@@ -6762,6 +6762,312 @@ function parsePptx(entries = []) {
   };
 }
 
+function parsePptxLargeEntryStreaming(entries = []) {
+  const slideEntries = entries
+    .filter((entry) => (
+      /^ppt\/slides\/slide\d+\.xml$/.test(entry.name || "") &&
+      entry.filePath &&
+      fsSync.existsSync(entry.filePath)
+    ))
+    .sort((left, right) => Number(left.name.match(/slide(\d+)/)?.[1] || 0) - Number(right.name.match(/slide(\d+)/)?.[1] || 0));
+  const slideLayoutNames = entries
+    .map((entry) => entry.name)
+    .filter((name) => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(name))
+    .sort((left, right) => Number(left.match(/slideLayout(\d+)/)?.[1] || 0) - Number(right.match(/slideLayout(\d+)/)?.[1] || 0));
+  const slideMasterNames = entries
+    .map((entry) => entry.name)
+    .filter((name) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(name))
+    .sort((left, right) => Number(left.match(/slideMaster(\d+)/)?.[1] || 0) - Number(right.match(/slideMaster(\d+)/)?.[1] || 0));
+  const noteNames = entries
+    .map((entry) => entry.name)
+    .filter((name) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name))
+    .sort((left, right) => Number(left.match(/notesSlide(\d+)/)?.[1] || 0) - Number(right.match(/notesSlide(\d+)/)?.[1] || 0));
+  const commentPartNames = entries
+    .map((entry) => entry.name)
+    .filter((name) => /^ppt\/comments\/comment\d+\.xml$/.test(name))
+    .sort((left, right) => Number(left.match(/comment(\d+)/)?.[1] || 0) - Number(right.match(/comment(\d+)/)?.[1] || 0));
+  const commentAuthors = pptxCommentAuthors(entries);
+  const elements = [];
+  let paragraphCount = 0;
+  let shapeCount = 0;
+  let shapeGeometryCount = 0;
+  let tableCount = 0;
+  let tableRowCount = 0;
+  let tableCellCount = 0;
+  let tableGeometryCount = 0;
+  let speakerNoteCount = 0;
+  let hyperlinkCount = 0;
+  let imageCount = 0;
+  let imageGeometryCount = 0;
+  let chartCount = 0;
+  let chartPartCount = 0;
+  let chartSeriesCount = 0;
+  let chartGeometryCount = 0;
+  let commentCount = 0;
+  let placeholderCount = 0;
+  let shapeMetadataCount = 0;
+  let slideLayoutRefCount = 0;
+  let slideMasterRefCount = 0;
+  let largeEntryCount = 0;
+  let streamedBytes = 0;
+  const slideLayoutPartSet = new Set();
+  const slideMasterPartSet = new Set();
+  for (const [index, entry] of slideEntries.entries()) {
+    const slideNumber = Number(entry.name.match(/slide(\d+)/)?.[1] || index + 1);
+    const stat = fsSync.statSync(entry.filePath);
+    streamedBytes += stat.size;
+    if (entry.warning === "structured-entry-too-large" || stat.size > STRUCTURED_ZIP_ENTRY_MAX_BYTES) {
+      largeEntryCount += 1;
+    }
+    const relationships = docxPartRelationships(entries, entry.name);
+    const layoutRef = pptxSlideLayoutMasterRef(entries, entry.name, relationships);
+    if (layoutRef?.layoutPart) {
+      slideLayoutPartSet.add(layoutRef.layoutPart);
+    }
+    if (layoutRef?.masterPart) {
+      slideMasterPartSet.add(layoutRef.masterPart);
+    }
+    const inheritance = appendPptxLayoutMasterElements(elements, layoutRef, {
+      slideNumber,
+      lineStart: elements.length
+    });
+    slideLayoutRefCount += inheritance.layoutRefCount;
+    slideMasterRefCount += inheritance.masterRefCount;
+    let slideElementCount = 0;
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?sp", (shapeXml) => {
+      const paragraphs = Array.from(shapeXml.matchAll(/<(?:[\w.-]+:)?p\b[\s\S]*?<\/(?:[\w.-]+:)?p>/g))
+        .map((match) => textFromXmlTextNodes(match[0]))
+        .filter(Boolean);
+      const text = (paragraphs.length ? paragraphs : [textFromXmlTextNodes(shapeXml)])
+        .filter(Boolean)
+        .join("\n");
+      if (!text) {
+        return;
+      }
+      shapeCount += 1;
+      slideElementCount += 1;
+      const geometry = pptxShapeGeometry(shapeXml, slideNumber, shapeCount);
+      if (geometry.bbox) {
+        shapeGeometryCount += 1;
+      }
+      const shapeName = pptxShapeName(shapeXml, `shape-${shapeCount}`);
+      const shape = pptxShapeMetadata(shapeXml, {
+        fallbackName: shapeName,
+        slideNumber,
+        order: shapeCount
+      });
+      if (shape.isPlaceholder) {
+        placeholderCount += 1;
+      }
+      if (shape.id || shape.name || shape.isPlaceholder) {
+        shapeMetadataCount += 1;
+      }
+      const type = pptxShapeElementType(shape, shapeCount - 1);
+      const level = pptxShapeHeadingLevel(shape, shapeCount - 1);
+      const layout = geometry.layout
+        ? { ...geometry.layout, strategy: "presentationml-stream-shape.v1", streamIndex: shapeCount }
+        : { strategy: "presentationml-stream-shape.v1", page: slideNumber, order: shapeCount, streamIndex: shapeCount };
+      pushStructureElement(elements, type, type === "heading" ? `Slide ${slideNumber}: ${text}` : text, {
+        level,
+        line: shapeCount,
+        name: `${entry.name}#${shapeName}`,
+        page: slideNumber,
+        bbox: geometry.bbox,
+        layout,
+        shape
+      });
+      if (type !== "heading") {
+        paragraphCount += Math.max(1, paragraphs.length);
+      }
+      hyperlinkCount += pushPptxLinkElements(elements, pptxHyperlinksFromXml(shapeXml, relationships, text), {
+        name: `${entry.name}#${shapeName}`,
+        slideNumber,
+        line: shapeCount,
+        geometry,
+        shape,
+        linkStart: hyperlinkCount
+      });
+    });
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?graphicFrame", (frameXml) => {
+      if (/<[^:>]*:?tbl\b/i.test(frameXml)) {
+        tableCount += 1;
+        slideElementCount += 1;
+        const tableGeometry = pptxShapeGeometry(frameXml, slideNumber, shapeCount + tableCount);
+        const table = appendPptxTableElements(elements, frameXml, {
+          slideNumber,
+          tableIndex: tableCount,
+          order: shapeCount + tableCount
+        });
+        tableRowCount += table.rowCount;
+        tableCellCount += table.cellCount;
+        tableGeometryCount += table.geometryCount;
+        hyperlinkCount += pushPptxLinkElements(elements, pptxHyperlinksFromXml(frameXml, relationships, textFromXmlTextNodes(frameXml)), {
+          name: `${entry.name}#table-${tableCount}`,
+          slideNumber,
+          line: shapeCount + tableCount,
+          geometry: tableGeometry,
+          shape: pptxShapeMetadata(frameXml, {
+            fallbackName: pptxShapeName(frameXml, `Slide ${slideNumber} Table ${tableCount}`),
+            slideNumber,
+            order: shapeCount + tableCount
+          }),
+          linkStart: hyperlinkCount
+        });
+      }
+      if (/<[^:>]*:?chart\b/i.test(frameXml)) {
+        const chartOrder = shapeCount + tableCount + imageCount + chartCount + 1;
+        const chartGeometry = pptxShapeGeometry(frameXml, slideNumber, chartOrder);
+        const chartShapeName = pptxShapeName(frameXml, `Slide ${slideNumber} Chart ${chartCount + 1}`);
+        const chartShape = pptxShapeMetadata(frameXml, {
+          fallbackName: chartShapeName,
+          slideNumber,
+          order: chartOrder
+        });
+        const chartLayout = chartGeometry.layout
+          ? { ...chartGeometry.layout, strategy: "presentationml-chart-ref.v1" }
+          : { strategy: "presentationml-chart-ref.v1", page: slideNumber, order: chartOrder };
+        const charts = appendOfficeChartElements(elements, entries, frameXml, relationships, {
+          sourcePart: entry.name,
+          format: "pptx",
+          fallbackName: chartShapeName,
+          page: slideNumber,
+          lineStart: chartOrder,
+          chartStart: chartCount,
+          order: chartOrder,
+          bbox: chartGeometry.bbox,
+          layout: chartLayout,
+          shape: chartShape
+        });
+        chartCount += charts.count;
+        chartPartCount += charts.chartPartCount;
+        chartSeriesCount += charts.chartSeriesCount;
+        chartGeometryCount += charts.count && chartGeometry.bbox ? 1 : 0;
+        slideElementCount += charts.count ? 1 : 0;
+      }
+    });
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?pic", (pictureXml) => {
+      const image = appendPptxImageElements(elements, pictureXml, relationships, {
+        slideNumber,
+        imageIndex: imageCount + 1,
+        order: shapeCount + tableCount + imageCount + 1,
+        sourcePart: entry.name
+      });
+      imageCount += image.count;
+      imageGeometryCount += image.geometryCount;
+      slideElementCount += image.count;
+    });
+    const comments = pptxCommentsForSlideEntries(entries, entry.name, slideNumber, commentAuthors);
+    for (const comment of comments) {
+      commentCount += 1;
+      slideElementCount += 1;
+      pushStructureElement(elements, "comment", `Slide ${slideNumber} comment ${comment.id}${comment.author ? ` by ${comment.author}` : ""}: ${comment.text}`, {
+        line: commentCount,
+        name: `${comment.sourcePart}#comment-${comment.id || commentCount}`,
+        page: slideNumber,
+        layout: comment.layout,
+        annotation: {
+          kind: "presentation-comment",
+          id: comment.id,
+          ...(comment.author ? { author: comment.author } : {}),
+          ...(comment.initials ? { initials: comment.initials } : {}),
+          ...(comment.authorId ? { authorId: comment.authorId } : {}),
+          ...(comment.date ? { date: comment.date } : {}),
+          sourcePart: comment.sourcePart,
+          relationshipId: comment.relationshipId,
+          target: comment.target,
+          type: comment.type
+        },
+        limit: 1800
+      });
+    }
+    if (slideElementCount) {
+      continue;
+    }
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?p", (paragraphXml) => {
+      const text = textFromXmlTextNodes(paragraphXml);
+      if (!text) {
+        return;
+      }
+      paragraphCount += 1;
+      const type = paragraphCount === 1 ? "heading" : "paragraph";
+      pushStructureElement(elements, type, type === "heading" ? `Slide ${slideNumber}: ${text}` : text, {
+        level: type === "heading" ? 1 : 0,
+        line: paragraphCount,
+        name: entry.name,
+        page: slideNumber,
+        layout: {
+          strategy: "presentationml-stream-paragraph.v1",
+          page: slideNumber,
+          order: paragraphCount,
+          streamIndex: paragraphCount
+        }
+      });
+    });
+    // TODO(external-kd): stream oversized PPTX speaker-note and comment parts as first-class PresentationML entries.
+  }
+  for (const [index, name] of noteNames.entries()) {
+    const slideNumber = Number(name.match(/notesSlide(\d+)/)?.[1] || index + 1);
+    const xml = zipEntryText(entries, name);
+    const paragraphs = uniqueOrdered(Array.from(xml.matchAll(/<(?:[\w.-]+:)?p\b[\s\S]*?<\/(?:[\w.-]+:)?p>/g))
+      .map((match) => compactMarkupText(textFromXmlTextNodes(match[0]), 1500))
+      .filter(Boolean));
+    const noteText = paragraphs.length
+      ? paragraphs.join("\n")
+      : compactMarkupText(textFromXmlTextNodes(xml), 2000);
+    if (!noteText) {
+      continue;
+    }
+    speakerNoteCount += 1;
+    pushStructureElement(elements, "speaker-note", `Slide ${slideNumber} speaker notes: ${noteText}`, {
+      line: speakerNoteCount,
+      name,
+      page: slideNumber,
+      layout: {
+        strategy: "presentationml-speaker-notes.v1",
+        page: slideNumber,
+        order: speakerNoteCount
+      }
+    });
+  }
+  const counts = elementTypeCounts(elements);
+  return {
+    text: structureElementsToText("pptx", elements, ""),
+    elements,
+    format: "pptx",
+    extractionMode: "streaming-large-presentationml-elements",
+    slideCount: slideEntries.length,
+    presentationPartCount: slideEntries.length + slideLayoutNames.length + slideMasterNames.length + noteNames.length + commentPartNames.length + (commentAuthors.size ? 1 : 0),
+    slideLayoutPartCount: slideLayoutNames.length || slideLayoutPartSet.size,
+    slideMasterPartCount: slideMasterNames.length || slideMasterPartSet.size,
+    slideLayoutRefCount,
+    slideMasterRefCount,
+    speakerNoteCount,
+    commentCount,
+    commentPartCount: commentPartNames.length,
+    commentAuthorCount: commentAuthors.size,
+    hyperlinkCount,
+    imageCount,
+    chartCount,
+    chartPartCount,
+    chartSeriesCount,
+    placeholderCount,
+    shapeMetadataCount,
+    shapeCount,
+    largeEntryCount,
+    streamedBytes,
+    geometryCount: shapeGeometryCount + tableGeometryCount + imageGeometryCount + chartGeometryCount,
+    shapeGeometryCount,
+    imageGeometryCount,
+    chartGeometryCount,
+    tableCount,
+    tableRowCount,
+    tableCellCount,
+    tableGeometryCount,
+    paragraphCount,
+    headingCount: counts.heading || 0
+  };
+}
+
 function visioPartNumber(partName = "", pattern = /(\d+)/) {
   return Number(String(partName || "").match(pattern)?.[1] || 0);
 }
@@ -13572,7 +13878,9 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
     const entryPlan = structuredZipDirectoryEntryPlan(route, extracted.outputDir);
     parserTrace.push(structuredZipEntryPlanTrace(entryPlan));
     if (entryPlan.skippedLargeFileCount > 0) {
-      warnings.push("structured-zip-large-entry-stream-fallback");
+      warnings.push(["word", "presentation"].includes(route?.id)
+        ? "structured-zip-large-entry-stream"
+        : "structured-zip-large-entry-stream-fallback");
     }
     const canUseBoundedEntries = entryPlan.skippedLargeFileCount === 0;
     if (route?.id === "word") {
@@ -13814,8 +14122,8 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
     } else if (route?.id === "presentation") {
       const parsed = canUseBoundedEntries
         ? parsePptx(entryPlan.entries)
-        : { text: "", elements: [], format: "pptx", slideCount: entryPlan.selectedFileCount };
-      if (parsed.text && canUseBoundedEntries) {
+        : parsePptxLargeEntryStreaming(entryPlan.entries);
+      if (parsed.text) {
         directText = parsed.text || "";
         totalCharacters = directText.length;
         structuredFileCount = parsed.presentationPartCount;
@@ -13825,9 +14133,12 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           stage,
           status: totalCharacters ? "completed" : "empty",
           mode: "structured-zip-file-ref",
+          extractionMode: parsed.extractionMode || "bounded-structured-zip-entries",
           files: structuredFileCount,
           characters: totalCharacters,
           elements: structureElements.length,
+          streamedBytes: parsed.streamedBytes || 0,
+          largeEntries: parsed.largeEntryCount || 0,
           slides: parsed.slideCount,
           shapes: parsed.shapeCount,
           placeholders: parsed.placeholderCount,
@@ -13856,6 +14167,21 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           headings: parsed.headingCount,
           paragraphs: parsed.paragraphCount
         });
+        if (!canUseBoundedEntries) {
+          parserTrace.push({
+            stage: "structured-zip.large-entry-stream",
+            status: "completed",
+            reason: "large-structure-entry",
+            extractionMode: parsed.extractionMode || "streaming-large-presentationml-elements",
+            routeId: route?.id || "",
+            files: structuredFileCount,
+            characters: totalCharacters,
+            elements: structureElements.length,
+            slides: parsed.slideCount,
+            shapes: parsed.shapeCount,
+            streamedBytes: parsed.streamedBytes || 0
+          });
+        }
         parserTrace.push({
           stage: "office.presentation.layouts",
           status: parsed.slideLayoutRefCount || parsed.slideMasterRefCount ? "completed" : "empty",

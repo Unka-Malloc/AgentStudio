@@ -1057,6 +1057,21 @@ try {
             "</w:body></w:document>"
           ].join("")
         }
+      },
+      {
+        sourceId: "source-77",
+        title: "Mounted Large PPTX Structural XML",
+        fileName: "mounted-large-structured.pptx",
+        mediaType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        entries: {
+          "ppt/slides/slide1.xml": [
+            "<p:sld xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><p:cSld><p:spTree>",
+            Array.from({ length: 720 }, (_, index) => (
+              `<p:sp><p:nvSpPr><p:cNvPr id="${index + 100}" name="Large PPTX Shape ${index + 1}"/></p:nvSpPr><p:nvPr><p:ph type="body" idx="${index + 1}"/></p:nvPr><p:spPr><a:xfrm><a:off x="914400" y="${457200 + index}"/><a:ext cx="5486400" cy="685800"/></a:xfrm></p:spPr><p:txBody><a:p><a:r><a:t>Large mounted PPTX shape ${index + 1} proves oversized PresentationML streams through element-aware parsing without whole-entry memory reads.</a:t></a:r></a:p></p:txBody></p:sp>`
+            )).join(""),
+            "</p:spTree></p:cSld></p:sld>"
+          ].join("")
+        }
       }
     ];
     for (const spec of mountedStructuredSpecs) {
@@ -3586,6 +3601,42 @@ try {
     ))), true);
     assert.equal(largeStructuredWord.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
     assert.ok(largeStructuredWord.quality.textCharacters > 25000, "large DOCX structural fallback must preserve oversized text");
+    const largeStructuredPptx = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-77");
+    assert.ok(largeStructuredPptx, "large mounted PPTX structural XML document must be present");
+    assert.equal(largeStructuredPptx.route.formatId, "presentation");
+    assert.equal(largeStructuredPptx.quality.suppliedPayloadKind, "file-ref-structured-zip");
+    assert.equal(largeStructuredPptx.parserTrace.some((trace) => (
+      trace.stage === "structured-zip.structural-entry-plan" &&
+      trace.status === "completed" &&
+      trace.selectedFiles === 1 &&
+      trace.loadedFiles === 0 &&
+      trace.skippedLargeFiles === 1 &&
+      trace.maxEntryBytes === 25000
+    )), true);
+    assert.equal(largeStructuredPptx.parserTrace.some((trace) => (
+      trace.stage === "structured-zip.large-entry-stream" &&
+      trace.status === "completed" &&
+      trace.reason === "large-structure-entry" &&
+      trace.extractionMode === "streaming-large-presentationml-elements" &&
+      trace.elements >= 700 &&
+      trace.shapes >= 700
+    )), true);
+    assert.equal(largeStructuredPptx.parserTrace.some((trace) => (
+      trace.stage === "office.presentation.slides" &&
+      trace.status === "completed" &&
+      trace.extractionMode === "streaming-large-presentationml-elements" &&
+      trace.elements >= 700
+    )), true);
+    assert.equal(largeStructuredPptx.elementPlan.strategy, "document-element-model.v1");
+    assert.equal(largeStructuredPptx.elementPlan.elementTypes["slide-shape"] >= 700, true);
+    assert.equal(largeStructuredPptx.windowPlan.strategy, "element-aware-by-title-windowing.v1");
+    assert.equal(largeStructuredPptx.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "slide-shape" &&
+      ref.layout?.strategy === "presentationml-stream-shape.v1" &&
+      ref.shape?.placeholderType === "body"
+    ))), true);
+    assert.equal(largeStructuredPptx.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
+    assert.ok(largeStructuredPptx.quality.textCharacters > 25000, "large PPTX structural parser must preserve oversized slide text");
   }
   if (directRuntime.payload.runtimes["tika.app"]?.available && mountedLegacyOfficeDocuments.length) {
     for (const [sourceId, formatId] of [

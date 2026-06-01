@@ -385,6 +385,21 @@ assert.equal(
   "large DOCX streaming parser must advertise structural extraction mode in parserTrace"
 );
 assert.equal(
+  externalServiceSource.includes("function parsePptxLargeEntryStreaming("),
+  true,
+  "large PPTX filePath parsing must keep a dedicated streaming structure parser instead of downgrading to plain text"
+);
+assert.equal(
+  externalServiceSource.includes("presentationml-stream-shape.v1"),
+  true,
+  "large PPTX streaming parser must preserve shape element references for element-aware windowing"
+);
+assert.equal(
+  externalServiceSource.includes("streaming-large-presentationml-elements"),
+  true,
+  "large PPTX streaming parser must advertise structural extraction mode in parserTrace"
+);
+assert.equal(
   formatConversionProfilesConfig.protocolVersion,
   "pact.external-knowledge-distillation.format-conversion-profiles.v1",
   "external knowledge distillation must keep format conversion profiles in a versioned singleton config"
