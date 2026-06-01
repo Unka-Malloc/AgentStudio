@@ -5029,6 +5029,20 @@ function zipEntryHasReadablePayload(entries = [], entryName = "") {
   return Boolean(entry?.data?.length || (entry?.filePath && fsSync.existsSync(entry.filePath)));
 }
 
+function scanXmlElementsFromEntry(entry = null, tagName = "", onElement = () => {}) {
+  if (!entry) {
+    return;
+  }
+  if (entry.filePath && fsSync.existsSync(entry.filePath)) {
+    scanXmlElementsFromFile(entry.filePath, tagName, onElement);
+    return;
+  }
+  const expression = new RegExp(`<${tagName}\\b[\\s\\S]*?<\\/${tagName}>`, "g");
+  for (const match of String(entry.data?.length ? utf8(entry.data) : "").matchAll(expression)) {
+    onElement(match[0]);
+  }
+}
+
 function structureElementsToText(format = "document", elements = [], fallback = "") {
   if (!elements.length && !String(fallback || "").trim()) {
     return "";
@@ -5139,7 +5153,13 @@ function docxContentControlProperties(sdtXml = "", sourcePart = "", fallbackInde
   };
 }
 
-function appendDocxContentControlElements(elements = [], xml = "", { sourcePart = "", lineStart = 0, headerFooter = null } = {}) {
+function appendDocxContentControlElements(elements = [], xml = "", {
+  sourcePart = "",
+  lineStart = 0,
+  headerFooter = null,
+  layoutStrategy = "",
+  streamStart = 0
+} = {}) {
   let count = 0;
   for (const match of String(xml || "").matchAll(/<[^:>]*:?sdt\b[\s\S]*?<\/[^:>]*:?sdt>/g)) {
     const sdtXml = match[0];
@@ -5158,13 +5178,25 @@ function appendDocxContentControlElements(elements = [], xml = "", { sourcePart 
       name: `${sourcePart}#content-control-${control.id || count}`,
       control,
       headerFooter,
+      layout: layoutStrategy ? {
+        strategy: layoutStrategy,
+        sourcePart,
+        streamIndex: streamStart + count,
+        order: streamStart + count
+      } : null,
       limit: 1800
     });
   }
   return count;
 }
 
-function appendDocxBookmarkElements(elements = [], xml = "", { sourcePart = "", lineStart = 0, headerFooter = null } = {}) {
+function appendDocxBookmarkElements(elements = [], xml = "", {
+  sourcePart = "",
+  lineStart = 0,
+  headerFooter = null,
+  layoutStrategy = "",
+  streamStart = 0
+} = {}) {
   let count = 0;
   for (const paragraphMatch of String(xml || "").matchAll(/<[^:>]*:?p\b[\s\S]*?<\/[^:>]*:?p>/g)) {
     const paragraphXml = paragraphMatch[0];
@@ -5184,6 +5216,12 @@ function appendDocxBookmarkElements(elements = [], xml = "", { sourcePart = "", 
         line: lineStart + count,
         name: `${sourcePart}#bookmark-${name}`,
         headerFooter,
+        layout: layoutStrategy ? {
+          strategy: layoutStrategy,
+          sourcePart,
+          streamIndex: streamStart + count,
+          order: streamStart + count
+        } : null,
         bookmark: {
           kind: "word-bookmark",
           id,
@@ -5219,7 +5257,14 @@ function formatDocxTableRow(tableLabel = "", rowNumber = 1, cells = [], headers 
   }).join("; ")}`;
 }
 
-function appendDocxTableElements(elements = [], tableXml = "", { name = "", tableIndex = 0, lineStart = 0, headerFooter = null } = {}) {
+function appendDocxTableElements(elements = [], tableXml = "", {
+  name = "",
+  tableIndex = 0,
+  lineStart = 0,
+  headerFooter = null,
+  layoutStrategy = "",
+  streamStart = 0
+} = {}) {
   const tableLabel = `Table ${tableIndex}`;
   const rows = Array.from(String(tableXml || "").matchAll(/<[^:>]*:?tr\b[\s\S]*?<\/[^:>]*:?tr>/g))
     .map((match) => docxTableCells(match[0]))
@@ -5240,6 +5285,12 @@ function appendDocxTableElements(elements = [], tableXml = "", { name = "", tabl
       line: lineStart + rowNumber,
       name: `${name}#table-${tableIndex}`,
       headerFooter,
+      layout: layoutStrategy ? {
+        strategy: layoutStrategy,
+        sourcePart: name,
+        streamIndex: streamStart + rowNumber,
+        order: streamStart + rowNumber
+      } : null,
       table: {
         format: "docx",
         sheet: tableLabel,
@@ -5262,7 +5313,9 @@ function appendDocxAnnotationElements(elements = [], xml = "", {
   tagName = "comment",
   type = "comment",
   sourcePart = "",
-  lineStart = 0
+  lineStart = 0,
+  layoutStrategy = "",
+  streamStart = 0
 } = {}) {
   let count = 0;
   for (const match of String(xml || "").matchAll(new RegExp(`<[^:>]*:?${tagName}\\b[\\s\\S]*?<\\/[^:>]*:?${tagName}>`, "g"))) {
@@ -5286,6 +5339,12 @@ function appendDocxAnnotationElements(elements = [], xml = "", {
     pushStructureElement(elements, type, `${label}: ${text}`, {
       line: lineStart + count,
       name: `${sourcePart}#${type}-${id}`,
+      layout: layoutStrategy ? {
+        strategy: layoutStrategy,
+        sourcePart,
+        streamIndex: streamStart + count,
+        order: streamStart + count
+      } : null,
       annotation: {
         kind: type,
         id,
@@ -5337,7 +5396,13 @@ function textFromDocxRevisionXml(xml = "") {
   return textFromXmlTextNodes(xml);
 }
 
-function appendDocxRevisionElements(elements = [], xml = "", { sourcePart = "", lineStart = 0, headerFooter = null } = {}) {
+function appendDocxRevisionElements(elements = [], xml = "", {
+  sourcePart = "",
+  lineStart = 0,
+  headerFooter = null,
+  layoutStrategy = "",
+  streamStart = 0
+} = {}) {
   let insertionCount = 0;
   let deletionCount = 0;
   let count = 0;
@@ -5362,6 +5427,12 @@ function appendDocxRevisionElements(elements = [], xml = "", { sourcePart = "", 
       line: lineStart + count,
       name: `${sourcePart}#revision-${id}`,
       headerFooter,
+      layout: layoutStrategy ? {
+        strategy: layoutStrategy,
+        sourcePart,
+        streamIndex: streamStart + count,
+        order: streamStart + count
+      } : null,
       annotation: {
         kind: "word-revision",
         id,
@@ -5882,6 +5953,23 @@ function parseDocxLargeEntryStreaming(entries = []) {
   let listItemCount = 0;
   let largeEntryCount = 0;
   let streamedBytes = 0;
+  let tableCount = 0;
+  let tableRowCount = 0;
+  let tableCellCount = 0;
+  let contentControlCount = 0;
+  let bookmarkCount = 0;
+  let annotationCount = 0;
+  let commentCount = 0;
+  let footnoteCount = 0;
+  let endnoteCount = 0;
+  let hyperlinkCount = 0;
+  let revisionCount = 0;
+  let insertionRevisionCount = 0;
+  let deletionRevisionCount = 0;
+  let imageCount = 0;
+  let chartCount = 0;
+  let chartPartCount = 0;
+  let chartSeriesCount = 0;
   for (const entry of xmlEntries) {
     const stat = fsSync.statSync(entry.filePath);
     streamedBytes += stat.size;
@@ -5889,39 +5977,120 @@ function parseDocxLargeEntryStreaming(entries = []) {
       largeEntryCount += 1;
     }
     const headerFooter = docxHeaderFooterMetadata(entry.name);
+    const relationships = docxPartRelationships(entries, entry.name);
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?sdt", (sdtXml) => {
+      contentControlCount += appendDocxContentControlElements(elements, sdtXml, {
+        sourcePart: entry.name,
+        lineStart: paragraphCount + tableRowCount + contentControlCount,
+        headerFooter,
+        layoutStrategy: "wordprocessingml-stream-content-control.v1",
+        streamStart: contentControlCount
+      });
+    });
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?tbl", (tableXml) => {
+      tableCount += 1;
+      const table = appendDocxTableElements(elements, tableXml, {
+        name: entry.name,
+        tableIndex: tableCount,
+        lineStart: paragraphCount + tableRowCount,
+        headerFooter,
+        layoutStrategy: "wordprocessingml-stream-table.v1",
+        streamStart: tableRowCount
+      });
+      tableRowCount += table.rowCount;
+      tableCellCount += table.cellCount;
+    });
     scanXmlElementsFromFile(entry.filePath, "[^:>]*:?p", (paragraphXml) => {
       const text = textFromXmlTextNodes(paragraphXml);
-      if (!text) {
-        return;
+      if (text) {
+        paragraphCount += 1;
+        const style = docxParagraphStyle(paragraphXml);
+        const styleProfile = docxParagraphStyleProfile(paragraphXml, style);
+        const { type, level } = docxParagraphElementType(paragraphXml, style);
+        if (styleProfile.styleId) {
+          styleRefCount += 1;
+        }
+        if (styleProfile.numberingId) {
+          numberingRefCount += 1;
+        }
+        if (type === "heading" || type === "title") {
+          headingCount += 1;
+        }
+        if (type === "list-item") {
+          listItemCount += 1;
+        }
+        pushStructureElement(elements, headerFooter?.kind || type, headerFooter ? `${headerFooter.label}: ${text}` : text, {
+          level,
+          line: paragraphCount,
+          name: entry.name,
+          headerFooter,
+          layout: {
+            strategy: "wordprocessingml-stream-paragraph.v1",
+            sourcePart: entry.name,
+            streamIndex: paragraphCount,
+            order: paragraphCount
+          },
+          ...(Object.keys(styleProfile).length ? { style: styleProfile } : {})
+        });
       }
-      paragraphCount += 1;
-      const style = docxParagraphStyle(paragraphXml);
-      const styleProfile = docxParagraphStyleProfile(paragraphXml, style);
-      const { type, level } = docxParagraphElementType(paragraphXml, style);
-      if (styleProfile.styleId) {
-        styleRefCount += 1;
-      }
-      if (styleProfile.numberingId) {
-        numberingRefCount += 1;
-      }
-      if (type === "heading" || type === "title") {
-        headingCount += 1;
-      }
-      if (type === "list-item") {
-        listItemCount += 1;
-      }
-      pushStructureElement(elements, headerFooter?.kind || type, headerFooter ? `${headerFooter.label}: ${text}` : text, {
-        level,
-        line: paragraphCount,
-        name: entry.name,
+      bookmarkCount += appendDocxBookmarkElements(elements, paragraphXml, {
+        sourcePart: entry.name,
+        lineStart: paragraphCount + tableRowCount + contentControlCount + bookmarkCount,
         headerFooter,
-        layout: {
-          strategy: "wordprocessingml-stream-paragraph.v1",
-          streamIndex: paragraphCount,
-          order: paragraphCount
-        },
-        ...(Object.keys(styleProfile).length ? { style: styleProfile } : {})
+        layoutStrategy: "wordprocessingml-stream-bookmark.v1",
+        streamStart: bookmarkCount
       });
+      const revisions = appendDocxRevisionElements(elements, paragraphXml, {
+        sourcePart: entry.name,
+        lineStart: paragraphCount + tableRowCount + contentControlCount + bookmarkCount + annotationCount + revisionCount,
+        headerFooter,
+        layoutStrategy: "wordprocessingml-stream-revision.v1",
+        streamStart: revisionCount
+      });
+      revisionCount += revisions.revisionCount;
+      insertionRevisionCount += revisions.insertionRevisionCount;
+      deletionRevisionCount += revisions.deletionRevisionCount;
+      for (const link of docxParagraphHyperlinks(paragraphXml, relationships)) {
+        hyperlinkCount += 1;
+        pushStructureElement(elements, "link", link.text, {
+          line: paragraphCount || hyperlinkCount,
+          name: `${entry.name}#link-${hyperlinkCount}`,
+          href: link.target,
+          headerFooter,
+          layout: {
+            strategy: "wordprocessingml-stream-hyperlink.v1",
+            sourcePart: entry.name,
+            streamIndex: hyperlinkCount,
+            order: hyperlinkCount
+          }
+        });
+      }
+    });
+  }
+  const annotationSpecs = [
+    { name: "word/comments.xml", tagName: "comment", type: "comment" },
+    { name: "word/footnotes.xml", tagName: "footnote", type: "footnote" },
+    { name: "word/endnotes.xml", tagName: "endnote", type: "endnote" }
+  ];
+  for (const spec of annotationSpecs) {
+    const entry = zipEntryByName(entries, spec.name);
+    scanXmlElementsFromEntry(entry, `[^:>]*:?${spec.tagName}`, (annotationXml) => {
+      const added = appendDocxAnnotationElements(elements, annotationXml, {
+        tagName: spec.tagName,
+        type: spec.type,
+        sourcePart: spec.name,
+        lineStart: paragraphCount + tableRowCount + annotationCount,
+        layoutStrategy: "wordprocessingml-stream-annotation.v1",
+        streamStart: annotationCount
+      });
+      annotationCount += added;
+      if (spec.type === "comment") {
+        commentCount += added;
+      } else if (spec.type === "footnote") {
+        footnoteCount += added;
+      } else if (spec.type === "endnote") {
+        endnoteCount += added;
+      }
     });
   }
   const counts = elementTypeCounts(elements);
@@ -5944,25 +6113,25 @@ function parseDocxLargeEntryStreaming(entries = []) {
     headerElementCount,
     footerElementCount,
     paragraphCount,
-    tableCount: 0,
-    tableRowCount: 0,
-    tableCellCount: 0,
-    contentControlCount: 0,
-    bookmarkCount: 0,
-    annotationCount: 0,
-    commentCount: 0,
-    footnoteCount: 0,
-    endnoteCount: 0,
-    hyperlinkCount: 0,
-    imageCount: 0,
+    tableCount,
+    tableRowCount,
+    tableCellCount,
+    contentControlCount,
+    bookmarkCount,
+    annotationCount,
+    commentCount,
+    footnoteCount,
+    endnoteCount,
+    hyperlinkCount,
+    imageCount,
     styleRefCount,
     numberingRefCount,
-    revisionCount: 0,
-    insertionRevisionCount: 0,
-    deletionRevisionCount: 0,
-    chartCount: 0,
-    chartPartCount: 0,
-    chartSeriesCount: 0,
+    revisionCount,
+    insertionRevisionCount,
+    deletionRevisionCount,
+    chartCount,
+    chartPartCount,
+    chartSeriesCount,
     headingCount: headingCount || (counts.title || 0) + (counts.heading || 0),
     listItemCount: listItemCount || counts["list-item"] || 0
   };
@@ -15056,6 +15225,27 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
             characters: totalCharacters,
             elements: structureElements.length,
             paragraphs: parsed.paragraphCount,
+            tables: parsed.tableCount,
+            tableRows: parsed.tableRowCount,
+            tableCells: parsed.tableCellCount,
+            contentControls: parsed.contentControlCount,
+            bookmarks: parsed.bookmarkCount,
+            annotations: parsed.annotationCount,
+            comments: parsed.commentCount,
+            footnotes: parsed.footnoteCount,
+            endnotes: parsed.endnoteCount,
+            revisions: parsed.revisionCount,
+            insertedRevisions: parsed.insertionRevisionCount,
+            deletedRevisions: parsed.deletionRevisionCount,
+            links: parsed.hyperlinkCount,
+            images: parsed.imageCount,
+            charts: parsed.chartCount,
+            chartParts: parsed.chartPartCount,
+            chartSeries: parsed.chartSeriesCount,
+            headings: parsed.headingCount,
+            listItems: parsed.listItemCount,
+            styles: parsed.styleRefCount,
+            numberingRefs: parsed.numberingRefCount,
             streamedBytes: parsed.streamedBytes || 0
           });
         }
@@ -22230,6 +22420,13 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "directory-file-ref-recursive-routing.v1",
       "visio-opc-shape-parser.v1",
       "pdf-text-file-ref-layout.v1",
+      "wordprocessingml-stream-paragraph.v1",
+      "wordprocessingml-stream-table.v1",
+      "wordprocessingml-stream-content-control.v1",
+      "wordprocessingml-stream-bookmark.v1",
+      "wordprocessingml-stream-annotation.v1",
+      "wordprocessingml-stream-revision.v1",
+      "wordprocessingml-stream-hyperlink.v1",
       "presentationml-speaker-note-stream.v1",
       "presentationml-comment-stream.v1",
       XLSX_SHARED_STRING_DISK_INDEX_STRATEGY,
@@ -22355,6 +22552,15 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       pdfTextTimeoutMs: PDF_TEXT_TIMEOUT_MS,
       pdfFileRefElementStrategy: "pdf-text-file-ref-layout.v1",
       pdfFileRefElementMaxBlocks: PDF_FILE_REF_ELEMENT_MAX_BLOCKS,
+      wordFileRefElementStrategies: [
+        "wordprocessingml-stream-paragraph.v1",
+        "wordprocessingml-stream-table.v1",
+        "wordprocessingml-stream-content-control.v1",
+        "wordprocessingml-stream-bookmark.v1",
+        "wordprocessingml-stream-annotation.v1",
+        "wordprocessingml-stream-revision.v1",
+        "wordprocessingml-stream-hyperlink.v1"
+      ],
       presentationFileRefElementStrategies: [
         "presentationml-stream-shape.v1",
         "presentationml-speaker-note-stream.v1",

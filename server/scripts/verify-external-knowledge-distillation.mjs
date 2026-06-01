@@ -1218,11 +1218,33 @@ try {
         mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         entries: {
           "word/document.xml": [
-            "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body>",
+            "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><w:body>",
+            "<w:p><w:pPr><w:pStyle w:val=\"Title\"/></w:pPr><w:r><w:t>Large Mounted DOCX Decision Register</w:t></w:r></w:p>",
+            "<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Decision</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Status</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Owner</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t>Stream DOCX structures</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Accepted</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Knowledge Distillation</w:t></w:r></w:p></w:tc></w:tr></w:tbl>",
+            "<w:sdt><w:sdtPr><w:id w:val=\"420\"/><w:alias w:val=\"LargeControl\"/><w:tag w:val=\"large-control\"/><w:text/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>Large content control preserves agent-readable routing metadata.</w:t></w:r></w:p></w:sdtContent></w:sdt>",
+            "<w:p><w:bookmarkStart w:id=\"421\" w:name=\"LargeDecisionScope\"/><w:r><w:t>Large bookmark scope anchors oversized WordprocessingML evidence.</w:t></w:r><w:bookmarkEnd w:id=\"421\"/></w:p>",
+            "<w:p><w:r><w:t>Large evidence portal: </w:t></w:r><w:hyperlink r:id=\"rIdLargeLink\"><w:r><w:t>large DOCX evidence portal</w:t></w:r></w:hyperlink></w:p>",
+            "<w:p><w:ins w:id=\"422\" w:author=\"Large Reviewer\" w:date=\"2026-07-04T00:00:00Z\"><w:r><w:t>Large inserted tracked change remains available in streaming mode.</w:t></w:r></w:ins></w:p>",
+            "<w:p><w:del w:id=\"423\" w:author=\"Large Reviewer\" w:date=\"2026-07-05T00:00:00Z\"><w:r><w:delText>Large deleted tracked change remains available in streaming mode.</w:delText></w:r></w:del></w:p>",
             Array.from({ length: 700 }, (_, index) => (
               `<w:p><w:r><w:t>Large mounted DOCX structural paragraph ${index + 1} proves oversized WordprocessingML streams through bounded filePath parsing without whole-entry memory reads.</w:t></w:r></w:p>`
             )).join(""),
             "</w:body></w:document>"
+          ].join(""),
+          "word/_rels/document.xml.rels": [
+            "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">",
+            "<Relationship Id=\"rIdLargeLink\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"https://example.com/large-mounted-docx\" TargetMode=\"External\"/>",
+            "</Relationships>"
+          ].join(""),
+          "word/comments.xml": [
+            "<w:comments xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">",
+            "<w:comment w:id=\"424\" w:author=\"Large Reviewer\"><w:p><w:r><w:t>Large DOCX comment remains available as streaming annotation evidence.</w:t></w:r></w:p></w:comment>",
+            "</w:comments>"
+          ].join(""),
+          "word/footnotes.xml": [
+            "<w:footnotes xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">",
+            "<w:footnote w:id=\"425\"><w:p><w:r><w:t>Large DOCX footnote remains available as streaming annotation evidence.</w:t></w:r></w:p></w:footnote>",
+            "</w:footnotes>"
           ].join("")
         }
       },
@@ -1478,6 +1500,15 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfTextTimeoutMs >= 120_000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementStrategy, "pdf-text-file-ref-layout.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementMaxBlocks >= 1000, true);
+  assert.deepEqual(capabilities.payload.largeDocumentPolicy.wordFileRefElementStrategies, [
+    "wordprocessingml-stream-paragraph.v1",
+    "wordprocessingml-stream-table.v1",
+    "wordprocessingml-stream-content-control.v1",
+    "wordprocessingml-stream-bookmark.v1",
+    "wordprocessingml-stream-annotation.v1",
+    "wordprocessingml-stream-revision.v1",
+    "wordprocessingml-stream-hyperlink.v1"
+  ]);
   assert.equal(capabilities.payload.largeDocumentPolicy.spreadsheetSharedStringLookupStrategy, "spreadsheetml-shared-string-disk-index.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.spreadsheetSharedStringIndexRecordBytes, 16);
   assert.equal(capabilities.payload.largeDocumentPolicy.tikaTimeoutMs >= 120_000, true);
@@ -1731,6 +1762,12 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("directory-file-ref-recursive-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("pdf-subtype-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("pdf-text-file-ref-layout.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("wordprocessingml-stream-table.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("wordprocessingml-stream-content-control.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("wordprocessingml-stream-bookmark.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("wordprocessingml-stream-annotation.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("wordprocessingml-stream-revision.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("wordprocessingml-stream-hyperlink.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("spreadsheetml-shared-string-disk-index.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("content-signature-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("human-agent-response-profile-separation.v1"), true);
@@ -3834,8 +3871,8 @@ try {
     assert.equal(largeStructuredWord.parserTrace.some((trace) => (
       trace.stage === "structured-zip.structural-entry-plan" &&
       trace.status === "completed" &&
-      trace.selectedFiles === 1 &&
-      trace.loadedFiles === 0 &&
+      trace.selectedFiles === 4 &&
+      trace.loadedFiles === 3 &&
       trace.skippedLargeFiles === 1 &&
       trace.maxEntryBytes === 25000
     )), true);
@@ -3845,20 +3882,84 @@ try {
       trace.reason === "large-structure-entry" &&
       trace.extractionMode === "streaming-large-wordprocessingml-elements" &&
       trace.elements >= 700 &&
-      trace.paragraphs >= 700
+      trace.paragraphs >= 700 &&
+      trace.tables === 1 &&
+      trace.tableRows === 2 &&
+      trace.tableCells === 6 &&
+      trace.contentControls === 1 &&
+      trace.bookmarks === 1 &&
+      trace.annotations === 2 &&
+      trace.comments === 1 &&
+      trace.footnotes === 1 &&
+      trace.revisions === 2 &&
+      trace.links === 1
     )), true);
     assert.equal(largeStructuredWord.parserTrace.some((trace) => (
       trace.stage === "office.word.structured" &&
       trace.status === "completed" &&
       trace.extractionMode === "streaming-large-wordprocessingml-elements" &&
-      trace.elements >= 700
+      trace.elements >= 700 &&
+      trace.tables === 1 &&
+      trace.tableRows === 2 &&
+      trace.tableCells === 6 &&
+      trace.contentControls === 1 &&
+      trace.bookmarks === 1 &&
+      trace.annotations === 2 &&
+      trace.comments === 1 &&
+      trace.footnotes === 1 &&
+      trace.revisions === 2 &&
+      trace.links === 1
     )), true);
+    assert.equal(largeStructuredWord.parserTrace.some((trace) => trace.stage === "office.word.tables" && trace.status === "completed" && trace.tables === 1 && trace.rows === 2 && trace.cells === 6), true);
+    assert.equal(largeStructuredWord.parserTrace.some((trace) => trace.stage === "office.word.content-controls" && trace.status === "completed" && trace.contentControls === 1), true);
+    assert.equal(largeStructuredWord.parserTrace.some((trace) => trace.stage === "office.word.bookmarks" && trace.status === "completed" && trace.bookmarks === 1), true);
+    assert.equal(largeStructuredWord.parserTrace.some((trace) => trace.stage === "office.word.annotations" && trace.status === "completed" && trace.annotations === 2 && trace.comments === 1 && trace.footnotes === 1), true);
+    assert.equal(largeStructuredWord.parserTrace.some((trace) => trace.stage === "office.word.revisions" && trace.status === "completed" && trace.revisions === 2 && trace.inserted === 1 && trace.deleted === 1), true);
+    assert.equal(largeStructuredWord.parserTrace.some((trace) => trace.stage === "office.word.hyperlinks" && trace.status === "completed" && trace.links === 1), true);
     assert.equal(largeStructuredWord.elementPlan.strategy, "document-element-model.v1");
     assert.equal(largeStructuredWord.elementPlan.elementTypes.paragraph >= 700, true);
+    assert.equal(largeStructuredWord.elementPlan.elementTypes["table-header"] >= 1, true);
+    assert.equal(largeStructuredWord.elementPlan.elementTypes["table-row"] >= 1, true);
+    assert.equal(largeStructuredWord.elementPlan.elementTypes["content-control"] >= 1, true);
+    assert.equal(largeStructuredWord.elementPlan.elementTypes.bookmark >= 1, true);
+    assert.equal(largeStructuredWord.elementPlan.elementTypes.comment >= 1, true);
+    assert.equal(largeStructuredWord.elementPlan.elementTypes.footnote >= 1, true);
+    assert.equal(largeStructuredWord.elementPlan.elementTypes.revision >= 2, true);
+    assert.equal(largeStructuredWord.elementPlan.elementTypes.link >= 1, true);
     assert.equal(largeStructuredWord.windowPlan.strategy, "element-aware-by-title-windowing.v1");
     assert.equal(largeStructuredWord.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
       ref.type === "paragraph" &&
       ref.layout?.strategy === "wordprocessingml-stream-paragraph.v1"
+    ))), true);
+    assert.equal(largeStructuredWord.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "table-row" &&
+      ref.layout?.strategy === "wordprocessingml-stream-table.v1" &&
+      ref.cells?.some((cell) => cell.header === "Decision" && cell.value === "Stream DOCX structures")
+    ))), true);
+    assert.equal(largeStructuredWord.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "content-control" &&
+      ref.layout?.strategy === "wordprocessingml-stream-content-control.v1" &&
+      ref.control?.alias === "LargeControl"
+    ))), true);
+    assert.equal(largeStructuredWord.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "bookmark" &&
+      ref.layout?.strategy === "wordprocessingml-stream-bookmark.v1" &&
+      ref.bookmark?.name === "LargeDecisionScope"
+    ))), true);
+    assert.equal(largeStructuredWord.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "comment" &&
+      ref.layout?.strategy === "wordprocessingml-stream-annotation.v1" &&
+      ref.annotation?.author === "Large Reviewer"
+    ))), true);
+    assert.equal(largeStructuredWord.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "revision" &&
+      ref.layout?.strategy === "wordprocessingml-stream-revision.v1" &&
+      ref.annotation?.type === "insertion"
+    ))), true);
+    assert.equal(largeStructuredWord.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "link" &&
+      ref.layout?.strategy === "wordprocessingml-stream-hyperlink.v1" &&
+      ref.href === "https://example.com/large-mounted-docx"
     ))), true);
     assert.equal(largeStructuredWord.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
     assert.ok(largeStructuredWord.quality.textCharacters > 25000, "large DOCX structural fallback must preserve oversized text");

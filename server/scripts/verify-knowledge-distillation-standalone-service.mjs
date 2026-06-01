@@ -390,6 +390,20 @@ assert.equal(
   true,
   "large DOCX streaming parser must preserve paragraph element references for element-aware windowing"
 );
+for (const strategy of [
+  "wordprocessingml-stream-table.v1",
+  "wordprocessingml-stream-content-control.v1",
+  "wordprocessingml-stream-bookmark.v1",
+  "wordprocessingml-stream-annotation.v1",
+  "wordprocessingml-stream-revision.v1",
+  "wordprocessingml-stream-hyperlink.v1"
+]) {
+  assert.equal(
+    externalServiceSource.includes(strategy),
+    true,
+    `large DOCX streaming parser must preserve ${strategy} element references for element-aware windowing`
+  );
+}
 assert.equal(
   externalServiceSource.includes("streaming-large-wordprocessingml-elements"),
   true,

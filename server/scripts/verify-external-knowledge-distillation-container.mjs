@@ -462,6 +462,15 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfTextTimeoutMs >= 120_000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementStrategy, "pdf-text-file-ref-layout.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementMaxBlocks >= 1000, true);
+  assert.deepEqual(capabilities.payload.largeDocumentPolicy.wordFileRefElementStrategies, [
+    "wordprocessingml-stream-paragraph.v1",
+    "wordprocessingml-stream-table.v1",
+    "wordprocessingml-stream-content-control.v1",
+    "wordprocessingml-stream-bookmark.v1",
+    "wordprocessingml-stream-annotation.v1",
+    "wordprocessingml-stream-revision.v1",
+    "wordprocessingml-stream-hyperlink.v1"
+  ]);
   assert.equal(capabilities.payload.largeDocumentPolicy.spreadsheetSharedStringLookupStrategy, "spreadsheetml-shared-string-disk-index.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.spreadsheetSharedStringIndexRecordBytes, 16);
   assert.equal(capabilities.payload.largeDocumentPolicy.tikaTimeoutMs >= 120_000, true);
