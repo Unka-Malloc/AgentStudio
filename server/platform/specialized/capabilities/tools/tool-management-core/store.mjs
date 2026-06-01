@@ -113,6 +113,29 @@ function normalizeRateLimit(value) {
   };
 }
 
+function normalizePolicyRevisionSnapshot(value = {}) {
+  const revision = Number(value?.revision || value?.policyRevision || 0);
+  const normalizedRevision = Number.isFinite(revision) && revision > 0 ? revision : 0;
+  return {
+    protocolVersion: String(value?.protocolVersion || value?.protocol_version || "").trim(),
+    revision: normalizedRevision,
+    updatedAt: String(value?.updatedAt || value?.updated_at || "").trim()
+  };
+}
+
+function stampGrantPolicyRevision(metadata = {}, policyRevision = {}) {
+  const snapshot = normalizePolicyRevisionSnapshot(policyRevision);
+  if (!snapshot.revision) {
+    return metadata;
+  }
+  return {
+    ...metadata,
+    policyRevision: snapshot.revision,
+    policyRevisionUpdatedAt: snapshot.updatedAt,
+    policyRevisionProtocolVersion: snapshot.protocolVersion
+  };
+}
+
 function normalizeGrantInput(input = {}, fallback = {}) {
   const explicitScopes = normalizeScopes(input.scopes ?? fallback.scopes);
   const toolsets = normalizeStringList(input.toolsets ?? fallback.toolsets);
@@ -1183,7 +1206,8 @@ export function createToolManagementStore({
   registry = null,
   capabilityResolver = null,
   capabilityKeyProvider = null,
-  capabilityBindingGuard = null
+  capabilityBindingGuard = null,
+  governancePolicyRevisionProvider = null
 }) {
   const rootPath = path.join(userDataPath, "tool-management");
   fs.mkdirSync(rootPath, { recursive: true });
@@ -1226,6 +1250,13 @@ export function createToolManagementStore({
           "auto",
         alias: process.env.PACT_TOOL_GRANT_BINDING_GUARD_ALIAS || "pact-tool-bindings"
       });
+
+  function currentGovernancePolicyRevision() {
+    if (typeof governancePolicyRevisionProvider !== "function") {
+      return normalizePolicyRevisionSnapshot();
+    }
+    return normalizePolicyRevisionSnapshot(governancePolicyRevisionProvider());
+  }
 
   const upsertGrantStmt = db.prepare(`
     INSERT INTO tool_grants (
@@ -1307,6 +1338,7 @@ export function createToolManagementStore({
 
   async function createGrant(input = {}) {
     rejectUnknownGrantCapabilities(input);
+    const policyRevision = currentGovernancePolicyRevision();
     const baseGrant = normalizeGrantInput({
       ...input,
       createdAt: nowIso(),
@@ -1350,7 +1382,7 @@ export function createToolManagementStore({
     const grant = normalizeGrantInput({
       ...baseGrant,
       metadata: {
-        ...sanitizeGrantMetadata(baseGrant.metadata),
+        ...stampGrantPolicyRevision(sanitizeGrantMetadata(baseGrant.metadata), policyRevision),
         ...credentialMetadata
       },
       tokenHash: hashToken(token),
@@ -1362,6 +1394,7 @@ export function createToolManagementStore({
       credentialProtocol: grant.metadata.credentialProtocol || "",
       capabilitySetHash: grant.metadata.capabilitySetHash || "",
       capabilityCount: grant.metadata.capabilityCount || 0,
+      policyRevision: grant.metadata.policyRevision || 0,
       toolsets: grant.toolsets
     });
     return {
@@ -1440,6 +1473,7 @@ export function createToolManagementStore({
     if (!existing) {
       return null;
     }
+    const policyRevision = currentGovernancePolicyRevision();
     const capabilities = resolveGrantCapabilities(existing, { registry, capabilityResolver });
     if (typeof resolvedCapabilityKeyProvider?.invalidateCredential === "function") {
       await resolvedCapabilityKeyProvider.invalidateCredential({
@@ -1491,7 +1525,7 @@ export function createToolManagementStore({
       ...existing,
       enabled: true,
       metadata: {
-        ...sanitizeGrantMetadata(existing.metadata),
+        ...stampGrantPolicyRevision(sanitizeGrantMetadata(existing.metadata), policyRevision),
         ...credentialMetadata
       },
       tokenHash: hashToken(token),

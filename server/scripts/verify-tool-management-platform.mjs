@@ -7,6 +7,8 @@ import Database from "better-sqlite3";
 import { promisify } from "node:util";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
+import { CONSOLE_ROLES } from "../platform/common/security/auth/console-auth.mjs";
+import { createAuthorizationGovernanceStore } from "../platform/common/security/authorization/authorization-governance-store.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -46,9 +48,20 @@ const server = await startHttpServer({
     profile: "minimal"
   }
 });
-await installAuthenticatedFetch(server);
+const authorizationGovernanceStore = createAuthorizationGovernanceStore({
+  userDataPath,
+  builtinRoles: CONSOLE_ROLES
+});
 
 try {
+  await installAuthenticatedFetch(server);
+  authorizationGovernanceStore.upsertTeam({
+    teamId: "verify-tool-management-policy-revision",
+    label: "Verify Tool Management Policy Revision"
+  });
+  const grantPolicyRevision = authorizationGovernanceStore.getPolicyRevision();
+  assert.ok(grantPolicyRevision.revision > 0);
+
   const catalog = await fetchJson(`${server.url}/api/tool-management/v1/catalog`);
   assert.equal(catalog.status, 200);
   assert.equal(catalog.payload.schemaVersion, 1);
@@ -80,6 +93,74 @@ try {
   assert.equal(grantResult.payload.grant.hasToken, true);
   assert.equal(grantResult.payload.grant.scopes.includes("knowledge:read"), true);
   assert.equal(grantResult.payload.grant.credential.protocolVersion, "pact.opaque-capability-key.v1");
+  assert.equal(grantResult.payload.grant.metadata.policyRevision, grantPolicyRevision.revision);
+  assert.equal(
+    grantResult.payload.grant.metadata.policyRevisionProtocolVersion,
+    grantPolicyRevision.protocolVersion
+  );
+  assert.equal(grantResult.payload.grant.metadata.policyRevisionUpdatedAt, grantPolicyRevision.updatedAt);
+
+  const freshGrantPreview = await fetchJson(`${server.url}/api/tool-management/v1/policy/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      toolId: "pact.knowledge.health",
+      grantId: grantResult.payload.grant.id,
+      input: {}
+    })
+  });
+  assert.equal(freshGrantPreview.status, 200);
+  assert.equal(freshGrantPreview.payload.decision.grantPolicyRevision, grantPolicyRevision.revision);
+  assert.equal(freshGrantPreview.payload.decision.grantPolicyState, "fresh");
+  assert.equal(
+    freshGrantPreview.payload.decision.governancePolicyRevision.revision,
+    grantPolicyRevision.revision
+  );
+
+  authorizationGovernanceStore.upsertTeam({
+    teamId: "verify-tool-management-policy-revision-next",
+    label: "Verify Tool Management Policy Revision Next"
+  });
+  const changedPolicyRevision = authorizationGovernanceStore.getPolicyRevision();
+  assert.equal(changedPolicyRevision.revision > grantPolicyRevision.revision, true);
+  const staleGrantPreview = await fetchJson(`${server.url}/api/tool-management/v1/policy/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      toolId: "pact.knowledge.health",
+      grantId: grantResult.payload.grant.id,
+      input: {}
+    })
+  });
+  assert.equal(staleGrantPreview.status, 200);
+  assert.equal(staleGrantPreview.payload.decision.grantPolicyRevision, grantPolicyRevision.revision);
+  assert.equal(staleGrantPreview.payload.decision.grantPolicyState, "stale");
+  assert.equal(
+    staleGrantPreview.payload.decision.governancePolicyRevision.revision,
+    changedPolicyRevision.revision
+  );
+
+  const currentRevisionGrant = await fetchJson(`${server.url}/api/tool-management/v1/grants`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      label: "verify-current-policy-revision",
+      scopes: ["knowledge:read"]
+    })
+  });
+  assert.equal(currentRevisionGrant.status, 201);
+  assert.equal(currentRevisionGrant.payload.grant.metadata.policyRevision, changedPolicyRevision.revision);
+  const currentRevisionPreview = await fetchJson(`${server.url}/api/tool-management/v1/policy/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      toolId: "pact.knowledge.health",
+      grantId: currentRevisionGrant.payload.grant.id,
+      input: {}
+    })
+  });
+  assert.equal(currentRevisionPreview.status, 200);
+  assert.equal(currentRevisionPreview.payload.decision.grantPolicyState, "fresh");
 
   const narrowGrant = await fetchJson(`${server.url}/api/tool-management/v1/grants`, {
     method: "POST",
@@ -871,6 +952,7 @@ try {
   });
   assert.equal(rotated.status, 200);
   assert.ok(rotated.payload.token);
+  assert.equal(rotated.payload.grant.metadata.policyRevision, changedPolicyRevision.revision);
   const oldTokenDenied = await fetchJson(`${server.url}/api/tool-management/v1/execute`, {
     method: "POST",
     headers: bearerHeaders(grantResult.payload.token),
@@ -1060,6 +1142,7 @@ try {
   assert.equal(revokedDenied.status, 401);
   assert.equal(revokedDenied.payload.error.code, "invalid_token");
 } finally {
+  authorizationGovernanceStore.close();
   await server.close();
   await fs.rm(userDataPath, { recursive: true, force: true });
 }
