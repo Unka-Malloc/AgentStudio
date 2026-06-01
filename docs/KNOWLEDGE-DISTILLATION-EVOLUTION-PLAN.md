@@ -1,8 +1,8 @@
 # Pact 知识蒸馏系统：全链路算法升级计划
 
 状态：章节化落地版调整计划
-日期：2026-05-31
-版本：v2.2
+日期：2026-06-02
+版本：v2.3
 适用范围：独立知识蒸馏服务、控制台、智能体 API、导出链路；平台内部知识蒸馏实现仅作为迁移期废弃入口
 
 ---
@@ -39,6 +39,7 @@
 - raw corpus 为空时硬拦截，禁止假成功。
 - 蒸馏结果必须携带来源、时间线、证据、置信度和失败边界。
 - 控制台输出面向用户，智能体输出机器可读。
+- 成功蒸馏任务必须经过真实模型网关调用；没有可用模型网关或 `modelAlias` 时失败，不生成规则假成功。
 - 外部能力统一使用 `external.*`；知识蒸馏唯一维护服务名为 `external.knowledge.distillation`。
 - 平台内部知识蒸馏运行时停止装载，旧接口只保留 `410` 迁移报文和机器可读替代操作。
 - 单机部署可运行，OrbStack 容器可验证，离线包可自检。
@@ -57,8 +58,9 @@ flowchart TD
     F --> G["主题分类与语义聚类"]
     G --> H["证据约束蒸馏"]
     H --> I["Claim Grounding"]
-    I --> J["时间线索引"]
-    J --> K["结果导出"]
+    I --> Q["真实模型蒸馏"]
+    Q --> J["时间线索引"]
+    J --> K["格式转换与结果导出"]
     K --> L["控制台响应"]
     K --> M["Agent 机器报文"]
     K --> N["API / 外部服务"]
@@ -118,11 +120,13 @@ flowchart LR
 
 | 层级 | 当前可用基线 | 后续调整落点 |
 | --- | --- | --- |
+| 内部模块边界 | 外部服务已拆出 `DocumentParsing`、`DistillationAlgorithm`、`ModelDistillation`、`FormatConversion` 四个内部模块边界：解析只输出 `pact.normalized-distillation-documents.v1`，算法只接收 `external-kd.algorithm-input.normalized-documents.v1`，模型蒸馏通过 `required-agent-gateway-real-model-call.v1` 发起真实模型调用，格式转换统一负责 Markdown/DOCX/JSON/ZIP 自检 | 后续文件解析、格式转换和模型蒸馏分别优化，但仍留在 `external.knowledge.distillation` 服务内，不拆成通用 Parsing 服务 |
 | 文件路由 | 外部服务已按 extension/media/source kind 生成 `routePlan`，PDF 额外输出 `pdf-subtype-routing.v1` 和 `pdfProfile`，可区分文本 PDF、扫描 PDF、字体映射风险 PDF、图片密集 PDF、加密 PDF 和空/未知 PDF | 继续只在外部服务增强 route-first 和 PDF 子类型字段，内部入口不再回填算法能力 |
 | 解析链 | 外部服务已覆盖文本、配置、Markdown frontmatter/block/code fence/blockquote、标记语言、图表、Notebook、源码、diff/patch、日历事件、PDF、OOXML、OpenDocument、EPUB、EML/MSG/MBOX 邮件、压缩包、OCR/Tika fallback，并把 Markdown frontmatter key/value refs/code-fence language-line refs/blockquote refs、markup、OOXML、OpenDocument、EPUB、基础 PDF 文本、PDF text-operator geometry、PDF URI annotation links、PDF outline/bookmark refs、PDF AcroForm/widget fields、Word paragraph styles/numbering refs/header/footer/content controls/bookmarks/hyperlinks/images/charts/comments/footnotes/endnotes/revisions、Word/PowerPoint/OpenDocument table cells、OpenDocument hyperlinks、PowerPoint slide layout/master 继承 refs、shape id/name/placeholders/geometry/hyperlinks/images/charts/speaker notes/comments、Excel workbook sheet name/id/state/path、defined names/named ranges/print areas、cell coordinates、merged-cell ranges、cell comments、SpreadsheetML date styles/date serials/formulas/hyperlinks/charts 纳入 `document-element-model.v1` | 继续在外部服务补齐专业解析；内部解析器只作为非蒸馏知识入库能力，不承接知识蒸馏算法升级 |
 | Raw Corpus | 外部服务已用 `EMPTY_RAW_CORPUS` 拦截空语料 | 内部 workbench 不再维护；旧入口返回迁移报文 |
 | 大文件 | 外部服务已支持 mounted file refs、streaming JSONL document manifests、archive refs、chunked windowing、大 JSON/JSONC file-ref streaming，并对 mounted Office/OpenDocument/EPUB 结构包执行结构 entry 选择、bounded native parse 和 large-entry streaming fallback | 上传、manifest、解析、蒸馏三层统一流式窗口协议 |
 | 分类蒸馏 | 外部服务 baseline 为 `hashing_embedding_window_community_classification_v3`，已输出语义概念主题层级、分组理由、低耦合高内聚指标和垃圾排除原因 | 后续分类算法只在外部服务升级 embedding cosine、低耦合高内聚分组和垃圾池 |
+| 真实模型蒸馏 | 外部服务在成功语料上调用 `agent-gateway`，写入 `result.modelDistillation` 与 `agentMessage.modelDistillation`；缺少模型网关返回 `MODEL_GATEWAY_REQUIRED`，缺少模型别名返回 `MODEL_ALIAS_REQUIRED` | 后续把模型输出纳入 claim 改写、摘要候选排序和风险解释，但不允许替代 evidence/grounding 门禁 |
 | Grounding | 外部服务已做 claim-evidence top-k、冲突证据和 promotion gate | 后续 claim 级门禁和无证据结论拦截只进入外部服务 |
 | 时间线 | 表格日期已进入 `timeRange`、`timeConfidence`、`timeSignals` | 扩展到邮件、元数据、正文日期，并提供 agent 查询过滤 |
 | 项目收敛 | 外部服务已有 `hierarchical-domain-topic-project-convergence.v3`、project-domain/domainReports、cross-domain links、agent query index、project snapshot、incremental reuse plan 和 project evidence query | 后续窗口 hash、增量重算、domain/topic/community/source/time 读模型和项目级 convergence 只进入外部服务 |

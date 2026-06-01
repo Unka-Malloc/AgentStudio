@@ -111,8 +111,11 @@ const REQUIRED_LEGACY_REMOVE_PATHS = Object.freeze([
 ]);
 
 function sourceSliceBetweenFunctions(source = "", functionName = "", nextFunctionName = "") {
-  const start = source.indexOf(`function ${functionName}`);
-  const end = source.indexOf(`\nfunction ${nextFunctionName}`, start + 1);
+  const functionStartPattern = (name) => new RegExp(`(?:^|\\n)(?:async\\s+)?function ${name}\\(`, "m");
+  const startMatch = functionStartPattern(functionName).exec(source);
+  const start = startMatch ? startMatch.index + (startMatch[0].startsWith("\n") ? 1 : 0) : -1;
+  const nextMatch = start === -1 ? null : functionStartPattern(nextFunctionName).exec(source.slice(start + 1));
+  const end = nextMatch ? start + 1 + nextMatch.index + (nextMatch[0].startsWith("\n") ? 1 : 0) : -1;
   assert.notEqual(start, -1, `${functionName} must exist in the external knowledge distillation service`);
   assert.notEqual(end, -1, `${functionName} must be followed by ${nextFunctionName}`);
   return source.slice(start, end);
@@ -249,6 +252,11 @@ for (const functionName of [
   "runKnowledgeDistillationWorkflow",
   "runDistillationWorkflow",
   "runDistillationAlgorithmWorkflow",
+  "runDocumentParsingModule",
+  "bindDocumentParsingToAlgorithmInput",
+  "runModelDistillationModule",
+  "callModelDistillationGateway",
+  "runFormatConversionModule",
   "initializeDistillationWorkflow",
   "normalizeDistillationWorkflowScope",
   "prepareDistillationAlgorithmInput",
@@ -279,7 +287,7 @@ const unifiedWorkflowBody = sourceSliceBetweenFunctions(
 );
 assert.match(
   unifiedWorkflowBody,
-  /const distillationWorkflow = runDistillationWorkflow\(input, runtimeStatus, priorRuns\);/,
+  /const distillationWorkflow = await runDistillationWorkflow\(input, runtimeStatus, priorRuns\);/,
   "runKnowledgeDistillationWorkflow must start with DistillationWorkflow"
 );
 assert.match(
@@ -313,7 +321,8 @@ const distillationWorkflowBody = sourceSliceBetweenFunctions(
 for (const expectedLine of [
   /const workflowContext = initializeDistillationWorkflow\(input\);/,
   /const algorithmInput = prepareDistillationAlgorithmInput\(workflowContext, runtimeStatus\);/,
-  /return runDistillationAlgorithmWorkflow\(algorithmInput, priorRuns\);/
+  /const algorithmWorkflow = runDistillationAlgorithmWorkflow\(algorithmInput, priorRuns\);/,
+  /return runModelDistillationModule\(algorithmWorkflow, runtimeStatus\);/
 ]) {
   assert.match(
     distillationWorkflowBody,
@@ -388,6 +397,70 @@ for (const forbiddenInlineStep of [
     algorithmWorkflowBody.includes(forbiddenInlineStep),
     false,
     `runDistillationAlgorithmWorkflow must not inline ${forbiddenInlineStep}; keep parser payload handling outside the algorithm core`
+  );
+}
+const parsingModuleBody = sourceSliceBetweenFunctions(
+  externalServiceSource,
+  "runDocumentParsingModule",
+  "bindDocumentParsingToAlgorithmInput"
+);
+for (const expectedLine of [
+  /const normalizedInput = normalizeDocuments\(input, runtimeStatus\);/,
+  /assertDistillationAlgorithmInputContract\(normalizedInput\.documents\);/
+]) {
+  assert.match(
+    parsingModuleBody,
+    expectedLine,
+    "DocumentParsing must own normalization and contract stripping before the algorithm receives input"
+  );
+}
+const prepareAlgorithmInputBody = sourceSliceBetweenFunctions(
+  externalServiceSource,
+  "prepareDistillationAlgorithmInput",
+  "filterDistillationInputByTime"
+);
+assert.match(
+  prepareAlgorithmInputBody,
+  /const documentParsing = runDocumentParsingModule\(workflowContext\.input, runtimeStatus\);/,
+  "prepareDistillationAlgorithmInput must call the DocumentParsing module boundary"
+);
+assert.match(
+  prepareAlgorithmInputBody,
+  /return bindDocumentParsingToAlgorithmInput\(workflowContext, documentParsing\);/,
+  "prepareDistillationAlgorithmInput must bind parsed documents to the algorithm contract without parsing inline"
+);
+const modelModuleBody = sourceSliceBetweenFunctions(
+  externalServiceSource,
+  "normalizeModelGatewayEndpoint",
+  "runKnowledgeDistillationWorkflow"
+);
+for (const expectedText of [
+  "MODEL_DISTILLATION_MODULE_BOUNDARY",
+  "MODEL_DISTILLATION_GATEWAY_STRATEGY",
+  "MODEL_GATEWAY_REQUIRED",
+  "MODEL_ALIAS_REQUIRED",
+  "callModelDistillationGateway"
+]) {
+  assert.equal(
+    modelModuleBody.includes(expectedText),
+    true,
+    `ModelDistillation must require a real model gateway path containing ${expectedText}`
+  );
+}
+const formatConversionModuleBody = sourceSliceBetweenFunctions(
+  externalServiceSource,
+  "runFormatConversionModule",
+  "jsonArtifactBuffer"
+);
+for (const expectedText of [
+  "FORMAT_CONVERSION_MODULE_BOUNDARY",
+  "buildFormatConversionPlan",
+  "attachFormatConversionOutputValidation"
+]) {
+  assert.equal(
+    formatConversionModuleBody.includes(expectedText),
+    true,
+    `FormatConversion must own output packaging and validation through ${expectedText}`
   );
 }
 const createRunWrapperBody = sourceSliceBetweenFunctions(externalServiceSource, "createRun", "capabilities");

@@ -37,8 +37,28 @@ assert.match(
 );
 assert.match(
   serviceSourceText,
+  /function runDocumentParsingModule/,
+  "external distillation must keep document parsing behind an explicit internal module boundary"
+);
+assert.match(
+  serviceSourceText,
+  /function runFormatConversionModule/,
+  "external distillation must keep format conversion behind an explicit internal module boundary"
+);
+assert.match(
+  serviceSourceText,
+  /async function runModelDistillationModule/,
+  "external distillation must invoke model distillation through an explicit async module boundary"
+);
+assert.match(
+  serviceSourceText,
   /const DISTILLATION_ALGORITHM_INPUT_CONTRACT = "external-kd\.algorithm-input\.normalized-documents\.v1"/,
   "external distillation must name the normalized-document algorithm input contract"
+);
+assert.match(
+  serviceSourceText,
+  /const MODEL_DISTILLATION_GATEWAY_STRATEGY = "required-agent-gateway-real-model-call\.v1"/,
+  "external distillation must require a real model gateway call instead of built-in fake model output"
 );
 assert.equal(
   /normalizeDocuments|loadDocumentPayload|contentBase64|filePathOverride|rawDocumentsManifestPath/.test(algorithmWorkflowBody),
@@ -109,7 +129,51 @@ async function waitForService(url, timeoutMs = 10_000) {
   throw new Error(`External distillation service did not become healthy: ${lastError?.message || "timeout"}`);
 }
 
-function startExternalService({ port, dataDir }) {
+async function startMockModelGateway() {
+  const calls = [];
+  const server = http.createServer(async (request, response) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      const rawBody = Buffer.concat(chunks).toString("utf8");
+      let body = {};
+      try {
+        body = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        body = { rawBody };
+      }
+      calls.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body
+      });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        ok: true,
+        text: [
+          "模型蒸馏结论：解析后的文档已按时间、结构和证据窗口聚合。",
+          "核心信息应保留来源编号、文档格式、时间线和低置信度提示。",
+          "冲突或上下文不足的内容需要继续通过 graphEvidence 与 grounding 校验。"
+        ].join("\n")
+      }));
+    });
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  return {
+    url: `http://127.0.0.1:${address.port}/api/agent-gateway/call`,
+    calls,
+    async close() {
+      await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  };
+}
+
+function startExternalService({ port, dataDir, modelGatewayUrl = "" }) {
   const child = spawn(process.execPath, [serviceEntry], {
     cwd: repoRoot,
     env: {
@@ -117,7 +181,9 @@ function startExternalService({ port, dataDir }) {
       HOST: "127.0.0.1",
       PORT: String(port),
       SERVICE_DATA_DIR: dataDir,
-      PACT_EXTERNAL_KD_STRUCTURED_ZIP_ENTRY_MAX_BYTES: "25000"
+      PACT_EXTERNAL_KD_STRUCTURED_ZIP_ENTRY_MAX_BYTES: "25000",
+      PACT_EXTERNAL_KD_MODEL_GATEWAY_URL: modelGatewayUrl,
+      PACT_EXTERNAL_KD_MODEL_ALIAS: "verify-real-model-gateway"
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -628,9 +694,12 @@ const serviceDataDir = reuseServiceUrl
 const pactDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-external-kd-platform-"));
 const port = reuseServiceUrl ? 0 : await freePort();
 const serviceUrl = reuseServiceUrl || `http://127.0.0.1:${port}`;
+const mockModelGateway = reuseServiceUrl
+  ? { url: "", calls: [], async close() {} }
+  : await startMockModelGateway();
 const service = reuseServiceUrl
   ? { async close() {} }
-  : startExternalService({ port, dataDir: serviceDataDir });
+  : startExternalService({ port, dataDir: serviceDataDir, modelGatewayUrl: mockModelGateway.url });
 let pactServer = null;
 let fileRefDocument = null;
 let deferredFileRefDocument = null;
@@ -1117,11 +1186,19 @@ try {
   assert.equal(capabilities.payload.workflowScopes.defaultValue, "project");
   assert.equal(capabilities.payload.workflowScopes.documentSelectorFields.includes("sourceId"), true);
   assert.equal(capabilities.payload.pipelineSeparation.strategy, "document-ingestion-vs-distillation-core-boundary.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.documentIngestionAdapter.moduleBoundary, "external-kd.document-parsing.module.v1");
   assert.equal(capabilities.payload.pipelineSeparation.documentIngestionAdapter.outputContract, "pact.normalized-distillation-documents.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.distillationAlgorithmCore.moduleBoundary, "external-kd.distillation-algorithm.module.v1");
   assert.equal(capabilities.payload.pipelineSeparation.distillationAlgorithmCore.inputContract, "external-kd.algorithm-input.normalized-documents.v1");
   assert.equal(capabilities.payload.pipelineSeparation.distillationAlgorithmCore.forbiddenInputFields.includes("contentBase64"), true);
+  assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.moduleBoundary, "external-kd.model-distillation.module.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.formatConversion.moduleBoundary, "external-kd.format-conversion.module.v1");
   assert.equal(capabilities.payload.distillationAlgorithm.parserPayloadFieldsAllowed, false);
   assert.equal(capabilities.payload.distillationAlgorithm.entrypoint, "runDistillationAlgorithmWorkflow");
+  assert.equal(capabilities.payload.modelDistillation.requiredRealModelCall, true);
+  assert.equal(capabilities.payload.modelDistillation.noBuiltinFallback, true);
+  assert.equal(capabilities.payload.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
   assert.equal(capabilities.payload.timeFiltering.supported, true);
   assert.equal(capabilities.payload.timeFiltering.strategy, "document-window-time-filter.v1");
   assert.equal(capabilities.payload.timeFiltering.timeFields.includes("eventTime"), true);
@@ -1144,7 +1221,7 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.binaryProfileStrategy, "bounded-binary-file-profile.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.structuredJsonFileRefStrategy, "structured-json-file-ref-streaming-window.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.manifestMaxDocuments >= 1000, true);
-  assert.equal(capabilities.payload.parserExecution.boundary, "document-ingestion-adapter");
+  assert.equal(capabilities.payload.parserExecution.boundary, "external-kd.document-parsing.module.v1");
   assert.equal(capabilities.payload.parserExecution.outputContract, "pact.normalized-distillation-documents.v1");
   assert.equal(capabilities.payload.parserExecution.consumedByAlgorithmContract, "external-kd.algorithm-input.normalized-documents.v1");
   assert.equal(capabilities.payload.parserExecution.payloadModes.includes("contentBase64"), true);
@@ -2026,6 +2103,18 @@ try {
   assert.equal(createRun.payload.result.graphEvidence.summary.entityCount > 0, true);
   assert.equal(createRun.payload.result.graphEvidence.summary.relationshipCount > 0, true);
   assert.equal(createRun.payload.result.graphEvidence.covariates.some((claim) => claim.covariate_type === "claim"), true);
+  assert.equal(createRun.payload.result.modelDistillation.moduleBoundary, "external-kd.model-distillation.module.v1");
+  assert.equal(createRun.payload.result.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
+  assert.equal(createRun.payload.result.modelDistillation.status, "completed");
+  assert.equal(createRun.payload.result.modelDistillation.modelAlias, "verify-real-model-gateway");
+  assert.equal(createRun.payload.result.agentMessage.modelDistillation.status, "completed");
+  if (!reuseServiceUrl) {
+    assert.equal(mockModelGateway.calls.length >= 1, true, "distillation must call the configured model gateway");
+    assert.equal(mockModelGateway.calls[0].method, "POST");
+    assert.equal(mockModelGateway.calls[0].url, "/api/agent-gateway/call");
+    assert.equal(mockModelGateway.calls[0].body.moduleId, "external.knowledge.distillation");
+    assert.equal(mockModelGateway.calls[0].body.modelAlias, "verify-real-model-gateway");
+  }
   assert.equal(createRun.payload.result.referenceGapReport.strategy, "reference-framework-gap-report.v1");
   assert.equal(createRun.payload.result.referenceGapReport.frameworks.some((framework) => framework.id === "graphrag" && framework.status === "absorbed-with-open-gaps"), true);
   assert.equal(createRun.payload.result.referenceGapReport.absorbedCapabilityMap.graphEvidence.evidence.includes("graph-lite-entity-relationship-evidence-pack.v1"), true);
@@ -4869,6 +4958,7 @@ try {
     await pactServer.close();
   }
   await service.close();
+  await mockModelGateway.close();
   if (previousUrl === undefined) {
     delete process.env.PACT_EXTERNAL_KNOWLEDGE_DISTILLATION_URL;
   } else {

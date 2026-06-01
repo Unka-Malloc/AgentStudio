@@ -57,6 +57,11 @@ const PDF_SUBTYPE_ROUTING_STRATEGY = "pdf-subtype-routing.v1";
 const DISTILLATION_DOCUMENT_INPUT_CONTRACT = "pact.normalized-distillation-documents.v1";
 const DOCUMENT_INGESTION_ADAPTER_STRATEGY = "external-kd.document-ingestion-adapter.v1";
 const DISTILLATION_ALGORITHM_INPUT_CONTRACT = "external-kd.algorithm-input.normalized-documents.v1";
+const DOCUMENT_PARSING_MODULE_BOUNDARY = "external-kd.document-parsing.module.v1";
+const DISTILLATION_ALGORITHM_MODULE_BOUNDARY = "external-kd.distillation-algorithm.module.v1";
+const MODEL_DISTILLATION_MODULE_BOUNDARY = "external-kd.model-distillation.module.v1";
+const FORMAT_CONVERSION_MODULE_BOUNDARY = "external-kd.format-conversion.module.v1";
+const MODEL_DISTILLATION_GATEWAY_STRATEGY = "required-agent-gateway-real-model-call.v1";
 const DISTILLATION_WORKFLOW_SCOPE = Object.freeze({
   DOCUMENT: "document",
   CORPUS: "corpus",
@@ -97,6 +102,8 @@ const EMAIL_MIME_MAX_DEPTH = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_EMA
 const EMAIL_MBOX_MAX_MESSAGES = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_EMAIL_MBOX_MAX_MESSAGES || 500));
 const EMAIL_MBOX_MESSAGE_MAX_CHARACTERS = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_EMAIL_MBOX_MESSAGE_MAX_CHARACTERS || 25 * 1024 * 1024));
 const STRUCTURED_ZIP_ENTRY_MAX_BYTES = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_STRUCTURED_ZIP_ENTRY_MAX_BYTES || ARCHIVE_ENTRY_MAX_BYTES));
+const MODEL_GATEWAY_TIMEOUT_MS = Math.max(1000, Number(process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_TIMEOUT_MS || 120_000));
+const MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_MODEL_PROMPT_MAX_CHARACTERS || 48_000));
 let runtimeDoctorCache = null;
 const PARSER_PAYLOAD_FIELD_NAMES = Object.freeze([
   "archiveFilePath",
@@ -15181,6 +15188,36 @@ function normalizeDocuments(input = {}, runtimeStatus = null) {
   };
 }
 
+function runDocumentParsingModule(input = {}, runtimeStatus = null) {
+  const normalizedInput = normalizeDocuments(input, runtimeStatus);
+  assertDistillationAlgorithmInputContract(normalizedInput.documents);
+  return {
+    ...normalizedInput,
+    moduleBoundary: DOCUMENT_PARSING_MODULE_BOUNDARY,
+    strategy: DOCUMENT_INGESTION_ADAPTER_STRATEGY,
+    outputContract: DISTILLATION_DOCUMENT_INPUT_CONTRACT,
+    consumedByAlgorithmContract: DISTILLATION_ALGORITHM_INPUT_CONTRACT,
+    parserPayloadFieldsStripped: true
+  };
+}
+
+function bindDocumentParsingToAlgorithmInput(workflowContext = {}, documentParsing = {}) {
+  return {
+    ...workflowContext,
+    allDocuments: documentParsing.documents || [],
+    inputDocumentPlan: {
+      ...(documentParsing.inputDocumentPlan || {}),
+      moduleBoundary: documentParsing.moduleBoundary,
+      parserModuleStrategy: documentParsing.strategy,
+      outputContract: documentParsing.outputContract,
+      consumedByAlgorithmContract: documentParsing.consumedByAlgorithmContract
+    },
+    documentParsing,
+    algorithmInputContract: DISTILLATION_ALGORITHM_INPUT_CONTRACT,
+    algorithmModuleBoundary: DISTILLATION_ALGORITHM_MODULE_BOUNDARY
+  };
+}
+
 function textTokens(value = "") {
   const normalized = String(value || "").toLowerCase();
   const tokens = new Set();
@@ -16146,6 +16183,23 @@ function attachFormatConversionOutputValidation(plan = {}, { title = "", runId =
       outputArtifactPassedCount: artifactValidations.filter((artifact) => artifact.status === "passed").length,
       outputArtifactFailedCount: artifactValidations.filter((artifact) => artifact.status === "failed").length
     }
+  };
+}
+
+function runFormatConversionModule({ runId = "", corpusPlan = null, title = "", createdAt = "", updatedAt = "", markdown = "" } = {}) {
+  const plan = buildFormatConversionPlan({ runId, corpusPlan });
+  const validatedPlan = attachFormatConversionOutputValidation(plan, {
+    title,
+    runId,
+    createdAt,
+    updatedAt,
+    markdown
+  });
+  return {
+    ...validatedPlan,
+    moduleBoundary: FORMAT_CONVERSION_MODULE_BOUNDARY,
+    inputArtifacts: ["distillation-workflow-state", "portable-markdown-draft"],
+    outputArtifacts: ["portable-markdown", "portable-docx", "console-summary-json", "agent-message-json", "workspace-package-zip"]
   };
 }
 
@@ -18448,7 +18502,7 @@ function markdownTableCell(value = "") {
     .trim();
 }
 
-function buildMarkdown({ title, query, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, failure = null }) {
+function buildMarkdown({ title, query, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, modelDistillation = null, failure = null }) {
   const evidenceIndexes = new Map(documents.map((document, index) => [document.sourceId, index]));
   const routingRows = corpusPlan.documents
     .slice(0, 12)
@@ -18533,6 +18587,16 @@ function buildMarkdown({ title, query, documents, classification, routePlan, cor
       ? `Strategy: ${graphEvidence.strategy}; text units: ${graphEvidence.summary.textUnitCount}; entities: ${graphEvidence.summary.entityCount}; relationships: ${graphEvidence.summary.relationshipCount}; claims: ${graphEvidence.summary.covariateCount}`
       : "No graph evidence pack was generated.",
     "",
+    "## Model Distillation",
+    "",
+    modelDistillation?.status === "completed"
+      ? [
+          `Strategy: ${modelDistillation.strategy}; model: ${modelDistillation.modelAlias}; prompt: ${modelDistillation.request.promptCharacters} characters.`,
+          "",
+          modelDistillation.response.text
+        ].join("\n")
+      : `Skipped: ${modelDistillation?.reason || "model output unavailable"}.`,
+    "",
     "## Grounding",
     "",
     `Strategy: ${grounding.strategy}`,
@@ -18545,7 +18609,7 @@ function buildMarkdown({ title, query, documents, classification, routePlan, cor
   ].join("\n");
 }
 
-function buildAgentMessage({ runId, title, query, workflowScope, scopeSelection, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, formatConversionPlan, runtimeStatus, failure = null }) {
+function buildAgentMessage({ runId, title, query, workflowScope, scopeSelection, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, modelDistillation, formatConversionPlan, runtimeStatus, failure = null }) {
   return {
     protocolVersion: `${PROTOCOL_VERSION}.agent-message`,
     responseProfile: "agent",
@@ -18599,6 +18663,7 @@ function buildAgentMessage({ runId, title, query, workflowScope, scopeSelection,
     },
     convergence,
     incrementalPlan,
+    modelDistillation,
     formatConversionPlan,
     graphEvidence,
     grounding,
@@ -18650,16 +18715,285 @@ function buildAgentMessage({ runId, title, query, workflowScope, scopeSelection,
   };
 }
 
-function runKnowledgeDistillationWorkflow(input = {}, runtimeStatus = null, priorRuns = [], referenceFrameworks = null) {
-  const distillationWorkflow = runDistillationWorkflow(input, runtimeStatus, priorRuns);
+function normalizeModelGatewayEndpoint(value = "") {
+  const rawValue = String(value || "").trim();
+  if (!rawValue) {
+    return "";
+  }
+  const parsed = new URL(rawValue);
+  if (!parsed.pathname || parsed.pathname === "/") {
+    parsed.pathname = "/api/agent-gateway/call";
+  }
+  return parsed.toString();
+}
+
+function resolveModelDistillationGatewayConfig(input = {}) {
+  const endpoint = normalizeModelGatewayEndpoint(
+    input.modelGatewayUrl ||
+      input.agentGatewayUrl ||
+      process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_URL ||
+      process.env.PACT_AGENT_GATEWAY_URL ||
+      ""
+  );
+  const modelAlias = String(
+    input.modelAlias ||
+      input.model ||
+      input.agentModelAlias ||
+      process.env.PACT_EXTERNAL_KD_MODEL_ALIAS ||
+      ""
+  ).trim();
+  const token = String(
+    input.modelGatewayToken ||
+      input.agentGatewayToken ||
+      process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_TOKEN ||
+      process.env.PACT_AGENT_GATEWAY_TOKEN ||
+      ""
+  ).trim();
+  const tokenHeader = String(process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_TOKEN_HEADER || "Authorization").trim() || "Authorization";
+  const tokenPrefix = String(process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_TOKEN_PREFIX || "Bearer ").trimEnd();
+  return {
+    endpoint,
+    modelAlias,
+    token,
+    tokenHeader,
+    tokenPrefix: tokenPrefix ? `${tokenPrefix} ` : "",
+    timeoutMs: Math.max(1000, Number(input.modelGatewayTimeoutMs || MODEL_GATEWAY_TIMEOUT_MS))
+  };
+}
+
+function compactModelDocumentRecord(document = {}, index = 0) {
+  return {
+    index,
+    sourceId: document.sourceId || "",
+    title: document.title || document.fileName || "",
+    fileName: document.fileName || "",
+    routeId: document.route?.id || "",
+    formatId: document.route?.formatId || "",
+    parser: document.route?.preferredParser || "",
+    byteSize: document.byteSize || 0,
+    documentTime: document.documentTime || "",
+    timeRange: document.timeRange || null,
+    windowCount: document.windowPlan?.windowCount || 0,
+    elementTypes: document.elementPlan?.elementTypes || {},
+    parseWarnings: (document.parseWarnings || []).slice(0, 6),
+    excerpt: firstSentence(document.text || "")
+  };
+}
+
+function buildModelDistillationPrompt(distillationWorkflow = {}) {
+  const modelInput = {
+    task: "Knowledge distillation over parsed Pact documents. Preserve source chronology, structure, contradictions, and evidence references.",
+    query: distillationWorkflow.query,
+    workflowScope: distillationWorkflow.workflowScope,
+    scopeSelection: distillationWorkflow.scopeSelection,
+    timeFilter: distillationWorkflow.corpusPlan?.timeFilter || null,
+    sourceSummary: {
+      sourceCount: distillationWorkflow.allDocuments?.length || 0,
+      distillableSourceCount: distillationWorkflow.documents?.length || 0,
+      totalBytes: distillationWorkflow.corpusPlan?.totalBytes || 0,
+      windowCount: distillationWorkflow.corpusPlan?.windowCount || 0
+    },
+    documents: (distillationWorkflow.documents || []).slice(0, 24).map(compactModelDocumentRecord),
+    groups: (distillationWorkflow.classification?.groups || []).slice(0, 12).map((group) => ({
+      groupId: group.groupId,
+      label: group.label,
+      kind: group.kind,
+      sourceIds: group.sourceIds,
+      keywords: group.keywords,
+      cohesionScore: group.cohesionScore,
+      separationScore: group.separationScore,
+      excludedFromCore: Boolean(group.excludedFromCore)
+    })),
+    convergence: {
+      strategy: distillationWorkflow.convergence?.strategy || "",
+      summary: distillationWorkflow.convergence?.convergenceSummary || "",
+      domains: distillationWorkflow.convergence?.domains?.slice?.(0, 8) || []
+    },
+    grounding: {
+      strategy: distillationWorkflow.grounding?.strategy || "",
+      claimCount: distillationWorkflow.grounding?.claimCount || 0,
+      supported: distillationWorkflow.grounding?.supported || 0,
+      contradicted: distillationWorkflow.grounding?.contradicted || 0,
+      score: distillationWorkflow.grounding?.groundingScore || 0
+    },
+    requiredOutput: {
+      language: "zh-CN",
+      format: "concise JSON-compatible analysis text",
+      constraints: [
+        "Do not invent source facts.",
+        "Flag weak chronology or context loss.",
+        "Prefer evidence-backed distilled decisions and risks."
+      ]
+    }
+  };
+  const prompt = JSON.stringify(modelInput, null, 2);
+  if (prompt.length <= MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS) {
+    return prompt;
+  }
+  return `${prompt.slice(0, MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS)}\n...[truncated for model input budget]`;
+}
+
+function modelGatewayHeaders(config = {}) {
+  const headers = {
+    "content-type": "application/json",
+    "x-pact-module": "external.knowledge.distillation",
+    "x-pact-strategy": MODEL_DISTILLATION_GATEWAY_STRATEGY
+  };
+  if (config.token) {
+    headers[config.tokenHeader] = `${config.tokenPrefix || ""}${config.token}`;
+  }
+  return headers;
+}
+
+function extractModelDistillationText(payload = {}) {
+  if (typeof payload === "string") {
+    return payload.trim();
+  }
+  return String(
+    payload.text ||
+      payload.answer ||
+      payload.content ||
+      payload.message ||
+      payload.output ||
+      payload.result?.text ||
+      payload.result?.answer ||
+      payload.result?.content ||
+      payload.result?.message ||
+      payload.response?.text ||
+      payload.response?.answer ||
+      payload.choices?.[0]?.message?.content ||
+      payload.choices?.[0]?.text ||
+      ""
+  ).trim();
+}
+
+function modelDistillationSkippedState(distillationWorkflow = {}, reason = "") {
+  return {
+    ...distillationWorkflow,
+    modelDistillation: {
+      moduleBoundary: MODEL_DISTILLATION_MODULE_BOUNDARY,
+      strategy: MODEL_DISTILLATION_GATEWAY_STRATEGY,
+      status: "skipped",
+      reason,
+      requiredRealModelCall: true,
+      generatedAt: nowIso()
+    }
+  };
+}
+
+async function callModelDistillationGateway({ distillationWorkflow = {}, config = {} } = {}) {
+  const prompt = buildModelDistillationPrompt(distillationWorkflow);
+  const payload = {
+    moduleId: "external.knowledge.distillation",
+    taskType: "knowledge_distillation",
+    modelAlias: config.modelAlias,
+    question: prompt,
+    systemPrompt: [
+      "You are the Pact external knowledge distillation model worker.",
+      "Return grounded distillation analysis only from the supplied parsed document evidence.",
+      "Preserve chronology, document structure, and uncertainty markers."
+    ].join("\n"),
+    parameters: {
+      responseProfile: "machine-readable",
+      temperature: 0.1,
+      maxOutputTokens: 1800
+    }
+  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  let response;
+  let responseText = "";
+  const startedAt = Date.now();
+  try {
+    response = await fetch(config.endpoint, {
+      method: "POST",
+      headers: modelGatewayHeaders(config),
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    responseText = await response.text();
+  } finally {
+    clearTimeout(timeout);
+  }
+  const durationMs = Date.now() - startedAt;
+  let parsed = {};
+  try {
+    parsed = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    parsed = { text: responseText };
+  }
+  if (!response.ok) {
+    const error = new Error(`Model gateway call failed with HTTP ${response.status}`);
+    error.statusCode = 502;
+    error.code = "MODEL_GATEWAY_CALL_FAILED";
+    error.details = { statusCode: response.status, endpoint: config.endpoint };
+    throw error;
+  }
+  const modelText = extractModelDistillationText(parsed);
+  if (!modelText) {
+    const error = new Error("Model gateway returned an empty distillation response.");
+    error.statusCode = 502;
+    error.code = "MODEL_GATEWAY_EMPTY_RESPONSE";
+    throw error;
+  }
+  return {
+    moduleBoundary: MODEL_DISTILLATION_MODULE_BOUNDARY,
+    strategy: MODEL_DISTILLATION_GATEWAY_STRATEGY,
+    status: "completed",
+    requiredRealModelCall: true,
+    generatedAt: nowIso(),
+    endpoint: config.endpoint,
+    modelAlias: config.modelAlias,
+    request: {
+      promptCharacters: prompt.length,
+      promptSha256: shaBuffer(Buffer.from(prompt, "utf8"))
+    },
+    response: {
+      statusCode: response.status,
+      durationMs,
+      byteSize: Buffer.byteLength(responseText, "utf8"),
+      sha256: shaBuffer(Buffer.from(responseText, "utf8")),
+      text: modelText,
+      raw: parsed
+    }
+  };
+}
+
+async function runModelDistillationModule(distillationWorkflow = {}, runtimeStatus = null) {
+  if (!Array.isArray(distillationWorkflow.documents) || distillationWorkflow.documents.length === 0) {
+    return modelDistillationSkippedState(distillationWorkflow, "no-distillable-documents");
+  }
+  const config = resolveModelDistillationGatewayConfig(distillationWorkflow.input || {});
+  if (!config.endpoint) {
+    const error = new Error("External knowledge distillation requires a configured model gateway endpoint.");
+    error.statusCode = 503;
+    error.code = "MODEL_GATEWAY_REQUIRED";
+    throw error;
+  }
+  if (!config.modelAlias) {
+    const error = new Error("External knowledge distillation requires a modelAlias for the model gateway call.");
+    error.statusCode = 400;
+    error.code = "MODEL_ALIAS_REQUIRED";
+    throw error;
+  }
+  const modelDistillation = await callModelDistillationGateway({ distillationWorkflow, config, runtimeStatus });
+  return {
+    ...distillationWorkflow,
+    modelDistillation
+  };
+}
+
+async function runKnowledgeDistillationWorkflow(input = {}, runtimeStatus = null, priorRuns = [], referenceFrameworks = null) {
+  const distillationWorkflow = await runDistillationWorkflow(input, runtimeStatus, priorRuns);
   const evaluation = evaluateDistillationWorkflow(distillationWorkflow, runtimeStatus, referenceFrameworks);
   return composeDistillationResult(distillationWorkflow, evaluation, runtimeStatus);
 }
 
-function runDistillationWorkflow(input = {}, runtimeStatus = null, priorRuns = []) {
+async function runDistillationWorkflow(input = {}, runtimeStatus = null, priorRuns = []) {
   const workflowContext = initializeDistillationWorkflow(input);
   const algorithmInput = prepareDistillationAlgorithmInput(workflowContext, runtimeStatus);
-  return runDistillationAlgorithmWorkflow(algorithmInput, priorRuns);
+  const algorithmWorkflow = runDistillationAlgorithmWorkflow(algorithmInput, priorRuns);
+  return runModelDistillationModule(algorithmWorkflow, runtimeStatus);
 }
 
 function runDistillationAlgorithmWorkflow(algorithmInput = {}, priorRuns = []) {
@@ -18719,14 +19053,8 @@ function initializeDistillationWorkflow(input = {}) {
 }
 
 function prepareDistillationAlgorithmInput(workflowContext = {}, runtimeStatus = null) {
-  const normalizedInput = normalizeDocuments(workflowContext.input, runtimeStatus);
-  assertDistillationAlgorithmInputContract(normalizedInput.documents);
-  return {
-    ...workflowContext,
-    allDocuments: normalizedInput.documents,
-    inputDocumentPlan: normalizedInput.inputDocumentPlan,
-    algorithmInputContract: DISTILLATION_ALGORITHM_INPUT_CONTRACT
-  };
+  const documentParsing = runDocumentParsingModule(workflowContext.input, runtimeStatus);
+  return bindDocumentParsingToAlgorithmInput(workflowContext, documentParsing);
 }
 
 function filterDistillationInputByTime(normalizedInput = {}) {
@@ -18982,7 +19310,8 @@ function composeDistillationWorkflowState(graphEvidenceState = {}) {
     convergence: graphEvidenceState.convergence,
     grounding: graphEvidenceState.grounding,
     incrementalPlan: graphEvidenceState.incrementalPlan,
-    graphEvidence: graphEvidenceState.graphEvidence
+    graphEvidence: graphEvidenceState.graphEvidence,
+    modelDistillation: graphEvidenceState.modelDistillation || null
   };
 }
 
@@ -19141,14 +19470,15 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     convergence,
     grounding,
     incrementalPlan,
-    graphEvidence
+    graphEvidence,
+    modelDistillation
   } = distillationWorkflow;
   const { passed, failure, referenceGapReport, qualityReport } = evaluation;
-  let formatConversionPlan = buildFormatConversionPlan({ runId, corpusPlan });
-  const markdown = buildMarkdown({ title, query, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, failure });
-  formatConversionPlan = attachFormatConversionOutputValidation(formatConversionPlan, {
-    title,
+  const markdown = buildMarkdown({ title, query, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, modelDistillation, failure });
+  const formatConversionPlan = runFormatConversionModule({
     runId,
+    corpusPlan,
+    title,
     createdAt,
     updatedAt: createdAt,
     markdown
@@ -19167,6 +19497,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     grounding,
     incrementalPlan,
     graphEvidence,
+    modelDistillation,
     formatConversionPlan,
     runtimeStatus,
     failure
@@ -19198,6 +19529,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     },
     convergence,
     incrementalPlan,
+    modelDistillation,
     formatConversionPlan,
     graphEvidence: graphEvidenceSummary(graphEvidence),
     grounding,
@@ -19253,7 +19585,15 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
       totalBytes: corpusPlan.totalBytes,
       windowCount: corpusPlan.windowCount,
       totalChars: documents.reduce((sum, document) => sum + Number(document.totalTextCharacters || document.text.length || 0), 0),
-      timeFilter: corpusPlan.timeFilter
+      timeFilter: corpusPlan.timeFilter,
+      modelDistillation: modelDistillation
+        ? {
+            moduleBoundary: modelDistillation.moduleBoundary,
+            strategy: modelDistillation.strategy,
+            status: modelDistillation.status,
+            modelAlias: modelDistillation.modelAlias || ""
+          }
+        : null
     },
     sourcePlan: {
       strategy: "external_service_route_window_community_claim_gated_graph_incremental_distillation_v5",
@@ -19265,6 +19605,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
       routePlan,
       incrementalPlan,
       graphEvidence: graphEvidenceSummary(graphEvidence),
+      modelDistillation,
       corpusPlan: {
         strategy: corpusPlan.strategy,
         allSizePolicy: corpusPlan.allSizePolicy,
@@ -19290,6 +19631,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
       corpusPlan,
       convergence,
       incrementalPlan,
+      modelDistillation,
       formatConversionPlan,
       graphEvidence,
       referenceGapReport,
@@ -19402,7 +19744,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
   };
 }
 
-function createRun(input = {}, runtimeStatus = null, priorRuns = [], referenceFrameworks = null) {
+async function createRun(input = {}, runtimeStatus = null, priorRuns = [], referenceFrameworks = null) {
   return runKnowledgeDistillationWorkflow(input, runtimeStatus, priorRuns, referenceFrameworks);
 }
 
@@ -19445,15 +19787,28 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
     pipelineSeparation: {
       strategy: "document-ingestion-vs-distillation-core-boundary.v1",
       documentIngestionAdapter: {
+        moduleBoundary: DOCUMENT_PARSING_MODULE_BOUNDARY,
         strategy: DOCUMENT_INGESTION_ADAPTER_STRATEGY,
         outputContract: DISTILLATION_DOCUMENT_INPUT_CONTRACT,
         owns: ["payloadModes", "filePath", "contentRef", "contentBase64", "manifest", "formatRouting", "parserTrace"],
         outputFields: ["sourceId", "title", "text", "metadata", "route", "structureElements", "parserTrace", "contentHash"]
       },
       distillationAlgorithmCore: {
+        moduleBoundary: DISTILLATION_ALGORITHM_MODULE_BOUNDARY,
         inputContract: DISTILLATION_ALGORITHM_INPUT_CONTRACT,
         owns: ["workflowScope", "timeFilter", "corpusPlan", "classification", "grounding", "incrementalPlan", "graphEvidence"],
         forbiddenInputFields: PARSER_PAYLOAD_FIELD_NAMES
+      },
+      modelDistillation: {
+        moduleBoundary: MODEL_DISTILLATION_MODULE_BOUNDARY,
+        strategy: MODEL_DISTILLATION_GATEWAY_STRATEGY,
+        owns: ["realModelInvocation", "modelDistillation", "modelEvidenceSynthesis"],
+        requires: ["agent-gateway", "modelAlias", "modelGatewayEndpoint"]
+      },
+      formatConversion: {
+        moduleBoundary: FORMAT_CONVERSION_MODULE_BOUNDARY,
+        strategy: "office-document-professional-adaptation.v1",
+        owns: ["portable-markdown", "portable-docx", "agent-message-json", "workspace-package-zip"]
       }
     },
     distillationAlgorithm: {
@@ -19461,6 +19816,18 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       documentContract: DISTILLATION_DOCUMENT_INPUT_CONTRACT,
       parserPayloadFieldsAllowed: false,
       entrypoint: "runDistillationAlgorithmWorkflow"
+    },
+    modelDistillation: {
+      supported: true,
+      moduleBoundary: MODEL_DISTILLATION_MODULE_BOUNDARY,
+      strategy: MODEL_DISTILLATION_GATEWAY_STRATEGY,
+      requiredRealModelCall: true,
+      gatewayEndpointConfigured: Boolean(process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_URL || process.env.PACT_AGENT_GATEWAY_URL),
+      modelAliasConfigured: Boolean(process.env.PACT_EXTERNAL_KD_MODEL_ALIAS),
+      timeoutMs: MODEL_GATEWAY_TIMEOUT_MS,
+      promptMaxCharacters: MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS,
+      noBuiltinFallback: true,
+      dependency: "agent-gateway"
     },
     algorithms: [
       "external-service.route-window-embedding-grounded-distillation.v1",
@@ -19489,6 +19856,11 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "human-agent-response-profile-separation.v1",
       "professional-format-manifest.v1",
       "bounded-binary-file-profile.v1",
+      DOCUMENT_PARSING_MODULE_BOUNDARY,
+      DISTILLATION_ALGORITHM_MODULE_BOUNDARY,
+      MODEL_DISTILLATION_MODULE_BOUNDARY,
+      FORMAT_CONVERSION_MODULE_BOUNDARY,
+      MODEL_DISTILLATION_GATEWAY_STRATEGY,
       EVIDENCE_QUERY_STRATEGY,
       PROJECT_EVIDENCE_QUERY_STRATEGY,
       REFERENCE_GAP_REPORT_STRATEGY,
@@ -19578,7 +19950,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       sizeLimitPolicy: "resource-bounded-no-small-hard-cap"
     },
     parserExecution: {
-      boundary: "document-ingestion-adapter",
+      boundary: DOCUMENT_PARSING_MODULE_BOUNDARY,
       strategy: DOCUMENT_INGESTION_ADAPTER_STRATEGY,
       outputContract: DISTILLATION_DOCUMENT_INPUT_CONTRACT,
       consumedByAlgorithmContract: DISTILLATION_ALGORITHM_INPUT_CONTRACT,
@@ -19899,7 +20271,7 @@ async function handleRequest(request, response) {
     if (request.method === "POST" && pathname === "/v1/distillation/runs") {
       const body = await readJson(request);
       const runs = await loadRuns();
-      const run = createRun(body, await runtimeDoctor(), runs, await loadReferenceFrameworks());
+      const run = await createRun(body, await runtimeDoctor(), runs, await loadReferenceFrameworks());
       runs.push(run);
       await saveRuns(runs);
       jsonResponse(response, 201, run);
