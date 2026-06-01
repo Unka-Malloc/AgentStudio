@@ -15781,6 +15781,87 @@ function artifactValidationGate(gate = "", passed = false, details = {}) {
   };
 }
 
+function xmlTagNameFromToken(token = "") {
+  return String(token || "")
+    .replace(/^<\//, "")
+    .replace(/^</, "")
+    .replace(/\/?>$/, "")
+    .trim()
+    .split(/\s+/)[0] || "";
+}
+
+function xmlWellFormedness(xml = "", expectedRootNames = []) {
+  const source = String(xml || "");
+  const expectedRoots = new Set((Array.isArray(expectedRootNames) ? expectedRootNames : [expectedRootNames]).filter(Boolean));
+  const stack = [];
+  const errors = [];
+  let rootName = "";
+  for (const match of source.matchAll(/<[^>]+>/g)) {
+    const token = match[0];
+    if (/^<\?/.test(token) || /^<!--/.test(token) || /^<!\[CDATA\[/.test(token) || /^<!DOCTYPE/i.test(token)) {
+      continue;
+    }
+    if (/^<\//.test(token)) {
+      const closingName = xmlTagNameFromToken(token);
+      const openingName = stack.pop();
+      if (openingName !== closingName) {
+        errors.push(`mismatch:${openingName || "empty"}:${closingName || "empty"}`);
+        break;
+      }
+      continue;
+    }
+    const openingName = xmlTagNameFromToken(token);
+    if (!openingName) {
+      errors.push("empty-tag-name");
+      break;
+    }
+    if (!rootName) {
+      rootName = openingName;
+    }
+    if (!/\/>$/.test(token)) {
+      stack.push(openingName);
+    }
+  }
+  if (stack.length) {
+    errors.push(`unclosed:${stack.slice(-5).join("/")}`);
+  }
+  if (expectedRoots.size && !expectedRoots.has(rootName)) {
+    errors.push(`unexpected-root:${rootName || "missing"}`);
+  }
+  return {
+    wellFormed: source.trim().length > 0 && errors.length === 0,
+    rootName,
+    errors
+  };
+}
+
+function xmlRelationshipTargets(xml = "") {
+  const relationships = [];
+  for (const match of String(xml || "").matchAll(/<Relationship\b([^>]*)>/g)) {
+    const attributes = match[1] || "";
+    relationships.push({
+      id: attributes.match(/\bId="([^"]+)"/)?.[1] || "",
+      type: attributes.match(/\bType="([^"]+)"/)?.[1] || "",
+      target: attributes.match(/\bTarget="([^"]+)"/)?.[1] || "",
+      targetMode: attributes.match(/\bTargetMode="([^"]+)"/)?.[1] || ""
+    });
+  }
+  return relationships;
+}
+
+function xmlAttributeValues(xml = "", tagPattern = "", attributeName = "") {
+  const values = [];
+  const tagRegex = new RegExp(`<${tagPattern}\\b([^>]*)>`, "g");
+  const attributeRegex = new RegExp(`\\b${attributeName}="([^"]+)"`);
+  for (const match of String(xml || "").matchAll(tagRegex)) {
+    const value = (match[1] || "").match(attributeRegex)?.[1] || "";
+    if (value) {
+      values.push(value);
+    }
+  }
+  return values;
+}
+
 function validateMarkdownArtifactBuffer(buffer = Buffer.alloc(0)) {
   const text = Buffer.from(buffer || []).toString("utf8");
   const gates = [
@@ -15815,9 +15896,29 @@ function validateOpenXmlDocxBuffer(buffer = Buffer.alloc(0)) {
   const entries = readZipEntries(buffer);
   const entryNames = new Set(entries.map((entry) => entry.name));
   const contentTypes = zipEntryText(entries, "[Content_Types].xml");
+  const packageRelationshipsXml = zipEntryText(entries, "_rels/.rels");
+  const coreXml = zipEntryText(entries, "docProps/core.xml");
+  const appXml = zipEntryText(entries, "docProps/app.xml");
   const documentXml = zipEntryText(entries, "word/document.xml");
   const relationshipsXml = zipEntryText(entries, "word/_rels/document.xml.rels");
   const stylesXml = zipEntryText(entries, "word/styles.xml");
+  const xmlPartChecks = {
+    contentTypes: xmlWellFormedness(contentTypes, "Types"),
+    packageRelationships: xmlWellFormedness(packageRelationshipsXml, "Relationships"),
+    coreProperties: xmlWellFormedness(coreXml, "cp:coreProperties"),
+    appProperties: xmlWellFormedness(appXml, "Properties"),
+    document: xmlWellFormedness(documentXml, "w:document"),
+    documentRelationships: xmlWellFormedness(relationshipsXml, "Relationships"),
+    styles: xmlWellFormedness(stylesXml, "w:styles")
+  };
+  const packageRelationships = xmlRelationshipTargets(packageRelationshipsXml);
+  const documentRelationships = xmlRelationshipTargets(relationshipsXml);
+  const packageTargets = new Set(packageRelationships.map((relationship) => relationship.target));
+  const documentRelationshipIds = new Set(documentRelationships.map((relationship) => relationship.id));
+  const hyperlinkRelationshipIds = new Set(documentRelationships
+    .filter((relationship) => /\/hyperlink$/.test(relationship.type))
+    .map((relationship) => relationship.id));
+  const documentHyperlinkIds = xmlAttributeValues(documentXml, "w:hyperlink", "r:id");
   const tableCount = (documentXml.match(/<w:tbl\b/g) || []).length;
   const tableRowCount = (documentXml.match(/<w:tr\b/g) || []).length;
   const tableCellCount = (documentXml.match(/<w:tc\b/g) || []).length;
@@ -15843,6 +15944,35 @@ function validateOpenXmlDocxBuffer(buffer = Buffer.alloc(0)) {
       observed: { entries: Array.from(entryNames).sort() },
       required: { parts: ["[Content_Types].xml", "_rels/.rels", "docProps/core.xml", "docProps/app.xml", "word/document.xml", "word/styles.xml"] },
       message: "DOCX required OpenXML package parts are present."
+    }),
+    artifactValidationGate("openxml-xml-parts-well-formed", Object.values(xmlPartChecks).every((check) => check.wellFormed), {
+      observed: Object.fromEntries(Object.entries(xmlPartChecks).map(([part, check]) => [
+        part,
+        { wellFormed: check.wellFormed, rootName: check.rootName, errors: check.errors }
+      ])),
+      required: { allRequiredXmlPartsWellFormed: true },
+      message: "DOCX required XML parts are well formed with expected roots."
+    }),
+    artifactValidationGate("openxml-package-relationships-resolve", (
+      packageTargets.has("word/document.xml") &&
+      packageTargets.has("docProps/core.xml") &&
+      packageTargets.has("docProps/app.xml") &&
+      documentRelationships.some((relationship) => relationship.id === "rStyle" && relationship.target === "styles.xml") &&
+      documentHyperlinkIds.every((id) => hyperlinkRelationshipIds.has(id)) &&
+      documentRelationships.every((relationship) => relationship.id && (relationship.targetMode === "External" || entryNames.has(`word/${relationship.target}`)))
+    ), {
+      observed: {
+        packageTargets: Array.from(packageTargets).sort(),
+        documentRelationshipIds: Array.from(documentRelationshipIds).sort(),
+        hyperlinkIds: documentHyperlinkIds,
+        hyperlinkRelationshipIds: Array.from(hyperlinkRelationshipIds).sort()
+      },
+      required: {
+        packageTargets: ["word/document.xml", "docProps/core.xml", "docProps/app.xml"],
+        stylesRelationship: "word/styles.xml",
+        hyperlinkIdsResolve: true
+      },
+      message: "DOCX package relationships resolve to required parts and hyperlink targets."
     }),
     artifactValidationGate("content-types-wordprocessing-main", /wordprocessingml\.document\.main\+xml/.test(contentTypes), {
       observed: { hasWordprocessingMain: /wordprocessingml\.document\.main\+xml/.test(contentTypes) },

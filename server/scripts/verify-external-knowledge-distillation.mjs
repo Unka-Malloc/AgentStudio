@@ -2553,7 +2553,9 @@ try {
   assert.equal(professionalConversionPlan.outputArtifactValidation.artifacts.some((artifact) => (
     artifact.artifactId === "portable-docx" &&
     artifact.status === "passed" &&
-    artifact.gates.some((gate) => gate.gate === "openxml-required-parts-present" && gate.status === "passed")
+    artifact.gates.some((gate) => gate.gate === "openxml-required-parts-present" && gate.status === "passed") &&
+    artifact.gates.some((gate) => gate.gate === "openxml-xml-parts-well-formed" && gate.status === "passed") &&
+    artifact.gates.some((gate) => gate.gate === "openxml-package-relationships-resolve" && gate.status === "passed")
   )), true);
   for (const [sourceId, routeId, family, qualityGate] of [
     ["source-5", "markdown", "markdown", "heading-tree-preserved"],
@@ -4788,6 +4790,8 @@ try {
     artifact.gates.some((gate) => gate.gate === "word-heading-styles-present" && gate.status === "passed") &&
     artifact.gates.some((gate) => gate.gate === "word-list-and-code-styles-present" && gate.status === "passed") &&
     artifact.gates.some((gate) => gate.gate === "word-table-elements-well-formed" && gate.status === "passed") &&
+    artifact.gates.some((gate) => gate.gate === "openxml-xml-parts-well-formed" && gate.status === "passed") &&
+    artifact.gates.some((gate) => gate.gate === "openxml-package-relationships-resolve" && gate.status === "passed") &&
     artifact.gates.some((gate) => gate.gate === "word-hyperlinks-well-formed" && gate.status === "passed")
   )), true);
   assert.equal(conversionPlan.formatMatrix.some((item) => item.routeId === "pdf" && item.qualityGates.includes("page-order-preserved")), true);
@@ -5083,7 +5087,9 @@ try {
     item.artifactId === "portable-docx" &&
     item.validation?.status === "passed" &&
     item.validation.gates.some((gate) => gate.gate === "word-document-body-present" && gate.status === "passed") &&
-    item.validation.gates.some((gate) => gate.gate === "word-heading-styles-present" && gate.status === "passed")
+    item.validation.gates.some((gate) => gate.gate === "word-heading-styles-present" && gate.status === "passed") &&
+    item.validation.gates.some((gate) => gate.gate === "openxml-xml-parts-well-formed" && gate.status === "passed") &&
+    item.validation.gates.some((gate) => gate.gate === "openxml-package-relationships-resolve" && gate.status === "passed")
   )), true);
 } finally {
   if (pactServer) {

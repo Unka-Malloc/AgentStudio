@@ -1470,6 +1470,8 @@ try {
     artifact.gates.some((gate) => gate.gate === "word-heading-styles-present" && gate.status === "passed") &&
     artifact.gates.some((gate) => gate.gate === "word-list-and-code-styles-present" && gate.status === "passed") &&
     artifact.gates.some((gate) => gate.gate === "word-table-elements-well-formed" && gate.status === "passed") &&
+    artifact.gates.some((gate) => gate.gate === "openxml-xml-parts-well-formed" && gate.status === "passed") &&
+    artifact.gates.some((gate) => gate.gate === "openxml-package-relationships-resolve" && gate.status === "passed") &&
     artifact.gates.some((gate) => gate.gate === "word-hyperlinks-well-formed" && gate.status === "passed" && gate.observed.hyperlinkCount >= 1)
   )), true);
   assert.equal(conversionPlan.documents.some((document) => (

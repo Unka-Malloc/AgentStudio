@@ -652,6 +652,18 @@ for (const expectedText of [
     `FormatConversion must own output packaging and validation through ${expectedText}`
   );
 }
+for (const expectedText of [
+  "xmlWellFormedness",
+  "xmlRelationshipTargets",
+  "openxml-xml-parts-well-formed",
+  "openxml-package-relationships-resolve"
+]) {
+  assert.equal(
+    externalServiceSource.includes(expectedText),
+    true,
+    `FormatConversion artifact validation must include OpenXML package self-check support: ${expectedText}`
+  );
+}
 const createRunWrapperBody = sourceSliceBetweenFunctions(externalServiceSource, "createRun", "capabilities");
 assert.match(
   createRunWrapperBody,
