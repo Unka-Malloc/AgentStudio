@@ -72,6 +72,7 @@ const FORMAT_CONVERSION_MODULE_BOUNDARY = "external-kd.format-conversion.module.
 const MODEL_DISTILLATION_GATEWAY_STRATEGY = "required-agent-gateway-real-model-call.v1";
 const MODEL_DISTILLATION_OUTPUT_CONTRACT = "pact.external-knowledge-distillation.model-output.v1";
 const MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY = "model-distillation-machine-readable-contract.v1";
+const MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY = "model-distillation-contract-repair-retry.v1";
 const DISTILLATION_WORKFLOW_SCOPE = Object.freeze({
   DOCUMENT: "document",
   CORPUS: "corpus",
@@ -115,6 +116,7 @@ const EMAIL_MBOX_MESSAGE_MAX_CHARACTERS = Math.max(4096, Number(process.env.PACT
 const STRUCTURED_ZIP_ENTRY_MAX_BYTES = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_STRUCTURED_ZIP_ENTRY_MAX_BYTES || ARCHIVE_ENTRY_MAX_BYTES));
 const MODEL_GATEWAY_TIMEOUT_MS = Math.max(1000, Number(process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_TIMEOUT_MS || 120_000));
 const MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_MODEL_PROMPT_MAX_CHARACTERS || 48_000));
+const MODEL_DISTILLATION_OUTPUT_REPAIR_MAX_ATTEMPTS = Math.max(0, Number(process.env.PACT_EXTERNAL_KD_MODEL_OUTPUT_REPAIR_MAX_ATTEMPTS || 1));
 let runtimeDoctorCache = null;
 const BACKGROUND_RUNS = new Set();
 const PARSER_PAYLOAD_FIELD_NAMES = Object.freeze([
@@ -682,6 +684,12 @@ function validateModelDistillationProfilesConfig(config = {}) {
     if (String(profile.requiredOutput?.machineReadableContract || "").trim() !== MODEL_DISTILLATION_OUTPUT_CONTRACT) {
       throw new Error(`model distillation profile ${id} must require ${MODEL_DISTILLATION_OUTPUT_CONTRACT}`);
     }
+    if (profile.outputRepairPolicy?.enabled !== true || String(profile.outputRepairPolicy?.strategy || "").trim() !== MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY) {
+      throw new Error(`model distillation profile ${id} must enable ${MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY}`);
+    }
+    if (Number(profile.outputRepairPolicy?.maxAttempts ?? -1) < 1) {
+      throw new Error(`model distillation profile ${id} must define outputRepairPolicy.maxAttempts`);
+    }
   }
   const defaultProfileId = String(config.defaultProfileId || "").trim();
   if (!profileIds.has(defaultProfileId)) {
@@ -721,6 +729,15 @@ function normalizeModelDistillationProfile(profile = {}, registry = {}) {
       maxAttempts: Math.max(1, Number(profile.transportPolicy?.maxAttempts || 1)),
       retryBackoffMs: Math.max(0, Number(profile.transportPolicy?.retryBackoffMs || 0)),
       retryOn: Object.freeze(normalizeFormatRouteArray(profile.transportPolicy?.retryOn))
+    }),
+    outputRepairPolicy: Object.freeze({
+      enabled: profile.outputRepairPolicy?.enabled === true,
+      strategy: String(profile.outputRepairPolicy?.strategy || MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY).trim(),
+      maxAttempts: Math.max(0, Math.min(
+        MODEL_DISTILLATION_OUTPUT_REPAIR_MAX_ATTEMPTS,
+        Number(profile.outputRepairPolicy?.maxAttempts ?? MODEL_DISTILLATION_OUTPUT_REPAIR_MAX_ATTEMPTS)
+      )),
+      systemPromptSuffixLines: Object.freeze(normalizeFormatRouteArray(profile.outputRepairPolicy?.systemPromptSuffixLines))
     }),
     classificationDistillation: Object.freeze({
       enabled: profile.classificationDistillation?.enabled === true,
@@ -21207,6 +21224,380 @@ function validateModelDistillationOutput({
   };
 }
 
+function failedModelOutputValidationGates(outputValidation = {}) {
+  return (outputValidation.gates || [])
+    .filter((gate) => gate.status === "failed")
+    .map((gate) => ({
+      gate: gate.gate,
+      message: gate.message || "",
+      observed: gate.observed || {},
+      required: gate.required || {}
+    }));
+}
+
+function modelOutputOriginalPromptPayload(prompt = "") {
+  try {
+    const parsed = JSON.parse(prompt);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch {
+    // Recover structured identifiers below for malformed or truncated JSON input.
+  }
+  const text = String(prompt || "");
+  const recoveredEvidenceRefs = uniqueOrdered(Array.from(text.matchAll(/"evidenceRef"\s*:\s*"([^"]+)"/g)).map((match) => match[1]));
+  const recoveredSourceIds = uniqueOrdered(Array.from(text.matchAll(/"sourceId"\s*:\s*"([^"]+)"/g)).map((match) => match[1]));
+  const groupId = text.match(/"groupId"\s*:\s*"([^"]+)"/)?.[1] || "";
+  const label = text.match(/"label"\s*:\s*"([^"]+)"/)?.[1] || "";
+  const evidence = recoveredEvidenceRefs.map((evidenceRef, index) => ({
+    evidenceRef,
+    sourceId: recoveredSourceIds[index] || recoveredSourceIds[0] || ""
+  }));
+  const documents = recoveredSourceIds.map((sourceId, index) => ({
+    sourceId,
+    evidenceRef: recoveredEvidenceRefs[index] || recoveredEvidenceRefs[0] || ""
+  }));
+  return {
+    recoveredFromTruncatedPrompt: {
+      strategy: "regex-identifier-recovery-from-truncated-model-prompt.v1",
+      sourceIdCount: recoveredSourceIds.length,
+      evidenceRefCount: recoveredEvidenceRefs.length
+    },
+    group: groupId
+      ? {
+          groupId,
+          label,
+          sourceIds: recoveredSourceIds
+        }
+      : null,
+    evidence,
+    documents,
+    rawPromptExcerpt: text.slice(0, 12_000)
+  };
+}
+
+function compactModelRepairDocumentRecord(document = {}) {
+  return {
+    sourceId: document.sourceId || "",
+    evidenceRef: document.evidenceRef || "",
+    title: document.title || document.fileName || "",
+    fileName: document.fileName || "",
+    routeId: document.routeId || document.route?.id || "",
+    formatId: document.formatId || document.route?.formatId || "",
+    documentTime: document.documentTime || "",
+    timeRange: document.timeRange || null,
+    excerpt: String(document.excerpt || "").slice(0, 240)
+  };
+}
+
+function compactModelRepairEvidenceRecord(evidence = {}) {
+  return {
+    evidenceRef: evidence.evidenceRef || "",
+    sourceId: evidence.sourceId || "",
+    title: evidence.title || evidence.fileName || "",
+    documentTime: evidence.documentTime || "",
+    timeRange: evidence.timeRange || null,
+    excerpt: String(evidence.excerpt || "").slice(0, 240)
+  };
+}
+
+function compactOriginalInputForModelRepair(originalInput = {}) {
+  const documents = (originalInput.documents || [])
+    .slice(0, 16)
+    .map(compactModelRepairDocumentRecord);
+  const evidence = (originalInput.evidence || [])
+    .slice(0, 16)
+    .map(compactModelRepairEvidenceRecord);
+  const groups = (originalInput.groups || [])
+    .slice(0, 16)
+    .map((group) => ({
+      groupId: group.groupId || "",
+      label: group.label || "",
+      kind: group.kind || "topic",
+      sourceIds: (group.sourceIds || []).slice(0, 64),
+      keywords: (group.keywords || []).slice(0, 24),
+      cohesionScore: group.cohesionScore || 0,
+      separationScore: group.separationScore ?? null,
+      excludedFromCore: Boolean(group.excludedFromCore)
+    }));
+  const sourceIds = uniqueOrdered(
+    (originalInput.group?.sourceIds || [])
+      .concat(documents.map((document) => document.sourceId))
+      .concat(evidence.map((item) => item.sourceId))
+      .filter(Boolean)
+  );
+  return {
+    task: originalInput.task || "",
+    distillationScope: originalInput.distillationScope || "",
+    query: originalInput.query || "",
+    workflowScope: originalInput.workflowScope || "",
+    scopeSelection: originalInput.scopeSelection || null,
+    timeFilter: originalInput.timeFilter || null,
+    group: originalInput.group
+      ? {
+          groupId: originalInput.group.groupId || "",
+          label: originalInput.group.label || "",
+          kind: originalInput.group.kind || "topic",
+          sourceIds: sourceIds.slice(0, 64),
+          keywords: (originalInput.group.keywords || []).slice(0, 24),
+          topicHierarchy: originalInput.group.topicHierarchy || null
+        }
+      : null,
+    groups,
+    documents,
+    evidence,
+    projectContext: originalInput.projectContext || null,
+    requiredOutput: originalInput.requiredOutput || null,
+    recoveredFromTruncatedPrompt: originalInput.recoveredFromTruncatedPrompt || null
+  };
+}
+
+function stringifyModelOutputRepairPrompt(repairInput = {}) {
+  const attempts = [
+    repairInput,
+    {
+      ...repairInput,
+      originalInput: {
+        ...(repairInput.originalInput || {}),
+        documents: (repairInput.originalInput?.documents || []).slice(0, 8),
+        evidence: (repairInput.originalInput?.evidence || []).slice(0, 8),
+        group: repairInput.originalInput?.group
+          ? {
+              ...repairInput.originalInput.group,
+              sourceIds: (repairInput.originalInput.group.sourceIds || []).slice(0, 32),
+              keywords: (repairInput.originalInput.group.keywords || []).slice(0, 12)
+            }
+          : null
+      },
+      invalidOutput: {
+        ...(repairInput.invalidOutput || {}),
+        textExcerpt: String(repairInput.invalidOutput?.textExcerpt || "").slice(0, 1000)
+      }
+    },
+    {
+      task: repairInput.task,
+      strategy: repairInput.strategy,
+      repairAttempt: repairInput.repairAttempt,
+      contract: repairInput.contract,
+      distillationScope: repairInput.distillationScope,
+      group: repairInput.group,
+      failedValidationGates: repairInput.failedValidationGates,
+      requiredOutput: repairInput.requiredOutput,
+      originalInput: {
+        group: repairInput.originalInput?.group || null,
+        groups: (repairInput.originalInput?.groups || []).slice(0, 8),
+        documents: (repairInput.originalInput?.documents || []).slice(0, 4),
+        evidence: (repairInput.originalInput?.evidence || []).slice(0, 4)
+      },
+      invalidOutput: {
+        responseSha256: repairInput.invalidOutput?.responseSha256 || "",
+        observed: repairInput.invalidOutput?.observed || {}
+      }
+    }
+  ];
+  for (const attempt of attempts) {
+    const text = JSON.stringify(attempt, null, 2);
+    if (text.length <= MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS) {
+      return text;
+    }
+  }
+  return JSON.stringify(attempts.at(-1), null, 2);
+}
+
+function buildModelOutputRepairPrompt({
+  originalPrompt = "",
+  gatewayCall = {},
+  outputValidation = {},
+  distillationScope = "project-convergence",
+  group = null,
+  profile = MODEL_DISTILLATION_PROFILES.defaultProfile,
+  repairAttempt = 1
+} = {}) {
+  const repairInput = {
+    task: "Repair the previous knowledge distillation model output so it satisfies the machine-readable contract.",
+    strategy: MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY,
+    repairAttempt,
+    contract: MODEL_DISTILLATION_OUTPUT_CONTRACT,
+    distillationScope,
+    group: group
+      ? {
+          groupId: group.groupId || "",
+          label: group.label || "",
+          kind: group.kind || "topic",
+          sourceIds: group.sourceIds || []
+        }
+      : null,
+    failedValidationGates: failedModelOutputValidationGates(outputValidation),
+    requiredOutput: {
+      language: profile.requiredOutput.language,
+      format: profile.requiredOutput.format,
+      machineReadableContract: profile.requiredOutput.machineReadableContract,
+      schema: modelDistillationOutputContractSpec(distillationScope),
+      constraints: [
+        ...profile.requiredOutput.constraints,
+        "Return only the corrected JSON object.",
+        "Reuse only sourceIds, evidenceRefs, and groupIds that appear in originalInput.",
+        "Do not add explanation, Markdown fences, or prose outside the JSON object."
+      ]
+    },
+    originalInput: compactOriginalInputForModelRepair(modelOutputOriginalPromptPayload(originalPrompt)),
+    invalidOutput: {
+      responseSha256: gatewayCall.response?.sha256 || "",
+      textExcerpt: String(gatewayCall.response?.text || "").slice(0, 2000),
+      observed: outputValidation.observed || {}
+    }
+  };
+  return stringifyModelOutputRepairPrompt(repairInput);
+}
+
+function modelOutputRepairSummary(repairAttempts = [], status = "not_required", maxAttempts = MODEL_DISTILLATION_OUTPUT_REPAIR_MAX_ATTEMPTS) {
+  return {
+    strategy: MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY,
+    enabled: true,
+    status,
+    attemptCount: repairAttempts.length,
+    maxAttempts,
+    attempts: repairAttempts.map((attempt) => ({
+      attempt: attempt.attempt,
+      request: attempt.request,
+      response: attempt.response,
+      validationStatus: attempt.validationStatus,
+      failedGates: attempt.failedGates
+    }))
+  };
+}
+
+function createModelOutputValidationError({
+  outputValidation = {},
+  distillationScope = "project-convergence",
+  group = null,
+  profile = MODEL_DISTILLATION_PROFILES.defaultProfile,
+  repairAttempts = []
+} = {}) {
+  const failedGates = failedModelOutputValidationGates(outputValidation);
+  const error = new Error(`Model gateway returned invalid machine-readable distillation output for ${distillationScope}.`);
+  error.statusCode = 502;
+  error.code = "MODEL_GATEWAY_INVALID_MACHINE_READABLE_OUTPUT";
+  error.details = {
+    profileId: profile.id,
+    strategy: MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY,
+    contract: MODEL_DISTILLATION_OUTPUT_CONTRACT,
+    repairStrategy: MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY,
+    distillationScope,
+    groupId: group?.groupId || "",
+    validationStatus: outputValidation.status || "unknown",
+    failedGates,
+    repairAttemptCount: repairAttempts.length,
+    responseSha256: outputValidation.responseSha256 || ""
+  };
+  return error;
+}
+
+async function callValidatedModelGatewayWithPrompt({
+  prompt = "",
+  config = {},
+  profile = MODEL_DISTILLATION_PROFILES.defaultProfile,
+  distillationScope = "project-convergence",
+  group = null,
+  systemPromptSuffixLines = [],
+  parameters = {},
+  distillationWorkflow = {},
+  selectedGroups = []
+} = {}) {
+  const validationContext = {
+    distillationWorkflow,
+    profile,
+    distillationScope,
+    group,
+    selectedGroups
+  };
+  let gatewayCall = await callModelGatewayWithPrompt({
+    prompt,
+    config,
+    profile,
+    distillationScope,
+    group,
+    systemPromptSuffixLines,
+    parameters
+  });
+  let outputValidation = validateModelDistillationOutput({
+    gatewayCall,
+    ...validationContext
+  });
+  const repairPolicy = profile.outputRepairPolicy || {};
+  const repairAttempts = [];
+  const maxRepairAttempts = repairPolicy.enabled === true
+    ? Math.max(0, Number(repairPolicy.maxAttempts || 0))
+    : 0;
+  for (let repairAttempt = 1; outputValidation.status !== "passed" && repairAttempt <= maxRepairAttempts; repairAttempt += 1) {
+    const repairPrompt = buildModelOutputRepairPrompt({
+      originalPrompt: prompt,
+      gatewayCall,
+      outputValidation,
+      distillationScope,
+      group,
+      profile,
+      repairAttempt
+    });
+    const repairCall = await callModelGatewayWithPrompt({
+      prompt: repairPrompt,
+      config,
+      profile,
+      distillationScope,
+      group,
+      systemPromptSuffixLines: [
+        ...(systemPromptSuffixLines || []),
+        ...(repairPolicy.systemPromptSuffixLines || [])
+      ],
+      parameters: {
+        ...parameters,
+        contractRepair: true,
+        contractRepairAttempt: repairAttempt,
+        contractRepairStrategy: repairPolicy.strategy || MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY,
+        originalPromptSha256: shaBuffer(Buffer.from(prompt, "utf8"))
+      }
+    });
+    const repairValidation = validateModelDistillationOutput({
+      gatewayCall: repairCall,
+      ...validationContext
+    });
+    repairAttempts.push({
+      attempt: repairAttempt,
+      request: repairCall.request,
+      response: {
+        statusCode: repairCall.response?.statusCode || 0,
+        byteSize: repairCall.response?.byteSize || 0,
+        sha256: repairCall.response?.sha256 || ""
+      },
+      validationStatus: repairValidation.status,
+      failedGates: failedModelOutputValidationGates(repairValidation)
+    });
+    gatewayCall = repairCall;
+    outputValidation = repairValidation;
+  }
+  if (outputValidation.status !== "passed") {
+    throw createModelOutputValidationError({
+      outputValidation,
+      distillationScope,
+      group,
+      profile,
+      repairAttempts
+    });
+  }
+  const repairStatus = repairAttempts.length === 0 ? "not_required" : "repaired";
+  const contractRepair = modelOutputRepairSummary(repairAttempts, repairStatus, maxRepairAttempts);
+  return {
+    gatewayCall: {
+      ...gatewayCall,
+      contractRepair
+    },
+    outputValidation: {
+      ...outputValidation,
+      contractRepair
+    }
+  };
+}
+
 function selectedClassificationDistillationGroups(distillationWorkflow = {}, policy = {}) {
   const classification = distillationWorkflow.classification || {};
   return (classification.groups || [])
@@ -21240,6 +21631,7 @@ function classificationGroupModelCallCompletedRecord({ group = {}, policy = {}, 
     modelAlias: config.modelAlias || "",
     request: gatewayCall.request,
     response: gatewayCall.response,
+    contractRepair: gatewayCall.contractRepair || null,
     outputValidation,
     machineReadablePayload: outputValidation?.machineReadablePayload || null
   };
@@ -21412,8 +21804,14 @@ function buildGroupModelDistillationPrompt(distillationWorkflow = {}, group = {}
   const allDocuments = distillationWorkflow.documents || [];
   const grounding = distillationWorkflow.grounding || {};
   const promotionGate = grounding.promotionGates?.[group.groupId] || candidatePromotionGateForGroup(group, grounding);
-  const groupDocuments = (group.documents || [])
+  const explicitGroupDocuments = Array.isArray(group.documents) ? group.documents : [];
+  const groupSourceIdSet = new Set(group.sourceIds || []);
+  const resolvedGroupDocuments = explicitGroupDocuments.length
+    ? explicitGroupDocuments
+    : allDocuments.filter((document) => groupSourceIdSet.has(document.sourceId));
+  const groupDocuments = resolvedGroupDocuments
     .slice(0, Math.max(1, Number(groupCallPolicy.maxEvidencePerGroup || profile.classificationDistillation?.maxEvidencePerGroup || 6)));
+  const groupEvidenceSourceIds = uniqueOrdered(groupDocuments.map((document) => document.sourceId).filter(Boolean));
   const modelInput = {
     task: profile.task,
     distillationScope: "classification-group",
@@ -21426,8 +21824,8 @@ function buildGroupModelDistillationPrompt(distillationWorkflow = {}, group = {}
       groupId: group.groupId,
       label: group.label,
       kind: group.kind || "topic",
-      sourceIds: group.sourceIds || [],
-      keywords: group.keywords || [],
+      sourceIds: groupEvidenceSourceIds,
+      keywords: (group.keywords || []).slice(0, 24),
       topicHierarchy: group.topicHierarchy || null,
       cohesionScore: group.cohesionScore || 0,
       separationScore: group.separationScore ?? null,
@@ -21437,15 +21835,18 @@ function buildGroupModelDistillationPrompt(distillationWorkflow = {}, group = {}
             unitId: group.distillationUnit.unitId || "",
             mode: group.distillationUnit.mode || "",
             topicPath: group.distillationUnit.topicPath || [],
-            sourceIds: group.distillationUnit.sourceIds || [],
-            summary: group.distillationUnit.summary || [],
-            windowRefs: group.distillationUnit.windowRefs || []
+            sourceIds: groupEvidenceSourceIds,
+            summary: (group.distillationUnit.summary || []).slice(0, 6),
+            windowRefs: (group.distillationUnit.windowRefs || []).slice(0, 16)
           }
         : null,
       promotionGate
     },
     evidence: groupDocuments.map((document) => compactGroupDistillationEvidenceRecord(allDocuments, document)),
-    documents: groupDocuments.map(compactModelDocumentRecord),
+    documents: groupDocuments.map((document) => compactModelDocumentRecord(
+      document,
+      Math.max(0, allDocuments.findIndex((item) => item.sourceId === document.sourceId))
+    )),
     projectContext: {
       classificationStrategy: distillationWorkflow.classification?.strategy || "",
       groupCount: distillationWorkflow.classification?.groupCount || 0,
@@ -21559,7 +21960,8 @@ function buildModelGatewayPayload({
   profile = MODEL_DISTILLATION_PROFILES.defaultProfile,
   distillationScope = "project-convergence",
   group = null,
-  systemPromptSuffixLines = []
+  systemPromptSuffixLines = [],
+  parameters = {}
 } = {}) {
   const payload = {
     moduleId: "external.knowledge.distillation",
@@ -21569,7 +21971,8 @@ function buildModelGatewayPayload({
     systemPrompt: profile.systemPromptLines.concat(systemPromptSuffixLines || []).join("\n"),
     parameters: {
       ...profile.parameters,
-      distillationScope
+      distillationScope,
+      ...parameters
     },
     distillationScope
   };
@@ -21588,7 +21991,8 @@ async function callModelGatewayWithPrompt({
   profile = MODEL_DISTILLATION_PROFILES.defaultProfile,
   distillationScope = "project-convergence",
   group = null,
-  systemPromptSuffixLines = []
+  systemPromptSuffixLines = [],
+  parameters = {}
 } = {}) {
   const payload = buildModelGatewayPayload({
     prompt,
@@ -21596,7 +22000,8 @@ async function callModelGatewayWithPrompt({
     profile,
     distillationScope,
     group,
-    systemPromptSuffixLines
+    systemPromptSuffixLines,
+    parameters
   });
   let response;
   let responseText = "";
@@ -21698,20 +22103,14 @@ async function callClassificationGroupModelGatewayCalls({
       continue;
     }
     const prompt = buildGroupModelDistillationPrompt(distillationWorkflow, group, profile);
-    const gatewayCall = await callModelGatewayWithPrompt({
+    const { gatewayCall, outputValidation } = await callValidatedModelGatewayWithPrompt({
       prompt,
       config,
       profile,
       distillationScope: "classification-group",
       group,
-      systemPromptSuffixLines: policy.systemPromptSuffixLines || []
-    });
-    const outputValidation = validateModelDistillationOutput({
-      gatewayCall,
+      systemPromptSuffixLines: policy.systemPromptSuffixLines || [],
       distillationWorkflow,
-      profile,
-      distillationScope: "classification-group",
-      group,
       selectedGroups
     });
     results.set(group.groupId, classificationGroupModelCallCompletedRecord({
@@ -21744,18 +22143,13 @@ function modelDistillationSkippedState(distillationWorkflow = {}, reason = "", p
 
 async function callModelDistillationGateway({ distillationWorkflow = {}, config = {}, profile = MODEL_DISTILLATION_PROFILES.defaultProfile } = {}) {
   const prompt = buildModelDistillationPrompt(distillationWorkflow, profile);
-  const projectCall = await callModelGatewayWithPrompt({
+  const selectedGroups = selectedClassificationDistillationGroups(distillationWorkflow, profile.classificationDistillation || {});
+  const { gatewayCall: projectCall, outputValidation } = await callValidatedModelGatewayWithPrompt({
     prompt,
     config,
     profile,
-    distillationScope: "project-convergence"
-  });
-  const selectedGroups = selectedClassificationDistillationGroups(distillationWorkflow, profile.classificationDistillation || {});
-  const outputValidation = validateModelDistillationOutput({
-    gatewayCall: projectCall,
-    distillationWorkflow,
-    profile,
     distillationScope: "project-convergence",
+    distillationWorkflow,
     selectedGroups
   });
   const groupGatewayResults = await callClassificationGroupModelGatewayCalls({
@@ -21782,6 +22176,7 @@ async function callModelDistillationGateway({ distillationWorkflow = {}, config 
     modelAlias: config.modelAlias,
     request: projectCall.request,
     response: projectCall.response,
+    contractRepair: projectCall.contractRepair || null,
     outputValidation,
     machineReadablePayload: outputValidation.machineReadablePayload || null,
     groupGatewayCalls: classificationDistillation.groupGatewayCalls,
@@ -22806,7 +23201,8 @@ function serializeRunError(error) {
   return {
     code: error?.code || "EXTERNAL_DISTILLATION_ERROR",
     message: error instanceof Error ? error.message : String(error),
-    statusCode: Number(error?.statusCode || 500)
+    statusCode: Number(error?.statusCode || 500),
+    details: error?.details || null
   };
 }
 
@@ -22972,7 +23368,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         owns: ["realModelInvocation", "modelDistillation", "modelEvidenceSynthesis"],
         requires: ["agent-gateway", "modelAlias", "modelGatewayEndpoint"],
         outputContract: MODEL_DISTILLATION_OUTPUT_CONTRACT,
-        outputValidationStrategy: MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY
+        outputValidationStrategy: MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY,
+        outputRepairStrategy: MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY
       },
       formatConversion: {
         moduleBoundary: FORMAT_CONVERSION_MODULE_BOUNDARY,
@@ -23009,6 +23406,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         parameters: profile.parameters,
         promptLimits: profile.promptLimits,
         transportPolicy: profile.transportPolicy,
+        outputRepairPolicy: profile.outputRepairPolicy,
         classificationDistillation: profile.classificationDistillation,
         requiredOutput: profile.requiredOutput
       })),
@@ -23019,6 +23417,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       promptMaxCharacters: MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS,
       outputContract: MODEL_DISTILLATION_OUTPUT_CONTRACT,
       outputValidationStrategy: MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY,
+      outputRepairStrategy: MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY,
+      outputRepairMaxAttempts: MODEL_DISTILLATION_OUTPUT_REPAIR_MAX_ATTEMPTS,
       noBuiltinFallback: true,
       dependency: "agent-gateway"
     },
@@ -23073,6 +23473,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       MODEL_DISTILLATION_GATEWAY_STRATEGY,
       MODEL_DISTILLATION_OUTPUT_CONTRACT,
       MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY,
+      MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY,
       EVIDENCE_QUERY_STRATEGY,
       PROJECT_EVIDENCE_QUERY_STRATEGY,
       REFERENCE_GAP_REPORT_STRATEGY,
@@ -23613,7 +24014,8 @@ async function handleRequest(request, response) {
     const statusCode = Number(error?.statusCode || 500);
     jsonResponse(response, statusCode >= 400 && statusCode < 600 ? statusCode : 500, {
       error: error instanceof Error ? error.message : String(error),
-      code: error?.code || "EXTERNAL_DISTILLATION_ERROR"
+      code: error?.code || "EXTERNAL_DISTILLATION_ERROR",
+      details: error?.details || null
     });
   }
 }

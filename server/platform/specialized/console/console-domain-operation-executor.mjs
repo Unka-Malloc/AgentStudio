@@ -5542,6 +5542,9 @@ async function executeExternalKnowledgeDistillationOperation({ operationId, inpu
     const status = Number(error?.statusCode || 502);
     return result(status >= 400 && status < 600 ? status : 502, errorPayload(error, "外部知识蒸馏服务调用失败。", {
       service: "external.knowledge.distillation",
+      code: error?.payload?.code || error?.code || "EXTERNAL_KNOWLEDGE_DISTILLATION_CALL_FAILED",
+      details: error?.payload?.details || error?.details || null,
+      externalServiceError: error?.payload || null,
       pactExternalServiceCall: error?.externalServiceCall || null
     }));
   }

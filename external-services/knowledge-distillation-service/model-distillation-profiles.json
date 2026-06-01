@@ -49,6 +49,15 @@
           "AbortError"
         ]
       },
+      "outputRepairPolicy": {
+        "enabled": true,
+        "strategy": "model-distillation-contract-repair-retry.v1",
+        "maxAttempts": 1,
+        "systemPromptSuffixLines": [
+          "Repair invalid machine-readable distillation output by returning only a corrected JSON object.",
+          "Use the validation failure list as hard constraints and do not change evidence identifiers."
+        ]
+      },
       "classificationDistillation": {
         "enabled": true,
         "strategy": "profile-guided-group-distillation-map.v1",

@@ -151,6 +151,7 @@ async function waitForCompletedRun(serviceUrl, runId, timeoutMs = 20_000) {
 
 async function startMockModelGateway() {
   const calls = [];
+  const invalidFirstAttemptKeys = new Set();
   const modelOutputContract = "pact.external-knowledge-distillation.model-output.v1";
   function parsePrompt(question = "") {
     try {
@@ -159,8 +160,13 @@ async function startMockModelGateway() {
       return {};
     }
   }
+  function modelInputFromPrompt(prompt = {}) {
+    return prompt.originalInput && typeof prompt.originalInput === "object"
+      ? prompt.originalInput
+      : prompt;
+  }
   function projectModelPayload(body = {}) {
-    const prompt = parsePrompt(body.question || "");
+    const prompt = modelInputFromPrompt(parsePrompt(body.question || ""));
     const documents = Array.isArray(prompt.documents) ? prompt.documents : [];
     const groups = Array.isArray(prompt.groups) ? prompt.groups : [];
     const documentBySourceId = new Map(documents.map((document) => [document.sourceId, document]));
@@ -213,10 +219,15 @@ async function startMockModelGateway() {
     };
   }
   function groupModelPayload(body = {}) {
-    const prompt = parsePrompt(body.question || "");
+    const prompt = modelInputFromPrompt(parsePrompt(body.question || ""));
     const evidence = Array.isArray(prompt.evidence) ? prompt.evidence : [];
-    const sourceIds = Array.isArray(body.sourceIds) ? body.sourceIds : [];
-    const evidenceRefs = evidence.map((item) => item.evidenceRef).filter(Boolean);
+    const documents = Array.isArray(prompt.documents) ? prompt.documents : [];
+    const sourceIds = Array.isArray(body.sourceIds) && body.sourceIds.length
+      ? body.sourceIds
+      : prompt.group?.sourceIds || documents.map((document) => document.sourceId).filter(Boolean);
+    const evidenceRefs = evidence.map((item) => item.evidenceRef).filter(Boolean).length
+      ? evidence.map((item) => item.evidenceRef).filter(Boolean)
+      : documents.map((document) => document.evidenceRef).filter(Boolean);
     return {
       protocolVersion: modelOutputContract,
       distillationScope: "classification-group",
@@ -254,6 +265,17 @@ async function startMockModelGateway() {
         body
       });
       response.writeHead(200, { "content-type": "application/json" });
+      const invalidAttemptKey = body.distillationScope === "classification-group"
+        ? `classification-group:${body.groupId || "unknown"}`
+        : `project-convergence:${String(body.question || "")}`;
+      if (body.parameters?.contractRepair !== true && !invalidFirstAttemptKeys.has(invalidAttemptKey)) {
+        invalidFirstAttemptKeys.add(invalidAttemptKey);
+        response.end(JSON.stringify({
+          ok: true,
+          text: "INVALID NON JSON MODEL OUTPUT WITHOUT SOURCE OR EVIDENCE REFERENCES"
+        }));
+        return;
+      }
       const modelPayload = body.distillationScope === "classification-group"
         ? groupModelPayload(body)
         : projectModelPayload(body);
@@ -1540,6 +1562,7 @@ try {
   assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
   assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.outputContract, "pact.external-knowledge-distillation.model-output.v1");
   assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.outputValidationStrategy, "model-distillation-machine-readable-contract.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.outputRepairStrategy, "model-distillation-contract-repair-retry.v1");
   assert.equal(capabilities.payload.pipelineSeparation.formatConversion.moduleBoundary, "external-kd.format-conversion.module.v1");
   assert.equal(capabilities.payload.distillationAlgorithm.parserPayloadFieldsAllowed, false);
   assert.equal(capabilities.payload.distillationAlgorithm.entrypoint, "runDistillationAlgorithmWorkflow");
@@ -1548,6 +1571,8 @@ try {
   assert.equal(capabilities.payload.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
   assert.equal(capabilities.payload.modelDistillation.outputContract, "pact.external-knowledge-distillation.model-output.v1");
   assert.equal(capabilities.payload.modelDistillation.outputValidationStrategy, "model-distillation-machine-readable-contract.v1");
+  assert.equal(capabilities.payload.modelDistillation.outputRepairStrategy, "model-distillation-contract-repair-retry.v1");
+  assert.equal(capabilities.payload.modelDistillation.outputRepairMaxAttempts >= 1, true);
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.protocolVersion, "pact.external-knowledge-distillation.model-distillation-profiles.v1");
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.strategy, "singleton-model-distillation-profile-registry.v1");
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.source, "external-services/knowledge-distillation-service/model-distillation-profiles.json");
@@ -1560,6 +1585,8 @@ try {
     profile.noBuiltinFallback === true &&
     profile.parameters.responseProfile === "machine-readable" &&
     profile.requiredOutput.machineReadableContract === "pact.external-knowledge-distillation.model-output.v1" &&
+    profile.outputRepairPolicy.enabled === true &&
+    profile.outputRepairPolicy.strategy === "model-distillation-contract-repair-retry.v1" &&
     profile.transportPolicy.maxAttempts === 2 &&
     profile.transportPolicy.retryOn.includes("ECONNRESET") &&
     profile.classificationDistillation.strategy === "profile-guided-group-distillation-map.v1" &&
@@ -1582,6 +1609,7 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("singleton-model-distillation-profile-registry.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("pact.external-knowledge-distillation.model-output.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("model-distillation-machine-readable-contract.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("model-distillation-contract-repair-retry.v1"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.strategy, "content-signature-routing.v1");
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("pdf-header"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-word"), true);
@@ -2032,7 +2060,7 @@ try {
   assert.equal(queuedRun.payload.queue.reason, "explicit-queued-request");
   assert.equal(queuedRun.headers.get("retry-after"), "1");
   const queuedCompletedRun = await waitForCompletedRun(serviceUrl, queuedRun.payload.runId);
-  assert.equal(queuedCompletedRun.status, "completed", `queued external distillation run failed: ${JSON.stringify(queuedCompletedRun).slice(0, 1200)}`);
+  assert.equal(queuedCompletedRun.status, "completed", `queued external distillation run failed: ${JSON.stringify(queuedCompletedRun).slice(0, 5000)}`);
   assert.equal(queuedCompletedRun.queue.executionMode, "queued");
   assert.equal(queuedCompletedRun.queue.phase, "completed");
   assert.equal(queuedCompletedRun.result.agentMessage.responseProfile, "agent");
@@ -2579,7 +2607,7 @@ try {
       responseProfile: "agent"
     })
   });
-  assert.equal(createRun.status, 201, `create external distillation run failed: ${JSON.stringify(createRun.payload).slice(0, 1200)}`);
+  assert.equal(createRun.status, 201, `create external distillation run failed: ${JSON.stringify(createRun.payload).slice(0, 5000)}`);
   assert.equal(createRun.payload.serviceName, "external-knowledge-distillation");
   assert.equal(createRun.payload.serviceKind, "externalKnowledgeDistillation");
   assert.equal(createRun.payload.status, "completed");
@@ -2616,6 +2644,10 @@ try {
   assert.equal(createRun.payload.result.modelDistillation.outputValidation.strategy, "model-distillation-machine-readable-contract.v1");
   assert.equal(createRun.payload.result.modelDistillation.outputValidation.contract, "pact.external-knowledge-distillation.model-output.v1");
   assert.equal(createRun.payload.result.modelDistillation.outputValidation.status, "passed");
+  assert.equal(createRun.payload.result.modelDistillation.contractRepair.strategy, "model-distillation-contract-repair-retry.v1");
+  assert.equal(createRun.payload.result.modelDistillation.contractRepair.status, "repaired");
+  assert.equal(createRun.payload.result.modelDistillation.contractRepair.attemptCount, 1);
+  assert.equal(createRun.payload.result.modelDistillation.outputValidation.contractRepair.status, "repaired");
   assert.equal(createRun.payload.result.modelDistillation.machineReadablePayload.protocolVersion, "pact.external-knowledge-distillation.model-output.v1");
   assert.equal(createRun.payload.result.modelDistillation.machineReadablePayload.distillationScope, "project-convergence");
   assert.equal(
@@ -2651,6 +2683,14 @@ try {
     assert.equal(mockModelGateway.calls[0].body.parameters.responseProfile, "machine-readable");
     assert.equal(mockModelGateway.calls[0].body.parameters.maxOutputTokens, 1800);
     assert.match(mockModelGateway.calls[0].body.question, /pact\.external-knowledge-distillation\.model-output\.v1/);
+    const contractRepairCalls = mockModelGateway.calls.filter((call) => (
+      call.body.parameters?.contractRepair === true
+    ));
+    assert.equal(contractRepairCalls.length >= 1, true, "invalid model output must trigger real gateway repair calls");
+    assert.equal(contractRepairCalls.some((call) => (
+      call.body.distillationScope === "project-convergence" &&
+      call.body.parameters.contractRepairStrategy === "model-distillation-contract-repair-retry.v1"
+    )), true);
     const groupModelGatewayCalls = mockModelGateway.calls.filter((call) => (
       call.body.distillationScope === "classification-group"
     ));
@@ -2661,6 +2701,7 @@ try {
     );
     assert.equal(groupModelGatewayCalls.every((call) => call.body.parameters.distillationScope === "classification-group"), true);
     assert.equal(groupModelGatewayCalls.every((call) => /pact\.external-knowledge-distillation\.model-output\.v1/.test(call.body.question)), true);
+    assert.equal(groupModelGatewayCalls.some((call) => call.body.parameters?.contractRepair === true), true);
   }
   assert.equal(createRun.payload.result.referenceGapReport.strategy, "reference-framework-gap-report.v1");
   assert.equal(createRun.payload.result.referenceGapReport.frameworks.some((framework) => framework.id === "graphrag" && framework.status === "absorbed-with-open-gaps"), true);
@@ -2707,6 +2748,9 @@ try {
   assert.equal(financeModelDistillation.modelCall.sourceIds.includes("source-2"), true);
   assert.equal(financeModelDistillation.modelCall.outputValidation.strategy, "model-distillation-machine-readable-contract.v1");
   assert.equal(financeModelDistillation.modelCall.outputValidation.status, "passed");
+  assert.equal(financeModelDistillation.modelCall.contractRepair.strategy, "model-distillation-contract-repair-retry.v1");
+  assert.equal(financeModelDistillation.modelCall.contractRepair.status, "repaired");
+  assert.equal(financeModelDistillation.modelCall.contractRepair.attemptCount, 1);
   assert.equal(financeModelDistillation.modelCall.machineReadablePayload.groupId, financeGroup.groupId);
   assert.equal(financeModelDistillation.modelOutputValidation.status, "passed");
   assert.equal(financeModelDistillation.machineReadablePayload.sourceIds.includes("source-2"), true);

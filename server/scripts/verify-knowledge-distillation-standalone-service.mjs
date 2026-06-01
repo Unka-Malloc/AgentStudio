@@ -577,6 +577,9 @@ assert.equal(defaultModelProfile.systemPromptLines.length >= 3, true);
 assert.equal(defaultModelProfile.parameters.responseProfile, "machine-readable");
 assert.equal(defaultModelProfile.parameters.maxOutputTokens >= 1000, true);
 assert.equal(defaultModelProfile.requiredOutput.machineReadableContract, "pact.external-knowledge-distillation.model-output.v1");
+assert.equal(defaultModelProfile.outputRepairPolicy.enabled, true);
+assert.equal(defaultModelProfile.outputRepairPolicy.strategy, "model-distillation-contract-repair-retry.v1");
+assert.equal(defaultModelProfile.outputRepairPolicy.maxAttempts >= 1, true);
 assert.equal(defaultModelProfile.transportPolicy.maxAttempts, 2);
 assert.equal(defaultModelProfile.transportPolicy.retryOn.includes("ECONNRESET"), true);
 assert.equal(defaultModelProfile.classificationDistillation.enabled, true);
@@ -818,9 +821,13 @@ for (const expectedText of [
   "profile.parameters",
   "MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY",
   "MODEL_DISTILLATION_OUTPUT_CONTRACT",
+  "MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY",
   "modelDistillationOutputContractSpec",
   "parseModelDistillationOutputPayload",
   "validateModelDistillationOutput",
+  "callValidatedModelGatewayWithPrompt",
+  "buildModelOutputRepairPrompt",
+  "MODEL_GATEWAY_INVALID_MACHINE_READABLE_OUTPUT",
   "machineReadablePayload",
   "buildClassificationDistillationMap",
   "buildGroupModelDistillationPrompt",

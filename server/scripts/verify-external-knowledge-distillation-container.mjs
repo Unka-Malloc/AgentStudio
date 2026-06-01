@@ -96,6 +96,92 @@ async function fetchJson(url, options = {}) {
 
 async function startMockModelGateway() {
   const calls = [];
+  const modelOutputContract = "pact.external-knowledge-distillation.model-output.v1";
+  function parsePrompt(question = "") {
+    try {
+      return question ? JSON.parse(question) : {};
+    } catch {
+      return {};
+    }
+  }
+  function modelInputFromPrompt(prompt = {}) {
+    return prompt.originalInput && typeof prompt.originalInput === "object"
+      ? prompt.originalInput
+      : prompt;
+  }
+  function modelPayload(body = {}) {
+    const prompt = modelInputFromPrompt(parsePrompt(body.question || ""));
+    if (body.distillationScope === "classification-group") {
+      const evidence = Array.isArray(prompt.evidence) ? prompt.evidence : [];
+      const documents = Array.isArray(prompt.documents) ? prompt.documents : [];
+      const sourceIds = Array.isArray(body.sourceIds) && body.sourceIds.length
+        ? body.sourceIds
+        : prompt.group?.sourceIds || documents.map((document) => document.sourceId).filter(Boolean);
+      const evidenceRefs = evidence.map((item) => item.evidenceRef).filter(Boolean).length
+        ? evidence.map((item) => item.evidenceRef).filter(Boolean)
+        : documents.map((document) => document.evidenceRef).filter(Boolean);
+      return {
+        protocolVersion: modelOutputContract,
+        distillationScope: "classification-group",
+        groupId: body.groupId || prompt.group?.groupId || "",
+        label: body.groupLabel || prompt.group?.label || "",
+        sourceIds,
+        evidenceRefs,
+        summary: "Container classification group distillation preserves isolated evidence.",
+        findings: [
+          {
+            claim: "Only supplied group evidence is used for this container verification output.",
+            sourceIds,
+            evidenceRefs,
+            confidence: 0.86
+          }
+        ]
+      };
+    }
+    const documents = Array.isArray(prompt.documents) ? prompt.documents : [];
+    const groups = Array.isArray(prompt.groups) ? prompt.groups : [];
+    const documentBySourceId = new Map(documents.map((document) => [document.sourceId, document]));
+    return {
+      protocolVersion: modelOutputContract,
+      distillationScope: "project-convergence",
+      summary: "Container model distillation verified against routed parser evidence.",
+      groups: groups.map((group) => {
+        const groupDocuments = (group.sourceIds || [])
+          .map((sourceId) => documentBySourceId.get(sourceId))
+          .filter(Boolean);
+        const evidenceRefs = groupDocuments.map((document) => document.evidenceRef).filter(Boolean);
+        return {
+          groupId: group.groupId,
+          label: group.label,
+          sourceIds: group.sourceIds || [],
+          evidenceRefs,
+          summary: "Container group output remains evidence bound.",
+          findings: [
+            {
+              claim: "Container verification output preserves source and evidence references.",
+              sourceIds: group.sourceIds || [],
+              evidenceRefs,
+              confidence: 0.86
+            }
+          ]
+        };
+      }),
+      timeline: documents.slice(0, 3).map((document) => ({
+        time: document.documentTime || document.timeRange?.from || "",
+        sourceIds: [document.sourceId].filter(Boolean),
+        evidenceRefs: [document.evidenceRef].filter(Boolean),
+        summary: "Container timeline evidence preserved."
+      })),
+      findings: [
+        {
+          claim: "Container output is machine-readable and grounded.",
+          sourceIds: documents.slice(0, 2).map((document) => document.sourceId).filter(Boolean),
+          evidenceRefs: documents.slice(0, 2).map((document) => document.evidenceRef).filter(Boolean),
+          confidence: 0.88
+        }
+      ]
+    };
+  }
   const server = http.createServer((request, response) => {
     const chunks = [];
     request.on("data", (chunk) => chunks.push(chunk));
@@ -114,13 +200,11 @@ async function startMockModelGateway() {
         body
       });
       response.writeHead(200, { "content-type": "application/json" });
+      const payload = modelPayload(body);
       response.end(JSON.stringify({
         ok: true,
-        text: [
-          "Container model distillation verified against routed parser evidence.",
-          "Preserve chronology, parser traces, graph evidence, and low-confidence warnings.",
-          "Return only grounded claims linked to the supplied corpus plan."
-        ].join("\n")
+        text: JSON.stringify(payload),
+        structuredOutput: payload
       }));
     });
   });
@@ -488,11 +572,14 @@ try {
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.defaultProfileId, "real-model-grounded-distillation.v1");
   assert.equal(capabilities.payload.modelDistillation.outputContract, "pact.external-knowledge-distillation.model-output.v1");
   assert.equal(capabilities.payload.modelDistillation.outputValidationStrategy, "model-distillation-machine-readable-contract.v1");
+  assert.equal(capabilities.payload.modelDistillation.outputRepairStrategy, "model-distillation-contract-repair-retry.v1");
   assert.equal(capabilities.payload.modelDistillation.profiles.some((profile) => (
     profile.id === "real-model-grounded-distillation.v1" &&
     profile.requiredRealModelCall === true &&
     profile.noBuiltinFallback === true &&
     profile.requiredOutput.machineReadableContract === "pact.external-knowledge-distillation.model-output.v1" &&
+    profile.outputRepairPolicy.enabled === true &&
+    profile.outputRepairPolicy.strategy === "model-distillation-contract-repair-retry.v1" &&
     profile.transportPolicy.maxAttempts === 2 &&
     profile.transportPolicy.retryOn.includes("ECONNRESET") &&
     profile.classificationDistillation.strategy === "profile-guided-group-distillation-map.v1" &&
@@ -500,6 +587,7 @@ try {
     profile.classificationDistillation.groupGatewayCalls.strategy === "classification-group-real-model-call.v1"
   )), true);
   assert.equal(capabilities.payload.algorithms.includes("model-distillation-machine-readable-contract.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("model-distillation-contract-repair-retry.v1"), true);
   assert.equal(capabilities.payload.classification.strategy, "hashing_embedding_window_community_classification_v3");
   assert.equal(capabilities.payload.classification.taxonomyStrategy, "semantic-concept-topic-hierarchy.v1");
   assert.equal(capabilities.payload.classification.assignmentRationaleStrategy, "leader-clustering-semantic-concept-rationale.v1");
