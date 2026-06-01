@@ -236,9 +236,10 @@ const externalServiceSource = await fs.readFile(externalServiceEntry, "utf8");
 for (const functionName of [
   "runKnowledgeDistillationWorkflow",
   "runDistillationWorkflow",
+  "runDistillationAlgorithmWorkflow",
   "initializeDistillationWorkflow",
   "normalizeDistillationWorkflowScope",
-  "normalizeDistillationInput",
+  "prepareDistillationAlgorithmInput",
   "filterDistillationInputByTime",
   "selectDistillationWorkflowScope",
   "buildDistillationCorpusPlan",
@@ -295,27 +296,17 @@ for (const forbiddenInlineStep of [
 const distillationWorkflowBody = sourceSliceBetweenFunctions(
   externalServiceSource,
   "runDistillationWorkflow",
-  "initializeDistillationWorkflow"
+  "runDistillationAlgorithmWorkflow"
 );
 for (const expectedLine of [
   /const workflowContext = initializeDistillationWorkflow\(input\);/,
-  /const normalizedInput = normalizeDistillationInput\(workflowContext, runtimeStatus\);/,
-  /const filteredInput = filterDistillationInputByTime\(normalizedInput\);/,
-  /const scopedInput = selectDistillationWorkflowScope\(filteredInput\);/,
-  /const corpusPlanState = buildDistillationCorpusPlan\(scopedInput\);/,
-  /const routePlanState = buildDistillationRoutePlan\(corpusPlanState\);/,
-  /const documentSet = buildDistillationDocumentSet\(routePlanState\);/,
-  /const classificationState = buildDistillationClassification\(documentSet\);/,
-  /const convergenceState = buildDistillationConvergence\(classificationState\);/,
-  /const groundingState = buildDistillationGrounding\(convergenceState\);/,
-  /const incrementalState = buildDistillationIncrementalPlan\(groundingState, priorRuns\);/,
-  /const graphEvidenceState = buildDistillationGraphEvidence\(incrementalState\);/,
-  /return composeDistillationWorkflowState\(graphEvidenceState\);/
+  /const algorithmInput = prepareDistillationAlgorithmInput\(workflowContext, runtimeStatus\);/,
+  /return runDistillationAlgorithmWorkflow\(algorithmInput, priorRuns\);/
 ]) {
   assert.match(
     distillationWorkflowBody,
     expectedLine,
-    "runDistillationWorkflow must remain a step-by-step orchestration function"
+    "runDistillationWorkflow must remain a thin parser-adapter-to-algorithm boundary"
   );
 }
 for (const forbiddenInlineStep of [
@@ -336,7 +327,55 @@ for (const forbiddenInlineStep of [
   assert.equal(
     distillationWorkflowBody.includes(forbiddenInlineStep),
     false,
-    `runDistillationWorkflow must not inline ${forbiddenInlineStep}; keep one command per workflow step`
+    `runDistillationWorkflow must not inline ${forbiddenInlineStep}; keep one command per workflow boundary`
+  );
+}
+const algorithmWorkflowBody = sourceSliceBetweenFunctions(
+  externalServiceSource,
+  "runDistillationAlgorithmWorkflow",
+  "normalizeDistillationWorkflowScope"
+);
+for (const expectedLine of [
+  /const filteredInput = filterDistillationInputByTime\(algorithmInput\);/,
+  /const scopedInput = selectDistillationWorkflowScope\(filteredInput\);/,
+  /const corpusPlanState = buildDistillationCorpusPlan\(scopedInput\);/,
+  /const routePlanState = buildDistillationRoutePlan\(corpusPlanState\);/,
+  /const documentSet = buildDistillationDocumentSet\(routePlanState\);/,
+  /const classificationState = buildDistillationClassification\(documentSet\);/,
+  /const convergenceState = buildDistillationConvergence\(classificationState\);/,
+  /const groundingState = buildDistillationGrounding\(convergenceState\);/,
+  /const incrementalState = buildDistillationIncrementalPlan\(groundingState, priorRuns\);/,
+  /const graphEvidenceState = buildDistillationGraphEvidence\(incrementalState\);/,
+  /return composeDistillationWorkflowState\(graphEvidenceState\);/
+]) {
+  assert.match(
+    algorithmWorkflowBody,
+    expectedLine,
+    "runDistillationAlgorithmWorkflow must remain a step-by-step algorithm orchestration function"
+  );
+}
+for (const forbiddenInlineStep of [
+  "normalizeDocuments(",
+  "loadDocumentPayload(",
+  "loadDocumentManifest(",
+  "normalizeTimeFilter(",
+  "applyTimeFilterToDocuments(",
+  "buildCorpusPlan(",
+  "buildRoutePlan(",
+  "classifyDocuments(",
+  "buildProjectConvergence(",
+  "buildGroundingReport(",
+  "buildIncrementalPlan(",
+  "buildGraphEvidencePack(",
+  "buildFormatConversionPlan(",
+  "rawDocumentsManifestPath",
+  "contentBase64",
+  "filePathOverride"
+]) {
+  assert.equal(
+    algorithmWorkflowBody.includes(forbiddenInlineStep),
+    false,
+    `runDistillationAlgorithmWorkflow must not inline ${forbiddenInlineStep}; keep parser payload handling outside the algorithm core`
   );
 }
 const createRunWrapperBody = sourceSliceBetweenFunctions(externalServiceSource, "createRun", "capabilities");

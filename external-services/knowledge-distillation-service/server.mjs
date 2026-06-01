@@ -54,6 +54,9 @@ const PROJECT_EVIDENCE_QUERY_STRATEGY = "project-graph-evidence-convergence-quer
 const REFERENCE_GAP_REPORT_STRATEGY = "reference-framework-gap-report.v1";
 const REFERENCE_FRAMEWORK_AUDIT_STRATEGY = "reference-framework-local-checkout-audit.v1";
 const PDF_SUBTYPE_ROUTING_STRATEGY = "pdf-subtype-routing.v1";
+const DISTILLATION_DOCUMENT_INPUT_CONTRACT = "pact.normalized-distillation-documents.v1";
+const DOCUMENT_INGESTION_ADAPTER_STRATEGY = "external-kd.document-ingestion-adapter.v1";
+const DISTILLATION_ALGORITHM_INPUT_CONTRACT = "external-kd.algorithm-input.normalized-documents.v1";
 const DISTILLATION_WORKFLOW_SCOPE = Object.freeze({
   DOCUMENT: "document",
   CORPUS: "corpus",
@@ -95,6 +98,23 @@ const EMAIL_MBOX_MAX_MESSAGES = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_
 const EMAIL_MBOX_MESSAGE_MAX_CHARACTERS = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_EMAIL_MBOX_MESSAGE_MAX_CHARACTERS || 25 * 1024 * 1024));
 const STRUCTURED_ZIP_ENTRY_MAX_BYTES = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_STRUCTURED_ZIP_ENTRY_MAX_BYTES || ARCHIVE_ENTRY_MAX_BYTES));
 let runtimeDoctorCache = null;
+const PARSER_PAYLOAD_FIELD_NAMES = Object.freeze([
+  "archiveFilePath",
+  "directoryPath",
+  "pdfFilePath",
+  "structuredZipFilePath",
+  "mboxFilePath",
+  "tikaFilePath",
+  "binaryProfileFilePath",
+  "filePath",
+  "contentRef",
+  "contentBase64",
+  "dataBase64",
+  "base64",
+  "buffer",
+  "rawBuffer",
+  "imageDataUrl"
+]);
 const STOP_WORDS = new Set([
   "about",
   "after",
@@ -2537,16 +2557,55 @@ function loadDocumentManifest(input = {}) {
   }
 }
 
+function inputDocumentArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function inlineDocumentInput(input = {}) {
+  const normalizedDocumentSet =
+    input.normalizedDocumentSet && typeof input.normalizedDocumentSet === "object"
+      ? input.normalizedDocumentSet
+      : input.parsedDocumentSet && typeof input.parsedDocumentSet === "object"
+        ? input.parsedDocumentSet
+        : null;
+  const candidates = [
+    {
+      field: "normalizedDocumentSet.documents",
+      contract: String(normalizedDocumentSet?.contract || normalizedDocumentSet?.documentInputContract || ""),
+      documents: inputDocumentArray(normalizedDocumentSet?.documents)
+    },
+    {
+      field: "normalizedDocuments",
+      contract: DISTILLATION_DOCUMENT_INPUT_CONTRACT,
+      documents: inputDocumentArray(input.normalizedDocuments)
+    },
+    {
+      field: "documents",
+      contract: DISTILLATION_DOCUMENT_INPUT_CONTRACT,
+      documents: inputDocumentArray(input.documents)
+    },
+    {
+      field: "rawDocuments",
+      contract: "legacy.raw-documents",
+      documents: inputDocumentArray(input.rawDocuments)
+    }
+  ];
+  return candidates.find((candidate) => candidate.documents.length > 0) || {
+    field: "",
+    contract: "",
+    documents: []
+  };
+}
+
 function collectInputDocuments(input = {}) {
-  const inlineDocuments = Array.isArray(input.rawDocuments)
-    ? input.rawDocuments
-    : Array.isArray(input.documents)
-      ? input.documents
-      : [];
+  const inlineInput = inlineDocumentInput(input);
+  const inlineDocuments = inlineInput.documents;
   const manifest = loadDocumentManifest(input);
   return {
     documents: [...inlineDocuments, ...manifest.documents],
     inlineDocumentCount: inlineDocuments.length,
+    inlineDocumentField: inlineInput.field,
+    inlineDocumentContract: inlineInput.contract,
     manifestDocumentCount: manifest.documents.length,
     manifests: manifest.manifests,
     parserTrace: manifest.parserTrace,
@@ -14971,6 +15030,37 @@ function expandMboxMessageDocuments({ parentDocument, buffer = null, runtimeStat
   return expanded;
 }
 
+function distillationDocumentContractRecord(document = {}) {
+  const sanitized = { ...document };
+  for (const fieldName of PARSER_PAYLOAD_FIELD_NAMES) {
+    delete sanitized[fieldName];
+  }
+  sanitized.documentInputContract = DISTILLATION_DOCUMENT_INPUT_CONTRACT;
+  sanitized.parserBoundary = {
+    strategy: DOCUMENT_INGESTION_ADAPTER_STRATEGY,
+    parserPayloadFieldsStripped: true,
+    parserTraceRetained: Array.isArray(document.parserTrace)
+  };
+  return sanitized;
+}
+
+function assertDistillationAlgorithmInputContract(documents = []) {
+  const violations = [];
+  for (const [index, document] of documents.entries()) {
+    for (const fieldName of PARSER_PAYLOAD_FIELD_NAMES) {
+      if (Object.prototype.hasOwnProperty.call(document || {}, fieldName)) {
+        violations.push(`${document?.sourceId || index}:${fieldName}`);
+      }
+    }
+  }
+  if (violations.length) {
+    const error = new Error(`Distillation algorithm input contains parser payload fields: ${violations.slice(0, 8).join(", ")}`);
+    error.statusCode = 500;
+    error.code = "DISTILLATION_INPUT_CONTRACT_VIOLATION";
+    throw error;
+  }
+}
+
 function normalizeDocuments(input = {}, runtimeStatus = null) {
   const inputDocuments = collectInputDocuments(input);
   const documents = inputDocuments.documents;
@@ -15072,10 +15162,16 @@ function normalizeDocuments(input = {}, runtimeStatus = null) {
     }
   }
   return {
-    documents: normalizedDocuments,
+    documents: normalizedDocuments.map(distillationDocumentContractRecord),
     inputDocumentPlan: {
       strategy: "inline-or-streaming-manifest-document-input.v1",
+      parserAdapterStrategy: DOCUMENT_INGESTION_ADAPTER_STRATEGY,
+      documentInputContract: DISTILLATION_DOCUMENT_INPUT_CONTRACT,
+      algorithmInputContract: DISTILLATION_ALGORITHM_INPUT_CONTRACT,
+      parserPayloadFieldsStripped: true,
       inlineDocumentCount: inputDocuments.inlineDocumentCount,
+      inlineDocumentField: inputDocuments.inlineDocumentField,
+      inlineDocumentContract: inputDocuments.inlineDocumentContract,
       manifestDocumentCount: inputDocuments.manifestDocumentCount,
       sourceCount: documents.length,
       manifests: inputDocuments.manifests,
@@ -18562,8 +18658,13 @@ function runKnowledgeDistillationWorkflow(input = {}, runtimeStatus = null, prio
 
 function runDistillationWorkflow(input = {}, runtimeStatus = null, priorRuns = []) {
   const workflowContext = initializeDistillationWorkflow(input);
-  const normalizedInput = normalizeDistillationInput(workflowContext, runtimeStatus);
-  const filteredInput = filterDistillationInputByTime(normalizedInput);
+  const algorithmInput = prepareDistillationAlgorithmInput(workflowContext, runtimeStatus);
+  return runDistillationAlgorithmWorkflow(algorithmInput, priorRuns);
+}
+
+function runDistillationAlgorithmWorkflow(algorithmInput = {}, priorRuns = []) {
+  assertDistillationAlgorithmInputContract(algorithmInput.allDocuments || []);
+  const filteredInput = filterDistillationInputByTime(algorithmInput);
   const scopedInput = selectDistillationWorkflowScope(filteredInput);
   const corpusPlanState = buildDistillationCorpusPlan(scopedInput);
   const routePlanState = buildDistillationRoutePlan(corpusPlanState);
@@ -18617,12 +18718,14 @@ function initializeDistillationWorkflow(input = {}) {
   };
 }
 
-function normalizeDistillationInput(workflowContext = {}, runtimeStatus = null) {
+function prepareDistillationAlgorithmInput(workflowContext = {}, runtimeStatus = null) {
   const normalizedInput = normalizeDocuments(workflowContext.input, runtimeStatus);
+  assertDistillationAlgorithmInputContract(normalizedInput.documents);
   return {
     ...workflowContext,
     allDocuments: normalizedInput.documents,
-    inputDocumentPlan: normalizedInput.inputDocumentPlan
+    inputDocumentPlan: normalizedInput.inputDocumentPlan,
+    algorithmInputContract: DISTILLATION_ALGORITHM_INPUT_CONTRACT
   };
 }
 
@@ -18863,6 +18966,7 @@ function composeDistillationWorkflowState(graphEvidenceState = {}) {
     createdAt: graphEvidenceState.createdAt,
     allDocuments: graphEvidenceState.allDocuments,
     inputDocumentPlan: graphEvidenceState.inputDocumentPlan,
+    algorithmInputContract: graphEvidenceState.algorithmInputContract,
     timeFilter: graphEvidenceState.timeFilter,
     corpusPlan: graphEvidenceState.corpusPlan,
     routePlan: graphEvidenceState.routePlan,
@@ -19023,6 +19127,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     createdAt,
     allDocuments,
     inputDocumentPlan,
+    algorithmInputContract,
     corpusPlan,
     routePlan,
     documents,
@@ -19138,6 +19243,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     updatedAt: createdAt,
     inputSummary: {
       sourceCount: allDocuments.length,
+      algorithmInputContract,
       workflowScope,
       scopeSelection,
       inputDocumentPlan,
@@ -19174,6 +19280,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     result: {
       status: passed ? "completed" : "failed",
       algorithmVersion: "external-service.route-window-community-claim-gated-graph-incremental-distillation.v5",
+      algorithmInputContract,
       workflowScope,
       scopeSelection,
       errors: failure ? [failure] : [],
@@ -19335,6 +19442,26 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       }
     },
     responseProfileSeparation: humanAgentModeSeparation(),
+    pipelineSeparation: {
+      strategy: "document-ingestion-vs-distillation-core-boundary.v1",
+      documentIngestionAdapter: {
+        strategy: DOCUMENT_INGESTION_ADAPTER_STRATEGY,
+        outputContract: DISTILLATION_DOCUMENT_INPUT_CONTRACT,
+        owns: ["payloadModes", "filePath", "contentRef", "contentBase64", "manifest", "formatRouting", "parserTrace"],
+        outputFields: ["sourceId", "title", "text", "metadata", "route", "structureElements", "parserTrace", "contentHash"]
+      },
+      distillationAlgorithmCore: {
+        inputContract: DISTILLATION_ALGORITHM_INPUT_CONTRACT,
+        owns: ["workflowScope", "timeFilter", "corpusPlan", "classification", "grounding", "incrementalPlan", "graphEvidence"],
+        forbiddenInputFields: PARSER_PAYLOAD_FIELD_NAMES
+      }
+    },
+    distillationAlgorithm: {
+      inputContract: DISTILLATION_ALGORITHM_INPUT_CONTRACT,
+      documentContract: DISTILLATION_DOCUMENT_INPUT_CONTRACT,
+      parserPayloadFieldsAllowed: false,
+      entrypoint: "runDistillationAlgorithmWorkflow"
+    },
     algorithms: [
       "external-service.route-window-embedding-grounded-distillation.v1",
       "external-service.route-window-community-grounded-distillation.v2",
@@ -19346,6 +19473,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "leader-clustering-semantic-concept-rationale.v1",
       PROJECT_CONVERGENCE_STRATEGY,
       "agent-project-convergence-query-index.v1",
+      DOCUMENT_INGESTION_ADAPTER_STRATEGY,
+      DISTILLATION_ALGORITHM_INPUT_CONTRACT,
       "inline-or-streaming-manifest-document-input.v1",
       "structured-json-file-ref-streaming-window.v1",
       "directory-file-ref-recursive-routing.v1",
@@ -19449,6 +19578,10 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       sizeLimitPolicy: "resource-bounded-no-small-hard-cap"
     },
     parserExecution: {
+      boundary: "document-ingestion-adapter",
+      strategy: DOCUMENT_INGESTION_ADAPTER_STRATEGY,
+      outputContract: DISTILLATION_DOCUMENT_INPUT_CONTRACT,
+      consumedByAlgorithmContract: DISTILLATION_ALGORITHM_INPUT_CONTRACT,
       payloadModes: ["text", "contentBase64", "filePath", "contentRef", "rawDocumentsManifestPath", "rawDocumentsManifestRef", "jsonlManifest"],
       allowedInputRoots: INPUT_ROOTS,
       builtInParsers: [

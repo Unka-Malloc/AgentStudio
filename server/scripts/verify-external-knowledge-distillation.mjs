@@ -15,6 +15,36 @@ import { authHeaders, installAuthenticatedFetch } from "./test-auth-helper.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
 const serviceEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/server.mjs");
+const serviceSourceText = await fs.readFile(serviceEntry, "utf8");
+
+function functionBody(sourceText, functionName, nextFunctionName) {
+  const start = sourceText.indexOf(`function ${functionName}`);
+  assert.notEqual(start, -1, `${functionName} must exist`);
+  const end = sourceText.indexOf(`function ${nextFunctionName}`, start + 1);
+  assert.notEqual(end, -1, `${nextFunctionName} must follow ${functionName}`);
+  return sourceText.slice(start, end);
+}
+
+const algorithmWorkflowBody = functionBody(
+  serviceSourceText,
+  "runDistillationAlgorithmWorkflow",
+  "normalizeDistillationWorkflowScope"
+);
+assert.match(
+  serviceSourceText,
+  /function prepareDistillationAlgorithmInput/,
+  "external distillation must prepare parsed documents before entering the algorithm core"
+);
+assert.match(
+  serviceSourceText,
+  /const DISTILLATION_ALGORITHM_INPUT_CONTRACT = "external-kd\.algorithm-input\.normalized-documents\.v1"/,
+  "external distillation must name the normalized-document algorithm input contract"
+);
+assert.equal(
+  /normalizeDocuments|loadDocumentPayload|contentBase64|filePathOverride|rawDocumentsManifestPath/.test(algorithmWorkflowBody),
+  false,
+  "distillation algorithm workflow must not parse files or know parser payload fields"
+);
 
 async function freePort() {
   const server = http.createServer();
@@ -147,6 +177,15 @@ assert.equal(
   "platform create run operation must force upstream callers to choose workflowScope explicitly"
 );
 assert.equal(createRunOperation.inputSchema?.properties?.workflowScope?.default, "project");
+assert.ok(
+  createRunOperation.inputSchema?.properties?.normalizedDocuments,
+  "platform create run operation must expose normalizedDocuments as the preferred parsed-document input"
+);
+assert.equal(
+  createRunOperation.inputSchema?.properties?.rawDocuments?.deprecated,
+  true,
+  "legacy rawDocuments must be marked deprecated at the platform operation boundary"
+);
 
 const catalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
 const toolIds = new Set(catalog.tools.map((tool) => tool.id));
@@ -1077,6 +1116,12 @@ try {
   assert.deepEqual(capabilities.payload.workflowScopes.enumValues, ["document", "corpus", "project"]);
   assert.equal(capabilities.payload.workflowScopes.defaultValue, "project");
   assert.equal(capabilities.payload.workflowScopes.documentSelectorFields.includes("sourceId"), true);
+  assert.equal(capabilities.payload.pipelineSeparation.strategy, "document-ingestion-vs-distillation-core-boundary.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.documentIngestionAdapter.outputContract, "pact.normalized-distillation-documents.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.distillationAlgorithmCore.inputContract, "external-kd.algorithm-input.normalized-documents.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.distillationAlgorithmCore.forbiddenInputFields.includes("contentBase64"), true);
+  assert.equal(capabilities.payload.distillationAlgorithm.parserPayloadFieldsAllowed, false);
+  assert.equal(capabilities.payload.distillationAlgorithm.entrypoint, "runDistillationAlgorithmWorkflow");
   assert.equal(capabilities.payload.timeFiltering.supported, true);
   assert.equal(capabilities.payload.timeFiltering.strategy, "document-window-time-filter.v1");
   assert.equal(capabilities.payload.timeFiltering.timeFields.includes("eventTime"), true);
@@ -1099,6 +1144,9 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.binaryProfileStrategy, "bounded-binary-file-profile.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.structuredJsonFileRefStrategy, "structured-json-file-ref-streaming-window.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.manifestMaxDocuments >= 1000, true);
+  assert.equal(capabilities.payload.parserExecution.boundary, "document-ingestion-adapter");
+  assert.equal(capabilities.payload.parserExecution.outputContract, "pact.normalized-distillation-documents.v1");
+  assert.equal(capabilities.payload.parserExecution.consumedByAlgorithmContract, "external-kd.algorithm-input.normalized-documents.v1");
   assert.equal(capabilities.payload.parserExecution.payloadModes.includes("contentBase64"), true);
   assert.equal(capabilities.payload.parserExecution.payloadModes.includes("filePath"), true);
   assert.equal(capabilities.payload.parserExecution.payloadModes.includes("contentRef"), true);

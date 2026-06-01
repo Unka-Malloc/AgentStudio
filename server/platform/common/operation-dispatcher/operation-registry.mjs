@@ -3390,8 +3390,28 @@ const SERVER_API_OPERATION_DEFINITIONS = [
         targetDocumentTitle: { type: "string" },
         query: { type: "string" },
         title: { type: "string" },
-        rawDocuments: { type: "array" },
-        rawDocumentsManifestPath: { type: "string" },
+        normalizedDocuments: {
+          type: "array",
+          description: "Preferred parsed document contract input. The distillation algorithm consumes this boundary, not raw file payloads."
+        },
+        normalizedDocumentSet: {
+          type: "object",
+          description: "Preferred parsed document set envelope containing documents and an optional contract."
+        },
+        documents: {
+          type: "array",
+          description: "Parsed document records. Use this for already-normalized source text and metadata."
+        },
+        rawDocuments: {
+          type: "array",
+          deprecated: true,
+          description: "Legacy alias for parsed document records. Do not send raw files through the distillation algorithm boundary."
+        },
+        rawDocumentsManifestPath: {
+          type: "string",
+          deprecated: true,
+          description: "Legacy ingestion-adapter manifest path. Platform parsing should normally produce normalizedDocuments before distillation."
+        },
         responseProfile: { type: "string", enum: ["console", "agent", "api"] }
       }
     },
