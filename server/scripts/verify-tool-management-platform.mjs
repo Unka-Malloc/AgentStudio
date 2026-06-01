@@ -273,7 +273,6 @@ try {
   ));
 
   const metricsDb = new Database(path.join(userDataPath, "tool-management", "tool-management.sqlite"), {
-    readonly: true,
     fileMustExist: true
   });
   try {
@@ -302,8 +301,130 @@ try {
     assert.ok(toolMetric.result_bytes > 0);
     assert.ok(toolMetric.transfer_bytes >= toolMetric.input_bytes + toolMetric.result_bytes);
     assert.ok(toolMetric.bytes_per_second >= 0);
+
+    metricsDb.prepare(`
+      INSERT INTO tool_metric_events (
+        metric_id, trace_id, tool_id, status, risk, duration_ms,
+        input_bytes, result_bytes, transfer_bytes, bytes_per_second, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "metric_verify_old_tool",
+      "trace_verify_old",
+      "pact.knowledge.health",
+      "ok",
+      "read_only",
+      12,
+      9,
+      17,
+      26,
+      2166.67,
+      "2000-01-01T00:00:00.000Z"
+    );
+    metricsDb.prepare(`
+      INSERT INTO http_request_metric_events (
+        metric_id, trace_id, request_id, transport, method, route, status_code,
+        completion_status, request_bytes, response_bytes, transfer_bytes,
+        duration_ms, bytes_per_second, user_agent, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "http_metric_verify_old",
+      "trace_verify_old",
+      "request_verify_old",
+      "tool-management",
+      "POST",
+      "/api/tool-management/v1/execute",
+      200,
+      "completed",
+      9,
+      17,
+      26,
+      12,
+      2166.67,
+      "verify",
+      "2000-01-01T00:00:00.000Z"
+    );
   } finally {
     metricsDb.close();
+  }
+
+  const pruneDenied = await fetchJson(`${server.url}/api/tool-management/v1/metrics/prune`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-pact-safety-confirm": "false"
+    },
+    body: JSON.stringify({ olderThan: "2001-01-01T00:00:00.000Z" })
+  });
+  assert.equal(pruneDenied.status, 428);
+  assert.match(JSON.stringify(pruneDenied.payload), /confirm|confirmation/i);
+
+  const pruned = await fetchJson(`${server.url}/api/tool-management/v1/metrics/prune`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ olderThan: "2001-01-01T00:00:00.000Z" })
+  });
+  assert.equal(pruned.status, 200);
+  assert.equal(pruned.payload.prune.schemaVersion, "pact.tool-management.metrics-prune.v1");
+  assert.equal(pruned.payload.prune.deleted.toolMetrics, 1);
+  assert.equal(pruned.payload.prune.deleted.httpRequestMetrics, 1);
+
+  const prunedDb = new Database(path.join(userDataPath, "tool-management", "tool-management.sqlite"), {
+    fileMustExist: true
+  });
+  try {
+    assert.equal(
+      prunedDb.prepare("SELECT count(*) AS count FROM tool_metric_events WHERE metric_id = ?")
+        .get("metric_verify_old_tool").count,
+      0
+    );
+    assert.equal(
+      prunedDb.prepare("SELECT count(*) AS count FROM http_request_metric_events WHERE metric_id = ?")
+        .get("http_metric_verify_old").count,
+      0
+    );
+    prunedDb.prepare(`
+      INSERT INTO tool_metric_events (
+        metric_id, trace_id, tool_id, status, risk, duration_ms,
+        input_bytes, result_bytes, transfer_bytes, bytes_per_second, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "metric_verify_cli_old_tool",
+      "trace_verify_cli_old",
+      "pact.knowledge.health",
+      "ok",
+      "read_only",
+      8,
+      4,
+      5,
+      9,
+      1125,
+      "2000-01-02T00:00:00.000Z"
+    );
+    prunedDb.prepare(`
+      INSERT INTO http_request_metric_events (
+        metric_id, trace_id, request_id, transport, method, route, status_code,
+        completion_status, request_bytes, response_bytes, transfer_bytes,
+        duration_ms, bytes_per_second, user_agent, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "http_metric_verify_cli_old",
+      "trace_verify_cli_old",
+      "request_verify_cli_old",
+      "tool-management",
+      "POST",
+      "/api/tool-management/v1/execute",
+      200,
+      "completed",
+      4,
+      5,
+      9,
+      8,
+      1125,
+      "verify-cli",
+      "2000-01-02T00:00:00.000Z"
+    );
+  } finally {
+    prunedDb.close();
   }
 
   const cliCatalog = await execFileAsync(
@@ -342,6 +463,26 @@ try {
   assert.equal(cliMetricsPayload.metrics.filters.toolId, "pact.knowledge.health");
   assert.equal(cliMetricsPayload.metrics.filters.transport, "tool-management");
   assert.equal(cliMetricsPayload.metrics.series.bucketSeconds, 60);
+
+  const cliPrune = await execFileAsync(
+    process.execPath,
+    [
+      path.resolve("server/scripts/pact.mjs"),
+      "tools",
+      "metrics",
+      "prune",
+      "--server-url",
+      server.url,
+      "--confirm",
+      "--body",
+      "{\"olderThan\":\"2001-01-01T00:00:00.000Z\"}"
+    ],
+    { env: process.env }
+  );
+  const cliPrunePayload = JSON.parse(cliPrune.stdout);
+  assert.equal(cliPrunePayload.schemaVersion, 1);
+  assert.equal(cliPrunePayload.prune.deleted.toolMetrics, 1);
+  assert.equal(cliPrunePayload.prune.deleted.httpRequestMetrics, 1);
 
   const rotated = await fetchJson(`${server.url}/api/tool-management/v1/grants/${grantResult.payload.grant.id}/rotate`, {
     method: "POST",

@@ -357,6 +357,27 @@ export function createToolManagementHttpRouter({
       });
     }
 
+    if (normalizedMethod === "POST" && suffix === "/metrics/prune") {
+      if (!(await requireConsole(request, response, normalizedMethod, url))) {
+        return true;
+      }
+      if (!requireSafetyConfirm(request, response)) {
+        return true;
+      }
+      const payload = parseJsonBody(requestBody);
+      return complete(200, {
+        schemaVersion: 1,
+        prune: platform.store.pruneMetrics({
+          olderThan: payload.olderThan || payload.older_than || "",
+          retentionDays: payload.retentionDays ?? payload.retention_days ?? 0,
+          maxRows: payload.maxRows ?? payload.max_rows ?? 0,
+          maxToolMetricRows: payload.maxToolMetricRows ?? payload.max_tool_metric_rows ?? 0,
+          maxHttpRequestMetricRows: payload.maxHttpRequestMetricRows ?? payload.max_http_request_metric_rows ?? 0,
+          dryRun: payload.dryRun === true || payload.dry_run === true
+        })
+      });
+    }
+
     if (normalizedMethod === "GET" && suffix === "/events") {
       if (!(await requireConsole(request, response, normalizedMethod, url, ["console:read"]))) {
         return true;

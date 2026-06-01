@@ -885,6 +885,38 @@ function summarizeMetricBuckets({ toolRows = [], requestRows = [], bucketSeconds
   };
 }
 
+function normalizeRetentionDays(value) {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return Math.max(1, Math.min(Math.floor(parsed), 3650));
+}
+
+function normalizeMetricMaxRows(value) {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return Math.max(1, Math.min(Math.floor(parsed), 1_000_000));
+}
+
+function retentionCutoffIso({ olderThan = "", retentionDays = 0 } = {}) {
+  const explicit = String(olderThan || "").trim();
+  if (explicit) {
+    const parsed = Date.parse(explicit);
+    if (!Number.isFinite(parsed)) {
+      throw new Error("Metric prune olderThan must be an ISO timestamp.");
+    }
+    return new Date(parsed).toISOString();
+  }
+  const days = normalizeRetentionDays(retentionDays);
+  if (!days) {
+    return "";
+  }
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
 export function getToolManagementDatabasePath(userDataPath) {
   return path.join(userDataPath, "tool-management", "tool-management.sqlite");
 }
@@ -1752,6 +1784,101 @@ export function createToolManagementStore({
     };
   }
 
+  function pruneMetrics({
+    olderThan = "",
+    retentionDays = 0,
+    maxRows = 0,
+    maxToolMetricRows = 0,
+    maxHttpRequestMetricRows = 0,
+    dryRun = false
+  } = {}) {
+    const cutoff = retentionCutoffIso({ olderThan, retentionDays });
+    const normalizedMaxRows = normalizeMetricMaxRows(maxRows);
+    const normalizedMaxToolMetricRows = normalizeMetricMaxRows(maxToolMetricRows) || normalizedMaxRows;
+    const normalizedMaxHttpRequestMetricRows = normalizeMetricMaxRows(maxHttpRequestMetricRows) || normalizedMaxRows;
+
+    const before = {
+      toolMetrics: db.prepare("SELECT count(*) AS count FROM tool_metric_events").get().count,
+      httpRequestMetrics: db.prepare("SELECT count(*) AS count FROM http_request_metric_events").get().count
+    };
+    const cutoffCounts = cutoff
+      ? {
+          toolMetrics: db.prepare("SELECT count(*) AS count FROM tool_metric_events WHERE created_at < ?").get(cutoff).count,
+          httpRequestMetrics: db.prepare("SELECT count(*) AS count FROM http_request_metric_events WHERE created_at < ?").get(cutoff).count
+        }
+      : { toolMetrics: 0, httpRequestMetrics: 0 };
+    const maxRowCounts = {
+      toolMetrics: normalizedMaxToolMetricRows
+        ? Math.max(0, before.toolMetrics - normalizedMaxToolMetricRows)
+        : 0,
+      httpRequestMetrics: normalizedMaxHttpRequestMetricRows
+        ? Math.max(0, before.httpRequestMetrics - normalizedMaxHttpRequestMetricRows)
+        : 0
+    };
+    const planned = {
+      toolMetrics: Math.max(cutoffCounts.toolMetrics, maxRowCounts.toolMetrics),
+      httpRequestMetrics: Math.max(cutoffCounts.httpRequestMetrics, maxRowCounts.httpRequestMetrics)
+    };
+
+    let deletedToolMetrics = 0;
+    let deletedHttpRequestMetrics = 0;
+    if (!dryRun) {
+      const run = db.transaction(() => {
+        if (cutoff) {
+          deletedToolMetrics += db.prepare("DELETE FROM tool_metric_events WHERE created_at < ?").run(cutoff).changes;
+          deletedHttpRequestMetrics += db.prepare("DELETE FROM http_request_metric_events WHERE created_at < ?").run(cutoff).changes;
+        }
+        if (normalizedMaxToolMetricRows) {
+          const remainingToolMetrics = db.prepare("SELECT count(*) AS count FROM tool_metric_events").get().count;
+          const overflow = Math.max(0, remainingToolMetrics - normalizedMaxToolMetricRows);
+          if (overflow > 0) {
+            deletedToolMetrics += db.prepare(`
+              DELETE FROM tool_metric_events
+              WHERE metric_id IN (
+                SELECT metric_id FROM tool_metric_events ORDER BY created_at ASC LIMIT ?
+              )
+            `).run(overflow).changes;
+          }
+        }
+        if (normalizedMaxHttpRequestMetricRows) {
+          const remainingHttpMetrics = db.prepare("SELECT count(*) AS count FROM http_request_metric_events").get().count;
+          const overflow = Math.max(0, remainingHttpMetrics - normalizedMaxHttpRequestMetricRows);
+          if (overflow > 0) {
+            deletedHttpRequestMetrics += db.prepare(`
+              DELETE FROM http_request_metric_events
+              WHERE metric_id IN (
+                SELECT metric_id FROM http_request_metric_events ORDER BY created_at ASC LIMIT ?
+              )
+            `).run(overflow).changes;
+          }
+        }
+      });
+      run();
+    }
+    const after = dryRun
+      ? before
+      : {
+          toolMetrics: db.prepare("SELECT count(*) AS count FROM tool_metric_events").get().count,
+          httpRequestMetrics: db.prepare("SELECT count(*) AS count FROM http_request_metric_events").get().count
+        };
+
+    return {
+      schemaVersion: "pact.tool-management.metrics-prune.v1",
+      dryRun: Boolean(dryRun),
+      cutoff,
+      retentionDays: normalizeRetentionDays(retentionDays),
+      maxToolMetricRows: normalizedMaxToolMetricRows,
+      maxHttpRequestMetricRows: normalizedMaxHttpRequestMetricRows,
+      planned,
+      deleted: {
+        toolMetrics: dryRun ? 0 : deletedToolMetrics,
+        httpRequestMetrics: dryRun ? 0 : deletedHttpRequestMetrics
+      },
+      before,
+      after
+    };
+  }
+
   function createMcpAuthorizationRequest(input = {}) {
     const requestId = randomId("mcp_auth_req");
     const sourceIp = sourceIpFromRequest(input.request);
@@ -1826,6 +1953,7 @@ export function createToolManagementStore({
     listAudit,
     getAudit,
     metricsSummary,
+    pruneMetrics,
     createMcpAuthorizationRequest,
     listMcpAuthorizationRequests,
     resolveMcpAuthorizationRequest,

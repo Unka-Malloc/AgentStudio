@@ -1757,6 +1757,17 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["console:read"]
   },
   {
+    id: "tool_management.metrics_prune",
+    feature: "tool_management",
+    label: "工具指标清理",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: { method: "POST", path: "/api/tool-management/v1/metrics/prune", localInForwardMode: true },
+    rpc: {method:"tool_management.metrics_prune",syntheticPath:"/api/tool-management/v1/metrics/prune",body:"params"},
+    cli: { command: ["tools", "metrics", "prune"], usage: "tools metrics prune --confirm --body prune.json" },
+    requiredScopes: ["runtime:admin"],
+    safety: { risk: "repair_write" }
+  },
+  {
     id: "tool_management.events",
     feature: "tool_management",
     label: "工具事件",
