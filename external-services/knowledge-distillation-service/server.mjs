@@ -18532,7 +18532,13 @@ function buildAgentMessage({ runId, title, query, documents, classification, rou
   };
 }
 
-function createRun(input = {}, runtimeStatus = null, priorRuns = [], referenceFrameworks = null) {
+function runKnowledgeDistillationWorkflow(input = {}, runtimeStatus = null, priorRuns = [], referenceFrameworks = null) {
+  const distillationWorkflow = runDistillationWorkflow(input, runtimeStatus, priorRuns);
+  const evaluation = evaluateDistillationWorkflow(distillationWorkflow, runtimeStatus, referenceFrameworks);
+  return composeDistillationResult(distillationWorkflow, evaluation, runtimeStatus);
+}
+
+function runDistillationWorkflow(input = {}, runtimeStatus = null, priorRuns = []) {
   const createdAt = nowIso();
   const normalizedInput = normalizeDocuments(input, runtimeStatus);
   const allDocuments = normalizedInput.documents;
@@ -18625,6 +18631,41 @@ function createRun(input = {}, runtimeStatus = null, priorRuns = [], referenceFr
     grounding,
     incrementalPlan
   });
+
+  return {
+    createdAt,
+    allDocuments,
+    inputDocumentPlan,
+    timeFilter,
+    corpusPlan,
+    routePlan,
+    documents,
+    evidenceDocuments,
+    query,
+    title,
+    runId,
+    formatConversionPlan,
+    responseProfile,
+    classification,
+    convergence,
+    grounding,
+    incrementalPlan,
+    graphEvidence
+  };
+}
+
+function evaluateDistillationWorkflow(distillationWorkflow = {}, runtimeStatus = null, referenceFrameworks = null) {
+  const {
+    allDocuments = [],
+    documents = [],
+    timeFilter = {},
+    corpusPlan = {},
+    runId = "",
+    classification = {},
+    graphEvidence = {},
+    grounding = {},
+    incrementalPlan = {}
+  } = distillationWorkflow;
   const rawDistillableCount = allDocuments.filter((document) => document.text).length;
   const passed = documents.length > 0;
   const failure = passed
@@ -18659,6 +18700,116 @@ function createRun(input = {}, runtimeStatus = null, priorRuns = [], referenceFr
       }
     }
   });
+  return {
+    rawDistillableCount,
+    passed,
+    failure,
+    referenceGapReport,
+    qualityReport: buildDistillationQualityReport({
+      distillationWorkflow,
+      evaluation: { passed, referenceGapReport },
+      runtimeStatus
+    })
+  };
+}
+
+function buildDistillationQualityReport({ distillationWorkflow = {}, evaluation = {}, runtimeStatus = null } = {}) {
+  const {
+    documents = [],
+    corpusPlan = {},
+    classification = {},
+    grounding = {},
+    incrementalPlan = {},
+    graphEvidence = {}
+  } = distillationWorkflow;
+  const passed = evaluation.passed === true;
+  const referenceGapReport = evaluation.referenceGapReport || {};
+  return {
+    protocolVersion: PROTOCOL_VERSION,
+    passed,
+    overallScore: passed ? (grounding.passed ? 0.8 : 0.68) : 0,
+    sourceCoverage: documents.length,
+    routing: {
+      supportedSourceCount: corpusPlan.documents.filter((document) => document.route.formatId !== "unknown").length,
+      riskySourceCount: corpusPlan.documents.filter((document) => document.route.riskFlags.length > 0).length
+    },
+    corpus: {
+      allSizePolicy: corpusPlan.allSizePolicy,
+      inputDocumentPlan: corpusPlan.inputDocumentPlan || null,
+      windowCount: corpusPlan.windowCount,
+      totalBytes: corpusPlan.totalBytes,
+      totalCharacters: corpusPlan.totalCharacters
+    },
+    incremental: {
+      strategy: incrementalPlan.strategy,
+      mode: incrementalPlan.mode,
+      projectId: incrementalPlan.projectId,
+      reuseRatio: incrementalPlan.reuseRatio,
+      reusedWindowCount: incrementalPlan.reusedWindowCount,
+      changedWindowCount: incrementalPlan.changedWindowCount,
+      addedWindowCount: incrementalPlan.addedWindowCount,
+      removedWindowCount: incrementalPlan.removedWindowCount
+    },
+    graphEvidence: graphEvidence.summary,
+    referenceGaps: {
+      strategy: referenceGapReport.strategy,
+      frameworkCount: referenceGapReport.referenceFrameworks.count,
+      openGapCount: referenceGapReport.openGaps.length
+    },
+    runtime: runtimeStatus?.summary || null,
+    classification: {
+      groupCount: classification.groupCount,
+      coreGroupCount: classification.coreGroupCount,
+      garbageGroupCount: classification.garbageGroupCount,
+      communityCount: classification.communityCount,
+      strategy: classification.strategy,
+      taxonomyStrategy: classification.taxonomyStrategy,
+      assignmentRationaleStrategy: classification.assignmentRationaleStrategy,
+      averageCohesion: Number(
+        (
+          classification.groups.reduce((sum, group) => sum + group.cohesionScore, 0) /
+          Math.max(1, classification.groupCount)
+        ).toFixed(4)
+      ),
+      averageSeparation: Number(
+        (
+          classification.groups
+            .filter((group) => !group.excludedFromCore)
+            .reduce((sum, group) => sum + Number(group.separationScore ?? 1), 0) /
+          Math.max(1, classification.coreGroupCount)
+        ).toFixed(4)
+      )
+    },
+    grounding: {
+      passed: grounding.passed,
+      claimCount: grounding.claimCount,
+      groundingScore: grounding.groundingScore,
+      neutral: grounding.neutral,
+      contradicted: grounding.contradicted
+    }
+  };
+}
+
+function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, runtimeStatus = null) {
+  const {
+    createdAt,
+    allDocuments,
+    inputDocumentPlan,
+    corpusPlan,
+    routePlan,
+    documents,
+    query,
+    title,
+    runId,
+    responseProfile,
+    classification,
+    convergence,
+    grounding,
+    incrementalPlan,
+    graphEvidence
+  } = distillationWorkflow;
+  const { passed, failure, referenceGapReport, qualityReport } = evaluation;
+  let formatConversionPlan = distillationWorkflow.formatConversionPlan;
   const markdown = buildMarkdown({ title, query, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, failure });
   formatConversionPlan = attachFormatConversionOutputValidation(formatConversionPlan, {
     title,
@@ -18829,70 +18980,7 @@ function createRun(input = {}, runtimeStatus = null, priorRuns = [], referenceFr
           };
         })
         .filter((candidate) => candidate.promoted),
-      qualityReport: {
-        protocolVersion: PROTOCOL_VERSION,
-        passed,
-        overallScore: passed ? (grounding.passed ? 0.8 : 0.68) : 0,
-        sourceCoverage: documents.length,
-        routing: {
-          supportedSourceCount: corpusPlan.documents.filter((document) => document.route.formatId !== "unknown").length,
-          riskySourceCount: corpusPlan.documents.filter((document) => document.route.riskFlags.length > 0).length
-        },
-        corpus: {
-          allSizePolicy: corpusPlan.allSizePolicy,
-          inputDocumentPlan: corpusPlan.inputDocumentPlan || null,
-          windowCount: corpusPlan.windowCount,
-          totalBytes: corpusPlan.totalBytes,
-          totalCharacters: corpusPlan.totalCharacters
-        },
-        incremental: {
-          strategy: incrementalPlan.strategy,
-          mode: incrementalPlan.mode,
-          projectId: incrementalPlan.projectId,
-          reuseRatio: incrementalPlan.reuseRatio,
-          reusedWindowCount: incrementalPlan.reusedWindowCount,
-          changedWindowCount: incrementalPlan.changedWindowCount,
-          addedWindowCount: incrementalPlan.addedWindowCount,
-          removedWindowCount: incrementalPlan.removedWindowCount
-        },
-        graphEvidence: graphEvidence.summary,
-        referenceGaps: {
-          strategy: referenceGapReport.strategy,
-          frameworkCount: referenceGapReport.referenceFrameworks.count,
-          openGapCount: referenceGapReport.openGaps.length
-        },
-        runtime: runtimeStatus?.summary || null,
-        classification: {
-          groupCount: classification.groupCount,
-          coreGroupCount: classification.coreGroupCount,
-          garbageGroupCount: classification.garbageGroupCount,
-          communityCount: classification.communityCount,
-          strategy: classification.strategy,
-          taxonomyStrategy: classification.taxonomyStrategy,
-          assignmentRationaleStrategy: classification.assignmentRationaleStrategy,
-          averageCohesion: Number(
-            (
-              classification.groups.reduce((sum, group) => sum + group.cohesionScore, 0) /
-              Math.max(1, classification.groupCount)
-            ).toFixed(4)
-          ),
-          averageSeparation: Number(
-            (
-              classification.groups
-                .filter((group) => !group.excludedFromCore)
-                .reduce((sum, group) => sum + Number(group.separationScore ?? 1), 0) /
-              Math.max(1, classification.coreGroupCount)
-            ).toFixed(4)
-          )
-        },
-        grounding: {
-          passed: grounding.passed,
-          claimCount: grounding.claimCount,
-          groundingScore: grounding.groundingScore,
-          neutral: grounding.neutral,
-          contradicted: grounding.contradicted
-        }
-      }
+      qualityReport
     },
     artifactRefs: [
       {
@@ -18963,6 +19051,10 @@ function createRun(input = {}, runtimeStatus = null, priorRuns = [], referenceFr
       }
     ]
   };
+}
+
+function createRun(input = {}, runtimeStatus = null, priorRuns = [], referenceFrameworks = null) {
+  return runKnowledgeDistillationWorkflow(input, runtimeStatus, priorRuns, referenceFrameworks);
 }
 
 function capabilities(referenceFrameworks = null, runtimeStatus = null) {

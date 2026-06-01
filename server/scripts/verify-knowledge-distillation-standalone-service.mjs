@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   FEATURE_MANIFEST,
   collectPackagePlan,
@@ -11,6 +14,8 @@ import { createToolCatalog } from "../platform/specialized/capabilities/tools/to
 
 const STANDALONE_FEATURE_ID = "external-knowledge-distillation";
 const LEGACY_FEATURE_ID = "knowledge-distillation";
+const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const externalServiceEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/server.mjs");
 
 const REQUIRED_STANDALONE_DEPENDENCIES = Object.freeze([
   "core-platform",
@@ -102,6 +107,14 @@ const REQUIRED_LEGACY_REMOVE_PATHS = Object.freeze([
   "server/platform/specialized/knowledge/invocation/knowledge-skill-runtime",
   "server/platform/specialized/knowledge/invocation/knowledge-summarization-runtime"
 ]);
+
+function sourceSliceBetweenFunctions(source = "", functionName = "", nextFunctionName = "") {
+  const start = source.indexOf(`function ${functionName}`);
+  const end = source.indexOf(`\nfunction ${nextFunctionName}`, start + 1);
+  assert.notEqual(start, -1, `${functionName} must exist in the external knowledge distillation service`);
+  assert.notEqual(end, -1, `${functionName} must be followed by ${nextFunctionName}`);
+  return source.slice(start, end);
+}
 
 const featureMap = new Map(FEATURE_MANIFEST.features.map((feature) => [feature.featureId, feature]));
 const standaloneFeature = featureMap.get(STANDALONE_FEATURE_ID);
@@ -218,5 +231,58 @@ for (const includePath of REQUIRED_EXTERNAL_PACKAGE_PATHS) {
 for (const removePath of REQUIRED_LEGACY_REMOVE_PATHS) {
   assert.ok(packagePlan.removePaths.includes(removePath), `standalone package plan must strip legacy path ${removePath}`);
 }
+
+const externalServiceSource = await fs.readFile(externalServiceEntry, "utf8");
+for (const functionName of [
+  "runKnowledgeDistillationWorkflow",
+  "runDistillationWorkflow",
+  "evaluateDistillationWorkflow",
+  "composeDistillationResult"
+]) {
+  assert.match(
+    externalServiceSource,
+    new RegExp(`function ${functionName}\\(`),
+    `${functionName} must exist as an explicit external service workflow boundary`
+  );
+}
+const unifiedWorkflowBody = sourceSliceBetweenFunctions(
+  externalServiceSource,
+  "runKnowledgeDistillationWorkflow",
+  "runDistillationWorkflow"
+);
+assert.match(
+  unifiedWorkflowBody,
+  /const distillationWorkflow = runDistillationWorkflow\(input, runtimeStatus, priorRuns\);/,
+  "runKnowledgeDistillationWorkflow must start with DistillationWorkflow"
+);
+assert.match(
+  unifiedWorkflowBody,
+  /const evaluation = evaluateDistillationWorkflow\(distillationWorkflow, runtimeStatus, referenceFrameworks\);/,
+  "runKnowledgeDistillationWorkflow must evaluate after DistillationWorkflow"
+);
+assert.match(
+  unifiedWorkflowBody,
+  /return composeDistillationResult\(distillationWorkflow, evaluation, runtimeStatus\);/,
+  "runKnowledgeDistillationWorkflow must finish with Result Composition"
+);
+for (const forbiddenInlineStep of [
+  "normalizeDocuments(",
+  "buildCorpusPlan(",
+  "classifyDocuments(",
+  "buildGroundingReport(",
+  "buildMarkdown("
+]) {
+  assert.equal(
+    unifiedWorkflowBody.includes(forbiddenInlineStep),
+    false,
+    `runKnowledgeDistillationWorkflow must not inline ${forbiddenInlineStep}; keep one workflow command per function call`
+  );
+}
+const createRunWrapperBody = sourceSliceBetweenFunctions(externalServiceSource, "createRun", "capabilities");
+assert.match(
+  createRunWrapperBody,
+  /return runKnowledgeDistillationWorkflow\(input, runtimeStatus, priorRuns, referenceFrameworks\);/,
+  "createRun must remain a compatibility wrapper around the unified workflow"
+);
 
 console.log("knowledge distillation standalone service feature gate passed");
