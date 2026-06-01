@@ -804,7 +804,8 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "codespace.review.approve": "pact.codespace.review.approve",
   "codespace.review.status.sync": "pact.codespace.review.status.sync",
   "raw-corpus.format.convert": "pact.rawCorpus.format.convert",
-  "knowledge.dossier.export": "pact.knowledge.dossier.export"
+  "knowledge.dossier.export": "pact.knowledge.dossier.export",
+  "knowledge.distillation.export": "pact.knowledge.distillation.export"
 });
 
 const TOOL_ALIAS_IDS_BY_OPERATION_ID = Object.freeze({
@@ -1051,7 +1052,8 @@ const SCOPE_BY_OPERATION_ID = Object.freeze({
   "codespace.review.approve": "repo:approve",
   "codespace.review.status.sync": "repo:read",
   "raw-corpus.format.convert": "knowledge:write",
-  "knowledge.dossier.export": "knowledge:read"
+  "knowledge.dossier.export": "knowledge:read",
+  "knowledge.distillation.export": "knowledge:read"
 });
 
 const TOOLSET_BY_SCOPE = Object.freeze({

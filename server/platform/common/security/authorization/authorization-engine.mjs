@@ -401,6 +401,9 @@ tool_management.grants
 tool_management.mcp.list_requests
 tool_management.mcp.request_authorization
 tool_management.mcp.resolve_request
+tool_management.metrics_export
+tool_management.metrics_prune
+tool_management.metrics_storage
 tool_management.metrics_summary
 tool_management.policy_evaluate
 tool_management.policy_preview
@@ -609,6 +612,7 @@ pact.knowledge.console
 pact.knowledge.contribution.submit
 pact.knowledge.documentStructure
 pact.knowledge.dossier.export
+pact.knowledge.distillation.export
 pact.knowledge.evaluation.runs.create
 pact.knowledge.evaluation.runs.get
 pact.knowledge.evaluation.runs.list
