@@ -40,6 +40,7 @@ const STREAM_TEXT_SAMPLE_CHARACTERS = Math.max(1024, Number(process.env.PACT_EXT
 const PDF_FILE_REF_ELEMENT_MAX_BLOCKS = Math.max(1000, Number(process.env.PACT_EXTERNAL_KD_PDF_FILE_REF_ELEMENT_MAX_BLOCKS || 50_000));
 const XLSX_SHARED_STRING_INDEX_RECORD_BYTES = 16;
 const XLSX_SHARED_STRING_DISK_INDEX_STRATEGY = "spreadsheetml-shared-string-disk-index.v1";
+const STRUCTURED_XML_ELEMENT_SCANNER_STRATEGY = "xml-active-element-carry-preserving-stream-scanner.v1";
 const BINARY_PROFILE_SAMPLE_BYTES = Math.max(512, Number(process.env.PACT_EXTERNAL_KD_BINARY_PROFILE_SAMPLE_BYTES || 4096));
 const SIGNATURE_SNIFF_BYTES = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_SIGNATURE_SNIFF_BYTES || 256 * 1024));
 const EMBEDDING_DIMENSIONS = 128;
@@ -5037,10 +5038,7 @@ function scanXmlElementsFromEntry(entry = null, tagName = "", onElement = () => 
     scanXmlElementsFromFile(entry.filePath, tagName, onElement);
     return;
   }
-  const expression = new RegExp(`<${tagName}\\b[\\s\\S]*?<\\/${tagName}>`, "g");
-  for (const match of String(entry.data?.length ? utf8(entry.data) : "").matchAll(expression)) {
-    onElement(match[0]);
-  }
+  drainXmlElementCarry(String(entry.data?.length ? utf8(entry.data) : ""), tagName, onElement, { final: true });
 }
 
 function structureElementsToText(format = "document", elements = [], fallback = "") {
@@ -9358,10 +9356,83 @@ function appendMarkupFileAsText(inputPath = "", outputPath = "") {
   return totalCharacters;
 }
 
+function exactXmlElementTagPattern(tagName = "") {
+  const legacyNamespacePattern = String(tagName || "").match(/^\[\^:>\]\*\:\?([A-Za-z_][\w.-]*)$/);
+  if (legacyNamespacePattern) {
+    return `(?:[^\\s/:>]+:)?${legacyNamespacePattern[1]}`;
+  }
+  return String(tagName || "");
+}
+
+function findNextXmlElementSpan(buffer = "", tagName = "") {
+  const tagPattern = exactXmlElementTagPattern(tagName);
+  const expression = new RegExp(`<(/?)(${tagPattern})(?=[\\s/>])[^>]*>`, "gi");
+  let start = -1;
+  let depth = 0;
+  let match;
+  while ((match = expression.exec(buffer)) !== null) {
+    const token = match[0] || "";
+    const isClosing = match[1] === "/";
+    const isSelfClosing = /\/\s*>$/.test(token);
+    if (start < 0) {
+      if (isClosing) {
+        continue;
+      }
+      start = match.index;
+      if (isSelfClosing) {
+        return { start, end: expression.lastIndex, complete: true };
+      }
+      depth = 1;
+      continue;
+    }
+    if (isClosing) {
+      depth -= 1;
+    } else if (!isSelfClosing) {
+      depth += 1;
+    }
+    if (depth <= 0) {
+      return { start, end: expression.lastIndex, complete: true };
+    }
+  }
+  return start >= 0
+    ? { start, end: buffer.length, complete: false }
+    : null;
+}
+
+function trimXmlCarryBeforeOpen(buffer = "", tagName = "") {
+  const tagPattern = exactXmlElementTagPattern(tagName);
+  const expression = new RegExp(`<${tagPattern}(?=[\\s/>])`, "gi");
+  let lastOpen = -1;
+  let match;
+  while ((match = expression.exec(buffer)) !== null) {
+    lastOpen = match.index;
+  }
+  if (lastOpen >= 0) {
+    return buffer.slice(lastOpen);
+  }
+  return buffer.slice(-Math.min(buffer.length, STREAM_TEXT_CHUNK_BYTES));
+}
+
+function drainXmlElementCarry(carry = "", tagName = "", onElement = () => {}, { final = false } = {}) {
+  let buffer = carry;
+  while (buffer) {
+    const span = findNextXmlElementSpan(buffer, tagName);
+    if (!span) {
+      return final ? "" : trimXmlCarryBeforeOpen(buffer, tagName);
+    }
+    if (!span.complete) {
+      return span.start > 0 ? buffer.slice(span.start) : buffer;
+    }
+    const element = buffer.slice(span.start, span.end);
+    onElement(element);
+    buffer = buffer.slice(span.end);
+  }
+  return "";
+}
+
 function scanXmlElementsFromFile(filePath = "", tagName = "", onElement = () => {}) {
   const decoder = new TextDecoder("utf-8");
   const buffer = Buffer.alloc(STREAM_TEXT_CHUNK_BYTES);
-  const expression = new RegExp(`<${tagName}\\b[\\s\\S]*?<\\/${tagName}>`, "g");
   let input = null;
   let carry = "";
   try {
@@ -9371,27 +9442,13 @@ function scanXmlElementsFromFile(filePath = "", tagName = "", onElement = () => 
       if (!bytesRead) {
         break;
       }
-      carry += decoder.decode(buffer.subarray(0, bytesRead), { stream: true });
-      expression.lastIndex = 0;
-      let processed = 0;
-      let match;
-      while ((match = expression.exec(carry)) !== null) {
-        onElement(match[0]);
-        processed = expression.lastIndex;
-      }
-      if (processed > 0) {
-        carry = carry.slice(processed);
-      }
-      if (carry.length > STREAM_TEXT_CHUNK_BYTES * 4) {
-        carry = carry.slice(-STREAM_TEXT_CHUNK_BYTES);
-      }
+      carry = drainXmlElementCarry(
+        carry + decoder.decode(buffer.subarray(0, bytesRead), { stream: true }),
+        tagName,
+        onElement
+      );
     }
-    carry += decoder.decode();
-    expression.lastIndex = 0;
-    let match;
-    while ((match = expression.exec(carry)) !== null) {
-      onElement(match[0]);
-    }
+    carry = drainXmlElementCarry(carry + decoder.decode(), tagName, onElement, { final: true });
   } finally {
     if (input !== null) {
       fsSync.closeSync(input);
@@ -22420,6 +22477,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "directory-file-ref-recursive-routing.v1",
       "visio-opc-shape-parser.v1",
       "pdf-text-file-ref-layout.v1",
+      STRUCTURED_XML_ELEMENT_SCANNER_STRATEGY,
       "wordprocessingml-stream-paragraph.v1",
       "wordprocessingml-stream-table.v1",
       "wordprocessingml-stream-content-control.v1",
@@ -22541,6 +22599,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       syncFileRefMaxBytes: SYNC_FILE_REF_MAX_BYTES,
       manifestStrategy: "inline-or-streaming-manifest-document-input.v1",
       structuredZipFileRefStrategy: "structured-zip-entry-bounded-or-streaming.v1",
+      structuredXmlElementScannerStrategy: STRUCTURED_XML_ELEMENT_SCANNER_STRATEGY,
+      structuredXmlStreamChunkBytes: STREAM_TEXT_CHUNK_BYTES,
       directoryFileRefStrategy: "directory-file-ref-recursive-routing.v1",
       binaryProfileStrategy: "bounded-binary-file-profile.v1",
       structuredZipEntryMaxBytes: STRUCTURED_ZIP_ENTRY_MAX_BYTES,

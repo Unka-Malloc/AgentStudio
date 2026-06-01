@@ -381,6 +381,16 @@ assert.equal(
   "large PDF filePath parsing must preserve page and layout references for element-aware windowing"
 );
 assert.equal(
+  externalServiceSource.includes("xml-active-element-carry-preserving-stream-scanner.v1"),
+  true,
+  "structured XML streaming must preserve active elements across chunk boundaries instead of trimming through them"
+);
+assert.equal(
+  externalServiceSource.includes("function findNextXmlElementSpan("),
+  true,
+  "structured XML streaming must use a token-aware element span scanner for large Office/OpenDocument/EPUB XML entries"
+);
+assert.equal(
   externalServiceSource.includes("function parseDocxLargeEntryStreaming("),
   true,
   "large DOCX filePath parsing must keep a dedicated streaming structure parser instead of downgrading to plain text"

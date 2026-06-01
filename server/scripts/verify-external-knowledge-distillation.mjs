@@ -197,6 +197,7 @@ function startExternalService({ port, dataDir, modelGatewayUrl = "" }) {
       PORT: String(port),
       SERVICE_DATA_DIR: dataDir,
       PACT_EXTERNAL_KD_STRUCTURED_ZIP_ENTRY_MAX_BYTES: "25000",
+      PACT_EXTERNAL_KD_STREAM_TEXT_CHUNK_BYTES: "4096",
       PACT_EXTERNAL_KD_MODEL_GATEWAY_URL: modelGatewayUrl,
       PACT_EXTERNAL_KD_MODEL_ALIAS: "verify-real-model-gateway"
     },
@@ -1226,6 +1227,7 @@ try {
             "<w:p><w:r><w:t>Large evidence portal: </w:t></w:r><w:hyperlink r:id=\"rIdLargeLink\"><w:r><w:t>large DOCX evidence portal</w:t></w:r></w:hyperlink></w:p>",
             "<w:p><w:ins w:id=\"422\" w:author=\"Large Reviewer\" w:date=\"2026-07-04T00:00:00Z\"><w:r><w:t>Large inserted tracked change remains available in streaming mode.</w:t></w:r></w:ins></w:p>",
             "<w:p><w:del w:id=\"423\" w:author=\"Large Reviewer\" w:date=\"2026-07-05T00:00:00Z\"><w:r><w:delText>Large deleted tracked change remains available in streaming mode.</w:delText></w:r></w:del></w:p>",
+            `<w:p><w:r><w:t>Oversized XML stream anchor marker proves one Word paragraph can span many 4KB stream chunks without carry truncation. ${"single-element-stream-token ".repeat(1800)}</w:t></w:r></w:p>`,
             Array.from({ length: 700 }, (_, index) => (
               `<w:p><w:r><w:t>Large mounted DOCX structural paragraph ${index + 1} proves oversized WordprocessingML streams through bounded filePath parsing without whole-entry memory reads.</w:t></w:r></w:p>`
             )).join(""),
@@ -1514,6 +1516,8 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.tikaTimeoutMs >= 120_000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.manifestStrategy, "inline-or-streaming-manifest-document-input.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.structuredZipFileRefStrategy, "structured-zip-entry-bounded-or-streaming.v1");
+  assert.equal(capabilities.payload.largeDocumentPolicy.structuredXmlElementScannerStrategy, "xml-active-element-carry-preserving-stream-scanner.v1");
+  assert.equal(capabilities.payload.largeDocumentPolicy.structuredXmlStreamChunkBytes, 4096);
   assert.equal(capabilities.payload.largeDocumentPolicy.directoryFileRefStrategy, "directory-file-ref-recursive-routing.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.directoryExpansionMaxFiles >= 1000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.binaryProfileStrategy, "bounded-binary-file-profile.v1");
@@ -1762,6 +1766,7 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("directory-file-ref-recursive-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("pdf-subtype-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("pdf-text-file-ref-layout.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("xml-active-element-carry-preserving-stream-scanner.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("wordprocessingml-stream-table.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("wordprocessingml-stream-content-control.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("wordprocessingml-stream-bookmark.v1"), true);
@@ -3931,6 +3936,13 @@ try {
       ref.type === "paragraph" &&
       ref.layout?.strategy === "wordprocessingml-stream-paragraph.v1"
     ))), true);
+    assert.equal(largeStructuredWord.windowPlan.windows.some((window) => (
+      /Oversized XML stream anchor marker/.test(window.excerpt || "") &&
+      window.elementRefs?.some((ref) => (
+        ref.type === "paragraph" &&
+        ref.layout?.strategy === "wordprocessingml-stream-paragraph.v1"
+      ))
+    )), true);
     assert.equal(largeStructuredWord.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
       ref.type === "table-row" &&
       ref.layout?.strategy === "wordprocessingml-stream-table.v1" &&

@@ -462,6 +462,7 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfTextTimeoutMs >= 120_000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementStrategy, "pdf-text-file-ref-layout.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementMaxBlocks >= 1000, true);
+  assert.equal(capabilities.payload.largeDocumentPolicy.structuredXmlElementScannerStrategy, "xml-active-element-carry-preserving-stream-scanner.v1");
   assert.deepEqual(capabilities.payload.largeDocumentPolicy.wordFileRefElementStrategies, [
     "wordprocessingml-stream-paragraph.v1",
     "wordprocessingml-stream-table.v1",
@@ -517,6 +518,7 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("content-signature-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("structured-json-file-ref-streaming-window.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("pdf-text-file-ref-layout.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("xml-active-element-carry-preserving-stream-scanner.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("spreadsheetml-shared-string-disk-index.v1"), true);
   assert.equal(capabilities.payload.fileCompatibility.routingStrategy, "content-signature-extension-media-shape-routing.v2");
   assert.equal(capabilities.payload.fileCompatibility.routeOrder[0], "contentSignature");
