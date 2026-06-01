@@ -517,9 +517,9 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
     label: "PDF",
     professionalFamily: "pdf",
     parserProfile: "pdf.text-layout-ocr-route",
-    structureUnits: ["page", "pdf-text-block", "layout-run", "link", "pdf-outline", "ocr-page"],
-    parserStages: ["pdf.text.basic", "pdf.text.pdftotext", "pdf.hyperlinks", "pdf.outlines", "pdf.visual.layout", "ocr.page"],
-    preserves: ["page", "bbox", "layout.order", "layout.fontSize", "links", "outline"],
+    structureUnits: ["page", "pdf-text-block", "layout-run", "link", "pdf-outline", "pdf-form-field", "ocr-page"],
+    parserStages: ["pdf.text.basic", "pdf.text.pdftotext", "pdf.hyperlinks", "pdf.outlines", "pdf.form-fields", "pdf.visual.layout", "ocr.page"],
+    preserves: ["page", "bbox", "layout.order", "layout.fontSize", "links", "outline", "formFields"],
     conversionTargets: ["markdown-with-page-blocks", "docx-review-copy", "agent-json-with-layout-and-link-refs", "evidence-pack"],
     conversionAdapters: [
       {
@@ -541,7 +541,7 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
         targetFormat: "agent-json",
         adapter: "pdf-layout-to-agent-elements.v1",
         mode: "agent",
-        stages: ["page-bbox-element-refs", "link-refs", "outline-refs", "window-ids", "content-hashes"]
+        stages: ["page-bbox-element-refs", "link-refs", "outline-refs", "form-field-refs", "window-ids", "content-hashes"]
       },
       {
         target: "evidence-pack-json",
@@ -551,7 +551,7 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
         stages: ["text-units", "entities", "claims"]
       }
     ],
-    qualityGates: ["page-order-preserved", "bbox-metadata-present-when-available", "pdf-link-refs-preserved", "pdf-outline-refs-preserved", "empty-corpus-blocked"],
+    qualityGates: ["page-order-preserved", "bbox-metadata-present-when-available", "pdf-link-refs-preserved", "pdf-outline-refs-preserved", "pdf-form-fields-preserved", "empty-corpus-blocked"],
     riskControls: ["font-mapping-risk", "image-only-pdf-ocr-fallback", "layout-geometry-approximation"],
     knownLosses: ["approximate-text-bbox", "complex-vector-layout-not-fully-reconstructed"]
   },
@@ -2378,6 +2378,7 @@ function pushStructureElement(elements, type, text, metadata = {}) {
     ...(metadata.shape ? { shape: metadata.shape } : {}),
     ...(metadata.image ? { image: metadata.image } : {}),
     ...(metadata.chart ? { chart: metadata.chart } : {}),
+    ...(metadata.form ? { form: metadata.form } : {}),
     ...(metadata.merge ? { merge: metadata.merge } : {}),
     ...(metadata.frontmatter ? { frontmatter: metadata.frontmatter } : {}),
     ...(metadata.cells ? { cells: metadata.cells } : {})
@@ -7531,7 +7532,8 @@ function structuredZipXmlFiles(route = null, rootDir = "") {
   if (route?.id === "word") {
     return collectFiles(rootDir, (name) => (
       /^word\/(document|header\d*|footer\d*|comments|footnotes|endnotes)\.xml$/.test(name) ||
-      /^word\/_rels\/(document|header\d*|footer\d*)\.xml\.rels$/.test(name)
+      /^word\/_rels\/(document|header\d*|footer\d*)\.xml\.rels$/.test(name) ||
+      /^word\/charts\/chart\d+\.xml$/.test(name)
     ), 240);
   }
   if (route?.id === "presentation") {
@@ -7540,6 +7542,8 @@ function structuredZipXmlFiles(route = null, rootDir = "") {
         .sort((left, right) => Number(left.relativePath.match(/slide(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/slide(\d+)/)?.[1] || 0)),
       ...collectFiles(rootDir, (name) => /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(name), 1000)
         .sort((left, right) => Number(left.relativePath.match(/slide(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/slide(\d+)/)?.[1] || 0)),
+      ...collectFiles(rootDir, (name) => /^ppt\/charts\/chart\d+\.xml$/.test(name), 1000)
+        .sort((left, right) => Number(left.relativePath.match(/chart(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/chart(\d+)/)?.[1] || 0)),
       ...collectFiles(rootDir, (name) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name), 1000)
         .sort((left, right) => Number(left.relativePath.match(/notesSlide(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/notesSlide(\d+)/)?.[1] || 0)),
       ...collectFiles(rootDir, (name) => name === "ppt/commentAuthors.xml", 1),
@@ -7557,6 +7561,12 @@ function structuredZipXmlFiles(route = null, rootDir = "") {
         .sort((left, right) => Number(left.relativePath.match(/sheet(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/sheet(\d+)/)?.[1] || 0)),
       ...collectFiles(rootDir, (name) => /^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/.test(name), 1000)
         .sort((left, right) => Number(left.relativePath.match(/sheet(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/sheet(\d+)/)?.[1] || 0)),
+      ...collectFiles(rootDir, (name) => /^xl\/drawings\/drawing\d+\.xml$/.test(name), 1000)
+        .sort((left, right) => Number(left.relativePath.match(/drawing(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/drawing(\d+)/)?.[1] || 0)),
+      ...collectFiles(rootDir, (name) => /^xl\/drawings\/_rels\/drawing\d+\.xml\.rels$/.test(name), 1000)
+        .sort((left, right) => Number(left.relativePath.match(/drawing(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/drawing(\d+)/)?.[1] || 0)),
+      ...collectFiles(rootDir, (name) => /^xl\/charts\/chart\d+\.xml$/.test(name), 1000)
+        .sort((left, right) => Number(left.relativePath.match(/chart(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/chart(\d+)/)?.[1] || 0)),
       ...collectFiles(rootDir, (name) => /^xl\/comments\d+\.xml$/.test(name), 1000)
         .sort((left, right) => Number(left.relativePath.match(/comments(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/comments(\d+)/)?.[1] || 0))
     ];
@@ -7593,6 +7603,12 @@ function structuredZipEntryFiles(route = null, rootDir = "") {
           .sort((left, right) => Number(left.relativePath.match(/sheet(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/sheet(\d+)/)?.[1] || 0)),
         ...collectFiles(rootDir, (name) => /^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/.test(name), 1000)
           .sort((left, right) => Number(left.relativePath.match(/sheet(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/sheet(\d+)/)?.[1] || 0)),
+        ...collectFiles(rootDir, (name) => /^xl\/drawings\/drawing\d+\.xml$/.test(name), 1000)
+          .sort((left, right) => Number(left.relativePath.match(/drawing(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/drawing(\d+)/)?.[1] || 0)),
+        ...collectFiles(rootDir, (name) => /^xl\/drawings\/_rels\/drawing\d+\.xml\.rels$/.test(name), 1000)
+          .sort((left, right) => Number(left.relativePath.match(/drawing(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/drawing(\d+)/)?.[1] || 0)),
+        ...collectFiles(rootDir, (name) => /^xl\/charts\/chart\d+\.xml$/.test(name), 1000)
+          .sort((left, right) => Number(left.relativePath.match(/chart(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/chart(\d+)/)?.[1] || 0)),
         ...collectFiles(rootDir, (name) => /^xl\/comments\d+\.xml$/.test(name), 1000)
           .sort((left, right) => Number(left.relativePath.match(/comments(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/comments(\d+)/)?.[1] || 0))
       ]
@@ -7773,6 +7789,13 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           stage: "office.word.images",
           status: parsed.imageCount ? "completed" : "empty",
           images: parsed.imageCount
+        },
+        {
+          stage: "office.word.charts",
+          status: parsed.chartCount ? "completed" : "empty",
+          charts: parsed.chartCount,
+          chartParts: parsed.chartPartCount,
+          chartSeries: parsed.chartSeriesCount
         }
       ]
     };
@@ -7804,6 +7827,10 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           commentAuthors: parsed.commentAuthorCount,
           hyperlinks: parsed.hyperlinkCount,
           images: parsed.imageCount,
+          charts: parsed.chartCount,
+          chartParts: parsed.chartPartCount,
+          chartSeries: parsed.chartSeriesCount,
+          chartGeometries: parsed.chartGeometryCount,
           layoutStrategy: parsed.shapeGeometryCount ? "presentationml-shape-geometry.v1" : "",
           headings: parsed.headingCount,
           paragraphs: parsed.paragraphCount
@@ -7833,6 +7860,14 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           status: parsed.imageCount ? "completed" : "empty",
           images: parsed.imageCount,
           geometries: parsed.imageGeometryCount
+        },
+        {
+          stage: "office.presentation.charts",
+          status: parsed.chartCount ? "completed" : "empty",
+          charts: parsed.chartCount,
+          chartParts: parsed.chartPartCount,
+          chartSeries: parsed.chartSeriesCount,
+          geometries: parsed.chartGeometryCount
         },
         {
           stage: "office.presentation.speaker-notes",
@@ -7871,7 +7906,10 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           mergedCells: parsed.mergedCellCount,
           comments: parsed.commentCount,
           formulas: parsed.formulaCount,
-          hyperlinks: parsed.hyperlinkCount
+          hyperlinks: parsed.hyperlinkCount,
+          charts: parsed.chartCount,
+          chartParts: parsed.chartPartCount,
+          chartSeries: parsed.chartSeriesCount
         },
         {
           stage: "table.workbook.sheets",
@@ -7917,6 +7955,13 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           stage: "table.sheet.hyperlinks",
           status: parsed.hyperlinkCount ? "completed" : "empty",
           hyperlinks: parsed.hyperlinkCount
+        },
+        {
+          stage: "table.sheet.charts",
+          status: parsed.chartCount ? "completed" : "empty",
+          charts: parsed.chartCount,
+          chartParts: parsed.chartPartCount,
+          chartSeries: parsed.chartSeriesCount
         }
       ]
     };
@@ -8148,6 +8193,140 @@ function extractPdfUriLinks(latin = "", objectBodies = pdfIndirectObjectBodies(l
   return links;
 }
 
+function pdfPageByAnnotationObject(objectBodies = new Map(), pageByObject = pdfPageNumberByObject(objectBodies)) {
+  const pageByAnnotationObject = new Map();
+  for (const [pageObjectNumber, body] of objectBodies.entries()) {
+    if (!/\/Type\s*\/Page(?!s)\b/.test(body)) {
+      continue;
+    }
+    const page = pageByObject.get(pageObjectNumber) || 1;
+    const annots = body.match(/\/Annots\s*\[([\s\S]*?)\]/)?.[1] || "";
+    for (const ref of annots.matchAll(/(\d+)\s+\d+\s+R/g)) {
+      pageByAnnotationObject.set(ref[1], page);
+    }
+  }
+  return pageByAnnotationObject;
+}
+
+function decodePdfName(value = "") {
+  return String(value || "")
+    .replace(/^\//, "")
+    .replace(/#([0-9a-fA-F]{2})/g, (_match, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
+function pdfScalarToken(body = "", key = "") {
+  const pattern = new RegExp(`/${key}\\s*(\\((?:\\\\.|[^\\\\)])*\\)|<[0-9a-fA-F\\s]+>|/[A-Za-z0-9_.#-]+)`);
+  return String(body || "").match(pattern)?.[1] || "";
+}
+
+function pdfScalarValue(body = "", key = "") {
+  const token = pdfScalarToken(body, key);
+  if (!token) {
+    return "";
+  }
+  return token.startsWith("/") ? decodePdfName(token) : decodePdfStringTokenValue(token);
+}
+
+function pdfFormFieldTypeLabel(fieldType = "") {
+  const normalized = String(fieldType || "").replace(/^\//, "");
+  if (normalized === "Tx") return "text";
+  if (normalized === "Btn") return "button";
+  if (normalized === "Ch") return "choice";
+  if (normalized === "Sig") return "signature";
+  return normalized || "unknown";
+}
+
+function pdfObjectRefs(value = "") {
+  return Array.from(String(value || "").matchAll(/(\d+)\s+\d+\s+R/g)).map((match) => match[1]);
+}
+
+function pdfFormFieldFromObject({
+  objectNumber = "",
+  body = "",
+  inherited = {},
+  pageByAnnotationObject = new Map(),
+  pageByObject = new Map()
+} = {}) {
+  const rawFieldType = pdfScalarValue(body, "FT") || inherited.rawFieldType || "";
+  const fieldName = pdfScalarValue(body, "T") || inherited.name || "";
+  const alternateName = pdfScalarValue(body, "TU") || inherited.alternateName || "";
+  const value = pdfScalarValue(body, "V") || pdfScalarValue(body, "DV") || pdfScalarValue(body, "AS") || inherited.value || "";
+  const pageObject = pdfFirstObjectRef(String(body || "").match(/\/P\s+(\d+\s+\d+\s+R)/)?.[1] || "");
+  const page = pageByAnnotationObject.get(objectNumber) || (pageObject ? pageByObject.get(pageObject) : 0) || inherited.page || 1;
+  const rect = parsePdfRect(String(body || "").match(/\/Rect\s*\[([^\]]+)\]/)?.[1] || "");
+  if (!rawFieldType && !/\/Subtype\s*\/Widget\b/.test(body)) {
+    return null;
+  }
+  const name = fieldName || alternateName || `field-${objectNumber || "unknown"}`;
+  const fieldType = pdfFormFieldTypeLabel(rawFieldType);
+  return {
+    objectNumber,
+    name,
+    alternateName,
+    fieldType,
+    rawFieldType,
+    value,
+    page,
+    bbox: rect,
+    required: Boolean(Number(String(body || "").match(/\/Ff\s+(\d+)/)?.[1] || 0) & 2),
+    readOnly: Boolean(Number(String(body || "").match(/\/Ff\s+(\d+)/)?.[1] || 0) & 1),
+    text: compactMarkupText(`${name}${value ? `: ${value}` : ""}${alternateName && alternateName !== name ? ` (${alternateName})` : ""}`, 800)
+  };
+}
+
+function extractPdfFormFields(latin = "", objectBodies = pdfIndirectObjectBodies(latin), pageByObject = pdfPageNumberByObject(objectBodies)) {
+  const pageByAnnotationObject = pdfPageByAnnotationObject(objectBodies, pageByObject);
+  const fields = [];
+  const seen = new Set();
+  const pushField = (field = null) => {
+    if (!field?.text) {
+      return;
+    }
+    const key = `${field.objectNumber}:${field.name}:${field.value}:${field.page}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    fields.push(field);
+  };
+  for (const [objectNumber, body] of objectBodies.entries()) {
+    if (!/\/FT\s*\/|\/Subtype\s*\/Widget\b/.test(body)) {
+      continue;
+    }
+    const inherited = {
+      rawFieldType: pdfScalarValue(body, "FT"),
+      name: pdfScalarValue(body, "T"),
+      alternateName: pdfScalarValue(body, "TU"),
+      value: pdfScalarValue(body, "V") || pdfScalarValue(body, "DV") || pdfScalarValue(body, "AS"),
+      page: pageByAnnotationObject.get(objectNumber) || 0
+    };
+    const kids = pdfObjectRefs(String(body || "").match(/\/Kids\s*\[([\s\S]*?)\]/)?.[1] || "");
+    if (kids.length) {
+      for (const kidObjectNumber of kids) {
+        const kidBody = objectBodies.get(kidObjectNumber) || "";
+        pushField(pdfFormFieldFromObject({
+          objectNumber: kidObjectNumber,
+          body: kidBody,
+          inherited,
+          pageByAnnotationObject,
+          pageByObject
+        }));
+      }
+      if (!/\/Rect\s*\[/.test(body)) {
+        continue;
+      }
+    }
+    pushField(pdfFormFieldFromObject({
+      objectNumber,
+      body,
+      inherited,
+      pageByAnnotationObject,
+      pageByObject
+    }));
+  }
+  return fields;
+}
+
 function pdfOutlinePage(body = "", pageByObject = new Map()) {
   const destination = String(body || "").match(/\/(?:Dest|D)\s*\[([^\]]+)\]/)?.[1] || "";
   const pageObject = pdfFirstObjectRef(destination);
@@ -8348,6 +8527,7 @@ function parsePdfBasicText(buffer) {
   const pageByObject = pdfPageNumberByObject(objectBodies);
   const uriLinks = extractPdfUriLinks(latin, objectBodies, pageByObject);
   const outlineItems = extractPdfOutlineItems(latin, objectBodies, pageByObject);
+  const formFields = extractPdfFormFields(latin, objectBodies, pageByObject);
   let layoutOrder = 0;
   let streamCount = 0;
   let decodedStreamCount = 0;
@@ -8385,7 +8565,8 @@ function parsePdfBasicText(buffer) {
   if (title) {
     textChunks.unshift(`Title: ${decodePdfLiteral(title)}`);
   }
-  const text = textChunks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+  const formTextChunks = formFields.map((field) => `PDF form field ${field.fieldType}: ${field.text}`);
+  const text = [...textChunks, ...formTextChunks].join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
   const elements = [];
   textChunks.forEach((chunk, index) => {
     if (chunk && index === 0 && /^Title:\s*/i.test(chunk)) {
@@ -8442,6 +8623,32 @@ function parsePdfBasicText(buffer) {
       limit: 800
     });
   });
+  formFields.forEach((field, index) => {
+    pushStructureElement(elements, "pdf-form-field", field.text, {
+      line: layoutOrder + uriLinks.length + index + 1,
+      name: `pdf-form-field-${field.objectNumber || index + 1}`,
+      page: field.page,
+      bbox: field.bbox,
+      layout: {
+        strategy: "pdf-form-field.v1",
+        page: field.page,
+        fieldObject: field.objectNumber,
+        order: layoutOrder + uriLinks.length + index + 1
+      },
+      form: {
+        strategy: "pdf-form-field.v1",
+        objectNumber: field.objectNumber,
+        name: field.name,
+        alternateName: field.alternateName,
+        fieldType: field.fieldType,
+        rawFieldType: field.rawFieldType,
+        value: field.value,
+        required: field.required,
+        readOnly: field.readOnly
+      },
+      limit: 1000
+    });
+  });
   parserTrace.push({
     stage: "pdf.text.basic",
     status: text ? "completed" : "empty",
@@ -8463,6 +8670,13 @@ function parsePdfBasicText(buffer) {
     status: outlineItems.length ? "completed" : "empty",
     outlines: outlineItems.length,
     strategy: "pdf-outline-destination.v1"
+  });
+  parserTrace.push({
+    stage: "pdf.form-fields",
+    status: formFields.length ? "completed" : "empty",
+    fields: formFields.length,
+    widgets: formFields.filter((field) => field.bbox).length,
+    strategy: "pdf-form-field.v1"
   });
   if (!text) {
     warnings.push("pdf-basic-text-empty");
@@ -9774,6 +9988,9 @@ function structureElementLine(element = {}) {
   const chart = element.chart?.relationshipId || element.chart?.chartPart || element.chart?.title
     ? ` chart ${[element.chart.relationshipId, element.chart.title || element.chart.chartPart].filter(Boolean).join(":")}`
     : "";
+  const form = element.form?.name || element.form?.value
+    ? ` form ${[element.form.name, element.form.value].filter(Boolean).join(":")}`
+    : "";
   const merge = element.merge?.ref
     ? ` merge ${element.merge.ref}${element.merge.masterRef ? ` master ${element.merge.masterRef}` : ""}`
     : "";
@@ -9782,7 +9999,7 @@ function structureElementLine(element = {}) {
     : element.shape?.isPlaceholder
       ? " placeholder"
       : "";
-  return `Element ${element.type}${level}${name}${line}${style}${numbering}${shape}${placeholder}${image}${chart}${merge}: ${element.text}${href}`;
+  return `Element ${element.type}${level}${name}${line}${style}${numbering}${shape}${placeholder}${image}${chart}${form}${merge}: ${element.text}${href}`;
 }
 
 function structureElementTypeCounts(elements = []) {
@@ -9905,6 +10122,19 @@ function normalizedStructureElements(document = {}) {
               : []
           }
         : null;
+      const form = element.form && typeof element.form === "object"
+        ? {
+            strategy: String(element.form.strategy || ""),
+            objectNumber: String(element.form.objectNumber || ""),
+            name: String(element.form.name || ""),
+            alternateName: String(element.form.alternateName || ""),
+            fieldType: String(element.form.fieldType || ""),
+            rawFieldType: String(element.form.rawFieldType || ""),
+            value: String(element.form.value || ""),
+            required: Boolean(element.form.required),
+            readOnly: Boolean(element.form.readOnly)
+          }
+        : null;
       const merge = element.merge && typeof element.merge === "object"
         ? {
             ref: String(element.merge.ref || ""),
@@ -10009,6 +10239,7 @@ function normalizedStructureElements(document = {}) {
         shape,
         image,
         chart,
+        form,
         merge,
         frontmatter,
         cells
@@ -10022,7 +10253,7 @@ function isHeadingStructureElement(element = {}) {
 }
 
 function isIsolatedStructureElement(element = {}) {
-  return ["table-header", "table-row", "merged-cell", "cell-comment", "code", "code-boundary", "formula", "image", "chart", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note"].includes(element.type);
+  return ["table-header", "table-row", "merged-cell", "cell-comment", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note"].includes(element.type);
 }
 
 function headingLevelForElement(element = {}) {
@@ -10058,6 +10289,7 @@ function buildStructureWindowRecord(document = {}, index = 0, elements = [], hea
       shape: element.shape || null,
       image: element.image || null,
       chart: element.chart || null,
+      form: element.form || null,
       merge: element.merge || null,
       frontmatter: element.frontmatter || null,
       cells: element.cells || [],
@@ -10177,6 +10409,7 @@ function buildDocumentElementPlan(document = {}, windowPlan = null) {
       shape: element.shape || null,
       image: element.image || null,
       chart: element.chart || null,
+      form: element.form || null,
       merge: element.merge || null,
       frontmatter: element.frontmatter || null,
       cells: element.cells || []
@@ -10393,6 +10626,19 @@ function buildProfessionalQualityGateResults({ document = {}, profile = {}, evid
         observed: { outlineSignals, pdfOutlineRefCount: evidence.pdfOutlineRefCount },
         required: { outlineRefsWhenBookmarksExist: true },
         message: status === "passed" ? "PDF outline/bookmark entries are preserved as element references." : "No PDF outline/bookmark entries were required or observed."
+      });
+    }
+    if (gate === "pdf-form-fields-preserved") {
+      const formSignals = maxTraceMetric(document, ["formFields", "fields"]);
+      const status = routeId !== "pdf"
+        ? "not_applicable"
+        : formSignals > 0
+          ? evidence.pdfFormFieldRefCount > 0 ? "passed" : "failed"
+          : "not_applicable";
+      return professionalGateRecord(gate, status, {
+        observed: { formSignals, pdfFormFieldRefCount: evidence.pdfFormFieldRefCount },
+        required: { formFieldRefsWhenAcroFormExists: true },
+        message: status === "passed" ? "PDF AcroForm/widget fields are preserved as structured element references." : "No PDF form fields were required or observed."
       });
     }
     if (gate === "word-table-cell-refs-preserved") {
@@ -10913,6 +11159,10 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       Number(elementTypes["pdf-outline"] || 0),
       sampleElements.filter((element) => element.type === "pdf-outline").length
     );
+    const pdfFormFieldRefCount = Math.max(
+      Number(elementTypes["pdf-form-field"] || 0),
+      sampleElements.filter((element) => element.type === "pdf-form-field" && element.form?.name).length
+    );
     const frontmatterRefCount = Math.max(
       Number(elementTypes.frontmatter || 0),
       sampleElements.filter((element) => element.type === "frontmatter" && element.frontmatter).length
@@ -10948,6 +11198,7 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       annotationElementCount,
       revisionRefCount,
       pdfOutlineRefCount,
+      pdfFormFieldRefCount,
       frontmatterRefCount,
       linkElementCount,
       imageRefCount,
@@ -11029,6 +11280,7 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       documentWithAnnotationsCount: plannedDocuments.filter((document) => document.evidence.annotationElementCount > 0).length,
       documentWithRevisionRefsCount: plannedDocuments.filter((document) => document.evidence.revisionRefCount > 0).length,
       documentWithPdfOutlineRefsCount: plannedDocuments.filter((document) => document.evidence.pdfOutlineRefCount > 0).length,
+      documentWithPdfFormFieldRefsCount: plannedDocuments.filter((document) => document.evidence.pdfFormFieldRefCount > 0).length,
       documentWithFrontmatterRefsCount: plannedDocuments.filter((document) => document.evidence.frontmatterRefCount > 0).length,
       documentWithPresentationCommentRefsCount: plannedDocuments.filter((document) => document.evidence.presentationCommentRefCount > 0).length,
       targetFormats: uniqueOrdered(plannedDocuments.flatMap((document) => document.targetFormats)),
@@ -16677,6 +16929,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         "pdf.subtype-route",
         "pdf.hyperlinks",
         "pdf.outlines",
+        "pdf.form-fields",
         "structured-zip.file-ref",
         "structured-zip.structural-entry-plan",
         "structured-zip.large-entry-stream",
@@ -16735,10 +16988,10 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       supported: true,
       strategy: "document-element-model.v1",
       windowingStrategy: "element-aware-by-title-windowing.v1",
-      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment"],
+      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment"],
       structuredFormats: ["markdown", "html", "xml", "asciidoc", "latex", "docx", "pptx", "xlsx", "open-document", "epub", "pdf"],
-      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
-      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
+      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
+      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
       referencePatterns: [
         "unstructured.elements",
         "unstructured.chunk_by_title",
@@ -16759,7 +17012,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       formatMatrix: professionalFormatMatrix(PROFESSIONAL_FORMAT_ORDER),
       humanReadableTargets: ["portable-markdown", "portable-docx", "console-summary-json", "workspace-package-zip"],
       agentReadableTargets: ["agent-message-json", "professional-format-manifest-json", "result-json", "evidence-pack-json"],
-      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders"],
+      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders"],
       qualityGates: uniqueOrdered(PROFESSIONAL_FORMAT_ORDER.flatMap((formatId) => (
         professionalFormatAdapter(formatId)?.qualityGates || []
       ))),

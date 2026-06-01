@@ -217,18 +217,20 @@ function buildImageOnlyPdf(raster) {
 function buildTextPdfWithLink() {
   const content = Buffer.from("BT /F1 12 Tf 72 720 Td (Container text PDF parser extracts linked evidence.) Tj ET", "ascii");
   const objects = [
-    pdfTextObject(1, "<< /Type /Catalog /Pages 2 0 R /Outlines 7 0 R >>"),
+    pdfTextObject(1, "<< /Type /Catalog /Pages 2 0 R /Outlines 7 0 R /AcroForm 10 0 R >>"),
     pdfTextObject(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
     pdfTextObject(
       3,
-      "<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R /Annots [6 0 R] >>"
+      "<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R /Annots [6 0 R 11 0 R] >>"
     ),
     pdfTextObject(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
     pdfStreamObject(5, `<< /Length ${content.length} >>`, content),
     pdfTextObject(6, "<< /Type /Annot /Subtype /Link /Rect [72 700 268 716] /Contents (Container PDF evidence portal) /A << /S /URI /URI (https://example.test/container-pdf-evidence) >> >>"),
     pdfTextObject(7, "<< /Type /Outlines /First 8 0 R /Last 9 0 R /Count 2 >>"),
     pdfTextObject(8, "<< /Title (Container PDF Overview) /Parent 7 0 R /Dest [3 0 R /Fit] /Next 9 0 R >>"),
-    pdfTextObject(9, "<< /Title (Container PDF Evidence Appendix) /Parent 7 0 R /Dest [3 0 R /XYZ 72 720 0] >>")
+    pdfTextObject(9, "<< /Title (Container PDF Evidence Appendix) /Parent 7 0 R /Dest [3 0 R /XYZ 72 720 0] >>"),
+    pdfTextObject(10, "<< /Fields [11 0 R] >>"),
+    pdfTextObject(11, "<< /Type /Annot /Subtype /Widget /FT /Tx /T (Container Owner) /TU (Container owner field) /V (Runtime Team) /Rect [72 640 260 660] /P 3 0 R >>")
   ];
   const chunks = [Buffer.from("%PDF-1.4\n", "ascii")];
   const offsets = [0];
@@ -458,9 +460,12 @@ try {
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("image.relationshipId"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("chart.chartPart"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("chart.series"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("form.name"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("form.value"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("table.sheetName"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("shape.placeholderType"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("pdf-outline"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("pdf-form-field"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("slide-shape"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("speaker-note"), true);
   assert.equal(capabilities.payload.elementModel.structuredFormats.includes("pdf"), true);
@@ -484,6 +489,8 @@ try {
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.image.relationshipId"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.chart.chartPart"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.chart.series"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.form.name"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.form.value"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.merge.ref"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.merge"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.comment"), true);
@@ -513,6 +520,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.preserves.includes("frontmatter"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("charts"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("chartSeries"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("formFields"), true);
   for (const [routeId, parserProfile, qualityGate] of [
     ["pdf", "pdf.text-layout-ocr-route", "page-order-preserved"],
     ["word", "wordprocessingml-paragraph-style-route", "word-annotation-refs-preserved"],
@@ -529,6 +537,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("docx-openxml-package-valid"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("pdf-link-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("pdf-outline-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("pdf-form-fields-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-paragraph-style-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-list-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-link-refs-preserved"), true);
@@ -612,6 +621,7 @@ try {
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.subtype-route"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.hyperlinks"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.outlines"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.form-fields"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("archive.expand-route"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.presentation.placeholders"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.presentation.tables"), true);
@@ -744,8 +754,10 @@ try {
   assert.equal(textPdfDocument.parserTrace.some((trace) => trace.stage === "pdf.text.basic" && trace.status === "completed"), true);
   assert.equal(textPdfDocument.parserTrace.some((trace) => trace.stage === "pdf.hyperlinks" && trace.status === "completed" && trace.links === 1), true);
   assert.equal(textPdfDocument.parserTrace.some((trace) => trace.stage === "pdf.outlines" && trace.status === "completed" && trace.outlines === 2), true);
+  assert.equal(textPdfDocument.parserTrace.some((trace) => trace.stage === "pdf.form-fields" && trace.status === "completed" && trace.fields === 1 && trace.widgets === 1), true);
   assert.equal(textPdfDocument.elementPlan.elementTypes["pdf-text-block"] >= 1, true);
   assert.equal(textPdfDocument.elementPlan.elementTypes["pdf-outline"] >= 2, true);
+  assert.equal(textPdfDocument.elementPlan.elementTypes["pdf-form-field"] >= 1, true);
   assert.equal(textPdfDocument.elementPlan.elementTypes.link >= 1, true);
   assert.equal(textPdfDocument.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
     ref.type === "pdf-outline" &&
@@ -756,12 +768,20 @@ try {
     ref.href === "https://example.test/container-pdf-evidence" &&
     ref.layout?.strategy === "pdf-uri-annotation.v1"
   ))), true);
+  assert.equal(textPdfDocument.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+    ref.type === "pdf-form-field" &&
+    ref.form?.name === "Container Owner" &&
+    ref.form?.value === "Runtime Team" &&
+    ref.layout?.strategy === "pdf-form-field.v1"
+  ))), true);
   assert.equal(textPdfRun.payload.result.formatConversionPlan.documents.some((document) => (
     document.routeId === "pdf" &&
     document.evidence.linkElementCount >= 1 &&
     document.evidence.pdfOutlineRefCount >= 2 &&
+    document.evidence.pdfFormFieldRefCount >= 1 &&
     document.qualityGateResults.some((gate) => gate.gate === "pdf-link-refs-preserved" && gate.status === "passed") &&
-    document.qualityGateResults.some((gate) => gate.gate === "pdf-outline-refs-preserved" && gate.status === "passed")
+    document.qualityGateResults.some((gate) => gate.gate === "pdf-outline-refs-preserved" && gate.status === "passed") &&
+    document.qualityGateResults.some((gate) => gate.gate === "pdf-form-fields-preserved" && gate.status === "passed")
   )), true);
 
   const scannedPdfRaster = drawOcrRaster([
