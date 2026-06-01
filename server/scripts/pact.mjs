@@ -113,8 +113,8 @@ function usage() {
     "  pact security recovery export --output recovery.json --passphrase-stdin",
     "  pact security recovery import --input recovery.json --passphrase-stdin",
     "  pact tools catalog|toolsets|toolsets resolve|execute|dry-run|audit|metrics ...",
-    "  pact tools metrics [--tool-id ID] [--route PATH] [--transport mcp|http|tool-management] [--bucket-seconds N]",
-    "  pact tools metrics export [--kind all|tool|request] [--output metrics.json]",
+    "  pact tools metrics [--tool-id ID] [--grant-id ID] [--profile-id ID] [--route PATH] [--transport mcp|http|tool-management] [--bucket-seconds N]",
+    "  pact tools metrics export [--kind all|tool|request] [--grant-id ID] [--profile-id ID] [--output metrics.json]",
     "  pact tools metrics health [--window-seconds 300]",
     "  pact tools metrics prometheus [--window-seconds 300]",
     "  pact tools metrics storage",
@@ -1386,6 +1386,12 @@ async function runToolsCommand(args) {
       if (args["tool-id"] || args.toolId) {
         query.set("toolId", String(args["tool-id"] || args.toolId));
       }
+      if (args["grant-id"] || args.grantId) {
+        query.set("grantId", String(args["grant-id"] || args.grantId));
+      }
+      if (args["profile-id"] || args.profileId) {
+        query.set("profileId", String(args["profile-id"] || args.profileId));
+      }
       if (args.route) {
         query.set("route", String(args.route));
       }
@@ -1521,6 +1527,12 @@ async function runToolsCommand(args) {
     }
     if (args["tool-id"] || args.toolId) {
       query.set("toolId", String(args["tool-id"] || args.toolId));
+    }
+    if (args["grant-id"] || args.grantId) {
+      query.set("grantId", String(args["grant-id"] || args.grantId));
+    }
+    if (args["profile-id"] || args.profileId) {
+      query.set("profileId", String(args["profile-id"] || args.profileId));
     }
     if (args.route) {
       query.set("route", String(args.route));

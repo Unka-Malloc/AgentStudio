@@ -285,17 +285,25 @@ try {
 
   const filteredMetricsUrl = new URL(`${server.url}/api/tool-management/v1/metrics/summary`);
   filteredMetricsUrl.searchParams.set("toolId", "pact.knowledge.health");
+  filteredMetricsUrl.searchParams.set("grantId", grantResult.payload.grant.id);
+  filteredMetricsUrl.searchParams.set("profileId", "profile-metered");
   filteredMetricsUrl.searchParams.set("transport", "tool-management");
   filteredMetricsUrl.searchParams.set("route", "/api/tool-management/v1/execute");
   filteredMetricsUrl.searchParams.set("bucketSeconds", "60");
   const filteredMetrics = await fetchJson(filteredMetricsUrl.toString());
   assert.equal(filteredMetrics.status, 200);
   assert.equal(filteredMetrics.payload.metrics.filters.toolId, "pact.knowledge.health");
+  assert.equal(filteredMetrics.payload.metrics.filters.grantId, grantResult.payload.grant.id);
+  assert.equal(filteredMetrics.payload.metrics.filters.profileId, "profile-metered");
   assert.equal(filteredMetrics.payload.metrics.filters.transport, "tool-management");
   assert.equal(filteredMetrics.payload.metrics.filters.route, "/api/tool-management/v1/execute");
   assert.equal(filteredMetrics.payload.metrics.series.bucketSeconds, 60);
   assert.ok(filteredMetrics.payload.metrics.toolCalls.byTool["pact.knowledge.health"] >= 1);
   assert.equal(Object.keys(filteredMetrics.payload.metrics.toolCalls.byTool).length, 1);
+  assert.equal(Object.keys(filteredMetrics.payload.metrics.toolCalls.byGrant).length, 1);
+  assert.equal(filteredMetrics.payload.metrics.toolCalls.byGrant[grantResult.payload.grant.id] >= 1, true);
+  assert.equal(Object.keys(filteredMetrics.payload.metrics.toolCalls.byProfile).length, 1);
+  assert.equal(filteredMetrics.payload.metrics.toolCalls.byProfile["profile-metered"] >= 1, true);
   assert.ok(filteredMetrics.payload.metrics.requests.byTransport["tool-management"] >= 1);
   assert.ok(filteredMetrics.payload.metrics.requests.byRoute["/api/tool-management/v1/execute"] >= 1);
   assert.ok(filteredMetrics.payload.metrics.series.buckets.some((bucket) =>
@@ -445,16 +453,22 @@ try {
   const toolMetricsExportUrl = new URL(`${server.url}/api/tool-management/v1/metrics/export`);
   toolMetricsExportUrl.searchParams.set("kind", "tool");
   toolMetricsExportUrl.searchParams.set("toolId", "pact.knowledge.health");
+  toolMetricsExportUrl.searchParams.set("grantId", grantResult.payload.grant.id);
+  toolMetricsExportUrl.searchParams.set("profileId", "profile-metered");
   toolMetricsExportUrl.searchParams.set("limit", "10");
   const toolMetricsExport = await fetchJson(toolMetricsExportUrl.toString());
   assert.equal(toolMetricsExport.status, 200);
   assert.equal(toolMetricsExport.payload.export.schemaVersion, "pact.tool-management.metrics-export.v1");
   assert.equal(toolMetricsExport.payload.export.filters.kind, "tool");
   assert.equal(toolMetricsExport.payload.export.filters.toolId, "pact.knowledge.health");
+  assert.equal(toolMetricsExport.payload.export.filters.grantId, grantResult.payload.grant.id);
+  assert.equal(toolMetricsExport.payload.export.filters.profileId, "profile-metered");
   assert.ok(toolMetricsExport.payload.export.toolMetricEvents.length >= 1);
   assert.equal(toolMetricsExport.payload.export.httpRequestMetricEvents.length, 0);
   assert.equal(toolMetricsExport.payload.export.toolMetricEvents.every((event) =>
     event.toolId === "pact.knowledge.health" &&
+      event.grantId === grantResult.payload.grant.id &&
+      event.profileId === "profile-metered" &&
       !Object.hasOwn(event, "input") &&
       !Object.hasOwn(event, "result")
   ), true);
@@ -671,6 +685,10 @@ try {
       "20",
       "--tool-id",
       "pact.knowledge.health",
+      "--grant-id",
+      grantResult.payload.grant.id,
+      "--profile-id",
+      "profile-metered",
       "--transport",
       "tool-management",
       "--route",
@@ -684,6 +702,8 @@ try {
   assert.equal(cliMetricsPayload.schemaVersion, 1);
   assert.ok(cliMetricsPayload.metrics.callsTotal >= 1);
   assert.equal(cliMetricsPayload.metrics.filters.toolId, "pact.knowledge.health");
+  assert.equal(cliMetricsPayload.metrics.filters.grantId, grantResult.payload.grant.id);
+  assert.equal(cliMetricsPayload.metrics.filters.profileId, "profile-metered");
   assert.equal(cliMetricsPayload.metrics.filters.transport, "tool-management");
   assert.equal(cliMetricsPayload.metrics.series.bucketSeconds, 60);
 
@@ -778,6 +798,38 @@ try {
   assert.equal(cliExportPayload.export.filters.kind, "request");
   assert.ok(cliExportPayload.export.httpRequestMetricEvents.length >= 1);
   assert.equal(cliExportPayload.export.toolMetricEvents.length, 0);
+
+  const cliToolExport = await execFileAsync(
+    process.execPath,
+    [
+      path.resolve("server/scripts/pact.mjs"),
+      "tools",
+      "metrics",
+      "export",
+      "--server-url",
+      server.url,
+      "--kind",
+      "tool",
+      "--tool-id",
+      "pact.knowledge.health",
+      "--grant-id",
+      grantResult.payload.grant.id,
+      "--profile-id",
+      "profile-metered",
+      "--limit",
+      "10"
+    ],
+    { env: process.env }
+  );
+  const cliToolExportPayload = JSON.parse(cliToolExport.stdout);
+  assert.equal(cliToolExportPayload.export.filters.kind, "tool");
+  assert.equal(cliToolExportPayload.export.filters.grantId, grantResult.payload.grant.id);
+  assert.equal(cliToolExportPayload.export.filters.profileId, "profile-metered");
+  assert.ok(cliToolExportPayload.export.toolMetricEvents.length >= 1);
+  assert.equal(cliToolExportPayload.export.httpRequestMetricEvents.length, 0);
+  assert.equal(cliToolExportPayload.export.toolMetricEvents.every((event) =>
+    event.grantId === grantResult.payload.grant.id && event.profileId === "profile-metered"
+  ), true);
 
   const cliStorage = await execFileAsync(
     process.execPath,

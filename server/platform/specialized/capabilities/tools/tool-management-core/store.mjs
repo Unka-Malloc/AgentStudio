@@ -936,6 +936,8 @@ function createMetricClauses({
   until = "",
   status = "",
   toolId = "",
+  grantId = "",
+  profileId = "",
   route = "",
   transport = "",
   statusCode = "",
@@ -955,6 +957,14 @@ function createMetricClauses({
     if (toolId) {
       clauses.push("tool_id = ?");
       params.push(String(toolId));
+    }
+    if (grantId) {
+      clauses.push("grant_id = ?");
+      params.push(String(grantId));
+    }
+    if (profileId) {
+      clauses.push("profile_id = ?");
+      params.push(String(profileId));
     }
     if (status) {
       clauses.push("status = ?");
@@ -1894,6 +1904,8 @@ export function createToolManagementStore({
     since = "",
     until = "",
     toolId = "",
+    grantId = "",
+    profileId = "",
     route = "",
     transport = "",
     status = "",
@@ -1903,7 +1915,7 @@ export function createToolManagementStore({
   } = {}) {
     const normalizedLimit = normalizeMetricLimit(limit);
     const normalizedBucketSeconds = normalizeBucketSeconds(bucketSeconds);
-    const toolFilters = createMetricClauses({ since, until, toolId, status }, "tool");
+    const toolFilters = createMetricClauses({ since, until, toolId, grantId, profileId, status }, "tool");
     const requestFilters = createMetricClauses({
       since,
       until,
@@ -2000,6 +2012,8 @@ export function createToolManagementStore({
         since: String(since || ""),
         until: String(until || ""),
         toolId: String(toolId || ""),
+        grantId: String(grantId || ""),
+        profileId: String(profileId || ""),
         route: String(route || ""),
         transport: String(transport || ""),
         status: String(status || ""),
@@ -2039,6 +2053,8 @@ export function createToolManagementStore({
     until = "",
     kind = "all",
     toolId = "",
+    grantId = "",
+    profileId = "",
     route = "",
     transport = "",
     status = "",
@@ -2049,7 +2065,7 @@ export function createToolManagementStore({
     const normalizedKind = normalizeMetricExportKind(kind);
     const includeTools = normalizedKind === "all" || normalizedKind === "tool";
     const includeRequests = normalizedKind === "all" || normalizedKind === "request";
-    const toolFilters = createMetricClauses({ since, until, toolId, status }, "tool");
+    const toolFilters = createMetricClauses({ since, until, toolId, grantId, profileId, status }, "tool");
     const requestFilters = createMetricClauses({
       since,
       until,
@@ -2084,6 +2100,8 @@ export function createToolManagementStore({
         until: String(until || ""),
         kind: normalizedKind,
         toolId: String(toolId || ""),
+        grantId: String(grantId || ""),
+        profileId: String(profileId || ""),
         route: String(route || ""),
         transport: String(transport || ""),
         status: String(status || ""),
