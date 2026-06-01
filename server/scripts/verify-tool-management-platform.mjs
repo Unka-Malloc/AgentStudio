@@ -30,6 +30,45 @@ function bearerHeaders(token) {
   };
 }
 
+function mcpHeaders(token) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+    "X-Pact-Api-Key": token
+  };
+}
+
+function mcpRequest(method, params = {}, id = 1) {
+  return {
+    jsonrpc: "2.0",
+    id,
+    method,
+    params
+  };
+}
+
+let mcpRequestId = 0;
+
+async function callMcpStructured({ serverUrl, token, operation, input = {}, toolName = "pact.sharedspace" }) {
+  mcpRequestId += 1;
+  const response = await fetchJson(`${serverUrl}/mcp`, {
+    method: "POST",
+    headers: mcpHeaders(token),
+    body: JSON.stringify(mcpRequest("tools/call", {
+      name: toolName,
+      arguments: {
+        apiVersion: "pact.mcp.v1",
+        operation,
+        input,
+        clientVersion: "verify-tool-management-platform"
+      }
+    }, mcpRequestId))
+  });
+  assert.equal(response.status, 200, JSON.stringify(response.payload, null, 2));
+  assert.equal(response.payload.error, undefined, JSON.stringify(response.payload.error || {}, null, 2));
+  return response.payload.result.structuredContent;
+}
+
 function assertDurationPercentiles(percentiles) {
   assert.ok(percentiles);
   assert.ok(percentiles.p50Ms >= 0);
@@ -299,6 +338,124 @@ try {
   });
   assert.equal(boundWrongUser.status, 403);
   assert.equal(boundWrongUser.payload.error.code, "binding_user_mismatch");
+
+  const approvalGrant = await fetchJson(`${server.url}/api/tool-management/v1/grants`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      label: "verify-pending-operation-approval",
+      toolsets: ["pact.agent.workspace.maintain"],
+      metadata: { maxRisk: "repair_write" }
+    })
+  });
+  assert.equal(approvalGrant.status, 201);
+
+  const rejectedPending = await fetchJson(`${server.url}/api/tool-management/v1/execute`, {
+    method: "POST",
+    headers: bearerHeaders(approvalGrant.payload.token),
+    body: JSON.stringify({
+      toolId: "pact.workspaceGovernance.policy.set",
+      context: {
+        transport: "mcp",
+        agentId: "approval-agent",
+        idempotencyKey: "verify-rejected-policy"
+      },
+      input: {
+        policy: {
+          workspaceId: "tool-management-rejected-policy",
+          organizationId: "verify-org",
+          allowedSubjectIds: ["agent-a"]
+        }
+      }
+    })
+  });
+  assert.equal(rejectedPending.status, 202, JSON.stringify(rejectedPending.payload, null, 2));
+  assert.equal(rejectedPending.payload.status, "pending_approval");
+  assert.equal(rejectedPending.payload.pendingOperation.status, "pending");
+  assert.equal(rejectedPending.payload.pendingOperation.toolId, "pact.workspaceGovernance.policy.set");
+  assert.equal(rejectedPending.payload.pendingOperation.grantId, approvalGrant.payload.grant.id);
+  assert.equal(Object.hasOwn(rejectedPending.payload.pendingOperation, "originalInput"), false);
+
+  const pendingOperations = await fetchJson(`${server.url}/api/tool-management/v1/pending-operations?status=pending`);
+  assert.equal(pendingOperations.status, 200);
+  assert.ok(pendingOperations.payload.pendingOperations.some((item) =>
+    item.pendingOperationId === rejectedPending.payload.pendingOperation.pendingOperationId &&
+      item.status === "pending" &&
+      item.redactedInput.type !== "raw"
+  ));
+
+  const rejectedResolution = await fetchJson(`${server.url}/api/tool-management/v1/pending-operations/${encodeURIComponent(rejectedPending.payload.pendingOperation.pendingOperationId)}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-pact-safety-confirm": "true" },
+    body: JSON.stringify({
+      resolution: "rejected",
+      resolvedBy: "verify-console",
+      reason: "verify rejection path"
+    })
+  });
+  assert.equal(rejectedResolution.status, 200, JSON.stringify(rejectedResolution.payload, null, 2));
+  assert.equal(rejectedResolution.payload.pendingOperation.status, "rejected");
+  assert.equal(rejectedResolution.payload.pendingOperation.errorCode, "pending_operation_rejected");
+
+  const governanceAfterReject = await fetchJson(`${server.url}/api/workspace-governance`);
+  assert.equal(governanceAfterReject.status, 200);
+  assert.equal(
+    JSON.stringify(governanceAfterReject.payload).includes("tool-management-rejected-policy"),
+    false,
+    "rejected pending operation must not execute the original tool"
+  );
+
+  const approvedPendingStructured = await callMcpStructured({
+    serverUrl: server.url,
+    token: approvalGrant.payload.token,
+    toolName: "pact.discovery",
+    operation: "pact.workspaceGovernance.policy.set",
+    input: {
+      policy: {
+        workspaceId: "tool-management-approved-policy",
+        organizationId: "verify-org",
+        allowedSubjectIds: ["agent-a"],
+        allowedActions: ["discover", "read", "copy"]
+      }
+    }
+  });
+  const approvedPending = approvedPendingStructured.payload;
+  assert.equal(approvedPending.status, "pending_approval", JSON.stringify(approvedPendingStructured, null, 2));
+  assert.equal(approvedPending.pendingOperation.status, "pending");
+  assert.equal(approvedPending.pendingOperation.toolId, "pact.workspaceGovernance.policy.set");
+  assert.equal(approvedPendingStructured.operation, "pact.workspaceGovernance.policy.set");
+  const approvedResolution = await fetchJson(`${server.url}/api/tool-management/v1/pending-operations/${encodeURIComponent(approvedPending.pendingOperation.pendingOperationId)}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-pact-safety-confirm": "true" },
+    body: JSON.stringify({
+      resolution: "approved",
+      resolvedBy: "verify-console",
+      reason: "verify approval path"
+    })
+  });
+  assert.equal(approvedResolution.status, 200, JSON.stringify(approvedResolution.payload, null, 2));
+  assert.equal(approvedResolution.payload.status, "ok");
+  assert.equal(approvedResolution.payload.pendingOperation.status, "completed");
+  assert.ok(approvedResolution.payload.pendingOperation.resumedToolExecutionId);
+
+  const governanceAfterApprove = await fetchJson(`${server.url}/api/workspace-governance`);
+  assert.equal(governanceAfterApprove.status, 200);
+  assert.equal(
+    JSON.stringify(governanceAfterApprove.payload).includes("tool-management-approved-policy"),
+    true,
+    "approved pending operation must resume and execute the original tool"
+  );
+
+  const approvalAudit = await fetchJson(`${server.url}/api/tool-management/v1/audit?limit=50`);
+  assert.equal(approvalAudit.status, 200);
+  assert.ok(approvalAudit.payload.items.some((item) =>
+    item.approvalId === approvedPending.pendingOperation.pendingOperationId &&
+      item.status === "pending_approval"
+  ));
+  assert.ok(approvalAudit.payload.items.some((item) =>
+    item.toolExecutionId === approvedResolution.payload.pendingOperation.resumedToolExecutionId &&
+      item.status === "ok"
+  ));
 
   const executed = await fetchJson(`${server.url}/api/tool-management/v1/execute`, {
     method: "POST",

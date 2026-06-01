@@ -331,7 +331,9 @@ export function createToolExecutionRuntime({
     directOperation = null,
     directUrl = null,
   directRequestBody = null,
-  directParams = null
+  directParams = null,
+  authorizedGrant = null,
+  approvedPendingOperation = null
   } = {}) {
     const requestTrace = traceContextFromRequest(request);
     const traceId = context.traceId || requestTrace?.traceId || randomId("trace");
@@ -413,12 +415,18 @@ export function createToolExecutionRuntime({
     });
     await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "started" }, { type: "tools.execution.started" });
 
-    const authorization = await store.authorizeRequest({
-      request,
-      requiredScopes: tool.requiredScopes,
-      tool,
-      context
-    });
+    const authorization = authorizedGrant
+      ? {
+          ok: true,
+          grant: authorizedGrant,
+          sourceIp: approvedPendingOperation?.sourceIp || sourceIpFromRequest(request)
+        }
+      : await store.authorizeRequest({
+          request,
+          requiredScopes: tool.requiredScopes,
+          tool,
+          context
+        });
     if (!authorization.ok) {
       const durationMs = Date.now() - startedAtMs;
       logTool("warn", "tool_management.execute.denied", {
@@ -538,6 +546,111 @@ export function createToolExecutionRuntime({
       traceId,
       toolExecutionId
     });
+
+    const approvalAlreadyGranted = approvedPendingOperation ||
+      context.approval?.approved === true ||
+      context.pendingOperationApproved === true;
+    const pendingApprovalRequested = String(context.transport || "").toLowerCase() === "mcp" ||
+      context.requirePendingOperation === true ||
+      context.pendingApprovalRequired === true;
+    if (
+      !dryRun &&
+      policy.effect !== "dry_run_only" &&
+      ["allow", "require_confirmation"].includes(policy.effect) &&
+      tool.requiresApproval === true &&
+      pendingApprovalRequested &&
+      !approvalAlreadyGranted
+    ) {
+      const durationMs = Date.now() - startedAtMs;
+      const pendingOperation = store.createPendingOperation({
+        traceId,
+        toolExecutionId,
+        toolId: tool.id,
+        toolVersion: tool.version,
+        toolsetIds: tool.toolsets,
+        operationId: tool.operationId,
+        risk: tool.risk,
+        approvalScope: tool.approvalScope || operation.safety?.approvalScope || "",
+        grantId: authorization.grant.id,
+        agentId: context.agentId || context.agentProfileId || "",
+        profileId: context.profileId || context.agentProfileId || "",
+        idempotencyKey: context.idempotencyKey || "",
+        reasonCode: "tool_approval_required",
+        riskReason: `Tool ${tool.id} requires approval before execution.`,
+        originalInput: input,
+        context,
+        sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+        userAgent: request?.headers?.["user-agent"] || "",
+        expiresAt: context.expiresAt || context.approvalExpiresAt || ""
+      });
+      store.appendExecution({
+        toolExecutionId,
+        traceId,
+        toolId: tool.id,
+        toolVersion: tool.version,
+        toolsetIds: tool.toolsets,
+        subjectType: "grant",
+        subjectId: authorization.grant.id,
+        grantId: authorization.grant.id,
+        agentId: context.agentId || "",
+        profileId: context.profileId || "",
+        operationId: tool.operationId,
+        risk: tool.risk,
+        decision: policy.effect,
+        input,
+        resultSummary: {
+          type: "pending_operation",
+          pendingOperationId: pendingOperation.pendingOperationId,
+          status: pendingOperation.status
+        },
+        status: "pending_approval",
+        errorCode: "tool_approval_required",
+        durationMs,
+        policyDecisionId: policy.decisionId,
+        approvalId: pendingOperation.pendingOperationId,
+        sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+        userAgent: request?.headers?.["user-agent"] || "",
+        startedAt,
+        finishedAt: nowIso()
+      });
+      store.appendMetric({
+        traceId,
+        toolId: tool.id,
+        grantId: authorization.grant.id,
+        profileId: context.profileId || "",
+        status: "pending_approval",
+        risk: tool.risk,
+        durationMs,
+        inputBytes,
+        resultBytes: jsonByteLength(pendingOperation),
+        reasonCode: "tool_approval_required"
+      });
+      await publishEvent("tools.pending_operation", {
+        pendingOperationId: pendingOperation.pendingOperationId,
+        traceId,
+        toolExecutionId,
+        toolId: tool.id,
+        operationId: tool.operationId,
+        risk: tool.risk,
+        status: "pending"
+      }, { type: "tools.pending_operation.created" });
+      return {
+        ok: true,
+        status: 202,
+        payload: {
+          schemaVersion: 1,
+          toolExecutionId,
+          traceId,
+          toolId: tool.id,
+          status: "pending_approval",
+          pendingOperation,
+          policy: {
+            decisionId: policy.decisionId
+          }
+        }
+      };
+    }
+
     if (!["allow", "dry_run_only"].includes(policy.effect)) {
       const durationMs = Date.now() - startedAtMs;
       logTool("warn", "tool_management.execute.denied", {
@@ -1005,7 +1118,173 @@ export function createToolExecutionRuntime({
     }
   }
 
+  async function resumePendingOperation({
+    pendingOperationId,
+    resolution = "approved",
+    request,
+    context = {},
+    resolvedBy = "",
+    reason = ""
+  } = {}) {
+    const pending = store.getPendingOperation?.(pendingOperationId, { includeOriginalInput: true });
+    if (!pending) {
+      return {
+        ok: false,
+        status: 404,
+        payload: {
+          schemaVersion: 1,
+          error: {
+            code: "pending_operation_not_found",
+            message: "Pending operation was not found."
+          }
+        }
+      };
+    }
+    if (pending.status !== "pending") {
+      return {
+        ok: false,
+        status: 409,
+        payload: {
+          schemaVersion: 1,
+          pendingOperation: pending,
+          error: {
+            code: "pending_operation_not_pending",
+            message: "Pending operation is not awaiting approval."
+          }
+        }
+      };
+    }
+    if (resolution === "rejected") {
+      const rejected = store.resolvePendingOperation({
+        pendingOperationId: pending.pendingOperationId,
+        resolution: "rejected",
+        resolvedBy,
+        reason,
+        errorCode: "pending_operation_rejected",
+        resultSummary: { type: "approval_decision", resolution: "rejected" }
+      });
+      store.appendMetric({
+        traceId: pending.traceId,
+        toolId: pending.toolId,
+        grantId: pending.grantId,
+        profileId: pending.profileId,
+        status: "rejected",
+        risk: pending.risk,
+        reasonCode: "pending_operation_rejected"
+      });
+      await publishEvent("tools.pending_operation", {
+        pendingOperationId: pending.pendingOperationId,
+        traceId: pending.traceId,
+        toolId: pending.toolId,
+        status: "rejected"
+      }, { type: "tools.pending_operation.rejected" });
+      return {
+        ok: true,
+        status: 200,
+        payload: {
+          schemaVersion: 1,
+          status: "rejected",
+          pendingOperation: rejected
+        }
+      };
+    }
+    if (resolution !== "approved") {
+      return {
+        ok: false,
+        status: 400,
+        payload: {
+          schemaVersion: 1,
+          error: {
+            code: "invalid_pending_operation_resolution",
+            message: "Pending operation resolution must be approved or rejected."
+          }
+        }
+      };
+    }
+    const approved = store.resolvePendingOperation({
+      pendingOperationId: pending.pendingOperationId,
+      resolution: "approved",
+      resolvedBy,
+      reason,
+      resultSummary: { type: "approval_decision", resolution: "approved" }
+    });
+    const grant = store.getRawGrant?.(pending.grantId);
+    if (!grant || grant.enabled === false || grant.revokedAt) {
+      const failed = store.resolvePendingOperation({
+        pendingOperationId: pending.pendingOperationId,
+        resolution: "failed",
+        resolvedBy,
+        reason,
+        errorCode: "pending_operation_grant_unavailable",
+        resultSummary: { type: "approval_resume_failed", reason: "grant_unavailable" }
+      });
+      return {
+        ok: false,
+        status: 409,
+        payload: {
+          schemaVersion: 1,
+          status: "failed",
+          pendingOperation: failed,
+          error: {
+            code: "pending_operation_grant_unavailable",
+            message: "Original tool grant is no longer available."
+          }
+        }
+      };
+    }
+    await publishEvent("tools.pending_operation", {
+      pendingOperationId: pending.pendingOperationId,
+      traceId: pending.traceId,
+      toolId: pending.toolId,
+      status: "approved"
+    }, { type: "tools.pending_operation.approved" });
+    const result = await executeTool({
+      toolId: pending.toolId,
+      input: pending.originalInput || {},
+      request,
+      context: {
+        ...pending.context,
+        ...context,
+        traceId: pending.traceId,
+        approval: {
+          approved: true,
+          pendingOperationId: pending.pendingOperationId,
+          resolvedBy,
+          resolvedAt: approved?.resolvedAt || nowIso()
+        },
+        pendingOperationApproved: true
+      },
+      authorizedGrant: grant,
+      approvedPendingOperation: approved || pending
+    });
+    const finalStatus = result.ok ? "completed" : "failed";
+    const completed = store.resolvePendingOperation({
+      pendingOperationId: pending.pendingOperationId,
+      resolution: finalStatus,
+      resolvedBy,
+      reason,
+      errorCode: result.ok ? "" : result.payload?.error?.code || "pending_operation_resume_failed",
+      resumedToolExecutionId: result.payload?.toolExecutionId || "",
+      resultSummary: resultSummaryFromPayload(result.payload || {})
+    });
+    await publishEvent("tools.pending_operation", {
+      pendingOperationId: pending.pendingOperationId,
+      traceId: pending.traceId,
+      toolId: pending.toolId,
+      status: finalStatus,
+      resumedToolExecutionId: result.payload?.toolExecutionId || ""
+    }, { type: result.ok ? "tools.pending_operation.completed" : "tools.pending_operation.failed" });
+    return {
+      ...result,
+      payload: {
+        ...(result.payload || {}),
+        pendingOperation: completed
+      }
+    };
+  }
+
   return {
-    executeTool
+    executeTool,
+    resumePendingOperation
   };
 }

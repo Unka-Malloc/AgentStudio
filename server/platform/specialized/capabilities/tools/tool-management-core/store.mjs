@@ -123,6 +123,13 @@ function normalizePolicyRevisionSnapshot(value = {}) {
   };
 }
 
+function normalizePendingOperationStatus(value = "pending") {
+  const status = String(value || "pending").trim();
+  return ["pending", "approved", "rejected", "expired", "completed", "failed"].includes(status)
+    ? status
+    : "pending";
+}
+
 function stampGrantPolicyRevision(metadata = {}, policyRevision = {}) {
   const snapshot = normalizePolicyRevisionSnapshot(policyRevision);
   if (!snapshot.revision) {
@@ -525,6 +532,42 @@ function ensureSchema(db) {
       resolved_at TEXT NOT NULL DEFAULT ''
     );
     CREATE INDEX IF NOT EXISTS idx_mcp_auth_req_status ON mcp_authorization_requests(status);
+
+    CREATE TABLE IF NOT EXISTS tool_pending_operations (
+      pending_operation_id TEXT PRIMARY KEY,
+      trace_id TEXT NOT NULL DEFAULT '',
+      tool_execution_id TEXT NOT NULL DEFAULT '',
+      tool_id TEXT NOT NULL,
+      tool_version TEXT NOT NULL DEFAULT '',
+      toolset_ids_json TEXT NOT NULL DEFAULT '[]',
+      operation_id TEXT NOT NULL DEFAULT '',
+      risk TEXT NOT NULL DEFAULT '',
+      approval_scope TEXT NOT NULL DEFAULT '',
+      grant_id TEXT NOT NULL DEFAULT '',
+      agent_id TEXT NOT NULL DEFAULT '',
+      profile_id TEXT NOT NULL DEFAULT '',
+      idempotency_key TEXT NOT NULL DEFAULT '',
+      reason_code TEXT NOT NULL DEFAULT '',
+      risk_reason TEXT NOT NULL DEFAULT '',
+      original_input_json TEXT NOT NULL DEFAULT '{}',
+      redacted_input_json TEXT NOT NULL DEFAULT '{}',
+      context_json TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'pending',
+      result_summary_json TEXT NOT NULL DEFAULT '{}',
+      error_code TEXT NOT NULL DEFAULT '',
+      resolved_by TEXT NOT NULL DEFAULT '',
+      resolution_reason TEXT NOT NULL DEFAULT '',
+      resumed_tool_execution_id TEXT NOT NULL DEFAULT '',
+      source_ip TEXT NOT NULL DEFAULT '',
+      user_agent TEXT NOT NULL DEFAULT '',
+      expires_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      resolved_at TEXT NOT NULL DEFAULT '',
+      completed_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_tool_pending_operations_status ON tool_pending_operations(status);
+    CREATE INDEX IF NOT EXISTS idx_tool_pending_operations_trace ON tool_pending_operations(trace_id);
+    CREATE INDEX IF NOT EXISTS idx_tool_pending_operations_tool ON tool_pending_operations(tool_id);
   `);
 
   // Version-controlled migrations — add new steps here as the schema evolves.
@@ -581,6 +624,49 @@ function ensureSchema(db) {
           CREATE INDEX IF NOT EXISTS idx_tool_metric_events_tool ON tool_metric_events(tool_id);
           CREATE INDEX IF NOT EXISTS idx_http_request_metric_events_created ON http_request_metric_events(created_at);
           CREATE INDEX IF NOT EXISTS idx_http_request_metric_events_route ON http_request_metric_events(route);
+        `);
+      }
+    },
+    // version 4: high-risk MCP/tool pending operation state machine.
+    {
+      version: 4,
+      up: (db) => {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS tool_pending_operations (
+            pending_operation_id TEXT PRIMARY KEY,
+            trace_id TEXT NOT NULL DEFAULT '',
+            tool_execution_id TEXT NOT NULL DEFAULT '',
+            tool_id TEXT NOT NULL,
+            tool_version TEXT NOT NULL DEFAULT '',
+            toolset_ids_json TEXT NOT NULL DEFAULT '[]',
+            operation_id TEXT NOT NULL DEFAULT '',
+            risk TEXT NOT NULL DEFAULT '',
+            approval_scope TEXT NOT NULL DEFAULT '',
+            grant_id TEXT NOT NULL DEFAULT '',
+            agent_id TEXT NOT NULL DEFAULT '',
+            profile_id TEXT NOT NULL DEFAULT '',
+            idempotency_key TEXT NOT NULL DEFAULT '',
+            reason_code TEXT NOT NULL DEFAULT '',
+            risk_reason TEXT NOT NULL DEFAULT '',
+            original_input_json TEXT NOT NULL DEFAULT '{}',
+            redacted_input_json TEXT NOT NULL DEFAULT '{}',
+            context_json TEXT NOT NULL DEFAULT '{}',
+            status TEXT NOT NULL DEFAULT 'pending',
+            result_summary_json TEXT NOT NULL DEFAULT '{}',
+            error_code TEXT NOT NULL DEFAULT '',
+            resolved_by TEXT NOT NULL DEFAULT '',
+            resolution_reason TEXT NOT NULL DEFAULT '',
+            resumed_tool_execution_id TEXT NOT NULL DEFAULT '',
+            source_ip TEXT NOT NULL DEFAULT '',
+            user_agent TEXT NOT NULL DEFAULT '',
+            expires_at TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            resolved_at TEXT NOT NULL DEFAULT '',
+            completed_at TEXT NOT NULL DEFAULT ''
+          );
+          CREATE INDEX IF NOT EXISTS idx_tool_pending_operations_status ON tool_pending_operations(status);
+          CREATE INDEX IF NOT EXISTS idx_tool_pending_operations_trace ON tool_pending_operations(trace_id);
+          CREATE INDEX IF NOT EXISTS idx_tool_pending_operations_tool ON tool_pending_operations(tool_id);
         `);
       }
     }
@@ -674,6 +760,47 @@ function summarizeValue(value) {
     }
   }
   return summary;
+}
+
+function rowToPendingOperation(row, { includeOriginalInput = false } = {}) {
+  if (!row) {
+    return null;
+  }
+  const pending = {
+    pendingOperationId: row.pending_operation_id,
+    traceId: row.trace_id,
+    toolExecutionId: row.tool_execution_id,
+    toolId: row.tool_id,
+    toolVersion: row.tool_version,
+    toolsetIds: parseJson(row.toolset_ids_json, []),
+    operationId: row.operation_id,
+    risk: row.risk,
+    approvalScope: row.approval_scope,
+    grantId: row.grant_id,
+    agentId: row.agent_id,
+    profileId: row.profile_id,
+    idempotencyKey: row.idempotency_key,
+    reasonCode: row.reason_code,
+    riskReason: row.risk_reason,
+    redactedInput: parseJson(row.redacted_input_json, {}),
+    context: parseJson(row.context_json, {}),
+    status: row.status,
+    resultSummary: parseJson(row.result_summary_json, {}),
+    errorCode: row.error_code,
+    resolvedBy: row.resolved_by,
+    resolutionReason: row.resolution_reason,
+    resumedToolExecutionId: row.resumed_tool_execution_id,
+    sourceIp: row.source_ip,
+    userAgent: row.user_agent,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    resolvedAt: row.resolved_at,
+    completedAt: row.completed_at
+  };
+  if (includeOriginalInput) {
+    pending.originalInput = parseJson(row.original_input_json, {});
+  }
+  return pending;
 }
 
 function summarizeRequestMetricRows(rows = []) {
@@ -2768,6 +2895,125 @@ export function createToolManagementStore({
     };
   }
 
+  function expirePendingOperations(now = nowIso()) {
+    db.prepare(`
+      UPDATE tool_pending_operations
+      SET status = 'expired', completed_at = ?, error_code = 'pending_operation_expired'
+      WHERE status = 'pending'
+        AND expires_at <> ''
+        AND expires_at <= ?
+    `).run(now, now);
+  }
+
+  function createPendingOperation(entry = {}) {
+    const pendingOperationId = String(entry.pendingOperationId || randomId("pending_op"));
+    const createdAt = entry.createdAt || nowIso();
+    const expiresAt = String(entry.expiresAt || new Date(Date.now() + 15 * 60 * 1000).toISOString());
+    const originalInput = entry.originalInput || entry.input || {};
+    const redactedInput = entry.redactedInput || summarizeValue(originalInput);
+    db.prepare(`
+      INSERT INTO tool_pending_operations (
+        pending_operation_id, trace_id, tool_execution_id, tool_id, tool_version,
+        toolset_ids_json, operation_id, risk, approval_scope, grant_id, agent_id,
+        profile_id, idempotency_key, reason_code, risk_reason, original_input_json,
+        redacted_input_json, context_json, status, source_ip, user_agent, expires_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      pendingOperationId,
+      String(entry.traceId || ""),
+      String(entry.toolExecutionId || ""),
+      String(entry.toolId || ""),
+      String(entry.toolVersion || ""),
+      stringifyJson(entry.toolsetIds || []),
+      String(entry.operationId || ""),
+      String(entry.risk || ""),
+      String(entry.approvalScope || ""),
+      String(entry.grantId || ""),
+      String(entry.agentId || ""),
+      String(entry.profileId || ""),
+      String(entry.idempotencyKey || ""),
+      String(entry.reasonCode || "approval_required"),
+      String(entry.riskReason || ""),
+      stringifyJson(originalInput),
+      stringifyJson(redactedInput),
+      stringifyJson(entry.context || {}),
+      "pending",
+      String(entry.sourceIp || ""),
+      String(entry.userAgent || ""),
+      expiresAt,
+      createdAt
+    );
+    return getPendingOperation(pendingOperationId);
+  }
+
+  function getPendingOperation(pendingOperationId, { includeOriginalInput = false } = {}) {
+    expirePendingOperations();
+    const row = db.prepare("SELECT * FROM tool_pending_operations WHERE pending_operation_id = ?")
+      .get(String(pendingOperationId || ""));
+    return rowToPendingOperation(row, { includeOriginalInput });
+  }
+
+  function listPendingOperations({ status = "pending", limit = 100 } = {}) {
+    expirePendingOperations();
+    const normalizedLimit = Math.max(1, Math.min(Number(limit || 100) || 100, 1000));
+    const normalizedStatus = String(status || "pending").trim();
+    const rows = normalizedStatus === "all"
+      ? db.prepare("SELECT * FROM tool_pending_operations ORDER BY created_at DESC LIMIT ?").all(normalizedLimit)
+      : db.prepare("SELECT * FROM tool_pending_operations WHERE status = ? ORDER BY created_at DESC LIMIT ?")
+        .all(normalizePendingOperationStatus(normalizedStatus), normalizedLimit);
+    return rows.map((row) => rowToPendingOperation(row));
+  }
+
+  function resolvePendingOperation({
+    pendingOperationId,
+    resolution,
+    resolvedBy = "",
+    reason = "",
+    resultSummary = {},
+    errorCode = "",
+    resumedToolExecutionId = ""
+  } = {}) {
+    expirePendingOperations();
+    const normalizedResolution = normalizePendingOperationStatus(resolution);
+    if (!["approved", "rejected", "completed", "failed"].includes(normalizedResolution)) {
+      throw new Error("Invalid pending operation resolution status.");
+    }
+    const timestamp = nowIso();
+    const completedAt = ["rejected", "completed", "failed"].includes(normalizedResolution) ? timestamp : "";
+    const info = db.prepare(`
+      UPDATE tool_pending_operations
+      SET status = ?,
+          resolved_at = CASE WHEN resolved_at = '' THEN ? ELSE resolved_at END,
+          resolved_by = CASE WHEN ? <> '' THEN ? ELSE resolved_by END,
+          resolution_reason = CASE WHEN ? <> '' THEN ? ELSE resolution_reason END,
+          result_summary_json = CASE WHEN ? <> '{}' THEN ? ELSE result_summary_json END,
+          error_code = CASE WHEN ? <> '' THEN ? ELSE error_code END,
+          resumed_tool_execution_id = CASE WHEN ? <> '' THEN ? ELSE resumed_tool_execution_id END,
+          completed_at = CASE WHEN ? <> '' THEN ? ELSE completed_at END
+      WHERE pending_operation_id = ? AND status IN ('pending', 'approved')
+    `).run(
+      normalizedResolution,
+      timestamp,
+      String(resolvedBy || ""),
+      String(resolvedBy || ""),
+      String(reason || ""),
+      String(reason || ""),
+      stringifyJson(resultSummary || {}),
+      stringifyJson(resultSummary || {}),
+      String(errorCode || ""),
+      String(errorCode || ""),
+      String(resumedToolExecutionId || ""),
+      String(resumedToolExecutionId || ""),
+      completedAt,
+      completedAt,
+      String(pendingOperationId || "")
+    );
+    if (info.changes <= 0) {
+      return null;
+    }
+    return getPendingOperation(pendingOperationId);
+  }
+
   function createMcpAuthorizationRequest(input = {}) {
     const requestId = randomId("mcp_auth_req");
     const sourceIp = sourceIpFromRequest(input.request);
@@ -2847,6 +3093,10 @@ export function createToolManagementStore({
     metricsPrometheus,
     metricsStorageSummary,
     pruneMetrics,
+    createPendingOperation,
+    getPendingOperation,
+    listPendingOperations,
+    resolvePendingOperation,
     createMcpAuthorizationRequest,
     listMcpAuthorizationRequests,
     resolveMcpAuthorizationRequest,

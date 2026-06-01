@@ -1914,6 +1914,37 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["console:read"]
   },
   {
+    id: "tool_management.pending_operations.list",
+    feature: "tool_management",
+    label: "待审批工具操作",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/tool-management/v1/pending-operations",
+      localInForwardMode: true,
+      query: [
+        { name: "status", aliases: ["status"] },
+        { name: "limit", aliases: ["limit"] }
+      ],
+      coerce: { limit: "number" }
+    },
+    rpc: {method:"tool_management.pending_operations.list",syntheticPath:"/api/tool-management/v1/pending-operations",query:[{name:"status",aliases:["status"]},{name:"limit",aliases:["limit"]}]},
+    cli: { command: ["tools", "pending", "list"], usage: "tools pending list [--status pending]" },
+    requiredScopes: ["console:read"],
+    safety: { risk: "read_only", requiresConfirmation: false }
+  },
+  {
+    id: "tool_management.pending_operations.resolve",
+    feature: "tool_management",
+    label: "审批待执行工具操作",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: { method: "POST", path: "/api/tool-management/v1/pending-operations/:pendingOperationId/resolve", localInForwardMode: true },
+    rpc: {method:"tool_management.pending_operations.resolve",syntheticPath:"/api/tool-management/v1/pending-operations/:pendingOperationId/resolve",params:[{name:"pendingOperationId",aliases:["pendingOperationId","pending-operation-id","id"],required:true}],body:"params"},
+    cli: { command: ["tools", "pending", "resolve"], usage: "tools pending resolve --id PENDING_OPERATION_ID --body decision.json" },
+    requiredScopes: ["runtime:admin"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
     id: "tool_management.mcp.request_authorization",
     feature: "tool_management",
     label: "MCP 请求授权",

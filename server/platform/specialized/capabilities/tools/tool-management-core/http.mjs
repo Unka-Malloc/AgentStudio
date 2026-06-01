@@ -477,6 +477,48 @@ export function createToolManagementHttpRouter({
       });
     }
 
+    if (normalizedMethod === "GET" && suffix === "/pending-operations") {
+      if (!(await requireConsole(request, response, normalizedMethod, url, ["console:read"]))) {
+        return true;
+      }
+      return complete(200, {
+        schemaVersion: 1,
+        pendingOperations: platform.store.listPendingOperations({
+          status: url.searchParams.get("status") || "pending",
+          limit: Number(url.searchParams.get("limit") || 100)
+        })
+      });
+    }
+
+    const pendingResolveMatch = suffix.match(/^\/pending-operations\/([^/]+)\/resolve$/);
+    if (normalizedMethod === "POST" && pendingResolveMatch) {
+      if (!(await requireConsole(request, response, normalizedMethod, url))) {
+        return true;
+      }
+      if (!requireSafetyConfirm(request, response)) {
+        return true;
+      }
+      if (!platform.runtime?.resumePendingOperation) {
+        return complete(503, {
+          schemaVersion: 1,
+          error: {
+            code: "pending_operation_runtime_unavailable",
+            message: "Pending operation runtime is unavailable."
+          }
+        });
+      }
+      const payload = parseJsonBody(requestBody);
+      const result = await platform.runtime.resumePendingOperation({
+        pendingOperationId: decodeURIComponent(pendingResolveMatch[1]),
+        resolution: payload.resolution || payload.decision || "",
+        request,
+        context: payload.context || {},
+        resolvedBy: payload.resolvedBy || payload.reviewer || "console",
+        reason: payload.reason || ""
+      });
+      return complete(result.status || 500, result.payload);
+    }
+
     return complete(404, {
       schemaVersion: 1,
       error: {
