@@ -527,7 +527,6 @@ export async function startHttpServer({
     knowledgeRuleAuthoringRuntime,
     knowledgeSkillRuntime,
     agentEvaluationRuntime,
-    knowledgeDistillationRuntime,
     knowledgeEvolutionRuntime,
     summarizationRuntime,
     agentExplorationRuntime
@@ -577,7 +576,6 @@ export async function startHttpServer({
     goldenRuleRuntime,
     knowledgeRuleAuthoringRuntime,
     knowledgeSkillRuntime,
-    knowledgeDistillationRuntime,
     agentEvaluationRuntime,
     modelDecisionRuntime,
     strategyManagementProvider,

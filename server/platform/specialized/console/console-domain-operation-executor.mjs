@@ -6859,8 +6859,7 @@ async function executeKnowledgeTransformationOperation({ operationId, input = {}
   }
   const provider = createKnowledgeTransformationProvider({
     knowledgeCore: getKnowledgeCore(context.runtime),
-    metadataStore: context.metadataStore,
-    knowledgeDistillationRuntime: context.knowledgeDistillationRuntime
+    metadataStore: context.metadataStore
   });
   const subject = subjectFromAuthSession(context.authSession);
   try {

@@ -79,6 +79,11 @@ assert.equal(
   false,
   "the server runtime must not dynamically load the internal knowledge distillation runtime"
 );
+assert.equal(
+  runtimeProvidersText.includes("knowledgeDistillationRuntime"),
+  false,
+  "the server runtime must not keep an internal knowledgeDistillationRuntime compatibility slot"
+);
 
 const consoleDomainServicesText = await fs.readFile(
   path.join(repoRoot, "server/platform/specialized/console/console-domain-services.mjs"),
