@@ -221,6 +221,12 @@ TODO：Apple iWork 包格式 `.pages`, `.numbers`, `.key`, `.keynote` 暂不纳�
 
 外部服务还通过 `reference-framework-local-checkout-audit.v1` 对上述本地 checkout 做运行时审计：检查路径是否存在、是否为 Git worktree、实际 commit 是否匹配 manifest，并在 `/v1/reference-frameworks`、`/v1/capabilities` 和 `/v1/reference-gap-report` 中暴露 `localAudit`。单机 Docker 镜像默认不打包 1.6G 参考源码时，也必须明确报告 missing，不允许把静态 JSON 当作已完成比对。
 
+工业 benchmark 通过 `pact.external-knowledge-distillation.industrial-benchmark.v1` 固化三层证据：
+
+- `referenceAudit.strategy = manifest-pinned-local-source-evidence.v1`：逐个检查 RAGFlow、MinerU、Docling、LlamaIndex、Marker、GraphRAG、Haystack、Unstructured 的本地 checkout、Git commit、脏状态和源码目录证据。
+- `absorptionMatrix`：把 DocumentParsing、ProfessionalOfficeCompatibility、AllSizeProcessing、ClassificationDistillation、ProjectConvergenceGraphEvidence、HumanAgentApiSeparation、RealModelDistillation 逐项绑定到参考框架和外部服务能力字符串。
+- `checks.referenceAbsorptionMatrix`：只有参考源码证据和服务能力同时存在，才允许判定为 `absorbed`；否则不能把参考框架写成已吸收。
+
 | 参考实现 | 对标重点 |
 | --- | --- |
 | RAGFlow | Deep document understanding、RAG 引擎、Agent 知识库流 |

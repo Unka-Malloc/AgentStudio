@@ -77,12 +77,33 @@ const benchmark = await readJson(outputPath);
 assert.equal(benchmark.protocolVersion, "pact.external-knowledge-distillation.industrial-benchmark.v1");
 assert.equal(benchmark.service, "external.knowledge.distillation");
 assert.equal(benchmark.referenceManifest.frameworkCount >= 8, true);
+assert.equal(benchmark.referenceAudit.strategy, "manifest-pinned-local-source-evidence.v1");
+assert.equal(benchmark.referenceAudit.summary.expectedCount, benchmark.referenceManifest.frameworkCount);
+assert.equal(benchmark.referenceAudit.summary.presentCount, benchmark.referenceAudit.summary.expectedCount);
+assert.equal(benchmark.referenceAudit.summary.gitCheckoutCount, benchmark.referenceAudit.summary.expectedCount);
+assert.equal(benchmark.referenceAudit.summary.commitMatchCount, benchmark.referenceAudit.summary.expectedCount);
+assert.equal(benchmark.referenceAudit.summary.sourceEvidencePassCount, benchmark.referenceAudit.summary.expectedCount);
+assert.equal(benchmark.referenceAudit.frameworks.every((framework) => (
+  framework.exists &&
+  framework.gitPresent &&
+  framework.commitMatches &&
+  framework.sourceEvidencePassed &&
+  framework.sourceEvidence.length > 0
+)), true);
+assert.equal(benchmark.absorptionMatrix.length >= 7, true);
+assert.equal(benchmark.absorptionMatrix.every((item) => item.status === "absorbed"), true);
+assert.equal(benchmark.absorptionMatrix.some((item) => item.capability === "DocumentParsing" && item.references.includes("docling")), true);
+assert.equal(benchmark.absorptionMatrix.some((item) => item.capability === "RealModelDistillation" && item.servicePatterns.includes("required-agent-gateway-real-model-call.v1")), true);
 assert.equal(benchmark.checks.referenceFrameworksPresent, true);
+assert.equal(benchmark.checks.referenceCheckoutsPinned, true);
+assert.equal(benchmark.checks.referenceSourceEvidence, true);
+assert.equal(benchmark.checks.referenceAbsorptionMatrix, true);
 assert.equal(benchmark.checks.routeWindowClassification, true);
 assert.equal(benchmark.checks.graphConvergence, true);
 assert.equal(benchmark.checks.humanAgentSeparation, true);
 assert.equal(benchmark.checks.professionalOfficeAdaptation, true);
 assert.equal(benchmark.checks.officeVisioAdaptation, true);
 assert.equal(benchmark.checks.mountedProjectDirectoryExpansion, true);
+assert.equal(benchmark.checks.realModelDistillation, true);
 
 console.log("external knowledge distillation industrial benchmark verification passed");
