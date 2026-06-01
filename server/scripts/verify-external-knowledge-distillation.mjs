@@ -1061,6 +1061,26 @@ try {
         }
       },
       {
+        sourceId: "source-79",
+        title: "Mounted Large OpenDocument Structural XML",
+        fileName: "mounted-large-structured.odt",
+        mediaType: "application/vnd.oasis.opendocument.text",
+        entries: {
+          "mimetype": "application/vnd.oasis.opendocument.text",
+          "content.xml": [
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+            "<office:document-content xmlns:office=\"urn:oasis:names:tc:opendocument:xmlns:office:1.0\" xmlns:text=\"urn:oasis:names:tc:opendocument:xmlns:text:1.0\" xmlns:table=\"urn:oasis:names:tc:opendocument:xmlns:table:1.0\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">",
+            "<office:body><office:text>",
+            "<text:h text:outline-level=\"1\">Large Mounted ODT Distillation Plan</text:h>",
+            "<table:table table:name=\"Large ODT Evidence\"><table:table-row><table:table-cell><text:p>Owner</text:p></table:table-cell><table:table-cell><text:p>Decision</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell><text:p>OpenDocument</text:p></table:table-cell><table:table-cell><text:p>Preserve streamed ODT table rows</text:p></table:table-cell></table:table-row></table:table>",
+            Array.from({ length: 720 }, (_, index) => (
+              `<text:p>Large mounted ODT paragraph ${index + 1} proves oversized content.xml streams through OpenDocument element-aware parsing. <text:a xlink:href="https://example.com/large-odt-${index + 1}">large ODT link ${index + 1}</text:a></text:p>`
+            )).join(""),
+            "</office:text></office:body></office:document-content>"
+          ].join("")
+        }
+      },
+      {
         sourceId: "source-25",
         title: "Mounted EPUB Handbook",
         fileName: "mounted-handbook.epub",
@@ -3711,6 +3731,56 @@ try {
     ))), true);
     assert.equal(largeStructuredXlsx.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
     assert.ok(largeStructuredXlsx.quality.textCharacters > 25000, "large XLSX structural parser must preserve oversized sheet text");
+    const largeStructuredOdt = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-79");
+    assert.ok(largeStructuredOdt, "large mounted ODT structural XML document must be present");
+    assert.equal(largeStructuredOdt.route.formatId, "open-document");
+    assert.equal(largeStructuredOdt.quality.suppliedPayloadKind, "file-ref-structured-zip");
+    assert.equal(largeStructuredOdt.parserTrace.some((trace) => (
+      trace.stage === "structured-zip.structural-entry-plan" &&
+      trace.status === "completed" &&
+      trace.selectedFiles === 1 &&
+      trace.loadedFiles === 0 &&
+      trace.skippedLargeFiles === 1 &&
+      trace.maxEntryBytes === 25000
+    )), true);
+    assert.equal(largeStructuredOdt.parserTrace.some((trace) => (
+      trace.stage === "structured-zip.large-entry-stream" &&
+      trace.status === "completed" &&
+      trace.reason === "large-structure-entry" &&
+      trace.extractionMode === "streaming-large-opendocument-elements" &&
+      trace.elements >= 700 &&
+      trace.paragraphs >= 700 &&
+      trace.links >= 700
+    )), true);
+    assert.equal(largeStructuredOdt.parserTrace.some((trace) => (
+      trace.stage === "open-document.structured" &&
+      trace.status === "completed" &&
+      trace.extractionMode === "streaming-large-opendocument-elements" &&
+      trace.elements >= 700
+    )), true);
+    assert.equal(largeStructuredOdt.parserTrace.some((trace) => trace.stage === "open-document.tables" && trace.status === "completed" && trace.tables === 1 && trace.rows >= 2), true);
+    assert.equal(largeStructuredOdt.parserTrace.some((trace) => trace.stage === "open-document.hyperlinks" && trace.status === "completed" && trace.links >= 700), true);
+    assert.equal(largeStructuredOdt.elementPlan.strategy, "document-element-model.v1");
+    assert.equal(largeStructuredOdt.elementPlan.elementTypes.paragraph >= 700, true);
+    assert.equal(largeStructuredOdt.elementPlan.elementTypes.link >= 700, true);
+    assert.equal(largeStructuredOdt.elementPlan.elementTypes["table-row"] >= 1, true);
+    assert.equal(largeStructuredOdt.windowPlan.strategy, "element-aware-by-title-windowing.v1");
+    assert.equal(largeStructuredOdt.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "paragraph" &&
+      ref.layout?.strategy === "opendocument-stream-paragraph.v1"
+    ))), true);
+    assert.equal(largeStructuredOdt.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "link" &&
+      ref.layout?.strategy === "opendocument-stream-link.v1" &&
+      ref.href === "https://example.com/large-odt-1"
+    ))), true);
+    assert.equal(largeStructuredOdt.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "table-row" &&
+      ref.layout?.strategy === "opendocument-stream-table-row.v1" &&
+      ref.table?.format === "open-document"
+    ))), true);
+    assert.equal(largeStructuredOdt.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
+    assert.ok(largeStructuredOdt.quality.textCharacters > 25000, "large ODT structural parser must preserve oversized document text");
   }
   if (directRuntime.payload.runtimes["tika.app"]?.available && mountedLegacyOfficeDocuments.length) {
     for (const [sourceId, formatId] of [

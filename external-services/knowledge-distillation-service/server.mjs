@@ -8440,6 +8440,207 @@ function parseOpenDocument(entries = []) {
   };
 }
 
+function parseOpenDocumentLargeEntryStreaming(entries = []) {
+  const xmlEntries = entries
+    .filter((entry) => (
+      /^(content|styles|meta)\.xml$/.test(entry.name || "") &&
+      entry.filePath &&
+      fsSync.existsSync(entry.filePath)
+    ))
+    .sort((left, right) => {
+      const order = { "content.xml": 0, "styles.xml": 1, "meta.xml": 2 };
+      return (order[left.name] ?? 99) - (order[right.name] ?? 99) || left.name.localeCompare(right.name);
+    });
+  const elements = [];
+  let sequence = 0;
+  let tableCount = 0;
+  let tableRowCount = 0;
+  let tableCellCount = 0;
+  let linkCount = 0;
+  let headingCount = 0;
+  let paragraphCount = 0;
+  let largeEntryCount = 0;
+  let streamedBytes = 0;
+  for (const entry of xmlEntries) {
+    const stat = fsSync.statSync(entry.filePath);
+    streamedBytes += stat.size;
+    if (entry.warning === "structured-entry-too-large" || stat.size > STRUCTURED_ZIP_ENTRY_MAX_BYTES) {
+      largeEntryCount += 1;
+    }
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?table", (tableXml) => {
+      if (!/<[^:>]*:?table-row\b/i.test(tableXml)) {
+        return;
+      }
+      tableCount += 1;
+      const beforeRows = tableRowCount;
+      const beforeCells = tableCellCount;
+      const table = appendOpenDocumentTableElements(elements, tableXml, {
+        name: entry.name,
+        tableIndex: tableCount,
+        lineStart: sequence + tableRowCount
+      });
+      tableRowCount += table.rowCount;
+      tableCellCount += table.cellCount;
+      if (table.rowCount) {
+        for (let index = elements.length - table.rowCount; index < elements.length; index += 1) {
+          if (elements[index]?.table?.format === "open-document") {
+            elements[index].layout = {
+              strategy: "opendocument-stream-table-row.v1",
+              streamIndex: beforeRows + (index - (elements.length - table.rowCount)) + 1,
+              order: beforeRows + (index - (elements.length - table.rowCount)) + 1
+            };
+          }
+        }
+      }
+      if (!table.rowCount && beforeRows === tableRowCount && beforeCells === tableCellCount) {
+        tableCount -= 1;
+      }
+    });
+    if (!tableRowCount) {
+      const headersByColumn = new Map();
+      let headerCaptured = false;
+      scanXmlElementsFromFile(entry.filePath, "[^:>]*:?table-row", (rowXml) => {
+        const tag = rowXml.match(/^<[^>]+>/)?.[0] || "";
+        const repeat = openDocumentRepeatedCount(tag, "number-rows-repeated");
+        const cells = openDocumentTableCells(rowXml);
+        if (!cells.some(Boolean)) {
+          return;
+        }
+        if (!tableCount) {
+          tableCount = 1;
+        }
+        for (let repeatIndex = 0; repeatIndex < repeat; repeatIndex += 1) {
+          tableRowCount += 1;
+          tableCellCount += cells.length;
+          const rowNumber = tableRowCount;
+          if (!headerCaptured && cells.length >= 2) {
+            for (const [cellIndex, cell] of cells.entries()) {
+              headersByColumn.set(xlsxColumnLabel("", cellIndex), cell);
+            }
+            pushStructureElement(elements, "table-header", `Table 1 Header row ${rowNumber}: ${cells.map((cell, cellIndex) => `${xlsxColumnLabel("", cellIndex)}=${cell}`).join("; ")}`, {
+              line: rowNumber,
+              name: `${entry.name}#table-1`,
+              table: {
+                format: "open-document",
+                sheet: "Table 1",
+                row: rowNumber,
+                columns: cells.length
+              },
+              layout: {
+                strategy: "opendocument-stream-table-row.v1",
+                streamIndex: rowNumber,
+                order: rowNumber
+              },
+              cells: cells.map((cell, cellIndex) => ({
+                ref: `${xlsxColumnLabel("", cellIndex)}${rowNumber}`,
+                column: xlsxColumnLabel("", cellIndex),
+                row: rowNumber,
+                value: cell
+              }))
+            });
+            headerCaptured = true;
+            continue;
+          }
+          pushStructureElement(elements, "table-row", `Table 1 Row ${rowNumber}: ${cells.map((cell, cellIndex) => `${headersByColumn.get(xlsxColumnLabel("", cellIndex)) || `Column ${cellIndex + 1}`}=${cell}`).join("; ")}`, {
+            line: rowNumber,
+            name: `${entry.name}#table-1`,
+            table: {
+              format: "open-document",
+              sheet: "Table 1",
+              row: rowNumber,
+              columns: cells.length
+            },
+            layout: {
+              strategy: "opendocument-stream-table-row.v1",
+              streamIndex: rowNumber,
+              order: rowNumber
+            },
+            cells: cells.map((cell, cellIndex) => ({
+              ref: `${xlsxColumnLabel("", cellIndex)}${rowNumber}`,
+              column: xlsxColumnLabel("", cellIndex),
+              row: rowNumber,
+              header: headersByColumn.get(xlsxColumnLabel("", cellIndex)) || "",
+              value: cell
+            }))
+          });
+        }
+      });
+    }
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?h", (headingXml) => {
+      const tag = headingXml.match(/^<[^>]+>/)?.[0] || "";
+      const level = Number(xmlLocalAttribute(tag, "outline-level") || 1);
+      const text = textFromXmlTextNodes(headingXml);
+      if (!text) {
+        return;
+      }
+      sequence += 1;
+      headingCount += 1;
+      pushStructureElement(elements, "heading", text, {
+        level: Math.max(1, Math.min(8, level || 1)),
+        line: sequence,
+        name: entry.name,
+        layout: {
+          strategy: "opendocument-stream-heading.v1",
+          streamIndex: sequence,
+          order: sequence
+        }
+      });
+    });
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?p", (paragraphXml) => {
+      const text = textFromXmlTextNodes(paragraphXml);
+      if (!text) {
+        return;
+      }
+      sequence += 1;
+      paragraphCount += 1;
+      pushStructureElement(elements, "paragraph", text, {
+        line: sequence,
+        name: entry.name,
+        layout: {
+          strategy: "opendocument-stream-paragraph.v1",
+          streamIndex: sequence,
+          order: sequence
+        }
+      });
+    });
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?a", (linkXml) => {
+      const tag = linkXml.match(/^<[^>]+>/)?.[0] || "";
+      const href = xmlLocalAttribute(tag, "href");
+      const text = compactMarkupText(textFromXmlTextNodes(linkXml), 1200);
+      if (!href || !text) {
+        return;
+      }
+      linkCount += 1;
+      pushStructureElement(elements, "link", text, {
+        line: sequence + tableRowCount + linkCount,
+        name: `${entry.name}#link-${linkCount}`,
+        href,
+        layout: {
+          strategy: "opendocument-stream-link.v1",
+          streamIndex: linkCount,
+          order: linkCount
+        }
+      });
+    });
+  }
+  const counts = elementTypeCounts(elements);
+  return {
+    text: structureElementsToText("open-document", elements, ""),
+    elements,
+    format: "open-document",
+    extractionMode: "streaming-large-opendocument-elements",
+    xmlFileCount: xmlEntries.length,
+    largeEntryCount,
+    streamedBytes,
+    headingCount: headingCount || counts.heading || 0,
+    paragraphCount: paragraphCount || counts.paragraph || 0,
+    tableCount,
+    tableRowCount,
+    tableCellCount,
+    linkCount
+  };
+}
+
 function parseEpub(entries = []) {
   const chapterNames = entries
     .map((entry) => entry.name)
@@ -14098,7 +14299,7 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
     const entryPlan = structuredZipDirectoryEntryPlan(route, extracted.outputDir);
     parserTrace.push(structuredZipEntryPlanTrace(entryPlan));
     if (entryPlan.skippedLargeFileCount > 0) {
-      warnings.push(["word", "presentation", "spreadsheet"].includes(route?.id)
+      warnings.push(["word", "presentation", "spreadsheet", "open-document"].includes(route?.id)
         ? "structured-zip-large-entry-stream"
         : "structured-zip-large-entry-stream-fallback");
     }
@@ -14516,8 +14717,8 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
     } else if (route?.id === "open-document") {
       const parsed = canUseBoundedEntries
         ? parseOpenDocument(entryPlan.entries)
-        : { text: "", elements: [], format: "open-document", xmlFileCount: entryPlan.selectedFileCount };
-      if (parsed.text && canUseBoundedEntries) {
+        : parseOpenDocumentLargeEntryStreaming(entryPlan.entries);
+      if (parsed.text) {
         directText = parsed.text || "";
         totalCharacters = directText.length;
         structuredFileCount = parsed.xmlFileCount;
@@ -14527,9 +14728,12 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           stage,
           status: totalCharacters ? "completed" : "empty",
           mode: "structured-zip-file-ref",
+          extractionMode: parsed.extractionMode || "bounded-structured-zip-entries",
           files: structuredFileCount,
           characters: totalCharacters,
           elements: structureElements.length,
+          streamedBytes: parsed.streamedBytes || 0,
+          largeEntries: parsed.largeEntryCount || 0,
           headings: parsed.headingCount,
           paragraphs: parsed.paragraphCount,
           tables: parsed.tableCount,
@@ -14537,6 +14741,23 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           tableCells: parsed.tableCellCount,
           links: parsed.linkCount
         });
+        if (!canUseBoundedEntries) {
+          parserTrace.push({
+            stage: "structured-zip.large-entry-stream",
+            status: "completed",
+            reason: "large-structure-entry",
+            extractionMode: parsed.extractionMode || "streaming-large-opendocument-elements",
+            routeId: route?.id || "",
+            files: structuredFileCount,
+            characters: totalCharacters,
+            elements: structureElements.length,
+            headings: parsed.headingCount,
+            paragraphs: parsed.paragraphCount,
+            tables: parsed.tableCount,
+            links: parsed.linkCount,
+            streamedBytes: parsed.streamedBytes || 0
+          });
+        }
         parserTrace.push({
           stage: "open-document.tables",
           status: parsed.tableCount ? "completed" : "empty",
