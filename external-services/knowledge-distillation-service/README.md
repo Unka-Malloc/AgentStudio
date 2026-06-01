@@ -34,7 +34,9 @@ API namespace:
 - `GET /v1/projects/:projectId/evidence`
 - `GET /v1/distillation/runs/:runId/artifacts/:artifactId`
 
-Large or interactive requests can ask the service to return immediately by sending `Prefer: respond-async`, `?executionMode=queued`, `?mode=queued`, `executionMode: "queued"`, or `async: true` with `POST /v1/distillation/runs`. The service persists a `queued` run, processes parsing and real model distillation in the single-node background queue, and exposes `queued` -> `running` -> `completed`/`failed`/`canceled` through `GET /v1/distillation/runs/:runId`.
+Large or interactive requests can ask the service to return immediately by sending `Prefer: respond-async`, `?executionMode=queued`, `?mode=queued`, `executionMode: "queued"`, or `async: true` with `POST /v1/distillation/runs`. The service also auto-queues large request bodies, streaming manifests, mounted directories, and documents whose declared or file-ref size crosses `PACT_EXTERNAL_KD_SYNC_FILE_REF_MAX_BYTES`, using `large-input-auto-queue.v1`. The service persists a `queued` run, processes parsing and real model distillation in the single-node background queue, and exposes `queued` -> `running` -> `completed`/`failed`/`canceled` through `GET /v1/distillation/runs/:runId`.
+
+Direct JSON bodies are bounded by `PACT_EXTERNAL_KD_REQUEST_BODY_MAX_BYTES`; large files should be uploaded to an allowed input root and passed by `filePath`/`contentRef`, or listed in a JSONL manifest. `PACT_EXTERNAL_KD_TIKA_TIMEOUT_MS` and `PACT_EXTERNAL_KD_PDF_TEXT_TIMEOUT_MS` are separate so legacy Office/Tika and PDF text extraction can be tuned independently for single-node deployments.
 
 Artifacts:
 

@@ -27,10 +27,13 @@ const INPUT_ROOTS = Array.from(new Set([
     .map((item) => item.trim())
     .filter(Boolean)
 ].map((item) => path.resolve(item))));
-const DEFAULT_WINDOW_CHARACTERS = 12_000;
-const DEFAULT_WINDOW_OVERLAP_CHARACTERS = 600;
-const LARGE_FILE_BYTES = 50 * 1024 * 1024;
-const LARGE_TEXT_CHARACTERS = 1_000_000;
+const DEFAULT_WINDOW_CHARACTERS = Math.max(1000, Number(process.env.PACT_EXTERNAL_KD_WINDOW_CHARACTERS || 12_000));
+const DEFAULT_WINDOW_OVERLAP_CHARACTERS = Math.max(0, Number(process.env.PACT_EXTERNAL_KD_WINDOW_OVERLAP_CHARACTERS || 600));
+const LARGE_FILE_BYTES = Math.max(1024 * 1024, Number(process.env.PACT_EXTERNAL_KD_LARGE_FILE_BYTES || 50 * 1024 * 1024));
+const LARGE_TEXT_CHARACTERS = Math.max(100_000, Number(process.env.PACT_EXTERNAL_KD_LARGE_TEXT_CHARACTERS || 5_000_000));
+const REQUEST_BODY_MAX_BYTES = Math.max(1024 * 1024, Number(process.env.PACT_EXTERNAL_KD_REQUEST_BODY_MAX_BYTES || 64 * 1024 * 1024));
+const SYNC_REQUEST_BODY_MAX_BYTES = Math.max(1024 * 1024, Number(process.env.PACT_EXTERNAL_KD_SYNC_REQUEST_BODY_MAX_BYTES || 8 * 1024 * 1024));
+const SYNC_FILE_REF_MAX_BYTES = Math.max(1024 * 1024, Number(process.env.PACT_EXTERNAL_KD_SYNC_FILE_REF_MAX_BYTES || LARGE_FILE_BYTES));
 const FILE_REF_DIRECT_READ_MAX_BYTES = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_FILE_REF_DIRECT_READ_MAX_BYTES || 8 * 1024 * 1024));
 const STREAM_TEXT_CHUNK_BYTES = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_STREAM_TEXT_CHUNK_BYTES || 512 * 1024));
 const STREAM_TEXT_SAMPLE_CHARACTERS = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_STREAM_TEXT_SAMPLE_CHARACTERS || 200_000));
@@ -87,7 +90,8 @@ const RUNTIME_DOCTOR_CACHE_MS = 30_000;
 const OCR_TIMEOUT_MS = Number(process.env.PACT_EXTERNAL_KD_OCR_TIMEOUT_MS || 30_000);
 const PDF_OCR_MAX_PAGES = Number(process.env.PACT_EXTERNAL_KD_PDF_OCR_MAX_PAGES || 5);
 const TIKA_APP_JAR = process.env.TIKA_APP_JAR || "/opt/tika/tika-app.jar";
-const TIKA_TIMEOUT_MS = Number(process.env.PACT_EXTERNAL_KD_TIKA_TIMEOUT_MS || 60_000);
+const TIKA_TIMEOUT_MS = Number(process.env.PACT_EXTERNAL_KD_TIKA_TIMEOUT_MS || 180_000);
+const PDF_TEXT_TIMEOUT_MS = Number(process.env.PACT_EXTERNAL_KD_PDF_TEXT_TIMEOUT_MS || 180_000);
 const ARCHIVE_EXPANSION_MAX_DEPTH = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_ARCHIVE_EXPANSION_MAX_DEPTH || 3));
 const ARCHIVE_EXPANSION_MAX_ENTRIES = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_ARCHIVE_EXPANSION_MAX_ENTRIES || 500));
 const ARCHIVE_ENTRY_MAX_BYTES = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_ARCHIVE_ENTRY_MAX_BYTES || 25 * 1024 * 1024));
@@ -877,16 +881,41 @@ function binaryResponse(response, statusCode, body, headers = {}) {
   response.end(Buffer.isBuffer(body) ? body : Buffer.from(body || []));
 }
 
-async function readJson(request) {
+function requestTooLargeError(bytes = 0, maxBytes = REQUEST_BODY_MAX_BYTES) {
+  const error = new Error(`Request JSON body is too large for direct API submission; use filePath/contentRef or a JSONL manifest for large documents. bytes=${bytes} maxBytes=${maxBytes}`);
+  error.statusCode = 413;
+  error.code = "REQUEST_BODY_TOO_LARGE_USE_FILE_REF_OR_MANIFEST";
+  return error;
+}
+
+async function readJson(request, options = {}) {
+  const maxBytes = Math.max(1, Number(options.maxBytes || REQUEST_BODY_MAX_BYTES));
+  const contentLength = Number(request.headers["content-length"] || 0);
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    throw requestTooLargeError(contentLength, maxBytes);
+  }
   const chunks = [];
+  let totalBytes = 0;
   for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const nextChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += nextChunk.length;
+    if (totalBytes > maxBytes) {
+      throw requestTooLargeError(totalBytes, maxBytes);
+    }
+    chunks.push(nextChunk);
   }
   const text = Buffer.concat(chunks).toString("utf8").trim();
   if (!text) {
     return {};
   }
-  return JSON.parse(text);
+  const parsed = JSON.parse(text);
+  if (parsed && typeof parsed === "object") {
+    Object.defineProperty(parsed, "__requestBodyBytes", {
+      value: totalBytes,
+      enumerable: false
+    });
+  }
+  return parsed;
 }
 
 async function loadRuns() {
@@ -13216,7 +13245,7 @@ function parsePdfFileRef({ document = {}, metadata = {}, filePath = "", runtimeS
     const inputStat = fsSync.statSync(filePath);
     execFileSync(runtime.command || "pdftotext", ["-layout", "-enc", "UTF-8", filePath, outputPath], {
       encoding: "utf8",
-      timeout: TIKA_TIMEOUT_MS,
+      timeout: PDF_TEXT_TIMEOUT_MS,
       maxBuffer: 8 * 1024 * 1024
     });
     let basicParse = null;
@@ -19792,21 +19821,142 @@ function isQueuedRunRequest(request, url, input = {}) {
     input.async === true;
 }
 
-function queuedRunInputSourceCount(input = {}) {
-  const candidates = [
+function isExplicitSyncRunRequest(request, url, input = {}) {
+  const prefer = String(request.headers.prefer || "").toLowerCase();
+  const queryMode = String(url.searchParams.get("executionMode") || url.searchParams.get("mode") || "").toLowerCase();
+  const bodyMode = String(input.executionMode || input.runMode || "").toLowerCase();
+  return prefer.includes("wait") ||
+    queryMode === "sync" ||
+    queryMode === "synchronous" ||
+    bodyMode === "sync" ||
+    bodyMode === "synchronous" ||
+    input.async === false;
+}
+
+function inputDocumentRecords(input = {}) {
+  return [
     input.rawDocuments,
     input.normalizedDocuments,
     input.documents,
     input.sources
-  ];
-  const explicitCount = candidates.reduce((sum, value) => sum + (Array.isArray(value) ? value.length : 0), 0);
+  ].flatMap((value) => Array.isArray(value) ? value : []);
+}
+
+function declaredDocumentByteSize(document = {}) {
+  const metadata = document?.metadata && typeof document.metadata === "object" ? document.metadata : {};
+  return Number(document.byteSize || document.size || metadata.byteSize || metadata.size || 0) || 0;
+}
+
+function encodedPayloadApproxBytes(value = "") {
+  const text = String(value || "").replace(/\s+/g, "");
+  return text ? Math.floor((text.length * 3) / 4) : 0;
+}
+
+function inlineDocumentPayloadBytes(document = {}) {
+  const metadata = document?.metadata && typeof document.metadata === "object" ? document.metadata : {};
+  const encoded =
+    document.contentBase64 ||
+    document.base64 ||
+    document.dataBase64 ||
+    document.bytesBase64 ||
+    metadata.contentBase64 ||
+    metadata.base64 ||
+    "";
+  if (encoded) {
+    return encodedPayloadApproxBytes(encoded);
+  }
+  return Buffer.byteLength(String(
+    document.text ||
+      document.content ||
+      document.markdown ||
+      document.body ||
+      metadata.text ||
+      ""
+  ), "utf8");
+}
+
+function documentFileRefStat(document = {}) {
+  const metadata = document?.metadata && typeof document.metadata === "object" ? document.metadata : {};
+  const contentPath = contentPathFromDocument(document, metadata);
+  if (!contentPath) {
+    return null;
+  }
+  const resolved = resolveAllowedInputPath(contentPath);
+  if (resolved.error || !resolved.path) {
+    return null;
+  }
+  try {
+    const stat = fsSync.statSync(resolved.path);
+    return {
+      path: resolved.path,
+      isDirectory: stat.isDirectory(),
+      isFile: stat.isFile(),
+      size: stat.size
+    };
+  } catch (_error) {
+    return null;
+  }
+}
+
+function autoQueueRunReason(input = {}) {
+  const requestBodyBytes = Number(input.__requestBodyBytes || 0);
+  if (requestBodyBytes >= SYNC_REQUEST_BODY_MAX_BYTES) {
+    return "auto-large-request-body";
+  }
+  if (manifestPathFromInput(input)) {
+    return "auto-manifest-input";
+  }
+  for (const document of inputDocumentRecords(input)) {
+    const declaredBytes = declaredDocumentByteSize(document);
+    if (declaredBytes >= SYNC_FILE_REF_MAX_BYTES) {
+      return "auto-large-declared-document";
+    }
+    if (inlineDocumentPayloadBytes(document) >= SYNC_REQUEST_BODY_MAX_BYTES) {
+      return "auto-large-inline-document";
+    }
+    const fileRef = documentFileRefStat(document);
+    if (fileRef?.isDirectory) {
+      return "auto-directory-file-ref";
+    }
+    if (fileRef?.isFile && fileRef.size >= SYNC_FILE_REF_MAX_BYTES) {
+      return "auto-large-file-ref";
+    }
+  }
+  return "";
+}
+
+function queuedRunDecision(request, url, input = {}) {
+  if (isQueuedRunRequest(request, url, input)) {
+    return {
+      queued: true,
+      autoQueued: false,
+      reason: "explicit-queued-request"
+    };
+  }
+  if (isExplicitSyncRunRequest(request, url, input)) {
+    return {
+      queued: false,
+      autoQueued: false,
+      reason: "explicit-sync-request"
+    };
+  }
+  const reason = autoQueueRunReason(input);
+  return {
+    queued: Boolean(reason),
+    autoQueued: Boolean(reason),
+    reason
+  };
+}
+
+function queuedRunInputSourceCount(input = {}) {
+  const explicitCount = inputDocumentRecords(input).length;
   if (explicitCount > 0) {
     return explicitCount;
   }
   return input.rawDocumentsManifestPath || input.rawDocumentsManifestRef || input.jsonlManifest ? 1 : 0;
 }
 
-function createQueuedRunRecord(input = {}) {
+function createQueuedRunRecord(input = {}, decision = {}) {
   const createdAt = nowIso();
   const query = String(input.query || input.prompt || input.title || "External knowledge distillation").trim();
   const title = String(input.title || query || "External Knowledge Distillation").trim();
@@ -19842,7 +19992,14 @@ function createQueuedRunRecord(input = {}) {
       completedAt: "",
       pollAfterMs: 1000,
       pollEndpoint: `/v1/distillation/runs/${encodeURIComponent(runId)}`,
-      cancelEndpoint: `/v1/distillation/runs/${encodeURIComponent(runId)}/cancel`
+      cancelEndpoint: `/v1/distillation/runs/${encodeURIComponent(runId)}/cancel`,
+      autoQueued: decision.autoQueued === true,
+      reason: decision.reason || "explicit-queued-request",
+      thresholds: {
+        syncRequestBodyMaxBytes: SYNC_REQUEST_BODY_MAX_BYTES,
+        syncFileRefMaxBytes: SYNC_FILE_REF_MAX_BYTES,
+        requestBodyMaxBytes: REQUEST_BODY_MAX_BYTES
+      }
     },
     artifactRefs: []
   };
@@ -19994,6 +20151,16 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       supported: true,
       strategy: "single-node-background-run-queue.v1",
       requestSignals: ["Prefer: respond-async", "executionMode=queued", "mode=queued", "body.executionMode=queued", "body.async=true"],
+      syncOverrideSignals: ["Prefer: wait", "executionMode=sync", "mode=sync", "body.executionMode=sync", "body.async=false"],
+      autoQueueStrategy: "large-input-auto-queue.v1",
+      autoQueueReasons: [
+        "auto-large-request-body",
+        "auto-manifest-input",
+        "auto-large-declared-document",
+        "auto-large-inline-document",
+        "auto-directory-file-ref",
+        "auto-large-file-ref"
+      ],
       responseStatus: 202,
       statuses: ["queued", "running", "completed", "failed", "canceled"],
       purpose: "Return immediately for large document parsing and model distillation, then expose progress through the run polling endpoint."
@@ -20204,6 +20371,9 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       defaultWindowOverlapCharacters: DEFAULT_WINDOW_OVERLAP_CHARACTERS,
       largeFileBytes: LARGE_FILE_BYTES,
       largeTextCharacters: LARGE_TEXT_CHARACTERS,
+      requestBodyMaxBytes: REQUEST_BODY_MAX_BYTES,
+      syncRequestBodyMaxBytes: SYNC_REQUEST_BODY_MAX_BYTES,
+      syncFileRefMaxBytes: SYNC_FILE_REF_MAX_BYTES,
       manifestStrategy: "inline-or-streaming-manifest-document-input.v1",
       structuredZipFileRefStrategy: "structured-zip-entry-bounded-or-streaming.v1",
       directoryFileRefStrategy: "directory-file-ref-recursive-routing.v1",
@@ -20213,6 +20383,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       directoryExpansionMaxFiles: DIRECTORY_EXPANSION_MAX_FILES,
       manifestMaxDocuments: MANIFEST_MAX_DOCUMENTS,
       manifestJsonDirectReadMaxBytes: MANIFEST_JSON_DIRECT_READ_MAX_BYTES,
+      tikaTimeoutMs: TIKA_TIMEOUT_MS,
+      pdfTextTimeoutMs: PDF_TEXT_TIMEOUT_MS,
       structuredJsonFileRefStrategy: "structured-json-file-ref-streaming-window.v1",
       sizeLimitPolicy: "resource-bounded-no-small-hard-cap"
     },
@@ -20459,8 +20631,9 @@ async function handleRequest(request, response) {
     if (request.method === "POST" && pathname === "/v1/distillation/runs") {
       const body = await readJson(request);
       const runs = await loadRuns();
-      if (isQueuedRunRequest(request, url, body)) {
-        const queuedRun = createQueuedRunRecord(body);
+      const queueDecision = queuedRunDecision(request, url, body);
+      if (queueDecision.queued) {
+        const queuedRun = createQueuedRunRecord(body, queueDecision);
         if (runs.some((run) => run.runId === queuedRun.runId)) {
           jsonResponse(response, 409, {
             error: "external distillation run already exists",

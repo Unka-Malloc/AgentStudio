@@ -457,6 +457,21 @@ assert.equal(
   true,
   "standalone service must support the standard respond-async request signal"
 );
+assert.equal(
+  externalServiceSource.includes("function queuedRunDecision("),
+  true,
+  "standalone service must centralize explicit and automatic queue decisions"
+);
+assert.equal(
+  externalServiceSource.includes("function isExplicitSyncRunRequest("),
+  true,
+  "standalone service must preserve an explicit sync override for compatibility callers"
+);
+assert.equal(
+  externalServiceSource.includes("large-input-auto-queue.v1"),
+  true,
+  "standalone service must auto-queue large file-ref, manifest, and request-body workflows"
+);
 for (const functionName of [
   "runKnowledgeDistillationWorkflow",
   "runDistillationWorkflow",

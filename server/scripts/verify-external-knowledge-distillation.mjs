@@ -1197,6 +1197,10 @@ try {
   assert.equal(capabilities.payload.runQueue.supported, true);
   assert.equal(capabilities.payload.runQueue.strategy, "single-node-background-run-queue.v1");
   assert.equal(capabilities.payload.runQueue.requestSignals.includes("Prefer: respond-async"), true);
+  assert.equal(capabilities.payload.runQueue.syncOverrideSignals.includes("executionMode=sync"), true);
+  assert.equal(capabilities.payload.runQueue.autoQueueStrategy, "large-input-auto-queue.v1");
+  assert.equal(capabilities.payload.runQueue.autoQueueReasons.includes("auto-large-declared-document"), true);
+  assert.equal(capabilities.payload.runQueue.autoQueueReasons.includes("auto-manifest-input"), true);
   assert.equal(capabilities.payload.runQueue.statuses.includes("queued"), true);
   assert.equal(capabilities.payload.runQueue.statuses.includes("running"), true);
   assert.equal(capabilities.payload.classification.supported, true);
@@ -1260,6 +1264,10 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.strategy, "streaming-windowed");
   assert.equal(capabilities.payload.largeDocumentPolicy.queueStrategy, "single-node-background-run-queue.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.recommendedExecutionMode, "queued");
+  assert.equal(capabilities.payload.largeDocumentPolicy.requestBodyMaxBytes >= capabilities.payload.largeDocumentPolicy.syncRequestBodyMaxBytes, true);
+  assert.equal(capabilities.payload.largeDocumentPolicy.syncFileRefMaxBytes >= 1024 * 1024, true);
+  assert.equal(capabilities.payload.largeDocumentPolicy.pdfTextTimeoutMs >= 120_000, true);
+  assert.equal(capabilities.payload.largeDocumentPolicy.tikaTimeoutMs >= 120_000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.manifestStrategy, "inline-or-streaming-manifest-document-input.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.structuredZipFileRefStrategy, "structured-zip-entry-bounded-or-streaming.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.directoryFileRefStrategy, "directory-file-ref-recursive-routing.v1");
@@ -1663,6 +1671,8 @@ try {
   assert.equal(queuedRun.status, 202);
   assert.equal(queuedRun.payload.status, "queued");
   assert.equal(queuedRun.payload.queue.strategy, "single-node-background-run-queue.v1");
+  assert.equal(queuedRun.payload.queue.autoQueued, false);
+  assert.equal(queuedRun.payload.queue.reason, "explicit-queued-request");
   assert.equal(queuedRun.headers.get("retry-after"), "1");
   const queuedCompletedRun = await waitForCompletedRun(serviceUrl, queuedRun.payload.runId);
   assert.equal(queuedCompletedRun.status, "completed", `queued external distillation run failed: ${JSON.stringify(queuedCompletedRun).slice(0, 1200)}`);
@@ -1671,6 +1681,38 @@ try {
   assert.equal(queuedCompletedRun.result.agentMessage.responseProfile, "agent");
   assert.equal(queuedCompletedRun.result.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
   assert.equal(queuedCompletedRun.result.modelDistillation.profileId, "real-model-grounded-distillation.v1");
+
+  const autoQueuedRun = await fetchJson(`${serviceUrl}/v1/distillation/runs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      query: "Auto queued large document workflow verification",
+      title: "Auto queued large document workflow verification",
+      responseProfile: "agent",
+      workflowScope: "document",
+      rawDocuments: [
+        {
+          sourceId: "auto-queued-large-doc",
+          title: "Auto Queued Large Document",
+          fileName: "auto-queued-large-doc.md",
+          mediaType: "text/markdown",
+          byteSize: capabilities.payload.largeDocumentPolicy.syncFileRefMaxBytes + 1,
+          text: "Large declared byte size should auto-queue without a Prefer header so callers avoid synchronous HTTP parse timeouts."
+        }
+      ]
+    })
+  });
+  assert.equal(autoQueuedRun.status, 202);
+  assert.equal(autoQueuedRun.payload.status, "queued");
+  assert.equal(autoQueuedRun.payload.queue.autoQueued, true);
+  assert.equal(autoQueuedRun.payload.queue.reason, "auto-large-declared-document");
+  assert.equal(autoQueuedRun.payload.queue.thresholds.syncFileRefMaxBytes, capabilities.payload.largeDocumentPolicy.syncFileRefMaxBytes);
+  const autoQueuedCompletedRun = await waitForCompletedRun(serviceUrl, autoQueuedRun.payload.runId);
+  assert.equal(autoQueuedCompletedRun.status, "completed", `auto queued external distillation run failed: ${JSON.stringify(autoQueuedCompletedRun).slice(0, 1200)}`);
+  assert.equal(autoQueuedCompletedRun.queue.autoQueued, true);
+  assert.equal(autoQueuedCompletedRun.queue.phase, "completed");
 
   const createRun = await fetchJson(`${pactServer.url}/api/external/knowledge/distillation/runs`, {
     method: "POST",
@@ -1681,6 +1723,7 @@ try {
     body: JSON.stringify({
       query: "外部知识蒸馏注册验证 [Agent contract](https://example.test/agent)",
       title: "外部知识蒸馏注册验证",
+      executionMode: "sync",
       rawDocumentsManifestPath: rawDocumentsManifestPath || undefined,
       rawDocuments: [
         {
@@ -4268,6 +4311,7 @@ try {
       body: JSON.stringify({
         query: "Streaming manifest input verification",
         title: "Streaming manifest input verification",
+        executionMode: "sync",
         workflowScope: "corpus",
         responseProfile: "agent",
         rawDocumentsManifestPath

@@ -453,8 +453,14 @@ try {
   assert.equal(capabilities.status, 200);
   assert.equal(capabilities.payload.runQueue.supported, true);
   assert.equal(capabilities.payload.runQueue.strategy, "single-node-background-run-queue.v1");
+  assert.equal(capabilities.payload.runQueue.syncOverrideSignals.includes("executionMode=sync"), true);
+  assert.equal(capabilities.payload.runQueue.autoQueueStrategy, "large-input-auto-queue.v1");
+  assert.equal(capabilities.payload.runQueue.autoQueueReasons.includes("auto-large-file-ref"), true);
   assert.equal(capabilities.payload.largeDocumentPolicy.queueStrategy, "single-node-background-run-queue.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.recommendedExecutionMode, "queued");
+  assert.equal(capabilities.payload.largeDocumentPolicy.requestBodyMaxBytes >= capabilities.payload.largeDocumentPolicy.syncRequestBodyMaxBytes, true);
+  assert.equal(capabilities.payload.largeDocumentPolicy.pdfTextTimeoutMs >= 120_000, true);
+  assert.equal(capabilities.payload.largeDocumentPolicy.tikaTimeoutMs >= 120_000, true);
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.protocolVersion, "pact.external-knowledge-distillation.parser-strategies.v1");
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategy, "singleton-parser-strategy-registry.v1");
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategyCount >= 145, true);
@@ -1966,6 +1972,7 @@ NODE`
     body: JSON.stringify({
       query: "Container streaming manifest verification",
       title: "Container streaming manifest verification",
+      executionMode: "sync",
       responseProfile: "agent",
       rawDocumentsManifestPath: "/data/raw-documents-manifest.jsonl"
     })
