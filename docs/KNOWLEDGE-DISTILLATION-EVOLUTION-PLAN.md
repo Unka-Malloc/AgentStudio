@@ -164,6 +164,41 @@ flowchart LR
 
 ---
 
+### 2.6 文件格式优化优先级
+
+当前外部知识蒸馏服务支持 24 类格式路由、141 个扩展名。以下顺序用于排定解析器优化、样例集、质量门禁和回归覆盖优先级；实际路由仍必须按扩展名、MIME、文件签名和容器结构精确判断，不能用概率排序替代路由算法。
+
+| 优先级 | 格式族 | 扩展名 | 独立解析策略 | 优化口径 |
+| ---: | --- | --- | --- | --- |
+| 1 | PDF | `.pdf` | `pdf.text.tika-safe` | 最高频知识库输入，优先覆盖文本型、扫描型、字体损坏、图片重型和加密/空 PDF 的 subtype routing |
+| 2 | Word | `.docx`, `.doc`, `.docm`, `.dotx`, `.dotm`, `.dot`, `.rtf` | `office.word.structured` | 优先保证标题、段落样式、编号、表格、页眉页脚、批注、修订、超链接和图片/图表可追溯 |
+| 3 | 表格 | `.xlsx`, `.xls`, `.xlsm`, `.xlsb`, `.csv`, `.tsv`, `.xltx`, `.xltm` | `table.sheet.structured` | 优先保证 sheet、行列坐标、merged cells、comment、formula、date serial、defined name 和 chart refs |
+| 4 | PowerPoint | `.pptx`, `.ppt`, `.pptm`, `.ppsx`, `.ppsm`, `.pps`, `.potx`, `.potm`, `.pot` | `office.presentation.slides` | 优先保证 slide 顺序、layout/master、shape、placeholder、图片、图表、speaker notes 和评论 |
+| 5 | Markdown | `.md`, `.markdown`, `.mdown` | `text.direct.markdown` | 优先保证 frontmatter、heading tree、table、code fence、blockquote、link 和 image refs |
+| 6 | 纯文本/日志 | `.txt`, `.text`, `.log` | `text.direct` | 保证大文件流式分窗、编码检测和日志时间线抽取 |
+| 7 | 图片/扫描件 | `.png`, `.jpg`, `.jpeg`, `.gif`, `.tif`, `.tiff`, `.webp`, `.bmp`, `.heic`, `.pbm`, `.pgm`, `.pnm` | `ocr.image` | 优先覆盖 OCR、版面坐标、表格/表单截图和 multimodal fallback |
+| 8 | 邮件 | `.eml`, `.msg`, `.mbox` | `email.headers-body-attachments` | 优先保证 headers、正文、线程、附件路由和时间线字段 |
+| 9 | 压缩包 | `.zip`, `.tar`, `.gz`, `.tgz`, `.tar.gz`, `.7z` | `archive.expand-route` | 优先保证安全展开、entry 级路由、递归深度、大小上限和 manifest |
+| 10 | HTML/XML/标记文档 | `.html`, `.htm`, `.xhtml`, `.xml`, `.rst`, `.adoc`, `.asciidoc`, `.org`, `.tex`, `.latex`, `.wiki`, `.mediawiki` | `markup.structure` | 保证结构树、链接、表格和正文噪声清洗 |
+| 11 | JSON/JSONL | `.json`, `.jsonc`, `.jsonl`, `.ndjson` | `structured.json` | 保证 record/window 流式处理、schema-like key path 和超大 JSONL manifest |
+| 12 | 源代码 | `.js`, `.mjs`, `.ts`, `.tsx`, `.py`, `.java`, `.go`, `.rs`, `.swift`, `.kt`, `.c`, `.cc`, `.cpp`, `.h`, `.hpp` | `code.structure` | 保证 symbol、注释、依赖和变更证据能进入项目级收敛 |
+| 13 | 配置文件 | `.yaml`, `.yml`, `.toml`, `.ini`, `.cfg`, `.conf`, `.properties`, `.env` | `config.key-value` | 保证 key/value、section、环境变量风险和部署配置证据 |
+| 14 | OpenDocument | `.odt`, `.ott`, `.ods`, `.ots`, `.odp`, `.otp` | `open-document.structured` | 作为 Office 兼容格式跟进，优先保留正文、表格和超链接 |
+| 15 | 图表/流程图 | `.svg`, `.drawio`, `.dio`, `.mmd`, `.mermaid`, `.puml`, `.plantuml` | `diagram.structure` | 保证节点、边、label 和图形文本可索引 |
+| 16 | 项目目录/包 | `.directory`, `.folder`, `.xcodeproj`, `.xcworkspace` | `directory.file-ref.expand` | 优先保证目录递归、忽略规则、child routing 和项目级 manifest |
+| 17 | Jupyter Notebook | `.ipynb` | `notebook.cells` | 保证 cell 顺序、markdown/code/output 分离和执行上下文 |
+| 18 | 字幕/转写 | `.vtt`, `.webvtt`, `.srt`, `.sbv` | `transcript.cues` | 保证 cue 时间轴、speaker turns 和片段级 evidence |
+| 19 | Visio | `.vsdx`, `.vsdm`, `.vssx`, `.vssm`, `.vstx`, `.vstm`, `.vsd`, `.vss`, `.vst`, `.vdx` | `office.visio.pages` | 低频但结构价值高，保留 page、shape、connector 和文本 |
+| 20 | 音频 | `.wav`, `.mp3`, `.m4a`, `.aac`, `.flac`, `.ogg`, `.opus` | `audio.transcript-sidecar` | 先支持 sidecar transcript，再接 ASR 外部能力 |
+| 21 | Diff/Patch | `.diff`, `.patch` | `diff.unified` | 保证 hunk、文件路径和变更语义进入工程证据 |
+| 22 | 日历 | `.ics`, `.vcs` | `calendar.ics` | 保证 event、时间、参与者和 recurrence 基础字段 |
+| 23 | EPUB | `.epub` | `ebook.epub` | 低频长文档，按 chapter/window 处理 |
+| 24 | XBRL/Inline XBRL 财报 | `.xbrl`, `.ixbrl` | `xbrl.facts` | 专业场景格式，按 fact/context/unit 优化 |
+
+TODO：Apple iWork 包格式 `.pages`, `.numbers`, `.key`, `.keynote` 暂不纳入主线优化；当前仅作为目录/包容器进入 `directory.file-ref.expand`，后续如需专业适配必须单独设立 iWork 解析策略和样例门禁。
+
+---
+
 ## 3. 业界参考基线
 
 参考仓库已浅克隆到：
