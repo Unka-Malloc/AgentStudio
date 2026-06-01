@@ -114,6 +114,7 @@ function usage() {
     "  pact security recovery import --input recovery.json --passphrase-stdin",
     "  pact tools catalog|toolsets|toolsets resolve|execute|dry-run|audit|metrics ...",
     "  pact tools metrics [--tool-id ID] [--route PATH] [--transport mcp|http|tool-management] [--bucket-seconds N]",
+    "  pact tools metrics storage",
     "  pact tools metrics prune --confirm --body prune.json",
     "  pact tools grants list|create|rotate|revoke ...",
     "  pact tools policy preview --body preview.json",
@@ -1365,6 +1366,18 @@ async function runToolsCommand(args) {
     return;
   }
   if (command === "metrics") {
+    if (subcommand === "storage") {
+      await writeResponse({
+        args,
+        result: await requestJson({
+          serverUrl: args["server-url"],
+          method: "GET",
+          apiPath: "/api/tool-management/v1/metrics/storage",
+          headers: readHeaders(args)
+        })
+      });
+      return;
+    }
     if (subcommand === "prune") {
       await writeResponse({
         args,

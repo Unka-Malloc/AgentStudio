@@ -1757,6 +1757,16 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["console:read"]
   },
   {
+    id: "tool_management.metrics_storage",
+    feature: "tool_management",
+    label: "工具指标存储摘要",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: { method: "GET", path: "/api/tool-management/v1/metrics/storage", localInForwardMode: true },
+    rpc: {method:"tool_management.metrics_storage",syntheticPath:"/api/tool-management/v1/metrics/storage"},
+    cli: { command: ["tools", "metrics", "storage"], usage: "tools metrics storage" },
+    requiredScopes: ["console:read"]
+  },
+  {
     id: "tool_management.metrics_prune",
     feature: "tool_management",
     label: "工具指标清理",

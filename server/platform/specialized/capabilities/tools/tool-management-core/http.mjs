@@ -357,6 +357,16 @@ export function createToolManagementHttpRouter({
       });
     }
 
+    if (normalizedMethod === "GET" && suffix === "/metrics/storage") {
+      if (!(await requireConsole(request, response, normalizedMethod, url, ["console:read"]))) {
+        return true;
+      }
+      return complete(200, {
+        schemaVersion: 1,
+        storage: platform.store.metricsStorageSummary()
+      });
+    }
+
     if (normalizedMethod === "POST" && suffix === "/metrics/prune") {
       if (!(await requireConsole(request, response, normalizedMethod, url))) {
         return true;

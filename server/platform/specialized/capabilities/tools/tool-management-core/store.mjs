@@ -735,6 +735,26 @@ function normalizeBucketSeconds(value) {
   return Math.max(1, Math.min(Math.floor(parsed), 86_400));
 }
 
+function safeFileSize(filePath) {
+  try {
+    return fs.statSync(filePath).size;
+  } catch {
+    return 0;
+  }
+}
+
+function metricWindowSeconds(oldestCreatedAt = "", newestCreatedAt = "", rows = 0) {
+  if (!rows) {
+    return 0;
+  }
+  const oldest = Date.parse(oldestCreatedAt || "");
+  const newest = Date.parse(newestCreatedAt || "");
+  if (!Number.isFinite(oldest) || !Number.isFinite(newest)) {
+    return 1;
+  }
+  return Math.max(1, Number(((newest - oldest) / 1000).toFixed(3)) || 1);
+}
+
 function createMetricClauses({
   since = "",
   until = "",
@@ -1784,6 +1804,112 @@ export function createToolManagementStore({
     };
   }
 
+  function metricTableStorageSummary(kind) {
+    if (kind === "tool") {
+      const row = db.prepare(`
+        SELECT
+          count(*) AS rows,
+          min(created_at) AS oldest_created_at,
+          max(created_at) AS newest_created_at,
+          coalesce(sum(input_bytes), 0) AS input_bytes_total,
+          coalesce(sum(result_bytes), 0) AS result_bytes_total,
+          coalesce(sum(transfer_bytes), 0) AS transfer_bytes_total,
+          coalesce(avg(bytes_per_second), 0) AS average_bytes_per_second,
+          coalesce(max(bytes_per_second), 0) AS peak_bytes_per_second
+        FROM tool_metric_events
+      `).get();
+      const rows = Number(row.rows || 0);
+      const observedWindowSeconds = metricWindowSeconds(row.oldest_created_at, row.newest_created_at, rows);
+      const transferBytesTotal = Number(row.transfer_bytes_total || 0);
+      return {
+        tableName: "tool_metric_events",
+        rows,
+        oldestCreatedAt: row.oldest_created_at || "",
+        newestCreatedAt: row.newest_created_at || "",
+        observedWindowSeconds,
+        eventsPerMinute: observedWindowSeconds ? Number(((rows * 60) / observedWindowSeconds).toFixed(2)) : 0,
+        inputBytesTotal: Number(row.input_bytes_total || 0),
+        resultBytesTotal: Number(row.result_bytes_total || 0),
+        transferBytesTotal,
+        observedTransferBytesPerSecond: observedWindowSeconds
+          ? Number((transferBytesTotal / observedWindowSeconds).toFixed(2))
+          : 0,
+        averageBytesPerSecond: Number(Number(row.average_bytes_per_second || 0).toFixed(2)),
+        peakBytesPerSecond: Number(row.peak_bytes_per_second || 0)
+      };
+    }
+
+    if (kind === "request") {
+      const row = db.prepare(`
+        SELECT
+          count(*) AS rows,
+          min(created_at) AS oldest_created_at,
+          max(created_at) AS newest_created_at,
+          coalesce(sum(request_bytes), 0) AS request_bytes_total,
+          coalesce(sum(response_bytes), 0) AS response_bytes_total,
+          coalesce(sum(transfer_bytes), 0) AS transfer_bytes_total,
+          coalesce(avg(bytes_per_second), 0) AS average_bytes_per_second,
+          coalesce(max(bytes_per_second), 0) AS peak_bytes_per_second
+        FROM http_request_metric_events
+      `).get();
+      const rows = Number(row.rows || 0);
+      const observedWindowSeconds = metricWindowSeconds(row.oldest_created_at, row.newest_created_at, rows);
+      const transferBytesTotal = Number(row.transfer_bytes_total || 0);
+      return {
+        tableName: "http_request_metric_events",
+        rows,
+        oldestCreatedAt: row.oldest_created_at || "",
+        newestCreatedAt: row.newest_created_at || "",
+        observedWindowSeconds,
+        eventsPerMinute: observedWindowSeconds ? Number(((rows * 60) / observedWindowSeconds).toFixed(2)) : 0,
+        requestBytesTotal: Number(row.request_bytes_total || 0),
+        responseBytesTotal: Number(row.response_bytes_total || 0),
+        transferBytesTotal,
+        observedTransferBytesPerSecond: observedWindowSeconds
+          ? Number((transferBytesTotal / observedWindowSeconds).toFixed(2))
+          : 0,
+        averageBytesPerSecond: Number(Number(row.average_bytes_per_second || 0).toFixed(2)),
+        peakBytesPerSecond: Number(row.peak_bytes_per_second || 0)
+      };
+    }
+
+    throw new Error("Unknown metric storage table kind.");
+  }
+
+  function metricsStorageSummary() {
+    const databasePath = getToolManagementDatabasePath(userDataPath);
+    const databaseBytes = safeFileSize(databasePath);
+    const walBytes = safeFileSize(`${databasePath}-wal`);
+    const shmBytes = safeFileSize(`${databasePath}-shm`);
+    const toolMetricEvents = metricTableStorageSummary("tool");
+    const httpRequestMetricEvents = metricTableStorageSummary("request");
+    const metricRows = toolMetricEvents.rows + httpRequestMetricEvents.rows;
+    const transferBytesTotal = toolMetricEvents.transferBytesTotal + httpRequestMetricEvents.transferBytesTotal;
+    return {
+      schemaVersion: "pact.tool-management.metrics-storage.v1",
+      generatedAt: nowIso(),
+      database: {
+        fileName: path.basename(databasePath),
+        bytes: databaseBytes,
+        walBytes,
+        shmBytes,
+        totalBytes: databaseBytes + walBytes + shmBytes
+      },
+      tables: {
+        toolMetricEvents,
+        httpRequestMetricEvents
+      },
+      totals: {
+        metricRows,
+        transferBytesTotal,
+        observedTransferBytesPerSecond: Number((
+          toolMetricEvents.observedTransferBytesPerSecond +
+          httpRequestMetricEvents.observedTransferBytesPerSecond
+        ).toFixed(2))
+      }
+    };
+  }
+
   function pruneMetrics({
     olderThan = "",
     retentionDays = 0,
@@ -1953,6 +2079,7 @@ export function createToolManagementStore({
     listAudit,
     getAudit,
     metricsSummary,
+    metricsStorageSummary,
     pruneMetrics,
     createMcpAuthorizationRequest,
     listMcpAuthorizationRequests,

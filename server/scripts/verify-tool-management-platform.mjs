@@ -272,6 +272,23 @@ try {
       bucket.requests.byTransport["tool-management"] >= 1
   ));
 
+  const storage = await fetchJson(`${server.url}/api/tool-management/v1/metrics/storage`);
+  assert.equal(storage.status, 200);
+  assert.equal(storage.payload.storage.schemaVersion, "pact.tool-management.metrics-storage.v1");
+  assert.equal(storage.payload.storage.database.fileName, "tool-management.sqlite");
+  assert.equal(Object.hasOwn(storage.payload.storage.database, "path"), false);
+  assert.ok(storage.payload.storage.database.totalBytes > 0);
+  assert.ok(storage.payload.storage.tables.toolMetricEvents.rows >= 2);
+  assert.ok(storage.payload.storage.tables.toolMetricEvents.transferBytesTotal > 0);
+  assert.ok(storage.payload.storage.tables.toolMetricEvents.eventsPerMinute >= 0);
+  assert.ok(storage.payload.storage.tables.httpRequestMetricEvents.rows >= 1);
+  assert.ok(storage.payload.storage.tables.httpRequestMetricEvents.transferBytesTotal > 0);
+  assert.ok(storage.payload.storage.tables.httpRequestMetricEvents.eventsPerMinute >= 0);
+  assert.equal(storage.payload.storage.totals.metricRows,
+    storage.payload.storage.tables.toolMetricEvents.rows +
+      storage.payload.storage.tables.httpRequestMetricEvents.rows);
+  assert.ok(storage.payload.storage.totals.transferBytesTotal > 0);
+
   const metricsDb = new Database(path.join(userDataPath, "tool-management", "tool-management.sqlite"), {
     fileMustExist: true
   });
@@ -463,6 +480,19 @@ try {
   assert.equal(cliMetricsPayload.metrics.filters.toolId, "pact.knowledge.health");
   assert.equal(cliMetricsPayload.metrics.filters.transport, "tool-management");
   assert.equal(cliMetricsPayload.metrics.series.bucketSeconds, 60);
+
+  const cliStorage = await execFileAsync(
+    process.execPath,
+    [path.resolve("server/scripts/pact.mjs"), "tools", "metrics", "storage", "--server-url", server.url],
+    { env: process.env }
+  );
+  const cliStoragePayload = JSON.parse(cliStorage.stdout);
+  assert.equal(cliStoragePayload.schemaVersion, 1);
+  assert.equal(cliStoragePayload.storage.schemaVersion, "pact.tool-management.metrics-storage.v1");
+  assert.equal(cliStoragePayload.storage.database.fileName, "tool-management.sqlite");
+  assert.equal(Object.hasOwn(cliStoragePayload.storage.database, "path"), false);
+  assert.ok(cliStoragePayload.storage.tables.toolMetricEvents.rows >= 1);
+  assert.ok(cliStoragePayload.storage.tables.httpRequestMetricEvents.rows >= 1);
 
   const cliPrune = await execFileAsync(
     process.execPath,
