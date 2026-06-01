@@ -312,8 +312,11 @@ try {
     }
   }), "pact.codespace.change.upload");
   assert.equal(githubUpload.contractVerified, true);
+  assert.equal(githubUpload.providerMode, "contract");
+  assert.equal(githubUpload.uploadState, "dry-run");
   assert.equal(githubUpload.target.targetProvider, "github");
   assert.equal(githubUpload.codeChange.completion.secretRef, "secret://pact/codespace/github-app");
+  assert.equal(githubUpload.codeChange.completion.uploadState, "dry-run");
 
   const gerritComment = assertCodespaceOk(await callCodespaceOperation({
     serverUrl: server.url,
