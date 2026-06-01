@@ -467,6 +467,8 @@ try {
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("table.sheetName"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("definedName.ref"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("definedName.builtinType"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("codeBlock.language"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("quote.depth"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("shape.placeholderType"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("pdf-outline"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("pdf-form-field"), true);
@@ -502,6 +504,8 @@ try {
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.bookmark.name"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.definedName.ref"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.definedName.builtinType"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.codeBlock.language"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.quote.depth"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.merge.ref"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.merge"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.comment"), true);
@@ -529,6 +533,8 @@ try {
   assert.equal(capabilities.payload.formatConversion.professionalFormats.includes("spreadsheet"), true);
   assert.equal(capabilities.payload.formatConversion.humanReadableTargets.includes("portable-docx"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("frontmatter"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("codeBlocks"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("blockquotes"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("charts"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("chartSeries"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("formFields"), true);
@@ -565,6 +571,8 @@ try {
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("markdown-link-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("markdown-image-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("markdown-frontmatter-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("markdown-code-blocks-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("markdown-blockquote-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-placeholder-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-link-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-image-refs-preserved"), true);

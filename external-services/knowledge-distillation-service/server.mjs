@@ -685,9 +685,9 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
     label: "Markdown",
     professionalFamily: "markdown",
     parserProfile: "markdown-block-element-route",
-    structureUnits: ["frontmatter", "frontmatter-field", "heading", "paragraph", "list-item", "table-row", "code", "link", "image"],
+    structureUnits: ["frontmatter", "frontmatter-field", "heading", "paragraph", "list-item", "blockquote", "table-row", "code", "code-fence", "link", "image"],
     parserStages: ["text.markdown", "markdown.frontmatter", "markdown.structure"],
-    preserves: ["heading-levels", "tables", "code-blocks", "links", "images", "frontmatter"],
+    preserves: ["heading-levels", "tables", "codeBlocks", "blockquotes", "links", "images", "frontmatter"],
     conversionTargets: ["clean-markdown", "valid-openxml-docx", "agent-json-with-block-refs", "evidence-pack"],
     conversionAdapters: [
       {
@@ -709,7 +709,7 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
         targetFormat: "agent-json",
         adapter: "markdown-blocks-to-agent-refs.v1",
         mode: "agent",
-        stages: ["block-refs", "frontmatter-refs", "heading-paths", "link-refs"]
+        stages: ["block-refs", "frontmatter-refs", "heading-paths", "code-block-refs", "blockquote-refs", "link-refs"]
       },
       {
         target: "evidence-pack-json",
@@ -719,7 +719,7 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
         stages: ["text-units", "entities", "claims"]
       }
     ],
-    qualityGates: ["heading-tree-preserved", "markdown-frontmatter-refs-preserved", "markdown-table-blocks-preserved", "markdown-link-refs-preserved", "markdown-image-refs-preserved", "docx-openxml-package-valid"],
+    qualityGates: ["heading-tree-preserved", "markdown-frontmatter-refs-preserved", "markdown-table-blocks-preserved", "markdown-code-blocks-preserved", "markdown-blockquote-refs-preserved", "markdown-link-refs-preserved", "markdown-image-refs-preserved", "docx-openxml-package-valid"],
     riskControls: ["custom-extension-loss-reporting", "image-reference-preservation"],
     knownLosses: ["custom-markdown-extension-rendering-not-normalized"]
   },
@@ -2382,6 +2382,8 @@ function pushStructureElement(elements, type, text, metadata = {}) {
     ...(metadata.control ? { control: metadata.control } : {}),
     ...(metadata.bookmark ? { bookmark: metadata.bookmark } : {}),
     ...(metadata.definedName ? { definedName: metadata.definedName } : {}),
+    ...(metadata.codeBlock ? { codeBlock: metadata.codeBlock } : {}),
+    ...(metadata.quote ? { quote: metadata.quote } : {}),
     ...(metadata.merge ? { merge: metadata.merge } : {}),
     ...(metadata.frontmatter ? { frontmatter: metadata.frontmatter } : {}),
     ...(metadata.cells ? { cells: metadata.cells } : {})
@@ -2569,6 +2571,8 @@ function parseMarkdownText(text = "", metadata = {}) {
   const elements = [];
   let inCode = false;
   let codeFence = "";
+  let codeFenceMarker = "";
+  let codeLanguage = "";
   let codeLines = [];
   let codeStartLine = 0;
   let paragraph = [];
@@ -2588,17 +2592,32 @@ function parseMarkdownText(text = "", metadata = {}) {
     paragraphLine = 0;
   };
 
-  const flushCode = () => {
+  const flushCode = (lineEnd = 0) => {
     if (!codeLines.length) {
+      codeStartLine = 0;
+      codeFence = "";
+      codeFenceMarker = "";
+      codeLanguage = "";
       return;
     }
     pushStructureElement(elements, "code", codeLines.join("\n"), {
       line: codeStartLine,
-      name: codeFence.replace(/^```+/, "").trim() || "code",
+      name: codeLanguage || "code",
+      codeBlock: {
+        kind: "markdown-code-fence",
+        fence: codeFenceMarker || codeFence,
+        language: codeLanguage,
+        lineStart: codeStartLine,
+        lineEnd: lineEnd || codeStartLine + codeLines.length,
+        lineCount: codeLines.length
+      },
       limit: 4000
     });
     codeLines = [];
     codeStartLine = 0;
+    codeFence = "";
+    codeFenceMarker = "";
+    codeLanguage = "";
   };
 
   for (let index = 0; index < lines.length && elements.length < 2000; index += 1) {
@@ -2628,15 +2647,21 @@ function parseMarkdownText(text = "", metadata = {}) {
       continue;
     }
 
-    if (/^```/.test(trimmed)) {
+    const fenceMatch = trimmed.match(/^(`{3,}|~{3,})(.*)$/);
+    if (fenceMatch) {
       if (inCode) {
-        flushCode();
-        inCode = false;
-        codeFence = "";
+        if (!codeFenceMarker || fenceMatch[1][0] === codeFenceMarker[0]) {
+          flushCode(lineNumber);
+          inCode = false;
+        } else {
+          codeLines.push(raw);
+        }
       } else {
         flushParagraph();
         inCode = true;
         codeFence = trimmed;
+        codeFenceMarker = fenceMatch[1];
+        codeLanguage = String(fenceMatch[2] || "").trim().split(/\s+/)[0] || "";
         codeStartLine = lineNumber;
       }
       continue;
@@ -2746,9 +2771,19 @@ function parseMarkdownText(text = "", metadata = {}) {
       continue;
     }
 
-    if (/^>\s+/.test(trimmed)) {
+    if (/^>+\s*\S/.test(trimmed)) {
       flushParagraph();
-      pushStructureElement(elements, "blockquote", stripMarkdownInline(trimmed.replace(/^>\s+/, "")), { line: lineNumber });
+      const quoteMatch = trimmed.match(/^(>+)\s*(.*)$/);
+      const quoteDepth = quoteMatch?.[1]?.length || 1;
+      pushStructureElement(elements, "blockquote", stripMarkdownInline(quoteMatch?.[2] || trimmed.replace(/^>\s+/, "")), {
+        line: lineNumber,
+        quote: {
+          kind: "markdown-blockquote",
+          depth: quoteDepth,
+          lineStart: lineNumber,
+          lineEnd: lineNumber
+        }
+      });
       continue;
     }
 
@@ -2774,6 +2809,7 @@ function parseMarkdownText(text = "", metadata = {}) {
     listItemCount: counts["list-item"] || 0,
     tableCount: (counts["table-header"] || 0) + (counts["table-row"] || 0),
     codeBlockCount: counts.code || 0,
+    blockquoteCount: counts.blockquote || 0,
     linkCount: counts.link || 0,
     imageCount: counts.image || 0,
     frontmatterCount: counts.frontmatter || frontmatterCount,
@@ -9647,6 +9683,7 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
         listItems: parsed.listItemCount,
         tables: parsed.tableCount,
         codeBlocks: parsed.codeBlockCount,
+        blockquotes: parsed.blockquoteCount,
         links: parsed.linkCount,
         images: parsed.imageCount,
         metadata: parsed.metadataCount
@@ -10283,6 +10320,12 @@ function structureElementLine(element = {}) {
   const definedName = element.definedName?.name || element.definedName?.ref
     ? ` defined-name ${[element.definedName.displayName || element.definedName.name, element.definedName.ref].filter(Boolean).join("=")}`
     : "";
+  const codeBlock = element.codeBlock?.language || element.codeBlock?.lineStart
+    ? ` code ${[element.codeBlock.language || "", element.codeBlock.lineStart ? `L${element.codeBlock.lineStart}` : ""].filter(Boolean).join(":")}`
+    : "";
+  const quote = element.quote?.depth
+    ? ` quote depth ${element.quote.depth}`
+    : "";
   const merge = element.merge?.ref
     ? ` merge ${element.merge.ref}${element.merge.masterRef ? ` master ${element.merge.masterRef}` : ""}`
     : "";
@@ -10291,7 +10334,7 @@ function structureElementLine(element = {}) {
     : element.shape?.isPlaceholder
       ? " placeholder"
       : "";
-  return `Element ${element.type}${level}${name}${line}${style}${numbering}${shape}${placeholder}${image}${chart}${form}${control}${bookmark}${definedName}${merge}: ${element.text}${href}`;
+  return `Element ${element.type}${level}${name}${line}${style}${numbering}${shape}${placeholder}${image}${chart}${form}${control}${bookmark}${definedName}${codeBlock}${quote}${merge}: ${element.text}${href}`;
 }
 
 function structureElementTypeCounts(elements = []) {
@@ -10481,6 +10524,24 @@ function normalizedStructureElements(document = {}) {
               : []
           }
         : null;
+      const codeBlock = element.codeBlock && typeof element.codeBlock === "object"
+        ? {
+            kind: String(element.codeBlock.kind || ""),
+            fence: String(element.codeBlock.fence || ""),
+            language: String(element.codeBlock.language || ""),
+            lineStart: Number(element.codeBlock.lineStart || 0),
+            lineEnd: Number(element.codeBlock.lineEnd || 0),
+            lineCount: Number(element.codeBlock.lineCount || 0)
+          }
+        : null;
+      const quote = element.quote && typeof element.quote === "object"
+        ? {
+            kind: String(element.quote.kind || ""),
+            depth: Number(element.quote.depth || 0),
+            lineStart: Number(element.quote.lineStart || 0),
+            lineEnd: Number(element.quote.lineEnd || 0)
+          }
+        : null;
       const merge = element.merge && typeof element.merge === "object"
         ? {
             ref: String(element.merge.ref || ""),
@@ -10589,6 +10650,8 @@ function normalizedStructureElements(document = {}) {
         control,
         bookmark,
         definedName,
+        codeBlock,
+        quote,
         merge,
         frontmatter,
         cells
@@ -10642,6 +10705,8 @@ function buildStructureWindowRecord(document = {}, index = 0, elements = [], hea
       control: element.control || null,
       bookmark: element.bookmark || null,
       definedName: element.definedName || null,
+      codeBlock: element.codeBlock || null,
+      quote: element.quote || null,
       merge: element.merge || null,
       frontmatter: element.frontmatter || null,
       cells: element.cells || [],
@@ -10765,6 +10830,8 @@ function buildDocumentElementPlan(document = {}, windowPlan = null) {
       control: element.control || null,
       bookmark: element.bookmark || null,
       definedName: element.definedName || null,
+      codeBlock: element.codeBlock || null,
+      quote: element.quote || null,
       merge: element.merge || null,
       frontmatter: element.frontmatter || null,
       cells: element.cells || []
@@ -11428,6 +11495,32 @@ function buildProfessionalQualityGateResults({ document = {}, profile = {}, evid
         message: status === "passed" ? "Markdown table blocks are preserved." : "No Markdown tables were required or observed."
       });
     }
+    if (gate === "markdown-code-blocks-preserved") {
+      const codeBlockSignals = maxTraceMetric(document, ["codeBlocks", "codeBlockCount"]);
+      const status = routeId !== "markdown"
+        ? "not_applicable"
+        : codeBlockSignals > 0
+          ? evidence.codeBlockRefCount > 0 ? "passed" : "failed"
+          : "not_applicable";
+      return professionalGateRecord(gate, status, {
+        observed: { codeBlockSignals, codeBlockRefCount: evidence.codeBlockRefCount },
+        required: { codeBlockRefsWhenPresent: true },
+        message: status === "passed" ? "Markdown code fences are preserved as structured element references." : "No Markdown code fences were required or observed."
+      });
+    }
+    if (gate === "markdown-blockquote-refs-preserved") {
+      const blockquoteSignals = maxTraceMetric(document, ["blockquotes", "blockquoteCount"]);
+      const status = routeId !== "markdown"
+        ? "not_applicable"
+        : blockquoteSignals > 0
+          ? evidence.blockquoteRefCount > 0 ? "passed" : "failed"
+          : "not_applicable";
+      return professionalGateRecord(gate, status, {
+        observed: { blockquoteSignals, blockquoteRefCount: evidence.blockquoteRefCount },
+        required: { blockquoteRefsWhenPresent: true },
+        message: status === "passed" ? "Markdown blockquotes are preserved as structured element references." : "No Markdown blockquotes were required or observed."
+      });
+    }
     if (gate === "markdown-link-refs-preserved") {
       const linkSignals = maxTraceMetric(document, ["links", "linkCount"]);
       const status = routeId !== "markdown"
@@ -11581,6 +11674,14 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       Number(elementTypes.frontmatter || 0),
       sampleElements.filter((element) => element.type === "frontmatter" && element.frontmatter).length
     );
+    const codeBlockRefCount = Math.max(
+      Number(elementTypes.code || 0),
+      sampleElements.filter((element) => element.type === "code" && element.codeBlock).length
+    );
+    const blockquoteRefCount = Math.max(
+      Number(elementTypes.blockquote || 0),
+      sampleElements.filter((element) => element.type === "blockquote" && element.quote).length
+    );
     const linkElementCount = sampleElements.filter((element) => element.type === "link" && element.href).length;
     const imageRefCount = sampleElements.filter((element) => element.type === "image" && element.href).length;
     const styleRefCount = sampleElements.filter((element) => element.style?.styleId).length;
@@ -11625,6 +11726,8 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       pdfOutlineRefCount,
       pdfFormFieldRefCount,
       frontmatterRefCount,
+      codeBlockRefCount,
+      blockquoteRefCount,
       linkElementCount,
       imageRefCount,
       styleRefCount,
@@ -11714,6 +11817,8 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       documentWithPdfOutlineRefsCount: plannedDocuments.filter((document) => document.evidence.pdfOutlineRefCount > 0).length,
       documentWithPdfFormFieldRefsCount: plannedDocuments.filter((document) => document.evidence.pdfFormFieldRefCount > 0).length,
       documentWithFrontmatterRefsCount: plannedDocuments.filter((document) => document.evidence.frontmatterRefCount > 0).length,
+      documentWithCodeBlockRefsCount: plannedDocuments.filter((document) => document.evidence.codeBlockRefCount > 0).length,
+      documentWithBlockquoteRefsCount: plannedDocuments.filter((document) => document.evidence.blockquoteRefCount > 0).length,
       documentWithPresentationCommentRefsCount: plannedDocuments.filter((document) => document.evidence.presentationCommentRefCount > 0).length,
       targetFormats: uniqueOrdered(plannedDocuments.flatMap((document) => document.targetFormats)),
       qualityGates: uniqueOrdered(plannedDocuments.flatMap((document) => document.qualityGates)).slice(0, 80),
@@ -17450,8 +17555,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       windowingStrategy: "element-aware-by-title-windowing.v1",
       elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "content-control", "bookmark", "defined-name", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment"],
       structuredFormats: ["markdown", "html", "xml", "asciidoc", "latex", "docx", "pptx", "xlsx", "open-document", "epub", "pdf"],
-      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "definedName.name", "definedName.ref", "definedName.builtinType", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
-      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.definedName", "elementRefs.definedName.name", "elementRefs.definedName.ref", "elementRefs.definedName.builtinType", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
+      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "definedName.name", "definedName.ref", "definedName.builtinType", "codeBlock.language", "codeBlock.lineStart", "quote.depth", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
+      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.definedName", "elementRefs.definedName.name", "elementRefs.definedName.ref", "elementRefs.definedName.builtinType", "elementRefs.codeBlock", "elementRefs.codeBlock.language", "elementRefs.codeBlock.lineStart", "elementRefs.quote", "elementRefs.quote.depth", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
       referencePatterns: [
         "unstructured.elements",
         "unstructured.chunk_by_title",
@@ -17472,7 +17577,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       formatMatrix: professionalFormatMatrix(PROFESSIONAL_FORMAT_ORDER),
       humanReadableTargets: ["portable-markdown", "portable-docx", "console-summary-json", "workspace-package-zip"],
       agentReadableTargets: ["agent-message-json", "professional-format-manifest-json", "result-json", "evidence-pack-json"],
-      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "definedNames", "namedRanges", "printAreas", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "contentControls", "bookmarks", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders"],
+      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "codeBlocks", "blockquotes", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "definedNames", "namedRanges", "printAreas", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "contentControls", "bookmarks", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders"],
       qualityGates: uniqueOrdered(PROFESSIONAL_FORMAT_ORDER.flatMap((formatId) => (
         professionalFormatAdapter(formatId)?.qualityGates || []
       ))),
