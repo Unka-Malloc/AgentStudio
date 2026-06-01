@@ -6626,11 +6626,11 @@ async function executeCapabilityPackageOperation({ operationId, input, context }
     return result(200, await registry.describe());
   }
   if (operationId === "capability_packages.plan") {
-    return result(200, await registry.plan(input.manifest || input));
+    return result(200, await registry.plan(input));
   }
   if (operationId === "capability_packages.submit") {
     try {
-      return result(200, await registry.submit(input.manifest || input, {
+      return result(200, await registry.submit(input, {
         submittedBy: actorFrom(context.authSession, input)
       }));
     } catch (error) {

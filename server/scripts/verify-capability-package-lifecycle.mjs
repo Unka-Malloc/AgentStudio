@@ -12,6 +12,7 @@ import {
   SKILL_REGISTRY_PROTOCOL_VERSION,
   CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION
 } from "../platform/specialized/capabilities/package-lifecycle/index.mjs";
+import { executeConsoleDomainOperation } from "../platform/specialized/console/console-domain-operation-executor.mjs";
 import { createToolCatalog } from "../platform/specialized/capabilities/tools/tool-management-core/catalog.mjs";
 
 function signedManifest(input) {
@@ -136,16 +137,87 @@ async function verifyRegistryLifecycle() {
     assert.equal(rolledBack.record.status, "active");
 
     const skill = skillManifest();
-    const skillSubmission = await registry.submit(skill, { submittedBy: "legal-ops" });
+    const skillSubmission = await registry.submit({
+      manifest: skill,
+      files: [
+        {
+          path: "SKILL.md",
+          content: [
+            "---",
+            "name: contract-review-skill",
+            "---",
+            "",
+            "# Contract Review Skill",
+            "",
+            "Use evidence refs and cite unresolved risks."
+          ].join("\n")
+        },
+        {
+          path: "scripts/check.mjs",
+          content: "export function check() { return true; }\n"
+        }
+      ]
+    }, { submittedBy: "legal-ops" });
     assert.equal(skillSubmission.record.manifest.protocolVersion, SKILL_REGISTRY_PROTOCOL_VERSION);
     assert.equal(skillSubmission.record.status, "submitted");
+    assert.equal(skillSubmission.record.library.protocolVersion, SKILL_REGISTRY_PROTOCOL_VERSION);
+    assert.equal(skillSubmission.record.library.storage, "server-skill-library");
+    assert.equal(skillSubmission.record.library.fileCount, 2);
+    assert.equal(skillSubmission.record.library.files.some((file) => file.path === "SKILL.md"), true);
+    assert.equal(Object.prototype.hasOwnProperty.call(skillSubmission.record.library, "absolutePath"), false);
+    assert.equal(
+      await fs.readFile(path.join(userDataPath, skillSubmission.record.library.filesRoot, "SKILL.md"), "utf8"),
+      [
+        "---",
+        "name: contract-review-skill",
+        "---",
+        "",
+        "# Contract Review Skill",
+        "",
+        "Use evidence refs and cite unresolved risks."
+      ].join("\n")
+    );
+    await registry.lifecycle(skillSubmission.record.manifest.packageId, { action: "approve", actor: "skill-reviewer" });
+    await registry.lifecycle(skillSubmission.record.manifest.packageId, { action: "install", actor: "skill-installer" });
+    const activeSkill = await registry.lifecycle(skillSubmission.record.manifest.packageId, {
+      action: "activate",
+      actor: "skill-release-manager"
+    });
+    assert.equal(activeSkill.record.status, "active");
 
     const described = await registry.describe();
     assert.equal(described.protocolVersion, CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION);
     assert.equal(described.summary.byKind.tool, 2);
     assert.equal(described.summary.byKind.skill, 1);
     assert.ok(described.summary.activeCount >= 1);
+    assert.equal(described.activeByKey["skill:contract-review-skill"], skillSubmission.record.manifest.packageId);
+    assert.equal(JSON.stringify(described).includes("export function check"), false);
     assert.ok(described.auditEvents.some((event) => event.action === "submit"));
+
+    const operationSkill = signedManifest({
+      ...skill,
+      name: "mcp-uploaded-skill",
+      version: "1.0.0",
+      capabilities: ["skill.mcp.uploaded"]
+    });
+    const operationSubmit = await executeConsoleDomainOperation({
+      operationId: "capability_packages.submit",
+      input: {
+        manifest: operationSkill,
+        files: [{ path: "SKILL.md", content: "# MCP Uploaded Skill\n" }]
+      },
+      context: {
+        userDataPath,
+        authSession: { user: { username: "mcp-agent" } }
+      }
+    });
+    assert.equal(operationSubmit.status, 200);
+    assert.equal(operationSubmit.payload.record.manifest.kind, "skill");
+    assert.equal(operationSubmit.payload.record.library.storage, "server-skill-library");
+    assert.equal(
+      await fs.readFile(path.join(userDataPath, operationSubmit.payload.record.library.filesRoot, "SKILL.md"), "utf8"),
+      "# MCP Uploaded Skill\n"
+    );
 
     await assert.rejects(
       () => registry.lifecycle(packageId, { action: "approve" }),
