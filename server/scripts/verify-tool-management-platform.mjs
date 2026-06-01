@@ -359,12 +359,20 @@ try {
   assert.ok(metricsHealth.payload.health.breaches.some((breach) => breach.code === "tool_denied_rate"));
   assert.ok(metricsHealth.payload.health.breaches.some((breach) => breach.code === "request_p95_duration_ms"));
   assert.ok(metricsHealth.payload.health.breaches.some((breach) => breach.code === "tool_p95_duration_ms"));
-  assert.ok(metricsHealth.payload.health.toolCalls.topTools.some((item) =>
+  const healthTopTool = metricsHealth.payload.health.toolCalls.topTools.find((item) =>
     item.toolId === "pact.knowledge.health"
-  ));
-  assert.ok(metricsHealth.payload.health.requests.topRoutes.some((item) =>
+  );
+  assert.ok(healthTopTool);
+  assert.ok(healthTopTool.averageDurationMs >= 0);
+  assert.ok(healthTopTool.transferBytesPerSecond >= 0);
+  assertDurationPercentiles(healthTopTool.durationPercentiles);
+  const healthTopRoute = metricsHealth.payload.health.requests.topRoutes.find((item) =>
     item.route === "/api/tool-management/v1/execute"
-  ));
+  );
+  assert.ok(healthTopRoute);
+  assert.ok(healthTopRoute.averageDurationMs >= 0);
+  assert.ok(healthTopRoute.transferBytesPerSecond >= 0);
+  assertDurationPercentiles(healthTopRoute.durationPercentiles);
 
   const prometheusUrl = new URL(`${server.url}/api/tool-management/v1/metrics/prometheus`);
   prometheusUrl.searchParams.set("windowSeconds", "3600");
@@ -385,7 +393,23 @@ try {
   );
   assert.match(
     prometheusText,
+    /^pact_tool_management_top_tool_transfer_bytes_per_second\{tool_id="pact\.knowledge\.health"\} \d+/m
+  );
+  assert.match(
+    prometheusText,
+    /^pact_tool_management_top_tool_duration_ms\{tool_id="pact\.knowledge\.health",quantile="0\.95"\} \d+/m
+  );
+  assert.match(
+    prometheusText,
     /^pact_tool_management_top_route_requests_total\{transport="tool-management",method="POST",route="\/api\/tool-management\/v1\/execute"\} \d+/m
+  );
+  assert.match(
+    prometheusText,
+    /^pact_tool_management_top_route_transfer_bytes_per_second\{transport="tool-management",method="POST",route="\/api\/tool-management\/v1\/execute"\} \d+/m
+  );
+  assert.match(
+    prometheusText,
+    /^pact_tool_management_top_route_duration_ms\{transport="tool-management",method="POST",route="\/api\/tool-management\/v1\/execute",quantile="0\.95"\} \d+/m
   );
 
   const toolMetricsExportUrl = new URL(`${server.url}/api/tool-management/v1/metrics/export`);
@@ -689,6 +713,14 @@ try {
   assert.match(cliPrometheus.stdout, /^pact_tool_management_requests_total \d+/m);
   assert.match(cliPrometheus.stdout, /^pact_tool_management_request_duration_ms\{quantile="0\.95"\} \d+/m);
   assert.match(cliPrometheus.stdout, /^pact_tool_management_tool_call_duration_ms\{quantile="0\.95"\} \d+/m);
+  assert.match(
+    cliPrometheus.stdout,
+    /^pact_tool_management_top_tool_duration_ms\{tool_id="pact\.knowledge\.health",quantile="0\.95"\} \d+/m
+  );
+  assert.match(
+    cliPrometheus.stdout,
+    /^pact_tool_management_top_route_duration_ms\{transport="tool-management",method="POST",route="\/api\/tool-management\/v1\/execute",quantile="0\.95"\} \d+/m
+  );
 
   const cliExport = await execFileAsync(
     process.execPath,

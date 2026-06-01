@@ -2069,31 +2069,63 @@ export function createToolManagementStore({
       ORDER BY duration_ms ASC
     `).all(startedAt, endedAt));
     const topTools = db.prepare(`
-      SELECT tool_id, count(*) AS total, coalesce(sum(transfer_bytes), 0) AS transfer_bytes_total
+      SELECT
+        tool_id,
+        count(*) AS total,
+        coalesce(sum(transfer_bytes), 0) AS transfer_bytes_total,
+        coalesce(avg(duration_ms), 0) AS average_duration_ms
       FROM tool_metric_events
       WHERE created_at >= ? AND created_at <= ?
       GROUP BY tool_id
       ORDER BY total DESC, transfer_bytes_total DESC
       LIMIT 10
-    `).all(startedAt, endedAt).map((row) => ({
-      toolId: row.tool_id,
-      total: Number(row.total || 0),
-      transferBytesTotal: Number(row.transfer_bytes_total || 0)
-    }));
+    `).all(startedAt, endedAt).map((row) => {
+      const transferBytesTotal = Number(row.transfer_bytes_total || 0);
+      return {
+        toolId: row.tool_id,
+        total: Number(row.total || 0),
+        transferBytesTotal,
+        transferBytesPerSecond: Number((transferBytesTotal / normalizedWindowSeconds).toFixed(2)),
+        averageDurationMs: Number(Number(row.average_duration_ms || 0).toFixed(2)),
+        durationPercentiles: durationPercentilesFromRows(db.prepare(`
+          SELECT duration_ms
+          FROM tool_metric_events
+          WHERE created_at >= ? AND created_at <= ? AND tool_id = ?
+          ORDER BY duration_ms ASC
+        `).all(startedAt, endedAt, row.tool_id))
+      };
+    });
     const topRoutes = db.prepare(`
-      SELECT transport, method, route, count(*) AS total, coalesce(sum(transfer_bytes), 0) AS transfer_bytes_total
+      SELECT
+        transport,
+        method,
+        route,
+        count(*) AS total,
+        coalesce(sum(transfer_bytes), 0) AS transfer_bytes_total,
+        coalesce(avg(duration_ms), 0) AS average_duration_ms
       FROM http_request_metric_events
       WHERE created_at >= ? AND created_at <= ?
       GROUP BY transport, method, route
       ORDER BY total DESC, transfer_bytes_total DESC
       LIMIT 10
-    `).all(startedAt, endedAt).map((row) => ({
-      transport: row.transport,
-      method: row.method,
-      route: row.route,
-      total: Number(row.total || 0),
-      transferBytesTotal: Number(row.transfer_bytes_total || 0)
-    }));
+    `).all(startedAt, endedAt).map((row) => {
+      const transferBytesTotal = Number(row.transfer_bytes_total || 0);
+      return {
+        transport: row.transport,
+        method: row.method,
+        route: row.route,
+        total: Number(row.total || 0),
+        transferBytesTotal,
+        transferBytesPerSecond: Number((transferBytesTotal / normalizedWindowSeconds).toFixed(2)),
+        averageDurationMs: Number(Number(row.average_duration_ms || 0).toFixed(2)),
+        durationPercentiles: durationPercentilesFromRows(db.prepare(`
+          SELECT duration_ms
+          FROM http_request_metric_events
+          WHERE created_at >= ? AND created_at <= ? AND transport = ? AND method = ? AND route = ?
+          ORDER BY duration_ms ASC
+        `).all(startedAt, endedAt, row.transport, row.method, row.route))
+      };
+    });
 
     const toolTotal = Number(toolRow.total || 0);
     const requestTotal = Number(requestRow.total || 0);
@@ -2323,6 +2355,28 @@ export function createToolManagementStore({
       ...health.toolCalls.topTools.map((item) =>
         prometheusSample("pact_tool_management_top_tool_calls_total", item.total, { tool_id: item.toolId })
       ),
+      "# HELP pact_tool_management_top_tool_transfer_bytes_total Top tool transfer bytes by tool id.",
+      "# TYPE pact_tool_management_top_tool_transfer_bytes_total gauge",
+      ...health.toolCalls.topTools.map((item) =>
+        prometheusSample("pact_tool_management_top_tool_transfer_bytes_total", item.transferBytesTotal, {
+          tool_id: item.toolId
+        })
+      ),
+      "# HELP pact_tool_management_top_tool_transfer_bytes_per_second Top tool transfer byte rate by tool id.",
+      "# TYPE pact_tool_management_top_tool_transfer_bytes_per_second gauge",
+      ...health.toolCalls.topTools.map((item) =>
+        prometheusSample("pact_tool_management_top_tool_transfer_bytes_per_second", item.transferBytesPerSecond, {
+          tool_id: item.toolId
+        })
+      ),
+      "# HELP pact_tool_management_top_tool_duration_ms Top tool p95 duration in milliseconds by tool id.",
+      "# TYPE pact_tool_management_top_tool_duration_ms gauge",
+      ...health.toolCalls.topTools.map((item) =>
+        prometheusSample("pact_tool_management_top_tool_duration_ms", item.durationPercentiles.p95Ms, {
+          tool_id: item.toolId,
+          quantile: "0.95"
+        })
+      ),
       "# HELP pact_tool_management_top_route_requests_total Top request counts by route.",
       "# TYPE pact_tool_management_top_route_requests_total gauge",
       ...health.requests.topRoutes.map((item) =>
@@ -2330,6 +2384,34 @@ export function createToolManagementStore({
           transport: item.transport,
           method: item.method,
           route: item.route
+        })
+      ),
+      "# HELP pact_tool_management_top_route_transfer_bytes_total Top route transfer bytes.",
+      "# TYPE pact_tool_management_top_route_transfer_bytes_total gauge",
+      ...health.requests.topRoutes.map((item) =>
+        prometheusSample("pact_tool_management_top_route_transfer_bytes_total", item.transferBytesTotal, {
+          transport: item.transport,
+          method: item.method,
+          route: item.route
+        })
+      ),
+      "# HELP pact_tool_management_top_route_transfer_bytes_per_second Top route transfer byte rate.",
+      "# TYPE pact_tool_management_top_route_transfer_bytes_per_second gauge",
+      ...health.requests.topRoutes.map((item) =>
+        prometheusSample("pact_tool_management_top_route_transfer_bytes_per_second", item.transferBytesPerSecond, {
+          transport: item.transport,
+          method: item.method,
+          route: item.route
+        })
+      ),
+      "# HELP pact_tool_management_top_route_duration_ms Top route p95 duration in milliseconds.",
+      "# TYPE pact_tool_management_top_route_duration_ms gauge",
+      ...health.requests.topRoutes.map((item) =>
+        prometheusSample("pact_tool_management_top_route_duration_ms", item.durationPercentiles.p95Ms, {
+          transport: item.transport,
+          method: item.method,
+          route: item.route,
+          quantile: "0.95"
         })
       )
     ];
