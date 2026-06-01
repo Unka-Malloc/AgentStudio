@@ -473,6 +473,18 @@ try {
   assert.ok(executed.payload.traceId);
   assert.equal(executed.payload.status, "ok");
   assert.equal(executed.payload.result.ok, true);
+  assert.equal(executed.payload.policy.grantPolicyRevision, grantPolicyRevision.revision);
+  assert.equal(executed.payload.policy.grantPolicyState, "stale");
+  assert.equal(executed.payload.policy.governancePolicyRevision.revision, changedPolicyRevision.revision);
+
+  const executedAudit = await fetchJson(`${server.url}/api/tool-management/v1/audit/${encodeURIComponent(executed.payload.toolExecutionId)}`);
+  assert.equal(executedAudit.status, 200);
+  assert.equal(executedAudit.payload.audit.resultSummary.policy.grantPolicyRevision, grantPolicyRevision.revision);
+  assert.equal(executedAudit.payload.audit.resultSummary.policy.grantPolicyState, "stale");
+  assert.equal(
+    executedAudit.payload.audit.resultSummary.policy.governancePolicyRevision.revision,
+    changedPolicyRevision.revision
+  );
 
   const audit = await fetchJson(`${server.url}/api/tool-management/v1/audit?limit=20`);
   assert.equal(audit.status, 200);

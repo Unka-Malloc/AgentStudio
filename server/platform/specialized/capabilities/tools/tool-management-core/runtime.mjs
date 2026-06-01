@@ -91,6 +91,26 @@ function parseCapturedJson(captured) {
   }
 }
 
+function policyRevisionSummary(policy = {}) {
+  const revision = policy.governancePolicyRevision &&
+    typeof policy.governancePolicyRevision === "object" &&
+    !Array.isArray(policy.governancePolicyRevision)
+    ? policy.governancePolicyRevision
+    : {};
+  return {
+    decisionId: policy.decisionId || "",
+    effect: policy.effect || "",
+    reasonCode: policy.reasonCode || "",
+    grantPolicyRevision: Number(policy.grantPolicyRevision || 0),
+    grantPolicyState: String(policy.grantPolicyState || ""),
+    governancePolicyRevision: {
+      protocolVersion: String(revision.protocolVersion || ""),
+      revision: Number(revision.revision || 0),
+      updatedAt: String(revision.updatedAt || "")
+    }
+  };
+}
+
 function sourceIpFromRequest(request) {
   return String(
     request?.headers?.["x-forwarded-for"] ||
@@ -550,6 +570,7 @@ export function createToolExecutionRuntime({
     const approvalAlreadyGranted = approvedPendingOperation ||
       context.approval?.approved === true ||
       context.pendingOperationApproved === true;
+    const policySummary = policyRevisionSummary(policy);
     const pendingApprovalRequested = String(context.transport || "").toLowerCase() === "mcp" ||
       context.requirePendingOperation === true ||
       context.pendingApprovalRequired === true;
@@ -601,7 +622,8 @@ export function createToolExecutionRuntime({
         resultSummary: {
           type: "pending_operation",
           pendingOperationId: pendingOperation.pendingOperationId,
-          status: pendingOperation.status
+          status: pendingOperation.status,
+          policy: policySummary
         },
         status: "pending_approval",
         errorCode: "tool_approval_required",
@@ -644,9 +666,7 @@ export function createToolExecutionRuntime({
           toolId: tool.id,
           status: "pending_approval",
           pendingOperation,
-          policy: {
-            decisionId: policy.decisionId
-          }
+          policy: policySummary
         }
       };
     }
@@ -678,6 +698,10 @@ export function createToolExecutionRuntime({
         risk: tool.risk,
         decision: policy.effect,
         input,
+        resultSummary: {
+          type: "policy_denial",
+          policy: policySummary
+        },
         status: "denied",
         errorCode: policy.reasonCode,
         durationMs,
@@ -710,6 +734,7 @@ export function createToolExecutionRuntime({
             message: policy.redactedReason,
             details: {
               decisionId: policy.decisionId,
+              policy: policySummary,
               missingScopes: policy.missingScopes,
               missingCapabilities: policy.missingCapabilities,
               missingToolsets: policy.missingToolsets
@@ -777,9 +802,7 @@ export function createToolExecutionRuntime({
           status: "ok",
           result,
           grant: authorization.grant,
-          policy: {
-            decisionId: policy.decisionId
-          }
+          policy: policySummary
         }
       };
     }
@@ -820,6 +843,11 @@ export function createToolExecutionRuntime({
         risk: tool.risk,
         decision: policy.effect,
         input,
+        resultSummary: {
+          type: "invalid_input",
+          error: schemaValidation.error,
+          policy: policySummary
+        },
         status: "denied",
         errorCode: "invalid_input",
         durationMs,
@@ -852,7 +880,8 @@ export function createToolExecutionRuntime({
             message: schemaValidation.error,
             details: {
               toolExecutionId,
-              decisionId: policy.decisionId
+              decisionId: policy.decisionId,
+              policy: policySummary
             }
           }
         }
@@ -938,7 +967,12 @@ export function createToolExecutionRuntime({
           risk: tool.risk,
           decision: policy.effect,
           input,
-          resultSummary: { type: "oversize", byteLength: buffer.length, maxResultBytes: tool.maxResultBytes },
+          resultSummary: {
+            type: "oversize",
+            byteLength: buffer.length,
+            maxResultBytes: tool.maxResultBytes,
+            policy: policySummary
+          },
           status: "failed",
           errorCode: "result_too_large",
           durationMs,
@@ -1007,7 +1041,10 @@ export function createToolExecutionRuntime({
         decision: policy.effect,
         input,
         result: payload,
-        resultSummary: tool.transport?.binary ? { type: "binary", byteLength: buffer.length } : resultSummaryFromPayload(payload),
+        resultSummary: {
+          ...(tool.transport?.binary ? { type: "binary", byteLength: buffer.length } : resultSummaryFromPayload(payload)),
+          policy: policySummary
+        },
         status,
         errorCode: status === "ok" ? "" : "tool_handler_failed",
         durationMs,
@@ -1042,9 +1079,7 @@ export function createToolExecutionRuntime({
           status,
           result: payload?.result !== undefined ? payload.result : payload,
           grant: authorization.grant,
-          policy: {
-            decisionId: policy.decisionId
-          }
+          policy: policySummary
         }
       };
     } catch (error) {
@@ -1076,6 +1111,11 @@ export function createToolExecutionRuntime({
         risk: tool.risk,
         decision: policy.effect,
         input,
+        resultSummary: {
+          type: "runtime_error",
+          errorCode,
+          policy: policySummary
+        },
         status: "failed",
         errorCode,
         durationMs,
@@ -1108,7 +1148,8 @@ export function createToolExecutionRuntime({
             message,
             details: {
               toolExecutionId,
-              decisionId: policy.decisionId
+              decisionId: policy.decisionId,
+              policy: policySummary
             }
           }
         }
