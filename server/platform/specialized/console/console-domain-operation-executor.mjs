@@ -806,6 +806,115 @@ async function publishProtocolEvent(protocolEventBus, topic, payload, options = 
   return protocolEventBus.publish(topic, payload, options);
 }
 
+function publicActorFromSession(authSession = null) {
+  const user = authSession?.user && typeof authSession.user === "object" ? authSession.user : {};
+  return {
+    userId: String(user.userId || "").trim(),
+    username: String(user.username || "").trim(),
+    roleId: String(user.roleId || "").trim()
+  };
+}
+
+function governanceEntityId(entityType, entity = {}) {
+  const source = entity && typeof entity === "object" && !Array.isArray(entity) ? entity : {};
+  const keys = {
+    role: ["roleId", "id"],
+    team: ["teamId", "id"],
+    "user-policy": ["userId", "subjectId", "id"],
+    "agent-group": ["groupId", "id"],
+    "agent-binding": ["agentId", "profileId", "id"],
+    approval: ["approvalId", "id"]
+  }[entityType] || ["id"];
+  for (const key of keys) {
+    const value = String(source[key] || "").trim();
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
+
+function governanceStringList(value) {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((item) => String(item || "").trim()).filter(Boolean))];
+  }
+  if (typeof value === "string") {
+    return governanceStringList(value.split(","));
+  }
+  return [];
+}
+
+function governanceAffectedSubjects(entityType, entity = {}) {
+  const source = entity && typeof entity === "object" && !Array.isArray(entity) ? entity : {};
+  return {
+    roleIds: entityType === "role" ? [source.roleId].filter(Boolean) : [],
+    teamIds: entityType === "team" ? [source.teamId].filter(Boolean) : governanceStringList(source.teamIds),
+    userIds: [source.userId, source.boundUserId].filter(Boolean),
+    agentIds: [source.agentId].filter(Boolean),
+    agentGroupIds: entityType === "agent-group" ? [source.groupId].filter(Boolean) : governanceStringList(source.groupIds),
+    approvalIds: entityType === "approval" ? [source.approvalId].filter(Boolean) : []
+  };
+}
+
+async function publishAuthorizationGovernanceUpdate({
+  context,
+  operationId,
+  entityType,
+  eventType,
+  entity
+}) {
+  const securityPermissions = context.securityPermissions;
+  const policyRevision = securityPermissions?.getGovernancePolicyRevision?.() || null;
+  const entityId = governanceEntityId(entityType, entity);
+  const payload = {
+    schemaVersion: 1,
+    protocolVersion: "pact.authorization.governance.update.v1",
+    operationId,
+    mutation: {
+      entityType,
+      entityId,
+      eventType
+    },
+    affectedSubjects: governanceAffectedSubjects(entityType, entity),
+    policyRevision,
+    refresh: {
+      required: true,
+      reasonCode: "governance_policy_revision_changed",
+      gatewayPolicyReloadRequired: true,
+      grantRefreshRequired: true,
+      staleGrantBehavior: "existing grants remain usable only through live policy evaluation until reissued or rotated"
+    },
+    actor: publicActorFromSession(context.authSession)
+  };
+  const governanceEvent = await publishProtocolEvent(
+    context.protocolEventBus,
+    "authorization.governance.updated",
+    payload,
+    { type: "authorization.governance.updated" }
+  );
+  const permissionsEvent = await publishProtocolEvent(
+    context.protocolEventBus,
+    "permissions.updated",
+    {
+      ...payload,
+      sourceTopic: "authorization.governance.updated"
+    },
+    { type: "permissions.updated" }
+  );
+  return {
+    policyRevision,
+    refresh: payload.refresh,
+    events: {
+      governance: governanceEvent
+        ? { id: governanceEvent.id, offset: governanceEvent.offset, topic: governanceEvent.topic }
+        : null,
+      permissions: permissionsEvent
+        ? { id: permissionsEvent.id, offset: permissionsEvent.offset, topic: permissionsEvent.topic }
+        : null
+    }
+  };
+}
+
 function defaultAgentSyncPolicy() {
   return {
     async loadAgentSyncConfig() {
@@ -3944,7 +4053,14 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "权限角色存储不可用。" });
     }
     const role = securityPermissions.upsertGovernanceRole(input);
-    return result(200, protocolPayload({ role }));
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "role",
+      eventType: "upserted",
+      entity: role
+    });
+    return result(200, protocolPayload({ role, ...governanceUpdate }));
   }
 
   if (id === "authorization.teams.list") {
@@ -3957,7 +4073,14 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "权限团队存储不可用。" });
     }
     const team = securityPermissions.upsertGovernanceTeam(input);
-    return result(200, protocolPayload({ team }));
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "team",
+      eventType: "upserted",
+      entity: team
+    });
+    return result(200, protocolPayload({ team, ...governanceUpdate }));
   }
 
   if (id === "authorization.users.policies.list") {
@@ -3970,7 +4093,14 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "用户授权策略存储不可用。" });
     }
     const userPolicy = securityPermissions.upsertGovernanceUserPolicy(input);
-    return result(200, protocolPayload({ userPolicy }));
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "user-policy",
+      eventType: "upserted",
+      entity: userPolicy
+    });
+    return result(200, protocolPayload({ userPolicy, ...governanceUpdate }));
   }
 
   if (id === "authorization.agent_groups.list") {
@@ -3983,7 +4113,14 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "智能体分组存储不可用。" });
     }
     const agentGroup = securityPermissions.upsertGovernanceAgentGroup(input);
-    return result(200, protocolPayload({ agentGroup }));
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "agent-group",
+      eventType: "upserted",
+      entity: agentGroup
+    });
+    return result(200, protocolPayload({ agentGroup, ...governanceUpdate }));
   }
 
   if (id === "authorization.agents.bindings.list") {
@@ -3996,7 +4133,14 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "智能体绑定存储不可用。" });
     }
     const agentBinding = securityPermissions.upsertGovernanceAgentBinding(input);
-    return result(200, protocolPayload({ agentBinding }));
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "agent-binding",
+      eventType: "upserted",
+      entity: agentBinding
+    });
+    return result(200, protocolPayload({ agentBinding, ...governanceUpdate }));
   }
 
   if (id === "authorization.approvals.list") {
@@ -4013,7 +4157,14 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "审批授权存储不可用。" });
     }
     const approval = securityPermissions.upsertGovernanceApproval(input);
-    return result(200, protocolPayload({ approval }));
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "approval",
+      eventType: "upserted",
+      entity: approval
+    });
+    return result(200, protocolPayload({ approval, ...governanceUpdate }));
   }
 
   if (id === "authorization.approvals.revoke") {
@@ -4021,9 +4172,17 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "审批授权存储不可用。" });
     }
     const approval = securityPermissions.revokeGovernanceApproval(input.approvalId || input.id, input.reason || "");
-    return approval
-      ? result(200, protocolPayload({ approval }))
-      : result(404, { error: "审批授权不存在。" });
+    if (!approval) {
+      return result(404, { error: "审批授权不存在。" });
+    }
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "approval",
+      eventType: "revoked",
+      entity: approval
+    });
+    return result(200, protocolPayload({ approval, ...governanceUpdate }));
   }
 
   if (id === "authorization.receipts.list") {

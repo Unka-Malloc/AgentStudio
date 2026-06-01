@@ -187,6 +187,7 @@ export function createSystemControllerContexts({
   function authorizationFacadeContext(authSession = null, extra = {}) {
     return {
       securityPermissions,
+      protocolEventBus,
       authSession,
       ...extra
     };
