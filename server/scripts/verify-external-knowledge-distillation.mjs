@@ -276,6 +276,8 @@ const sampleDocxBase64 = base64Zip({
     "<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr><w:r><w:t>Routing Decisions</w:t></w:r></w:p>",
     "<w:p><w:pPr><w:pStyle w:val=\"ListParagraph\"/><w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"9\"/></w:numPr></w:pPr><w:r><w:t>Preserve Word list hierarchy for agent filters.</w:t></w:r></w:p>",
     "<w:p><w:r><w:t>Standalone DOCX payload parser extracts contract decisions.</w:t></w:r></w:p>",
+    "<w:sdt><w:sdtPr><w:id w:val=\"100\"/><w:alias w:val=\"Decision Owner\"/><w:tag w:val=\"decision.owner\"/><w:text/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>Decision owner is Platform Architecture.</w:t></w:r></w:p></w:sdtContent></w:sdt>",
+    "<w:p><w:bookmarkStart w:id=\"42\" w:name=\"DecisionScope\"/><w:r><w:t>Bookmark scope captures routing impact.</w:t></w:r><w:bookmarkEnd w:id=\"42\"/></w:p>",
     "<w:p><w:r><w:t>Evidence portal: </w:t></w:r><w:hyperlink r:id=\"rId1\"><w:r><w:t>DOCX evidence portal</w:t></w:r></w:hyperlink></w:p>",
     "<w:p><w:r><w:drawing><wp:inline><wp:docPr id=\"10\" name=\"Architecture Diagram\" descr=\"DOCX architecture diagram evidence\"/><a:graphic><a:graphicData><pic:pic><pic:blipFill><a:blip r:embed=\"rIdImage1\"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>",
     "<w:p><w:r><w:drawing><wp:inline><wp:docPr id=\"11\" name=\"Decision Trend Chart\"/><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/chart\"><c:chart r:id=\"rIdChart1\"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>",
@@ -960,6 +962,8 @@ try {
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.form-fields"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("tika.text.app"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.tables"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.content-controls"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.bookmarks"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.annotations"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.revisions"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.hyperlinks"), true);
@@ -1054,6 +1058,8 @@ try {
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("chart.series"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("form.name"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("form.value"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("control.tag"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("bookmark.name"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("table.sheetName"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("table.sheetId"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("shape.placeholderType"), true);
@@ -1066,6 +1072,8 @@ try {
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("footnote"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("link"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("chart"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("content-control"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("bookmark"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("frontmatter"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("merged-cell"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("cell-comment"), true);
@@ -1082,6 +1090,8 @@ try {
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.chart.series"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.form.name"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.form.value"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.control.tag"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.bookmark.name"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.merge.ref"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.merge"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.comment"), true);
@@ -1116,6 +1126,8 @@ try {
   assert.equal(capabilities.payload.formatConversion.preserves.includes("charts"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("chartSeries"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("formFields"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("contentControls"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("bookmarks"), true);
   for (const [routeId, parserProfile, qualityGate] of [
     ["pdf", "pdf.text-layout-ocr-route", "page-order-preserved"],
     ["word", "wordprocessingml-paragraph-style-route", "word-annotation-refs-preserved"],
@@ -1135,6 +1147,8 @@ try {
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("pdf-form-fields-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-paragraph-style-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-list-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-content-control-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-bookmark-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-link-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-image-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-chart-refs-preserved"), true);
@@ -1800,6 +1814,8 @@ try {
   assert.equal(professionalConversionPlan.summary.targetFormats.includes("docx"), true);
   assert.equal(professionalConversionPlan.summary.qualityGates.includes("docx-openxml-package-valid"), true);
   assert.equal(professionalConversionPlan.summary.qualityGates.includes("word-link-refs-preserved"), true);
+  assert.equal(professionalConversionPlan.summary.qualityGates.includes("word-content-control-refs-preserved"), true);
+  assert.equal(professionalConversionPlan.summary.qualityGates.includes("word-bookmark-refs-preserved"), true);
   assert.equal(professionalConversionPlan.summary.qualityGates.includes("word-revision-refs-preserved"), true);
   assert.equal(professionalConversionPlan.summary.qualityGates.includes("pdf-outline-refs-preserved"), true);
   assert.equal(professionalConversionPlan.summary.qualityGates.includes("pdf-form-fields-preserved"), true);
@@ -1809,6 +1825,8 @@ try {
   assert.equal(professionalConversionPlan.summary.documentWithPdfOutlineRefsCount >= 1, true);
   assert.equal(professionalConversionPlan.summary.documentWithPdfFormFieldRefsCount >= 1, true);
   assert.equal(professionalConversionPlan.summary.documentWithFrontmatterRefsCount >= 1, true);
+  assert.equal(professionalConversionPlan.summary.documentWithContentControlRefsCount >= 1, true);
+  assert.equal(professionalConversionPlan.summary.documentWithBookmarkRefsCount >= 1, true);
   assert.equal(professionalConversionPlan.summary.documentWithRevisionRefsCount >= 1, true);
   assert.equal(professionalConversionPlan.summary.qualityGateStatusCounts.passed > 0, true);
   assert.equal(professionalConversionPlan.summary.outputArtifactValidationStrategy, "format-conversion-output-artifact-self-check.v1");
@@ -1854,11 +1872,15 @@ try {
     document.routeId === "word" &&
     document.evidence.styleRefCount >= 1 &&
     document.evidence.numberingRefCount >= 1 &&
+    document.evidence.contentControlRefCount >= 1 &&
+    document.evidence.bookmarkRefCount >= 1 &&
     document.evidence.linkElementCount >= 1 &&
     document.evidence.imageRefCount >= 1 &&
     document.evidence.revisionRefCount >= 2 &&
     document.qualityGateResults.some((gate) => gate.gate === "word-paragraph-style-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "word-list-refs-preserved" && gate.status === "passed") &&
+    document.qualityGateResults.some((gate) => gate.gate === "word-content-control-refs-preserved" && gate.status === "passed") &&
+    document.qualityGateResults.some((gate) => gate.gate === "word-bookmark-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "word-link-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "word-revision-refs-preserved" && gate.status === "passed")
   )), true);
@@ -2000,6 +2022,8 @@ try {
   assert.equal(docxPayloadCorpus.parserTrace.some((trace) => trace.stage === "office.word.styles" && trace.status === "completed" && trace.styles >= 3 && trace.headings >= 2), true);
   assert.equal(docxPayloadCorpus.parserTrace.some((trace) => trace.stage === "office.word.numbering" && trace.status === "completed" && trace.numberingRefs === 1), true);
   assert.equal(docxPayloadCorpus.parserTrace.some((trace) => trace.stage === "office.word.tables" && trace.status === "completed" && trace.tables === 1 && trace.cells === 6), true);
+  assert.equal(docxPayloadCorpus.parserTrace.some((trace) => trace.stage === "office.word.content-controls" && trace.status === "completed" && trace.contentControls === 1), true);
+  assert.equal(docxPayloadCorpus.parserTrace.some((trace) => trace.stage === "office.word.bookmarks" && trace.status === "completed" && trace.bookmarks === 1), true);
   assert.equal(docxPayloadCorpus.parserTrace.some((trace) => (
     trace.stage === "office.word.annotations" &&
     trace.status === "completed" &&
@@ -2041,6 +2065,8 @@ try {
   assert.equal(docxPayloadCorpus.elementPlan.elementTypes.link >= 1, true);
   assert.equal(docxPayloadCorpus.elementPlan.elementTypes.image >= 1, true);
   assert.equal(docxPayloadCorpus.elementPlan.elementTypes.chart >= 1, true);
+  assert.equal(docxPayloadCorpus.elementPlan.elementTypes["content-control"] >= 1, true);
+  assert.equal(docxPayloadCorpus.elementPlan.elementTypes.bookmark >= 1, true);
   assert.equal(docxPayloadCorpus.elementPlan.elementTypes.comment >= 1, true);
   assert.equal(docxPayloadCorpus.elementPlan.elementTypes.revision >= 2, true);
   assert.equal(docxPayloadCorpus.elementPlan.elementTypes.footnote >= 1, true);
@@ -2060,6 +2086,21 @@ try {
     element.type === "table-row" &&
     element.table?.format === "docx" &&
     element.cells?.some((cell) => cell.ref === "B2" && cell.header === "Decision" && cell.value.includes("external.knowledge.distillation"))
+  )), true);
+  assert.equal(docxPayloadCorpus.elementPlan.sampleElements.some((element) => (
+    element.type === "content-control" &&
+    element.control?.kind === "word-content-control" &&
+    element.control?.alias === "Decision Owner" &&
+    element.control?.tag === "decision.owner" &&
+    element.control?.controlType === "text" &&
+    element.text.includes("Platform Architecture")
+  )), true);
+  assert.equal(docxPayloadCorpus.elementPlan.sampleElements.some((element) => (
+    element.type === "bookmark" &&
+    element.bookmark?.kind === "word-bookmark" &&
+    element.bookmark?.id === "42" &&
+    element.bookmark?.name === "DecisionScope" &&
+    element.text.includes("routing impact")
   )), true);
   assert.equal(docxPayloadCorpus.elementPlan.sampleElements.some((element) => (
     element.type === "comment" &&
@@ -2116,6 +2157,15 @@ try {
     ref.cells?.some((cell) => cell.ref === "B2")
   ))), true);
   assert.equal(docxPayloadCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+    ref.type === "content-control" &&
+    ref.control?.tag === "decision.owner" &&
+    ref.control?.alias === "Decision Owner"
+  ))), true);
+  assert.equal(docxPayloadCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+    ref.type === "bookmark" &&
+    ref.bookmark?.name === "DecisionScope"
+  ))), true);
+  assert.equal(docxPayloadCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
     ref.type === "comment" &&
     ref.annotation?.kind === "comment" &&
     ref.annotation?.id === "7"
@@ -2155,6 +2205,8 @@ try {
   assert.equal(docxPayloadCorpus.formatConversionProfile.preserves.includes("images"), true);
   assert.equal(docxPayloadCorpus.formatConversionProfile.preserves.includes("charts"), true);
   assert.equal(docxPayloadCorpus.formatConversionProfile.preserves.includes("chartSeries"), true);
+  assert.equal(docxPayloadCorpus.formatConversionProfile.preserves.includes("contentControls"), true);
+  assert.equal(docxPayloadCorpus.formatConversionProfile.preserves.includes("bookmarks"), true);
   assert.equal(docxPayloadCorpus.formatConversionProfile.preserves.includes("comments"), true);
   assert.equal(docxPayloadCorpus.formatConversionProfile.preserves.includes("footnotes"), true);
   assert.equal(docxPayloadCorpus.formatConversionProfile.preserves.includes("revisions"), true);
@@ -2173,6 +2225,21 @@ try {
       ref.type === "table-row" &&
       ref.table?.format === "docx" &&
       ref.cells?.some((cell) => cell.ref === "B2")
+    ))
+  )), true);
+  assert.equal(createRun.payload.result.graphEvidence.text_units.some((unit) => (
+    unit.sourceId === "source-8" &&
+    unit.metadata?.elementRefs?.some((ref) => (
+      ref.type === "content-control" &&
+      ref.control?.tag === "decision.owner" &&
+      ref.control?.alias === "Decision Owner"
+    ))
+  )), true);
+  assert.equal(createRun.payload.result.graphEvidence.text_units.some((unit) => (
+    unit.sourceId === "source-8" &&
+    unit.metadata?.elementRefs?.some((ref) => (
+      ref.type === "bookmark" &&
+      ref.bookmark?.name === "DecisionScope"
     ))
   )), true);
   assert.equal(createRun.payload.result.graphEvidence.text_units.some((unit) => (
@@ -3626,6 +3693,8 @@ try {
   assert.equal(agentMessage.formatConversionPlan.summary.documentWithSpreadsheetCommentRefsCount >= 1, true);
   assert.equal(agentMessage.formatConversionPlan.summary.documentWithRevisionRefsCount >= 1, true);
   assert.equal(agentMessage.formatConversionPlan.summary.documentWithFrontmatterRefsCount >= 1, true);
+  assert.equal(agentMessage.formatConversionPlan.summary.documentWithContentControlRefsCount >= 1, true);
+  assert.equal(agentMessage.formatConversionPlan.summary.documentWithBookmarkRefsCount >= 1, true);
   assert.equal(agentMessage.formatConversionPlan.summary.documentWithChartRefsCount >= 1, true);
   assert.equal(agentMessage.graphEvidence.summary.entityCount > 0, true);
   assert.equal(agentMessage.classification.communityCount >= agentMessage.classification.coreGroupCount, true);
@@ -3667,6 +3736,8 @@ try {
   assert.equal(conversionPlan.summary.documentWithChartSeriesRefsCount >= 1, true);
   assert.equal(conversionPlan.summary.documentWithStyleRefsCount >= 1, true);
   assert.equal(conversionPlan.summary.documentWithNumberingRefsCount >= 1, true);
+  assert.equal(conversionPlan.summary.documentWithContentControlRefsCount >= 1, true);
+  assert.equal(conversionPlan.summary.documentWithBookmarkRefsCount >= 1, true);
   assert.equal(conversionPlan.summary.documentWithAnnotationsCount >= 1, true);
   assert.equal(conversionPlan.summary.documentWithRevisionRefsCount >= 1, true);
   assert.equal(conversionPlan.summary.documentWithFrontmatterRefsCount >= 1, true);
@@ -3733,11 +3804,15 @@ try {
     document.evidence.annotationElementCount >= 1 &&
     document.evidence.styleRefCount >= 1 &&
     document.evidence.numberingRefCount >= 1 &&
+    document.evidence.contentControlRefCount >= 1 &&
+    document.evidence.bookmarkRefCount >= 1 &&
     document.evidence.linkElementCount >= 1 &&
     document.evidence.chartRefCount >= 1 &&
     document.evidence.revisionRefCount >= 2 &&
     document.qualityGateResults.some((gate) => gate.gate === "word-paragraph-style-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "word-list-refs-preserved" && gate.status === "passed") &&
+    document.qualityGateResults.some((gate) => gate.gate === "word-content-control-refs-preserved" && gate.status === "passed") &&
+    document.qualityGateResults.some((gate) => gate.gate === "word-bookmark-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "word-link-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "word-image-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "word-chart-refs-preserved" && gate.status === "passed") &&
@@ -3798,12 +3873,16 @@ try {
     document.parserProfile === "wordprocessingml-paragraph-style-route" &&
     document.parserStages.includes("office.word.styles") &&
     document.parserStages.includes("office.word.numbering") &&
+    document.parserStages.includes("office.word.content-controls") &&
+    document.parserStages.includes("office.word.bookmarks") &&
     document.parserStages.includes("office.word.revisions") &&
     document.parserStages.includes("office.word.hyperlinks") &&
     document.parserStages.includes("office.word.images") &&
     document.parserStages.includes("office.word.charts") &&
     document.preserves.includes("paragraphStyles") &&
     document.preserves.includes("listLevels") &&
+    document.preserves.includes("contentControls") &&
+    document.preserves.includes("bookmarks") &&
     document.preserves.includes("links") &&
     document.preserves.includes("images") &&
     document.preserves.includes("charts") &&
@@ -3811,11 +3890,15 @@ try {
     document.preserves.includes("revisions") &&
     document.evidence.styleRefCount >= 1 &&
     document.evidence.numberingRefCount >= 1 &&
+    document.evidence.contentControlRefCount >= 1 &&
+    document.evidence.bookmarkRefCount >= 1 &&
     document.evidence.imageRefCount >= 1 &&
     document.evidence.chartRefCount >= 1 &&
     document.evidence.revisionRefCount >= 2 &&
     document.qualityGateResults.some((gate) => gate.gate === "word-paragraph-style-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "word-list-refs-preserved" && gate.status === "passed") &&
+    document.qualityGateResults.some((gate) => gate.gate === "word-content-control-refs-preserved" && gate.status === "passed") &&
+    document.qualityGateResults.some((gate) => gate.gate === "word-bookmark-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "word-link-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "word-image-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "word-chart-refs-preserved" && gate.status === "passed") &&

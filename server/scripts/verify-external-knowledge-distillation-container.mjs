@@ -462,6 +462,8 @@ try {
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("chart.series"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("form.name"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("form.value"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("control.tag"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("bookmark.name"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("table.sheetName"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("shape.placeholderType"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("pdf-outline"), true);
@@ -475,6 +477,8 @@ try {
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("footnote"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("link"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("chart"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("content-control"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("bookmark"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("frontmatter"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("merged-cell"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("cell-comment"), true);
@@ -491,6 +495,8 @@ try {
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.chart.series"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.form.name"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.form.value"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.control.tag"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.bookmark.name"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.merge.ref"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.merge"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.comment"), true);
@@ -521,6 +527,8 @@ try {
   assert.equal(capabilities.payload.formatConversion.preserves.includes("charts"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("chartSeries"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("formFields"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("contentControls"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("bookmarks"), true);
   for (const [routeId, parserProfile, qualityGate] of [
     ["pdf", "pdf.text-layout-ocr-route", "page-order-preserved"],
     ["word", "wordprocessingml-paragraph-style-route", "word-annotation-refs-preserved"],
@@ -540,6 +548,8 @@ try {
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("pdf-form-fields-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-paragraph-style-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-list-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-content-control-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-bookmark-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-link-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-image-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-chart-refs-preserved"), true);
@@ -597,6 +607,8 @@ try {
   assert.equal(capabilities.payload.fileCompatibility.supportedExtensions.includes(".tex"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("tika.text.app"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.tables"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.content-controls"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.bookmarks"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.annotations"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.revisions"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.hyperlinks"), true);

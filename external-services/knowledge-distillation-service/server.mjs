@@ -210,7 +210,7 @@ const FORMAT_ROUTES = Object.freeze([
     contentShape: "office-document",
     preferredParser: "office.word.structured",
     fallbackParsers: ["tika.text", "ocr.embedded-images"],
-    parserChain: ["office.route", "office.word.structured", "office.word.styles", "office.word.numbering", "office.word.tables", "office.word.annotations", "office.word.revisions", "office.word.hyperlinks", "office.word.images", "tika.text"],
+    parserChain: ["office.route", "office.word.structured", "office.word.styles", "office.word.numbering", "office.word.tables", "office.word.content-controls", "office.word.bookmarks", "office.word.annotations", "office.word.revisions", "office.word.hyperlinks", "office.word.images", "office.word.charts", "tika.text"],
     streamingUnit: "section",
     referenceFrameworks: ["docling", "mineru", "unstructured"]
   },
@@ -230,7 +230,7 @@ const FORMAT_ROUTES = Object.freeze([
     contentShape: "presentation",
     preferredParser: "office.presentation.slides",
     fallbackParsers: ["tika.text", "ocr.slide-images"],
-    parserChain: ["office.route", "office.presentation.slides", "office.presentation.placeholders", "office.presentation.tables", "office.presentation.hyperlinks", "office.presentation.images", "office.presentation.speaker-notes", "office.presentation.comments", "tika.text", "ocr.slide-images"],
+    parserChain: ["office.route", "office.presentation.slides", "office.presentation.placeholders", "office.presentation.tables", "office.presentation.hyperlinks", "office.presentation.images", "office.presentation.charts", "office.presentation.speaker-notes", "office.presentation.comments", "tika.text", "ocr.slide-images"],
     streamingUnit: "slide",
     referenceFrameworks: ["docling", "mineru", "unstructured"]
   },
@@ -251,7 +251,7 @@ const FORMAT_ROUTES = Object.freeze([
     contentShape: "spreadsheet",
     preferredParser: "table.sheet.structured",
     fallbackParsers: ["tika.text", "text.direct"],
-    parserChain: ["table.route", "table.sheet.structured", "table.workbook.sheets", "table.sheet.headers", "table.sheet.cells", "table.sheet.merged-cells", "table.sheet.comments", "table.sheet.date-styles", "table.sheet.formulas", "table.sheet.hyperlinks", "table.rows.windowed"],
+    parserChain: ["table.route", "table.sheet.structured", "table.workbook.sheets", "table.sheet.headers", "table.sheet.cells", "table.sheet.merged-cells", "table.sheet.comments", "table.sheet.date-styles", "table.sheet.formulas", "table.sheet.hyperlinks", "table.sheet.charts", "table.rows.windowed"],
     streamingUnit: "sheet",
     referenceFrameworks: ["docling", "mineru", "unstructured", "haystack"]
   },
@@ -559,9 +559,9 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
     label: "Word",
     professionalFamily: "office-word",
     parserProfile: "wordprocessingml-paragraph-style-route",
-    structureUnits: ["heading", "paragraph", "list-item", "paragraph-style", "numbering-ref", "table-row", "link", "image", "chart", "comment", "footnote", "endnote", "revision"],
-    parserStages: ["office.word.structured", "office.word.styles", "office.word.numbering", "office.word.tables", "office.word.annotations", "office.word.revisions", "office.word.hyperlinks", "office.word.images", "office.word.charts", "tika.text"],
-    preserves: ["headings", "paragraphs", "paragraphStyles", "listLevels", "lists", "tables", "cellRefs", "links", "images", "charts", "chartSeries", "comments", "footnotes", "endnotes", "revisions"],
+    structureUnits: ["heading", "paragraph", "list-item", "paragraph-style", "numbering-ref", "table-row", "content-control", "bookmark", "link", "image", "chart", "comment", "footnote", "endnote", "revision"],
+    parserStages: ["office.word.structured", "office.word.styles", "office.word.numbering", "office.word.tables", "office.word.content-controls", "office.word.bookmarks", "office.word.annotations", "office.word.revisions", "office.word.hyperlinks", "office.word.images", "office.word.charts", "tika.text"],
+    preserves: ["headings", "paragraphs", "paragraphStyles", "listLevels", "lists", "tables", "cellRefs", "contentControls", "bookmarks", "links", "images", "charts", "chartSeries", "comments", "footnotes", "endnotes", "revisions"],
     conversionTargets: ["markdown-outline", "valid-openxml-docx", "agent-json-with-word-style-list-table-link-and-annotation-refs", "evidence-pack"],
     conversionAdapters: [
       {
@@ -583,7 +583,7 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
         targetFormat: "agent-json",
         adapter: "word-elements-to-agent-refs.v1",
         mode: "agent",
-        stages: ["element-refs", "paragraph-style-refs", "numbering-refs", "table-cell-refs", "link-refs", "image-refs", "chart-refs", "annotation-refs", "revision-refs"]
+        stages: ["element-refs", "paragraph-style-refs", "numbering-refs", "table-cell-refs", "content-control-refs", "bookmark-refs", "link-refs", "image-refs", "chart-refs", "annotation-refs", "revision-refs"]
       },
       {
         target: "evidence-pack-json",
@@ -593,7 +593,7 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
         stages: ["text-units", "relationships", "claims"]
       }
     ],
-    qualityGates: ["docx-openxml-package-valid", "word-paragraph-style-refs-preserved", "word-list-refs-preserved", "word-table-cell-refs-preserved", "word-link-refs-preserved", "word-image-refs-preserved", "word-chart-refs-preserved", "word-annotation-refs-preserved", "word-revision-refs-preserved"],
+    qualityGates: ["docx-openxml-package-valid", "word-paragraph-style-refs-preserved", "word-list-refs-preserved", "word-table-cell-refs-preserved", "word-content-control-refs-preserved", "word-bookmark-refs-preserved", "word-link-refs-preserved", "word-image-refs-preserved", "word-chart-refs-preserved", "word-annotation-refs-preserved", "word-revision-refs-preserved"],
     riskControls: ["legacy-doc-tika-fallback", "advanced-style-loss-reporting", "tracked-changes-preserved-when-present"],
     knownLosses: ["advanced-openxml-styling-not-rendered"]
   },
@@ -1041,7 +1041,7 @@ const REFERENCE_ABSORPTION_MAP = Object.freeze({
     gaps: ["high-fidelity layout reconstruction for complex PDFs"]
   },
   docling: {
-    absorbed: ["unified routePlan/corpusPlan/parserTrace document model", "table time index for structured sheets", "HTML, XML, AsciiDoc, LaTeX, Markdown, OOXML, OpenDocument, EPUB, and PDF element models", "basic PDF text-operator geometry for page/x/y/bbox metadata", "PDF outline/bookmark references", "WordprocessingML, PresentationML, and OpenDocument table row/cell metadata", "WordprocessingML, PresentationML, and OpenDocument hyperlink targets", "WordprocessingML comments, revisions, footnotes, and endnotes", "spreadsheet workbook sheet id/name/path plus row/cell coordinate/comment/formula/hyperlink metadata", "PresentationML shape id/name, placeholder, comment, and geometry metadata for slide elements"],
+    absorbed: ["unified routePlan/corpusPlan/parserTrace document model", "table time index for structured sheets", "HTML, XML, AsciiDoc, LaTeX, Markdown, OOXML, OpenDocument, EPUB, and PDF element models", "basic PDF text-operator geometry for page/x/y/bbox metadata", "PDF outline/bookmark references", "WordprocessingML content controls and bookmark anchors", "WordprocessingML, PresentationML, and OpenDocument table row/cell metadata", "WordprocessingML, PresentationML, and OpenDocument hyperlink targets", "WordprocessingML comments, revisions, footnotes, and endnotes", "spreadsheet workbook sheet id/name/path plus row/cell coordinate/comment/formula/hyperlink metadata", "PresentationML shape id/name, placeholder, comment, and geometry metadata for slide elements"],
     baseline: ["structured ZIP extraction for OOXML and OpenDocument"],
     gaps: ["full PDF and Word layout block geometry", "formula recognition beyond SpreadsheetML and text-level elements"]
   },
@@ -1066,7 +1066,7 @@ const REFERENCE_ABSORPTION_MAP = Object.freeze({
     gaps: ["external component registry", "configurable parser/ranker pipeline graph"]
   },
   unstructured: {
-    absorbed: ["partition-style format routing", "chunked windowing", "email and archive child routing", "element-type enrichment for Markdown, markup, PDF, OOXML, OpenDocument, EPUB, headings, lists, links, tables, PDF outlines, Word/PowerPoint/OpenDocument table cells, Word annotations/revisions and hyperlinks, PowerPoint comments and hyperlinks, OpenDocument hyperlinks, code, formulas, spreadsheet workbook sheet refs/comments/hyperlinks, slide shapes, and PowerPoint placeholders", "by-title element-aware windowing with table/code isolation"],
+    absorbed: ["partition-style format routing", "chunked windowing", "email and archive child routing", "element-type enrichment for Markdown, markup, PDF, OOXML, OpenDocument, EPUB, headings, lists, links, tables, PDF outlines, Word content controls/bookmarks, Word/PowerPoint/OpenDocument table cells, Word annotations/revisions and hyperlinks, PowerPoint comments and hyperlinks, OpenDocument hyperlinks, code, formulas, spreadsheet workbook sheet refs/comments/hyperlinks, slide shapes, and PowerPoint placeholders", "by-title element-aware windowing with table/code isolation"],
     baseline: ["strategy-based parser fallback"],
     gaps: ["remaining high-fidelity PDF, Word, and spreadsheet layout coordinates", "domain-specific chunk enrichment plugins"]
   }
@@ -2379,6 +2379,8 @@ function pushStructureElement(elements, type, text, metadata = {}) {
     ...(metadata.image ? { image: metadata.image } : {}),
     ...(metadata.chart ? { chart: metadata.chart } : {}),
     ...(metadata.form ? { form: metadata.form } : {}),
+    ...(metadata.control ? { control: metadata.control } : {}),
+    ...(metadata.bookmark ? { bookmark: metadata.bookmark } : {}),
     ...(metadata.merge ? { merge: metadata.merge } : {}),
     ...(metadata.frontmatter ? { frontmatter: metadata.frontmatter } : {}),
     ...(metadata.cells ? { cells: metadata.cells } : {})
@@ -4695,6 +4697,84 @@ function docxParagraphElementType(paragraphXml = "", style = "") {
   return { type: "paragraph", level: 0 };
 }
 
+function docxContentControlType(prXml = "") {
+  for (const type of ["checkbox", "dropDownList", "comboBox", "date", "picture", "richText", "text", "repeatingSection", "docPartObj"]) {
+    if (new RegExp(`<[^:>]*:?${type}\\b`, "i").test(prXml)) {
+      return type;
+    }
+  }
+  return "unknown";
+}
+
+function docxContentControlProperties(sdtXml = "", sourcePart = "", fallbackIndex = 0) {
+  const prXml = String(sdtXml || "").match(/<[^:>]*:?sdtPr\b[\s\S]*?<\/[^:>]*:?sdtPr>/i)?.[0] || "";
+  return {
+    kind: "word-content-control",
+    id: xmlLocalAttribute(prXml.match(/<[^:>]*:?id\b[^>]*(?:\/>|>)/i)?.[0] || "", "val") || String(fallbackIndex || ""),
+    alias: xmlLocalAttribute(prXml.match(/<[^:>]*:?alias\b[^>]*(?:\/>|>)/i)?.[0] || "", "val"),
+    tag: xmlLocalAttribute(prXml.match(/<[^:>]*:?tag\b[^>]*(?:\/>|>)/i)?.[0] || "", "val"),
+    controlType: docxContentControlType(prXml),
+    lock: xmlLocalAttribute(prXml.match(/<[^:>]*:?lock\b[^>]*(?:\/>|>)/i)?.[0] || "", "val"),
+    sourcePart
+  };
+}
+
+function appendDocxContentControlElements(elements = [], xml = "", { sourcePart = "", lineStart = 0 } = {}) {
+  let count = 0;
+  for (const match of String(xml || "").matchAll(/<[^:>]*:?sdt\b[\s\S]*?<\/[^:>]*:?sdt>/g)) {
+    const sdtXml = match[0];
+    const text = compactMarkupText(
+      textFromXmlTextNodes(sdtXml.match(/<[^:>]*:?sdtContent\b[\s\S]*?<\/[^:>]*:?sdtContent>/i)?.[0] || sdtXml),
+      1600
+    );
+    if (!text) {
+      continue;
+    }
+    count += 1;
+    const control = docxContentControlProperties(sdtXml, sourcePart, count);
+    const label = control.alias || control.tag || control.id || `control-${count}`;
+    pushStructureElement(elements, "content-control", `Content control ${label}: ${text}`, {
+      line: lineStart + count,
+      name: `${sourcePart}#content-control-${control.id || count}`,
+      control,
+      limit: 1800
+    });
+  }
+  return count;
+}
+
+function appendDocxBookmarkElements(elements = [], xml = "", { sourcePart = "", lineStart = 0 } = {}) {
+  let count = 0;
+  for (const paragraphMatch of String(xml || "").matchAll(/<[^:>]*:?p\b[\s\S]*?<\/[^:>]*:?p>/g)) {
+    const paragraphXml = paragraphMatch[0];
+    for (const bookmarkMatch of paragraphXml.matchAll(/<[^:>]*:?bookmarkStart\b[^>]*(?:\/>|>)/g)) {
+      const tag = bookmarkMatch[0];
+      const id = xmlLocalAttribute(tag, "id") || String(count + 1);
+      const name = xmlLocalAttribute(tag, "name") || `bookmark-${id}`;
+      if (!name || /^_/.test(name)) {
+        continue;
+      }
+      const text = compactMarkupText(textFromXmlTextNodes(paragraphXml) || name, 1600);
+      if (!text) {
+        continue;
+      }
+      count += 1;
+      pushStructureElement(elements, "bookmark", `Bookmark ${name}: ${text}`, {
+        line: lineStart + count,
+        name: `${sourcePart}#bookmark-${name}`,
+        bookmark: {
+          kind: "word-bookmark",
+          id,
+          name,
+          sourcePart
+        },
+        limit: 1800
+      });
+    }
+  }
+  return count;
+}
+
 function removeDocxTables(xml = "") {
   return String(xml || "").replace(/<[^:>]*:?tbl\b[\s\S]*?<\/[^:>]*:?tbl>/g, " ");
 }
@@ -5200,6 +5280,8 @@ function parseDocx(entries = []) {
   let tableCount = 0;
   let tableRowCount = 0;
   let tableCellCount = 0;
+  let contentControlCount = 0;
+  let bookmarkCount = 0;
   let annotationCount = 0;
   let commentCount = 0;
   let footnoteCount = 0;
@@ -5217,6 +5299,14 @@ function parseDocx(entries = []) {
   for (const name of xmlNames) {
     const xml = zipEntryText(entries, name);
     const relationships = docxPartRelationships(entries, name);
+    contentControlCount += appendDocxContentControlElements(elements, xml, {
+      sourcePart: name,
+      lineStart: paragraphCount + tableRowCount + contentControlCount
+    });
+    bookmarkCount += appendDocxBookmarkElements(elements, xml, {
+      sourcePart: name,
+      lineStart: paragraphCount + tableRowCount + contentControlCount + bookmarkCount
+    });
     for (const tableMatch of xml.matchAll(/<[^:>]*:?tbl\b[\s\S]*?<\/[^:>]*:?tbl>/g)) {
       tableCount += 1;
       const table = appendDocxTableElements(elements, tableMatch[0], {
@@ -5307,6 +5397,8 @@ function parseDocx(entries = []) {
     tableCount,
     tableRowCount,
     tableCellCount,
+    contentControlCount,
+    bookmarkCount,
     annotationCount,
     commentCount,
     footnoteCount,
@@ -7728,6 +7820,8 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           tables: parsed.tableCount,
           tableRows: parsed.tableRowCount,
           tableCells: parsed.tableCellCount,
+          contentControls: parsed.contentControlCount,
+          bookmarks: parsed.bookmarkCount,
           annotations: parsed.annotationCount,
           comments: parsed.commentCount,
           footnotes: parsed.footnoteCount,
@@ -7764,6 +7858,16 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           tables: parsed.tableCount,
           rows: parsed.tableRowCount,
           cells: parsed.tableCellCount
+        },
+        {
+          stage: "office.word.content-controls",
+          status: parsed.contentControlCount ? "completed" : "empty",
+          contentControls: parsed.contentControlCount
+        },
+        {
+          stage: "office.word.bookmarks",
+          status: parsed.bookmarkCount ? "completed" : "empty",
+          bookmarks: parsed.bookmarkCount
         },
         {
           stage: "office.word.annotations",
@@ -9417,6 +9521,8 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
           tables: parsed.tableCount,
           tableRows: parsed.tableRowCount,
           tableCells: parsed.tableCellCount,
+          contentControls: parsed.contentControlCount,
+          bookmarks: parsed.bookmarkCount,
           annotations: parsed.annotationCount,
           comments: parsed.commentCount,
           footnotes: parsed.footnoteCount,
@@ -9453,6 +9559,16 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
           tables: parsed.tableCount,
           rows: parsed.tableRowCount,
           cells: parsed.tableCellCount
+        });
+        parserTrace.push({
+          stage: "office.word.content-controls",
+          status: parsed.contentControlCount ? "completed" : "empty",
+          contentControls: parsed.contentControlCount
+        });
+        parserTrace.push({
+          stage: "office.word.bookmarks",
+          status: parsed.bookmarkCount ? "completed" : "empty",
+          bookmarks: parsed.bookmarkCount
         });
         parserTrace.push({
           stage: "office.word.annotations",
@@ -9991,6 +10107,12 @@ function structureElementLine(element = {}) {
   const form = element.form?.name || element.form?.value
     ? ` form ${[element.form.name, element.form.value].filter(Boolean).join(":")}`
     : "";
+  const control = element.control?.alias || element.control?.tag || element.control?.id
+    ? ` control ${[element.control.alias || element.control.tag, element.control.id].filter(Boolean).join(":")}`
+    : "";
+  const bookmark = element.bookmark?.name
+    ? ` bookmark ${element.bookmark.name}`
+    : "";
   const merge = element.merge?.ref
     ? ` merge ${element.merge.ref}${element.merge.masterRef ? ` master ${element.merge.masterRef}` : ""}`
     : "";
@@ -9999,7 +10121,7 @@ function structureElementLine(element = {}) {
     : element.shape?.isPlaceholder
       ? " placeholder"
       : "";
-  return `Element ${element.type}${level}${name}${line}${style}${numbering}${shape}${placeholder}${image}${chart}${form}${merge}: ${element.text}${href}`;
+  return `Element ${element.type}${level}${name}${line}${style}${numbering}${shape}${placeholder}${image}${chart}${form}${control}${bookmark}${merge}: ${element.text}${href}`;
 }
 
 function structureElementTypeCounts(elements = []) {
@@ -10135,6 +10257,25 @@ function normalizedStructureElements(document = {}) {
             readOnly: Boolean(element.form.readOnly)
           }
         : null;
+      const control = element.control && typeof element.control === "object"
+        ? {
+            kind: String(element.control.kind || ""),
+            id: String(element.control.id || ""),
+            alias: String(element.control.alias || ""),
+            tag: String(element.control.tag || ""),
+            controlType: String(element.control.controlType || ""),
+            lock: String(element.control.lock || ""),
+            sourcePart: String(element.control.sourcePart || "")
+          }
+        : null;
+      const bookmark = element.bookmark && typeof element.bookmark === "object"
+        ? {
+            kind: String(element.bookmark.kind || ""),
+            id: String(element.bookmark.id || ""),
+            name: String(element.bookmark.name || ""),
+            sourcePart: String(element.bookmark.sourcePart || "")
+          }
+        : null;
       const merge = element.merge && typeof element.merge === "object"
         ? {
             ref: String(element.merge.ref || ""),
@@ -10240,6 +10381,8 @@ function normalizedStructureElements(document = {}) {
         image,
         chart,
         form,
+        control,
+        bookmark,
         merge,
         frontmatter,
         cells
@@ -10253,7 +10396,7 @@ function isHeadingStructureElement(element = {}) {
 }
 
 function isIsolatedStructureElement(element = {}) {
-  return ["table-header", "table-row", "merged-cell", "cell-comment", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note"].includes(element.type);
+  return ["table-header", "table-row", "merged-cell", "cell-comment", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "content-control", "bookmark", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note"].includes(element.type);
 }
 
 function headingLevelForElement(element = {}) {
@@ -10290,6 +10433,8 @@ function buildStructureWindowRecord(document = {}, index = 0, elements = [], hea
       image: element.image || null,
       chart: element.chart || null,
       form: element.form || null,
+      control: element.control || null,
+      bookmark: element.bookmark || null,
       merge: element.merge || null,
       frontmatter: element.frontmatter || null,
       cells: element.cells || [],
@@ -10410,6 +10555,8 @@ function buildDocumentElementPlan(document = {}, windowPlan = null) {
       image: element.image || null,
       chart: element.chart || null,
       form: element.form || null,
+      control: element.control || null,
+      bookmark: element.bookmark || null,
       merge: element.merge || null,
       frontmatter: element.frontmatter || null,
       cells: element.cells || []
@@ -10678,6 +10825,34 @@ function buildProfessionalQualityGateResults({ document = {}, profile = {}, evid
         observed: { listSignals, numberingRefCount: evidence.numberingRefCount },
         required: { numberingRefsWhenListItemsExist: true },
         message: status === "passed" ? "Word numbered/bulleted list references are preserved." : "No Word list references were required or observed."
+      });
+    }
+    if (gate === "word-content-control-refs-preserved") {
+      const contentControlRefCount = Number(evidence.contentControlRefCount || 0);
+      const controlSignals = maxTraceMetric(document, ["contentControls", "contentControlCount"]) || contentControlRefCount;
+      const status = routeId !== "word"
+        ? "not_applicable"
+        : controlSignals > 0
+          ? contentControlRefCount > 0 ? "passed" : "failed"
+          : "not_applicable";
+      return professionalGateRecord(gate, status, {
+        observed: { controlSignals, contentControlRefCount },
+        required: { contentControlRefsWhenPresent: true },
+        message: status === "passed" ? "Word content controls are preserved as structured element references." : "No Word content controls were required or observed."
+      });
+    }
+    if (gate === "word-bookmark-refs-preserved") {
+      const bookmarkRefCount = Number(evidence.bookmarkRefCount || 0);
+      const bookmarkSignals = maxTraceMetric(document, ["bookmarks", "bookmarkCount"]) || bookmarkRefCount;
+      const status = routeId !== "word"
+        ? "not_applicable"
+        : bookmarkSignals > 0
+          ? bookmarkRefCount > 0 ? "passed" : "failed"
+          : "not_applicable";
+      return professionalGateRecord(gate, status, {
+        observed: { bookmarkSignals, bookmarkRefCount },
+        required: { bookmarkRefsWhenPresent: true },
+        message: status === "passed" ? "Word bookmarks are preserved as structured element references." : "No Word bookmarks were required or observed."
       });
     }
     if (gate === "word-annotation-refs-preserved") {
@@ -11171,6 +11346,14 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
     const imageRefCount = sampleElements.filter((element) => element.type === "image" && element.href).length;
     const styleRefCount = sampleElements.filter((element) => element.style?.styleId).length;
     const numberingRefCount = sampleElements.filter((element) => element.style?.numberingId).length;
+    const contentControlRefCount = Math.max(
+      Number(elementTypes["content-control"] || 0),
+      sampleElements.filter((element) => element.type === "content-control" && element.control).length
+    );
+    const bookmarkRefCount = Math.max(
+      Number(elementTypes.bookmark || 0),
+      sampleElements.filter((element) => element.type === "bookmark" && element.bookmark).length
+    );
     const shapeRefCount = sampleElements.filter((element) => element.shape?.id || element.shape?.name).length;
     const placeholderRefCount = sampleElements.filter((element) => element.shape?.isPlaceholder || element.shape?.placeholderType).length;
     const chartRefCount = Math.max(
@@ -11204,6 +11387,8 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       imageRefCount,
       styleRefCount,
       numberingRefCount,
+      contentControlRefCount,
+      bookmarkRefCount,
       shapeRefCount,
       placeholderRefCount,
       chartRefCount,
@@ -11277,6 +11462,8 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       documentWithChartSeriesRefsCount: plannedDocuments.filter((document) => document.evidence.chartSeriesRefCount > 0).length,
       documentWithStyleRefsCount: plannedDocuments.filter((document) => document.evidence.styleRefCount > 0).length,
       documentWithNumberingRefsCount: plannedDocuments.filter((document) => document.evidence.numberingRefCount > 0).length,
+      documentWithContentControlRefsCount: plannedDocuments.filter((document) => document.evidence.contentControlRefCount > 0).length,
+      documentWithBookmarkRefsCount: plannedDocuments.filter((document) => document.evidence.bookmarkRefCount > 0).length,
       documentWithAnnotationsCount: plannedDocuments.filter((document) => document.evidence.annotationElementCount > 0).length,
       documentWithRevisionRefsCount: plannedDocuments.filter((document) => document.evidence.revisionRefCount > 0).length,
       documentWithPdfOutlineRefsCount: plannedDocuments.filter((document) => document.evidence.pdfOutlineRefCount > 0).length,
@@ -11796,6 +11983,8 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           tables: parsed.tableCount,
           tableRows: parsed.tableRowCount,
           tableCells: parsed.tableCellCount,
+          contentControls: parsed.contentControlCount,
+          bookmarks: parsed.bookmarkCount,
           annotations: parsed.annotationCount,
           comments: parsed.commentCount,
           footnotes: parsed.footnoteCount,
@@ -11829,6 +12018,16 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           tables: parsed.tableCount,
           rows: parsed.tableRowCount,
           cells: parsed.tableCellCount
+        });
+        parserTrace.push({
+          stage: "office.word.content-controls",
+          status: parsed.contentControlCount ? "completed" : "empty",
+          contentControls: parsed.contentControlCount
+        });
+        parserTrace.push({
+          stage: "office.word.bookmarks",
+          status: parsed.bookmarkCount ? "completed" : "empty",
+          bookmarks: parsed.bookmarkCount
         });
         parserTrace.push({
           stage: "office.word.annotations",
@@ -16947,6 +17146,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         "office.word.structured",
         "office.word.styles",
         "office.word.numbering",
+        "office.word.content-controls",
+        "office.word.bookmarks",
         "office.word.hyperlinks",
         "office.word.images",
         "office.word.charts",
@@ -16988,10 +17189,10 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       supported: true,
       strategy: "document-element-model.v1",
       windowingStrategy: "element-aware-by-title-windowing.v1",
-      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment"],
+      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "content-control", "bookmark", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment"],
       structuredFormats: ["markdown", "html", "xml", "asciidoc", "latex", "docx", "pptx", "xlsx", "open-document", "epub", "pdf"],
-      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
-      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
+      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
+      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
       referencePatterns: [
         "unstructured.elements",
         "unstructured.chunk_by_title",
@@ -17012,7 +17213,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       formatMatrix: professionalFormatMatrix(PROFESSIONAL_FORMAT_ORDER),
       humanReadableTargets: ["portable-markdown", "portable-docx", "console-summary-json", "workspace-package-zip"],
       agentReadableTargets: ["agent-message-json", "professional-format-manifest-json", "result-json", "evidence-pack-json"],
-      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders"],
+      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "contentControls", "bookmarks", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders"],
       qualityGates: uniqueOrdered(PROFESSIONAL_FORMAT_ORDER.flatMap((formatId) => (
         professionalFormatAdapter(formatId)?.qualityGates || []
       ))),
