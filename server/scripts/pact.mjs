@@ -1426,6 +1426,12 @@ async function runToolsCommand(args) {
       if (args["max-denied-rate"] || args.maxDeniedRate) {
         query.set("maxDeniedRate", String(args["max-denied-rate"] || args.maxDeniedRate));
       }
+      if (args["max-request-p95-ms"] || args.maxRequestP95Ms) {
+        query.set("maxRequestP95Ms", String(args["max-request-p95-ms"] || args.maxRequestP95Ms));
+      }
+      if (args["max-tool-p95-ms"] || args.maxToolP95Ms) {
+        query.set("maxToolP95Ms", String(args["max-tool-p95-ms"] || args.maxToolP95Ms));
+      }
       if (args["min-requests"] || args.minRequests) {
         query.set("minRequests", String(args["min-requests"] || args.minRequests));
       }
@@ -1453,6 +1459,12 @@ async function runToolsCommand(args) {
       }
       if (args["max-denied-rate"] || args.maxDeniedRate) {
         query.set("maxDeniedRate", String(args["max-denied-rate"] || args.maxDeniedRate));
+      }
+      if (args["max-request-p95-ms"] || args.maxRequestP95Ms) {
+        query.set("maxRequestP95Ms", String(args["max-request-p95-ms"] || args.maxRequestP95Ms));
+      }
+      if (args["max-tool-p95-ms"] || args.maxToolP95Ms) {
+        query.set("maxToolP95Ms", String(args["max-tool-p95-ms"] || args.maxToolP95Ms));
       }
       if (args["min-requests"] || args.minRequests) {
         query.set("minRequests", String(args["min-requests"] || args.minRequests));

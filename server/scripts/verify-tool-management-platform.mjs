@@ -279,16 +279,74 @@ try {
       bucket.requests.byTransport["tool-management"] >= 1
   ));
 
+  {
+    const healthMetricsDb = new Database(path.join(userDataPath, "tool-management", "tool-management.sqlite"), {
+      fileMustExist: true
+    });
+    try {
+      const createdAt = new Date().toISOString();
+      for (let index = 0; index < 3; index += 1) {
+        healthMetricsDb.prepare(`
+          INSERT INTO tool_metric_events (
+            metric_id, trace_id, tool_id, status, risk, duration_ms,
+            input_bytes, result_bytes, transfer_bytes, bytes_per_second, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          `metric_verify_latency_tool_${index}`,
+          `trace_verify_latency_${index}`,
+          "pact.knowledge.health",
+          "ok",
+          "read_only",
+          2500 + index,
+          13,
+          29,
+          42,
+          16.8,
+          createdAt
+        );
+        healthMetricsDb.prepare(`
+          INSERT INTO http_request_metric_events (
+            metric_id, trace_id, request_id, transport, method, route, status_code,
+            completion_status, request_bytes, response_bytes, transfer_bytes,
+            duration_ms, bytes_per_second, user_agent, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          `http_metric_verify_latency_${index}`,
+          `trace_verify_latency_${index}`,
+          `request_verify_latency_${index}`,
+          "tool-management",
+          "POST",
+          "/api/tool-management/v1/execute",
+          200,
+          "completed",
+          13,
+          29,
+          42,
+          3000 + index,
+          14,
+          "verify",
+          createdAt
+        );
+      }
+    } finally {
+      healthMetricsDb.close();
+    }
+  }
+
   const metricsHealthUrl = new URL(`${server.url}/api/tool-management/v1/metrics/health`);
   metricsHealthUrl.searchParams.set("windowSeconds", "3600");
   metricsHealthUrl.searchParams.set("maxDeniedRate", "0");
   metricsHealthUrl.searchParams.set("maxToolFailureRate", "1");
   metricsHealthUrl.searchParams.set("maxRequestErrorRate", "1");
+  metricsHealthUrl.searchParams.set("maxRequestP95Ms", "1");
+  metricsHealthUrl.searchParams.set("maxToolP95Ms", "1");
   const metricsHealth = await fetchJson(metricsHealthUrl.toString());
   assert.equal(metricsHealth.status, 200);
   assert.equal(metricsHealth.payload.health.schemaVersion, "pact.tool-management.metrics-health.v1");
   assert.equal(metricsHealth.payload.health.window.windowSeconds, 3600);
   assert.equal(metricsHealth.payload.health.thresholds.maxDeniedRate, 0);
+  assert.equal(metricsHealth.payload.health.thresholds.maxRequestP95Ms, 1);
+  assert.equal(metricsHealth.payload.health.thresholds.maxToolP95Ms, 1);
   assert.ok(["warn", "critical"].includes(metricsHealth.payload.health.status));
   assert.ok(metricsHealth.payload.health.toolCalls.total >= 2);
   assert.ok(metricsHealth.payload.health.toolCalls.callsPerMinute >= 0);
@@ -299,6 +357,8 @@ try {
   assert.ok(metricsHealth.payload.health.requests.transferBytesPerSecond >= 0);
   assertDurationPercentiles(metricsHealth.payload.health.requests.durationPercentiles);
   assert.ok(metricsHealth.payload.health.breaches.some((breach) => breach.code === "tool_denied_rate"));
+  assert.ok(metricsHealth.payload.health.breaches.some((breach) => breach.code === "request_p95_duration_ms"));
+  assert.ok(metricsHealth.payload.health.breaches.some((breach) => breach.code === "tool_p95_duration_ms"));
   assert.ok(metricsHealth.payload.health.toolCalls.topTools.some((item) =>
     item.toolId === "pact.knowledge.health"
   ));
@@ -585,6 +645,10 @@ try {
       "--window-seconds",
       "3600",
       "--max-denied-rate",
+      "1",
+      "--max-request-p95-ms",
+      "1",
+      "--max-tool-p95-ms",
       "1"
     ],
     { env: process.env }
@@ -597,6 +661,8 @@ try {
   assertDurationPercentiles(cliHealthPayload.health.toolCalls.durationPercentiles);
   assert.ok(cliHealthPayload.health.requests.total >= 1);
   assertDurationPercentiles(cliHealthPayload.health.requests.durationPercentiles);
+  assert.ok(cliHealthPayload.health.breaches.some((breach) => breach.code === "request_p95_duration_ms"));
+  assert.ok(cliHealthPayload.health.breaches.some((breach) => breach.code === "tool_p95_duration_ms"));
 
   const cliPrometheus = await execFileAsync(
     process.execPath,
@@ -610,6 +676,10 @@ try {
       "--window-seconds",
       "3600",
       "--max-denied-rate",
+      "1",
+      "--max-request-p95-ms",
+      "1",
+      "--max-tool-p95-ms",
       "1"
     ],
     { env: process.env }

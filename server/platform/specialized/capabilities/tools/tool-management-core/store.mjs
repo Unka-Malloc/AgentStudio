@@ -768,6 +768,17 @@ function normalizeMetricThreshold(value, fallback) {
   return Math.min(parsed, 1);
 }
 
+function normalizeMetricDurationThreshold(value, fallback = 0) {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback;
+  }
+  return Number(Math.min(parsed, 86_400_000).toFixed(2));
+}
+
 function safeFileSize(filePath) {
   try {
     return fs.statSync(filePath).size;
@@ -1997,6 +2008,8 @@ export function createToolManagementStore({
     maxRequestErrorRate = 0.05,
     maxToolFailureRate = 0.05,
     maxDeniedRate = 0.2,
+    maxRequestP95Ms = 0,
+    maxToolP95Ms = 0,
     minRequests = 0
   } = {}) {
     const normalizedWindowSeconds = normalizeMetricWindowSeconds(windowSeconds);
@@ -2004,6 +2017,8 @@ export function createToolManagementStore({
       maxRequestErrorRate: normalizeMetricThreshold(maxRequestErrorRate, 0.05),
       maxToolFailureRate: normalizeMetricThreshold(maxToolFailureRate, 0.05),
       maxDeniedRate: normalizeMetricThreshold(maxDeniedRate, 0.2),
+      maxRequestP95Ms: normalizeMetricDurationThreshold(maxRequestP95Ms, 0),
+      maxToolP95Ms: normalizeMetricDurationThreshold(maxToolP95Ms, 0),
       minRequests: Math.max(0, Math.floor(Number(minRequests || 0) || 0))
     };
     const endedAt = nowIso();
@@ -2147,6 +2162,14 @@ export function createToolManagementStore({
         threshold: thresholds.maxRequestErrorRate
       });
     }
+    if (thresholds.maxRequestP95Ms > 0 && requests.durationPercentiles.p95Ms > thresholds.maxRequestP95Ms) {
+      breaches.push({
+        code: "request_p95_duration_ms",
+        severity: "warn",
+        observed: requests.durationPercentiles.p95Ms,
+        threshold: thresholds.maxRequestP95Ms
+      });
+    }
     if (toolCalls.failureRate > thresholds.maxToolFailureRate) {
       breaches.push({
         code: "tool_failure_rate",
@@ -2161,6 +2184,14 @@ export function createToolManagementStore({
         severity: "warn",
         observed: toolCalls.deniedRate,
         threshold: thresholds.maxDeniedRate
+      });
+    }
+    if (thresholds.maxToolP95Ms > 0 && toolCalls.durationPercentiles.p95Ms > thresholds.maxToolP95Ms) {
+      breaches.push({
+        code: "tool_p95_duration_ms",
+        severity: "warn",
+        observed: toolCalls.durationPercentiles.p95Ms,
+        threshold: thresholds.maxToolP95Ms
       });
     }
     const status = breaches.some((breach) => breach.severity === "critical")

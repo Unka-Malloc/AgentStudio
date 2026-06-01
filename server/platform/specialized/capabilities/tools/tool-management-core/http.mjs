@@ -406,6 +406,9 @@ export function createToolManagementHttpRouter({
           maxToolFailureRate: url.searchParams.get("maxToolFailureRate") ||
             url.searchParams.get("max-tool-failure-rate") || "",
           maxDeniedRate: url.searchParams.get("maxDeniedRate") || url.searchParams.get("max-denied-rate") || "",
+          maxRequestP95Ms: url.searchParams.get("maxRequestP95Ms") ||
+            url.searchParams.get("max-request-p95-ms") || "",
+          maxToolP95Ms: url.searchParams.get("maxToolP95Ms") || url.searchParams.get("max-tool-p95-ms") || "",
           minRequests: Number(url.searchParams.get("minRequests") || url.searchParams.get("min-requests") || 0)
         })
       });
@@ -422,6 +425,9 @@ export function createToolManagementHttpRouter({
         maxToolFailureRate: url.searchParams.get("maxToolFailureRate") ||
           url.searchParams.get("max-tool-failure-rate") || "",
         maxDeniedRate: url.searchParams.get("maxDeniedRate") || url.searchParams.get("max-denied-rate") || "",
+        maxRequestP95Ms: url.searchParams.get("maxRequestP95Ms") ||
+          url.searchParams.get("max-request-p95-ms") || "",
+        maxToolP95Ms: url.searchParams.get("maxToolP95Ms") || url.searchParams.get("max-tool-p95-ms") || "",
         minRequests: Number(url.searchParams.get("minRequests") || url.searchParams.get("min-requests") || 0)
       }), "text/plain; version=0.0.4; charset=utf-8");
     }
