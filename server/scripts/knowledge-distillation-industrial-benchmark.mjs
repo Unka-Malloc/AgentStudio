@@ -8,6 +8,11 @@ const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const serviceRoot = path.join(repoRoot, "external-services/knowledge-distillation-service");
 const referenceManifestPath = path.join(serviceRoot, "reference-frameworks.json");
 const serviceServerPath = path.join(serviceRoot, "server.mjs");
+const serviceConfigPaths = Object.freeze([
+  path.join(serviceRoot, "format-routes.json"),
+  path.join(serviceRoot, "parser-strategies.json"),
+  path.join(serviceRoot, "format-conversion-profiles.json")
+]);
 
 const REFERENCE_SOURCE_MARKERS = Object.freeze({
   ragflow: {
@@ -65,6 +70,7 @@ const ABSORPTION_REQUIREMENTS = Object.freeze([
       "office.presentation.slides",
       "table.sheet.structured",
       "office-document-professional-adaptation.v1",
+      "singleton-format-conversion-profile-registry.v1",
       "format-conversion-output-artifact-self-check.v1"
     ]
   },
@@ -251,10 +257,12 @@ function buildAbsorptionMatrix(serviceText = "", referenceAudits = []) {
 }
 
 async function buildExternalIndustrialBenchmark() {
-  const [manifest, serviceText] = await Promise.all([
+  const [manifest, serviceSourceText, ...serviceConfigTexts] = await Promise.all([
     readJson(referenceManifestPath),
-    fs.readFile(serviceServerPath, "utf8")
+    fs.readFile(serviceServerPath, "utf8"),
+    ...serviceConfigPaths.map((configPath) => fs.readFile(configPath, "utf8"))
   ]);
+  const serviceText = [serviceSourceText, ...serviceConfigTexts].join("\n");
   const frameworks = Array.isArray(manifest.frameworks) ? manifest.frameworks : [];
   const frameworkIds = frameworks.map((framework) => String(framework.id || ""));
   const referenceAudits = frameworks.map(gitReferenceAudit);
@@ -268,6 +276,7 @@ async function buildExternalIndustrialBenchmark() {
     "human-agent-response-profile-separation.v1",
     "professional-format-manifest-json",
     "office-document-professional-adaptation.v1",
+    "singleton-format-conversion-profile-registry.v1",
     "visio-opc-shape-parser.v1",
     "directory-file-ref-recursive-routing.v1",
     "PROJECT_EVIDENCE_QUERY_STRATEGY",

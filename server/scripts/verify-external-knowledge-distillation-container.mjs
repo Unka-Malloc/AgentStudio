@@ -460,6 +460,9 @@ try {
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategyCount >= 145, true);
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.builtInParserCount >= 103, true);
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.routeBoundStrategyCount >= 105, true);
+  assert.equal(capabilities.payload.formatConversion.profileRegistry.protocolVersion, "pact.external-knowledge-distillation.format-conversion-profiles.v1");
+  assert.equal(capabilities.payload.formatConversion.profileRegistry.strategy, "singleton-format-conversion-profile-registry.v1");
+  assert.equal(capabilities.payload.formatConversion.profileRegistry.profileCount, 7);
   assert.equal(capabilities.payload.classification.strategy, "hashing_embedding_window_community_classification_v3");
   assert.equal(capabilities.payload.classification.taxonomyStrategy, "semantic-concept-topic-hierarchy.v1");
   assert.equal(capabilities.payload.classification.assignmentRationaleStrategy, "leader-clustering-semantic-concept-rationale.v1");

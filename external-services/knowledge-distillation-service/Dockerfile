@@ -22,6 +22,7 @@ COPY server.mjs /app/server.mjs
 COPY reference-frameworks.json /app/reference-frameworks.json
 COPY format-routes.json /app/format-routes.json
 COPY parser-strategies.json /app/parser-strategies.json
+COPY format-conversion-profiles.json /app/format-conversion-profiles.json
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0

@@ -295,6 +295,9 @@ const FORMAT_ROUTES_CONFIG_STRATEGY = "singleton-format-route-registry.v1";
 const PARSER_STRATEGIES_CONFIG_PATH = path.join(SERVICE_ROOT, "parser-strategies.json");
 const PARSER_STRATEGIES_CONFIG_PROTOCOL_VERSION = "pact.external-knowledge-distillation.parser-strategies.v1";
 const PARSER_STRATEGIES_CONFIG_STRATEGY = "singleton-parser-strategy-registry.v1";
+const FORMAT_CONVERSION_PROFILES_CONFIG_PATH = path.join(SERVICE_ROOT, "format-conversion-profiles.json");
+const FORMAT_CONVERSION_PROFILES_CONFIG_PROTOCOL_VERSION = "pact.external-knowledge-distillation.format-conversion-profiles.v1";
+const FORMAT_CONVERSION_PROFILES_CONFIG_STRATEGY = "singleton-format-conversion-profile-registry.v1";
 
 function normalizeFormatRouteArray(value = []) {
   return Array.from(new Set((Array.isArray(value) ? value : [])
@@ -494,303 +497,114 @@ for (const route of FORMAT_ROUTES) {
   }
 }
 
-const PROFESSIONAL_FORMAT_ORDER = Object.freeze(["pdf", "word", "presentation", "visio", "spreadsheet", "markdown", "open-document"]);
-const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
-  pdf: {
-    label: "PDF",
-    professionalFamily: "pdf",
-    parserProfile: "pdf.text-layout-ocr-route",
-    structureUnits: ["page", "pdf-text-block", "layout-run", "link", "pdf-outline", "pdf-form-field", "ocr-page"],
-    parserStages: ["pdf.text.basic", "pdf.text.pdftotext", "pdf.hyperlinks", "pdf.outlines", "pdf.form-fields", "pdf.visual.layout", "ocr.page"],
-    preserves: ["page", "bbox", "layout.order", "layout.fontSize", "links", "outline", "formFields"],
-    conversionTargets: ["markdown-with-page-blocks", "docx-review-copy", "agent-json-with-layout-and-link-refs", "evidence-pack"],
-    conversionAdapters: [
-      {
-        target: "portable-markdown",
-        targetFormat: "markdown",
-        adapter: "pdf-pages-to-markdown.v1",
-        mode: "human",
-        stages: ["page-anchor-headings", "layout-block-order", "utf8-markdown"]
-      },
-      {
-        target: "portable-docx",
-        targetFormat: "docx",
-        adapter: "pdf-pages-to-docx-review.v1",
-        mode: "human",
-        stages: ["page-section-breaks", "layout-notes", "openxml-package"]
-      },
-      {
-        target: "agent-message-json",
-        targetFormat: "agent-json",
-        adapter: "pdf-layout-to-agent-elements.v1",
-        mode: "agent",
-        stages: ["page-bbox-element-refs", "link-refs", "outline-refs", "form-field-refs", "window-ids", "content-hashes"]
-      },
-      {
-        target: "evidence-pack-json",
-        targetFormat: "graph-evidence",
-        adapter: "pdf-windows-to-graph-evidence.v1",
-        mode: "agent",
-        stages: ["text-units", "entities", "claims"]
-      }
-    ],
-    qualityGates: ["page-order-preserved", "bbox-metadata-present-when-available", "pdf-link-refs-preserved", "pdf-outline-refs-preserved", "pdf-form-fields-preserved", "empty-corpus-blocked"],
-    riskControls: ["font-mapping-risk", "image-only-pdf-ocr-fallback", "layout-geometry-approximation"],
-    knownLosses: ["approximate-text-bbox", "complex-vector-layout-not-fully-reconstructed"]
-  },
-  word: {
-    label: "Word",
-    professionalFamily: "office-word",
-    parserProfile: "wordprocessingml-paragraph-style-route",
-    structureUnits: ["heading", "paragraph", "list-item", "paragraph-style", "numbering-ref", "table-row", "header", "footer", "content-control", "bookmark", "link", "image", "chart", "comment", "footnote", "endnote", "revision"],
-    parserStages: ["office.word.structured", "office.word.styles", "office.word.numbering", "office.word.tables", "office.word.headers-footers", "office.word.content-controls", "office.word.bookmarks", "office.word.annotations", "office.word.revisions", "office.word.hyperlinks", "office.word.images", "office.word.charts", "tika.text"],
-    preserves: ["headings", "paragraphs", "paragraphStyles", "listLevels", "lists", "tables", "cellRefs", "headers", "footers", "contentControls", "bookmarks", "links", "images", "charts", "chartSeries", "comments", "footnotes", "endnotes", "revisions"],
-    conversionTargets: ["markdown-outline", "valid-openxml-docx", "agent-json-with-word-style-list-table-link-and-annotation-refs", "evidence-pack"],
-    conversionAdapters: [
-      {
-        target: "portable-markdown",
-        targetFormat: "markdown",
-        adapter: "word-elements-to-markdown-outline.v1",
-        mode: "human",
-        stages: ["heading-outline", "table-markdown", "annotation-sections"]
-      },
-      {
-        target: "portable-docx",
-        targetFormat: "docx",
-        adapter: "word-elements-to-valid-openxml.v1",
-        mode: "human",
-        stages: ["paragraph-styles", "table-grid", "openxml-package"]
-      },
-      {
-        target: "agent-message-json",
-        targetFormat: "agent-json",
-        adapter: "word-elements-to-agent-refs.v1",
-        mode: "agent",
-        stages: ["element-refs", "paragraph-style-refs", "numbering-refs", "table-cell-refs", "header-footer-refs", "content-control-refs", "bookmark-refs", "link-refs", "image-refs", "chart-refs", "annotation-refs", "revision-refs"]
-      },
-      {
-        target: "evidence-pack-json",
-        targetFormat: "graph-evidence",
-        adapter: "word-windows-to-graph-evidence.v1",
-        mode: "agent",
-        stages: ["text-units", "relationships", "claims"]
-      }
-    ],
-    qualityGates: ["docx-openxml-package-valid", "word-paragraph-style-refs-preserved", "word-list-refs-preserved", "word-table-cell-refs-preserved", "word-header-footer-refs-preserved", "word-content-control-refs-preserved", "word-bookmark-refs-preserved", "word-link-refs-preserved", "word-image-refs-preserved", "word-chart-refs-preserved", "word-annotation-refs-preserved", "word-revision-refs-preserved"],
-    riskControls: ["legacy-doc-tika-fallback", "advanced-style-loss-reporting", "tracked-changes-preserved-when-present"],
-    knownLosses: ["advanced-openxml-styling-not-rendered"]
-  },
-  presentation: {
-    label: "PowerPoint",
-    professionalFamily: "office-presentation",
-    parserProfile: "presentationml-slide-route",
-    structureUnits: ["slide", "slide-layout", "slide-master", "heading", "placeholder", "slide-shape", "table-row", "link", "image", "chart", "speaker-note", "comment"],
-    parserStages: ["office.presentation.slides", "office.presentation.layouts", "office.presentation.placeholders", "office.presentation.tables", "office.presentation.hyperlinks", "office.presentation.images", "office.presentation.charts", "office.presentation.speaker-notes", "office.presentation.comments", "tika.text", "ocr.slide-images"],
-    preserves: ["slide-order", "slide-heading", "slide-layout", "slide-master", "body-paragraphs", "shape-id", "shape-name", "shape-placeholder", "shape-bbox", "shape-order", "tables", "cellRefs", "links", "images", "charts", "chartSeries", "speaker-notes", "comments"],
-    conversionTargets: ["markdown-slide-outline", "docx-review-copy", "agent-json-with-slide-layout-placeholder-table-link-and-note-refs", "evidence-pack"],
-    conversionAdapters: [
-      {
-        target: "portable-markdown",
-        targetFormat: "markdown",
-        adapter: "slides-to-markdown-outline.v1",
-        mode: "human",
-        stages: ["slide-headings", "shape-order", "table-markdown"]
-      },
-      {
-        target: "portable-docx",
-        targetFormat: "docx",
-        adapter: "slides-to-docx-review.v1",
-        mode: "human",
-        stages: ["slide-sections", "shape-bullets", "openxml-package"]
-      },
-      {
-        target: "agent-message-json",
-        targetFormat: "agent-json",
-        adapter: "slides-to-agent-layout-refs.v1",
-        mode: "agent",
-        stages: ["slide-refs", "slide-layout-refs", "slide-master-refs", "shape-placeholder-refs", "shape-bbox-refs", "table-cell-refs", "link-refs", "image-refs", "chart-refs", "speaker-note-refs", "comment-refs"]
-      },
-      {
-        target: "evidence-pack-json",
-        targetFormat: "graph-evidence",
-        adapter: "slides-to-graph-evidence.v1",
-        mode: "agent",
-        stages: ["text-units", "slide-relationships", "claims"]
-      }
-    ],
-    qualityGates: ["slide-order-preserved", "presentation-layout-master-refs-preserved", "presentation-placeholder-refs-preserved", "shape-layout-refs-present", "presentation-table-cell-refs-preserved", "presentation-link-refs-preserved", "presentation-image-refs-preserved", "presentation-chart-refs-preserved", "presentation-speaker-notes-preserved", "presentation-comment-refs-preserved"],
-    riskControls: ["speaker-notes-preserved-when-notesSlides-present", "comments-preserved-when-comment-parts-present", "raster-only-slide-ocr-fallback"],
-    knownLosses: ["visual-layer-geometry-partial"]
-  },
-  visio: {
-    label: "Visio",
-    professionalFamily: "office-drawing",
-    parserProfile: "visio-opc-page-shape-route",
-    structureUnits: ["page", "visio-shape", "visio-connector", "shape-text", "shape-bbox"],
-    parserStages: ["office.visio.pages", "office.visio.shapes", "office.visio.connectors", "office.visio.text", "tika.text"],
-    preserves: ["page-order", "shape-id", "shape-name", "shape-text", "shape-bbox", "shape-order", "connectors"],
-    conversionTargets: ["markdown-page-outline", "docx-review-copy", "agent-json-with-visio-shape-and-connector-refs", "evidence-pack"],
-    conversionAdapters: [
-      {
-        target: "portable-markdown",
-        targetFormat: "markdown",
-        adapter: "visio-pages-to-markdown-outline.v1",
-        mode: "human",
-        stages: ["page-headings", "shape-order", "connector-notes"]
-      },
-      {
-        target: "portable-docx",
-        targetFormat: "docx",
-        adapter: "visio-pages-to-docx-review.v1",
-        mode: "human",
-        stages: ["page-sections", "shape-bullets", "connector-table", "openxml-package"]
-      },
-      {
-        target: "agent-message-json",
-        targetFormat: "agent-json",
-        adapter: "visio-elements-to-agent-refs.v1",
-        mode: "agent",
-        stages: ["page-refs", "shape-id-name-refs", "shape-bbox-refs", "connector-refs", "window-ids"]
-      },
-      {
-        target: "evidence-pack-json",
-        targetFormat: "graph-evidence",
-        adapter: "visio-windows-to-graph-evidence.v1",
-        mode: "agent",
-        stages: ["text-units", "shape-relationships", "claims"]
-      }
-    ],
-    qualityGates: ["visio-page-order-preserved", "visio-shape-refs-preserved", "visio-shape-layout-refs-present", "visio-connector-refs-preserved", "empty-corpus-blocked"],
-    riskControls: ["legacy-vsd-tika-fallback", "shape-geometry-approximation"],
-    knownLosses: ["advanced-visio-style-and-master-rendering-not-reconstructed"]
-  },
-  spreadsheet: {
-    label: "Excel",
-    professionalFamily: "office-spreadsheet",
-    parserProfile: "spreadsheetml-sheet-row-cell-route",
-    structureUnits: ["workbook-sheet", "defined-name", "named-range", "print-area", "sheet", "table-header", "table-row", "merged-cell", "cell-comment", "cell", "formula", "hyperlink", "chart", "time-signal"],
-    parserStages: ["table.sheet.structured", "table.workbook.sheets", "table.workbook.defined-names", "table.sheet.headers", "table.sheet.cells", "table.sheet.merged-cells", "table.sheet.comments", "table.sheet.date-styles", "table.sheet.formulas", "table.sheet.hyperlinks", "table.sheet.charts", "table.time-index"],
-    preserves: ["sheet", "sheetName", "sheetId", "sheetState", "worksheetPath", "definedNames", "namedRanges", "printAreas", "row", "column", "cellRefs", "headers", "mergedCells", "cellComments", "dateStyles", "dateSerials", "formulas", "hyperlinks", "charts", "chartSeries", "timeSignals"],
-    conversionTargets: ["markdown-tables", "docx-review-copy", "agent-json-with-workbook-sheet-cell-coordinates-and-formulas", "evidence-pack"],
-    conversionAdapters: [
-      {
-        target: "portable-markdown",
-        targetFormat: "markdown",
-        adapter: "sheets-to-markdown-tables.v1",
-        mode: "human",
-        stages: ["sheet-sections", "header-row-capture", "formula-notes", "hyperlink-notes"]
-      },
-      {
-        target: "portable-docx",
-        targetFormat: "docx",
-        adapter: "sheets-to-docx-review-tables.v1",
-        mode: "human",
-        stages: ["sheet-heading", "table-grid", "openxml-package"]
-      },
-      {
-        target: "agent-message-json",
-        targetFormat: "agent-json",
-        adapter: "sheets-to-agent-cell-refs.v1",
-        mode: "agent",
-        stages: ["workbook-sheet-refs", "defined-name-refs", "named-range-refs", "cell-coordinate-refs", "merged-cell-refs", "cell-comment-refs", "date-serial-refs", "formula-refs", "hyperlink-refs", "chart-refs", "time-signals"]
-      },
-      {
-        target: "evidence-pack-json",
-        targetFormat: "graph-evidence",
-        adapter: "sheets-to-graph-evidence.v1",
-        mode: "agent",
-        stages: ["row-text-units", "entity-columns", "claim-values"]
-      }
-    ],
-    qualityGates: ["spreadsheet-workbook-sheet-refs-preserved", "spreadsheet-defined-name-refs-preserved", "sheet-row-cell-refs-preserved", "spreadsheet-merged-cell-refs-preserved", "spreadsheet-comment-refs-preserved", "spreadsheet-date-serials-normalized", "formula-text-preserved", "spreadsheet-hyperlink-refs-preserved", "spreadsheet-chart-refs-preserved", "table-time-index-when-date-columns-exist"],
-    riskControls: ["formula-results-not-recomputed"],
-    knownLosses: ["formula-results-not-recomputed"]
-  },
-  markdown: {
-    label: "Markdown",
-    professionalFamily: "markdown",
-    parserProfile: "markdown-block-element-route",
-    structureUnits: ["frontmatter", "frontmatter-field", "heading", "paragraph", "list-item", "blockquote", "table-row", "code", "code-fence", "link", "image"],
-    parserStages: ["text.markdown", "markdown.frontmatter", "markdown.structure"],
-    preserves: ["heading-levels", "tables", "codeBlocks", "blockquotes", "links", "images", "frontmatter"],
-    conversionTargets: ["clean-markdown", "valid-openxml-docx", "agent-json-with-block-refs", "evidence-pack"],
-    conversionAdapters: [
-      {
-        target: "portable-markdown",
-        targetFormat: "markdown",
-        adapter: "markdown-normalized-clean.v1",
-        mode: "human",
-        stages: ["frontmatter-section", "heading-tree", "table-and-code-blocks"]
-      },
-      {
-        target: "portable-docx",
-        targetFormat: "docx",
-        adapter: "markdown-blocks-to-valid-openxml.v1",
-        mode: "human",
-        stages: ["heading-styles", "table-grid", "code-paragraphs", "openxml-package"]
-      },
-      {
-        target: "agent-message-json",
-        targetFormat: "agent-json",
-        adapter: "markdown-blocks-to-agent-refs.v1",
-        mode: "agent",
-        stages: ["block-refs", "frontmatter-refs", "heading-paths", "code-block-refs", "blockquote-refs", "link-refs"]
-      },
-      {
-        target: "evidence-pack-json",
-        targetFormat: "graph-evidence",
-        adapter: "markdown-windows-to-graph-evidence.v1",
-        mode: "agent",
-        stages: ["text-units", "entities", "claims"]
-      }
-    ],
-    qualityGates: ["heading-tree-preserved", "markdown-frontmatter-refs-preserved", "markdown-table-blocks-preserved", "markdown-code-blocks-preserved", "markdown-blockquote-refs-preserved", "markdown-link-refs-preserved", "markdown-image-refs-preserved", "docx-openxml-package-valid"],
-    riskControls: ["custom-extension-loss-reporting", "image-reference-preservation"],
-    knownLosses: ["custom-markdown-extension-rendering-not-normalized"]
-  },
-  "open-document": {
-    label: "OpenDocument",
-    professionalFamily: "opendocument",
-    parserProfile: "opendocument-content-xml-route",
-    structureUnits: ["heading", "paragraph", "table-row", "cell", "link"],
-    parserStages: ["open-document.structured", "open-document.tables", "open-document.hyperlinks", "tika.text"],
-    preserves: ["headings", "paragraphs", "tables", "cellRefs", "links"],
-    conversionTargets: ["markdown-outline", "docx-review-copy", "agent-json-with-opendocument-cell-and-link-refs", "evidence-pack"],
-    conversionAdapters: [
-      {
-        target: "portable-markdown",
-        targetFormat: "markdown",
-        adapter: "odf-elements-to-markdown-outline.v1",
-        mode: "human",
-        stages: ["heading-outline", "table-markdown", "content-xml-order"]
-      },
-      {
-        target: "portable-docx",
-        targetFormat: "docx",
-        adapter: "odf-elements-to-docx-review.v1",
-        mode: "human",
-        stages: ["paragraph-styles", "table-grid", "openxml-package"]
-      },
-      {
-        target: "agent-message-json",
-        targetFormat: "agent-json",
-        adapter: "odf-elements-to-agent-refs.v1",
-        mode: "agent",
-        stages: ["element-refs", "table-cell-refs", "link-refs"]
-      },
-      {
-        target: "evidence-pack-json",
-        targetFormat: "graph-evidence",
-        adapter: "odf-windows-to-graph-evidence.v1",
-        mode: "agent",
-        stages: ["text-units", "entities", "claims"]
-      }
-    ],
-    qualityGates: ["odf-content-order-preserved", "opendocument-table-cell-refs-preserved", "opendocument-link-refs-preserved", "empty-corpus-blocked"],
-    riskControls: ["advanced-odf-style-loss-reporting"],
-    knownLosses: ["advanced-odf-styling-not-rendered"]
+function normalizeFormatConversionAdapterArray(value = []) {
+  return (Array.isArray(value) ? value : []).map((adapter = {}) => Object.freeze({
+    target: String(adapter.target || "").trim(),
+    targetFormat: String(adapter.targetFormat || "").trim(),
+    adapter: String(adapter.adapter || "").trim(),
+    mode: String(adapter.mode || "").trim(),
+    stages: Object.freeze(normalizeFormatRouteArray(adapter.stages))
+  })).filter((adapter) => adapter.target && adapter.targetFormat && adapter.adapter && adapter.mode);
+}
+
+function validateFormatConversionProfilesConfig(config = {}, routes = [], parserStrategies = []) {
+  if (config.protocolVersion !== FORMAT_CONVERSION_PROFILES_CONFIG_PROTOCOL_VERSION) {
+    throw new Error(`Invalid format conversion profiles config protocolVersion: ${config.protocolVersion || "missing"}`);
   }
-});
+  if (config.strategy !== FORMAT_CONVERSION_PROFILES_CONFIG_STRATEGY) {
+    throw new Error(`Invalid format conversion profiles config strategy: ${config.strategy || "missing"}`);
+  }
+  if (!Array.isArray(config.profiles) || config.profiles.length === 0) {
+    throw new Error("format-conversion-profiles.json must contain non-empty profiles[]");
+  }
+  const routeIds = new Set(routes.map((route) => route.id));
+  const parserStrategyIds = new Set(parserStrategies.map((strategy) => strategy.id));
+  const profileIds = new Set();
+  for (const [index, profile] of config.profiles.entries()) {
+    const routeId = String(profile?.routeId || "").trim();
+    if (!routeId) {
+      throw new Error(`format conversion profile at index ${index} is missing routeId`);
+    }
+    if (profileIds.has(routeId)) {
+      throw new Error(`Duplicate format conversion profile routeId: ${routeId}`);
+    }
+    if (!routeIds.has(routeId)) {
+      throw new Error(`format conversion profile ${routeId} has no matching format route`);
+    }
+    profileIds.add(routeId);
+    for (const field of ["label", "professionalFamily", "parserProfile"]) {
+      if (!String(profile?.[field] || "").trim()) {
+        throw new Error(`format conversion profile ${routeId} is missing ${field}`);
+      }
+    }
+    for (const field of ["structureUnits", "parserStages", "preserves", "conversionTargets", "conversionAdapters", "qualityGates", "riskControls", "knownLosses"]) {
+      if (!Array.isArray(profile?.[field])) {
+        throw new Error(`format conversion profile ${routeId} must define ${field}[]`);
+      }
+    }
+    for (const parserStage of normalizeFormatRouteArray(profile.parserStages)) {
+      if (!parserStrategyIds.has(parserStage)) {
+        throw new Error(`format conversion profile ${routeId} references missing parser stage ${parserStage}`);
+      }
+    }
+    const adapters = normalizeFormatConversionAdapterArray(profile.conversionAdapters);
+    if (adapters.length === 0) {
+      throw new Error(`format conversion profile ${routeId} must define conversionAdapters[]`);
+    }
+  }
+  const order = normalizeFormatRouteArray(config.profileOrder);
+  for (const routeId of order) {
+    if (!profileIds.has(routeId)) {
+      throw new Error(`format conversion profileOrder references missing profile ${routeId}`);
+    }
+  }
+  return {
+    profileCount: profileIds.size,
+    profileOrder: order.length ? order : Array.from(profileIds)
+  };
+}
+
+function normalizeFormatConversionProfile(profile = {}, registry = {}) {
+  return Object.freeze({
+    routeId: String(profile.routeId || "").trim(),
+    label: String(profile.label || "").trim(),
+    professionalFamily: String(profile.professionalFamily || "").trim(),
+    parserProfile: String(profile.parserProfile || "").trim(),
+    structureUnits: Object.freeze(normalizeFormatRouteArray(profile.structureUnits)),
+    parserStages: Object.freeze(normalizeFormatRouteArray(profile.parserStages)),
+    preserves: Object.freeze(normalizeFormatRouteArray(profile.preserves)),
+    conversionTargets: Object.freeze(normalizeFormatRouteArray(profile.conversionTargets)),
+    conversionAdapters: Object.freeze(normalizeFormatConversionAdapterArray(profile.conversionAdapters)),
+    qualityGates: Object.freeze(normalizeFormatRouteArray(profile.qualityGates)),
+    riskControls: Object.freeze(normalizeFormatRouteArray(profile.riskControls)),
+    knownLosses: Object.freeze(normalizeFormatRouteArray(profile.knownLosses)),
+    registry
+  });
+}
+
+function loadFormatConversionProfiles(routes = [], parserStrategies = []) {
+  const parsed = JSON.parse(fsSync.readFileSync(FORMAT_CONVERSION_PROFILES_CONFIG_PATH, "utf8"));
+  const summary = validateFormatConversionProfilesConfig(parsed, routes, parserStrategies);
+  const registry = Object.freeze({
+    protocolVersion: FORMAT_CONVERSION_PROFILES_CONFIG_PROTOCOL_VERSION,
+    strategy: FORMAT_CONVERSION_PROFILES_CONFIG_STRATEGY,
+    source: "external-services/knowledge-distillation-service/format-conversion-profiles.json",
+    profileCount: summary.profileCount,
+    validation: "startup-fail-fast"
+  });
+  const profiles = Object.freeze(parsed.profiles.map((profile) => normalizeFormatConversionProfile(profile, registry)));
+  const profilesByRouteId = new Map(profiles.map((profile) => [profile.routeId, profile]));
+  return Object.freeze({
+    registry,
+    order: Object.freeze(summary.profileOrder),
+    profiles,
+    adapters: Object.freeze(Object.fromEntries(summary.profileOrder.map((routeId) => [routeId, profilesByRouteId.get(routeId)])))
+  });
+}
+
+const FORMAT_CONVERSION_PROFILES = loadFormatConversionProfiles(FORMAT_ROUTES, PARSER_STRATEGIES);
+const PROFESSIONAL_FORMAT_ORDER = FORMAT_CONVERSION_PROFILES.order;
+const PROFESSIONAL_FORMAT_ADAPTERS = FORMAT_CONVERSION_PROFILES.adapters;
 
 const MEDIA_TYPE_BY_EXTENSION = new Map(Object.entries({
   ".html": "text/html",
@@ -19852,6 +19666,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "bounded-binary-file-profile.v1",
       FORMAT_ROUTES_CONFIG_STRATEGY,
       PARSER_STRATEGIES_CONFIG_STRATEGY,
+      FORMAT_CONVERSION_PROFILES_CONFIG_STRATEGY,
       DOCUMENT_PARSING_MODULE_BOUNDARY,
       DISTILLATION_ALGORITHM_MODULE_BOUNDARY,
       MODEL_DISTILLATION_MODULE_BOUNDARY,
@@ -20004,6 +19819,13 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
     formatConversion: {
       supported: true,
       strategy: "office-document-professional-adaptation.v1",
+      profileRegistry: {
+        protocolVersion: FORMAT_CONVERSION_PROFILES_CONFIG_PROTOCOL_VERSION,
+        strategy: FORMAT_CONVERSION_PROFILES_CONFIG_STRATEGY,
+        source: "external-services/knowledge-distillation-service/format-conversion-profiles.json",
+        profileCount: FORMAT_CONVERSION_PROFILES.profiles.length,
+        validation: "startup-fail-fast"
+      },
       qualityGateEvaluationStrategy: "professional-format-quality-gates.v1",
       outputArtifactValidationStrategy: "format-conversion-output-artifact-self-check.v1",
       artifact: "format-conversion-plan-json",

@@ -1496,12 +1496,18 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("human-agent-response-profile-separation.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("professional-format-manifest.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("bounded-binary-file-profile.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("singleton-format-conversion-profile-registry.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("visio-opc-shape-parser.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("timed-transcript-cue-parser.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("xbrl-financial-fact-parser.v1"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("markdown.frontmatter"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("markdown.structure"), true);
   assert.equal(capabilities.payload.formatConversion.strategy, "office-document-professional-adaptation.v1");
+  assert.equal(capabilities.payload.formatConversion.profileRegistry.protocolVersion, "pact.external-knowledge-distillation.format-conversion-profiles.v1");
+  assert.equal(capabilities.payload.formatConversion.profileRegistry.strategy, "singleton-format-conversion-profile-registry.v1");
+  assert.equal(capabilities.payload.formatConversion.profileRegistry.source, "external-services/knowledge-distillation-service/format-conversion-profiles.json");
+  assert.equal(capabilities.payload.formatConversion.profileRegistry.profileCount, 7);
+  assert.equal(capabilities.payload.formatConversion.profileRegistry.validation, "startup-fail-fast");
   assert.equal(capabilities.payload.formatConversion.qualityGateEvaluationStrategy, "professional-format-quality-gates.v1");
   assert.equal(capabilities.payload.formatConversion.outputArtifactValidationStrategy, "format-conversion-output-artifact-self-check.v1");
   assert.equal(capabilities.payload.formatConversion.artifact, "format-conversion-plan-json");

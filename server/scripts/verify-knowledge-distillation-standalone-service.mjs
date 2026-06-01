@@ -18,6 +18,7 @@ const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const externalServiceEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/server.mjs");
 const formatRoutesConfigEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/format-routes.json");
 const parserStrategiesConfigEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/parser-strategies.json");
+const formatConversionProfilesConfigEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/format-conversion-profiles.json");
 
 const REQUIRED_STANDALONE_DEPENDENCIES = Object.freeze([
   "core-platform",
@@ -252,6 +253,7 @@ for (const removePath of REQUIRED_LEGACY_REMOVE_PATHS) {
 const externalServiceSource = await fs.readFile(externalServiceEntry, "utf8");
 const formatRoutesConfig = JSON.parse(await fs.readFile(formatRoutesConfigEntry, "utf8"));
 const parserStrategiesConfig = JSON.parse(await fs.readFile(parserStrategiesConfigEntry, "utf8"));
+const formatConversionProfilesConfig = JSON.parse(await fs.readFile(formatConversionProfilesConfigEntry, "utf8"));
 assert.equal(
   formatRoutesConfig.protocolVersion,
   "pact.external-knowledge-distillation.format-routes.v1",
@@ -341,6 +343,43 @@ assert.equal(
   externalServiceSource.includes("const PARSER_STRATEGIES = loadParserStrategies(FORMAT_ROUTES);"),
   true,
   "server.mjs must load parser strategies from the singleton config after format routes"
+);
+assert.equal(
+  formatConversionProfilesConfig.protocolVersion,
+  "pact.external-knowledge-distillation.format-conversion-profiles.v1",
+  "external knowledge distillation must keep format conversion profiles in a versioned singleton config"
+);
+assert.equal(
+  formatConversionProfilesConfig.strategy,
+  "singleton-format-conversion-profile-registry.v1",
+  "external knowledge distillation must load format conversion profiles through the singleton registry"
+);
+assert.deepEqual(
+  formatConversionProfilesConfig.profileOrder,
+  ["pdf", "word", "presentation", "visio", "spreadsheet", "markdown", "open-document"],
+  "format conversion profiles must preserve professional document priority order"
+);
+const routeIds = new Set(formatRoutesConfig.routes.map((route) => route.id));
+for (const profile of formatConversionProfilesConfig.profiles) {
+  assert.ok(routeIds.has(profile.routeId), `format conversion profile ${profile.routeId} must bind to a known format route`);
+  for (const parserStage of profile.parserStages || []) {
+    assert.ok(parserStrategyIds.has(parserStage), `format conversion profile ${profile.routeId} must use registered parser stage ${parserStage}`);
+  }
+  assert.equal(
+    (profile.conversionAdapters || []).some((adapter) => adapter.targetFormat === "docx"),
+    true,
+    `format conversion profile ${profile.routeId} must keep a DOCX conversion adapter`
+  );
+  assert.equal(
+    (profile.conversionAdapters || []).some((adapter) => adapter.targetFormat === "agent-json"),
+    true,
+    `format conversion profile ${profile.routeId} must keep an agent JSON conversion adapter`
+  );
+}
+assert.equal(
+  externalServiceSource.includes("const FORMAT_CONVERSION_PROFILES = loadFormatConversionProfiles(FORMAT_ROUTES, PARSER_STRATEGIES);"),
+  true,
+  "server.mjs must load format conversion profiles from the singleton config after parser strategies"
 );
 assert.equal(
   externalServiceSource.includes("runQueue: {"),
