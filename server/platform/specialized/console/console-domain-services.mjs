@@ -26,7 +26,6 @@ import {
   toPublicDocumentParsingResult
 } from "../knowledge/preprocessing/document-parsing-runtime.mjs";
 import { enhanceAffairTaxonomy } from "../knowledge/preprocessing/domain/knowledge-taxonomy/service.mjs";
-import { createKnowledgeDistillationWorkbench } from "../knowledge/invocation/knowledge-distillation-workbench/index.mjs";
 import { executeConsoleDomainOperation } from "./console-domain-operation-executor.mjs";
 import {
   buildAgentSettingsConsoleProjection as buildAgentSettingsConsoleProjectionBase,
@@ -97,7 +96,6 @@ export function createConsoleDomainServices() {
     createDocumentParsingRuntime,
     toPublicDocumentParsingResult,
     enhanceAffairTaxonomy,
-    createKnowledgeDistillationWorkbench,
     buildAgentSettingsConsoleProjection: (input = {}) =>
       buildAgentSettingsConsoleProjectionBase({
         ...input,

@@ -72,7 +72,6 @@ const contributionRegistries = new Map();
 const codespaceRegistries = new Map();
 const cloudDrivePorts = new Map();
 const knowledgeBackendPorts = new Map();
-const knowledgeDistillationWorkbenchInstances = new Map();
 const PATH_BROWSER_MAX_ENTRIES = 600;
 const EXTERNAL_KNOWLEDGE_DISTILLATION_SERVICE_ID = "external.knowledge.distillation";
 const EXTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_PREFIX = "external.knowledge.distillation.";
@@ -798,28 +797,6 @@ function getKnowledgeCore(runtime) {
     return null;
   }
   return mount;
-}
-
-function getKnowledgeDistillationWorkbench(context = {}) {
-  if (context.knowledgeDistillationWorkbench) {
-    return context.knowledgeDistillationWorkbench;
-  }
-  if (typeof context.createKnowledgeDistillationWorkbench !== "function") {
-    return null;
-  }
-  const key = context.userDataPath || "default";
-  if (!knowledgeDistillationWorkbenchInstances.has(key)) {
-    knowledgeDistillationWorkbenchInstances.set(
-      key,
-      context.createKnowledgeDistillationWorkbench({
-        userDataPath: context.userDataPath,
-        jobManager: context.jobWorkflowProvider,
-        knowledgeDistillationRuntime: context.knowledgeDistillationRuntime,
-        queueMonitor: context.queueMonitor
-      })
-    );
-  }
-  return knowledgeDistillationWorkbenchInstances.get(key);
 }
 
 async function publishProtocolEvent(protocolEventBus, topic, payload, options = {}) {
@@ -5435,176 +5412,6 @@ async function executeKnowledgeDistillationWorkflowOperation({ operationId, inpu
   }
 
   return result(410, internalKnowledgeDistillationRemovedPayload(id));
-
-  if (id === "knowledge.distillation.runs.create" || id === "knowledge.distillation.runs.get") {
-    const runtime = context.knowledgeDistillationRuntime;
-    if (!runtime) {
-      return result(503, { error: "知识蒸馏运行时不可用。" });
-    }
-    if (id === "knowledge.distillation.runs.create") {
-      const operationResult = await runtime.runDistillation(input);
-      await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation", operationResult, {
-        type: "knowledge.distillation.completed"
-      });
-      return result(201, operationResult);
-    }
-    const operationResult = await runtime.getRun({ runId: input.runId || input["run-id"] || input.id || "" });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏任务不存在。" });
-    }
-    return result(200, operationResult);
-  }
-
-  const workbench = getKnowledgeDistillationWorkbench(context);
-  if (!workbench) {
-    return result(503, { error: "知识蒸馏工作台运行时不可用。" });
-  }
-  const runId = input.runId || input["run-id"] || input.id || "";
-
-  if (id === "knowledge.distillation.workbench.runs.list") {
-    return result(200, await workbench.listRuns({
-      limit: Number(input.limit || 50),
-      includeArchived: parseBooleanFlag(input.includeArchived ?? input["include-archived"], false)
-    }));
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.create") {
-    const operationResult = await workbench.createRun(input);
-    await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation.workbench", operationResult, {
-      type: "knowledge.distillation.workbench.created"
-    });
-    return result(202, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.get") {
-    const operationResult = await workbench.getRun({ runId });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台任务不存在。" });
-    }
-    return result(200, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.resume") {
-    const operationResult = await workbench.resumeRun({ runId });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台任务不存在。" });
-    }
-    await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation.workbench", operationResult, {
-      type: "knowledge.distillation.workbench.resumed"
-    });
-    return result(202, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.cancel") {
-    const operationResult = await workbench.cancelRun({
-      runId,
-      reason: input.reason || input.message || ""
-    });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台任务不存在。" });
-    }
-    await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation.workbench", operationResult, {
-      type: "knowledge.distillation.workbench.canceled"
-    });
-    return result(202, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.archive") {
-    const operationResult = await workbench.archiveRun({ runId });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台任务不存在。" });
-    }
-    await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation.workbench", operationResult, {
-      type: "knowledge.distillation.workbench.archived"
-    });
-    return result(202, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.delete") {
-    const operationResult = await workbench.deleteRun({ runId });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台任务不存在。" });
-    }
-    await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation.workbench", operationResult, {
-      type: "knowledge.distillation.workbench.deleted"
-    });
-    return result(200, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.stage.rerun") {
-    try {
-      const operationResult = await workbench.rerunStage({
-        runId,
-        stageId: input.stageId || input["stage-id"] || input.stage || ""
-      });
-      if (!operationResult) {
-        return result(404, { error: "知识蒸馏工作台任务不存在。" });
-      }
-      await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation.workbench", operationResult, {
-        type: "knowledge.distillation.workbench.stage.rerun"
-      });
-      return result(202, operationResult);
-    } catch (error) {
-      return result(error?.code === "UNKNOWN_STAGE" ? 400 : 500, {
-        error: error instanceof Error ? error.message : "重跑知识蒸馏阶段失败。"
-      });
-    }
-  }
-
-  if (id === "knowledge.distillation.workbench.stage.export") {
-    const operationResult = await workbench.exportStage({
-      runId,
-      stageId: input.stageId || input["stage-id"] || input.stage || "",
-      format: input.format || "markdown"
-    });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台阶段导出不存在。" });
-    }
-    return result(200, {
-      __binaryResponse: true,
-      contentType: operationResult.contentType,
-      disposition: "attachment",
-      fileName: operationResult.fileName,
-      buffer: operationResult.buffer,
-      headers: { "X-Pact-Knowledge-Export": "distillation-workbench" }
-    });
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.artifacts") {
-    const operationResult = await workbench.listRunArtifacts({ runId });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台产物信息不存在。" });
-    }
-    return result(200, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.package") {
-    const operationResult = await workbench.exportRunPackage({ runId });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台整包导出不存在。" });
-    }
-    return result(200, {
-      __binaryResponse: true,
-      contentType: operationResult.contentType,
-      disposition: "attachment",
-      fileName: operationResult.fileName,
-      buffer: operationResult.buffer,
-      headers: { "X-Pact-Knowledge-Export": "distillation-workbench-package" }
-    });
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.compare") {
-    const operationResult = await workbench.compareRuns({
-      leftRunId: runId,
-      rightRunId: input.rightRunId || input["right-run-id"] || input.right || ""
-    });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台比较对象不存在。" });
-    }
-    return result(200, operationResult);
-  }
-
-  return null;
 }
 
 async function executeAgentExplorationOperation({ operationId, input, context }) {
@@ -6887,6 +6694,9 @@ async function executeKnowledgeTransformationOperation({ operationId, input = {}
   ]);
   if (!handledOperations.has(id)) {
     return null;
+  }
+  if (id === "knowledge.distillation.export") {
+    return result(410, internalKnowledgeDistillationRemovedPayload(id));
   }
   const provider = createKnowledgeTransformationProvider({
     knowledgeCore: getKnowledgeCore(context.runtime),

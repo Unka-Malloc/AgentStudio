@@ -2,14 +2,14 @@
 
 状态：章节化落地版调整计划
 日期：2026-05-31
-版本：v2.1
-适用范围：内建知识蒸馏、独立知识蒸馏服务、控制台、智能体 API、导出链路
+版本：v2.2
+适用范围：独立知识蒸馏服务、控制台、智能体 API、导出链路；平台内部知识蒸馏实现仅作为迁移期废弃入口
 
 ---
 
 ## 0. 文档定位
 
-本文件是 Pact 知识蒸馏能力的整改计划，不是单点修补清单。目标是把当前偏“文件解析 + LLM 总结”的链路，升级为单机可部署、证据可追溯、算法可验证、智能体可直接调用的知识提炼系统。
+本文件是 Pact 知识蒸馏能力的整改计划，不是单点修补清单。目标是把当前偏“文件解析 + LLM 总结”的链路，收敛为单机可部署、证据可追溯、算法可验证、智能体可直接调用的独立知识蒸馏服务。
 
 本文作为后续知识蒸馏改造的主执行文档：新增算法、解析器、导出链路、外部服务能力和 verifier，都必须回填到对应章节，避免计划继续分散到临时说明里。
 
@@ -19,11 +19,11 @@
 
 本计划覆盖以下边界：
 
-- 内建模块：`server/platform/specialized/knowledge/`
+- 独立服务主线：`external-services/knowledge-distillation-service/`
+- 外部服务适配：`server/platform/specialized/knowledge/invocation/external-distillation-service/`
+- 废弃迁移壳：`knowledge.distillation.*` 与 `knowledge.distillation.workbench.*` 只返回迁移报文，不再承载算法演进
 - Tika 与文件归一化：`server/platform/modules/knowledge/file-processor/`
 - 控制台工作台：`server-web/components/KnowledgeDistillationWorkbench.vue`
-- 外部服务：`external-services/knowledge-distillation-service/`
-- 平台注册：`server/platform/specialized/knowledge/invocation/external-distillation-service/`
 - 验证脚本：`server/scripts/verify-*knowledge*distillation*.mjs`
 
 ---
@@ -39,7 +39,8 @@
 - raw corpus 为空时硬拦截，禁止假成功。
 - 蒸馏结果必须携带来源、时间线、证据、置信度和失败边界。
 - 控制台输出面向用户，智能体输出机器可读。
-- 内建能力和外部服务明确命名，外部能力统一使用 `external.*`。
+- 外部能力统一使用 `external.*`；知识蒸馏唯一维护服务名为 `external.knowledge.distillation`。
+- 平台内部知识蒸馏运行时停止装载，旧接口只保留 `410` 迁移报文和机器可读替代操作。
 - 单机部署可运行，OrbStack 容器可验证，离线包可自检。
 
 ---
@@ -86,7 +87,7 @@ flowchart TD
 | 12 | 时间线 | `eventTime`/`documentTime`/`ingestedAt`/`distilledAt` 四类时间 | 智能体可按时间段、置信度和证据强度过滤 |
 | 13 | 响应 | `console`、`agent`、`api` 三类 response profile | 用户不看机器 trace，智能体能读重试动作 |
 | 14 | 导出 | Markdown、DOCX、JSON、ZIP、Agent JSON | Word/Xcode/解压工具可打开产物 |
-| 15 | 服务边界 | 内建模块与 `external.*` 外部能力共存 | Pact 可注册并调用独立知识蒸馏服务 |
+| 15 | 服务边界 | `external.knowledge.distillation` 成为唯一维护面，内部入口废弃 | Pact 可注册并调用独立知识蒸馏服务，内部入口不再暴露给智能体 |
 | 16 | 验证 | 样本集、verifier、CI 轻重分层 | 历史故障全部进入回归 |
 
 ### 2.2 实施依赖顺序
@@ -113,28 +114,28 @@ flowchart LR
 
 ### 2.3 当前实现状态与调整落点
 
-这份计划按“已经落地的外部服务基线 + 仍需回填的内建平台能力”组织，避免把可用 baseline 和最终目标混在一起。
+这份计划按“已经落地的外部服务基线 + 仍需继续增强的独立服务能力 + 内部模块删除路径”组织，避免把可用 baseline、最终目标和迁移壳混在一起。
 
 | 层级 | 当前可用基线 | 后续调整落点 |
 | --- | --- | --- |
-| 文件路由 | 外部服务已按 extension/media/source kind 生成 `routePlan`，PDF 额外输出 `pdf-subtype-routing.v1` 和 `pdfProfile`，可区分文本 PDF、扫描 PDF、字体映射风险 PDF、图片密集 PDF、加密 PDF 和空/未知 PDF | 内建 file processor 与 Tika 调用前也必须统一 route-first，并回填 PDF 子类型字段 |
-| 解析链 | 外部服务已覆盖文本、配置、Markdown frontmatter/block/code fence/blockquote、标记语言、图表、Notebook、源码、diff/patch、日历事件、PDF、OOXML、OpenDocument、EPUB、EML/MSG/MBOX 邮件、压缩包、OCR/Tika fallback，并把 Markdown frontmatter key/value refs/code-fence language-line refs/blockquote refs、markup、OOXML、OpenDocument、EPUB、基础 PDF 文本、PDF text-operator geometry、PDF URI annotation links、PDF outline/bookmark refs、PDF AcroForm/widget fields、Word paragraph styles/numbering refs/header/footer/content controls/bookmarks/hyperlinks/images/charts/comments/footnotes/endnotes/revisions、Word/PowerPoint/OpenDocument table cells、OpenDocument hyperlinks、PowerPoint slide layout/master 继承 refs、shape id/name/placeholders/geometry/hyperlinks/images/charts/speaker notes/comments、Excel workbook sheet name/id/state/path、defined names/named ranges/print areas、cell coordinates、merged-cell ranges、cell comments、SpreadsheetML date styles/date serials/formulas/hyperlinks/charts 纳入 `document-element-model.v1` | 内建解析器补齐 parser trace、runtime doctor、配置/标记语言/图表/Notebook/源码/变更集/日历文档路由和 PDF 子类型判定 |
-| Raw Corpus | 外部服务已用 `EMPTY_RAW_CORPUS` 拦截空语料 | 内建 workbench 同步禁止假成功，并暴露用户/智能体双响应 |
+| 文件路由 | 外部服务已按 extension/media/source kind 生成 `routePlan`，PDF 额外输出 `pdf-subtype-routing.v1` 和 `pdfProfile`，可区分文本 PDF、扫描 PDF、字体映射风险 PDF、图片密集 PDF、加密 PDF 和空/未知 PDF | 继续只在外部服务增强 route-first 和 PDF 子类型字段，内部入口不再回填算法能力 |
+| 解析链 | 外部服务已覆盖文本、配置、Markdown frontmatter/block/code fence/blockquote、标记语言、图表、Notebook、源码、diff/patch、日历事件、PDF、OOXML、OpenDocument、EPUB、EML/MSG/MBOX 邮件、压缩包、OCR/Tika fallback，并把 Markdown frontmatter key/value refs/code-fence language-line refs/blockquote refs、markup、OOXML、OpenDocument、EPUB、基础 PDF 文本、PDF text-operator geometry、PDF URI annotation links、PDF outline/bookmark refs、PDF AcroForm/widget fields、Word paragraph styles/numbering refs/header/footer/content controls/bookmarks/hyperlinks/images/charts/comments/footnotes/endnotes/revisions、Word/PowerPoint/OpenDocument table cells、OpenDocument hyperlinks、PowerPoint slide layout/master 继承 refs、shape id/name/placeholders/geometry/hyperlinks/images/charts/speaker notes/comments、Excel workbook sheet name/id/state/path、defined names/named ranges/print areas、cell coordinates、merged-cell ranges、cell comments、SpreadsheetML date styles/date serials/formulas/hyperlinks/charts 纳入 `document-element-model.v1` | 继续在外部服务补齐专业解析；内部解析器只作为非蒸馏知识入库能力，不承接知识蒸馏算法升级 |
+| Raw Corpus | 外部服务已用 `EMPTY_RAW_CORPUS` 拦截空语料 | 内部 workbench 不再维护；旧入口返回迁移报文 |
 | 大文件 | 外部服务已支持 mounted file refs、streaming JSONL document manifests、archive refs、chunked windowing、大 JSON/JSONC file-ref streaming，并对 mounted Office/OpenDocument/EPUB 结构包执行结构 entry 选择、bounded native parse 和 large-entry streaming fallback | 上传、manifest、解析、蒸馏三层统一流式窗口协议 |
-| 分类蒸馏 | 外部服务 baseline 为 `hashing_embedding_window_community_classification_v3`，已输出语义概念主题层级、分组理由、低耦合高内聚指标和垃圾排除原因 | 内建运行时升级 embedding cosine、低耦合高内聚分组和垃圾池 |
-| Grounding | 外部服务已做 claim-evidence top-k、冲突证据和 promotion gate | 内建运行时补 claim 级门禁和无证据结论拦截 |
+| 分类蒸馏 | 外部服务 baseline 为 `hashing_embedding_window_community_classification_v3`，已输出语义概念主题层级、分组理由、低耦合高内聚指标和垃圾排除原因 | 后续分类算法只在外部服务升级 embedding cosine、低耦合高内聚分组和垃圾池 |
+| Grounding | 外部服务已做 claim-evidence top-k、冲突证据和 promotion gate | 后续 claim 级门禁和无证据结论拦截只进入外部服务 |
 | 时间线 | 表格日期已进入 `timeRange`、`timeConfidence`、`timeSignals` | 扩展到邮件、元数据、正文日期，并提供 agent 查询过滤 |
-| 项目收敛 | 外部服务已有 `hierarchical-domain-topic-project-convergence.v3`、project-domain/domainReports、cross-domain links、agent query index、project snapshot、incremental reuse plan 和 project evidence query | 内建知识库接入窗口 hash、增量重算、domain/topic/community/source/time 读模型和项目级 convergence |
+| 项目收敛 | 外部服务已有 `hierarchical-domain-topic-project-convergence.v3`、project-domain/domainReports、cross-domain links、agent query index、project snapshot、incremental reuse plan 和 project evidence query | 后续窗口 hash、增量重算、domain/topic/community/source/time 读模型和项目级 convergence 只进入外部服务 |
 | 图证据 | 外部服务已有 graph-lite evidence pack、run evidence query 和跨 run project evidence query | 接入更多智能体检索策略和项目级图谱查询 |
-| 导出 | 外部服务产出 Markdown、DOCX、JSON、Agent JSON、snapshot、evidence pack、workspace ZIP，并为 PDF/Word/PowerPoint/Excel/Markdown/OpenDocument 输出专业格式适配矩阵、转换 adapter、质量门禁和风险边界 | 内建继续复用 openability、manifest size/hash、专业格式转换矩阵和 bridge 下载统一规则 |
-| 服务边界 | `external.knowledge.distillation` 可作为独立服务注册 | 外部能力继续采用 `external.*` 命名，内建模块保留平台内部名称 |
+| 导出 | 外部服务产出 Markdown、DOCX、JSON、Agent JSON、snapshot、evidence pack、workspace ZIP，并为 PDF/Word/PowerPoint/Excel/Markdown/OpenDocument 输出专业格式适配矩阵、转换 adapter、质量门禁和风险边界 | 旧内部导出入口废弃，下载/openability/manifest 规则只按外部服务产物验收 |
+| 服务边界 | `external.knowledge.distillation` 可作为独立服务注册 | 外部能力继续采用 `external.*` 命名，内部知识蒸馏运行时停止装载并进入删除路径 |
 | 验证 | 已有外部服务、容器和平台注册 verifier | 增补 routing、grounding、timeline、export-openability 全量回归 |
 
 ### 2.4 分层边界
 
 | 层级 | 范围 | 不接受的结果 |
 | --- | --- | --- |
-| 平台边界层 | 内建知识蒸馏、`external.knowledge.distillation`、普通 API、Agent 工具注册 | 内外服务同名、控制台私有接口被智能体直接依赖 |
+| 平台边界层 | `external.knowledge.distillation`、普通 API、Agent 工具注册、内部迁移壳 | 内部算法入口继续暴露给智能体，或旧接口绕过外部服务继续运行 |
 | 输入路由层 | 文件类型、媒体类型、内容形态、调用函数和 fallback 决策 | 未判断格式就直接交给 Tika 或模型 |
 | 解析运行时层 | Java/Tika、PDF 视觉解析、OCR、Office/Archive/Email parser 的能力自检 | 缺依赖时只返回“执行失败” |
 | Raw Corpus 层 | 文本、表格、页面、slide、sheet、邮件线程、图表节点和源码 symbol 的证据化 | 空语料继续进入蒸馏并生成假成功 |
@@ -449,13 +450,13 @@ raw corpus item 标准字段：
 算法路径：
 
 - 当前独立服务先用确定性 token/Jaccard 做 baseline。
-- 后续内建运行时升级为 embedding cosine。
+- 后续只在独立服务中升级 embedding cosine 或更强语义聚类。
 - 大项目再叠加 GraphRAG 风格 community report。
 
 落地位置：
 
 - `external-services/knowledge-distillation-service/server.mjs`
-- `server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/index.mjs`
+- `server/platform/specialized/knowledge/invocation/external-distillation-service/index.mjs`
 
 验收：
 
@@ -666,15 +667,15 @@ raw corpus item 标准字段：
 
 ---
 
-## 15. 服务边界层：内建能力与外部服务
+## 15. 服务边界层：外部服务唯一维护面
 
-目标：内部深度嵌合能力和外部独立服务可以共存。
+目标：知识蒸馏算法只在独立部署服务中演进；平台内部实现进入删除路径，不再作为维护对象。
 
 命名规则：
 
-- 内建模块继续使用现有知识蒸馏模块名。
 - 外部服务统一使用 `external.*`。
-- 当前外部知识蒸馏服务名：`external.knowledge.distillation`。
+- 知识蒸馏唯一维护服务名：`external.knowledge.distillation`。
+- 旧 `knowledge.distillation.*` 和 `knowledge.distillation.workbench.*` 是迁移壳，不属于可维护算法面。
 - 后续外部能力示例：
   - `external.icloud`
   - `external.mail`
@@ -683,9 +684,18 @@ raw corpus item 标准字段：
 
 调用边界：
 
-- 控制台可以调用内建能力或已注册外部服务。
+- 控制台只调用已注册外部服务或迁移壳返回的替代指引。
 - 智能体可直接访问授权后的 `external.knowledge.distillation`。
 - 普通 API 可绕过控制台和智能体，直接使用稳定接口。
+- 内部知识蒸馏运行时不再由 server runtime provider 装载。
+
+删除路径：
+
+- `server/platform/interactive/server-runtime-providers.mjs` 不再动态加载 `knowledge-distillation-runtime/index.mjs`。
+- `server/platform/specialized/console/console-domain-services.mjs` 不再导入内部 workbench。
+- `knowledge.distillation.*` 与 `knowledge.distillation.workbench.*` 在 Operation Registry 中标记 `deprecated: true`、`replacementService: external.knowledge.distillation`、`maintenancePolicy: compatibility-shim-only`。
+- Tool Management 不暴露任何内部知识蒸馏操作，智能体只能发现 `pact.external.knowledge.distillation.*`。
+- 后续删除内部文件时，先迁移仍依赖内部 runtime 的验证脚本和历史兼容样本，再移除 `server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/` 与 `knowledge-distillation-workbench/`。
 
 落地位置：
 
@@ -699,6 +709,8 @@ raw corpus item 标准字段：
 - 新 OrbStack 容器能启动独立服务。
 - Pact 平台能注册并调用外部服务。
 - 智能体工具目录可发现并调用该能力。
+- 旧内部入口返回机器可读 `INTERNAL_KNOWLEDGE_DISTILLATION_REMOVED`。
+- `server:verify:external-service-api-registration` 阻止内部知识蒸馏重新进入 Tool Management 或 server runtime provider。
 
 ---
 
@@ -794,4 +806,4 @@ Verifier：
 - 智能体能按时间段检索并排除弱证据。
 - 控制台、智能体、API 三类响应互不混淆。
 - Markdown、DOCX、JSON、ZIP 可下载、可打开、可复核。
-- 内建能力和 `external.knowledge.distillation` 均可单机部署和验证。
+- `external.knowledge.distillation` 可单机部署和验证，内部知识蒸馏模块已删除。

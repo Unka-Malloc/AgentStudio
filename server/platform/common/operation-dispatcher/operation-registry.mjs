@@ -4,6 +4,44 @@ import {
 } from "./operation-decorators.mjs";
 import { PROTOCOL_OPERATION_DEFINITIONS } from "./protocol-operation-definitions.mjs";
 
+const INTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_DEPRECATION = Object.freeze({
+  deprecated: true,
+  replacementService: "external.knowledge.distillation",
+  replacementOperationPrefix: "external.knowledge.distillation.",
+  lifecycle: Object.freeze({
+    status: "deprecated",
+    reason: "Internal knowledge distillation is being removed; the independently deployed external service is the only maintained algorithm surface.",
+    maintenancePolicy: "compatibility-shim-only",
+    removalTarget: "remove internal knowledge distillation modules after console callers migrate",
+    replacementService: "external.knowledge.distillation"
+  })
+});
+
+const INTERNAL_KNOWLEDGE_DISTILLATION_DEPRECATED_ASPECTS = Object.freeze([
+  "knowledge-distillation",
+  "internal-deprecated",
+  "external-replaced"
+]);
+
+function internalKnowledgeDistillationOperation(operation = {}) {
+  return {
+    ...operation,
+    ...INTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_DEPRECATION,
+    description: operation.description ||
+      "Deprecated internal knowledge distillation compatibility endpoint. Use external.knowledge.distillation instead.",
+    lifecycle: {
+      ...INTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_DEPRECATION.lifecycle,
+      ...(operation.lifecycle || {})
+    },
+    aspects: [
+      ...new Set([
+        ...INTERNAL_KNOWLEDGE_DISTILLATION_DEPRECATED_ASPECTS,
+        ...(operation.aspects || [])
+      ])
+    ]
+  };
+}
+
 const REPO_OPERATION_SPECS = Object.freeze([
   ["repo.status", "repo:read", "查看代码库对象状态", ["repoId", "targetType"], "read_only", true],
   ["repo.file.read", "repo:read", "读取代码库文件", ["repoId", "path"], "read_only", true],
@@ -3148,7 +3186,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     cli: { command: ["knowledge", "gold-cases", "save"], usage: "knowledge gold-cases save --body gold-case.json" },
     requiredScopes: ["knowledge:maintain"]
   },
-  {
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.runs.create",
     feature: "knowledge",
     label: "创建知识蒸馏任务",
@@ -3164,8 +3202,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       ]
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.runs.get",
     feature: "knowledge",
     label: "读取知识蒸馏任务",
@@ -3181,12 +3219,12 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:read"]
-  },
+  }),
   {
     id: "external.knowledge.distillation.service.health",
     feature: "external",
     label: "外部知识蒸馏服务健康检查",
-    description: "Health probe for the registered external knowledge distillation service. Internal knowledge.distillation.* APIs are not affected.",
+    description: "Health probe for the registered external knowledge distillation service. Deprecated internal knowledge.distillation.* APIs only return migration metadata.",
     target: { controller: "system", method: "handleExternalKnowledgeDistillationHealth" },
     http: {
       method: "GET",
@@ -3482,7 +3520,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     binary: true,
     aspects: ["external-service", "knowledge-distillation", "result-export"]
   },
-  {
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.list",
     feature: "knowledge",
     label: "列出知识蒸馏工作台任务",
@@ -3497,8 +3535,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       usage: "knowledge distillation workbench list [--limit 50]"
     },
     requiredScopes: ["knowledge:read"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.create",
     feature: "knowledge",
     label: "创建知识蒸馏工作台任务",
@@ -3516,8 +3554,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       ]
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.get",
     feature: "knowledge",
     label: "读取知识蒸馏工作台任务",
@@ -3533,8 +3571,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:read"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.resume",
     feature: "knowledge",
     label: "恢复知识蒸馏工作台任务",
@@ -3550,8 +3588,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.cancel",
     feature: "knowledge",
     label: "取消知识蒸馏工作台任务",
@@ -3564,8 +3602,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.archive",
     feature: "knowledge",
     label: "归档知识蒸馏工作台任务",
@@ -3581,8 +3619,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.delete",
     feature: "knowledge",
     label: "删除知识蒸馏工作台任务",
@@ -3598,8 +3636,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.stage.rerun",
     feature: "knowledge",
     label: "重跑知识蒸馏工作台阶段",
@@ -3618,8 +3656,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"], stageId: ["stage-id", "stage"] }
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.stage.export",
     feature: "knowledge",
     label: "导出知识蒸馏工作台阶段结果",
@@ -3642,8 +3680,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       ]
     },
     requiredScopes: ["knowledge:read"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.package",
     feature: "knowledge",
     label: "导出知识蒸馏工作台整包",
@@ -3659,8 +3697,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:read"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.artifacts",
     feature: "knowledge",
     label: "读取知识蒸馏工作台产物信息",
@@ -3676,8 +3714,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:read"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.compare",
     feature: "knowledge",
     label: "比较知识蒸馏工作台版本",
@@ -3697,7 +3735,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       queryParams: [{ name: "rightRunId", aliases: ["right-run-id", "right"] }]
     },
     requiredScopes: ["knowledge:read"]
-  },
+  }),
   {
     id: "knowledge.skills.evaluation.runs.create",
     feature: "knowledge",
@@ -5848,6 +5886,10 @@ export function listInterfaceCatalog(operations = SERVER_API_OPERATIONS) {
     concurrencySafe: operation.concurrencySafe === true,
     audit: operation.audit || {},
     log: operation.log || {},
+    deprecated: operation.deprecated === true,
+    replacementService: operation.replacementService || "",
+    replacementOperationPrefix: operation.replacementOperationPrefix || "",
+    lifecycle: operation.lifecycle || {},
     inputSchema: operation.inputSchema || {}
   }));
 }

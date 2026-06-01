@@ -73,7 +73,6 @@ export function createSystemControllerContexts({
   const createDocumentParsingRuntime = requireDomainService("createDocumentParsingRuntime");
   const toPublicDocumentParsingResult = requireDomainService("toPublicDocumentParsingResult");
   const enhanceAffairTaxonomy = requireDomainService("enhanceAffairTaxonomy");
-  const createKnowledgeDistillationWorkbench = requireDomainService("createKnowledgeDistillationWorkbench");
   const executeConsoleDomainOperation = requireDomainService("executeConsoleDomainOperation");
   const resumeKnowledgeWordCloudClassificationTasks = requireDomainService("resumeKnowledgeWordCloudClassificationTasks");
   const uploadSessionStore = requireDomainProvider(
@@ -158,7 +157,6 @@ export function createSystemControllerContexts({
       strategyManagementProvider,
       knowledgeEvolutionRuntime,
       knowledgeDistillationRuntime,
-      createKnowledgeDistillationWorkbench,
       jobWorkflowProvider,
       queueMonitor,
       contextRuntime,

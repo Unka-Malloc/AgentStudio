@@ -532,18 +532,18 @@ export const FEATURE_MANIFEST = Object.freeze({
     },
     {
       featureId: "knowledge-distillation",
-      label: "Knowledge distillation, summarization, golden rules, and skill authoring",
+      label: "External knowledge distillation, summarization, golden rules, and skill authoring",
       group: "knowledge",
       dependsOn: ["knowledge-core", "agent-gateway"],
       defaultEnabled: false,
       server: {
         operationPrefixes: [
+          "external.knowledge.distillation.",
           "knowledge.agent_skill.",
           "knowledge.skills.",
           "knowledge.golden_rules.",
           "knowledge.rule_authoring.",
           "knowledge.gold_cases.",
-          "knowledge.distillation.",
           "knowledge.summarization.",
           "knowledge.training_sets.",
           "knowledge.evaluation.",
@@ -551,8 +551,13 @@ export const FEATURE_MANIFEST = Object.freeze({
           "knowledge.model_decision"
         ],
         operations: ["knowledge.evidence_gate.evaluate"],
-        modules: ["KnowledgeDistillationRuntime", "KnowledgeSkillRuntime", "SummarizationRuntime"],
+        modules: ["ExternalKnowledgeDistillationService", "KnowledgeSkillRuntime", "SummarizationRuntime"],
         webPanels: ["knowledge-distillation", "knowledge-distillation-workbench"]
+      },
+      lifecycle: {
+        internalKnowledgeDistillation: "removed-from-runtime",
+        replacementService: "external.knowledge.distillation",
+        maintenancePolicy: "external-service-only"
       },
       web: {
         navItems: ["knowledge.distillation", "debug.knowledgeDistillation"],

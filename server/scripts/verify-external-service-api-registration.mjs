@@ -29,6 +29,23 @@ const SERVICE_REGISTRATION_REQUIREMENTS = Object.freeze({
     rejectedInternalToolIds: [
       "pact.knowledge.distillation.runs.create",
       "pact.knowledge.distillation.runs.get"
+    ],
+    deprecatedInternalOperationIds: [
+      "knowledge.distillation.export",
+      "knowledge.distillation.runs.create",
+      "knowledge.distillation.runs.get",
+      "knowledge.distillation.workbench.runs.list",
+      "knowledge.distillation.workbench.runs.create",
+      "knowledge.distillation.workbench.runs.get",
+      "knowledge.distillation.workbench.runs.resume",
+      "knowledge.distillation.workbench.runs.cancel",
+      "knowledge.distillation.workbench.runs.archive",
+      "knowledge.distillation.workbench.runs.delete",
+      "knowledge.distillation.workbench.stage.rerun",
+      "knowledge.distillation.workbench.stage.export",
+      "knowledge.distillation.workbench.runs.package",
+      "knowledge.distillation.workbench.runs.artifacts",
+      "knowledge.distillation.workbench.runs.compare"
     ]
   }
 });
@@ -118,6 +135,66 @@ for (const serviceName of externalServiceNames) {
       `${rejectedToolId} is an internal platform algorithm capability and must not be exposed`
     );
   }
+  for (const operationId of requirement.deprecatedInternalOperationIds || []) {
+    const operation = operationsById.get(operationId);
+    assert.ok(operation, `${operationId} must remain registered only as a migration shim until callers move`);
+    assert.equal(operation.deprecated, true, `${operationId} must be marked deprecated`);
+    assert.equal(
+      operation.replacementService,
+      requirement.namespace,
+      `${operationId} must point to ${requirement.namespace}`
+    );
+    assert.equal(
+      operation.lifecycle?.maintenancePolicy,
+      "compatibility-shim-only",
+      `${operationId} must not be treated as a maintained algorithm surface`
+    );
+    assert.equal(
+      operation.aspects?.includes("internal-deprecated"),
+      true,
+      `${operationId} must expose an internal-deprecated aspect`
+    );
+    assert.equal(
+      toolsByOperationId.has(operationId),
+      false,
+      `${operationId} must not be exposed through Tool Management`
+    );
+  }
 }
+
+const runtimeProvidersText = await fs.readFile(
+  path.join(repoRoot, "server/platform/interactive/server-runtime-providers.mjs"),
+  "utf8"
+);
+assert.equal(
+  runtimeProvidersText.includes("knowledge-distillation-runtime/index.mjs"),
+  false,
+  "server runtime providers must not load the internal knowledge distillation runtime"
+);
+assert.equal(
+  runtimeProvidersText.includes("createKnowledgeDistillationRuntime"),
+  false,
+  "server runtime providers must not instantiate the internal knowledge distillation runtime"
+);
+
+const consoleDomainServicesText = await fs.readFile(
+  path.join(repoRoot, "server/platform/specialized/console/console-domain-services.mjs"),
+  "utf8"
+);
+assert.equal(
+  consoleDomainServicesText.includes("knowledge-distillation-workbench/index.mjs"),
+  false,
+  "console domain services must not import the internal knowledge distillation workbench"
+);
+
+const operationExecutorText = await fs.readFile(
+  path.join(repoRoot, "server/platform/specialized/console/console-domain-operation-executor.mjs"),
+  "utf8"
+);
+assert.match(
+  operationExecutorText,
+  /INTERNAL_KNOWLEDGE_DISTILLATION_REMOVED/,
+  "internal knowledge distillation operations must return a machine-readable migration response"
+);
 
 console.log("external service API registration gate passed");

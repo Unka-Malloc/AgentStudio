@@ -808,7 +808,21 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
 });
 
 const INTERNAL_OPERATION_IDS_HIDDEN_FROM_TOOL_CATALOG = Object.freeze(new Set([
-  "knowledge.distillation.export"
+  "knowledge.distillation.export",
+  "knowledge.distillation.runs.create",
+  "knowledge.distillation.runs.get",
+  "knowledge.distillation.workbench.runs.list",
+  "knowledge.distillation.workbench.runs.create",
+  "knowledge.distillation.workbench.runs.get",
+  "knowledge.distillation.workbench.runs.resume",
+  "knowledge.distillation.workbench.runs.cancel",
+  "knowledge.distillation.workbench.runs.archive",
+  "knowledge.distillation.workbench.runs.delete",
+  "knowledge.distillation.workbench.stage.rerun",
+  "knowledge.distillation.workbench.stage.export",
+  "knowledge.distillation.workbench.runs.package",
+  "knowledge.distillation.workbench.runs.artifacts",
+  "knowledge.distillation.workbench.runs.compare"
 ]));
 
 const TOOL_ALIAS_IDS_BY_OPERATION_ID = Object.freeze({
@@ -1483,6 +1497,10 @@ export function createToolCatalog({ operations = [], activeFeatureIds = null } =
       featureId: operation.featureId || "",
       operationId: operation.id,
       handlerId: operation.target?.method || "",
+      deprecated: operation.deprecated === true,
+      replacementService: operation.replacementService || "",
+      replacementOperationPrefix: operation.replacementOperationPrefix || "",
+      lifecycle: operation.lifecycle || {},
       transport: {
         http: {
           method,

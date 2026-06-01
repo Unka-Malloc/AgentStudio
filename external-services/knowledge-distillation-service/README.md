@@ -1,6 +1,6 @@
 # External Knowledge Distillation Service
 
-Standalone HTTP service used to verify and evolve Pact external distillation registration.
+Standalone HTTP service used to verify and evolve Pact external distillation registration. This service is the only maintained knowledge distillation algorithm surface; embedded `knowledge.distillation.*` platform implementations are deprecated migration shims and must not receive new parser, routing, or distillation work.
 
 The service is intentionally standalone. It exposes a route-first, windowed, classified distillation baseline that separates unrelated source groups before producing human-readable Markdown and an agent-readable JSON message. The local reference framework manifest tracks the open-source systems Pact uses for ongoing comparison.
 

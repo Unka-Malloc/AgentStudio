@@ -224,20 +224,7 @@ export async function createServerRuntimeProviders({
       knowledgeAgentSkill
     }]
   );
-  const knowledgeDistillationRuntime = await createProvider(
-    isFeatureActive("knowledge-distillation"),
-    "../specialized/knowledge/invocation/knowledge-distillation-runtime/index.mjs",
-    "createKnowledgeDistillationRuntime",
-    [{
-      userDataPath,
-      runtime,
-      metadataStore,
-      knowledgeSkillRuntime,
-      goldenRuleRuntime,
-      evidenceGate: evidenceSufficiencyGate,
-      modelDecisionRuntime
-    }]
-  );
+  const knowledgeDistillationRuntime = null;
   const knowledgeEvolutionRuntime = await createProvider(
     isFeatureActive("knowledge-evolution"),
     "../specialized/knowledge/invocation/knowledge-evolution-runtime/index.mjs",
