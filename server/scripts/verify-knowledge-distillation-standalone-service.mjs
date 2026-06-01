@@ -16,6 +16,7 @@ const STANDALONE_FEATURE_ID = "external-knowledge-distillation";
 const LEGACY_FEATURE_ID = "knowledge-distillation";
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const externalServiceEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/server.mjs");
+const formatRoutesConfigEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/format-routes.json");
 
 const REQUIRED_STANDALONE_DEPENDENCIES = Object.freeze([
   "core-platform",
@@ -248,6 +249,49 @@ for (const removePath of REQUIRED_LEGACY_REMOVE_PATHS) {
 }
 
 const externalServiceSource = await fs.readFile(externalServiceEntry, "utf8");
+const formatRoutesConfig = JSON.parse(await fs.readFile(formatRoutesConfigEntry, "utf8"));
+assert.equal(
+  formatRoutesConfig.protocolVersion,
+  "pact.external-knowledge-distillation.format-routes.v1",
+  "external knowledge distillation must keep format routes in a versioned singleton config"
+);
+assert.equal(
+  formatRoutesConfig.strategy,
+  "singleton-format-route-registry.v1",
+  "external knowledge distillation must route parser strategies through the singleton registry"
+);
+assert.equal(formatRoutesConfig.routes.length >= 24, true, "format route registry must cover all current route families");
+assert.equal(
+  new Set(formatRoutesConfig.routes.flatMap((route) => route.extensions || [])).size >= 141,
+  true,
+  "format route registry must preserve current extension coverage"
+);
+for (const [routeId, parser] of [
+  ["pdf", "pdf.text.tika-safe"],
+  ["word", "office.word.structured"],
+  ["presentation", "office.presentation.slides"],
+  ["spreadsheet", "table.sheet.structured"],
+  ["markdown", "text.direct.markdown"],
+  ["email", "email.headers-body-attachments"],
+  ["archive", "archive.expand-route"],
+  ["directory", "directory.file-ref.expand"]
+]) {
+  assert.equal(
+    formatRoutesConfig.routes.some((route) => route.id === routeId && route.preferredParser === parser),
+    true,
+    `format route registry must map ${routeId} to ${parser}`
+  );
+}
+assert.equal(
+  externalServiceSource.includes("const FORMAT_ROUTES = Object.freeze(["),
+  false,
+  "format route definitions must not be hard-coded inline in server.mjs"
+);
+assert.equal(
+  externalServiceSource.includes("const FORMAT_ROUTES = loadFormatRoutes();"),
+  true,
+  "server.mjs must load format routes from the singleton config"
+);
 for (const functionName of [
   "runKnowledgeDistillationWorkflow",
   "runDistillationWorkflow",

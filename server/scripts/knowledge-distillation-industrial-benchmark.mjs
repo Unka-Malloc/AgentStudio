@@ -52,7 +52,8 @@ const ABSORPTION_REQUIREMENTS = Object.freeze([
       "DOCUMENT_PARSING_MODULE_BOUNDARY",
       "document-element-model.v1",
       "element-aware-by-title-windowing.v1",
-      "content-signature-routing.v1"
+      "content-signature-routing.v1",
+      "singleton-format-route-registry.v1"
     ]
   },
   {

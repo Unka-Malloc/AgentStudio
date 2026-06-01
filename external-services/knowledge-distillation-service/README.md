@@ -4,7 +4,7 @@ Standalone HTTP service used to verify and evolve Pact external distillation reg
 
 The service is intentionally standalone. It exposes a route-first, windowed, classified distillation baseline that separates unrelated source groups before producing human-readable Markdown and an agent-readable JSON message. The local reference framework manifest tracks the open-source systems Pact uses for ongoing comparison.
 
-The service does not hide unsupported binary parsing behind a generic Tika call. Every source first receives a `routePlan` based on extension, media type, source kind, and text fallback. Archive entries and email attachments are recursively routed as child documents before distillable text is split into bounded windows, so large projects can converge through window, document, project-domain, topic-group, and project layers.
+The service does not hide unsupported binary parsing behind a generic Tika call. Every source first receives a `routePlan` based on extension, media type, source kind, and text fallback. The route registry lives in `format-routes.json` (`pact.external-knowledge-distillation.format-routes.v1`, `singleton-format-route-registry.v1`) and is validated at startup so parser strategy changes are reviewable and fail fast if malformed. Archive entries and email attachments are recursively routed as child documents before distillable text is split into bounded windows, so large projects can converge through window, document, project-domain, topic-group, and project layers.
 
 Request payloads can provide either direct text fields or a base64 file payload:
 
@@ -201,6 +201,11 @@ Reference patterns currently absorbed into the local baseline:
 Reference framework checkout root:
 
 - `build/reference-frameworks/knowledge-distillation`
+
+Format route registry:
+
+- `format-routes.json` is the singleton source for extension, media type, preferred parser, fallback parser, parser chain, streaming unit, and reference framework mappings.
+- `/v1/capabilities.fileCompatibility.routeRegistry` exposes route registry protocol, source, route count, extension count, media type count, and startup validation mode.
 
 Reference framework audit:
 

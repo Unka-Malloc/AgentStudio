@@ -1204,6 +1204,13 @@ try {
   assert.equal(capabilities.payload.timeFiltering.timeFields.includes("eventTime"), true);
   assert.equal(capabilities.payload.fileCompatibility.routingStrategy, "content-signature-extension-media-shape-routing.v2");
   assert.equal(capabilities.payload.fileCompatibility.routeOrder[0], "contentSignature");
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.protocolVersion, "pact.external-knowledge-distillation.format-routes.v1");
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.strategy, "singleton-format-route-registry.v1");
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.source, "external-services/knowledge-distillation-service/format-routes.json");
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.routeCount >= 24, true);
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.extensionCount >= 141, true);
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.validation, "startup-fail-fast");
+  assert.equal(capabilities.payload.algorithms.includes("singleton-format-route-registry.v1"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.strategy, "content-signature-routing.v1");
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("pdf-header"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-word"), true);

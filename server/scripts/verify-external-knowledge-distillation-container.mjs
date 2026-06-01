@@ -94,6 +94,50 @@ async function fetchJson(url, options = {}) {
   };
 }
 
+async function startMockModelGateway() {
+  const calls = [];
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      const rawBody = Buffer.concat(chunks).toString("utf8");
+      let body = {};
+      try {
+        body = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        body = { rawBody };
+      }
+      calls.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body
+      });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        ok: true,
+        text: [
+          "Container model distillation verified against routed parser evidence.",
+          "Preserve chronology, parser traces, graph evidence, and low-confidence warnings.",
+          "Return only grounded claims linked to the supplied corpus plan."
+        ].join("\n")
+      }));
+    });
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "0.0.0.0", resolve);
+  });
+  const address = server.address();
+  return {
+    hostUrl: `http://host.docker.internal:${address.port}/api/agent-gateway/call`,
+    calls,
+    async close() {
+      await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  };
+}
+
 async function waitForService(url, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   let lastError = null;
@@ -375,6 +419,7 @@ if (process.env.PACT_EXTERNAL_KD_SKIP_DOCKER_BUILD !== "1") {
 const port = await freePort();
 const serviceUrl = `http://127.0.0.1:${port}`;
 let started = false;
+const mockModelGateway = await startMockModelGateway();
 
 try {
   await docker([
@@ -385,6 +430,10 @@ try {
     containerName,
     "-p",
     `127.0.0.1:${port}:8799`,
+    "-e",
+    `PACT_EXTERNAL_KD_MODEL_GATEWAY_URL=${mockModelGateway.hostUrl}`,
+    "-e",
+    "PACT_EXTERNAL_KD_MODEL_ALIAS=verify-container-real-model-gateway",
     imageTag
   ]);
   started = true;
@@ -425,6 +474,13 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("structured-json-file-ref-streaming-window.v1"), true);
   assert.equal(capabilities.payload.fileCompatibility.routingStrategy, "content-signature-extension-media-shape-routing.v2");
   assert.equal(capabilities.payload.fileCompatibility.routeOrder[0], "contentSignature");
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.protocolVersion, "pact.external-knowledge-distillation.format-routes.v1");
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.strategy, "singleton-format-route-registry.v1");
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.source, "external-services/knowledge-distillation-service/format-routes.json");
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.routeCount >= 24, true);
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.extensionCount >= 141, true);
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.validation, "startup-fail-fast");
+  assert.equal(capabilities.payload.algorithms.includes("singleton-format-route-registry.v1"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.strategy, "content-signature-routing.v1");
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("pdf-header"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-word"), true);
@@ -772,6 +828,11 @@ try {
   assert.equal(createRun.payload.result.grounding.strategy, "claim-evidence-topk-conflict-gating.v2");
   assert.equal(createRun.payload.result.graphEvidence.strategy, "graph-lite-entity-relationship-evidence-pack.v1");
   assert.equal(createRun.payload.result.graphEvidence.summary.entityCount > 0, true);
+  assert.equal(mockModelGateway.calls.length >= 1, true, "container distillation must call the configured model gateway");
+  assert.equal(mockModelGateway.calls[0].method, "POST");
+  assert.equal(mockModelGateway.calls[0].url, "/api/agent-gateway/call");
+  assert.equal(mockModelGateway.calls[0].body.moduleId, "external.knowledge.distillation");
+  assert.equal(mockModelGateway.calls[0].body.modelAlias, "verify-container-real-model-gateway");
 
   const markdown = await fetch(`${serviceUrl}/v1/distillation/runs/${encodeURIComponent(createRun.payload.runId)}/artifacts/portable-markdown`);
   assert.equal(markdown.status, 200);
@@ -2586,6 +2647,7 @@ NODE`
   if (started) {
     await docker(["rm", "-f", containerName]).catch(() => {});
   }
+  await mockModelGateway.close();
 }
 
 console.log("external knowledge distillation container verification passed");
