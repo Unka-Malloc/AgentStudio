@@ -270,6 +270,15 @@ try {
   assert.ok(metrics.payload.metrics.requests.total >= 1);
   assert.ok(metrics.payload.metrics.requests.byTransport["tool-management"] >= 1);
   assert.ok(metrics.payload.metrics.requests.byRoute["/api/tool-management/v1/execute"] >= 1);
+  assert.ok(metrics.payload.metrics.requests.byCompletionStatus.completed >= 1);
+  assert.ok(metrics.payload.metrics.requests.successTotal >= 1);
+  assert.ok(metrics.payload.metrics.requests.clientErrorTotal >= 0);
+  assert.ok(metrics.payload.metrics.requests.serverErrorTotal >= 0);
+  assert.ok(metrics.payload.metrics.requests.completionFailureTotal >= 0);
+  assert.ok(metrics.payload.metrics.requests.clientErrorRate >= 0);
+  assert.ok(metrics.payload.metrics.requests.serverErrorRate >= 0);
+  assert.ok(metrics.payload.metrics.requests.completionFailureRate >= 0);
+  assertDurationPercentiles(metrics.payload.metrics.requests.durationPercentiles);
   assert.ok(metrics.payload.metrics.requests.requestBytesTotal > 0);
   assert.ok(metrics.payload.metrics.requests.responseBytesTotal > 0);
   assert.ok(metrics.payload.metrics.requests.transferBytesPerSecond >= 0);
@@ -295,7 +304,9 @@ try {
   ));
   assert.ok(filteredMetrics.payload.metrics.series.buckets.some((bucket) =>
     bucket.requests.total >= 1 &&
-      bucket.requests.byTransport["tool-management"] >= 1
+      bucket.requests.byTransport["tool-management"] >= 1 &&
+      bucket.requests.byCompletionStatus.completed >= 1 &&
+      bucket.requests.successTotal >= 1
   ));
 
   {

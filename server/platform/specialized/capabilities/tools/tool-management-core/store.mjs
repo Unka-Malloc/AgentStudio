@@ -665,14 +665,20 @@ function summarizeRequestMetricRows(rows = []) {
   let transferBytesTotal = 0;
   let byteRateTotal = 0;
   let peakBytesPerSecond = 0;
+  let successTotal = 0;
+  let clientErrorTotal = 0;
+  let serverErrorTotal = 0;
+  let completionFailureTotal = 0;
+  const durationRows = [];
   let firstTimestamp = 0;
   let lastTimestamp = 0;
 
   for (const row of rows) {
     const statusKey = String(row.status_code || 0);
+    const statusCode = Number(row.status_code || 0);
+    const completionStatus = row.completion_status || "unknown";
     byStatusCode[statusKey] = (byStatusCode[statusKey] || 0) + 1;
-    byCompletionStatus[row.completion_status || "unknown"] =
-      (byCompletionStatus[row.completion_status || "unknown"] || 0) + 1;
+    byCompletionStatus[completionStatus] = (byCompletionStatus[completionStatus] || 0) + 1;
     byMethod[row.method || ""] = (byMethod[row.method || ""] || 0) + 1;
     byRoute[row.route || ""] = (byRoute[row.route || ""] || 0) + 1;
     byTransport[row.transport || "http"] = (byTransport[row.transport || "http"] || 0) + 1;
@@ -683,11 +689,16 @@ function summarizeRequestMetricRows(rows = []) {
     const transferBytes = Number(row.transfer_bytes || requestBytes + responseBytes);
     const bytesPerSecond = Number(row.bytes_per_second || 0);
     durationTotal += durationMs;
+    durationRows.push({ duration_ms: durationMs });
     requestBytesTotal += requestBytes;
     responseBytesTotal += responseBytes;
     transferBytesTotal += transferBytes;
     byteRateTotal += bytesPerSecond;
     peakBytesPerSecond = Math.max(peakBytesPerSecond, bytesPerSecond);
+    successTotal += statusCode >= 200 && statusCode < 400 ? 1 : 0;
+    clientErrorTotal += statusCode >= 400 && statusCode < 500 ? 1 : 0;
+    serverErrorTotal += statusCode >= 500 ? 1 : 0;
+    completionFailureTotal += completionStatus === "completed" ? 0 : 1;
 
     const timestamp = Date.parse(row.created_at || "");
     if (Number.isFinite(timestamp)) {
@@ -707,10 +718,18 @@ function summarizeRequestMetricRows(rows = []) {
     byMethod,
     byRoute,
     byTransport,
+    successTotal,
+    clientErrorTotal,
+    serverErrorTotal,
+    completionFailureTotal,
+    serverErrorRate: ratio(serverErrorTotal, rows.length),
+    clientErrorRate: ratio(clientErrorTotal, rows.length),
+    completionFailureRate: ratio(completionFailureTotal, rows.length),
     requestBytesTotal,
     responseBytesTotal,
     transferBytesTotal,
     averageDurationMs: rows.length ? Number((durationTotal / rows.length).toFixed(2)) : 0,
+    durationPercentiles: durationPercentilesFromRows(durationRows),
     observedWindowSeconds,
     requestsPerMinute: observedWindowSeconds
       ? Number(((rows.length * 60) / observedWindowSeconds).toFixed(2))
@@ -1025,8 +1044,13 @@ function emptyBucket(startMs, bucketSeconds) {
     requests: {
       total: 0,
       byStatusCode: {},
+      byCompletionStatus: {},
       byRoute: {},
       byTransport: {},
+      successTotal: 0,
+      clientErrorTotal: 0,
+      serverErrorTotal: 0,
+      completionFailureTotal: 0,
       requestBytesTotal: 0,
       responseBytesTotal: 0,
       transferBytesTotal: 0
@@ -1078,6 +1102,8 @@ function summarizeMetricBuckets({ toolRows = [], requestRows = [], bucketSeconds
       continue;
     }
     const statusCode = String(row.status_code || 0);
+    const numericStatusCode = Number(row.status_code || 0);
+    const completionStatus = row.completion_status || "unknown";
     const route = row.route || "";
     const transport = row.transport || "http";
     const requestBytes = Number(row.request_bytes || 0);
@@ -1085,8 +1111,14 @@ function summarizeMetricBuckets({ toolRows = [], requestRows = [], bucketSeconds
     const transferBytes = Number(row.transfer_bytes || requestBytes + responseBytes);
     bucket.requests.total += 1;
     bucket.requests.byStatusCode[statusCode] = (bucket.requests.byStatusCode[statusCode] || 0) + 1;
+    bucket.requests.byCompletionStatus[completionStatus] =
+      (bucket.requests.byCompletionStatus[completionStatus] || 0) + 1;
     bucket.requests.byRoute[route] = (bucket.requests.byRoute[route] || 0) + 1;
     bucket.requests.byTransport[transport] = (bucket.requests.byTransport[transport] || 0) + 1;
+    bucket.requests.successTotal += numericStatusCode >= 200 && numericStatusCode < 400 ? 1 : 0;
+    bucket.requests.clientErrorTotal += numericStatusCode >= 400 && numericStatusCode < 500 ? 1 : 0;
+    bucket.requests.serverErrorTotal += numericStatusCode >= 500 ? 1 : 0;
+    bucket.requests.completionFailureTotal += completionStatus === "completed" ? 0 : 1;
     bucket.requests.requestBytesTotal += requestBytes;
     bucket.requests.responseBytesTotal += responseBytes;
     bucket.requests.transferBytesTotal += transferBytes;
