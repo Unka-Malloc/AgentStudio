@@ -22,6 +22,14 @@ function workspaceAssetPolicyKey(workspaceId, policyId) {
   return `${String(workspaceId || "default").trim() || "default"}:${String(policyId || "").trim()}`;
 }
 
+function defaultGovernancePolicyRevision() {
+  return {
+    protocolVersion: "pact.authorization.governance.policy-revision.v1",
+    revision: 0,
+    updatedAt: ""
+  };
+}
+
 export function createSecurityPermissionsProvider({
   consoleAuth = null,
   authorizationEngine = null,
@@ -170,9 +178,13 @@ export function createSecurityPermissionsProvider({
         ? resolvedAuthorizationEngine.evaluate(input)
         : null;
     },
+    getGovernancePolicyRevision() {
+      return resolvedAuthorizationGovernanceStore?.getPolicyRevision?.() || defaultGovernancePolicyRevision();
+    },
     getGovernanceSummary() {
       if (!resolvedAuthorizationGovernanceStore) {
         return {
+          policyRevision: defaultGovernancePolicyRevision(),
           roles: [],
           teams: [],
           userPolicies: [],
@@ -182,6 +194,7 @@ export function createSecurityPermissionsProvider({
         };
       }
       return {
+        policyRevision: resolvedAuthorizationGovernanceStore.getPolicyRevision?.() || defaultGovernancePolicyRevision(),
         roles: resolvedAuthorizationGovernanceStore.listRoles?.() || [],
         teams: resolvedAuthorizationGovernanceStore.listTeams?.() || [],
         userPolicies: resolvedAuthorizationGovernanceStore.listUserPolicies?.() || [],
