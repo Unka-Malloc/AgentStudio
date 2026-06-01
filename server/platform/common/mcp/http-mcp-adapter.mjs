@@ -259,7 +259,7 @@ function mcpOutletForTool(tool = {}) {
   const aspects = Array.isArray(tool.aspects) ? tool.aspects.map((item) => String(item || "")) : [];
   const text = `${id} ${publicName} ${feature} ${aspects.join(" ")}`.toLowerCase();
 
-  if (/^(tool_management\.|knowledge\.skills\.|knowledge\.agent_skill\.|workspace\.skill\.)/i.test(id)) {
+  if (/^(tool_management\.|knowledge\.skills\.|knowledge\.agent_skill\.|workspace\.skill\.|capability_packages\.)/i.test(id)) {
     return MCP_OUTLET_METADATA[MCP_SKILL_HUB_TOOL_NAME];
   }
   if (/^(repo\.|gerrit\.|github\.|workspace\.code\.)/i.test(id) || /\b(repo|repository|codespace|gerrit|github)\b/.test(text)) {
@@ -1297,7 +1297,7 @@ function mcpEnvelopePublic(envelope = {}, workspaceDirectory = null) {
   };
 }
 
-function pactMetaResult({
+async function pactMetaResult({
   operation,
   input,
   envelope,
@@ -1318,13 +1318,31 @@ function pactMetaResult({
     const operations = toolSkillManagementProvider
       .listVisibleTools({ authorization })
       .map(publicMcpTool);
+    const skillCatalog = typeof toolSkillManagementProvider.listVisibleSkills === "function"
+      ? await toolSkillManagementProvider.listVisibleSkills({ authorization })
+      : {
+          schemaVersion: 1,
+          status: "unavailable",
+          summary: { activeSkillCount: 0, visibleSkillCount: 0 },
+          skills: []
+        };
+    const outlets = mcpOutletSummary(operations);
+    if (outlets[MCP_SKILL_HUB_TOOL_NAME]) {
+      outlets[MCP_SKILL_HUB_TOOL_NAME].skillCatalog = {
+        protocolVersion: skillCatalog.protocolVersion || "",
+        revision: skillCatalog.revision || "",
+        activeSkillCount: skillCatalog.summary?.activeSkillCount || 0,
+        visibleSkillCount: skillCatalog.summary?.visibleSkillCount || 0
+      };
+    }
     const runtime = mcpRuntimeMetadata({ listenUrl, discoveryState });
     return mcpToolResult({
       result: {
         ...runtime,
         grant: toolSkillManagementProvider.visibleGrantSummary({ authorization }),
         envelope: mcpEnvelopePublic(envelope),
-        outlets: mcpOutletSummary(operations),
+        outlets,
+        skillCatalog,
         operations
       }
     });
@@ -1829,7 +1847,7 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider,
         });
       }
     }
-    const metaResult = pactMetaResult({
+    const metaResult = await pactMetaResult({
       operation: parsedCall.operation,
       input: parsedCall.input,
       envelope: parsedCall.envelope,

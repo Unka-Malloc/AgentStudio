@@ -6,6 +6,11 @@ import path from "node:path";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 import { verifyMcpHandshakeSignature } from "../platform/common/mcp/identity.mjs";
+import {
+  capabilityPackageDigest,
+  createCapabilityPackageRegistry,
+  normalizeCapabilityPackageManifest
+} from "../platform/specialized/capabilities/package-lifecycle/index.mjs";
 
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
@@ -106,6 +111,17 @@ function bearerHeaders(token) {
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`
   };
+}
+
+function signedManifest(input) {
+  const normalized = normalizeCapabilityPackageManifest(input);
+  return normalizeCapabilityPackageManifest({
+    ...input,
+    signature: {
+      algorithm: "sha256",
+      digestSha256: capabilityPackageDigest(normalized)
+    }
+  });
 }
 
 const RELEASE_BOOTSTRAP = `/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"`;
@@ -535,6 +551,30 @@ try {
   assert.equal(localGrant.payload.toolsets.includes("pact.storage.write"), true);
   assert.equal(localGrant.payload.toolsets.includes("pact.agent.workspace"), true);
 
+  const skillPackageRegistry = createCapabilityPackageRegistry({ userDataPath });
+  const visibleSkillManifest = signedManifest({
+    kind: "skill",
+    name: "mcp-discovery-visible-skill",
+    version: "1.0.0",
+    title: "MCP Discovery Visible Skill",
+    description: "Verifies active skill package projection into pact.discovery.",
+    owner: "verification",
+    source: "skill-hub-upload",
+    capabilities: ["skill.discovery.visible"],
+    risk: "read_only",
+    inputSchema: { type: "object" },
+    outputSchema: { type: "object" },
+    sandbox: { policy: "knowledge-only" },
+    license: "MIT"
+  });
+  const visibleSkill = await skillPackageRegistry.submit({
+    manifest: visibleSkillManifest,
+    files: [{ path: "SKILL.md", content: "# MCP Discovery Visible Skill\n" }]
+  }, { submittedBy: "mcp-verifier" });
+  await skillPackageRegistry.lifecycle(visibleSkill.record.manifest.packageId, { action: "approve", actor: "mcp-verifier" });
+  await skillPackageRegistry.lifecycle(visibleSkill.record.manifest.packageId, { action: "install", actor: "mcp-verifier" });
+  await skillPackageRegistry.lifecycle(visibleSkill.record.manifest.packageId, { action: "activate", actor: "mcp-verifier" });
+
   const unknownTargetGrant = await fetchJson(`${server.url}/api/mcp/local-grant`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -706,6 +746,7 @@ try {
   assert.equal(localGrantCapabilities.status, 200);
   const localOperations = localGrantCapabilities.payload.result.structuredContent.operations;
   const localOutlets = localGrantCapabilities.payload.result.structuredContent.outlets;
+  const localSkillCatalog = localGrantCapabilities.payload.result.structuredContent.skillCatalog;
   assert.equal(localGrantCapabilities.payload.result.structuredContent.sharedHub.canonicalMcpUrl, `${server.url}/mcp`);
   assert.equal(localGrantCapabilities.payload.result.structuredContent.sharedHub.sharedspace.outlet, "pact.sharedspace");
   assert.equal(localGrantCapabilities.payload.result.structuredContent.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
@@ -726,12 +767,20 @@ try {
   assert.equal(operationByName.get("pact.repo.status")._meta.mcpOutlet, "pact.codespace");
   assert.equal(operationByName.get("pact.knowledge.skills.list")._meta.mcpOutlet, "pact.skillHub");
   assert.equal(operationByName.get("pact.knowledge.search")._meta.mcpOutlet, "pact.knowledge");
+  assert.equal(localSkillCatalog.summary.activeSkillCount, 1);
+  assert.equal(localSkillCatalog.summary.visibleSkillCount, 1);
+  assert.equal(localSkillCatalog.skills[0].name, "mcp-discovery-visible-skill");
+  assert.equal(localSkillCatalog.skills[0].mcpOutlet, "pact.skillHub");
+  assert.equal(localSkillCatalog.skills[0].library.storage, "server-skill-library");
+  assert.equal(Object.prototype.hasOwnProperty.call(localSkillCatalog.skills[0].library, "absolutePath"), false);
+  assert.equal(JSON.stringify(localSkillCatalog).includes("MCP Discovery Visible Skill\\n"), false);
   assert.ok(localOutlets["pact.sharedspace"].operations.includes("pact.sharedspace.file.write"));
   assert.equal(localOutlets["pact.sharedspace"].exchangeReceipt.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
   assert.ok(localOutlets["pact.sharedspace"].exchangeReceipt.actions.includes("file-written"));
   assert.ok(localOutlets["pact.sharedspace"].exchangeReceipt.actions.includes("drive-sync-applied"));
   assert.ok(localOutlets["pact.codespace"].operations.includes("pact.repo.status"));
   assert.ok(localOutlets["pact.skillHub"].operations.includes("pact.knowledge.skills.list"));
+  assert.equal(localOutlets["pact.skillHub"].skillCatalog.visibleSkillCount, 1);
   assert.ok(localOutlets["pact.knowledge"].operations.includes("pact.knowledge.search"));
 
   const mismatchedOutletCall = await fetchJson(`${server.url}/mcp`, {

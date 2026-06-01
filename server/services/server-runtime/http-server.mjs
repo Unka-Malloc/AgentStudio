@@ -614,6 +614,7 @@ export async function startHttpServer({
   toolManagementPlatformRef = toolManagementPlatform;
   const toolSkillManagementProvider = createServerToolSkillManagementProvider({
     toolManagementPlatform,
+    userDataPath,
     securityPermissions,
     logger: runtimeLogger
   });

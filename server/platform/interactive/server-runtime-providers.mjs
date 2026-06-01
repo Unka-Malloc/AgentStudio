@@ -70,11 +70,13 @@ export function createServerToolManagementPlatform({
 
 export function createServerToolSkillManagementProvider({
   toolManagementPlatform,
+  userDataPath,
   securityPermissions,
   logger
 }) {
   return createToolSkillManagementProvider({
     toolManagementPlatform,
+    userDataPath,
     securityPermissions,
     logger
   });

@@ -1,4 +1,11 @@
+import {
+  CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION,
+  SKILL_REGISTRY_PROTOCOL_VERSION,
+  createCapabilityPackageRegistry
+} from "../package-lifecycle/index.mjs";
+
 export const TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION = "pact.tool-skill-management.v1";
+export const SKILL_HUB_DISCOVERY_PROTOCOL_VERSION = "pact.skill-hub-discovery.v1";
 
 const LOCAL_GRANT_MCP_SHAREDSPACE_TOOL_NAME = "pact.sharedspace";
 const LOCAL_GRANT_MCP_CONNECTOR_PACKAGE = "pact-mcp-connector";
@@ -400,6 +407,107 @@ function grantCanSeeTool(tool, grant = null) {
     return false;
   }
   return localGrantRiskRank(tool.risk || "read_only") <= localGrantRiskRank(grantVisibleRisk(grant));
+}
+
+function skillPackageRequiredScopes(skill = {}) {
+  return skill.risk === "read_only" ? ["knowledge:read"] : ["knowledge:read", "knowledge:maintain"];
+}
+
+function skillPackageToolsets(skill = {}) {
+  return skill.risk === "read_only" ? ["pact.knowledge.read"] : ["pact.knowledge.maintain"];
+}
+
+function publicSkillPackage(record = {}) {
+  const manifest = record.manifest || {};
+  const library = record.library || {};
+  const skill = {
+    packageId: manifest.packageId || "",
+    name: manifest.name || "",
+    version: manifest.version || "",
+    title: manifest.title || manifest.name || "",
+    description: manifest.description || "",
+    owner: manifest.owner || "",
+    source: manifest.source || "",
+    capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities : [],
+    risk: manifest.risk || "read_only",
+    status: record.status || "",
+    activatedAt: record.activatedAt || "",
+    lifecycleEventCount: Array.isArray(record.lifecycleEvents) ? record.lifecycleEvents.length : 0,
+    mcpOutlet: "pact.skillHub",
+    protocolVersion: manifest.protocolVersion || SKILL_REGISTRY_PROTOCOL_VERSION,
+    library: {
+      storage: library.storage || "",
+      root: library.root || "",
+      manifestPath: library.manifestPath || "",
+      filesRoot: library.filesRoot || "",
+      fileCount: Number(library.fileCount || 0),
+      totalBytes: Number(library.totalBytes || 0),
+      artifactDigestSha256: library.artifactDigestSha256 || ""
+    }
+  };
+  return {
+    ...skill,
+    requiredScopes: skillPackageRequiredScopes(skill),
+    toolsets: skillPackageToolsets(skill)
+  };
+}
+
+function grantCanSeeSkill(skill, grant = null) {
+  if (!skill || skill.status !== "active" || !grant) {
+    return false;
+  }
+  const grantScopes = new Set(normalizeGrantValues(grant.scopes || [], 512));
+  const missingScopes = skill.requiredScopes.filter((scope) => !grantScopes.has(scope));
+  if (missingScopes.length > 0) {
+    return false;
+  }
+  const grantToolsets = new Set(normalizeGrantValues(grant.toolsets || [], 256));
+  if (grantToolsets.size > 0 && !skill.toolsets.some((toolset) => grantToolsets.has(toolset))) {
+    return false;
+  }
+  return localGrantRiskRank(skill.risk || "read_only") <= localGrantRiskRank(grantVisibleRisk(grant));
+}
+
+function emptySkillCatalog({ status = "ok", error = "" } = {}) {
+  return {
+    schemaVersion: 1,
+    protocolVersion: SKILL_HUB_DISCOVERY_PROTOCOL_VERSION,
+    lifecycleProtocolVersion: CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION,
+    skillRegistryProtocolVersion: SKILL_REGISTRY_PROTOCOL_VERSION,
+    status,
+    revision: "",
+    summary: {
+      activeSkillCount: 0,
+      visibleSkillCount: 0
+    },
+    skills: [],
+    ...(error ? { error } : {})
+  };
+}
+
+function skillCatalogFromCapabilityPackages(registryDescription = {}, { authorization = null } = {}) {
+  const activePackageIds = new Set(Object.values(registryDescription.activeByKey || {}).map((value) => String(value || "")));
+  const activeSkills = (registryDescription.packages || [])
+    .filter((record) => record?.manifest?.kind === "skill")
+    .filter((record) => record.status === "active")
+    .filter((record) => activePackageIds.has(String(record.manifest.packageId || "")))
+    .map(publicSkillPackage);
+  const visibleSkills = authorization?.grant
+    ? activeSkills.filter((skill) => grantCanSeeSkill(skill, authorization.grant))
+    : activeSkills;
+  const revision = [
+    registryDescription.updatedAt || "",
+    ...visibleSkills.map((skill) => `${skill.packageId}:${skill.version}:${skill.library.artifactDigestSha256}`)
+  ].filter(Boolean).join("|");
+  return {
+    ...emptySkillCatalog(),
+    revision,
+    summary: {
+      activeSkillCount: activeSkills.length,
+      visibleSkillCount: visibleSkills.length
+    },
+    skills: visibleSkills
+  };
 }
 
 function hasSafetyConfirm(request = null) {
@@ -878,10 +986,13 @@ function mcpGrantClientRows(grant, { offlineAfterSeconds = 300 } = {}) {
 
 export function createToolSkillManagementProvider({
   toolManagementPlatform,
+  userDataPath = "",
+  capabilityPackageRegistry = null,
   securityPermissions = toolManagementPlatform?.securityPermissions || null,
   logger = null
 } = {}) {
   const platform = toolManagementPlatform;
+  const skillPackageRegistry = capabilityPackageRegistry || createCapabilityPackageRegistry({ userDataPath });
 
   async function loadMcpWorkspaceDirectory({ request, context = {} }) {
     const result = await executeTool({
@@ -977,6 +1088,20 @@ export function createToolSkillManagementProvider({
     return (catalog.tools || [])
       .filter((tool) => tool.status === "active")
       .filter((tool) => !grant || grantCanSeeTool(tool, grant));
+  }
+
+  async function listVisibleSkills({ authorization = null } = {}) {
+    try {
+      return skillCatalogFromCapabilityPackages(await skillPackageRegistry.describe(), { authorization });
+    } catch (error) {
+      logger?.warn?.("tool_skill_management.skill_catalog.failed", {
+        error: error?.message || "skill catalog projection failed"
+      });
+      return emptySkillCatalog({
+        status: "unavailable",
+        error: "Skill catalog projection failed."
+      });
+    }
   }
 
   async function executeTool({ toolId, input = {}, request = null, context = {}, dryRun = false } = {}) {
@@ -1307,13 +1432,15 @@ export function createToolSkillManagementProvider({
           "tool_execution",
           "mcp_local_grant",
           "mcp_workspace_reference_projection",
-          "skill_registry_surface"
+          "skill_registry_surface",
+          "active_skill_catalog"
         ]
       };
     },
     authorizeRequest,
     visibleGrantSummary,
     listVisibleTools,
+    listVisibleSkills,
     executeTool,
     resolveMcpWorkspaceInput,
     publicMcpToolPayload,

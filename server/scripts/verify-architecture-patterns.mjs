@@ -1833,6 +1833,7 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
   for (const needle of [
     "TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION",
     "listMcpClientConnections",
+    "listVisibleSkills",
     "authorizeRequest",
     "createLocalMcpGrant",
     "markLocalMcpGrantUninstalled",
