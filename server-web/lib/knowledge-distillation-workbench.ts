@@ -78,7 +78,9 @@ export type DistillationModelProbeStatus = {
   message: string;
 };
 
-type CreateWorkbenchRunPayload = Record<string, unknown>;
+type CreateWorkbenchRunPayload = Record<string, unknown> & {
+  workflowScope: "document" | "corpus" | "project";
+};
 
 export function asWorkbenchRun(value: unknown): WorkbenchRun {
   const record = value && typeof value === "object" ? value as Record<string, unknown> : {};

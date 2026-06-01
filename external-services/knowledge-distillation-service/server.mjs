@@ -18646,7 +18646,9 @@ function documentWorkflowSelector(input = {}) {
       input.documentId ||
       input.sourceId ||
       input.fileName ||
-      input.title ||
+      input.targetTitle ||
+      input.documentTitle ||
+      input.targetDocumentTitle ||
       ""
   ).trim();
 }
@@ -19325,7 +19327,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       enumValues: DISTILLATION_WORKFLOW_SCOPE_VALUES,
       defaultValue: DEFAULT_DISTILLATION_WORKFLOW_SCOPE,
       aliases: Object.keys(DISTILLATION_WORKFLOW_SCOPE_ALIASES),
-      documentSelectorFields: ["targetDocumentId", "documentId", "sourceId", "fileName", "title"],
+      documentSelectorFields: ["targetDocumentId", "documentId", "sourceId", "fileName", "targetTitle", "documentTitle", "targetDocumentTitle"],
       semantics: {
         document: "Run the single-document workflow after input normalization and time filtering.",
         corpus: "Run a multi-document corpus workflow without requiring project-level intent.",

@@ -207,6 +207,7 @@ async function startWorkbenchRun() {
       jobId: props.ingestJob.id,
       batchId: props.normalizedManifest?.batchId || props.ingestJob.id,
       query: "项目全部文档通用知识蒸馏",
+      workflowScope: "project",
       ...createOptions.value,
       modelEnabled: true,
     });

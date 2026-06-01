@@ -478,6 +478,8 @@ export function useDebugDistillationController(options: DebugDistillationControl
         jobId: completedJob.id,
         batchId: completedJob.id,
         query: "上传文件核心知识提炼",
+        workflowScope: "document",
+        fileName: file.name,
         prompt: defaultDistillationPrompt,
         modelAlias: distillationModelAlias.value,
         tokenBudget: DISTILLATION_TOKEN_BUDGET,

@@ -141,6 +141,11 @@ assert.deepEqual(
   ["document", "corpus", "project"],
   "create run operation must expose workflowScope as an enum value parameter"
 );
+assert.equal(
+  createRunOperation.inputSchema?.required?.includes("workflowScope"),
+  true,
+  "platform create run operation must force upstream callers to choose workflowScope explicitly"
+);
 assert.equal(createRunOperation.inputSchema?.properties?.workflowScope?.default, "project");
 
 const catalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
@@ -3992,6 +3997,7 @@ try {
       body: JSON.stringify({
         query: "Streaming manifest input verification",
         title: "Streaming manifest input verification",
+        workflowScope: "corpus",
         responseProfile: "agent",
         rawDocumentsManifestPath
       })
@@ -4027,6 +4033,7 @@ try {
     body: JSON.stringify({
       query: "冲突证据门禁验证",
       title: "冲突证据门禁验证",
+      workflowScope: "document",
       responseProfile: "agent",
       requestedClaims: [
         "Legacy FTP upload is permitted for production evidence."
@@ -4059,6 +4066,7 @@ try {
       projectId: "incremental-project-alpha",
       query: "增量工程首次快照",
       title: "增量工程首次快照",
+      workflowScope: "project",
       responseProfile: "agent",
       rawDocuments: [
         {
@@ -4093,6 +4101,7 @@ try {
       projectId: "incremental-project-alpha",
       query: "增量工程变更快照",
       title: "增量工程变更快照",
+      workflowScope: "project",
       responseProfile: "agent",
       rawDocuments: [
         {
@@ -4155,6 +4164,7 @@ try {
     body: JSON.stringify({
       query: "时间过滤蒸馏验证",
       title: "时间过滤蒸馏验证",
+      workflowScope: "corpus",
       responseProfile: "agent",
       timeFilter: {
         from: "2026-06-01",
@@ -4210,6 +4220,7 @@ try {
     body: JSON.stringify({
       query: "空语料失败验证",
       title: "空语料失败验证",
+      workflowScope: "document",
       rawDocuments: [
         {
           sourceId: "image-only",
@@ -4242,6 +4253,7 @@ try {
     body: JSON.stringify({
       query: "扫描 PDF 降级验证",
       title: "扫描 PDF 降级验证",
+      workflowScope: "document",
       rawDocuments: [
         {
           sourceId: "scanned-pdf",
@@ -4275,6 +4287,7 @@ try {
     body: JSON.stringify({
       query: "PDF 字体映射风险验证",
       title: "PDF 字体映射风险验证",
+      workflowScope: "document",
       rawDocuments: [
         {
           sourceId: "font-risk-pdf",

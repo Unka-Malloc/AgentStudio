@@ -3373,6 +3373,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     },
     inputSchema: {
       type: "object",
+      required: ["workflowScope"],
       properties: {
         workflowScope: {
           type: "string",
@@ -3384,6 +3385,9 @@ const SERVER_API_OPERATION_DEFINITIONS = [
         documentId: { type: "string" },
         sourceId: { type: "string" },
         fileName: { type: "string" },
+        targetTitle: { type: "string" },
+        documentTitle: { type: "string" },
+        targetDocumentTitle: { type: "string" },
         query: { type: "string" },
         title: { type: "string" },
         rawDocuments: { type: "array" },

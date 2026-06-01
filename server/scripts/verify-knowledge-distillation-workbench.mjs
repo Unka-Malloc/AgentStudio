@@ -95,4 +95,76 @@ assert.equal(
   "console domain services must not import the internal knowledge distillation workbench"
 );
 
+async function readOptional(relativePath) {
+  try {
+    return await fs.readFile(path.join(repoRoot, relativePath), "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return "";
+    }
+    throw error;
+  }
+}
+
+const workbenchFacadeText = await fs.readFile(
+  path.join(repoRoot, "server-web/lib/knowledge-distillation-workbench.ts"),
+  "utf8"
+);
+const workbenchComponentText = await fs.readFile(
+  path.join(repoRoot, "server-web/components/KnowledgeDistillationWorkbench.vue"),
+  "utf8"
+);
+const legacyDebugDistillationControllerText = await fs.readFile(
+  path.join(repoRoot, "server-web/composables/console-debug-distillation-controller.ts"),
+  "utf8"
+);
+const extractedWorkbenchControllerText = await readOptional(
+  "server-web/composables/knowledge-distillation-workbench-controller.ts"
+);
+const extractedDebugDistillationRunnerText = await readOptional(
+  "server-web/composables/console-debug-distillation-runner.ts"
+);
+const consoleWorkbenchCallerText = [
+  workbenchComponentText,
+  extractedWorkbenchControllerText
+].join("\n");
+const consoleDebugDistillationCallerText = [
+  legacyDebugDistillationControllerText,
+  extractedDebugDistillationRunnerText
+].join("\n");
+
+assert.ok(
+  /type\s+CreateWorkbenchRunPayload\s*=\s*Record<string,\s*unknown>\s*&\s*\{\s*workflowScope:\s*"document"\s*\|\s*"corpus"\s*\|\s*"project";\s*\}/.test(workbenchFacadeText) ||
+    /CreateKnowledgeDistillationWorkbenchRunPayload/.test(workbenchFacadeText),
+  "console workbench facade must require workflowScope in the create payload type"
+);
+assert.match(
+  consoleWorkbenchCallerText,
+  /workflowScope:\s*"project"/,
+  "project-directory workbench runs must explicitly pass workflowScope=project"
+);
+assert.match(
+  consoleDebugDistillationCallerText,
+  /workflowScope:\s*"document"/,
+  "single-file debug distillation runs must explicitly pass workflowScope=document"
+);
+assert.match(
+  consoleDebugDistillationCallerText,
+  /fileName:\s*file\.name/,
+  "single-file debug distillation must pass the known fileName as the document selector"
+);
+
+const externalCreateOperation = operationsById.get("external.knowledge.distillation.runs.create");
+assert.ok(externalCreateOperation, "external distillation create operation must exist");
+assert.equal(
+  externalCreateOperation.inputSchema?.required?.includes("workflowScope"),
+  true,
+  "external distillation create operation must force workflowScope at the platform boundary"
+);
+assert.deepEqual(
+  externalCreateOperation.inputSchema?.properties?.workflowScope?.enum,
+  ["document", "corpus", "project"],
+  "external distillation create operation must expose workflowScope as an enum"
+);
+
 console.log("knowledge distillation internal workbench deprecation verification passed");
