@@ -256,6 +256,12 @@ function localGrantSharedspaceExchangeReceiptContract() {
       "syncReceiptId",
       "contractVerified",
       "localAdapterVerified",
+      "remoteLiveVerified",
+      "remoteReadInvoked",
+      "remoteWriteInvoked",
+      "providerReceipt",
+      "transferBytes",
+      "bytesPerSecond",
       "nextOperations"
     ]
   };

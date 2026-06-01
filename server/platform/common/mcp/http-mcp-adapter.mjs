@@ -241,6 +241,12 @@ function sharedspaceExchangeReceiptContract() {
       "syncReceiptId",
       "contractVerified",
       "localAdapterVerified",
+      "remoteLiveVerified",
+      "remoteReadInvoked",
+      "remoteWriteInvoked",
+      "providerReceipt",
+      "transferBytes",
+      "bytesPerSecond",
       "nextOperations"
     ]
   };
@@ -1633,6 +1639,12 @@ function inferSharedspaceExchangeReceipt({ operation = "", input = {}, payload =
     ]),
     contractVerified: payload.contractVerified === true,
     localAdapterVerified: payload.localAdapterVerified === true,
+    remoteLiveVerified: payload.remoteLiveVerified === true || payload.transferReceipt?.remoteLiveVerified === true,
+    remoteReadInvoked: payload.remoteReadInvoked === true,
+    remoteWriteInvoked: payload.remoteWriteInvoked === true,
+    providerReceipt: payload.providerReceipt || payload.transferReceipt?.provider || null,
+    transferBytes: Number(payload.telemetry?.transferBytes || payload.transferReceipt?.telemetry?.transferBytes || 0) || undefined,
+    bytesPerSecond: Number(payload.telemetry?.bytesPerSecond || payload.transferReceipt?.telemetry?.bytesPerSecond || 0) || undefined,
     nextOperations: [...MCP_SHAREDSPACE_CORE_OPERATIONS]
   };
 }

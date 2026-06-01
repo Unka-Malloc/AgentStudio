@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -86,6 +88,169 @@ function assertPublicPayloadDoesNotLeak(payload, forbiddenText, label) {
   );
 }
 
+function sha256(buffer) {
+  return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
+async function readJsonRequest(request) {
+  const chunks = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.from(chunk));
+  }
+  const text = Buffer.concat(chunks).toString("utf8");
+  return text.trim() ? JSON.parse(text) : {};
+}
+
+function sendJson(response, status, payload) {
+  response.writeHead(status, { "Content-Type": "application/json" });
+  response.end(`${JSON.stringify(payload)}\n`);
+}
+
+async function startFakeCloudDriveProvider() {
+  const files = new Map();
+  const requests = [];
+
+  function putFile(filePath, content, revision = "rev-1") {
+    const buffer = Buffer.from(content, "utf8");
+    files.set(filePath, {
+      path: filePath,
+      name: path.posix.basename(filePath),
+      content: buffer,
+      contentSha256: sha256(buffer),
+      providerFileId: `fake-file-${sha256(Buffer.from(filePath)).slice(0, 12)}`,
+      revision,
+      etag: `"${sha256(Buffer.concat([Buffer.from(filePath), buffer])).slice(0, 16)}"`
+    });
+  }
+
+  putFile(".pact-data/codex/remote-seed.txt", "remote live seeded file\n", "rev-seed-1");
+  putFile(".pact-data/public/readme.txt", "remote live public file\n", "rev-public-1");
+
+  let baseUrl = "";
+  const server = http.createServer(async (request, response) => {
+    try {
+      if (request.method !== "POST") {
+        sendJson(response, 405, { ok: false, error: "method not allowed" });
+        return;
+      }
+      const body = await readJsonRequest(request);
+      requests.push({
+        url: request.url,
+        provider: body.provider,
+        operation: body.operation,
+        credentialRefHash: body.credentialRefHash
+      });
+      assert.equal(JSON.stringify(body).includes("secret://"), false, "remote provider request must receive only hashed credential refs");
+      const payload = body.payload || {};
+
+      if (request.url === "/connect") {
+        sendJson(response, 200, {
+          ok: true,
+          connection: {
+            rootId: "fake-root-01",
+            rootName: "Fake Drive Root",
+            revision: "root-rev-1",
+            accountId: "fake-account-01"
+          }
+        });
+        return;
+      }
+
+      if (request.url === "/items/list") {
+        const basePath = String(payload.path || "/").replace(/^\/+|\/+$/g, "");
+        const items = [...files.values()]
+          .filter((file) => !basePath || basePath === "." || file.path === basePath || file.path.startsWith(`${basePath}/`))
+          .map((file) => ({
+            path: file.path,
+            name: file.name,
+            itemType: "file",
+            mimeType: "text/plain",
+            sizeBytes: file.content.length,
+            contentSha256: file.contentSha256,
+            providerFileId: file.providerFileId,
+            revision: file.revision,
+            webUrl: `${baseUrl}/web/${encodeURIComponent(file.path)}`,
+            etag: file.etag
+          }));
+        sendJson(response, 200, { ok: true, items });
+        return;
+      }
+
+      if (request.url === "/files/download") {
+        const file = files.get(String(payload.path || ""));
+        if (!file) {
+          sendJson(response, 404, { ok: false, code: "REMOTE_FILE_NOT_FOUND", error: "file not found" });
+          return;
+        }
+        sendJson(response, 200, {
+          ok: true,
+          path: file.path,
+          name: file.name,
+          byteSize: file.content.length,
+          contentBase64: file.content.toString("base64"),
+          contentSha256: file.contentSha256,
+          providerFileId: file.providerFileId,
+          revision: file.revision,
+          webUrl: `${baseUrl}/web/${encodeURIComponent(file.path)}`,
+          etag: file.etag
+        });
+        return;
+      }
+
+      if (request.url === "/files/upload") {
+        const filePath = String(payload.path || "");
+        const content = Buffer.from(String(payload.contentBase64 || ""), "base64");
+        const expectedSha256 = String(payload.contentSha256 || "");
+        assert.equal(sha256(content), expectedSha256, "remote upload content hash must match provider payload");
+        const revision = `rev-upload-${requests.length}`;
+        const providerFileId = `fake-file-${sha256(Buffer.from(filePath)).slice(0, 12)}`;
+        const record = {
+          path: filePath,
+          name: path.posix.basename(filePath),
+          content,
+          contentSha256: expectedSha256,
+          providerFileId,
+          revision,
+          etag: `"${sha256(Buffer.concat([Buffer.from(filePath), content])).slice(0, 16)}"`
+        };
+        files.set(filePath, record);
+        sendJson(response, 200, {
+          ok: true,
+          path: record.path,
+          name: record.name,
+          byteSize: record.content.length,
+          contentSha256: record.contentSha256,
+          providerFileId: record.providerFileId,
+          revision: record.revision,
+          webUrl: `${baseUrl}/web/${encodeURIComponent(record.path)}`,
+          etag: record.etag
+        });
+        return;
+      }
+
+      sendJson(response, 404, { ok: false, error: "unknown fake provider route" });
+    } catch (error) {
+      sendJson(response, 500, { ok: false, error: error?.message || String(error) });
+    }
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  baseUrl = `http://127.0.0.1:${address.port}`;
+  return {
+    url: baseUrl,
+    requests,
+    readFile(filePath) {
+      return files.get(filePath);
+    },
+    close() {
+      return new Promise((resolve, reject) => {
+        server.close((error) => error ? reject(error) : resolve());
+      });
+    }
+  };
+}
+
 const operationsById = new Map(SERVER_API_OPERATIONS.map((operation) => [operation.id, operation]));
 const toolsByOperationId = new Map(
   createToolCatalog({ operations: SERVER_API_OPERATIONS }).tools
@@ -116,6 +281,7 @@ for (const operationId of REQUIRED_OPERATIONS) {
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-v001-cloud-drive-"));
 const icloudRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-icloud-drive-"));
 let server = null;
+let fakeProvider = null;
 
 try {
   await fs.mkdir(path.join(icloudRoot, ".pact-data", "owner"), { recursive: true });
@@ -134,6 +300,7 @@ try {
     }
   });
   const auth = await installAuthenticatedFetch(server, { safetyConfirm: true });
+  fakeProvider = await startFakeCloudDriveProvider();
 
   const workspace = await fetchJson(`${server.url}/api/agent-workspaces`, {
     method: "POST",
@@ -412,6 +579,100 @@ try {
     providerRefs[provider] = connected.payload.drive.driveRef;
   }
 
+  const remoteLiveConnect = await fetchJson(`${server.url}/api/sharedspace/drive/connect`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(auth, { method: "POST" })
+    },
+    body: JSON.stringify({
+      workspaceId,
+      provider: "google-drive",
+      secretRef: "secret://pact/drive/google-drive-oauth",
+      mode: "remote-live",
+      endpointRef: "config://pact/drive/google-drive-fake-provider",
+      endpointUrl: fakeProvider.url,
+      managedFolder: true,
+      managedFolderRoot: ".pact-data",
+      publicFolder: "public",
+      allowedClients: ["owner", "codex"],
+      defaultClient: "codex"
+    })
+  });
+  assert.equal(remoteLiveConnect.status, 200, JSON.stringify(remoteLiveConnect.payload, null, 2));
+  assert.equal(remoteLiveConnect.payload.contractVerified, false, "remote-live connect must not be reported as contract verified");
+  assert.equal(remoteLiveConnect.payload.remoteLiveVerified, true);
+  assert.equal(remoteLiveConnect.payload.drive.mode, "remote-live");
+  assert.equal(remoteLiveConnect.payload.drive.remoteLiveVerified, true);
+  assert.ok(remoteLiveConnect.payload.telemetry.transferBytes > 0, "remote-live connect must expose transfer size telemetry");
+  assert.ok(remoteLiveConnect.payload.telemetry.bytesPerSecond > 0, "remote-live connect must expose transfer rate telemetry");
+  assert.equal(JSON.stringify(remoteLiveConnect.payload).includes(fakeProvider.url), false, "public remote-live connect payload must not expose endpointUrl");
+  const remoteLiveDriveRef = remoteLiveConnect.payload.drive.driveRef;
+
+  const remoteLiveList = await fetchJson(`${server.url}/api/sharedspace/drive/items?${new URLSearchParams({
+    workspaceId,
+    driveRef: remoteLiveDriveRef,
+    clientId: "codex",
+    path: "default",
+    recursive: "true",
+    includeHash: "true"
+  })}`, {
+    headers: authHeaders(auth)
+  });
+  assert.equal(remoteLiveList.status, 200, JSON.stringify(remoteLiveList.payload, null, 2));
+  assert.equal(remoteLiveList.payload.remoteLiveVerified, true);
+  assert.equal(remoteLiveList.payload.contractVerified, false);
+  assert.equal(remoteLiveList.payload.paths.includes(".pact-data/codex/remote-seed.txt"), true);
+  assert.ok(remoteLiveList.payload.items[0].provider.fileId, "remote-live list items must include provider file id metadata");
+  assert.ok(remoteLiveList.payload.telemetry.transferBytes > 0, "remote-live list must expose transfer bytes");
+
+  const remoteLiveDownload = await fetchJson(`${server.url}/api/sharedspace/drive/files/download?${new URLSearchParams({
+    workspaceId,
+    driveRef: remoteLiveDriveRef,
+    clientId: "codex",
+    path: "default/remote-seed.txt",
+    includeText: "true"
+  })}`, {
+    headers: authHeaders(auth)
+  });
+  assert.equal(remoteLiveDownload.status, 200, JSON.stringify(remoteLiveDownload.payload, null, 2));
+  assert.equal(remoteLiveDownload.payload.content, "remote live seeded file\n");
+  assert.equal(remoteLiveDownload.payload.remoteReadInvoked, true);
+  assert.equal(remoteLiveDownload.payload.remoteLiveVerified, true);
+  assert.equal(remoteLiveDownload.payload.transferReceipt.state, "remoteLiveVerified");
+  assert.ok(remoteLiveDownload.payload.transferReceipt.provider.fileId, "remote-live download receipt must include provider file id");
+  assert.ok(remoteLiveDownload.payload.transferReceipt.provider.revision, "remote-live download receipt must include provider revision");
+  assert.ok(remoteLiveDownload.payload.transferReceipt.provider.webUrl, "remote-live download receipt must include provider webUrl");
+  assert.ok(remoteLiveDownload.payload.transferReceipt.provider.etag, "remote-live download receipt must include provider etag");
+  assert.ok(remoteLiveDownload.payload.transferReceipt.telemetry.transferBytes > 0, "remote-live download receipt must include transfer bytes");
+  assert.ok(remoteLiveDownload.payload.transferReceipt.telemetry.bytesPerSecond > 0, "remote-live download receipt must include transfer rate");
+
+  const remoteLiveUpload = await fetchJson(`${server.url}/api/sharedspace/drive/files/upload`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(auth, { method: "POST" })
+    },
+    body: JSON.stringify({
+      workspaceId,
+      driveRef: remoteLiveDriveRef,
+      clientId: "codex",
+      path: "default/remote-upload.txt",
+      content: "uploaded through remote live provider\n"
+    })
+  });
+  assert.equal(remoteLiveUpload.status, 201, JSON.stringify(remoteLiveUpload.payload, null, 2));
+  assert.equal(remoteLiveUpload.payload.remoteWriteInvoked, true);
+  assert.equal(remoteLiveUpload.payload.remoteLiveVerified, true);
+  assert.equal(remoteLiveUpload.payload.contractVerified, false);
+  assert.equal(remoteLiveUpload.payload.transferReceipt.state, "remoteLiveVerified");
+  assert.ok(remoteLiveUpload.payload.transferReceipt.provider.fileId, "remote-live upload receipt must include provider file id");
+  assert.ok(remoteLiveUpload.payload.transferReceipt.provider.revision, "remote-live upload receipt must include provider revision");
+  assert.ok(remoteLiveUpload.payload.transferReceipt.provider.webUrl, "remote-live upload receipt must include provider webUrl");
+  assert.ok(remoteLiveUpload.payload.transferReceipt.provider.etag, "remote-live upload receipt must include provider etag");
+  assert.ok(remoteLiveUpload.payload.transferReceipt.telemetry.transferBytes > 0, "remote-live upload receipt must include transfer bytes");
+  assert.equal(fakeProvider.readFile(".pact-data/codex/remote-upload.txt").content.toString("utf8"), "uploaded through remote live provider\n");
+
   const dropboxPermissions = await fetchJson(`${server.url}/api/sharedspace/drive/permissions?${new URLSearchParams({
     workspaceId,
     driveRef: providerRefs.dropbox
@@ -502,6 +763,32 @@ try {
   assert.equal(mcpUploadStructured.exchange.transferReceiptId, mcpUpload.transferReceipt.transferReceiptId);
   assert.equal(mcpUploadStructured.exchange.checkpointId, mcpUpload.checkpoint.checkpointId);
 
+  const mcpRemoteUploadStructured = await callMcpStructured({
+    serverUrl: server.url,
+    token: grant.payload.token,
+    operation: "pact.sharedspace.drive.file.upload",
+    input: {
+      workspaceId,
+      driveRef: remoteLiveDriveRef,
+      clientId: "codex",
+      path: "default/mcp-remote-live-upload.txt",
+      content: "mcp remote live upload"
+    }
+  });
+  const mcpRemoteUpload = mcpRemoteUploadStructured.payload;
+  assert.equal(mcpRemoteUpload.ok, true);
+  assert.equal(mcpRemoteUpload.remoteLiveVerified, true);
+  assert.equal(mcpRemoteUpload.contractVerified, false);
+  assert.equal(mcpRemoteUpload.remoteWriteInvoked, true);
+  assert.equal(mcpRemoteUploadStructured.exchange.action, "drive-file-uploaded");
+  assert.equal(mcpRemoteUploadStructured.exchange.driveRef, remoteLiveDriveRef);
+  assert.equal(mcpRemoteUploadStructured.exchange.remoteLiveVerified, true);
+  assert.equal(mcpRemoteUploadStructured.exchange.remoteWriteInvoked, true);
+  assert.ok(mcpRemoteUploadStructured.exchange.providerReceipt.fileId, "MCP exchange must carry provider file id for remote-live upload");
+  assert.ok(mcpRemoteUploadStructured.exchange.transferBytes > 0, "MCP exchange must carry remote-live transfer bytes");
+  assert.ok(mcpRemoteUploadStructured.exchange.bytesPerSecond > 0, "MCP exchange must carry remote-live transfer rate");
+  assert.equal(fakeProvider.readFile(".pact-data/codex/mcp-remote-live-upload.txt").content.toString("utf8"), "mcp remote live upload");
+
   const mcpSyncStructured = await callMcpStructured({
     serverUrl: server.url,
     token: grant.payload.token,
@@ -535,6 +822,9 @@ try {
   });
   assert.ok(audit.items.some((item) => item.operationId === "sharedspace.drive.file.upload"), "drive upload must be queryable from operation audit");
 } finally {
+  if (fakeProvider?.close) {
+    await fakeProvider.close().catch(() => {});
+  }
   if (server?.close) {
     await server.close();
   }
