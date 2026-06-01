@@ -520,6 +520,15 @@ try {
   assert.ok(metrics.payload.metrics.requests.requestBytesTotal > 0);
   assert.ok(metrics.payload.metrics.requests.responseBytesTotal > 0);
   assert.ok(metrics.payload.metrics.requests.transferBytesPerSecond >= 0);
+  assert.ok(metrics.payload.metrics.pendingOperations.total >= 2);
+  assert.ok(metrics.payload.metrics.pendingOperations.byStatus.rejected >= 1);
+  assert.ok(metrics.payload.metrics.pendingOperations.byStatus.completed >= 1);
+  assert.ok(metrics.payload.metrics.pendingOperations.byTool["pact.workspaceGovernance.policy.set"] >= 2);
+  assert.ok(metrics.payload.metrics.pendingOperations.byRisk.repair_write >= 2);
+  assert.ok(metrics.payload.metrics.pendingOperations.byGrant[approvalGrant.payload.grant.id] >= 2);
+  assert.ok(metrics.payload.metrics.pendingOperations.metadataBytesTotal > 0);
+  assert.ok(metrics.payload.metrics.pendingOperations.operationsPerMinute >= 0);
+  assert.ok(metrics.payload.metrics.pendingOperations.averagePendingAgeSeconds >= 0);
 
   const filteredMetricsUrl = new URL(`${server.url}/api/tool-management/v1/metrics/summary`);
   filteredMetricsUrl.searchParams.set("toolId", "pact.knowledge.health");
@@ -544,6 +553,7 @@ try {
   assert.equal(filteredMetrics.payload.metrics.toolCalls.byProfile["profile-metered"] >= 1, true);
   assert.ok(filteredMetrics.payload.metrics.requests.byTransport["tool-management"] >= 1);
   assert.ok(filteredMetrics.payload.metrics.requests.byRoute["/api/tool-management/v1/execute"] >= 1);
+  assert.equal(filteredMetrics.payload.metrics.pendingOperations.total, 0);
   assert.ok(filteredMetrics.payload.metrics.series.buckets.some((bucket) =>
     bucket.toolCalls.total >= 1 &&
       bucket.toolCalls.byTool["pact.knowledge.health"] >= 1

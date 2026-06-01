@@ -1060,6 +1060,98 @@ function summarizeToolUsageDimension(rows = [], columnName = "", outputKey = "",
     });
 }
 
+function summarizePendingOperationRows(rows = []) {
+  const byStatus = {};
+  const byTool = {};
+  const byOperation = {};
+  const byRisk = {};
+  const byGrant = {};
+  const byProfile = {};
+  const byAgent = {};
+  let redactedInputBytesTotal = 0;
+  let contextBytesTotal = 0;
+  let resultSummaryBytesTotal = 0;
+  let pendingAgeSecondsTotal = 0;
+  let pendingAgeCount = 0;
+  let oldestPendingAgeSeconds = 0;
+  let oldestCreatedAt = "";
+  let newestCreatedAt = "";
+  const nowMs = Date.now();
+
+  for (const row of rows) {
+    const status = row.status || "unknown";
+    const toolId = row.tool_id || "unknown";
+    const operationId = row.operation_id || "";
+    const risk = row.risk || "unknown";
+    byStatus[status] = (byStatus[status] || 0) + 1;
+    byTool[toolId] = (byTool[toolId] || 0) + 1;
+    byRisk[risk] = (byRisk[risk] || 0) + 1;
+    if (operationId) {
+      byOperation[operationId] = (byOperation[operationId] || 0) + 1;
+    }
+    if (row.grant_id) {
+      byGrant[row.grant_id] = (byGrant[row.grant_id] || 0) + 1;
+    }
+    if (row.profile_id) {
+      byProfile[row.profile_id] = (byProfile[row.profile_id] || 0) + 1;
+    }
+    if (row.agent_id) {
+      byAgent[row.agent_id] = (byAgent[row.agent_id] || 0) + 1;
+    }
+    redactedInputBytesTotal += Buffer.byteLength(String(row.redacted_input_json || ""), "utf8");
+    contextBytesTotal += Buffer.byteLength(String(row.context_json || ""), "utf8");
+    resultSummaryBytesTotal += Buffer.byteLength(String(row.result_summary_json || ""), "utf8");
+
+    const createdAt = String(row.created_at || "");
+    if (createdAt) {
+      oldestCreatedAt = !oldestCreatedAt || createdAt < oldestCreatedAt ? createdAt : oldestCreatedAt;
+      newestCreatedAt = !newestCreatedAt || createdAt > newestCreatedAt ? createdAt : newestCreatedAt;
+    }
+    if (status === "pending") {
+      const createdMs = Date.parse(createdAt);
+      if (Number.isFinite(createdMs)) {
+        const ageSeconds = Math.max(0, Number(((nowMs - createdMs) / 1000).toFixed(2)));
+        pendingAgeSecondsTotal += ageSeconds;
+        pendingAgeCount += 1;
+        oldestPendingAgeSeconds = Math.max(oldestPendingAgeSeconds, ageSeconds);
+      }
+    }
+  }
+
+  const observedWindowSeconds = metricWindowSeconds(oldestCreatedAt, newestCreatedAt, rows.length);
+  const metadataBytesTotal = redactedInputBytesTotal + contextBytesTotal + resultSummaryBytesTotal;
+  return {
+    total: rows.length,
+    pendingTotal: byStatus.pending || 0,
+    approvedTotal: byStatus.approved || 0,
+    completedTotal: byStatus.completed || 0,
+    rejectedTotal: byStatus.rejected || 0,
+    expiredTotal: byStatus.expired || 0,
+    failedTotal: byStatus.failed || 0,
+    byStatus,
+    byTool,
+    byOperation,
+    byRisk,
+    byGrant,
+    byProfile,
+    byAgent,
+    redactedInputBytesTotal,
+    contextBytesTotal,
+    resultSummaryBytesTotal,
+    metadataBytesTotal,
+    oldestCreatedAt,
+    newestCreatedAt,
+    observedWindowSeconds,
+    operationsPerMinute: observedWindowSeconds
+      ? Number(((rows.length * 60) / observedWindowSeconds).toFixed(2))
+      : 0,
+    averagePendingAgeSeconds: pendingAgeCount
+      ? Number((pendingAgeSecondsTotal / pendingAgeCount).toFixed(2))
+      : 0,
+    oldestPendingAgeSeconds
+  };
+}
+
 function prometheusEscapeLabel(value = "") {
   return String(value || "")
     .replace(/\\/g, "\\\\")
@@ -2086,6 +2178,7 @@ export function createToolManagementStore({
       statusCode,
       completionStatus
     }, "request");
+    const pendingOperationFilters = createMetricClauses({ since, until, toolId, grantId, profileId }, "tool");
     const rows = db.prepare(`
       SELECT * FROM tool_metric_events
       ${toolFilters.clauses.length ? `WHERE ${toolFilters.clauses.join(" AND ")}` : ""}
@@ -2146,6 +2239,14 @@ export function createToolManagementStore({
       LIMIT ?
     `).all(...requestFilters.params, normalizedLimit);
     const requests = summarizeRequestMetricRows(requestRows);
+    expirePendingOperations();
+    const pendingOperationRows = db.prepare(`
+      SELECT * FROM tool_pending_operations
+      ${pendingOperationFilters.clauses.length ? `WHERE ${pendingOperationFilters.clauses.join(" AND ")}` : ""}
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(...pendingOperationFilters.params, normalizedLimit);
+    const pendingOperations = summarizePendingOperationRows(pendingOperationRows);
     const activeExecutions = db.prepare("SELECT count(*) AS count FROM tool_executions WHERE status = 'running'").get().count;
     const toolCalls = {
       total: rows.length,
@@ -2200,6 +2301,7 @@ export function createToolManagementStore({
       peakBytesPerSecond,
       toolCalls,
       requests,
+      pendingOperations,
       series: summarizeMetricBuckets({
         toolRows: rows,
         requestRows,
