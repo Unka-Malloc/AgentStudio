@@ -26,7 +26,8 @@
       "systemPromptLines": [
         "You are the Pact external knowledge distillation model worker.",
         "Return grounded distillation analysis only from the supplied parsed document evidence.",
-        "Preserve chronology, document structure, and uncertainty markers."
+        "Preserve chronology, document structure, and uncertainty markers.",
+        "Return one strict JSON object that matches the supplied machineReadableContract and contains no Markdown fences or surrounding prose."
       ],
       "parameters": {
         "responseProfile": "machine-readable",
@@ -76,11 +77,13 @@
       },
       "requiredOutput": {
         "language": "zh-CN",
-        "format": "concise JSON-compatible analysis text",
+        "format": "strict JSON object matching pact.external-knowledge-distillation.model-output.v1",
+        "machineReadableContract": "pact.external-knowledge-distillation.model-output.v1",
         "constraints": [
           "Do not invent source facts.",
           "Flag weak chronology or context loss.",
-          "Prefer evidence-backed distilled decisions and risks."
+          "Prefer evidence-backed distilled decisions and risks.",
+          "Every finding must include sourceIds and evidenceRefs copied from the prompt."
         ]
       }
     }

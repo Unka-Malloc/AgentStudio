@@ -486,16 +486,20 @@ try {
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.protocolVersion, "pact.external-knowledge-distillation.model-distillation-profiles.v1");
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.strategy, "singleton-model-distillation-profile-registry.v1");
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.defaultProfileId, "real-model-grounded-distillation.v1");
+  assert.equal(capabilities.payload.modelDistillation.outputContract, "pact.external-knowledge-distillation.model-output.v1");
+  assert.equal(capabilities.payload.modelDistillation.outputValidationStrategy, "model-distillation-machine-readable-contract.v1");
   assert.equal(capabilities.payload.modelDistillation.profiles.some((profile) => (
     profile.id === "real-model-grounded-distillation.v1" &&
     profile.requiredRealModelCall === true &&
     profile.noBuiltinFallback === true &&
+    profile.requiredOutput.machineReadableContract === "pact.external-knowledge-distillation.model-output.v1" &&
     profile.transportPolicy.maxAttempts === 2 &&
     profile.transportPolicy.retryOn.includes("ECONNRESET") &&
     profile.classificationDistillation.strategy === "profile-guided-group-distillation-map.v1" &&
     profile.classificationDistillation.groupGatewayCalls.enabled === true &&
     profile.classificationDistillation.groupGatewayCalls.strategy === "classification-group-real-model-call.v1"
   )), true);
+  assert.equal(capabilities.payload.algorithms.includes("model-distillation-machine-readable-contract.v1"), true);
   assert.equal(capabilities.payload.classification.strategy, "hashing_embedding_window_community_classification_v3");
   assert.equal(capabilities.payload.classification.taxonomyStrategy, "semantic-concept-topic-hierarchy.v1");
   assert.equal(capabilities.payload.classification.assignmentRationaleStrategy, "leader-clustering-semantic-concept-rationale.v1");

@@ -576,6 +576,7 @@ assert.equal(defaultModelProfile.requestFields.includes("question"), true);
 assert.equal(defaultModelProfile.systemPromptLines.length >= 3, true);
 assert.equal(defaultModelProfile.parameters.responseProfile, "machine-readable");
 assert.equal(defaultModelProfile.parameters.maxOutputTokens >= 1000, true);
+assert.equal(defaultModelProfile.requiredOutput.machineReadableContract, "pact.external-knowledge-distillation.model-output.v1");
 assert.equal(defaultModelProfile.transportPolicy.maxAttempts, 2);
 assert.equal(defaultModelProfile.transportPolicy.retryOn.includes("ECONNRESET"), true);
 assert.equal(defaultModelProfile.classificationDistillation.enabled, true);
@@ -815,6 +816,12 @@ for (const expectedText of [
   "profile.gatewayStrategy",
   "profile.systemPromptLines",
   "profile.parameters",
+  "MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY",
+  "MODEL_DISTILLATION_OUTPUT_CONTRACT",
+  "modelDistillationOutputContractSpec",
+  "parseModelDistillationOutputPayload",
+  "validateModelDistillationOutput",
+  "machineReadablePayload",
   "buildClassificationDistillationMap",
   "buildGroupModelDistillationPrompt",
   "callClassificationGroupModelGatewayCalls",

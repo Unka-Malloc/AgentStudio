@@ -60,6 +60,11 @@ assert.match(
   /const MODEL_DISTILLATION_GATEWAY_STRATEGY = "required-agent-gateway-real-model-call\.v1"/,
   "external distillation must require a real model gateway call instead of built-in fake model output"
 );
+assert.match(
+  serviceSourceText,
+  /const MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY = "model-distillation-machine-readable-contract\.v1"/,
+  "external distillation must validate real model output as machine-readable evidence-bound JSON"
+);
 assert.equal(
   /normalizeDocuments|loadDocumentPayload|contentBase64|filePathOverride|rawDocumentsManifestPath/.test(algorithmWorkflowBody),
   false,
@@ -146,6 +151,91 @@ async function waitForCompletedRun(serviceUrl, runId, timeoutMs = 20_000) {
 
 async function startMockModelGateway() {
   const calls = [];
+  const modelOutputContract = "pact.external-knowledge-distillation.model-output.v1";
+  function parsePrompt(question = "") {
+    try {
+      return question ? JSON.parse(question) : {};
+    } catch {
+      return {};
+    }
+  }
+  function projectModelPayload(body = {}) {
+    const prompt = parsePrompt(body.question || "");
+    const documents = Array.isArray(prompt.documents) ? prompt.documents : [];
+    const groups = Array.isArray(prompt.groups) ? prompt.groups : [];
+    const documentBySourceId = new Map(documents.map((document) => [document.sourceId, document]));
+    return {
+      protocolVersion: modelOutputContract,
+      distillationScope: "project-convergence",
+      summary: "解析后的文档已按时间、结构、证据窗口和分类组完成收敛蒸馏。",
+      groups: groups.map((group) => {
+        const groupDocuments = (group.sourceIds || [])
+          .map((sourceId) => documentBySourceId.get(sourceId))
+          .filter(Boolean);
+        const evidenceRefs = groupDocuments.map((document) => document.evidenceRef).filter(Boolean);
+        return {
+          groupId: group.groupId,
+          label: group.label,
+          sourceIds: group.sourceIds || [],
+          evidenceRefs,
+          summary: `${group.label || group.groupId} 已保持独立蒸馏边界。`,
+          findings: [
+            {
+              claim: `${group.label || group.groupId} 的核心信息需要保留来源、时间线和置信度。`,
+              sourceIds: group.sourceIds || [],
+              evidenceRefs,
+              confidence: 0.86
+            }
+          ]
+        };
+      }),
+      timeline: documents.slice(0, 6).map((document) => ({
+        time: document.documentTime || document.timeRange?.from || "",
+        sourceIds: [document.sourceId].filter(Boolean),
+        evidenceRefs: [document.evidenceRef].filter(Boolean),
+        summary: `${document.title || document.fileName || document.sourceId} 的时间线证据已保留。`
+      })),
+      findings: [
+        {
+          claim: "跨文档蒸馏必须继续绑定 sourceIds 与 evidenceRefs。",
+          sourceIds: documents.slice(0, 3).map((document) => document.sourceId).filter(Boolean),
+          evidenceRefs: documents.slice(0, 3).map((document) => document.evidenceRef).filter(Boolean),
+          confidence: 0.9
+        }
+      ],
+      risks: [
+        {
+          risk: "低置信度或弱时间线证据不得提升为核心结论。",
+          sourceIds: documents.slice(0, 1).map((document) => document.sourceId).filter(Boolean),
+          evidenceRefs: documents.slice(0, 1).map((document) => document.evidenceRef).filter(Boolean)
+        }
+      ]
+    };
+  }
+  function groupModelPayload(body = {}) {
+    const prompt = parsePrompt(body.question || "");
+    const evidence = Array.isArray(prompt.evidence) ? prompt.evidence : [];
+    const sourceIds = Array.isArray(body.sourceIds) ? body.sourceIds : [];
+    const evidenceRefs = evidence.map((item) => item.evidenceRef).filter(Boolean);
+    return {
+      protocolVersion: modelOutputContract,
+      distillationScope: "classification-group",
+      groupId: body.groupId || prompt.group?.groupId || "",
+      label: body.groupLabel || prompt.group?.label || "",
+      sourceIds,
+      evidenceRefs,
+      summary: `${body.groupLabel || body.groupId || "classification group"} 已按独立分类组完成蒸馏。`,
+      findings: [
+        {
+          claim: "该分类组只使用本组 evidence 和 sourceIds 生成结论。",
+          sourceIds,
+          evidenceRefs,
+          confidence: 0.88
+        }
+      ],
+      risks: []
+    };
+  }
   const server = http.createServer(async (request, response) => {
     const chunks = [];
     request.on("data", (chunk) => chunks.push(chunk));
@@ -164,13 +254,13 @@ async function startMockModelGateway() {
         body
       });
       response.writeHead(200, { "content-type": "application/json" });
+      const modelPayload = body.distillationScope === "classification-group"
+        ? groupModelPayload(body)
+        : projectModelPayload(body);
       response.end(JSON.stringify({
         ok: true,
-        text: [
-          "模型蒸馏结论：解析后的文档已按时间、结构和证据窗口聚合。",
-          "核心信息应保留来源编号、文档格式、时间线和低置信度提示。",
-          "冲突或上下文不足的内容需要继续通过 graphEvidence 与 grounding 校验。"
-        ].join("\n")
+        text: JSON.stringify(modelPayload),
+        structuredOutput: modelPayload
       }));
     });
   });
@@ -1448,12 +1538,16 @@ try {
   assert.equal(capabilities.payload.pipelineSeparation.distillationAlgorithmCore.forbiddenInputFields.includes("contentBase64"), true);
   assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.moduleBoundary, "external-kd.model-distillation.module.v1");
   assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.outputContract, "pact.external-knowledge-distillation.model-output.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.outputValidationStrategy, "model-distillation-machine-readable-contract.v1");
   assert.equal(capabilities.payload.pipelineSeparation.formatConversion.moduleBoundary, "external-kd.format-conversion.module.v1");
   assert.equal(capabilities.payload.distillationAlgorithm.parserPayloadFieldsAllowed, false);
   assert.equal(capabilities.payload.distillationAlgorithm.entrypoint, "runDistillationAlgorithmWorkflow");
   assert.equal(capabilities.payload.modelDistillation.requiredRealModelCall, true);
   assert.equal(capabilities.payload.modelDistillation.noBuiltinFallback, true);
   assert.equal(capabilities.payload.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
+  assert.equal(capabilities.payload.modelDistillation.outputContract, "pact.external-knowledge-distillation.model-output.v1");
+  assert.equal(capabilities.payload.modelDistillation.outputValidationStrategy, "model-distillation-machine-readable-contract.v1");
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.protocolVersion, "pact.external-knowledge-distillation.model-distillation-profiles.v1");
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.strategy, "singleton-model-distillation-profile-registry.v1");
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.source, "external-services/knowledge-distillation-service/model-distillation-profiles.json");
@@ -1465,6 +1559,7 @@ try {
     profile.requiredRealModelCall === true &&
     profile.noBuiltinFallback === true &&
     profile.parameters.responseProfile === "machine-readable" &&
+    profile.requiredOutput.machineReadableContract === "pact.external-knowledge-distillation.model-output.v1" &&
     profile.transportPolicy.maxAttempts === 2 &&
     profile.transportPolicy.retryOn.includes("ECONNRESET") &&
     profile.classificationDistillation.strategy === "profile-guided-group-distillation-map.v1" &&
@@ -1485,6 +1580,8 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("singleton-format-route-registry.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("singleton-parser-strategy-registry.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("singleton-model-distillation-profile-registry.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("pact.external-knowledge-distillation.model-output.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("model-distillation-machine-readable-contract.v1"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.strategy, "content-signature-routing.v1");
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("pdf-header"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-word"), true);
@@ -2516,9 +2613,22 @@ try {
   assert.equal(createRun.payload.result.modelDistillation.profileId, "real-model-grounded-distillation.v1");
   assert.equal(createRun.payload.result.modelDistillation.status, "completed");
   assert.equal(createRun.payload.result.modelDistillation.modelAlias, "verify-real-model-gateway");
+  assert.equal(createRun.payload.result.modelDistillation.outputValidation.strategy, "model-distillation-machine-readable-contract.v1");
+  assert.equal(createRun.payload.result.modelDistillation.outputValidation.contract, "pact.external-knowledge-distillation.model-output.v1");
+  assert.equal(createRun.payload.result.modelDistillation.outputValidation.status, "passed");
+  assert.equal(createRun.payload.result.modelDistillation.machineReadablePayload.protocolVersion, "pact.external-knowledge-distillation.model-output.v1");
+  assert.equal(createRun.payload.result.modelDistillation.machineReadablePayload.distillationScope, "project-convergence");
+  assert.equal(
+    createRun.payload.result.modelDistillation.outputValidation.gates.every((gate) => gate.status === "passed"),
+    true
+  );
   assert.equal(createRun.payload.result.modelDistillation.classificationDistillation.strategy, "profile-guided-group-distillation-map.v1");
+  assert.equal(createRun.payload.result.modelDistillation.classificationDistillation.outputValidationStrategy, "model-distillation-machine-readable-contract.v1");
   assert.equal(createRun.payload.result.modelDistillation.groupGatewayCalls.strategy, "classification-group-real-model-call.v1");
   assert.equal(createRun.payload.result.modelDistillation.groupGatewayCalls.completedGroupCallCount >= 1, true);
+  assert.equal(createRun.payload.result.modelDistillation.groupGatewayCalls.outputValidationStrategy, "model-distillation-machine-readable-contract.v1");
+  assert.equal(createRun.payload.result.modelDistillation.groupGatewayCalls.validationStatusCounts.passed >= 1, true);
+  assert.deepEqual(createRun.payload.result.modelDistillation.groupGatewayCalls.failedValidationGroupIds, []);
   assert.equal(
     createRun.payload.result.modelDistillation.classificationDistillation.groupCount >= createRun.payload.result.classification.coreGroupCount,
     true
@@ -2540,6 +2650,7 @@ try {
     assert.match(mockModelGateway.calls[0].body.systemPrompt, /Pact external knowledge distillation model worker/);
     assert.equal(mockModelGateway.calls[0].body.parameters.responseProfile, "machine-readable");
     assert.equal(mockModelGateway.calls[0].body.parameters.maxOutputTokens, 1800);
+    assert.match(mockModelGateway.calls[0].body.question, /pact\.external-knowledge-distillation\.model-output\.v1/);
     const groupModelGatewayCalls = mockModelGateway.calls.filter((call) => (
       call.body.distillationScope === "classification-group"
     ));
@@ -2549,6 +2660,7 @@ try {
       "classification distillation must call the model gateway once for each core group"
     );
     assert.equal(groupModelGatewayCalls.every((call) => call.body.parameters.distillationScope === "classification-group"), true);
+    assert.equal(groupModelGatewayCalls.every((call) => /pact\.external-knowledge-distillation\.model-output\.v1/.test(call.body.question)), true);
   }
   assert.equal(createRun.payload.result.referenceGapReport.strategy, "reference-framework-gap-report.v1");
   assert.equal(createRun.payload.result.referenceGapReport.frameworks.some((framework) => framework.id === "graphrag" && framework.status === "absorbed-with-open-gaps"), true);
@@ -2593,6 +2705,11 @@ try {
   assert.equal(financeModelDistillation.modelCall.scope, "classification-group");
   assert.equal(financeModelDistillation.modelCall.strategy, "classification-group-real-model-call.v1");
   assert.equal(financeModelDistillation.modelCall.sourceIds.includes("source-2"), true);
+  assert.equal(financeModelDistillation.modelCall.outputValidation.strategy, "model-distillation-machine-readable-contract.v1");
+  assert.equal(financeModelDistillation.modelCall.outputValidation.status, "passed");
+  assert.equal(financeModelDistillation.modelCall.machineReadablePayload.groupId, financeGroup.groupId);
+  assert.equal(financeModelDistillation.modelOutputValidation.status, "passed");
+  assert.equal(financeModelDistillation.machineReadablePayload.sourceIds.includes("source-2"), true);
   assert.equal(typeof financeModelDistillation.modelCall.request.promptSha256, "string");
   assert.equal(financeModelDistillation.modelCall.request.promptCharacters > 100, true);
   if (!reuseServiceUrl) {

@@ -70,6 +70,8 @@ const DISTILLATION_ALGORITHM_MODULE_BOUNDARY = "external-kd.distillation-algorit
 const MODEL_DISTILLATION_MODULE_BOUNDARY = "external-kd.model-distillation.module.v1";
 const FORMAT_CONVERSION_MODULE_BOUNDARY = "external-kd.format-conversion.module.v1";
 const MODEL_DISTILLATION_GATEWAY_STRATEGY = "required-agent-gateway-real-model-call.v1";
+const MODEL_DISTILLATION_OUTPUT_CONTRACT = "pact.external-knowledge-distillation.model-output.v1";
+const MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY = "model-distillation-machine-readable-contract.v1";
 const DISTILLATION_WORKFLOW_SCOPE = Object.freeze({
   DOCUMENT: "document",
   CORPUS: "corpus",
@@ -674,6 +676,12 @@ function validateModelDistillationProfilesConfig(config = {}) {
     if (!Array.isArray(profile.requiredOutput?.constraints) || profile.requiredOutput.constraints.length === 0) {
       throw new Error(`model distillation profile ${id} must define requiredOutput.constraints[]`);
     }
+    if (String(profile.parameters?.responseProfile || "").trim() !== "machine-readable") {
+      throw new Error(`model distillation profile ${id} must require a machine-readable response profile`);
+    }
+    if (String(profile.requiredOutput?.machineReadableContract || "").trim() !== MODEL_DISTILLATION_OUTPUT_CONTRACT) {
+      throw new Error(`model distillation profile ${id} must require ${MODEL_DISTILLATION_OUTPUT_CONTRACT}`);
+    }
   }
   const defaultProfileId = String(config.defaultProfileId || "").trim();
   if (!profileIds.has(defaultProfileId)) {
@@ -739,6 +747,7 @@ function normalizeModelDistillationProfile(profile = {}, registry = {}) {
     requiredOutput: Object.freeze({
       language: String(profile.requiredOutput?.language || "zh-CN").trim(),
       format: String(profile.requiredOutput?.format || "concise JSON-compatible analysis text").trim(),
+      machineReadableContract: String(profile.requiredOutput?.machineReadableContract || MODEL_DISTILLATION_OUTPUT_CONTRACT).trim(),
       constraints: Object.freeze(normalizeFormatRouteArray(profile.requiredOutput?.constraints))
     }),
     registry
@@ -20853,6 +20862,7 @@ function resolveModelDistillationProfile(input = {}) {
 function compactModelDocumentRecord(document = {}, index = 0) {
   return {
     index,
+    evidenceRef: evidenceKey(index),
     sourceId: document.sourceId || "",
     title: document.title || document.fileName || "",
     fileName: document.fileName || "",
@@ -20886,6 +20896,317 @@ function compactGroupDistillationEvidenceRecord(allDocuments = [], document = {}
   };
 }
 
+function modelDistillationOutputContractSpec(distillationScope = "project-convergence") {
+  const base = {
+    protocolVersion: MODEL_DISTILLATION_OUTPUT_CONTRACT,
+    distillationScope,
+    requiredTopLevelFields: ["protocolVersion", "distillationScope", "summary", "findings"],
+    findingShape: {
+      claim: "string",
+      sourceIds: ["source-id-from-prompt"],
+      evidenceRefs: ["evidenceRef-from-prompt"],
+      confidence: "number-0-to-1"
+    },
+    rules: [
+      "Return only one strict JSON object, without Markdown fences or prose outside JSON.",
+      "Every claim must include sourceIds and evidenceRefs from the prompt.",
+      "Do not invent groupId, sourceId, evidenceRef, dates, or facts."
+    ]
+  };
+  if (distillationScope === "classification-group") {
+    return {
+      ...base,
+      requiredTopLevelFields: ["protocolVersion", "distillationScope", "groupId", "summary", "sourceIds", "evidenceRefs", "findings"],
+      groupShape: {
+        groupId: "exact group.groupId from the prompt",
+        sourceIds: ["only sourceIds from this group"],
+        evidenceRefs: ["only evidenceRef values supplied for this group"]
+      }
+    };
+  }
+  return {
+    ...base,
+    requiredTopLevelFields: ["protocolVersion", "distillationScope", "summary", "groups", "timeline", "findings"],
+    groupShape: {
+      groupId: "exact groupId from prompt.groups",
+      sourceIds: ["only sourceIds from the matching group"],
+      evidenceRefs: ["only evidenceRef values from prompt.documents"]
+    },
+    timelineShape: {
+      time: "documentTime/timeRange from prompt when available",
+      sourceIds: ["source-id-from-prompt"],
+      evidenceRefs: ["evidenceRef-from-prompt"],
+      summary: "chronology-preserving statement"
+    }
+  };
+}
+
+function likelyModelDistillationPayload(value = {}) {
+  return Boolean(value) &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    ["protocolVersion", "distillationScope", "scope", "groupId", "groups", "findings", "timeline", "summary"].some((field) => (
+      value[field] !== undefined
+    ));
+}
+
+function parseJsonObjectTextCandidate(candidate = "") {
+  const text = String(candidate || "").trim();
+  if (!text) {
+    return { parsed: null, candidateText: "", parseError: "empty-model-output" };
+  }
+  const candidates = [text];
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    candidates.push(fenced[1].trim());
+  }
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.push(text.slice(firstBrace, lastBrace + 1));
+  }
+  let parseError = "";
+  for (const candidateText of candidates) {
+    try {
+      const parsed = JSON.parse(candidateText);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return { parsed, candidateText, parseError: "" };
+      }
+      parseError = "model-output-json-root-not-object";
+    } catch (error) {
+      parseError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  return { parsed: null, candidateText: text, parseError };
+}
+
+function parseModelDistillationOutputPayload(gatewayCall = {}) {
+  const raw = gatewayCall.response?.raw || {};
+  const objectCandidates = [
+    raw?.structuredOutput,
+    raw?.machineReadablePayload,
+    raw?.distillation,
+    raw?.result,
+    raw?.output,
+    raw?.response,
+    raw?.data,
+    raw
+  ];
+  for (const candidate of objectCandidates) {
+    if (likelyModelDistillationPayload(candidate)) {
+      return {
+        parsed: candidate,
+        candidateText: JSON.stringify(candidate),
+        parseError: "",
+        source: "gateway-json-object"
+      };
+    }
+  }
+  const textResult = parseJsonObjectTextCandidate(gatewayCall.response?.text || "");
+  return {
+    ...textResult,
+    source: textResult.parsed ? "gateway-text-json" : "gateway-text"
+  };
+}
+
+function collectJsonScalarValues(value = {}) {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectJsonScalarValues(item));
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const normalized = String(value).trim();
+    return normalized ? [normalized] : [];
+  }
+  return [];
+}
+
+function collectJsonKeyValues(value = {}, keys = new Set(), collected = []) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectJsonKeyValues(item, keys, collected);
+    }
+    return collected;
+  }
+  if (!value || typeof value !== "object") {
+    return collected;
+  }
+  for (const [key, childValue] of Object.entries(value)) {
+    if (keys.has(key)) {
+      collected.push(...collectJsonScalarValues(childValue));
+    }
+    collectJsonKeyValues(childValue, keys, collected);
+  }
+  return collected;
+}
+
+function sourceIdsForGroupDocuments(allDocuments = [], group = {}) {
+  const fromGroupDocuments = (group.documents || [])
+    .map((document) => document.sourceId)
+    .filter(Boolean);
+  if (fromGroupDocuments.length) {
+    return uniqueOrdered(fromGroupDocuments);
+  }
+  const groupSourceIds = new Set(group.sourceIds || []);
+  return allDocuments
+    .filter((document) => groupSourceIds.has(document.sourceId))
+    .map((document) => document.sourceId)
+    .filter(Boolean);
+}
+
+function evidenceRefsForSourceIds(allDocuments = [], sourceIds = []) {
+  const sourceIdSet = new Set(sourceIds || []);
+  return allDocuments
+    .map((document, index) => sourceIdSet.has(document.sourceId) ? evidenceKey(index) : "")
+    .filter(Boolean);
+}
+
+function modelDistillationFindingsPresent(parsed = {}, distillationScope = "project-convergence") {
+  if (!parsed || typeof parsed !== "object") {
+    return false;
+  }
+  if (Array.isArray(parsed.findings) && parsed.findings.length > 0) {
+    return true;
+  }
+  if (distillationScope === "project-convergence") {
+    return Array.isArray(parsed.groups) &&
+      parsed.groups.some((group) => Array.isArray(group?.findings) && group.findings.length > 0);
+  }
+  return false;
+}
+
+function validateModelDistillationOutput({
+  gatewayCall = {},
+  distillationWorkflow = {},
+  profile = MODEL_DISTILLATION_PROFILES.defaultProfile,
+  distillationScope = "project-convergence",
+  group = null,
+  selectedGroups = []
+} = {}) {
+  const parsedResult = parseModelDistillationOutputPayload(gatewayCall);
+  const parsed = parsedResult.parsed;
+  const allDocuments = distillationWorkflow.documents || [];
+  const selectedGroupRecords = selectedGroups.length
+    ? selectedGroups
+    : selectedClassificationDistillationGroups(distillationWorkflow, profile.classificationDistillation || {});
+  const expectedGroupIds = distillationScope === "classification-group"
+    ? [group?.groupId || ""].filter(Boolean)
+    : selectedGroupRecords.map((item) => item.groupId).filter(Boolean);
+  const knownGroupIds = new Set(selectedGroupRecords.map((item) => item.groupId).filter(Boolean));
+  for (const expectedGroupId of expectedGroupIds) {
+    knownGroupIds.add(expectedGroupId);
+  }
+  const allowedSourceIds = distillationScope === "classification-group"
+    ? sourceIdsForGroupDocuments(allDocuments, group || {})
+    : allDocuments.map((document) => document.sourceId).filter(Boolean);
+  const allowedEvidenceRefs = distillationScope === "classification-group"
+    ? evidenceRefsForSourceIds(allDocuments, allowedSourceIds)
+    : allDocuments.map((document, index) => document.sourceId ? evidenceKey(index) : "").filter(Boolean);
+  const observedScope = parsed?.distillationScope || parsed?.scope || "";
+  const observedGroupIds = uniqueOrdered(collectJsonKeyValues(parsed, new Set(["groupId", "groupIds"])));
+  const observedSourceIds = uniqueOrdered(collectJsonKeyValues(parsed, new Set(["sourceId", "sourceIds"])));
+  const observedEvidenceRefs = uniqueOrdered(collectJsonKeyValues(parsed, new Set(["evidenceRef", "evidenceRefs"])));
+  const missingGroupIds = expectedGroupIds.filter((groupId) => !observedGroupIds.includes(groupId));
+  const unknownGroupIds = observedGroupIds.filter((groupId) => !knownGroupIds.has(groupId));
+  const invalidSourceIds = observedSourceIds.filter((sourceId) => !allowedSourceIds.includes(sourceId));
+  const invalidEvidenceRefs = observedEvidenceRefs.filter((evidenceRef) => !allowedEvidenceRefs.includes(evidenceRef));
+  const hasSummary = hasJsonField(parsed || {}, "summary");
+  const hasGroupsArray = distillationScope !== "project-convergence" ||
+    (Array.isArray(parsed?.groups) && parsed.groups.length > 0);
+  const hasTimelineArray = distillationScope !== "project-convergence" ||
+    (Array.isArray(parsed?.timeline) && parsed.timeline.length > 0);
+  const gates = [
+    artifactValidationGate("model-output-text-present", Boolean(gatewayCall.response?.text), {
+      observed: { characters: String(gatewayCall.response?.text || "").length },
+      required: { nonEmptyText: true },
+      message: gatewayCall.response?.text ? "Model gateway returned output text." : "Model gateway returned no output text."
+    }),
+    artifactValidationGate("model-output-json-parseable", Boolean(parsed) && !parsedResult.parseError, {
+      observed: { source: parsedResult.source, parseError: parsedResult.parseError },
+      required: { validJsonObject: true },
+      message: parsedResult.parseError ? `Model output JSON parse failed: ${parsedResult.parseError}` : "Model output parses as a JSON object."
+    }),
+    artifactValidationGate("model-output-contract-version-matches", parsed?.protocolVersion === MODEL_DISTILLATION_OUTPUT_CONTRACT, {
+      observed: { protocolVersion: parsed?.protocolVersion || "" },
+      required: { protocolVersion: MODEL_DISTILLATION_OUTPUT_CONTRACT },
+      message: parsed?.protocolVersion === MODEL_DISTILLATION_OUTPUT_CONTRACT
+        ? "Model output declares the expected contract."
+        : "Model output contract is missing or mismatched."
+    }),
+    artifactValidationGate("model-output-scope-matches", observedScope === distillationScope, {
+      observed: { distillationScope: observedScope },
+      required: { distillationScope },
+      message: observedScope === distillationScope ? "Model output scope matches the request." : "Model output scope does not match the request."
+    }),
+    artifactValidationGate("model-output-required-group-ids-present", missingGroupIds.length === 0, {
+      observed: { observedGroupIds, missingGroupIds },
+      required: { groupIds: expectedGroupIds },
+      message: missingGroupIds.length ? "Model output is missing required group ids." : "Model output includes required group ids."
+    }),
+    artifactValidationGate("model-output-group-ids-known", unknownGroupIds.length === 0, {
+      observed: { observedGroupIds, unknownGroupIds },
+      required: { knownGroupIds: Array.from(knownGroupIds) },
+      message: unknownGroupIds.length ? "Model output references unknown group ids." : "Model output group ids resolve to classification groups."
+    }),
+    artifactValidationGate("model-output-source-refs-resolve", observedSourceIds.length > 0 && invalidSourceIds.length === 0, {
+      observed: { observedSourceIds, invalidSourceIds },
+      required: { sourceIds: allowedSourceIds },
+      message: invalidSourceIds.length
+        ? "Model output references unknown source ids."
+        : "Model output source ids resolve to supplied documents."
+    }),
+    artifactValidationGate("model-output-evidence-refs-resolve", observedEvidenceRefs.length > 0 && invalidEvidenceRefs.length === 0, {
+      observed: { observedEvidenceRefs, invalidEvidenceRefs },
+      required: { evidenceRefs: allowedEvidenceRefs },
+      message: invalidEvidenceRefs.length
+        ? "Model output references unknown evidence refs."
+        : "Model output evidence refs resolve to supplied evidence."
+    }),
+    artifactValidationGate("model-output-project-arrays-present", hasGroupsArray && hasTimelineArray, {
+      observed: {
+        hasGroupsArray,
+        hasTimelineArray
+      },
+      required: distillationScope === "project-convergence"
+        ? { groups: "non-empty array", timeline: "non-empty array" }
+        : { projectArraysRequired: false },
+      message: hasGroupsArray && hasTimelineArray ? "Model output includes required project arrays." : "Model output is missing required project arrays."
+    }),
+    artifactValidationGate("model-output-distilled-findings-present", hasSummary && modelDistillationFindingsPresent(parsed, distillationScope), {
+      observed: {
+        hasSummary,
+        hasFindings: modelDistillationFindingsPresent(parsed, distillationScope)
+      },
+      required: { summary: "non-empty string", findings: "non-empty array" },
+      message: hasSummary ? "Model output includes a summary and distilled findings." : "Model output is missing summary or findings."
+    })
+  ];
+  return {
+    strategy: MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY,
+    contract: MODEL_DISTILLATION_OUTPUT_CONTRACT,
+    status: gates.every((gate) => gate.status === "passed") ? "passed" : "failed",
+    generatedAt: nowIso(),
+    profileId: profile.id,
+    distillationScope,
+    groupId: group?.groupId || "",
+    parseSource: parsedResult.source,
+    responseSha256: gatewayCall.response?.sha256 || "",
+    machineReadablePayload: parsed || null,
+    observed: {
+      protocolVersion: parsed?.protocolVersion || "",
+      distillationScope: observedScope,
+      groupIds: observedGroupIds,
+      sourceIds: observedSourceIds,
+      evidenceRefs: observedEvidenceRefs
+    },
+    required: {
+      groupIds: expectedGroupIds,
+      sourceIds: allowedSourceIds,
+      evidenceRefs: allowedEvidenceRefs
+    },
+    gates
+  };
+}
+
 function selectedClassificationDistillationGroups(distillationWorkflow = {}, policy = {}) {
   const classification = distillationWorkflow.classification || {};
   return (classification.groups || [])
@@ -20906,7 +21227,7 @@ function classificationGroupModelCallSkippedRecord(group = {}, policy = {}, reas
   };
 }
 
-function classificationGroupModelCallCompletedRecord({ group = {}, policy = {}, config = {}, gatewayCall = {} } = {}) {
+function classificationGroupModelCallCompletedRecord({ group = {}, policy = {}, config = {}, gatewayCall = {}, outputValidation = null } = {}) {
   return {
     status: "completed",
     scope: "classification-group",
@@ -20918,7 +21239,9 @@ function classificationGroupModelCallCompletedRecord({ group = {}, policy = {}, 
     endpoint: config.endpoint || "",
     modelAlias: config.modelAlias || "",
     request: gatewayCall.request,
-    response: gatewayCall.response
+    response: gatewayCall.response,
+    outputValidation,
+    machineReadablePayload: outputValidation?.machineReadablePayload || null
   };
 }
 
@@ -20937,6 +21260,13 @@ function summarizeClassificationGroupGatewayCalls(selectedGroups = [], groupGate
     skippedGroupCallCount: records.filter((record) => record.status === "skipped").length,
     completedGroupIds: records
       .filter((record) => record.status === "completed")
+      .map((record) => record.groupId),
+    outputValidationStrategy: MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY,
+    validationStatusCounts: qualityGateStatusCounts(records
+      .map((record) => record.outputValidation)
+      .filter(Boolean)),
+    failedValidationGroupIds: records
+      .filter((record) => record.outputValidation?.status === "failed")
       .map((record) => record.groupId),
     skippedGroups: records
       .filter((record) => record.status === "skipped")
@@ -20965,6 +21295,7 @@ function buildClassificationDistillationMap(
     profileId: profile.id,
     enabled: policy.enabled === true,
     generatedAt: nowIso(),
+    outputValidationStrategy: MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY,
     source: "classification.groups + project-model-response + classification-group-model-responses",
     referencePatterns: [
       "graphrag.community-reports",
@@ -21007,6 +21338,8 @@ function buildClassificationDistillationMap(
           highCohesion: group.cohesionScore >= LEADER_CLUSTER_THRESHOLD
         },
         modelCall,
+        modelOutputValidation: modelCall.outputValidation || null,
+        machineReadablePayload: modelCall.machineReadablePayload || null,
         distilledFocus: modelFocus
           .concat(group.distillationUnit?.summary || [])
           .concat((group.documents || []).map((document) => firstSentence(document.text || "")))
@@ -21066,6 +21399,8 @@ function buildModelDistillationPrompt(distillationWorkflow = {}, profile = MODEL
     requiredOutput: {
       language: profile.requiredOutput.language,
       format: profile.requiredOutput.format,
+      machineReadableContract: profile.requiredOutput.machineReadableContract,
+      schema: modelDistillationOutputContractSpec("project-convergence"),
       constraints: profile.requiredOutput.constraints
     }
   };
@@ -21123,7 +21458,9 @@ function buildGroupModelDistillationPrompt(distillationWorkflow = {}, group = {}
     },
     requiredOutput: {
       language: profile.requiredOutput.language,
-      format: "JSON-compatible isolated classification group distillation text",
+      format: "strict JSON object for isolated classification group distillation",
+      machineReadableContract: profile.requiredOutput.machineReadableContract,
+      schema: modelDistillationOutputContractSpec("classification-group"),
       constraints: [
         ...profile.requiredOutput.constraints,
         "Only use facts from group.sourceIds and supplied evidence.",
@@ -21369,11 +21706,20 @@ async function callClassificationGroupModelGatewayCalls({
       group,
       systemPromptSuffixLines: policy.systemPromptSuffixLines || []
     });
+    const outputValidation = validateModelDistillationOutput({
+      gatewayCall,
+      distillationWorkflow,
+      profile,
+      distillationScope: "classification-group",
+      group,
+      selectedGroups
+    });
     results.set(group.groupId, classificationGroupModelCallCompletedRecord({
       group,
       policy,
       config,
-      gatewayCall
+      gatewayCall,
+      outputValidation
     }));
     completedCalls += 1;
   }
@@ -21405,6 +21751,13 @@ async function callModelDistillationGateway({ distillationWorkflow = {}, config 
     distillationScope: "project-convergence"
   });
   const selectedGroups = selectedClassificationDistillationGroups(distillationWorkflow, profile.classificationDistillation || {});
+  const outputValidation = validateModelDistillationOutput({
+    gatewayCall: projectCall,
+    distillationWorkflow,
+    profile,
+    distillationScope: "project-convergence",
+    selectedGroups
+  });
   const groupGatewayResults = await callClassificationGroupModelGatewayCalls({
     distillationWorkflow,
     config,
@@ -21429,6 +21782,8 @@ async function callModelDistillationGateway({ distillationWorkflow = {}, config 
     modelAlias: config.modelAlias,
     request: projectCall.request,
     response: projectCall.response,
+    outputValidation,
+    machineReadablePayload: outputValidation.machineReadablePayload || null,
     groupGatewayCalls: classificationDistillation.groupGatewayCalls,
     classificationDistillation
   };
@@ -22615,7 +22970,9 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         moduleBoundary: MODEL_DISTILLATION_MODULE_BOUNDARY,
         strategy: MODEL_DISTILLATION_GATEWAY_STRATEGY,
         owns: ["realModelInvocation", "modelDistillation", "modelEvidenceSynthesis"],
-        requires: ["agent-gateway", "modelAlias", "modelGatewayEndpoint"]
+        requires: ["agent-gateway", "modelAlias", "modelGatewayEndpoint"],
+        outputContract: MODEL_DISTILLATION_OUTPUT_CONTRACT,
+        outputValidationStrategy: MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY
       },
       formatConversion: {
         moduleBoundary: FORMAT_CONVERSION_MODULE_BOUNDARY,
@@ -22660,6 +23017,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       modelAliasConfigured: Boolean(process.env.PACT_EXTERNAL_KD_MODEL_ALIAS),
       timeoutMs: MODEL_GATEWAY_TIMEOUT_MS,
       promptMaxCharacters: MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS,
+      outputContract: MODEL_DISTILLATION_OUTPUT_CONTRACT,
+      outputValidationStrategy: MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY,
       noBuiltinFallback: true,
       dependency: "agent-gateway"
     },
@@ -22712,6 +23071,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       MODEL_DISTILLATION_MODULE_BOUNDARY,
       FORMAT_CONVERSION_MODULE_BOUNDARY,
       MODEL_DISTILLATION_GATEWAY_STRATEGY,
+      MODEL_DISTILLATION_OUTPUT_CONTRACT,
+      MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY,
       EVIDENCE_QUERY_STRATEGY,
       PROJECT_EVIDENCE_QUERY_STRATEGY,
       REFERENCE_GAP_REPORT_STRATEGY,
