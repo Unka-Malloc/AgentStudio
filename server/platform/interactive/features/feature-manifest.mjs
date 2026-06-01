@@ -79,6 +79,7 @@ export const FEATURE_MANIFEST = Object.freeze({
         "pdf-processor",
         "analysis-runtime",
         "knowledge-core",
+        "external-knowledge-distillation",
         "knowledge-distillation",
         "agent-gateway",
         "agent-management",
@@ -101,6 +102,7 @@ export const FEATURE_MANIFEST = Object.freeze({
         "multimodal-parser",
         "analysis-runtime",
         "knowledge-core",
+        "external-knowledge-distillation",
         "knowledge-distillation",
         "knowledge-evolution",
         "knowledge-outline-reasoning",
@@ -531,14 +533,54 @@ export const FEATURE_MANIFEST = Object.freeze({
       tests: { suites: ["server:verify:knowledge"] }
     },
     {
-      featureId: "knowledge-distillation",
-      label: "External knowledge distillation, summarization, golden rules, and skill authoring",
+      featureId: "external-knowledge-distillation",
+      label: "External knowledge distillation service proxy",
       group: "knowledge",
-      dependsOn: ["knowledge-core", "agent-gateway"],
+      dependsOn: [
+        "core-platform",
+        "security-permissions",
+        "operation-dispatcher",
+        "console-shell",
+        "tool-management-core",
+        "work-queue-core"
+      ],
+      defaultEnabled: false,
+      server: {
+        operationPrefixes: ["external.knowledge.distillation."],
+        modules: ["ExternalKnowledgeDistillationService"],
+        webPanels: ["external-knowledge-distillation"]
+      },
+      lifecycle: {
+        serviceName: "external.knowledge.distillation",
+        deploymentBoundary: "standalone-external-service",
+        platformRole: "configuration, authorization, operation proxy, upload receipt and queue orchestration",
+        algorithmSurface: "external-service-only",
+        internalWorkflowPolicy: "not-required"
+      },
+      web: {
+        navItems: ["knowledge.distillation"],
+        panels: ["KnowledgeDistillationWorkbench"]
+      },
+      package: {
+        includePaths: [
+          "external-services/knowledge-distillation-service",
+          "server/platform/specialized/knowledge/invocation/external-distillation-service",
+          "server/platform/common/console/http/controllers/system-controller-knowledge-runtime-handlers.mjs",
+          "server/platform/common/operation-dispatcher/operation-registry.mjs",
+          "server/platform/specialized/console/console-domain-operation-executor.mjs"
+        ],
+        removePaths: []
+      },
+      tests: { suites: ["server:verify:knowledge-distillation-standalone-service"] }
+    },
+    {
+      featureId: "knowledge-distillation",
+      label: "Deprecated internal knowledge distillation workflow migration shims",
+      group: "knowledge",
+      dependsOn: ["external-knowledge-distillation", "knowledge-core", "agent-gateway"],
       defaultEnabled: false,
       server: {
         operationPrefixes: [
-          "external.knowledge.distillation.",
           "knowledge.agent_skill.",
           "knowledge.skills.",
           "knowledge.golden_rules.",
@@ -555,9 +597,24 @@ export const FEATURE_MANIFEST = Object.freeze({
         webPanels: ["knowledge-distillation", "knowledge-distillation-workbench"]
       },
       lifecycle: {
+        status: "must-migrate",
         internalKnowledgeDistillation: "removed-from-runtime",
         replacementService: "external.knowledge.distillation",
-        maintenancePolicy: "external-service-only"
+        replacementFeature: "external-knowledge-distillation",
+        maintenancePolicy: "migration-shim-only",
+        internalWorkflows: [
+          { id: "knowledge.agent_skill", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.skills", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.golden_rules", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.rule_authoring", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.gold_cases", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.summarization", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.training_sets", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.evaluation", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.model_roles", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.model_decision", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.evidence_gate.evaluate", status: "must-migrate", target: "external.knowledge.distillation" }
+        ]
       },
       web: {
         navItems: ["knowledge.distillation", "debug.knowledgeDistillation"],
@@ -961,8 +1018,14 @@ export function resolveFeatureRuntime({
   const active = new Set();
   const reasons = {};
 
-  function addFeature(featureId, reason = "selected") {
-    if (!featureId || disabled.has(featureId)) {
+  function addFeature(featureId, reason = "selected", requiredBy = "") {
+    if (!featureId) {
+      return;
+    }
+    if (disabled.has(featureId)) {
+      if (requiredBy) {
+        throw new Error(`Feature dependency cannot be disabled: ${requiredBy} depends on ${featureId}`);
+      }
       return;
     }
     const feature = featureMap.get(featureId);
@@ -975,7 +1038,7 @@ export function resolveFeatureRuntime({
     active.add(featureId);
     reasons[featureId] = reasons[featureId] || reason;
     for (const dependencyId of feature.dependsOn || []) {
-      addFeature(dependencyId, `dependency of ${featureId}`);
+      addFeature(dependencyId, `dependency of ${featureId}`, featureId);
     }
   }
 
@@ -1049,6 +1112,7 @@ function publicFeatureDefinition(feature = {}, reason = "") {
     defaultEnabled: feature.defaultEnabled === true,
     dependsOn: [...(feature.dependsOn || [])],
     conflictsWith: [...(feature.conflictsWith || [])],
+    lifecycle: feature.lifecycle || null,
     reason
   };
 }
@@ -1100,6 +1164,11 @@ export function operationFeatureId(operation = {}) {
     operationId.startsWith("knowledge.skills.deployments.")
   ) {
     return "knowledge-evolution";
+  }
+  if (
+    operationId.startsWith("external.knowledge.distillation.")
+  ) {
+    return "external-knowledge-distillation";
   }
   if (
     operationId.startsWith("knowledge.agent_skill.") ||
@@ -1203,7 +1272,7 @@ export function publicFeatureRuntime(featureRuntime, operations = []) {
   };
 }
 
-export function validateFeatureManifest({ operations = [], clientModules = [] } = {}) {
+export function validateFeatureManifest({ operations = [], clientModules = [], validateClientModules = true } = {}) {
   const featureMap = getFeatureMap();
   const errors = [];
   for (const feature of FEATURE_MANIFEST.features) {
@@ -1237,11 +1306,13 @@ export function validateFeatureManifest({ operations = [], clientModules = [] } 
   const normalizedClientModules = Array.isArray(clientModules)
     ? clientModules
     : Object.entries(clientModules || {}).map(([id, module]) => ({ id, ...(module || {}) }));
-  const clientModuleIds = new Set(normalizedClientModules.map((module) => module.id));
-  for (const feature of FEATURE_MANIFEST.features) {
-    for (const moduleId of feature.client?.modules || []) {
-      if (!clientModuleIds.has(moduleId)) {
-        errors.push(`Feature ${feature.featureId} references unknown client module ${moduleId}.`);
+  if (validateClientModules) {
+    const clientModuleIds = new Set(normalizedClientModules.map((module) => module.id));
+    for (const feature of FEATURE_MANIFEST.features) {
+      for (const moduleId of feature.client?.modules || []) {
+        if (!clientModuleIds.has(moduleId)) {
+          errors.push(`Feature ${feature.featureId} references unknown client module ${moduleId}.`);
+        }
       }
     }
   }

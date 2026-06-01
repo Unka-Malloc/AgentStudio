@@ -397,9 +397,20 @@ raw corpus item 标准字段：
 
 目标：文件上限不再由一次性内存、一次性 Tika 调用或一次性 LLM 上下文决定。
 
+上传与排队流程：
+
+1. TODO：前端上传必须使用成熟开源组件或标准协议，例如 Uppy/FilePond、tus 或 S3 multipart 兼容实现；知识蒸馏服务不自研 multipart、断点续传、分片合并和浏览器上传状态机。
+2. TODO：上传网关把原始文件存放到单独配置的本地临时目录，目录必须和最终知识库、导出目录、运行结果目录隔离，并受 TTL、quota、扩展名、MIME、hash 和路径白名单约束。
+3. TODO：上传完成后，后端立即生成上传收据，至少包含 `uploadId`、`sourceId`、原始文件名、临时路径或对象 key、`byteSize`、`sha256`、`mediaType`、`extension`、上传状态和过期时间。
+4. TODO：后端同时创建待解析任务并放入任务队列，任务初始状态为 `queued`，任务载荷只引用上传收据或 manifest，不再携带大文件字节。
+5. TODO：解析 worker 从队列领取任务后，将临时文件转换为 `filePath`、`contentRef` 或 JSONL manifest 条目，再调用 `external.knowledge.distillation` 的 `POST /v1/distillation/runs`。
+6. 已实现边界：外部知识蒸馏服务只消费 JSON 描述、文件引用、目录引用或 manifest；它负责签名探测、路由、解析、分窗和蒸馏，不负责上传传输层。
+7. TODO：任务结束后，后端根据结果把上传状态推进为 `parsed`、`failed`、`expired` 或 `rejected`，并清理过期临时文件；失败必须保留错误码、parser trace refs 和 upload receipt refs。
+
 改进计划：
 
-- 上传层支持 chunk/resume，不把大文件完整塞进单次内存处理。
+- TODO：上传层支持 chunk/resume，不把大文件完整塞进单次内存处理。
+- TODO：上传层使用成熟组件和标准协议，Pact 只管理上传收据、临时目录、任务状态和队列调度。
 - API 层支持 `rawDocumentsManifestPath`/`rawDocumentsManifestRef` 指向 JSONL 文档清单，服务端逐行读取 manifest，再把每个条目交给 filePath/contentRef 路由，避免大工程把所有文档塞进一次请求体。
 - 解析层按页、sheet、slide、section 或 block 流式产出。
 - `.json/.jsonc` 的 mounted filePath 必须走 `structured-json-file-ref-streaming-window.v1`，超出 direct-read 阈值时仍保留 `json` 路由、streaming hash、窗口和 parser trace，不允许退化成 unknown binary。
@@ -420,6 +431,8 @@ raw corpus item 标准字段：
 
 验收：
 
+- TODO：上传链路不出现自研 multipart 文件接收逻辑；文件先进入受控临时目录，再通过队列任务触发解析。
+- TODO：上传完成后能看到 upload receipt、queued parse job、解析中状态和最终 parsed/failed 状态。
 - 大 PDF 不因单次解析 timeout 直接失败。
 - 单文档可拆成多个窗口，并能合并为文档级结论。
 - verifier 覆盖至少一个超窗口文本样本。
@@ -668,6 +681,7 @@ raw corpus item 标准字段：
 - 外部服务统一使用 `external.*`。
 - 知识蒸馏唯一维护服务名：`external.knowledge.distillation`。
 - 旧 `knowledge.distillation.*` 和 `knowledge.distillation.workbench.*` 是迁移壳，不属于可维护算法面。
+- Feature Profile 中新增独立能力 `external-knowledge-distillation`；旧 `knowledge-distillation` 只作为内部工作流迁移标记，不再代表外部服务最小依赖。
 - 后续外部能力示例：
   - `external.icloud`
   - `external.mail`
@@ -680,6 +694,12 @@ raw corpus item 标准字段：
 - 智能体可直接访问授权后的 `external.knowledge.distillation`。
 - 普通 API 可绕过控制台和智能体，直接使用稳定接口。
 - 内部知识蒸馏运行时不再由 server runtime provider 装载。
+
+Feature Profile 最小依赖：
+
+- `external-knowledge-distillation` 必须显式依赖 `core-platform`、`security-permissions`、`operation-dispatcher`、`console-shell`、`tool-management-core`、`work-queue-core`。
+- `knowledge-core`、`agent-gateway`、`document-parser`、`pdf-processor`、`ocr`、`multimodal-parser` 不属于外部知识蒸馏代理的最小依赖；需要这些能力时必须作为上层组合 feature 单独启用。
+- 旧内部工作流必须标记 `must-migrate`：`knowledge.agent_skill`、`knowledge.skills`、`knowledge.golden_rules`、`knowledge.rule_authoring`、`knowledge.gold_cases`、`knowledge.summarization`、`knowledge.training_sets`、`knowledge.evaluation`、`knowledge.model_roles`、`knowledge.model_decision`、`knowledge.evidence_gate.evaluate`。
 
 删除路径：
 
@@ -695,6 +715,8 @@ raw corpus item 标准字段：
 - `server/platform/specialized/knowledge/invocation/external-distillation-service/`
 - `server/platform/specialized/capabilities/tools/tool-management-core/catalog.mjs`
 - `server/platform/common/operation-dispatcher/operation-registry.mjs`
+- `server/platform/interactive/features/feature-manifest.mjs`
+- `server/scripts/verify-knowledge-distillation-standalone-service.mjs`
 
 验收：
 
@@ -703,6 +725,7 @@ raw corpus item 标准字段：
 - 智能体工具目录可发现并调用该能力。
 - 旧内部入口返回机器可读 `INTERNAL_KNOWLEDGE_DISTILLATION_REMOVED`。
 - `server:verify:external-service-api-registration` 阻止内部知识蒸馏重新进入 Tool Management 或 server runtime provider。
+- `server:verify:knowledge-distillation-standalone-service` 是服务端独立服务门禁，不读取 `client-gui` 清单；它必须证明平台基础核心组件和 `external.knowledge.distillation` 所需组件能被单独剥离出来，且不拉起内部知识库、Agent Gateway、平台文档解析器或旧内部工作流。
 
 ---
 
@@ -733,6 +756,7 @@ Verifier：
 - `verify-document-parser-dry-run`
 - `verify-knowledge-distillation-workbench`
 - `verify-external-service-api-registration`
+- `verify-knowledge-distillation-standalone-service`
 - `verify-external-knowledge-distillation`
 - 新增 `verify-distillation-routing`
 - 新增 `verify-distillation-grounding`

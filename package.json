@@ -114,6 +114,7 @@
     "server:verify:executive-report": "node server/scripts/verify-executive-report.mjs",
     "server:verify:external-knowledge-base": "node server/scripts/verify-external-knowledge-base.mjs",
     "server:verify:external-service-api-registration": "node server/scripts/verify-external-service-api-registration.mjs",
+    "server:verify:knowledge-distillation-standalone-service": "node server/scripts/verify-knowledge-distillation-standalone-service.mjs",
     "server:verify:external-knowledge-distillation": "node server/scripts/verify-external-knowledge-distillation.mjs",
     "server:verify:external-knowledge-distillation-container": "node server/scripts/verify-external-knowledge-distillation-container.mjs",
     "server:verify:external-knowledge-distillation-references": "node server/scripts/verify-external-knowledge-distillation-references.mjs",
