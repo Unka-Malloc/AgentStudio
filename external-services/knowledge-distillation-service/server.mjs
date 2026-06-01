@@ -298,6 +298,9 @@ const PARSER_STRATEGIES_CONFIG_STRATEGY = "singleton-parser-strategy-registry.v1
 const FORMAT_CONVERSION_PROFILES_CONFIG_PATH = path.join(SERVICE_ROOT, "format-conversion-profiles.json");
 const FORMAT_CONVERSION_PROFILES_CONFIG_PROTOCOL_VERSION = "pact.external-knowledge-distillation.format-conversion-profiles.v1";
 const FORMAT_CONVERSION_PROFILES_CONFIG_STRATEGY = "singleton-format-conversion-profile-registry.v1";
+const MODEL_DISTILLATION_PROFILES_CONFIG_PATH = path.join(SERVICE_ROOT, "model-distillation-profiles.json");
+const MODEL_DISTILLATION_PROFILES_CONFIG_PROTOCOL_VERSION = "pact.external-knowledge-distillation.model-distillation-profiles.v1";
+const MODEL_DISTILLATION_PROFILES_CONFIG_STRATEGY = "singleton-model-distillation-profile-registry.v1";
 
 function normalizeFormatRouteArray(value = []) {
   return Array.from(new Set((Array.isArray(value) ? value : [])
@@ -605,6 +608,124 @@ function loadFormatConversionProfiles(routes = [], parserStrategies = []) {
 const FORMAT_CONVERSION_PROFILES = loadFormatConversionProfiles(FORMAT_ROUTES, PARSER_STRATEGIES);
 const PROFESSIONAL_FORMAT_ORDER = FORMAT_CONVERSION_PROFILES.order;
 const PROFESSIONAL_FORMAT_ADAPTERS = FORMAT_CONVERSION_PROFILES.adapters;
+
+function validateModelDistillationProfilesConfig(config = {}) {
+  if (config.protocolVersion !== MODEL_DISTILLATION_PROFILES_CONFIG_PROTOCOL_VERSION) {
+    throw new Error(`Invalid model distillation profiles config protocolVersion: ${config.protocolVersion || "missing"}`);
+  }
+  if (config.strategy !== MODEL_DISTILLATION_PROFILES_CONFIG_STRATEGY) {
+    throw new Error(`Invalid model distillation profiles config strategy: ${config.strategy || "missing"}`);
+  }
+  if (!Array.isArray(config.profiles) || config.profiles.length === 0) {
+    throw new Error("model-distillation-profiles.json must contain non-empty profiles[]");
+  }
+  const profileIds = new Set();
+  for (const [index, profile] of config.profiles.entries()) {
+    const id = String(profile?.id || "").trim();
+    if (!id) {
+      throw new Error(`model distillation profile at index ${index} is missing id`);
+    }
+    if (profileIds.has(id)) {
+      throw new Error(`Duplicate model distillation profile id: ${id}`);
+    }
+    profileIds.add(id);
+    for (const field of ["label", "moduleBoundary", "gatewayStrategy", "taskType", "task", "dependency"]) {
+      if (!String(profile?.[field] || "").trim()) {
+        throw new Error(`model distillation profile ${id} is missing ${field}`);
+      }
+    }
+    if (profile.moduleBoundary !== MODEL_DISTILLATION_MODULE_BOUNDARY) {
+      throw new Error(`model distillation profile ${id} must stay in ${MODEL_DISTILLATION_MODULE_BOUNDARY}`);
+    }
+    if (profile.gatewayStrategy !== MODEL_DISTILLATION_GATEWAY_STRATEGY) {
+      throw new Error(`model distillation profile ${id} must use ${MODEL_DISTILLATION_GATEWAY_STRATEGY}`);
+    }
+    if (profile.requiredRealModelCall !== true || profile.noBuiltinFallback !== true) {
+      throw new Error(`model distillation profile ${id} must require real model calls and forbid built-in fallback`);
+    }
+    if (!Array.isArray(profile.requestFields) || !profile.requestFields.includes("modelAlias") || !profile.requestFields.includes("question")) {
+      throw new Error(`model distillation profile ${id} must declare gateway request fields`);
+    }
+    if (!Array.isArray(profile.systemPromptLines) || profile.systemPromptLines.length === 0) {
+      throw new Error(`model distillation profile ${id} must define systemPromptLines[]`);
+    }
+    if (!profile.transportPolicy || Number(profile.transportPolicy.maxAttempts || 0) < 1) {
+      throw new Error(`model distillation profile ${id} must define transportPolicy.maxAttempts`);
+    }
+    if (!Array.isArray(profile.requiredOutput?.constraints) || profile.requiredOutput.constraints.length === 0) {
+      throw new Error(`model distillation profile ${id} must define requiredOutput.constraints[]`);
+    }
+  }
+  const defaultProfileId = String(config.defaultProfileId || "").trim();
+  if (!profileIds.has(defaultProfileId)) {
+    throw new Error(`model distillation defaultProfileId is missing from profiles[]: ${defaultProfileId || "missing"}`);
+  }
+  return {
+    profileCount: profileIds.size,
+    defaultProfileId
+  };
+}
+
+function normalizeModelDistillationProfile(profile = {}, registry = {}) {
+  const promptLimits = profile.promptLimits || {};
+  return Object.freeze({
+    id: String(profile.id || "").trim(),
+    label: String(profile.label || "").trim(),
+    moduleBoundary: String(profile.moduleBoundary || "").trim(),
+    gatewayStrategy: String(profile.gatewayStrategy || "").trim(),
+    taskType: String(profile.taskType || "").trim(),
+    task: String(profile.task || "").trim(),
+    requiredRealModelCall: profile.requiredRealModelCall === true,
+    noBuiltinFallback: profile.noBuiltinFallback === true,
+    dependency: String(profile.dependency || "").trim(),
+    requestFields: Object.freeze(normalizeFormatRouteArray(profile.requestFields)),
+    systemPromptLines: Object.freeze(normalizeFormatRouteArray(profile.systemPromptLines)),
+    parameters: Object.freeze({
+      responseProfile: String(profile.parameters?.responseProfile || "machine-readable").trim(),
+      temperature: Number(profile.parameters?.temperature ?? 0.1),
+      maxOutputTokens: Math.max(1, Number(profile.parameters?.maxOutputTokens || 1800))
+    }),
+    promptLimits: Object.freeze({
+      documents: Math.max(1, Number(promptLimits.documents || 24)),
+      groups: Math.max(1, Number(promptLimits.groups || 12)),
+      domains: Math.max(1, Number(promptLimits.domains || 8))
+    }),
+    transportPolicy: Object.freeze({
+      maxAttempts: Math.max(1, Number(profile.transportPolicy?.maxAttempts || 1)),
+      retryBackoffMs: Math.max(0, Number(profile.transportPolicy?.retryBackoffMs || 0)),
+      retryOn: Object.freeze(normalizeFormatRouteArray(profile.transportPolicy?.retryOn))
+    }),
+    requiredOutput: Object.freeze({
+      language: String(profile.requiredOutput?.language || "zh-CN").trim(),
+      format: String(profile.requiredOutput?.format || "concise JSON-compatible analysis text").trim(),
+      constraints: Object.freeze(normalizeFormatRouteArray(profile.requiredOutput?.constraints))
+    }),
+    registry
+  });
+}
+
+function loadModelDistillationProfiles() {
+  const parsed = JSON.parse(fsSync.readFileSync(MODEL_DISTILLATION_PROFILES_CONFIG_PATH, "utf8"));
+  const summary = validateModelDistillationProfilesConfig(parsed);
+  const registry = Object.freeze({
+    protocolVersion: MODEL_DISTILLATION_PROFILES_CONFIG_PROTOCOL_VERSION,
+    strategy: MODEL_DISTILLATION_PROFILES_CONFIG_STRATEGY,
+    source: "external-services/knowledge-distillation-service/model-distillation-profiles.json",
+    profileCount: summary.profileCount,
+    defaultProfileId: summary.defaultProfileId,
+    validation: "startup-fail-fast"
+  });
+  const profiles = Object.freeze(parsed.profiles.map((profile) => normalizeModelDistillationProfile(profile, registry)));
+  const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+  return Object.freeze({
+    registry,
+    defaultProfile: byId.get(summary.defaultProfileId),
+    profiles,
+    byId
+  });
+}
+
+const MODEL_DISTILLATION_PROFILES = loadModelDistillationProfiles();
 
 const MEDIA_TYPE_BY_EXTENSION = new Map(Object.entries({
   ".html": "text/html",
@@ -18371,6 +18492,23 @@ function resolveModelDistillationGatewayConfig(input = {}) {
   };
 }
 
+function resolveModelDistillationProfile(input = {}) {
+  const rawProfileId = String(
+    input.modelDistillationProfileId ||
+      input.modelProfileId ||
+      process.env.PACT_EXTERNAL_KD_MODEL_DISTILLATION_PROFILE ||
+      MODEL_DISTILLATION_PROFILES.registry.defaultProfileId
+  ).trim();
+  const profile = MODEL_DISTILLATION_PROFILES.byId.get(rawProfileId);
+  if (!profile) {
+    const error = new Error(`Unknown modelDistillationProfileId: ${rawProfileId}`);
+    error.statusCode = 400;
+    error.code = "MODEL_DISTILLATION_PROFILE_NOT_FOUND";
+    throw error;
+  }
+  return profile;
+}
+
 function compactModelDocumentRecord(document = {}, index = 0) {
   return {
     index,
@@ -18390,9 +18528,9 @@ function compactModelDocumentRecord(document = {}, index = 0) {
   };
 }
 
-function buildModelDistillationPrompt(distillationWorkflow = {}) {
+function buildModelDistillationPrompt(distillationWorkflow = {}, profile = MODEL_DISTILLATION_PROFILES.defaultProfile) {
   const modelInput = {
-    task: "Knowledge distillation over parsed Pact documents. Preserve source chronology, structure, contradictions, and evidence references.",
+    task: profile.task,
     query: distillationWorkflow.query,
     workflowScope: distillationWorkflow.workflowScope,
     scopeSelection: distillationWorkflow.scopeSelection,
@@ -18403,8 +18541,10 @@ function buildModelDistillationPrompt(distillationWorkflow = {}) {
       totalBytes: distillationWorkflow.corpusPlan?.totalBytes || 0,
       windowCount: distillationWorkflow.corpusPlan?.windowCount || 0
     },
-    documents: (distillationWorkflow.documents || []).slice(0, 24).map(compactModelDocumentRecord),
-    groups: (distillationWorkflow.classification?.groups || []).slice(0, 12).map((group) => ({
+    documents: (distillationWorkflow.documents || [])
+      .slice(0, profile.promptLimits.documents)
+      .map(compactModelDocumentRecord),
+    groups: (distillationWorkflow.classification?.groups || []).slice(0, profile.promptLimits.groups).map((group) => ({
       groupId: group.groupId,
       label: group.label,
       kind: group.kind,
@@ -18417,7 +18557,7 @@ function buildModelDistillationPrompt(distillationWorkflow = {}) {
     convergence: {
       strategy: distillationWorkflow.convergence?.strategy || "",
       summary: distillationWorkflow.convergence?.convergenceSummary || "",
-      domains: distillationWorkflow.convergence?.domains?.slice?.(0, 8) || []
+      domains: distillationWorkflow.convergence?.domains?.slice?.(0, profile.promptLimits.domains) || []
     },
     grounding: {
       strategy: distillationWorkflow.grounding?.strategy || "",
@@ -18427,13 +18567,9 @@ function buildModelDistillationPrompt(distillationWorkflow = {}) {
       score: distillationWorkflow.grounding?.groundingScore || 0
     },
     requiredOutput: {
-      language: "zh-CN",
-      format: "concise JSON-compatible analysis text",
-      constraints: [
-        "Do not invent source facts.",
-        "Flag weak chronology or context loss.",
-        "Prefer evidence-backed distilled decisions and risks."
-      ]
+      language: profile.requiredOutput.language,
+      format: profile.requiredOutput.format,
+      constraints: profile.requiredOutput.constraints
     }
   };
   const prompt = JSON.stringify(modelInput, null, 2);
@@ -18443,16 +18579,64 @@ function buildModelDistillationPrompt(distillationWorkflow = {}) {
   return `${prompt.slice(0, MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS)}\n...[truncated for model input budget]`;
 }
 
-function modelGatewayHeaders(config = {}) {
+function modelGatewayHeaders(config = {}, profile = MODEL_DISTILLATION_PROFILES.defaultProfile) {
   const headers = {
     "content-type": "application/json",
     "x-pact-module": "external.knowledge.distillation",
-    "x-pact-strategy": MODEL_DISTILLATION_GATEWAY_STRATEGY
+    "x-pact-strategy": profile.gatewayStrategy,
+    "x-pact-model-distillation-profile": profile.id
   };
   if (config.token) {
     headers[config.tokenHeader] = `${config.tokenPrefix || ""}${config.token}`;
   }
   return headers;
+}
+
+function waitForMilliseconds(milliseconds = 0) {
+  if (milliseconds <= 0) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function modelGatewayTransportErrorTokens(error = {}) {
+  const cause = error?.cause instanceof Error ? error.cause : null;
+  return new Set([
+    error?.name,
+    error?.code,
+    error?.message,
+    cause?.name,
+    cause?.code,
+    cause?.message
+  ].filter(Boolean).map((item) => String(item)));
+}
+
+function shouldRetryModelGatewayTransportError(error = {}, profile = MODEL_DISTILLATION_PROFILES.defaultProfile) {
+  const retryTokens = profile.transportPolicy?.retryOn || [];
+  if (!retryTokens.length) {
+    return false;
+  }
+  const errorTokens = modelGatewayTransportErrorTokens(error);
+  return retryTokens.some((retryToken) => {
+    const token = String(retryToken || "").trim();
+    return token && Array.from(errorTokens).some((errorToken) => errorToken.includes(token));
+  });
+}
+
+function createModelGatewayTransportError(error = {}, config = {}, attempt = 1, maxAttempts = 1) {
+  const causeMessage = error?.cause instanceof Error ? error.cause.message : "";
+  const transportError = new Error(
+    `Model gateway transport failed: ${error instanceof Error ? error.message : String(error)}${causeMessage ? ` (${causeMessage})` : ""}`
+  );
+  transportError.statusCode = 502;
+  transportError.code = "MODEL_GATEWAY_TRANSPORT_FAILED";
+  transportError.details = {
+    endpoint: config.endpoint,
+    attempt,
+    maxAttempts,
+    cause: causeMessage
+  };
+  return transportError;
 }
 
 function extractModelDistillationText(payload = {}) {
@@ -18477,53 +18661,58 @@ function extractModelDistillationText(payload = {}) {
   ).trim();
 }
 
-function modelDistillationSkippedState(distillationWorkflow = {}, reason = "") {
+function modelDistillationSkippedState(distillationWorkflow = {}, reason = "", profile = MODEL_DISTILLATION_PROFILES.defaultProfile) {
   return {
     ...distillationWorkflow,
     modelDistillation: {
-      moduleBoundary: MODEL_DISTILLATION_MODULE_BOUNDARY,
-      strategy: MODEL_DISTILLATION_GATEWAY_STRATEGY,
+      moduleBoundary: profile.moduleBoundary,
+      strategy: profile.gatewayStrategy,
+      profileId: profile.id,
       status: "skipped",
       reason,
       requiredRealModelCall: true,
+      noBuiltinFallback: profile.noBuiltinFallback,
       generatedAt: nowIso()
     }
   };
 }
 
-async function callModelDistillationGateway({ distillationWorkflow = {}, config = {} } = {}) {
-  const prompt = buildModelDistillationPrompt(distillationWorkflow);
+async function callModelDistillationGateway({ distillationWorkflow = {}, config = {}, profile = MODEL_DISTILLATION_PROFILES.defaultProfile } = {}) {
+  const prompt = buildModelDistillationPrompt(distillationWorkflow, profile);
   const payload = {
     moduleId: "external.knowledge.distillation",
-    taskType: "knowledge_distillation",
+    taskType: profile.taskType,
     modelAlias: config.modelAlias,
     question: prompt,
-    systemPrompt: [
-      "You are the Pact external knowledge distillation model worker.",
-      "Return grounded distillation analysis only from the supplied parsed document evidence.",
-      "Preserve chronology, document structure, and uncertainty markers."
-    ].join("\n"),
-    parameters: {
-      responseProfile: "machine-readable",
-      temperature: 0.1,
-      maxOutputTokens: 1800
-    }
+    systemPrompt: profile.systemPromptLines.join("\n"),
+    parameters: profile.parameters
   };
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   let response;
   let responseText = "";
   const startedAt = Date.now();
-  try {
-    response = await fetch(config.endpoint, {
-      method: "POST",
-      headers: modelGatewayHeaders(config),
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    });
-    responseText = await response.text();
-  } finally {
-    clearTimeout(timeout);
+  const maxAttempts = Math.max(1, Number(profile.transportPolicy?.maxAttempts || 1));
+  let attempts = 0;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    attempts = attempt;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+    try {
+      response = await fetch(config.endpoint, {
+        method: "POST",
+        headers: modelGatewayHeaders(config, profile),
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      responseText = await response.text();
+      break;
+    } catch (error) {
+      if (attempt >= maxAttempts || !shouldRetryModelGatewayTransportError(error, profile)) {
+        throw createModelGatewayTransportError(error, config, attempt, maxAttempts);
+      }
+      await waitForMilliseconds(Number(profile.transportPolicy?.retryBackoffMs || 0) * attempt);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
   const durationMs = Date.now() - startedAt;
   let parsed = {};
@@ -18547,14 +18736,17 @@ async function callModelDistillationGateway({ distillationWorkflow = {}, config 
     throw error;
   }
   return {
-    moduleBoundary: MODEL_DISTILLATION_MODULE_BOUNDARY,
-    strategy: MODEL_DISTILLATION_GATEWAY_STRATEGY,
+    moduleBoundary: profile.moduleBoundary,
+    strategy: profile.gatewayStrategy,
+    profileId: profile.id,
     status: "completed",
     requiredRealModelCall: true,
+    noBuiltinFallback: profile.noBuiltinFallback,
     generatedAt: nowIso(),
     endpoint: config.endpoint,
     modelAlias: config.modelAlias,
     request: {
+      transportAttempts: attempts,
       promptCharacters: prompt.length,
       promptSha256: shaBuffer(Buffer.from(prompt, "utf8"))
     },
@@ -18570,8 +18762,9 @@ async function callModelDistillationGateway({ distillationWorkflow = {}, config 
 }
 
 async function runModelDistillationModule(distillationWorkflow = {}, runtimeStatus = null) {
+  const profile = resolveModelDistillationProfile(distillationWorkflow.input || {});
   if (!Array.isArray(distillationWorkflow.documents) || distillationWorkflow.documents.length === 0) {
-    return modelDistillationSkippedState(distillationWorkflow, "no-distillable-documents");
+    return modelDistillationSkippedState(distillationWorkflow, "no-distillable-documents", profile);
   }
   const config = resolveModelDistillationGatewayConfig(distillationWorkflow.input || {});
   if (!config.endpoint) {
@@ -18586,7 +18779,7 @@ async function runModelDistillationModule(distillationWorkflow = {}, runtimeStat
     error.code = "MODEL_ALIAS_REQUIRED";
     throw error;
   }
-  const modelDistillation = await callModelDistillationGateway({ distillationWorkflow, config, runtimeStatus });
+  const modelDistillation = await callModelDistillationGateway({ distillationWorkflow, config, profile, runtimeStatus });
   return {
     ...distillationWorkflow,
     modelDistillation
@@ -19629,6 +19822,27 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       supported: true,
       moduleBoundary: MODEL_DISTILLATION_MODULE_BOUNDARY,
       strategy: MODEL_DISTILLATION_GATEWAY_STRATEGY,
+      profileRegistry: {
+        protocolVersion: MODEL_DISTILLATION_PROFILES_CONFIG_PROTOCOL_VERSION,
+        strategy: MODEL_DISTILLATION_PROFILES_CONFIG_STRATEGY,
+        source: "external-services/knowledge-distillation-service/model-distillation-profiles.json",
+        profileCount: MODEL_DISTILLATION_PROFILES.profiles.length,
+        defaultProfileId: MODEL_DISTILLATION_PROFILES.registry.defaultProfileId,
+        validation: "startup-fail-fast"
+      },
+      profiles: MODEL_DISTILLATION_PROFILES.profiles.map((profile) => ({
+        id: profile.id,
+        label: profile.label,
+        gatewayStrategy: profile.gatewayStrategy,
+        taskType: profile.taskType,
+        requiredRealModelCall: profile.requiredRealModelCall,
+        noBuiltinFallback: profile.noBuiltinFallback,
+        dependency: profile.dependency,
+        parameters: profile.parameters,
+        promptLimits: profile.promptLimits,
+        transportPolicy: profile.transportPolicy,
+        requiredOutput: profile.requiredOutput
+      })),
       requiredRealModelCall: true,
       gatewayEndpointConfigured: Boolean(process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_URL || process.env.PACT_AGENT_GATEWAY_URL),
       modelAliasConfigured: Boolean(process.env.PACT_EXTERNAL_KD_MODEL_ALIAS),
@@ -19667,6 +19881,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       FORMAT_ROUTES_CONFIG_STRATEGY,
       PARSER_STRATEGIES_CONFIG_STRATEGY,
       FORMAT_CONVERSION_PROFILES_CONFIG_STRATEGY,
+      MODEL_DISTILLATION_PROFILES_CONFIG_STRATEGY,
       DOCUMENT_PARSING_MODULE_BOUNDARY,
       DISTILLATION_ALGORITHM_MODULE_BOUNDARY,
       MODEL_DISTILLATION_MODULE_BOUNDARY,

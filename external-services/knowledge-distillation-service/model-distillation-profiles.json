@@ -1,0 +1,62 @@
+{
+  "protocolVersion": "pact.external-knowledge-distillation.model-distillation-profiles.v1",
+  "strategy": "singleton-model-distillation-profile-registry.v1",
+  "profileCount": 1,
+  "defaultProfileId": "real-model-grounded-distillation.v1",
+  "validation": "startup-fail-fast",
+  "profiles": [
+    {
+      "id": "real-model-grounded-distillation.v1",
+      "label": "Real model grounded knowledge distillation",
+      "moduleBoundary": "external-kd.model-distillation.module.v1",
+      "gatewayStrategy": "required-agent-gateway-real-model-call.v1",
+      "taskType": "knowledge_distillation",
+      "task": "Knowledge distillation over parsed Pact documents. Preserve source chronology, structure, contradictions, and evidence references.",
+      "requiredRealModelCall": true,
+      "noBuiltinFallback": true,
+      "dependency": "agent-gateway",
+      "requestFields": [
+        "moduleId",
+        "taskType",
+        "modelAlias",
+        "question",
+        "systemPrompt",
+        "parameters"
+      ],
+      "systemPromptLines": [
+        "You are the Pact external knowledge distillation model worker.",
+        "Return grounded distillation analysis only from the supplied parsed document evidence.",
+        "Preserve chronology, document structure, and uncertainty markers."
+      ],
+      "parameters": {
+        "responseProfile": "machine-readable",
+        "temperature": 0.1,
+        "maxOutputTokens": 1800
+      },
+      "promptLimits": {
+        "documents": 24,
+        "groups": 12,
+        "domains": 8
+      },
+      "transportPolicy": {
+        "maxAttempts": 2,
+        "retryBackoffMs": 120,
+        "retryOn": [
+          "ECONNRESET",
+          "UND_ERR_SOCKET",
+          "ETIMEDOUT",
+          "AbortError"
+        ]
+      },
+      "requiredOutput": {
+        "language": "zh-CN",
+        "format": "concise JSON-compatible analysis text",
+        "constraints": [
+          "Do not invent source facts.",
+          "Flag weak chronology or context loss.",
+          "Prefer evidence-backed distilled decisions and risks."
+        ]
+      }
+    }
+  ]
+}

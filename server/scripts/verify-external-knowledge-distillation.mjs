@@ -1219,6 +1219,20 @@ try {
   assert.equal(capabilities.payload.modelDistillation.requiredRealModelCall, true);
   assert.equal(capabilities.payload.modelDistillation.noBuiltinFallback, true);
   assert.equal(capabilities.payload.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
+  assert.equal(capabilities.payload.modelDistillation.profileRegistry.protocolVersion, "pact.external-knowledge-distillation.model-distillation-profiles.v1");
+  assert.equal(capabilities.payload.modelDistillation.profileRegistry.strategy, "singleton-model-distillation-profile-registry.v1");
+  assert.equal(capabilities.payload.modelDistillation.profileRegistry.source, "external-services/knowledge-distillation-service/model-distillation-profiles.json");
+  assert.equal(capabilities.payload.modelDistillation.profileRegistry.profileCount, 1);
+  assert.equal(capabilities.payload.modelDistillation.profileRegistry.defaultProfileId, "real-model-grounded-distillation.v1");
+  assert.equal(capabilities.payload.modelDistillation.profileRegistry.validation, "startup-fail-fast");
+  assert.equal(capabilities.payload.modelDistillation.profiles.some((profile) => (
+    profile.id === "real-model-grounded-distillation.v1" &&
+    profile.requiredRealModelCall === true &&
+    profile.noBuiltinFallback === true &&
+    profile.parameters.responseProfile === "machine-readable" &&
+    profile.transportPolicy.maxAttempts === 2 &&
+    profile.transportPolicy.retryOn.includes("ECONNRESET")
+  )), true);
   assert.equal(capabilities.payload.timeFiltering.supported, true);
   assert.equal(capabilities.payload.timeFiltering.strategy, "document-window-time-filter.v1");
   assert.equal(capabilities.payload.timeFiltering.timeFields.includes("eventTime"), true);
@@ -1232,6 +1246,7 @@ try {
   assert.equal(capabilities.payload.fileCompatibility.routeRegistry.validation, "startup-fail-fast");
   assert.equal(capabilities.payload.algorithms.includes("singleton-format-route-registry.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("singleton-parser-strategy-registry.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("singleton-model-distillation-profile-registry.v1"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.strategy, "content-signature-routing.v1");
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("pdf-header"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-word"), true);
@@ -1654,6 +1669,7 @@ try {
   assert.equal(queuedCompletedRun.queue.phase, "completed");
   assert.equal(queuedCompletedRun.result.agentMessage.responseProfile, "agent");
   assert.equal(queuedCompletedRun.result.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
+  assert.equal(queuedCompletedRun.result.modelDistillation.profileId, "real-model-grounded-distillation.v1");
 
   const createRun = await fetchJson(`${pactServer.url}/api/external/knowledge/distillation/runs`, {
     method: "POST",
@@ -2161,7 +2177,7 @@ try {
       responseProfile: "agent"
     })
   });
-  assert.equal(createRun.status, 201);
+  assert.equal(createRun.status, 201, `create external distillation run failed: ${JSON.stringify(createRun.payload).slice(0, 1200)}`);
   assert.equal(createRun.payload.serviceName, "external-knowledge-distillation");
   assert.equal(createRun.payload.serviceKind, "externalKnowledgeDistillation");
   assert.equal(createRun.payload.status, "completed");
@@ -2192,6 +2208,7 @@ try {
   assert.equal(createRun.payload.result.graphEvidence.covariates.some((claim) => claim.covariate_type === "claim"), true);
   assert.equal(createRun.payload.result.modelDistillation.moduleBoundary, "external-kd.model-distillation.module.v1");
   assert.equal(createRun.payload.result.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
+  assert.equal(createRun.payload.result.modelDistillation.profileId, "real-model-grounded-distillation.v1");
   assert.equal(createRun.payload.result.modelDistillation.status, "completed");
   assert.equal(createRun.payload.result.modelDistillation.modelAlias, "verify-real-model-gateway");
   assert.equal(createRun.payload.result.agentMessage.modelDistillation.status, "completed");
@@ -2199,8 +2216,13 @@ try {
     assert.equal(mockModelGateway.calls.length >= 1, true, "distillation must call the configured model gateway");
     assert.equal(mockModelGateway.calls[0].method, "POST");
     assert.equal(mockModelGateway.calls[0].url, "/api/agent-gateway/call");
+    assert.equal(mockModelGateway.calls[0].headers["x-pact-model-distillation-profile"], "real-model-grounded-distillation.v1");
     assert.equal(mockModelGateway.calls[0].body.moduleId, "external.knowledge.distillation");
+    assert.equal(mockModelGateway.calls[0].body.taskType, "knowledge_distillation");
     assert.equal(mockModelGateway.calls[0].body.modelAlias, "verify-real-model-gateway");
+    assert.match(mockModelGateway.calls[0].body.systemPrompt, /Pact external knowledge distillation model worker/);
+    assert.equal(mockModelGateway.calls[0].body.parameters.responseProfile, "machine-readable");
+    assert.equal(mockModelGateway.calls[0].body.parameters.maxOutputTokens, 1800);
   }
   assert.equal(createRun.payload.result.referenceGapReport.strategy, "reference-framework-gap-report.v1");
   assert.equal(createRun.payload.result.referenceGapReport.frameworks.some((framework) => framework.id === "graphrag" && framework.status === "absorbed-with-open-gaps"), true);

@@ -11,7 +11,8 @@ const serviceServerPath = path.join(serviceRoot, "server.mjs");
 const serviceConfigPaths = Object.freeze([
   path.join(serviceRoot, "format-routes.json"),
   path.join(serviceRoot, "parser-strategies.json"),
-  path.join(serviceRoot, "format-conversion-profiles.json")
+  path.join(serviceRoot, "format-conversion-profiles.json"),
+  path.join(serviceRoot, "model-distillation-profiles.json")
 ]);
 
 const REFERENCE_SOURCE_MARKERS = Object.freeze({
@@ -124,6 +125,7 @@ const ABSORPTION_REQUIREMENTS = Object.freeze([
     servicePatterns: [
       "MODEL_DISTILLATION_MODULE_BOUNDARY",
       "required-agent-gateway-real-model-call.v1",
+      "singleton-model-distillation-profile-registry.v1",
       "MODEL_GATEWAY_REQUIRED",
       "MODEL_ALIAS_REQUIRED"
     ]
@@ -280,7 +282,8 @@ async function buildExternalIndustrialBenchmark() {
     "visio-opc-shape-parser.v1",
     "directory-file-ref-recursive-routing.v1",
     "PROJECT_EVIDENCE_QUERY_STRATEGY",
-    "required-agent-gateway-real-model-call.v1"
+    "required-agent-gateway-real-model-call.v1",
+    "singleton-model-distillation-profile-registry.v1"
   ];
   const localCheckoutCount = frameworks.filter((framework) => framework.localPath).length;
   const referenceAuditSummary = {

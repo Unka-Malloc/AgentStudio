@@ -19,6 +19,7 @@ const externalServiceEntry = path.join(repoRoot, "external-services/knowledge-di
 const formatRoutesConfigEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/format-routes.json");
 const parserStrategiesConfigEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/parser-strategies.json");
 const formatConversionProfilesConfigEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/format-conversion-profiles.json");
+const modelDistillationProfilesConfigEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/model-distillation-profiles.json");
 
 const REQUIRED_STANDALONE_DEPENDENCIES = Object.freeze([
   "core-platform",
@@ -254,6 +255,7 @@ const externalServiceSource = await fs.readFile(externalServiceEntry, "utf8");
 const formatRoutesConfig = JSON.parse(await fs.readFile(formatRoutesConfigEntry, "utf8"));
 const parserStrategiesConfig = JSON.parse(await fs.readFile(parserStrategiesConfigEntry, "utf8"));
 const formatConversionProfilesConfig = JSON.parse(await fs.readFile(formatConversionProfilesConfigEntry, "utf8"));
+const modelDistillationProfilesConfig = JSON.parse(await fs.readFile(modelDistillationProfilesConfigEntry, "utf8"));
 assert.equal(
   formatRoutesConfig.protocolVersion,
   "pact.external-knowledge-distillation.format-routes.v1",
@@ -380,6 +382,39 @@ assert.equal(
   externalServiceSource.includes("const FORMAT_CONVERSION_PROFILES = loadFormatConversionProfiles(FORMAT_ROUTES, PARSER_STRATEGIES);"),
   true,
   "server.mjs must load format conversion profiles from the singleton config after parser strategies"
+);
+assert.equal(
+  modelDistillationProfilesConfig.protocolVersion,
+  "pact.external-knowledge-distillation.model-distillation-profiles.v1",
+  "external knowledge distillation must keep model distillation profiles in a versioned singleton config"
+);
+assert.equal(
+  modelDistillationProfilesConfig.strategy,
+  "singleton-model-distillation-profile-registry.v1",
+  "external knowledge distillation must load model distillation profiles through the singleton registry"
+);
+const defaultModelProfile = modelDistillationProfilesConfig.profiles.find((profile) => (
+  profile.id === modelDistillationProfilesConfig.defaultProfileId
+));
+assert.ok(defaultModelProfile, "model distillation default profile must exist");
+assert.equal(defaultModelProfile.moduleBoundary, "external-kd.model-distillation.module.v1");
+assert.equal(defaultModelProfile.gatewayStrategy, "required-agent-gateway-real-model-call.v1");
+assert.equal(defaultModelProfile.requiredRealModelCall, true);
+assert.equal(defaultModelProfile.noBuiltinFallback, true);
+assert.equal(defaultModelProfile.dependency, "agent-gateway");
+assert.equal(defaultModelProfile.taskType, "knowledge_distillation");
+assert.equal(defaultModelProfile.requestFields.includes("modelAlias"), true);
+assert.equal(defaultModelProfile.requestFields.includes("question"), true);
+assert.equal(defaultModelProfile.systemPromptLines.length >= 3, true);
+assert.equal(defaultModelProfile.parameters.responseProfile, "machine-readable");
+assert.equal(defaultModelProfile.parameters.maxOutputTokens >= 1000, true);
+assert.equal(defaultModelProfile.transportPolicy.maxAttempts, 2);
+assert.equal(defaultModelProfile.transportPolicy.retryOn.includes("ECONNRESET"), true);
+assert.equal(defaultModelProfile.requiredOutput.constraints.length >= 3, true);
+assert.equal(
+  externalServiceSource.includes("const MODEL_DISTILLATION_PROFILES = loadModelDistillationProfiles();"),
+  true,
+  "server.mjs must load model distillation profiles from the singleton config"
 );
 assert.equal(
   externalServiceSource.includes("runQueue: {"),
@@ -583,8 +618,10 @@ const modelModuleBody = sourceSliceBetweenFunctions(
   "runKnowledgeDistillationWorkflow"
 );
 for (const expectedText of [
-  "MODEL_DISTILLATION_MODULE_BOUNDARY",
-  "MODEL_DISTILLATION_GATEWAY_STRATEGY",
+  "resolveModelDistillationProfile",
+  "profile.gatewayStrategy",
+  "profile.systemPromptLines",
+  "profile.parameters",
   "MODEL_GATEWAY_REQUIRED",
   "MODEL_ALIAS_REQUIRED",
   "callModelDistillationGateway"

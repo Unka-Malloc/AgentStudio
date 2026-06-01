@@ -23,6 +23,7 @@ COPY reference-frameworks.json /app/reference-frameworks.json
 COPY format-routes.json /app/format-routes.json
 COPY parser-strategies.json /app/parser-strategies.json
 COPY format-conversion-profiles.json /app/format-conversion-profiles.json
+COPY model-distillation-profiles.json /app/model-distillation-profiles.json
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0

@@ -463,6 +463,16 @@ try {
   assert.equal(capabilities.payload.formatConversion.profileRegistry.protocolVersion, "pact.external-knowledge-distillation.format-conversion-profiles.v1");
   assert.equal(capabilities.payload.formatConversion.profileRegistry.strategy, "singleton-format-conversion-profile-registry.v1");
   assert.equal(capabilities.payload.formatConversion.profileRegistry.profileCount, 7);
+  assert.equal(capabilities.payload.modelDistillation.profileRegistry.protocolVersion, "pact.external-knowledge-distillation.model-distillation-profiles.v1");
+  assert.equal(capabilities.payload.modelDistillation.profileRegistry.strategy, "singleton-model-distillation-profile-registry.v1");
+  assert.equal(capabilities.payload.modelDistillation.profileRegistry.defaultProfileId, "real-model-grounded-distillation.v1");
+  assert.equal(capabilities.payload.modelDistillation.profiles.some((profile) => (
+    profile.id === "real-model-grounded-distillation.v1" &&
+    profile.requiredRealModelCall === true &&
+    profile.noBuiltinFallback === true &&
+    profile.transportPolicy.maxAttempts === 2 &&
+    profile.transportPolicy.retryOn.includes("ECONNRESET")
+  )), true);
   assert.equal(capabilities.payload.classification.strategy, "hashing_embedding_window_community_classification_v3");
   assert.equal(capabilities.payload.classification.taxonomyStrategy, "semantic-concept-topic-hierarchy.v1");
   assert.equal(capabilities.payload.classification.assignmentRationaleStrategy, "leader-clustering-semantic-concept-rationale.v1");
@@ -843,8 +853,11 @@ try {
   assert.equal(mockModelGateway.calls.length >= 1, true, "container distillation must call the configured model gateway");
   assert.equal(mockModelGateway.calls[0].method, "POST");
   assert.equal(mockModelGateway.calls[0].url, "/api/agent-gateway/call");
+  assert.equal(mockModelGateway.calls[0].headers["x-pact-model-distillation-profile"], "real-model-grounded-distillation.v1");
   assert.equal(mockModelGateway.calls[0].body.moduleId, "external.knowledge.distillation");
+  assert.equal(mockModelGateway.calls[0].body.taskType, "knowledge_distillation");
   assert.equal(mockModelGateway.calls[0].body.modelAlias, "verify-container-real-model-gateway");
+  assert.equal(mockModelGateway.calls[0].body.parameters.responseProfile, "machine-readable");
 
   const markdown = await fetch(`${serviceUrl}/v1/distillation/runs/${encodeURIComponent(createRun.payload.runId)}/artifacts/portable-markdown`);
   assert.equal(markdown.status, 200);
