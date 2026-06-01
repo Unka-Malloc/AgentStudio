@@ -351,7 +351,31 @@ const samplePptxBase64 = base64Zip({
     "<Relationship Id=\"rIdImage1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/roadmap.png\"/>",
     "<Relationship Id=\"rIdChart1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart\" Target=\"../charts/chart1.xml\"/>",
     "<Relationship Id=\"rIdComment1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments\" Target=\"../comments/comment1.xml\"/>",
+    "<Relationship Id=\"rIdLayout1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/>",
     "</Relationships>"
+  ].join(""),
+  "ppt/slideLayouts/slideLayout1.xml": [
+    "<p:sldLayout xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" ",
+    "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" ",
+    "type=\"titleAndContent\">",
+    "<p:cSld name=\"Roadmap Layout\"><p:spTree>",
+    "<p:sp><p:nvSpPr><p:cNvPr id=\"11\" name=\"Layout Title Placeholder\"/></p:nvSpPr><p:nvPr><p:ph type=\"title\" idx=\"0\"/></p:nvPr><p:txBody><a:p><a:r><a:t>Roadmap layout title placeholder</a:t></a:r></a:p></p:txBody></p:sp>",
+    "<p:sp><p:nvSpPr><p:cNvPr id=\"12\" name=\"Layout Body Placeholder\"/></p:nvSpPr><p:nvPr><p:ph type=\"body\" idx=\"1\"/></p:nvPr><p:txBody><a:p><a:r><a:t>Roadmap layout body placeholder</a:t></a:r></a:p></p:txBody></p:sp>",
+    "</p:spTree></p:cSld>",
+    "</p:sldLayout>"
+  ].join(""),
+  "ppt/slideLayouts/_rels/slideLayout1.xml.rels": [
+    "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">",
+    "<Relationship Id=\"rIdMaster1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"../slideMasters/slideMaster1.xml\"/>",
+    "</Relationships>"
+  ].join(""),
+  "ppt/slideMasters/slideMaster1.xml": [
+    "<p:sldMaster xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" ",
+    "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">",
+    "<p:cSld name=\"Knowledge Distillation Master\"><p:spTree>",
+    "<p:sp><p:nvSpPr><p:cNvPr id=\"21\" name=\"Master Footer\"/></p:nvSpPr><p:txBody><a:p><a:r><a:t>Knowledge distillation master footer evidence</a:t></a:r></a:p></p:txBody></p:sp>",
+    "</p:spTree></p:cSld>",
+    "</p:sldMaster>"
   ].join(""),
   "ppt/commentAuthors.xml": [
     "<p:cmAuthorLst xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">",
@@ -682,7 +706,23 @@ try {
             "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"https://example.com/mounted-pptx\" TargetMode=\"External\"/>",
             "<Relationship Id=\"rIdImage1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/mounted-roadmap.png\"/>",
             "<Relationship Id=\"rIdComment1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments\" Target=\"../comments/comment1.xml\"/>",
+            "<Relationship Id=\"rIdLayout1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/>",
             "</Relationships>"
+          ].join(""),
+          "ppt/slideLayouts/slideLayout1.xml": [
+            "<p:sldLayout xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" type=\"titleAndContent\">",
+            "<p:cSld name=\"Mounted Roadmap Layout\"><p:spTree><p:sp><p:nvSpPr><p:cNvPr id=\"11\" name=\"Mounted Layout Placeholder\"/></p:nvSpPr><p:nvPr><p:ph type=\"body\" idx=\"1\"/></p:nvPr><p:txBody><a:p><a:r><a:t>Mounted layout keeps inherited PowerPoint semantics queryable.</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld>",
+            "</p:sldLayout>"
+          ].join(""),
+          "ppt/slideLayouts/_rels/slideLayout1.xml.rels": [
+            "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">",
+            "<Relationship Id=\"rIdMaster1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"../slideMasters/slideMaster1.xml\"/>",
+            "</Relationships>"
+          ].join(""),
+          "ppt/slideMasters/slideMaster1.xml": [
+            "<p:sldMaster xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">",
+            "<p:cSld name=\"Mounted Roadmap Master\"><p:spTree><p:sp><p:nvSpPr><p:cNvPr id=\"21\" name=\"Mounted Master Footer\"/></p:nvSpPr><p:txBody><a:p><a:r><a:t>Mounted master preserves project-level PPTX footer context.</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld>",
+            "</p:sldMaster>"
           ].join(""),
           "ppt/commentAuthors.xml": [
             "<p:cmAuthorLst xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">",
@@ -984,6 +1024,7 @@ try {
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.charts"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.styles"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.numbering"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.presentation.layouts"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.presentation.placeholders"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.presentation.tables"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.presentation.hyperlinks"), true);
@@ -1083,8 +1124,12 @@ try {
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("table.sheetName"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("table.sheetId"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("shape.placeholderType"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("presentation.layoutPart"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("presentation.masterPart"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("pdf-outline"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("pdf-form-field"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("slide-layout"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("slide-master"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("slide-shape"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("speaker-note"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("comment"), true);
@@ -1106,6 +1151,8 @@ try {
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.style.styleId"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.style.numberingId"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.shape.placeholderType"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.presentation.layoutPart"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.presentation.masterPart"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.table.sheetName"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.image.target"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.image.relationshipId"), true);
@@ -1161,6 +1208,8 @@ try {
   assert.equal(capabilities.payload.formatConversion.preserves.includes("bookmarks"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("headers"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("footers"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("slide-layout"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("slide-master"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("definedNames"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("namedRanges"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("printAreas"), true);
@@ -1195,6 +1244,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("markdown-frontmatter-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("markdown-code-blocks-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("markdown-blockquote-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-layout-master-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-placeholder-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-link-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-image-refs-preserved"), true);
@@ -2655,6 +2705,23 @@ try {
       } else if (formatId === "presentation") {
         assert.equal(mountedStructuredCorpus.windowPlan.strategy, "element-aware-by-title-windowing.v1");
         assert.equal(mountedStructuredCorpus.parserTrace.some((trace) => (
+          trace.stage === "office.presentation.layouts" &&
+          trace.status === "completed" &&
+          trace.slideLayouts === 1 &&
+          trace.slideMasters === 1 &&
+          trace.layoutRefs === 1 &&
+          trace.masterRefs === 1
+        )), true);
+        assert.equal(mountedStructuredCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+          ref.type === "slide-layout" &&
+          ref.presentation?.layoutPart === "ppt/slideLayouts/slideLayout1.xml" &&
+          ref.presentation?.masterPart === "ppt/slideMasters/slideMaster1.xml"
+        ))), true);
+        assert.equal(mountedStructuredCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+          ref.type === "slide-master" &&
+          ref.presentation?.masterPart === "ppt/slideMasters/slideMaster1.xml"
+        ))), true);
+        assert.equal(mountedStructuredCorpus.parserTrace.some((trace) => (
           trace.stage === "office.presentation.tables" &&
           trace.status === "completed" &&
           trace.tables === 1 &&
@@ -2918,6 +2985,14 @@ try {
     trace.layoutStrategy === "presentationml-shape-geometry.v1"
   )), true);
   assert.equal(pptxPayloadCorpus.parserTrace.some((trace) => (
+    trace.stage === "office.presentation.layouts" &&
+    trace.status === "completed" &&
+    trace.slideLayouts === 1 &&
+    trace.slideMasters === 1 &&
+    trace.layoutRefs === 1 &&
+    trace.masterRefs === 1
+  )), true);
+  assert.equal(pptxPayloadCorpus.parserTrace.some((trace) => (
     trace.stage === "office.presentation.placeholders" &&
     trace.status === "completed" &&
     trace.placeholders === 2 &&
@@ -2961,6 +3036,8 @@ try {
   )), true);
   assert.equal(pptxPayloadCorpus.elementPlan.strategy, "document-element-model.v1");
   assert.equal(pptxPayloadCorpus.elementPlan.sourceFormat, "pptx");
+  assert.equal(pptxPayloadCorpus.elementPlan.elementTypes["slide-layout"] >= 1, true);
+  assert.equal(pptxPayloadCorpus.elementPlan.elementTypes["slide-master"] >= 1, true);
   assert.equal(pptxPayloadCorpus.elementPlan.elementTypes.heading >= 1, true);
   assert.equal(pptxPayloadCorpus.elementPlan.elementTypes["slide-shape"] >= 1, true);
   assert.equal(pptxPayloadCorpus.elementPlan.elementTypes["table-header"] >= 1, true);
@@ -2970,6 +3047,27 @@ try {
   assert.equal(pptxPayloadCorpus.elementPlan.elementTypes.chart >= 1, true);
   assert.equal(pptxPayloadCorpus.elementPlan.elementTypes["speaker-note"] >= 1, true);
   assert.equal(pptxPayloadCorpus.elementPlan.elementTypes.comment >= 1, true);
+  assert.equal(pptxPayloadCorpus.elementPlan.sampleElements.some((element) => (
+    element.type === "slide-layout" &&
+    element.page === 1 &&
+    element.layout?.strategy === "presentationml-slide-layout-ref.v1" &&
+    element.presentation?.kind === "slide-layout" &&
+    element.presentation?.slidePart === "ppt/slides/slide1.xml" &&
+    element.presentation?.layoutPart === "ppt/slideLayouts/slideLayout1.xml" &&
+    element.presentation?.masterPart === "ppt/slideMasters/slideMaster1.xml" &&
+    element.presentation?.relationshipId === "rIdLayout1" &&
+    element.presentation?.layoutName === "Roadmap Layout"
+  )), true);
+  assert.equal(pptxPayloadCorpus.elementPlan.sampleElements.some((element) => (
+    element.type === "slide-master" &&
+    element.page === 1 &&
+    element.layout?.strategy === "presentationml-slide-master-ref.v1" &&
+    element.presentation?.kind === "slide-master" &&
+    element.presentation?.layoutPart === "ppt/slideLayouts/slideLayout1.xml" &&
+    element.presentation?.masterPart === "ppt/slideMasters/slideMaster1.xml" &&
+    element.presentation?.masterRelationshipId === "rIdMaster1" &&
+    element.presentation?.masterName === "Knowledge Distillation Master"
+  )), true);
   assert.equal(pptxPayloadCorpus.elementPlan.sampleElements.some((element) => (
     element.type === "heading" &&
     element.page === 1 &&
@@ -3045,8 +3143,20 @@ try {
   assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("charts"), true);
   assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("chartSeries"), true);
   assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("shape-placeholder"), true);
+  assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("slide-layout"), true);
+  assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("slide-master"), true);
   assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("speaker-notes"), true);
   assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("comments"), true);
+  assert.equal(pptxPayloadCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+    ref.type === "slide-layout" &&
+    ref.presentation?.layoutPart === "ppt/slideLayouts/slideLayout1.xml" &&
+    ref.presentation?.masterPart === "ppt/slideMasters/slideMaster1.xml"
+  ))), true);
+  assert.equal(pptxPayloadCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+    ref.type === "slide-master" &&
+    ref.presentation?.masterPart === "ppt/slideMasters/slideMaster1.xml" &&
+    ref.layout?.strategy === "presentationml-slide-master-ref.v1"
+  ))), true);
   assert.equal(pptxPayloadCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
     ref.type === "speaker-note" &&
     ref.page === 1 &&
@@ -3075,6 +3185,20 @@ try {
     ref.chart?.relationshipId === "rIdChart1" &&
     ref.layout?.strategy === "presentationml-chart-ref.v1"
   ))), true);
+  assert.equal(createRun.payload.result.graphEvidence.text_units.some((unit) => (
+    unit.sourceId === "source-13" &&
+    unit.metadata?.elementRefs?.some((ref) => (
+      ref.type === "slide-layout" &&
+      ref.presentation?.layoutPart === "ppt/slideLayouts/slideLayout1.xml"
+    ))
+  )), true);
+  assert.equal(createRun.payload.result.graphEvidence.text_units.some((unit) => (
+    unit.sourceId === "source-13" &&
+    unit.metadata?.elementRefs?.some((ref) => (
+      ref.type === "slide-master" &&
+      ref.presentation?.masterPart === "ppt/slideMasters/slideMaster1.xml"
+    ))
+  )), true);
   assert.equal(createRun.payload.result.graphEvidence.text_units.some((unit) => (
     unit.sourceId === "source-13" &&
     unit.metadata?.elementRefs?.some((ref) => ref.type === "speaker-note")
@@ -3129,6 +3253,8 @@ try {
   assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("shape-bbox"), true);
   assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("shape-id"), true);
   assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("shape-name"), true);
+  assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("slide-layout"), true);
+  assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("slide-master"), true);
   assert.equal(pptxPayloadCorpus.formatConversionProfile.preserves.includes("cellRefs"), true);
   assert.equal(createRun.payload.result.graphEvidence.text_units.some((unit) => (
     unit.sourceId === "source-13" &&
@@ -3879,6 +4005,9 @@ try {
   assert.equal(agentMessage.formatConversionPlan.summary.documentWithCellRefsCount >= 1, true);
   assert.equal(agentMessage.formatConversionPlan.summary.documentWithPdfOutlineRefsCount >= 1, true);
   assert.equal(agentMessage.formatConversionPlan.summary.documentWithPdfFormFieldRefsCount >= 1, true);
+  assert.equal(agentMessage.formatConversionPlan.summary.documentWithPresentationInheritanceRefsCount >= 1, true);
+  assert.equal(agentMessage.formatConversionPlan.summary.documentWithPresentationLayoutRefsCount >= 1, true);
+  assert.equal(agentMessage.formatConversionPlan.summary.documentWithPresentationMasterRefsCount >= 1, true);
   assert.equal(agentMessage.formatConversionPlan.summary.documentWithPresentationCommentRefsCount >= 1, true);
   assert.equal(agentMessage.formatConversionPlan.summary.documentWithSpreadsheetCommentRefsCount >= 1, true);
   assert.equal(agentMessage.formatConversionPlan.summary.documentWithRevisionRefsCount >= 1, true);
@@ -3930,6 +4059,9 @@ try {
   assert.equal(conversionPlan.summary.documentWithMergedCellRefsCount >= 1, true);
   assert.equal(conversionPlan.summary.documentWithPdfOutlineRefsCount >= 1, true);
   assert.equal(conversionPlan.summary.documentWithPdfFormFieldRefsCount >= 1, true);
+  assert.equal(conversionPlan.summary.documentWithPresentationInheritanceRefsCount >= 1, true);
+  assert.equal(conversionPlan.summary.documentWithPresentationLayoutRefsCount >= 1, true);
+  assert.equal(conversionPlan.summary.documentWithPresentationMasterRefsCount >= 1, true);
   assert.equal(conversionPlan.summary.documentWithPresentationCommentRefsCount >= 1, true);
   assert.equal(conversionPlan.summary.documentWithSpreadsheetCommentRefsCount >= 1, true);
   assert.equal(conversionPlan.summary.documentWithImageRefsCount >= 1, true);
@@ -3956,6 +4088,7 @@ try {
   assert.equal(conversionPlan.formatMatrix.some((item) => item.routeId === "pdf" && item.qualityGates.includes("pdf-link-refs-preserved")), true);
   assert.equal(conversionPlan.formatMatrix.some((item) => item.routeId === "pdf" && item.qualityGates.includes("pdf-outline-refs-preserved")), true);
   assert.equal(conversionPlan.formatMatrix.some((item) => item.routeId === "pdf" && item.qualityGates.includes("pdf-form-fields-preserved")), true);
+  assert.equal(conversionPlan.formatMatrix.some((item) => item.routeId === "presentation" && item.qualityGates.includes("presentation-layout-master-refs-preserved")), true);
   assert.equal(conversionPlan.documents.some((document) => (
     document.routeId === "pdf" &&
     document.evidence.linkElementCount >= 1 &&
@@ -4037,8 +4170,11 @@ try {
     document.evidence.linkElementCount >= 1 &&
     document.evidence.imageRefCount >= 1 &&
     document.evidence.chartRefCount >= 1 &&
+    document.evidence.presentationLayoutRefCount >= 1 &&
+    document.evidence.presentationMasterRefCount >= 1 &&
     document.evidence.speakerNoteElementCount >= 1 &&
     document.evidence.presentationCommentRefCount >= 1 &&
+    document.qualityGateResults.some((gate) => gate.gate === "presentation-layout-master-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "presentation-placeholder-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "presentation-link-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "presentation-image-refs-preserved" && gate.status === "passed") &&
@@ -4130,6 +4266,7 @@ try {
   assert.equal(professionalManifest.documents.some((document) => (
     document.routeId === "presentation" &&
     document.parserStages.includes("office.presentation.slides") &&
+    document.parserStages.includes("office.presentation.layouts") &&
     document.parserStages.includes("office.presentation.placeholders") &&
     document.parserStages.includes("office.presentation.hyperlinks") &&
     document.parserStages.includes("office.presentation.images") &&
@@ -4138,15 +4275,20 @@ try {
     document.parserStages.includes("office.presentation.comments") &&
     document.preserves.includes("shape-placeholder") &&
     document.preserves.includes("shape-bbox") &&
+    document.preserves.includes("slide-layout") &&
+    document.preserves.includes("slide-master") &&
     document.preserves.includes("links") &&
     document.preserves.includes("images") &&
     document.preserves.includes("charts") &&
     document.preserves.includes("speaker-notes") &&
     document.preserves.includes("comments") &&
     document.evidence.placeholderRefCount >= 2 &&
+    document.evidence.presentationLayoutRefCount >= 1 &&
+    document.evidence.presentationMasterRefCount >= 1 &&
     document.evidence.imageRefCount >= 1 &&
     document.evidence.chartRefCount >= 1 &&
     document.evidence.presentationCommentRefCount >= 1 &&
+    document.qualityGateResults.some((gate) => gate.gate === "presentation-layout-master-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "presentation-placeholder-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "presentation-link-refs-preserved" && gate.status === "passed") &&
     document.qualityGateResults.some((gate) => gate.gate === "presentation-image-refs-preserved" && gate.status === "passed") &&

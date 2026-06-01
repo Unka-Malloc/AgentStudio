@@ -230,7 +230,7 @@ const FORMAT_ROUTES = Object.freeze([
     contentShape: "presentation",
     preferredParser: "office.presentation.slides",
     fallbackParsers: ["tika.text", "ocr.slide-images"],
-    parserChain: ["office.route", "office.presentation.slides", "office.presentation.placeholders", "office.presentation.tables", "office.presentation.hyperlinks", "office.presentation.images", "office.presentation.charts", "office.presentation.speaker-notes", "office.presentation.comments", "tika.text", "ocr.slide-images"],
+    parserChain: ["office.route", "office.presentation.slides", "office.presentation.layouts", "office.presentation.placeholders", "office.presentation.tables", "office.presentation.hyperlinks", "office.presentation.images", "office.presentation.charts", "office.presentation.speaker-notes", "office.presentation.comments", "tika.text", "ocr.slide-images"],
     streamingUnit: "slide",
     referenceFrameworks: ["docling", "mineru", "unstructured"]
   },
@@ -601,9 +601,9 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
     label: "PowerPoint",
     professionalFamily: "office-presentation",
     parserProfile: "presentationml-slide-route",
-    structureUnits: ["slide", "heading", "placeholder", "slide-shape", "table-row", "link", "image", "chart", "speaker-note", "comment"],
-    parserStages: ["office.presentation.slides", "office.presentation.placeholders", "office.presentation.tables", "office.presentation.hyperlinks", "office.presentation.images", "office.presentation.charts", "office.presentation.speaker-notes", "office.presentation.comments", "tika.text", "ocr.slide-images"],
-    preserves: ["slide-order", "slide-heading", "body-paragraphs", "shape-id", "shape-name", "shape-placeholder", "shape-bbox", "shape-order", "tables", "cellRefs", "links", "images", "charts", "chartSeries", "speaker-notes", "comments"],
+    structureUnits: ["slide", "slide-layout", "slide-master", "heading", "placeholder", "slide-shape", "table-row", "link", "image", "chart", "speaker-note", "comment"],
+    parserStages: ["office.presentation.slides", "office.presentation.layouts", "office.presentation.placeholders", "office.presentation.tables", "office.presentation.hyperlinks", "office.presentation.images", "office.presentation.charts", "office.presentation.speaker-notes", "office.presentation.comments", "tika.text", "ocr.slide-images"],
+    preserves: ["slide-order", "slide-heading", "slide-layout", "slide-master", "body-paragraphs", "shape-id", "shape-name", "shape-placeholder", "shape-bbox", "shape-order", "tables", "cellRefs", "links", "images", "charts", "chartSeries", "speaker-notes", "comments"],
     conversionTargets: ["markdown-slide-outline", "docx-review-copy", "agent-json-with-slide-layout-placeholder-table-link-and-note-refs", "evidence-pack"],
     conversionAdapters: [
       {
@@ -625,7 +625,7 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
         targetFormat: "agent-json",
         adapter: "slides-to-agent-layout-refs.v1",
         mode: "agent",
-        stages: ["slide-refs", "shape-placeholder-refs", "shape-bbox-refs", "table-cell-refs", "link-refs", "image-refs", "chart-refs", "speaker-note-refs", "comment-refs"]
+        stages: ["slide-refs", "slide-layout-refs", "slide-master-refs", "shape-placeholder-refs", "shape-bbox-refs", "table-cell-refs", "link-refs", "image-refs", "chart-refs", "speaker-note-refs", "comment-refs"]
       },
       {
         target: "evidence-pack-json",
@@ -635,7 +635,7 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
         stages: ["text-units", "slide-relationships", "claims"]
       }
     ],
-    qualityGates: ["slide-order-preserved", "presentation-placeholder-refs-preserved", "shape-layout-refs-present", "presentation-table-cell-refs-preserved", "presentation-link-refs-preserved", "presentation-image-refs-preserved", "presentation-chart-refs-preserved", "presentation-speaker-notes-preserved", "presentation-comment-refs-preserved"],
+    qualityGates: ["slide-order-preserved", "presentation-layout-master-refs-preserved", "presentation-placeholder-refs-preserved", "shape-layout-refs-present", "presentation-table-cell-refs-preserved", "presentation-link-refs-preserved", "presentation-image-refs-preserved", "presentation-chart-refs-preserved", "presentation-speaker-notes-preserved", "presentation-comment-refs-preserved"],
     riskControls: ["speaker-notes-preserved-when-notesSlides-present", "comments-preserved-when-comment-parts-present", "raster-only-slide-ocr-fallback"],
     knownLosses: ["visual-layer-geometry-partial"]
   },
@@ -2376,6 +2376,7 @@ function pushStructureElement(elements, type, text, metadata = {}) {
     ...(metadata.annotation ? { annotation: metadata.annotation } : {}),
     ...(metadata.style ? { style: metadata.style } : {}),
     ...(metadata.shape ? { shape: metadata.shape } : {}),
+    ...(metadata.presentation ? { presentation: metadata.presentation } : {}),
     ...(metadata.image ? { image: metadata.image } : {}),
     ...(metadata.chart ? { chart: metadata.chart } : {}),
     ...(metadata.form ? { form: metadata.form } : {}),
@@ -5594,6 +5595,118 @@ function pptxShapeGeometry(shapeXml = "", slideNumber = 0, order = 0) {
   };
 }
 
+function pptxPartNumber(partName = "", pattern = /(\d+)/) {
+  return Number(String(partName || "").match(pattern)?.[1] || 0);
+}
+
+function pptxSlideLayoutMasterRef(entries = [], slideName = "", slideRelationships = new Map()) {
+  const slideLayoutRelationship = [...slideRelationships.values()].find((relationship) => (
+    /\/slideLayout$/i.test(relationship.type || "") ||
+    /(^|\/)slideLayouts\/slideLayout\d+\.xml$/i.test(relationship.target || "")
+  )) || null;
+  if (!slideLayoutRelationship) {
+    return null;
+  }
+  const layoutPart = officeRelationshipResolvedTarget(slideName, slideLayoutRelationship);
+  if (!layoutPart) {
+    return null;
+  }
+  const layoutXml = zipEntryText(entries, layoutPart);
+  const layoutRelationships = docxPartRelationships(entries, layoutPart);
+  const slideMasterRelationship = [...layoutRelationships.values()].find((relationship) => (
+    /\/slideMaster$/i.test(relationship.type || "") ||
+    /(^|\/)slideMasters\/slideMaster\d+\.xml$/i.test(relationship.target || "")
+  )) || null;
+  const masterPart = slideMasterRelationship
+    ? officeRelationshipResolvedTarget(layoutPart, slideMasterRelationship)
+    : "";
+  const masterXml = masterPart ? zipEntryText(entries, masterPart) : "";
+  const layoutName = xmlLocalAttribute(String(layoutXml || "").match(/<[^:>]*:?cSld\b[^>]*(?:\/>|>)/i)?.[0] || "", "name") ||
+    `Slide Layout ${pptxPartNumber(layoutPart, /slideLayout(\d+)/) || ""}`.trim();
+  const masterName = xmlLocalAttribute(String(masterXml || "").match(/<[^:>]*:?cSld\b[^>]*(?:\/>|>)/i)?.[0] || "", "name") ||
+    `Slide Master ${pptxPartNumber(masterPart, /slideMaster(\d+)/) || ""}`.trim();
+  return {
+    slidePart: slideName,
+    layoutPart,
+    layoutRelationshipId: slideLayoutRelationship.id || "",
+    layoutRelationshipType: slideLayoutRelationship.type || "",
+    layoutName,
+    layoutText: compactMarkupText(textFromXmlTextNodes(layoutXml), 1600),
+    masterPart,
+    masterRelationshipId: slideMasterRelationship?.id || "",
+    masterRelationshipType: slideMasterRelationship?.type || "",
+    masterName,
+    masterText: compactMarkupText(textFromXmlTextNodes(masterXml), 1600)
+  };
+}
+
+function appendPptxLayoutMasterElements(elements = [], layoutRef = null, {
+  slideNumber = 0,
+  lineStart = 0
+} = {}) {
+  if (!layoutRef?.layoutPart) {
+    return { layoutRefCount: 0, masterRefCount: 0 };
+  }
+  const base = {
+    slide: Number(slideNumber || 0),
+    slidePart: layoutRef.slidePart || "",
+    layoutPart: layoutRef.layoutPart || "",
+    relationshipId: layoutRef.layoutRelationshipId || "",
+    layoutRelationshipId: layoutRef.layoutRelationshipId || "",
+    layoutRelationshipType: layoutRef.layoutRelationshipType || "",
+    layoutName: layoutRef.layoutName || "",
+    masterPart: layoutRef.masterPart || "",
+    masterRelationshipId: layoutRef.masterRelationshipId || "",
+    masterRelationshipType: layoutRef.masterRelationshipType || "",
+    masterName: layoutRef.masterName || ""
+  };
+  pushStructureElement(
+    elements,
+    "slide-layout",
+    `Slide ${slideNumber} layout ${layoutRef.layoutName || layoutRef.layoutPart}: ${layoutRef.layoutText || layoutRef.layoutPart}`,
+    {
+      line: lineStart + 1,
+      name: `${layoutRef.slidePart || `slide-${slideNumber}`}#layout`,
+      page: slideNumber,
+      layout: {
+        strategy: "presentationml-slide-layout-ref.v1",
+        page: slideNumber,
+        order: lineStart + 1
+      },
+      presentation: {
+        kind: "slide-layout",
+        ...base
+      },
+      limit: 2000
+    }
+  );
+  let masterRefCount = 0;
+  if (layoutRef.masterPart) {
+    masterRefCount = 1;
+    pushStructureElement(
+      elements,
+      "slide-master",
+      `Slide ${slideNumber} master ${layoutRef.masterName || layoutRef.masterPart}: ${layoutRef.masterText || layoutRef.masterPart}`,
+      {
+        line: lineStart + 2,
+        name: `${layoutRef.slidePart || `slide-${slideNumber}`}#master`,
+        page: slideNumber,
+        layout: {
+          strategy: "presentationml-slide-master-ref.v1",
+          page: slideNumber,
+          order: lineStart + 2
+        },
+        presentation: {
+          kind: "slide-master",
+          ...base
+        },
+        limit: 2000
+      }
+    );
+  }
+  return { layoutRefCount: 1, masterRefCount };
+}
+
 function pptxHyperlinkFromTag(tag = "", relationships = new Map(), text = "") {
   const relationshipId = xmlLocalAttribute(tag, "id");
   const relationship = relationships.get(relationshipId) || null;
@@ -5891,6 +6004,14 @@ function parsePptx(entries = []) {
     .map((entry) => entry.name)
     .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
     .sort((left, right) => Number(left.match(/slide(\d+)/)?.[1] || 0) - Number(right.match(/slide(\d+)/)?.[1] || 0));
+  const slideLayoutNames = entries
+    .map((entry) => entry.name)
+    .filter((name) => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(name))
+    .sort((left, right) => Number(left.match(/slideLayout(\d+)/)?.[1] || 0) - Number(right.match(/slideLayout(\d+)/)?.[1] || 0));
+  const slideMasterNames = entries
+    .map((entry) => entry.name)
+    .filter((name) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(name))
+    .sort((left, right) => Number(left.match(/slideMaster(\d+)/)?.[1] || 0) - Number(right.match(/slideMaster(\d+)/)?.[1] || 0));
   const noteNames = entries
     .map((entry) => entry.name)
     .filter((name) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name))
@@ -5919,10 +6040,27 @@ function parsePptx(entries = []) {
   let commentCount = 0;
   let placeholderCount = 0;
   let shapeMetadataCount = 0;
+  let slideLayoutRefCount = 0;
+  let slideMasterRefCount = 0;
+  const slideLayoutPartSet = new Set();
+  const slideMasterPartSet = new Set();
   for (const [index, name] of slideNames.entries()) {
     const slideNumber = Number(name.match(/slide(\d+)/)?.[1] || index + 1);
     const xml = zipEntryText(entries, name);
     const relationships = docxPartRelationships(entries, name);
+    const layoutRef = pptxSlideLayoutMasterRef(entries, name, relationships);
+    if (layoutRef?.layoutPart) {
+      slideLayoutPartSet.add(layoutRef.layoutPart);
+    }
+    if (layoutRef?.masterPart) {
+      slideMasterPartSet.add(layoutRef.masterPart);
+    }
+    const inheritance = appendPptxLayoutMasterElements(elements, layoutRef, {
+      slideNumber,
+      lineStart: elements.length
+    });
+    slideLayoutRefCount += inheritance.layoutRefCount;
+    slideMasterRefCount += inheritance.masterRefCount;
     const shapeBlocks = Array.from(xml.matchAll(/<[^:>]*:?sp\b[\s\S]*?<\/[^:>]*:?sp>/g))
       .map((match) => match[0])
       .filter((shapeXml) => textFromXmlTextNodes(shapeXml));
@@ -6151,7 +6289,11 @@ function parsePptx(entries = []) {
     elements,
     format: "pptx",
     slideCount: slideNames.length,
-    presentationPartCount: slideNames.length + noteNames.length + commentPartNames.length + (commentAuthors.size ? 1 : 0),
+    presentationPartCount: slideNames.length + slideLayoutNames.length + slideMasterNames.length + noteNames.length + commentPartNames.length + (commentAuthors.size ? 1 : 0),
+    slideLayoutPartCount: slideLayoutNames.length || slideLayoutPartSet.size,
+    slideMasterPartCount: slideMasterNames.length || slideMasterPartSet.size,
+    slideLayoutRefCount,
+    slideMasterRefCount,
     speakerNoteCount,
     commentCount,
     commentPartCount: commentPartNames.length,
@@ -7874,6 +8016,12 @@ function structuredZipXmlFiles(route = null, rootDir = "") {
         .sort((left, right) => Number(left.relativePath.match(/slide(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/slide(\d+)/)?.[1] || 0)),
       ...collectFiles(rootDir, (name) => /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(name), 1000)
         .sort((left, right) => Number(left.relativePath.match(/slide(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/slide(\d+)/)?.[1] || 0)),
+      ...collectFiles(rootDir, (name) => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(name), 1000)
+        .sort((left, right) => Number(left.relativePath.match(/slideLayout(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/slideLayout(\d+)/)?.[1] || 0)),
+      ...collectFiles(rootDir, (name) => /^ppt\/slideLayouts\/_rels\/slideLayout\d+\.xml\.rels$/.test(name), 1000)
+        .sort((left, right) => Number(left.relativePath.match(/slideLayout(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/slideLayout(\d+)/)?.[1] || 0)),
+      ...collectFiles(rootDir, (name) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(name), 1000)
+        .sort((left, right) => Number(left.relativePath.match(/slideMaster(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/slideMaster(\d+)/)?.[1] || 0)),
       ...collectFiles(rootDir, (name) => /^ppt\/charts\/chart\d+\.xml$/.test(name), 1000)
         .sort((left, right) => Number(left.relativePath.match(/chart(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/chart(\d+)/)?.[1] || 0)),
       ...collectFiles(rootDir, (name) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name), 1000)
@@ -8183,6 +8331,10 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           comments: parsed.commentCount,
           commentParts: parsed.commentPartCount,
           commentAuthors: parsed.commentAuthorCount,
+          slideLayouts: parsed.slideLayoutPartCount,
+          slideMasters: parsed.slideMasterPartCount,
+          layoutRefs: parsed.slideLayoutRefCount,
+          masterRefs: parsed.slideMasterRefCount,
           hyperlinks: parsed.hyperlinkCount,
           images: parsed.imageCount,
           charts: parsed.chartCount,
@@ -8192,6 +8344,14 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           layoutStrategy: parsed.shapeGeometryCount ? "presentationml-shape-geometry.v1" : "",
           headings: parsed.headingCount,
           paragraphs: parsed.paragraphCount
+        },
+        {
+          stage: "office.presentation.layouts",
+          status: parsed.slideLayoutRefCount || parsed.slideMasterRefCount ? "completed" : "empty",
+          slideLayouts: parsed.slideLayoutPartCount,
+          slideMasters: parsed.slideMasterPartCount,
+          layoutRefs: parsed.slideLayoutRefCount,
+          masterRefs: parsed.slideMasterRefCount
         },
         {
           stage: "office.presentation.placeholders",
@@ -9911,6 +10071,10 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
           comments: parsed.commentCount,
           commentParts: parsed.commentPartCount,
           commentAuthors: parsed.commentAuthorCount,
+          slideLayouts: parsed.slideLayoutPartCount,
+          slideMasters: parsed.slideMasterPartCount,
+          layoutRefs: parsed.slideLayoutRefCount,
+          masterRefs: parsed.slideMasterRefCount,
           hyperlinks: parsed.hyperlinkCount,
           images: parsed.imageCount,
           charts: parsed.chartCount,
@@ -9920,6 +10084,14 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
           layoutStrategy: parsed.shapeGeometryCount ? "presentationml-shape-geometry.v1" : "",
           headings: parsed.headingCount,
           paragraphs: parsed.paragraphCount
+        });
+        parserTrace.push({
+          stage: "office.presentation.layouts",
+          status: parsed.slideLayoutRefCount || parsed.slideMasterRefCount ? "completed" : "empty",
+          slideLayouts: parsed.slideLayoutPartCount,
+          slideMasters: parsed.slideMasterPartCount,
+          layoutRefs: parsed.slideLayoutRefCount,
+          masterRefs: parsed.slideMasterRefCount
         });
         parserTrace.push({
           stage: "office.presentation.placeholders",
@@ -10400,6 +10572,9 @@ function structureElementLine(element = {}) {
   const headerFooter = element.headerFooter?.kind
     ? ` ${element.headerFooter.kind} ${element.headerFooter.partName || ""}`
     : "";
+  const presentation = element.presentation?.kind
+    ? ` ${element.presentation.kind} ${[element.presentation.layoutPart, element.presentation.masterPart].filter(Boolean).join(" -> ")}`
+    : "";
   const definedName = element.definedName?.name || element.definedName?.ref
     ? ` defined-name ${[element.definedName.displayName || element.definedName.name, element.definedName.ref].filter(Boolean).join("=")}`
     : "";
@@ -10417,7 +10592,7 @@ function structureElementLine(element = {}) {
     : element.shape?.isPlaceholder
       ? " placeholder"
       : "";
-  return `Element ${element.type}${level}${name}${line}${style}${numbering}${shape}${placeholder}${image}${chart}${form}${control}${bookmark}${headerFooter}${definedName}${codeBlock}${quote}${merge}: ${element.text}${href}`;
+  return `Element ${element.type}${level}${name}${line}${style}${numbering}${shape}${placeholder}${image}${chart}${form}${control}${bookmark}${headerFooter}${presentation}${definedName}${codeBlock}${quote}${merge}: ${element.text}${href}`;
 }
 
 function structureElementTypeCounts(elements = []) {
@@ -10496,6 +10671,23 @@ function normalizedStructureElements(document = {}) {
             placeholderType: String(element.shape.placeholderType || ""),
             placeholderIndex: String(element.shape.placeholderIndex || ""),
             placeholderSize: String(element.shape.placeholderSize || "")
+          }
+        : null;
+      const presentation = element.presentation && typeof element.presentation === "object"
+        ? {
+            kind: String(element.presentation.kind || ""),
+            slide: Number(element.presentation.slide || page || 0),
+            slidePart: String(element.presentation.slidePart || ""),
+            layoutPart: String(element.presentation.layoutPart || ""),
+            masterPart: String(element.presentation.masterPart || ""),
+            relationshipId: String(element.presentation.relationshipId || element.presentation.layoutRelationshipId || ""),
+            layoutRelationshipId: String(element.presentation.layoutRelationshipId || element.presentation.relationshipId || ""),
+            layoutRelationshipType: String(element.presentation.layoutRelationshipType || ""),
+            masterRelationshipId: String(element.presentation.masterRelationshipId || ""),
+            masterRelationshipType: String(element.presentation.masterRelationshipType || ""),
+            name: String(element.presentation.name || element.presentation.layoutName || element.presentation.masterName || ""),
+            layoutName: String(element.presentation.layoutName || ""),
+            masterName: String(element.presentation.masterName || "")
           }
         : null;
       const image = element.image && typeof element.image === "object"
@@ -10735,6 +10927,7 @@ function normalizedStructureElements(document = {}) {
         annotation,
         style,
         shape,
+        presentation,
         image,
         chart,
         form,
@@ -10757,7 +10950,7 @@ function isHeadingStructureElement(element = {}) {
 }
 
 function isIsolatedStructureElement(element = {}) {
-  return ["table-header", "table-row", "merged-cell", "cell-comment", "defined-name", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "content-control", "bookmark", "header", "footer", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note"].includes(element.type);
+  return ["table-header", "table-row", "merged-cell", "cell-comment", "defined-name", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "content-control", "bookmark", "header", "footer", "slide-layout", "slide-master", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note"].includes(element.type);
 }
 
 function headingLevelForElement(element = {}) {
@@ -10791,6 +10984,7 @@ function buildStructureWindowRecord(document = {}, index = 0, elements = [], hea
       annotation: element.annotation || null,
       style: element.style || null,
       shape: element.shape || null,
+      presentation: element.presentation || null,
       image: element.image || null,
       chart: element.chart || null,
       form: element.form || null,
@@ -10917,6 +11111,7 @@ function buildDocumentElementPlan(document = {}, windowPlan = null) {
       annotation: element.annotation || null,
       style: element.style || null,
       shape: element.shape || null,
+      presentation: element.presentation || null,
       image: element.image || null,
       chart: element.chart || null,
       form: element.form || null,
@@ -11314,6 +11509,22 @@ function buildProfessionalQualityGateResults({ document = {}, profile = {}, evid
         observed: { slideCount, elementCount: evidence.elementCount },
         required: { orderedSlides: true },
         message: status === "passed" ? "Slide sequence is represented in element refs." : "Slide sequence was not observed."
+      });
+    }
+    if (gate === "presentation-layout-master-refs-preserved") {
+      const layoutSignals = maxTraceMetric(document, ["layoutRefs", "slideLayouts"]);
+      const masterSignals = maxTraceMetric(document, ["masterRefs", "slideMasters"]);
+      const presentationLayoutRefCount = Number(evidence.presentationLayoutRefCount || 0);
+      const presentationMasterRefCount = Number(evidence.presentationMasterRefCount || 0);
+      const status = routeId !== "presentation"
+        ? "not_applicable"
+        : layoutSignals > 0 || masterSignals > 0
+          ? presentationLayoutRefCount > 0 && (masterSignals === 0 || presentationMasterRefCount > 0) ? "passed" : "failed"
+          : "not_applicable";
+      return professionalGateRecord(gate, status, {
+        observed: { layoutSignals, masterSignals, presentationLayoutRefCount, presentationMasterRefCount },
+        required: { layoutRefsWhenSlideLayoutExists: true, masterRefsWhenSlideMasterExists: true },
+        message: status === "passed" ? "PowerPoint slide layout and master inheritance are preserved as element references." : "No PowerPoint layout/master references were required or observed."
       });
     }
     if (gate === "shape-layout-refs-present") {
@@ -11808,6 +12019,14 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
     );
     const shapeRefCount = sampleElements.filter((element) => element.shape?.id || element.shape?.name).length;
     const placeholderRefCount = sampleElements.filter((element) => element.shape?.isPlaceholder || element.shape?.placeholderType).length;
+    const presentationLayoutRefCount = Math.max(
+      Number(elementTypes["slide-layout"] || 0),
+      sampleElements.filter((element) => element.type === "slide-layout" && element.presentation?.layoutPart).length
+    );
+    const presentationMasterRefCount = Math.max(
+      Number(elementTypes["slide-master"] || 0),
+      sampleElements.filter((element) => element.type === "slide-master" && element.presentation?.masterPart).length
+    );
     const chartRefCount = Math.max(
       Number(elementTypes.chart || 0),
       sampleElements.filter((element) => element.type === "chart" && (element.chart?.chartPart || element.chart?.relationshipId)).length
@@ -11849,6 +12068,8 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       headerFooterRefCount,
       shapeRefCount,
       placeholderRefCount,
+      presentationLayoutRefCount,
+      presentationMasterRefCount,
       chartRefCount,
       chartSeriesRefCount,
       speakerNoteElementCount,
@@ -11926,6 +12147,9 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       documentWithContentControlRefsCount: plannedDocuments.filter((document) => document.evidence.contentControlRefCount > 0).length,
       documentWithBookmarkRefsCount: plannedDocuments.filter((document) => document.evidence.bookmarkRefCount > 0).length,
       documentWithHeaderFooterRefsCount: plannedDocuments.filter((document) => document.evidence.headerFooterRefCount > 0).length,
+      documentWithPresentationLayoutRefsCount: plannedDocuments.filter((document) => document.evidence.presentationLayoutRefCount > 0).length,
+      documentWithPresentationMasterRefsCount: plannedDocuments.filter((document) => document.evidence.presentationMasterRefCount > 0).length,
+      documentWithPresentationInheritanceRefsCount: plannedDocuments.filter((document) => document.evidence.presentationLayoutRefCount > 0 || document.evidence.presentationMasterRefCount > 0).length,
       documentWithAnnotationsCount: plannedDocuments.filter((document) => document.evidence.annotationElementCount > 0).length,
       documentWithRevisionRefsCount: plannedDocuments.filter((document) => document.evidence.revisionRefCount > 0).length,
       documentWithPdfOutlineRefsCount: plannedDocuments.filter((document) => document.evidence.pdfOutlineRefCount > 0).length,
@@ -12676,6 +12900,10 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           comments: parsed.commentCount,
           commentParts: parsed.commentPartCount,
           commentAuthors: parsed.commentAuthorCount,
+          slideLayouts: parsed.slideLayoutPartCount,
+          slideMasters: parsed.slideMasterPartCount,
+          layoutRefs: parsed.slideLayoutRefCount,
+          masterRefs: parsed.slideMasterRefCount,
           hyperlinks: parsed.hyperlinkCount,
           images: parsed.imageCount,
           charts: parsed.chartCount,
@@ -12685,6 +12913,14 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           layoutStrategy: parsed.shapeGeometryCount ? "presentationml-shape-geometry.v1" : "",
           headings: parsed.headingCount,
           paragraphs: parsed.paragraphCount
+        });
+        parserTrace.push({
+          stage: "office.presentation.layouts",
+          status: parsed.slideLayoutRefCount || parsed.slideMasterRefCount ? "completed" : "empty",
+          slideLayouts: parsed.slideLayoutPartCount,
+          slideMasters: parsed.slideMasterPartCount,
+          layoutRefs: parsed.slideLayoutRefCount,
+          masterRefs: parsed.slideMasterRefCount
         });
         parserTrace.push({
           stage: "office.presentation.placeholders",
@@ -17631,6 +17867,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         "office.word.charts",
         "office.word.revisions",
         "office.presentation.slides",
+        "office.presentation.layouts",
         "office.presentation.placeholders",
         "office.presentation.tables",
         "office.presentation.hyperlinks",
@@ -17668,10 +17905,10 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       supported: true,
       strategy: "document-element-model.v1",
       windowingStrategy: "element-aware-by-title-windowing.v1",
-      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "content-control", "bookmark", "header", "footer", "defined-name", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment"],
+      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-layout", "slide-master", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "content-control", "bookmark", "header", "footer", "defined-name", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment"],
       structuredFormats: ["markdown", "html", "xml", "asciidoc", "latex", "docx", "pptx", "xlsx", "open-document", "epub", "pdf"],
-      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "headerFooter.kind", "headerFooter.partName", "definedName.name", "definedName.ref", "definedName.builtinType", "codeBlock.language", "codeBlock.lineStart", "quote.depth", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
-      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.headerFooter", "elementRefs.headerFooter.kind", "elementRefs.headerFooter.partName", "elementRefs.definedName", "elementRefs.definedName.name", "elementRefs.definedName.ref", "elementRefs.definedName.builtinType", "elementRefs.codeBlock", "elementRefs.codeBlock.language", "elementRefs.codeBlock.lineStart", "elementRefs.quote", "elementRefs.quote.depth", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
+      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "presentation.kind", "presentation.slidePart", "presentation.layoutPart", "presentation.masterPart", "presentation.relationshipId", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "headerFooter.kind", "headerFooter.partName", "definedName.name", "definedName.ref", "definedName.builtinType", "codeBlock.language", "codeBlock.lineStart", "quote.depth", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
+      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.presentation", "elementRefs.presentation.layoutPart", "elementRefs.presentation.masterPart", "elementRefs.presentation.relationshipId", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.headerFooter", "elementRefs.headerFooter.kind", "elementRefs.headerFooter.partName", "elementRefs.definedName", "elementRefs.definedName.name", "elementRefs.definedName.ref", "elementRefs.definedName.builtinType", "elementRefs.codeBlock", "elementRefs.codeBlock.language", "elementRefs.codeBlock.lineStart", "elementRefs.quote", "elementRefs.quote.depth", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
       referencePatterns: [
         "unstructured.elements",
         "unstructured.chunk_by_title",
@@ -17692,7 +17929,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       formatMatrix: professionalFormatMatrix(PROFESSIONAL_FORMAT_ORDER),
       humanReadableTargets: ["portable-markdown", "portable-docx", "console-summary-json", "workspace-package-zip"],
       agentReadableTargets: ["agent-message-json", "professional-format-manifest-json", "result-json", "evidence-pack-json"],
-      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "codeBlocks", "blockquotes", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "definedNames", "namedRanges", "printAreas", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "contentControls", "bookmarks", "headers", "footers", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders"],
+      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "codeBlocks", "blockquotes", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "definedNames", "namedRanges", "printAreas", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "contentControls", "bookmarks", "headers", "footers", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders", "slide-layout", "slide-master", "slideLayouts", "slideMasters"],
       qualityGates: uniqueOrdered(PROFESSIONAL_FORMAT_ORDER.flatMap((formatId) => (
         professionalFormatAdapter(formatId)?.qualityGates || []
       ))),
