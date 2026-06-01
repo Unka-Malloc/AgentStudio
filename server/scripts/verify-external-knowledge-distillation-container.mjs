@@ -465,6 +465,8 @@ try {
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("control.tag"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("bookmark.name"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("table.sheetName"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("definedName.ref"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("definedName.builtinType"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("shape.placeholderType"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("pdf-outline"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("pdf-form-field"), true);
@@ -480,6 +482,7 @@ try {
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("content-control"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("bookmark"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("frontmatter"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("defined-name"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("merged-cell"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("cell-comment"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.href"), true);
@@ -497,6 +500,8 @@ try {
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.form.value"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.control.tag"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.bookmark.name"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.definedName.ref"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.definedName.builtinType"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.merge.ref"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.merge"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.comment"), true);
@@ -529,6 +534,9 @@ try {
   assert.equal(capabilities.payload.formatConversion.preserves.includes("formFields"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("contentControls"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("bookmarks"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("definedNames"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("namedRanges"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("printAreas"), true);
   for (const [routeId, parserProfile, qualityGate] of [
     ["pdf", "pdf.text-layout-ocr-route", "page-order-preserved"],
     ["word", "wordprocessingml-paragraph-style-route", "word-annotation-refs-preserved"],
@@ -564,6 +572,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-comment-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("opendocument-link-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-workbook-sheet-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-defined-name-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-merged-cell-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-comment-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-date-serials-normalized"), true);
@@ -656,6 +665,7 @@ try {
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("open-document.hyperlinks"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("ebook.epub"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("table.workbook.sheets"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("table.workbook.defined-names"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("table.sheet.headers"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("table.sheet.cells"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("table.sheet.merged-cells"), true);

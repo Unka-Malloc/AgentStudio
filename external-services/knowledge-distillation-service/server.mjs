@@ -643,9 +643,9 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
     label: "Excel",
     professionalFamily: "office-spreadsheet",
     parserProfile: "spreadsheetml-sheet-row-cell-route",
-    structureUnits: ["workbook-sheet", "sheet", "table-header", "table-row", "merged-cell", "cell-comment", "cell", "formula", "hyperlink", "chart", "time-signal"],
-    parserStages: ["table.sheet.structured", "table.workbook.sheets", "table.sheet.headers", "table.sheet.cells", "table.sheet.merged-cells", "table.sheet.comments", "table.sheet.date-styles", "table.sheet.formulas", "table.sheet.hyperlinks", "table.sheet.charts", "table.time-index"],
-    preserves: ["sheet", "sheetName", "sheetId", "sheetState", "worksheetPath", "row", "column", "cellRefs", "headers", "mergedCells", "cellComments", "dateStyles", "dateSerials", "formulas", "hyperlinks", "charts", "chartSeries", "timeSignals"],
+    structureUnits: ["workbook-sheet", "defined-name", "named-range", "print-area", "sheet", "table-header", "table-row", "merged-cell", "cell-comment", "cell", "formula", "hyperlink", "chart", "time-signal"],
+    parserStages: ["table.sheet.structured", "table.workbook.sheets", "table.workbook.defined-names", "table.sheet.headers", "table.sheet.cells", "table.sheet.merged-cells", "table.sheet.comments", "table.sheet.date-styles", "table.sheet.formulas", "table.sheet.hyperlinks", "table.sheet.charts", "table.time-index"],
+    preserves: ["sheet", "sheetName", "sheetId", "sheetState", "worksheetPath", "definedNames", "namedRanges", "printAreas", "row", "column", "cellRefs", "headers", "mergedCells", "cellComments", "dateStyles", "dateSerials", "formulas", "hyperlinks", "charts", "chartSeries", "timeSignals"],
     conversionTargets: ["markdown-tables", "docx-review-copy", "agent-json-with-workbook-sheet-cell-coordinates-and-formulas", "evidence-pack"],
     conversionAdapters: [
       {
@@ -667,7 +667,7 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
         targetFormat: "agent-json",
         adapter: "sheets-to-agent-cell-refs.v1",
         mode: "agent",
-        stages: ["workbook-sheet-refs", "cell-coordinate-refs", "merged-cell-refs", "cell-comment-refs", "date-serial-refs", "formula-refs", "hyperlink-refs", "chart-refs", "time-signals"]
+        stages: ["workbook-sheet-refs", "defined-name-refs", "named-range-refs", "cell-coordinate-refs", "merged-cell-refs", "cell-comment-refs", "date-serial-refs", "formula-refs", "hyperlink-refs", "chart-refs", "time-signals"]
       },
       {
         target: "evidence-pack-json",
@@ -677,7 +677,7 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
         stages: ["row-text-units", "entity-columns", "claim-values"]
       }
     ],
-    qualityGates: ["spreadsheet-workbook-sheet-refs-preserved", "sheet-row-cell-refs-preserved", "spreadsheet-merged-cell-refs-preserved", "spreadsheet-comment-refs-preserved", "spreadsheet-date-serials-normalized", "formula-text-preserved", "spreadsheet-hyperlink-refs-preserved", "spreadsheet-chart-refs-preserved", "table-time-index-when-date-columns-exist"],
+    qualityGates: ["spreadsheet-workbook-sheet-refs-preserved", "spreadsheet-defined-name-refs-preserved", "sheet-row-cell-refs-preserved", "spreadsheet-merged-cell-refs-preserved", "spreadsheet-comment-refs-preserved", "spreadsheet-date-serials-normalized", "formula-text-preserved", "spreadsheet-hyperlink-refs-preserved", "spreadsheet-chart-refs-preserved", "table-time-index-when-date-columns-exist"],
     riskControls: ["formula-results-not-recomputed"],
     knownLosses: ["formula-results-not-recomputed"]
   },
@@ -1036,12 +1036,12 @@ const REFERENCE_ABSORPTION_MAP = Object.freeze({
     gaps: ["ranking/evaluation loop over external vector stores", "full document-layout enrichment for every parser"]
   },
   mineru: {
-    absorbed: ["PDF, Office, OpenDocument, EPUB, image, email, and archive routing", "PDF URI annotation and outline refs", "LLM-ready Markdown/JSON outputs", "SpreadsheetML workbook sheet, comment, and formula metadata"],
+    absorbed: ["PDF, Office, OpenDocument, EPUB, image, email, and archive routing", "PDF URI annotation and outline refs", "LLM-ready Markdown/JSON outputs", "SpreadsheetML workbook sheet, defined-name, comment, and formula metadata"],
     baseline: ["file-ref parsers for large binary payloads"],
     gaps: ["high-fidelity layout reconstruction for complex PDFs"]
   },
   docling: {
-    absorbed: ["unified routePlan/corpusPlan/parserTrace document model", "table time index for structured sheets", "HTML, XML, AsciiDoc, LaTeX, Markdown, OOXML, OpenDocument, EPUB, and PDF element models", "basic PDF text-operator geometry for page/x/y/bbox metadata", "PDF outline/bookmark references", "WordprocessingML content controls and bookmark anchors", "WordprocessingML, PresentationML, and OpenDocument table row/cell metadata", "WordprocessingML, PresentationML, and OpenDocument hyperlink targets", "WordprocessingML comments, revisions, footnotes, and endnotes", "spreadsheet workbook sheet id/name/path plus row/cell coordinate/comment/formula/hyperlink metadata", "PresentationML shape id/name, placeholder, comment, and geometry metadata for slide elements"],
+    absorbed: ["unified routePlan/corpusPlan/parserTrace document model", "table time index for structured sheets", "HTML, XML, AsciiDoc, LaTeX, Markdown, OOXML, OpenDocument, EPUB, and PDF element models", "basic PDF text-operator geometry for page/x/y/bbox metadata", "PDF outline/bookmark references", "WordprocessingML content controls and bookmark anchors", "WordprocessingML, PresentationML, and OpenDocument table row/cell metadata", "WordprocessingML, PresentationML, and OpenDocument hyperlink targets", "WordprocessingML comments, revisions, footnotes, and endnotes", "spreadsheet workbook sheet id/name/path plus defined-name/named-range/print-area and row/cell coordinate/comment/formula/hyperlink metadata", "PresentationML shape id/name, placeholder, comment, and geometry metadata for slide elements"],
     baseline: ["structured ZIP extraction for OOXML and OpenDocument"],
     gaps: ["full PDF and Word layout block geometry", "formula recognition beyond SpreadsheetML and text-level elements"]
   },
@@ -1066,7 +1066,7 @@ const REFERENCE_ABSORPTION_MAP = Object.freeze({
     gaps: ["external component registry", "configurable parser/ranker pipeline graph"]
   },
   unstructured: {
-    absorbed: ["partition-style format routing", "chunked windowing", "email and archive child routing", "element-type enrichment for Markdown, markup, PDF, OOXML, OpenDocument, EPUB, headings, lists, links, tables, PDF outlines, Word content controls/bookmarks, Word/PowerPoint/OpenDocument table cells, Word annotations/revisions and hyperlinks, PowerPoint comments and hyperlinks, OpenDocument hyperlinks, code, formulas, spreadsheet workbook sheet refs/comments/hyperlinks, slide shapes, and PowerPoint placeholders", "by-title element-aware windowing with table/code isolation"],
+    absorbed: ["partition-style format routing", "chunked windowing", "email and archive child routing", "element-type enrichment for Markdown, markup, PDF, OOXML, OpenDocument, EPUB, headings, lists, links, tables, PDF outlines, Word content controls/bookmarks, Word/PowerPoint/OpenDocument table cells, Word annotations/revisions and hyperlinks, PowerPoint comments and hyperlinks, OpenDocument hyperlinks, code, formulas, spreadsheet workbook sheet refs/defined names/comments/hyperlinks, slide shapes, and PowerPoint placeholders", "by-title element-aware windowing with table/code isolation"],
     baseline: ["strategy-based parser fallback"],
     gaps: ["remaining high-fidelity PDF, Word, and spreadsheet layout coordinates", "domain-specific chunk enrichment plugins"]
   }
@@ -2381,6 +2381,7 @@ function pushStructureElement(elements, type, text, metadata = {}) {
     ...(metadata.form ? { form: metadata.form } : {}),
     ...(metadata.control ? { control: metadata.control } : {}),
     ...(metadata.bookmark ? { bookmark: metadata.bookmark } : {}),
+    ...(metadata.definedName ? { definedName: metadata.definedName } : {}),
     ...(metadata.merge ? { merge: metadata.merge } : {}),
     ...(metadata.frontmatter ? { frontmatter: metadata.frontmatter } : {}),
     ...(metadata.cells ? { cells: metadata.cells } : {})
@@ -6469,6 +6470,129 @@ function parseWorkbookSheets(workbookXml = "", relationshipXml = "") {
   return sheets;
 }
 
+function xlsxDefinedNameBuiltinType(name = "") {
+  const normalized = String(name || "").replace(/^_xlnm\./i, "").toLowerCase();
+  if (normalized === "print_area") {
+    return "print-area";
+  }
+  if (normalized === "print_titles") {
+    return "print-titles";
+  }
+  if (normalized === "_filterdatabase" || normalized === "filterdatabase") {
+    return "filter-database";
+  }
+  return "named-range";
+}
+
+function xlsxDefinedNameDisplayName(name = "") {
+  return String(name || "").replace(/^_xlnm\./i, "");
+}
+
+function xlsxDefinedNameRanges(formula = "") {
+  const ranges = [];
+  const pattern = /(?:'((?:[^']|'')+)'|([A-Za-z0-9_]+))!\$?([A-Z]{1,3})\$?(\d+)(?::\$?([A-Z]{1,3})\$?(\d+))?/gi;
+  for (const match of String(formula || "").matchAll(pattern)) {
+    const sheetName = String(match[1] || match[2] || "").replace(/''/g, "'");
+    const startRef = `${String(match[3] || "").toUpperCase()}${Number(match[4] || 0)}`;
+    const endRef = match[5] && match[6]
+      ? `${String(match[5] || "").toUpperCase()}${Number(match[6] || 0)}`
+      : startRef;
+    const range = xlsxMergedCellRange(startRef === endRef ? startRef : `${startRef}:${endRef}`);
+    if (!range) {
+      continue;
+    }
+    ranges.push({
+      sheetName,
+      ref: range.ref,
+      startRef: range.startRef,
+      endRef: range.endRef,
+      startColumn: range.startColumn,
+      endColumn: range.endColumn,
+      startRow: range.startRow,
+      endRow: range.endRow,
+      rowSpan: range.rowSpan,
+      columnSpan: range.columnSpan,
+      cellRefs: range.cellRefs.slice(0, 200)
+    });
+  }
+  return ranges;
+}
+
+function parseXlsxDefinedNamesXml(workbookXml = "", workbookSheets = []) {
+  const sheetsByLocalId = new Map(workbookSheets.map((sheet, index) => [String(index), sheet]));
+  const definedNames = [];
+  for (const match of String(workbookXml || "").matchAll(/<definedName\b[^>]*>[\s\S]*?<\/definedName>/g)) {
+    const xml = match[0];
+    const tag = xml.match(/^<definedName\b[^>]*>/)?.[0] || "";
+    const name = xmlAttribute(tag, "name");
+    const formula = decodeXmlEntities(String(xml.match(/<definedName\b[^>]*>([\s\S]*?)<\/definedName>/)?.[1] || ""))
+      .replace(/<[^>]+>/g, "")
+      .trim();
+    if (!name || !formula) {
+      continue;
+    }
+    const localSheetId = xmlAttribute(tag, "localSheetId");
+    const sheet = localSheetId !== "" ? sheetsByLocalId.get(localSheetId) || null : null;
+    const ranges = xlsxDefinedNameRanges(formula);
+    const builtinType = xlsxDefinedNameBuiltinType(name);
+    const sheetName = ranges[0]?.sheetName || sheet?.name || "";
+    const ref = ranges.map((range) => range.sheetName ? `${range.sheetName}!${range.ref}` : range.ref).join(",");
+    definedNames.push({
+      kind: "spreadsheet-defined-name",
+      name,
+      displayName: xlsxDefinedNameDisplayName(name),
+      builtin: name.startsWith("_xlnm.") || name.startsWith("_"),
+      builtinType,
+      scope: localSheetId !== "" ? "worksheet" : "workbook",
+      localSheetId,
+      hidden: xmlAttribute(tag, "hidden") === "1",
+      sheetName,
+      sheetId: String(sheet?.sheetId || ""),
+      worksheetPath: String(sheet?.worksheetPath || ""),
+      ref,
+      formula,
+      ranges,
+      sourcePart: "xl/workbook.xml"
+    });
+  }
+  return definedNames;
+}
+
+function formatXlsxDefinedNameLine(definedName = {}) {
+  const typeLabel = definedName.builtinType === "print-area"
+    ? "Print area"
+    : definedName.builtinType === "print-titles"
+      ? "Print titles"
+      : definedName.builtinType === "filter-database"
+        ? "Filter database"
+        : "Named range";
+  const name = definedName.displayName || definedName.name || typeLabel;
+  const scope = definedName.sheetName ? ` (${definedName.sheetName})` : "";
+  const target = definedName.ref || definedName.formula || "";
+  return `${typeLabel} ${name}${scope}: ${target}`;
+}
+
+function appendXlsxDefinedNameElements(elements = [], definedNames = []) {
+  for (const [index, definedName] of definedNames.entries()) {
+    pushStructureElement(elements, "defined-name", formatXlsxDefinedNameLine(definedName), {
+      line: index + 1,
+      name: `xl/workbook.xml#defined-name-${index + 1}`,
+      table: {
+        format: "xlsx",
+        sheet: definedName.sheetName || "",
+        sheetName: definedName.sheetName || "",
+        sheetId: definedName.sheetId || "",
+        worksheetPath: definedName.worksheetPath || "",
+        row: 0,
+        columns: 0
+      },
+      definedName,
+      limit: 1600
+    });
+  }
+  return definedNames.length;
+}
+
 function workbookSheetRecordsForPaths(sheetPaths = [], workbookSheets = []) {
   const byPath = new Map(workbookSheets.map((sheet) => [sheet.worksheetPath, sheet]));
   const remaining = new Set(sheetPaths);
@@ -6857,10 +6981,12 @@ function xlsxElementMerge(range = {}, anchorValue = "") {
 function parseXlsxDetailed(entries = []) {
   const sharedStrings = parseSharedStringsXml(zipEntryText(entries, "xl/sharedStrings.xml"));
   const styles = parseXlsxStylesXml(zipEntryText(entries, "xl/styles.xml"));
+  const workbookXml = zipEntryText(entries, "xl/workbook.xml");
   const workbookSheets = parseWorkbookSheets(
-    zipEntryText(entries, "xl/workbook.xml"),
+    workbookXml,
     zipEntryText(entries, "xl/_rels/workbook.xml.rels")
   );
+  const definedNames = parseXlsxDefinedNamesXml(workbookXml, workbookSheets);
   const sheetNames = entries
     .map((entry) => entry.name)
     .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
@@ -6879,6 +7005,7 @@ function parseXlsxDetailed(entries = []) {
   let chartPartCount = 0;
   let chartSeriesCount = 0;
   const elements = [];
+  appendXlsxDefinedNameElements(elements, definedNames);
   for (const [index, record] of sheetRecords.entries()) {
     const { name, sheet } = record;
     const sheetXml = zipEntryText(entries, name);
@@ -6996,6 +7123,9 @@ function parseXlsxDetailed(entries = []) {
     dateCellCount,
     mergedCellCount,
     commentCount,
+    definedNameCount: definedNames.length,
+    namedRangeCount: definedNames.filter((definedName) => definedName.builtinType === "named-range").length,
+    printAreaCount: definedNames.filter((definedName) => definedName.builtinType === "print-area").length,
     sheetCount: sheetNames.length,
     workbookSheetCount: workbookSheets.length,
     sheetRefCount: sheetRecords.filter((record) => (
@@ -7511,14 +7641,16 @@ function appendXlsxWorksheetText({ sheetPath = "", sheetLabel = "", sharedString
 function appendXlsxDirectoryAsText(rootDir = "", outputPath = "") {
   const sharedStrings = parseSharedStringsFile(path.join(rootDir, "xl/sharedStrings.xml"));
   const styles = parseXlsxStylesFile(path.join(rootDir, "xl/styles.xml"));
+  const workbookXml = fsSync.existsSync(path.join(rootDir, "xl/workbook.xml"))
+    ? fsSync.readFileSync(path.join(rootDir, "xl/workbook.xml"), "utf8")
+    : "";
   const workbookSheets = parseWorkbookSheets(
-    fsSync.existsSync(path.join(rootDir, "xl/workbook.xml"))
-      ? fsSync.readFileSync(path.join(rootDir, "xl/workbook.xml"), "utf8")
-      : "",
+    workbookXml,
     fsSync.existsSync(path.join(rootDir, "xl/_rels/workbook.xml.rels"))
       ? fsSync.readFileSync(path.join(rootDir, "xl/_rels/workbook.xml.rels"), "utf8")
       : ""
   );
+  const definedNames = parseXlsxDefinedNamesXml(workbookXml, workbookSheets);
   const sheetFiles = collectFiles(rootDir, (name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name), 1000)
     .sort((left, right) => Number(left.relativePath.match(/sheet(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/sheet(\d+)/)?.[1] || 0));
   const filesByRelativePath = new Map(sheetFiles.map((file) => [file.relativePath, file]));
@@ -7534,6 +7666,11 @@ function appendXlsxDirectoryAsText(rootDir = "", outputPath = "") {
   let mergedCellCount = 0;
   let commentCount = 0;
   let headerRows = 0;
+  for (const definedName of definedNames) {
+    const line = `${formatXlsxDefinedNameLine(definedName)}\n`;
+    fsSync.appendFileSync(outputPath, line, "utf8");
+    totalCharacters += line.length;
+  }
   for (const [index, record] of sheetRecords.entries()) {
     const sheetLabel = xlsxSheetLabel(record.sheet, index);
     const stats = appendXlsxWorksheetText({
@@ -7561,6 +7698,9 @@ function appendXlsxDirectoryAsText(rootDir = "", outputPath = "") {
     dateCellCount,
     mergedCellCount,
     commentCount,
+    definedNameCount: definedNames.length,
+    namedRangeCount: definedNames.filter((definedName) => definedName.builtinType === "named-range").length,
+    printAreaCount: definedNames.filter((definedName) => definedName.builtinType === "print-area").length,
     sheetCount: sheetFiles.length,
     workbookSheetCount: workbookSheets.length,
     sheetRefCount: sheetRecords.length,
@@ -7577,6 +7717,13 @@ function appendXlsxDirectoryAsText(rootDir = "", outputPath = "") {
         sheets: workbookSheets.length,
         sheetRefs: sheetRecords.length,
         hiddenSheets: sheetRecords.filter((record) => record.sheet?.state && record.sheet.state !== "visible").length
+      },
+      {
+        stage: "table.workbook.defined-names",
+        status: definedNames.length ? "completed" : "empty",
+        definedNames: definedNames.length,
+        namedRanges: definedNames.filter((definedName) => definedName.builtinType === "named-range").length,
+        printAreas: definedNames.filter((definedName) => definedName.builtinType === "print-area").length
       },
       {
         stage: "table.sheet.headers",
@@ -8003,6 +8150,9 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           workbookSheets: parsed.workbookSheetCount,
           sheetRefs: parsed.sheetRefCount,
           hiddenSheets: parsed.hiddenSheetCount,
+          definedNames: parsed.definedNameCount,
+          namedRanges: parsed.namedRangeCount,
+          printAreas: parsed.printAreaCount,
           rows: parsed.rowCount,
           cells: parsed.cellCount,
           dateStyles: parsed.dateStyleCount,
@@ -8021,6 +8171,13 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           sheets: parsed.workbookSheetCount,
           sheetRefs: parsed.sheetRefCount,
           hiddenSheets: parsed.hiddenSheetCount
+        },
+        {
+          stage: "table.workbook.defined-names",
+          status: parsed.definedNameCount ? "completed" : "empty",
+          definedNames: parsed.definedNameCount,
+          namedRanges: parsed.namedRangeCount,
+          printAreas: parsed.printAreaCount
         },
         {
           stage: "table.sheet.headers",
@@ -9718,6 +9875,9 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
           workbookSheets: parsed.workbookSheetCount,
           sheetRefs: parsed.sheetRefCount,
           hiddenSheets: parsed.hiddenSheetCount,
+          definedNames: parsed.definedNameCount,
+          namedRanges: parsed.namedRangeCount,
+          printAreas: parsed.printAreaCount,
           rows: parsed.rowCount,
           cells: parsed.cellCount,
           dateStyles: parsed.dateStyleCount,
@@ -9736,6 +9896,13 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
           sheets: parsed.workbookSheetCount,
           sheetRefs: parsed.sheetRefCount,
           hiddenSheets: parsed.hiddenSheetCount
+        });
+        parserTrace.push({
+          stage: "table.workbook.defined-names",
+          status: parsed.definedNameCount ? "completed" : "empty",
+          definedNames: parsed.definedNameCount,
+          namedRanges: parsed.namedRangeCount,
+          printAreas: parsed.printAreaCount
         });
         parserTrace.push({
           stage: "table.sheet.headers",
@@ -10113,6 +10280,9 @@ function structureElementLine(element = {}) {
   const bookmark = element.bookmark?.name
     ? ` bookmark ${element.bookmark.name}`
     : "";
+  const definedName = element.definedName?.name || element.definedName?.ref
+    ? ` defined-name ${[element.definedName.displayName || element.definedName.name, element.definedName.ref].filter(Boolean).join("=")}`
+    : "";
   const merge = element.merge?.ref
     ? ` merge ${element.merge.ref}${element.merge.masterRef ? ` master ${element.merge.masterRef}` : ""}`
     : "";
@@ -10121,7 +10291,7 @@ function structureElementLine(element = {}) {
     : element.shape?.isPlaceholder
       ? " placeholder"
       : "";
-  return `Element ${element.type}${level}${name}${line}${style}${numbering}${shape}${placeholder}${image}${chart}${form}${control}${bookmark}${merge}: ${element.text}${href}`;
+  return `Element ${element.type}${level}${name}${line}${style}${numbering}${shape}${placeholder}${image}${chart}${form}${control}${bookmark}${definedName}${merge}: ${element.text}${href}`;
 }
 
 function structureElementTypeCounts(elements = []) {
@@ -10276,6 +10446,41 @@ function normalizedStructureElements(document = {}) {
             sourcePart: String(element.bookmark.sourcePart || "")
           }
         : null;
+      const definedName = element.definedName && typeof element.definedName === "object"
+        ? {
+            kind: String(element.definedName.kind || ""),
+            name: String(element.definedName.name || ""),
+            displayName: String(element.definedName.displayName || ""),
+            builtin: Boolean(element.definedName.builtin),
+            builtinType: String(element.definedName.builtinType || ""),
+            scope: String(element.definedName.scope || ""),
+            localSheetId: String(element.definedName.localSheetId || ""),
+            hidden: Boolean(element.definedName.hidden),
+            sheetName: String(element.definedName.sheetName || ""),
+            sheetId: String(element.definedName.sheetId || ""),
+            worksheetPath: String(element.definedName.worksheetPath || ""),
+            ref: String(element.definedName.ref || ""),
+            formula: String(element.definedName.formula || ""),
+            sourcePart: String(element.definedName.sourcePart || ""),
+            ranges: Array.isArray(element.definedName.ranges)
+              ? element.definedName.ranges.slice(0, 20).map((range) => ({
+                  sheetName: String(range.sheetName || ""),
+                  ref: String(range.ref || ""),
+                  startRef: String(range.startRef || ""),
+                  endRef: String(range.endRef || ""),
+                  startColumn: String(range.startColumn || ""),
+                  endColumn: String(range.endColumn || ""),
+                  startRow: Number(range.startRow || 0),
+                  endRow: Number(range.endRow || 0),
+                  rowSpan: Number(range.rowSpan || 0),
+                  columnSpan: Number(range.columnSpan || 0),
+                  cellRefs: Array.isArray(range.cellRefs)
+                    ? range.cellRefs.slice(0, 200).map((ref) => String(ref || "")).filter(Boolean)
+                    : []
+                }))
+              : []
+          }
+        : null;
       const merge = element.merge && typeof element.merge === "object"
         ? {
             ref: String(element.merge.ref || ""),
@@ -10383,6 +10588,7 @@ function normalizedStructureElements(document = {}) {
         form,
         control,
         bookmark,
+        definedName,
         merge,
         frontmatter,
         cells
@@ -10396,7 +10602,7 @@ function isHeadingStructureElement(element = {}) {
 }
 
 function isIsolatedStructureElement(element = {}) {
-  return ["table-header", "table-row", "merged-cell", "cell-comment", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "content-control", "bookmark", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note"].includes(element.type);
+  return ["table-header", "table-row", "merged-cell", "cell-comment", "defined-name", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "content-control", "bookmark", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note"].includes(element.type);
 }
 
 function headingLevelForElement(element = {}) {
@@ -10435,6 +10641,7 @@ function buildStructureWindowRecord(document = {}, index = 0, elements = [], hea
       form: element.form || null,
       control: element.control || null,
       bookmark: element.bookmark || null,
+      definedName: element.definedName || null,
       merge: element.merge || null,
       frontmatter: element.frontmatter || null,
       cells: element.cells || [],
@@ -10557,6 +10764,7 @@ function buildDocumentElementPlan(document = {}, windowPlan = null) {
       form: element.form || null,
       control: element.control || null,
       bookmark: element.bookmark || null,
+      definedName: element.definedName || null,
       merge: element.merge || null,
       frontmatter: element.frontmatter || null,
       cells: element.cells || []
@@ -11065,6 +11273,25 @@ function buildProfessionalQualityGateResults({ document = {}, profile = {}, evid
         message: status === "passed" ? "Spreadsheet workbook sheet references are preserved." : "No workbook sheet references were required or observed."
       });
     }
+    if (gate === "spreadsheet-defined-name-refs-preserved") {
+      const definedNameRefCount = Number(evidence.definedNameRefCount || 0);
+      const definedNameSignals = maxTraceMetric(document, ["definedNames", "namedRanges", "printAreas"]) || definedNameRefCount;
+      const status = routeId !== "spreadsheet"
+        ? "not_applicable"
+        : definedNameSignals > 0
+          ? definedNameRefCount > 0 ? "passed" : "failed"
+          : "not_applicable";
+      return professionalGateRecord(gate, status, {
+        observed: {
+          definedNameSignals,
+          definedNameRefCount,
+          namedRangeRefCount: evidence.namedRangeRefCount,
+          printAreaRefCount: evidence.printAreaRefCount
+        },
+        required: { definedNameRefsWhenWorkbookDefinesNames: true },
+        message: status === "passed" ? "Spreadsheet defined names, named ranges, and print areas are preserved as element references." : "No spreadsheet defined names were required or observed."
+      });
+    }
     if (gate === "spreadsheet-merged-cell-refs-preserved") {
       const mergedCellSignals = maxTraceMetric(document, ["mergedCells", "mergedCellCount"]);
       const status = routeId !== "spreadsheet"
@@ -11324,6 +11551,18 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       element.table?.worksheetPath
     )).length;
     const elementTypes = document.elementPlan?.elementTypes || {};
+    const definedNameRefCount = Math.max(
+      Number(elementTypes["defined-name"] || 0),
+      sampleElements.filter((element) => element.type === "defined-name" && element.definedName).length
+    );
+    const namedRangeRefCount = sampleElements.filter((element) => (
+      element.type === "defined-name" &&
+      element.definedName?.builtinType === "named-range"
+    )).length;
+    const printAreaRefCount = sampleElements.filter((element) => (
+      element.type === "defined-name" &&
+      element.definedName?.builtinType === "print-area"
+    )).length;
     const geometryElementCount = sampleElements.filter((element) => element.bbox || element.page || element.layout).length;
     const annotationElementCount = sampleElements.filter((element) => element.annotation || ["comment", "footnote", "endnote"].includes(element.type)).length;
     const revisionRefCount = Math.max(
@@ -11377,6 +11616,9 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       spreadsheetCommentRefCount,
       dateCellRefCount,
       sheetRefCount,
+      definedNameRefCount,
+      namedRangeRefCount,
+      printAreaRefCount,
       geometryElementCount,
       annotationElementCount,
       revisionRefCount,
@@ -11452,6 +11694,9 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       documentWithGeometryCount: plannedDocuments.filter((document) => document.evidence.geometryElementCount > 0).length,
       documentWithCellRefsCount: plannedDocuments.filter((document) => document.evidence.cellRefCount > 0).length,
       documentWithSheetRefsCount: plannedDocuments.filter((document) => document.evidence.sheetRefCount > 0).length,
+      documentWithDefinedNameRefsCount: plannedDocuments.filter((document) => document.evidence.definedNameRefCount > 0).length,
+      documentWithNamedRangeRefsCount: plannedDocuments.filter((document) => document.evidence.namedRangeRefCount > 0).length,
+      documentWithPrintAreaRefsCount: plannedDocuments.filter((document) => document.evidence.printAreaRefCount > 0).length,
       documentWithDateCellRefsCount: plannedDocuments.filter((document) => document.evidence.dateCellRefCount > 0).length,
       documentWithMergedCellRefsCount: plannedDocuments.filter((document) => document.evidence.mergeRefCount > 0).length,
       documentWithSpreadsheetCommentRefsCount: plannedDocuments.filter((document) => document.evidence.spreadsheetCommentRefCount > 0).length,
@@ -12083,6 +12328,9 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           workbookSheets: parsed.workbookSheetCount,
           sheetRefs: parsed.sheetRefCount,
           hiddenSheets: parsed.hiddenSheetCount,
+          definedNames: parsed.definedNameCount,
+          namedRanges: parsed.namedRangeCount,
+          printAreas: parsed.printAreaCount,
           rows: parsed.rowCount,
           cells: parsed.cellCount,
           dateStyles: parsed.dateStyleCount,
@@ -12101,6 +12349,13 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           sheets: parsed.workbookSheetCount,
           sheetRefs: parsed.sheetRefCount,
           hiddenSheets: parsed.hiddenSheetCount
+        });
+        parserTrace.push({
+          stage: "table.workbook.defined-names",
+          status: parsed.definedNameCount ? "completed" : "empty",
+          definedNames: parsed.definedNameCount,
+          namedRanges: parsed.namedRangeCount,
+          printAreas: parsed.printAreaCount
         });
         parserTrace.push({
           stage: "table.sheet.headers",
@@ -12161,6 +12416,9 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           workbookSheets: spreadsheet.workbookSheetCount,
           sheetRefs: spreadsheet.sheetRefCount,
           hiddenSheets: spreadsheet.hiddenSheetCount,
+          definedNames: spreadsheet.definedNameCount,
+          namedRanges: spreadsheet.namedRangeCount,
+          printAreas: spreadsheet.printAreaCount,
           dateStyles: spreadsheet.dateStyleCount,
           dateCells: spreadsheet.dateCellCount,
           mergedCells: spreadsheet.mergedCellCount,
@@ -17164,6 +17422,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         "office.word.annotations",
         "table.sheet.structured",
         "table.workbook.sheets",
+        "table.workbook.defined-names",
         "table.sheet.headers",
         "table.sheet.cells",
         "table.sheet.merged-cells",
@@ -17189,10 +17448,10 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       supported: true,
       strategy: "document-element-model.v1",
       windowingStrategy: "element-aware-by-title-windowing.v1",
-      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "content-control", "bookmark", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment"],
+      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "content-control", "bookmark", "defined-name", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment"],
       structuredFormats: ["markdown", "html", "xml", "asciidoc", "latex", "docx", "pptx", "xlsx", "open-document", "epub", "pdf"],
-      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
-      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
+      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "definedName.name", "definedName.ref", "definedName.builtinType", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
+      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.definedName", "elementRefs.definedName.name", "elementRefs.definedName.ref", "elementRefs.definedName.builtinType", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
       referencePatterns: [
         "unstructured.elements",
         "unstructured.chunk_by_title",
@@ -17213,7 +17472,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       formatMatrix: professionalFormatMatrix(PROFESSIONAL_FORMAT_ORDER),
       humanReadableTargets: ["portable-markdown", "portable-docx", "console-summary-json", "workspace-package-zip"],
       agentReadableTargets: ["agent-message-json", "professional-format-manifest-json", "result-json", "evidence-pack-json"],
-      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "contentControls", "bookmarks", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders"],
+      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "definedNames", "namedRanges", "printAreas", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "contentControls", "bookmarks", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders"],
       qualityGates: uniqueOrdered(PROFESSIONAL_FORMAT_ORDER.flatMap((formatId) => (
         professionalFormatAdapter(formatId)?.qualityGates || []
       ))),
