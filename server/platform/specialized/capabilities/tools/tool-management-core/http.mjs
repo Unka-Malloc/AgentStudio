@@ -345,7 +345,14 @@ export function createToolManagementHttpRouter({
         metrics: platform.store.metricsSummary({
           limit: Number(url.searchParams.get("limit") || 2000),
           since: url.searchParams.get("since") || "",
-          until: url.searchParams.get("until") || ""
+          until: url.searchParams.get("until") || "",
+          toolId: url.searchParams.get("toolId") || url.searchParams.get("tool-id") || "",
+          route: url.searchParams.get("route") || "",
+          transport: url.searchParams.get("transport") || "",
+          status: url.searchParams.get("status") || "",
+          statusCode: url.searchParams.get("statusCode") || url.searchParams.get("status-code") || "",
+          completionStatus: url.searchParams.get("completionStatus") || url.searchParams.get("completion-status") || "",
+          bucketSeconds: Number(url.searchParams.get("bucketSeconds") || url.searchParams.get("bucket-seconds") || 0)
         })
       });
     }

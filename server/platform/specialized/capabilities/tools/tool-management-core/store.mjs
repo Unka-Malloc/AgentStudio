@@ -723,6 +723,168 @@ function summarizeRequestMetricRows(rows = []) {
   };
 }
 
+function normalizeMetricLimit(value) {
+  return Math.max(1, Math.min(Number(value || 2000), 10000));
+}
+
+function normalizeBucketSeconds(value) {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return Math.max(1, Math.min(Math.floor(parsed), 86_400));
+}
+
+function createMetricClauses({
+  since = "",
+  until = "",
+  status = "",
+  toolId = "",
+  route = "",
+  transport = "",
+  statusCode = "",
+  completionStatus = ""
+} = {}, kind = "tool") {
+  const clauses = [];
+  const params = [];
+  if (since) {
+    clauses.push("created_at >= ?");
+    params.push(String(since));
+  }
+  if (until) {
+    clauses.push("created_at <= ?");
+    params.push(String(until));
+  }
+  if (kind === "tool") {
+    if (toolId) {
+      clauses.push("tool_id = ?");
+      params.push(String(toolId));
+    }
+    if (status) {
+      clauses.push("status = ?");
+      params.push(String(status));
+    }
+  } else {
+    if (route) {
+      clauses.push("route = ?");
+      params.push(String(route));
+    }
+    if (transport) {
+      clauses.push("transport = ?");
+      params.push(String(transport));
+    }
+    if (statusCode) {
+      clauses.push("status_code = ?");
+      params.push(Math.max(0, Number(statusCode || 0) || 0));
+    }
+    if (completionStatus || status) {
+      clauses.push("completion_status = ?");
+      params.push(String(completionStatus || status));
+    }
+  }
+  return { clauses, params };
+}
+
+function bucketStartMs(createdAt = "", bucketSeconds = 60) {
+  const timestamp = Date.parse(createdAt || "");
+  if (!Number.isFinite(timestamp)) {
+    return 0;
+  }
+  const bucketMs = Math.max(1, Number(bucketSeconds || 60)) * 1000;
+  return Math.floor(timestamp / bucketMs) * bucketMs;
+}
+
+function emptyBucket(startMs, bucketSeconds) {
+  const endMs = startMs + (bucketSeconds * 1000);
+  return {
+    start: new Date(startMs).toISOString(),
+    end: new Date(endMs).toISOString(),
+    toolCalls: {
+      total: 0,
+      byStatus: {},
+      byTool: {},
+      inputBytesTotal: 0,
+      resultBytesTotal: 0,
+      transferBytesTotal: 0
+    },
+    requests: {
+      total: 0,
+      byStatusCode: {},
+      byRoute: {},
+      byTransport: {},
+      requestBytesTotal: 0,
+      responseBytesTotal: 0,
+      transferBytesTotal: 0
+    }
+  };
+}
+
+function summarizeMetricBuckets({ toolRows = [], requestRows = [], bucketSeconds = 0 } = {}) {
+  const normalizedBucketSeconds = normalizeBucketSeconds(bucketSeconds);
+  if (!normalizedBucketSeconds) {
+    return {
+      bucketSeconds: 0,
+      buckets: []
+    };
+  }
+  const buckets = new Map();
+  const ensureBucket = (createdAt) => {
+    const startMs = bucketStartMs(createdAt, normalizedBucketSeconds);
+    if (!startMs) {
+      return null;
+    }
+    if (!buckets.has(startMs)) {
+      buckets.set(startMs, emptyBucket(startMs, normalizedBucketSeconds));
+    }
+    return buckets.get(startMs);
+  };
+
+  for (const row of toolRows) {
+    const bucket = ensureBucket(row.created_at);
+    if (!bucket) {
+      continue;
+    }
+    const status = row.status || "unknown";
+    const toolId = row.tool_id || "unknown";
+    const inputBytes = Number(row.input_bytes || 0);
+    const resultBytes = Number(row.result_bytes || 0);
+    const transferBytes = Number(row.transfer_bytes || inputBytes + resultBytes);
+    bucket.toolCalls.total += 1;
+    bucket.toolCalls.byStatus[status] = (bucket.toolCalls.byStatus[status] || 0) + 1;
+    bucket.toolCalls.byTool[toolId] = (bucket.toolCalls.byTool[toolId] || 0) + 1;
+    bucket.toolCalls.inputBytesTotal += inputBytes;
+    bucket.toolCalls.resultBytesTotal += resultBytes;
+    bucket.toolCalls.transferBytesTotal += transferBytes;
+  }
+
+  for (const row of requestRows) {
+    const bucket = ensureBucket(row.created_at);
+    if (!bucket) {
+      continue;
+    }
+    const statusCode = String(row.status_code || 0);
+    const route = row.route || "";
+    const transport = row.transport || "http";
+    const requestBytes = Number(row.request_bytes || 0);
+    const responseBytes = Number(row.response_bytes || 0);
+    const transferBytes = Number(row.transfer_bytes || requestBytes + responseBytes);
+    bucket.requests.total += 1;
+    bucket.requests.byStatusCode[statusCode] = (bucket.requests.byStatusCode[statusCode] || 0) + 1;
+    bucket.requests.byRoute[route] = (bucket.requests.byRoute[route] || 0) + 1;
+    bucket.requests.byTransport[transport] = (bucket.requests.byTransport[transport] || 0) + 1;
+    bucket.requests.requestBytesTotal += requestBytes;
+    bucket.requests.responseBytesTotal += responseBytes;
+    bucket.requests.transferBytesTotal += transferBytes;
+  }
+
+  return {
+    bucketSeconds: normalizedBucketSeconds,
+    buckets: [...buckets.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, bucket]) => bucket)
+  };
+}
+
 export function getToolManagementDatabasePath(userDataPath) {
   return path.join(userDataPath, "tool-management", "tool-management.sqlite");
 }
@@ -1448,24 +1610,36 @@ export function createToolManagementStore({
     };
   }
 
-  function metricsSummary({ limit = 2000, since = "", until = "" } = {}) {
-    const clauses = [];
-    const params = [];
-    if (since) {
-      clauses.push("created_at >= ?");
-      params.push(String(since));
-    }
-    if (until) {
-      clauses.push("created_at <= ?");
-      params.push(String(until));
-    }
-    params.push(Math.max(1, Math.min(Number(limit || 2000), 10000)));
+  function metricsSummary({
+    limit = 2000,
+    since = "",
+    until = "",
+    toolId = "",
+    route = "",
+    transport = "",
+    status = "",
+    statusCode = "",
+    completionStatus = "",
+    bucketSeconds = 0
+  } = {}) {
+    const normalizedLimit = normalizeMetricLimit(limit);
+    const normalizedBucketSeconds = normalizeBucketSeconds(bucketSeconds);
+    const toolFilters = createMetricClauses({ since, until, toolId, status }, "tool");
+    const requestFilters = createMetricClauses({
+      since,
+      until,
+      route,
+      transport,
+      status,
+      statusCode,
+      completionStatus
+    }, "request");
     const rows = db.prepare(`
       SELECT * FROM tool_metric_events
-      ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+      ${toolFilters.clauses.length ? `WHERE ${toolFilters.clauses.join(" AND ")}` : ""}
       ORDER BY created_at DESC
       LIMIT ?
-    `).all(...params);
+    `).all(...toolFilters.params, normalizedLimit);
     const byStatus = {};
     const byTool = {};
     const byProfile = {};
@@ -1515,10 +1689,10 @@ export function createToolManagementStore({
     }
     const requestRows = db.prepare(`
       SELECT * FROM http_request_metric_events
-      ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+      ${requestFilters.clauses.length ? `WHERE ${requestFilters.clauses.join(" AND ")}` : ""}
       ORDER BY created_at DESC
       LIMIT ?
-    `).all(...params);
+    `).all(...requestFilters.params, normalizedLimit);
     const requests = summarizeRequestMetricRows(requestRows);
     const activeExecutions = db.prepare("SELECT count(*) AS count FROM tool_executions WHERE status = 'running'").get().count;
     const toolCalls = {
@@ -1540,6 +1714,18 @@ export function createToolManagementStore({
       peakBytesPerSecond
     };
     return {
+      filters: {
+        limit: normalizedLimit,
+        since: String(since || ""),
+        until: String(until || ""),
+        toolId: String(toolId || ""),
+        route: String(route || ""),
+        transport: String(transport || ""),
+        status: String(status || ""),
+        statusCode: String(statusCode || ""),
+        completionStatus: String(completionStatus || ""),
+        bucketSeconds: normalizedBucketSeconds
+      },
       callsTotal: rows.length,
       byStatus,
       byTool,
@@ -1557,7 +1743,12 @@ export function createToolManagementStore({
       averageBytesPerSecond: rows.length ? Number((byteRateTotal / rows.length).toFixed(2)) : 0,
       peakBytesPerSecond,
       toolCalls,
-      requests
+      requests,
+      series: summarizeMetricBuckets({
+        toolRows: rows,
+        requestRows,
+        bucketSeconds: normalizedBucketSeconds
+      })
     };
   }
 

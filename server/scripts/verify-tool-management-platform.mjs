@@ -248,6 +248,30 @@ try {
   assert.ok(metrics.payload.metrics.requests.responseBytesTotal > 0);
   assert.ok(metrics.payload.metrics.requests.transferBytesPerSecond >= 0);
 
+  const filteredMetricsUrl = new URL(`${server.url}/api/tool-management/v1/metrics/summary`);
+  filteredMetricsUrl.searchParams.set("toolId", "pact.knowledge.health");
+  filteredMetricsUrl.searchParams.set("transport", "tool-management");
+  filteredMetricsUrl.searchParams.set("route", "/api/tool-management/v1/execute");
+  filteredMetricsUrl.searchParams.set("bucketSeconds", "60");
+  const filteredMetrics = await fetchJson(filteredMetricsUrl.toString());
+  assert.equal(filteredMetrics.status, 200);
+  assert.equal(filteredMetrics.payload.metrics.filters.toolId, "pact.knowledge.health");
+  assert.equal(filteredMetrics.payload.metrics.filters.transport, "tool-management");
+  assert.equal(filteredMetrics.payload.metrics.filters.route, "/api/tool-management/v1/execute");
+  assert.equal(filteredMetrics.payload.metrics.series.bucketSeconds, 60);
+  assert.ok(filteredMetrics.payload.metrics.toolCalls.byTool["pact.knowledge.health"] >= 1);
+  assert.equal(Object.keys(filteredMetrics.payload.metrics.toolCalls.byTool).length, 1);
+  assert.ok(filteredMetrics.payload.metrics.requests.byTransport["tool-management"] >= 1);
+  assert.ok(filteredMetrics.payload.metrics.requests.byRoute["/api/tool-management/v1/execute"] >= 1);
+  assert.ok(filteredMetrics.payload.metrics.series.buckets.some((bucket) =>
+    bucket.toolCalls.total >= 1 &&
+      bucket.toolCalls.byTool["pact.knowledge.health"] >= 1
+  ));
+  assert.ok(filteredMetrics.payload.metrics.series.buckets.some((bucket) =>
+    bucket.requests.total >= 1 &&
+      bucket.requests.byTransport["tool-management"] >= 1
+  ));
+
   const metricsDb = new Database(path.join(userDataPath, "tool-management", "tool-management.sqlite"), {
     readonly: true,
     fileMustExist: true
@@ -293,12 +317,31 @@ try {
 
   const cliMetrics = await execFileAsync(
     process.execPath,
-    [path.resolve("server/scripts/pact.mjs"), "tools", "metrics", "--server-url", server.url, "--limit", "20"],
+    [
+      path.resolve("server/scripts/pact.mjs"),
+      "tools",
+      "metrics",
+      "--server-url",
+      server.url,
+      "--limit",
+      "20",
+      "--tool-id",
+      "pact.knowledge.health",
+      "--transport",
+      "tool-management",
+      "--route",
+      "/api/tool-management/v1/execute",
+      "--bucket-seconds",
+      "60"
+    ],
     { env: process.env }
   );
   const cliMetricsPayload = JSON.parse(cliMetrics.stdout);
   assert.equal(cliMetricsPayload.schemaVersion, 1);
   assert.ok(cliMetricsPayload.metrics.callsTotal >= 1);
+  assert.equal(cliMetricsPayload.metrics.filters.toolId, "pact.knowledge.health");
+  assert.equal(cliMetricsPayload.metrics.filters.transport, "tool-management");
+  assert.equal(cliMetricsPayload.metrics.series.bucketSeconds, 60);
 
   const rotated = await fetchJson(`${server.url}/api/tool-management/v1/grants/${grantResult.payload.grant.id}/rotate`, {
     method: "POST",

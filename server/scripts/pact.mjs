@@ -113,6 +113,7 @@ function usage() {
     "  pact security recovery export --output recovery.json --passphrase-stdin",
     "  pact security recovery import --input recovery.json --passphrase-stdin",
     "  pact tools catalog|toolsets|toolsets resolve|execute|dry-run|audit|metrics ...",
+    "  pact tools metrics [--tool-id ID] [--route PATH] [--transport mcp|http|tool-management] [--bucket-seconds N]",
     "  pact tools grants list|create|rotate|revoke ...",
     "  pact tools policy preview --body preview.json",
     "",
@@ -1372,6 +1373,27 @@ async function runToolsCommand(args) {
     }
     if (args.until) {
       query.set("until", String(args.until));
+    }
+    if (args["tool-id"] || args.toolId) {
+      query.set("toolId", String(args["tool-id"] || args.toolId));
+    }
+    if (args.route) {
+      query.set("route", String(args.route));
+    }
+    if (args.transport) {
+      query.set("transport", String(args.transport));
+    }
+    if (args.status) {
+      query.set("status", String(args.status));
+    }
+    if (args["status-code"] || args.statusCode) {
+      query.set("statusCode", String(args["status-code"] || args.statusCode));
+    }
+    if (args["completion-status"] || args.completionStatus) {
+      query.set("completionStatus", String(args["completion-status"] || args.completionStatus));
+    }
+    if (args["bucket-seconds"] || args.bucketSeconds) {
+      query.set("bucketSeconds", String(args["bucket-seconds"] || args.bucketSeconds));
     }
     await writeResponse({
       args,

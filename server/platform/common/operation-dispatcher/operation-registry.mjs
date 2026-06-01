@@ -1741,12 +1741,19 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       query: [
         { name: "limit", aliases: ["limit"] },
         { name: "since", aliases: ["since"] },
-        { name: "until", aliases: ["until"] }
+        { name: "until", aliases: ["until"] },
+        { name: "toolId", aliases: ["toolId", "tool-id"] },
+        { name: "route", aliases: ["route"] },
+        { name: "transport", aliases: ["transport"] },
+        { name: "status", aliases: ["status"] },
+        { name: "statusCode", aliases: ["statusCode", "status-code"] },
+        { name: "completionStatus", aliases: ["completionStatus", "completion-status"] },
+        { name: "bucketSeconds", aliases: ["bucketSeconds", "bucket-seconds"] }
       ],
-      coerce: { limit: "number" }
+      coerce: { limit: "number", statusCode: "number", bucketSeconds: "number" }
     },
-    rpc: {method:"tool_management.metrics_summary",syntheticPath:"/api/tool-management/v1/metrics/summary",query:[{name:"limit",aliases:["limit"]},{name:"since",aliases:["since"]},{name:"until",aliases:["until"]}]},
-    cli: { command: ["tools", "metrics"], usage: "tools metrics" },
+    rpc: {method:"tool_management.metrics_summary",syntheticPath:"/api/tool-management/v1/metrics/summary",query:[{name:"limit",aliases:["limit"]},{name:"since",aliases:["since"]},{name:"until",aliases:["until"]},{name:"toolId",aliases:["toolId","tool-id"]},{name:"route",aliases:["route"]},{name:"transport",aliases:["transport"]},{name:"status",aliases:["status"]},{name:"statusCode",aliases:["statusCode","status-code"]},{name:"completionStatus",aliases:["completionStatus","completion-status"]},{name:"bucketSeconds",aliases:["bucketSeconds","bucket-seconds"]}]},
+    cli: { command: ["tools", "metrics"], usage: "tools metrics [--tool-id ID] [--route PATH] [--transport KIND] [--bucket-seconds N]" },
     requiredScopes: ["console:read"]
   },
   {

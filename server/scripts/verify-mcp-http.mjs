@@ -1013,6 +1013,26 @@ try {
   assert.ok(mcpMetrics.payload.metrics.toolCalls.inputBytesTotal > 0);
   assert.ok(mcpMetrics.payload.metrics.toolCalls.transferBytesTotal > 0);
 
+  const mcpFilteredMetricsUrl = new URL(`${server.url}/api/tool-management/v1/metrics/summary`);
+  mcpFilteredMetricsUrl.searchParams.set("transport", "mcp");
+  mcpFilteredMetricsUrl.searchParams.set("route", "/mcp");
+  mcpFilteredMetricsUrl.searchParams.set("toolId", "system.health");
+  mcpFilteredMetricsUrl.searchParams.set("bucketSeconds", "60");
+  const mcpFilteredMetrics = await fetchJson(mcpFilteredMetricsUrl.toString());
+  assert.equal(mcpFilteredMetrics.status, 200);
+  assert.equal(mcpFilteredMetrics.payload.metrics.filters.transport, "mcp");
+  assert.equal(mcpFilteredMetrics.payload.metrics.filters.route, "/mcp");
+  assert.equal(mcpFilteredMetrics.payload.metrics.filters.toolId, "system.health");
+  assert.equal(mcpFilteredMetrics.payload.metrics.series.bucketSeconds, 60);
+  assert.ok(mcpFilteredMetrics.payload.metrics.toolCalls.byTool["system.health"] >= 1);
+  assert.ok(mcpFilteredMetrics.payload.metrics.requests.byTransport.mcp >= 1);
+  assert.ok(mcpFilteredMetrics.payload.metrics.series.buckets.some((bucket) =>
+    bucket.toolCalls.byTool["system.health"] >= 1
+  ));
+  assert.ok(mcpFilteredMetrics.payload.metrics.series.buckets.some((bucket) =>
+    bucket.requests.byRoute["/mcp"] >= 1
+  ));
+
   console.log("mcp-http verification passed");
 } finally {
   await server.close();
