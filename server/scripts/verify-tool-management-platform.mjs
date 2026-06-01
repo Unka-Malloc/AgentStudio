@@ -28,6 +28,13 @@ function bearerHeaders(token) {
   };
 }
 
+function assertDurationPercentiles(percentiles) {
+  assert.ok(percentiles);
+  assert.ok(percentiles.p50Ms >= 0);
+  assert.ok(percentiles.p95Ms >= percentiles.p50Ms);
+  assert.ok(percentiles.p99Ms >= percentiles.p95Ms);
+}
+
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-tool-management-"));
 process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
 process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
@@ -286,9 +293,11 @@ try {
   assert.ok(metricsHealth.payload.health.toolCalls.total >= 2);
   assert.ok(metricsHealth.payload.health.toolCalls.callsPerMinute >= 0);
   assert.ok(metricsHealth.payload.health.toolCalls.transferBytesPerSecond >= 0);
+  assertDurationPercentiles(metricsHealth.payload.health.toolCalls.durationPercentiles);
   assert.ok(metricsHealth.payload.health.requests.total >= 1);
   assert.ok(metricsHealth.payload.health.requests.requestsPerMinute >= 0);
   assert.ok(metricsHealth.payload.health.requests.transferBytesPerSecond >= 0);
+  assertDurationPercentiles(metricsHealth.payload.health.requests.durationPercentiles);
   assert.ok(metricsHealth.payload.health.breaches.some((breach) => breach.code === "tool_denied_rate"));
   assert.ok(metricsHealth.payload.health.toolCalls.topTools.some((item) =>
     item.toolId === "pact.knowledge.health"
@@ -308,6 +317,8 @@ try {
   assert.match(prometheusText, /^pact_tool_management_requests_total \d+/m);
   assert.match(prometheusText, /^pact_tool_management_tool_calls_total \d+/m);
   assert.match(prometheusText, /^pact_tool_management_health_breaches_total \d+/m);
+  assert.match(prometheusText, /^pact_tool_management_request_duration_ms\{quantile="0\.95"\} \d+/m);
+  assert.match(prometheusText, /^pact_tool_management_tool_call_duration_ms\{quantile="0\.95"\} \d+/m);
   assert.match(
     prometheusText,
     /^pact_tool_management_top_tool_calls_total\{tool_id="pact\.knowledge\.health"\} \d+/m
@@ -583,7 +594,9 @@ try {
   assert.equal(cliHealthPayload.health.schemaVersion, "pact.tool-management.metrics-health.v1");
   assert.equal(cliHealthPayload.health.window.windowSeconds, 3600);
   assert.ok(cliHealthPayload.health.toolCalls.total >= 1);
+  assertDurationPercentiles(cliHealthPayload.health.toolCalls.durationPercentiles);
   assert.ok(cliHealthPayload.health.requests.total >= 1);
+  assertDurationPercentiles(cliHealthPayload.health.requests.durationPercentiles);
 
   const cliPrometheus = await execFileAsync(
     process.execPath,
@@ -604,6 +617,8 @@ try {
   assert.match(cliPrometheus.stdout, /^# HELP pact_tool_management_window_seconds/m);
   assert.match(cliPrometheus.stdout, /^pact_tool_management_tool_calls_total \d+/m);
   assert.match(cliPrometheus.stdout, /^pact_tool_management_requests_total \d+/m);
+  assert.match(cliPrometheus.stdout, /^pact_tool_management_request_duration_ms\{quantile="0\.95"\} \d+/m);
+  assert.match(cliPrometheus.stdout, /^pact_tool_management_tool_call_duration_ms\{quantile="0\.95"\} \d+/m);
 
   const cliExport = await execFileAsync(
     process.execPath,

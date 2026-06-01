@@ -796,6 +796,27 @@ function ratio(part, total) {
   return Number((Number(part || 0) / denominator).toFixed(4));
 }
 
+function percentileFromSortedValues(values = [], quantile = 0) {
+  if (!values.length) {
+    return 0;
+  }
+  const normalizedQuantile = Math.min(1, Math.max(0, Number(quantile || 0)));
+  const index = Math.min(values.length - 1, Math.max(0, Math.ceil(normalizedQuantile * values.length) - 1));
+  return Number(Number(values[index] || 0).toFixed(2));
+}
+
+function durationPercentilesFromRows(rows = []) {
+  const values = rows
+    .map((row) => Number(row.duration_ms || 0))
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .sort((left, right) => left - right);
+  return {
+    p50Ms: percentileFromSortedValues(values, 0.5),
+    p95Ms: percentileFromSortedValues(values, 0.95),
+    p99Ms: percentileFromSortedValues(values, 0.99)
+  };
+}
+
 function prometheusEscapeLabel(value = "") {
   return String(value || "")
     .replace(/\\/g, "\\\\")
@@ -2020,6 +2041,18 @@ export function createToolManagementStore({
       FROM http_request_metric_events
       WHERE created_at >= ? AND created_at <= ?
     `).get(startedAt, endedAt);
+    const toolDurationPercentiles = durationPercentilesFromRows(db.prepare(`
+      SELECT duration_ms
+      FROM tool_metric_events
+      WHERE created_at >= ? AND created_at <= ?
+      ORDER BY duration_ms ASC
+    `).all(startedAt, endedAt));
+    const requestDurationPercentiles = durationPercentilesFromRows(db.prepare(`
+      SELECT duration_ms
+      FROM http_request_metric_events
+      WHERE created_at >= ? AND created_at <= ?
+      ORDER BY duration_ms ASC
+    `).all(startedAt, endedAt));
     const topTools = db.prepare(`
       SELECT tool_id, count(*) AS total, coalesce(sum(transfer_bytes), 0) AS transfer_bytes_total
       FROM tool_metric_events
@@ -2064,6 +2097,7 @@ export function createToolManagementStore({
       transferBytesTotal: Number(toolRow.transfer_bytes_total || 0),
       transferBytesPerSecond: Number((Number(toolRow.transfer_bytes_total || 0) / normalizedWindowSeconds).toFixed(2)),
       averageDurationMs: Number(Number(toolRow.average_duration_ms || 0).toFixed(2)),
+      durationPercentiles: toolDurationPercentiles,
       averageBytesPerSecond: Number(Number(toolRow.average_bytes_per_second || 0).toFixed(2)),
       peakBytesPerSecond: Number(toolRow.peak_bytes_per_second || 0),
       topTools
@@ -2083,6 +2117,7 @@ export function createToolManagementStore({
       transferBytesTotal: Number(requestRow.transfer_bytes_total || 0),
       transferBytesPerSecond: Number((Number(requestRow.transfer_bytes_total || 0) / normalizedWindowSeconds).toFixed(2)),
       averageDurationMs: Number(Number(requestRow.average_duration_ms || 0).toFixed(2)),
+      durationPercentiles: requestDurationPercentiles,
       averageBytesPerSecond: Number(Number(requestRow.average_bytes_per_second || 0).toFixed(2)),
       peakBytesPerSecond: Number(requestRow.peak_bytes_per_second || 0),
       topRoutes
@@ -2199,6 +2234,17 @@ export function createToolManagementStore({
         "pact_tool_management_request_transfer_bytes_per_second",
         health.requests.transferBytesPerSecond
       ),
+      "# HELP pact_tool_management_request_duration_ms HTTP request duration quantiles in milliseconds.",
+      "# TYPE pact_tool_management_request_duration_ms gauge",
+      prometheusSample("pact_tool_management_request_duration_ms", health.requests.durationPercentiles.p50Ms, {
+        quantile: "0.5"
+      }),
+      prometheusSample("pact_tool_management_request_duration_ms", health.requests.durationPercentiles.p95Ms, {
+        quantile: "0.95"
+      }),
+      prometheusSample("pact_tool_management_request_duration_ms", health.requests.durationPercentiles.p99Ms, {
+        quantile: "0.99"
+      }),
       "# HELP pact_tool_management_tool_calls_total Tool call metric events in the window.",
       "# TYPE pact_tool_management_tool_calls_total gauge",
       prometheusSample("pact_tool_management_tool_calls_total", health.toolCalls.total),
@@ -2230,6 +2276,17 @@ export function createToolManagementStore({
         "pact_tool_management_tool_transfer_bytes_per_second",
         health.toolCalls.transferBytesPerSecond
       ),
+      "# HELP pact_tool_management_tool_call_duration_ms Tool call duration quantiles in milliseconds.",
+      "# TYPE pact_tool_management_tool_call_duration_ms gauge",
+      prometheusSample("pact_tool_management_tool_call_duration_ms", health.toolCalls.durationPercentiles.p50Ms, {
+        quantile: "0.5"
+      }),
+      prometheusSample("pact_tool_management_tool_call_duration_ms", health.toolCalls.durationPercentiles.p95Ms, {
+        quantile: "0.95"
+      }),
+      prometheusSample("pact_tool_management_tool_call_duration_ms", health.toolCalls.durationPercentiles.p99Ms, {
+        quantile: "0.99"
+      }),
       "# HELP pact_tool_management_top_tool_calls_total Top tool calls by tool id.",
       "# TYPE pact_tool_management_top_tool_calls_total gauge",
       ...health.toolCalls.topTools.map((item) =>
