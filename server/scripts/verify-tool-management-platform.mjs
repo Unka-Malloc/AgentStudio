@@ -272,6 +272,42 @@ try {
       bucket.requests.byTransport["tool-management"] >= 1
   ));
 
+  const toolMetricsExportUrl = new URL(`${server.url}/api/tool-management/v1/metrics/export`);
+  toolMetricsExportUrl.searchParams.set("kind", "tool");
+  toolMetricsExportUrl.searchParams.set("toolId", "pact.knowledge.health");
+  toolMetricsExportUrl.searchParams.set("limit", "10");
+  const toolMetricsExport = await fetchJson(toolMetricsExportUrl.toString());
+  assert.equal(toolMetricsExport.status, 200);
+  assert.equal(toolMetricsExport.payload.export.schemaVersion, "pact.tool-management.metrics-export.v1");
+  assert.equal(toolMetricsExport.payload.export.filters.kind, "tool");
+  assert.equal(toolMetricsExport.payload.export.filters.toolId, "pact.knowledge.health");
+  assert.ok(toolMetricsExport.payload.export.toolMetricEvents.length >= 1);
+  assert.equal(toolMetricsExport.payload.export.httpRequestMetricEvents.length, 0);
+  assert.equal(toolMetricsExport.payload.export.toolMetricEvents.every((event) =>
+    event.toolId === "pact.knowledge.health" &&
+      !Object.hasOwn(event, "input") &&
+      !Object.hasOwn(event, "result")
+  ), true);
+  assert.equal(toolMetricsExport.payload.export.counts.total, toolMetricsExport.payload.export.toolMetricEvents.length);
+
+  const requestMetricsExportUrl = new URL(`${server.url}/api/tool-management/v1/metrics/export`);
+  requestMetricsExportUrl.searchParams.set("kind", "request");
+  requestMetricsExportUrl.searchParams.set("transport", "tool-management");
+  requestMetricsExportUrl.searchParams.set("route", "/api/tool-management/v1/execute");
+  requestMetricsExportUrl.searchParams.set("limit", "10");
+  const requestMetricsExport = await fetchJson(requestMetricsExportUrl.toString());
+  assert.equal(requestMetricsExport.status, 200);
+  assert.equal(requestMetricsExport.payload.export.filters.kind, "request");
+  assert.equal(requestMetricsExport.payload.export.toolMetricEvents.length, 0);
+  assert.ok(requestMetricsExport.payload.export.httpRequestMetricEvents.length >= 1);
+  assert.equal(requestMetricsExport.payload.export.httpRequestMetricEvents.every((event) =>
+    event.transport === "tool-management" &&
+      event.route === "/api/tool-management/v1/execute" &&
+      !Object.hasOwn(event, "body") &&
+      !Object.hasOwn(event, "response") &&
+      !Object.hasOwn(event, "userAgent")
+  ), true);
+
   const storage = await fetchJson(`${server.url}/api/tool-management/v1/metrics/storage`);
   assert.equal(storage.status, 200);
   assert.equal(storage.payload.storage.schemaVersion, "pact.tool-management.metrics-storage.v1");
@@ -480,6 +516,33 @@ try {
   assert.equal(cliMetricsPayload.metrics.filters.toolId, "pact.knowledge.health");
   assert.equal(cliMetricsPayload.metrics.filters.transport, "tool-management");
   assert.equal(cliMetricsPayload.metrics.series.bucketSeconds, 60);
+
+  const cliExport = await execFileAsync(
+    process.execPath,
+    [
+      path.resolve("server/scripts/pact.mjs"),
+      "tools",
+      "metrics",
+      "export",
+      "--server-url",
+      server.url,
+      "--kind",
+      "request",
+      "--transport",
+      "tool-management",
+      "--route",
+      "/api/tool-management/v1/execute",
+      "--limit",
+      "10"
+    ],
+    { env: process.env }
+  );
+  const cliExportPayload = JSON.parse(cliExport.stdout);
+  assert.equal(cliExportPayload.schemaVersion, 1);
+  assert.equal(cliExportPayload.export.schemaVersion, "pact.tool-management.metrics-export.v1");
+  assert.equal(cliExportPayload.export.filters.kind, "request");
+  assert.ok(cliExportPayload.export.httpRequestMetricEvents.length >= 1);
+  assert.equal(cliExportPayload.export.toolMetricEvents.length, 0);
 
   const cliStorage = await execFileAsync(
     process.execPath,

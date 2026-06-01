@@ -114,6 +114,7 @@ function usage() {
     "  pact security recovery import --input recovery.json --passphrase-stdin",
     "  pact tools catalog|toolsets|toolsets resolve|execute|dry-run|audit|metrics ...",
     "  pact tools metrics [--tool-id ID] [--route PATH] [--transport mcp|http|tool-management] [--bucket-seconds N]",
+    "  pact tools metrics export [--kind all|tool|request] [--output metrics.json]",
     "  pact tools metrics storage",
     "  pact tools metrics prune --confirm --body prune.json",
     "  pact tools grants list|create|rotate|revoke ...",
@@ -1366,6 +1367,49 @@ async function runToolsCommand(args) {
     return;
   }
   if (command === "metrics") {
+    if (subcommand === "export") {
+      const query = new URLSearchParams();
+      if (args.limit) {
+        query.set("limit", String(args.limit));
+      }
+      if (args.since) {
+        query.set("since", String(args.since));
+      }
+      if (args.until) {
+        query.set("until", String(args.until));
+      }
+      if (args.kind) {
+        query.set("kind", String(args.kind));
+      }
+      if (args["tool-id"] || args.toolId) {
+        query.set("toolId", String(args["tool-id"] || args.toolId));
+      }
+      if (args.route) {
+        query.set("route", String(args.route));
+      }
+      if (args.transport) {
+        query.set("transport", String(args.transport));
+      }
+      if (args.status) {
+        query.set("status", String(args.status));
+      }
+      if (args["status-code"] || args.statusCode) {
+        query.set("statusCode", String(args["status-code"] || args.statusCode));
+      }
+      if (args["completion-status"] || args.completionStatus) {
+        query.set("completionStatus", String(args["completion-status"] || args.completionStatus));
+      }
+      await writeResponse({
+        args,
+        result: await requestJson({
+          serverUrl: args["server-url"],
+          method: "GET",
+          apiPath: `/api/tool-management/v1/metrics/export${query.toString() ? `?${query}` : ""}`,
+          headers: readHeaders(args)
+        })
+      });
+      return;
+    }
     if (subcommand === "storage") {
       await writeResponse({
         args,

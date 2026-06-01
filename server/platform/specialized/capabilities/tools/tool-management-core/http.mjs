@@ -357,6 +357,27 @@ export function createToolManagementHttpRouter({
       });
     }
 
+    if (normalizedMethod === "GET" && suffix === "/metrics/export") {
+      if (!(await requireConsole(request, response, normalizedMethod, url, ["console:read"]))) {
+        return true;
+      }
+      return complete(200, {
+        schemaVersion: 1,
+        export: platform.store.metricsExport({
+          limit: Number(url.searchParams.get("limit") || 2000),
+          since: url.searchParams.get("since") || "",
+          until: url.searchParams.get("until") || "",
+          kind: url.searchParams.get("kind") || "",
+          toolId: url.searchParams.get("toolId") || url.searchParams.get("tool-id") || "",
+          route: url.searchParams.get("route") || "",
+          transport: url.searchParams.get("transport") || "",
+          status: url.searchParams.get("status") || "",
+          statusCode: url.searchParams.get("statusCode") || url.searchParams.get("status-code") || "",
+          completionStatus: url.searchParams.get("completionStatus") || url.searchParams.get("completion-status") || ""
+        })
+      });
+    }
+
     if (normalizedMethod === "GET" && suffix === "/metrics/storage") {
       if (!(await requireConsole(request, response, normalizedMethod, url, ["console:read"]))) {
         return true;

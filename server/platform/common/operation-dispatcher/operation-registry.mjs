@@ -1757,6 +1757,33 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["console:read"]
   },
   {
+    id: "tool_management.metrics_export",
+    feature: "tool_management",
+    label: "工具指标导出",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/tool-management/v1/metrics/export",
+      localInForwardMode: true,
+      query: [
+        { name: "limit", aliases: ["limit"] },
+        { name: "since", aliases: ["since"] },
+        { name: "until", aliases: ["until"] },
+        { name: "kind", aliases: ["kind"] },
+        { name: "toolId", aliases: ["toolId", "tool-id"] },
+        { name: "route", aliases: ["route"] },
+        { name: "transport", aliases: ["transport"] },
+        { name: "status", aliases: ["status"] },
+        { name: "statusCode", aliases: ["statusCode", "status-code"] },
+        { name: "completionStatus", aliases: ["completionStatus", "completion-status"] }
+      ],
+      coerce: { limit: "number", statusCode: "number" }
+    },
+    rpc: {method:"tool_management.metrics_export",syntheticPath:"/api/tool-management/v1/metrics/export",query:[{name:"limit",aliases:["limit"]},{name:"since",aliases:["since"]},{name:"until",aliases:["until"]},{name:"kind",aliases:["kind"]},{name:"toolId",aliases:["toolId","tool-id"]},{name:"route",aliases:["route"]},{name:"transport",aliases:["transport"]},{name:"status",aliases:["status"]},{name:"statusCode",aliases:["statusCode","status-code"]},{name:"completionStatus",aliases:["completionStatus","completion-status"]}]},
+    cli: { command: ["tools", "metrics", "export"], usage: "tools metrics export [--kind all|tool|request] [--output metrics.json]" },
+    requiredScopes: ["console:read"]
+  },
+  {
     id: "tool_management.metrics_storage",
     feature: "tool_management",
     label: "工具指标存储摘要",

@@ -735,6 +735,17 @@ function normalizeBucketSeconds(value) {
   return Math.max(1, Math.min(Math.floor(parsed), 86_400));
 }
 
+function normalizeMetricExportKind(value) {
+  const normalized = String(value || "all").trim().toLowerCase();
+  if (normalized === "tool" || normalized === "tools" || normalized === "tool_calls") {
+    return "tool";
+  }
+  if (normalized === "request" || normalized === "requests" || normalized === "http") {
+    return "request";
+  }
+  return "all";
+}
+
 function safeFileSize(filePath) {
   try {
     return fs.statSync(filePath).size;
@@ -803,6 +814,44 @@ function createMetricClauses({
     }
   }
   return { clauses, params };
+}
+
+function rowToToolMetricEvent(row) {
+  return {
+    metricId: row.metric_id,
+    traceId: row.trace_id,
+    toolId: row.tool_id,
+    grantId: row.grant_id,
+    profileId: row.profile_id,
+    status: row.status,
+    risk: row.risk,
+    durationMs: row.duration_ms,
+    inputBytes: row.input_bytes,
+    resultBytes: row.result_bytes,
+    transferBytes: row.transfer_bytes,
+    bytesPerSecond: row.bytes_per_second,
+    reasonCode: row.reason_code,
+    createdAt: row.created_at
+  };
+}
+
+function rowToHttpRequestMetricEvent(row) {
+  return {
+    metricId: row.metric_id,
+    traceId: row.trace_id,
+    requestId: row.request_id,
+    transport: row.transport,
+    method: row.method,
+    route: row.route,
+    statusCode: row.status_code,
+    completionStatus: row.completion_status,
+    requestBytes: row.request_bytes,
+    responseBytes: row.response_bytes,
+    transferBytes: row.transfer_bytes,
+    durationMs: row.duration_ms,
+    bytesPerSecond: row.bytes_per_second,
+    createdAt: row.created_at
+  };
 }
 
 function bucketStartMs(createdAt = "", bucketSeconds = 60) {
@@ -1804,6 +1853,73 @@ export function createToolManagementStore({
     };
   }
 
+  function metricsExport({
+    limit = 2000,
+    since = "",
+    until = "",
+    kind = "all",
+    toolId = "",
+    route = "",
+    transport = "",
+    status = "",
+    statusCode = "",
+    completionStatus = ""
+  } = {}) {
+    const normalizedLimit = normalizeMetricLimit(limit);
+    const normalizedKind = normalizeMetricExportKind(kind);
+    const includeTools = normalizedKind === "all" || normalizedKind === "tool";
+    const includeRequests = normalizedKind === "all" || normalizedKind === "request";
+    const toolFilters = createMetricClauses({ since, until, toolId, status }, "tool");
+    const requestFilters = createMetricClauses({
+      since,
+      until,
+      route,
+      transport,
+      status,
+      statusCode,
+      completionStatus
+    }, "request");
+    const toolMetricEvents = includeTools
+      ? db.prepare(`
+          SELECT * FROM tool_metric_events
+          ${toolFilters.clauses.length ? `WHERE ${toolFilters.clauses.join(" AND ")}` : ""}
+          ORDER BY created_at DESC
+          LIMIT ?
+        `).all(...toolFilters.params, normalizedLimit).map(rowToToolMetricEvent)
+      : [];
+    const httpRequestMetricEvents = includeRequests
+      ? db.prepare(`
+          SELECT * FROM http_request_metric_events
+          ${requestFilters.clauses.length ? `WHERE ${requestFilters.clauses.join(" AND ")}` : ""}
+          ORDER BY created_at DESC
+          LIMIT ?
+        `).all(...requestFilters.params, normalizedLimit).map(rowToHttpRequestMetricEvent)
+      : [];
+    return {
+      schemaVersion: "pact.tool-management.metrics-export.v1",
+      generatedAt: nowIso(),
+      filters: {
+        limit: normalizedLimit,
+        since: String(since || ""),
+        until: String(until || ""),
+        kind: normalizedKind,
+        toolId: String(toolId || ""),
+        route: String(route || ""),
+        transport: String(transport || ""),
+        status: String(status || ""),
+        statusCode: String(statusCode || ""),
+        completionStatus: String(completionStatus || "")
+      },
+      counts: {
+        toolMetricEvents: toolMetricEvents.length,
+        httpRequestMetricEvents: httpRequestMetricEvents.length,
+        total: toolMetricEvents.length + httpRequestMetricEvents.length
+      },
+      toolMetricEvents,
+      httpRequestMetricEvents
+    };
+  }
+
   function metricTableStorageSummary(kind) {
     if (kind === "tool") {
       const row = db.prepare(`
@@ -2079,6 +2195,7 @@ export function createToolManagementStore({
     listAudit,
     getAudit,
     metricsSummary,
+    metricsExport,
     metricsStorageSummary,
     pruneMetrics,
     createMcpAuthorizationRequest,
