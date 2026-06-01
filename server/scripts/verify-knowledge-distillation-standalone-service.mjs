@@ -23,7 +23,8 @@ const REQUIRED_STANDALONE_DEPENDENCIES = Object.freeze([
   "operation-dispatcher",
   "console-shell",
   "tool-management-core",
-  "work-queue-core"
+  "work-queue-core",
+  "agent-gateway"
 ]);
 
 const EXTERNAL_OPERATION_IDS = Object.freeze([
@@ -75,7 +76,6 @@ const FORBIDDEN_STANDALONE_FEATURES = Object.freeze([
   "knowledge-distillation",
   "knowledge-evolution",
   "knowledge-core",
-  "agent-gateway",
   "agent-exploration",
   "document-parser",
   "analysis-runtime",
@@ -95,7 +95,9 @@ const FORBIDDEN_STANDALONE_FEATURES = Object.freeze([
 
 const REQUIRED_EXTERNAL_PACKAGE_PATHS = Object.freeze([
   "external-services/knowledge-distillation-service",
-  "server/platform/specialized/knowledge/invocation/external-distillation-service"
+  "server/platform/specialized/knowledge/invocation/external-distillation-service",
+  "server/platform/specialized/agent/agent-gateway",
+  "server/protocols/agent-sync"
 ]);
 
 const REQUIRED_LEGACY_REMOVE_PATHS = Object.freeze([
@@ -131,6 +133,16 @@ assert.equal(
   standaloneFeature.lifecycle?.deploymentBoundary,
   "standalone-external-service",
   `${STANDALONE_FEATURE_ID} must be marked as a standalone external service boundary`
+);
+assert.equal(
+  standaloneFeature.lifecycle?.modelGatewayPolicy,
+  "required-real-model-call",
+  `${STANDALONE_FEATURE_ID} must carry the model gateway as a required distillation dependency`
+);
+assert.equal(
+  standaloneFeature.lifecycle?.uploadPolicy,
+  "reuse-platform-upload-sessions-and-checkpoints",
+  `${STANDALONE_FEATURE_ID} must reuse platform upload sessions and checkpoints`
 );
 assert.equal(
   legacyFeature.lifecycle?.status,

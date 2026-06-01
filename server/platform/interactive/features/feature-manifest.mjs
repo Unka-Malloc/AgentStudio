@@ -542,7 +542,8 @@ export const FEATURE_MANIFEST = Object.freeze({
         "operation-dispatcher",
         "console-shell",
         "tool-management-core",
-        "work-queue-core"
+        "work-queue-core",
+        "agent-gateway"
       ],
       defaultEnabled: false,
       server: {
@@ -553,9 +554,11 @@ export const FEATURE_MANIFEST = Object.freeze({
       lifecycle: {
         serviceName: "external.knowledge.distillation",
         deploymentBoundary: "standalone-external-service",
-        platformRole: "configuration, authorization, operation proxy, upload receipt and queue orchestration",
+        platformRole: "configuration, authorization, operation proxy, upload receipt and queue orchestration, model gateway invocation",
         algorithmSurface: "external-service-only",
-        internalWorkflowPolicy: "not-required"
+        internalWorkflowPolicy: "not-required",
+        modelGatewayPolicy: "required-real-model-call",
+        uploadPolicy: "reuse-platform-upload-sessions-and-checkpoints"
       },
       web: {
         navItems: ["knowledge.distillation"],
@@ -565,6 +568,8 @@ export const FEATURE_MANIFEST = Object.freeze({
         includePaths: [
           "external-services/knowledge-distillation-service",
           "server/platform/specialized/knowledge/invocation/external-distillation-service",
+          "server/platform/specialized/agent/agent-gateway",
+          "server/protocols/agent-sync",
           "server/platform/common/console/http/controllers/system-controller-knowledge-runtime-handlers.mjs",
           "server/platform/common/operation-dispatcher/operation-registry.mjs",
           "server/platform/specialized/console/console-domain-operation-executor.mjs"

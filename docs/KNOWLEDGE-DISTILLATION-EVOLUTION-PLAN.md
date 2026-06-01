@@ -732,8 +732,10 @@ raw corpus item 标准字段：
 
 Feature Profile 最小依赖：
 
-- `external-knowledge-distillation` 必须显式依赖 `core-platform`、`security-permissions`、`operation-dispatcher`、`console-shell`、`tool-management-core`、`work-queue-core`。
-- `knowledge-core`、`agent-gateway`、`document-parser`、`pdf-processor`、`ocr`、`multimodal-parser` 不属于外部知识蒸馏代理的最小依赖；需要这些能力时必须作为上层组合 feature 单独启用。
+- `external-knowledge-distillation` 必须显式依赖 `core-platform`、`security-permissions`、`operation-dispatcher`、`console-shell`、`tool-management-core`、`work-queue-core`、`agent-gateway`。
+- `agent-gateway` 是真实模型蒸馏的必需脱水依赖；模型不可用时任务必须失败并返回机器可读错误，不允许生成规则假成功。
+- `work-queue-core` 是上传复用的必需脱水依赖；知识蒸馏上传链路复用平台 upload session、checkpoint、resume 和 raw object 能力，服务内部不自研浏览器分片上传状态机。
+- `knowledge-core`、`document-parser`、`pdf-processor`、`ocr`、`multimodal-parser` 不属于外部知识蒸馏代理的最小依赖；需要这些能力时必须作为上层组合 feature 单独启用。知识蒸馏服务内的解析模块只为蒸馏服务生成保持时序、逻辑和原文结构关系的中间数据，不替代平台通用文档解析器。
 - 旧内部工作流必须标记 `must-migrate`：`knowledge.agent_skill`、`knowledge.skills`、`knowledge.golden_rules`、`knowledge.rule_authoring`、`knowledge.gold_cases`、`knowledge.summarization`、`knowledge.training_sets`、`knowledge.evaluation`、`knowledge.model_roles`、`knowledge.model_decision`、`knowledge.evidence_gate.evaluate`。
 
 删除路径：
@@ -758,9 +760,11 @@ Feature Profile 最小依赖：
 - 新 OrbStack 容器能启动独立服务。
 - Pact 平台能注册并调用外部服务。
 - 智能体工具目录可发现并调用该能力。
+- 独立 profile 必须带出 `agent-gateway`，并能通过 Pact 模型网关完成真实模型调用。
+- 独立 profile 必须带出 `work-queue-core`，上传侧通过平台 upload session/checkpoint/resume 进入受控临时目录和任务队列。
 - 旧内部入口返回机器可读 `INTERNAL_KNOWLEDGE_DISTILLATION_REMOVED`。
 - `server:verify:external-service-api-registration` 阻止内部知识蒸馏重新进入 Tool Management 或 server runtime provider。
-- `server:verify:knowledge-distillation-standalone-service` 是服务端独立服务门禁，不读取 `client-gui` 清单；它必须证明平台基础核心组件和 `external.knowledge.distillation` 所需组件能被单独剥离出来，且不拉起内部知识库、Agent Gateway、平台文档解析器或旧内部工作流。
+- `server:verify:knowledge-distillation-standalone-service` 是服务端独立服务门禁，不读取 `client-gui` 清单；它必须证明平台基础核心组件、`agent-gateway`、`work-queue-core` 和 `external.knowledge.distillation` 所需组件能被单独剥离出来，且不拉起内部知识库、平台文档解析器或旧内部工作流。
 
 ---
 
@@ -782,6 +786,7 @@ Feature Profile 最小依赖：
 - 日历事件样本：`.ics`、`.vcs`。
 - DOCX/XLSX/PPTX。
 - EML/MSG/MBOX。
+- 仓库内真实邮件原文：`tests/fixtures/email-corpus/*.eml`，用于邮件解析、时间线筛选和模型蒸馏回归。
 - 大文件样本。
 - 多主题混合样本。
 - 噪声样本。
