@@ -1003,6 +1003,16 @@ try {
   assert.equal(unsupportedDirectCall.payload.error.data.stableToolName, "pact.call");
   assert.ok(unsupportedDirectCall.payload.error.data.categorizedOutlets.includes("pact.discovery"));
 
+  const mcpMetrics = await fetchJson(`${server.url}/api/tool-management/v1/metrics/summary`);
+  assert.equal(mcpMetrics.status, 200);
+  assert.ok(mcpMetrics.payload.metrics.requests.byTransport.mcp >= 1);
+  assert.ok(mcpMetrics.payload.metrics.requests.byRoute["/mcp"] >= 1);
+  assert.ok(mcpMetrics.payload.metrics.requests.requestBytesTotal > 0);
+  assert.ok(mcpMetrics.payload.metrics.requests.responseBytesTotal > 0);
+  assert.ok(mcpMetrics.payload.metrics.toolCalls.byTool["system.health"] >= 1);
+  assert.ok(mcpMetrics.payload.metrics.toolCalls.inputBytesTotal > 0);
+  assert.ok(mcpMetrics.payload.metrics.toolCalls.transferBytesTotal > 0);
+
   console.log("mcp-http verification passed");
 } finally {
   await server.close();

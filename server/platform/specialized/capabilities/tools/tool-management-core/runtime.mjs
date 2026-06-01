@@ -165,6 +165,14 @@ function resultSummaryFromPayload(payload) {
   return { value: result };
 }
 
+function jsonByteLength(value) {
+  try {
+    return Buffer.byteLength(JSON.stringify(value ?? null), "utf8");
+  } catch {
+    return 0;
+  }
+}
+
 function validateInputSchema(operation, input = {}) {
   const schema = operation.inputSchema || {};
   if ((schema.type || "object") !== "object") {
@@ -330,6 +338,7 @@ export function createToolExecutionRuntime({
     const toolExecutionId = randomId("tool_exec");
     const startedAtMs = Date.now();
     const startedAt = nowIso();
+    const inputBytes = jsonByteLength(input);
     const tool = registry.getTool(toolId);
     const operation = directOperation || operationsById.get(tool?.operationId || "");
     const profile = context.profileId
@@ -357,7 +366,7 @@ export function createToolExecutionRuntime({
         startedAt,
         finishedAt: nowIso()
       });
-      store.appendMetric({ traceId, toolId, status: "denied", reasonCode });
+      store.appendMetric({ traceId, toolId, status: "denied", reasonCode, inputBytes });
       appendAuthorizationDecision({
         decisionId: randomId("authz_decision"),
         traceId,
@@ -496,6 +505,7 @@ export function createToolExecutionRuntime({
         status: "denied",
         risk: tool.risk,
         durationMs,
+        inputBytes,
         reasonCode: decision.reasonCode
       });
       await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "denied" }, { type: "tools.execution.denied" });
@@ -572,6 +582,7 @@ export function createToolExecutionRuntime({
         status: "denied",
         risk: tool.risk,
         durationMs,
+        inputBytes,
         reasonCode: policy.reasonCode
       });
       await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "denied" }, { type: "tools.execution.denied" });
@@ -632,7 +643,7 @@ export function createToolExecutionRuntime({
         startedAt,
         finishedAt: nowIso()
       });
-      store.appendMetric({ traceId, toolId: tool.id, grantId: authorization.grant.id, profileId: context.profileId || "", status: "ok", risk: tool.risk, durationMs });
+      store.appendMetric({ traceId, toolId: tool.id, grantId: authorization.grant.id, profileId: context.profileId || "", status: "ok", risk: tool.risk, durationMs, inputBytes, resultBytes: jsonByteLength(result) });
       logTool("info", "tool_management.execute.dry_run_completed", {
         traceId,
         toolExecutionId,
@@ -713,6 +724,7 @@ export function createToolExecutionRuntime({
         status: "denied",
         risk: tool.risk,
         durationMs,
+        inputBytes,
         reasonCode: "invalid_input"
       });
       await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "denied" }, { type: "tools.execution.denied" });
@@ -831,6 +843,7 @@ export function createToolExecutionRuntime({
           status: "failed",
           risk: tool.risk,
           durationMs,
+          inputBytes,
           resultBytes: buffer.length,
           reasonCode: "result_too_large"
         });
@@ -899,6 +912,7 @@ export function createToolExecutionRuntime({
         status,
         risk: tool.risk,
         durationMs,
+        inputBytes,
         resultBytes: buffer.length,
         reasonCode: status === "ok" ? "" : "tool_handler_failed"
       });
@@ -966,6 +980,7 @@ export function createToolExecutionRuntime({
         status: "failed",
         risk: tool.risk,
         durationMs,
+        inputBytes,
         reasonCode: errorCode
       });
       await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "failed" }, { type: "tools.execution.failed" });

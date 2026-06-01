@@ -309,6 +309,64 @@ function assertSafeListenHost(host, runtimeOptions = {}) {
   );
 }
 
+function responseChunkBytes(chunk, encoding) {
+  if (chunk === undefined || chunk === null || typeof chunk === "function") {
+    return 0;
+  }
+  if (Buffer.isBuffer(chunk)) {
+    return chunk.length;
+  }
+  if (chunk instanceof Uint8Array) {
+    return chunk.byteLength;
+  }
+  return Buffer.byteLength(String(chunk), typeof encoding === "string" ? encoding : "utf8");
+}
+
+function trackResponseBodyBytes(response) {
+  let responseBytes = 0;
+  const originalWrite = response.write.bind(response);
+  const originalEnd = response.end.bind(response);
+  response.write = function writeWithMetrics(chunk, encoding, callback) {
+    responseBytes += responseChunkBytes(chunk, encoding);
+    return originalWrite(chunk, encoding, callback);
+  };
+  response.end = function endWithMetrics(chunk, encoding, callback) {
+    if (typeof chunk === "function") {
+      return originalEnd(chunk);
+    }
+    responseBytes += responseChunkBytes(chunk, encoding);
+    if (typeof encoding === "function") {
+      return originalEnd(chunk, encoding);
+    }
+    return originalEnd(chunk, encoding, callback);
+  };
+  return () => responseBytes;
+}
+
+function routeFromRequestUrl(value = "") {
+  try {
+    return new URL(value || "/", "http://127.0.0.1").pathname;
+  } catch {
+    return value || "/";
+  }
+}
+
+function metricTransportForRoute(route = "") {
+  if (route === "/mcp" || route.startsWith("/api/mcp") || route === "/.well-known/pact/mcp.json") {
+    return "mcp";
+  }
+  if (route.startsWith("/api/tool-management/v1")) {
+    return "tool-management";
+  }
+  return "http";
+}
+
+function numericHeader(value) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = Number(raw || 0);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
 export async function startHttpServer({
   userDataPath,
   distPath,
@@ -586,6 +644,8 @@ export async function startHttpServer({
   const server = http.createServer(async (request, response) => {
     const requestId = randomUUID();
     const startedAt = Date.now();
+    const getResponseBytes = trackResponseBodyBytes(response);
+    let requestBodyBytes = numericHeader(request.headers["content-length"]);
 
     const traceContext = createTraceContext({
       requestId,
@@ -596,23 +656,50 @@ export async function startHttpServer({
     response.setHeader("X-Pact-Trace-Id", traceContext.traceId);
     request.__pactRequestId = requestId;
     let finished = false;
+    let requestMetricRecorded = false;
+    const recordRequestMetric = (completionStatus = "completed") => {
+      if (requestMetricRecorded) {
+        return;
+      }
+      requestMetricRecorded = true;
+      try {
+        const route = routeFromRequestUrl(request.url || "/");
+        toolManagementPlatformRef?.store?.appendHttpRequestMetric?.({
+          traceId: traceContext.traceId,
+          requestId,
+          transport: metricTransportForRoute(route),
+          method: request.method || "GET",
+          route,
+          statusCode: response.statusCode || 0,
+          completionStatus,
+          requestBytes: requestBodyBytes,
+          responseBytes: getResponseBytes(),
+          durationMs: Date.now() - startedAt,
+          userAgent: request.headers["user-agent"] || ""
+        });
+      } catch (error) {
+        runtimeLogger.warn("http.request_metric.failed", {
+          traceId: traceContext.traceId,
+          requestId,
+          error: summarizeError(error)
+        });
+      }
+    };
     response.once("finish", () => {
       finished = true;
+      const responseBytes = getResponseBytes();
       runtimeLogger.info("http.request.completed", {
         traceId: traceContext.traceId,
         requestId,
         method: request.method || "GET",
-        route: (() => {
-          try {
-            return new URL(request.url || "/", "http://127.0.0.1").pathname;
-          } catch {
-            return request.url || "/";
-          }
-        })(),
+        route: routeFromRequestUrl(request.url || "/"),
         statusCode: response.statusCode,
+        requestBytes: requestBodyBytes,
+        responseBytes,
         contentLength: response.getHeader("content-length") || "",
         durationMs: Date.now() - startedAt
       });
+      recordRequestMetric("completed");
     });
     response.once("close", () => {
       if (finished) {
@@ -622,16 +709,13 @@ export async function startHttpServer({
         traceId: traceContext.traceId,
         requestId,
         method: request.method || "GET",
-        route: (() => {
-          try {
-            return new URL(request.url || "/", "http://127.0.0.1").pathname;
-          } catch {
-            return request.url || "/";
-          }
-        })(),
+        route: routeFromRequestUrl(request.url || "/"),
         statusCode: response.statusCode,
+        requestBytes: requestBodyBytes,
+        responseBytes: getResponseBytes(),
         durationMs: Date.now() - startedAt
       });
+      recordRequestMetric("closed");
     });
     // H-4: track in-flight to enable graceful drain before DB close
     incrementInflight();
@@ -655,6 +739,7 @@ export async function startHttpServer({
       });
       const requestBody =
         method === "GET" || method === "HEAD" ? Buffer.alloc(0) : await readRequestBody(request);
+      requestBodyBytes = requestBody.length;
 
       if (
         await handlePactMcpHttpRequest({

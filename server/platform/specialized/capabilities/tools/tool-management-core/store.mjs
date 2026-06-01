@@ -346,6 +346,18 @@ function bindingContextFromRequest({ request = null, context = {} } = {}) {
   };
 }
 
+function hasColumn(db, tableName, columnName) {
+  return db.prepare(`PRAGMA table_info(${tableName})`).all()
+    .some((column) => column.name === columnName);
+}
+
+function addColumnIfMissing(db, tableName, columnName, columnSql) {
+  if (hasColumn(db, tableName, columnName)) {
+    return;
+  }
+  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnSql}`);
+}
+
 function ensureSchema(db) {
   db.exec(`
     PRAGMA journal_mode = WAL;
@@ -436,8 +448,29 @@ function ensureSchema(db) {
       status TEXT NOT NULL DEFAULT '',
       risk TEXT NOT NULL DEFAULT '',
       duration_ms INTEGER NOT NULL DEFAULT 0,
+      input_bytes INTEGER NOT NULL DEFAULT 0,
       result_bytes INTEGER NOT NULL DEFAULT 0,
+      transfer_bytes INTEGER NOT NULL DEFAULT 0,
+      bytes_per_second REAL NOT NULL DEFAULT 0,
       reason_code TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS http_request_metric_events (
+      metric_id TEXT PRIMARY KEY,
+      trace_id TEXT NOT NULL DEFAULT '',
+      request_id TEXT NOT NULL DEFAULT '',
+      transport TEXT NOT NULL DEFAULT 'http',
+      method TEXT NOT NULL DEFAULT '',
+      route TEXT NOT NULL DEFAULT '',
+      status_code INTEGER NOT NULL DEFAULT 0,
+      completion_status TEXT NOT NULL DEFAULT 'completed',
+      request_bytes INTEGER NOT NULL DEFAULT 0,
+      response_bytes INTEGER NOT NULL DEFAULT 0,
+      transfer_bytes INTEGER NOT NULL DEFAULT 0,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      bytes_per_second REAL NOT NULL DEFAULT 0,
+      user_agent TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
     );
 
@@ -452,6 +485,9 @@ function ensureSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_tool_executions_tool ON tool_executions(tool_id);
     CREATE INDEX IF NOT EXISTS idx_tool_executions_status ON tool_executions(status);
     CREATE INDEX IF NOT EXISTS idx_tool_metric_events_created ON tool_metric_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_tool_metric_events_tool ON tool_metric_events(tool_id);
+    CREATE INDEX IF NOT EXISTS idx_http_request_metric_events_created ON http_request_metric_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_http_request_metric_events_route ON http_request_metric_events(route);
 
     CREATE TABLE IF NOT EXISTS mcp_authorization_requests (
       request_id TEXT PRIMARY KEY,
@@ -491,6 +527,37 @@ function ensureSchema(db) {
             resolved_at TEXT NOT NULL DEFAULT ''
           );
           CREATE INDEX IF NOT EXISTS idx_mcp_auth_req_status ON mcp_authorization_requests(status);
+        `);
+      }
+    },
+    // version 3: request metrics and byte-rate columns for commercial usage telemetry.
+    {
+      version: 3,
+      up: (db) => {
+        addColumnIfMissing(db, "tool_metric_events", "input_bytes", "input_bytes INTEGER NOT NULL DEFAULT 0");
+        addColumnIfMissing(db, "tool_metric_events", "transfer_bytes", "transfer_bytes INTEGER NOT NULL DEFAULT 0");
+        addColumnIfMissing(db, "tool_metric_events", "bytes_per_second", "bytes_per_second REAL NOT NULL DEFAULT 0");
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS http_request_metric_events (
+            metric_id TEXT PRIMARY KEY,
+            trace_id TEXT NOT NULL DEFAULT '',
+            request_id TEXT NOT NULL DEFAULT '',
+            transport TEXT NOT NULL DEFAULT 'http',
+            method TEXT NOT NULL DEFAULT '',
+            route TEXT NOT NULL DEFAULT '',
+            status_code INTEGER NOT NULL DEFAULT 0,
+            completion_status TEXT NOT NULL DEFAULT 'completed',
+            request_bytes INTEGER NOT NULL DEFAULT 0,
+            response_bytes INTEGER NOT NULL DEFAULT 0,
+            transfer_bytes INTEGER NOT NULL DEFAULT 0,
+            duration_ms INTEGER NOT NULL DEFAULT 0,
+            bytes_per_second REAL NOT NULL DEFAULT 0,
+            user_agent TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_tool_metric_events_tool ON tool_metric_events(tool_id);
+          CREATE INDEX IF NOT EXISTS idx_http_request_metric_events_created ON http_request_metric_events(created_at);
+          CREATE INDEX IF NOT EXISTS idx_http_request_metric_events_route ON http_request_metric_events(route);
         `);
       }
     }
@@ -584,6 +651,76 @@ function summarizeValue(value) {
     }
   }
   return summary;
+}
+
+function summarizeRequestMetricRows(rows = []) {
+  const byStatusCode = {};
+  const byCompletionStatus = {};
+  const byMethod = {};
+  const byRoute = {};
+  const byTransport = {};
+  let durationTotal = 0;
+  let requestBytesTotal = 0;
+  let responseBytesTotal = 0;
+  let transferBytesTotal = 0;
+  let byteRateTotal = 0;
+  let peakBytesPerSecond = 0;
+  let firstTimestamp = 0;
+  let lastTimestamp = 0;
+
+  for (const row of rows) {
+    const statusKey = String(row.status_code || 0);
+    byStatusCode[statusKey] = (byStatusCode[statusKey] || 0) + 1;
+    byCompletionStatus[row.completion_status || "unknown"] =
+      (byCompletionStatus[row.completion_status || "unknown"] || 0) + 1;
+    byMethod[row.method || ""] = (byMethod[row.method || ""] || 0) + 1;
+    byRoute[row.route || ""] = (byRoute[row.route || ""] || 0) + 1;
+    byTransport[row.transport || "http"] = (byTransport[row.transport || "http"] || 0) + 1;
+
+    const durationMs = Number(row.duration_ms || 0);
+    const requestBytes = Number(row.request_bytes || 0);
+    const responseBytes = Number(row.response_bytes || 0);
+    const transferBytes = Number(row.transfer_bytes || requestBytes + responseBytes);
+    const bytesPerSecond = Number(row.bytes_per_second || 0);
+    durationTotal += durationMs;
+    requestBytesTotal += requestBytes;
+    responseBytesTotal += responseBytes;
+    transferBytesTotal += transferBytes;
+    byteRateTotal += bytesPerSecond;
+    peakBytesPerSecond = Math.max(peakBytesPerSecond, bytesPerSecond);
+
+    const timestamp = Date.parse(row.created_at || "");
+    if (Number.isFinite(timestamp)) {
+      firstTimestamp = firstTimestamp ? Math.min(firstTimestamp, timestamp) : timestamp;
+      lastTimestamp = Math.max(lastTimestamp, timestamp);
+    }
+  }
+
+  const observedWindowSeconds = rows.length
+    ? Math.max(1, Number(((lastTimestamp - firstTimestamp) / 1000).toFixed(3)) || 1)
+    : 0;
+
+  return {
+    total: rows.length,
+    byStatusCode,
+    byCompletionStatus,
+    byMethod,
+    byRoute,
+    byTransport,
+    requestBytesTotal,
+    responseBytesTotal,
+    transferBytesTotal,
+    averageDurationMs: rows.length ? Number((durationTotal / rows.length).toFixed(2)) : 0,
+    observedWindowSeconds,
+    requestsPerMinute: observedWindowSeconds
+      ? Number(((rows.length * 60) / observedWindowSeconds).toFixed(2))
+      : 0,
+    transferBytesPerSecond: observedWindowSeconds
+      ? Number((transferBytesTotal / observedWindowSeconds).toFixed(2))
+      : 0,
+    averageBytesPerSecond: rows.length ? Number((byteRateTotal / rows.length).toFixed(2)) : 0,
+    peakBytesPerSecond
+  };
 }
 
 export function getToolManagementDatabasePath(userDataPath) {
@@ -1152,11 +1289,18 @@ export function createToolManagementStore({
   }
 
   function appendMetric(entry = {}) {
+    const durationMs = Math.max(0, Number(entry.durationMs || 0));
+    const inputBytes = Math.max(0, Number(entry.inputBytes || 0));
+    const resultBytes = Math.max(0, Number(entry.resultBytes || 0));
+    const transferBytes = Math.max(0, Number(entry.transferBytes || inputBytes + resultBytes));
+    const bytesPerSecond = durationMs > 0
+      ? Number(((transferBytes * 1000) / durationMs).toFixed(2))
+      : transferBytes;
     db.prepare(`
       INSERT INTO tool_metric_events (
         metric_id, trace_id, tool_id, grant_id, profile_id, status, risk, duration_ms,
-        result_bytes, reason_code, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        input_bytes, result_bytes, transfer_bytes, bytes_per_second, reason_code, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       randomId("metric"),
       String(entry.traceId || ""),
@@ -1165,9 +1309,45 @@ export function createToolManagementStore({
       String(entry.profileId || ""),
       String(entry.status || ""),
       String(entry.risk || ""),
-      Math.max(0, Number(entry.durationMs || 0)),
-      Math.max(0, Number(entry.resultBytes || 0)),
+      durationMs,
+      inputBytes,
+      resultBytes,
+      transferBytes,
+      bytesPerSecond,
       String(entry.reasonCode || ""),
+      entry.createdAt || nowIso()
+    );
+  }
+
+  function appendHttpRequestMetric(entry = {}) {
+    const durationMs = Math.max(0, Number(entry.durationMs || 0));
+    const requestBytes = Math.max(0, Number(entry.requestBytes || 0));
+    const responseBytes = Math.max(0, Number(entry.responseBytes || 0));
+    const transferBytes = Math.max(0, Number(entry.transferBytes || requestBytes + responseBytes));
+    const bytesPerSecond = durationMs > 0
+      ? Number(((transferBytes * 1000) / durationMs).toFixed(2))
+      : transferBytes;
+    db.prepare(`
+      INSERT INTO http_request_metric_events (
+        metric_id, trace_id, request_id, transport, method, route, status_code,
+        completion_status, request_bytes, response_bytes, transfer_bytes,
+        duration_ms, bytes_per_second, user_agent, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      randomId("http_metric"),
+      String(entry.traceId || ""),
+      String(entry.requestId || ""),
+      String(entry.transport || "http"),
+      String(entry.method || ""),
+      String(entry.route || ""),
+      Math.max(0, Number(entry.statusCode || 0)),
+      String(entry.completionStatus || "completed"),
+      requestBytes,
+      responseBytes,
+      transferBytes,
+      durationMs,
+      bytesPerSecond,
+      String(entry.userAgent || "").slice(0, 512),
       entry.createdAt || nowIso()
     );
   }
@@ -1293,7 +1473,11 @@ export function createToolManagementStore({
     const byRisk = {};
     const deniedByReason = {};
     let durationTotal = 0;
+    let inputBytesTotal = 0;
     let resultBytesTotal = 0;
+    let transferBytesTotal = 0;
+    let byteRateTotal = 0;
+    let peakBytesPerSecond = 0;
     let timeoutTotal = 0;
     let rateLimitedTotal = 0;
     for (const row of rows) {
@@ -1317,10 +1501,44 @@ export function createToolManagementStore({
       if (row.reason_code === "rate_limited") {
         rateLimitedTotal += 1;
       }
-      durationTotal += Number(row.duration_ms || 0);
-      resultBytesTotal += Number(row.result_bytes || 0);
+      const durationMs = Number(row.duration_ms || 0);
+      const inputBytes = Number(row.input_bytes || 0);
+      const resultBytes = Number(row.result_bytes || 0);
+      const transferBytes = Number(row.transfer_bytes || inputBytes + resultBytes);
+      const bytesPerSecond = Number(row.bytes_per_second || 0);
+      durationTotal += durationMs;
+      inputBytesTotal += inputBytes;
+      resultBytesTotal += resultBytes;
+      transferBytesTotal += transferBytes;
+      byteRateTotal += bytesPerSecond;
+      peakBytesPerSecond = Math.max(peakBytesPerSecond, bytesPerSecond);
     }
+    const requestRows = db.prepare(`
+      SELECT * FROM http_request_metric_events
+      ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(...params);
+    const requests = summarizeRequestMetricRows(requestRows);
     const activeExecutions = db.prepare("SELECT count(*) AS count FROM tool_executions WHERE status = 'running'").get().count;
+    const toolCalls = {
+      total: rows.length,
+      byStatus,
+      byTool,
+      byProfile,
+      byGrant,
+      byRisk,
+      deniedByReason,
+      timeoutTotal,
+      rateLimitedTotal,
+      activeExecutions,
+      averageDurationMs: rows.length ? Number((durationTotal / rows.length).toFixed(2)) : 0,
+      inputBytesTotal,
+      resultBytesTotal,
+      transferBytesTotal,
+      averageBytesPerSecond: rows.length ? Number((byteRateTotal / rows.length).toFixed(2)) : 0,
+      peakBytesPerSecond
+    };
     return {
       callsTotal: rows.length,
       byStatus,
@@ -1333,7 +1551,13 @@ export function createToolManagementStore({
       rateLimitedTotal,
       activeExecutions,
       averageDurationMs: rows.length ? Number((durationTotal / rows.length).toFixed(2)) : 0,
-      resultBytesTotal
+      inputBytesTotal,
+      resultBytesTotal,
+      transferBytesTotal,
+      averageBytesPerSecond: rows.length ? Number((byteRateTotal / rows.length).toFixed(2)) : 0,
+      peakBytesPerSecond,
+      toolCalls,
+      requests
     };
   }
 
@@ -1406,6 +1630,7 @@ export function createToolManagementStore({
     appendPolicyDecision,
     appendExecution,
     appendMetric,
+    appendHttpRequestMetric,
     saveCatalogSnapshot,
     listAudit,
     getAudit,

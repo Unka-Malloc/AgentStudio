@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { promisify } from "node:util";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
@@ -234,6 +235,52 @@ try {
   assert.ok(metrics.payload.metrics.callsTotal >= 2);
   assert.ok(metrics.payload.metrics.byStatus.ok >= 1);
   assert.ok(metrics.payload.metrics.byStatus.denied >= 1);
+  assert.ok(metrics.payload.metrics.inputBytesTotal > 0);
+  assert.ok(metrics.payload.metrics.resultBytesTotal > 0);
+  assert.ok(metrics.payload.metrics.transferBytesTotal >= metrics.payload.metrics.inputBytesTotal);
+  assert.ok(metrics.payload.metrics.toolCalls.inputBytesTotal > 0);
+  assert.ok(metrics.payload.metrics.toolCalls.resultBytesTotal > 0);
+  assert.ok(metrics.payload.metrics.toolCalls.averageBytesPerSecond >= 0);
+  assert.ok(metrics.payload.metrics.requests.total >= 1);
+  assert.ok(metrics.payload.metrics.requests.byTransport["tool-management"] >= 1);
+  assert.ok(metrics.payload.metrics.requests.byRoute["/api/tool-management/v1/execute"] >= 1);
+  assert.ok(metrics.payload.metrics.requests.requestBytesTotal > 0);
+  assert.ok(metrics.payload.metrics.requests.responseBytesTotal > 0);
+  assert.ok(metrics.payload.metrics.requests.transferBytesPerSecond >= 0);
+
+  const metricsDb = new Database(path.join(userDataPath, "tool-management", "tool-management.sqlite"), {
+    readonly: true,
+    fileMustExist: true
+  });
+  try {
+    const httpMetric = metricsDb.prepare(`
+      SELECT request_bytes, response_bytes, transfer_bytes, bytes_per_second
+      FROM http_request_metric_events
+      WHERE route = '/api/tool-management/v1/execute'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get();
+    assert.ok(httpMetric);
+    assert.ok(httpMetric.request_bytes > 0);
+    assert.ok(httpMetric.response_bytes > 0);
+    assert.ok(httpMetric.transfer_bytes >= httpMetric.request_bytes + httpMetric.response_bytes);
+    assert.ok(httpMetric.bytes_per_second >= 0);
+
+    const toolMetric = metricsDb.prepare(`
+      SELECT input_bytes, result_bytes, transfer_bytes, bytes_per_second
+      FROM tool_metric_events
+      WHERE tool_id = 'pact.knowledge.health' AND status = 'ok'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get();
+    assert.ok(toolMetric);
+    assert.ok(toolMetric.input_bytes > 0);
+    assert.ok(toolMetric.result_bytes > 0);
+    assert.ok(toolMetric.transfer_bytes >= toolMetric.input_bytes + toolMetric.result_bytes);
+    assert.ok(toolMetric.bytes_per_second >= 0);
+  } finally {
+    metricsDb.close();
+  }
 
   const cliCatalog = await execFileAsync(
     process.execPath,
