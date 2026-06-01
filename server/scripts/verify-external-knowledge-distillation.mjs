@@ -129,6 +129,21 @@ async function waitForService(url, timeoutMs = 10_000) {
   throw new Error(`External distillation service did not become healthy: ${lastError?.message || "timeout"}`);
 }
 
+async function waitForCompletedRun(serviceUrl, runId, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastPayload = null;
+  while (Date.now() < deadline) {
+    const run = await fetchJson(`${serviceUrl}/v1/distillation/runs/${encodeURIComponent(runId)}`);
+    assert.equal(run.status, 200);
+    lastPayload = run.payload;
+    if (run.payload.status === "completed" || run.payload.status === "failed" || run.payload.status === "canceled") {
+      return run.payload;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Queued external distillation run did not finish: ${JSON.stringify(lastPayload)}`);
+}
+
 async function startMockModelGateway() {
   const calls = [];
   const server = http.createServer(async (request, response) => {
@@ -1179,6 +1194,11 @@ try {
   assert.equal(capabilities.payload.api.evidenceQuery, "GET /v1/distillation/runs/:runId/evidence");
   assert.equal(capabilities.payload.api.projectEvidenceQuery, "GET /v1/projects/:projectId/evidence");
   assert.equal(capabilities.payload.api.referenceGapReport, "GET /v1/reference-gap-report");
+  assert.equal(capabilities.payload.runQueue.supported, true);
+  assert.equal(capabilities.payload.runQueue.strategy, "single-node-background-run-queue.v1");
+  assert.equal(capabilities.payload.runQueue.requestSignals.includes("Prefer: respond-async"), true);
+  assert.equal(capabilities.payload.runQueue.statuses.includes("queued"), true);
+  assert.equal(capabilities.payload.runQueue.statuses.includes("running"), true);
   assert.equal(capabilities.payload.classification.supported, true);
   assert.equal(capabilities.payload.responseProfiles.includes("agent"), true);
   assert.equal(capabilities.payload.workflowScopes.requestField, "workflowScope");
@@ -1221,6 +1241,8 @@ try {
   assert.equal(capabilities.payload.fileCompatibility.pdfSubtypeRouting.strategy, "pdf-subtype-routing.v1");
   assert.equal(capabilities.payload.fileCompatibility.pdfSubtypeRouting.subtypes.includes("pdf-scanned"), true);
   assert.equal(capabilities.payload.largeDocumentPolicy.strategy, "streaming-windowed");
+  assert.equal(capabilities.payload.largeDocumentPolicy.queueStrategy, "single-node-background-run-queue.v1");
+  assert.equal(capabilities.payload.largeDocumentPolicy.recommendedExecutionMode, "queued");
   assert.equal(capabilities.payload.largeDocumentPolicy.manifestStrategy, "inline-or-streaming-manifest-document-input.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.structuredZipFileRefStrategy, "structured-zip-entry-bounded-or-streaming.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.directoryFileRefStrategy, "directory-file-ref-recursive-routing.v1");
@@ -1574,6 +1596,40 @@ try {
     method: "GET",
     path: "/v1/runtime/health"
   });
+
+  const queuedRun = await fetchJson(`${serviceUrl}/v1/distillation/runs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Prefer: "respond-async"
+    },
+    body: JSON.stringify({
+      query: "Queued large document workflow verification",
+      title: "Queued large document workflow verification",
+      responseProfile: "agent",
+      workflowScope: "document",
+      rawDocuments: [
+        {
+          sourceId: "queued-large-doc",
+          title: "Queued Large Document",
+          fileName: "queued-large-doc.md",
+          mediaType: "text/markdown",
+          byteSize: 64 * 1024 * 1024,
+          text: "Queued execution prevents document parsing and model distillation from being tied to a synchronous console HTTP timeout."
+        }
+      ]
+    })
+  });
+  assert.equal(queuedRun.status, 202);
+  assert.equal(queuedRun.payload.status, "queued");
+  assert.equal(queuedRun.payload.queue.strategy, "single-node-background-run-queue.v1");
+  assert.equal(queuedRun.headers.get("retry-after"), "1");
+  const queuedCompletedRun = await waitForCompletedRun(serviceUrl, queuedRun.payload.runId);
+  assert.equal(queuedCompletedRun.status, "completed");
+  assert.equal(queuedCompletedRun.queue.executionMode, "queued");
+  assert.equal(queuedCompletedRun.queue.phase, "completed");
+  assert.equal(queuedCompletedRun.result.agentMessage.responseProfile, "agent");
+  assert.equal(queuedCompletedRun.result.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
 
   const createRun = await fetchJson(`${pactServer.url}/api/external/knowledge/distillation/runs`, {
     method: "POST",

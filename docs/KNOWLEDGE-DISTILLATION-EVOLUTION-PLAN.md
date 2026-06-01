@@ -457,6 +457,7 @@ raw corpus item 标准字段：
 
 - TODO：上传层支持 chunk/resume，不把大文件完整塞进单次内存处理。
 - TODO：上传层使用成熟组件和标准协议，Pact 只管理上传收据、临时目录、任务状态和队列调度。
+- 已实现：外部知识蒸馏服务支持 `single-node-background-run-queue.v1`，`POST /v1/distillation/runs` 可通过 `Prefer: respond-async`、`executionMode=queued`、`mode=queued`、`executionMode: "queued"` 或 `async: true` 立即返回 `202 queued`，后续通过 run polling 查询 `queued/running/completed/failed/canceled`。
 - API 层支持 `rawDocumentsManifestPath`/`rawDocumentsManifestRef` 指向 JSONL 文档清单，服务端逐行读取 manifest，再把每个条目交给 filePath/contentRef 路由，避免大工程把所有文档塞进一次请求体。
 - 解析层按页、sheet、slide、section 或 block 流式产出。
 - `.json/.jsonc` 的 mounted filePath 必须走 `structured-json-file-ref-streaming-window.v1`，超出 direct-read 阈值时仍保留 `json` 路由、streaming hash、窗口和 parser trace，不允许退化成 unknown binary。

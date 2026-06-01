@@ -74,6 +74,7 @@ const ABSORPTION_REQUIREMENTS = Object.freeze([
       "streaming-windowed",
       "input.manifest.jsonl",
       "payload.stream-text",
+      "single-node-background-run-queue.v1",
       "directory-file-ref-recursive-routing.v1",
       "structured-zip-entry-bounded-or-streaming.v1"
     ]

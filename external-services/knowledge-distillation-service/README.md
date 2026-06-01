@@ -34,6 +34,8 @@ API namespace:
 - `GET /v1/projects/:projectId/evidence`
 - `GET /v1/distillation/runs/:runId/artifacts/:artifactId`
 
+Large or interactive requests can ask the service to return immediately by sending `Prefer: respond-async`, `?executionMode=queued`, `?mode=queued`, `executionMode: "queued"`, or `async: true` with `POST /v1/distillation/runs`. The service persists a `queued` run, processes parsing and real model distillation in the single-node background queue, and exposes `queued` -> `running` -> `completed`/`failed`/`canceled` through `GET /v1/distillation/runs/:runId`.
+
 Artifacts:
 
 - `portable-markdown`: human-readable classified distillation output.

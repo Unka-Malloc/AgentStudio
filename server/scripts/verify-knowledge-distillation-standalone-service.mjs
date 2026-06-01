@@ -292,6 +292,21 @@ assert.equal(
   true,
   "server.mjs must load format routes from the singleton config"
 );
+assert.equal(
+  externalServiceSource.includes("runQueue: {"),
+  true,
+  "standalone service must advertise async run queue capabilities for large document workflows"
+);
+assert.equal(
+  externalServiceSource.includes("function scheduleQueuedRun("),
+  true,
+  "standalone service must schedule queued distillation runs outside the request wait path"
+);
+assert.equal(
+  externalServiceSource.includes("Prefer: respond-async"),
+  true,
+  "standalone service must support the standard respond-async request signal"
+);
 for (const functionName of [
   "runKnowledgeDistillationWorkflow",
   "runDistillationWorkflow",

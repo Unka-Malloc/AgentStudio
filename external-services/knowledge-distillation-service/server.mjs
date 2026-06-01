@@ -105,6 +105,7 @@ const STRUCTURED_ZIP_ENTRY_MAX_BYTES = Math.max(1024, Number(process.env.PACT_EX
 const MODEL_GATEWAY_TIMEOUT_MS = Math.max(1000, Number(process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_TIMEOUT_MS || 120_000));
 const MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_MODEL_PROMPT_MAX_CHARACTERS || 48_000));
 let runtimeDoctorCache = null;
+const BACKGROUND_RUNS = new Set();
 const PARSER_PAYLOAD_FIELD_NAMES = Object.freeze([
   "archiveFilePath",
   "directoryPath",
@@ -860,7 +861,9 @@ async function loadRuns() {
 
 async function saveRuns(runs) {
   await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(RUNS_PATH, `${JSON.stringify({ protocolVersion: PROTOCOL_VERSION, runs }, null, 2)}\n`);
+  const temporaryPath = `${RUNS_PATH}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`;
+  await fs.writeFile(temporaryPath, `${JSON.stringify({ protocolVersion: PROTOCOL_VERSION, runs }, null, 2)}\n`);
+  await fs.rename(temporaryPath, RUNS_PATH);
 }
 
 function resolveReferenceFrameworkPath(localPath = "") {
@@ -19445,6 +19448,196 @@ async function createRun(input = {}, runtimeStatus = null, priorRuns = [], refer
   return runKnowledgeDistillationWorkflow(input, runtimeStatus, priorRuns, referenceFrameworks);
 }
 
+function isQueuedRunRequest(request, url, input = {}) {
+  const prefer = String(request.headers.prefer || "").toLowerCase();
+  const queryMode = String(url.searchParams.get("executionMode") || url.searchParams.get("mode") || "").toLowerCase();
+  const bodyMode = String(input.executionMode || input.runMode || "").toLowerCase();
+  return prefer.includes("respond-async") ||
+    queryMode === "queued" ||
+    queryMode === "async" ||
+    bodyMode === "queued" ||
+    bodyMode === "async" ||
+    input.async === true;
+}
+
+function queuedRunInputSourceCount(input = {}) {
+  const candidates = [
+    input.rawDocuments,
+    input.normalizedDocuments,
+    input.documents,
+    input.sources
+  ];
+  const explicitCount = candidates.reduce((sum, value) => sum + (Array.isArray(value) ? value.length : 0), 0);
+  if (explicitCount > 0) {
+    return explicitCount;
+  }
+  return input.rawDocumentsManifestPath || input.rawDocumentsManifestRef || input.jsonlManifest ? 1 : 0;
+}
+
+function createQueuedRunRecord(input = {}) {
+  const createdAt = nowIso();
+  const query = String(input.query || input.prompt || input.title || "External knowledge distillation").trim();
+  const title = String(input.title || query || "External Knowledge Distillation").trim();
+  const runId = String(input.runId || "").trim() || stableId("external_kd_run", query, createdAt);
+  const workflowScope = normalizeDistillationWorkflowScope(input);
+  const responseProfile = String(input.responseProfile || input.mode || "console").trim() || "console";
+  const sourceCount = queuedRunInputSourceCount(input);
+  const projectId = String(input.projectId || input.workspaceId || input.project?.id || input.project?.name || "").trim();
+  return {
+    protocolVersion: PROTOCOL_VERSION,
+    serviceName: SERVICE_NAME,
+    serviceKind: SERVICE_KIND,
+    runId,
+    status: "queued",
+    responseProfile,
+    workflowScope,
+    title,
+    query,
+    createdAt,
+    updatedAt: createdAt,
+    inputSummary: {
+      sourceCount,
+      workflowScope,
+      projectId,
+      executionMode: "queued"
+    },
+    queue: {
+      strategy: "single-node-background-run-queue.v1",
+      executionMode: "queued",
+      phase: "queued",
+      submittedAt: createdAt,
+      startedAt: "",
+      completedAt: "",
+      pollAfterMs: 1000,
+      pollEndpoint: `/v1/distillation/runs/${encodeURIComponent(runId)}`,
+      cancelEndpoint: `/v1/distillation/runs/${encodeURIComponent(runId)}/cancel`
+    },
+    artifactRefs: []
+  };
+}
+
+async function replaceRunRecord(nextRun = {}) {
+  const runs = await loadRuns();
+  const index = runs.findIndex((run) => run.runId === nextRun.runId);
+  if (index >= 0) {
+    runs[index] = nextRun;
+  } else {
+    runs.push(nextRun);
+  }
+  await saveRuns(runs);
+  return nextRun;
+}
+
+async function updateRunRecord(runId = "", updater = (run) => run) {
+  const runs = await loadRuns();
+  const index = runs.findIndex((run) => run.runId === runId);
+  if (index < 0) {
+    return null;
+  }
+  const nextRun = updater(runs[index]);
+  if (!nextRun) {
+    return runs[index];
+  }
+  runs[index] = nextRun;
+  await saveRuns(runs);
+  return nextRun;
+}
+
+function serializeRunError(error) {
+  return {
+    code: error?.code || "EXTERNAL_DISTILLATION_ERROR",
+    message: error instanceof Error ? error.message : String(error),
+    statusCode: Number(error?.statusCode || 500)
+  };
+}
+
+async function processQueuedRun(input = {}, queuedRun = {}) {
+  const runId = queuedRun.runId;
+  const current = (await loadRuns()).find((run) => run.runId === runId);
+  if (!current || current.status === "canceled") {
+    return;
+  }
+  const startedAt = nowIso();
+  await updateRunRecord(runId, (run) => ({
+    ...run,
+    status: "running",
+    updatedAt: startedAt,
+    queue: {
+      ...(run.queue || queuedRun.queue || {}),
+      phase: "running",
+      startedAt
+    }
+  }));
+  try {
+    const priorRuns = (await loadRuns()).filter((run) => run.runId !== runId && run.status === "completed");
+    const completedRun = await createRun(
+      { ...input, runId },
+      await runtimeDoctor(),
+      priorRuns,
+      await loadReferenceFrameworks()
+    );
+    const completedAt = nowIso();
+    const latest = (await loadRuns()).find((run) => run.runId === runId);
+    if (latest?.status === "canceled") {
+      await updateRunRecord(runId, (run) => ({
+        ...run,
+        updatedAt: completedAt,
+        queue: {
+          ...(run.queue || queuedRun.queue || {}),
+          phase: "canceled",
+          completedAt
+        }
+      }));
+      return;
+    }
+    await replaceRunRecord({
+      ...completedRun,
+      queue: {
+        ...(queuedRun.queue || {}),
+        phase: completedRun.status,
+        startedAt,
+        completedAt,
+        executionMode: "queued"
+      }
+    });
+  } catch (error) {
+    const failedAt = nowIso();
+    const serializedError = serializeRunError(error);
+    await updateRunRecord(runId, (run) => ({
+      ...run,
+      status: "failed",
+      updatedAt: failedAt,
+      queue: {
+        ...(run.queue || queuedRun.queue || {}),
+        phase: "failed",
+        completedAt: failedAt
+      },
+      result: {
+        status: "failed",
+        errors: [serializedError]
+      },
+      errors: [serializedError]
+    }));
+  }
+}
+
+function scheduleQueuedRun(input = {}, queuedRun = {}) {
+  const runId = queuedRun.runId;
+  if (!runId || BACKGROUND_RUNS.has(runId)) {
+    return;
+  }
+  BACKGROUND_RUNS.add(runId);
+  setImmediate(() => {
+    processQueuedRun(input, queuedRun)
+      .catch((error) => {
+        console.error(`Queued external distillation run ${runId} failed`, error);
+      })
+      .finally(() => {
+        BACKGROUND_RUNS.delete(runId);
+      });
+  });
+}
+
 function capabilities(referenceFrameworks = null, runtimeStatus = null) {
   const supportedExtensions = Array.from(ROUTES_BY_EXTENSION.keys()).sort();
   const supportedMediaTypes = Array.from(ROUTES_BY_MEDIA_TYPE.keys()).sort();
@@ -19464,6 +19657,14 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       evidenceQuery: "GET /v1/distillation/runs/:runId/evidence",
       projectEvidenceQuery: "GET /v1/projects/:projectId/evidence",
       exportArtifact: "GET /v1/distillation/runs/:runId/artifacts/:artifactId"
+    },
+    runQueue: {
+      supported: true,
+      strategy: "single-node-background-run-queue.v1",
+      requestSignals: ["Prefer: respond-async", "executionMode=queued", "mode=queued", "body.executionMode=queued", "body.async=true"],
+      responseStatus: 202,
+      statuses: ["queued", "running", "completed", "failed", "canceled"],
+      purpose: "Return immediately for large document parsing and model distillation, then expose progress through the run polling endpoint."
     },
     artifacts: ["portable-markdown", "portable-docx", "console-summary-json", "result-json", "agent-message-json", "project-snapshot-json", "evidence-pack-json", "format-conversion-plan-json", "professional-format-manifest-json", "reference-gap-report-json", "workspace-package-zip"],
     responseProfiles: ["console", "agent", "api"],
@@ -19640,6 +19841,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
     },
     largeDocumentPolicy: {
       strategy: "streaming-windowed",
+      queueStrategy: "single-node-background-run-queue.v1",
+      recommendedExecutionMode: "queued",
       defaultWindowCharacters: DEFAULT_WINDOW_CHARACTERS,
       defaultWindowOverlapCharacters: DEFAULT_WINDOW_OVERLAP_CHARACTERS,
       largeFileBytes: LARGE_FILE_BYTES,
@@ -19978,6 +20181,25 @@ async function handleRequest(request, response) {
     if (request.method === "POST" && pathname === "/v1/distillation/runs") {
       const body = await readJson(request);
       const runs = await loadRuns();
+      if (isQueuedRunRequest(request, url, body)) {
+        const queuedRun = createQueuedRunRecord(body);
+        if (runs.some((run) => run.runId === queuedRun.runId)) {
+          jsonResponse(response, 409, {
+            error: "external distillation run already exists",
+            code: "RUN_ID_ALREADY_EXISTS",
+            runId: queuedRun.runId
+          });
+          return;
+        }
+        runs.push(queuedRun);
+        await saveRuns(runs);
+        scheduleQueuedRun({ ...body, runId: queuedRun.runId }, queuedRun);
+        jsonResponse(response, 202, queuedRun, {
+          location: queuedRun.queue.pollEndpoint,
+          "retry-after": "1"
+        });
+        return;
+      }
       const run = await createRun(body, await runtimeDoctor(), runs, await loadReferenceFrameworks());
       runs.push(run);
       await saveRuns(runs);
@@ -20039,6 +20261,17 @@ async function handleRequest(request, response) {
       const artifactMatch = suffix.match(/^artifacts\/([^/]+)$/);
       if (request.method === "GET" && artifactMatch) {
         const artifactId = decodeURIComponent(artifactMatch[1]);
+        if (run.status === "queued" || run.status === "running" || run.status === "canceled") {
+          jsonResponse(response, 409, {
+            error: "external distillation artifact is not available for the current run status",
+            code: "RUN_ARTIFACT_NOT_READY",
+            runId,
+            artifactId,
+            status: run.status,
+            pollEndpoint: `/v1/distillation/runs/${encodeURIComponent(runId)}`
+          });
+          return;
+        }
         if (artifactId === "portable-markdown") {
           const markdown = run.result?.portableDocuments?.[0]?.document?.markdown || "";
           textResponse(response, 200, markdown, {
