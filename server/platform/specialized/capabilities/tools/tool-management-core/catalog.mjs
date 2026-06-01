@@ -804,9 +804,12 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "codespace.review.approve": "pact.codespace.review.approve",
   "codespace.review.status.sync": "pact.codespace.review.status.sync",
   "raw-corpus.format.convert": "pact.rawCorpus.format.convert",
-  "knowledge.dossier.export": "pact.knowledge.dossier.export",
-  "knowledge.distillation.export": "pact.knowledge.distillation.export"
+  "knowledge.dossier.export": "pact.knowledge.dossier.export"
 });
+
+const INTERNAL_OPERATION_IDS_HIDDEN_FROM_TOOL_CATALOG = Object.freeze(new Set([
+  "knowledge.distillation.export"
+]));
 
 const TOOL_ALIAS_IDS_BY_OPERATION_ID = Object.freeze({
   "agent_workspaces.create": ["pact.workspace.create"],
@@ -1052,8 +1055,7 @@ const SCOPE_BY_OPERATION_ID = Object.freeze({
   "codespace.review.approve": "repo:approve",
   "codespace.review.status.sync": "repo:read",
   "raw-corpus.format.convert": "knowledge:write",
-  "knowledge.dossier.export": "knowledge:read",
-  "knowledge.distillation.export": "knowledge:read"
+  "knowledge.dossier.export": "knowledge:read"
 });
 
 const TOOLSET_BY_SCOPE = Object.freeze({
@@ -1461,6 +1463,9 @@ export function createToolCatalog({ operations = [], activeFeatureIds = null } =
   for (const operation of operations) {
     const toolId = TOOL_ID_BY_OPERATION_ID[operation.id];
     if (!toolId) {
+      continue;
+    }
+    if (INTERNAL_OPERATION_IDS_HIDDEN_FROM_TOOL_CATALOG.has(operation.id)) {
       continue;
     }
     const scope = operationScope(operation);
