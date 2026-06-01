@@ -701,6 +701,55 @@ const samplePdfBase64 = base64Text([
   "%%EOF"
 ].join("\n"));
 
+function buildLargePdfFileRefBuffer({ paddingBytes = 0 } = {}) {
+  const pageOne = "BT /F1 12 Tf 72 720 Td (Large PDF file reference page one keeps page aware text blocks.) Tj 0 -24 Td (Agent queries must filter this mounted PDF by page and block.) Tj ET";
+  const pageTwo = "BT /F1 12 Tf 72 720 Td (Large PDF file reference page two preserves later evidence.) Tj 0 -24 Td (The parser must not downgrade large PDF file refs to plain stream windows only.) Tj ET";
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R >>",
+    `<< /Length ${Buffer.byteLength(pageOne)} >>\nstream\n${pageOne}\nendstream`,
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>",
+    `<< /Length ${Buffer.byteLength(pageTwo)} >>\nstream\n${pageTwo}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+  ];
+  const chunks = [Buffer.from("%PDF-1.4\n", "latin1")];
+  const offsets = [0];
+  let byteOffset = chunks[0].length;
+  objects.forEach((objectBody, index) => {
+    offsets.push(byteOffset);
+    const chunk = Buffer.from(`${index + 1} 0 obj\n${objectBody}\nendobj\n`, "latin1");
+    chunks.push(chunk);
+    byteOffset += chunk.length;
+  });
+  if (paddingBytes > 0) {
+    const paddingLine = Buffer.from("% large-pdf-file-ref-padding\n", "latin1");
+    const paddingChunks = Math.ceil(paddingBytes / paddingLine.length);
+    const padding = Buffer.alloc(paddingChunks * paddingLine.length);
+    for (let index = 0; index < paddingChunks; index += 1) {
+      paddingLine.copy(padding, index * paddingLine.length);
+    }
+    const boundedPadding = padding.subarray(0, paddingBytes);
+    chunks.push(boundedPadding);
+    byteOffset += boundedPadding.length;
+  }
+  const xrefOffset = byteOffset;
+  const xref = [
+    "xref",
+    `0 ${objects.length + 1}`,
+    "0000000000 65535 f ",
+    ...offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `),
+    "trailer",
+    `<< /Size ${objects.length + 1} /Root 1 0 R >>`,
+    "startxref",
+    String(xrefOffset),
+    "%%EOF",
+    ""
+  ].join("\n");
+  chunks.push(Buffer.from(xref, "latin1"));
+  return Buffer.concat(chunks);
+}
+
 const previousUrl = process.env.PACT_EXTERNAL_KNOWLEDGE_DISTILLATION_URL;
 const reuseServiceUrl = String(process.env.PACT_VERIFY_EXTERNAL_KD_SERVICE_URL || "").replace(/\/+$/, "");
 const serviceDataDir = reuseServiceUrl
@@ -718,6 +767,7 @@ const service = reuseServiceUrl
 let pactServer = null;
 let fileRefDocument = null;
 let deferredFileRefDocument = null;
+let largePdfFileRefDocument = null;
 let binaryProfileFileRefDocument = null;
 let largeJsonFileRefDocument = null;
 let mountedArchiveDocument = null;
@@ -786,6 +836,17 @@ try {
       mediaType: "application/pdf",
       byteSize: deferredStat.size,
       filePath: deferredPath
+    };
+    const largePdfPath = path.join(serviceDataDir, "mounted-large-valid.pdf");
+    await fs.writeFile(largePdfPath, buildLargePdfFileRefBuffer({ paddingBytes: (9 * 1024 * 1024) + 123 }));
+    const largePdfStat = await fs.stat(largePdfPath);
+    largePdfFileRefDocument = {
+      sourceId: "source-82",
+      title: "Mounted Large Valid PDF",
+      fileName: "mounted-large-valid.pdf",
+      mediaType: "application/pdf",
+      byteSize: largePdfStat.size,
+      filePath: largePdfPath
     };
     const binaryProfilePath = path.join(serviceDataDir, "mounted-unknown-large.asset");
     const binaryProfileBuffer = Buffer.alloc((9 * 1024 * 1024) + 101, 0);
@@ -1381,6 +1442,8 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.requestBodyMaxBytes >= capabilities.payload.largeDocumentPolicy.syncRequestBodyMaxBytes, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.syncFileRefMaxBytes >= 1024 * 1024, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfTextTimeoutMs >= 120_000, true);
+  assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementStrategy, "pdf-text-file-ref-layout.v1");
+  assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementMaxBlocks >= 1000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.tikaTimeoutMs >= 120_000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.manifestStrategy, "inline-or-streaming-manifest-document-input.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.structuredZipFileRefStrategy, "structured-zip-entry-bounded-or-streaming.v1");
@@ -1441,6 +1504,7 @@ try {
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("directory.entry-file-ref"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.text.basic"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.text.pdftotext"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.text.file-ref-elements"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.subtype-route"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.hyperlinks"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.outlines"), true);
@@ -1630,6 +1694,7 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("structured-json-file-ref-streaming-window.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("directory-file-ref-recursive-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("pdf-subtype-routing.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("pdf-text-file-ref-layout.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("content-signature-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("human-agent-response-profile-separation.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("professional-format-manifest.v1"), true);
@@ -2220,6 +2285,7 @@ try {
         },
         ...(fileRefDocument ? [fileRefDocument] : []),
         ...(deferredFileRefDocument ? [deferredFileRefDocument] : []),
+        ...(largePdfFileRefDocument ? [largePdfFileRefDocument] : []),
         ...(binaryProfileFileRefDocument ? [binaryProfileFileRefDocument] : []),
         ...(largeJsonFileRefDocument ? [largeJsonFileRefDocument] : []),
         ...(mountedDirectoryDocument ? [mountedDirectoryDocument] : []),
@@ -3361,6 +3427,51 @@ try {
     assert.equal(deferredFileRefCorpus.parserTrace.some((trace) => trace.stage === "payload.file-ref" && trace.status === "completed"), true);
     assert.equal(deferredFileRefCorpus.parserTrace.some((trace) => trace.stage === "pdf.text.pdftotext"), true);
     assert.equal(deferredFileRefCorpus.parserTrace.some((trace) => trace.stage === "payload.file-ref-deferred"), false);
+  }
+  if (largePdfFileRefDocument && directRuntime.payload.runtimes["pdf.pdftotext"]?.available) {
+    const largePdfFileRefCorpus = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-82");
+    assert.ok(largePdfFileRefCorpus, "valid large PDF filePath source must remain visible in corpus");
+    assert.equal(largePdfFileRefCorpus.route.formatId, "pdf");
+    assert.equal(largePdfFileRefCorpus.quality.suppliedPayloadKind, "file-ref-pdf");
+    assert.equal(largePdfFileRefCorpus.parserTrace.some((trace) => (
+      trace.stage === "payload.file-ref" &&
+      trace.status === "completed" &&
+      trace.mode === "pdf-file-ref"
+    )), true);
+    assert.equal(largePdfFileRefCorpus.parserTrace.some((trace) => (
+      trace.stage === "pdf.text.pdftotext" &&
+      trace.status === "completed" &&
+      trace.characters > 0
+    )), true);
+    assert.equal(largePdfFileRefCorpus.parserTrace.some((trace) => (
+      trace.stage === "pdf.text.file-ref-elements" &&
+      trace.status === "completed" &&
+      trace.strategy === "pdf-text-file-ref-layout.v1" &&
+      trace.pages >= 2 &&
+      trace.blocks >= 2 &&
+      trace.truncated === false
+    )), true);
+    assert.equal(largePdfFileRefCorpus.parserTrace.some((trace) => (
+      trace.stage === "pdf.subtype-route" &&
+      trace.source === "file-ref-pdftotext" &&
+      trace.subtype === "pdf-text" &&
+      trace.layoutBlocks >= 2
+    )), true);
+    assert.equal(largePdfFileRefCorpus.elementPlan.strategy, "document-element-model.v1");
+    assert.equal(largePdfFileRefCorpus.elementPlan.sourceFormat, "pdf");
+    assert.equal(largePdfFileRefCorpus.elementPlan.elementTypes["pdf-text-block"] >= 2, true);
+    assert.equal(largePdfFileRefCorpus.elementPlan.sampleElements.some((element) => (
+      element.type === "pdf-text-block" &&
+      element.page === 2 &&
+      element.layout?.strategy === "pdf-text-file-ref-layout.v1" &&
+      element.bbox?.height >= 14
+    )), true);
+    assert.equal(largePdfFileRefCorpus.windowPlan.strategy, "element-aware-by-title-windowing.v1");
+    assert.equal(largePdfFileRefCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "pdf-text-block" &&
+      ref.page === 2 &&
+      ref.layout?.strategy === "pdf-text-file-ref-layout.v1"
+    ))), true);
   }
   if (binaryProfileFileRefDocument) {
     const binaryProfileCorpus = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-43");

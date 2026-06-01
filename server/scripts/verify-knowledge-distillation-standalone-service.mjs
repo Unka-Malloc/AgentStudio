@@ -352,6 +352,7 @@ for (const route of formatRoutesConfig.routes) {
 }
 for (const parserId of [
   "pdf.text.tika-safe",
+  "pdf.text.file-ref-elements",
   "office.word.structured",
   "office.presentation.slides",
   "table.sheet.structured",
@@ -368,6 +369,16 @@ assert.equal(
   externalServiceSource.includes("const PARSER_STRATEGIES = loadParserStrategies(FORMAT_ROUTES);"),
   true,
   "server.mjs must load parser strategies from the singleton config after format routes"
+);
+assert.equal(
+  externalServiceSource.includes("function parsePdfTextFileRefElements("),
+  true,
+  "large PDF filePath parsing must convert pdftotext output into page-aware structure elements"
+);
+assert.equal(
+  externalServiceSource.includes("pdf-text-file-ref-layout.v1"),
+  true,
+  "large PDF filePath parsing must preserve page and layout references for element-aware windowing"
 );
 assert.equal(
   externalServiceSource.includes("function parseDocxLargeEntryStreaming("),

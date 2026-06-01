@@ -24,6 +24,8 @@
       "parserChain": [
         "pdf.route",
         "pdf.text.tika-safe",
+        "pdf.text.pdftotext",
+        "pdf.text.file-ref-elements",
         "pdf.hyperlinks",
         "pdf.outlines",
         "pdf.visual.layout",

@@ -37,6 +37,7 @@ const SYNC_FILE_REF_MAX_BYTES = Math.max(1024 * 1024, Number(process.env.PACT_EX
 const FILE_REF_DIRECT_READ_MAX_BYTES = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_FILE_REF_DIRECT_READ_MAX_BYTES || 8 * 1024 * 1024));
 const STREAM_TEXT_CHUNK_BYTES = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_STREAM_TEXT_CHUNK_BYTES || 512 * 1024));
 const STREAM_TEXT_SAMPLE_CHARACTERS = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_STREAM_TEXT_SAMPLE_CHARACTERS || 200_000));
+const PDF_FILE_REF_ELEMENT_MAX_BLOCKS = Math.max(1000, Number(process.env.PACT_EXTERNAL_KD_PDF_FILE_REF_ELEMENT_MAX_BLOCKS || 50_000));
 const BINARY_PROFILE_SAMPLE_BYTES = Math.max(512, Number(process.env.PACT_EXTERNAL_KD_BINARY_PROFILE_SAMPLE_BYTES || 4096));
 const SIGNATURE_SNIFF_BYTES = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_SIGNATURE_SNIFF_BYTES || 256 * 1024));
 const EMBEDDING_DIMENSIONS = 128;
@@ -14264,6 +14265,156 @@ function streamTextFileAnalysis({ document = {}, route = null, metadata = {}, fi
   };
 }
 
+function parsePdfTextFileRefElements(filePath = "") {
+  const elements = [];
+  const decoder = new TextDecoder("utf-8");
+  const buffer = Buffer.alloc(STREAM_TEXT_CHUNK_BYTES);
+  let file = null;
+  let carry = "";
+  let page = 1;
+  let pageCount = 1;
+  let pageLine = 0;
+  let globalLine = 0;
+  let blockIndex = 0;
+  let characters = 0;
+  let truncated = false;
+  let blockLines = [];
+  let blockStartLine = 0;
+  let blockStartPageLine = 0;
+  let blockPage = 1;
+  let blockIndent = 0;
+
+  const flushBlock = () => {
+    if (!blockLines.length || truncated) {
+      blockLines = [];
+      return;
+    }
+    const text = compactMarkupText(blockLines.join(" "), 2200);
+    if (text) {
+      blockIndex += 1;
+      const x = roundLayoutNumber(blockIndent * 4.8);
+      const y = roundLayoutNumber(blockStartPageLine * 14);
+      const height = roundLayoutNumber(Math.max(14, blockLines.length * 14));
+      const width = roundLayoutNumber(Math.min(720, Math.max(48, text.length * 5.2)));
+      pushStructureElement(elements, "pdf-text-block", text, {
+        line: blockStartLine || globalLine,
+        name: `page-${blockPage}#block-${blockIndex}`,
+        page: blockPage,
+        bbox: { x, y, width, height },
+        layout: {
+          strategy: "pdf-text-file-ref-layout.v1",
+          page: blockPage,
+          streamIndex: blockPage,
+          order: blockIndex,
+          x,
+          y,
+          width,
+          height,
+          fontSize: 12
+        },
+        limit: 2200
+      });
+      if (elements.length >= PDF_FILE_REF_ELEMENT_MAX_BLOCKS) {
+        truncated = true;
+      }
+    }
+    blockLines = [];
+    blockStartLine = 0;
+    blockStartPageLine = 0;
+    blockPage = page;
+    blockIndent = 0;
+  };
+
+  const processLine = (rawLine = "") => {
+    pageLine += 1;
+    globalLine += 1;
+    characters += rawLine.length + 1;
+    const trimmed = compactMarkupText(rawLine, 2200);
+    if (!trimmed) {
+      flushBlock();
+      return;
+    }
+    const indent = rawLine.match(/^\s*/)?.[0]?.length || 0;
+    const currentLength = blockLines.reduce((sum, line) => sum + line.length + 1, 0);
+    if (blockLines.length && (currentLength + trimmed.length > 1800 || blockLines.length >= 8)) {
+      flushBlock();
+    }
+    if (!blockLines.length) {
+      blockStartLine = globalLine;
+      blockStartPageLine = pageLine;
+      blockPage = page;
+      blockIndent = indent;
+    }
+    if (!truncated) {
+      blockLines.push(trimmed);
+    }
+  };
+
+  const finishCarryAsLine = () => {
+    if (carry) {
+      processLine(carry);
+      carry = "";
+    }
+  };
+
+  const pageBreak = () => {
+    finishCarryAsLine();
+    flushBlock();
+    page += 1;
+    pageCount = Math.max(pageCount, page);
+    pageLine = 0;
+  };
+
+  const processText = (text = "") => {
+    const pages = String(text || "").split("\f");
+    for (const [index, part] of pages.entries()) {
+      const lines = (carry + part).split(/\r?\n/);
+      carry = lines.pop() || "";
+      for (const line of lines) {
+        processLine(line);
+      }
+      if (index < pages.length - 1) {
+        pageBreak();
+      }
+    }
+  };
+
+  try {
+    file = fsSync.openSync(filePath, "r");
+    while (true) {
+      const bytesRead = fsSync.readSync(file, buffer, 0, buffer.length, null);
+      if (!bytesRead) {
+        break;
+      }
+      processText(decoder.decode(buffer.subarray(0, bytesRead), { stream: true }));
+    }
+    processText(decoder.decode());
+    finishCarryAsLine();
+    flushBlock();
+  } finally {
+    if (file !== null) {
+      fsSync.closeSync(file);
+    }
+  }
+
+  return {
+    elements,
+    format: elements.length ? "pdf" : "",
+    parserTrace: [{
+      stage: "pdf.text.file-ref-elements",
+      status: elements.length ? "completed" : "empty",
+      strategy: "pdf-text-file-ref-layout.v1",
+      source: "pdftotext-layout",
+      pages: pageCount,
+      blocks: elements.length,
+      characters,
+      maxBlocks: PDF_FILE_REF_ELEMENT_MAX_BLOCKS,
+      truncated
+    }],
+    warnings: truncated ? ["pdf-file-ref-elements-truncated"] : []
+  };
+}
+
 function byteEntropyScore(buffer = Buffer.alloc(0)) {
   if (!buffer.length) {
     return 0;
@@ -14418,20 +14569,27 @@ function parsePdfFileRef({ document = {}, metadata = {}, filePath = "", runtimeS
           parserTrace: [],
           warnings: ["pdf-pdftotext-empty"]
         };
+    const fileRefElements = stat.size > 0
+      ? parsePdfTextFileRefElements(outputPath)
+      : { elements: [], format: "", parserTrace: [], warnings: [] };
+    const structureElements = basicParse?.elements?.length
+      ? basicParse.elements
+      : fileRefElements.elements || [];
+    const structureFormat = basicParse?.format || fileRefElements.format || (structureElements.length ? "pdf" : "");
     const pdfProfile = buildPdfSubtypeProfile({
       source: "file-ref-pdftotext",
       byteSize: document.byteSize || inputStat.size || 0,
       textCharacters: stream.totalCharacters || 0,
-      layoutBlocks: basicParse?.elements?.filter((element) => element.type === "pdf-text-block").length || 0,
-      parserWarnings: [...(stream.warnings || []), ...(basicParse?.warnings || []), ...basicWarnings]
+      layoutBlocks: structureElements.filter((element) => element.type === "pdf-text-block").length,
+      parserWarnings: [...(stream.warnings || []), ...(fileRefElements.warnings || []), ...(basicParse?.warnings || []), ...basicWarnings]
     });
     return {
       text: stream.textSample || "",
       totalCharacters: stream.totalCharacters || 0,
       contentHash: stream.contentHash || "",
-      windowPlan: stream.windowPlan || null,
-      structureElements: basicParse?.elements || [],
-      structureFormat: basicParse?.format || (basicParse?.elements?.length ? "pdf" : ""),
+      windowPlan: structureElements.length ? null : stream.windowPlan || null,
+      structureElements,
+      structureFormat,
       parserTrace: [
         {
           stage: "pdf.text.pdftotext",
@@ -14442,11 +14600,12 @@ function parsePdfFileRef({ document = {}, metadata = {}, filePath = "", runtimeS
           characters: stream.totalCharacters || 0,
           windows: stream.windowPlan?.windowCount || 0
         },
+        ...fileRefElements.parserTrace,
         ...(basicParse?.parserTrace || []),
         pdfSubtypeTrace(pdfProfile),
         ...stream.parserTrace
       ],
-      warnings: [...(stream.warnings || []), ...(basicParse?.warnings || []), ...basicWarnings],
+      warnings: [...(stream.warnings || []), ...(fileRefElements.warnings || []), ...(basicParse?.warnings || []), ...basicWarnings],
       pdfProfile
     };
   } catch (error) {
@@ -21805,6 +21964,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "structured-json-file-ref-streaming-window.v1",
       "directory-file-ref-recursive-routing.v1",
       "visio-opc-shape-parser.v1",
+      "pdf-text-file-ref-layout.v1",
       "document-element-model.v1",
       "element-aware-by-title-windowing.v1",
       PDF_SUBTYPE_ROUTING_STRATEGY,
@@ -21925,6 +22085,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       manifestJsonDirectReadMaxBytes: MANIFEST_JSON_DIRECT_READ_MAX_BYTES,
       tikaTimeoutMs: TIKA_TIMEOUT_MS,
       pdfTextTimeoutMs: PDF_TEXT_TIMEOUT_MS,
+      pdfFileRefElementStrategy: "pdf-text-file-ref-layout.v1",
+      pdfFileRefElementMaxBlocks: PDF_FILE_REF_ELEMENT_MAX_BLOCKS,
       structuredJsonFileRefStrategy: "structured-json-file-ref-streaming-window.v1",
       sizeLimitPolicy: "resource-bounded-no-small-hard-cap"
     },

@@ -460,6 +460,8 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.recommendedExecutionMode, "queued");
   assert.equal(capabilities.payload.largeDocumentPolicy.requestBodyMaxBytes >= capabilities.payload.largeDocumentPolicy.syncRequestBodyMaxBytes, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfTextTimeoutMs >= 120_000, true);
+  assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementStrategy, "pdf-text-file-ref-layout.v1");
+  assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementMaxBlocks >= 1000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.tikaTimeoutMs >= 120_000, true);
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.protocolVersion, "pact.external-knowledge-distillation.parser-strategies.v1");
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategy, "singleton-parser-strategy-registry.v1");
@@ -503,6 +505,7 @@ try {
   assert.equal(capabilities.payload.graphEvidence.projectQuery.readModel, "domain-topic-community-source-time.v1");
   assert.equal(capabilities.payload.algorithms.includes("content-signature-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("structured-json-file-ref-streaming-window.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("pdf-text-file-ref-layout.v1"), true);
   assert.equal(capabilities.payload.fileCompatibility.routingStrategy, "content-signature-extension-media-shape-routing.v2");
   assert.equal(capabilities.payload.fileCompatibility.routeOrder[0], "contentSignature");
   assert.equal(capabilities.payload.fileCompatibility.routeRegistry.protocolVersion, "pact.external-knowledge-distillation.format-routes.v1");
@@ -764,6 +767,7 @@ try {
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("markup.structure"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("structured-zip.file-ref"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.text.pdftotext"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.text.file-ref-elements"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.subtype-route"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.hyperlinks"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.outlines"), true);
@@ -1904,7 +1908,13 @@ for (const object of objects) {
   offsets.push(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
   chunks.push(object);
 }
-const xrefOffset = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+let totalBytes = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+const paddingLine = Buffer.from("% mounted-large-pdf-file-ref-padding\\n", "utf8");
+while (totalBytes < (9 * 1024 * 1024)) {
+  chunks.push(paddingLine);
+  totalBytes += paddingLine.length;
+}
+const xrefOffset = totalBytes;
 const xrefEntries = ["0000000000 65535 f ", ...offsets.slice(1).map((offset) => String(offset).padStart(10, "0") + " 00000 n ")];
 chunks.push(Buffer.from(["xref", "0 " + (objects.length + 1), ...xrefEntries, "trailer", "<< /Size " + (objects.length + 1) + " /Root 1 0 R >>", "startxref", String(xrefOffset), "%%EOF", ""].join("\\n"), "utf8"));
 fs.writeFileSync("/data/mounted-large-text.pdf", Buffer.concat(chunks));
@@ -2062,10 +2072,31 @@ NODE`
   assert.ok(mountedPdf, "mounted PDF filePath source must be present in corpus");
   assert.equal(mountedPdf.route.formatId, "pdf");
   assert.equal(mountedPdf.quality.suppliedPayloadKind, "file-ref-pdf");
-  assert.equal(mountedPdf.windowPlan.strategy, "file-ref-stream-windowing.v1");
+  assert.equal(mountedPdf.windowPlan.strategy, "element-aware-by-title-windowing.v1");
   assert.equal(mountedPdf.parserTrace.some((trace) => trace.stage === "pdf.text.pdftotext" && trace.status === "completed"), true);
+  assert.equal(mountedPdf.parserTrace.some((trace) => (
+    trace.stage === "pdf.text.file-ref-elements" &&
+    trace.status === "completed" &&
+    trace.strategy === "pdf-text-file-ref-layout.v1" &&
+    trace.pages >= 100 &&
+    trace.blocks >= 100 &&
+    trace.truncated === false
+  )), true);
   assert.equal(mountedPdf.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), true);
   assert.equal(mountedPdf.parserTrace.some((trace) => trace.stage === "payload.file-ref-deferred"), false);
+  assert.equal(mountedPdf.elementPlan.strategy, "document-element-model.v1");
+  assert.equal(mountedPdf.elementPlan.sourceFormat, "pdf");
+  assert.equal(mountedPdf.elementPlan.elementTypes["pdf-text-block"] >= 100, true);
+  assert.equal(mountedPdf.elementPlan.sampleElements.some((element) => (
+    element.type === "pdf-text-block" &&
+    element.layout?.strategy === "pdf-text-file-ref-layout.v1" &&
+    element.bbox?.height >= 14
+  )), true);
+  assert.equal(mountedPdf.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+    ref.type === "pdf-text-block" &&
+    ref.layout?.strategy === "pdf-text-file-ref-layout.v1" &&
+    ref.page >= 1
+  ))), true);
   assert.equal(mountedPdf.windowPlan.windowCount > 1, true);
 
   const mountedStructuredRun = await fetchJson(`${serviceUrl}/v1/distillation/runs`, {
