@@ -61,6 +61,7 @@ async function buildExternalIndustrialBenchmark() {
     "human-agent-response-profile-separation.v1",
     "professional-format-manifest-json",
     "office-document-professional-adaptation.v1",
+    "visio-opc-shape-parser.v1",
     "directory-file-ref-recursive-routing.v1",
     "PROJECT_EVIDENCE_QUERY_STRATEGY"
   ];
@@ -109,6 +110,12 @@ async function buildExternalIndustrialBenchmark() {
         "office-document-professional-adaptation.v1",
         "professional-format-manifest-json",
         "format-conversion-plan-json"
+      ]),
+      officeVisioAdaptation: hasAll(serviceText, [
+        "visio-opc-shape-parser.v1",
+        "office.visio.pages",
+        "office.visio.connectors",
+        "visio-opc-page-shape-route"
       ]),
       mountedProjectDirectoryExpansion: hasAll(serviceText, [
         "directory-file-ref-recursive-routing.v1",

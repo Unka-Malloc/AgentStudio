@@ -429,6 +429,7 @@ try {
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("pdf-header"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-word"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-presentation"), true);
+  assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-visio"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-spreadsheet"), true);
   assert.equal(capabilities.payload.fileCompatibility.pdfSubtypeRouting.strategy, "pdf-subtype-routing.v1");
   assert.equal(capabilities.payload.fileCompatibility.pdfSubtypeRouting.subtypes.includes("pdf-scanned"), true);
@@ -480,8 +481,11 @@ try {
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("slide-master"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("slide-shape"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("speaker-note"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("visio-shape"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("visio-connector"), true);
   assert.equal(capabilities.payload.elementModel.structuredFormats.includes("pdf"), true);
   assert.equal(capabilities.payload.elementModel.structuredFormats.includes("markdown"), true);
+  assert.equal(capabilities.payload.elementModel.structuredFormats.includes("vsdx"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("comment"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("revision"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("footnote"), true);
@@ -544,6 +548,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.professionalManifestArtifact, "professional-format-manifest-json");
   assert.equal(capabilities.payload.formatConversion.modeSeparationStrategy, "human-agent-response-profile-separation.v1");
   assert.equal(capabilities.payload.formatConversion.professionalFormats.includes("spreadsheet"), true);
+  assert.equal(capabilities.payload.formatConversion.professionalFormats.includes("visio"), true);
   assert.equal(capabilities.payload.formatConversion.humanReadableTargets.includes("portable-docx"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("frontmatter"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("codeBlocks"), true);
@@ -557,6 +562,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.preserves.includes("footers"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("slide-layout"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("slide-master"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("shapeConnectors"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("definedNames"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("namedRanges"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("printAreas"), true);
@@ -564,6 +570,7 @@ try {
     ["pdf", "pdf.text-layout-ocr-route", "page-order-preserved"],
     ["word", "wordprocessingml-paragraph-style-route", "word-annotation-refs-preserved"],
     ["presentation", "presentationml-slide-route", "slide-order-preserved"],
+    ["visio", "visio-opc-page-shape-route", "visio-shape-refs-preserved"],
     ["spreadsheet", "spreadsheetml-sheet-row-cell-route", "sheet-row-cell-refs-preserved"],
     ["markdown", "markdown-block-element-route", "heading-tree-preserved"]
   ]) {
@@ -597,6 +604,8 @@ try {
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-image-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-chart-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-comment-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("visio-shape-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("visio-connector-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("opendocument-link-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-workbook-sheet-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-defined-name-refs-preserved"), true);
@@ -617,6 +626,8 @@ try {
   assert.equal(capabilities.payload.fileCompatibility.supportedExtensions.includes(".dotx"), true);
   assert.equal(capabilities.payload.fileCompatibility.supportedExtensions.includes(".pptm"), true);
   assert.equal(capabilities.payload.fileCompatibility.supportedExtensions.includes(".ppsx"), true);
+  assert.equal(capabilities.payload.fileCompatibility.supportedExtensions.includes(".vsdx"), true);
+  assert.equal(capabilities.payload.fileCompatibility.supportedExtensions.includes(".vsd"), true);
   assert.equal(capabilities.payload.fileCompatibility.supportedExtensions.includes(".xlsm"), true);
   assert.equal(capabilities.payload.fileCompatibility.supportedExtensions.includes(".xltx"), true);
   assert.equal(capabilities.payload.fileCompatibility.supportedExtensions.includes(".xlsb"), true);
@@ -679,6 +690,9 @@ try {
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.presentation.charts"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.presentation.speaker-notes"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.presentation.comments"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.visio.pages"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.visio.shapes"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.visio.connectors"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("archive.child-file.route"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("archive.file-ref.expand"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("archive.entry-file-ref"), true);
@@ -1692,7 +1706,7 @@ try {
       "printf '%s\\n' 'vendor,total' 'ArchiveMountCo,256' > /tmp/pact-mounted-archive/invoice.csv",
       "tar -cf /data/mounted-project-package.tar -C /tmp/pact-mounted-archive large-project.md invoice.csv",
       "rm -rf /tmp/pact-mounted-structured",
-      "mkdir -p /tmp/pact-mounted-structured/docx/word/_rels /tmp/pact-mounted-structured/docx/word/media /tmp/pact-mounted-structured/pptx/ppt/slides/_rels /tmp/pact-mounted-structured/pptx/ppt/slideLayouts/_rels /tmp/pact-mounted-structured/pptx/ppt/slideMasters /tmp/pact-mounted-structured/pptx/ppt/notesSlides /tmp/pact-mounted-structured/pptx/ppt/comments /tmp/pact-mounted-structured/pptx/ppt/media /tmp/pact-mounted-structured/xlsx/xl/_rels /tmp/pact-mounted-structured/xlsx/xl/worksheets/_rels /tmp/pact-mounted-structured/odt /tmp/pact-mounted-structured/epub/META-INF /tmp/pact-mounted-structured/epub/OEBPS",
+      "mkdir -p /tmp/pact-mounted-structured/docx/word/_rels /tmp/pact-mounted-structured/docx/word/media /tmp/pact-mounted-structured/pptx/ppt/slides/_rels /tmp/pact-mounted-structured/pptx/ppt/slideLayouts/_rels /tmp/pact-mounted-structured/pptx/ppt/slideMasters /tmp/pact-mounted-structured/pptx/ppt/notesSlides /tmp/pact-mounted-structured/pptx/ppt/comments /tmp/pact-mounted-structured/pptx/ppt/media /tmp/pact-mounted-structured/vsdx/visio/pages /tmp/pact-mounted-structured/xlsx/xl/_rels /tmp/pact-mounted-structured/xlsx/xl/worksheets/_rels /tmp/pact-mounted-structured/odt /tmp/pact-mounted-structured/epub/META-INF /tmp/pact-mounted-structured/epub/OEBPS",
       "printf '%s' '<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><w:body><w:p><w:pPr><w:pStyle w:val=\"Title\"/></w:pPr><w:r><w:t>Mounted DOCX Decision Register</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr><w:r><w:t>Mounted Routing Decisions</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val=\"ListParagraph\"/><w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"6\"/></w:numPr></w:pPr><w:r><w:t>Container mounted DOCX list hierarchy remains agent-readable.</w:t></w:r></w:p><w:p><w:r><w:t>Mounted DOCX filePath extraction validates structured service routing and project convergence evidence.</w:t></w:r></w:p><w:p><w:r><w:t>Container link: </w:t></w:r><w:hyperlink r:id=\"rId1\"><w:r><w:t>container DOCX link</w:t></w:r></w:hyperlink></w:p><w:p><w:r><w:drawing><wp:inline><wp:docPr id=\"12\" name=\"Container Architecture Image\" descr=\"Container DOCX architecture image evidence\"/><a:graphic><a:graphicData><pic:pic><pic:blipFill><a:blip r:embed=\"rIdImage1\"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p><w:p><w:ins w:id=\"14\" w:author=\"Container Revision Author\" w:date=\"2026-07-04T00:00:00Z\"><w:r><w:t>Container inserted tracked change remains agent-readable.</w:t></w:r></w:ins></w:p><w:p><w:del w:id=\"15\" w:author=\"Container Revision Author\" w:date=\"2026-07-05T00:00:00Z\"><w:r><w:delText>Container deleted tracked change remains agent-readable.</w:delText></w:r></w:del></w:p></w:body></w:document>' > /tmp/pact-mounted-structured/docx/word/document.xml",
       "printf '%s' '<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"https://example.com/container-docx\" TargetMode=\"External\"/><Relationship Id=\"rIdImage1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/container-architecture.png\"/></Relationships>' > /tmp/pact-mounted-structured/docx/word/_rels/document.xml.rels",
       "printf '%s' '<w:comments xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:comment w:id=\"8\" w:author=\"Container Reviewer\"><w:p><w:r><w:t>Container mounted DOCX comments remain agent-readable.</w:t></w:r></w:p></w:comment></w:comments>' > /tmp/pact-mounted-structured/docx/word/comments.xml",
@@ -1707,6 +1721,8 @@ try {
       "printf '%s' '<p:notes xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Container mounted speaker notes remain queryable for agents.</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:notes>' > /tmp/pact-mounted-structured/pptx/ppt/notesSlides/notesSlide1.xml",
       "printf '%s' '<p:cmAuthorLst xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"><p:cmAuthor id=\"0\" name=\"Container Slide Reviewer\" initials=\"CSR\" lastIdx=\"1\"/></p:cmAuthorLst>' > /tmp/pact-mounted-structured/pptx/ppt/commentAuthors.xml",
       "printf '%s' '<p:cmLst xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"><p:cm authorId=\"0\" dt=\"2026-06-01T12:00:00Z\" idx=\"1\"><p:pos x=\"914400\" y=\"914400\"/><p:text>Container PPTX comment remains agent-readable.</p:text></p:cm></p:cmLst>' > /tmp/pact-mounted-structured/pptx/ppt/comments/comment1.xml",
+      "printf '%s' '<VisioDocument xmlns=\"http://schemas.microsoft.com/office/visio/2012/main\"><DocumentProperties><Title>Container Visio Flow</Title></DocumentProperties></VisioDocument>' > /tmp/pact-mounted-structured/vsdx/visio/document.xml",
+      "printf '%s' '<PageContents xmlns=\"http://schemas.microsoft.com/office/visio/2012/main\"><Shapes><Shape ID=\"1\" NameU=\"Container Start\" Type=\"Shape\"><Text>Container external KD</Text><Cell N=\"PinX\" V=\"1\"/><Cell N=\"PinY\" V=\"2\"/><Cell N=\"Width\" V=\"1.5\"/><Cell N=\"Height\" V=\"0.5\"/></Shape><Shape ID=\"2\" NameU=\"Container Decision\" Type=\"Shape\"><Text>Container Visio routing</Text><Cell N=\"PinX\" V=\"3\"/><Cell N=\"PinY\" V=\"2\"/><Cell N=\"Width\" V=\"1.75\"/><Cell N=\"Height\" V=\"0.75\"/></Shape><Shape ID=\"3\" NameU=\"Connector\" Type=\"Shape\"><Text>container edge</Text></Shape></Shapes><Connects><Connect FromSheet=\"3\" ToSheet=\"1\" FromPart=\"BeginX\" ToPart=\"PinX\"/><Connect FromSheet=\"3\" ToSheet=\"2\" FromPart=\"EndX\" ToPart=\"PinX\"/></Connects></PageContents>' > /tmp/pact-mounted-structured/vsdx/visio/pages/page1.xml",
       "printf '%s' '<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><si><t>Parser</t></si><si><t>Status</t></si><si><t>Report Date</t></si><si><t>Evidence Score</t></si><si><t>mounted xlsx</t></si><si><t>completed</t></si><si><t>2026-06-15</t></si></sst>' > /tmp/pact-mounted-structured/xlsx/xl/sharedStrings.xml",
       "printf '%s' '<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><cellXfs count=\"2\"><xf numFmtId=\"0\"/><xf numFmtId=\"14\" applyNumberFormat=\"1\"/></cellXfs></styleSheet>' > /tmp/pact-mounted-structured/xlsx/xl/styles.xml",
       "printf '%s' '<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Container Evidence\" sheetId=\"11\" r:id=\"rIdSheet1\"/></sheets></workbook>' > /tmp/pact-mounted-structured/xlsx/xl/workbook.xml",
@@ -1721,6 +1737,7 @@ try {
       "printf '%s' '<html xmlns=\"http://www.w3.org/1999/xhtml\"><body><h1>Mounted EPUB Evidence</h1><p>Mounted EPUB filePath chapter routing verifies ebook compatibility.</p></body></html>' > /tmp/pact-mounted-structured/epub/OEBPS/chapter1.xhtml",
       "cd /tmp/pact-mounted-structured/docx && (7zz a -tzip /data/mounted-project-plan.docx word/document.xml word/_rels/document.xml.rels word/comments.xml word/footnotes.xml word/media/container-architecture.png >/dev/null || 7z a -tzip /data/mounted-project-plan.docx word/document.xml word/_rels/document.xml.rels word/comments.xml word/footnotes.xml word/media/container-architecture.png >/dev/null)",
       "cd /tmp/pact-mounted-structured/pptx && (7zz a -tzip /data/mounted-roadmap.pptx ppt/slides/slide1.xml ppt/slides/_rels/slide1.xml.rels ppt/slideLayouts/slideLayout1.xml ppt/slideLayouts/_rels/slideLayout1.xml.rels ppt/slideMasters/slideMaster1.xml ppt/notesSlides/notesSlide1.xml ppt/commentAuthors.xml ppt/comments/comment1.xml ppt/media/container-roadmap.png >/dev/null || 7z a -tzip /data/mounted-roadmap.pptx ppt/slides/slide1.xml ppt/slides/_rels/slide1.xml.rels ppt/slideLayouts/slideLayout1.xml ppt/slideLayouts/_rels/slideLayout1.xml.rels ppt/slideMasters/slideMaster1.xml ppt/notesSlides/notesSlide1.xml ppt/commentAuthors.xml ppt/comments/comment1.xml ppt/media/container-roadmap.png >/dev/null)",
+      "cd /tmp/pact-mounted-structured/vsdx && (7zz a -tzip /data/mounted-flow.vsdx visio/document.xml visio/pages/page1.xml >/dev/null || 7z a -tzip /data/mounted-flow.vsdx visio/document.xml visio/pages/page1.xml >/dev/null)",
       "cd /tmp/pact-mounted-structured/xlsx && (7zz a -tzip /data/mounted-evidence.xlsx xl/sharedStrings.xml xl/styles.xml xl/workbook.xml xl/_rels/workbook.xml.rels xl/worksheets/sheet1.xml xl/worksheets/_rels/sheet1.xml.rels xl/comments1.xml >/dev/null || 7z a -tzip /data/mounted-evidence.xlsx xl/sharedStrings.xml xl/styles.xml xl/workbook.xml xl/_rels/workbook.xml.rels xl/worksheets/sheet1.xml xl/worksheets/_rels/sheet1.xml.rels xl/comments1.xml >/dev/null)",
       "cd /tmp/pact-mounted-structured/odt && (7zz a -tzip /data/mounted-notes.odt mimetype content.xml >/dev/null || 7z a -tzip /data/mounted-notes.odt mimetype content.xml >/dev/null)",
       "cd /tmp/pact-mounted-structured/epub && (7zz a -tzip /data/mounted-handbook.epub mimetype META-INF/container.xml OEBPS/chapter1.xhtml >/dev/null || 7z a -tzip /data/mounted-handbook.epub mimetype META-INF/container.xml OEBPS/chapter1.xhtml >/dev/null)",
@@ -2254,6 +2271,13 @@ NODE`
           filePath: "/data/mounted-roadmap.pptx"
         },
         {
+          sourceId: "container-signature-vsdx",
+          title: "Container Signature VSDX",
+          fileName: "mounted-vsdx.asset",
+          mediaType: "application/octet-stream",
+          filePath: "/data/mounted-flow.vsdx"
+        },
+        {
           sourceId: "container-signature-xlsx",
           title: "Container Signature XLSX",
           fileName: "mounted-xlsx.asset",
@@ -2292,6 +2316,7 @@ NODE`
     ["container-signature-pdf", "pdf", "pdf-header", ".pdf", "pdf.text.pdftotext"],
     ["container-signature-docx", "word", "zip-ooxml-word", ".docx", "office.word.structured"],
     ["container-signature-pptx", "presentation", "zip-ooxml-presentation", ".pptx", "office.presentation.slides"],
+    ["container-signature-vsdx", "visio", "zip-ooxml-visio", ".vsdx", "office.visio.pages"],
     ["container-signature-xlsx", "spreadsheet", "zip-ooxml-spreadsheet", ".xlsx", "table.sheet.structured"]
   ]) {
     const signatureRouted = signatureRoutedRun.payload.result.corpusPlan.documents.find((item) => item.sourceId === sourceId);

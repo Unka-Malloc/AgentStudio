@@ -421,6 +421,39 @@ const samplePptxBase64 = base64Zip({
   "ppt/media/roadmap.png": "pptx-image-bytes"
 });
 
+const sampleVisioBase64 = base64Zip({
+  "[Content_Types].xml": [
+    "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">",
+    "<Override PartName=\"/visio/document.xml\" ContentType=\"application/vnd.ms-visio.drawing.main+xml\"/>",
+    "<Override PartName=\"/visio/pages/page1.xml\" ContentType=\"application/vnd.ms-visio.page+xml\"/>",
+    "</Types>"
+  ].join(""),
+  "_rels/.rels": [
+    "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">",
+    "<Relationship Id=\"rId1\" Type=\"http://schemas.microsoft.com/visio/2010/relationships/document\" Target=\"visio/document.xml\"/>",
+    "</Relationships>"
+  ].join(""),
+  "visio/document.xml": [
+    "<VisioDocument xmlns=\"http://schemas.microsoft.com/office/visio/2012/main\">",
+    "<DocumentProperties><Title>External KD Flow</Title></DocumentProperties>",
+    "<Pages><Page ID=\"0\" NameU=\"Main Flow\"/></Pages>",
+    "</VisioDocument>"
+  ].join(""),
+  "visio/pages/page1.xml": [
+    "<PageContents xmlns=\"http://schemas.microsoft.com/office/visio/2012/main\">",
+    "<Shapes>",
+    "<Shape ID=\"1\" NameU=\"Start\" Type=\"Shape\"><Text>External KD service</Text><Cell N=\"PinX\" V=\"1\"/><Cell N=\"PinY\" V=\"2\"/><Cell N=\"Width\" V=\"1.5\"/><Cell N=\"Height\" V=\"0.5\"/></Shape>",
+    "<Shape ID=\"2\" NameU=\"Decision\" Type=\"Shape\"><Text>Route-first Visio parsing</Text><Cell N=\"PinX\" V=\"3\"/><Cell N=\"PinY\" V=\"2\"/><Cell N=\"Width\" V=\"1.75\"/><Cell N=\"Height\" V=\"0.75\"/></Shape>",
+    "<Shape ID=\"3\" NameU=\"Connector\" Type=\"Shape\"><Text>evidence edge</Text></Shape>",
+    "</Shapes>",
+    "<Connects>",
+    "<Connect FromSheet=\"3\" ToSheet=\"1\" FromPart=\"BeginX\" ToPart=\"PinX\"/>",
+    "<Connect FromSheet=\"3\" ToSheet=\"2\" FromPart=\"EndX\" ToPart=\"PinX\"/>",
+    "</Connects>",
+    "</PageContents>"
+  ].join("")
+});
+
 const sampleXlsxBase64 = base64Zip({
   "xl/sharedStrings.xml": [
     "<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">",
@@ -1036,6 +1069,7 @@ try {
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("pdf-header"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-word"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-presentation"), true);
+  assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-visio"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-spreadsheet"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.fields.includes("parserTrace[].stage=content.signature"), true);
   assert.equal(capabilities.payload.fileCompatibility.pdfSubtypeRouting.strategy, "pdf-subtype-routing.v1");
@@ -1104,6 +1138,10 @@ try {
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.presentation.charts"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.presentation.speaker-notes"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.presentation.comments"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.visio.pages"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.visio.shapes"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.visio.connectors"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.visio.text"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("archive.expand-route"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("archive.child-file.route"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("archive.file-ref.expand"), true);
@@ -1196,6 +1234,8 @@ try {
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("table.sheetName"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("table.sheetId"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("shape.placeholderType"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("shape.type"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("shape.master"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("presentation.layoutPart"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("presentation.masterPart"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("pdf-outline"), true);
@@ -1204,6 +1244,8 @@ try {
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("slide-master"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("slide-shape"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("speaker-note"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("visio-shape"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("visio-connector"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("comment"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("revision"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("footnote"), true);
@@ -1226,6 +1268,7 @@ try {
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.style.styleId"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.style.numberingId"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.shape.placeholderType"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.shape.type"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.presentation.layoutPart"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.presentation.masterPart"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.table.sheetName"), true);
@@ -1252,6 +1295,7 @@ try {
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.xbrlFact.contextRef"), true);
   assert.equal(capabilities.payload.elementModel.structuredFormats.includes("pdf"), true);
   assert.equal(capabilities.payload.elementModel.structuredFormats.includes("markdown"), true);
+  assert.equal(capabilities.payload.elementModel.structuredFormats.includes("vsdx"), true);
   assert.equal(capabilities.payload.elementModel.structuredFormats.includes("webvtt"), true);
   assert.equal(capabilities.payload.elementModel.structuredFormats.includes("xbrl"), true);
   assert.equal(capabilities.payload.elementModel.referencePatterns.includes("unstructured.chunk_by_title"), true);
@@ -1263,6 +1307,7 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("human-agent-response-profile-separation.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("professional-format-manifest.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("bounded-binary-file-profile.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("visio-opc-shape-parser.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("timed-transcript-cue-parser.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("xbrl-financial-fact-parser.v1"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("markdown.frontmatter"), true);
@@ -1276,6 +1321,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.professionalFormats.includes("pdf"), true);
   assert.equal(capabilities.payload.formatConversion.professionalFormats.includes("word"), true);
   assert.equal(capabilities.payload.formatConversion.professionalFormats.includes("presentation"), true);
+  assert.equal(capabilities.payload.formatConversion.professionalFormats.includes("visio"), true);
   assert.equal(capabilities.payload.formatConversion.professionalFormats.includes("spreadsheet"), true);
   assert.equal(capabilities.payload.formatConversion.professionalFormats.includes("markdown"), true);
   assert.equal(capabilities.payload.formatConversion.humanReadableTargets.includes("portable-docx"), true);
@@ -1292,6 +1338,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.preserves.includes("footers"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("slide-layout"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("slide-master"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("shapeConnectors"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("definedNames"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("namedRanges"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("printAreas"), true);
@@ -1299,6 +1346,7 @@ try {
     ["pdf", "pdf.text-layout-ocr-route", "page-order-preserved"],
     ["word", "wordprocessingml-paragraph-style-route", "word-annotation-refs-preserved"],
     ["presentation", "presentationml-slide-route", "slide-order-preserved"],
+    ["visio", "visio-opc-page-shape-route", "visio-shape-refs-preserved"],
     ["spreadsheet", "spreadsheetml-sheet-row-cell-route", "sheet-row-cell-refs-preserved"],
     ["markdown", "markdown-block-element-route", "heading-tree-preserved"]
   ]) {
@@ -1332,6 +1380,9 @@ try {
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-image-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-chart-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("presentation-comment-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("visio-page-order-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("visio-shape-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("visio-connector-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("opendocument-link-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-workbook-sheet-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-defined-name-refs-preserved"), true);
@@ -1340,7 +1391,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-date-serials-normalized"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-hyperlink-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-chart-refs-preserved"), true);
-  for (const extension of [".pdf", ".docx", ".docm", ".dotx", ".dotm", ".doc", ".dot", ".rtf", ".xlsx", ".xlsm", ".xlsb", ".xltx", ".xltm", ".pptx", ".pptm", ".ppsx", ".ppsm", ".potx", ".potm", ".ppt", ".pps", ".pot", ".odt", ".ods", ".odp", ".epub", ".eml", ".msg", ".mbox", ".png", ".gif", ".pgm", ".zip", ".tar", ".tgz", ".tar.gz", ".7z", ".directory", ".pages", ".numbers", ".key", ".xcodeproj", ".xcworkspace", ".md", ".json", ".jsonc", ".ipynb", ".yaml", ".toml", ".ini", ".properties", ".env", ".svg", ".drawio", ".mmd", ".mermaid", ".puml", ".plantuml", ".js", ".ts", ".py", ".go", ".rs", ".diff", ".patch", ".ics", ".vcs", ".vtt", ".webvtt", ".srt", ".xbrl", ".ixbrl", ".wav", ".mp3", ".m4a", ".html", ".htm", ".xhtml", ".xml", ".rst", ".adoc", ".asciidoc", ".org", ".tex", ".latex", ".wiki", ".mediawiki"]) {
+  for (const extension of [".pdf", ".docx", ".docm", ".dotx", ".dotm", ".doc", ".dot", ".rtf", ".xlsx", ".xlsm", ".xlsb", ".xltx", ".xltm", ".pptx", ".pptm", ".ppsx", ".ppsm", ".potx", ".potm", ".ppt", ".pps", ".pot", ".vsdx", ".vsdm", ".vssx", ".vssm", ".vstx", ".vstm", ".vsd", ".vss", ".vst", ".vdx", ".odt", ".ods", ".odp", ".epub", ".eml", ".msg", ".mbox", ".png", ".gif", ".pgm", ".zip", ".tar", ".tgz", ".tar.gz", ".7z", ".directory", ".pages", ".numbers", ".key", ".xcodeproj", ".xcworkspace", ".md", ".json", ".jsonc", ".ipynb", ".yaml", ".toml", ".ini", ".properties", ".env", ".svg", ".drawio", ".mmd", ".mermaid", ".puml", ".plantuml", ".js", ".ts", ".py", ".go", ".rs", ".diff", ".patch", ".ics", ".vcs", ".vtt", ".webvtt", ".srt", ".xbrl", ".ixbrl", ".wav", ".mp3", ".m4a", ".html", ".htm", ".xhtml", ".xml", ".rst", ".adoc", ".asciidoc", ".org", ".tex", ".latex", ".wiki", ".mediawiki"]) {
     assert.equal(
       capabilities.payload.fileCompatibility.supportedExtensions.includes(extension),
       true,
@@ -1787,6 +1838,13 @@ try {
           contentBase64: samplePptxBase64
         },
         {
+          sourceId: "source-75",
+          title: "Visio Architecture Flow",
+          fileName: "architecture-flow.vsdx",
+          mediaType: "application/vnd.ms-visio.drawing.main+xml",
+          contentBase64: sampleVisioBase64
+        },
+        {
           sourceId: "source-14",
           title: "XLSX Payload",
           fileName: "payload.xlsx",
@@ -1820,6 +1878,13 @@ try {
           fileName: "signature-routed-xlsx.asset",
           mediaType: "application/octet-stream",
           contentBase64: sampleXlsxBase64
+        },
+        {
+          sourceId: "source-76",
+          title: "Signature Routed VSDX",
+          fileName: "signature-routed-visio.asset",
+          mediaType: "application/octet-stream",
+          contentBase64: sampleVisioBase64
         },
         {
           sourceId: "source-48",
@@ -3469,6 +3534,57 @@ try {
       ref.cells?.some((cell) => cell.ref === "B2")
     ))
   )), true);
+  const visioPayloadCorpus = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-75");
+  assert.ok(visioPayloadCorpus, "Visio payload corpus document must be present");
+  assert.equal(visioPayloadCorpus.route.formatId, "visio");
+  assert.equal(visioPayloadCorpus.parserTrace.some((trace) => (
+    trace.stage === "office.visio.pages" &&
+    trace.status === "completed" &&
+    trace.pages === 1 &&
+    trace.shapes === 3 &&
+    trace.textShapes === 3 &&
+    trace.connectors === 2
+  )), true);
+  assert.equal(visioPayloadCorpus.parserTrace.some((trace) => (
+    trace.stage === "office.visio.shapes" &&
+    trace.status === "completed" &&
+    trace.geometries === 2 &&
+    trace.layoutStrategy === "visio-shape-geometry.v1"
+  )), true);
+  assert.equal(visioPayloadCorpus.parserTrace.some((trace) => (
+    trace.stage === "office.visio.connectors" &&
+    trace.status === "completed" &&
+    trace.connectors === 2
+  )), true);
+  assert.equal(visioPayloadCorpus.elementPlan.sourceFormat, "vsdx");
+  assert.equal(visioPayloadCorpus.elementPlan.elementTypes["visio-shape"] >= 3, true);
+  assert.equal(visioPayloadCorpus.elementPlan.elementTypes["visio-connector"] >= 2, true);
+  assert.equal(visioPayloadCorpus.elementPlan.sampleElements.some((element) => (
+    element.type === "visio-shape" &&
+    element.shape?.id === "2" &&
+    element.shape?.name === "Decision" &&
+    element.shape?.type === "Shape" &&
+    element.layout?.strategy === "visio-shape-geometry.v1" &&
+    element.bbox?.x === 3 &&
+    element.text.includes("Route-first Visio parsing")
+  )), true);
+  assert.equal(visioPayloadCorpus.windowPlan.strategy, "element-aware-by-title-windowing.v1");
+  assert.equal(visioPayloadCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+    ref.type === "visio-connector" &&
+    ref.shape?.id === "3->2" &&
+    ref.layout?.strategy === "visio-connector-ref.v1"
+  ))), true);
+  assert.equal(visioPayloadCorpus.formatConversionProfile.parserProfile, "visio-opc-page-shape-route");
+  assert.equal(visioPayloadCorpus.formatConversionProfile.preserves.includes("connectors"), true);
+  assert.equal(visioPayloadCorpus.formatConversionProfile.conversionAdapters.some((adapter) => adapter.targetFormat === "docx"), true);
+  assert.equal(createRun.payload.result.graphEvidence.text_units.some((unit) => (
+    unit.sourceId === "source-75" &&
+    unit.metadata?.elementRefs?.some((ref) => (
+      ref.type === "visio-shape" &&
+      ref.shape?.name === "Decision" &&
+      ref.layout?.strategy === "visio-shape-geometry.v1"
+    ))
+  )), true);
   const xlsxPayloadCorpus = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-14");
   assert.equal(xlsxPayloadCorpus.parserTrace.some((trace) => trace.stage === "table.sheet.structured" && trace.status === "completed"), true);
   assert.equal(xlsxPayloadCorpus.parserTrace.some((trace) => (
@@ -3693,7 +3809,8 @@ try {
     ["source-44", "pdf", "pdf-header", ".pdf", "pdf.text.basic"],
     ["source-45", "word", "zip-ooxml-word", ".docx", "office.word.structured"],
     ["source-46", "presentation", "zip-ooxml-presentation", ".pptx", "office.presentation.slides"],
-    ["source-47", "spreadsheet", "zip-ooxml-spreadsheet", ".xlsx", "table.sheet.structured"]
+    ["source-47", "spreadsheet", "zip-ooxml-spreadsheet", ".xlsx", "table.sheet.structured"],
+    ["source-76", "visio", "zip-ooxml-visio", ".vsdx", "office.visio.pages"]
   ]) {
     const signatureRoutedCorpus = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === sourceId);
     assert.ok(signatureRoutedCorpus, `${sourceId} content-signature routed office document must be present`);

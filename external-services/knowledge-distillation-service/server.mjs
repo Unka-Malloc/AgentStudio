@@ -295,6 +295,29 @@ const FORMAT_ROUTES = Object.freeze([
     referenceFrameworks: ["docling", "mineru", "unstructured"]
   },
   {
+    id: "visio",
+    label: "Visio drawing",
+    extensions: [".vsdx", ".vsdm", ".vssx", ".vssm", ".vstx", ".vstm", ".vsd", ".vss", ".vst", ".vdx"],
+    mediaTypes: [
+      "application/vnd.ms-visio.drawing.main+xml",
+      "application/vnd.ms-visio.drawing.macroenabled.main+xml",
+      "application/vnd.ms-visio.stencil.main+xml",
+      "application/vnd.ms-visio.stencil.macroenabled.main+xml",
+      "application/vnd.ms-visio.template.main+xml",
+      "application/vnd.ms-visio.template.macroenabled.main+xml",
+      "application/vnd.visio",
+      "application/vnd.ms-visio",
+      "application/x-visio",
+      "application/visio"
+    ],
+    contentShape: "office-drawing",
+    preferredParser: "office.visio.pages",
+    fallbackParsers: ["tika.text", "text.direct"],
+    parserChain: ["office.route", "office.visio.pages", "office.visio.shapes", "office.visio.connectors", "office.visio.text", "tika.text"],
+    streamingUnit: "page",
+    referenceFrameworks: ["docling", "unstructured", "haystack", "llama-index"]
+  },
+  {
     id: "spreadsheet",
     label: "Spreadsheet",
     extensions: [".xlsx", ".xlsm", ".xltx", ".xltm", ".xls", ".xlsb", ".csv", ".tsv"],
@@ -630,7 +653,7 @@ for (const route of FORMAT_ROUTES) {
   }
 }
 
-const PROFESSIONAL_FORMAT_ORDER = Object.freeze(["pdf", "word", "presentation", "spreadsheet", "markdown", "open-document"]);
+const PROFESSIONAL_FORMAT_ORDER = Object.freeze(["pdf", "word", "presentation", "visio", "spreadsheet", "markdown", "open-document"]);
 const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
   pdf: {
     label: "PDF",
@@ -757,6 +780,48 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
     qualityGates: ["slide-order-preserved", "presentation-layout-master-refs-preserved", "presentation-placeholder-refs-preserved", "shape-layout-refs-present", "presentation-table-cell-refs-preserved", "presentation-link-refs-preserved", "presentation-image-refs-preserved", "presentation-chart-refs-preserved", "presentation-speaker-notes-preserved", "presentation-comment-refs-preserved"],
     riskControls: ["speaker-notes-preserved-when-notesSlides-present", "comments-preserved-when-comment-parts-present", "raster-only-slide-ocr-fallback"],
     knownLosses: ["visual-layer-geometry-partial"]
+  },
+  visio: {
+    label: "Visio",
+    professionalFamily: "office-drawing",
+    parserProfile: "visio-opc-page-shape-route",
+    structureUnits: ["page", "visio-shape", "visio-connector", "shape-text", "shape-bbox"],
+    parserStages: ["office.visio.pages", "office.visio.shapes", "office.visio.connectors", "office.visio.text", "tika.text"],
+    preserves: ["page-order", "shape-id", "shape-name", "shape-text", "shape-bbox", "shape-order", "connectors"],
+    conversionTargets: ["markdown-page-outline", "docx-review-copy", "agent-json-with-visio-shape-and-connector-refs", "evidence-pack"],
+    conversionAdapters: [
+      {
+        target: "portable-markdown",
+        targetFormat: "markdown",
+        adapter: "visio-pages-to-markdown-outline.v1",
+        mode: "human",
+        stages: ["page-headings", "shape-order", "connector-notes"]
+      },
+      {
+        target: "portable-docx",
+        targetFormat: "docx",
+        adapter: "visio-pages-to-docx-review.v1",
+        mode: "human",
+        stages: ["page-sections", "shape-bullets", "connector-table", "openxml-package"]
+      },
+      {
+        target: "agent-message-json",
+        targetFormat: "agent-json",
+        adapter: "visio-elements-to-agent-refs.v1",
+        mode: "agent",
+        stages: ["page-refs", "shape-id-name-refs", "shape-bbox-refs", "connector-refs", "window-ids"]
+      },
+      {
+        target: "evidence-pack-json",
+        targetFormat: "graph-evidence",
+        adapter: "visio-windows-to-graph-evidence.v1",
+        mode: "agent",
+        stages: ["text-units", "shape-relationships", "claims"]
+      }
+    ],
+    qualityGates: ["visio-page-order-preserved", "visio-shape-refs-preserved", "visio-shape-layout-refs-present", "visio-connector-refs-preserved", "empty-corpus-blocked"],
+    riskControls: ["legacy-vsd-tika-fallback", "shape-geometry-approximation"],
+    knownLosses: ["advanced-visio-style-and-master-rendering-not-reconstructed"]
   },
   spreadsheet: {
     label: "Excel",
@@ -925,6 +990,16 @@ const MEDIA_TYPE_BY_EXTENSION = new Map(Object.entries({
   ".ppsm": "application/vnd.ms-powerpoint.slideshow.macroenabled.12",
   ".potx": "application/vnd.openxmlformats-officedocument.presentationml.template",
   ".potm": "application/vnd.ms-powerpoint.template.macroenabled.12",
+  ".vsd": "application/vnd.visio",
+  ".vss": "application/vnd.visio",
+  ".vst": "application/vnd.visio",
+  ".vdx": "application/vnd.visio",
+  ".vsdx": "application/vnd.ms-visio.drawing.main+xml",
+  ".vsdm": "application/vnd.ms-visio.drawing.macroenabled.main+xml",
+  ".vssx": "application/vnd.ms-visio.stencil.main+xml",
+  ".vssm": "application/vnd.ms-visio.stencil.macroenabled.main+xml",
+  ".vstx": "application/vnd.ms-visio.template.main+xml",
+  ".vstm": "application/vnd.ms-visio.template.macroenabled.main+xml",
   ".xls": "application/vnd.ms-excel",
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ".xlsm": "application/vnd.ms-excel.sheet.macroenabled.12",
@@ -1181,7 +1256,7 @@ const REFERENCE_ABSORPTION_MAP = Object.freeze({
     gaps: ["high-fidelity layout reconstruction for complex PDFs"]
   },
   docling: {
-    absorbed: ["unified routePlan/corpusPlan/parserTrace document model", "table time index for structured sheets", "HTML, XML, AsciiDoc, LaTeX, Markdown, OOXML, OpenDocument, EPUB, and PDF element models", "basic PDF text-operator geometry for page/x/y/bbox metadata", "PDF outline/bookmark references", "WordprocessingML content controls and bookmark anchors", "WordprocessingML, PresentationML, and OpenDocument table row/cell metadata", "WordprocessingML, PresentationML, and OpenDocument hyperlink targets", "WordprocessingML comments, revisions, footnotes, and endnotes", "spreadsheet workbook sheet id/name/path plus defined-name/named-range/print-area and row/cell coordinate/comment/formula/hyperlink metadata", "PresentationML shape id/name, placeholder, comment, and geometry metadata for slide elements"],
+    absorbed: ["unified routePlan/corpusPlan/parserTrace document model", "table time index for structured sheets", "HTML, XML, AsciiDoc, LaTeX, Markdown, OOXML, OpenDocument, EPUB, and PDF element models", "basic PDF text-operator geometry for page/x/y/bbox metadata", "PDF outline/bookmark references", "WordprocessingML content controls and bookmark anchors", "WordprocessingML, PresentationML, and OpenDocument table row/cell metadata", "WordprocessingML, PresentationML, and OpenDocument hyperlink targets", "WordprocessingML comments, revisions, footnotes, and endnotes", "spreadsheet workbook sheet id/name/path plus defined-name/named-range/print-area and row/cell coordinate/comment/formula/hyperlink metadata", "PresentationML shape id/name, placeholder, comment, and geometry metadata for slide elements", "Visio OPC page, shape, connector, and shape-geometry metadata extraction"],
     baseline: ["structured ZIP extraction for OOXML and OpenDocument"],
     gaps: ["full PDF and Word layout block geometry", "formula recognition beyond SpreadsheetML and text-level elements"]
   },
@@ -1201,12 +1276,12 @@ const REFERENCE_ABSORPTION_MAP = Object.freeze({
     gaps: ["persistent graph store adapter", "learned graph ranking over multi-run evidence"]
   },
   haystack: {
-    absorbed: ["explicit route stages", "parser traces", "runtime doctor", "capabilities document", "directory file-ref expansion stage", "HTML/Markdown-style converter boundaries for markup and Markdown documents", "Word, PowerPoint, and Excel hyperlink preservation on element/cell refs", "format conversion profiles for human and agent targets"],
+    absorbed: ["explicit route stages", "parser traces", "runtime doctor", "capabilities document", "directory file-ref expansion stage", "HTML/Markdown-style converter boundaries for markup and Markdown documents", "Word, PowerPoint, Excel, and Visio parser stages with element refs", "Word, PowerPoint, and Excel hyperlink preservation on element/cell refs", "format conversion profiles for human and agent targets"],
     baseline: ["pipeline-like deterministic execution record"],
     gaps: ["external component registry", "configurable parser/ranker pipeline graph"]
   },
   unstructured: {
-    absorbed: ["partition-style format routing", "chunked windowing", "email, archive, and directory child routing", "element-type enrichment for Markdown, markup, PDF, OOXML, OpenDocument, EPUB, headings, lists, links, tables, PDF outlines, Word content controls/bookmarks, Word/PowerPoint/OpenDocument table cells, Word annotations/revisions and hyperlinks, PowerPoint comments and hyperlinks, OpenDocument hyperlinks, code, formulas, spreadsheet workbook sheet refs/defined names/comments/hyperlinks, slide shapes, and PowerPoint placeholders", "by-title element-aware windowing with table/code isolation"],
+    absorbed: ["partition-style format routing", "chunked windowing", "email, archive, and directory child routing", "element-type enrichment for Markdown, markup, PDF, OOXML, OpenDocument, EPUB, headings, lists, links, tables, PDF outlines, Word content controls/bookmarks, Word/PowerPoint/OpenDocument table cells, Word annotations/revisions and hyperlinks, PowerPoint comments and hyperlinks, OpenDocument hyperlinks, code, formulas, spreadsheet workbook sheet refs/defined names/comments/hyperlinks, slide shapes, PowerPoint placeholders, Visio shapes, and Visio connectors", "by-title element-aware windowing with table/code isolation"],
     baseline: ["strategy-based parser fallback"],
     gaps: ["remaining high-fidelity PDF, Word, and spreadsheet layout coordinates", "domain-specific chunk enrichment plugins"]
   }
@@ -1685,6 +1760,16 @@ function zipSignatureHint(buffer = Buffer.alloc(0)) {
       confidence: 0.99
     };
   }
+  if (lowerNames.some((name) => name.startsWith("visio/"))) {
+    return {
+      extension: ".vsdx",
+      mediaType: mediaTypeForExtension(".vsdx"),
+      signature: "zip-ooxml-visio",
+      container: "zip",
+      evidence: names.slice(0, 12),
+      confidence: 0.99
+    };
+  }
   if (lowerNames.some((name) => name.startsWith("xl/"))) {
     return {
       extension: ".xlsx",
@@ -1886,6 +1971,9 @@ function isStructuredZipFileRoute(route = null, metadata = {}) {
   if (route?.id === "presentation") {
     return [".pptx", ".pptm", ".ppsx", ".ppsm", ".potx", ".potm"].includes(extension);
   }
+  if (route?.id === "visio") {
+    return [".vsdx", ".vsdm", ".vssx", ".vssm", ".vstx", ".vstm"].includes(extension);
+  }
   if (route?.id === "spreadsheet") {
     return [".xlsx", ".xlsm", ".xltx", ".xltm"].includes(extension);
   }
@@ -1905,6 +1993,9 @@ function isTikaFileRoute(route = null, metadata = {}) {
   }
   if (route?.id === "presentation") {
     return [".ppt", ".pps", ".pot"].includes(extension);
+  }
+  if (route?.id === "visio") {
+    return [".vsd", ".vss", ".vst", ".vdx"].includes(extension);
   }
   if (route?.id === "spreadsheet") {
     return [".xls", ".xlsb"].includes(extension);
@@ -2564,6 +2655,7 @@ function fallbackStructureFormat(route = null, metadata = {}) {
   if (route?.id === "pdf") return "pdf";
   if (route?.id === "word") return extensionFormat || "word";
   if (route?.id === "presentation") return extensionFormat || "presentation";
+  if (route?.id === "visio") return extensionFormat || "vsdx";
   if (route?.id === "spreadsheet") return extensionFormat || "table";
   if (route?.id === "open-document") return "open-document";
   if (route?.id === "ebook") return "epub";
@@ -2571,7 +2663,7 @@ function fallbackStructureFormat(route = null, metadata = {}) {
 }
 
 function supportsFallbackStructureElements(route = null) {
-  return ["pdf", "word", "presentation", "spreadsheet", "open-document", "ebook"].includes(route?.id);
+  return ["pdf", "word", "presentation", "visio", "spreadsheet", "open-document", "ebook"].includes(route?.id);
 }
 
 function lineLooksLikeTableRow(line = "", route = null) {
@@ -6690,6 +6782,162 @@ function parsePptx(entries = []) {
   };
 }
 
+function visioPartNumber(partName = "", pattern = /(\d+)/) {
+  return Number(String(partName || "").match(pattern)?.[1] || 0);
+}
+
+function visioCellNumber(shapeXml = "", cellName = "") {
+  for (const match of String(shapeXml || "").matchAll(/<[^:>]*:?Cell\b[^>]*(?:\/>|>[\s\S]*?<\/[^:>]*:?Cell>)/g)) {
+    const tag = match[0].match(/^<[^>]+>/)?.[0] || match[0];
+    if (xmlLocalAttribute(tag, "N").toLowerCase() !== String(cellName || "").toLowerCase()) {
+      continue;
+    }
+    const value = Number(xmlLocalAttribute(tag, "V"));
+    return Number.isFinite(value) ? roundLayoutNumber(value) : 0;
+  }
+  return 0;
+}
+
+function visioShapeGeometry(shapeXml = "", pageNumber = 0, order = 0) {
+  const x = visioCellNumber(shapeXml, "PinX");
+  const y = visioCellNumber(shapeXml, "PinY");
+  const width = visioCellNumber(shapeXml, "Width");
+  const height = visioCellNumber(shapeXml, "Height");
+  if (![x, y, width, height].some((value) => value !== 0)) {
+    return { bbox: null, layout: null };
+  }
+  const bbox = { x, y, width, height };
+  return {
+    bbox,
+    layout: {
+      strategy: "visio-shape-geometry.v1",
+      page: pageNumber,
+      order,
+      x,
+      y,
+      width,
+      height
+    }
+  };
+}
+
+function visioShapeText(shapeXml = "") {
+  const blocks = [];
+  for (const match of String(shapeXml || "").matchAll(/<[^:>]*:?Text\b[\s\S]*?<\/[^:>]*:?Text>/g)) {
+    const text = compactMarkupText(textFromXmlTextNodes(match[0]) || stripMarkup(match[0]), 1800);
+    if (text) {
+      blocks.push(text);
+    }
+  }
+  return uniqueOrdered(blocks).join("\n");
+}
+
+function visioShapeMetadata(openTag = "", {
+  pageNumber = 0,
+  order = 0
+} = {}) {
+  const id = xmlLocalAttribute(openTag, "ID") || xmlLocalAttribute(openTag, "Id");
+  const name = xmlLocalAttribute(openTag, "NameU") || xmlLocalAttribute(openTag, "Name") || (id ? `Shape ${id}` : `Shape ${order}`);
+  const type = xmlLocalAttribute(openTag, "Type");
+  return Object.fromEntries(Object.entries({
+    id,
+    name,
+    slide: Number(pageNumber || 0),
+    order: Number(order || 0),
+    type,
+    master: xmlLocalAttribute(openTag, "Master"),
+    masterShape: xmlLocalAttribute(openTag, "MasterShape")
+  }).filter(([, value]) => value !== "" && value !== null && value !== undefined));
+}
+
+function parseVisio(entries = []) {
+  const pageNames = entries
+    .map((entry) => entry.name)
+    .filter((name) => /^visio\/pages\/page\d+\.xml$/.test(name))
+    .sort((left, right) => visioPartNumber(left, /page(\d+)/) - visioPartNumber(right, /page(\d+)/));
+  const masterNames = entries
+    .map((entry) => entry.name)
+    .filter((name) => /^visio\/masters\/master\d+\.xml$/.test(name))
+    .sort((left, right) => visioPartNumber(left, /master(\d+)/) - visioPartNumber(right, /master(\d+)/));
+  const elements = [];
+  let shapeCount = 0;
+  let textShapeCount = 0;
+  let connectorCount = 0;
+  let geometryCount = 0;
+  for (const [index, name] of pageNames.entries()) {
+    const pageNumber = visioPartNumber(name, /page(\d+)/) || index + 1;
+    const xml = zipEntryText(entries, name);
+    for (const match of String(xml || "").matchAll(/<[^:>]*:?Shape\b[\s\S]*?<\/[^:>]*:?Shape>/g)) {
+      const shapeXml = match[0];
+      const openTag = shapeXml.match(/^<[^>]+>/)?.[0] || "";
+      shapeCount += 1;
+      const shape = visioShapeMetadata(openTag, { pageNumber, order: shapeCount });
+      const text = visioShapeText(shapeXml);
+      const geometry = visioShapeGeometry(shapeXml, pageNumber, shapeCount);
+      if (geometry.bbox) {
+        geometryCount += 1;
+      }
+      if (!text) {
+        continue;
+      }
+      textShapeCount += 1;
+      pushStructureElement(elements, "visio-shape", `Page ${pageNumber} ${shape.name || `Shape ${shapeCount}`}: ${text}`, {
+        line: shapeCount,
+        name: `${name}#shape-${shape.id || shapeCount}`,
+        page: pageNumber,
+        bbox: geometry.bbox,
+        layout: geometry.layout,
+        shape,
+        limit: 2200
+      });
+    }
+    for (const match of String(xml || "").matchAll(/<[^:>]*:?Connect\b[^>]*(?:\/>|>[\s\S]*?<\/[^:>]*:?Connect>)/g)) {
+      const tag = match[0].match(/^<[^>]+>/)?.[0] || match[0];
+      const from = xmlLocalAttribute(tag, "FromSheet");
+      const to = xmlLocalAttribute(tag, "ToSheet");
+      const fromPart = xmlLocalAttribute(tag, "FromPart");
+      const toPart = xmlLocalAttribute(tag, "ToPart");
+      connectorCount += 1;
+      pushStructureElement(elements, "visio-connector", `Page ${pageNumber} connector ${from || "unknown"} -> ${to || "unknown"}${fromPart || toPart ? ` (${[fromPart, toPart].filter(Boolean).join(" to ")})` : ""}`, {
+        line: connectorCount,
+        name: `${name}#connector-${connectorCount}`,
+        page: pageNumber,
+        layout: {
+          strategy: "visio-connector-ref.v1",
+          page: pageNumber,
+          order: connectorCount
+        },
+        shape: {
+          id: [from, to].filter(Boolean).join("->") || `connector-${connectorCount}`,
+          name: "Visio connector",
+          slide: pageNumber,
+          order: connectorCount
+        },
+        limit: 1200
+      });
+    }
+  }
+  const fallback = pageNames
+    .map((name, index) => {
+      const pageNumber = visioPartNumber(name, /page(\d+)/) || index + 1;
+      const pageText = visioShapeText(zipEntryText(entries, name)) || textFromXmlTextNodes(zipEntryText(entries, name));
+      return pageText ? `Page ${pageNumber}: ${pageText}` : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+  return {
+    text: structureElementsToText("vsdx", elements, fallback),
+    elements,
+    format: "vsdx",
+    pageCount: pageNames.length,
+    visioPartCount: pageNames.length + masterNames.length + (zipEntryText(entries, "visio/document.xml") ? 1 : 0),
+    shapeCount,
+    textShapeCount,
+    connectorCount,
+    geometryCount
+  };
+}
+
 function xmlAttribute(tag = "", name = "") {
   const pattern = new RegExp(`\\s${name}=(["'])(.*?)\\1`, "i");
   return decodeXmlEntities(String(tag || "").match(pattern)?.[2] || "");
@@ -8402,6 +8650,19 @@ function structuredZipXmlFiles(route = null, rootDir = "") {
         .sort((left, right) => Number(left.relativePath.match(/comment(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/comment(\d+)/)?.[1] || 0))
     ];
   }
+  if (route?.id === "visio") {
+    return [
+      ...collectFiles(rootDir, (name) => name === "visio/document.xml", 1),
+      ...collectFiles(rootDir, (name) => /^visio\/pages\/page\d+\.xml$/.test(name), 1000)
+        .sort((left, right) => visioPartNumber(left.relativePath, /page(\d+)/) - visioPartNumber(right.relativePath, /page(\d+)/)),
+      ...collectFiles(rootDir, (name) => /^visio\/pages\/_rels\/page\d+\.xml\.rels$/.test(name), 1000)
+        .sort((left, right) => visioPartNumber(left.relativePath, /page(\d+)/) - visioPartNumber(right.relativePath, /page(\d+)/)),
+      ...collectFiles(rootDir, (name) => /^visio\/masters\/master\d+\.xml$/.test(name), 1000)
+        .sort((left, right) => visioPartNumber(left.relativePath, /master(\d+)/) - visioPartNumber(right.relativePath, /master(\d+)/)),
+      ...collectFiles(rootDir, (name) => /^visio\/masters\/_rels\/master\d+\.xml\.rels$/.test(name), 1000)
+        .sort((left, right) => visioPartNumber(left.relativePath, /master(\d+)/) - visioPartNumber(right.relativePath, /master(\d+)/))
+    ];
+  }
   if (route?.id === "spreadsheet") {
     return [
       ...collectFiles(rootDir, (name) => name === "xl/sharedStrings.xml", 1),
@@ -8437,6 +8698,7 @@ function structuredZipXmlFiles(route = null, rootDir = "") {
 function structuredZipStage(route = null) {
   if (route?.id === "word") return "office.word.structured";
   if (route?.id === "presentation") return "office.presentation.slides";
+  if (route?.id === "visio") return "office.visio.pages";
   if (route?.id === "spreadsheet") return "table.sheet.structured";
   if (route?.id === "open-document") return "open-document.structured";
   if (route?.id === "ebook") return "ebook.epub";
@@ -8533,6 +8795,9 @@ function structuredZipDirectoryEntries(route = null, rootDir = "") {
 function structuredZipTextPrefix(route = null, index = 0, file = {}) {
   if (route?.id === "presentation") {
     return `Slide ${index + 1} (${file.relativePath})`;
+  }
+  if (route?.id === "visio") {
+    return `Visio page ${index + 1} (${file.relativePath})`;
   }
   if (route?.id === "ebook") {
     return `Chapter ${index + 1} (${file.relativePath})`;
@@ -8769,6 +9034,38 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           comments: parsed.commentCount,
           commentParts: parsed.commentPartCount,
           authors: parsed.commentAuthorCount
+        }
+      ]
+    };
+  }
+  if (route?.id === "visio") {
+    const parsed = parseVisio(entries);
+    return {
+      ...parsed,
+      fileCount: entries.length,
+      parserTrace: [
+        {
+          stage: "office.visio.pages",
+          status: parsed.text ? "completed" : "empty",
+          characters: parsed.text.length,
+          elements: parsed.elements.length,
+          pages: parsed.pageCount,
+          shapes: parsed.shapeCount,
+          textShapes: parsed.textShapeCount,
+          connectors: parsed.connectorCount,
+          geometries: parsed.geometryCount
+        },
+        {
+          stage: "office.visio.shapes",
+          status: parsed.shapeCount ? "completed" : "empty",
+          shapes: parsed.shapeCount,
+          textShapes: parsed.textShapeCount,
+          geometries: parsed.geometryCount
+        },
+        {
+          stage: "office.visio.connectors",
+          status: parsed.connectorCount ? "completed" : "empty",
+          connectors: parsed.connectorCount
         }
       ]
     };
@@ -10426,7 +10723,7 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
       parserTrace.push({ stage: "text.direct", status: "completed", characters: parsed.length });
       return { text: parsed, parserTrace, warnings };
     }
-    if (["word", "presentation", "spreadsheet", "open-document", "ebook"].includes(route?.id)) {
+    if (["word", "presentation", "visio", "spreadsheet", "open-document", "ebook"].includes(route?.id)) {
       const entries = readZipEntries(buffer);
       parserTrace.push({ stage: "zip.container", status: entries.length ? "completed" : "failed", entries: entries.length });
       if (route.id === "word") {
@@ -10632,6 +10929,46 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
           comments: parsed.commentCount,
           commentParts: parsed.commentPartCount,
           authors: parsed.commentAuthorCount
+        });
+        if (parsed.text) {
+          return {
+            text: parsed.text,
+            parserTrace,
+            warnings,
+            structureElements: parsed.elements,
+            structureFormat: parsed.format
+          };
+        }
+        const tikaResult = runTikaText(buffer, metadata, runtimeStatus, "tika.text");
+        parserTrace.push(...tikaResult.parserTrace);
+        warnings.push(...tikaResult.warnings);
+        return { text: tikaResult.text, parserTrace, warnings };
+      }
+      if (route.id === "visio") {
+        const parsed = parseVisio(entries);
+        parserTrace.push({
+          stage: "office.visio.pages",
+          status: parsed.text ? "completed" : "empty",
+          characters: parsed.text.length,
+          elements: parsed.elements.length,
+          pages: parsed.pageCount,
+          shapes: parsed.shapeCount,
+          textShapes: parsed.textShapeCount,
+          connectors: parsed.connectorCount,
+          geometries: parsed.geometryCount
+        });
+        parserTrace.push({
+          stage: "office.visio.shapes",
+          status: parsed.shapeCount ? "completed" : "empty",
+          shapes: parsed.shapeCount,
+          textShapes: parsed.textShapeCount,
+          geometries: parsed.geometryCount,
+          layoutStrategy: parsed.geometryCount ? "visio-shape-geometry.v1" : ""
+        });
+        parserTrace.push({
+          stage: "office.visio.connectors",
+          status: parsed.connectorCount ? "completed" : "empty",
+          connectors: parsed.connectorCount
         });
         if (parsed.text) {
           return {
@@ -11170,6 +11507,9 @@ function normalizedStructureElements(document = {}) {
             name: String(element.shape.name || ""),
             slide: Number(element.shape.slide || page || 0),
             order: Number(element.shape.order || 0),
+            type: String(element.shape.type || ""),
+            master: String(element.shape.master || ""),
+            masterShape: String(element.shape.masterShape || ""),
             isPlaceholder: Boolean(element.shape.isPlaceholder),
             placeholderType: String(element.shape.placeholderType || ""),
             placeholderIndex: String(element.shape.placeholderIndex || ""),
@@ -11479,7 +11819,7 @@ function isHeadingStructureElement(element = {}) {
 }
 
 function isIsolatedStructureElement(element = {}) {
-  return ["table-header", "table-row", "merged-cell", "cell-comment", "defined-name", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "content-control", "bookmark", "header", "footer", "slide-layout", "slide-master", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note", "transcript-cue", "speaker-turn", "xbrl-fact"].includes(element.type);
+  return ["table-header", "table-row", "merged-cell", "cell-comment", "defined-name", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "content-control", "bookmark", "header", "footer", "slide-layout", "slide-master", "visio-connector", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note", "transcript-cue", "speaker-turn", "xbrl-fact"].includes(element.type);
 }
 
 function headingLevelForElement(element = {}) {
@@ -12164,6 +12504,58 @@ function buildProfessionalQualityGateResults({ document = {}, profile = {}, evid
         message: status === "passed" ? "PowerPoint comments are preserved as element references." : "No PowerPoint comments were required or observed."
       });
     }
+    if (gate === "visio-page-order-preserved") {
+      const pageSignals = maxTraceMetric(document, ["pages", "pageCount", "visioPartCount"]);
+      const status = routeId !== "visio"
+        ? "not_applicable"
+        : pageSignals > 0 || evidence.elementCount > 0
+          ? "passed"
+          : "warning";
+      return professionalGateRecord(gate, status, {
+        observed: { pageSignals, elementCount: evidence.elementCount },
+        required: { orderedPages: true },
+        message: status === "passed" ? "Visio page order is represented in element refs." : "Visio page order was not observed."
+      });
+    }
+    if (gate === "visio-shape-refs-preserved") {
+      const shapeSignals = maxTraceMetric(document, ["shapes", "shapeCount", "textShapes", "textShapeCount"]);
+      const status = routeId !== "visio"
+        ? "not_applicable"
+        : shapeSignals > 0
+          ? evidence.visioShapeRefCount > 0 ? "passed" : "failed"
+          : "not_applicable";
+      return professionalGateRecord(gate, status, {
+        observed: { shapeSignals, visioShapeRefCount: evidence.visioShapeRefCount },
+        required: { shapeRefsWhenShapesExist: true },
+        message: status === "passed" ? "Visio shapes are preserved as structured element references." : "No Visio shape references were required or observed."
+      });
+    }
+    if (gate === "visio-shape-layout-refs-present") {
+      const geometrySignals = maxTraceMetric(document, ["geometries", "geometryCount"]);
+      const status = routeId !== "visio"
+        ? "not_applicable"
+        : geometrySignals > 0
+          ? evidence.geometryElementCount > 0 ? "passed" : "failed"
+          : "warning";
+      return professionalGateRecord(gate, status, {
+        observed: { geometrySignals, geometryElementCount: evidence.geometryElementCount },
+        required: { shapeLayoutRefs: true },
+        message: status === "passed" ? "Visio shape geometry is attached to element refs." : "Visio shape geometry was not attached."
+      });
+    }
+    if (gate === "visio-connector-refs-preserved") {
+      const connectorSignals = maxTraceMetric(document, ["connectors", "connectorCount"]);
+      const status = routeId !== "visio"
+        ? "not_applicable"
+        : connectorSignals > 0
+          ? evidence.visioConnectorRefCount > 0 ? "passed" : "failed"
+          : "not_applicable";
+      return professionalGateRecord(gate, status, {
+        observed: { connectorSignals, visioConnectorRefCount: evidence.visioConnectorRefCount },
+        required: { connectorRefsWhenConnectorsExist: true },
+        message: status === "passed" ? "Visio connectors are preserved as structured element references." : "No Visio connectors were required or observed."
+      });
+    }
     if (gate === "sheet-row-cell-refs-preserved") {
       const cellSignals = maxTraceMetric(document, ["cells", "cellCount"]);
       const status = routeId !== "spreadsheet"
@@ -12551,6 +12943,14 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       sampleElements.filter((element) => element.headerFooter?.partName).length
     );
     const shapeRefCount = sampleElements.filter((element) => element.shape?.id || element.shape?.name).length;
+    const visioShapeRefCount = Math.max(
+      Number(elementTypes["visio-shape"] || 0),
+      sampleElements.filter((element) => element.type === "visio-shape" && (element.shape?.id || element.shape?.name)).length
+    );
+    const visioConnectorRefCount = Math.max(
+      Number(elementTypes["visio-connector"] || 0),
+      sampleElements.filter((element) => element.type === "visio-connector" && element.layout?.strategy === "visio-connector-ref.v1").length
+    );
     const placeholderRefCount = sampleElements.filter((element) => element.shape?.isPlaceholder || element.shape?.placeholderType).length;
     const presentationLayoutRefCount = Math.max(
       Number(elementTypes["slide-layout"] || 0),
@@ -12600,6 +13000,8 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       bookmarkRefCount,
       headerFooterRefCount,
       shapeRefCount,
+      visioShapeRefCount,
+      visioConnectorRefCount,
       placeholderRefCount,
       presentationLayoutRefCount,
       presentationMasterRefCount,
@@ -12683,6 +13085,8 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       documentWithPresentationLayoutRefsCount: plannedDocuments.filter((document) => document.evidence.presentationLayoutRefCount > 0).length,
       documentWithPresentationMasterRefsCount: plannedDocuments.filter((document) => document.evidence.presentationMasterRefCount > 0).length,
       documentWithPresentationInheritanceRefsCount: plannedDocuments.filter((document) => document.evidence.presentationLayoutRefCount > 0 || document.evidence.presentationMasterRefCount > 0).length,
+      documentWithVisioShapeRefsCount: plannedDocuments.filter((document) => document.evidence.visioShapeRefCount > 0).length,
+      documentWithVisioConnectorRefsCount: plannedDocuments.filter((document) => document.evidence.visioConnectorRefCount > 0).length,
       documentWithAnnotationsCount: plannedDocuments.filter((document) => document.evidence.annotationElementCount > 0).length,
       documentWithRevisionRefsCount: plannedDocuments.filter((document) => document.evidence.revisionRefCount > 0).length,
       documentWithPdfOutlineRefsCount: plannedDocuments.filter((document) => document.evidence.pdfOutlineRefCount > 0).length,
@@ -13510,6 +13914,43 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           authors: parsed.commentAuthorCount
         });
       }
+    } else if (route?.id === "visio") {
+      const parsed = canUseBoundedEntries
+        ? parseVisio(entryPlan.entries)
+        : { text: "", elements: [], format: "vsdx", pageCount: entryPlan.selectedFileCount, shapeCount: 0, textShapeCount: 0, connectorCount: 0, geometryCount: 0 };
+      if (parsed.text && canUseBoundedEntries) {
+        directText = parsed.text || "";
+        totalCharacters = directText.length;
+        structuredFileCount = parsed.visioPartCount || entryPlan.selectedFileCount;
+        structureElements = parsed.elements || [];
+        structureFormat = parsed.format || "vsdx";
+        parserTrace.push({
+          stage,
+          status: totalCharacters ? "completed" : "empty",
+          mode: "structured-zip-file-ref",
+          files: structuredFileCount,
+          characters: totalCharacters,
+          elements: structureElements.length,
+          pages: parsed.pageCount,
+          shapes: parsed.shapeCount,
+          textShapes: parsed.textShapeCount,
+          connectors: parsed.connectorCount,
+          geometries: parsed.geometryCount,
+          layoutStrategy: parsed.geometryCount ? "visio-shape-geometry.v1" : ""
+        });
+        parserTrace.push({
+          stage: "office.visio.shapes",
+          status: parsed.shapeCount ? "completed" : "empty",
+          shapes: parsed.shapeCount,
+          textShapes: parsed.textShapeCount,
+          geometries: parsed.geometryCount
+        });
+        parserTrace.push({
+          stage: "office.visio.connectors",
+          status: parsed.connectorCount ? "completed" : "empty",
+          connectors: parsed.connectorCount
+        });
+      }
     } else if (route?.id === "open-document") {
       const parsed = canUseBoundedEntries
         ? parseOpenDocument(entryPlan.entries)
@@ -13560,7 +14001,7 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
         characters: totalCharacters
       });
     }
-    if (!directText && !structureElements.length && totalCharacters === 0 && ["word", "presentation"].includes(route?.id)) {
+    if (!directText && !structureElements.length && totalCharacters === 0 && ["word", "presentation", "visio"].includes(route?.id)) {
       const streamed = appendStructuredZipFilesAsText({ route, rootDir: extracted.outputDir, outputPath });
       structuredFileCount = streamed.fileCount;
       totalCharacters = streamed.totalCharacters;
@@ -18561,6 +19002,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "inline-or-streaming-manifest-document-input.v1",
       "structured-json-file-ref-streaming-window.v1",
       "directory-file-ref-recursive-routing.v1",
+      "visio-opc-shape-parser.v1",
       "document-element-model.v1",
       "element-aware-by-title-windowing.v1",
       PDF_SUBTYPE_ROUTING_STRATEGY,
@@ -18594,6 +19036,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
           "pdf-header",
           "zip-ooxml-word",
           "zip-ooxml-presentation",
+          "zip-ooxml-visio",
           "zip-ooxml-spreadsheet",
           "zip-opendocument",
           "zip-opendocument-spreadsheet",
@@ -18739,6 +19182,10 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         "office.presentation.charts",
         "office.presentation.speaker-notes",
         "office.presentation.comments",
+        "office.visio.pages",
+        "office.visio.shapes",
+        "office.visio.connectors",
+        "office.visio.text",
         "office.word.tables",
         "office.word.annotations",
         "table.sheet.structured",
@@ -18769,10 +19216,10 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       supported: true,
       strategy: "document-element-model.v1",
       windowingStrategy: "element-aware-by-title-windowing.v1",
-      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-layout", "slide-master", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "content-control", "bookmark", "header", "footer", "defined-name", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment", "transcript-cue", "speaker-turn", "xbrl-fact"],
-      structuredFormats: ["markdown", "html", "xml", "asciidoc", "latex", "docx", "pptx", "xlsx", "open-document", "epub", "pdf", "webvtt", "srt", "xbrl", "ixbrl"],
-      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "presentation.kind", "presentation.slidePart", "presentation.layoutPart", "presentation.masterPart", "presentation.relationshipId", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "headerFooter.kind", "headerFooter.partName", "definedName.name", "definedName.ref", "definedName.builtinType", "codeBlock.language", "codeBlock.lineStart", "quote.depth", "transcript.cueId", "transcript.speaker", "transcript.start", "transcript.end", "xbrlFact.name", "xbrlFact.contextRef", "xbrlFact.unitRef", "xbrlFact.periodEnd", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
-      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.presentation", "elementRefs.presentation.layoutPart", "elementRefs.presentation.masterPart", "elementRefs.presentation.relationshipId", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.headerFooter", "elementRefs.headerFooter.kind", "elementRefs.headerFooter.partName", "elementRefs.definedName", "elementRefs.definedName.name", "elementRefs.definedName.ref", "elementRefs.definedName.builtinType", "elementRefs.codeBlock", "elementRefs.codeBlock.language", "elementRefs.codeBlock.lineStart", "elementRefs.quote", "elementRefs.quote.depth", "elementRefs.transcript", "elementRefs.transcript.speaker", "elementRefs.transcript.start", "elementRefs.xbrlFact", "elementRefs.xbrlFact.contextRef", "elementRefs.xbrlFact.unitRef", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
+      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-layout", "slide-master", "slide-shape", "speaker-note", "visio-shape", "visio-connector", "list-item", "blockquote", "link", "image", "chart", "content-control", "bookmark", "header", "footer", "defined-name", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment", "transcript-cue", "speaker-turn", "xbrl-fact"],
+      structuredFormats: ["markdown", "html", "xml", "asciidoc", "latex", "docx", "pptx", "xlsx", "vsdx", "open-document", "epub", "pdf", "webvtt", "srt", "xbrl", "ixbrl"],
+      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.type", "shape.master", "shape.masterShape", "shape.placeholderType", "presentation.kind", "presentation.slidePart", "presentation.layoutPart", "presentation.masterPart", "presentation.relationshipId", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "headerFooter.kind", "headerFooter.partName", "definedName.name", "definedName.ref", "definedName.builtinType", "codeBlock.language", "codeBlock.lineStart", "quote.depth", "transcript.cueId", "transcript.speaker", "transcript.start", "transcript.end", "xbrlFact.name", "xbrlFact.contextRef", "xbrlFact.unitRef", "xbrlFact.periodEnd", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
+      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.type", "elementRefs.shape.master", "elementRefs.shape.masterShape", "elementRefs.shape.placeholderType", "elementRefs.presentation", "elementRefs.presentation.layoutPart", "elementRefs.presentation.masterPart", "elementRefs.presentation.relationshipId", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.headerFooter", "elementRefs.headerFooter.kind", "elementRefs.headerFooter.partName", "elementRefs.definedName", "elementRefs.definedName.name", "elementRefs.definedName.ref", "elementRefs.definedName.builtinType", "elementRefs.codeBlock", "elementRefs.codeBlock.language", "elementRefs.codeBlock.lineStart", "elementRefs.quote", "elementRefs.quote.depth", "elementRefs.transcript", "elementRefs.transcript.speaker", "elementRefs.transcript.start", "elementRefs.xbrlFact", "elementRefs.xbrlFact.contextRef", "elementRefs.xbrlFact.unitRef", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
       referencePatterns: [
         "unstructured.elements",
         "unstructured.chunk_by_title",
@@ -18793,7 +19240,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       formatMatrix: professionalFormatMatrix(PROFESSIONAL_FORMAT_ORDER),
       humanReadableTargets: ["portable-markdown", "portable-docx", "console-summary-json", "workspace-package-zip"],
       agentReadableTargets: ["agent-message-json", "professional-format-manifest-json", "result-json", "evidence-pack-json"],
-      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "codeBlocks", "blockquotes", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "definedNames", "namedRanges", "printAreas", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "contentControls", "bookmarks", "headers", "footers", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders", "slide-layout", "slide-master", "slideLayouts", "slideMasters"],
+      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "codeBlocks", "blockquotes", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "definedNames", "namedRanges", "printAreas", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "contentControls", "bookmarks", "headers", "footers", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapeNames", "shapeGeometry", "shapeConnectors", "shapePlaceholders", "slide-layout", "slide-master", "slideLayouts", "slideMasters"],
       qualityGates: uniqueOrdered(PROFESSIONAL_FORMAT_ORDER.flatMap((formatId) => (
         professionalFormatAdapter(formatId)?.qualityGates || []
       ))),
