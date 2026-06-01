@@ -796,6 +796,27 @@ function ratio(part, total) {
   return Number((Number(part || 0) / denominator).toFixed(4));
 }
 
+function prometheusEscapeLabel(value = "") {
+  return String(value || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/"/g, "\\\"");
+}
+
+function prometheusLabels(labels = {}) {
+  const entries = Object.entries(labels)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "");
+  if (!entries.length) {
+    return "";
+  }
+  return `{${entries.map(([key, value]) => `${key}="${prometheusEscapeLabel(value)}"`).join(",")}}`;
+}
+
+function prometheusSample(name, value, labels = {}) {
+  const numericValue = Number(value || 0);
+  return `${name}${prometheusLabels(labels)} ${Number.isFinite(numericValue) ? numericValue : 0}`;
+}
+
 function createMetricClauses({
   since = "",
   until = "",
@@ -2128,6 +2149,105 @@ export function createToolManagementStore({
     };
   }
 
+  function metricsPrometheus(options = {}) {
+    const health = metricsHealth(options);
+    const lines = [
+      "# HELP pact_tool_management_window_seconds Metrics aggregation window in seconds.",
+      "# TYPE pact_tool_management_window_seconds gauge",
+      prometheusSample("pact_tool_management_window_seconds", health.window.windowSeconds),
+      "# HELP pact_tool_management_health_status Health status as one-hot gauges by status label.",
+      "# TYPE pact_tool_management_health_status gauge",
+      ...["ok", "warn", "critical"].map((status) =>
+        prometheusSample("pact_tool_management_health_status", health.status === status ? 1 : 0, { status })
+      ),
+      "# HELP pact_tool_management_health_breaches_total Number of active health threshold breaches.",
+      "# TYPE pact_tool_management_health_breaches_total gauge",
+      prometheusSample("pact_tool_management_health_breaches_total", health.breaches.length),
+      "# HELP pact_tool_management_requests_total HTTP request metric events in the window.",
+      "# TYPE pact_tool_management_requests_total gauge",
+      prometheusSample("pact_tool_management_requests_total", health.requests.total),
+      prometheusSample("pact_tool_management_requests_success_total", health.requests.successTotal),
+      prometheusSample("pact_tool_management_requests_client_error_total", health.requests.clientErrorTotal),
+      prometheusSample("pact_tool_management_requests_server_error_total", health.requests.serverErrorTotal),
+      prometheusSample(
+        "pact_tool_management_requests_completion_failure_total",
+        health.requests.completionFailureTotal
+      ),
+      "# HELP pact_tool_management_requests_per_minute HTTP request rate in the window.",
+      "# TYPE pact_tool_management_requests_per_minute gauge",
+      prometheusSample("pact_tool_management_requests_per_minute", health.requests.requestsPerMinute),
+      "# HELP pact_tool_management_request_error_rate HTTP request error ratios in the window.",
+      "# TYPE pact_tool_management_request_error_rate gauge",
+      prometheusSample("pact_tool_management_request_error_rate", health.requests.serverErrorRate, {
+        kind: "server"
+      }),
+      prometheusSample("pact_tool_management_request_error_rate", health.requests.clientErrorRate, {
+        kind: "client"
+      }),
+      prometheusSample("pact_tool_management_request_error_rate", health.requests.completionFailureRate, {
+        kind: "completion"
+      }),
+      "# HELP pact_tool_management_request_transfer_bytes_total HTTP request and response transfer bytes.",
+      "# TYPE pact_tool_management_request_transfer_bytes_total gauge",
+      prometheusSample(
+        "pact_tool_management_request_transfer_bytes_total",
+        health.requests.transferBytesTotal
+      ),
+      "# HELP pact_tool_management_request_transfer_bytes_per_second HTTP transfer byte rate.",
+      "# TYPE pact_tool_management_request_transfer_bytes_per_second gauge",
+      prometheusSample(
+        "pact_tool_management_request_transfer_bytes_per_second",
+        health.requests.transferBytesPerSecond
+      ),
+      "# HELP pact_tool_management_tool_calls_total Tool call metric events in the window.",
+      "# TYPE pact_tool_management_tool_calls_total gauge",
+      prometheusSample("pact_tool_management_tool_calls_total", health.toolCalls.total),
+      prometheusSample("pact_tool_management_tool_calls_ok_total", health.toolCalls.okTotal),
+      prometheusSample("pact_tool_management_tool_calls_denied_total", health.toolCalls.deniedTotal),
+      prometheusSample("pact_tool_management_tool_calls_failure_total", health.toolCalls.failureTotal),
+      prometheusSample("pact_tool_management_tool_calls_timeout_total", health.toolCalls.timeoutTotal),
+      prometheusSample(
+        "pact_tool_management_tool_calls_rate_limited_total",
+        health.toolCalls.rateLimitedTotal
+      ),
+      "# HELP pact_tool_management_tool_calls_per_minute Tool call rate in the window.",
+      "# TYPE pact_tool_management_tool_calls_per_minute gauge",
+      prometheusSample("pact_tool_management_tool_calls_per_minute", health.toolCalls.callsPerMinute),
+      "# HELP pact_tool_management_tool_call_rate Tool call failure and denial ratios.",
+      "# TYPE pact_tool_management_tool_call_rate gauge",
+      prometheusSample("pact_tool_management_tool_call_rate", health.toolCalls.failureRate, {
+        kind: "failure"
+      }),
+      prometheusSample("pact_tool_management_tool_call_rate", health.toolCalls.deniedRate, {
+        kind: "denied"
+      }),
+      "# HELP pact_tool_management_tool_transfer_bytes_total Tool input and result transfer bytes.",
+      "# TYPE pact_tool_management_tool_transfer_bytes_total gauge",
+      prometheusSample("pact_tool_management_tool_transfer_bytes_total", health.toolCalls.transferBytesTotal),
+      "# HELP pact_tool_management_tool_transfer_bytes_per_second Tool transfer byte rate.",
+      "# TYPE pact_tool_management_tool_transfer_bytes_per_second gauge",
+      prometheusSample(
+        "pact_tool_management_tool_transfer_bytes_per_second",
+        health.toolCalls.transferBytesPerSecond
+      ),
+      "# HELP pact_tool_management_top_tool_calls_total Top tool calls by tool id.",
+      "# TYPE pact_tool_management_top_tool_calls_total gauge",
+      ...health.toolCalls.topTools.map((item) =>
+        prometheusSample("pact_tool_management_top_tool_calls_total", item.total, { tool_id: item.toolId })
+      ),
+      "# HELP pact_tool_management_top_route_requests_total Top request counts by route.",
+      "# TYPE pact_tool_management_top_route_requests_total gauge",
+      ...health.requests.topRoutes.map((item) =>
+        prometheusSample("pact_tool_management_top_route_requests_total", item.total, {
+          transport: item.transport,
+          method: item.method,
+          route: item.route
+        })
+      )
+    ];
+    return `${lines.join("\n")}\n`;
+  }
+
   function metricTableStorageSummary(kind) {
     if (kind === "tool") {
       const row = db.prepare(`
@@ -2405,6 +2525,7 @@ export function createToolManagementStore({
     metricsSummary,
     metricsExport,
     metricsHealth,
+    metricsPrometheus,
     metricsStorageSummary,
     pruneMetrics,
     createMcpAuthorizationRequest,

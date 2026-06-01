@@ -403,6 +403,7 @@ tool_management.mcp.request_authorization
 tool_management.mcp.resolve_request
 tool_management.metrics_export
 tool_management.metrics_health
+tool_management.metrics_prometheus
 tool_management.metrics_prune
 tool_management.metrics_storage
 tool_management.metrics_summary

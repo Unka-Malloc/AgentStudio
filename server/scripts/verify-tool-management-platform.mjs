@@ -297,6 +297,26 @@ try {
     item.route === "/api/tool-management/v1/execute"
   ));
 
+  const prometheusUrl = new URL(`${server.url}/api/tool-management/v1/metrics/prometheus`);
+  prometheusUrl.searchParams.set("windowSeconds", "3600");
+  prometheusUrl.searchParams.set("maxDeniedRate", "0");
+  const prometheusResponse = await fetch(prometheusUrl.toString());
+  const prometheusText = await prometheusResponse.text();
+  assert.equal(prometheusResponse.status, 200);
+  assert.match(prometheusResponse.headers.get("content-type") || "", /text\/plain/);
+  assert.match(prometheusText, /^# HELP pact_tool_management_window_seconds/m);
+  assert.match(prometheusText, /^pact_tool_management_requests_total \d+/m);
+  assert.match(prometheusText, /^pact_tool_management_tool_calls_total \d+/m);
+  assert.match(prometheusText, /^pact_tool_management_health_breaches_total \d+/m);
+  assert.match(
+    prometheusText,
+    /^pact_tool_management_top_tool_calls_total\{tool_id="pact\.knowledge\.health"\} \d+/m
+  );
+  assert.match(
+    prometheusText,
+    /^pact_tool_management_top_route_requests_total\{transport="tool-management",method="POST",route="\/api\/tool-management\/v1\/execute"\} \d+/m
+  );
+
   const toolMetricsExportUrl = new URL(`${server.url}/api/tool-management/v1/metrics/export`);
   toolMetricsExportUrl.searchParams.set("kind", "tool");
   toolMetricsExportUrl.searchParams.set("toolId", "pact.knowledge.health");
@@ -564,6 +584,26 @@ try {
   assert.equal(cliHealthPayload.health.window.windowSeconds, 3600);
   assert.ok(cliHealthPayload.health.toolCalls.total >= 1);
   assert.ok(cliHealthPayload.health.requests.total >= 1);
+
+  const cliPrometheus = await execFileAsync(
+    process.execPath,
+    [
+      path.resolve("server/scripts/pact.mjs"),
+      "tools",
+      "metrics",
+      "prometheus",
+      "--server-url",
+      server.url,
+      "--window-seconds",
+      "3600",
+      "--max-denied-rate",
+      "1"
+    ],
+    { env: process.env }
+  );
+  assert.match(cliPrometheus.stdout, /^# HELP pact_tool_management_window_seconds/m);
+  assert.match(cliPrometheus.stdout, /^pact_tool_management_tool_calls_total \d+/m);
+  assert.match(cliPrometheus.stdout, /^pact_tool_management_requests_total \d+/m);
 
   const cliExport = await execFileAsync(
     process.execPath,

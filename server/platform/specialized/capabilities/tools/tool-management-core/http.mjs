@@ -151,6 +151,21 @@ export function createToolManagementHttpRouter({
       return true;
     }
 
+    async function completeText(status, text, contentType = "text/plain; charset=utf-8") {
+      logRouter(status >= 400 ? "warn" : "info", "tool_management.http.completed", {
+        requestId: request?.__pactRequestId || "",
+        method: normalizedMethod,
+        route: url.pathname,
+        suffix,
+        status,
+        durationMs: Date.now() - startedAt,
+        responseBytes: Buffer.byteLength(String(text || ""), "utf8")
+      });
+      response.writeHead(status, { "content-type": contentType });
+      response.end(String(text || ""));
+      return true;
+    }
+
     try {
 
     if (normalizedMethod === "GET" && suffix === "/catalog") {
@@ -394,6 +409,21 @@ export function createToolManagementHttpRouter({
           minRequests: Number(url.searchParams.get("minRequests") || url.searchParams.get("min-requests") || 0)
         })
       });
+    }
+
+    if (normalizedMethod === "GET" && suffix === "/metrics/prometheus") {
+      if (!(await requireConsole(request, response, normalizedMethod, url, ["console:read"]))) {
+        return true;
+      }
+      return completeText(200, platform.store.metricsPrometheus({
+        windowSeconds: Number(url.searchParams.get("windowSeconds") || url.searchParams.get("window-seconds") || 300),
+        maxRequestErrorRate: url.searchParams.get("maxRequestErrorRate") ||
+          url.searchParams.get("max-request-error-rate") || "",
+        maxToolFailureRate: url.searchParams.get("maxToolFailureRate") ||
+          url.searchParams.get("max-tool-failure-rate") || "",
+        maxDeniedRate: url.searchParams.get("maxDeniedRate") || url.searchParams.get("max-denied-rate") || "",
+        minRequests: Number(url.searchParams.get("minRequests") || url.searchParams.get("min-requests") || 0)
+      }), "text/plain; version=0.0.4; charset=utf-8");
     }
 
     if (normalizedMethod === "GET" && suffix === "/metrics/storage") {

@@ -1812,6 +1812,34 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["console:read"]
   },
   {
+    id: "tool_management.metrics_prometheus",
+    feature: "tool_management",
+    label: "工具指标 Prometheus 导出",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/tool-management/v1/metrics/prometheus",
+      localInForwardMode: true,
+      query: [
+        { name: "windowSeconds", aliases: ["windowSeconds", "window-seconds"] },
+        { name: "maxRequestErrorRate", aliases: ["maxRequestErrorRate", "max-request-error-rate"] },
+        { name: "maxToolFailureRate", aliases: ["maxToolFailureRate", "max-tool-failure-rate"] },
+        { name: "maxDeniedRate", aliases: ["maxDeniedRate", "max-denied-rate"] },
+        { name: "minRequests", aliases: ["minRequests", "min-requests"] }
+      ],
+      coerce: {
+        windowSeconds: "number",
+        maxRequestErrorRate: "number",
+        maxToolFailureRate: "number",
+        maxDeniedRate: "number",
+        minRequests: "number"
+      }
+    },
+    rpc: {method:"tool_management.metrics_prometheus",syntheticPath:"/api/tool-management/v1/metrics/prometheus",query:[{name:"windowSeconds",aliases:["windowSeconds","window-seconds"]},{name:"maxRequestErrorRate",aliases:["maxRequestErrorRate","max-request-error-rate"]},{name:"maxToolFailureRate",aliases:["maxToolFailureRate","max-tool-failure-rate"]},{name:"maxDeniedRate",aliases:["maxDeniedRate","max-denied-rate"]},{name:"minRequests",aliases:["minRequests","min-requests"]}]},
+    cli: { command: ["tools", "metrics", "prometheus"], usage: "tools metrics prometheus [--window-seconds 300]" },
+    requiredScopes: ["console:read"]
+  },
+  {
     id: "tool_management.metrics_storage",
     feature: "tool_management",
     label: "工具指标存储摘要",
