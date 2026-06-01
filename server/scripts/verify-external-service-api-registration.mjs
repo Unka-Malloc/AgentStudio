@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SERVER_API_OPERATIONS } from "../platform/common/operation-dispatcher/operation-registry.mjs";
 import { createToolCatalog } from "../platform/specialized/capabilities/tools/tool-management-core/catalog.mjs";
+import { KERNEL_TOOL_IDS } from "../platform/common/security/authorization/authorization-engine.mjs";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const externalServicesRoot = path.join(repoRoot, "external-services");
@@ -27,6 +28,7 @@ const SERVICE_REGISTRATION_REQUIREMENTS = Object.freeze({
     requiredFiles: ["server.mjs", "README.md", "Dockerfile", "reference-frameworks.json", "format-routes.json", "parser-strategies.json", "format-conversion-profiles.json", "model-distillation-profiles.json"],
     rejectedInternalOperationPrefixes: ["knowledge.distillation."],
     rejectedInternalToolIds: [
+      "pact.knowledge.distillation.export",
       "pact.knowledge.distillation.runs.create",
       "pact.knowledge.distillation.runs.get"
     ],
@@ -74,6 +76,7 @@ const operationsById = new Map(SERVER_API_OPERATIONS.map((operation) => [operati
 const catalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
 const toolsByOperationId = new Map(catalog.tools.map((tool) => [tool.operationId, tool]));
 const toolIds = new Set(catalog.tools.map((tool) => tool.id));
+const kernelToolIds = new Set(KERNEL_TOOL_IDS);
 
 for (const operation of SERVER_API_OPERATIONS) {
   if (!operation.aspects?.includes("external-service")) {
@@ -133,6 +136,11 @@ for (const serviceName of externalServiceNames) {
       toolIds.has(rejectedToolId),
       false,
       `${rejectedToolId} is an internal platform algorithm capability and must not be exposed`
+    );
+    assert.equal(
+      kernelToolIds.has(rejectedToolId),
+      false,
+      `${rejectedToolId} is an internal platform algorithm capability and must not remain in the authorization kernel`
     );
   }
   for (const operationId of requirement.deprecatedInternalOperationIds || []) {

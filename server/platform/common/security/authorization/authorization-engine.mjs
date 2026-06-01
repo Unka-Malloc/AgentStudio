@@ -614,7 +614,6 @@ pact.knowledge.console
 pact.knowledge.contribution.submit
 pact.knowledge.documentStructure
 pact.knowledge.dossier.export
-pact.knowledge.distillation.export
 pact.knowledge.evaluation.runs.create
 pact.knowledge.evaluation.runs.get
 pact.knowledge.evaluation.runs.list
