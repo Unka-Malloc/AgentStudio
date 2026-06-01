@@ -659,6 +659,13 @@ function validateModelDistillationProfilesConfig(config = {}) {
     if (profile.classificationDistillation?.enabled !== true || !String(profile.classificationDistillation?.strategy || "").trim()) {
       throw new Error(`model distillation profile ${id} must define an enabled classificationDistillation strategy`);
     }
+    const groupGatewayCalls = profile.classificationDistillation?.groupGatewayCalls || {};
+    if (groupGatewayCalls.enabled !== true || !String(groupGatewayCalls.strategy || "").trim()) {
+      throw new Error(`model distillation profile ${id} must define enabled classificationDistillation.groupGatewayCalls`);
+    }
+    if (Number(groupGatewayCalls.maxGroupCalls || 0) < 1) {
+      throw new Error(`model distillation profile ${id} must define classificationDistillation.groupGatewayCalls.maxGroupCalls`);
+    }
     if (!Array.isArray(profile.requiredOutput?.constraints) || profile.requiredOutput.constraints.length === 0) {
       throw new Error(`model distillation profile ${id} must define requiredOutput.constraints[]`);
     }
@@ -708,6 +715,20 @@ function normalizeModelDistillationProfile(profile = {}, registry = {}) {
       maxGroups: Math.max(1, Number(profile.classificationDistillation?.maxGroups || 32)),
       maxEvidencePerGroup: Math.max(1, Number(profile.classificationDistillation?.maxEvidencePerGroup || 6)),
       includeGarbageGroups: profile.classificationDistillation?.includeGarbageGroups === true,
+      groupGatewayCalls: Object.freeze({
+        enabled: profile.classificationDistillation?.groupGatewayCalls?.enabled === true,
+        strategy: String(profile.classificationDistillation?.groupGatewayCalls?.strategy || "").trim(),
+        maxGroupCalls: Math.max(1, Number(profile.classificationDistillation?.groupGatewayCalls?.maxGroupCalls || 32)),
+        includeGarbageGroups: profile.classificationDistillation?.groupGatewayCalls?.includeGarbageGroups === true,
+        maxEvidencePerGroup: Math.max(1, Number(
+          profile.classificationDistillation?.groupGatewayCalls?.maxEvidencePerGroup ||
+            profile.classificationDistillation?.maxEvidencePerGroup ||
+            6
+        )),
+        systemPromptSuffixLines: Object.freeze(normalizeFormatRouteArray(
+          profile.classificationDistillation?.groupGatewayCalls?.systemPromptSuffixLines
+        ))
+      }),
       outputs: Object.freeze(normalizeFormatRouteArray(profile.classificationDistillation?.outputs))
     }),
     requiredOutput: Object.freeze({
@@ -18726,20 +18747,86 @@ function compactGroupDistillationEvidenceRecord(allDocuments = [], document = {}
   };
 }
 
-function buildClassificationDistillationMap(distillationWorkflow = {}, modelText = "", profile = MODEL_DISTILLATION_PROFILES.defaultProfile) {
+function selectedClassificationDistillationGroups(distillationWorkflow = {}, policy = {}) {
+  const classification = distillationWorkflow.classification || {};
+  return (classification.groups || [])
+    .filter((group) => policy.includeGarbageGroups || !group.excludedFromCore)
+    .slice(0, Math.max(1, Number(policy.maxGroups || 32)));
+}
+
+function classificationGroupModelCallSkippedRecord(group = {}, policy = {}, reason = "") {
+  return {
+    status: "skipped",
+    scope: "classification-group",
+    strategy: policy.strategy || "",
+    reason,
+    generatedAt: nowIso(),
+    groupId: group.groupId || "",
+    label: group.label || "",
+    sourceIds: group.sourceIds || []
+  };
+}
+
+function classificationGroupModelCallCompletedRecord({ group = {}, policy = {}, config = {}, gatewayCall = {} } = {}) {
+  return {
+    status: "completed",
+    scope: "classification-group",
+    strategy: policy.strategy || "",
+    generatedAt: nowIso(),
+    groupId: group.groupId || "",
+    label: group.label || "",
+    sourceIds: group.sourceIds || [],
+    endpoint: config.endpoint || "",
+    modelAlias: config.modelAlias || "",
+    request: gatewayCall.request,
+    response: gatewayCall.response
+  };
+}
+
+function summarizeClassificationGroupGatewayCalls(selectedGroups = [], groupGatewayResults = new Map(), policy = {}) {
+  const records = selectedGroups.map((group) => (
+    groupGatewayResults.get(group.groupId) ||
+      classificationGroupModelCallSkippedRecord(group, policy, "group-model-call-not-recorded")
+  ));
+  return {
+    enabled: policy.enabled === true,
+    strategy: policy.strategy || "",
+    maxGroupCalls: Math.max(1, Number(policy.maxGroupCalls || 32)),
+    includeGarbageGroups: policy.includeGarbageGroups === true,
+    selectedGroupCount: selectedGroups.length,
+    completedGroupCallCount: records.filter((record) => record.status === "completed").length,
+    skippedGroupCallCount: records.filter((record) => record.status === "skipped").length,
+    completedGroupIds: records
+      .filter((record) => record.status === "completed")
+      .map((record) => record.groupId),
+    skippedGroups: records
+      .filter((record) => record.status === "skipped")
+      .map((record) => ({
+        groupId: record.groupId,
+        reason: record.reason
+      }))
+  };
+}
+
+function buildClassificationDistillationMap(
+  distillationWorkflow = {},
+  modelText = "",
+  profile = MODEL_DISTILLATION_PROFILES.defaultProfile,
+  groupGatewayResults = new Map()
+) {
   const policy = profile.classificationDistillation || {};
+  const groupCallPolicy = policy.groupGatewayCalls || {};
   const classification = distillationWorkflow.classification || {};
   const grounding = distillationWorkflow.grounding || {};
   const allDocuments = distillationWorkflow.documents || [];
-  const selectedGroups = (classification.groups || [])
-    .filter((group) => policy.includeGarbageGroups || !group.excludedFromCore)
-    .slice(0, Math.max(1, Number(policy.maxGroups || 32)));
+  const selectedGroups = selectedClassificationDistillationGroups(distillationWorkflow, policy);
+  const groupGatewayCalls = summarizeClassificationGroupGatewayCalls(selectedGroups, groupGatewayResults, groupCallPolicy);
   return {
     strategy: policy.strategy,
     profileId: profile.id,
     enabled: policy.enabled === true,
     generatedAt: nowIso(),
-    source: "classification.groups + modelDistillation.response",
+    source: "classification.groups + project-model-response + classification-group-model-responses",
     referencePatterns: [
       "graphrag.community-reports",
       "haystack.pipeline-component-outputs",
@@ -18750,12 +18837,18 @@ function buildClassificationDistillationMap(distillationWorkflow = {}, modelText
     groupCount: selectedGroups.length,
     coreGroupCount: selectedGroups.filter((group) => !group.excludedFromCore).length,
     garbageGroupCount: selectedGroups.filter((group) => group.excludedFromCore).length,
+    groupGatewayCalls,
     outputs: policy.outputs || [],
     groups: selectedGroups.map((group) => {
       const promotionGate = grounding.promotionGates?.[group.groupId] || candidatePromotionGateForGroup(group, grounding);
       const evidence = (group.documents || [])
         .slice(0, Math.max(1, Number(policy.maxEvidencePerGroup || 6)))
         .map((document) => compactGroupDistillationEvidenceRecord(allDocuments, document));
+      const modelCall = groupGatewayResults.get(group.groupId) ||
+        classificationGroupModelCallSkippedRecord(group, groupCallPolicy, "group-model-call-not-recorded");
+      const modelFocus = modelCall.status === "completed" && modelCall.response?.text
+        ? [modelCall.response.text]
+        : [];
       return {
         strategy: policy.strategy,
         profileId: profile.id,
@@ -18774,7 +18867,9 @@ function buildClassificationDistillationMap(distillationWorkflow = {}, modelText
           lowCoupling: (group.separationScore ?? 1) >= CLASSIFICATION_SEPARATION_THRESHOLD,
           highCohesion: group.cohesionScore >= LEADER_CLUSTER_THRESHOLD
         },
-        distilledFocus: (group.distillationUnit?.summary || [])
+        modelCall,
+        distilledFocus: modelFocus
+          .concat(group.distillationUnit?.summary || [])
           .concat((group.documents || []).map((document) => firstSentence(document.text || "")))
           .filter(Boolean)
           .slice(0, 5),
@@ -18782,6 +18877,13 @@ function buildClassificationDistillationMap(distillationWorkflow = {}, modelText
       };
     })
   };
+}
+
+function truncateModelDistillationPrompt(prompt = "") {
+  if (prompt.length <= MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS) {
+    return prompt;
+  }
+  return `${prompt.slice(0, MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS)}\n...[truncated for model input budget]`;
 }
 
 function buildModelDistillationPrompt(distillationWorkflow = {}, profile = MODEL_DISTILLATION_PROFILES.defaultProfile) {
@@ -18828,11 +18930,69 @@ function buildModelDistillationPrompt(distillationWorkflow = {}, profile = MODEL
       constraints: profile.requiredOutput.constraints
     }
   };
-  const prompt = JSON.stringify(modelInput, null, 2);
-  if (prompt.length <= MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS) {
-    return prompt;
-  }
-  return `${prompt.slice(0, MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS)}\n...[truncated for model input budget]`;
+  return truncateModelDistillationPrompt(JSON.stringify(modelInput, null, 2));
+}
+
+function buildGroupModelDistillationPrompt(distillationWorkflow = {}, group = {}, profile = MODEL_DISTILLATION_PROFILES.defaultProfile) {
+  const groupCallPolicy = profile.classificationDistillation?.groupGatewayCalls || {};
+  const allDocuments = distillationWorkflow.documents || [];
+  const grounding = distillationWorkflow.grounding || {};
+  const promotionGate = grounding.promotionGates?.[group.groupId] || candidatePromotionGateForGroup(group, grounding);
+  const groupDocuments = (group.documents || [])
+    .slice(0, Math.max(1, Number(groupCallPolicy.maxEvidencePerGroup || profile.classificationDistillation?.maxEvidencePerGroup || 6)));
+  const modelInput = {
+    task: profile.task,
+    distillationScope: "classification-group",
+    query: distillationWorkflow.query,
+    workflowScope: distillationWorkflow.workflowScope,
+    scopeSelection: distillationWorkflow.scopeSelection,
+    timeFilter: distillationWorkflow.corpusPlan?.timeFilter || null,
+    isolationRule: "Only distill the supplied group evidence. Do not merge unrelated classification groups.",
+    group: {
+      groupId: group.groupId,
+      label: group.label,
+      kind: group.kind || "topic",
+      sourceIds: group.sourceIds || [],
+      keywords: group.keywords || [],
+      topicHierarchy: group.topicHierarchy || null,
+      cohesionScore: group.cohesionScore || 0,
+      separationScore: group.separationScore ?? null,
+      excludedFromCore: Boolean(group.excludedFromCore),
+      distillationUnit: group.distillationUnit
+        ? {
+            unitId: group.distillationUnit.unitId || "",
+            mode: group.distillationUnit.mode || "",
+            topicPath: group.distillationUnit.topicPath || [],
+            sourceIds: group.distillationUnit.sourceIds || [],
+            summary: group.distillationUnit.summary || [],
+            windowRefs: group.distillationUnit.windowRefs || []
+          }
+        : null,
+      promotionGate
+    },
+    evidence: groupDocuments.map((document) => compactGroupDistillationEvidenceRecord(allDocuments, document)),
+    documents: groupDocuments.map(compactModelDocumentRecord),
+    projectContext: {
+      classificationStrategy: distillationWorkflow.classification?.strategy || "",
+      groupCount: distillationWorkflow.classification?.groupCount || 0,
+      coreGroupCount: distillationWorkflow.classification?.coreGroupCount || 0,
+      garbageGroupCount: distillationWorkflow.classification?.garbageGroupCount || 0,
+      convergenceStrategy: distillationWorkflow.convergence?.strategy || "",
+      convergenceSummary: distillationWorkflow.convergence?.convergenceSummary || "",
+      groundingStrategy: grounding.strategy || "",
+      groundingScore: grounding.groundingScore || 0
+    },
+    requiredOutput: {
+      language: profile.requiredOutput.language,
+      format: "JSON-compatible isolated classification group distillation text",
+      constraints: [
+        ...profile.requiredOutput.constraints,
+        "Only use facts from group.sourceIds and supplied evidence.",
+        "Keep unrelated topics out of this group output."
+      ]
+    }
+  };
+  return truncateModelDistillationPrompt(JSON.stringify(modelInput, null, 2));
 }
 
 function modelGatewayHeaders(config = {}, profile = MODEL_DISTILLATION_PROFILES.defaultProfile) {
@@ -18917,32 +19077,51 @@ function extractModelDistillationText(payload = {}) {
   ).trim();
 }
 
-function modelDistillationSkippedState(distillationWorkflow = {}, reason = "", profile = MODEL_DISTILLATION_PROFILES.defaultProfile) {
-  return {
-    ...distillationWorkflow,
-    modelDistillation: {
-      moduleBoundary: profile.moduleBoundary,
-      strategy: profile.gatewayStrategy,
-      profileId: profile.id,
-      status: "skipped",
-      reason,
-      requiredRealModelCall: true,
-      noBuiltinFallback: profile.noBuiltinFallback,
-      generatedAt: nowIso()
-    }
-  };
-}
-
-async function callModelDistillationGateway({ distillationWorkflow = {}, config = {}, profile = MODEL_DISTILLATION_PROFILES.defaultProfile } = {}) {
-  const prompt = buildModelDistillationPrompt(distillationWorkflow, profile);
+function buildModelGatewayPayload({
+  prompt = "",
+  config = {},
+  profile = MODEL_DISTILLATION_PROFILES.defaultProfile,
+  distillationScope = "project-convergence",
+  group = null,
+  systemPromptSuffixLines = []
+} = {}) {
   const payload = {
     moduleId: "external.knowledge.distillation",
     taskType: profile.taskType,
     modelAlias: config.modelAlias,
     question: prompt,
-    systemPrompt: profile.systemPromptLines.join("\n"),
-    parameters: profile.parameters
+    systemPrompt: profile.systemPromptLines.concat(systemPromptSuffixLines || []).join("\n"),
+    parameters: {
+      ...profile.parameters,
+      distillationScope
+    },
+    distillationScope
   };
+  if (group) {
+    payload.groupId = group.groupId || "";
+    payload.groupLabel = group.label || "";
+    payload.groupKind = group.kind || "topic";
+    payload.sourceIds = group.sourceIds || [];
+  }
+  return payload;
+}
+
+async function callModelGatewayWithPrompt({
+  prompt = "",
+  config = {},
+  profile = MODEL_DISTILLATION_PROFILES.defaultProfile,
+  distillationScope = "project-convergence",
+  group = null,
+  systemPromptSuffixLines = []
+} = {}) {
+  const payload = buildModelGatewayPayload({
+    prompt,
+    config,
+    profile,
+    distillationScope,
+    group,
+    systemPromptSuffixLines
+  });
   let response;
   let responseText = "";
   const startedAt = Date.now();
@@ -18977,11 +19156,16 @@ async function callModelDistillationGateway({ distillationWorkflow = {}, config 
   } catch {
     parsed = { text: responseText };
   }
-  if (!response.ok) {
-    const error = new Error(`Model gateway call failed with HTTP ${response.status}`);
+  if (!response?.ok) {
+    const error = new Error(`Model gateway call failed with HTTP ${response?.status || 0}`);
     error.statusCode = 502;
     error.code = "MODEL_GATEWAY_CALL_FAILED";
-    error.details = { statusCode: response.status, endpoint: config.endpoint };
+    error.details = {
+      statusCode: response?.status || 0,
+      endpoint: config.endpoint,
+      distillationScope,
+      groupId: group?.groupId || ""
+    };
     throw error;
   }
   const modelText = extractModelDistillationText(parsed);
@@ -18989,19 +19173,13 @@ async function callModelDistillationGateway({ distillationWorkflow = {}, config 
     const error = new Error("Model gateway returned an empty distillation response.");
     error.statusCode = 502;
     error.code = "MODEL_GATEWAY_EMPTY_RESPONSE";
+    error.details = {
+      distillationScope,
+      groupId: group?.groupId || ""
+    };
     throw error;
   }
-  const classificationDistillation = buildClassificationDistillationMap(distillationWorkflow, modelText, profile);
   return {
-    moduleBoundary: profile.moduleBoundary,
-    strategy: profile.gatewayStrategy,
-    profileId: profile.id,
-    status: "completed",
-    requiredRealModelCall: true,
-    noBuiltinFallback: profile.noBuiltinFallback,
-    generatedAt: nowIso(),
-    endpoint: config.endpoint,
-    modelAlias: config.modelAlias,
     request: {
       transportAttempts: attempts,
       promptCharacters: prompt.length,
@@ -19014,7 +19192,105 @@ async function callModelDistillationGateway({ distillationWorkflow = {}, config 
       sha256: shaBuffer(Buffer.from(responseText, "utf8")),
       text: modelText,
       raw: parsed
-    },
+    }
+  };
+}
+
+async function callClassificationGroupModelGatewayCalls({
+  distillationWorkflow = {},
+  config = {},
+  profile = MODEL_DISTILLATION_PROFILES.defaultProfile,
+  selectedGroups = []
+} = {}) {
+  const policy = profile.classificationDistillation?.groupGatewayCalls || {};
+  const results = new Map();
+  if (policy.enabled !== true) {
+    for (const group of selectedGroups) {
+      results.set(group.groupId, classificationGroupModelCallSkippedRecord(group, policy, "group-gateway-calls-disabled"));
+    }
+    return results;
+  }
+  const maxGroupCalls = Math.max(1, Number(policy.maxGroupCalls || 32));
+  let completedCalls = 0;
+  for (const group of selectedGroups) {
+    if (group.excludedFromCore && policy.includeGarbageGroups !== true) {
+      results.set(group.groupId, classificationGroupModelCallSkippedRecord(group, policy, "garbage-group-excluded-from-model-call"));
+      continue;
+    }
+    if (completedCalls >= maxGroupCalls) {
+      results.set(group.groupId, classificationGroupModelCallSkippedRecord(group, policy, "group-model-call-limit-exceeded"));
+      continue;
+    }
+    const prompt = buildGroupModelDistillationPrompt(distillationWorkflow, group, profile);
+    const gatewayCall = await callModelGatewayWithPrompt({
+      prompt,
+      config,
+      profile,
+      distillationScope: "classification-group",
+      group,
+      systemPromptSuffixLines: policy.systemPromptSuffixLines || []
+    });
+    results.set(group.groupId, classificationGroupModelCallCompletedRecord({
+      group,
+      policy,
+      config,
+      gatewayCall
+    }));
+    completedCalls += 1;
+  }
+  return results;
+}
+
+function modelDistillationSkippedState(distillationWorkflow = {}, reason = "", profile = MODEL_DISTILLATION_PROFILES.defaultProfile) {
+  return {
+    ...distillationWorkflow,
+    modelDistillation: {
+      moduleBoundary: profile.moduleBoundary,
+      strategy: profile.gatewayStrategy,
+      profileId: profile.id,
+      status: "skipped",
+      reason,
+      requiredRealModelCall: true,
+      noBuiltinFallback: profile.noBuiltinFallback,
+      generatedAt: nowIso()
+    }
+  };
+}
+
+async function callModelDistillationGateway({ distillationWorkflow = {}, config = {}, profile = MODEL_DISTILLATION_PROFILES.defaultProfile } = {}) {
+  const prompt = buildModelDistillationPrompt(distillationWorkflow, profile);
+  const projectCall = await callModelGatewayWithPrompt({
+    prompt,
+    config,
+    profile,
+    distillationScope: "project-convergence"
+  });
+  const selectedGroups = selectedClassificationDistillationGroups(distillationWorkflow, profile.classificationDistillation || {});
+  const groupGatewayResults = await callClassificationGroupModelGatewayCalls({
+    distillationWorkflow,
+    config,
+    profile,
+    selectedGroups
+  });
+  const classificationDistillation = buildClassificationDistillationMap(
+    distillationWorkflow,
+    projectCall.response.text,
+    profile,
+    groupGatewayResults
+  );
+  return {
+    moduleBoundary: profile.moduleBoundary,
+    strategy: profile.gatewayStrategy,
+    profileId: profile.id,
+    status: "completed",
+    requiredRealModelCall: true,
+    noBuiltinFallback: profile.noBuiltinFallback,
+    generatedAt: nowIso(),
+    endpoint: config.endpoint,
+    modelAlias: config.modelAlias,
+    request: projectCall.request,
+    response: projectCall.response,
+    groupGatewayCalls: classificationDistillation.groupGatewayCalls,
     classificationDistillation
   };
 }

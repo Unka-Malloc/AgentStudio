@@ -478,7 +478,9 @@ try {
     profile.noBuiltinFallback === true &&
     profile.transportPolicy.maxAttempts === 2 &&
     profile.transportPolicy.retryOn.includes("ECONNRESET") &&
-    profile.classificationDistillation.strategy === "profile-guided-group-distillation-map.v1"
+    profile.classificationDistillation.strategy === "profile-guided-group-distillation-map.v1" &&
+    profile.classificationDistillation.groupGatewayCalls.enabled === true &&
+    profile.classificationDistillation.groupGatewayCalls.strategy === "classification-group-real-model-call.v1"
   )), true);
   assert.equal(capabilities.payload.classification.strategy, "hashing_embedding_window_community_classification_v3");
   assert.equal(capabilities.payload.classification.taxonomyStrategy, "semantic-concept-topic-hierarchy.v1");
@@ -857,7 +859,7 @@ try {
   assert.equal(createRun.payload.result.grounding.strategy, "claim-evidence-topk-conflict-gating.v2");
   assert.equal(createRun.payload.result.graphEvidence.strategy, "graph-lite-entity-relationship-evidence-pack.v1");
   assert.equal(createRun.payload.result.graphEvidence.summary.entityCount > 0, true);
-  assert.equal(mockModelGateway.calls.length >= 1, true, "container distillation must call the configured model gateway");
+  assert.equal(mockModelGateway.calls.length >= 2, true, "container distillation must call the configured model gateway for project and group distillation");
   assert.equal(mockModelGateway.calls[0].method, "POST");
   assert.equal(mockModelGateway.calls[0].url, "/api/agent-gateway/call");
   assert.equal(mockModelGateway.calls[0].headers["x-pact-model-distillation-profile"], "real-model-grounded-distillation.v1");
@@ -865,6 +867,10 @@ try {
   assert.equal(mockModelGateway.calls[0].body.taskType, "knowledge_distillation");
   assert.equal(mockModelGateway.calls[0].body.modelAlias, "verify-container-real-model-gateway");
   assert.equal(mockModelGateway.calls[0].body.parameters.responseProfile, "machine-readable");
+  assert.equal(mockModelGateway.calls.some((call) => (
+    call.body.distillationScope === "classification-group" &&
+    call.body.parameters.distillationScope === "classification-group"
+  )), true);
 
   const markdown = await fetch(`${serviceUrl}/v1/distillation/runs/${encodeURIComponent(createRun.payload.runId)}/artifacts/portable-markdown`);
   assert.equal(markdown.status, 200);

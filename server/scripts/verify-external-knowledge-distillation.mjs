@@ -1236,7 +1236,9 @@ try {
     profile.parameters.responseProfile === "machine-readable" &&
     profile.transportPolicy.maxAttempts === 2 &&
     profile.transportPolicy.retryOn.includes("ECONNRESET") &&
-    profile.classificationDistillation.strategy === "profile-guided-group-distillation-map.v1"
+    profile.classificationDistillation.strategy === "profile-guided-group-distillation-map.v1" &&
+    profile.classificationDistillation.groupGatewayCalls.enabled === true &&
+    profile.classificationDistillation.groupGatewayCalls.strategy === "classification-group-real-model-call.v1"
   )), true);
   assert.equal(capabilities.payload.timeFiltering.supported, true);
   assert.equal(capabilities.payload.timeFiltering.strategy, "document-window-time-filter.v1");
@@ -2256,8 +2258,15 @@ try {
   assert.equal(createRun.payload.result.modelDistillation.status, "completed");
   assert.equal(createRun.payload.result.modelDistillation.modelAlias, "verify-real-model-gateway");
   assert.equal(createRun.payload.result.modelDistillation.classificationDistillation.strategy, "profile-guided-group-distillation-map.v1");
+  assert.equal(createRun.payload.result.modelDistillation.groupGatewayCalls.strategy, "classification-group-real-model-call.v1");
+  assert.equal(createRun.payload.result.modelDistillation.groupGatewayCalls.completedGroupCallCount >= 1, true);
   assert.equal(
     createRun.payload.result.modelDistillation.classificationDistillation.groupCount >= createRun.payload.result.classification.coreGroupCount,
+    true
+  );
+  assert.equal(
+    createRun.payload.result.modelDistillation.classificationDistillation.groupGatewayCalls.completedGroupCallCount >=
+      createRun.payload.result.classification.coreGroupCount,
     true
   );
   assert.equal(createRun.payload.result.agentMessage.modelDistillation.status, "completed");
@@ -2272,6 +2281,15 @@ try {
     assert.match(mockModelGateway.calls[0].body.systemPrompt, /Pact external knowledge distillation model worker/);
     assert.equal(mockModelGateway.calls[0].body.parameters.responseProfile, "machine-readable");
     assert.equal(mockModelGateway.calls[0].body.parameters.maxOutputTokens, 1800);
+    const groupModelGatewayCalls = mockModelGateway.calls.filter((call) => (
+      call.body.distillationScope === "classification-group"
+    ));
+    assert.equal(
+      groupModelGatewayCalls.length >= createRun.payload.result.classification.coreGroupCount,
+      true,
+      "classification distillation must call the model gateway once for each core group"
+    );
+    assert.equal(groupModelGatewayCalls.every((call) => call.body.parameters.distillationScope === "classification-group"), true);
   }
   assert.equal(createRun.payload.result.referenceGapReport.strategy, "reference-framework-gap-report.v1");
   assert.equal(createRun.payload.result.referenceGapReport.frameworks.some((framework) => framework.id === "graphrag" && framework.status === "absorbed-with-open-gaps"), true);
@@ -2312,6 +2330,22 @@ try {
   assert.equal(financeModelDistillation.topicHierarchy.primaryConcept, "finance");
   assert.equal(financeModelDistillation.sourceIds.includes("source-2"), true);
   assert.equal(financeModelDistillation.evidence.some((evidence) => evidence.evidenceRef), true);
+  assert.equal(financeModelDistillation.modelCall.status, "completed");
+  assert.equal(financeModelDistillation.modelCall.scope, "classification-group");
+  assert.equal(financeModelDistillation.modelCall.strategy, "classification-group-real-model-call.v1");
+  assert.equal(financeModelDistillation.modelCall.sourceIds.includes("source-2"), true);
+  assert.equal(typeof financeModelDistillation.modelCall.request.promptSha256, "string");
+  assert.equal(financeModelDistillation.modelCall.request.promptCharacters > 100, true);
+  if (!reuseServiceUrl) {
+    const financeModelGatewayCall = mockModelGateway.calls.find((call) => (
+      call.body.distillationScope === "classification-group" &&
+      call.body.groupId === financeGroup.groupId
+    ));
+    assert.ok(financeModelGatewayCall, "finance group must be distilled through its own model gateway call");
+    assert.equal(financeModelGatewayCall.body.groupKind, "topic");
+    assert.equal(financeModelGatewayCall.body.sourceIds.includes("source-2"), true);
+    assert.match(financeModelGatewayCall.body.question, /Only distill the supplied group evidence/);
+  }
   assert.equal(createRun.payload.result.candidates.some((candidate) => (
     candidate.sourceIds.includes("source-2") &&
     candidate.distillationUnitId &&
@@ -2332,7 +2366,9 @@ try {
   assert.equal(createRun.payload.result.modelDistillation.classificationDistillation.groups.some((group) => (
     group.groupId === garbageGroup?.groupId &&
     group.excludedFromCore === true &&
-    group.kind === "garbage"
+    group.kind === "garbage" &&
+    group.modelCall.status === "skipped" &&
+    group.modelCall.reason === "garbage-group-excluded-from-model-call"
   )), true);
   assert.equal(createRun.payload.result.agentMessage.responseProfile, "agent");
   assert.equal(createRun.payload.result.agentMessage.outputs.some((output) => (

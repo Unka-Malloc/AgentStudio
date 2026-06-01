@@ -54,8 +54,20 @@
         "maxGroups": 32,
         "maxEvidencePerGroup": 6,
         "includeGarbageGroups": true,
+        "groupGatewayCalls": {
+          "enabled": true,
+          "strategy": "classification-group-real-model-call.v1",
+          "maxGroupCalls": 32,
+          "includeGarbageGroups": false,
+          "maxEvidencePerGroup": 8,
+          "systemPromptSuffixLines": [
+            "For classification-group calls, only distill the supplied group evidence.",
+            "Do not merge unrelated groups or infer facts from the global project response."
+          ]
+        },
         "outputs": [
           "groupDistillationUnits",
+          "groupModelGatewayCalls",
           "evidenceRefs",
           "promotionGate",
           "topicHierarchy",

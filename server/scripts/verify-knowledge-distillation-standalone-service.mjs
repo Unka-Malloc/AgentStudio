@@ -436,6 +436,10 @@ assert.equal(defaultModelProfile.transportPolicy.retryOn.includes("ECONNRESET"),
 assert.equal(defaultModelProfile.classificationDistillation.enabled, true);
 assert.equal(defaultModelProfile.classificationDistillation.strategy, "profile-guided-group-distillation-map.v1");
 assert.equal(defaultModelProfile.classificationDistillation.includeGarbageGroups, true);
+assert.equal(defaultModelProfile.classificationDistillation.groupGatewayCalls.enabled, true);
+assert.equal(defaultModelProfile.classificationDistillation.groupGatewayCalls.strategy, "classification-group-real-model-call.v1");
+assert.equal(defaultModelProfile.classificationDistillation.groupGatewayCalls.maxGroupCalls >= 8, true);
+assert.equal(defaultModelProfile.classificationDistillation.groupGatewayCalls.includeGarbageGroups, false);
 assert.equal(defaultModelProfile.requiredOutput.constraints.length >= 3, true);
 assert.equal(
   externalServiceSource.includes("const MODEL_DISTILLATION_PROFILES = loadModelDistillationProfiles();"),
@@ -480,6 +484,9 @@ for (const functionName of [
   "bindDocumentParsingToAlgorithmInput",
   "runModelDistillationModule",
   "callModelDistillationGateway",
+  "callModelGatewayWithPrompt",
+  "callClassificationGroupModelGatewayCalls",
+  "buildGroupModelDistillationPrompt",
   "runFormatConversionModule",
   "initializeDistillationWorkflow",
   "normalizeDistillationWorkflowScope",
@@ -664,6 +671,9 @@ for (const expectedText of [
   "profile.systemPromptLines",
   "profile.parameters",
   "buildClassificationDistillationMap",
+  "buildGroupModelDistillationPrompt",
+  "callClassificationGroupModelGatewayCalls",
+  "groupGatewayCalls",
   "MODEL_GATEWAY_REQUIRED",
   "MODEL_ALIAS_REQUIRED",
   "callModelDistillationGateway"
