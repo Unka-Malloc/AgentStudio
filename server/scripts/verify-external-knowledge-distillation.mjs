@@ -1777,6 +1777,7 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("content-signature-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("human-agent-response-profile-separation.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("professional-format-manifest.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("response-profile-json-artifact-self-check.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("bounded-binary-file-profile.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("singleton-format-conversion-profile-registry.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("visio-opc-shape-parser.v1"), true);
@@ -1792,6 +1793,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.profileRegistry.validation, "startup-fail-fast");
   assert.equal(capabilities.payload.formatConversion.qualityGateEvaluationStrategy, "professional-format-quality-gates.v1");
   assert.equal(capabilities.payload.formatConversion.outputArtifactValidationStrategy, "format-conversion-output-artifact-self-check.v1");
+  assert.equal(capabilities.payload.formatConversion.responseProfileJsonArtifactValidationStrategy, "response-profile-json-artifact-self-check.v1");
   assert.equal(capabilities.payload.formatConversion.artifact, "format-conversion-plan-json");
   assert.equal(capabilities.payload.formatConversion.professionalManifestArtifact, "professional-format-manifest-json");
   assert.equal(capabilities.payload.formatConversion.modeSeparationStrategy, "human-agent-response-profile-separation.v1");
@@ -5842,7 +5844,31 @@ try {
   }
   const workspaceManifest = JSON.parse(Buffer.from(workspaceEntries["manifest.json"]).toString("utf8"));
   assert.equal(workspaceManifest.protocolVersion, "pact.external-knowledge-distillation.v1.workspace-package");
+  assert.equal(workspaceManifest.artifactValidationStrategy, "response-profile-json-artifact-self-check.v1");
+  assert.equal(workspaceManifest.validationStatusCounts.failed || 0, 0);
   assert.equal(workspaceManifest.artifacts.every((item) => item.byteSize > 0 && /^[a-f0-9]{64}$/.test(item.sha256)), true);
+  const workspaceArtifactsById = new Map(workspaceManifest.artifacts.map((item) => [item.artifactId, item]));
+  for (const artifactId of [
+    "console-summary-json",
+    "agent-message-json",
+    "result-json",
+    "project-snapshot-json",
+    "evidence-pack-json",
+    "format-conversion-plan-json",
+    "professional-format-manifest-json",
+    "reference-gap-report-json"
+  ]) {
+    const artifact = workspaceArtifactsById.get(artifactId);
+    assert.ok(artifact, `workspace manifest must list ${artifactId}`);
+    assert.equal(artifact.validation?.strategy, "response-profile-json-artifact-self-check.v1");
+    assert.equal(artifact.validation?.status, "passed");
+    assert.equal(artifact.validation.gates.some((gate) => gate.gate === "json-required-fields-present" && gate.status === "passed"), true);
+    assert.equal(artifact.validation.gates.some((gate) => gate.gate === "json-expected-fields-match" && gate.status === "passed"), true);
+  }
+  assert.equal(workspaceArtifactsById.get("agent-message-json").responseProfile, "agent");
+  assert.equal(workspaceArtifactsById.get("professional-format-manifest-json").responseProfile, "agent");
+  assert.equal(workspaceArtifactsById.get("evidence-pack-json").responseProfile, "agent");
+  assert.equal(workspaceArtifactsById.get("result-json").responseProfile, "api");
   assert.equal(workspaceManifest.artifacts.some((item) => (
     item.artifactId === "portable-docx" &&
     item.validation?.status === "passed" &&

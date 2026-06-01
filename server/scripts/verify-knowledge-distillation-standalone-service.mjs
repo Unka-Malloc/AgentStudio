@@ -849,7 +849,11 @@ for (const expectedText of [
   "xmlWellFormedness",
   "xmlRelationshipTargets",
   "openxml-xml-parts-well-formed",
-  "openxml-package-relationships-resolve"
+  "openxml-package-relationships-resolve",
+  "response-profile-json-artifact-self-check.v1",
+  "validateJsonArtifactBuffer",
+  "json-required-fields-present",
+  "json-expected-fields-match"
 ]) {
   assert.equal(
     externalServiceSource.includes(expectedText),

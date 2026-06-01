@@ -41,6 +41,7 @@ const PDF_FILE_REF_ELEMENT_MAX_BLOCKS = Math.max(1000, Number(process.env.PACT_E
 const XLSX_SHARED_STRING_INDEX_RECORD_BYTES = 16;
 const XLSX_SHARED_STRING_DISK_INDEX_STRATEGY = "spreadsheetml-shared-string-disk-index.v1";
 const STRUCTURED_XML_ELEMENT_SCANNER_STRATEGY = "xml-active-element-carry-preserving-stream-scanner.v1";
+const RESPONSE_PROFILE_JSON_ARTIFACT_VALIDATION_STRATEGY = "response-profile-json-artifact-self-check.v1";
 const BINARY_PROFILE_SAMPLE_BYTES = Math.max(512, Number(process.env.PACT_EXTERNAL_KD_BINARY_PROFILE_SAMPLE_BYTES || 4096));
 const SIGNATURE_SNIFF_BYTES = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_SIGNATURE_SNIFF_BYTES || 256 * 1024));
 const EMBEDDING_DIMENSIONS = 128;
@@ -18018,6 +18019,181 @@ function validateOpenXmlDocxBuffer(buffer = Buffer.alloc(0)) {
   };
 }
 
+function jsonPathValue(value = {}, pathName = "") {
+  let current = value;
+  for (const segment of String(pathName || "").split(".").filter(Boolean)) {
+    if (current === null || current === undefined || typeof current !== "object" || !Object.hasOwn(current, segment)) {
+      return undefined;
+    }
+    current = current[segment];
+  }
+  return current;
+}
+
+function hasJsonField(value = {}, pathName = "") {
+  const fieldValue = jsonPathValue(value, pathName);
+  return fieldValue !== undefined && fieldValue !== null && !(typeof fieldValue === "string" && !fieldValue.trim());
+}
+
+function jsonArtifactValidationSpec(artifactId = "") {
+  const specs = {
+    "console-summary-json": {
+      expectedFields: {
+        protocolVersion: `${PROTOCOL_VERSION}.console-summary`,
+        responseProfile: "console"
+      },
+      requiredFields: ["protocolVersion", "responseProfile", "runId", "status", "modeSeparation", "summary", "documents", "artifactRefs", "omittedForConsole"],
+      requiredObjects: ["modeSeparation", "summary"],
+      requiredArrays: ["documents", "artifactRefs", "omittedForConsole"]
+    },
+    "agent-message-json": {
+      expectedFields: {
+        protocolVersion: `${PROTOCOL_VERSION}.agent-message`,
+        responseProfile: "agent"
+      },
+      requiredFields: ["protocolVersion", "responseProfile", "runId", "workflowScope", "status", "corpusPlan", "classification", "outputs", "graphEvidence", "formatConversionPlan"],
+      requiredObjects: ["corpusPlan", "classification", "graphEvidence", "formatConversionPlan"],
+      requiredArrays: ["outputs"]
+    },
+    "result-json": {
+      expectedFields: {
+        protocolVersion: PROTOCOL_VERSION,
+        serviceName: SERVICE_NAME,
+        serviceKind: SERVICE_KIND
+      },
+      requiredFields: ["protocolVersion", "serviceName", "serviceKind", "runId", "status", "result", "artifactRefs"],
+      requiredObjects: ["result"],
+      requiredArrays: ["artifactRefs"]
+    },
+    "project-snapshot-json": {
+      expectedFields: {
+        strategy: INCREMENTAL_CONVERGENCE_STRATEGY
+      },
+      requiredFields: ["strategy", "projectId", "projectFingerprint", "snapshot", "mergePolicy", "referencePatterns"],
+      requiredObjects: ["snapshot"],
+      requiredArrays: ["mergePolicy", "referencePatterns"]
+    },
+    "evidence-pack-json": {
+      expectedFields: {
+        protocolVersion: `${PROTOCOL_VERSION}.graph-evidence`,
+        strategy: GRAPH_EVIDENCE_STRATEGY
+      },
+      requiredFields: ["protocolVersion", "strategy", "runId", "summary", "text_units", "entities", "relationships", "covariates", "communities", "community_reports"],
+      requiredObjects: ["summary"],
+      requiredArrays: ["text_units", "entities", "relationships", "covariates", "communities", "community_reports"]
+    },
+    "format-conversion-plan-json": {
+      expectedFields: {
+        strategy: "office-document-professional-adaptation.v1"
+      },
+      requiredFields: ["strategy", "runId", "summary", "documents", "formatMatrix", "outputArtifactValidation"],
+      requiredObjects: ["summary", "outputArtifactValidation"],
+      requiredArrays: ["documents", "formatMatrix"]
+    },
+    "professional-format-manifest-json": {
+      expectedFields: {
+        protocolVersion: `${PROTOCOL_VERSION}.professional-format-manifest`,
+        strategy: "professional-format-manifest.v1"
+      },
+      requiredFields: ["protocolVersion", "strategy", "runId", "modeSeparation", "summary", "outputArtifactValidation", "formatMatrix", "documents"],
+      requiredObjects: ["modeSeparation", "summary", "outputArtifactValidation"],
+      requiredArrays: ["formatMatrix", "documents"]
+    },
+    "reference-gap-report-json": {
+      expectedFields: {
+        protocolVersion: `${PROTOCOL_VERSION}.reference-gap-report`,
+        strategy: REFERENCE_GAP_REPORT_STRATEGY
+      },
+      requiredFields: ["protocolVersion", "strategy", "referenceFrameworks", "absorbedCapabilityMap", "frameworks", "openGaps", "nextActions"],
+      requiredObjects: ["referenceFrameworks", "absorbedCapabilityMap"],
+      requiredArrays: ["frameworks", "openGaps", "nextActions"]
+    }
+  };
+  return specs[artifactId] || {
+    requiredFields: [],
+    requiredObjects: [],
+    requiredArrays: [],
+    expectedFields: {}
+  };
+}
+
+function validateJsonArtifactBuffer({ artifactId = "", buffer = Buffer.alloc(0) } = {}) {
+  const text = Buffer.from(buffer || []).toString("utf8");
+  let parsed = null;
+  let parseError = "";
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : String(error);
+  }
+  const spec = jsonArtifactValidationSpec(artifactId);
+  const requiredFields = spec.requiredFields || [];
+  const requiredObjects = spec.requiredObjects || [];
+  const requiredArrays = spec.requiredArrays || [];
+  const expectedFields = spec.expectedFields || {};
+  const missingFields = parsed && typeof parsed === "object"
+    ? requiredFields.filter((field) => !hasJsonField(parsed, field))
+    : requiredFields;
+  const invalidObjects = parsed && typeof parsed === "object"
+    ? requiredObjects.filter((field) => {
+        const value = jsonPathValue(parsed, field);
+        return !value || typeof value !== "object" || Array.isArray(value);
+      })
+    : requiredObjects;
+  const invalidArrays = parsed && typeof parsed === "object"
+    ? requiredArrays.filter((field) => !Array.isArray(jsonPathValue(parsed, field)))
+    : requiredArrays;
+  const expectedMismatches = parsed && typeof parsed === "object"
+    ? Object.entries(expectedFields).filter(([field, expected]) => jsonPathValue(parsed, field) !== expected)
+    : Object.entries(expectedFields);
+  const gates = [
+    artifactValidationGate("utf8-decodable", true, {
+      observed: { characters: text.length },
+      required: { encoding: "utf8" },
+      message: "JSON artifact decodes as UTF-8."
+    }),
+    artifactValidationGate("json-parseable", Boolean(parsed) && !parseError, {
+      observed: { parseError },
+      required: { validJson: true },
+      message: parseError ? `JSON artifact parse failed: ${parseError}` : "JSON artifact parses successfully."
+    }),
+    artifactValidationGate("json-root-object", Boolean(parsed) && typeof parsed === "object" && !Array.isArray(parsed), {
+      observed: { rootType: Array.isArray(parsed) ? "array" : typeof parsed },
+      required: { rootType: "object" },
+      message: "JSON artifact root is an object."
+    }),
+    artifactValidationGate("json-required-fields-present", missingFields.length === 0, {
+      observed: { missingFields },
+      required: { fields: requiredFields },
+      message: missingFields.length ? `JSON artifact is missing fields: ${missingFields.join(", ")}` : "JSON artifact includes required fields."
+    }),
+    artifactValidationGate("json-required-objects-present", invalidObjects.length === 0, {
+      observed: { invalidObjects },
+      required: { objectFields: requiredObjects },
+      message: invalidObjects.length ? `JSON artifact has invalid object fields: ${invalidObjects.join(", ")}` : "JSON artifact object fields are present."
+    }),
+    artifactValidationGate("json-required-arrays-present", invalidArrays.length === 0, {
+      observed: { invalidArrays },
+      required: { arrayFields: requiredArrays },
+      message: invalidArrays.length ? `JSON artifact has invalid array fields: ${invalidArrays.join(", ")}` : "JSON artifact array fields are present."
+    }),
+    artifactValidationGate("json-expected-fields-match", expectedMismatches.length === 0, {
+      observed: Object.fromEntries(Object.keys(expectedFields).map((field) => [field, jsonPathValue(parsed || {}, field)])),
+      required: expectedFields,
+      message: expectedMismatches.length ? "JSON artifact expected fields do not match." : "JSON artifact expected fields match."
+    })
+  ];
+  return {
+    artifactId,
+    format: "json",
+    strategy: RESPONSE_PROFILE_JSON_ARTIFACT_VALIDATION_STRATEGY,
+    byteSize: buffer.length,
+    sha256: shaBuffer(buffer),
+    status: gates.every((gate) => gate.status === "passed") ? "passed" : "failed",
+    gates
+  };
+}
+
 function attachFormatConversionOutputValidation(plan = {}, { title = "", runId = "", createdAt = "", updatedAt = "", markdown = "" } = {}) {
   const markdownBuffer = Buffer.from(String(markdown || ""), "utf8");
   const docxBuffer = buildPortableDocxBuffer({ title, runId, createdAt, updatedAt, markdown });
@@ -18064,13 +18240,24 @@ function jsonArtifactBuffer(value = {}) {
   return Buffer.from(JSON.stringify(value, null, 2), "utf8");
 }
 
+function responseProfileForArtifact(artifactId = "") {
+  if (["portable-markdown", "portable-docx", "console-summary-json"].includes(artifactId)) {
+    return "human-readable";
+  }
+  if (["agent-message-json", "evidence-pack-json", "format-conversion-plan-json", "professional-format-manifest-json"].includes(artifactId)) {
+    return "agent";
+  }
+  if (["result-json", "project-snapshot-json", "reference-gap-report-json"].includes(artifactId)) {
+    return "api";
+  }
+  return "bundle";
+}
+
 function buildWorkspacePackageZip(run = {}) {
   const markdown = Buffer.from(run.result?.portableDocuments?.[0]?.document?.markdown || "", "utf8");
   const docx = buildPortableDocx(run);
   const consoleSummary = jsonArtifactBuffer(buildConsoleSummary(run));
   const professionalFormatManifest = jsonArtifactBuffer(buildProfessionalFormatManifest(run));
-  const validationByArtifactId = new Map((run.result?.formatConversionPlan?.outputArtifactValidation?.artifacts || [])
-    .map((artifact) => [artifact.artifactId, artifact]));
   const artifactEntries = [
     { artifactId: "portable-markdown", path: "distillation.md", contentType: "text/markdown; charset=utf-8", data: markdown },
     { artifactId: "portable-docx", path: "distillation.docx", contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", data: docx },
@@ -18083,16 +18270,33 @@ function buildWorkspacePackageZip(run = {}) {
     { artifactId: "professional-format-manifest-json", path: "professional-format-manifest.json", contentType: "application/json; charset=utf-8", data: professionalFormatManifest },
     { artifactId: "reference-gap-report-json", path: "reference-gap-report.json", contentType: "application/json; charset=utf-8", data: jsonArtifactBuffer(run.result?.referenceGapReport || {}) }
   ];
+  const validationByArtifactId = new Map((run.result?.formatConversionPlan?.outputArtifactValidation?.artifacts || [])
+    .map((artifact) => [artifact.artifactId, artifact]));
+  for (const entry of artifactEntries) {
+    if (validationByArtifactId.has(entry.artifactId) || !/application\/json/i.test(entry.contentType || "")) {
+      continue;
+    }
+    validationByArtifactId.set(entry.artifactId, validateJsonArtifactBuffer({
+      artifactId: entry.artifactId,
+      buffer: entry.data
+    }));
+  }
+  const artifactValidations = artifactEntries
+    .map((entry) => validationByArtifactId.get(entry.artifactId) || null)
+    .filter(Boolean);
   const manifest = {
     protocolVersion: `${PROTOCOL_VERSION}.workspace-package`,
     runId: run.runId,
     title: run.title,
     generatedAt: nowIso(),
     responseProfiles: ["human-readable", "agent", "api"],
+    artifactValidationStrategy: RESPONSE_PROFILE_JSON_ARTIFACT_VALIDATION_STRATEGY,
+    validationStatusCounts: qualityGateStatusCounts(artifactValidations.map((artifact) => ({ status: artifact.status }))),
     artifacts: artifactEntries.map((entry) => ({
       artifactId: entry.artifactId,
       path: entry.path,
       contentType: entry.contentType,
+      responseProfile: responseProfileForArtifact(entry.artifactId),
       byteSize: entry.data.length,
       sha256: shaBuffer(entry.data),
       validation: validationByArtifactId.has(entry.artifactId)
@@ -22497,6 +22701,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "audio-transcript-sidecar-routing.v1",
       "human-agent-response-profile-separation.v1",
       "professional-format-manifest.v1",
+      RESPONSE_PROFILE_JSON_ARTIFACT_VALIDATION_STRATEGY,
       "bounded-binary-file-profile.v1",
       FORMAT_ROUTES_CONFIG_STRATEGY,
       PARSER_STRATEGIES_CONFIG_STRATEGY,
@@ -22688,6 +22893,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       },
       qualityGateEvaluationStrategy: "professional-format-quality-gates.v1",
       outputArtifactValidationStrategy: "format-conversion-output-artifact-self-check.v1",
+      responseProfileJsonArtifactValidationStrategy: RESPONSE_PROFILE_JSON_ARTIFACT_VALIDATION_STRATEGY,
       artifact: "format-conversion-plan-json",
       professionalManifestArtifact: "professional-format-manifest-json",
       modeSeparationStrategy: "human-agent-response-profile-separation.v1",
