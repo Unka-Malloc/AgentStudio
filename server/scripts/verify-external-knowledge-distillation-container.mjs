@@ -464,6 +464,8 @@ try {
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("form.value"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("control.tag"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("bookmark.name"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("headerFooter.kind"), true);
+  assert.equal(capabilities.payload.elementModel.geometryFields.includes("headerFooter.partName"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("table.sheetName"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("definedName.ref"), true);
   assert.equal(capabilities.payload.elementModel.geometryFields.includes("definedName.builtinType"), true);
@@ -483,6 +485,8 @@ try {
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("chart"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("content-control"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("bookmark"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("header"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("footer"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("frontmatter"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("defined-name"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("merged-cell"), true);
@@ -502,6 +506,8 @@ try {
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.form.value"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.control.tag"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.bookmark.name"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.headerFooter.kind"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.headerFooter.partName"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.definedName.ref"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.definedName.builtinType"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.codeBlock.language"), true);
@@ -524,6 +530,7 @@ try {
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("structured.json.file-ref-stream"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("structured-zip.structural-entry-plan"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("structured-zip.large-entry-stream"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("office.word.headers-footers"), true);
   assert.equal(capabilities.payload.formatConversion.strategy, "office-document-professional-adaptation.v1");
   assert.equal(capabilities.payload.formatConversion.qualityGateEvaluationStrategy, "professional-format-quality-gates.v1");
   assert.equal(capabilities.payload.formatConversion.outputArtifactValidationStrategy, "format-conversion-output-artifact-self-check.v1");
@@ -540,6 +547,8 @@ try {
   assert.equal(capabilities.payload.formatConversion.preserves.includes("formFields"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("contentControls"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("bookmarks"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("headers"), true);
+  assert.equal(capabilities.payload.formatConversion.preserves.includes("footers"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("definedNames"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("namedRanges"), true);
   assert.equal(capabilities.payload.formatConversion.preserves.includes("printAreas"), true);
@@ -564,6 +573,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-list-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-content-control-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-bookmark-refs-preserved"), true);
+  assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-header-footer-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-link-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-image-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("word-chart-refs-preserved"), true);

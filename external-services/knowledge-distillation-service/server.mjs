@@ -559,9 +559,9 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
     label: "Word",
     professionalFamily: "office-word",
     parserProfile: "wordprocessingml-paragraph-style-route",
-    structureUnits: ["heading", "paragraph", "list-item", "paragraph-style", "numbering-ref", "table-row", "content-control", "bookmark", "link", "image", "chart", "comment", "footnote", "endnote", "revision"],
-    parserStages: ["office.word.structured", "office.word.styles", "office.word.numbering", "office.word.tables", "office.word.content-controls", "office.word.bookmarks", "office.word.annotations", "office.word.revisions", "office.word.hyperlinks", "office.word.images", "office.word.charts", "tika.text"],
-    preserves: ["headings", "paragraphs", "paragraphStyles", "listLevels", "lists", "tables", "cellRefs", "contentControls", "bookmarks", "links", "images", "charts", "chartSeries", "comments", "footnotes", "endnotes", "revisions"],
+    structureUnits: ["heading", "paragraph", "list-item", "paragraph-style", "numbering-ref", "table-row", "header", "footer", "content-control", "bookmark", "link", "image", "chart", "comment", "footnote", "endnote", "revision"],
+    parserStages: ["office.word.structured", "office.word.styles", "office.word.numbering", "office.word.tables", "office.word.headers-footers", "office.word.content-controls", "office.word.bookmarks", "office.word.annotations", "office.word.revisions", "office.word.hyperlinks", "office.word.images", "office.word.charts", "tika.text"],
+    preserves: ["headings", "paragraphs", "paragraphStyles", "listLevels", "lists", "tables", "cellRefs", "headers", "footers", "contentControls", "bookmarks", "links", "images", "charts", "chartSeries", "comments", "footnotes", "endnotes", "revisions"],
     conversionTargets: ["markdown-outline", "valid-openxml-docx", "agent-json-with-word-style-list-table-link-and-annotation-refs", "evidence-pack"],
     conversionAdapters: [
       {
@@ -583,7 +583,7 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
         targetFormat: "agent-json",
         adapter: "word-elements-to-agent-refs.v1",
         mode: "agent",
-        stages: ["element-refs", "paragraph-style-refs", "numbering-refs", "table-cell-refs", "content-control-refs", "bookmark-refs", "link-refs", "image-refs", "chart-refs", "annotation-refs", "revision-refs"]
+        stages: ["element-refs", "paragraph-style-refs", "numbering-refs", "table-cell-refs", "header-footer-refs", "content-control-refs", "bookmark-refs", "link-refs", "image-refs", "chart-refs", "annotation-refs", "revision-refs"]
       },
       {
         target: "evidence-pack-json",
@@ -593,7 +593,7 @@ const PROFESSIONAL_FORMAT_ADAPTERS = Object.freeze({
         stages: ["text-units", "relationships", "claims"]
       }
     ],
-    qualityGates: ["docx-openxml-package-valid", "word-paragraph-style-refs-preserved", "word-list-refs-preserved", "word-table-cell-refs-preserved", "word-content-control-refs-preserved", "word-bookmark-refs-preserved", "word-link-refs-preserved", "word-image-refs-preserved", "word-chart-refs-preserved", "word-annotation-refs-preserved", "word-revision-refs-preserved"],
+    qualityGates: ["docx-openxml-package-valid", "word-paragraph-style-refs-preserved", "word-list-refs-preserved", "word-table-cell-refs-preserved", "word-header-footer-refs-preserved", "word-content-control-refs-preserved", "word-bookmark-refs-preserved", "word-link-refs-preserved", "word-image-refs-preserved", "word-chart-refs-preserved", "word-annotation-refs-preserved", "word-revision-refs-preserved"],
     riskControls: ["legacy-doc-tika-fallback", "advanced-style-loss-reporting", "tracked-changes-preserved-when-present"],
     knownLosses: ["advanced-openxml-styling-not-rendered"]
   },
@@ -2381,6 +2381,7 @@ function pushStructureElement(elements, type, text, metadata = {}) {
     ...(metadata.form ? { form: metadata.form } : {}),
     ...(metadata.control ? { control: metadata.control } : {}),
     ...(metadata.bookmark ? { bookmark: metadata.bookmark } : {}),
+    ...(metadata.headerFooter ? { headerFooter: metadata.headerFooter } : {}),
     ...(metadata.definedName ? { definedName: metadata.definedName } : {}),
     ...(metadata.codeBlock ? { codeBlock: metadata.codeBlock } : {}),
     ...(metadata.quote ? { quote: metadata.quote } : {}),
@@ -4703,6 +4704,34 @@ function docxParagraphStyle(paragraphXml = "") {
   return xmlLocalAttribute(styleTag, "val");
 }
 
+function docxHeaderFooterMetadata(partName = "") {
+  const match = String(partName || "").match(/^word\/(header|footer)(\d*)\.xml$/i);
+  if (!match) {
+    return null;
+  }
+  const kind = match[1].toLowerCase();
+  const partIndex = Number(match[2] || 0);
+  return {
+    kind,
+    partName,
+    partIndex,
+    label: `${kind === "header" ? "Header" : "Footer"}${partIndex ? ` ${partIndex}` : ""}`
+  };
+}
+
+function docxPartSortKey(partName = "") {
+  if (partName === "word/document.xml") {
+    return 0;
+  }
+  const headerFooter = docxHeaderFooterMetadata(partName);
+  if (!headerFooter) {
+    return 1000;
+  }
+  return headerFooter.kind === "header"
+    ? 100 + headerFooter.partIndex
+    : 200 + headerFooter.partIndex;
+}
+
 function docxParagraphStyleProfile(paragraphXml = "", styleId = "") {
   const numPr = String(paragraphXml || "").match(/<[^:>]*:?numPr\b[\s\S]*?<\/[^:>]*:?numPr>/i)?.[0] || "";
   const numberingId = xmlLocalAttribute(numPr.match(/<[^:>]*:?numId\b[^>]*>/i)?.[0] || "", "val");
@@ -4756,7 +4785,7 @@ function docxContentControlProperties(sdtXml = "", sourcePart = "", fallbackInde
   };
 }
 
-function appendDocxContentControlElements(elements = [], xml = "", { sourcePart = "", lineStart = 0 } = {}) {
+function appendDocxContentControlElements(elements = [], xml = "", { sourcePart = "", lineStart = 0, headerFooter = null } = {}) {
   let count = 0;
   for (const match of String(xml || "").matchAll(/<[^:>]*:?sdt\b[\s\S]*?<\/[^:>]*:?sdt>/g)) {
     const sdtXml = match[0];
@@ -4774,13 +4803,14 @@ function appendDocxContentControlElements(elements = [], xml = "", { sourcePart 
       line: lineStart + count,
       name: `${sourcePart}#content-control-${control.id || count}`,
       control,
+      headerFooter,
       limit: 1800
     });
   }
   return count;
 }
 
-function appendDocxBookmarkElements(elements = [], xml = "", { sourcePart = "", lineStart = 0 } = {}) {
+function appendDocxBookmarkElements(elements = [], xml = "", { sourcePart = "", lineStart = 0, headerFooter = null } = {}) {
   let count = 0;
   for (const paragraphMatch of String(xml || "").matchAll(/<[^:>]*:?p\b[\s\S]*?<\/[^:>]*:?p>/g)) {
     const paragraphXml = paragraphMatch[0];
@@ -4799,6 +4829,7 @@ function appendDocxBookmarkElements(elements = [], xml = "", { sourcePart = "", 
       pushStructureElement(elements, "bookmark", `Bookmark ${name}: ${text}`, {
         line: lineStart + count,
         name: `${sourcePart}#bookmark-${name}`,
+        headerFooter,
         bookmark: {
           kind: "word-bookmark",
           id,
@@ -4834,7 +4865,7 @@ function formatDocxTableRow(tableLabel = "", rowNumber = 1, cells = [], headers 
   }).join("; ")}`;
 }
 
-function appendDocxTableElements(elements = [], tableXml = "", { name = "", tableIndex = 0, lineStart = 0 } = {}) {
+function appendDocxTableElements(elements = [], tableXml = "", { name = "", tableIndex = 0, lineStart = 0, headerFooter = null } = {}) {
   const tableLabel = `Table ${tableIndex}`;
   const rows = Array.from(String(tableXml || "").matchAll(/<[^:>]*:?tr\b[\s\S]*?<\/[^:>]*:?tr>/g))
     .map((match) => docxTableCells(match[0]))
@@ -4854,6 +4885,7 @@ function appendDocxTableElements(elements = [], tableXml = "", { name = "", tabl
     pushStructureElement(elements, type, text, {
       line: lineStart + rowNumber,
       name: `${name}#table-${tableIndex}`,
+      headerFooter,
       table: {
         format: "docx",
         sheet: tableLabel,
@@ -4951,7 +4983,7 @@ function textFromDocxRevisionXml(xml = "") {
   return textFromXmlTextNodes(xml);
 }
 
-function appendDocxRevisionElements(elements = [], xml = "", { sourcePart = "", lineStart = 0 } = {}) {
+function appendDocxRevisionElements(elements = [], xml = "", { sourcePart = "", lineStart = 0, headerFooter = null } = {}) {
   let insertionCount = 0;
   let deletionCount = 0;
   let count = 0;
@@ -4975,6 +5007,7 @@ function appendDocxRevisionElements(elements = [], xml = "", { sourcePart = "", 
     pushStructureElement(elements, "revision", `Revision ${id} ${revisionKind}${author ? ` by ${author}` : ""}: ${text}`, {
       line: lineStart + count,
       name: `${sourcePart}#revision-${id}`,
+      headerFooter,
       annotation: {
         kind: "word-revision",
         id,
@@ -5213,6 +5246,7 @@ function appendOfficeChartElements(elements = [], entries = [], fragmentXml = ""
   layout = null,
   shape = null,
   table = null,
+  headerFooter = null,
   sheetName = "",
   sheetId = "",
   worksheetPath = ""
@@ -5247,6 +5281,7 @@ function appendOfficeChartElements(elements = [], entries = [], fragmentXml = ""
       layout,
       shape,
       table,
+      headerFooter,
       chart
     });
   }
@@ -5282,7 +5317,8 @@ function docxParagraphHyperlinks(paragraphXml = "", relationships = new Map()) {
 function appendDocxImageElements(elements = [], xml = "", relationships = new Map(), {
   partName = "",
   lineStart = 0,
-  imageStart = 0
+  imageStart = 0,
+  headerFooter = null
 } = {}) {
   let count = 0;
   const fragments = [
@@ -5301,6 +5337,7 @@ function appendDocxImageElements(elements = [], xml = "", relationships = new Ma
         line: lineStart + count,
         name: `${partName}#image-${imageStart + count}`,
         href: image.href,
+        headerFooter,
         image
       });
     }
@@ -5311,7 +5348,8 @@ function appendDocxImageElements(elements = [], xml = "", relationships = new Ma
 function parseDocx(entries = []) {
   const xmlNames = entries
     .map((entry) => entry.name)
-    .filter((name) => /^word\/(document|header\d*|footer\d*)\.xml$/.test(name));
+    .filter((name) => /^word\/(document|header\d*|footer\d*)\.xml$/.test(name))
+    .sort((left, right) => docxPartSortKey(left) - docxPartSortKey(right) || left.localeCompare(right));
   const elements = [];
   let paragraphCount = 0;
   let tableCount = 0;
@@ -5336,20 +5374,24 @@ function parseDocx(entries = []) {
   for (const name of xmlNames) {
     const xml = zipEntryText(entries, name);
     const relationships = docxPartRelationships(entries, name);
+    const headerFooter = docxHeaderFooterMetadata(name);
     contentControlCount += appendDocxContentControlElements(elements, xml, {
       sourcePart: name,
-      lineStart: paragraphCount + tableRowCount + contentControlCount
+      lineStart: paragraphCount + tableRowCount + contentControlCount,
+      headerFooter
     });
     bookmarkCount += appendDocxBookmarkElements(elements, xml, {
       sourcePart: name,
-      lineStart: paragraphCount + tableRowCount + contentControlCount + bookmarkCount
+      lineStart: paragraphCount + tableRowCount + contentControlCount + bookmarkCount,
+      headerFooter
     });
     for (const tableMatch of xml.matchAll(/<[^:>]*:?tbl\b[\s\S]*?<\/[^:>]*:?tbl>/g)) {
       tableCount += 1;
       const table = appendDocxTableElements(elements, tableMatch[0], {
         name,
         tableIndex: tableCount,
-        lineStart: paragraphCount + tableRowCount
+        lineStart: paragraphCount + tableRowCount,
+        headerFooter
       });
       tableRowCount += table.rowCount;
       tableCellCount += table.cellCount;
@@ -5373,10 +5415,11 @@ function parseDocx(entries = []) {
       if (styleProfile.numberingId) {
         numberingRefCount += 1;
       }
-      pushStructureElement(elements, type, text, {
+      pushStructureElement(elements, headerFooter?.kind || type, headerFooter ? `${headerFooter.label}: ${text}` : text, {
         level,
         line: paragraphCount,
         name,
+        headerFooter,
         ...(Object.keys(styleProfile).length ? { style: styleProfile } : {})
       });
       for (const link of docxParagraphHyperlinks(paragraphXml, relationships)) {
@@ -5384,28 +5427,32 @@ function parseDocx(entries = []) {
         pushStructureElement(elements, "link", link.text, {
           line: paragraphCount,
           name: `${name}#link-${hyperlinkCount}`,
-          href: link.target
+          href: link.target,
+          headerFooter
         });
       }
     }
     imageCount += appendDocxImageElements(elements, xml, relationships, {
       partName: name,
       lineStart: paragraphCount + tableRowCount + annotationCount,
-      imageStart: imageCount
+      imageStart: imageCount,
+      headerFooter
     });
     const charts = appendOfficeChartElements(elements, entries, xml, relationships, {
       sourcePart: name,
       format: "docx",
       fallbackName: `Word Chart ${chartCount + 1}`,
       lineStart: paragraphCount + tableRowCount + annotationCount + imageCount + chartCount,
-      chartStart: chartCount
+      chartStart: chartCount,
+      headerFooter
     });
     chartCount += charts.count;
     chartPartCount += charts.chartPartCount;
     chartSeriesCount += charts.chartSeriesCount;
     const revisions = appendDocxRevisionElements(elements, xml, {
       sourcePart: name,
-      lineStart: paragraphCount + tableRowCount + annotationCount + imageCount + chartCount + revisionCount
+      lineStart: paragraphCount + tableRowCount + annotationCount + imageCount + chartCount + revisionCount,
+      headerFooter
     });
     revisionCount += revisions.revisionCount;
     insertionRevisionCount += revisions.insertionRevisionCount;
@@ -5414,7 +5461,7 @@ function parseDocx(entries = []) {
       const text = textFromXmlTextNodes(xml);
       if (text) {
         paragraphCount += 1;
-        pushStructureElement(elements, "paragraph", text, { line: paragraphCount, name });
+        pushStructureElement(elements, headerFooter?.kind || "paragraph", headerFooter ? `${headerFooter.label}: ${text}` : text, { line: paragraphCount, name, headerFooter });
       }
     }
   }
@@ -5425,11 +5472,21 @@ function parseDocx(entries = []) {
   endnoteCount = annotations.endnoteCount;
   const fallback = xmlNames.map((name) => textFromXmlTextNodes(zipEntryText(entries, name))).filter(Boolean).join("\n\n");
   const counts = elementTypeCounts(elements);
+  const headerPartCount = xmlNames.filter((name) => docxHeaderFooterMetadata(name)?.kind === "header").length;
+  const footerPartCount = xmlNames.filter((name) => docxHeaderFooterMetadata(name)?.kind === "footer").length;
+  const headerElementCount = elements.filter((element) => element.headerFooter?.kind === "header" || element.type === "header").length;
+  const footerElementCount = elements.filter((element) => element.headerFooter?.kind === "footer" || element.type === "footer").length;
+  const headerFooterElementCount = headerElementCount + footerElementCount;
   return {
     text: structureElementsToText("docx", elements, fallback),
     elements,
     format: "docx",
     xmlFileCount: xmlNames.length,
+    headerPartCount,
+    footerPartCount,
+    headerFooterElementCount,
+    headerElementCount,
+    footerElementCount,
     paragraphCount,
     tableCount,
     tableRowCount,
@@ -8005,6 +8062,11 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           tableCells: parsed.tableCellCount,
           contentControls: parsed.contentControlCount,
           bookmarks: parsed.bookmarkCount,
+          headerParts: parsed.headerPartCount,
+          footerParts: parsed.footerPartCount,
+          headerFooters: parsed.headerFooterElementCount,
+          headers: parsed.headerElementCount,
+          footers: parsed.footerElementCount,
           annotations: parsed.annotationCount,
           comments: parsed.commentCount,
           footnotes: parsed.footnoteCount,
@@ -8041,6 +8103,15 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           tables: parsed.tableCount,
           rows: parsed.tableRowCount,
           cells: parsed.tableCellCount
+        },
+        {
+          stage: "office.word.headers-footers",
+          status: parsed.headerFooterElementCount ? "completed" : "empty",
+          headerParts: parsed.headerPartCount,
+          footerParts: parsed.footerPartCount,
+          headerFooters: parsed.headerFooterElementCount,
+          headers: parsed.headerElementCount,
+          footers: parsed.footerElementCount
         },
         {
           stage: "office.word.content-controls",
@@ -9755,6 +9826,15 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
           cells: parsed.tableCellCount
         });
         parserTrace.push({
+          stage: "office.word.headers-footers",
+          status: parsed.headerFooterElementCount ? "completed" : "empty",
+          headerParts: parsed.headerPartCount,
+          footerParts: parsed.footerPartCount,
+          headerFooters: parsed.headerFooterElementCount,
+          headers: parsed.headerElementCount,
+          footers: parsed.footerElementCount
+        });
+        parserTrace.push({
           stage: "office.word.content-controls",
           status: parsed.contentControlCount ? "completed" : "empty",
           contentControls: parsed.contentControlCount
@@ -10317,6 +10397,9 @@ function structureElementLine(element = {}) {
   const bookmark = element.bookmark?.name
     ? ` bookmark ${element.bookmark.name}`
     : "";
+  const headerFooter = element.headerFooter?.kind
+    ? ` ${element.headerFooter.kind} ${element.headerFooter.partName || ""}`
+    : "";
   const definedName = element.definedName?.name || element.definedName?.ref
     ? ` defined-name ${[element.definedName.displayName || element.definedName.name, element.definedName.ref].filter(Boolean).join("=")}`
     : "";
@@ -10334,7 +10417,7 @@ function structureElementLine(element = {}) {
     : element.shape?.isPlaceholder
       ? " placeholder"
       : "";
-  return `Element ${element.type}${level}${name}${line}${style}${numbering}${shape}${placeholder}${image}${chart}${form}${control}${bookmark}${definedName}${codeBlock}${quote}${merge}: ${element.text}${href}`;
+  return `Element ${element.type}${level}${name}${line}${style}${numbering}${shape}${placeholder}${image}${chart}${form}${control}${bookmark}${headerFooter}${definedName}${codeBlock}${quote}${merge}: ${element.text}${href}`;
 }
 
 function structureElementTypeCounts(elements = []) {
@@ -10487,6 +10570,14 @@ function normalizedStructureElements(document = {}) {
             id: String(element.bookmark.id || ""),
             name: String(element.bookmark.name || ""),
             sourcePart: String(element.bookmark.sourcePart || "")
+          }
+        : null;
+      const headerFooter = element.headerFooter && typeof element.headerFooter === "object"
+        ? {
+            kind: String(element.headerFooter.kind || ""),
+            partName: String(element.headerFooter.partName || ""),
+            partIndex: Number(element.headerFooter.partIndex || 0),
+            label: String(element.headerFooter.label || "")
           }
         : null;
       const definedName = element.definedName && typeof element.definedName === "object"
@@ -10649,6 +10740,7 @@ function normalizedStructureElements(document = {}) {
         form,
         control,
         bookmark,
+        headerFooter,
         definedName,
         codeBlock,
         quote,
@@ -10665,7 +10757,7 @@ function isHeadingStructureElement(element = {}) {
 }
 
 function isIsolatedStructureElement(element = {}) {
-  return ["table-header", "table-row", "merged-cell", "cell-comment", "defined-name", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "content-control", "bookmark", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note"].includes(element.type);
+  return ["table-header", "table-row", "merged-cell", "cell-comment", "defined-name", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "content-control", "bookmark", "header", "footer", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note"].includes(element.type);
 }
 
 function headingLevelForElement(element = {}) {
@@ -10704,6 +10796,7 @@ function buildStructureWindowRecord(document = {}, index = 0, elements = [], hea
       form: element.form || null,
       control: element.control || null,
       bookmark: element.bookmark || null,
+      headerFooter: element.headerFooter || null,
       definedName: element.definedName || null,
       codeBlock: element.codeBlock || null,
       quote: element.quote || null,
@@ -10829,6 +10922,7 @@ function buildDocumentElementPlan(document = {}, windowPlan = null) {
       form: element.form || null,
       control: element.control || null,
       bookmark: element.bookmark || null,
+      headerFooter: element.headerFooter || null,
       definedName: element.definedName || null,
       codeBlock: element.codeBlock || null,
       quote: element.quote || null,
@@ -11074,6 +11168,20 @@ function buildProfessionalQualityGateResults({ document = {}, profile = {}, evid
         observed: { tableCells, cellRefCount: evidence.cellRefCount },
         required: { cellRefsWhenTablesExist: true },
         message: status === "passed" ? "Word table cell references are present." : "No Word table cell references were required or observed."
+      });
+    }
+    if (gate === "word-header-footer-refs-preserved") {
+      const headerFooterRefCount = Number(evidence.headerFooterRefCount || 0);
+      const headerFooterSignals = maxTraceMetric(document, ["headerFooters", "headerFooterRefs"]) || headerFooterRefCount;
+      const status = routeId !== "word"
+        ? "not_applicable"
+        : headerFooterSignals > 0
+          ? headerFooterRefCount > 0 ? "passed" : "failed"
+          : "not_applicable";
+      return professionalGateRecord(gate, status, {
+        observed: { headerFooterSignals, headerFooterRefCount },
+        required: { headerFooterRefsWhenPresent: true },
+        message: status === "passed" ? "Word header and footer parts are preserved as structured element references." : "No Word header or footer references were required or observed."
       });
     }
     if (gate === "word-paragraph-style-refs-preserved") {
@@ -11694,6 +11802,10 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       Number(elementTypes.bookmark || 0),
       sampleElements.filter((element) => element.type === "bookmark" && element.bookmark).length
     );
+    const headerFooterRefCount = Math.max(
+      Number(elementTypes.header || 0) + Number(elementTypes.footer || 0),
+      sampleElements.filter((element) => element.headerFooter?.partName).length
+    );
     const shapeRefCount = sampleElements.filter((element) => element.shape?.id || element.shape?.name).length;
     const placeholderRefCount = sampleElements.filter((element) => element.shape?.isPlaceholder || element.shape?.placeholderType).length;
     const chartRefCount = Math.max(
@@ -11734,6 +11846,7 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       numberingRefCount,
       contentControlRefCount,
       bookmarkRefCount,
+      headerFooterRefCount,
       shapeRefCount,
       placeholderRefCount,
       chartRefCount,
@@ -11812,6 +11925,7 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
       documentWithNumberingRefsCount: plannedDocuments.filter((document) => document.evidence.numberingRefCount > 0).length,
       documentWithContentControlRefsCount: plannedDocuments.filter((document) => document.evidence.contentControlRefCount > 0).length,
       documentWithBookmarkRefsCount: plannedDocuments.filter((document) => document.evidence.bookmarkRefCount > 0).length,
+      documentWithHeaderFooterRefsCount: plannedDocuments.filter((document) => document.evidence.headerFooterRefCount > 0).length,
       documentWithAnnotationsCount: plannedDocuments.filter((document) => document.evidence.annotationElementCount > 0).length,
       documentWithRevisionRefsCount: plannedDocuments.filter((document) => document.evidence.revisionRefCount > 0).length,
       documentWithPdfOutlineRefsCount: plannedDocuments.filter((document) => document.evidence.pdfOutlineRefCount > 0).length,
@@ -17511,6 +17625,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         "office.word.numbering",
         "office.word.content-controls",
         "office.word.bookmarks",
+        "office.word.headers-footers",
         "office.word.hyperlinks",
         "office.word.images",
         "office.word.charts",
@@ -17553,10 +17668,10 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       supported: true,
       strategy: "document-element-model.v1",
       windowingStrategy: "element-aware-by-title-windowing.v1",
-      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "content-control", "bookmark", "defined-name", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment"],
+      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "content-control", "bookmark", "header", "footer", "defined-name", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment"],
       structuredFormats: ["markdown", "html", "xml", "asciidoc", "latex", "docx", "pptx", "xlsx", "open-document", "epub", "pdf"],
-      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "definedName.name", "definedName.ref", "definedName.builtinType", "codeBlock.language", "codeBlock.lineStart", "quote.depth", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
-      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.definedName", "elementRefs.definedName.name", "elementRefs.definedName.ref", "elementRefs.definedName.builtinType", "elementRefs.codeBlock", "elementRefs.codeBlock.language", "elementRefs.codeBlock.lineStart", "elementRefs.quote", "elementRefs.quote.depth", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
+      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "headerFooter.kind", "headerFooter.partName", "definedName.name", "definedName.ref", "definedName.builtinType", "codeBlock.language", "codeBlock.lineStart", "quote.depth", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
+      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.headerFooter", "elementRefs.headerFooter.kind", "elementRefs.headerFooter.partName", "elementRefs.definedName", "elementRefs.definedName.name", "elementRefs.definedName.ref", "elementRefs.definedName.builtinType", "elementRefs.codeBlock", "elementRefs.codeBlock.language", "elementRefs.codeBlock.lineStart", "elementRefs.quote", "elementRefs.quote.depth", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
       referencePatterns: [
         "unstructured.elements",
         "unstructured.chunk_by_title",
@@ -17577,7 +17692,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       formatMatrix: professionalFormatMatrix(PROFESSIONAL_FORMAT_ORDER),
       humanReadableTargets: ["portable-markdown", "portable-docx", "console-summary-json", "workspace-package-zip"],
       agentReadableTargets: ["agent-message-json", "professional-format-manifest-json", "result-json", "evidence-pack-json"],
-      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "codeBlocks", "blockquotes", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "definedNames", "namedRanges", "printAreas", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "contentControls", "bookmarks", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders"],
+      preserves: ["routePlan", "parserTrace", "elementRefs", "windowIds", "contentHash", "frontmatter", "codeBlocks", "blockquotes", "page", "bbox", "sheet", "sheetName", "sheetId", "worksheetPath", "definedNames", "namedRanges", "printAreas", "row", "column", "cellRefs", "mergedCells", "cellComments", "dateSerials", "links", "images", "charts", "chartSeries", "formFields", "contentControls", "bookmarks", "headers", "footers", "formulas", "paragraphStyles", "listLevels", "annotations", "revisions", "shapeIds", "shapePlaceholders"],
       qualityGates: uniqueOrdered(PROFESSIONAL_FORMAT_ORDER.flatMap((formatId) => (
         professionalFormatAdapter(formatId)?.qualityGates || []
       ))),
