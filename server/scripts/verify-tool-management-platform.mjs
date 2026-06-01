@@ -272,6 +272,31 @@ try {
       bucket.requests.byTransport["tool-management"] >= 1
   ));
 
+  const metricsHealthUrl = new URL(`${server.url}/api/tool-management/v1/metrics/health`);
+  metricsHealthUrl.searchParams.set("windowSeconds", "3600");
+  metricsHealthUrl.searchParams.set("maxDeniedRate", "0");
+  metricsHealthUrl.searchParams.set("maxToolFailureRate", "1");
+  metricsHealthUrl.searchParams.set("maxRequestErrorRate", "1");
+  const metricsHealth = await fetchJson(metricsHealthUrl.toString());
+  assert.equal(metricsHealth.status, 200);
+  assert.equal(metricsHealth.payload.health.schemaVersion, "pact.tool-management.metrics-health.v1");
+  assert.equal(metricsHealth.payload.health.window.windowSeconds, 3600);
+  assert.equal(metricsHealth.payload.health.thresholds.maxDeniedRate, 0);
+  assert.ok(["warn", "critical"].includes(metricsHealth.payload.health.status));
+  assert.ok(metricsHealth.payload.health.toolCalls.total >= 2);
+  assert.ok(metricsHealth.payload.health.toolCalls.callsPerMinute >= 0);
+  assert.ok(metricsHealth.payload.health.toolCalls.transferBytesPerSecond >= 0);
+  assert.ok(metricsHealth.payload.health.requests.total >= 1);
+  assert.ok(metricsHealth.payload.health.requests.requestsPerMinute >= 0);
+  assert.ok(metricsHealth.payload.health.requests.transferBytesPerSecond >= 0);
+  assert.ok(metricsHealth.payload.health.breaches.some((breach) => breach.code === "tool_denied_rate"));
+  assert.ok(metricsHealth.payload.health.toolCalls.topTools.some((item) =>
+    item.toolId === "pact.knowledge.health"
+  ));
+  assert.ok(metricsHealth.payload.health.requests.topRoutes.some((item) =>
+    item.route === "/api/tool-management/v1/execute"
+  ));
+
   const toolMetricsExportUrl = new URL(`${server.url}/api/tool-management/v1/metrics/export`);
   toolMetricsExportUrl.searchParams.set("kind", "tool");
   toolMetricsExportUrl.searchParams.set("toolId", "pact.knowledge.health");
@@ -516,6 +541,29 @@ try {
   assert.equal(cliMetricsPayload.metrics.filters.toolId, "pact.knowledge.health");
   assert.equal(cliMetricsPayload.metrics.filters.transport, "tool-management");
   assert.equal(cliMetricsPayload.metrics.series.bucketSeconds, 60);
+
+  const cliHealth = await execFileAsync(
+    process.execPath,
+    [
+      path.resolve("server/scripts/pact.mjs"),
+      "tools",
+      "metrics",
+      "health",
+      "--server-url",
+      server.url,
+      "--window-seconds",
+      "3600",
+      "--max-denied-rate",
+      "1"
+    ],
+    { env: process.env }
+  );
+  const cliHealthPayload = JSON.parse(cliHealth.stdout);
+  assert.equal(cliHealthPayload.schemaVersion, 1);
+  assert.equal(cliHealthPayload.health.schemaVersion, "pact.tool-management.metrics-health.v1");
+  assert.equal(cliHealthPayload.health.window.windowSeconds, 3600);
+  assert.ok(cliHealthPayload.health.toolCalls.total >= 1);
+  assert.ok(cliHealthPayload.health.requests.total >= 1);
 
   const cliExport = await execFileAsync(
     process.execPath,

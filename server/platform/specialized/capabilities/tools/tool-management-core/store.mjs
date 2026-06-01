@@ -735,6 +735,14 @@ function normalizeBucketSeconds(value) {
   return Math.max(1, Math.min(Math.floor(parsed), 86_400));
 }
 
+function normalizeMetricWindowSeconds(value) {
+  const parsed = Number(value || 300);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 300;
+  }
+  return Math.max(1, Math.min(Math.floor(parsed), 86_400));
+}
+
 function normalizeMetricExportKind(value) {
   const normalized = String(value || "all").trim().toLowerCase();
   if (normalized === "tool" || normalized === "tools" || normalized === "tool_calls") {
@@ -744,6 +752,20 @@ function normalizeMetricExportKind(value) {
     return "request";
   }
   return "all";
+}
+
+function normalizeMetricThreshold(value, fallback) {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback;
+  }
+  if (parsed > 1 && parsed <= 100) {
+    return Number((parsed / 100).toFixed(4));
+  }
+  return Math.min(parsed, 1);
 }
 
 function safeFileSize(filePath) {
@@ -764,6 +786,14 @@ function metricWindowSeconds(oldestCreatedAt = "", newestCreatedAt = "", rows = 
     return 1;
   }
   return Math.max(1, Number(((newest - oldest) / 1000).toFixed(3)) || 1);
+}
+
+function ratio(part, total) {
+  const denominator = Number(total || 0);
+  if (!denominator) {
+    return 0;
+  }
+  return Number((Number(part || 0) / denominator).toFixed(4));
 }
 
 function createMetricClauses({
@@ -1920,6 +1950,184 @@ export function createToolManagementStore({
     };
   }
 
+  function metricsHealth({
+    windowSeconds = 300,
+    maxRequestErrorRate = 0.05,
+    maxToolFailureRate = 0.05,
+    maxDeniedRate = 0.2,
+    minRequests = 0
+  } = {}) {
+    const normalizedWindowSeconds = normalizeMetricWindowSeconds(windowSeconds);
+    const thresholds = {
+      maxRequestErrorRate: normalizeMetricThreshold(maxRequestErrorRate, 0.05),
+      maxToolFailureRate: normalizeMetricThreshold(maxToolFailureRate, 0.05),
+      maxDeniedRate: normalizeMetricThreshold(maxDeniedRate, 0.2),
+      minRequests: Math.max(0, Math.floor(Number(minRequests || 0) || 0))
+    };
+    const endedAt = nowIso();
+    const startedAt = new Date(Date.now() - normalizedWindowSeconds * 1000).toISOString();
+    const toolRow = db.prepare(`
+      SELECT
+        count(*) AS total,
+        coalesce(sum(CASE WHEN status = 'ok' THEN 1 ELSE 0 END), 0) AS ok_total,
+        coalesce(sum(CASE WHEN status = 'denied' THEN 1 ELSE 0 END), 0) AS denied_total,
+        coalesce(sum(CASE WHEN status != 'ok' THEN 1 ELSE 0 END), 0) AS failure_total,
+        coalesce(sum(CASE WHEN reason_code = 'tool_timeout' THEN 1 ELSE 0 END), 0) AS timeout_total,
+        coalesce(sum(CASE WHEN reason_code = 'rate_limited' THEN 1 ELSE 0 END), 0) AS rate_limited_total,
+        coalesce(sum(input_bytes), 0) AS input_bytes_total,
+        coalesce(sum(result_bytes), 0) AS result_bytes_total,
+        coalesce(sum(transfer_bytes), 0) AS transfer_bytes_total,
+        coalesce(avg(duration_ms), 0) AS average_duration_ms,
+        coalesce(avg(bytes_per_second), 0) AS average_bytes_per_second,
+        coalesce(max(bytes_per_second), 0) AS peak_bytes_per_second
+      FROM tool_metric_events
+      WHERE created_at >= ? AND created_at <= ?
+    `).get(startedAt, endedAt);
+    const requestRow = db.prepare(`
+      SELECT
+        count(*) AS total,
+        coalesce(sum(CASE WHEN status_code >= 200 AND status_code < 400 THEN 1 ELSE 0 END), 0) AS success_total,
+        coalesce(sum(CASE WHEN status_code >= 400 AND status_code < 500 THEN 1 ELSE 0 END), 0) AS client_error_total,
+        coalesce(sum(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END), 0) AS server_error_total,
+        coalesce(sum(CASE WHEN completion_status != 'completed' THEN 1 ELSE 0 END), 0) AS completion_failure_total,
+        coalesce(sum(request_bytes), 0) AS request_bytes_total,
+        coalesce(sum(response_bytes), 0) AS response_bytes_total,
+        coalesce(sum(transfer_bytes), 0) AS transfer_bytes_total,
+        coalesce(avg(duration_ms), 0) AS average_duration_ms,
+        coalesce(avg(bytes_per_second), 0) AS average_bytes_per_second,
+        coalesce(max(bytes_per_second), 0) AS peak_bytes_per_second
+      FROM http_request_metric_events
+      WHERE created_at >= ? AND created_at <= ?
+    `).get(startedAt, endedAt);
+    const topTools = db.prepare(`
+      SELECT tool_id, count(*) AS total, coalesce(sum(transfer_bytes), 0) AS transfer_bytes_total
+      FROM tool_metric_events
+      WHERE created_at >= ? AND created_at <= ?
+      GROUP BY tool_id
+      ORDER BY total DESC, transfer_bytes_total DESC
+      LIMIT 10
+    `).all(startedAt, endedAt).map((row) => ({
+      toolId: row.tool_id,
+      total: Number(row.total || 0),
+      transferBytesTotal: Number(row.transfer_bytes_total || 0)
+    }));
+    const topRoutes = db.prepare(`
+      SELECT transport, method, route, count(*) AS total, coalesce(sum(transfer_bytes), 0) AS transfer_bytes_total
+      FROM http_request_metric_events
+      WHERE created_at >= ? AND created_at <= ?
+      GROUP BY transport, method, route
+      ORDER BY total DESC, transfer_bytes_total DESC
+      LIMIT 10
+    `).all(startedAt, endedAt).map((row) => ({
+      transport: row.transport,
+      method: row.method,
+      route: row.route,
+      total: Number(row.total || 0),
+      transferBytesTotal: Number(row.transfer_bytes_total || 0)
+    }));
+
+    const toolTotal = Number(toolRow.total || 0);
+    const requestTotal = Number(requestRow.total || 0);
+    const toolCalls = {
+      total: toolTotal,
+      okTotal: Number(toolRow.ok_total || 0),
+      deniedTotal: Number(toolRow.denied_total || 0),
+      failureTotal: Number(toolRow.failure_total || 0),
+      timeoutTotal: Number(toolRow.timeout_total || 0),
+      rateLimitedTotal: Number(toolRow.rate_limited_total || 0),
+      callsPerMinute: Number(((toolTotal * 60) / normalizedWindowSeconds).toFixed(2)),
+      failureRate: ratio(toolRow.failure_total, toolTotal),
+      deniedRate: ratio(toolRow.denied_total, toolTotal),
+      inputBytesTotal: Number(toolRow.input_bytes_total || 0),
+      resultBytesTotal: Number(toolRow.result_bytes_total || 0),
+      transferBytesTotal: Number(toolRow.transfer_bytes_total || 0),
+      transferBytesPerSecond: Number((Number(toolRow.transfer_bytes_total || 0) / normalizedWindowSeconds).toFixed(2)),
+      averageDurationMs: Number(Number(toolRow.average_duration_ms || 0).toFixed(2)),
+      averageBytesPerSecond: Number(Number(toolRow.average_bytes_per_second || 0).toFixed(2)),
+      peakBytesPerSecond: Number(toolRow.peak_bytes_per_second || 0),
+      topTools
+    };
+    const requests = {
+      total: requestTotal,
+      successTotal: Number(requestRow.success_total || 0),
+      clientErrorTotal: Number(requestRow.client_error_total || 0),
+      serverErrorTotal: Number(requestRow.server_error_total || 0),
+      completionFailureTotal: Number(requestRow.completion_failure_total || 0),
+      requestsPerMinute: Number(((requestTotal * 60) / normalizedWindowSeconds).toFixed(2)),
+      serverErrorRate: ratio(requestRow.server_error_total, requestTotal),
+      clientErrorRate: ratio(requestRow.client_error_total, requestTotal),
+      completionFailureRate: ratio(requestRow.completion_failure_total, requestTotal),
+      requestBytesTotal: Number(requestRow.request_bytes_total || 0),
+      responseBytesTotal: Number(requestRow.response_bytes_total || 0),
+      transferBytesTotal: Number(requestRow.transfer_bytes_total || 0),
+      transferBytesPerSecond: Number((Number(requestRow.transfer_bytes_total || 0) / normalizedWindowSeconds).toFixed(2)),
+      averageDurationMs: Number(Number(requestRow.average_duration_ms || 0).toFixed(2)),
+      averageBytesPerSecond: Number(Number(requestRow.average_bytes_per_second || 0).toFixed(2)),
+      peakBytesPerSecond: Number(requestRow.peak_bytes_per_second || 0),
+      topRoutes
+    };
+    const breaches = [];
+    if (thresholds.minRequests && requestTotal < thresholds.minRequests) {
+      breaches.push({
+        code: "request_volume_low",
+        severity: "warn",
+        observed: requestTotal,
+        threshold: thresholds.minRequests
+      });
+    }
+    if (requests.serverErrorRate > thresholds.maxRequestErrorRate) {
+      breaches.push({
+        code: "request_server_error_rate",
+        severity: "critical",
+        observed: requests.serverErrorRate,
+        threshold: thresholds.maxRequestErrorRate
+      });
+    }
+    if (requests.completionFailureRate > thresholds.maxRequestErrorRate) {
+      breaches.push({
+        code: "request_completion_failure_rate",
+        severity: "critical",
+        observed: requests.completionFailureRate,
+        threshold: thresholds.maxRequestErrorRate
+      });
+    }
+    if (toolCalls.failureRate > thresholds.maxToolFailureRate) {
+      breaches.push({
+        code: "tool_failure_rate",
+        severity: "critical",
+        observed: toolCalls.failureRate,
+        threshold: thresholds.maxToolFailureRate
+      });
+    }
+    if (toolCalls.deniedRate > thresholds.maxDeniedRate) {
+      breaches.push({
+        code: "tool_denied_rate",
+        severity: "warn",
+        observed: toolCalls.deniedRate,
+        threshold: thresholds.maxDeniedRate
+      });
+    }
+    const status = breaches.some((breach) => breach.severity === "critical")
+      ? "critical"
+      : breaches.length
+        ? "warn"
+        : "ok";
+    return {
+      schemaVersion: "pact.tool-management.metrics-health.v1",
+      generatedAt: endedAt,
+      status,
+      window: {
+        startedAt,
+        endedAt,
+        windowSeconds: normalizedWindowSeconds
+      },
+      thresholds,
+      requests,
+      toolCalls,
+      breaches
+    };
+  }
+
   function metricTableStorageSummary(kind) {
     if (kind === "tool") {
       const row = db.prepare(`
@@ -2196,6 +2404,7 @@ export function createToolManagementStore({
     getAudit,
     metricsSummary,
     metricsExport,
+    metricsHealth,
     metricsStorageSummary,
     pruneMetrics,
     createMcpAuthorizationRequest,

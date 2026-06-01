@@ -378,6 +378,24 @@ export function createToolManagementHttpRouter({
       });
     }
 
+    if (normalizedMethod === "GET" && suffix === "/metrics/health") {
+      if (!(await requireConsole(request, response, normalizedMethod, url, ["console:read"]))) {
+        return true;
+      }
+      return complete(200, {
+        schemaVersion: 1,
+        health: platform.store.metricsHealth({
+          windowSeconds: Number(url.searchParams.get("windowSeconds") || url.searchParams.get("window-seconds") || 300),
+          maxRequestErrorRate: url.searchParams.get("maxRequestErrorRate") ||
+            url.searchParams.get("max-request-error-rate") || "",
+          maxToolFailureRate: url.searchParams.get("maxToolFailureRate") ||
+            url.searchParams.get("max-tool-failure-rate") || "",
+          maxDeniedRate: url.searchParams.get("maxDeniedRate") || url.searchParams.get("max-denied-rate") || "",
+          minRequests: Number(url.searchParams.get("minRequests") || url.searchParams.get("min-requests") || 0)
+        })
+      });
+    }
+
     if (normalizedMethod === "GET" && suffix === "/metrics/storage") {
       if (!(await requireConsole(request, response, normalizedMethod, url, ["console:read"]))) {
         return true;

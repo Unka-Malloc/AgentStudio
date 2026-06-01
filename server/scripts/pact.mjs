@@ -115,6 +115,7 @@ function usage() {
     "  pact tools catalog|toolsets|toolsets resolve|execute|dry-run|audit|metrics ...",
     "  pact tools metrics [--tool-id ID] [--route PATH] [--transport mcp|http|tool-management] [--bucket-seconds N]",
     "  pact tools metrics export [--kind all|tool|request] [--output metrics.json]",
+    "  pact tools metrics health [--window-seconds 300]",
     "  pact tools metrics storage",
     "  pact tools metrics prune --confirm --body prune.json",
     "  pact tools grants list|create|rotate|revoke ...",
@@ -1405,6 +1406,34 @@ async function runToolsCommand(args) {
           serverUrl: args["server-url"],
           method: "GET",
           apiPath: `/api/tool-management/v1/metrics/export${query.toString() ? `?${query}` : ""}`,
+          headers: readHeaders(args)
+        })
+      });
+      return;
+    }
+    if (subcommand === "health") {
+      const query = new URLSearchParams();
+      if (args["window-seconds"] || args.windowSeconds) {
+        query.set("windowSeconds", String(args["window-seconds"] || args.windowSeconds));
+      }
+      if (args["max-request-error-rate"] || args.maxRequestErrorRate) {
+        query.set("maxRequestErrorRate", String(args["max-request-error-rate"] || args.maxRequestErrorRate));
+      }
+      if (args["max-tool-failure-rate"] || args.maxToolFailureRate) {
+        query.set("maxToolFailureRate", String(args["max-tool-failure-rate"] || args.maxToolFailureRate));
+      }
+      if (args["max-denied-rate"] || args.maxDeniedRate) {
+        query.set("maxDeniedRate", String(args["max-denied-rate"] || args.maxDeniedRate));
+      }
+      if (args["min-requests"] || args.minRequests) {
+        query.set("minRequests", String(args["min-requests"] || args.minRequests));
+      }
+      await writeResponse({
+        args,
+        result: await requestJson({
+          serverUrl: args["server-url"],
+          method: "GET",
+          apiPath: `/api/tool-management/v1/metrics/health${query.toString() ? `?${query}` : ""}`,
           headers: readHeaders(args)
         })
       });
