@@ -48,6 +48,10 @@ const toolsByOperationId = new Map(
     .map((tool) => [tool.operationId, tool])
 );
 
+function requiresToolCatalogExposure(operationId) {
+  return !String(operationId || "").startsWith("knowledge.distillation.");
+}
+
 for (const operationId of PROTOCOL_OPERATION_IDS) {
   const operation = operationsById.get(operationId);
   assert.ok(operation, `${operationId} must be registered in SERVER_API_OPERATIONS`);
@@ -66,6 +70,10 @@ for (const operationId of PROTOCOL_OPERATION_IDS) {
   assert.equal(typeof operation.readOnly, "boolean", `${operationId} must declare readOnly`);
 
   const tool = toolsByOperationId.get(operationId);
+  if (!requiresToolCatalogExposure(operationId)) {
+    assert.equal(tool, undefined, `${operationId} must remain an internal API operation, not a Tool Management tool`);
+    continue;
+  }
   assert.ok(tool, `${operationId} must be discoverable through Tool Management catalog`);
   assert.equal(tool.status, "active", `${operationId} tool must be active`);
   assert.ok(tool.id.startsWith("pact."), `${operationId} tool id must be in pact namespace`);
