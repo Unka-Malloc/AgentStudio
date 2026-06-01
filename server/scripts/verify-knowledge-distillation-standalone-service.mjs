@@ -445,6 +445,26 @@ assert.equal(
   "large EPUB streaming parser must advertise structural extraction mode in parserTrace"
 );
 assert.equal(
+  externalServiceSource.includes("function parseVisioLargeEntryStreaming("),
+  true,
+  "large Visio filePath parsing must keep a dedicated streaming structure parser instead of downgrading to plain text"
+);
+assert.equal(
+  externalServiceSource.includes("streaming-large-visio-elements"),
+  true,
+  "large Visio streaming parser must advertise structural extraction mode in parserTrace"
+);
+assert.equal(
+  externalServiceSource.includes("visio-shape-geometry.v1"),
+  true,
+  "large Visio streaming parser must preserve shape geometry references for element-aware windowing"
+);
+assert.equal(
+  externalServiceSource.includes("visio-connector-ref.v1"),
+  true,
+  "large Visio streaming parser must preserve connector references for element-aware windowing"
+);
+assert.equal(
   formatConversionProfilesConfig.protocolVersion,
   "pact.external-knowledge-distillation.format-conversion-profiles.v1",
   "external knowledge distillation must keep format conversion profiles in a versioned singleton config"

@@ -1117,6 +1117,30 @@ try {
         }
       },
       {
+        sourceId: "source-81",
+        title: "Mounted Large Visio Structural XML",
+        fileName: "mounted-large-structured.vsdx",
+        mediaType: "application/vnd.ms-visio.drawing.main+xml",
+        entries: {
+          "visio/document.xml": [
+            "<VisioDocument xmlns=\"http://schemas.microsoft.com/office/visio/2012/main\">",
+            "<DocumentProperties><Title>Large Mounted Visio Flow</Title></DocumentProperties>",
+            "<Pages><Page ID=\"0\" NameU=\"Large Flow\"/></Pages>",
+            "</VisioDocument>"
+          ].join(""),
+          "visio/pages/page1.xml": [
+            "<PageContents xmlns=\"http://schemas.microsoft.com/office/visio/2012/main\"><Shapes>",
+            Array.from({ length: 720 }, (_, index) => (
+              `<Shape ID="${index + 1}" NameU="Large Visio Shape ${index + 1}" Type="Shape"><Text>Large mounted Visio shape ${index + 1} proves oversized page XML streams through shape-aware parsing.</Text><Cell N="PinX" V="${1 + (index % 24)}"/><Cell N="PinY" V="${2 + Math.floor(index / 24)}"/><Cell N="Width" V="1.5"/><Cell N="Height" V="0.5"/></Shape>`
+            )).join(""),
+            "</Shapes><Connects>",
+            "<Connect FromSheet=\"1\" ToSheet=\"2\" FromPart=\"BeginX\" ToPart=\"PinX\"/>",
+            "<Connect FromSheet=\"2\" ToSheet=\"3\" FromPart=\"EndX\" ToPart=\"PinX\"/>",
+            "</Connects></PageContents>"
+          ].join("")
+        }
+      },
+      {
         sourceId: "source-42",
         title: "Mounted Large DOCX Structural XML",
         fileName: "mounted-large-structured.docx",
@@ -3867,6 +3891,61 @@ try {
     ))), true);
     assert.equal(largeStructuredEpub.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
     assert.ok(largeStructuredEpub.quality.textCharacters > 25000, "large EPUB structural parser must preserve oversized chapter text");
+    const largeStructuredVisio = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-81");
+    assert.ok(largeStructuredVisio, "large mounted Visio structural XML document must be present");
+    assert.equal(largeStructuredVisio.route.formatId, "visio");
+    assert.equal(largeStructuredVisio.quality.suppliedPayloadKind, "file-ref-structured-zip");
+    assert.equal(largeStructuredVisio.parserTrace.some((trace) => (
+      trace.stage === "structured-zip.structural-entry-plan" &&
+      trace.status === "completed" &&
+      trace.selectedFiles === 2 &&
+      trace.loadedFiles === 1 &&
+      trace.skippedLargeFiles === 1 &&
+      trace.maxEntryBytes === 25000
+    )), true);
+    assert.equal(largeStructuredVisio.parserTrace.some((trace) => (
+      trace.stage === "structured-zip.large-entry-stream" &&
+      trace.status === "completed" &&
+      trace.reason === "large-structure-entry" &&
+      trace.extractionMode === "streaming-large-visio-elements" &&
+      trace.elements >= 700 &&
+      trace.shapes >= 700 &&
+      trace.textShapes >= 700 &&
+      trace.connectors >= 2 &&
+      trace.geometries >= 700
+    )), true);
+    assert.equal(largeStructuredVisio.parserTrace.some((trace) => (
+      trace.stage === "office.visio.pages" &&
+      trace.status === "completed" &&
+      trace.extractionMode === "streaming-large-visio-elements" &&
+      trace.elements >= 700 &&
+      trace.shapes >= 700 &&
+      trace.connectors >= 2
+    )), true);
+    assert.equal(largeStructuredVisio.parserTrace.some((trace) => (
+      trace.stage === "office.visio.shapes" &&
+      trace.status === "completed" &&
+      trace.shapes >= 700 &&
+      trace.geometries >= 700 &&
+      trace.layoutStrategy === "visio-shape-geometry.v1"
+    )), true);
+    assert.equal(largeStructuredVisio.elementPlan.strategy, "document-element-model.v1");
+    assert.equal(largeStructuredVisio.elementPlan.elementTypes["visio-shape"] >= 700, true);
+    assert.equal(largeStructuredVisio.elementPlan.elementTypes["visio-connector"] >= 2, true);
+    assert.equal(largeStructuredVisio.windowPlan.strategy, "element-aware-by-title-windowing.v1");
+    assert.equal(largeStructuredVisio.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "visio-shape" &&
+      ref.shape?.id === "2" &&
+      ref.layout?.strategy === "visio-shape-geometry.v1" &&
+      ref.bbox?.width === 1.5
+    ))), true);
+    assert.equal(largeStructuredVisio.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "visio-connector" &&
+      ref.shape?.id === "1->2" &&
+      ref.layout?.strategy === "visio-connector-ref.v1"
+    ))), true);
+    assert.equal(largeStructuredVisio.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
+    assert.ok(largeStructuredVisio.quality.textCharacters > 25000, "large Visio structural parser must preserve oversized page text");
   }
   if (directRuntime.payload.runtimes["tika.app"]?.available && mountedLegacyOfficeDocuments.length) {
     for (const [sourceId, formatId] of [

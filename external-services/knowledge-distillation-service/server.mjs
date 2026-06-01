@@ -7224,6 +7224,100 @@ function parseVisio(entries = []) {
   };
 }
 
+function parseVisioLargeEntryStreaming(entries = []) {
+  const pageEntries = entries
+    .filter((entry) => (
+      /^visio\/pages\/page\d+\.xml$/.test(entry.name || "") &&
+      entry.filePath &&
+      fsSync.existsSync(entry.filePath)
+    ))
+    .sort((left, right) => visioPartNumber(left.name, /page(\d+)/) - visioPartNumber(right.name, /page(\d+)/));
+  const masterNames = entries
+    .map((entry) => entry.name)
+    .filter((name) => /^visio\/masters\/master\d+\.xml$/.test(name))
+    .sort((left, right) => visioPartNumber(left, /master(\d+)/) - visioPartNumber(right, /master(\d+)/));
+  const elements = [];
+  let shapeCount = 0;
+  let textShapeCount = 0;
+  let connectorCount = 0;
+  let geometryCount = 0;
+  let largeEntryCount = 0;
+  let streamedBytes = 0;
+  for (const [index, entry] of pageEntries.entries()) {
+    const pageNumber = visioPartNumber(entry.name, /page(\d+)/) || index + 1;
+    const stat = fsSync.statSync(entry.filePath);
+    streamedBytes += stat.size;
+    if (entry.warning === "structured-entry-too-large" || stat.size > STRUCTURED_ZIP_ENTRY_MAX_BYTES) {
+      largeEntryCount += 1;
+    }
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?Shape", (shapeXml) => {
+      const openTag = shapeXml.match(/^<[^>]+>/)?.[0] || "";
+      shapeCount += 1;
+      const shape = visioShapeMetadata(openTag, { pageNumber, order: shapeCount });
+      const text = visioShapeText(shapeXml);
+      const geometry = visioShapeGeometry(shapeXml, pageNumber, shapeCount);
+      const layout = geometry.layout
+        ? { ...geometry.layout, streamIndex: shapeCount }
+        : null;
+      if (geometry.bbox) {
+        geometryCount += 1;
+      }
+      if (!text) {
+        return;
+      }
+      textShapeCount += 1;
+      pushStructureElement(elements, "visio-shape", `Page ${pageNumber} ${shape.name || `Shape ${shapeCount}`}: ${text}`, {
+        line: shapeCount,
+        name: `${entry.name}#shape-${shape.id || shapeCount}`,
+        page: pageNumber,
+        bbox: geometry.bbox,
+        layout,
+        shape,
+        limit: 2200
+      });
+    });
+    scanXmlOpenTagsFromFile(entry.filePath, "[^:>]*:?Connect", (tag) => {
+      const from = xmlLocalAttribute(tag, "FromSheet");
+      const to = xmlLocalAttribute(tag, "ToSheet");
+      const fromPart = xmlLocalAttribute(tag, "FromPart");
+      const toPart = xmlLocalAttribute(tag, "ToPart");
+      connectorCount += 1;
+      pushStructureElement(elements, "visio-connector", `Page ${pageNumber} connector ${from || "unknown"} -> ${to || "unknown"}${fromPart || toPart ? ` (${[fromPart, toPart].filter(Boolean).join(" to ")})` : ""}`, {
+        line: connectorCount,
+        name: `${entry.name}#connector-${connectorCount}`,
+        page: pageNumber,
+        layout: {
+          strategy: "visio-connector-ref.v1",
+          page: pageNumber,
+          order: connectorCount,
+          streamIndex: connectorCount
+        },
+        shape: {
+          id: [from, to].filter(Boolean).join("->") || `connector-${connectorCount}`,
+          name: "Visio connector",
+          slide: pageNumber,
+          order: connectorCount
+        },
+        limit: 1200
+      });
+    });
+  }
+  return {
+    text: structureElementsToText("vsdx", elements, ""),
+    elements,
+    format: "vsdx",
+    extractionMode: "streaming-large-visio-elements",
+    pageCount: pageEntries.length,
+    visioPartCount: pageEntries.length + masterNames.length + (zipEntryText(entries, "visio/document.xml") ? 1 : 0),
+    shapeCount,
+    textShapeCount,
+    connectorCount,
+    geometryCount,
+    largeEntryCount,
+    streamedBytes
+  };
+}
+
 function xmlAttribute(tag = "", name = "") {
   const pattern = new RegExp(`\\s${name}=(["'])(.*?)\\1`, "i");
   return decodeXmlEntities(String(tag || "").match(pattern)?.[2] || "");
@@ -14497,7 +14591,7 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
     const entryPlan = structuredZipDirectoryEntryPlan(route, extracted.outputDir);
     parserTrace.push(structuredZipEntryPlanTrace(entryPlan));
     if (entryPlan.skippedLargeFileCount > 0) {
-      warnings.push(["word", "presentation", "spreadsheet", "open-document", "ebook"].includes(route?.id)
+      warnings.push(["word", "presentation", "spreadsheet", "open-document", "ebook", "visio"].includes(route?.id)
         ? "structured-zip-large-entry-stream"
         : "structured-zip-large-entry-stream-fallback");
     }
@@ -14878,8 +14972,8 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
     } else if (route?.id === "visio") {
       const parsed = canUseBoundedEntries
         ? parseVisio(entryPlan.entries)
-        : { text: "", elements: [], format: "vsdx", pageCount: entryPlan.selectedFileCount, shapeCount: 0, textShapeCount: 0, connectorCount: 0, geometryCount: 0 };
-      if (parsed.text && canUseBoundedEntries) {
+        : parseVisioLargeEntryStreaming(entryPlan.entries);
+      if (parsed.text) {
         directText = parsed.text || "";
         totalCharacters = directText.length;
         structuredFileCount = parsed.visioPartCount || entryPlan.selectedFileCount;
@@ -14889,9 +14983,12 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           stage,
           status: totalCharacters ? "completed" : "empty",
           mode: "structured-zip-file-ref",
+          extractionMode: parsed.extractionMode || "bounded-structured-zip-entries",
           files: structuredFileCount,
           characters: totalCharacters,
           elements: structureElements.length,
+          streamedBytes: parsed.streamedBytes || 0,
+          largeEntries: parsed.largeEntryCount || 0,
           pages: parsed.pageCount,
           shapes: parsed.shapeCount,
           textShapes: parsed.textShapeCount,
@@ -14899,12 +14996,31 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           geometries: parsed.geometryCount,
           layoutStrategy: parsed.geometryCount ? "visio-shape-geometry.v1" : ""
         });
+        if (!canUseBoundedEntries) {
+          parserTrace.push({
+            stage: "structured-zip.large-entry-stream",
+            status: "completed",
+            reason: "large-structure-entry",
+            extractionMode: parsed.extractionMode || "streaming-large-visio-elements",
+            routeId: route?.id || "",
+            files: structuredFileCount,
+            characters: totalCharacters,
+            elements: structureElements.length,
+            pages: parsed.pageCount,
+            shapes: parsed.shapeCount,
+            textShapes: parsed.textShapeCount,
+            connectors: parsed.connectorCount,
+            geometries: parsed.geometryCount,
+            streamedBytes: parsed.streamedBytes || 0
+          });
+        }
         parserTrace.push({
           stage: "office.visio.shapes",
           status: parsed.shapeCount ? "completed" : "empty",
           shapes: parsed.shapeCount,
           textShapes: parsed.textShapeCount,
-          geometries: parsed.geometryCount
+          geometries: parsed.geometryCount,
+          layoutStrategy: parsed.geometryCount ? "visio-shape-geometry.v1" : ""
         });
         parserTrace.push({
           stage: "office.visio.connectors",
