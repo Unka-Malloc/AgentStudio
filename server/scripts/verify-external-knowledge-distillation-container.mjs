@@ -471,7 +471,8 @@ try {
     profile.requiredRealModelCall === true &&
     profile.noBuiltinFallback === true &&
     profile.transportPolicy.maxAttempts === 2 &&
-    profile.transportPolicy.retryOn.includes("ECONNRESET")
+    profile.transportPolicy.retryOn.includes("ECONNRESET") &&
+    profile.classificationDistillation.strategy === "profile-guided-group-distillation-map.v1"
   )), true);
   assert.equal(capabilities.payload.classification.strategy, "hashing_embedding_window_community_classification_v3");
   assert.equal(capabilities.payload.classification.taxonomyStrategy, "semantic-concept-topic-hierarchy.v1");

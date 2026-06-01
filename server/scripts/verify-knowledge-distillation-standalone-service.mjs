@@ -410,6 +410,9 @@ assert.equal(defaultModelProfile.parameters.responseProfile, "machine-readable")
 assert.equal(defaultModelProfile.parameters.maxOutputTokens >= 1000, true);
 assert.equal(defaultModelProfile.transportPolicy.maxAttempts, 2);
 assert.equal(defaultModelProfile.transportPolicy.retryOn.includes("ECONNRESET"), true);
+assert.equal(defaultModelProfile.classificationDistillation.enabled, true);
+assert.equal(defaultModelProfile.classificationDistillation.strategy, "profile-guided-group-distillation-map.v1");
+assert.equal(defaultModelProfile.classificationDistillation.includeGarbageGroups, true);
 assert.equal(defaultModelProfile.requiredOutput.constraints.length >= 3, true);
 assert.equal(
   externalServiceSource.includes("const MODEL_DISTILLATION_PROFILES = loadModelDistillationProfiles();"),
@@ -622,6 +625,7 @@ for (const expectedText of [
   "profile.gatewayStrategy",
   "profile.systemPromptLines",
   "profile.parameters",
+  "buildClassificationDistillationMap",
   "MODEL_GATEWAY_REQUIRED",
   "MODEL_ALIAS_REQUIRED",
   "callModelDistillationGateway"

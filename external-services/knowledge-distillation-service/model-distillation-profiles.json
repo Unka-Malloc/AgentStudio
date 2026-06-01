@@ -48,6 +48,20 @@
           "AbortError"
         ]
       },
+      "classificationDistillation": {
+        "enabled": true,
+        "strategy": "profile-guided-group-distillation-map.v1",
+        "maxGroups": 32,
+        "maxEvidencePerGroup": 6,
+        "includeGarbageGroups": true,
+        "outputs": [
+          "groupDistillationUnits",
+          "evidenceRefs",
+          "promotionGate",
+          "topicHierarchy",
+          "lowCouplingHighCohesion"
+        ]
+      },
       "requiredOutput": {
         "language": "zh-CN",
         "format": "concise JSON-compatible analysis text",

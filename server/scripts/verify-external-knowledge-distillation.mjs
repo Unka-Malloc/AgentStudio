@@ -1231,7 +1231,8 @@ try {
     profile.noBuiltinFallback === true &&
     profile.parameters.responseProfile === "machine-readable" &&
     profile.transportPolicy.maxAttempts === 2 &&
-    profile.transportPolicy.retryOn.includes("ECONNRESET")
+    profile.transportPolicy.retryOn.includes("ECONNRESET") &&
+    profile.classificationDistillation.strategy === "profile-guided-group-distillation-map.v1"
   )), true);
   assert.equal(capabilities.payload.timeFiltering.supported, true);
   assert.equal(capabilities.payload.timeFiltering.strategy, "document-window-time-filter.v1");
@@ -1664,7 +1665,7 @@ try {
   assert.equal(queuedRun.payload.queue.strategy, "single-node-background-run-queue.v1");
   assert.equal(queuedRun.headers.get("retry-after"), "1");
   const queuedCompletedRun = await waitForCompletedRun(serviceUrl, queuedRun.payload.runId);
-  assert.equal(queuedCompletedRun.status, "completed");
+  assert.equal(queuedCompletedRun.status, "completed", `queued external distillation run failed: ${JSON.stringify(queuedCompletedRun).slice(0, 1200)}`);
   assert.equal(queuedCompletedRun.queue.executionMode, "queued");
   assert.equal(queuedCompletedRun.queue.phase, "completed");
   assert.equal(queuedCompletedRun.result.agentMessage.responseProfile, "agent");
@@ -2211,6 +2212,11 @@ try {
   assert.equal(createRun.payload.result.modelDistillation.profileId, "real-model-grounded-distillation.v1");
   assert.equal(createRun.payload.result.modelDistillation.status, "completed");
   assert.equal(createRun.payload.result.modelDistillation.modelAlias, "verify-real-model-gateway");
+  assert.equal(createRun.payload.result.modelDistillation.classificationDistillation.strategy, "profile-guided-group-distillation-map.v1");
+  assert.equal(
+    createRun.payload.result.modelDistillation.classificationDistillation.groupCount >= createRun.payload.result.classification.coreGroupCount,
+    true
+  );
   assert.equal(createRun.payload.result.agentMessage.modelDistillation.status, "completed");
   if (!reuseServiceUrl) {
     assert.equal(mockModelGateway.calls.length >= 1, true, "distillation must call the configured model gateway");
@@ -2256,6 +2262,13 @@ try {
   assert.equal(financeGroup.distillationUnit.windowRefs.length >= 1, true);
   assert.equal(typeof financeGroup.separationScore, "number");
   assert.equal(financeGroup.boundary, "isolated");
+  const financeModelDistillation = createRun.payload.result.modelDistillation.classificationDistillation.groups.find((group) => (
+    group.groupId === financeGroup.groupId
+  ));
+  assert.ok(financeModelDistillation, "classification distillation must expose the finance group as a model-grounded group unit");
+  assert.equal(financeModelDistillation.topicHierarchy.primaryConcept, "finance");
+  assert.equal(financeModelDistillation.sourceIds.includes("source-2"), true);
+  assert.equal(financeModelDistillation.evidence.some((evidence) => evidence.evidenceRef), true);
   assert.equal(createRun.payload.result.candidates.some((candidate) => (
     candidate.sourceIds.includes("source-2") &&
     candidate.distillationUnitId &&
@@ -2273,7 +2286,17 @@ try {
     /below garbage threshold/.test(document.reason)
   )), true);
   assert.equal(garbageGroup?.exclusionReasons?.some((reason) => reason.code === "WEAK_EVIDENCE_SIGNAL"), true);
+  assert.equal(createRun.payload.result.modelDistillation.classificationDistillation.groups.some((group) => (
+    group.groupId === garbageGroup?.groupId &&
+    group.excludedFromCore === true &&
+    group.kind === "garbage"
+  )), true);
   assert.equal(createRun.payload.result.agentMessage.responseProfile, "agent");
+  assert.equal(createRun.payload.result.agentMessage.outputs.some((output) => (
+    output.groupId === financeGroup.groupId &&
+    output.modelDistillation?.strategy === "profile-guided-group-distillation-map.v1" &&
+    output.modelDistillation.sourceIds.includes("source-2")
+  )), true);
 
   const documentScopedRun = await fetchJson(`${pactServer.url}/api/external/knowledge/distillation/runs`, {
     method: "POST",

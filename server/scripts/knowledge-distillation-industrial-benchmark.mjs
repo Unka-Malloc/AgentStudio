@@ -95,7 +95,8 @@ const ABSORPTION_REQUIREMENTS = Object.freeze([
       "semantic-concept-topic-hierarchy.v1",
       "leader-clustering-semantic-concept-rationale.v1",
       "lowCouplingHighCohesion",
-      "distillationUnit"
+      "distillationUnit",
+      "profile-guided-group-distillation-map.v1"
     ]
   },
   {
@@ -279,6 +280,7 @@ async function buildExternalIndustrialBenchmark() {
     "professional-format-manifest-json",
     "office-document-professional-adaptation.v1",
     "singleton-format-conversion-profile-registry.v1",
+    "profile-guided-group-distillation-map.v1",
     "visio-opc-shape-parser.v1",
     "directory-file-ref-recursive-routing.v1",
     "PROJECT_EVIDENCE_QUERY_STRATEGY",

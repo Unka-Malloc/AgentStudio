@@ -265,7 +265,7 @@ TODO：Apple iWork 包格式 `.pages`, `.numbers`, `.key`, `.keynote` 暂不纳�
 - 路由策略统一由 `external-services/knowledge-distillation-service/format-routes.json` 管理，协议为 `pact.external-knowledge-distillation.format-routes.v1`，策略为 `singleton-format-route-registry.v1`；服务启动时必须校验 route id、extension、media type、preferred parser 和 parser chain，配置错误直接启动失败。
 - 解析策略统一由 `external-services/knowledge-distillation-service/parser-strategies.json` 管理，协议为 `pact.external-knowledge-distillation.parser-strategies.v1`，策略为 `singleton-parser-strategy-registry.v1`；服务启动时必须校验每个 route 引用的 preferred/fallback/chain parser strategy 均存在，配置错误直接启动失败。
 - 专业格式转换 profile 统一由 `external-services/knowledge-distillation-service/format-conversion-profiles.json` 管理，协议为 `pact.external-knowledge-distillation.format-conversion-profiles.v1`，策略为 `singleton-format-conversion-profile-registry.v1`；服务启动时必须校验 profile 绑定到已有 route，且 parser stages 均来自 parser strategy registry。
-- 真实模型蒸馏 profile 统一由 `external-services/knowledge-distillation-service/model-distillation-profiles.json` 管理，协议为 `pact.external-knowledge-distillation.model-distillation-profiles.v1`，策略为 `singleton-model-distillation-profile-registry.v1`；服务启动时必须校验 profile 要求真实模型调用、禁止内置 fallback，并声明 gateway request fields、system prompt、输出约束和采样参数。
+- 真实模型蒸馏 profile 统一由 `external-services/knowledge-distillation-service/model-distillation-profiles.json` 管理，协议为 `pact.external-knowledge-distillation.model-distillation-profiles.v1`，策略为 `singleton-model-distillation-profile-registry.v1`；服务启动时必须校验 profile 要求真实模型调用、禁止内置 fallback，并声明 gateway request fields、system prompt、分类蒸馏 group map、输出约束和采样参数。
 - 建立统一路由对象：
 
 ```json

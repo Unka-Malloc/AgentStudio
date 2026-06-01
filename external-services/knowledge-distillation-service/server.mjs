@@ -652,6 +652,9 @@ function validateModelDistillationProfilesConfig(config = {}) {
     if (!profile.transportPolicy || Number(profile.transportPolicy.maxAttempts || 0) < 1) {
       throw new Error(`model distillation profile ${id} must define transportPolicy.maxAttempts`);
     }
+    if (profile.classificationDistillation?.enabled !== true || !String(profile.classificationDistillation?.strategy || "").trim()) {
+      throw new Error(`model distillation profile ${id} must define an enabled classificationDistillation strategy`);
+    }
     if (!Array.isArray(profile.requiredOutput?.constraints) || profile.requiredOutput.constraints.length === 0) {
       throw new Error(`model distillation profile ${id} must define requiredOutput.constraints[]`);
     }
@@ -694,6 +697,14 @@ function normalizeModelDistillationProfile(profile = {}, registry = {}) {
       maxAttempts: Math.max(1, Number(profile.transportPolicy?.maxAttempts || 1)),
       retryBackoffMs: Math.max(0, Number(profile.transportPolicy?.retryBackoffMs || 0)),
       retryOn: Object.freeze(normalizeFormatRouteArray(profile.transportPolicy?.retryOn))
+    }),
+    classificationDistillation: Object.freeze({
+      enabled: profile.classificationDistillation?.enabled === true,
+      strategy: String(profile.classificationDistillation?.strategy || "").trim(),
+      maxGroups: Math.max(1, Number(profile.classificationDistillation?.maxGroups || 32)),
+      maxEvidencePerGroup: Math.max(1, Number(profile.classificationDistillation?.maxEvidencePerGroup || 6)),
+      includeGarbageGroups: profile.classificationDistillation?.includeGarbageGroups === true,
+      outputs: Object.freeze(normalizeFormatRouteArray(profile.classificationDistillation?.outputs))
     }),
     requiredOutput: Object.freeze({
       language: String(profile.requiredOutput?.language || "zh-CN").trim(),
@@ -1142,7 +1153,7 @@ function buildReferenceGapReport(referenceFrameworks = null, { run = null, runti
       },
       classificationDistillation: {
         status: "absorbed",
-        evidence: [CLASSIFICATION_STRATEGY, "semantic-concept-topic-hierarchy.v1", "leader-clustering-semantic-concept-rationale.v1", "lowCouplingHighCohesion", "garbage group", "distillationUnit"],
+        evidence: [CLASSIFICATION_STRATEGY, "semantic-concept-topic-hierarchy.v1", "leader-clustering-semantic-concept-rationale.v1", "profile-guided-group-distillation-map.v1", "lowCouplingHighCohesion", "garbage group", "distillationUnit"],
         references: ["graphrag", "llama-index", "haystack"]
       },
       projectConvergence: {
@@ -18235,6 +18246,8 @@ function markdownTableCell(value = "") {
 
 function buildMarkdown({ title, query, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, modelDistillation = null, failure = null }) {
   const evidenceIndexes = new Map(documents.map((document, index) => [document.sourceId, index]));
+  const classificationDistillationsByGroupId = new Map((modelDistillation?.classificationDistillation?.groups || [])
+    .map((group) => [group.groupId, group]));
   const routingRows = corpusPlan.documents
     .slice(0, 12)
     .map((document) => {
@@ -18257,7 +18270,11 @@ function buildMarkdown({ title, query, documents, classification, routePlan, cor
     : "- No source files were supplied.";
   const categorySections = classification.groups
     .map((group) => {
-      const findings = group.documents
+      const groupDistillation = classificationDistillationsByGroupId.get(group.groupId);
+      const focus = (groupDistillation?.distilledFocus || []).length
+        ? groupDistillation.distilledFocus.map((item) => `- ${item}`).join("\n")
+        : "";
+      const evidenceRows = group.documents
         .slice(0, 8)
         .map((document) => {
           const index = evidenceIndexes.get(document.sourceId) ?? 0;
@@ -18269,7 +18286,9 @@ function buildMarkdown({ title, query, documents, classification, routePlan, cor
         "",
         `Sources: ${group.sourceCount}; cohesion: ${group.cohesionScore}; separation: ${group.separationScore ?? "n/a"}; communities: ${group.communityCount || 0}; kind: ${group.kind || "topic"}`,
         "",
-        findings || "- No source text was supplied."
+        focus || "- No distilled focus was produced for this group.",
+        "",
+        evidenceRows || "- No source text was supplied."
       ].join("\n");
     })
     .join("\n\n");
@@ -18341,6 +18360,8 @@ function buildMarkdown({ title, query, documents, classification, routePlan, cor
 }
 
 function buildAgentMessage({ runId, title, query, workflowScope, scopeSelection, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, modelDistillation, formatConversionPlan, runtimeStatus, failure = null }) {
+  const modelDistillationGroups = new Map((modelDistillation?.classificationDistillation?.groups || [])
+    .map((group) => [group.groupId, group]));
   return {
     protocolVersion: `${PROTOCOL_VERSION}.agent-message`,
     responseProfile: "agent",
@@ -18441,7 +18462,8 @@ function buildAgentMessage({ runId, title, query, workflowScope, scopeSelection,
         evidenceRefs: evidenceRefsForDocuments(documents, group.documents),
         windowCommunityIds: (group.windowCommunities || []).map((community) => community.communityId),
         distillationUnitId: group.distillationUnit?.unitId || "",
-        summary: group.documents.map((document) => firstSentence(document.text)).filter(Boolean).slice(0, 4)
+        summary: group.documents.map((document) => firstSentence(document.text)).filter(Boolean).slice(0, 4),
+        modelDistillation: modelDistillationGroups.get(group.groupId) || null
       }))
   };
 }
@@ -18525,6 +18547,81 @@ function compactModelDocumentRecord(document = {}, index = 0) {
     elementTypes: document.elementPlan?.elementTypes || {},
     parseWarnings: (document.parseWarnings || []).slice(0, 6),
     excerpt: firstSentence(document.text || "")
+  };
+}
+
+function compactGroupDistillationEvidenceRecord(allDocuments = [], document = {}) {
+  const index = allDocuments.findIndex((item) => item.sourceId === document.sourceId);
+  return {
+    evidenceRef: evidenceKey(Math.max(0, index)),
+    sourceId: document.sourceId || "",
+    title: document.title || document.fileName || "",
+    fileName: document.fileName || "",
+    routeId: document.route?.id || "",
+    formatId: document.route?.formatId || "",
+    parser: document.route?.preferredParser || "",
+    eventTime: document.eventTime || "",
+    documentTime: document.documentTime || "",
+    timeRange: document.timeRange || null,
+    excerpt: firstSentence(document.text || "").slice(0, 320)
+  };
+}
+
+function buildClassificationDistillationMap(distillationWorkflow = {}, modelText = "", profile = MODEL_DISTILLATION_PROFILES.defaultProfile) {
+  const policy = profile.classificationDistillation || {};
+  const classification = distillationWorkflow.classification || {};
+  const grounding = distillationWorkflow.grounding || {};
+  const allDocuments = distillationWorkflow.documents || [];
+  const selectedGroups = (classification.groups || [])
+    .filter((group) => policy.includeGarbageGroups || !group.excludedFromCore)
+    .slice(0, Math.max(1, Number(policy.maxGroups || 32)));
+  return {
+    strategy: policy.strategy,
+    profileId: profile.id,
+    enabled: policy.enabled === true,
+    generatedAt: nowIso(),
+    source: "classification.groups + modelDistillation.response",
+    referencePatterns: [
+      "graphrag.community-reports",
+      "haystack.pipeline-component-outputs",
+      "llama-index.nodes-with-metadata"
+    ],
+    modelResponseSha256: shaBuffer(Buffer.from(modelText || "", "utf8")),
+    modelResponseExcerpt: String(modelText || "").slice(0, 800),
+    groupCount: selectedGroups.length,
+    coreGroupCount: selectedGroups.filter((group) => !group.excludedFromCore).length,
+    garbageGroupCount: selectedGroups.filter((group) => group.excludedFromCore).length,
+    outputs: policy.outputs || [],
+    groups: selectedGroups.map((group) => {
+      const promotionGate = grounding.promotionGates?.[group.groupId] || candidatePromotionGateForGroup(group, grounding);
+      const evidence = (group.documents || [])
+        .slice(0, Math.max(1, Number(policy.maxEvidencePerGroup || 6)))
+        .map((document) => compactGroupDistillationEvidenceRecord(allDocuments, document));
+      return {
+        strategy: policy.strategy,
+        profileId: profile.id,
+        groupId: group.groupId,
+        label: group.label,
+        kind: group.kind || "topic",
+        excludedFromCore: Boolean(group.excludedFromCore),
+        sourceIds: group.sourceIds || [],
+        topicHierarchy: group.topicHierarchy || null,
+        distillationUnitId: group.distillationUnit?.unitId || "",
+        windowCommunityIds: (group.windowCommunities || []).map((community) => community.communityId),
+        promotionGate,
+        quality: {
+          cohesionScore: group.cohesionScore || 0,
+          separationScore: group.separationScore ?? null,
+          lowCoupling: (group.separationScore ?? 1) >= CLASSIFICATION_SEPARATION_THRESHOLD,
+          highCohesion: group.cohesionScore >= LEADER_CLUSTER_THRESHOLD
+        },
+        distilledFocus: (group.distillationUnit?.summary || [])
+          .concat((group.documents || []).map((document) => firstSentence(document.text || "")))
+          .filter(Boolean)
+          .slice(0, 5),
+        evidence
+      };
+    })
   };
 }
 
@@ -18735,6 +18832,7 @@ async function callModelDistillationGateway({ distillationWorkflow = {}, config 
     error.code = "MODEL_GATEWAY_EMPTY_RESPONSE";
     throw error;
   }
+  const classificationDistillation = buildClassificationDistillationMap(distillationWorkflow, modelText, profile);
   return {
     moduleBoundary: profile.moduleBoundary,
     strategy: profile.gatewayStrategy,
@@ -18757,7 +18855,8 @@ async function callModelDistillationGateway({ distillationWorkflow = {}, config 
       sha256: shaBuffer(Buffer.from(responseText, "utf8")),
       text: modelText,
       raw: parsed
-    }
+    },
+    classificationDistillation
   };
 }
 
@@ -19841,6 +19940,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         parameters: profile.parameters,
         promptLimits: profile.promptLimits,
         transportPolicy: profile.transportPolicy,
+        classificationDistillation: profile.classificationDistillation,
         requiredOutput: profile.requiredOutput
       })),
       requiredRealModelCall: true,

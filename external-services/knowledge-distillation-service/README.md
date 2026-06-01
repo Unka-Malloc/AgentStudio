@@ -209,7 +209,7 @@ Format route registry:
 - `format-routes.json` is the singleton source for extension, media type, preferred parser, fallback parser, parser chain, streaming unit, and reference framework mappings.
 - `parser-strategies.json` is the singleton source for parser strategy id, family, execution mode, runtime dependency, capability surface, route bindings, and parser input/output contracts.
 - `format-conversion-profiles.json` is the singleton source for professional format family, parser profile, structure units, conversion adapters, quality gates, risk controls, and known losses.
-- `model-distillation-profiles.json` is the singleton source for real model gateway task type, system prompt, prompt limits, output constraints, sampling parameters, and the no-built-in-fallback policy.
+- `model-distillation-profiles.json` is the singleton source for real model gateway task type, system prompt, prompt limits, classification distillation group maps, output constraints, sampling parameters, and the no-built-in-fallback policy.
 - `/v1/capabilities.fileCompatibility.routeRegistry` exposes route registry protocol, source, route count, extension count, media type count, and startup validation mode.
 
 Reference framework audit:
