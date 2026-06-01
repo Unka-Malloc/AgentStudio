@@ -91,7 +91,7 @@ Routed format families:
 - PDF: subtype routing before distillation, text extraction, URI annotation links, outline/bookmark destinations, AcroForm/widget field refs, visual layout fallback, OCR fallback, and text-operator geometry (`page`, `x/y`, approximate `bbox`) for evidence windows and conversion profiles.
 - Office and OpenDocument: DOC/DOT/DOCX/DOCM/DOTX/DOTM, RTF, PPT/PPS/POT/PPTX/PPTM/PPSX/PPSM/POTX/POTM, XLS/XLSB/XLSX/XLSM/XLTX/XLTM, ODT/ODS/ODP with paragraph, heading, Word paragraph style and numbering refs, Word header/footer part refs, Word content controls/bookmarks, Word hyperlinks/images/charts/comments/footnotes/endnotes/tracked-change revisions, Word/PowerPoint/OpenDocument table row/cell metadata, OpenDocument hyperlinks, slide, PresentationML slide layout/master inheritance refs, shape id/name, placeholder, chart, comment, and geometry refs, PowerPoint hyperlinks/images/charts and speaker notes, workbook sheet name/id/state/path, defined names/named ranges/print areas, sheet-row, cell-coordinate, SpreadsheetML merged-cell/comment/date style/date serial/formula/hyperlink/chart metadata, and table/chart elements for OOXML/OpenDocument payloads.
 - Ebooks: EPUB.
-- Text, configuration, and structured data: Markdown, TXT, YAML, TOML, INI, properties, dotenv, JSON, JSONC, JSONL, CSV, TSV, and logs. Markdown is parsed as frontmatter key-value refs plus block elements with heading, table, code-fence language/line refs, blockquote refs, link refs, and image refs rather than treated as plain text.
+- Text, configuration, and structured data: Markdown, TXT, YAML, TOML, INI, properties, dotenv, JSON, JSONC, JSONL, CSV, TSV, logs, WebVTT/SRT transcript files, and XBRL/Inline XBRL financial reports. Markdown is parsed as frontmatter key-value refs plus block elements with heading, table, code-fence language/line refs, blockquote refs, link refs, and image refs rather than treated as plain text; transcripts preserve cue timing/speaker turns; XBRL preserves fact/context/unit refs.
 - Markup documents: HTML, XHTML, XML, reStructuredText, AsciiDoc, Org, LaTeX, and MediaWiki with element-type extraction.
 - Diagrams: SVG, draw.io, Mermaid, and PlantUML with node, edge, and label extraction.
 - Notebooks: Jupyter `.ipynb` with markdown, code, and output cell extraction.
@@ -100,6 +100,7 @@ Routed format families:
 - Images: PNG, JPEG, TIFF, WEBP, BMP, HEIC, PBM, PGM, PNM.
 - Source code: JavaScript, TypeScript, Python, Java, Go, Rust, Swift, Kotlin, C, and C++ with static import/symbol extraction.
 - Calendar events: iCalendar `.ics` and vCalendar `.vcs` with event/todo and timeline extraction.
+- Audio recordings: WAV, MP3, M4A, AAC, FLAC, OGG, and OPUS are explicitly routed as audio and require a transcript sidecar or external ASR runtime instead of being misread as text.
 - Recursively routed ZIP, TAR, GZip/TGZ, and 7z archives.
 
 Built-in payload parsers:
@@ -113,6 +114,9 @@ Built-in payload parsers:
 - Source code structure normalization for imports, symbols, entry points, TODOs, and line-aware excerpts without executing code.
 - Unified diff/patch normalization for changed files, hunks, additions, deletions, and context lines.
 - iCalendar/vCalendar normalization for events, todos, dates, locations, organizers, and descriptions.
+- WebVTT/SRT transcript normalization for cue timing, speaker turns, and cue-level evidence windows.
+- XBRL/Inline XBRL normalization for financial facts, contexts, units, periods, and fact-level evidence windows.
+- Audio metadata routing that requires transcript sidecar or ASR runtime instead of pretending compressed audio bytes are text.
 - CSV and TSV row normalization.
 - EML-style header/body extraction.
 - MSG binary text extraction through Apache Tika for direct payloads and mounted file references.

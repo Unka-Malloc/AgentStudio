@@ -1035,6 +1035,12 @@ try {
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("code.structure"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("diff.unified"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("calendar.ics"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("transcript.cues"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("transcript.webvtt"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("transcript.srt"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("xbrl.facts"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("audio.metadata"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("audio.transcript-sidecar"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("markup.structure"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("structured.json.file-ref-stream"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("structured-zip.file-ref"), true);
@@ -1179,6 +1185,9 @@ try {
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("frontmatter"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("merged-cell"), true);
   assert.equal(capabilities.payload.elementModel.elementTypes.includes("cell-comment"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("transcript-cue"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("speaker-turn"), true);
+  assert.equal(capabilities.payload.elementModel.elementTypes.includes("xbrl-fact"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.href"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.frontmatter"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.annotation"), true);
@@ -1207,8 +1216,12 @@ try {
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.comment"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.dateIso"), true);
   assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.cells.dateSerial"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.transcript.speaker"), true);
+  assert.equal(capabilities.payload.elementModel.graphMetadata.includes("elementRefs.xbrlFact.contextRef"), true);
   assert.equal(capabilities.payload.elementModel.structuredFormats.includes("pdf"), true);
   assert.equal(capabilities.payload.elementModel.structuredFormats.includes("markdown"), true);
+  assert.equal(capabilities.payload.elementModel.structuredFormats.includes("webvtt"), true);
+  assert.equal(capabilities.payload.elementModel.structuredFormats.includes("xbrl"), true);
   assert.equal(capabilities.payload.elementModel.referencePatterns.includes("unstructured.chunk_by_title"), true);
   assert.equal(capabilities.payload.algorithms.includes("element-aware-by-title-windowing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("structured-json-file-ref-streaming-window.v1"), true);
@@ -1217,6 +1230,8 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("human-agent-response-profile-separation.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("professional-format-manifest.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("bounded-binary-file-profile.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("timed-transcript-cue-parser.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("xbrl-financial-fact-parser.v1"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("markdown.frontmatter"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("markdown.structure"), true);
   assert.equal(capabilities.payload.formatConversion.strategy, "office-document-professional-adaptation.v1");
@@ -1292,7 +1307,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-date-serials-normalized"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-hyperlink-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-chart-refs-preserved"), true);
-  for (const extension of [".pdf", ".docx", ".docm", ".dotx", ".dotm", ".doc", ".dot", ".rtf", ".xlsx", ".xlsm", ".xlsb", ".xltx", ".xltm", ".pptx", ".pptm", ".ppsx", ".ppsm", ".potx", ".potm", ".ppt", ".pps", ".pot", ".odt", ".ods", ".odp", ".epub", ".eml", ".msg", ".mbox", ".png", ".gif", ".pgm", ".zip", ".tar", ".tgz", ".tar.gz", ".7z", ".md", ".json", ".jsonc", ".ipynb", ".yaml", ".toml", ".ini", ".properties", ".env", ".svg", ".drawio", ".mmd", ".mermaid", ".puml", ".plantuml", ".js", ".ts", ".py", ".go", ".rs", ".diff", ".patch", ".ics", ".vcs", ".html", ".htm", ".xhtml", ".xml", ".rst", ".adoc", ".asciidoc", ".org", ".tex", ".latex", ".wiki", ".mediawiki"]) {
+  for (const extension of [".pdf", ".docx", ".docm", ".dotx", ".dotm", ".doc", ".dot", ".rtf", ".xlsx", ".xlsm", ".xlsb", ".xltx", ".xltm", ".pptx", ".pptm", ".ppsx", ".ppsm", ".potx", ".potm", ".ppt", ".pps", ".pot", ".odt", ".ods", ".odp", ".epub", ".eml", ".msg", ".mbox", ".png", ".gif", ".pgm", ".zip", ".tar", ".tgz", ".tar.gz", ".7z", ".md", ".json", ".jsonc", ".ipynb", ".yaml", ".toml", ".ini", ".properties", ".env", ".svg", ".drawio", ".mmd", ".mermaid", ".puml", ".plantuml", ".js", ".ts", ".py", ".go", ".rs", ".diff", ".patch", ".ics", ".vcs", ".vtt", ".webvtt", ".srt", ".xbrl", ".ixbrl", ".wav", ".mp3", ".m4a", ".html", ".htm", ".xhtml", ".xml", ".rst", ".adoc", ".asciidoc", ".org", ".tex", ".latex", ".wiki", ".mediawiki"]) {
     assert.equal(
       capabilities.payload.fileCompatibility.supportedExtensions.includes(extension),
       true,
@@ -1558,6 +1573,50 @@ try {
             "END:VTODO",
             "END:VCALENDAR"
           ].join("\n"))
+        },
+        {
+          sourceId: "source-71",
+          title: "Architecture Review Transcript",
+          fileName: "architecture-review.vtt",
+          mediaType: "text/vtt",
+          contentBase64: base64Text([
+            "WEBVTT",
+            "",
+            "intro",
+            "00:00:01.000 --> 00:00:05.000",
+            "<v Architect>External knowledge distillation must route transcript files as cue-level evidence.",
+            "",
+            "00:00:05.500 --> 00:00:11.000",
+            "<v Finance Lead>Finance XBRL facts should remain separate from architecture review dialogue."
+          ].join("\n"))
+        },
+        {
+          sourceId: "source-72",
+          title: "Quarterly XBRL Facts",
+          fileName: "quarterly-facts.xbrl",
+          mediaType: "application/xbrl+xml",
+          contentBase64: base64Text([
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+            "<xbrli:xbrl xmlns:xbrli=\"http://www.xbrl.org/2003/instance\" xmlns:us-gaap=\"http://fasb.org/us-gaap/2026\" xmlns:iso4217=\"http://www.xbrl.org/2003/iso4217\">",
+            "  <xbrli:context id=\"FY2026Q2\"><xbrli:period><xbrli:startDate>2026-04-01</xbrli:startDate><xbrli:endDate>2026-06-30</xbrli:endDate></xbrli:period></xbrli:context>",
+            "  <xbrli:unit id=\"USD\"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>",
+            "  <us-gaap:Revenue contextRef=\"FY2026Q2\" unitRef=\"USD\" decimals=\"-3\">4200000</us-gaap:Revenue>",
+            "  <us-gaap:OperatingIncomeLoss contextRef=\"FY2026Q2\" unitRef=\"USD\" decimals=\"-3\">870000</us-gaap:OperatingIncomeLoss>",
+            "</xbrli:xbrl>"
+          ].join("\n"))
+        },
+        {
+          sourceId: "source-73",
+          title: "Architecture Review Audio",
+          fileName: "architecture-review.wav",
+          mediaType: "audio/wav",
+          byteSize: 44,
+          contentBase64: Buffer.concat([
+            Buffer.from("RIFF", "ascii"),
+            Buffer.alloc(4),
+            Buffer.from("WAVEfmt ", "ascii"),
+            Buffer.alloc(32)
+          ]).toString("base64")
         },
         {
           sourceId: "source-38",
@@ -2123,6 +2182,26 @@ try {
   assert.equal(calendarPayloadCorpus.timeRange.from, "2026-06-15");
   assert.equal(calendarPayloadCorpus.timeRange.to, "2026-06-16");
   assert.match(calendarPayloadCorpus.windowPlan.windows[0]?.excerpt || "", /Knowledge distillation release review|Ship calendar parser verification/);
+  const transcriptCorpus = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-71");
+  assert.equal(transcriptCorpus.route.formatId, "transcript");
+  assert.equal(transcriptCorpus.parserTrace.some((trace) => trace.stage === "transcript.cues" && trace.status === "completed" && trace.cues === 2 && trace.speakers === 2), true);
+  assert.equal(transcriptCorpus.parserTrace.some((trace) => trace.stage === "transcript.webvtt" && trace.status === "completed"), true);
+  assert.equal(transcriptCorpus.elementPlan.elementTypes["transcript-cue"] >= 2, true);
+  assert.equal(transcriptCorpus.elementPlan.elementTypes["speaker-turn"] >= 2, true);
+  assert.equal(transcriptCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => ref.transcript?.speaker === "Architect")), true);
+  assert.match(transcriptCorpus.windowPlan.windows[0]?.excerpt || "", /cue-level evidence|Finance XBRL facts/);
+  const xbrlCorpus = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-72");
+  assert.equal(xbrlCorpus.route.formatId, "financial-report");
+  assert.equal(xbrlCorpus.parserTrace.some((trace) => trace.stage === "xbrl.contexts" && trace.status === "completed" && trace.contexts === 1), true);
+  assert.equal(xbrlCorpus.parserTrace.some((trace) => trace.stage === "xbrl.facts" && trace.status === "completed" && trace.facts >= 2 && trace.units === 1), true);
+  assert.equal(xbrlCorpus.elementPlan.elementTypes["xbrl-fact"] >= 2, true);
+  assert.equal(xbrlCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => ref.xbrlFact?.contextRef === "FY2026Q2")), true);
+  assert.match(xbrlCorpus.windowPlan.windows[0]?.excerpt || "", /Revenue|OperatingIncomeLoss|4200000/);
+  const audioCorpus = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-73");
+  assert.equal(audioCorpus.route.formatId, "audio");
+  assert.equal(audioCorpus.parseStatus, "empty");
+  assert.equal(audioCorpus.parserTrace.some((trace) => trace.stage === "audio.metadata" && trace.status === "completed"), true);
+  assert.equal(audioCorpus.parserTrace.some((trace) => trace.stage === "audio.transcript-sidecar" && trace.status === "requires-input"), true);
   const htmlMarkupCorpus = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-38");
   assert.equal(htmlMarkupCorpus.route.formatId, "markup");
   assert.equal(htmlMarkupCorpus.parserTrace.some((trace) => trace.stage === "markup.structure" && trace.status === "completed" && trace.format === "html" && trace.elements >= 8 && trace.headings >= 2 && trace.links >= 1 && trace.tables >= 2 && trace.codeBlocks >= 1), true);

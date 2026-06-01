@@ -115,6 +115,8 @@ const SEMANTIC_ALIAS_GROUPS = Object.freeze({
   finance: [
     "finance",
     "financial",
+    "currency",
+    "currencies",
     "invoice",
     "invoices",
     "vendor",
@@ -124,12 +126,23 @@ const SEMANTIC_ALIAS_GROUPS = Object.freeze({
     "payment",
     "payments",
     "remittance",
+    "settlement",
+    "settlements",
     "tax",
     "vat",
     "total",
     "totals",
     "amount",
-    "amounts"
+    "amounts",
+    "revenue",
+    "revenues",
+    "income",
+    "loss",
+    "operating",
+    "gaap",
+    "usd",
+    "xbrl",
+    "ixbrl"
   ],
   parsing: [
     "parser",
@@ -176,6 +189,31 @@ const SEMANTIC_ALIAS_GROUPS = Object.freeze({
     "convergence",
     "distillation"
   ]
+});
+
+const DOMAIN_SEMANTIC_CONCEPTS = Object.freeze(new Set([
+  "architecture",
+  "finance"
+]));
+
+const BROAD_SEMANTIC_CONCEPTS = Object.freeze(new Set([
+  "project"
+]));
+
+const MECHANICAL_SEMANTIC_CONCEPTS = Object.freeze(new Set([
+  "parsing",
+  "visual"
+]));
+
+const ROUTE_CONCEPT_BOOSTS = Object.freeze({
+  "financial-report": { finance: 4 },
+  spreadsheet: { finance: 0.75 },
+  email: { finance: 0.25 },
+  archive: { parsing: 0.25 },
+  image: { visual: 2 },
+  "scanned-document": { visual: 1.5 },
+  audio: { parsing: 0.25 },
+  transcript: { parsing: 0.25 }
 });
 const SEMANTIC_CONCEPT_INDEX = Object.freeze(
   Object.fromEntries(Object.keys(SEMANTIC_ALIAS_GROUPS).map((concept, index) => [`concept:${concept}`, index]))
@@ -439,6 +477,42 @@ const FORMAT_ROUTES = Object.freeze([
     parserChain: ["calendar.route", "calendar.ics", "text.direct"],
     streamingUnit: "event",
     referenceFrameworks: ["llama-index", "haystack", "unstructured"]
+  },
+  {
+    id: "transcript",
+    label: "Timed transcript / subtitle",
+    extensions: [".vtt", ".webvtt", ".srt", ".sbv"],
+    mediaTypes: ["text/vtt", "text/webvtt", "application/x-subrip", "text/x-subrip", "text/x-subtitle"],
+    contentShape: "timed-transcript",
+    preferredParser: "transcript.cues",
+    fallbackParsers: ["text.direct"],
+    parserChain: ["transcript.route", "transcript.webvtt", "transcript.srt", "transcript.speaker-turns", "transcript.time-index", "text.direct"],
+    streamingUnit: "cue",
+    referenceFrameworks: ["docling", "unstructured", "llama-index", "haystack"]
+  },
+  {
+    id: "financial-report",
+    label: "XBRL / Inline XBRL financial report",
+    extensions: [".xbrl", ".ixbrl"],
+    mediaTypes: ["application/xbrl+xml", "application/ixbrl+xml", "application/x-inline-xbrl", "text/xbrl"],
+    contentShape: "financial-facts",
+    preferredParser: "xbrl.facts",
+    fallbackParsers: ["markup.structure", "text.direct"],
+    parserChain: ["financial-report.route", "xbrl.contexts", "xbrl.facts", "xbrl.units", "markup.structure", "text.direct"],
+    streamingUnit: "fact",
+    referenceFrameworks: ["docling", "unstructured", "llama-index", "haystack"]
+  },
+  {
+    id: "audio",
+    label: "Audio / speech recording",
+    extensions: [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus"],
+    mediaTypes: ["audio/wav", "audio/wave", "audio/mpeg", "audio/mp4", "audio/aac", "audio/flac", "audio/ogg", "audio/opus"],
+    contentShape: "audio",
+    preferredParser: "audio.transcript-sidecar",
+    fallbackParsers: ["audio.asr.external", "metadata.only"],
+    parserChain: ["audio.route", "audio.metadata", "audio.transcript-sidecar", "audio.asr.external"],
+    streamingUnit: "track",
+    referenceFrameworks: ["docling", "unstructured", "haystack"]
   },
   {
     id: "source-code",
@@ -820,7 +894,20 @@ const MEDIA_TYPE_BY_EXTENSION = new Map(Object.entries({
   ".msg": "application/vnd.ms-outlook",
   ".mbox": "application/mbox",
   ".ics": "text/calendar",
-  ".vcs": "text/x-vcalendar"
+  ".vcs": "text/x-vcalendar",
+  ".vtt": "text/vtt",
+  ".webvtt": "text/vtt",
+  ".srt": "application/x-subrip",
+  ".sbv": "text/x-subtitle",
+  ".xbrl": "application/xbrl+xml",
+  ".ixbrl": "application/ixbrl+xml",
+  ".wav": "audio/wav",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".aac": "audio/aac",
+  ".flac": "audio/flac",
+  ".ogg": "audio/ogg",
+  ".opus": "audio/opus"
 }));
 
 const GENERIC_MEDIA_TYPES = new Set([
@@ -1713,7 +1800,7 @@ function isStreamableTextRoute(route = null, metadata = {}) {
   if (!route) {
     return false;
   }
-  if (["markdown", "plain-text", "markup", "source-code", "config", "diagram", "notebook", "diff", "calendar"].includes(route.id)) {
+  if (["markdown", "plain-text", "markup", "source-code", "config", "diagram", "notebook", "diff", "calendar", "transcript", "financial-report"].includes(route.id)) {
     return true;
   }
   const extension = normalizeExtension(metadata.extension || extensionFromFileName(metadata.fileName || ""));
@@ -2388,7 +2475,9 @@ function pushStructureElement(elements, type, text, metadata = {}) {
     ...(metadata.quote ? { quote: metadata.quote } : {}),
     ...(metadata.merge ? { merge: metadata.merge } : {}),
     ...(metadata.frontmatter ? { frontmatter: metadata.frontmatter } : {}),
-    ...(metadata.cells ? { cells: metadata.cells } : {})
+    ...(metadata.cells ? { cells: metadata.cells } : {}),
+    ...(metadata.transcript ? { transcript: metadata.transcript } : {}),
+    ...(metadata.xbrlFact ? { xbrlFact: metadata.xbrlFact } : {})
   });
 }
 
@@ -3636,6 +3725,215 @@ function parseCalendarText(text = "") {
     todoCount: todos.length,
     from: minDate,
     to: maxDate || minDate
+  };
+}
+
+function secondsFromTranscriptTime(value = "") {
+  const normalized = String(value || "").trim().replace(",", ".");
+  const parts = normalized.split(":");
+  if (parts.length < 2) {
+    return 0;
+  }
+  const seconds = Number(parts.pop() || 0);
+  const minutes = Number(parts.pop() || 0);
+  const hours = Number(parts.pop() || 0);
+  return Math.max(0, Math.round(((hours * 3600) + (minutes * 60) + seconds) * 1000) / 1000);
+}
+
+function cleanTranscriptCueText(lines = []) {
+  return lines
+    .join(" ")
+    .replace(/<c(?:\.[^>]*)?>/gi, "")
+    .replace(/<\/c>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function speakerFromTranscriptCue(value = "") {
+  const voice = String(value || "").match(/<v\s+([^>]+)>/i)?.[1] || "";
+  if (voice) {
+    return compactMarkupText(voice, 80);
+  }
+  const speaker = String(value || "").match(/^([A-Za-z][A-Za-z0-9 _.-]{1,60})\s*:\s+\S/)?.[1] || "";
+  return speaker ? compactMarkupText(speaker, 80) : "";
+}
+
+function parseTranscriptText(text = "", metadata = {}) {
+  const records = [];
+  const elements = [];
+  const cues = [];
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  let index = 0;
+  while (index < lines.length && cues.length < 5000) {
+    let line = lines[index].trim();
+    const lineNumber = index + 1;
+    if (!line || /^WEBVTT(?:\s|$)/i.test(line) || /^NOTE(?:\s|$)/i.test(line) || /^STYLE$/i.test(line) || /^REGION$/i.test(line)) {
+      index += 1;
+      continue;
+    }
+    let cueId = "";
+    if (/^\d+$/.test(line) && lines[index + 1]?.includes("-->")) {
+      cueId = line;
+      index += 1;
+      line = lines[index].trim();
+    } else if (!line.includes("-->") && lines[index + 1]?.includes("-->")) {
+      cueId = line;
+      index += 1;
+      line = lines[index].trim();
+    }
+    const timing = line.match(/(\d{1,2}:\d{2}:\d{2}[,.]\d{3}|\d{1,2}:\d{2}[,.]\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,.]\d{3}|\d{1,2}:\d{2}[,.]\d{3})/);
+    if (!timing) {
+      index += 1;
+      continue;
+    }
+    const start = timing[1].replace(",", ".");
+    const end = timing[2].replace(",", ".");
+    index += 1;
+    const cueLines = [];
+    while (index < lines.length && lines[index].trim()) {
+      cueLines.push(lines[index]);
+      index += 1;
+    }
+    const rawCue = cueLines.join(" ");
+    const speaker = speakerFromTranscriptCue(rawCue);
+    const cueText = cleanTranscriptCueText(cueLines);
+    if (!cueText) {
+      continue;
+    }
+    const cue = {
+      cueId: cueId || `cue-${cues.length + 1}`,
+      start,
+      end,
+      startSeconds: secondsFromTranscriptTime(start),
+      endSeconds: secondsFromTranscriptTime(end),
+      speaker,
+      text: cueText,
+      line: lineNumber
+    };
+    cues.push(cue);
+    records.push(`Transcript cue ${cues.length} ${start} --> ${end}${speaker ? ` speaker ${speaker}` : ""}: ${cueText}`);
+    pushStructureElement(elements, "transcript-cue", cueText, {
+      line: lineNumber,
+      transcript: {
+        kind: "cue",
+        cueId: cue.cueId,
+        speaker,
+        start,
+        end,
+        startSeconds: cue.startSeconds,
+        endSeconds: cue.endSeconds
+      }
+    });
+  }
+  const speakers = uniqueOrdered(cues.map((cue) => cue.speaker).filter(Boolean));
+  for (const speaker of speakers.slice(0, 200)) {
+    const speakerText = cues
+      .filter((cue) => cue.speaker === speaker)
+      .map((cue) => cue.text)
+      .join(" ")
+      .slice(0, 1200);
+    pushStructureElement(elements, "speaker-turn", speakerText, {
+      name: speaker,
+      transcript: { kind: "speaker-turn", speaker }
+    });
+  }
+  const fallback = String(text || "").trim();
+  return {
+    text: records.join("\n") || fallback,
+    elements,
+    format: normalizeExtension(metadata.extension || "") === ".srt" ? "srt" : "webvtt",
+    cueCount: cues.length,
+    speakerCount: speakers.length,
+    from: cues[0]?.start || "",
+    to: cues[cues.length - 1]?.end || ""
+  };
+}
+
+function xbrlFactLocalName(name = "") {
+  return String(name || "").split(":").pop() || String(name || "");
+}
+
+function parseXbrlContexts(text = "") {
+  const contexts = new Map();
+  for (const match of String(text || "").matchAll(/<[^>]*:?context\b[^>]*\bid=(["'])(.*?)\1[^>]*>([\s\S]*?)<\/[^>]*:?context>/gi)) {
+    const id = decodeXmlEntities(match[2] || "");
+    const body = match[3] || "";
+    const start = body.match(/<[^>]*:?startDate\b[^>]*>([^<]+)<\/[^>]*:?startDate>/i)?.[1] || "";
+    const end = body.match(/<[^>]*:?endDate\b[^>]*>([^<]+)<\/[^>]*:?endDate>/i)?.[1] || "";
+    const instant = body.match(/<[^>]*:?instant\b[^>]*>([^<]+)<\/[^>]*:?instant>/i)?.[1] || "";
+    contexts.set(id, {
+      id,
+      start: parseCalendarDate(start) || start.trim(),
+      end: parseCalendarDate(end) || end.trim(),
+      instant: parseCalendarDate(instant) || instant.trim()
+    });
+  }
+  return contexts;
+}
+
+function parseXbrlText(text = "", metadata = {}) {
+  const records = [];
+  const elements = [];
+  const contexts = parseXbrlContexts(text);
+  const facts = [];
+  const seen = new Set();
+  const source = String(text || "");
+  const factPatterns = [
+    /<ix:(?:nonFraction|nonNumeric)\b([^>]*)>([\s\S]*?)<\/ix:(?:nonFraction|nonNumeric)>/gi,
+    /<([A-Za-z][\w.-]*:[A-Za-z][\w.-]*)\b([^>]*)>([^<]{1,2000})<\/\1>/gi
+  ];
+  for (const pattern of factPatterns) {
+    for (const match of source.matchAll(pattern)) {
+      const inline = pattern.source.startsWith("<ix:");
+      const attrs = inline ? match[1] || "" : match[2] || "";
+      const name = inline
+        ? xmlLocalAttribute(attrs, "name")
+        : match[1] || "";
+      const value = compactMarkupText(decodeXmlEntities(inline ? match[2] || "" : match[3] || "").replace(/<[^>]+>/g, " "), 500);
+      const contextRef = xmlLocalAttribute(attrs, "contextRef");
+      const unitRef = xmlLocalAttribute(attrs, "unitRef");
+      const decimals = xmlLocalAttribute(attrs, "decimals");
+      const localName = xbrlFactLocalName(name);
+      if (!name || !value || /^(context|unit|schemaRef|startDate|endDate|instant|identifier|measure)$/i.test(localName)) {
+        continue;
+      }
+      const dedupeKey = `${name}\n${contextRef}\n${unitRef}\n${value}`;
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+      const context = contexts.get(contextRef) || {};
+      const fact = {
+        name,
+        localName,
+        contextRef,
+        unitRef,
+        decimals,
+        value,
+        periodStart: context.start || "",
+        periodEnd: context.end || "",
+        instant: context.instant || ""
+      };
+      facts.push(fact);
+      records.push(`XBRL fact ${localName}: ${value}${unitRef ? ` ${unitRef}` : ""}${contextRef ? ` context ${contextRef}` : ""}${fact.periodStart || fact.periodEnd ? ` period ${fact.periodStart || ""}..${fact.periodEnd || ""}` : ""}${fact.instant ? ` instant ${fact.instant}` : ""}`);
+      pushStructureElement(elements, "xbrl-fact", `${localName}: ${value}`, {
+        name: localName,
+        xbrlFact: fact
+      });
+      if (facts.length >= 5000) {
+        break;
+      }
+    }
+  }
+  const fallback = compactMarkupText(source.replace(/<[^>]+>/g, " "), 8000);
+  return {
+    text: records.join("\n") || fallback,
+    elements,
+    format: normalizeExtension(metadata.extension || "") === ".ixbrl" ? "ixbrl" : "xbrl",
+    factCount: facts.length,
+    contextCount: contexts.size,
+    unitCount: new Set(facts.map((fact) => fact.unitRef).filter(Boolean)).size
   };
 }
 
@@ -9656,6 +9954,57 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
       });
       return { text: parsed.text || text, parserTrace, warnings: [] };
     }
+    if (route?.id === "transcript") {
+      const parsed = parseTranscriptText(text, metadata);
+      parserTrace.push({
+        stage: "transcript.cues",
+        status: parsed.text ? "completed" : "empty",
+        characters: parsed.text.length,
+        cues: parsed.cueCount,
+        speakers: parsed.speakerCount,
+        from: parsed.from,
+        to: parsed.to
+      });
+      parserTrace.push({
+        stage: parsed.format === "srt" ? "transcript.srt" : "transcript.webvtt",
+        status: parsed.cueCount ? "completed" : "empty",
+        cues: parsed.cueCount
+      });
+      parserTrace.push({
+        stage: "transcript.speaker-turns",
+        status: parsed.speakerCount ? "completed" : "empty",
+        speakers: parsed.speakerCount
+      });
+      return {
+        text: parsed.text || text,
+        parserTrace,
+        warnings: [],
+        structureElements: parsed.elements,
+        structureFormat: parsed.format
+      };
+    }
+    if (route?.id === "financial-report") {
+      const parsed = parseXbrlText(text, metadata);
+      parserTrace.push({
+        stage: "xbrl.contexts",
+        status: parsed.contextCount ? "completed" : "empty",
+        contexts: parsed.contextCount
+      });
+      parserTrace.push({
+        stage: "xbrl.facts",
+        status: parsed.factCount ? "completed" : "empty",
+        characters: parsed.text.length,
+        facts: parsed.factCount,
+        units: parsed.unitCount
+      });
+      return {
+        text: parsed.text || text,
+        parserTrace,
+        warnings: [],
+        structureElements: parsed.elements,
+        structureFormat: parsed.format
+      };
+    }
     if (route?.id === "diagram") {
       const parsed = parseDiagramText(text, metadata);
       parserTrace.push({
@@ -9750,6 +10099,27 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
       warnings.push(requiredRuntimeWarning(runtimeStatus, ["ocr.tesseract"]) || "image-ocr-runtime-required");
       return { text: "", parserTrace, warnings };
     }
+    if (route?.id === "audio") {
+      parserTrace.push({
+        stage: "audio.metadata",
+        status: "completed",
+        bytes: buffer.length,
+        mediaType: metadata.mediaType || "",
+        extension: metadata.extension || "",
+        strategy: "audio-route-no-inline-binary-to-text.v1"
+      });
+      parserTrace.push({
+        stage: "audio.transcript-sidecar",
+        status: "requires-input",
+        expectedSidecarFormats: [".vtt", ".srt", ".json", ".txt"]
+      });
+      parserTrace.push({
+        stage: "audio.asr.external",
+        status: "requires-external-runtime"
+      });
+      warnings.push("audio-transcript-or-asr-runtime-required");
+      return { text: "", parserTrace, warnings };
+    }
     if (route?.id === "json") {
       const parsed = parseJsonLike(plain);
       parserTrace.push({ stage: "structured.json", status: "completed", characters: parsed.length });
@@ -9809,6 +10179,57 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
         to: parsed.to
       });
       return { text: parsed.text || plain.trim(), parserTrace, warnings };
+    }
+    if (route?.id === "transcript") {
+      const parsed = parseTranscriptText(plain, metadata);
+      parserTrace.push({
+        stage: "transcript.cues",
+        status: parsed.text ? "completed" : "empty",
+        characters: parsed.text.length,
+        cues: parsed.cueCount,
+        speakers: parsed.speakerCount,
+        from: parsed.from,
+        to: parsed.to
+      });
+      parserTrace.push({
+        stage: parsed.format === "srt" ? "transcript.srt" : "transcript.webvtt",
+        status: parsed.cueCount ? "completed" : "empty",
+        cues: parsed.cueCount
+      });
+      parserTrace.push({
+        stage: "transcript.speaker-turns",
+        status: parsed.speakerCount ? "completed" : "empty",
+        speakers: parsed.speakerCount
+      });
+      return {
+        text: parsed.text || plain.trim(),
+        parserTrace,
+        warnings,
+        structureElements: parsed.elements,
+        structureFormat: parsed.format
+      };
+    }
+    if (route?.id === "financial-report") {
+      const parsed = parseXbrlText(plain, metadata);
+      parserTrace.push({
+        stage: "xbrl.contexts",
+        status: parsed.contextCount ? "completed" : "empty",
+        contexts: parsed.contextCount
+      });
+      parserTrace.push({
+        stage: "xbrl.facts",
+        status: parsed.factCount ? "completed" : "empty",
+        characters: parsed.text.length,
+        facts: parsed.factCount,
+        units: parsed.unitCount
+      });
+      return {
+        text: parsed.text || plain.trim(),
+        parserTrace,
+        warnings,
+        structureElements: parsed.elements,
+        structureFormat: parsed.format
+      };
     }
     if (route?.id === "markup") {
       const parsed = parseMarkupText(plain, metadata);
@@ -10432,6 +10853,9 @@ function lookupFormatRoute({ extension = "", mediaType = "", text = "" } = {}) {
   if (normalizedMediaType.startsWith("image/")) {
     return ROUTES_BY_EXTENSION.get(".png");
   }
+  if (normalizedMediaType.startsWith("audio/")) {
+    return ROUTES_BY_EXTENSION.get(".wav");
+  }
   if (text) {
     return ROUTES_BY_MEDIA_TYPE.get("text/plain");
   }
@@ -10911,6 +11335,30 @@ function normalizedStructureElements(document = {}) {
               : null
           }))
         : [];
+      const transcript = element.transcript && typeof element.transcript === "object"
+        ? {
+            kind: String(element.transcript.kind || ""),
+            cueId: String(element.transcript.cueId || ""),
+            speaker: String(element.transcript.speaker || ""),
+            start: String(element.transcript.start || ""),
+            end: String(element.transcript.end || ""),
+            startSeconds: Number(element.transcript.startSeconds || 0),
+            endSeconds: Number(element.transcript.endSeconds || 0)
+          }
+        : null;
+      const xbrlFact = element.xbrlFact && typeof element.xbrlFact === "object"
+        ? {
+            name: String(element.xbrlFact.name || ""),
+            localName: String(element.xbrlFact.localName || ""),
+            contextRef: String(element.xbrlFact.contextRef || ""),
+            unitRef: String(element.xbrlFact.unitRef || ""),
+            decimals: String(element.xbrlFact.decimals || ""),
+            value: String(element.xbrlFact.value || ""),
+            periodStart: String(element.xbrlFact.periodStart || ""),
+            periodEnd: String(element.xbrlFact.periodEnd || ""),
+            instant: String(element.xbrlFact.instant || "")
+          }
+        : null;
       return {
         elementId: element.elementId || stableId("element", document.sourceId, String(index), element.type || "text", element.text || ""),
         index,
@@ -10939,7 +11387,9 @@ function normalizedStructureElements(document = {}) {
         quote,
         merge,
         frontmatter,
-        cells
+        cells,
+        transcript,
+        xbrlFact
       };
     })
     .filter((element) => element.text);
@@ -10950,7 +11400,7 @@ function isHeadingStructureElement(element = {}) {
 }
 
 function isIsolatedStructureElement(element = {}) {
-  return ["table-header", "table-row", "merged-cell", "cell-comment", "defined-name", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "content-control", "bookmark", "header", "footer", "slide-layout", "slide-master", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note"].includes(element.type);
+  return ["table-header", "table-row", "merged-cell", "cell-comment", "defined-name", "code", "code-boundary", "formula", "image", "chart", "pdf-form-field", "content-control", "bookmark", "header", "footer", "slide-layout", "slide-master", "frontmatter", "comment", "footnote", "endnote", "revision", "speaker-note", "transcript-cue", "speaker-turn", "xbrl-fact"].includes(element.type);
 }
 
 function headingLevelForElement(element = {}) {
@@ -10997,6 +11447,8 @@ function buildStructureWindowRecord(document = {}, index = 0, elements = [], hea
       merge: element.merge || null,
       frontmatter: element.frontmatter || null,
       cells: element.cells || [],
+      transcript: element.transcript || null,
+      xbrlFact: element.xbrlFact || null,
       headingPath
     })),
     elementTypes: uniqueOrdered(elements.map((element) => element.type))
@@ -11123,7 +11575,9 @@ function buildDocumentElementPlan(document = {}, windowPlan = null) {
       quote: element.quote || null,
       merge: element.merge || null,
       frontmatter: element.frontmatter || null,
-      cells: element.cells || []
+      cells: element.cells || [],
+      transcript: element.transcript || null,
+      xbrlFact: element.xbrlFact || null
     }))
   };
 }
@@ -12178,6 +12632,8 @@ function streamParserStage(route = null, metadata = {}) {
   if (route?.id === "notebook") return "notebook.cells";
   if (route?.id === "diff") return "diff.unified";
   if (route?.id === "calendar") return "calendar.ics";
+  if (route?.id === "transcript") return "transcript.cues";
+  if (route?.id === "financial-report") return "xbrl.facts";
   if (route?.id === "spreadsheet" && metadata.extension === ".csv") return "table.csv";
   if (route?.id === "spreadsheet" && metadata.extension === ".tsv") return "table.tsv";
   if (route?.id === "json" && [".jsonl", ".ndjson"].includes(normalizeExtension(metadata.extension || ""))) return "structured.jsonl";
@@ -12206,6 +12662,12 @@ function transformStreamingTextChunk(chunk = "", route = null, metadata = {}) {
   }
   if (route?.id === "calendar") {
     return parseCalendarText(chunk).text || String(chunk || "");
+  }
+  if (route?.id === "transcript") {
+    return parseTranscriptText(chunk, metadata).text || String(chunk || "");
+  }
+  if (route?.id === "financial-report") {
+    return parseXbrlText(chunk, metadata).text || String(chunk || "");
   }
   if (route?.id === "markup") {
     return parseMarkupText(chunk, metadata).text || String(chunk || "");
@@ -14018,25 +14480,88 @@ function topTokens(tokens = new Set(), limit = 4) {
     .slice(0, limit);
 }
 
-function semanticConceptScores(tokens = new Set(), expandedTokens = new Set()) {
+function routeConceptBoost(concept = "", routeId = "") {
+  return Number(ROUTE_CONCEPT_BOOSTS[routeId]?.[concept] || 0);
+}
+
+function documentConceptEvidence(document = {}, concept = "", aliases = []) {
+  const routeId = document.route?.formatId || "";
+  const documentTokens = textTokens([
+    document.title,
+    document.fileName,
+    String(document.text || "").slice(0, 8_000)
+  ].filter(Boolean).join("\n"));
+  const directHits = aliases.filter((alias) => documentTokens.has(alias));
+  const routeBoost = routeConceptBoost(concept, routeId);
+  const score = directHits.length + routeBoost;
+  return {
+    sourceId: document.sourceId || "",
+    routeId,
+    score,
+    directHits: directHits.slice(0, 6),
+    routeBoost
+  };
+}
+
+function semanticConceptScores(tokens = new Set(), expandedTokens = new Set(), options = {}) {
+  const documents = Array.isArray(options.documents) ? options.documents : [];
   return Object.entries(SEMANTIC_ALIAS_GROUPS)
     .map(([concept, aliases]) => {
       const directHits = aliases.filter((alias) => tokens.has(alias));
       const conceptToken = `concept:${concept}`;
-      const score = directHits.length + (expandedTokens.has(conceptToken) ? 1 : 0);
+      const documentEvidence = documents.map((document) => documentConceptEvidence(document, concept, aliases));
+      const documentHitCount = documentEvidence.filter((item) => item.score > 0).length;
+      const documentScore = documentEvidence.reduce((sum, item) => sum + Math.min(5, item.score), 0);
+      const routeBoost = documents.reduce((sum, document) => sum + routeConceptBoost(concept, document.route?.formatId || ""), 0);
+      const score = Number((
+        directHits.length +
+        (expandedTokens.has(conceptToken) ? 1 : 0) +
+        (documentScore * 1.15) +
+        (documentHitCount * 1.4) +
+        routeBoost
+      ).toFixed(4));
       return {
         concept,
         score,
-        directHits: directHits.slice(0, 8)
+        directHits: directHits.slice(0, 8),
+        documentHitCount,
+        routeBoost: Number(routeBoost.toFixed(4)),
+        documentEvidence: documentEvidence
+          .filter((item) => item.score > 0)
+          .sort((left, right) => right.score - left.score || left.sourceId.localeCompare(right.sourceId))
+          .slice(0, 6)
       };
     })
     .filter((item) => item.score > 0)
-    .sort((left, right) => right.score - left.score || left.concept.localeCompare(right.concept));
+    .sort((left, right) => (
+      right.score - left.score ||
+      right.documentHitCount - left.documentHitCount ||
+      left.concept.localeCompare(right.concept)
+    ));
 }
 
-function topicHierarchyForTokens(tokens = new Set(), expandedTokens = new Set(), keywords = []) {
-  const concepts = semanticConceptScores(tokens, expandedTokens);
-  const primaryConcept = concepts[0]?.concept || "general";
+function selectPrimaryConcept(concepts = []) {
+  const leadingConcept = concepts[0];
+  if (
+    !leadingConcept ||
+    (
+      !MECHANICAL_SEMANTIC_CONCEPTS.has(leadingConcept.concept) &&
+      !BROAD_SEMANTIC_CONCEPTS.has(leadingConcept.concept)
+    )
+  ) {
+    return leadingConcept?.concept || "general";
+  }
+  const domainConcept = concepts.find((item) => (
+    DOMAIN_SEMANTIC_CONCEPTS.has(item.concept) &&
+    item.documentHitCount >= 2 &&
+    item.score >= (leadingConcept.score * 0.52)
+  ));
+  return domainConcept?.concept || leadingConcept.concept;
+}
+
+function topicHierarchyForTokens(tokens = new Set(), expandedTokens = new Set(), keywords = [], documents = []) {
+  const concepts = semanticConceptScores(tokens, expandedTokens, { documents });
+  const primaryConcept = selectPrimaryConcept(concepts);
   return {
     strategy: "semantic-concept-topic-hierarchy.v1",
     primaryConcept,
@@ -15090,7 +15615,7 @@ function classifyDocuments(documents = []) {
   mergeLeaderGroupsBySemanticConcept(groups);
   const topicGroups = groups.map((group, index) => {
     const keywords = topTokens(group.tokens, 5);
-    const topicHierarchy = topicHierarchyForTokens(group.tokens, group.expandedTokens, keywords);
+    const topicHierarchy = topicHierarchyForTokens(group.tokens, group.expandedTokens, keywords, group.documents);
     const topicGroup = {
       groupId: group.groupId,
       kind: "topic",
@@ -17717,6 +18242,9 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "element-aware-by-title-windowing.v1",
       PDF_SUBTYPE_ROUTING_STRATEGY,
       "content-signature-routing.v1",
+      "timed-transcript-cue-parser.v1",
+      "xbrl-financial-fact-parser.v1",
+      "audio-transcript-sidecar-routing.v1",
       "human-agent-response-profile-separation.v1",
       "professional-format-manifest.v1",
       "bounded-binary-file-profile.v1",
@@ -17828,6 +18356,14 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         "code.structure",
         "diff.unified",
         "calendar.ics",
+        "transcript.cues",
+        "transcript.webvtt",
+        "transcript.srt",
+        "transcript.speaker-turns",
+        "xbrl.contexts",
+        "xbrl.facts",
+        "audio.metadata",
+        "audio.transcript-sidecar",
         "table.csv",
         "table.tsv",
         "email.headers-body",
@@ -17905,10 +18441,10 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       supported: true,
       strategy: "document-element-model.v1",
       windowingStrategy: "element-aware-by-title-windowing.v1",
-      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-layout", "slide-master", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "content-control", "bookmark", "header", "footer", "defined-name", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment"],
-      structuredFormats: ["markdown", "html", "xml", "asciidoc", "latex", "docx", "pptx", "xlsx", "open-document", "epub", "pdf"],
-      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "presentation.kind", "presentation.slidePart", "presentation.layoutPart", "presentation.masterPart", "presentation.relationshipId", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "headerFooter.kind", "headerFooter.partName", "definedName.name", "definedName.ref", "definedName.builtinType", "codeBlock.language", "codeBlock.lineStart", "quote.depth", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
-      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.presentation", "elementRefs.presentation.layoutPart", "elementRefs.presentation.masterPart", "elementRefs.presentation.relationshipId", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.headerFooter", "elementRefs.headerFooter.kind", "elementRefs.headerFooter.partName", "elementRefs.definedName", "elementRefs.definedName.name", "elementRefs.definedName.ref", "elementRefs.definedName.builtinType", "elementRefs.codeBlock", "elementRefs.codeBlock.language", "elementRefs.codeBlock.lineStart", "elementRefs.quote", "elementRefs.quote.depth", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
+      elementTypes: ["title", "heading", "task-heading", "paragraph", "pdf-text-block", "pdf-outline", "pdf-form-field", "slide-layout", "slide-master", "slide-shape", "speaker-note", "list-item", "blockquote", "link", "image", "chart", "content-control", "bookmark", "header", "footer", "defined-name", "frontmatter", "table-header", "table-row", "merged-cell", "cell-comment", "comment", "footnote", "endnote", "revision", "code", "formula", "citation", "reference", "xml-field", "attribute", "metadata", "environment", "transcript-cue", "speaker-turn", "xbrl-fact"],
+      structuredFormats: ["markdown", "html", "xml", "asciidoc", "latex", "docx", "pptx", "xlsx", "open-document", "epub", "pdf", "webvtt", "srt", "xbrl", "ixbrl"],
+      geometryFields: ["page", "bbox", "layout.strategy", "layout.order", "layout.width", "layout.height", "shape.id", "shape.name", "shape.placeholderType", "presentation.kind", "presentation.slidePart", "presentation.layoutPart", "presentation.masterPart", "presentation.relationshipId", "image.target", "image.relationshipId", "chart.chartPart", "chart.relationshipId", "chart.chartType", "chart.series", "form.name", "form.fieldType", "form.value", "control.alias", "control.tag", "control.controlType", "bookmark.name", "headerFooter.kind", "headerFooter.partName", "definedName.name", "definedName.ref", "definedName.builtinType", "codeBlock.language", "codeBlock.lineStart", "quote.depth", "transcript.cueId", "transcript.speaker", "transcript.start", "transcript.end", "xbrlFact.name", "xbrlFact.contextRef", "xbrlFact.unitRef", "xbrlFact.periodEnd", "table.sheet", "table.sheetName", "table.sheetId", "table.worksheetPath", "table.row", "merge.ref", "merge.masterRef", "cells.ref", "cells.dateIso", "cells.dateSerial", "cells.formula", "cells.hyperlink.target", "cells.merge.ref", "cells.comment.ref"],
+      graphMetadata: ["elementRefs", "elementTypes", "headingPath", "semanticChunkStrategy", "boundaryReason", "elementRefs.page", "elementRefs.bbox", "elementRefs.layout", "elementRefs.table", "elementRefs.table.sheetName", "elementRefs.table.sheetId", "elementRefs.table.worksheetPath", "elementRefs.href", "elementRefs.frontmatter", "elementRefs.annotation", "elementRefs.style", "elementRefs.style.styleId", "elementRefs.style.numberingId", "elementRefs.shape", "elementRefs.shape.id", "elementRefs.shape.name", "elementRefs.shape.placeholderType", "elementRefs.presentation", "elementRefs.presentation.layoutPart", "elementRefs.presentation.masterPart", "elementRefs.presentation.relationshipId", "elementRefs.image", "elementRefs.image.target", "elementRefs.image.relationshipId", "elementRefs.chart", "elementRefs.chart.chartPart", "elementRefs.chart.series", "elementRefs.form", "elementRefs.form.name", "elementRefs.form.value", "elementRefs.control", "elementRefs.control.alias", "elementRefs.control.tag", "elementRefs.bookmark", "elementRefs.bookmark.name", "elementRefs.headerFooter", "elementRefs.headerFooter.kind", "elementRefs.headerFooter.partName", "elementRefs.definedName", "elementRefs.definedName.name", "elementRefs.definedName.ref", "elementRefs.definedName.builtinType", "elementRefs.codeBlock", "elementRefs.codeBlock.language", "elementRefs.codeBlock.lineStart", "elementRefs.quote", "elementRefs.quote.depth", "elementRefs.transcript", "elementRefs.transcript.speaker", "elementRefs.transcript.start", "elementRefs.xbrlFact", "elementRefs.xbrlFact.contextRef", "elementRefs.xbrlFact.unitRef", "elementRefs.merge", "elementRefs.merge.ref", "elementRefs.cells", "elementRefs.cells.dateIso", "elementRefs.cells.dateSerial", "elementRefs.cells.formula", "elementRefs.cells.hyperlink", "elementRefs.cells.merge", "elementRefs.cells.comment"],
       referencePatterns: [
         "unstructured.elements",
         "unstructured.chunk_by_title",
