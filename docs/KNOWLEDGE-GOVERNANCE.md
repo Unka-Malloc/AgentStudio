@@ -430,52 +430,38 @@ ingest
 
 这些都应生成 maintenance issue，进入 review / repair / reindex / distill / archive 流程。
 
-## 工业级蒸馏验收流程
+## 外部知识蒸馏验收流程
 
-工业级蒸馏使用 `pact.knowledge-distillation-industrial.v1`。
+知识蒸馏唯一维护面是 `external.knowledge.distillation`。内部 `knowledge.distillation.*` 模块只保留迁移报文，不再承接算法、解析或导出增强。
 
-项目 Markdown 蒸馏：
+参考框架：
 
-- `markdown-project-digest`
-- `buildMarkdownProjectDigest`
-- 外部 baseline 可参考 Repomix、Gitingest。
+- RAGFlow
+- MinerU
+- Docling
+- LlamaIndex
+- Marker
+- GraphRAG
+- Haystack
+- Unstructured
 
-邮件线程蒸馏：
+验收重点：
 
-- `email-thread-digest`
-- `buildEmailThreadDigest`
-- RFC 5322
-- RFC 5256
-- `Message-ID`
-- `In-Reply-To`
-- `References`
-
-默认模型：
-
-- `deepseek-v4-flash`
-
-评价指标：
-
-- `coverage`
-- `same-matter merge`
-- `timeline order`
-- `source trace`
-- `unsupported claims`
-
-评价函数：
-
-- `evaluateIndustrialDistillationGap`
-
-评价框架可参考 DeepEval / G-Eval 的 rubric 和 judge trace 形式，但不能把外部工具变成不可替换依赖。
+- route-first 文件分流。
+- 大文件 streaming/windowing。
+- 分类蒸馏与 project convergence。
+- `human-agent-response-profile-separation.v1`。
+- `office-document-professional-adaptation.v1`。
+- Graph evidence、reference gap report 和 external service API 注册。
 
 验证入口：
 
 ```bash
 npm run server:verify:knowledge-architecture-governance
-npm run server:verify:knowledge-markdown-chunking
-npm run server:verify:knowledge-docx-export
 npm run server:verify:knowledge-industrial-distillation
-npm run server:verify:dynamic-document-parsing
+npm run server:verify:external-knowledge-distillation
+npm run server:verify:external-knowledge-distillation-container
+npm run server:verify:external-knowledge-distillation-references
 ```
 
 ## 与工作空间的关系

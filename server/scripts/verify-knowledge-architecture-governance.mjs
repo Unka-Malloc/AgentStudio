@@ -64,8 +64,9 @@ async function assertGovernanceDoc() {
     "knowledgeBase",
     "pact.knowledge.v1",
     "npm run server:verify:knowledge-architecture-governance",
-    "npm run server:verify:knowledge-markdown-chunking",
-    "npm run server:verify:knowledge-docx-export",
+    "npm run server:verify:external-knowledge-distillation",
+    "npm run server:verify:external-knowledge-distillation-container",
+    "npm run server:verify:external-knowledge-distillation-references",
     "raw-corpus-construction",
     "knowledge-index-construction",
     "knowledge-distillation",
@@ -90,24 +91,14 @@ async function assertGovernanceDoc() {
     "granularityFragments",
     "dispatchDynamicDocumentParsingAlgorithm",
     "bindDynamicDocumentParsingInvocation",
-    "工业级蒸馏验收",
-    "pact.knowledge-distillation-industrial.v1",
-    "markdown-project-digest",
-    "email-thread-digest",
-    "Repomix",
-    "Gitingest",
-    "DeepEval",
-    "G-Eval",
-    "RFC 5322",
-    "RFC 5256",
-    "Message-ID",
-    "In-Reply-To",
-    "References",
-    "deepseek-v4-flash",
-    "same-matter merge",
-    "timeline order",
-    "source trace",
-    "unsupported claims",
+    "外部知识蒸馏验收流程",
+    "external.knowledge.distillation",
+    "RAGFlow",
+    "MinerU",
+    "Docling",
+    "GraphRAG",
+    "human-agent-response-profile-separation.v1",
+    "office-document-professional-adaptation.v1",
     "npm run server:verify:knowledge-industrial-distillation"
   ], file);
 }
@@ -213,16 +204,14 @@ async function assertProtocolDocs() {
     "toolGrantId",
     "原始语料全文",
     "校验、引用、补证",
-    "pact.knowledge-distillation-industrial.v1",
-    "markdown-project-digest",
-    "email-thread-digest",
-    "Repomix",
-    "Gitingest",
-    "deepseek-v4-flash",
-    "Message-ID",
-    "In-Reply-To",
-    "References",
-    "evaluateIndustrialDistillationGap"
+    "pact.external-knowledge-distillation.industrial-benchmark.v1",
+    "external.knowledge.distillation",
+    "RAGFlow",
+    "MinerU",
+    "Docling",
+    "GraphRAG",
+    "human/agent",
+    "Office"
   ], "docs/PROTOCOLS.md");
 
   assertAllIncludes(protocols, [
@@ -257,10 +246,10 @@ async function assertProtocolDocs() {
     "bindDynamicDocumentParsingInvocation",
     "payloadBudget.maxResponseBytes",
     "payload.nextContinuationToken",
-    "pact.knowledge-distillation-industrial.v1",
-    "buildMarkdownProjectDigest",
-    "buildEmailThreadDigest",
-    "deepseek-v4-flash",
+    "pact.external-knowledge-distillation.industrial-benchmark.v1",
+    "external.knowledge.distillation",
+    "route-first",
+    "Office 专业适配",
     "server:verify:knowledge-industrial-distillation"
   ], "docs/SERVER.md");
 
@@ -398,12 +387,11 @@ async function assertProtocolDocs() {
     "Export support does not replace the local knowledge-base runtime shape",
     "local agent retrieval",
     "self-contained Markdown/DOCX/HTML/PDF-style portable documents",
-    "Industrial Distillation Benchmark Protocol",
-    "pact.knowledge-distillation-industrial.v1",
-    "buildMarkdownProjectDigest",
-    "buildEmailThreadDigest",
-    "evaluateIndustrialDistillationGap",
-    "deepseek-v4-flash"
+    "External Knowledge Distillation",
+    "external.knowledge.distillation",
+    "external.knowledge.distillation.runs.create",
+    "external.knowledge.distillation.evidence.query",
+    "external.knowledge.distillation.artifacts.export"
   ], "server/protocols/knowledge/README.md");
 
 }
@@ -475,71 +463,62 @@ async function assertDynamicParsingImplementation() {
 }
 
 async function assertIndustrialDistillationBenchmark() {
-  const module = await read("server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/industrial-benchmark.mjs");
-  const runtime = await read("server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/index.mjs");
+  const service = await read("external-services/knowledge-distillation-service/server.mjs");
+  const references = await read("external-services/knowledge-distillation-service/reference-frameworks.json");
   const cli = await read("server/scripts/knowledge-distillation-industrial-benchmark.mjs");
   const verify = await read("server/scripts/verify-knowledge-industrial-distillation.mjs");
   const docs = await read("docs/KNOWLEDGE-GOVERNANCE.md");
 
-  assertAllIncludes(module, [
-    "pact.knowledge-distillation-industrial.v1",
-    "DEFAULT_INDUSTRIAL_DISTILLATION_MODEL",
-    "deepseek-v4-flash",
-    "buildMarkdownProjectDigest",
-    "buildEmailThreadDigest",
-    "evaluateIndustrialDistillationGap",
-    "repomix",
-    "gitingest",
-    "deepeval",
-    "Message-ID",
-    "In-Reply-To",
-    "References",
-    "same_matter_email_merge",
-    "timeline_order"
-  ], "server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/industrial-benchmark.mjs");
+  assertAllIncludes(service, [
+    "external-service.route-window-community-claim-gated-graph-incremental-distillation.v5",
+    "referenceGapReport",
+    "hashing_embedding_window_community_classification_v3",
+    "hierarchical-domain-topic-project-convergence.v3",
+    "human-agent-response-profile-separation.v1",
+    "office-document-professional-adaptation.v1",
+    "professional-format-manifest-json"
+  ], "external-services/knowledge-distillation-service/server.mjs");
 
-  assertAllIncludes(runtime, [
-    "DEFAULT_INDUSTRIAL_DISTILLATION_MODEL",
-    "industrialBaselineModelAlias",
-    "modelAlias"
-  ], "server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/index.mjs");
+  assertAllIncludes(references, [
+    "ragflow",
+    "mineru",
+    "docling",
+    "llama-index",
+    "marker",
+    "graphrag",
+    "haystack",
+    "unstructured"
+  ], "external-services/knowledge-distillation-service/reference-frameworks.json");
 
   assertAllIncludes(cli, [
-    "--project-dir",
-    "--email-dir",
-    "--model-alias",
-    "--baseline-document",
-    "--framework-document",
-    "buildIndustrialDistillationBenchmark",
-    "evaluateIndustrialDistillationGap"
+    "--output",
+    "--compact",
+    "reference-frameworks.json",
+    "external.knowledge.distillation",
+    "buildExternalIndustrialBenchmark",
+    "external knowledge distillation industrial benchmark written"
   ], "server/scripts/knowledge-distillation-industrial-benchmark.mjs");
 
   assertAllIncludes(verify, [
-    "buildMarkdownProjectDigest",
-    "buildEmailThreadDigest",
-    "buildIndustrialDistillationBenchmark",
-    "evaluateIndustrialDistillationGap",
-    "deepseek-v4-flash",
-    "same_matter_email_merge"
+    "reference-frameworks.json",
+    "external.knowledge.distillation",
+    "internal knowledge-distillation-runtime directory must be removed",
+    "routePlan",
+    "graphEvidence",
+    "professionalOfficeAdaptation",
+    "pact.external-knowledge-distillation.industrial-benchmark.v1"
   ], "server/scripts/verify-knowledge-industrial-distillation.mjs");
 
   assertAllIncludes(docs, [
-    "工业级蒸馏验收流程",
-    "Repomix",
-    "Gitingest",
-    "DeepEval",
-    "G-Eval",
-    "RFC 5322",
-    "RFC 5256",
-    "Message-ID",
-    "In-Reply-To",
-    "References",
-    "deepseek-v4-flash",
-    "coverage",
-    "same-matter merge",
-    "timeline order",
-    "source trace",
-    "unsupported claims"
+    "外部知识蒸馏验收流程",
+    "external.knowledge.distillation",
+    "RAGFlow",
+    "MinerU",
+    "Docling",
+    "LlamaIndex",
+    "GraphRAG",
+    "human-agent-response-profile-separation.v1",
+    "office-document-professional-adaptation.v1"
   ], "docs/KNOWLEDGE-GOVERNANCE.md");
 }
 

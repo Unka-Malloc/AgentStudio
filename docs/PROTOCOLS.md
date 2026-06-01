@@ -1199,7 +1199,7 @@ Legal hold 必须阻断 delete/purge/expire/retention.dispose 等破坏性动作
 - `knowledge.export.docx`，HTTP 入口固定为 `GET /api/knowledge/export/docx`
 - `raw-corpus.format.convert`，使用 `targetFormat`
 - `knowledge.dossier.export`，输出同一事项的 unified dossier，使用 `outputFormat`
-- `knowledge.distillation.export`，使用 `outputFormat`
+- `knowledge.distillation.export`，使用 `outputFormat`，仅作为迁移期废弃入口；新调用使用 `external.knowledge.distillation.artifacts.export`
 
 `raw-corpus.format.convert`、`knowledge.dossier.export` 和 `knowledge.distillation.export` 由 `pact.knowledge-transformation.v1` provider 执行。返回值统一为 portable export package：包含 `contentType`、`fileName`、`byteSize`、文本 `content`（适用时）、`contentBase64`、`manifest`、`documentCount` 和 `knowledgeAccessDecision`。导出前必须经 AgentLibrary access decision 裁决，并把 receipt/loan/denied request 写入 authorization store。
 
@@ -1209,7 +1209,7 @@ Legal hold 必须阻断 delete/purge/expire/retention.dispose 等破坏性动作
 2. `knowledge-index-construction`：canonical evidence/index，`KnowledgeCore` 或 external knowledge-base adapter。
 3. `knowledge-distillation`：从原始语料全文生成自包含知识文档，只作为背景和交付物，不替代 evidence；第二层 evidence 只负责校验、引用、补证。
 
-工业级蒸馏验收使用 `pact.knowledge-distillation-industrial.v1`。项目资料先形成 `markdown-project-digest`，邮件资料先形成 `email-thread-digest`；外部 baseline 可参考 Repomix、Gitingest、DeepEval、G-Eval 的组织和评价方式。默认模型别名为 `deepseek-v4-flash`，差距评估函数为 `evaluateIndustrialDistillationGap`，并检查 `Message-ID`、`In-Reply-To`、`References` 等邮件线程字段。长语料蒸馏必须记录逐批核心提炼覆盖率：`batchExtraction.batchCount`、`processedBatchCount`、`skippedBatchCount`、`complete`、`truncatedForModel` 和可审计的 `batchExtracts`。
+工业级蒸馏验收使用 `pact.external-knowledge-distillation.industrial-benchmark.v1`。唯一维护面是 `external.knowledge.distillation`，通过本地 RAGFlow、MinerU、Docling、LlamaIndex、Marker、GraphRAG、Haystack 和 Unstructured 参考框架对比 route-first、windowing、分类蒸馏、Graph evidence、human/agent 响应分离和 Office 专业适配；内部 `knowledge.distillation.*` 只返回迁移报文。
 
 蒸馏持续优化使用 `pact.knowledge-distillation-optimization.v1`。每次 `knowledgeSkillSet` evolution run 必须记录 `promptVersion`、baseline skill/model/framework、candidate skill IDs、evaluation dataset version/case IDs、error attribution、metric trend、human review 状态和 canary deployment；失败评估进入人工审核队列，通过评估后才能发布 canary，后续仍必须保留 promote/rollback 审计链。
 

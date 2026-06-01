@@ -349,7 +349,7 @@
 当前实现入口：
 
 - `server/platform/specialized/knowledge/retrieval/evidence-sufficiency-gate/index.mjs` 和 `retrieval-scoring.mjs` 提供 evidence sufficiency、score reason 和检索质量基础。
-- `server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/industrial-benchmark.mjs`、`knowledge-distillation-workbench/index.mjs` 和 `knowledge-evolution-runtime/index.mjs` 提供蒸馏基准、工作台、错误归因、趋势和候选改进闭环。
+- `external-services/knowledge-distillation-service/`、`server/platform/specialized/knowledge/invocation/external-distillation-service/index.mjs` 和 `knowledge-evolution-runtime/index.mjs` 提供外部蒸馏基准、服务调用、错误归因、趋势和候选改进闭环。
 - `server/platform/specialized/knowledge/invocation/golden-rule-runtime/index.mjs` 支持黄金规则、测试场景和规则命中评估。
 - `server/scripts/verify-knowledge-retrieval-quality.mjs`、`verify-knowledge-distillation-workbench.mjs`、`verify-knowledge-industrial-distillation.mjs`、`verify-knowledge-distillation-optimization.mjs`、`verify-knowledge-evolution-loop.mjs`、`verify-knowledge-rule-authoring.mjs` 和 `verify-business-scenarios.mjs` 覆盖 RAG、蒸馏、Agent/工具业务流和回归趋势。
 - `npm run server:verify:production-readiness` 已把 `rag-evaluation`、`distillation-evaluation` 和 `business-scenarios` 纳入门禁。

@@ -384,8 +384,6 @@ raw corpus item 标准字段：
 
 落地位置：
 
-- `server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/index.mjs`
-- `server/platform/specialized/knowledge/invocation/knowledge-distillation-workbench/index.mjs`
 - `external-services/knowledge-distillation-service/server.mjs`
 
 验收：
@@ -418,8 +416,6 @@ raw corpus item 标准字段：
 
 落地位置：
 
-- `server/platform/specialized/knowledge/invocation/knowledge-distillation-workbench/index.mjs`
-- `server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/index.mjs`
 - `external-services/knowledge-distillation-service/server.mjs`
 
 验收：
@@ -491,8 +487,8 @@ raw corpus item 标准字段：
 
 落地位置：
 
-- `server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/index.mjs`
-- `server/platform/specialized/knowledge/storage/knowledge-core/index.mjs`
+- `external-services/knowledge-distillation-service/server.mjs`
+- `external-services/knowledge-distillation-service/reference-frameworks.json`
 
 验收：
 
@@ -519,8 +515,8 @@ raw corpus item 标准字段：
 
 落地位置：
 
-- `server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/index.mjs`
-- `server/scripts/verify-knowledge-distillation-workbench.mjs`
+- `external-services/knowledge-distillation-service/server.mjs`
+- `server/scripts/verify-external-knowledge-distillation.mjs`
 
 验收：
 
@@ -561,8 +557,6 @@ raw corpus item 标准字段：
 
 落地位置：
 
-- `server/platform/specialized/knowledge/storage/knowledge-core/index.mjs`
-- `server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/index.mjs`
 - `external-services/knowledge-distillation-service/server.mjs`
 
 验收：
@@ -598,7 +592,6 @@ raw corpus item 标准字段：
 落地位置：
 
 - `server-web/components/KnowledgeDistillationWorkbench.vue`
-- `server/platform/specialized/knowledge/invocation/knowledge-distillation-workbench/index.mjs`
 - `server/platform/specialized/knowledge/invocation/external-distillation-service/index.mjs`
 - `external-services/knowledge-distillation-service/server.mjs`
 
@@ -655,7 +648,6 @@ raw corpus item 标准字段：
 
 - `server-web/lib/bridge.ts`
 - `server-web/components/KnowledgeDistillationWorkbench.vue`
-- `server/platform/specialized/knowledge/invocation/knowledge-distillation-workbench/index.mjs`
 - `external-services/knowledge-distillation-service/server.mjs`
 
 验收：
@@ -695,7 +687,7 @@ raw corpus item 标准字段：
 - `server/platform/specialized/console/console-domain-services.mjs` 不再导入内部 workbench。
 - `knowledge.distillation.*` 与 `knowledge.distillation.workbench.*` 在 Operation Registry 中标记 `deprecated: true`、`replacementService: external.knowledge.distillation`、`maintenancePolicy: compatibility-shim-only`。
 - Tool Management 不暴露任何内部知识蒸馏操作，智能体只能发现 `pact.external.knowledge.distillation.*`。
-- 后续删除内部文件时，先迁移仍依赖内部 runtime 的验证脚本和历史兼容样本，再移除 `server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/` 与 `knowledge-distillation-workbench/`。
+- 内部 `knowledge-distillation-runtime/` 与 `knowledge-distillation-workbench/` 源文件已删除；相关 verifier 改为确认外部服务能力和内部模块缺席。
 
 落地位置：
 

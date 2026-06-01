@@ -1,44 +1,25 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  DEFAULT_INDUSTRIAL_DISTILLATION_MODEL,
-  buildIndustrialDistillationBenchmark,
-  evaluateIndustrialDistillationGap
-} from "../platform/specialized/knowledge/invocation/knowledge-distillation-runtime/industrial-benchmark.mjs";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const serviceRoot = path.join(repoRoot, "external-services/knowledge-distillation-service");
+const referenceManifestPath = path.join(serviceRoot, "reference-frameworks.json");
+const serviceServerPath = path.join(serviceRoot, "server.mjs");
 
 function parseArgs(argv = process.argv.slice(2)) {
   const args = {
-    projectRoot: "",
-    emailRoot: "",
     output: "",
-    modelAlias: DEFAULT_INDUSTRIAL_DISTILLATION_MODEL,
-    baselineDocument: "",
-    frameworkDocument: ""
+    pretty: true
   };
   for (let index = 0; index < argv.length; index += 1) {
     const item = argv[index];
     const next = argv[index + 1];
-    if (item === "--project-dir" || item === "--project-root") {
-      args.projectRoot = next || "";
-      index += 1;
-    } else if (item === "--email-dir" || item === "--email-root") {
-      args.emailRoot = next || "";
-      index += 1;
-    } else if (item === "--output" || item === "-o") {
+    if (item === "--output" || item === "-o") {
       args.output = next || "";
       index += 1;
-    } else if (item === "--model-alias" || item === "--model") {
-      args.modelAlias = next || DEFAULT_INDUSTRIAL_DISTILLATION_MODEL;
-      index += 1;
-    } else if (item === "--baseline-document") {
-      args.baselineDocument = next || "";
-      index += 1;
-    } else if (item === "--framework-document") {
-      args.frameworkDocument = next || "";
-      index += 1;
+    } else if (item === "--compact") {
+      args.pretty = false;
     } else if (item === "--help" || item === "-h") {
       args.help = true;
     }
@@ -49,26 +30,87 @@ function parseArgs(argv = process.argv.slice(2)) {
 function helpText() {
   return `
 Usage:
-  node server/scripts/knowledge-distillation-industrial-benchmark.mjs \\
-    --project-dir /path/to/project \\
-    --email-dir /path/to/eml-folder \\
-    --output /tmp/pact-industrial-distillation.json
+  node server/scripts/knowledge-distillation-industrial-benchmark.mjs --output /tmp/external-kd-industrial.json
 
-Options:
-  --project-dir        Scan all Markdown files under this project directory.
-  --email-dir          Scan all .eml files and build RFC 5322/RFC 5256-style threads.
-  --model-alias        Framework model alias. Default: ${DEFAULT_INDUSTRIAL_DISTILLATION_MODEL}
-  --baseline-document  Optional external skill baseline Markdown file.
-  --framework-document Optional Pact framework output Markdown file to score against baseline.
-  --output, -o         Write benchmark JSON to this path. Defaults to stdout.
+This command audits the maintained external.knowledge.distillation service against local reference framework checkouts.
+The embedded platform knowledge-distillation runtime has been removed from the maintained path.
 `.trim();
 }
 
-async function readOptionalText(filePath) {
-  if (!filePath) {
-    return "";
-  }
-  return fs.readFile(path.resolve(filePath), "utf8");
+async function readJson(filePath) {
+  return JSON.parse(await fs.readFile(filePath, "utf8"));
+}
+
+function hasAll(text, patterns = []) {
+  return patterns.every((pattern) => text.includes(pattern));
+}
+
+async function buildExternalIndustrialBenchmark() {
+  const [manifest, serviceText] = await Promise.all([
+    readJson(referenceManifestPath),
+    fs.readFile(serviceServerPath, "utf8")
+  ]);
+  const frameworks = Array.isArray(manifest.frameworks) ? manifest.frameworks : [];
+  const frameworkIds = frameworks.map((framework) => String(framework.id || ""));
+  const absorbedPatterns = [
+    "routePlan",
+    "graphEvidence",
+    "referenceGapReport",
+    "hashing_embedding_window_community_classification_v3",
+    "hierarchical-domain-topic-project-convergence.v3",
+    "human-agent-response-profile-separation.v1",
+    "professional-format-manifest-json",
+    "office-document-professional-adaptation.v1",
+    "PROJECT_EVIDENCE_QUERY_STRATEGY"
+  ];
+  const localCheckoutCount = frameworks.filter((framework) => framework.localPath).length;
+  return {
+    protocolVersion: "pact.external-knowledge-distillation.industrial-benchmark.v1",
+    service: "external.knowledge.distillation",
+    generatedAt: new Date().toISOString(),
+    referenceManifest: {
+      protocolVersion: manifest.protocolVersion || "",
+      localRoot: manifest.localRoot || "",
+      frameworkCount: frameworks.length,
+      localCheckoutCount,
+      frameworkIds
+    },
+    absorbedPatterns,
+    checks: {
+      referenceFrameworksPresent: hasAll(frameworkIds.join("\n"), [
+        "ragflow",
+        "mineru",
+        "docling",
+        "llama-index",
+        "marker",
+        "graphrag",
+        "haystack",
+        "unstructured"
+      ]),
+      externalServiceOnly: !serviceText.includes("createKnowledgeDistillationRuntime"),
+      routeWindowClassification: hasAll(serviceText, [
+        "routePlan",
+        "window",
+        "classification",
+        "distillationUnit"
+      ]),
+      graphConvergence: hasAll(serviceText, [
+        "graphEvidence",
+        "community_reports",
+        "PROJECT_EVIDENCE_QUERY_STRATEGY"
+      ]),
+      humanAgentSeparation: hasAll(serviceText, [
+        "console-summary-json",
+        "agent-message-json",
+        "human-agent-response-profile-separation.v1"
+      ]),
+      professionalOfficeAdaptation: hasAll(serviceText, [
+        "office-document-professional-adaptation.v1",
+        "professional-format-manifest-json",
+        "format-conversion-plan-json"
+      ])
+    }
+  };
 }
 
 async function main() {
@@ -77,36 +119,16 @@ async function main() {
     console.log(helpText());
     return;
   }
-  const benchmark = await buildIndustrialDistillationBenchmark({
-    projectRoot: args.projectRoot ? path.resolve(args.projectRoot) : "",
-    emailRoot: args.emailRoot ? path.resolve(args.emailRoot) : "",
-    modelAlias: args.modelAlias
-  });
-  const baselineDocument = await readOptionalText(args.baselineDocument);
-  const frameworkDocument = await readOptionalText(args.frameworkDocument);
-  const evaluation = baselineDocument || frameworkDocument
-    ? evaluateIndustrialDistillationGap({
-        projectDigest: benchmark.projectDigest,
-        emailDigest: benchmark.emailDigest,
-        baselineDocument,
-        frameworkDocument
-      })
-    : null;
-  const output = {
-    ...benchmark,
-    generatedAt: new Date().toISOString(),
-    repoRoot,
-    evaluation
-  };
-  const json = `${JSON.stringify(output, null, 2)}\n`;
+  const benchmark = await buildExternalIndustrialBenchmark();
+  const json = `${JSON.stringify(benchmark, null, args.pretty ? 2 : 0)}\n`;
   if (args.output) {
     const outputPath = path.resolve(args.output);
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
     await fs.writeFile(outputPath, json, "utf8");
-    console.log(`industrial distillation benchmark written: ${outputPath}`);
-  } else {
-    process.stdout.write(json);
+    console.log(`external knowledge distillation industrial benchmark written: ${outputPath}`);
+    return;
   }
+  process.stdout.write(json);
 }
 
 await main();

@@ -1,13 +1,13 @@
 # Knowledge Distillation Audit
 
 审计日期：2026-05-26
-范围：`server/platform/specialized/knowledge/invocation/` 全部蒸馏相关模块
+范围：已删除的内部知识蒸馏 runtime/workbench 历史审计；当前维护面已迁移到 `external.knowledge.distillation`
 
 ---
 
 ## 总体评价
 
-管线架构设计合理，但实现状态处于"可运行的骨架"阶段——模型未接入时全链路降级为确定性空壳，聚类和分批策略停留在原型级别，与 KNOWLEDGE-GOVERNANCE.md 的文档承诺之间存在大量未实现部分。
+该审计结论已用于下线内部实现。当前项目不再维护 `knowledge-distillation-runtime` 或 `knowledge-distillation-workbench`，后续算法、解析、分类、项目收敛和导出能力只进入 `external-services/knowledge-distillation-service/`。
 
 ---
 
@@ -15,10 +15,10 @@
 
 | 模块 | 文件 | 行数 | 职责 |
 |------|------|------|------|
-| Distillation Runtime | `knowledge-distillation-runtime/index.mjs` | 2223 | 核心蒸馏管线：raw corpus → batch → cluster → distill → review → portable doc |
-| Distillation Workbench | `knowledge-distillation-workbench/index.mjs` | 1820 | 5 阶段编排：format → corpus → dossier → index → distillation |
-| Industrial Benchmark | `knowledge-distillation-runtime/industrial-benchmark.mjs` | 816 | Markdown 项目 digest + 邮件线程 digest + 评估 |
-| CLI Script | `scripts/knowledge-distillation-industrial-benchmark.mjs` | 112 | CLI 入口 |
+| Legacy Distillation Runtime | `knowledge-distillation-runtime/index.mjs` | removed | 已删除，不再维护 |
+| Legacy Distillation Workbench | `knowledge-distillation-workbench/index.mjs` | removed | 已删除，不再维护 |
+| External Service | `external-services/knowledge-distillation-service/server.mjs` | current | 独立部署知识蒸馏主线 |
+| External Benchmark CLI | `scripts/knowledge-distillation-industrial-benchmark.mjs` | current | 外部服务参考框架对比入口 |
 
 ---
 

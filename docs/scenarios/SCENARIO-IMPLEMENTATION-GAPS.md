@@ -113,9 +113,9 @@
 
 当前实现：
 
-- Workbench run 持久化在 `knowledge-distillation-workbench/runs/<runId>/run.json`。
+- 旧内部 Workbench 已废弃，知识蒸馏 run 需要统一迁移到 `external.knowledge.distillation` 服务的持久化与导出链路。
 - operation registry 只按 `knowledge:read` / `knowledge:maintain` 做粗粒度 scope。
-- `createRun(...)` 当前没有持久化 owner / workspace / tenant / source permission snapshot，也没有在 `get/export/package/compare` 时按 run 归属做授权裁决。
+- 外部服务的 `runs.create` / `runs.get` / `artifacts.export` 需要持久化 owner / workspace / tenant / source permission snapshot，并在读取、导出、取消、归档和对比时按 run 归属做授权裁决。
 
 为什么是 P0：
 
@@ -364,4 +364,3 @@ P0 补齐 pending/resume 后，还要补超时处理、审批撤销、重复 app
 ### P2-05：审批、权限和审计的 UI 文案需要避免误导
 
 例如“批准”可能是批准 MCP 授权请求，也可能是批准某次高危操作；“已连接云盘”可能是 contract-mode，不等于真实外部账号可用。后续需要在 UI 上把授权请求、操作审批、contract-mode、真实 provider 成功分开展示。
-
