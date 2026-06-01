@@ -68,18 +68,84 @@ export function resolveExternalKnowledgeDistillationConfig({
   };
 }
 
+function jsonByteLength(value) {
+  if (value === undefined) {
+    return 0;
+  }
+  return Buffer.byteLength(typeof value === "string" ? value : JSON.stringify(value), "utf8");
+}
+
+function externalServiceCallRecord({
+  baseUrl = "",
+  pathname = "",
+  method = "GET",
+  statusCode = 0,
+  requestBytes = 0,
+  responseBytes = 0,
+  startedAtMs = Date.now(),
+  contentType = "",
+  error = null
+} = {}) {
+  const durationMs = Math.max(0, Date.now() - startedAtMs);
+  const transferBytes = Math.max(0, Number(requestBytes || 0)) + Math.max(0, Number(responseBytes || 0));
+  return {
+    protocolVersion: `${EXTERNAL_KNOWLEDGE_DISTILLATION_PROTOCOL_VERSION}.gateway-call-telemetry`,
+    service: "external.knowledge.distillation",
+    baseUrl,
+    method,
+    path: pathname,
+    statusCode: Math.max(0, Number(statusCode || 0)),
+    requestBytes: Math.max(0, Number(requestBytes || 0)),
+    responseBytes: Math.max(0, Number(responseBytes || 0)),
+    transferBytes,
+    durationMs,
+    bytesPerSecond: durationMs > 0
+      ? Number(((transferBytes * 1000) / durationMs).toFixed(2))
+      : transferBytes,
+    contentType,
+    observedAt: new Date().toISOString(),
+    error: error ? (error instanceof Error ? error.message : String(error)) : ""
+  };
+}
+
+function attachExternalServiceCall(payload, call) {
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    return {
+      ...payload,
+      pactExternalServiceCall: call
+    };
+  }
+  return {
+    value: payload,
+    pactExternalServiceCall: call
+  };
+}
+
 async function readResponseBody(response, { binary = false } = {}) {
   const contentType = response.headers.get("content-type") || "";
   const arrayBuffer = await response.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
+  const text = buffer.toString("utf8");
   if (!binary && contentType.includes("application/json")) {
-    const text = buffer.toString("utf8").trim();
-    return text ? JSON.parse(text) : {};
+    const trimmed = text.trim();
+    return {
+      body: trimmed ? JSON.parse(trimmed) : {},
+      buffer,
+      text,
+      contentType,
+      byteLength: buffer.length
+    };
   }
   return {
+    body: {
+      buffer,
+      text,
+      contentType
+    },
     buffer,
-    text: buffer.toString("utf8"),
-    contentType
+    text,
+    contentType,
+    byteLength: buffer.length
   };
 }
 
@@ -139,28 +205,63 @@ export function createExternalKnowledgeDistillationClient({
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
     }
-    const response = await fetchImpl(`${normalizedBaseUrl}${pathname}`, {
+    const serializedBody = body === undefined ? undefined : JSON.stringify(body);
+    const startedAtMs = Date.now();
+    let response = null;
+    let payloadRecord = null;
+    try {
+      response = await fetchImpl(`${normalizedBaseUrl}${pathname}`, {
+        method,
+        headers,
+        body: serializedBody,
+        signal: AbortSignal.timeout(timeoutMs)
+      });
+      payloadRecord = await readResponseBody(response, { binary });
+    } catch (error) {
+      const externalServiceCall = externalServiceCallRecord({
+        baseUrl: normalizedBaseUrl,
+        pathname,
+        method,
+        statusCode: response?.status || 0,
+        requestBytes: jsonByteLength(serializedBody),
+        responseBytes: payloadRecord?.byteLength || 0,
+        startedAtMs,
+        contentType: payloadRecord?.contentType || response?.headers?.get("content-type") || "",
+        error
+      });
+      if (error && typeof error === "object") {
+        error.externalServiceCall = externalServiceCall;
+      }
+      throw error;
+    }
+    const payload = payloadRecord.body;
+    const externalServiceCall = externalServiceCallRecord({
+      baseUrl: normalizedBaseUrl,
+      pathname,
       method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs)
+      statusCode: response.status,
+      requestBytes: jsonByteLength(serializedBody),
+      responseBytes: payloadRecord.byteLength,
+      startedAtMs,
+      contentType: response.headers.get("content-type") || payloadRecord.contentType || ""
     });
-    const payload = await readResponseBody(response, { binary });
     if (!response.ok) {
       const message = payload?.error || payload?.message || `外部知识蒸馏服务请求失败：${response.status}`;
       const error = new Error(message);
       error.statusCode = response.status;
       error.payload = payload;
+      error.externalServiceCall = externalServiceCall;
       throw error;
     }
     if (binary) {
       return {
         buffer: payload.buffer || Buffer.from(payload.text || ""),
         contentType: response.headers.get("content-type") || payload.contentType || "application/octet-stream",
-        fileName: fileNameFromDisposition(response.headers.get("content-disposition"), "external-distillation.bin")
+        fileName: fileNameFromDisposition(response.headers.get("content-disposition"), "external-distillation.bin"),
+        pactExternalServiceCall: externalServiceCall
       };
     }
-    return payload;
+    return attachExternalServiceCall(payload, externalServiceCall);
   }
 
   return Object.freeze({

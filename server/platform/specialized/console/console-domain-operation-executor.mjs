@@ -74,6 +74,8 @@ const cloudDrivePorts = new Map();
 const knowledgeBackendPorts = new Map();
 const knowledgeDistillationWorkbenchInstances = new Map();
 const PATH_BROWSER_MAX_ENTRIES = 600;
+const EXTERNAL_KNOWLEDGE_DISTILLATION_SERVICE_ID = "external.knowledge.distillation";
+const EXTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_PREFIX = "external.knowledge.distillation.";
 const PATH_BROWSER_IGNORED_NAMES = new Set([
   ".git",
   ".hg",
@@ -84,6 +86,31 @@ const PATH_BROWSER_IGNORED_NAMES = new Set([
 
 function result(status, payload) {
   return { status, payload };
+}
+
+function internalKnowledgeDistillationRemovedPayload(operationId = "") {
+  return {
+    ok: false,
+    status: 410,
+    error: "内部知识蒸馏实现已废弃并停止维护，请改用独立部署的 external.knowledge.distillation 服务。",
+    code: "INTERNAL_KNOWLEDGE_DISTILLATION_REMOVED",
+    deprecated: true,
+    removedFromMaintenance: true,
+    operationId,
+    replacementService: EXTERNAL_KNOWLEDGE_DISTILLATION_SERVICE_ID,
+    replacementOperationPrefix: EXTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_PREFIX,
+    migration: {
+      health: "external.knowledge.distillation.service.health",
+      capabilities: "external.knowledge.distillation.service.capabilities",
+      createRun: "external.knowledge.distillation.runs.create",
+      getRun: "external.knowledge.distillation.runs.get",
+      listRuns: "external.knowledge.distillation.runs.list",
+      evidenceQuery: "external.knowledge.distillation.evidence.query",
+      projectEvidenceQuery: "external.knowledge.distillation.projects.evidence.query",
+      artifactExport: "external.knowledge.distillation.artifacts.export"
+    },
+    maintenancePolicy: "external-service-only"
+  };
 }
 
 function requireStorageProvider(context = {}) {
@@ -5360,19 +5387,26 @@ async function executeExternalKnowledgeDistillationOperation({ operationId, inpu
     }
     if (id === "external.knowledge.distillation.artifacts.export") {
       const operationResult = await client.exportArtifact(input);
+      const externalCall = operationResult.pactExternalServiceCall || {};
       return result(200, {
         __binaryResponse: true,
         contentType: operationResult.contentType,
         disposition: "attachment",
         fileName: operationResult.fileName,
         buffer: operationResult.buffer,
-        headers: { "X-Pact-External-Service": "external.knowledge.distillation" }
+        headers: {
+          "X-Pact-External-Service": "external.knowledge.distillation",
+          "X-Pact-External-Service-Duration-Ms": String(externalCall.durationMs || 0),
+          "X-Pact-External-Service-Transfer-Bytes": String(externalCall.transferBytes || 0),
+          "X-Pact-External-Service-Bytes-Per-Second": String(externalCall.bytesPerSecond || 0)
+        }
       });
     }
   } catch (error) {
     const status = Number(error?.statusCode || 502);
     return result(status >= 400 && status < 600 ? status : 502, errorPayload(error, "外部知识蒸馏服务调用失败。", {
-      service: "external.knowledge.distillation"
+      service: "external.knowledge.distillation",
+      pactExternalServiceCall: error?.externalServiceCall || null
     }));
   }
 
@@ -5399,6 +5433,8 @@ async function executeKnowledgeDistillationWorkflowOperation({ operationId, inpu
   if (!handledOperations.has(id)) {
     return null;
   }
+
+  return result(410, internalKnowledgeDistillationRemovedPayload(id));
 
   if (id === "knowledge.distillation.runs.create" || id === "knowledge.distillation.runs.get") {
     const runtime = context.knowledgeDistillationRuntime;

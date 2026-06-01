@@ -38,6 +38,30 @@ async function fetchJson(url, options = {}) {
   };
 }
 
+function assertExternalGatewayCall(payload = {}, {
+  serviceUrl = "",
+  method = "GET",
+  path = "",
+  statusCode = 200,
+  minRequestBytes = 0,
+  minResponseBytes = 1
+} = {}) {
+  const call = payload.pactExternalServiceCall;
+  assert.ok(call, "platform gateway responses must include external service call telemetry");
+  assert.equal(call.protocolVersion, "pact.external-knowledge-distillation.v1.gateway-call-telemetry");
+  assert.equal(call.service, "external.knowledge.distillation");
+  assert.equal(call.baseUrl, serviceUrl);
+  assert.equal(call.method, method);
+  assert.equal(call.path, path);
+  assert.equal(call.statusCode, statusCode);
+  assert.equal(call.requestBytes >= minRequestBytes, true);
+  assert.equal(call.responseBytes >= minResponseBytes, true);
+  assert.equal(call.transferBytes >= call.requestBytes + call.responseBytes, true);
+  assert.equal(call.durationMs >= 0, true);
+  assert.equal(call.bytesPerSecond >= 0, true);
+  assert.match(call.observedAt, /^\d{4}-\d{2}-\d{2}T/);
+}
+
 async function waitForService(url, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs;
   let lastError = null;
@@ -954,11 +978,21 @@ try {
   assert.equal(health.payload.serviceKind, "externalKnowledgeDistillation");
   assert.equal(health.payload.pactRegistration.namespace, "external.knowledge.distillation");
   assert.ok(health.payload.runtimeDoctor.summary, "health response must expose runtime doctor summary");
+  assertExternalGatewayCall(health.payload, {
+    serviceUrl,
+    method: "GET",
+    path: "/health"
+  });
 
   const capabilities = await fetchJson(`${pactServer.url}/api/external/knowledge/distillation/capabilities`, {
     headers: authHeaders(auth)
   });
   assert.equal(capabilities.status, 200);
+  assertExternalGatewayCall(capabilities.payload, {
+    serviceUrl,
+    method: "GET",
+    path: "/v1/capabilities"
+  });
   assert.equal(capabilities.payload.api.createRun, "POST /v1/distillation/runs");
   assert.equal(capabilities.payload.api.evidenceQuery, "GET /v1/distillation/runs/:runId/evidence");
   assert.equal(capabilities.payload.api.projectEvidenceQuery, "GET /v1/projects/:projectId/evidence");
@@ -1287,6 +1321,11 @@ try {
   assert.equal(runtimeHealth.payload.pactRegistration.namespace, "external.knowledge.distillation");
   assert.ok(runtimeHealth.payload.runtimes["tika.app"], "platform runtime health must proxy Tika fallback runtime state");
   assert.ok(runtimeHealth.payload.runtimes["ocr.tesseract"], "platform runtime health must proxy OCR runtime state");
+  assertExternalGatewayCall(runtimeHealth.payload, {
+    serviceUrl,
+    method: "GET",
+    path: "/v1/runtime/health"
+  });
 
   const createRun = await fetchJson(`${pactServer.url}/api/external/knowledge/distillation/runs`, {
     method: "POST",
@@ -1739,6 +1778,13 @@ try {
   assert.equal(createRun.payload.serviceKind, "externalKnowledgeDistillation");
   assert.equal(createRun.payload.status, "completed");
   assert.equal(createRun.payload.responseProfile, "agent");
+  assertExternalGatewayCall(createRun.payload, {
+    serviceUrl,
+    method: "POST",
+    path: "/v1/distillation/runs",
+    statusCode: 201,
+    minRequestBytes: 100
+  });
   assert.ok(createRun.payload.runId);
   assert.ok(
     createRun.payload.result.classification.groupCount >= 2,
@@ -3938,6 +3984,9 @@ try {
   });
   assert.equal(artifact.status, 200);
   assert.match(artifact.headers.get("content-type") || "", /text\/markdown/);
+  assert.equal(artifact.headers.get("x-pact-external-service"), "external.knowledge.distillation");
+  assert.equal(Number(artifact.headers.get("x-pact-external-service-transfer-bytes") || 0) > 0, true);
+  assert.equal(Number(artifact.headers.get("x-pact-external-service-bytes-per-second") || 0) >= 0, true);
   const markdown = await artifact.text();
   assert.match(markdown, /external\.knowledge\.distillation/);
   assert.match(markdown, /Source Routing/);
