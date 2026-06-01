@@ -400,6 +400,21 @@ assert.equal(
   "large PPTX streaming parser must advertise structural extraction mode in parserTrace"
 );
 assert.equal(
+  externalServiceSource.includes("function parseXlsxLargeEntryStreaming("),
+  true,
+  "large XLSX filePath parsing must keep a dedicated streaming structure parser instead of downgrading to plain text"
+);
+assert.equal(
+  externalServiceSource.includes("spreadsheetml-stream-row.v1"),
+  true,
+  "large XLSX streaming parser must preserve row element references for element-aware windowing"
+);
+assert.equal(
+  externalServiceSource.includes("streaming-large-spreadsheetml-elements"),
+  true,
+  "large XLSX streaming parser must advertise structural extraction mode in parserTrace"
+);
+assert.equal(
   formatConversionProfilesConfig.protocolVersion,
   "pact.external-knowledge-distillation.format-conversion-profiles.v1",
   "external knowledge distillation must keep format conversion profiles in a versioned singleton config"

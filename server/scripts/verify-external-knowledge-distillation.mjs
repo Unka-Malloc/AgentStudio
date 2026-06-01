@@ -1013,6 +1013,39 @@ try {
         }
       },
       {
+        sourceId: "source-78",
+        title: "Mounted Large XLSX Structural XML",
+        fileName: "mounted-large-structured.xlsx",
+        mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        entries: {
+          "xl/styles.xml": [
+            "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">",
+            "<cellXfs count=\"2\"><xf numFmtId=\"0\"/><xf numFmtId=\"14\" applyNumberFormat=\"1\"/></cellXfs>",
+            "</styleSheet>"
+          ].join(""),
+          "xl/workbook.xml": [
+            "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">",
+            "<sheets><sheet name=\"Large Mounted Evidence\" sheetId=\"78\" r:id=\"rIdSheet1\"/></sheets>",
+            "<definedNames><definedName name=\"LargeMountedEvidenceRange\" localSheetId=\"0\">'Large Mounted Evidence'!$A$1:$D$721</definedName></definedNames>",
+            "</workbook>"
+          ].join(""),
+          "xl/_rels/workbook.xml.rels": [
+            "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">",
+            "<Relationship Id=\"rIdSheet1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>",
+            "</Relationships>"
+          ].join(""),
+          "xl/worksheets/sheet1.xml": [
+            "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>",
+            "<row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>Topic</t></is></c><c r=\"B1\" t=\"inlineStr\"><is><t>Classification</t></is></c><c r=\"C1\" t=\"inlineStr\"><is><t>Observed Date</t></is></c><c r=\"D1\" t=\"inlineStr\"><is><t>Evidence Score</t></is></c></row>",
+            Array.from({ length: 720 }, (_, index) => {
+              const row = index + 2;
+              return `<row r="${row}"><c r="A${row}" t="inlineStr"><is><t>Large mounted XLSX evidence row ${index + 1}</t></is></c><c r="B${row}" t="inlineStr"><is><t>classification-${(index % 9) + 1}</t></is></c><c r="C${row}" s="1"><v>${46188 + index}</v></c><c r="D${row}"><f>LEN(B${row})</f><v>${16 + (index % 9)}</v></c></row>`;
+            }).join(""),
+            "</sheetData></worksheet>"
+          ].join("")
+        }
+      },
+      {
         sourceId: "source-24",
         title: "Mounted OpenDocument Notes",
         fileName: "mounted-notes.odt",
@@ -3637,6 +3670,47 @@ try {
     ))), true);
     assert.equal(largeStructuredPptx.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
     assert.ok(largeStructuredPptx.quality.textCharacters > 25000, "large PPTX structural parser must preserve oversized slide text");
+    const largeStructuredXlsx = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-78");
+    assert.ok(largeStructuredXlsx, "large mounted XLSX structural XML document must be present");
+    assert.equal(largeStructuredXlsx.route.formatId, "spreadsheet");
+    assert.equal(largeStructuredXlsx.quality.suppliedPayloadKind, "file-ref-structured-zip");
+    assert.equal(largeStructuredXlsx.parserTrace.some((trace) => (
+      trace.stage === "structured-zip.structural-entry-plan" &&
+      trace.status === "completed" &&
+      trace.selectedFiles >= 4 &&
+      trace.loadedFiles >= 3 &&
+      trace.skippedLargeFiles === 1 &&
+      trace.maxEntryBytes === 25000
+    )), true);
+    assert.equal(largeStructuredXlsx.parserTrace.some((trace) => (
+      trace.stage === "structured-zip.large-entry-stream" &&
+      trace.status === "completed" &&
+      trace.reason === "large-structure-entry" &&
+      trace.extractionMode === "streaming-large-spreadsheetml-elements" &&
+      trace.elements >= 700 &&
+      trace.rows >= 700 &&
+      trace.cells >= 2800
+    )), true);
+    assert.equal(largeStructuredXlsx.parserTrace.some((trace) => (
+      trace.stage === "table.sheet.structured" &&
+      trace.status === "completed" &&
+      trace.extractionMode === "streaming-large-spreadsheetml-elements" &&
+      trace.elements >= 700
+    )), true);
+    assert.equal(largeStructuredXlsx.parserTrace.some((trace) => trace.stage === "table.sheet.formulas" && trace.status === "completed" && trace.formulas >= 700), true);
+    assert.equal(largeStructuredXlsx.parserTrace.some((trace) => trace.stage === "table.sheet.date-styles" && trace.status === "completed" && trace.dateCells >= 700), true);
+    assert.equal(largeStructuredXlsx.elementPlan.strategy, "document-element-model.v1");
+    assert.equal(largeStructuredXlsx.elementPlan.elementTypes["table-row"] >= 700, true);
+    assert.equal(largeStructuredXlsx.windowPlan.strategy, "element-aware-by-title-windowing.v1");
+    assert.equal(largeStructuredXlsx.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "table-row" &&
+      ref.layout?.strategy === "spreadsheetml-stream-row.v1" &&
+      ref.table?.sheetName === "Large Mounted Evidence" &&
+      ref.cells?.some((cell) => cell.ref === "D2" && cell.header === "Evidence Score" && cell.formula === "LEN(B2)") &&
+      ref.cells?.some((cell) => cell.ref === "C2" && cell.header === "Observed Date" && cell.dateIso)
+    ))), true);
+    assert.equal(largeStructuredXlsx.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
+    assert.ok(largeStructuredXlsx.quality.textCharacters > 25000, "large XLSX structural parser must preserve oversized sheet text");
   }
   if (directRuntime.payload.runtimes["tika.app"]?.available && mountedLegacyOfficeDocuments.length) {
     for (const [sourceId, formatId] of [

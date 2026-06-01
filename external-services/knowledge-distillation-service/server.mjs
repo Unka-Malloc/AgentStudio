@@ -8778,6 +8778,226 @@ function appendXlsxWorksheetText({ sheetPath = "", sheetLabel = "", sharedString
   return { rowCount, cellCount, formulaCount, hyperlinkCount, dateCellCount, mergedCellCount: mergedCells.length, commentCount, headerRows, totalCharacters };
 }
 
+function appendXlsxWorksheetElementsFromFile(elements = [], {
+  sheetPath = "",
+  sheetLabel = "",
+  sheet = {},
+  sharedStrings = [],
+  styles = null,
+  fallbackIndex = 0
+} = {}) {
+  const hyperlinks = parseXlsxHyperlinksFile(sheetPath, worksheetRelationshipFilePath(sheetPath));
+  const mergedCells = parseXlsxMergedCellsFile(sheetPath);
+  const mergedCellsByRef = xlsxMergedCellLookup(mergedCells);
+  const comments = parseXlsxCommentsForSheetFile(sheetPath, worksheetRelationshipFilePath(sheetPath), fallbackIndex);
+  const commentsByRef = xlsxCommentsByRef(comments);
+  const anchorRefs = new Set([
+    ...mergedCells.map((range) => String(range.masterRef || range.startRef || "").toUpperCase()).filter(Boolean),
+    ...comments.map((comment) => String(comment.ref || "").toUpperCase()).filter(Boolean)
+  ]);
+  const anchorCellsByRef = new Map();
+  const headersByColumn = new Map();
+  let headerCaptured = false;
+  let rowCount = 0;
+  let cellCount = 0;
+  let formulaCount = 0;
+  let hyperlinkCount = 0;
+  let dateCellCount = 0;
+  let headerRows = 0;
+  scanXmlElementsFromFile(sheetPath, "row", (xml) => {
+    const row = parseXlsxRowXml(xml, sharedStrings, rowCount + 1, hyperlinks, styles, mergedCellsByRef, commentsByRef);
+    if (!row.cells.length) {
+      return;
+    }
+    rowCount += 1;
+    cellCount += row.cells.length;
+    formulaCount += row.cells.filter((cell) => cell.formula).length;
+    hyperlinkCount += row.cells.filter((cell) => cell.hyperlink).length;
+    dateCellCount += row.cells.filter((cell) => cell.dateIso).length;
+    for (const cell of row.cells) {
+      const ref = String(cell.ref || "").toUpperCase();
+      if (anchorRefs.has(ref)) {
+        anchorCellsByRef.set(ref, cell);
+      }
+    }
+    if (!headerCaptured && row.cells.length >= 2) {
+      for (const cell of row.cells) {
+        headersByColumn.set(cell.column, cell.value);
+      }
+      pushStructureElement(elements, "table-header", formatXlsxHeaderRow(sheetLabel, row), {
+        line: row.rowNumber,
+        name: sheetLabel,
+        table: xlsxTableMetadata(sheet, sheetLabel, row.rowNumber, row.cells.length),
+        layout: {
+          strategy: "spreadsheetml-stream-row.v1",
+          streamIndex: rowCount,
+          order: rowCount
+        },
+        cells: row.cells.map((cell) => xlsxElementCell(cell, row.rowNumber)),
+        limit: 2000
+      });
+      headerRows += 1;
+      headerCaptured = true;
+      return;
+    }
+    pushStructureElement(elements, "table-row", formatXlsxDataRow(sheetLabel, row, headersByColumn), {
+      line: row.rowNumber,
+      name: sheetLabel,
+      table: xlsxTableMetadata(sheet, sheetLabel, row.rowNumber, row.cells.length),
+      layout: {
+        strategy: "spreadsheetml-stream-row.v1",
+        streamIndex: rowCount,
+        order: rowCount
+      },
+      cells: row.cells.map((cell) => xlsxElementCell(cell, row.rowNumber, headersByColumn.get(cell.column) || "")),
+      limit: 2000
+    });
+  });
+  for (const range of mergedCells) {
+    const anchorCell = anchorCellsByRef.get(String(range.masterRef || range.startRef || "").toUpperCase()) || null;
+    const anchorValue = anchorCell?.value || anchorCell?.formula || "";
+    pushStructureElement(elements, "merged-cell", `${sheetLabel} Merged range ${range.ref}: ${range.masterRef}${anchorValue ? `=${anchorValue}` : ""} spans ${range.rowSpan}x${range.columnSpan}`, {
+      line: range.startRow,
+      name: sheetLabel,
+      table: xlsxTableMetadata(sheet, sheetLabel, range.startRow, range.columnSpan),
+      layout: {
+        strategy: "spreadsheetml-stream-merge.v1",
+        streamIndex: range.startRow,
+        order: range.startRow
+      },
+      merge: xlsxElementMerge(range, anchorValue),
+      limit: 1200
+    });
+  }
+  for (const comment of comments) {
+    const coordinate = xlsxCellCoordinate(comment.ref);
+    const anchorCell = anchorCellsByRef.get(String(comment.ref || "").toUpperCase()) || {
+      ref: comment.ref,
+      column: coordinate?.column || xlsxColumnLabel(comment.ref),
+      value: "",
+      comment
+    };
+    const cell = { ...anchorCell, comment };
+    pushStructureElement(elements, "cell-comment", `${sheetLabel} Comment ${comment.ref}${comment.author ? ` by ${comment.author}` : ""}: ${comment.text}`, {
+      line: coordinate?.row || 0,
+      name: sheetLabel,
+      table: xlsxTableMetadata(sheet, sheetLabel, coordinate?.row || 0, 1),
+      layout: {
+        strategy: "spreadsheetml-stream-comment.v1",
+        streamIndex: coordinate?.row || 0,
+        order: coordinate?.row || 0
+      },
+      annotation: {
+        kind: "spreadsheet-comment",
+        id: comment.ref,
+        author: comment.author || "",
+        type: "comment",
+        sourcePart: comment.sourcePart || ""
+      },
+      cells: [xlsxElementCell(cell, coordinate?.row || 0)],
+      limit: 1600
+    });
+  }
+  return {
+    rowCount,
+    cellCount,
+    formulaCount,
+    hyperlinkCount,
+    dateCellCount,
+    mergedCellCount: mergedCells.length,
+    commentCount: comments.length,
+    headerRows
+  };
+}
+
+function parseXlsxLargeEntryStreaming(rootDir = "", entries = []) {
+  // TODO(external-kd): replace in-memory sharedStrings with a disk-backed indexed lookup for multi-GB shared string tables.
+  const sharedStrings = parseSharedStringsFile(path.join(rootDir, "xl/sharedStrings.xml"));
+  const styles = parseXlsxStylesFile(path.join(rootDir, "xl/styles.xml"));
+  const workbookXml = fsSync.existsSync(path.join(rootDir, "xl/workbook.xml"))
+    ? fsSync.readFileSync(path.join(rootDir, "xl/workbook.xml"), "utf8")
+    : "";
+  const workbookSheets = parseWorkbookSheets(
+    workbookXml,
+    fsSync.existsSync(path.join(rootDir, "xl/_rels/workbook.xml.rels"))
+      ? fsSync.readFileSync(path.join(rootDir, "xl/_rels/workbook.xml.rels"), "utf8")
+      : ""
+  );
+  const definedNames = parseXlsxDefinedNamesXml(workbookXml, workbookSheets);
+  const sheetFiles = collectFiles(rootDir, (name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name), 1000)
+    .sort((left, right) => Number(left.relativePath.match(/sheet(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/sheet(\d+)/)?.[1] || 0));
+  const filesByRelativePath = new Map(sheetFiles.map((file) => [file.relativePath, file]));
+  const sheetRecords = workbookSheetRecordsForPaths(sheetFiles.map((file) => file.relativePath), workbookSheets)
+    .map((record) => ({ ...record, file: filesByRelativePath.get(record.name) }))
+    .filter((record) => record.file);
+  const entriesByName = new Map(entries.map((entry) => [entry.name, entry]));
+  const elements = [];
+  appendXlsxDefinedNameElements(elements, definedNames);
+  let rowCount = 0;
+  let cellCount = 0;
+  let formulaCount = 0;
+  let hyperlinkCount = 0;
+  let dateCellCount = 0;
+  let mergedCellCount = 0;
+  let commentCount = 0;
+  let headerRows = 0;
+  let largeEntryCount = 0;
+  let streamedBytes = 0;
+  for (const [index, record] of sheetRecords.entries()) {
+    const sheetLabel = xlsxSheetLabel(record.sheet, index);
+    const stat = fsSync.statSync(record.file.absolutePath);
+    streamedBytes += stat.size;
+    const entry = entriesByName.get(record.file.relativePath) || null;
+    if (entry?.warning === "structured-entry-too-large" || stat.size > STRUCTURED_ZIP_ENTRY_MAX_BYTES) {
+      largeEntryCount += 1;
+    }
+    const stats = appendXlsxWorksheetElementsFromFile(elements, {
+      sheetPath: record.file.absolutePath,
+      sheetLabel,
+      sheet: record.sheet,
+      sharedStrings,
+      styles,
+      fallbackIndex: index
+    });
+    rowCount += stats.rowCount;
+    cellCount += stats.cellCount;
+    formulaCount += stats.formulaCount;
+    hyperlinkCount += stats.hyperlinkCount;
+    dateCellCount += stats.dateCellCount;
+    mergedCellCount += stats.mergedCellCount;
+    commentCount += stats.commentCount;
+    headerRows += stats.headerRows;
+  }
+  return {
+    text: structureElementsToText("xlsx", elements, ""),
+    elements,
+    format: "xlsx",
+    extractionMode: "streaming-large-spreadsheetml-elements",
+    sharedStringCount: sharedStrings.length,
+    dateStyleCount: styles.dateStyleCount,
+    dateCellCount,
+    mergedCellCount,
+    commentCount,
+    definedNameCount: definedNames.length,
+    namedRangeCount: definedNames.filter((definedName) => definedName.builtinType === "named-range").length,
+    printAreaCount: definedNames.filter((definedName) => definedName.builtinType === "print-area").length,
+    sheetCount: sheetFiles.length,
+    workbookSheetCount: workbookSheets.length,
+    sheetRefCount: sheetRecords.length,
+    hiddenSheetCount: sheetRecords.filter((record) => record.sheet?.state && record.sheet.state !== "visible").length,
+    rowCount,
+    cellCount,
+    formulaCount,
+    hyperlinkCount,
+    chartCount: 0,
+    chartPartCount: 0,
+    chartSeriesCount: 0,
+    headerRows,
+    largeEntryCount,
+    streamedBytes
+  };
+}
+
 function appendXlsxDirectoryAsText(rootDir = "", outputPath = "") {
   const sharedStrings = parseSharedStringsFile(path.join(rootDir, "xl/sharedStrings.xml"));
   const styles = parseXlsxStylesFile(path.join(rootDir, "xl/styles.xml"));
@@ -13878,7 +14098,7 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
     const entryPlan = structuredZipDirectoryEntryPlan(route, extracted.outputDir);
     parserTrace.push(structuredZipEntryPlanTrace(entryPlan));
     if (entryPlan.skippedLargeFileCount > 0) {
-      warnings.push(["word", "presentation"].includes(route?.id)
+      warnings.push(["word", "presentation", "spreadsheet"].includes(route?.id)
         ? "structured-zip-large-entry-stream"
         : "structured-zip-large-entry-stream-fallback");
     }
@@ -14003,8 +14223,8 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
     } else if (route?.id === "spreadsheet") {
       const parsed = canUseBoundedEntries
         ? parseXlsxDetailed(entryPlan.entries)
-        : { text: "", elements: [], format: "xlsx", sheetCount: 0 };
-      if (parsed.text && canUseBoundedEntries) {
+        : parseXlsxLargeEntryStreaming(extracted.outputDir, entryPlan.entries);
+      if (parsed.text) {
         directText = parsed.text;
         totalCharacters = directText.length;
         structuredFileCount = parsed.sheetCount;
@@ -14014,9 +14234,12 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           stage,
           status: "completed",
           mode: "structured-zip-file-ref",
+          extractionMode: parsed.extractionMode || "bounded-structured-zip-entries",
           files: structuredFileCount,
           characters: totalCharacters,
           elements: structureElements.length,
+          streamedBytes: parsed.streamedBytes || 0,
+          largeEntries: parsed.largeEntryCount || 0,
           sheets: parsed.sheetCount,
           workbookSheets: parsed.workbookSheetCount,
           sheetRefs: parsed.sheetRefCount,
@@ -14036,6 +14259,22 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           chartParts: parsed.chartPartCount,
           chartSeries: parsed.chartSeriesCount
         });
+        if (!canUseBoundedEntries) {
+          parserTrace.push({
+            stage: "structured-zip.large-entry-stream",
+            status: "completed",
+            reason: "large-structure-entry",
+            extractionMode: parsed.extractionMode || "streaming-large-spreadsheetml-elements",
+            routeId: route?.id || "",
+            files: structuredFileCount,
+            characters: totalCharacters,
+            elements: structureElements.length,
+            sheets: parsed.sheetCount,
+            rows: parsed.rowCount,
+            cells: parsed.cellCount,
+            streamedBytes: parsed.streamedBytes || 0
+          });
+        }
         parserTrace.push({
           stage: "table.workbook.sheets",
           status: parsed.workbookSheetCount ? "completed" : "empty",
