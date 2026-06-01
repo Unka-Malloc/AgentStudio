@@ -8685,6 +8685,204 @@ function parseEpub(entries = []) {
   };
 }
 
+function htmlTableCells(rowXml = "") {
+  return Array.from(String(rowXml || "").matchAll(/<(?:th|td)\b[\s\S]*?<\/(?:th|td)>/gi))
+    .map((match) => compactMarkupText(stripMarkup(match[0]), 1000))
+    .filter(Boolean);
+}
+
+function parseEpubLargeEntryStreaming(entries = []) {
+  const chapterEntries = entries
+    .filter((entry) => (
+      /\.(xhtml|html|htm|xml)$/i.test(entry.name || "") &&
+      !/(^|\/)(container|package|toc|nav)\.(xml|xhtml|html)$/i.test(entry.name || "") &&
+      entry.filePath &&
+      fsSync.existsSync(entry.filePath)
+    ))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const elements = [];
+  let sequence = 0;
+  let headingCount = 0;
+  let paragraphCount = 0;
+  let listItemCount = 0;
+  let linkCount = 0;
+  let tableRowCount = 0;
+  let largeEntryCount = 0;
+  let streamedBytes = 0;
+  for (const [chapterIndex, entry] of chapterEntries.entries()) {
+    const chapterNumber = chapterIndex + 1;
+    const stat = fsSync.statSync(entry.filePath);
+    streamedBytes += stat.size;
+    if (entry.warning === "structured-entry-too-large" || stat.size > STRUCTURED_ZIP_ENTRY_MAX_BYTES) {
+      largeEntryCount += 1;
+    }
+    let chapterHeadingCount = 0;
+    scanXmlElementsFromFile(entry.filePath, "title", (titleXml) => {
+      const text = textFromXmlTextNodes(titleXml) || stripMarkup(titleXml);
+      if (!text) {
+        return;
+      }
+      sequence += 1;
+      headingCount += 1;
+      chapterHeadingCount += 1;
+      pushStructureElement(elements, "title", text, {
+        level: 1,
+        line: sequence,
+        name: entry.name,
+        layout: {
+          strategy: "epub-stream-title.v1",
+          page: chapterNumber,
+          streamIndex: sequence,
+          order: sequence
+        }
+      });
+    });
+    for (let level = 1; level <= 6; level += 1) {
+      scanXmlElementsFromFile(entry.filePath, `h${level}`, (headingXml) => {
+        const text = textFromXmlTextNodes(headingXml) || stripMarkup(headingXml);
+        if (!text) {
+          return;
+        }
+        sequence += 1;
+        headingCount += 1;
+        chapterHeadingCount += 1;
+        pushStructureElement(elements, "heading", text, {
+          level,
+          line: sequence,
+          name: entry.name,
+          layout: {
+            strategy: "epub-stream-heading.v1",
+            page: chapterNumber,
+            streamIndex: sequence,
+            order: sequence
+          }
+        });
+      });
+    }
+    if (!chapterHeadingCount) {
+      sequence += 1;
+      headingCount += 1;
+      pushStructureElement(elements, "heading", `Chapter ${chapterNumber}: ${entry.name}`, {
+        level: 1,
+        line: sequence,
+        name: entry.name,
+        layout: {
+          strategy: "epub-stream-chapter.v1",
+          page: chapterNumber,
+          streamIndex: sequence,
+          order: sequence
+        }
+      });
+    }
+    scanXmlElementsFromFile(entry.filePath, "tr", (rowXml) => {
+      const cells = htmlTableCells(rowXml);
+      if (!cells.length) {
+        return;
+      }
+      tableRowCount += 1;
+      sequence += 1;
+      const isHeader = /<th\b/i.test(rowXml) || tableRowCount === 1;
+      pushStructureElement(elements, isHeader ? "table-header" : "table-row", cells.map((cell, cellIndex) => `${xlsxColumnLabel("", cellIndex)}=${cell}`).join("; "), {
+        line: sequence,
+        name: entry.name,
+        layout: {
+          strategy: "epub-stream-table-row.v1",
+          page: chapterNumber,
+          streamIndex: sequence,
+          order: sequence
+        },
+        table: {
+          format: "epub",
+          sheet: `Chapter ${chapterNumber}`,
+          row: tableRowCount,
+          columns: cells.length
+        },
+        cells: cells.map((cell, cellIndex) => ({
+          ref: `${xlsxColumnLabel("", cellIndex)}${tableRowCount}`,
+          column: xlsxColumnLabel("", cellIndex),
+          row: tableRowCount,
+          value: cell
+        }))
+      });
+    });
+    scanXmlElementsFromFile(entry.filePath, "li", (listXml) => {
+      const text = textFromXmlTextNodes(listXml) || stripMarkup(listXml);
+      if (!text) {
+        return;
+      }
+      sequence += 1;
+      listItemCount += 1;
+      pushStructureElement(elements, "list-item", text, {
+        line: sequence,
+        name: entry.name,
+        layout: {
+          strategy: "epub-stream-list-item.v1",
+          page: chapterNumber,
+          streamIndex: sequence,
+          order: sequence
+        },
+        limit: 1000
+      });
+    });
+    scanXmlElementsFromFile(entry.filePath, "p", (paragraphXml) => {
+      const text = textFromXmlTextNodes(paragraphXml) || stripMarkup(paragraphXml);
+      if (!text) {
+        return;
+      }
+      sequence += 1;
+      paragraphCount += 1;
+      pushStructureElement(elements, "paragraph", text, {
+        line: sequence,
+        name: entry.name,
+        layout: {
+          strategy: "epub-stream-paragraph.v1",
+          page: chapterNumber,
+          streamIndex: sequence,
+          order: sequence
+        },
+        limit: 1600
+      });
+    });
+    scanXmlElementsFromFile(entry.filePath, "a", (linkXml) => {
+      const tag = linkXml.match(/^<[^>]+>/)?.[0] || "";
+      const href = xmlLocalAttribute(tag, "href");
+      const text = compactMarkupText(textFromXmlTextNodes(linkXml) || stripMarkup(linkXml), 1000);
+      if (!href || !text) {
+        return;
+      }
+      sequence += 1;
+      linkCount += 1;
+      pushStructureElement(elements, "link", text, {
+        line: sequence,
+        name: `${entry.name}#link-${linkCount}`,
+        href,
+        layout: {
+          strategy: "epub-stream-link.v1",
+          page: chapterNumber,
+          streamIndex: sequence,
+          order: sequence
+        },
+        limit: 1000
+      });
+    });
+  }
+  const counts = elementTypeCounts(elements);
+  return {
+    text: structureElementsToText("epub", elements, ""),
+    elements,
+    format: "epub",
+    extractionMode: "streaming-large-epub-elements",
+    chapterCount: chapterEntries.length,
+    largeEntryCount,
+    streamedBytes,
+    headingCount: headingCount || (counts.title || 0) + (counts.heading || 0),
+    paragraphCount: paragraphCount || counts.paragraph || 0,
+    tableRowCount: tableRowCount || counts["table-row"] || 0,
+    listItemCount: listItemCount || counts["list-item"] || 0,
+    linkCount: linkCount || counts.link || 0
+  };
+}
+
 function collectFiles(rootDir = "", predicate = () => false, limit = 1000) {
   const files = [];
   const walk = (dir) => {
@@ -14299,7 +14497,7 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
     const entryPlan = structuredZipDirectoryEntryPlan(route, extracted.outputDir);
     parserTrace.push(structuredZipEntryPlanTrace(entryPlan));
     if (entryPlan.skippedLargeFileCount > 0) {
-      warnings.push(["word", "presentation", "spreadsheet", "open-document"].includes(route?.id)
+      warnings.push(["word", "presentation", "spreadsheet", "open-document", "ebook"].includes(route?.id)
         ? "structured-zip-large-entry-stream"
         : "structured-zip-large-entry-stream-fallback");
     }
@@ -14770,6 +14968,51 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           status: parsed.linkCount ? "completed" : "empty",
           links: parsed.linkCount
         });
+      }
+    } else if (route?.id === "ebook") {
+      const parsed = canUseBoundedEntries
+        ? parseEpub(entryPlan.entries)
+        : parseEpubLargeEntryStreaming(entryPlan.entries);
+      if (parsed.text) {
+        directText = parsed.text || "";
+        totalCharacters = directText.length;
+        structuredFileCount = parsed.chapterCount;
+        structureElements = parsed.elements || [];
+        structureFormat = parsed.format || "epub";
+        parserTrace.push({
+          stage,
+          status: totalCharacters ? "completed" : "empty",
+          mode: "structured-zip-file-ref",
+          extractionMode: parsed.extractionMode || "bounded-structured-zip-entries",
+          files: structuredFileCount,
+          characters: totalCharacters,
+          elements: structureElements.length,
+          streamedBytes: parsed.streamedBytes || 0,
+          largeEntries: parsed.largeEntryCount || 0,
+          chapters: parsed.chapterCount,
+          headings: parsed.headingCount,
+          paragraphs: parsed.paragraphCount,
+          tableRows: parsed.tableRowCount,
+          listItems: parsed.listItemCount,
+          links: parsed.linkCount
+        });
+        if (!canUseBoundedEntries) {
+          parserTrace.push({
+            stage: "structured-zip.large-entry-stream",
+            status: "completed",
+            reason: "large-structure-entry",
+            extractionMode: parsed.extractionMode || "streaming-large-epub-elements",
+            routeId: route?.id || "",
+            files: structuredFileCount,
+            characters: totalCharacters,
+            elements: structureElements.length,
+            chapters: parsed.chapterCount,
+            headings: parsed.headingCount,
+            paragraphs: parsed.paragraphCount,
+            links: parsed.linkCount,
+            streamedBytes: parsed.streamedBytes || 0
+          });
+        }
       }
     } else {
       const streamed = appendStructuredZipFilesAsText({ route, rootDir: extracted.outputDir, outputPath });

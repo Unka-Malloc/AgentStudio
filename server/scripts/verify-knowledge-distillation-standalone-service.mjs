@@ -430,6 +430,21 @@ assert.equal(
   "large OpenDocument streaming parser must advertise structural extraction mode in parserTrace"
 );
 assert.equal(
+  externalServiceSource.includes("function parseEpubLargeEntryStreaming("),
+  true,
+  "large EPUB filePath parsing must keep a dedicated streaming structure parser instead of downgrading to plain text"
+);
+assert.equal(
+  externalServiceSource.includes("epub-stream-paragraph.v1"),
+  true,
+  "large EPUB streaming parser must preserve paragraph element references for element-aware windowing"
+);
+assert.equal(
+  externalServiceSource.includes("streaming-large-epub-elements"),
+  true,
+  "large EPUB streaming parser must advertise structural extraction mode in parserTrace"
+);
+assert.equal(
   formatConversionProfilesConfig.protocolVersion,
   "pact.external-knowledge-distillation.format-conversion-profiles.v1",
   "external knowledge distillation must keep format conversion profiles in a versioned singleton config"

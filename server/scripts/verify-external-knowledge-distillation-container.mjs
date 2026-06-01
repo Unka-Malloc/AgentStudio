@@ -2323,6 +2323,19 @@ NODE`
         ref.type === "link" &&
         ref.href === "https://example.com/container-mounted-odf"
       ))), true);
+    } else if (formatId === "ebook") {
+      assert.equal(mountedStructured.windowPlan.strategy, "element-aware-by-title-windowing.v1");
+      assert.equal(mountedStructured.parserTrace.some((trace) => (
+        trace.stage === "ebook.epub" &&
+        trace.status === "completed" &&
+        trace.chapters === 1 &&
+        trace.headings >= 1 &&
+        trace.paragraphs >= 1
+      )), true);
+      assert.equal(mountedStructured.elementPlan.elementTypes.heading >= 1, true);
+      assert.equal(mountedStructured.elementPlan.elementTypes.paragraph >= 1, true);
+      assert.equal(mountedStructured.windowPlan.windows.some((window) => /Mounted EPUB Evidence|filePath chapter routing/.test(window.excerpt || "")), true);
+      assert.equal(mountedStructured.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
     } else if (!["word", "spreadsheet"].includes(formatId)) {
       assert.equal(mountedStructured.windowPlan.strategy, "file-ref-stream-windowing.v1");
       assert.equal(mountedStructured.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), true);

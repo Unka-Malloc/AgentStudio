@@ -1097,6 +1097,26 @@ try {
         }
       },
       {
+        sourceId: "source-80",
+        title: "Mounted Large EPUB Structural XHTML",
+        fileName: "mounted-large-structured.epub",
+        mediaType: "application/epub+zip",
+        entries: {
+          "mimetype": "application/epub+zip",
+          "META-INF/container.xml": "<?xml version=\"1.0\"?><container version=\"1.0\"></container>",
+          "OEBPS/chapter1.xhtml": [
+            "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>Large Mounted EPUB Evidence</title></head><body>",
+            "<h1>Large Mounted EPUB Distillation Plan</h1>",
+            "<table><tr><th>Topic</th><th>Decision</th></tr><tr><td>EPUB</td><td>Preserve streamed XHTML table rows</td></tr></table>",
+            "<ul><li>Large EPUB list item preserves semantic evidence.</li></ul>",
+            Array.from({ length: 720 }, (_, index) => (
+              `<p>Large mounted EPUB paragraph ${index + 1} proves oversized XHTML chapters stream through element-aware parsing. <a href="https://example.com/large-epub-${index + 1}">large EPUB link ${index + 1}</a></p>`
+            )).join(""),
+            "</body></html>"
+          ].join("")
+        }
+      },
+      {
         sourceId: "source-42",
         title: "Mounted Large DOCX Structural XML",
         fileName: "mounted-large-structured.docx",
@@ -3611,6 +3631,22 @@ try {
           ref.type === "link" &&
           ref.href === "https://example.com/mounted-odf"
         ))), true);
+      } else if (formatId === "ebook") {
+        assert.equal(mountedStructuredCorpus.windowPlan.strategy, "element-aware-by-title-windowing.v1");
+        assert.equal(mountedStructuredCorpus.parserTrace.some((trace) => (
+          trace.stage === "ebook.epub" &&
+          trace.status === "completed" &&
+          trace.chapters === 1 &&
+          trace.headings >= 1 &&
+          trace.paragraphs >= 1
+        )), true);
+        assert.equal(mountedStructuredCorpus.elementPlan.elementTypes.heading >= 1, true);
+        assert.equal(mountedStructuredCorpus.elementPlan.elementTypes.paragraph >= 1, true);
+        assert.equal(mountedStructuredCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+          ref.type === "heading" &&
+          /Mounted EPUB Evidence/.test(ref.text || window.excerpt || "")
+        )) || /Mounted EPUB Evidence/.test(window.excerpt || "")), true);
+        assert.equal(mountedStructuredCorpus.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
       } else {
         assert.equal(mountedStructuredCorpus.windowPlan.strategy, "file-ref-stream-windowing.v1");
         assert.equal(mountedStructuredCorpus.parserTrace.some((trace) => trace.stage === "document.structure.elements" && trace.status === "completed"), true);
@@ -3781,6 +3817,56 @@ try {
     ))), true);
     assert.equal(largeStructuredOdt.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
     assert.ok(largeStructuredOdt.quality.textCharacters > 25000, "large ODT structural parser must preserve oversized document text");
+    const largeStructuredEpub = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-80");
+    assert.ok(largeStructuredEpub, "large mounted EPUB structural XHTML document must be present");
+    assert.equal(largeStructuredEpub.route.formatId, "ebook");
+    assert.equal(largeStructuredEpub.quality.suppliedPayloadKind, "file-ref-structured-zip");
+    assert.equal(largeStructuredEpub.parserTrace.some((trace) => (
+      trace.stage === "structured-zip.structural-entry-plan" &&
+      trace.status === "completed" &&
+      trace.selectedFiles === 1 &&
+      trace.loadedFiles === 0 &&
+      trace.skippedLargeFiles === 1 &&
+      trace.maxEntryBytes === 25000
+    )), true);
+    assert.equal(largeStructuredEpub.parserTrace.some((trace) => (
+      trace.stage === "structured-zip.large-entry-stream" &&
+      trace.status === "completed" &&
+      trace.reason === "large-structure-entry" &&
+      trace.extractionMode === "streaming-large-epub-elements" &&
+      trace.elements >= 700 &&
+      trace.paragraphs >= 700 &&
+      trace.links >= 700
+    )), true);
+    assert.equal(largeStructuredEpub.parserTrace.some((trace) => (
+      trace.stage === "ebook.epub" &&
+      trace.status === "completed" &&
+      trace.extractionMode === "streaming-large-epub-elements" &&
+      trace.elements >= 700 &&
+      trace.chapters === 1 &&
+      trace.tableRows >= 2
+    )), true);
+    assert.equal(largeStructuredEpub.elementPlan.strategy, "document-element-model.v1");
+    assert.equal(largeStructuredEpub.elementPlan.elementTypes.paragraph >= 700, true);
+    assert.equal(largeStructuredEpub.elementPlan.elementTypes.link >= 700, true);
+    assert.equal(largeStructuredEpub.elementPlan.elementTypes["table-row"] >= 1, true);
+    assert.equal(largeStructuredEpub.windowPlan.strategy, "element-aware-by-title-windowing.v1");
+    assert.equal(largeStructuredEpub.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "paragraph" &&
+      ref.layout?.strategy === "epub-stream-paragraph.v1"
+    ))), true);
+    assert.equal(largeStructuredEpub.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "link" &&
+      ref.layout?.strategy === "epub-stream-link.v1" &&
+      ref.href === "https://example.com/large-epub-1"
+    ))), true);
+    assert.equal(largeStructuredEpub.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "table-row" &&
+      ref.layout?.strategy === "epub-stream-table-row.v1" &&
+      ref.table?.format === "epub"
+    ))), true);
+    assert.equal(largeStructuredEpub.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
+    assert.ok(largeStructuredEpub.quality.textCharacters > 25000, "large EPUB structural parser must preserve oversized chapter text");
   }
   if (directRuntime.payload.runtimes["tika.app"]?.available && mountedLegacyOfficeDocuments.length) {
     for (const [sourceId, formatId] of [
