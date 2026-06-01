@@ -1403,8 +1403,11 @@ export function buildClientPackagingConfig(baseConfig = {}, featureRuntime = {})
   };
 }
 
-export function collectPackagePlan(featureRuntime = {}) {
+export function collectPackagePlan(featureRuntime = {}, options = {}) {
   const featureMap = getFeatureMap();
+  const surface = String(options.surface || "all").trim() || "all";
+  const includeClientSurface = surface !== "server";
+  const includeWebSurface = surface !== "server";
   const includePaths = new Set();
   const excludePaths = new Set();
   const removePaths = new Set();
@@ -1414,7 +1417,7 @@ export function collectPackagePlan(featureRuntime = {}) {
   const webPanels = new Set();
   const webNavItems = new Set();
   const eventTopics = new Set();
-  const clientModules = new Set(activeClientModuleIds(featureRuntime));
+  const clientModules = new Set(includeClientSurface ? activeClientModuleIds(featureRuntime) : []);
 
   for (const featureId of featureRuntime.activeFeatureIds || []) {
     const feature = featureMap.get(featureId);
@@ -1423,10 +1426,12 @@ export function collectPackagePlan(featureRuntime = {}) {
     for (const item of feature?.tests?.suites || []) tests.add(item);
     for (const item of feature?.server?.modules || []) serverModules.add(item);
     for (const item of feature?.server?.mounts || []) mounts.add(item);
-    for (const item of feature?.server?.webPanels || []) webPanels.add(item);
     for (const item of feature?.server?.eventTopics || []) eventTopics.add(item);
-    for (const item of feature?.web?.panels || []) webPanels.add(item);
-    for (const item of feature?.web?.navItems || []) webNavItems.add(item);
+    if (includeWebSurface) {
+      for (const item of feature?.server?.webPanels || []) webPanels.add(item);
+      for (const item of feature?.web?.panels || []) webPanels.add(item);
+      for (const item of feature?.web?.navItems || []) webNavItems.add(item);
+    }
   }
   for (const featureId of featureRuntime.disabledFeatureIds || []) {
     const feature = featureMap.get(featureId);
@@ -1437,6 +1442,7 @@ export function collectPackagePlan(featureRuntime = {}) {
 
   return {
     edition: featureRuntime.edition,
+    surface,
     activeFeatureIds: [...(featureRuntime.activeFeatureIds || [])],
     includePaths: [...includePaths].sort(),
     excludePaths: [...excludePaths].sort(),

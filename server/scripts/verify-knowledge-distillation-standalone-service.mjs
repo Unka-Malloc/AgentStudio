@@ -243,7 +243,30 @@ for (const operationId of toolOperationIds) {
   );
 }
 
-const packagePlan = collectPackagePlan(runtime);
+const packagePlan = collectPackagePlan(runtime, { surface: "server" });
+assert.equal(packagePlan.surface, "server", "standalone knowledge distillation package plan must use the server-only surface");
+assert.deepEqual(
+  packagePlan.clientModules,
+  [],
+  "standalone knowledge distillation service packaging must not carry client modules"
+);
+assert.deepEqual(
+  packagePlan.webPanels,
+  [],
+  "standalone knowledge distillation service packaging must not carry web panels"
+);
+assert.deepEqual(
+  packagePlan.webNavItems,
+  [],
+  "standalone knowledge distillation service packaging must not carry web navigation"
+);
+for (const includePath of packagePlan.includePaths) {
+  assert.equal(
+    String(includePath).startsWith("client-gui"),
+    false,
+    "standalone knowledge distillation service packaging must not read client-gui paths"
+  );
+}
 for (const includePath of REQUIRED_EXTERNAL_PACKAGE_PATHS) {
   assert.ok(packagePlan.includePaths.includes(includePath), `standalone package plan must include ${includePath}`);
 }
