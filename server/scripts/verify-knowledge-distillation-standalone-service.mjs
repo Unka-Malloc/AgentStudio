@@ -17,6 +17,7 @@ const LEGACY_FEATURE_ID = "knowledge-distillation";
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const externalServiceEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/server.mjs");
 const formatRoutesConfigEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/format-routes.json");
+const parserStrategiesConfigEntry = path.join(repoRoot, "external-services/knowledge-distillation-service/parser-strategies.json");
 
 const REQUIRED_STANDALONE_DEPENDENCIES = Object.freeze([
   "core-platform",
@@ -250,6 +251,7 @@ for (const removePath of REQUIRED_LEGACY_REMOVE_PATHS) {
 
 const externalServiceSource = await fs.readFile(externalServiceEntry, "utf8");
 const formatRoutesConfig = JSON.parse(await fs.readFile(formatRoutesConfigEntry, "utf8"));
+const parserStrategiesConfig = JSON.parse(await fs.readFile(parserStrategiesConfigEntry, "utf8"));
 assert.equal(
   formatRoutesConfig.protocolVersion,
   "pact.external-knowledge-distillation.format-routes.v1",
@@ -258,7 +260,7 @@ assert.equal(
 assert.equal(
   formatRoutesConfig.strategy,
   "singleton-format-route-registry.v1",
-  "external knowledge distillation must route parser strategies through the singleton registry"
+  "external knowledge distillation must route formats through the singleton registry"
 );
 assert.equal(formatRoutesConfig.routes.length >= 24, true, "format route registry must cover all current route families");
 assert.equal(
@@ -291,6 +293,54 @@ assert.equal(
   externalServiceSource.includes("const FORMAT_ROUTES = loadFormatRoutes();"),
   true,
   "server.mjs must load format routes from the singleton config"
+);
+assert.equal(
+  parserStrategiesConfig.protocolVersion,
+  "pact.external-knowledge-distillation.parser-strategies.v1",
+  "external knowledge distillation must keep parser strategies in a versioned singleton config"
+);
+assert.equal(
+  parserStrategiesConfig.strategy,
+  "singleton-parser-strategy-registry.v1",
+  "external knowledge distillation must route parser strategy metadata through the singleton registry"
+);
+assert.equal(parserStrategiesConfig.strategies.length >= 145, true, "parser strategy registry must cover built-in and route-bound strategies");
+assert.equal(
+  parserStrategiesConfig.strategies.filter((strategy) => strategy.capabilitySurface === "built-in-parser").length >= 103,
+  true,
+  "parser strategy registry must preserve current built-in parser coverage"
+);
+const parserStrategyIds = new Set(parserStrategiesConfig.strategies.map((strategy) => strategy.id));
+for (const route of formatRoutesConfig.routes) {
+  for (const parserId of [
+    route.preferredParser,
+    ...(route.fallbackParsers || []),
+    ...(route.parserChain || [])
+  ].filter(Boolean)) {
+    assert.ok(
+      parserStrategyIds.has(parserId),
+      `parser strategy registry must define ${parserId} referenced by ${route.id}`
+    );
+  }
+}
+for (const parserId of [
+  "pdf.text.tika-safe",
+  "office.word.structured",
+  "office.presentation.slides",
+  "table.sheet.structured",
+  "text.direct.markdown",
+  "email.headers-body-attachments",
+  "archive.expand-route",
+  "directory.file-ref.expand",
+  "structured-zip.large-entry-stream",
+  "payload.stream-text"
+]) {
+  assert.ok(parserStrategyIds.has(parserId), `parser strategy registry must include ${parserId}`);
+}
+assert.equal(
+  externalServiceSource.includes("const PARSER_STRATEGIES = loadParserStrategies(FORMAT_ROUTES);"),
+  true,
+  "server.mjs must load parser strategies from the singleton config after format routes"
 );
 assert.equal(
   externalServiceSource.includes("runQueue: {"),

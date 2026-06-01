@@ -455,6 +455,11 @@ try {
   assert.equal(capabilities.payload.runQueue.strategy, "single-node-background-run-queue.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.queueStrategy, "single-node-background-run-queue.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.recommendedExecutionMode, "queued");
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.protocolVersion, "pact.external-knowledge-distillation.parser-strategies.v1");
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategy, "singleton-parser-strategy-registry.v1");
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategyCount >= 145, true);
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.builtInParserCount >= 103, true);
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.routeBoundStrategyCount >= 105, true);
   assert.equal(capabilities.payload.classification.strategy, "hashing_embedding_window_community_classification_v3");
   assert.equal(capabilities.payload.classification.taxonomyStrategy, "semantic-concept-topic-hierarchy.v1");
   assert.equal(capabilities.payload.classification.assignmentRationaleStrategy, "leader-clustering-semantic-concept-rationale.v1");

@@ -24,7 +24,7 @@ const SERVICE_REGISTRATION_REQUIREMENTS = Object.freeze({
       "external.knowledge.distillation.projects.evidence.query",
       "external.knowledge.distillation.artifacts.export"
     ],
-    requiredFiles: ["server.mjs", "README.md", "Dockerfile", "reference-frameworks.json", "format-routes.json"],
+    requiredFiles: ["server.mjs", "README.md", "Dockerfile", "reference-frameworks.json", "format-routes.json", "parser-strategies.json"],
     rejectedInternalOperationPrefixes: ["knowledge.distillation."],
     rejectedInternalToolIds: [
       "pact.knowledge.distillation.runs.create",

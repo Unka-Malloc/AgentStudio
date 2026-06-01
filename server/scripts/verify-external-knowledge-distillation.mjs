@@ -1231,6 +1231,7 @@ try {
   assert.equal(capabilities.payload.fileCompatibility.routeRegistry.extensionCount >= 141, true);
   assert.equal(capabilities.payload.fileCompatibility.routeRegistry.validation, "startup-fail-fast");
   assert.equal(capabilities.payload.algorithms.includes("singleton-format-route-registry.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("singleton-parser-strategy-registry.v1"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.strategy, "content-signature-routing.v1");
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("pdf-header"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.signatures.includes("zip-ooxml-word"), true);
@@ -1253,6 +1254,23 @@ try {
   assert.equal(capabilities.payload.parserExecution.boundary, "external-kd.document-parsing.module.v1");
   assert.equal(capabilities.payload.parserExecution.outputContract, "pact.normalized-distillation-documents.v1");
   assert.equal(capabilities.payload.parserExecution.consumedByAlgorithmContract, "external-kd.algorithm-input.normalized-documents.v1");
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.protocolVersion, "pact.external-knowledge-distillation.parser-strategies.v1");
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategy, "singleton-parser-strategy-registry.v1");
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.source, "external-services/knowledge-distillation-service/parser-strategies.json");
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategyCount >= 145, true);
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.builtInParserCount >= 103, true);
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.routeBoundStrategyCount >= 105, true);
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.validation, "startup-fail-fast");
+  assert.equal(capabilities.payload.parserExecution.strategies.some((strategy) => (
+    strategy.id === "office.word.structured" &&
+    strategy.capabilitySurface === "built-in-parser" &&
+    strategy.routeBindings.includes("word")
+  )), true);
+  assert.equal(capabilities.payload.parserExecution.strategies.some((strategy) => (
+    strategy.id === "pdf.text.tika-safe" &&
+    strategy.capabilitySurface === "route-bound-strategy" &&
+    strategy.routeBindings.includes("pdf")
+  )), true);
   assert.equal(capabilities.payload.parserExecution.payloadModes.includes("contentBase64"), true);
   assert.equal(capabilities.payload.parserExecution.payloadModes.includes("filePath"), true);
   assert.equal(capabilities.payload.parserExecution.payloadModes.includes("contentRef"), true);

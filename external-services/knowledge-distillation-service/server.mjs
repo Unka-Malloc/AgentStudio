@@ -292,6 +292,9 @@ const SEMANTIC_CONCEPT_INDEX = Object.freeze(
 const FORMAT_ROUTES_CONFIG_PATH = path.join(SERVICE_ROOT, "format-routes.json");
 const FORMAT_ROUTES_CONFIG_PROTOCOL_VERSION = "pact.external-knowledge-distillation.format-routes.v1";
 const FORMAT_ROUTES_CONFIG_STRATEGY = "singleton-format-route-registry.v1";
+const PARSER_STRATEGIES_CONFIG_PATH = path.join(SERVICE_ROOT, "parser-strategies.json");
+const PARSER_STRATEGIES_CONFIG_PROTOCOL_VERSION = "pact.external-knowledge-distillation.parser-strategies.v1";
+const PARSER_STRATEGIES_CONFIG_STRATEGY = "singleton-parser-strategy-registry.v1";
 
 function normalizeFormatRouteArray(value = []) {
   return Array.from(new Set((Array.isArray(value) ? value : [])
@@ -386,6 +389,99 @@ function loadFormatRoutes() {
 }
 
 const FORMAT_ROUTES = loadFormatRoutes();
+
+function parserReferenceIdsForRoute(route = {}) {
+  return normalizeFormatRouteArray([
+    route.preferredParser,
+    ...(route.fallbackParsers || []),
+    ...(route.parserChain || [])
+  ]);
+}
+
+function validateParserStrategiesConfig(config = {}, routes = []) {
+  if (config.protocolVersion !== PARSER_STRATEGIES_CONFIG_PROTOCOL_VERSION) {
+    throw new Error(`Invalid parser strategies config protocolVersion: ${config.protocolVersion || "missing"}`);
+  }
+  if (config.strategy !== PARSER_STRATEGIES_CONFIG_STRATEGY) {
+    throw new Error(`Invalid parser strategies config strategy: ${config.strategy || "missing"}`);
+  }
+  if (!Array.isArray(config.strategies) || config.strategies.length === 0) {
+    throw new Error("parser-strategies.json must contain non-empty strategies[]");
+  }
+  const strategyIds = new Set();
+  let builtInParserCount = 0;
+  let routeBoundStrategyCount = 0;
+  for (const [index, strategy] of config.strategies.entries()) {
+    const id = String(strategy?.id || "").trim();
+    if (!id) {
+      throw new Error(`parser strategy at index ${index} is missing id`);
+    }
+    if (strategyIds.has(id)) {
+      throw new Error(`Duplicate parser strategy id: ${id}`);
+    }
+    strategyIds.add(id);
+    for (const field of ["label", "family", "executionMode", "runtime", "capabilitySurface", "inputContract", "outputContract"]) {
+      if (!String(strategy?.[field] || "").trim()) {
+        throw new Error(`parser strategy ${id} is missing ${field}`);
+      }
+    }
+    if (strategy.capabilitySurface === "built-in-parser") {
+      builtInParserCount += 1;
+    }
+    if (Array.isArray(strategy.routeBindings) && strategy.routeBindings.length > 0) {
+      routeBoundStrategyCount += 1;
+    }
+  }
+  for (const route of routes) {
+    for (const parserId of parserReferenceIdsForRoute(route)) {
+      if (!strategyIds.has(parserId)) {
+        throw new Error(`format route ${route.id} references missing parser strategy ${parserId}`);
+      }
+    }
+  }
+  return {
+    strategyCount: strategyIds.size,
+    builtInParserCount,
+    routeBoundStrategyCount
+  };
+}
+
+function loadParserStrategies(routes = []) {
+  const parsed = JSON.parse(fsSync.readFileSync(PARSER_STRATEGIES_CONFIG_PATH, "utf8"));
+  const summary = validateParserStrategiesConfig(parsed, routes);
+  return Object.freeze(parsed.strategies.map((strategy) => Object.freeze({
+    id: String(strategy.id || "").trim(),
+    label: String(strategy.label || "").trim(),
+    family: String(strategy.family || "").trim(),
+    executionMode: String(strategy.executionMode || "").trim(),
+    runtime: String(strategy.runtime || "").trim(),
+    capabilitySurface: String(strategy.capabilitySurface || "").trim(),
+    routeBindings: Object.freeze(normalizeFormatRouteArray(strategy.routeBindings)),
+    routeRoles: Object.freeze(normalizeFormatRouteArray(strategy.routeRoles)),
+    inputContract: String(strategy.inputContract || "").trim(),
+    outputContract: String(strategy.outputContract || "").trim(),
+    registry: Object.freeze({
+      protocolVersion: PARSER_STRATEGIES_CONFIG_PROTOCOL_VERSION,
+      strategy: PARSER_STRATEGIES_CONFIG_STRATEGY,
+      source: "external-services/knowledge-distillation-service/parser-strategies.json",
+      strategyCount: summary.strategyCount,
+      builtInParserCount: summary.builtInParserCount,
+      routeBoundStrategyCount: summary.routeBoundStrategyCount
+    })
+  })));
+}
+
+const PARSER_STRATEGIES = loadParserStrategies(FORMAT_ROUTES);
+const BUILT_IN_PARSER_IDS = Object.freeze(
+  PARSER_STRATEGIES
+    .filter((strategy) => strategy.capabilitySurface === "built-in-parser")
+    .map((strategy) => strategy.id)
+);
+const EXTERNAL_RUNTIME_REQUIRED_PARSER_IDS = Object.freeze(
+  PARSER_STRATEGIES
+    .filter((strategy) => strategy.executionMode === "external-runtime" || strategy.runtime !== "builtin")
+    .map((strategy) => strategy.id)
+);
 
 const ROUTES_BY_EXTENSION = new Map();
 const ROUTES_BY_MEDIA_TYPE = new Map();
@@ -19755,6 +19851,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "professional-format-manifest.v1",
       "bounded-binary-file-profile.v1",
       FORMAT_ROUTES_CONFIG_STRATEGY,
+      PARSER_STRATEGIES_CONFIG_STRATEGY,
       DOCUMENT_PARSING_MODULE_BOUNDARY,
       DISTILLATION_ALGORITHM_MODULE_BOUNDARY,
       MODEL_DISTILLATION_MODULE_BOUNDARY,
@@ -19866,112 +19963,26 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       consumedByAlgorithmContract: DISTILLATION_ALGORITHM_INPUT_CONTRACT,
       payloadModes: ["text", "contentBase64", "filePath", "contentRef", "rawDocumentsManifestPath", "rawDocumentsManifestRef", "jsonlManifest"],
       allowedInputRoots: INPUT_ROOTS,
-      builtInParsers: [
-        "input.manifest.jsonl",
-        "input.manifest.json",
-        "content.signature",
-        "payload.file-ref",
-        "payload.file-ref-deferred",
-        "payload.file-ref-binary-profile",
-        "payload.stream-text",
-        "text.direct",
-        "text.markdown",
-        "markdown.frontmatter",
-        "markdown.structure",
-        "markup.structure",
-        "structured.json",
-        "structured.json.file-ref-stream",
-        "config.key-value",
-        "diagram.structure",
-        "notebook.cells",
-        "code.structure",
-        "diff.unified",
-        "calendar.ics",
-        "transcript.cues",
-        "transcript.webvtt",
-        "transcript.srt",
-        "transcript.speaker-turns",
-        "xbrl.contexts",
-        "xbrl.facts",
-        "audio.metadata",
-        "audio.transcript-sidecar",
-        "table.csv",
-        "table.tsv",
-        "email.headers-body",
-        "email.msg.tika",
-        "email.msg.tika.file-ref",
-        "email.mbox",
-        "email.mbox-route",
-        "email.attachment-route",
-        "pdf.text.basic",
-        "pdf.text.pdftotext",
-        "pdf.subtype-route",
-        "pdf.hyperlinks",
-        "pdf.outlines",
-        "pdf.form-fields",
-        "structured-zip.file-ref",
-        "structured-zip.structural-entry-plan",
-        "structured-zip.large-entry-stream",
-        "zip.manifest",
-        "archive.expand-route",
-        "archive.child-file.route",
-        "archive.file-ref.expand",
-        "archive.entry-file-ref",
-        "directory.file-ref.expand",
-        "directory.entry-file-ref",
-        "archive.zip.container",
-        "archive.zip.extract",
-        "archive.tar.container",
-        "archive.tar.extract",
-        "archive.gzip.decompress",
-        "archive.7z.extract",
-        "office.word.structured",
-        "office.word.styles",
-        "office.word.numbering",
-        "office.word.content-controls",
-        "office.word.bookmarks",
-        "office.word.headers-footers",
-        "office.word.hyperlinks",
-        "office.word.images",
-        "office.word.charts",
-        "office.word.revisions",
-        "office.presentation.slides",
-        "office.presentation.layouts",
-        "office.presentation.placeholders",
-        "office.presentation.tables",
-        "office.presentation.hyperlinks",
-        "office.presentation.images",
-        "office.presentation.charts",
-        "office.presentation.speaker-notes",
-        "office.presentation.comments",
-        "office.visio.pages",
-        "office.visio.shapes",
-        "office.visio.connectors",
-        "office.visio.text",
-        "office.word.tables",
-        "office.word.annotations",
-        "table.sheet.structured",
-        "table.workbook.sheets",
-        "table.workbook.defined-names",
-        "table.sheet.headers",
-        "table.sheet.cells",
-        "table.sheet.merged-cells",
-        "table.sheet.comments",
-        "table.sheet.date-styles",
-        "table.sheet.formulas",
-        "table.sheet.hyperlinks",
-        "table.sheet.charts",
-        "table.time-index",
-        "open-document.structured",
-        "open-document.tables",
-        "open-document.hyperlinks",
-        "ebook.epub",
-        "tika.text.app",
-        "tika.text.file-ref",
-        "ocr.image.tesseract",
-        "pdf.ocr.poppler-tesseract"
-      ],
-      externalRuntimeRequired: ["tika.text", "pdf.visual.layout", "ocr.page", "ocr.image", "multimodal.image"],
+      strategyRegistry: {
+        protocolVersion: PARSER_STRATEGIES_CONFIG_PROTOCOL_VERSION,
+        strategy: PARSER_STRATEGIES_CONFIG_STRATEGY,
+        source: "external-services/knowledge-distillation-service/parser-strategies.json",
+        strategyCount: PARSER_STRATEGIES.length,
+        builtInParserCount: BUILT_IN_PARSER_IDS.length,
+        routeBoundStrategyCount: PARSER_STRATEGIES.filter((strategy) => strategy.routeBindings.length > 0).length,
+        validation: "startup-fail-fast"
+      },
+      strategies: PARSER_STRATEGIES.map((strategy) => ({
+        id: strategy.id,
+        family: strategy.family,
+        executionMode: strategy.executionMode,
+        runtime: strategy.runtime,
+        capabilitySurface: strategy.capabilitySurface,
+        routeBindings: strategy.routeBindings,
+        routeRoles: strategy.routeRoles
+      })),
+      builtInParsers: BUILT_IN_PARSER_IDS,
+      externalRuntimeRequired: EXTERNAL_RUNTIME_REQUIRED_PARSER_IDS,
       emptyCorpusErrorCode: "EMPTY_RAW_CORPUS"
     },
     elementModel: {
