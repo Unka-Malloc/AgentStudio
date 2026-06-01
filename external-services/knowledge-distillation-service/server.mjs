@@ -5854,6 +5854,108 @@ function parseDocx(entries = []) {
   };
 }
 
+function parseDocxLargeEntryStreaming(entries = []) {
+  const xmlEntries = entries
+    .filter((entry) => (
+      /^word\/(document|header\d*|footer\d*)\.xml$/.test(entry.name || "") &&
+      entry.filePath &&
+      fsSync.existsSync(entry.filePath)
+    ))
+    .sort((left, right) => docxPartSortKey(left.name) - docxPartSortKey(right.name) || left.name.localeCompare(right.name));
+  const elements = [];
+  let paragraphCount = 0;
+  let styleRefCount = 0;
+  let numberingRefCount = 0;
+  let headingCount = 0;
+  let listItemCount = 0;
+  let largeEntryCount = 0;
+  let streamedBytes = 0;
+  for (const entry of xmlEntries) {
+    const stat = fsSync.statSync(entry.filePath);
+    streamedBytes += stat.size;
+    if (entry.warning === "structured-entry-too-large" || stat.size > STRUCTURED_ZIP_ENTRY_MAX_BYTES) {
+      largeEntryCount += 1;
+    }
+    const headerFooter = docxHeaderFooterMetadata(entry.name);
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?p", (paragraphXml) => {
+      const text = textFromXmlTextNodes(paragraphXml);
+      if (!text) {
+        return;
+      }
+      paragraphCount += 1;
+      const style = docxParagraphStyle(paragraphXml);
+      const styleProfile = docxParagraphStyleProfile(paragraphXml, style);
+      const { type, level } = docxParagraphElementType(paragraphXml, style);
+      if (styleProfile.styleId) {
+        styleRefCount += 1;
+      }
+      if (styleProfile.numberingId) {
+        numberingRefCount += 1;
+      }
+      if (type === "heading" || type === "title") {
+        headingCount += 1;
+      }
+      if (type === "list-item") {
+        listItemCount += 1;
+      }
+      pushStructureElement(elements, headerFooter?.kind || type, headerFooter ? `${headerFooter.label}: ${text}` : text, {
+        level,
+        line: paragraphCount,
+        name: entry.name,
+        headerFooter,
+        layout: {
+          strategy: "wordprocessingml-stream-paragraph.v1",
+          streamIndex: paragraphCount,
+          order: paragraphCount
+        },
+        ...(Object.keys(styleProfile).length ? { style: styleProfile } : {})
+      });
+    });
+  }
+  const counts = elementTypeCounts(elements);
+  const headerPartCount = xmlEntries.filter((entry) => docxHeaderFooterMetadata(entry.name)?.kind === "header").length;
+  const footerPartCount = xmlEntries.filter((entry) => docxHeaderFooterMetadata(entry.name)?.kind === "footer").length;
+  const headerElementCount = elements.filter((element) => element.headerFooter?.kind === "header" || element.type === "header").length;
+  const footerElementCount = elements.filter((element) => element.headerFooter?.kind === "footer" || element.type === "footer").length;
+  const headerFooterElementCount = headerElementCount + footerElementCount;
+  return {
+    text: structureElementsToText("docx", elements, ""),
+    elements,
+    format: "docx",
+    extractionMode: "streaming-large-wordprocessingml-elements",
+    xmlFileCount: xmlEntries.length,
+    largeEntryCount,
+    streamedBytes,
+    headerPartCount,
+    footerPartCount,
+    headerFooterElementCount,
+    headerElementCount,
+    footerElementCount,
+    paragraphCount,
+    tableCount: 0,
+    tableRowCount: 0,
+    tableCellCount: 0,
+    contentControlCount: 0,
+    bookmarkCount: 0,
+    annotationCount: 0,
+    commentCount: 0,
+    footnoteCount: 0,
+    endnoteCount: 0,
+    hyperlinkCount: 0,
+    imageCount: 0,
+    styleRefCount,
+    numberingRefCount,
+    revisionCount: 0,
+    insertionRevisionCount: 0,
+    deletionRevisionCount: 0,
+    chartCount: 0,
+    chartPartCount: 0,
+    chartSeriesCount: 0,
+    headingCount: headingCount || (counts.title || 0) + (counts.heading || 0),
+    listItemCount: listItemCount || counts["list-item"] || 0
+  };
+}
+
 function pptxEmuToPoints(value = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? roundLayoutNumber(parsed / 12700) : 0;
@@ -13476,8 +13578,8 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
     if (route?.id === "word") {
       const parsed = canUseBoundedEntries
         ? parseDocx(entryPlan.entries)
-        : { text: "", elements: [], format: "docx", xmlFileCount: entryPlan.selectedFileCount };
-      if (parsed.text && canUseBoundedEntries) {
+        : parseDocxLargeEntryStreaming(entryPlan.entries);
+      if (parsed.text) {
         directText = parsed.text;
         totalCharacters = directText.length;
         structuredFileCount = parsed.xmlFileCount;
@@ -13487,9 +13589,12 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           stage,
           status: "completed",
           mode: "structured-zip-file-ref",
+          extractionMode: parsed.extractionMode || "bounded-structured-zip-entries",
           files: structuredFileCount,
           characters: totalCharacters,
           elements: structureElements.length,
+          streamedBytes: parsed.streamedBytes || 0,
+          largeEntries: parsed.largeEntryCount || 0,
           paragraphs: parsed.paragraphCount,
           tables: parsed.tableCount,
           tableRows: parsed.tableRowCount,
@@ -13510,6 +13615,20 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           styles: parsed.styleRefCount,
           numberingRefs: parsed.numberingRefCount
         });
+        if (!canUseBoundedEntries) {
+          parserTrace.push({
+            stage: "structured-zip.large-entry-stream",
+            status: "completed",
+            reason: "large-structure-entry",
+            extractionMode: parsed.extractionMode || "streaming-large-wordprocessingml-elements",
+            routeId: route?.id || "",
+            files: structuredFileCount,
+            characters: totalCharacters,
+            elements: structureElements.length,
+            paragraphs: parsed.paragraphCount,
+            streamedBytes: parsed.streamedBytes || 0
+          });
+        }
         parserTrace.push({
           stage: "office.word.styles",
           status: parsed.styleRefCount ? "completed" : "empty",

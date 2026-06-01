@@ -370,6 +370,21 @@ assert.equal(
   "server.mjs must load parser strategies from the singleton config after format routes"
 );
 assert.equal(
+  externalServiceSource.includes("function parseDocxLargeEntryStreaming("),
+  true,
+  "large DOCX filePath parsing must keep a dedicated streaming structure parser instead of downgrading to plain text"
+);
+assert.equal(
+  externalServiceSource.includes("wordprocessingml-stream-paragraph.v1"),
+  true,
+  "large DOCX streaming parser must preserve paragraph element references for element-aware windowing"
+);
+assert.equal(
+  externalServiceSource.includes("streaming-large-wordprocessingml-elements"),
+  true,
+  "large DOCX streaming parser must advertise structural extraction mode in parserTrace"
+);
+assert.equal(
   formatConversionProfilesConfig.protocolVersion,
   "pact.external-knowledge-distillation.format-conversion-profiles.v1",
   "external knowledge distillation must keep format conversion profiles in a versioned singleton config"

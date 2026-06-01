@@ -3566,10 +3566,25 @@ try {
     assert.equal(largeStructuredWord.parserTrace.some((trace) => (
       trace.stage === "structured-zip.large-entry-stream" &&
       trace.status === "completed" &&
-      trace.reason === "large-structure-entry"
+      trace.reason === "large-structure-entry" &&
+      trace.extractionMode === "streaming-large-wordprocessingml-elements" &&
+      trace.elements >= 700 &&
+      trace.paragraphs >= 700
     )), true);
-    assert.equal(largeStructuredWord.windowPlan.strategy, "file-ref-stream-windowing.v1");
-    assert.equal(largeStructuredWord.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), true);
+    assert.equal(largeStructuredWord.parserTrace.some((trace) => (
+      trace.stage === "office.word.structured" &&
+      trace.status === "completed" &&
+      trace.extractionMode === "streaming-large-wordprocessingml-elements" &&
+      trace.elements >= 700
+    )), true);
+    assert.equal(largeStructuredWord.elementPlan.strategy, "document-element-model.v1");
+    assert.equal(largeStructuredWord.elementPlan.elementTypes.paragraph >= 700, true);
+    assert.equal(largeStructuredWord.windowPlan.strategy, "element-aware-by-title-windowing.v1");
+    assert.equal(largeStructuredWord.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "paragraph" &&
+      ref.layout?.strategy === "wordprocessingml-stream-paragraph.v1"
+    ))), true);
+    assert.equal(largeStructuredWord.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
     assert.ok(largeStructuredWord.quality.textCharacters > 25000, "large DOCX structural fallback must preserve oversized text");
   }
   if (directRuntime.payload.runtimes["tika.app"]?.available && mountedLegacyOfficeDocuments.length) {
