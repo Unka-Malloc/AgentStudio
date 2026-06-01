@@ -54,6 +54,26 @@ const PROJECT_EVIDENCE_QUERY_STRATEGY = "project-graph-evidence-convergence-quer
 const REFERENCE_GAP_REPORT_STRATEGY = "reference-framework-gap-report.v1";
 const REFERENCE_FRAMEWORK_AUDIT_STRATEGY = "reference-framework-local-checkout-audit.v1";
 const PDF_SUBTYPE_ROUTING_STRATEGY = "pdf-subtype-routing.v1";
+const DISTILLATION_WORKFLOW_SCOPE = Object.freeze({
+  DOCUMENT: "document",
+  CORPUS: "corpus",
+  PROJECT: "project"
+});
+const DISTILLATION_WORKFLOW_SCOPE_VALUES = Object.freeze(Object.values(DISTILLATION_WORKFLOW_SCOPE));
+const DEFAULT_DISTILLATION_WORKFLOW_SCOPE = DISTILLATION_WORKFLOW_SCOPE.PROJECT;
+const DISTILLATION_WORKFLOW_SCOPE_ALIASES = Object.freeze({
+  doc: DISTILLATION_WORKFLOW_SCOPE.DOCUMENT,
+  document: DISTILLATION_WORKFLOW_SCOPE.DOCUMENT,
+  single: DISTILLATION_WORKFLOW_SCOPE.DOCUMENT,
+  "single-document": DISTILLATION_WORKFLOW_SCOPE.DOCUMENT,
+  source: DISTILLATION_WORKFLOW_SCOPE.DOCUMENT,
+  corpus: DISTILLATION_WORKFLOW_SCOPE.CORPUS,
+  batch: DISTILLATION_WORKFLOW_SCOPE.CORPUS,
+  collection: DISTILLATION_WORKFLOW_SCOPE.CORPUS,
+  "multi-document": DISTILLATION_WORKFLOW_SCOPE.CORPUS,
+  project: DISTILLATION_WORKFLOW_SCOPE.PROJECT,
+  "project-run": DISTILLATION_WORKFLOW_SCOPE.PROJECT
+});
 const RUNTIME_DOCTOR_TIMEOUT_MS = 2500;
 const RUNTIME_DOCTOR_CACHE_MS = 30_000;
 const OCR_TIMEOUT_MS = Number(process.env.PACT_EXTERNAL_KD_OCR_TIMEOUT_MS || 30_000);
@@ -18429,11 +18449,13 @@ function buildMarkdown({ title, query, documents, classification, routePlan, cor
   ].join("\n");
 }
 
-function buildAgentMessage({ runId, title, query, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, formatConversionPlan, runtimeStatus, failure = null }) {
+function buildAgentMessage({ runId, title, query, workflowScope, scopeSelection, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, formatConversionPlan, runtimeStatus, failure = null }) {
   return {
     protocolVersion: `${PROTOCOL_VERSION}.agent-message`,
     responseProfile: "agent",
     runId,
+    workflowScope,
+    scopeSelection,
     status: failure ? "failed" : "completed",
     errors: failure ? [failure] : [],
     title,
@@ -18542,7 +18564,8 @@ function runDistillationWorkflow(input = {}, runtimeStatus = null, priorRuns = [
   const workflowContext = initializeDistillationWorkflow(input);
   const normalizedInput = normalizeDistillationInput(workflowContext, runtimeStatus);
   const filteredInput = filterDistillationInputByTime(normalizedInput);
-  const corpusPlanState = buildDistillationCorpusPlan(filteredInput);
+  const scopedInput = selectDistillationWorkflowScope(filteredInput);
+  const corpusPlanState = buildDistillationCorpusPlan(scopedInput);
   const routePlanState = buildDistillationRoutePlan(corpusPlanState);
   const documentSet = buildDistillationDocumentSet(routePlanState);
   const classificationState = buildDistillationClassification(documentSet);
@@ -18553,12 +18576,30 @@ function runDistillationWorkflow(input = {}, runtimeStatus = null, priorRuns = [
   return composeDistillationWorkflowState(graphEvidenceState);
 }
 
+function normalizeDistillationWorkflowScope(input = {}) {
+  const rawValue = String(
+    input.workflowScope ||
+      input.distillationWorkflowScope ||
+      input.scope ||
+      DEFAULT_DISTILLATION_WORKFLOW_SCOPE
+  ).trim().toLowerCase().replace(/_/g, "-");
+  const workflowScope = DISTILLATION_WORKFLOW_SCOPE_ALIASES[rawValue] || rawValue;
+  if (!DISTILLATION_WORKFLOW_SCOPE_VALUES.includes(workflowScope)) {
+    const error = new Error(`Invalid workflowScope enum value: ${rawValue}. Supported values: ${DISTILLATION_WORKFLOW_SCOPE_VALUES.join(", ")}.`);
+    error.statusCode = 400;
+    error.code = "INVALID_WORKFLOW_SCOPE";
+    throw error;
+  }
+  return workflowScope;
+}
+
 function initializeDistillationWorkflow(input = {}) {
   const createdAt = nowIso();
   const query = String(input.query || input.prompt || input.title || "External knowledge distillation").trim();
   const title = String(input.title || query || "External Knowledge Distillation").trim();
   const runId = String(input.runId || "").trim() || stableId("external_kd_run", query, createdAt);
   const responseProfile = String(input.responseProfile || input.mode || "console").trim() || "console";
+  const workflowScope = normalizeDistillationWorkflowScope(input);
   const requestedClaims = Array.isArray(input.claims)
     ? input.claims
     : Array.isArray(input.requestedClaims)
@@ -18571,6 +18612,7 @@ function initializeDistillationWorkflow(input = {}) {
     title,
     runId,
     responseProfile,
+    workflowScope,
     requestedClaims
   };
 }
@@ -18595,6 +18637,88 @@ function filterDistillationInputByTime(normalizedInput = {}) {
     timeFilter,
     filtered,
     activeDocuments: filtered.documents
+  };
+}
+
+function documentWorkflowSelector(input = {}) {
+  return String(
+    input.targetDocumentId ||
+      input.documentId ||
+      input.sourceId ||
+      input.fileName ||
+      input.title ||
+      ""
+  ).trim();
+}
+
+function documentMatchesWorkflowSelector(document = {}, selector = "") {
+  if (!selector) {
+    return false;
+  }
+  return [
+    document.sourceId,
+    document.documentId,
+    document.id,
+    document.fileName,
+    document.title,
+    document.path,
+    document.originalPath,
+    document.contentRef
+  ].some((value) => String(value || "") === selector);
+}
+
+function selectDocumentWorkflowDocuments(activeDocuments = [], input = {}) {
+  const selector = documentWorkflowSelector(input);
+  if (!selector) {
+    return {
+      selector,
+      documents: activeDocuments.slice(0, 1)
+    };
+  }
+  const selected = activeDocuments.filter((document) => documentMatchesWorkflowSelector(document, selector));
+  if (selected.length === 0) {
+    const error = new Error(`workflowScope=document selector did not match any active document: ${selector}`);
+    error.statusCode = 400;
+    error.code = "DOCUMENT_SCOPE_SELECTOR_NOT_FOUND";
+    throw error;
+  }
+  if (selected.length > 1) {
+    const error = new Error(`workflowScope=document selector matched multiple active documents: ${selector}`);
+    error.statusCode = 400;
+    error.code = "DOCUMENT_SCOPE_SELECTOR_AMBIGUOUS";
+    throw error;
+  }
+  return {
+    selector,
+    documents: selected
+  };
+}
+
+function selectDistillationWorkflowScope(filteredInput = {}) {
+  if (filteredInput.workflowScope !== DISTILLATION_WORKFLOW_SCOPE.DOCUMENT) {
+    return {
+      ...filteredInput,
+      scopeSelection: {
+        workflowScope: filteredInput.workflowScope,
+        strategy: "workflow-scope-pass-through.v1",
+        inputDocumentCount: filteredInput.activeDocuments.length,
+        selectedDocumentCount: filteredInput.activeDocuments.length,
+        selectedSourceIds: filteredInput.activeDocuments.map((document) => document.sourceId).filter(Boolean)
+      }
+    };
+  }
+  const selected = selectDocumentWorkflowDocuments(filteredInput.activeDocuments, filteredInput.input);
+  return {
+    ...filteredInput,
+    activeDocuments: selected.documents,
+    scopeSelection: {
+      workflowScope: filteredInput.workflowScope,
+      strategy: "document-workflow-single-source-selection.v1",
+      selector: selected.selector,
+      inputDocumentCount: filteredInput.activeDocuments.length,
+      selectedDocumentCount: selected.documents.length,
+      selectedSourceIds: selected.documents.map((document) => document.sourceId).filter(Boolean)
+    }
   };
 }
 
@@ -18746,6 +18870,8 @@ function composeDistillationWorkflowState(graphEvidenceState = {}) {
     title: graphEvidenceState.title,
     runId: graphEvidenceState.runId,
     responseProfile: graphEvidenceState.responseProfile,
+    workflowScope: graphEvidenceState.workflowScope,
+    scopeSelection: graphEvidenceState.scopeSelection,
     classification: graphEvidenceState.classification,
     convergence: graphEvidenceState.convergence,
     grounding: graphEvidenceState.grounding,
@@ -18902,6 +19028,8 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     title,
     runId,
     responseProfile,
+    workflowScope,
+    scopeSelection,
     classification,
     convergence,
     grounding,
@@ -18922,6 +19050,8 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     runId,
     title,
     query,
+    workflowScope,
+    scopeSelection,
     documents,
     classification,
     routePlan,
@@ -18939,6 +19069,8 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     title,
     markdown,
     responseProfile: "human-readable",
+    workflowScope,
+    scopeSelection,
     selfContained: true,
     runtimeDependencies: [],
     status: passed ? "completed" : "failed",
@@ -18996,12 +19128,16 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     runId,
     status: passed ? "completed" : "failed",
     responseProfile,
+    workflowScope,
+    scopeSelection,
     title,
     query,
     createdAt,
     updatedAt: createdAt,
     inputSummary: {
       sourceCount: allDocuments.length,
+      workflowScope,
+      scopeSelection,
       inputDocumentPlan,
       projectId: incrementalPlan.projectId,
       projectFingerprint: incrementalPlan.projectFingerprint,
@@ -19013,6 +19149,8 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     },
     sourcePlan: {
       strategy: "external_service_route_window_community_claim_gated_graph_incremental_distillation_v5",
+      workflowScope,
+      scopeSelection,
       sourceCount: allDocuments.length,
       distillableSourceCount: documents.length,
       groupCount: classification.groupCount,
@@ -19034,6 +19172,8 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     result: {
       status: passed ? "completed" : "failed",
       algorithmVersion: "external-service.route-window-community-claim-gated-graph-incremental-distillation.v5",
+      workflowScope,
+      scopeSelection,
       errors: failure ? [failure] : [],
       agentMessage,
       runtimeStatus,
@@ -19179,6 +19319,19 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
     },
     artifacts: ["portable-markdown", "portable-docx", "console-summary-json", "result-json", "agent-message-json", "project-snapshot-json", "evidence-pack-json", "format-conversion-plan-json", "professional-format-manifest-json", "reference-gap-report-json", "workspace-package-zip"],
     responseProfiles: ["console", "agent", "api"],
+    workflowScopes: {
+      requestField: "workflowScope",
+      type: "enum",
+      enumValues: DISTILLATION_WORKFLOW_SCOPE_VALUES,
+      defaultValue: DEFAULT_DISTILLATION_WORKFLOW_SCOPE,
+      aliases: Object.keys(DISTILLATION_WORKFLOW_SCOPE_ALIASES),
+      documentSelectorFields: ["targetDocumentId", "documentId", "sourceId", "fileName", "title"],
+      semantics: {
+        document: "Run the single-document workflow after input normalization and time filtering.",
+        corpus: "Run a multi-document corpus workflow without requiring project-level intent.",
+        project: "Run the default project-level multi-document workflow with convergence and incremental state."
+      }
+    },
     responseProfileSeparation: humanAgentModeSeparation(),
     algorithms: [
       "external-service.route-window-embedding-grounded-distillation.v1",
@@ -19749,8 +19902,10 @@ async function handleRequest(request, response) {
 
     jsonResponse(response, 404, { error: "not found", path: pathname });
   } catch (error) {
-    jsonResponse(response, 500, {
-      error: error instanceof Error ? error.message : String(error)
+    const statusCode = Number(error?.statusCode || 500);
+    jsonResponse(response, statusCode >= 400 && statusCode < 600 ? statusCode : 500, {
+      error: error instanceof Error ? error.message : String(error),
+      code: error?.code || "EXTERNAL_DISTILLATION_ERROR"
     });
   }
 }

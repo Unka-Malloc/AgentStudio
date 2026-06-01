@@ -3371,6 +3371,26 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       command: ["external", "knowledge", "distillation", "run"],
       usage: "external knowledge distillation run --body request.json"
     },
+    inputSchema: {
+      type: "object",
+      properties: {
+        workflowScope: {
+          type: "string",
+          enum: ["document", "corpus", "project"],
+          default: "project",
+          description: "Selects the distillation workflow boundary explicitly. Use document for a single source, corpus for a multi-document corpus, and project for project-level convergence."
+        },
+        targetDocumentId: { type: "string" },
+        documentId: { type: "string" },
+        sourceId: { type: "string" },
+        fileName: { type: "string" },
+        query: { type: "string" },
+        title: { type: "string" },
+        rawDocuments: { type: "array" },
+        rawDocumentsManifestPath: { type: "string" },
+        responseProfile: { type: "string", enum: ["console", "agent", "api"] }
+      }
+    },
     requiredScopes: ["knowledge:maintain"],
     safety: { risk: "safe_write" },
     aspects: ["external-service", "knowledge-distillation"]

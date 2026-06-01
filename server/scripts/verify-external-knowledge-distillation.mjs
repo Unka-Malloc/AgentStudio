@@ -134,6 +134,14 @@ const operationIds = new Set(SERVER_API_OPERATIONS.map((operation) => operation.
 for (const operationId of requiredOperationIds) {
   assert.equal(operationIds.has(operationId), true, `${operationId} must be registered`);
 }
+const createRunOperation = SERVER_API_OPERATIONS.find((operation) => operation.id === "external.knowledge.distillation.runs.create");
+assert.ok(createRunOperation, "external distillation create operation must exist");
+assert.deepEqual(
+  createRunOperation.inputSchema?.properties?.workflowScope?.enum,
+  ["document", "corpus", "project"],
+  "create run operation must expose workflowScope as an enum value parameter"
+);
+assert.equal(createRunOperation.inputSchema?.properties?.workflowScope?.default, "project");
 
 const catalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
 const toolIds = new Set(catalog.tools.map((tool) => tool.id));
@@ -1060,6 +1068,10 @@ try {
   assert.equal(capabilities.payload.api.referenceGapReport, "GET /v1/reference-gap-report");
   assert.equal(capabilities.payload.classification.supported, true);
   assert.equal(capabilities.payload.responseProfiles.includes("agent"), true);
+  assert.equal(capabilities.payload.workflowScopes.requestField, "workflowScope");
+  assert.deepEqual(capabilities.payload.workflowScopes.enumValues, ["document", "corpus", "project"]);
+  assert.equal(capabilities.payload.workflowScopes.defaultValue, "project");
+  assert.equal(capabilities.payload.workflowScopes.documentSelectorFields.includes("sourceId"), true);
   assert.equal(capabilities.payload.timeFiltering.supported, true);
   assert.equal(capabilities.payload.timeFiltering.strategy, "document-window-time-filter.v1");
   assert.equal(capabilities.payload.timeFiltering.timeFields.includes("eventTime"), true);
@@ -1928,6 +1940,7 @@ try {
       ],
       maxWindowCharacters: 6000,
       windowOverlapCharacters: 300,
+      workflowScope: "project",
       responseProfile: "agent"
     })
   });
@@ -1936,6 +1949,8 @@ try {
   assert.equal(createRun.payload.serviceKind, "externalKnowledgeDistillation");
   assert.equal(createRun.payload.status, "completed");
   assert.equal(createRun.payload.responseProfile, "agent");
+  assert.equal(createRun.payload.workflowScope, "project");
+  assert.equal(createRun.payload.scopeSelection.workflowScope, "project");
   assertExternalGatewayCall(createRun.payload, {
     serviceUrl,
     method: "POST",
@@ -1949,6 +1964,8 @@ try {
     "unrelated source documents should be separated into classified distillation groups"
   );
   assert.equal(createRun.payload.result.algorithmVersion, "external-service.route-window-community-claim-gated-graph-incremental-distillation.v5");
+  assert.equal(createRun.payload.result.workflowScope, "project");
+  assert.equal(createRun.payload.result.agentMessage.workflowScope, "project");
   assert.equal(createRun.payload.result.incrementalPlan.strategy, "project-snapshot-incremental-convergence.v1");
   assert.equal(createRun.payload.result.incrementalPlan.snapshot.documents.length >= createRun.payload.result.corpusPlan.documents.length, true);
   assert.equal(createRun.payload.result.graphEvidence.strategy, "graph-lite-entity-relationship-evidence-pack.v1");
@@ -2006,6 +2023,98 @@ try {
   )), true);
   assert.equal(garbageGroup?.exclusionReasons?.some((reason) => reason.code === "WEAK_EVIDENCE_SIGNAL"), true);
   assert.equal(createRun.payload.result.agentMessage.responseProfile, "agent");
+
+  const documentScopedRun = await fetchJson(`${pactServer.url}/api/external/knowledge/distillation/runs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(auth, { method: "POST" })
+    },
+    body: JSON.stringify({
+      query: "单文档工作流枚举选择验证",
+      title: "单文档工作流枚举选择验证",
+      workflowScope: "document",
+      sourceId: "doc-target",
+      responseProfile: "agent",
+      rawDocuments: [
+        {
+          sourceId: "doc-skip",
+          title: "Skipped Corpus Note",
+          fileName: "skip.md",
+          mediaType: "text/markdown",
+          text: "This source must stay out of the single-document distillation scope."
+        },
+        {
+          sourceId: "doc-target",
+          title: "Target Document",
+          fileName: "target.md",
+          mediaType: "text/markdown",
+          text: "The target document is the only source selected by workflowScope=document and sourceId=doc-target."
+        }
+      ]
+    })
+  });
+  assert.equal(documentScopedRun.status, 201);
+  assert.equal(documentScopedRun.payload.workflowScope, "document");
+  assert.equal(documentScopedRun.payload.scopeSelection.strategy, "document-workflow-single-source-selection.v1");
+  assert.deepEqual(documentScopedRun.payload.scopeSelection.selectedSourceIds, ["doc-target"]);
+  assert.equal(documentScopedRun.payload.inputSummary.sourceCount, 2);
+  assert.equal(documentScopedRun.payload.inputSummary.distillableSourceCount, 1);
+  assert.deepEqual(documentScopedRun.payload.result.corpusPlan.documents.map((document) => document.sourceId), ["doc-target"]);
+  assert.deepEqual(documentScopedRun.payload.result.routePlan.documents.map((document) => document.sourceId), ["doc-target"]);
+  assert.equal(documentScopedRun.payload.result.agentMessage.workflowScope, "document");
+
+  const missingDocumentScopeRun = await fetchJson(`${pactServer.url}/api/external/knowledge/distillation/runs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(auth, { method: "POST" })
+    },
+    body: JSON.stringify({
+      query: "单文档选择器缺失验证",
+      title: "单文档选择器缺失验证",
+      workflowScope: "document",
+      sourceId: "missing-doc",
+      rawDocuments: [
+        {
+          sourceId: "present-doc",
+          title: "Present Document",
+          fileName: "present.md",
+          mediaType: "text/markdown",
+          text: "The selector must not silently fall back to this document."
+        }
+      ]
+    })
+  });
+  assert.equal(missingDocumentScopeRun.status, 400);
+  assert.match(missingDocumentScopeRun.payload.error, /selector did not match any active document/);
+  assert.equal(missingDocumentScopeRun.payload.pactExternalServiceCall.statusCode, 400);
+
+  const invalidScopeRun = await fetchJson(`${pactServer.url}/api/external/knowledge/distillation/runs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(auth, { method: "POST" })
+    },
+    body: JSON.stringify({
+      query: "非法工作流枚举验证",
+      title: "非法工作流枚举验证",
+      workflowScope: "workspace",
+      rawDocuments: [
+        {
+          sourceId: "invalid-scope",
+          title: "Invalid Scope",
+          fileName: "invalid.md",
+          mediaType: "text/markdown",
+          text: "This request must fail before distillation because workflowScope is not a supported enum value."
+        }
+      ]
+    })
+  });
+  assert.equal(invalidScopeRun.status, 400);
+  assert.match(invalidScopeRun.payload.error, /Invalid workflowScope enum value/);
+  assert.equal(invalidScopeRun.payload.pactExternalServiceCall.statusCode, 400);
+
   assert.equal(createRun.payload.result.routePlan.strategy, "content-signature-extension-media-shape-routing.v2");
   assert.equal(createRun.payload.result.routePlan.routeOrder[0], "contentSignature");
   assert.equal(createRun.payload.result.corpusPlan.allSizePolicy, "streaming-windowed");
