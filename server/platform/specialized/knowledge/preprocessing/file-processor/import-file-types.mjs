@@ -222,6 +222,27 @@ export function importFileTypeConfigPath() {
   return loadImportFileTypeRegistry().configPath;
 }
 
+function cloneRouteMap(value = {}) {
+  return Object.fromEntries(
+    Object.entries(value || {}).map(([key, route]) => [
+      key,
+      {
+        mountName: String(route?.mountName || "").trim(),
+        action: String(route?.action || "extractDocument").trim() || "extractDocument"
+      }
+    ])
+  );
+}
+
+export function getImportDefaultRoutingTable() {
+  const registry = loadImportFileTypeRegistry();
+  return {
+    kindRoutes: cloneRouteMap(registry.kindRoutes),
+    extensionRoutes: cloneRouteMap(registry.extensionRoutes),
+    mediaTypeRoutes: cloneRouteMap(registry.mediaTypeRoutes)
+  };
+}
+
 export function normalizeImportExtension(value = "") {
   return normalizeExtension(value);
 }
@@ -273,15 +294,15 @@ export function mediaTypeForImportExtension(extension = "") {
 }
 
 export function getImportKindRoutes() {
-  return { ...loadImportFileTypeRegistry().kindRoutes };
+  return getImportDefaultRoutingTable().kindRoutes;
 }
 
 export function getImportExtensionRoutes() {
-  return { ...loadImportFileTypeRegistry().extensionRoutes };
+  return getImportDefaultRoutingTable().extensionRoutes;
 }
 
 export function getImportMediaTypeRoutes() {
-  return { ...loadImportFileTypeRegistry().mediaTypeRoutes };
+  return getImportDefaultRoutingTable().mediaTypeRoutes;
 }
 
 export function getTikaImportExtensions() {

@@ -4,6 +4,7 @@ import path from "node:path";
 import { unzipSync } from "fflate";
 import {
   detectExtensionBySignature,
+  getImportDefaultRoutingTable,
   importFileDescriptorForExtension,
   importFileDescriptorForMediaType,
   importFileDescriptorForPath,
@@ -472,6 +473,37 @@ function getMountedHandler(runtime, mountName = "") {
   return runtime?.mounts?.[mountName] || null;
 }
 
+function routeTargetWithMatch(route = null, matchedBy = "") {
+  const mountName = String(route?.mountName || "").trim();
+  if (!mountName) {
+    return null;
+  }
+  return {
+    mountName,
+    action: String(route?.action || "extractDocument").trim() || "extractDocument",
+    matchedBy
+  };
+}
+
+function resolveConfiguredDocumentRoute({ sourceKind = "", extension = "", mediaTypeHint = "" } = {}) {
+  const routing = getImportDefaultRoutingTable();
+  const normalizedExtension = normalizeRoutingExtension(extension);
+  const normalizedMediaType = String(mediaTypeHint || "").toLowerCase().trim();
+  const normalizedKind = String(sourceKind || "").trim();
+
+  return (
+    routeTargetWithMatch(routing.extensionRoutes?.[normalizedExtension], "extension") ||
+    routeTargetWithMatch(routing.mediaTypeRoutes?.[normalizedMediaType], "mediaType") ||
+    routeTargetWithMatch(routing.kindRoutes?.[normalizedKind], "kind") ||
+    routeTargetWithMatch(routing.kindRoutes?.document, "default-kind") ||
+    {
+      mountName: "documentParser",
+      action: "extractDocument",
+      matchedBy: "default"
+    }
+  );
+}
+
 function resolveDocumentRoute({ runtime, sourceKind, extension = "", mediaTypeHint = "" }) {
   if (runtime && typeof runtime.resolveDocumentRoute === "function") {
     return runtime.resolveDocumentRoute({
@@ -481,18 +513,11 @@ function resolveDocumentRoute({ runtime, sourceKind, extension = "", mediaTypeHi
     });
   }
 
-  if (sourceKind === "image") {
-    return {
-      mountName: "ocr",
-      action: "extractText"
-    };
-  }
-
-  return {
-    mountName: "documentParser",
-    action: "extractDocument",
-    matchedBy: "default"
-  };
+  return resolveConfiguredDocumentRoute({
+    sourceKind,
+    extension,
+    mediaTypeHint
+  });
 }
 
 function normalizeDocumentParseResult(result, parserId = "") {
@@ -546,6 +571,11 @@ function shouldReadStructuredBufferDirectly({ descriptor = null, sourceKind = ""
     String(sourceKind || "").trim() === "text" ||
     String(mediaTypeHint || "").trim().toLowerCase().startsWith("text/")
   );
+}
+
+function routeRequiresMountedExtraction(route = {}) {
+  const mountName = String(route?.mountName || "").trim();
+  return Boolean(mountName && mountName !== "documentParser");
 }
 
 function documentParserSupports({ extension, mediaTypeHint, runtime, sourceKind = "document" }) {
@@ -741,7 +771,10 @@ async function readStructuredBuffer({
     mediaTypeHint
   });
 
-  if (shouldReadStructuredBufferDirectly({ descriptor, sourceKind, mediaTypeHint })) {
+  if (
+    !routeRequiresMountedExtraction(route) &&
+    shouldReadStructuredBufferDirectly({ descriptor, sourceKind, mediaTypeHint })
+  ) {
     return normalizeDocumentParseResult({
       parserId: "builtin/text-direct",
       text: decodePlainTextBuffer(buffer),

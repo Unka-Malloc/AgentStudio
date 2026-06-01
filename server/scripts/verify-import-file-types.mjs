@@ -9,7 +9,9 @@ import {
   isSupportedImportPath
 } from "../platform/specialized/knowledge/preprocessing/file-processor/index.mjs";
 import {
+  getImportDefaultRoutingTable,
   getImportExtensionRoutes,
+  getImportMediaTypeRoutes,
   importFileDescriptorForPath,
   importFileTypeConfigPath,
   reloadImportFileTypeRegistry
@@ -20,7 +22,13 @@ import { normalizeMountRouting } from "../platform/common/module-manager/mount-c
 const configPath = importFileTypeConfigPath();
 assert.ok(configPath.endsWith("default-import-file-types.json"));
 
+const defaultRoutingTable = getImportDefaultRoutingTable();
 const extensionRoutes = getImportExtensionRoutes();
+const mediaTypeRoutes = getImportMediaTypeRoutes();
+assert.equal(defaultRoutingTable.extensionRoutes[".pdf"]?.mountName, "pdfProcessor");
+assert.equal(defaultRoutingTable.mediaTypeRoutes["application/pdf"]?.mountName, "pdfProcessor");
+assert.equal(defaultRoutingTable.kindRoutes.image?.mountName, "ocr");
+assert.equal(mediaTypeRoutes["application/pdf"]?.mountName, "pdfProcessor");
 for (const filePath of [
   "src/main.rs",
   "src/app.swift",
@@ -47,6 +55,35 @@ assert.ok(TIKA_IMPORT_EXTENSIONS.includes("pdf"));
 const routing = normalizeMountRouting();
 assert.equal(routing.extensionRoutes[".go"]?.mountName, "documentParser");
 assert.equal(routing.extensionRoutes[".pdf"]?.mountName, "pdfProcessor");
+assert.equal(routing.mediaTypeRoutes["application/pdf"]?.mountName, "pdfProcessor");
+
+const mountConfigText = await fs.readFile(
+  path.resolve("server/platform/common/module-manager/mount-config.mjs"),
+  "utf8"
+);
+assert.ok(
+  mountConfigText.includes("getImportDefaultRoutingTable"),
+  "mount routing defaults must come from the singleton import file type registry"
+);
+assert.equal(
+  mountConfigText.includes("readFileSync"),
+  false,
+  "mount-config must not re-read the import file type JSON outside the singleton registry"
+);
+
+const fileProcessorText = await fs.readFile(
+  path.resolve("server/platform/specialized/knowledge/preprocessing/file-processor/index.mjs"),
+  "utf8"
+);
+assert.ok(
+  fileProcessorText.includes("getImportDefaultRoutingTable"),
+  "file processor fallback routing must query the singleton import file type registry"
+);
+assert.equal(
+  /sourceKind\s*===\s*["']image["'][\s\S]{0,180}mountName:\s*["']ocr["']/.test(fileProcessorText),
+  false,
+  "file processor must not hard-code the image-to-OCR route"
+);
 
 const markdownRouting = createFileRoutingDecision({
   buffer: Buffer.from("# Baseline\n\nDate: 2026-05-30\n\nMarkdown body.", "utf8"),

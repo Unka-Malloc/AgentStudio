@@ -1,42 +1,19 @@
-import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   atomicWriteJson,
   queueStateMutation,
   waitForStateIdle
 } from "../platform-core/state-coordinator.mjs";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const DEFAULT_IMPORT_FILE_TYPES_PATH = path.resolve(__dirname, "../../../config/default-import-file-types.json");
+import {
+  getImportDefaultRoutingTable
+} from "../../specialized/knowledge/preprocessing/file-processor/import-file-types.mjs";
 
 function readDefaultImportRoutes() {
-  const filePath = path.resolve(process.env.PACT_IMPORT_FILE_TYPES_PATH || DEFAULT_IMPORT_FILE_TYPES_PATH);
   try {
-    const parsed = JSON.parse(fsSync.readFileSync(filePath, "utf8"));
-    const normalizeRoute = (route = {}, fallbackMountName = "", fallbackAction = "extractDocument") =>
-      normalizeRouteTarget(route, fallbackMountName, fallbackAction);
-    const kindRoutes = Object.fromEntries(
-      Object.entries(parsed.kindRoutes || {}).map(([kind, route]) => [kind, normalizeRoute(route)])
-    );
-    const extensionRoutes = {};
-    for (const group of Array.isArray(parsed.groups) ? parsed.groups : []) {
-      const groupRoute = normalizeRoute(group.route);
-      for (const entry of Array.isArray(group.entries) ? group.entries : []) {
-        const entryRoute = normalizeRoute(entry.route, groupRoute?.mountName || "", groupRoute?.action || "extractDocument");
-        for (const extension of Array.isArray(entry.extensions) ? entry.extensions : []) {
-          const normalizedExtension = String(extension || "").toLowerCase().trim();
-          if (normalizedExtension && entryRoute.mountName) {
-            extensionRoutes[normalizedExtension.startsWith(".") ? normalizedExtension : `.${normalizedExtension}`] = entryRoute;
-          }
-        }
-      }
-    }
-    return { kindRoutes, extensionRoutes };
+    return getImportDefaultRoutingTable();
   } catch {
-    return { kindRoutes: {}, extensionRoutes: {} };
+    return { kindRoutes: {}, extensionRoutes: {}, mediaTypeRoutes: {} };
   }
 }
 
@@ -86,7 +63,8 @@ function normalizeRouteTarget(value = {}, fallbackMountName = "", fallbackAction
 export function normalizeMountRouting(value = {}) {
   const {
     kindRoutes: defaultKindRouteTargets,
-    extensionRoutes: defaultExtensionRouteTargets
+    extensionRoutes: defaultExtensionRouteTargets,
+    mediaTypeRoutes: defaultMediaTypeRouteTargets
   } = readDefaultImportRoutes();
   const kindRoutes = {
     ...Object.fromEntries(
@@ -108,7 +86,10 @@ export function normalizeMountRouting(value = {}) {
   );
 
   const mediaTypeRoutes = Object.fromEntries(
-    Object.entries(value.mediaTypeRoutes || {}).map(([mediaType, route]) => [
+    [
+      ...Object.entries(defaultMediaTypeRouteTargets),
+      ...Object.entries(value.mediaTypeRoutes || {})
+    ].map(([mediaType, route]) => [
       String(mediaType || "").toLowerCase().trim(),
       normalizeRouteTarget(route)
     ])
