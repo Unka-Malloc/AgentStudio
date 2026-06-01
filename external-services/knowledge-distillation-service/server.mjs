@@ -5013,9 +5013,18 @@ function extractArchiveEntries(buffer, metadata = {}, runtimeStatus = null) {
   }
 }
 
+function zipEntryByName(entries = [], entryName = "") {
+  return entries.find((item) => item.name === entryName) || null;
+}
+
 function zipEntryText(entries = [], entryName = "") {
-  const entry = entries.find((item) => item.name === entryName);
+  const entry = zipEntryByName(entries, entryName);
   return entry?.data?.length ? utf8(entry.data) : "";
+}
+
+function zipEntryHasReadablePayload(entries = [], entryName = "") {
+  const entry = zipEntryByName(entries, entryName);
+  return Boolean(entry?.data?.length || (entry?.filePath && fsSync.existsSync(entry.filePath)));
 }
 
 function structureElementsToText(format = "document", elements = [], fallback = "") {
@@ -6363,7 +6372,7 @@ function pptxCommentRelationships(entries = [], slideName = "", slideNumber = 0)
     return relationships;
   }
   const fallbackTarget = `ppt/comments/comment${slideNumber || 1}.xml`;
-  return zipEntryText(entries, fallbackTarget)
+  return zipEntryHasReadablePayload(entries, fallbackTarget)
     ? [{
         id: "",
         target: fallbackTarget,
@@ -6377,7 +6386,9 @@ function parsePptxCommentsXml(xml = "", {
   authors = new Map(),
   relationship = {},
   sourcePart = "",
-  slideNumber = 0
+  slideNumber = 0,
+  streaming = false,
+  orderStart = 0
 } = {}) {
   const comments = [];
   for (const match of String(xml || "").matchAll(/<[^:>]*:?cm\b[\s\S]*?<\/[^:>]*:?cm>/g)) {
@@ -6394,7 +6405,8 @@ function parsePptxCommentsXml(xml = "", {
     const hasPosition = Boolean(positionTag);
     const x = hasPosition ? pptxEmuToPoints(xmlLocalAttribute(positionTag, "x")) : 0;
     const y = hasPosition ? pptxEmuToPoints(xmlLocalAttribute(positionTag, "y")) : 0;
-    const id = xmlLocalAttribute(openTag, "idx") || String(comments.length + 1);
+    const order = orderStart + comments.length + 1;
+    const id = xmlLocalAttribute(openTag, "idx") || String(order);
     comments.push({
       id,
       authorId,
@@ -6408,39 +6420,125 @@ function parsePptxCommentsXml(xml = "", {
       type: String(relationship.type || ""),
       layout: hasPosition
         ? {
-            strategy: "presentationml-comment-position.v1",
+            strategy: streaming ? "presentationml-comment-stream.v1" : "presentationml-comment-position.v1",
             page: slideNumber,
-            order: comments.length + 1,
+            order,
+            ...(streaming ? { streamIndex: order } : {}),
             x,
             y
           }
         : {
-            strategy: "presentationml-comment-ref.v1",
+            strategy: streaming ? "presentationml-comment-stream.v1" : "presentationml-comment-ref.v1",
             page: slideNumber,
-            order: comments.length + 1
+            order,
+            ...(streaming ? { streamIndex: order } : {})
           }
     });
   }
   return comments;
 }
 
-function pptxCommentsForSlideEntries(entries = [], slideName = "", slideNumber = 0, authors = new Map()) {
+function pptxCommentsForSlideEntries(entries = [], slideName = "", slideNumber = 0, authors = new Map(), {
+  streamLargeParts = false
+} = {}) {
   const relationships = pptxCommentRelationships(entries, slideName, slideNumber);
   const comments = [];
   for (const relationship of relationships) {
     const sourcePart = relationship.target || "";
     const xml = zipEntryText(entries, sourcePart);
-    if (!xml) {
+    if (xml) {
+      comments.push(...parsePptxCommentsXml(xml, {
+        authors,
+        relationship,
+        sourcePart,
+        slideNumber
+      }));
       continue;
     }
-    comments.push(...parsePptxCommentsXml(xml, {
-      authors,
-      relationship,
-      sourcePart,
-      slideNumber
-    }));
+    const entry = zipEntryByName(entries, sourcePart);
+    if (!entry?.filePath || !fsSync.existsSync(entry.filePath)) {
+      continue;
+    }
+    let streamedCommentIndex = 0;
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?cm", (commentXml) => {
+      const parsed = parsePptxCommentsXml(commentXml, {
+        authors,
+        relationship,
+        sourcePart,
+        slideNumber,
+        streaming: streamLargeParts,
+        orderStart: streamedCommentIndex
+      });
+      streamedCommentIndex += parsed.length;
+      comments.push(...parsed);
+    });
   }
   return comments;
+}
+
+function appendPptxCommentElement(elements = [], comment = {}, {
+  slideNumber = 0,
+  commentIndex = 0
+} = {}) {
+  pushStructureElement(elements, "comment", `Slide ${slideNumber} comment ${comment.id}${comment.author ? ` by ${comment.author}` : ""}: ${comment.text}`, {
+    line: commentIndex,
+    name: `${comment.sourcePart}#comment-${comment.id || commentIndex}`,
+    page: slideNumber,
+    layout: comment.layout,
+    annotation: {
+      kind: "presentation-comment",
+      id: comment.id,
+      ...(comment.author ? { author: comment.author } : {}),
+      ...(comment.initials ? { initials: comment.initials } : {}),
+      ...(comment.authorId ? { authorId: comment.authorId } : {}),
+      ...(comment.date ? { date: comment.date } : {}),
+      sourcePart: comment.sourcePart,
+      relationshipId: comment.relationshipId,
+      target: comment.target,
+      type: comment.type
+    },
+    presentation: {
+      kind: "comment",
+      slide: slideNumber,
+      slidePart: comment.sourcePart || ""
+    },
+    limit: 1800
+  });
+}
+
+function pptxSpeakerNoteTextFromXml(xml = "") {
+  const paragraphs = uniqueOrdered(Array.from(String(xml || "").matchAll(/<(?:[\w.-]+:)?p\b[\s\S]*?<\/(?:[\w.-]+:)?p>/g))
+    .map((match) => compactMarkupText(textFromXmlTextNodes(match[0]), 1500))
+    .filter(Boolean));
+  return paragraphs.length
+    ? paragraphs.join("\n")
+    : compactMarkupText(textFromXmlTextNodes(xml), 2000);
+}
+
+function appendPptxSpeakerNoteElement(elements = [], noteText = "", {
+  slideNumber = 0,
+  noteIndex = 0,
+  name = "",
+  layoutStrategy = "presentationml-speaker-notes.v1",
+  streamIndex = 0
+} = {}) {
+  pushStructureElement(elements, "speaker-note", `Slide ${slideNumber} speaker notes: ${noteText}`, {
+    line: noteIndex,
+    name,
+    page: slideNumber,
+    layout: {
+      strategy: layoutStrategy,
+      page: slideNumber,
+      order: noteIndex,
+      ...(streamIndex ? { streamIndex } : {})
+    },
+    presentation: {
+      kind: "speaker-note",
+      slide: slideNumber,
+      slidePart: name
+    },
+    limit: 1800
+  });
 }
 
 function parsePptx(entries = []) {
@@ -6640,24 +6738,9 @@ function parsePptx(entries = []) {
     const comments = pptxCommentsForSlideEntries(entries, name, slideNumber, commentAuthors);
     for (const comment of comments) {
       commentCount += 1;
-      pushStructureElement(elements, "comment", `Slide ${slideNumber} comment ${comment.id}${comment.author ? ` by ${comment.author}` : ""}: ${comment.text}`, {
-        line: commentCount,
-        name: `${comment.sourcePart}#comment-${comment.id || commentCount}`,
-        page: slideNumber,
-        layout: comment.layout,
-        annotation: {
-          kind: "presentation-comment",
-          id: comment.id,
-          ...(comment.author ? { author: comment.author } : {}),
-          ...(comment.initials ? { initials: comment.initials } : {}),
-          ...(comment.authorId ? { authorId: comment.authorId } : {}),
-          ...(comment.date ? { date: comment.date } : {}),
-          sourcePart: comment.sourcePart,
-          relationshipId: comment.relationshipId,
-          target: comment.target,
-          type: comment.type
-        },
-        limit: 1800
+      appendPptxCommentElement(elements, comment, {
+        slideNumber,
+        commentIndex: commentCount
       });
     }
     if (shapeBlocks.length || tableFrames.length || chartFrames.length || pictureBlocks.length) {
@@ -6695,25 +6778,15 @@ function parsePptx(entries = []) {
   for (const [index, name] of noteNames.entries()) {
     const slideNumber = Number(name.match(/notesSlide(\d+)/)?.[1] || index + 1);
     const xml = zipEntryText(entries, name);
-    const paragraphs = uniqueOrdered(Array.from(xml.matchAll(/<(?:[\w.-]+:)?p\b[\s\S]*?<\/(?:[\w.-]+:)?p>/g))
-      .map((match) => compactMarkupText(textFromXmlTextNodes(match[0]), 1500))
-      .filter(Boolean));
-    const noteText = paragraphs.length
-      ? paragraphs.join("\n")
-      : compactMarkupText(textFromXmlTextNodes(xml), 2000);
+    const noteText = pptxSpeakerNoteTextFromXml(xml);
     if (!noteText) {
       continue;
     }
     speakerNoteCount += 1;
-    pushStructureElement(elements, "speaker-note", `Slide ${slideNumber} speaker notes: ${noteText}`, {
-      line: speakerNoteCount,
-      name,
-      page: slideNumber,
-      layout: {
-        strategy: "presentationml-speaker-notes.v1",
-        page: slideNumber,
-        order: speakerNoteCount
-      }
+    appendPptxSpeakerNoteElement(elements, noteText, {
+      slideNumber,
+      noteIndex: speakerNoteCount,
+      name
     });
   }
   const fallback = [
@@ -6813,14 +6886,29 @@ function parsePptxLargeEntryStreaming(entries = []) {
   let streamedBytes = 0;
   const slideLayoutPartSet = new Set();
   const slideMasterPartSet = new Set();
-  for (const [index, entry] of slideEntries.entries()) {
-    const slideNumber = Number(entry.name.match(/slide(\d+)/)?.[1] || index + 1);
+  const streamedEntryNames = new Set();
+  const recordStreamedEntry = (entry = null) => {
+    if (!entry?.filePath || !fsSync.existsSync(entry.filePath) || streamedEntryNames.has(entry.name)) {
+      return;
+    }
     const stat = fsSync.statSync(entry.filePath);
+    streamedEntryNames.add(entry.name);
     streamedBytes += stat.size;
     if (entry.warning === "structured-entry-too-large" || stat.size > STRUCTURED_ZIP_ENTRY_MAX_BYTES) {
       largeEntryCount += 1;
     }
+  };
+  for (const [index, entry] of slideEntries.entries()) {
+    const slideNumber = Number(entry.name.match(/slide(\d+)/)?.[1] || index + 1);
+    recordStreamedEntry(entry);
     const relationships = docxPartRelationships(entries, entry.name);
+    const commentRelationships = pptxCommentRelationships(entries, entry.name, slideNumber);
+    for (const relationship of commentRelationships) {
+      const commentEntry = zipEntryByName(entries, relationship.target || "");
+      if (!commentEntry?.data?.length) {
+        recordStreamedEntry(commentEntry);
+      }
+    }
     const layoutRef = pptxSlideLayoutMasterRef(entries, entry.name, relationships);
     if (layoutRef?.layoutPart) {
       slideLayoutPartSet.add(layoutRef.layoutPart);
@@ -6957,28 +7045,15 @@ function parsePptxLargeEntryStreaming(entries = []) {
       imageGeometryCount += image.geometryCount;
       slideElementCount += image.count;
     });
-    const comments = pptxCommentsForSlideEntries(entries, entry.name, slideNumber, commentAuthors);
+    const comments = pptxCommentsForSlideEntries(entries, entry.name, slideNumber, commentAuthors, {
+      streamLargeParts: true
+    });
     for (const comment of comments) {
       commentCount += 1;
       slideElementCount += 1;
-      pushStructureElement(elements, "comment", `Slide ${slideNumber} comment ${comment.id}${comment.author ? ` by ${comment.author}` : ""}: ${comment.text}`, {
-        line: commentCount,
-        name: `${comment.sourcePart}#comment-${comment.id || commentCount}`,
-        page: slideNumber,
-        layout: comment.layout,
-        annotation: {
-          kind: "presentation-comment",
-          id: comment.id,
-          ...(comment.author ? { author: comment.author } : {}),
-          ...(comment.initials ? { initials: comment.initials } : {}),
-          ...(comment.authorId ? { authorId: comment.authorId } : {}),
-          ...(comment.date ? { date: comment.date } : {}),
-          sourcePart: comment.sourcePart,
-          relationshipId: comment.relationshipId,
-          target: comment.target,
-          type: comment.type
-        },
-        limit: 1800
+      appendPptxCommentElement(elements, comment, {
+        slideNumber,
+        commentIndex: commentCount
       });
     }
     if (slideElementCount) {
@@ -7004,30 +7079,45 @@ function parsePptxLargeEntryStreaming(entries = []) {
         }
       });
     });
-    // TODO(external-kd): stream oversized PPTX speaker-note and comment parts as first-class PresentationML entries.
   }
   for (const [index, name] of noteNames.entries()) {
     const slideNumber = Number(name.match(/notesSlide(\d+)/)?.[1] || index + 1);
     const xml = zipEntryText(entries, name);
-    const paragraphs = uniqueOrdered(Array.from(xml.matchAll(/<(?:[\w.-]+:)?p\b[\s\S]*?<\/(?:[\w.-]+:)?p>/g))
-      .map((match) => compactMarkupText(textFromXmlTextNodes(match[0]), 1500))
-      .filter(Boolean));
-    const noteText = paragraphs.length
-      ? paragraphs.join("\n")
-      : compactMarkupText(textFromXmlTextNodes(xml), 2000);
-    if (!noteText) {
+    if (xml) {
+      const noteText = pptxSpeakerNoteTextFromXml(xml);
+      if (!noteText) {
+        continue;
+      }
+      speakerNoteCount += 1;
+      appendPptxSpeakerNoteElement(elements, noteText, {
+        slideNumber,
+        noteIndex: speakerNoteCount,
+        name
+      });
       continue;
     }
-    speakerNoteCount += 1;
-    pushStructureElement(elements, "speaker-note", `Slide ${slideNumber} speaker notes: ${noteText}`, {
-      line: speakerNoteCount,
-      name,
-      page: slideNumber,
-      layout: {
-        strategy: "presentationml-speaker-notes.v1",
-        page: slideNumber,
-        order: speakerNoteCount
+    const entry = zipEntryByName(entries, name);
+    if (!entry?.filePath || !fsSync.existsSync(entry.filePath)) {
+      continue;
+    }
+    recordStreamedEntry(entry);
+    let noteParagraphIndex = 0;
+    const seenParagraphs = new Set();
+    scanXmlElementsFromFile(entry.filePath, "[^:>]*:?p", (paragraphXml) => {
+      const noteText = compactMarkupText(textFromXmlTextNodes(paragraphXml), 1500);
+      if (!noteText || seenParagraphs.has(noteText)) {
+        return;
       }
+      seenParagraphs.add(noteText);
+      noteParagraphIndex += 1;
+      speakerNoteCount += 1;
+      appendPptxSpeakerNoteElement(elements, noteText, {
+        slideNumber,
+        noteIndex: speakerNoteCount,
+        name: `${name}#paragraph-${noteParagraphIndex}`,
+        layoutStrategy: "presentationml-speaker-note-stream.v1",
+        streamIndex: noteParagraphIndex
+      });
     });
   }
   const counts = elementTypeCounts(elements);
@@ -15070,6 +15160,9 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
             elements: structureElements.length,
             slides: parsed.slideCount,
             shapes: parsed.shapeCount,
+            speakerNotes: parsed.speakerNoteCount,
+            comments: parsed.commentCount,
+            commentParts: parsed.commentPartCount,
             streamedBytes: parsed.streamedBytes || 0
           });
         }
@@ -21965,6 +22058,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "directory-file-ref-recursive-routing.v1",
       "visio-opc-shape-parser.v1",
       "pdf-text-file-ref-layout.v1",
+      "presentationml-speaker-note-stream.v1",
+      "presentationml-comment-stream.v1",
       "document-element-model.v1",
       "element-aware-by-title-windowing.v1",
       PDF_SUBTYPE_ROUTING_STRATEGY,
@@ -22087,6 +22182,11 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       pdfTextTimeoutMs: PDF_TEXT_TIMEOUT_MS,
       pdfFileRefElementStrategy: "pdf-text-file-ref-layout.v1",
       pdfFileRefElementMaxBlocks: PDF_FILE_REF_ELEMENT_MAX_BLOCKS,
+      presentationFileRefElementStrategies: [
+        "presentationml-stream-shape.v1",
+        "presentationml-speaker-note-stream.v1",
+        "presentationml-comment-stream.v1"
+      ],
       structuredJsonFileRefStrategy: "structured-json-file-ref-streaming-window.v1",
       sizeLimitPolicy: "resource-bounded-no-small-hard-cap"
     },

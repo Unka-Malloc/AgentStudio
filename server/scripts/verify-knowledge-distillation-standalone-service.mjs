@@ -406,6 +406,16 @@ assert.equal(
   "large PPTX streaming parser must preserve shape element references for element-aware windowing"
 );
 assert.equal(
+  externalServiceSource.includes("presentationml-speaker-note-stream.v1"),
+  true,
+  "large PPTX streaming parser must preserve oversized speaker-note element references"
+);
+assert.equal(
+  externalServiceSource.includes("presentationml-comment-stream.v1"),
+  true,
+  "large PPTX streaming parser must preserve oversized comment element references"
+);
+assert.equal(
   externalServiceSource.includes("streaming-large-presentationml-elements"),
   true,
   "large PPTX streaming parser must advertise structural extraction mode in parserTrace"

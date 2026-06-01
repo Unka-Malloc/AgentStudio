@@ -1228,6 +1228,30 @@ try {
               `<p:sp><p:nvSpPr><p:cNvPr id="${index + 100}" name="Large PPTX Shape ${index + 1}"/></p:nvSpPr><p:nvPr><p:ph type="body" idx="${index + 1}"/></p:nvPr><p:spPr><a:xfrm><a:off x="914400" y="${457200 + index}"/><a:ext cx="5486400" cy="685800"/></a:xfrm></p:spPr><p:txBody><a:p><a:r><a:t>Large mounted PPTX shape ${index + 1} proves oversized PresentationML streams through element-aware parsing without whole-entry memory reads.</a:t></a:r></a:p></p:txBody></p:sp>`
             )).join(""),
             "</p:spTree></p:cSld></p:sld>"
+          ].join(""),
+          "ppt/slides/_rels/slide1.xml.rels": [
+            "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">",
+            "<Relationship Id=\"rIdComment1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments\" Target=\"../comments/comment1.xml\"/>",
+            "</Relationships>"
+          ].join(""),
+          "ppt/commentAuthors.xml": [
+            "<p:cmAuthorLst xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">",
+            "<p:cmAuthor id=\"0\" name=\"Large Slide Reviewer\" initials=\"LSR\" lastIdx=\"240\"/>",
+            "</p:cmAuthorLst>"
+          ].join(""),
+          "ppt/notesSlides/notesSlide1.xml": [
+            "<p:notes xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><p:cSld><p:spTree><p:sp><p:txBody>",
+            Array.from({ length: 240 }, (_, index) => (
+              `<a:p><a:r><a:t>Large mounted PPTX speaker note paragraph ${index + 1} proves oversized notes stream as first-class agent evidence with slide context preserved.</a:t></a:r></a:p>`
+            )).join(""),
+            "</p:txBody></p:sp></p:spTree></p:cSld></p:notes>"
+          ].join(""),
+          "ppt/comments/comment1.xml": [
+            "<p:cmLst xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">",
+            Array.from({ length: 240 }, (_, index) => (
+              `<p:cm authorId="0" dt="2026-06-01T10:00:00Z" idx="${index + 1}"><p:pos x="${914400 + index}" y="${914400 + index}"/><p:text>Large mounted PPTX comment ${index + 1} proves oversized comment parts stream as first-class review evidence.</p:text></p:cm>`
+            )).join(""),
+            "</p:cmLst>"
           ].join("")
         }
       }
@@ -3832,9 +3856,9 @@ try {
     assert.equal(largeStructuredPptx.parserTrace.some((trace) => (
       trace.stage === "structured-zip.structural-entry-plan" &&
       trace.status === "completed" &&
-      trace.selectedFiles === 1 &&
-      trace.loadedFiles === 0 &&
-      trace.skippedLargeFiles === 1 &&
+      trace.selectedFiles === 5 &&
+      trace.loadedFiles === 2 &&
+      trace.skippedLargeFiles === 3 &&
       trace.maxEntryBytes === 25000
     )), true);
     assert.equal(largeStructuredPptx.parserTrace.some((trace) => (
@@ -3843,21 +3867,51 @@ try {
       trace.reason === "large-structure-entry" &&
       trace.extractionMode === "streaming-large-presentationml-elements" &&
       trace.elements >= 700 &&
-      trace.shapes >= 700
+      trace.shapes >= 700 &&
+      trace.speakerNotes >= 200 &&
+      trace.comments >= 200 &&
+      trace.commentParts === 1
     )), true);
     assert.equal(largeStructuredPptx.parserTrace.some((trace) => (
       trace.stage === "office.presentation.slides" &&
       trace.status === "completed" &&
       trace.extractionMode === "streaming-large-presentationml-elements" &&
-      trace.elements >= 700
+      trace.elements >= 700 &&
+      trace.speakerNotes >= 200 &&
+      trace.comments >= 200
+    )), true);
+    assert.equal(largeStructuredPptx.parserTrace.some((trace) => (
+      trace.stage === "office.presentation.speaker-notes" &&
+      trace.status === "completed" &&
+      trace.notes >= 200
+    )), true);
+    assert.equal(largeStructuredPptx.parserTrace.some((trace) => (
+      trace.stage === "office.presentation.comments" &&
+      trace.status === "completed" &&
+      trace.comments >= 200 &&
+      trace.commentParts === 1 &&
+      trace.authors === 1
     )), true);
     assert.equal(largeStructuredPptx.elementPlan.strategy, "document-element-model.v1");
     assert.equal(largeStructuredPptx.elementPlan.elementTypes["slide-shape"] >= 700, true);
+    assert.equal(largeStructuredPptx.elementPlan.elementTypes["speaker-note"] >= 200, true);
+    assert.equal(largeStructuredPptx.elementPlan.elementTypes.comment >= 200, true);
     assert.equal(largeStructuredPptx.windowPlan.strategy, "element-aware-by-title-windowing.v1");
     assert.equal(largeStructuredPptx.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
       ref.type === "slide-shape" &&
       ref.layout?.strategy === "presentationml-stream-shape.v1" &&
       ref.shape?.placeholderType === "body"
+    ))), true);
+    assert.equal(largeStructuredPptx.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "speaker-note" &&
+      ref.layout?.strategy === "presentationml-speaker-note-stream.v1" &&
+      ref.presentation?.kind === "speaker-note"
+    ))), true);
+    assert.equal(largeStructuredPptx.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => (
+      ref.type === "comment" &&
+      ref.layout?.strategy === "presentationml-comment-stream.v1" &&
+      ref.annotation?.kind === "presentation-comment" &&
+      ref.annotation?.author === "Large Slide Reviewer"
     ))), true);
     assert.equal(largeStructuredPptx.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), false);
     assert.ok(largeStructuredPptx.quality.textCharacters > 25000, "large PPTX structural parser must preserve oversized slide text");
