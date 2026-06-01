@@ -38,6 +38,8 @@ const FILE_REF_DIRECT_READ_MAX_BYTES = Math.max(1024, Number(process.env.PACT_EX
 const STREAM_TEXT_CHUNK_BYTES = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_STREAM_TEXT_CHUNK_BYTES || 512 * 1024));
 const STREAM_TEXT_SAMPLE_CHARACTERS = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_STREAM_TEXT_SAMPLE_CHARACTERS || 200_000));
 const PDF_FILE_REF_ELEMENT_MAX_BLOCKS = Math.max(1000, Number(process.env.PACT_EXTERNAL_KD_PDF_FILE_REF_ELEMENT_MAX_BLOCKS || 50_000));
+const XLSX_SHARED_STRING_INDEX_RECORD_BYTES = 16;
+const XLSX_SHARED_STRING_DISK_INDEX_STRATEGY = "spreadsheetml-shared-string-disk-index.v1";
 const BINARY_PROFILE_SAMPLE_BYTES = Math.max(512, Number(process.env.PACT_EXTERNAL_KD_BINARY_PROFILE_SAMPLE_BYTES || 4096));
 const SIGNATURE_SNIFF_BYTES = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_SIGNATURE_SNIFF_BYTES || 256 * 1024));
 const EMBEDDING_DIMENSIONS = 128;
@@ -7754,6 +7756,46 @@ function parseSharedStringsXml(xml = "") {
   return strings;
 }
 
+function xlsxSharedStringCount(sharedStrings = []) {
+  if (Array.isArray(sharedStrings)) {
+    return sharedStrings.length;
+  }
+  return Number(sharedStrings?.count || 0);
+}
+
+function xlsxSharedStringValue(sharedStrings = [], index = 0) {
+  const normalizedIndex = Number(index);
+  if (!Number.isInteger(normalizedIndex) || normalizedIndex < 0) {
+    return "";
+  }
+  if (Array.isArray(sharedStrings)) {
+    return sharedStrings[normalizedIndex] || "";
+  }
+  if (typeof sharedStrings?.get === "function") {
+    return sharedStrings.get(normalizedIndex) || "";
+  }
+  return "";
+}
+
+function xlsxSharedStringLookupStrategy(sharedStrings = []) {
+  return Array.isArray(sharedStrings)
+    ? "spreadsheetml-shared-string-memory-array.v1"
+    : sharedStrings?.strategy || "";
+}
+
+function xlsxSharedStringStorage(sharedStrings = []) {
+  return Array.isArray(sharedStrings)
+    ? "memory"
+    : sharedStrings?.storage || "";
+}
+
+function closeXlsxSharedStringLookup(sharedStrings = []) {
+  if (Array.isArray(sharedStrings) || typeof sharedStrings?.close !== "function") {
+    return;
+  }
+  sharedStrings.close();
+}
+
 function parseWorkbookSheetNames(xml = "") {
   return parseWorkbookSheets(xml).map((sheet) => sheet.name).filter(Boolean);
 }
@@ -8103,7 +8145,7 @@ function xlsxCellValue(cellXml = "", sharedStrings = [], styles = null) {
   }
   const style = xlsxCellStyle(openTag, styles);
   if (type === "s") {
-    return { value: sharedStrings[Number(raw)] || raw, rawValue: raw, style, dateIso: "" };
+    return { value: xlsxSharedStringValue(sharedStrings, Number(raw)) || raw, rawValue: raw, style, dateIso: "" };
   }
   if (type === "b") {
     return { value: raw === "1" ? "TRUE" : "FALSE", rawValue: raw, style, dateIso: "" };
@@ -9240,6 +9282,108 @@ function parseSharedStringsFile(filePath = "") {
   return strings;
 }
 
+function createDiskBackedSharedStringLookup(filePath = "", rootDir = "") {
+  const baseDirectory = rootDir && fsSync.existsSync(rootDir)
+    ? rootDir
+    : fsSync.mkdtempSync(path.join(os.tmpdir(), "external-kd-xlsx-shared-strings-"));
+  const scratchDirectory = path.join(baseDirectory, ".pact-kd-shared-strings");
+  fsSync.mkdirSync(scratchDirectory, { recursive: true });
+  const suffix = `${process.pid}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+  const dataPath = path.join(scratchDirectory, `sharedStrings-${suffix}.dat`);
+  const indexPath = path.join(scratchDirectory, `sharedStrings-${suffix}.idx`);
+  let dataWriteFd = null;
+  let indexWriteFd = null;
+  let count = 0;
+  let dataBytes = 0;
+  try {
+    dataWriteFd = fsSync.openSync(dataPath, "w");
+    indexWriteFd = fsSync.openSync(indexPath, "w");
+    if (filePath && fsSync.existsSync(filePath)) {
+      scanXmlElementsFromFile(filePath, "[^:>]*:?si", (xml) => {
+        const value = textFromXmlTextNodes(xml);
+        const bytes = Buffer.from(value, "utf8");
+        const record = Buffer.alloc(XLSX_SHARED_STRING_INDEX_RECORD_BYTES);
+        record.writeBigUInt64LE(BigInt(dataBytes), 0);
+        record.writeBigUInt64LE(BigInt(bytes.length), 8);
+        fsSync.writeSync(indexWriteFd, record, 0, record.length, count * XLSX_SHARED_STRING_INDEX_RECORD_BYTES);
+        if (bytes.length) {
+          fsSync.writeSync(dataWriteFd, bytes, 0, bytes.length, dataBytes);
+          dataBytes += bytes.length;
+        }
+        count += 1;
+      });
+    }
+  } finally {
+    if (dataWriteFd !== null) {
+      fsSync.closeSync(dataWriteFd);
+    }
+    if (indexWriteFd !== null) {
+      fsSync.closeSync(indexWriteFd);
+    }
+  }
+
+  let dataReadFd = fsSync.openSync(dataPath, "r");
+  let indexReadFd = fsSync.openSync(indexPath, "r");
+  let closed = false;
+  const unlinkQuietly = (targetPath = "") => {
+    try {
+      if (targetPath && fsSync.existsSync(targetPath)) {
+        fsSync.unlinkSync(targetPath);
+      }
+    } catch {
+      // Best-effort temp cleanup. The extracted package directory is also removed by the caller.
+    }
+  };
+  return {
+    strategy: XLSX_SHARED_STRING_DISK_INDEX_STRATEGY,
+    storage: "disk",
+    count,
+    dataBytes,
+    indexBytes: count * XLSX_SHARED_STRING_INDEX_RECORD_BYTES,
+    dataPath,
+    indexPath,
+    get(index = 0) {
+      if (closed || !Number.isInteger(index) || index < 0 || index >= count) {
+        return "";
+      }
+      const record = Buffer.alloc(XLSX_SHARED_STRING_INDEX_RECORD_BYTES);
+      const recordBytes = fsSync.readSync(indexReadFd, record, 0, record.length, index * XLSX_SHARED_STRING_INDEX_RECORD_BYTES);
+      if (recordBytes !== XLSX_SHARED_STRING_INDEX_RECORD_BYTES) {
+        return "";
+      }
+      const offset = Number(record.readBigUInt64LE(0));
+      const length = Number(record.readBigUInt64LE(8));
+      if (!Number.isFinite(offset) || !Number.isFinite(length) || length <= 0) {
+        return "";
+      }
+      const valueBuffer = Buffer.alloc(length);
+      const valueBytes = fsSync.readSync(dataReadFd, valueBuffer, 0, length, offset);
+      return valueBytes ? valueBuffer.subarray(0, valueBytes).toString("utf8") : "";
+    },
+    close() {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      if (dataReadFd !== null) {
+        fsSync.closeSync(dataReadFd);
+        dataReadFd = null;
+      }
+      if (indexReadFd !== null) {
+        fsSync.closeSync(indexReadFd);
+        indexReadFd = null;
+      }
+      unlinkQuietly(dataPath);
+      unlinkQuietly(indexPath);
+      try {
+        fsSync.rmdirSync(scratchDirectory);
+      } catch {
+        // Directory may contain another concurrently created index.
+      }
+    }
+  };
+}
+
 function parseXlsxStylesFile(filePath = "") {
   return parseXlsxStylesXml(
     filePath && fsSync.existsSync(filePath)
@@ -9495,91 +9639,98 @@ function appendXlsxWorksheetElementsFromFile(elements = [], {
 }
 
 function parseXlsxLargeEntryStreaming(rootDir = "", entries = []) {
-  // TODO(external-kd): replace in-memory sharedStrings with a disk-backed indexed lookup for multi-GB shared string tables.
-  const sharedStrings = parseSharedStringsFile(path.join(rootDir, "xl/sharedStrings.xml"));
-  const styles = parseXlsxStylesFile(path.join(rootDir, "xl/styles.xml"));
-  const workbookXml = fsSync.existsSync(path.join(rootDir, "xl/workbook.xml"))
-    ? fsSync.readFileSync(path.join(rootDir, "xl/workbook.xml"), "utf8")
-    : "";
-  const workbookSheets = parseWorkbookSheets(
-    workbookXml,
-    fsSync.existsSync(path.join(rootDir, "xl/_rels/workbook.xml.rels"))
-      ? fsSync.readFileSync(path.join(rootDir, "xl/_rels/workbook.xml.rels"), "utf8")
-      : ""
-  );
-  const definedNames = parseXlsxDefinedNamesXml(workbookXml, workbookSheets);
-  const sheetFiles = collectFiles(rootDir, (name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name), 1000)
-    .sort((left, right) => Number(left.relativePath.match(/sheet(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/sheet(\d+)/)?.[1] || 0));
-  const filesByRelativePath = new Map(sheetFiles.map((file) => [file.relativePath, file]));
-  const sheetRecords = workbookSheetRecordsForPaths(sheetFiles.map((file) => file.relativePath), workbookSheets)
-    .map((record) => ({ ...record, file: filesByRelativePath.get(record.name) }))
-    .filter((record) => record.file);
-  const entriesByName = new Map(entries.map((entry) => [entry.name, entry]));
-  const elements = [];
-  appendXlsxDefinedNameElements(elements, definedNames);
-  let rowCount = 0;
-  let cellCount = 0;
-  let formulaCount = 0;
-  let hyperlinkCount = 0;
-  let dateCellCount = 0;
-  let mergedCellCount = 0;
-  let commentCount = 0;
-  let headerRows = 0;
-  let largeEntryCount = 0;
-  let streamedBytes = 0;
-  for (const [index, record] of sheetRecords.entries()) {
-    const sheetLabel = xlsxSheetLabel(record.sheet, index);
-    const stat = fsSync.statSync(record.file.absolutePath);
-    streamedBytes += stat.size;
-    const entry = entriesByName.get(record.file.relativePath) || null;
-    if (entry?.warning === "structured-entry-too-large" || stat.size > STRUCTURED_ZIP_ENTRY_MAX_BYTES) {
-      largeEntryCount += 1;
+  const sharedStrings = createDiskBackedSharedStringLookup(path.join(rootDir, "xl/sharedStrings.xml"), rootDir);
+  try {
+    const styles = parseXlsxStylesFile(path.join(rootDir, "xl/styles.xml"));
+    const workbookXml = fsSync.existsSync(path.join(rootDir, "xl/workbook.xml"))
+      ? fsSync.readFileSync(path.join(rootDir, "xl/workbook.xml"), "utf8")
+      : "";
+    const workbookSheets = parseWorkbookSheets(
+      workbookXml,
+      fsSync.existsSync(path.join(rootDir, "xl/_rels/workbook.xml.rels"))
+        ? fsSync.readFileSync(path.join(rootDir, "xl/_rels/workbook.xml.rels"), "utf8")
+        : ""
+    );
+    const definedNames = parseXlsxDefinedNamesXml(workbookXml, workbookSheets);
+    const sheetFiles = collectFiles(rootDir, (name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name), 1000)
+      .sort((left, right) => Number(left.relativePath.match(/sheet(\d+)/)?.[1] || 0) - Number(right.relativePath.match(/sheet(\d+)/)?.[1] || 0));
+    const filesByRelativePath = new Map(sheetFiles.map((file) => [file.relativePath, file]));
+    const sheetRecords = workbookSheetRecordsForPaths(sheetFiles.map((file) => file.relativePath), workbookSheets)
+      .map((record) => ({ ...record, file: filesByRelativePath.get(record.name) }))
+      .filter((record) => record.file);
+    const entriesByName = new Map(entries.map((entry) => [entry.name, entry]));
+    const elements = [];
+    appendXlsxDefinedNameElements(elements, definedNames);
+    let rowCount = 0;
+    let cellCount = 0;
+    let formulaCount = 0;
+    let hyperlinkCount = 0;
+    let dateCellCount = 0;
+    let mergedCellCount = 0;
+    let commentCount = 0;
+    let headerRows = 0;
+    let largeEntryCount = 0;
+    let streamedBytes = 0;
+    for (const [index, record] of sheetRecords.entries()) {
+      const sheetLabel = xlsxSheetLabel(record.sheet, index);
+      const stat = fsSync.statSync(record.file.absolutePath);
+      streamedBytes += stat.size;
+      const entry = entriesByName.get(record.file.relativePath) || null;
+      if (entry?.warning === "structured-entry-too-large" || stat.size > STRUCTURED_ZIP_ENTRY_MAX_BYTES) {
+        largeEntryCount += 1;
+      }
+      const stats = appendXlsxWorksheetElementsFromFile(elements, {
+        sheetPath: record.file.absolutePath,
+        sheetLabel,
+        sheet: record.sheet,
+        sharedStrings,
+        styles,
+        fallbackIndex: index
+      });
+      rowCount += stats.rowCount;
+      cellCount += stats.cellCount;
+      formulaCount += stats.formulaCount;
+      hyperlinkCount += stats.hyperlinkCount;
+      dateCellCount += stats.dateCellCount;
+      mergedCellCount += stats.mergedCellCount;
+      commentCount += stats.commentCount;
+      headerRows += stats.headerRows;
     }
-    const stats = appendXlsxWorksheetElementsFromFile(elements, {
-      sheetPath: record.file.absolutePath,
-      sheetLabel,
-      sheet: record.sheet,
-      sharedStrings,
-      styles,
-      fallbackIndex: index
-    });
-    rowCount += stats.rowCount;
-    cellCount += stats.cellCount;
-    formulaCount += stats.formulaCount;
-    hyperlinkCount += stats.hyperlinkCount;
-    dateCellCount += stats.dateCellCount;
-    mergedCellCount += stats.mergedCellCount;
-    commentCount += stats.commentCount;
-    headerRows += stats.headerRows;
+    return {
+      text: structureElementsToText("xlsx", elements, ""),
+      elements,
+      format: "xlsx",
+      extractionMode: "streaming-large-spreadsheetml-elements",
+      sharedStringCount: xlsxSharedStringCount(sharedStrings),
+      sharedStringLookupStrategy: xlsxSharedStringLookupStrategy(sharedStrings),
+      sharedStringStorage: xlsxSharedStringStorage(sharedStrings),
+      sharedStringIndexBytes: sharedStrings.indexBytes || 0,
+      sharedStringDataBytes: sharedStrings.dataBytes || 0,
+      dateStyleCount: styles.dateStyleCount,
+      dateCellCount,
+      mergedCellCount,
+      commentCount,
+      definedNameCount: definedNames.length,
+      namedRangeCount: definedNames.filter((definedName) => definedName.builtinType === "named-range").length,
+      printAreaCount: definedNames.filter((definedName) => definedName.builtinType === "print-area").length,
+      sheetCount: sheetFiles.length,
+      workbookSheetCount: workbookSheets.length,
+      sheetRefCount: sheetRecords.length,
+      hiddenSheetCount: sheetRecords.filter((record) => record.sheet?.state && record.sheet.state !== "visible").length,
+      rowCount,
+      cellCount,
+      formulaCount,
+      hyperlinkCount,
+      chartCount: 0,
+      chartPartCount: 0,
+      chartSeriesCount: 0,
+      headerRows,
+      largeEntryCount,
+      streamedBytes
+    };
+  } finally {
+    closeXlsxSharedStringLookup(sharedStrings);
   }
-  return {
-    text: structureElementsToText("xlsx", elements, ""),
-    elements,
-    format: "xlsx",
-    extractionMode: "streaming-large-spreadsheetml-elements",
-    sharedStringCount: sharedStrings.length,
-    dateStyleCount: styles.dateStyleCount,
-    dateCellCount,
-    mergedCellCount,
-    commentCount,
-    definedNameCount: definedNames.length,
-    namedRangeCount: definedNames.filter((definedName) => definedName.builtinType === "named-range").length,
-    printAreaCount: definedNames.filter((definedName) => definedName.builtinType === "print-area").length,
-    sheetCount: sheetFiles.length,
-    workbookSheetCount: workbookSheets.length,
-    sheetRefCount: sheetRecords.length,
-    hiddenSheetCount: sheetRecords.filter((record) => record.sheet?.state && record.sheet.state !== "visible").length,
-    rowCount,
-    cellCount,
-    formulaCount,
-    hyperlinkCount,
-    chartCount: 0,
-    chartPartCount: 0,
-    chartSeriesCount: 0,
-    headerRows,
-    largeEntryCount,
-    streamedBytes
-  };
 }
 
 function appendXlsxDirectoryAsText(rootDir = "", outputPath = "") {
@@ -9637,7 +9788,7 @@ function appendXlsxDirectoryAsText(rootDir = "", outputPath = "") {
   }
   return {
     totalCharacters,
-    sharedStringCount: sharedStrings.length,
+    sharedStringCount: xlsxSharedStringCount(sharedStrings),
     dateStyleCount: styles.dateStyleCount,
     dateCellCount,
     mergedCellCount,
@@ -10186,6 +10337,10 @@ function parseStructuredZipDirectory(route = null, rootDir = "") {
           comments: parsed.commentCount,
           formulas: parsed.formulaCount,
           hyperlinks: parsed.hyperlinkCount,
+          sharedStringLookupStrategy: parsed.sharedStringLookupStrategy || "",
+          sharedStringStorage: parsed.sharedStringStorage || "",
+          sharedStringIndexBytes: parsed.sharedStringIndexBytes || 0,
+          sharedStringDataBytes: parsed.sharedStringDataBytes || 0,
           charts: parsed.chartCount,
           chartParts: parsed.chartPartCount,
           chartSeries: parsed.chartSeriesCount
@@ -12096,6 +12251,11 @@ function parseSuppliedContent({ route, metadata, text = "", buffer = null, runti
           comments: parsed.commentCount,
           formulas: parsed.formulaCount,
           hyperlinks: parsed.hyperlinkCount,
+          sharedStrings: parsed.sharedStringCount,
+          sharedStringLookupStrategy: parsed.sharedStringLookupStrategy || "",
+          sharedStringStorage: parsed.sharedStringStorage || "",
+          sharedStringIndexBytes: parsed.sharedStringIndexBytes || 0,
+          sharedStringDataBytes: parsed.sharedStringDataBytes || 0,
           charts: parsed.chartCount,
           chartParts: parsed.chartPartCount,
           chartSeries: parsed.chartSeriesCount
@@ -14997,6 +15157,11 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           comments: parsed.commentCount,
           formulas: parsed.formulaCount,
           hyperlinks: parsed.hyperlinkCount,
+          sharedStrings: parsed.sharedStringCount,
+          sharedStringLookupStrategy: parsed.sharedStringLookupStrategy || "",
+          sharedStringStorage: parsed.sharedStringStorage || "",
+          sharedStringIndexBytes: parsed.sharedStringIndexBytes || 0,
+          sharedStringDataBytes: parsed.sharedStringDataBytes || 0,
           charts: parsed.chartCount,
           chartParts: parsed.chartPartCount,
           chartSeries: parsed.chartSeriesCount
@@ -15014,6 +15179,10 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
             sheets: parsed.sheetCount,
             rows: parsed.rowCount,
             cells: parsed.cellCount,
+            sharedStrings: parsed.sharedStringCount,
+            sharedStringLookupStrategy: parsed.sharedStringLookupStrategy || "",
+            sharedStringStorage: parsed.sharedStringStorage || "",
+            sharedStringIndexBytes: parsed.sharedStringIndexBytes || 0,
             streamedBytes: parsed.streamedBytes || 0
           });
         }
@@ -15041,7 +15210,10 @@ function parseStructuredZipFileRef({ document = {}, metadata = {}, route = null,
           status: parsed.cellCount ? "completed" : "empty",
           cells: parsed.cellCount,
           rows: parsed.rowCount,
-          sharedStrings: parsed.sharedStringCount
+          sharedStrings: parsed.sharedStringCount,
+          sharedStringLookupStrategy: parsed.sharedStringLookupStrategy || "",
+          sharedStringStorage: parsed.sharedStringStorage || "",
+          sharedStringIndexBytes: parsed.sharedStringIndexBytes || 0
         });
         parserTrace.push({
           stage: "table.sheet.merged-cells",
@@ -22060,6 +22232,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "pdf-text-file-ref-layout.v1",
       "presentationml-speaker-note-stream.v1",
       "presentationml-comment-stream.v1",
+      XLSX_SHARED_STRING_DISK_INDEX_STRATEGY,
       "document-element-model.v1",
       "element-aware-by-title-windowing.v1",
       PDF_SUBTYPE_ROUTING_STRATEGY,
@@ -22187,6 +22360,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         "presentationml-speaker-note-stream.v1",
         "presentationml-comment-stream.v1"
       ],
+      spreadsheetSharedStringLookupStrategy: XLSX_SHARED_STRING_DISK_INDEX_STRATEGY,
+      spreadsheetSharedStringIndexRecordBytes: XLSX_SHARED_STRING_INDEX_RECORD_BYTES,
       structuredJsonFileRefStrategy: "structured-json-file-ref-streaming-window.v1",
       sizeLimitPolicy: "resource-bounded-no-small-hard-cap"
     },

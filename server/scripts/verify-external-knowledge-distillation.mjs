@@ -1079,6 +1079,14 @@ try {
         fileName: "mounted-large-structured.xlsx",
         mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         entries: {
+          "xl/sharedStrings.xml": [
+            "<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">",
+            "<si><t>Topic</t></si><si><t>Classification</t></si><si><t>Observed Date</t></si><si><t>Evidence Score</t></si>",
+            Array.from({ length: 720 }, (_, index) => (
+              `<si><t>Large mounted XLSX evidence row ${index + 1} proves oversized sharedStrings.xml streams through a disk-backed lookup without whole-table memory retention.</t></si><si><t>classification-${(index % 9) + 1}</t></si>`
+            )).join(""),
+            "</sst>"
+          ].join(""),
           "xl/styles.xml": [
             "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">",
             "<cellXfs count=\"2\"><xf numFmtId=\"0\"/><xf numFmtId=\"14\" applyNumberFormat=\"1\"/></cellXfs>",
@@ -1097,10 +1105,12 @@ try {
           ].join(""),
           "xl/worksheets/sheet1.xml": [
             "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>",
-            "<row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>Topic</t></is></c><c r=\"B1\" t=\"inlineStr\"><is><t>Classification</t></is></c><c r=\"C1\" t=\"inlineStr\"><is><t>Observed Date</t></is></c><c r=\"D1\" t=\"inlineStr\"><is><t>Evidence Score</t></is></c></row>",
+            "<row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c><c r=\"C1\" t=\"s\"><v>2</v></c><c r=\"D1\" t=\"s\"><v>3</v></c></row>",
             Array.from({ length: 720 }, (_, index) => {
               const row = index + 2;
-              return `<row r="${row}"><c r="A${row}" t="inlineStr"><is><t>Large mounted XLSX evidence row ${index + 1}</t></is></c><c r="B${row}" t="inlineStr"><is><t>classification-${(index % 9) + 1}</t></is></c><c r="C${row}" s="1"><v>${46188 + index}</v></c><c r="D${row}"><f>LEN(B${row})</f><v>${16 + (index % 9)}</v></c></row>`;
+              const topicIndex = 4 + (index * 2);
+              const classificationIndex = topicIndex + 1;
+              return `<row r="${row}"><c r="A${row}" t="s"><v>${topicIndex}</v></c><c r="B${row}" t="s"><v>${classificationIndex}</v></c><c r="C${row}" s="1"><v>${46188 + index}</v></c><c r="D${row}"><f>LEN(B${row})</f><v>${16 + (index % 9)}</v></c></row>`;
             }).join(""),
             "</sheetData></worksheet>"
           ].join("")
@@ -1468,6 +1478,8 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfTextTimeoutMs >= 120_000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementStrategy, "pdf-text-file-ref-layout.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementMaxBlocks >= 1000, true);
+  assert.equal(capabilities.payload.largeDocumentPolicy.spreadsheetSharedStringLookupStrategy, "spreadsheetml-shared-string-disk-index.v1");
+  assert.equal(capabilities.payload.largeDocumentPolicy.spreadsheetSharedStringIndexRecordBytes, 16);
   assert.equal(capabilities.payload.largeDocumentPolicy.tikaTimeoutMs >= 120_000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.manifestStrategy, "inline-or-streaming-manifest-document-input.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.structuredZipFileRefStrategy, "structured-zip-entry-bounded-or-streaming.v1");
@@ -1719,6 +1731,7 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("directory-file-ref-recursive-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("pdf-subtype-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("pdf-text-file-ref-layout.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("spreadsheetml-shared-string-disk-index.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("content-signature-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("human-agent-response-profile-separation.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("professional-format-manifest.v1"), true);
@@ -3922,9 +3935,9 @@ try {
     assert.equal(largeStructuredXlsx.parserTrace.some((trace) => (
       trace.stage === "structured-zip.structural-entry-plan" &&
       trace.status === "completed" &&
-      trace.selectedFiles >= 4 &&
+      trace.selectedFiles >= 5 &&
       trace.loadedFiles >= 3 &&
-      trace.skippedLargeFiles === 1 &&
+      trace.skippedLargeFiles === 2 &&
       trace.maxEntryBytes === 25000
     )), true);
     assert.equal(largeStructuredXlsx.parserTrace.some((trace) => (
@@ -3934,13 +3947,27 @@ try {
       trace.extractionMode === "streaming-large-spreadsheetml-elements" &&
       trace.elements >= 700 &&
       trace.rows >= 700 &&
-      trace.cells >= 2800
+      trace.cells >= 2800 &&
+      trace.sharedStrings >= 1400 &&
+      trace.sharedStringLookupStrategy === "spreadsheetml-shared-string-disk-index.v1" &&
+      trace.sharedStringStorage === "disk" &&
+      trace.sharedStringIndexBytes > 0
     )), true);
     assert.equal(largeStructuredXlsx.parserTrace.some((trace) => (
       trace.stage === "table.sheet.structured" &&
       trace.status === "completed" &&
       trace.extractionMode === "streaming-large-spreadsheetml-elements" &&
-      trace.elements >= 700
+      trace.elements >= 700 &&
+      trace.sharedStringLookupStrategy === "spreadsheetml-shared-string-disk-index.v1" &&
+      trace.sharedStringStorage === "disk"
+    )), true);
+    assert.equal(largeStructuredXlsx.parserTrace.some((trace) => (
+      trace.stage === "table.sheet.cells" &&
+      trace.status === "completed" &&
+      trace.sharedStrings >= 1400 &&
+      trace.sharedStringLookupStrategy === "spreadsheetml-shared-string-disk-index.v1" &&
+      trace.sharedStringStorage === "disk" &&
+      trace.sharedStringIndexBytes > 0
     )), true);
     assert.equal(largeStructuredXlsx.parserTrace.some((trace) => trace.stage === "table.sheet.formulas" && trace.status === "completed" && trace.formulas >= 700), true);
     assert.equal(largeStructuredXlsx.parserTrace.some((trace) => trace.stage === "table.sheet.date-styles" && trace.status === "completed" && trace.dateCells >= 700), true);

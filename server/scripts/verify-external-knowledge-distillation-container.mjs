@@ -462,6 +462,8 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfTextTimeoutMs >= 120_000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementStrategy, "pdf-text-file-ref-layout.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.pdfFileRefElementMaxBlocks >= 1000, true);
+  assert.equal(capabilities.payload.largeDocumentPolicy.spreadsheetSharedStringLookupStrategy, "spreadsheetml-shared-string-disk-index.v1");
+  assert.equal(capabilities.payload.largeDocumentPolicy.spreadsheetSharedStringIndexRecordBytes, 16);
   assert.equal(capabilities.payload.largeDocumentPolicy.tikaTimeoutMs >= 120_000, true);
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.protocolVersion, "pact.external-knowledge-distillation.parser-strategies.v1");
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategy, "singleton-parser-strategy-registry.v1");
@@ -506,6 +508,7 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("content-signature-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("structured-json-file-ref-streaming-window.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("pdf-text-file-ref-layout.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("spreadsheetml-shared-string-disk-index.v1"), true);
   assert.equal(capabilities.payload.fileCompatibility.routingStrategy, "content-signature-extension-media-shape-routing.v2");
   assert.equal(capabilities.payload.fileCompatibility.routeOrder[0], "contentSignature");
   assert.equal(capabilities.payload.fileCompatibility.routeRegistry.protocolVersion, "pact.external-knowledge-distillation.format-routes.v1");

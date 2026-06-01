@@ -431,6 +431,11 @@ assert.equal(
   "large XLSX streaming parser must preserve row element references for element-aware windowing"
 );
 assert.equal(
+  externalServiceSource.includes("spreadsheetml-shared-string-disk-index.v1"),
+  true,
+  "large XLSX streaming parser must use a disk-backed shared string lookup instead of an in-memory sharedStrings array"
+);
+assert.equal(
   externalServiceSource.includes("streaming-large-spreadsheetml-elements"),
   true,
   "large XLSX streaming parser must advertise structural extraction mode in parserTrace"
