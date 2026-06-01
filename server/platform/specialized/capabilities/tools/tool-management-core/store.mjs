@@ -828,6 +828,69 @@ function durationPercentilesFromRows(rows = []) {
   };
 }
 
+function summarizeToolUsageDimension(rows = [], columnName = "", outputKey = "", limit = 10) {
+  const summaries = new Map();
+  for (const row of rows) {
+    const dimensionValue = String(row[columnName] || "").trim();
+    if (!dimensionValue) {
+      continue;
+    }
+    if (!summaries.has(dimensionValue)) {
+      summaries.set(dimensionValue, {
+        [outputKey]: dimensionValue,
+        total: 0,
+        okTotal: 0,
+        deniedTotal: 0,
+        failureTotal: 0,
+        inputBytesTotal: 0,
+        resultBytesTotal: 0,
+        transferBytesTotal: 0,
+        durationTotal: 0,
+        byteRateTotal: 0,
+        peakBytesPerSecond: 0,
+        durationRows: []
+      });
+    }
+    const summary = summaries.get(dimensionValue);
+    const status = row.status || "unknown";
+    const durationMs = Number(row.duration_ms || 0);
+    const inputBytes = Number(row.input_bytes || 0);
+    const resultBytes = Number(row.result_bytes || 0);
+    const transferBytes = Number(row.transfer_bytes || inputBytes + resultBytes);
+    const bytesPerSecond = Number(row.bytes_per_second || 0);
+    summary.total += 1;
+    summary.okTotal += status === "ok" ? 1 : 0;
+    summary.deniedTotal += status === "denied" ? 1 : 0;
+    summary.failureTotal += status === "ok" ? 0 : 1;
+    summary.inputBytesTotal += inputBytes;
+    summary.resultBytesTotal += resultBytes;
+    summary.transferBytesTotal += transferBytes;
+    summary.durationTotal += durationMs;
+    summary.byteRateTotal += bytesPerSecond;
+    summary.peakBytesPerSecond = Math.max(summary.peakBytesPerSecond, bytesPerSecond);
+    summary.durationRows.push({ duration_ms: durationMs });
+  }
+
+  return [...summaries.values()]
+    .sort((left, right) =>
+      right.total - left.total ||
+      right.transferBytesTotal - left.transferBytesTotal ||
+      String(left[outputKey]).localeCompare(String(right[outputKey]))
+    )
+    .slice(0, Math.max(1, Number(limit || 10)))
+    .map((summary) => {
+      const { durationRows, durationTotal, byteRateTotal, ...publicSummary } = summary;
+      return {
+        ...publicSummary,
+        failureRate: ratio(summary.failureTotal, summary.total),
+        deniedRate: ratio(summary.deniedTotal, summary.total),
+        averageDurationMs: summary.total ? Number((durationTotal / summary.total).toFixed(2)) : 0,
+        durationPercentiles: durationPercentilesFromRows(durationRows),
+        averageBytesPerSecond: summary.total ? Number((byteRateTotal / summary.total).toFixed(2)) : 0
+      };
+    });
+}
+
 function prometheusEscapeLabel(value = "") {
   return String(value || "")
     .replace(/\\/g, "\\\\")
@@ -1885,6 +1948,8 @@ export function createToolManagementStore({
       byTool,
       byProfile,
       byGrant,
+      usageByGrant: summarizeToolUsageDimension(rows, "grant_id", "grantId"),
+      usageByProfile: summarizeToolUsageDimension(rows, "profile_id", "profileId"),
       byRisk,
       deniedByReason,
       timeoutTotal,

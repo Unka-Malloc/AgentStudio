@@ -224,6 +224,9 @@ try {
     headers: bearerHeaders(grantResult.payload.token),
     body: JSON.stringify({
       toolId: "pact.knowledge.health",
+      context: {
+        profileId: "profile-metered"
+      },
       input: {}
     })
   });
@@ -248,6 +251,22 @@ try {
   assert.ok(metrics.payload.metrics.toolCalls.inputBytesTotal > 0);
   assert.ok(metrics.payload.metrics.toolCalls.resultBytesTotal > 0);
   assert.ok(metrics.payload.metrics.toolCalls.averageBytesPerSecond >= 0);
+  const grantUsage = metrics.payload.metrics.toolCalls.usageByGrant.find((item) =>
+    item.grantId === grantResult.payload.grant.id
+  );
+  assert.ok(grantUsage);
+  assert.ok(grantUsage.total >= 1);
+  assert.ok(grantUsage.transferBytesTotal > 0);
+  assert.ok(grantUsage.averageBytesPerSecond >= 0);
+  assert.ok(grantUsage.failureRate >= 0);
+  assertDurationPercentiles(grantUsage.durationPercentiles);
+  const profileUsage = metrics.payload.metrics.toolCalls.usageByProfile.find((item) =>
+    item.profileId === "profile-metered"
+  );
+  assert.ok(profileUsage);
+  assert.ok(profileUsage.total >= 1);
+  assert.ok(profileUsage.transferBytesTotal > 0);
+  assertDurationPercentiles(profileUsage.durationPercentiles);
   assert.ok(metrics.payload.metrics.requests.total >= 1);
   assert.ok(metrics.payload.metrics.requests.byTransport["tool-management"] >= 1);
   assert.ok(metrics.payload.metrics.requests.byRoute["/api/tool-management/v1/execute"] >= 1);
