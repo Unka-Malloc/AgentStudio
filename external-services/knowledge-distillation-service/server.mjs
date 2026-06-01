@@ -18539,45 +18539,111 @@ function runKnowledgeDistillationWorkflow(input = {}, runtimeStatus = null, prio
 }
 
 function runDistillationWorkflow(input = {}, runtimeStatus = null, priorRuns = []) {
+  const workflowContext = initializeDistillationWorkflow(input);
+  const normalizedInput = normalizeDistillationInput(workflowContext, runtimeStatus);
+  const filteredInput = filterDistillationInputByTime(normalizedInput);
+  const corpusPlanState = buildDistillationCorpusPlan(filteredInput);
+  const routePlanState = buildDistillationRoutePlan(corpusPlanState);
+  const documentSet = buildDistillationDocumentSet(routePlanState);
+  const classificationState = buildDistillationClassification(documentSet);
+  const convergenceState = buildDistillationConvergence(classificationState);
+  const groundingState = buildDistillationGrounding(convergenceState);
+  const incrementalState = buildDistillationIncrementalPlan(groundingState, priorRuns);
+  const graphEvidenceState = buildDistillationGraphEvidence(incrementalState);
+  return composeDistillationWorkflowState(graphEvidenceState);
+}
+
+function initializeDistillationWorkflow(input = {}) {
   const createdAt = nowIso();
-  const normalizedInput = normalizeDocuments(input, runtimeStatus);
-  const allDocuments = normalizedInput.documents;
-  const inputDocumentPlan = normalizedInput.inputDocumentPlan;
-  const timeFilter = normalizeTimeFilter(input);
-  const filtered = applyTimeFilterToDocuments(allDocuments, timeFilter, {
-    maxWindowCharacters: input.maxWindowCharacters,
-    windowOverlapCharacters: input.windowOverlapCharacters
-  });
-  const activeDocuments = filtered.documents;
-  const corpusPlan = {
-    ...buildCorpusPlan(activeDocuments, input),
-    inputDocumentPlan,
-    timeFilter: filtered.summary
-  };
-  const routePlan = buildRoutePlan(corpusPlan);
-  const plannedBySourceId = new Map(corpusPlan.documents.map((document) => [document.sourceId, document]));
-  const containerSourceIds = new Set(activeDocuments.map((document) => document.parentSourceId).filter(Boolean));
-  const documents = activeDocuments
-    .filter((document) => document.text || containerSourceIds.has(document.sourceId))
-    .map((document) => ({
-      ...document,
-      windowPlan: plannedBySourceId.get(document.sourceId)?.windowPlan || buildWindowPlan(document, input),
-      route: plannedBySourceId.get(document.sourceId)?.route || document.route
-    }));
-  const evidenceDocuments = activeDocuments
-    .map((document) => ({
-      ...document,
-      windowPlan: plannedBySourceId.get(document.sourceId)?.windowPlan || buildWindowPlan(document, input),
-      route: plannedBySourceId.get(document.sourceId)?.route || document.route
-    }))
-    .filter((document) => document.text || document.windowPlan?.windowCount > 0);
   const query = String(input.query || input.prompt || input.title || "External knowledge distillation").trim();
   const title = String(input.title || query || "External Knowledge Distillation").trim();
   const runId = String(input.runId || "").trim() || stableId("external_kd_run", query, createdAt);
-  let formatConversionPlan = buildFormatConversionPlan({ runId, corpusPlan });
   const responseProfile = String(input.responseProfile || input.mode || "console").trim() || "console";
+  const requestedClaims = Array.isArray(input.claims)
+    ? input.claims
+    : Array.isArray(input.requestedClaims)
+      ? input.requestedClaims
+      : [];
+  return {
+    input,
+    createdAt,
+    query,
+    title,
+    runId,
+    responseProfile,
+    requestedClaims
+  };
+}
+
+function normalizeDistillationInput(workflowContext = {}, runtimeStatus = null) {
+  const normalizedInput = normalizeDocuments(workflowContext.input, runtimeStatus);
+  return {
+    ...workflowContext,
+    allDocuments: normalizedInput.documents,
+    inputDocumentPlan: normalizedInput.inputDocumentPlan
+  };
+}
+
+function filterDistillationInputByTime(normalizedInput = {}) {
+  const timeFilter = normalizeTimeFilter(normalizedInput.input);
+  const filtered = applyTimeFilterToDocuments(normalizedInput.allDocuments, timeFilter, {
+    maxWindowCharacters: normalizedInput.input.maxWindowCharacters,
+    windowOverlapCharacters: normalizedInput.input.windowOverlapCharacters
+  });
+  return {
+    ...normalizedInput,
+    timeFilter,
+    filtered,
+    activeDocuments: filtered.documents
+  };
+}
+
+function buildDistillationCorpusPlan(filteredInput = {}) {
+  const corpusPlan = {
+    ...buildCorpusPlan(filteredInput.activeDocuments, filteredInput.input),
+    inputDocumentPlan: filteredInput.inputDocumentPlan,
+    timeFilter: filteredInput.filtered.summary
+  };
+  return {
+    ...filteredInput,
+    corpusPlan
+  };
+}
+
+function buildDistillationRoutePlan(corpusPlanState = {}) {
+  return {
+    ...corpusPlanState,
+    routePlan: buildRoutePlan(corpusPlanState.corpusPlan)
+  };
+}
+
+function documentWithCorpusPlan(document = {}, plannedBySourceId = new Map(), input = {}) {
+  return {
+    ...document,
+    windowPlan: plannedBySourceId.get(document.sourceId)?.windowPlan || buildWindowPlan(document, input),
+    route: plannedBySourceId.get(document.sourceId)?.route || document.route
+  };
+}
+
+function buildDistillationDocumentSet(routePlanState = {}) {
+  const plannedBySourceId = new Map(routePlanState.corpusPlan.documents.map((document) => [document.sourceId, document]));
+  const containerSourceIds = new Set(routePlanState.activeDocuments.map((document) => document.parentSourceId).filter(Boolean));
+  const documents = routePlanState.activeDocuments
+    .filter((document) => document.text || containerSourceIds.has(document.sourceId))
+    .map((document) => documentWithCorpusPlan(document, plannedBySourceId, routePlanState.input));
+  const evidenceDocuments = routePlanState.activeDocuments
+    .map((document) => documentWithCorpusPlan(document, plannedBySourceId, routePlanState.input))
+    .filter((document) => document.text || document.windowPlan?.windowCount > 0);
+  return {
+    ...routePlanState,
+    documents,
+    evidenceDocuments
+  };
+}
+
+function buildDocumentClassification(documents = []) {
   const groups = classifyDocuments(documents);
-  const classification = {
+  return {
     strategy: CLASSIFICATION_STRATEGY,
     taxonomyStrategy: "semantic-concept-topic-hierarchy.v1",
     assignmentRationaleStrategy: "leader-clustering-semantic-concept-rationale.v1",
@@ -18606,51 +18672,85 @@ function runDistillationWorkflow(input = {}, runtimeStatus = null, priorRuns = [
     communityCount: groups.reduce((sum, group) => sum + Number(group.communityCount || 0), 0),
     groups
   };
-  const convergence = buildProjectConvergence({ corpusPlan, classification });
-  const requestedClaims = Array.isArray(input.claims)
-    ? input.claims
-    : Array.isArray(input.requestedClaims)
-      ? input.requestedClaims
-      : [];
-  const grounding = buildGroundingReport({ documents, classification, requestedClaims });
-  const incrementalPlan = buildIncrementalPlan({
-    input,
-    corpusPlan,
-    classification,
-    convergence,
-    grounding,
-    priorRuns,
-    createdAt
-  });
-  const graphEvidence = buildGraphEvidencePack({
-    runId,
-    createdAt,
-    documents: evidenceDocuments,
-    classification,
-    convergence,
-    grounding,
-    incrementalPlan
-  });
+}
 
+function buildDistillationClassification(documentSet = {}) {
   return {
-    createdAt,
-    allDocuments,
-    inputDocumentPlan,
-    timeFilter,
-    corpusPlan,
-    routePlan,
-    documents,
-    evidenceDocuments,
-    query,
-    title,
-    runId,
-    formatConversionPlan,
-    responseProfile,
-    classification,
-    convergence,
-    grounding,
-    incrementalPlan,
-    graphEvidence
+    ...documentSet,
+    classification: buildDocumentClassification(documentSet.documents)
+  };
+}
+
+function buildDistillationConvergence(classificationState = {}) {
+  return {
+    ...classificationState,
+    convergence: buildProjectConvergence({
+      corpusPlan: classificationState.corpusPlan,
+      classification: classificationState.classification
+    })
+  };
+}
+
+function buildDistillationGrounding(convergenceState = {}) {
+  return {
+    ...convergenceState,
+    grounding: buildGroundingReport({
+      documents: convergenceState.documents,
+      classification: convergenceState.classification,
+      requestedClaims: convergenceState.requestedClaims
+    })
+  };
+}
+
+function buildDistillationIncrementalPlan(groundingState = {}, priorRuns = []) {
+  return {
+    ...groundingState,
+    incrementalPlan: buildIncrementalPlan({
+      input: groundingState.input,
+      corpusPlan: groundingState.corpusPlan,
+      classification: groundingState.classification,
+      convergence: groundingState.convergence,
+      grounding: groundingState.grounding,
+      priorRuns,
+      createdAt: groundingState.createdAt
+    })
+  };
+}
+
+function buildDistillationGraphEvidence(incrementalState = {}) {
+  return {
+    ...incrementalState,
+    graphEvidence: buildGraphEvidencePack({
+      runId: incrementalState.runId,
+      createdAt: incrementalState.createdAt,
+      documents: incrementalState.evidenceDocuments,
+      classification: incrementalState.classification,
+      convergence: incrementalState.convergence,
+      grounding: incrementalState.grounding,
+      incrementalPlan: incrementalState.incrementalPlan
+    })
+  };
+}
+
+function composeDistillationWorkflowState(graphEvidenceState = {}) {
+  return {
+    createdAt: graphEvidenceState.createdAt,
+    allDocuments: graphEvidenceState.allDocuments,
+    inputDocumentPlan: graphEvidenceState.inputDocumentPlan,
+    timeFilter: graphEvidenceState.timeFilter,
+    corpusPlan: graphEvidenceState.corpusPlan,
+    routePlan: graphEvidenceState.routePlan,
+    documents: graphEvidenceState.documents,
+    evidenceDocuments: graphEvidenceState.evidenceDocuments,
+    query: graphEvidenceState.query,
+    title: graphEvidenceState.title,
+    runId: graphEvidenceState.runId,
+    responseProfile: graphEvidenceState.responseProfile,
+    classification: graphEvidenceState.classification,
+    convergence: graphEvidenceState.convergence,
+    grounding: graphEvidenceState.grounding,
+    incrementalPlan: graphEvidenceState.incrementalPlan,
+    graphEvidence: graphEvidenceState.graphEvidence
   };
 }
 
@@ -18809,7 +18909,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     graphEvidence
   } = distillationWorkflow;
   const { passed, failure, referenceGapReport, qualityReport } = evaluation;
-  let formatConversionPlan = distillationWorkflow.formatConversionPlan;
+  let formatConversionPlan = buildFormatConversionPlan({ runId, corpusPlan });
   const markdown = buildMarkdown({ title, query, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, failure });
   formatConversionPlan = attachFormatConversionOutputValidation(formatConversionPlan, {
     title,
