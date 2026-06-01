@@ -102,6 +102,7 @@ Routed format families:
 - Calendar events: iCalendar `.ics` and vCalendar `.vcs` with event/todo and timeline extraction.
 - Audio recordings: WAV, MP3, M4A, AAC, FLAC, OGG, and OPUS are explicitly routed as audio and require a transcript sidecar or external ASR runtime instead of being misread as text.
 - Recursively routed ZIP, TAR, GZip/TGZ, and 7z archives.
+- Mounted directories and project packages: plain folders plus Apple iWork/Xcode package directories (`.pages`, `.numbers`, `.key`, `.xcodeproj`, `.xcworkspace`) are recursively expanded as child documents, with common dependency/build folders ignored.
 
 Built-in payload parsers:
 
@@ -117,6 +118,7 @@ Built-in payload parsers:
 - WebVTT/SRT transcript normalization for cue timing, speaker turns, and cue-level evidence windows.
 - XBRL/Inline XBRL normalization for financial facts, contexts, units, periods, and fact-level evidence windows.
 - Audio metadata routing that requires transcript sidecar or ASR runtime instead of pretending compressed audio bytes are text.
+- Directory file-ref expansion for mounted projects and macOS package directories, reusing child document route detection instead of forcing users to ZIP large workspaces first.
 - CSV and TSV row normalization.
 - EML-style header/body extraction.
 - MSG binary text extraction through Apache Tika for direct payloads and mounted file references.

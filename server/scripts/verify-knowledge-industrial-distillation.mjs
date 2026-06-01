@@ -55,6 +55,7 @@ for (const requiredPattern of [
   "professional-format-manifest-json",
   "office-document-professional-adaptation.v1",
   "format-conversion-plan-json",
+  "directory-file-ref-recursive-routing.v1",
   "PROJECT_EVIDENCE_QUERY_STRATEGY"
 ]) {
   assert.match(serviceText, new RegExp(requiredPattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `external service must retain ${requiredPattern}`);
@@ -80,5 +81,6 @@ assert.equal(benchmark.checks.routeWindowClassification, true);
 assert.equal(benchmark.checks.graphConvergence, true);
 assert.equal(benchmark.checks.humanAgentSeparation, true);
 assert.equal(benchmark.checks.professionalOfficeAdaptation, true);
+assert.equal(benchmark.checks.mountedProjectDirectoryExpansion, true);
 
 console.log("external knowledge distillation industrial benchmark verification passed");

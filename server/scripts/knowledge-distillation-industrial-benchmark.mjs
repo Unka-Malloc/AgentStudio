@@ -61,6 +61,7 @@ async function buildExternalIndustrialBenchmark() {
     "human-agent-response-profile-separation.v1",
     "professional-format-manifest-json",
     "office-document-professional-adaptation.v1",
+    "directory-file-ref-recursive-routing.v1",
     "PROJECT_EVIDENCE_QUERY_STRATEGY"
   ];
   const localCheckoutCount = frameworks.filter((framework) => framework.localPath).length;
@@ -108,6 +109,11 @@ async function buildExternalIndustrialBenchmark() {
         "office-document-professional-adaptation.v1",
         "professional-format-manifest-json",
         "format-conversion-plan-json"
+      ]),
+      mountedProjectDirectoryExpansion: hasAll(serviceText, [
+        "directory-file-ref-recursive-routing.v1",
+        "directory.file-ref.expand",
+        "directory.entry-file-ref"
       ])
     }
   };

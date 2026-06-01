@@ -64,6 +64,8 @@ const ARCHIVE_EXPANSION_MAX_DEPTH = Math.max(1, Number(process.env.PACT_EXTERNAL
 const ARCHIVE_EXPANSION_MAX_ENTRIES = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_ARCHIVE_EXPANSION_MAX_ENTRIES || 500));
 const ARCHIVE_ENTRY_MAX_BYTES = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_ARCHIVE_ENTRY_MAX_BYTES || 25 * 1024 * 1024));
 const ARCHIVE_EXTERNAL_TIMEOUT_MS = Number(process.env.PACT_EXTERNAL_KD_ARCHIVE_EXTERNAL_TIMEOUT_MS || 45_000);
+const DIRECTORY_EXPANSION_MAX_DEPTH = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_DIRECTORY_EXPANSION_MAX_DEPTH || 8));
+const DIRECTORY_EXPANSION_MAX_FILES = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_DIRECTORY_EXPANSION_MAX_FILES || 5000));
 const MANIFEST_MAX_DOCUMENTS = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_MANIFEST_MAX_DOCUMENTS || 100_000));
 const MANIFEST_JSON_DIRECT_READ_MAX_BYTES = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_MANIFEST_JSON_DIRECT_READ_MAX_BYTES || FILE_REF_DIRECT_READ_MAX_BYTES));
 const EMAIL_ATTACHMENT_MAX_COUNT = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_EMAIL_ATTACHMENT_MAX_COUNT || 200));
@@ -210,11 +212,31 @@ const ROUTE_CONCEPT_BOOSTS = Object.freeze({
   spreadsheet: { finance: 0.75 },
   email: { finance: 0.25 },
   archive: { parsing: 0.25 },
+  directory: { project: 2 },
   image: { visual: 2 },
   "scanned-document": { visual: 1.5 },
   audio: { parsing: 0.25 },
   transcript: { parsing: 0.25 }
 });
+
+const DIRECTORY_IGNORED_NAMES = Object.freeze(new Set([
+  ".git",
+  ".hg",
+  ".svn",
+  ".cache",
+  ".next",
+  ".nuxt",
+  ".turbo",
+  ".venv",
+  ".yarn",
+  "__pycache__",
+  "build",
+  "DerivedData",
+  "dist",
+  "node_modules",
+  "target",
+  "venv"
+]));
 const SEMANTIC_CONCEPT_INDEX = Object.freeze(
   Object.fromEntries(Object.keys(SEMANTIC_ALIAS_GROUPS).map((concept, index) => [`concept:${concept}`, index]))
 );
@@ -571,6 +593,29 @@ const FORMAT_ROUTES = Object.freeze([
     parserChain: ["archive.route", "archive.container-detect", "archive.expand-route", "child-file.route"],
     streamingUnit: "entry",
     referenceFrameworks: ["ragflow", "unstructured", "haystack"]
+  },
+  {
+    id: "directory",
+    label: "Mounted directory / project package",
+    extensions: [".directory", ".folder", ".pages", ".numbers", ".key", ".keynote", ".xcodeproj", ".xcworkspace"],
+    mediaTypes: [
+      "inode/directory",
+      "application/x-directory",
+      "application/vnd.apple.pages",
+      "application/vnd.apple.numbers",
+      "application/vnd.apple.keynote",
+      "application/x-iwork-pages-sffpages",
+      "application/x-iwork-numbers-sffnumbers",
+      "application/x-iwork-keynote-sffkey",
+      "application/x-xcode-project",
+      "application/x-xcode-workspace"
+    ],
+    contentShape: "directory-project-package",
+    preferredParser: "directory.file-ref.expand",
+    fallbackParsers: ["directory.child-route", "payload.file-ref-binary-profile"],
+    parserChain: ["directory.route", "directory.file-ref.expand", "directory.entry-file-ref", "content.signature", "route.child-documents"],
+    streamingUnit: "file",
+    referenceFrameworks: ["ragflow", "llama-index", "haystack", "unstructured"]
   }
 ]);
 
@@ -901,6 +946,14 @@ const MEDIA_TYPE_BY_EXTENSION = new Map(Object.entries({
   ".sbv": "text/x-subtitle",
   ".xbrl": "application/xbrl+xml",
   ".ixbrl": "application/ixbrl+xml",
+  ".directory": "inode/directory",
+  ".folder": "inode/directory",
+  ".pages": "application/vnd.apple.pages",
+  ".numbers": "application/vnd.apple.numbers",
+  ".key": "application/vnd.apple.keynote",
+  ".keynote": "application/vnd.apple.keynote",
+  ".xcodeproj": "application/x-xcode-project",
+  ".xcworkspace": "application/x-xcode-workspace",
   ".wav": "audio/wav",
   ".mp3": "audio/mpeg",
   ".m4a": "audio/mp4",
@@ -1118,7 +1171,7 @@ async function loadReferenceFrameworks() {
 
 const REFERENCE_ABSORPTION_MAP = Object.freeze({
   ragflow: {
-    absorbed: ["route-first document understanding", "agent-readable knowledge-base flow", "large project artifact package"],
+    absorbed: ["route-first document understanding", "agent-readable knowledge-base flow", "large project artifact package", "mounted project directory expansion"],
     baseline: ["RAG-style source routing and evidence attachment"],
     gaps: ["ranking/evaluation loop over external vector stores", "full document-layout enrichment for every parser"]
   },
@@ -1133,7 +1186,7 @@ const REFERENCE_ABSORPTION_MAP = Object.freeze({
     gaps: ["full PDF and Word layout block geometry", "formula recognition beyond SpreadsheetML and text-level elements"]
   },
   "llama-index": {
-    absorbed: ["agent-message-json", "graphEvidence text units with metadata", "evidence query API", "node-style element references on windows and text units"],
+    absorbed: ["agent-message-json", "graphEvidence text units with metadata", "evidence query API", "node-style element references on windows and text units", "directory child documents as routed nodes"],
     baseline: ["node/window metadata and project snapshot hashes"],
     gaps: ["pluggable ingestion pipeline contracts", "agent evaluation feedback loop"]
   },
@@ -1148,12 +1201,12 @@ const REFERENCE_ABSORPTION_MAP = Object.freeze({
     gaps: ["persistent graph store adapter", "learned graph ranking over multi-run evidence"]
   },
   haystack: {
-    absorbed: ["explicit route stages", "parser traces", "runtime doctor", "capabilities document", "HTML/Markdown-style converter boundaries for markup and Markdown documents", "Word, PowerPoint, and Excel hyperlink preservation on element/cell refs", "format conversion profiles for human and agent targets"],
+    absorbed: ["explicit route stages", "parser traces", "runtime doctor", "capabilities document", "directory file-ref expansion stage", "HTML/Markdown-style converter boundaries for markup and Markdown documents", "Word, PowerPoint, and Excel hyperlink preservation on element/cell refs", "format conversion profiles for human and agent targets"],
     baseline: ["pipeline-like deterministic execution record"],
     gaps: ["external component registry", "configurable parser/ranker pipeline graph"]
   },
   unstructured: {
-    absorbed: ["partition-style format routing", "chunked windowing", "email and archive child routing", "element-type enrichment for Markdown, markup, PDF, OOXML, OpenDocument, EPUB, headings, lists, links, tables, PDF outlines, Word content controls/bookmarks, Word/PowerPoint/OpenDocument table cells, Word annotations/revisions and hyperlinks, PowerPoint comments and hyperlinks, OpenDocument hyperlinks, code, formulas, spreadsheet workbook sheet refs/defined names/comments/hyperlinks, slide shapes, and PowerPoint placeholders", "by-title element-aware windowing with table/code isolation"],
+    absorbed: ["partition-style format routing", "chunked windowing", "email, archive, and directory child routing", "element-type enrichment for Markdown, markup, PDF, OOXML, OpenDocument, EPUB, headings, lists, links, tables, PDF outlines, Word content controls/bookmarks, Word/PowerPoint/OpenDocument table cells, Word annotations/revisions and hyperlinks, PowerPoint comments and hyperlinks, OpenDocument hyperlinks, code, formulas, spreadsheet workbook sheet refs/defined names/comments/hyperlinks, slide shapes, and PowerPoint placeholders", "by-title element-aware windowing with table/code isolation"],
     baseline: ["strategy-based parser fallback"],
     gaps: ["remaining high-fidelity PDF, Word, and spreadsheet layout coordinates", "domain-specific chunk enrichment plugins"]
   }
@@ -1231,7 +1284,7 @@ function buildReferenceGapReport(referenceFrameworks = null, { run = null, runti
       },
       allSizeProcessing: {
         status: "baseline-absorbed",
-        evidence: ["filePath/contentRef", "input.manifest.jsonl", "payload.stream-text", "archive.entry-file-ref", "streaming-windowed"],
+        evidence: ["filePath/contentRef", "input.manifest.jsonl", "payload.stream-text", "archive.entry-file-ref", "directory.entry-file-ref", "streaming-windowed"],
         references: ["ragflow", "haystack", "unstructured"]
       },
       classificationDistillation: {
@@ -1817,6 +1870,10 @@ function isArchiveRoute(route = null) {
   return route?.id === "archive";
 }
 
+function isDirectoryRoute(route = null) {
+  return route?.id === "directory";
+}
+
 function isPdfRoute(route = null) {
   return route?.id === "pdf";
 }
@@ -1965,6 +2022,22 @@ function loadDocumentPayload(document = {}, metadata = {}, route = null) {
   }
   try {
     const stat = fsSync.statSync(resolved.path);
+    if (stat.isDirectory() && isDirectoryRoute(route)) {
+      return {
+        buffer: null,
+        suppliedPayloadKind: "directory-file-ref",
+        filePath: resolved.path,
+        directoryPath: resolved.path,
+        byteSize: 0,
+        parserTrace: [{
+          stage: "payload.directory-ref",
+          status: "completed",
+          path: resolved.path,
+          mode: "directory-file-ref"
+        }],
+        warnings: []
+      };
+    }
     if (!stat.isFile()) {
       return {
         buffer: null,
@@ -10856,6 +10929,9 @@ function lookupFormatRoute({ extension = "", mediaType = "", text = "" } = {}) {
   if (normalizedMediaType.startsWith("audio/")) {
     return ROUTES_BY_EXTENSION.get(".wav");
   }
+  if (normalizedMediaType === "inode/directory" || normalizedMediaType === "application/x-directory") {
+    return ROUTES_BY_MEDIA_TYPE.get("inode/directory");
+  }
   if (text) {
     return ROUTES_BY_MEDIA_TYPE.get("text/plain");
   }
@@ -10886,6 +10962,9 @@ function buildDocumentRoute(document = {}) {
   }
   if (route?.id === "archive") {
     riskFlags.push("archive-expansion-required");
+  }
+  if (route?.id === "directory") {
+    riskFlags.push("directory-expansion-required");
   }
   if (!document.text && textCharacters <= 0) {
     riskFlags.push("no-supplied-text");
@@ -13616,6 +13695,7 @@ function buildCorpusPlan(documents = [], input = {}) {
       parserTrace: document.parserTrace || [],
       parseWarnings: document.parseWarnings || [],
       parseStatus: document.parseStatus || (distillable ? "completed" : "empty"),
+      directoryPath: document.directoryPath || "",
       quality: {
         suppliedPayloadKind: document.suppliedPayloadKind || "metadata-only",
         hasDistillableText: distillable,
@@ -13677,6 +13757,28 @@ function normalizeDocumentRecord(document = {}, index = 0, runtimeStatus = null,
   let documentMetadata = options.metadataOverride
     ? { ...options.metadataOverride }
     : normalizeDocumentMetadata(document, metadata, title, suppliedText);
+  const candidatePath = options.filePathOverride || contentPathFromDocument(document, { ...metadata, ...documentMetadata });
+  const resolvedCandidatePath = candidatePath ? resolveAllowedInputPath(candidatePath) : { path: "", error: "" };
+  let resolvedCandidateStat = null;
+  if (resolvedCandidatePath.path) {
+    try {
+      resolvedCandidateStat = fsSync.statSync(resolvedCandidatePath.path);
+      if (resolvedCandidateStat.isDirectory()) {
+        const currentMediaType = String(documentMetadata.mediaType || "").toLowerCase();
+        documentMetadata = {
+          ...documentMetadata,
+          extension: documentMetadata.extension || ".directory",
+          mediaType: !documentMetadata.mediaType || GENERIC_MEDIA_TYPES.has(currentMediaType)
+            ? "inode/directory"
+            : documentMetadata.mediaType,
+          sourceKind: documentMetadata.sourceKind || "directory",
+          byteSize: documentMetadata.byteSize || 0
+        };
+      }
+    } catch (_error) {
+      resolvedCandidateStat = null;
+    }
+  }
   let signatureHint = null;
   if (options.bufferOverride) {
     signatureHint = contentSignatureHint(options.bufferOverride);
@@ -13684,15 +13786,11 @@ function normalizeDocumentRecord(document = {}, index = 0, runtimeStatus = null,
     const inlineBuffer = bufferFromDocument(document, { ...metadata, ...documentMetadata });
     if (inlineBuffer?.length) {
       signatureHint = contentSignatureHint(inlineBuffer);
-    } else {
-      const candidatePath = options.filePathOverride || contentPathFromDocument(document, { ...metadata, ...documentMetadata });
-      const resolved = candidatePath ? resolveAllowedInputPath(candidatePath) : { path: "", error: "" };
-      if (resolved.path) {
-        try {
-          signatureHint = contentSignatureHint(readFileHeadSample(resolved.path));
-        } catch (_error) {
-          signatureHint = null;
-        }
+    } else if (resolvedCandidatePath.path && !resolvedCandidateStat?.isDirectory()) {
+      try {
+        signatureHint = contentSignatureHint(readFileHeadSample(resolvedCandidatePath.path));
+      } catch (_error) {
+        signatureHint = null;
       }
     }
   }
@@ -13712,19 +13810,21 @@ function normalizeDocumentRecord(document = {}, index = 0, runtimeStatus = null,
     const stat = fsSync.statSync(options.filePathOverride);
     const streamText = isStreamableTextRoute(route, documentMetadata);
     const archiveFilePath = isArchiveRoute(route) ? options.filePathOverride : "";
+    const directoryPath = stat.isDirectory() && isDirectoryRoute(route) ? options.filePathOverride : "";
     const pdfFilePath = isPdfRoute(route) ? options.filePathOverride : "";
     const structuredZipFilePath = isStructuredZipFileRoute(route, documentMetadata) ? options.filePathOverride : "";
     const mboxFilePath = isMboxRoute(route, documentMetadata) ? options.filePathOverride : "";
     const tikaFilePath = isTikaFileRoute(route, documentMetadata) ? options.filePathOverride : "";
-    const hasFileParserPath = streamText || archiveFilePath || pdfFilePath || structuredZipFilePath || mboxFilePath || tikaFilePath;
+    const hasFileParserPath = streamText || archiveFilePath || directoryPath || pdfFilePath || structuredZipFilePath || mboxFilePath || tikaFilePath;
     const binaryProfileFilePath = !hasFileParserPath && stat.size > FILE_REF_DIRECT_READ_MAX_BYTES ? options.filePathOverride : "";
     payload = {
       buffer: hasFileParserPath || stat.size > FILE_REF_DIRECT_READ_MAX_BYTES
         ? null
         : fsSync.readFileSync(options.filePathOverride),
-      suppliedPayloadKind: options.suppliedPayloadKind || (streamText ? "archive-entry-file-ref-stream" : "archive-entry-file-ref"),
+      suppliedPayloadKind: options.suppliedPayloadKind || (directoryPath ? "directory-entry-file-ref" : streamText ? "archive-entry-file-ref-stream" : "archive-entry-file-ref"),
       filePath: options.filePathOverride,
       archiveFilePath,
+      directoryPath,
       pdfFilePath,
       structuredZipFilePath,
       mboxFilePath,
@@ -13737,7 +13837,7 @@ function normalizeDocumentRecord(document = {}, index = 0, runtimeStatus = null,
         status: "completed",
         path: options.filePathOverride,
         bytes: stat.size,
-        mode: streamText ? "streaming-windowed" : archiveFilePath ? "archive-file-ref" : pdfFilePath ? "pdf-file-ref" : structuredZipFilePath ? "structured-zip-file-ref" : mboxFilePath ? "mbox-file-ref" : tikaFilePath ? "tika-file-ref" : binaryProfileFilePath ? "bounded-binary-profile" : "archive-entry-file-ref"
+        mode: directoryPath ? "directory-file-ref" : streamText ? "streaming-windowed" : archiveFilePath ? "archive-file-ref" : pdfFilePath ? "pdf-file-ref" : structuredZipFilePath ? "structured-zip-file-ref" : mboxFilePath ? "mbox-file-ref" : tikaFilePath ? "tika-file-ref" : binaryProfileFilePath ? "bounded-binary-profile" : "archive-entry-file-ref"
       }],
       warnings: []
     };
@@ -13869,6 +13969,19 @@ function normalizeDocumentRecord(document = {}, index = 0, runtimeStatus = null,
           structureFormat: "",
           pdfProfile: null
         }
+    : payload.directoryPath && isDirectoryRoute(route)
+      ? {
+          text: "",
+          parserTrace: [{
+            stage: "directory.file-ref",
+            status: "ready",
+            path: payload.directoryPath
+          }],
+          warnings: [],
+          structureElements: [],
+          structureFormat: "",
+          pdfProfile: null
+        }
     : parseSuppliedContent({ route, metadata: documentMetadata, text: suppliedText, buffer, runtimeStatus });
   const parserTrace = [signatureTrace, ...(payload.parserTrace || []), ...parsed.parserTrace].filter(Boolean);
   const parseWarnings = [...(payload.warnings || []), ...parsed.warnings];
@@ -13936,6 +14049,7 @@ function normalizeDocumentRecord(document = {}, index = 0, runtimeStatus = null,
       structureFormat,
       streamingWindowPlan: streamAnalysis?.windowPlan || pdfFileAnalysis?.windowPlan || structuredZipAnalysis?.windowPlan || tikaFileAnalysis?.windowPlan || binaryProfileAnalysis?.windowPlan || null,
       archiveFilePath: payload.archiveFilePath || "",
+      directoryPath: payload.directoryPath || "",
       pdfFilePath: payload.pdfFilePath || "",
       mboxFilePath: payload.mboxFilePath || "",
       parserTrace,
@@ -14090,6 +14204,195 @@ function expandArchiveFileDocuments({
   }
 }
 
+function shouldSkipDirectoryName(name = "") {
+  return DIRECTORY_IGNORED_NAMES.has(String(name || ""));
+}
+
+function collectDirectoryFileEntries(rootDir = "", {
+  maxFiles = DIRECTORY_EXPANSION_MAX_FILES,
+  maxDepth = DIRECTORY_EXPANSION_MAX_DEPTH
+} = {}) {
+  const root = path.resolve(rootDir);
+  const entries = [];
+  const warnings = [];
+  const stack = [{ absolutePath: root, relativePath: "", depth: 0 }];
+  let skippedDirectoryCount = 0;
+  let skippedFileCount = 0;
+  let totalBytes = 0;
+  while (stack.length && entries.length < maxFiles) {
+    const current = stack.pop();
+    let dirents = [];
+    try {
+      dirents = fsSync.readdirSync(current.absolutePath, { withFileTypes: true })
+        .sort((left, right) => left.name.localeCompare(right.name));
+    } catch (_error) {
+      warnings.push(`directory-read-failed:${current.relativePath || "."}`);
+      continue;
+    }
+    for (const dirent of dirents) {
+      const absolutePath = path.join(current.absolutePath, dirent.name);
+      const relativePath = current.relativePath ? path.join(current.relativePath, dirent.name) : dirent.name;
+      if (dirent.isDirectory()) {
+        if (shouldSkipDirectoryName(dirent.name) || current.depth + 1 > maxDepth) {
+          skippedDirectoryCount += 1;
+          continue;
+        }
+        stack.push({ absolutePath, relativePath, depth: current.depth + 1 });
+        continue;
+      }
+      if (!dirent.isFile()) {
+        skippedFileCount += 1;
+        continue;
+      }
+      let stat = null;
+      try {
+        stat = fsSync.statSync(absolutePath);
+      } catch (_error) {
+        skippedFileCount += 1;
+        continue;
+      }
+      totalBytes += stat.size;
+      if (entries.length >= maxFiles) {
+        skippedFileCount += 1;
+        continue;
+      }
+      entries.push({
+        absolutePath,
+        relativePath: relativePath.replace(/\\/g, "/"),
+        fileName: dirent.name,
+        byteSize: stat.size,
+        depth: current.depth + 1
+      });
+    }
+  }
+  if (stack.length) {
+    skippedDirectoryCount += stack.length;
+  }
+  if (skippedDirectoryCount) {
+    warnings.push("directory-expansion-directory-limit-or-ignore");
+  }
+  if (skippedFileCount || entries.length >= maxFiles) {
+    warnings.push("directory-expansion-file-limit-or-skip");
+  }
+  return {
+    strategy: "directory-file-ref-recursive-routing.v1",
+    root,
+    maxFiles,
+    maxDepth,
+    fileCount: entries.length,
+    skippedDirectoryCount,
+    skippedFileCount,
+    totalBytes,
+    entries: entries.sort((left, right) => left.relativePath.localeCompare(right.relativePath)),
+    warnings
+  };
+}
+
+function metadataForDirectoryEntry(entry = {}, parentDocument = {}) {
+  const extension = extensionFromFileName(entry.fileName || entry.relativePath || "");
+  return {
+    title: entry.relativePath || entry.fileName || "Directory entry",
+    fileName: entry.fileName || path.basename(entry.relativePath || ""),
+    relativePath: entry.relativePath || entry.fileName || "",
+    extension,
+    mediaType: mediaTypeForExtension(extension),
+    byteSize: entry.byteSize || 0,
+    sourceKind: "directory-entry",
+    parentSourceId: parentDocument.sourceId || "",
+    archivePath: entry.relativePath || "",
+    eventTime: parentDocument.eventTime || "",
+    documentTime: parentDocument.documentTime || parentDocument.capturedAt || ""
+  };
+}
+
+function expandDirectoryDocuments({
+  parentDocument,
+  directoryPath,
+  runtimeStatus,
+  remainingFiles = DIRECTORY_EXPANSION_MAX_FILES,
+  windowOptions = {}
+} = {}) {
+  if (!directoryPath || remainingFiles <= 0) {
+    return { documents: [], parserTrace: [], warnings: [] };
+  }
+  const collected = collectDirectoryFileEntries(directoryPath, {
+    maxFiles: remainingFiles,
+    maxDepth: DIRECTORY_EXPANSION_MAX_DEPTH
+  });
+  const expanded = [];
+  for (const [entryIndex, entry] of collected.entries.entries()) {
+    if (expanded.length >= remainingFiles) {
+      break;
+    }
+    const entryMetadata = metadataForDirectoryEntry(entry, parentDocument);
+    const sourceId = `${parentDocument.sourceId}!${entry.relativePath}`;
+    const normalized = normalizeDocumentRecord({
+      sourceId,
+      title: entry.relativePath,
+      fileName: entryMetadata.fileName,
+      relativePath: entryMetadata.relativePath,
+      mediaType: entryMetadata.mediaType,
+      byteSize: entryMetadata.byteSize,
+      sourceKind: "directory-entry"
+    }, entryIndex, runtimeStatus, {
+      sourceId,
+      parentSourceId: parentDocument.sourceId,
+      archivePath: entry.relativePath,
+      archiveDepth: Number(parentDocument.archiveDepth || 0) + 1,
+      metadataOverride: entryMetadata,
+      filePathOverride: entry.absolutePath,
+      suppliedPayloadKind: "directory-entry-file-ref",
+      capturedAt: parentDocument.capturedAt,
+      windowOptions
+    });
+    normalized.document.parserTrace.unshift({
+      stage: "directory.entry-file-ref",
+      status: "expanded",
+      strategy: collected.strategy,
+      parentSourceId: parentDocument.sourceId,
+      entryName: entry.relativePath,
+      depth: entry.depth,
+      bytes: entry.byteSize
+    });
+    expanded.push(normalized.document);
+    if (normalized.route?.id === "archive" && normalized.document.archiveFilePath) {
+      const nested = expandArchiveFileDocuments({
+        parentDocument: normalized.document,
+        filePath: normalized.document.archiveFilePath,
+        runtimeStatus,
+        depth: Number(normalized.document.archiveDepth || 0),
+        remainingEntries: Math.max(0, ARCHIVE_EXPANSION_MAX_ENTRIES - expanded.length),
+        windowOptions
+      });
+      normalized.document.parserTrace.push(...nested.parserTrace);
+      normalized.document.parseWarnings.push(...nested.warnings);
+      normalized.document.parserTrace.push({
+        stage: "archive.file-ref.expand",
+        status: nested.documents.length ? "completed" : "empty",
+        childDocumentCount: nested.documents.length
+      });
+      expanded.push(...nested.documents.slice(0, remainingFiles - expanded.length));
+    }
+  }
+  return {
+    documents: expanded,
+    parserTrace: [{
+      stage: "directory.file-ref.expand",
+      status: expanded.length ? "completed" : "empty",
+      strategy: collected.strategy,
+      path: collected.root,
+      childDocumentCount: expanded.length,
+      discoveredFiles: collected.fileCount,
+      totalBytes: collected.totalBytes,
+      maxFiles: collected.maxFiles,
+      maxDepth: collected.maxDepth,
+      skippedDirectories: collected.skippedDirectoryCount,
+      skippedFiles: collected.skippedFileCount
+    }],
+    warnings: collected.warnings
+  };
+}
+
 function expandEmailAttachmentDocuments({ parentDocument, buffer, runtimeStatus, remainingAttachments = EMAIL_ATTACHMENT_MAX_COUNT } = {}) {
   if (!buffer?.length || remainingAttachments <= 0) {
     return [];
@@ -14218,7 +14521,25 @@ function normalizeDocuments(input = {}, runtimeStatus = null) {
   for (const [index, document] of documents.entries()) {
     const normalized = normalizeDocumentRecord(document, index, runtimeStatus, { windowOptions });
     normalizedDocuments.push(normalized.document);
-    if (normalized.route?.id === "archive" && normalized.document.archiveFilePath) {
+    if (normalized.route?.id === "directory" && normalized.document.directoryPath) {
+      const directory = expandDirectoryDocuments({
+        parentDocument: normalized.document,
+        directoryPath: normalized.document.directoryPath,
+        runtimeStatus,
+        remainingFiles: DIRECTORY_EXPANSION_MAX_FILES,
+        windowOptions
+      });
+      normalized.document.parserTrace.push(...directory.parserTrace);
+      normalized.document.parseWarnings.push(...directory.warnings);
+      normalized.document.parserTrace.push({
+        stage: "directory.expand-route",
+        status: directory.documents.length ? "completed" : "empty",
+        childDocumentCount: directory.documents.length,
+        maxDepth: DIRECTORY_EXPANSION_MAX_DEPTH,
+        maxFiles: DIRECTORY_EXPANSION_MAX_FILES
+      });
+      normalizedDocuments.push(...directory.documents);
+    } else if (normalized.route?.id === "archive" && normalized.document.archiveFilePath) {
       const archive = expandArchiveFileDocuments({
         parentDocument: normalized.document,
         filePath: normalized.document.archiveFilePath,
@@ -15515,7 +15836,7 @@ function classifyDocuments(documents = []) {
       .map((document) => document.sourceId)
   );
   for (const [index, document] of documents.entries()) {
-    if (containerParentIds.has(document.sourceId) && document.route?.formatId === "archive") {
+    if (containerParentIds.has(document.sourceId) && ["archive", "directory"].includes(document.route?.formatId)) {
       assignmentBySourceId.set(document.sourceId, {
         decision: "support-only",
         similarity: 0,
@@ -17788,8 +18109,9 @@ function createRun(input = {}, runtimeStatus = null, priorRuns = [], referenceFr
   };
   const routePlan = buildRoutePlan(corpusPlan);
   const plannedBySourceId = new Map(corpusPlan.documents.map((document) => [document.sourceId, document]));
+  const containerSourceIds = new Set(activeDocuments.map((document) => document.parentSourceId).filter(Boolean));
   const documents = activeDocuments
-    .filter((document) => document.text)
+    .filter((document) => document.text || containerSourceIds.has(document.sourceId))
     .map((document) => ({
       ...document,
       windowPlan: plannedBySourceId.get(document.sourceId)?.windowPlan || buildWindowPlan(document, input),
@@ -18238,6 +18560,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       "agent-project-convergence-query-index.v1",
       "inline-or-streaming-manifest-document-input.v1",
       "structured-json-file-ref-streaming-window.v1",
+      "directory-file-ref-recursive-routing.v1",
       "document-element-model.v1",
       "element-aware-by-title-windowing.v1",
       PDF_SUBTYPE_ROUTING_STRATEGY,
@@ -18325,8 +18648,11 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       largeTextCharacters: LARGE_TEXT_CHARACTERS,
       manifestStrategy: "inline-or-streaming-manifest-document-input.v1",
       structuredZipFileRefStrategy: "structured-zip-entry-bounded-or-streaming.v1",
+      directoryFileRefStrategy: "directory-file-ref-recursive-routing.v1",
       binaryProfileStrategy: "bounded-binary-file-profile.v1",
       structuredZipEntryMaxBytes: STRUCTURED_ZIP_ENTRY_MAX_BYTES,
+      directoryExpansionMaxDepth: DIRECTORY_EXPANSION_MAX_DEPTH,
+      directoryExpansionMaxFiles: DIRECTORY_EXPANSION_MAX_FILES,
       manifestMaxDocuments: MANIFEST_MAX_DOCUMENTS,
       manifestJsonDirectReadMaxBytes: MANIFEST_JSON_DIRECT_READ_MAX_BYTES,
       structuredJsonFileRefStrategy: "structured-json-file-ref-streaming-window.v1",
@@ -18386,6 +18712,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         "archive.child-file.route",
         "archive.file-ref.expand",
         "archive.entry-file-ref",
+        "directory.file-ref.expand",
+        "directory.entry-file-ref",
         "archive.zip.container",
         "archive.zip.extract",
         "archive.tar.container",

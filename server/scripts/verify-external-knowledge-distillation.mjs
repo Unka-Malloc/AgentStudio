@@ -552,6 +552,7 @@ let deferredFileRefDocument = null;
 let binaryProfileFileRefDocument = null;
 let largeJsonFileRefDocument = null;
 let mountedArchiveDocument = null;
+let mountedDirectoryDocument = null;
 let rawDocumentsManifestPath = "";
 const mountedStructuredDocuments = [];
 const mountedLegacyOfficeDocuments = [];
@@ -651,6 +652,33 @@ try {
       mediaType: "application/json",
       byteSize: largeJsonStat.size,
       filePath: largeJsonPath
+    };
+    const mountedDirectoryPath = path.join(serviceDataDir, "mounted-project-directory");
+    await fs.mkdir(path.join(mountedDirectoryPath, "finance"), { recursive: true });
+    await fs.mkdir(path.join(mountedDirectoryPath, "src"), { recursive: true });
+    await fs.mkdir(path.join(mountedDirectoryPath, "node_modules", "ignored"), { recursive: true });
+    await fs.writeFile(
+      path.join(mountedDirectoryPath, "README.md"),
+      "# Mounted Directory Project\nDirectory filePath expansion must route child documents without zipping the project first."
+    );
+    await fs.writeFile(
+      path.join(mountedDirectoryPath, "finance", "invoices.csv"),
+      "vendor,total,date\nDirectoryCo,720,2026-08-01\nDirectoryOps,144,2026-08-02\n"
+    );
+    await fs.writeFile(
+      path.join(mountedDirectoryPath, "src", "router.js"),
+      "export function routeExternalDistillation(input) { return input.service === 'external.knowledge.distillation'; }\n"
+    );
+    await fs.writeFile(
+      path.join(mountedDirectoryPath, "node_modules", "ignored", "noise.txt"),
+      "This dependency folder should be ignored by directory expansion.\n"
+    );
+    mountedDirectoryDocument = {
+      sourceId: "source-74",
+      title: "Mounted Project Directory",
+      fileName: "mounted-project.directory",
+      mediaType: "inode/directory",
+      filePath: mountedDirectoryPath
     };
     const mountedArchivePath = path.join(serviceDataDir, "mounted-project-package.tar");
     const mountedArchiveText = Array.from({ length: 80_000 }, (_, index) => (
@@ -1015,6 +1043,8 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.strategy, "streaming-windowed");
   assert.equal(capabilities.payload.largeDocumentPolicy.manifestStrategy, "inline-or-streaming-manifest-document-input.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.structuredZipFileRefStrategy, "structured-zip-entry-bounded-or-streaming.v1");
+  assert.equal(capabilities.payload.largeDocumentPolicy.directoryFileRefStrategy, "directory-file-ref-recursive-routing.v1");
+  assert.equal(capabilities.payload.largeDocumentPolicy.directoryExpansionMaxFiles >= 1000, true);
   assert.equal(capabilities.payload.largeDocumentPolicy.binaryProfileStrategy, "bounded-binary-file-profile.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.structuredJsonFileRefStrategy, "structured-json-file-ref-streaming-window.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.manifestMaxDocuments >= 1000, true);
@@ -1046,6 +1076,8 @@ try {
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("structured-zip.file-ref"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("structured-zip.structural-entry-plan"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("structured-zip.large-entry-stream"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("directory.file-ref.expand"), true);
+  assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("directory.entry-file-ref"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.text.basic"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.text.pdftotext"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("pdf.subtype-route"), true);
@@ -1225,6 +1257,7 @@ try {
   assert.equal(capabilities.payload.elementModel.referencePatterns.includes("unstructured.chunk_by_title"), true);
   assert.equal(capabilities.payload.algorithms.includes("element-aware-by-title-windowing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("structured-json-file-ref-streaming-window.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("directory-file-ref-recursive-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("pdf-subtype-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("content-signature-routing.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("human-agent-response-profile-separation.v1"), true);
@@ -1307,7 +1340,7 @@ try {
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-date-serials-normalized"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-hyperlink-refs-preserved"), true);
   assert.equal(capabilities.payload.formatConversion.qualityGates.includes("spreadsheet-chart-refs-preserved"), true);
-  for (const extension of [".pdf", ".docx", ".docm", ".dotx", ".dotm", ".doc", ".dot", ".rtf", ".xlsx", ".xlsm", ".xlsb", ".xltx", ".xltm", ".pptx", ".pptm", ".ppsx", ".ppsm", ".potx", ".potm", ".ppt", ".pps", ".pot", ".odt", ".ods", ".odp", ".epub", ".eml", ".msg", ".mbox", ".png", ".gif", ".pgm", ".zip", ".tar", ".tgz", ".tar.gz", ".7z", ".md", ".json", ".jsonc", ".ipynb", ".yaml", ".toml", ".ini", ".properties", ".env", ".svg", ".drawio", ".mmd", ".mermaid", ".puml", ".plantuml", ".js", ".ts", ".py", ".go", ".rs", ".diff", ".patch", ".ics", ".vcs", ".vtt", ".webvtt", ".srt", ".xbrl", ".ixbrl", ".wav", ".mp3", ".m4a", ".html", ".htm", ".xhtml", ".xml", ".rst", ".adoc", ".asciidoc", ".org", ".tex", ".latex", ".wiki", ".mediawiki"]) {
+  for (const extension of [".pdf", ".docx", ".docm", ".dotx", ".dotm", ".doc", ".dot", ".rtf", ".xlsx", ".xlsm", ".xlsb", ".xltx", ".xltm", ".pptx", ".pptm", ".ppsx", ".ppsm", ".potx", ".potm", ".ppt", ".pps", ".pot", ".odt", ".ods", ".odp", ".epub", ".eml", ".msg", ".mbox", ".png", ".gif", ".pgm", ".zip", ".tar", ".tgz", ".tar.gz", ".7z", ".directory", ".pages", ".numbers", ".key", ".xcodeproj", ".xcworkspace", ".md", ".json", ".jsonc", ".ipynb", ".yaml", ".toml", ".ini", ".properties", ".env", ".svg", ".drawio", ".mmd", ".mermaid", ".puml", ".plantuml", ".js", ".ts", ".py", ".go", ".rs", ".diff", ".patch", ".ics", ".vcs", ".vtt", ".webvtt", ".srt", ".xbrl", ".ixbrl", ".wav", ".mp3", ".m4a", ".html", ".htm", ".xhtml", ".xml", ".rst", ".adoc", ".asciidoc", ".org", ".tex", ".latex", ".wiki", ".mediawiki"]) {
     assert.equal(
       capabilities.payload.fileCompatibility.supportedExtensions.includes(extension),
       true,
@@ -1735,6 +1768,7 @@ try {
         ...(deferredFileRefDocument ? [deferredFileRefDocument] : []),
         ...(binaryProfileFileRefDocument ? [binaryProfileFileRefDocument] : []),
         ...(largeJsonFileRefDocument ? [largeJsonFileRefDocument] : []),
+        ...(mountedDirectoryDocument ? [mountedDirectoryDocument] : []),
         ...(mountedArchiveDocument ? [mountedArchiveDocument] : []),
         ...mountedStructuredDocuments,
         ...(directRuntime.payload.runtimes["tika.app"]?.available ? mountedLegacyOfficeDocuments : []),
@@ -2728,6 +2762,42 @@ try {
     )), true);
     assert.equal(largeJsonCorpus.parserTrace.some((trace) => trace.stage === "payload.file-ref-binary-profile"), false);
     assert.equal(largeJsonCorpus.parserTrace.some((trace) => trace.stage === "payload.file-ref-deferred"), false);
+  }
+  if (mountedDirectoryDocument) {
+    const directoryCorpus = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-74");
+    assert.ok(directoryCorpus, "mounted directory parent must remain visible in corpus");
+    assert.equal(directoryCorpus.route.formatId, "directory");
+    assert.equal(directoryCorpus.quality.suppliedPayloadKind, "directory-file-ref");
+    assert.equal(directoryCorpus.quality.distillable, false);
+    assert.equal(directoryCorpus.parserTrace.some((trace) => trace.stage === "payload.directory-ref" && trace.status === "completed"), true);
+    assert.equal(directoryCorpus.parserTrace.some((trace) => trace.stage === "directory.file-ref" && trace.status === "ready"), true);
+    assert.equal(directoryCorpus.parserTrace.some((trace) => (
+      trace.stage === "directory.file-ref.expand" &&
+      trace.status === "completed" &&
+      trace.strategy === "directory-file-ref-recursive-routing.v1" &&
+      trace.childDocumentCount >= 3
+    )), true);
+    assert.equal(directoryCorpus.parserTrace.some((trace) => trace.stage === "directory.expand-route" && trace.status === "completed"), true);
+    const directoryMarkdownChild = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-74!README.md");
+    assert.ok(directoryMarkdownChild, "mounted directory Markdown child must be routed");
+    assert.equal(directoryMarkdownChild.parentSourceId, "source-74");
+    assert.equal(directoryMarkdownChild.route.formatId, "markdown");
+    assert.equal(directoryMarkdownChild.quality.suppliedPayloadKind, "directory-entry-file-ref");
+    assert.equal(directoryMarkdownChild.parserTrace.some((trace) => trace.stage === "directory.entry-file-ref" && trace.status === "expanded"), true);
+    assert.equal(directoryMarkdownChild.parserTrace.some((trace) => trace.stage === "payload.stream-text" && trace.status === "completed"), true);
+    const directoryCsvChild = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-74!finance/invoices.csv");
+    assert.ok(directoryCsvChild, "mounted directory CSV child must be routed");
+    assert.equal(directoryCsvChild.parentSourceId, "source-74");
+    assert.equal(directoryCsvChild.route.formatId, "spreadsheet");
+    assert.equal(directoryCsvChild.parserTrace.some((trace) => trace.stage === "table.csv" && trace.status === "completed"), true);
+    const directoryCodeChild = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-74!src/router.js");
+    assert.ok(directoryCodeChild, "mounted directory source-code child must be routed");
+    assert.equal(directoryCodeChild.route.formatId, "source-code");
+    assert.equal(directoryCodeChild.parserTrace.some((trace) => trace.stage === "code.structure" && trace.status === "completed"), true);
+    assert.equal(createRun.payload.result.corpusPlan.documents.some((document) => /node_modules/.test(document.sourceId)), false);
+    const directorySupportGroup = createRun.payload.result.classification.groups.find((group) => group.sourceIds.includes("source-74"));
+    assert.equal(directorySupportGroup?.kind, "container-manifest");
+    assert.equal(directorySupportGroup?.excludedFromCore, true);
   }
   if (mountedArchiveDocument) {
     const mountedArchiveCorpus = createRun.payload.result.corpusPlan.documents.find((document) => document.sourceId === "source-20");
