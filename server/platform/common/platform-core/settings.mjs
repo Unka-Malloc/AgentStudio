@@ -131,6 +131,9 @@ const DEFAULT_AGENT_EXPLORE_DEFAULTS = {
   contextProfileId: "context-128k",
   thinkingMode: "default",
   toolChoice: "auto",
+  infoFeedSummaryModelAlias: "",
+  agentRetrievalModelAlias: "",
+  ruleAuthoringModelAlias: "",
   reviewFusionModelAlias: "",
   reviewFusionSystemPrompt:
     "你是 Pact 知识冲突融合智能体。你只能基于输入的原始记录、新录入记录、冲突原因和证据字段进行分析。请判断两份知识是完全重合、部分重合还是明显不同；给出相似度、应采取的审核动作和可复核理由。不得改写原始证据，不得编造未提供的信息。",
@@ -966,6 +969,15 @@ function normalizeAgentExploreDefaults(value = {}) {
     ),
     limit: sanitizeNumericSetting(incoming.limit, DEFAULT_AGENT_EXPLORE_DEFAULTS.limit),
     toolChoice: String(incoming.toolChoice || DEFAULT_AGENT_EXPLORE_DEFAULTS.toolChoice).trim() || "auto",
+    infoFeedSummaryModelAlias: String(
+      incoming.infoFeedSummaryModelAlias || DEFAULT_AGENT_EXPLORE_DEFAULTS.infoFeedSummaryModelAlias
+    ).trim(),
+    agentRetrievalModelAlias: String(
+      incoming.agentRetrievalModelAlias || DEFAULT_AGENT_EXPLORE_DEFAULTS.agentRetrievalModelAlias
+    ).trim(),
+    ruleAuthoringModelAlias: String(
+      incoming.ruleAuthoringModelAlias || DEFAULT_AGENT_EXPLORE_DEFAULTS.ruleAuthoringModelAlias
+    ).trim(),
     reviewFusionModelAlias: String(
       incoming.reviewFusionModelAlias || DEFAULT_AGENT_EXPLORE_DEFAULTS.reviewFusionModelAlias
     ).trim(),

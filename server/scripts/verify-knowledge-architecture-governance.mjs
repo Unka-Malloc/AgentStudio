@@ -400,8 +400,8 @@ async function assertDynamicParsingImplementation() {
   const module = await read("server/platform/specialized/knowledge/preprocessing/dynamic-parameter-document-parsing.mjs");
   const runtime = await read("server/platform/specialized/knowledge/preprocessing/document-parsing-runtime.mjs");
   const preprocessResult = await read("server/platform/specialized/knowledge/preprocessing/preprocess-result.mjs");
-  const knowledgeViewConsole = await read("server-web/composables/useKnowledgeViewConsole.ts");
-  const types = await read("server-web/lib/types.ts");
+  const knowledgeViewStateController = await read("server-web/composables/console-knowledge-view-state-controller.ts");
+  const splitDocumentTypes = await read("server-web/lib/types/split/documents.ts");
   const packageJson = await read("package.json");
 
   assertAllIncludes(module, [
@@ -436,7 +436,7 @@ async function assertDynamicParsingImplementation() {
     "granularityFragments"
   ], "server/platform/specialized/knowledge/preprocessing/preprocess-result.mjs");
 
-  assertAllIncludes(knowledgeViewConsole, [
+  assertAllIncludes(knowledgeViewStateController, [
     "dynamicParsingPreviewConfig",
     "dynamic-parameter-v1",
     "unified-knowledge-ingest-v1",
@@ -446,16 +446,16 @@ async function assertDynamicParsingImplementation() {
     "structureArtifacts",
     "granularityFragments",
     "parentArtifactId"
-  ], "server-web/composables/useKnowledgeViewConsole.ts");
+  ], "server-web/composables/console-knowledge-view-state-controller.ts");
 
-  assertAllIncludes(types, [
+  assertAllIncludes(splitDocumentTypes, [
     "contextBudget",
     "payloadBudget",
     "granularity",
     "dynamicParsing",
     "structureArtifacts",
     "granularityFragments"
-  ], "server-web/lib/types.ts");
+  ], "server-web/lib/types/split/documents.ts");
 
   assertIncludes(packageJson, "server:verify:dynamic-document-parsing", "package.json must expose dynamic parsing verifier");
   assertIncludes(packageJson, "server:knowledge:industrial-distill-plan", "package.json must expose industrial distillation benchmark CLI");
@@ -609,13 +609,25 @@ async function assertFrontendCoverage() {
   const registry = await read("server/config/frontend-feature-registry.yaml");
   const router = await read("server-web/router/index.ts");
   const bridge = await read("server-web/lib/bridge.ts");
+  const jobsClient = await read("server-web/lib/jobs-client.ts");
   const knowledgeDocuments = await read("server-web/lib/knowledge-documents.ts");
+  const knowledgeDocumentsClient = await read("server-web/lib/knowledge-documents-client.ts");
   const knowledgeView = await read("server-web/views/KnowledgeView.vue");
   const knowledgeIngestPanel = await read("server-web/components/knowledge/KnowledgeIngestPanel.vue");
   const approvalFlowView = await read("server-web/views/ApprovalFlowView.vue");
+  const approvalFlowController = await read("server-web/composables/console-approval-flow-view-controller.ts");
   const knowledgeImportCard = await read("server-web/components/KnowledgeImportCard.vue");
   const workspacesView = await read("server-web/views/WorkspacesView.vue");
   const debugView = await read("server-web/views/DebugView.vue");
+  const knowledgeRecallDebugPanel = await read("server-web/components/debug/KnowledgeRecallDebugPanel.vue");
+  const agentRetrievalForm = await read("server-web/components/debug/AgentRetrievalForm.vue");
+  const knowledgeRecallController = await read("server-web/composables/console-knowledge-recall-controller.ts");
+  const agentExploreSessionController = await read("server-web/composables/console-agent-explore-session-controller.ts");
+  const agentExploreClient = await read("server-web/lib/agent-explore-client.ts");
+  const debugDistillationRunner = await read("server-web/composables/console-debug-distillation-runner.ts");
+  const debugViewContext = await read("server-web/composables/debugViewContext.ts");
+  const knowledgeIngestController = await read("server-web/composables/console-knowledge-ingest-controller.ts");
+  const jobController = await read("server-web/composables/console-job-controller.ts");
   const toolsView = await read("server-web/views/admin/ToolsView.vue");
   const modulesView = await read("server-web/views/admin/ModulesView.vue");
   const consoleComposable = await read("server-web/composables/useConsole.ts");
@@ -653,12 +665,30 @@ async function assertFrontendCoverage() {
     "getKnowledgeEvidence",
     "knowledgeAssetUrl",
     "knowledgeDocxExportUrl",
-    "/api/knowledge/export/docx",
     "saveRuntimeMounts",
     "reloadRuntimeMounts",
     "getToolManagementCatalog",
     "getClientRuntimeStatus"
   ], "server-web/lib/bridge.ts");
+
+  assertAllIncludes(knowledgeDocumentsClient, [
+    "/api/knowledge/export/docx",
+    "knowledgeDocxExportUrl",
+    "normalizedDocumentUrl"
+  ], "server-web/lib/knowledge-documents-client.ts");
+
+  assertAllIncludes(jobsClient, [
+    "createJob",
+    "reparseJob",
+    "listJobs",
+    "deleteJob",
+    "getJob",
+    "getJobResult",
+    "/api/jobs",
+    "/reparse",
+    "/result"
+  ], "server-web/lib/jobs-client.ts");
+  assert.equal(bridge.includes("/api/jobs"), false, "server-web/lib/bridge.ts must delegate job lifecycle endpoints to jobs-client.ts");
 
   assertAllIncludes(knowledgeView, [
     "activeKnowledgeTab === 'management'",
@@ -681,13 +711,18 @@ async function assertFrontendCoverage() {
 
   assertAllIncludes(approvalFlowView, [
     "全平台审批流",
+    "ApprovalFlowCardList",
+    "useApprovalFlowViewController"
+  ], "server-web/views/ApprovalFlowView.vue");
+
+  assertAllIncludes(approvalFlowController, [
     "MCP 客户端授权",
     "知识入库冲突",
     "refreshMcpAuthorizationRequests",
     "refreshKnowledgeConflicts",
     "resolveMcpAuthorizationRequest",
     "resolveKnowledgeReview"
-  ], "server-web/views/ApprovalFlowView.vue");
+  ], "server-web/composables/console-approval-flow-view-controller.ts");
 
   assertAllIncludes(knowledgeImportCard, [
     "knowledgeExportUrl",
@@ -717,10 +752,58 @@ async function assertFrontendCoverage() {
   assertAllIncludes(debugView, [
     "knowledgeRecall",
     "agentRetrieval",
-    "runKnowledgeRecallDebugBatch",
-    "runKnowledgeAgentExplore",
-    "openAgentEvidencePreview"
+    "KnowledgeRecallDebugPanel",
+    "AgentRetrievalDebugPanel"
   ], "server-web/views/DebugView.vue");
+
+  assertAllIncludes(knowledgeRecallDebugPanel, [
+    "runKnowledgeRecallDebugBatch",
+    "openAgentEvidencePreview"
+  ], "server-web/components/debug/KnowledgeRecallDebugPanel.vue");
+
+  assertAllIncludes(knowledgeRecallController, [
+    "runKnowledgeRecallDebugBatch",
+    "buildKnowledgeRecallSearchPayload"
+  ], "server-web/composables/console-knowledge-recall-controller.ts");
+
+  assertAllIncludes(agentRetrievalForm, [
+    "runKnowledgeAgentExplore"
+  ], "server-web/components/debug/AgentRetrievalForm.vue");
+
+  assertAllIncludes(agentExploreSessionController, [
+    "runKnowledgeAgentExplore",
+    "runKnowledgeAgentExploreApi",
+    "getKnowledgeAgentExploreRun"
+  ], "server-web/composables/console-agent-explore-session-controller.ts");
+  assertAllIncludes(agentExploreClient, [
+    "/api/knowledge/agent-explore/runs",
+    "/api/agent-workspaces"
+  ], "server-web/lib/agent-explore-client.ts");
+
+  assertAllIncludes(debugDistillationRunner, [
+    "from \"../lib/jobs-client\"",
+    "createJob({",
+    "getJob(jobId)"
+  ], "server-web/composables/console-debug-distillation-runner.ts");
+
+  assertAllIncludes(debugViewContext, [
+    "openAgentEvidencePreview"
+  ], "server-web/composables/debugViewContext.ts");
+
+  assertAllIncludes(knowledgeIngestController, [
+    "from \"../lib/jobs-client\"",
+    "createKnowledgeUploadSession(filesToUpload",
+    "createJob({",
+    "getJob(ingestJob.value.id)",
+    "getNormalizedDocuments(job.id)"
+  ], "server-web/composables/console-knowledge-ingest-controller.ts");
+
+  assertAllIncludes(jobController, [
+    "from \"../lib/jobs-client\"",
+    "deleteJobRequest(jobId)",
+    "function upsertJobFromEvent",
+    "const filteredJobs = computed"
+  ], "server-web/composables/console-job-controller.ts");
 
   assertAllIncludes(toolsView, [
     "toolManagementCatalogState",
@@ -746,7 +829,7 @@ async function assertFrontendCoverage() {
     "disableMountModule",
     "async function uploadFilesToKnowledge()",
     "createKnowledgeUploadSession(filesToUpload",
-    "bridge.createJob({"
+    "jobs-client.createJob({"
   ], "server-web/composables/useConsole.ts");
 }
 

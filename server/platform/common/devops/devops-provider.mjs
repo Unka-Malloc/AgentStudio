@@ -5,6 +5,7 @@ import {
   saveMonitorAlertConfig
 } from "./monitor-alert-core/monitor-alerts.mjs";
 import { getBackgroundProcessStatus } from "./process-status/background-process-status.mjs";
+import { recoverBackgroundSupervisor } from "./supervisor-recovery/supervisor-recovery.mjs";
 import {
   composeUnifiedSystemStatus,
   normalizeUnifiedRegistration
@@ -34,6 +35,16 @@ export function createDevopsProvider({ userDataPath = "" } = {}) {
         input
       );
     },
+    async recoverBackgroundSupervisor(input = {}) {
+      const effectiveUserDataPath = input.userDataPath || userDataPath;
+      const backgroundStatus = input.backgroundStatus ||
+        await getBackgroundProcessStatus(effectiveUserDataPath);
+      return recoverBackgroundSupervisor({
+        ...input,
+        userDataPath: effectiveUserDataPath,
+        backgroundStatus
+      });
+    },
     createMonitorAlertApi({ queueMonitor = null } = {}) {
       return Object.freeze({
         getState: () => getMonitorAlertState(userDataPath, { queueMonitor }),
@@ -60,6 +71,7 @@ export function createDevopsProvider({ userDataPath = "" } = {}) {
               "saveMonitorAlertConfig",
               "runMonitorAlertCycle",
               "acknowledgeMonitorAlert",
+              "recoverBackgroundSupervisor",
               "createMonitorAlertApi"
             ]
           },

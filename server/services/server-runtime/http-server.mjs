@@ -590,6 +590,7 @@ export async function startHttpServer({
     queueMonitor: queueMonitorAdapter,
     checkpointTreeApi: dataStructures.checkpointTree,
     devopsProvider: registeredDevopsProvider,
+    getToolManagementPlatform: () => toolManagementPlatformRef,
     getToolSkillManagementProvider: () => toolSkillManagementProviderRef,
     consoleDomainServices
   });

@@ -196,11 +196,11 @@ try {
   assert.ok(manifest.sharedHub.sharedspace.exchangeReceipt.locations.includes("structuredContent.exchange"));
   assert.ok(manifest.sharedHub.sharedspace.exchangeReceipt.fields.includes("outlet"));
   assert.ok(manifest.sharedHub.sharedspace.exchangeReceipt.fields.includes("referencePolicy"));
-  assert.ok(manifest.sharedHub.sharedspace.exchangeReceipt.fields.includes("transferReceiptId"));
-  assert.ok(manifest.sharedHub.sharedspace.exchangeReceipt.actions.includes("drive-file-uploaded"));
+  assert.equal(manifest.sharedHub.sharedspace.exchangeReceipt.fields.includes("transferReceiptId"), false);
+  assert.equal(manifest.sharedHub.sharedspace.exchangeReceipt.actions.includes("drive-file-uploaded"), false);
   assert.ok(manifest.sharedHub.sharedspace.coreOperations.includes("pact.sharedspace.file.write"));
-  assert.ok(manifest.sharedHub.sharedspace.coreOperations.includes("pact.sharedspace.drive.file.upload"));
-  assert.ok(manifest.sharedHub.sharedspace.coreOperations.includes("pact.sharedspace.drive.sync.apply"));
+  assert.equal(manifest.sharedHub.sharedspace.coreOperations.includes("pact.sharedspace.drive.file.upload"), false);
+  assert.equal(manifest.sharedHub.sharedspace.coreOperations.includes("pact.sharedspace.drive.sync.apply"), false);
   const portablePlatform = manifest.portable.currentPlatform || verifyTargetPlatform;
   const archiveOrder = archiveInspectOrder(portablePlatform);
   const portableArchives = resolvePortableArchivePaths(result, manifest);

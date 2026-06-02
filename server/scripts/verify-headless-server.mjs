@@ -1130,7 +1130,7 @@ try {
   assert.equal(weeklyDownload.ok, true);
   assert.match(
     weeklyDownload.headers.get("content-disposition") || "",
-    /^attachment; filename="weekly-report\.eml"$/
+    /^attachment; filename="weekly-report\.eml"(?:; filename\*=UTF-8''weekly-report\.eml)?$/
   );
   assert.equal(await weeklyDownload.text(), bundledWeeklyEmail.content);
 

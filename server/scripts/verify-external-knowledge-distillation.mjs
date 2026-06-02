@@ -1786,9 +1786,18 @@ try {
   assert.equal(capabilities.payload.artifacts.includes("format-conversion-plan-json"), true);
   assert.equal(capabilities.payload.artifacts.includes("professional-format-manifest-json"), true);
   assert.equal(capabilities.payload.artifacts.includes("reference-gap-report-json"), true);
+  assert.equal(capabilities.payload.artifacts.includes("component-pipeline-graph-json"), true);
   assert.equal(capabilities.payload.responseProfileSeparation.strategy, "human-agent-response-profile-separation.v1");
   assert.equal(capabilities.payload.responseProfileSeparation.humanReadable.artifacts.includes("console-summary-json"), true);
   assert.equal(capabilities.payload.responseProfileSeparation.agentReadable.artifacts.includes("professional-format-manifest-json"), true);
+  assert.equal(capabilities.payload.responseProfileSeparation.agentReadable.artifacts.includes("component-pipeline-graph-json"), true);
+  assert.equal(capabilities.payload.componentPipelineGraph.supported, true);
+  assert.equal(capabilities.payload.componentPipelineGraph.strategy, "haystack-llamaindex-inspired-component-pipeline-graph.v1");
+  assert.equal(capabilities.payload.componentPipelineGraph.registryStrategy, "external-kd-configurable-component-registry.v1");
+  assert.equal(capabilities.payload.componentPipelineGraph.artifact, "component-pipeline-graph-json");
+  assert.equal(capabilities.payload.componentPipelineGraph.moduleBoundaries.includes("external-kd.document-parsing.module.v1"), true);
+  assert.equal(capabilities.payload.componentPipelineGraph.moduleBoundaries.includes("external-kd.distillation-algorithm.module.v1"), true);
+  assert.equal(capabilities.payload.componentPipelineGraph.parserPayloadFieldsAllowedInAlgorithmCore, false);
   assert.equal(capabilities.payload.referenceGapReport.strategy, "reference-framework-gap-report.v1");
   assert.equal(capabilities.payload.referenceGapReport.localAuditStrategy, "reference-framework-local-checkout-audit.v1");
   assert.equal(capabilities.payload.elementModel.supported, true);
@@ -2636,6 +2645,16 @@ try {
   assert.equal(createRun.payload.result.graphEvidence.summary.entityCount > 0, true);
   assert.equal(createRun.payload.result.graphEvidence.summary.relationshipCount > 0, true);
   assert.equal(createRun.payload.result.graphEvidence.covariates.some((claim) => claim.covariate_type === "claim"), true);
+  assert.equal(createRun.payload.result.componentPipelineGraph.strategy, "haystack-llamaindex-inspired-component-pipeline-graph.v1");
+  assert.equal(createRun.payload.result.componentPipelineGraph.componentRegistry.strategy, "external-kd-configurable-component-registry.v1");
+  assert.equal(createRun.payload.result.componentPipelineGraph.nodes.some((node) => node.nodeId === "parser-strategy-executor" && node.moduleBoundary === "external-kd.document-parsing.module.v1"), true);
+  assert.equal(createRun.payload.result.componentPipelineGraph.nodes.some((node) => node.nodeId === "classification-router" && node.moduleBoundary === "external-kd.distillation-algorithm.module.v1"), true);
+  assert.equal(createRun.payload.result.componentPipelineGraph.nodes.some((node) => node.nodeId === "evidence-ranker" && node.componentType === "ranker"), true);
+  assert.equal(createRun.payload.result.componentPipelineGraph.edges.some((edge) => edge.contract === "external-kd.algorithm-input.normalized-documents.v1"), true);
+  assert.equal(createRun.payload.result.componentPipelineGraph.contracts.parserPayloadFieldsAllowedInAlgorithmCore, false);
+  assert.equal(createRun.payload.result.componentPipelineGraph.rankers.some((ranker) => ranker.id === "semantic-lexical-polarity-evidence-ranker"), true);
+  assert.equal(createRun.payload.result.agentMessage.componentPipelineGraph.artifactId, "component-pipeline-graph-json");
+  assert.equal(createRun.payload.result.agentMessage.componentPipelineGraph.nodeCount, createRun.payload.result.componentPipelineGraph.nodes.length);
   assert.equal(createRun.payload.result.modelDistillation.moduleBoundary, "external-kd.model-distillation.module.v1");
   assert.equal(createRun.payload.result.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
   assert.equal(createRun.payload.result.modelDistillation.profileId, "real-model-grounded-distillation.v1");
@@ -5993,6 +6012,22 @@ try {
   const referenceGapReport = JSON.parse(await referenceGapArtifact.text());
   assert.equal(referenceGapReport.strategy, "reference-framework-gap-report.v1");
   assert.equal(referenceGapReport.frameworks.some((framework) => framework.id === "docling" && framework.openGaps.length > 0), true);
+  assert.equal(referenceGapReport.absorbedCapabilityMap.componentPipelineGraph.status, "absorbed");
+  assert.equal(referenceGapReport.frameworks.some((framework) => (
+    framework.id === "haystack" &&
+    framework.absorbedPatterns.includes("configurable parser/ranker component pipeline graph") &&
+    !framework.openGaps.includes("configurable parser/ranker pipeline graph")
+  )), true);
+
+  const componentPipelineGraphArtifact = await fetch(`${pactServer.url}/api/external/knowledge/distillation/runs/${encodeURIComponent(createRun.payload.runId)}/artifacts/component-pipeline-graph-json`, {
+    headers: authHeaders(auth)
+  });
+  assert.equal(componentPipelineGraphArtifact.status, 200);
+  const componentPipelineGraph = JSON.parse(await componentPipelineGraphArtifact.text());
+  assert.equal(componentPipelineGraph.strategy, "haystack-llamaindex-inspired-component-pipeline-graph.v1");
+  assert.equal(componentPipelineGraph.configSources.parserStrategies.strategy, "singleton-parser-strategy-registry.v1");
+  assert.equal(componentPipelineGraph.nodes.some((node) => node.nodeId === "format-conversion-adapter"), true);
+  assert.equal(componentPipelineGraph.edges.some((edge) => edge.from === "graph-evidence-builder" && edge.to === "model-distillation-gateway"), true);
 
   const workspacePackageArtifact = await fetch(`${pactServer.url}/api/external/knowledge/distillation/runs/${encodeURIComponent(createRun.payload.runId)}/artifacts/workspace-package-zip`, {
     headers: authHeaders(auth)
@@ -6000,7 +6035,7 @@ try {
   assert.equal(workspacePackageArtifact.status, 200);
   assert.match(workspacePackageArtifact.headers.get("content-type") || "", /application\/zip/);
   const workspaceEntries = unzipSync(new Uint8Array(await workspacePackageArtifact.arrayBuffer()));
-  for (const entryName of ["manifest.json", "distillation.md", "distillation.docx", "console-summary.json", "agent-message.json", "result.json", "project-snapshot.json", "evidence-pack.json", "format-conversion-plan.json", "professional-format-manifest.json", "reference-gap-report.json"]) {
+  for (const entryName of ["manifest.json", "distillation.md", "distillation.docx", "console-summary.json", "agent-message.json", "result.json", "project-snapshot.json", "evidence-pack.json", "format-conversion-plan.json", "professional-format-manifest.json", "reference-gap-report.json", "component-pipeline-graph.json"]) {
     assert.ok(workspaceEntries[entryName], `workspace package must include ${entryName}`);
   }
   const workspaceManifest = JSON.parse(Buffer.from(workspaceEntries["manifest.json"]).toString("utf8"));
@@ -6017,7 +6052,8 @@ try {
     "evidence-pack-json",
     "format-conversion-plan-json",
     "professional-format-manifest-json",
-    "reference-gap-report-json"
+    "reference-gap-report-json",
+    "component-pipeline-graph-json"
   ]) {
     const artifact = workspaceArtifactsById.get(artifactId);
     assert.ok(artifact, `workspace manifest must list ${artifactId}`);
@@ -6029,6 +6065,7 @@ try {
   assert.equal(workspaceArtifactsById.get("agent-message-json").responseProfile, "agent");
   assert.equal(workspaceArtifactsById.get("professional-format-manifest-json").responseProfile, "agent");
   assert.equal(workspaceArtifactsById.get("evidence-pack-json").responseProfile, "agent");
+  assert.equal(workspaceArtifactsById.get("component-pipeline-graph-json").responseProfile, "agent");
   assert.equal(workspaceArtifactsById.get("result-json").responseProfile, "api");
   assert.equal(workspaceManifest.artifacts.some((item) => (
     item.artifactId === "portable-docx" &&

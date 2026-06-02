@@ -316,10 +316,27 @@ async function assertRuntimeDefaultBinding() {
 
 async function assertFrontendBinding() {
   const knowledgeView = await read("server-web/views/KnowledgeView.vue");
+  const knowledgeIngestPanel = await read("server-web/components/knowledge/KnowledgeIngestPanel.vue");
+  const knowledgeViewConsole = await read("server-web/composables/useKnowledgeViewConsole.ts");
   const types = await read("server-web/lib/types.ts");
   const bridge = await read("server-web/lib/bridge.ts");
   const registry = await read("server/platform/common/operation-dispatcher/operation-registry.mjs");
   const packageJson = await read("package.json");
+
+  assert.ok(knowledgeView.includes("KnowledgeIngestPanel"), "KnowledgeView.vue must mount the ingest panel");
+  assert.ok(knowledgeView.includes("dynamicParsingPolicySignature"), "KnowledgeView.vue must expose the dynamic parsing policy signature");
+
+  for (const needle of [
+    "dynamicParsingPreviewConfig",
+    "contextBudget",
+    "payloadBudget",
+    "granularity",
+    "dynamicParsing",
+    "structureArtifacts",
+    "granularityFragments"
+  ]) {
+    assert.ok(knowledgeIngestPanel.includes(needle), `KnowledgeIngestPanel.vue must bind ${needle}`);
+  }
 
   for (const needle of [
     "dynamic-parameter-v1",
@@ -332,12 +349,12 @@ async function assertFrontendBinding() {
     "granularityFragments",
     "parentArtifactId"
   ]) {
-    assert.ok(knowledgeView.includes(needle), `KnowledgeView.vue must bind ${needle}`);
+    assert.ok(knowledgeViewConsole.includes(needle), `useKnowledgeViewConsole.ts must configure ${needle}`);
   }
   assert.match(
-    knowledgeView,
+    knowledgeViewConsole,
     /secondaryParse:\s*{\s*enabled:\s*false/,
-    "KnowledgeView.vue must keep secondary parsing disabled by default"
+    "useKnowledgeViewConsole.ts must keep secondary parsing disabled by default"
   );
 
   for (const [file, text] of [

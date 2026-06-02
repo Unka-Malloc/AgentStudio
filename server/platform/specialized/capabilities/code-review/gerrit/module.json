@@ -13,7 +13,7 @@
   "defaultLoaded": true,
   "protocol": "pact.code-review.v1",
   "adapterProtocol": "gerrit.rest.v1+gerrit.git-review-push",
-  "maintenanceSkill": "skills/server-mcp/pact-gerrit-mcp-maintainer/SKILL.md",
+  "maintenanceSkill": "skills/codespace/pact-gerrit-mcp-maintainer/SKILL.md",
   "components": {
     "gerritMcpRoute": {
       "path": "./index.mjs",

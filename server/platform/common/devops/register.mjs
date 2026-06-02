@@ -66,6 +66,14 @@ export function registerDevopsPlatformServices(registry, {
       value: (input = {}) => effectiveDevopsProvider.acknowledgeMonitorAlert(input)
     }),
     registerPlatformService(registry, {
+      id: "devops.backgroundSupervisor.recover",
+      platform: "devops",
+      label: "Recover background supervisor",
+      kind: "process-control",
+      ownerFeatureId: "monitor-alert-core",
+      value: (input = {}) => effectiveDevopsProvider.recoverBackgroundSupervisor(input)
+    }),
+    registerPlatformService(registry, {
       id: "devops.unifiedRegistration.normalize",
       platform: "devops",
       label: "Unified registration normalize",

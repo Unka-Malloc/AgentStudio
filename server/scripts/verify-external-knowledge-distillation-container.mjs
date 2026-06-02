@@ -637,9 +637,16 @@ try {
   assert.equal(capabilities.payload.artifacts.includes("format-conversion-plan-json"), true);
   assert.equal(capabilities.payload.artifacts.includes("professional-format-manifest-json"), true);
   assert.equal(capabilities.payload.artifacts.includes("reference-gap-report-json"), true);
+  assert.equal(capabilities.payload.artifacts.includes("component-pipeline-graph-json"), true);
   assert.equal(capabilities.payload.responseProfileSeparation.strategy, "human-agent-response-profile-separation.v1");
   assert.equal(capabilities.payload.responseProfileSeparation.humanReadable.artifacts.includes("console-summary-json"), true);
   assert.equal(capabilities.payload.responseProfileSeparation.agentReadable.artifacts.includes("professional-format-manifest-json"), true);
+  assert.equal(capabilities.payload.responseProfileSeparation.agentReadable.artifacts.includes("component-pipeline-graph-json"), true);
+  assert.equal(capabilities.payload.componentPipelineGraph.supported, true);
+  assert.equal(capabilities.payload.componentPipelineGraph.strategy, "haystack-llamaindex-inspired-component-pipeline-graph.v1");
+  assert.equal(capabilities.payload.componentPipelineGraph.registryStrategy, "external-kd-configurable-component-registry.v1");
+  assert.equal(capabilities.payload.componentPipelineGraph.artifact, "component-pipeline-graph-json");
+  assert.equal(capabilities.payload.componentPipelineGraph.parserPayloadFieldsAllowedInAlgorithmCore, false);
   assert.equal(capabilities.payload.referenceGapReport.strategy, "reference-framework-gap-report.v1");
   assert.equal(capabilities.payload.elementModel.supported, true);
   assert.equal(capabilities.payload.elementModel.strategy, "document-element-model.v1");
@@ -1670,7 +1677,7 @@ try {
   const workspacePackage = await fetch(`${serviceUrl}/v1/distillation/runs/${encodeURIComponent(projectPackageRun.payload.runId)}/artifacts/workspace-package-zip`);
   assert.equal(workspacePackage.status, 200);
   const workspaceEntries = unzipSync(new Uint8Array(await workspacePackage.arrayBuffer()));
-  for (const entryName of ["manifest.json", "distillation.md", "distillation.docx", "console-summary.json", "agent-message.json", "result.json", "project-snapshot.json", "evidence-pack.json", "format-conversion-plan.json", "professional-format-manifest.json", "reference-gap-report.json"]) {
+  for (const entryName of ["manifest.json", "distillation.md", "distillation.docx", "console-summary.json", "agent-message.json", "result.json", "project-snapshot.json", "evidence-pack.json", "format-conversion-plan.json", "professional-format-manifest.json", "reference-gap-report.json", "component-pipeline-graph.json"]) {
     assert.ok(workspaceEntries[entryName], `container workspace package must include ${entryName}`);
   }
   const workspaceManifest = JSON.parse(Buffer.from(workspaceEntries["manifest.json"]).toString("utf8"));
@@ -1686,7 +1693,8 @@ try {
     "evidence-pack-json",
     "format-conversion-plan-json",
     "professional-format-manifest-json",
-    "reference-gap-report-json"
+    "reference-gap-report-json",
+    "component-pipeline-graph-json"
   ]) {
     const artifact = workspaceArtifactsById.get(artifactId);
     assert.ok(artifact, `container workspace manifest must list ${artifactId}`);
@@ -1698,9 +1706,15 @@ try {
   assert.equal(workspaceArtifactsById.get("agent-message-json").responseProfile, "agent");
   assert.equal(workspaceArtifactsById.get("professional-format-manifest-json").responseProfile, "agent");
   assert.equal(workspaceArtifactsById.get("evidence-pack-json").responseProfile, "agent");
+  assert.equal(workspaceArtifactsById.get("component-pipeline-graph-json").responseProfile, "agent");
   assert.equal(workspaceArtifactsById.get("result-json").responseProfile, "api");
   assert.equal(workspaceManifest.artifacts.some((item) => item.artifactId === "console-summary-json" && item.path === "console-summary.json"), true);
   assert.equal(workspaceManifest.artifacts.some((item) => item.artifactId === "professional-format-manifest-json" && item.path === "professional-format-manifest.json"), true);
+  assert.equal(workspaceManifest.artifacts.some((item) => item.artifactId === "component-pipeline-graph-json" && item.path === "component-pipeline-graph.json"), true);
+  const packagePipelineGraph = JSON.parse(Buffer.from(workspaceEntries["component-pipeline-graph.json"]).toString("utf8"));
+  assert.equal(packagePipelineGraph.strategy, "haystack-llamaindex-inspired-component-pipeline-graph.v1");
+  assert.equal(packagePipelineGraph.componentRegistry.strategy, "external-kd-configurable-component-registry.v1");
+  assert.equal(packagePipelineGraph.nodes.some((node) => node.nodeId === "evidence-ranker" && node.componentType === "ranker"), true);
   const packageConsoleSummary = JSON.parse(Buffer.from(workspaceEntries["console-summary.json"]).toString("utf8"));
   assert.equal(packageConsoleSummary.responseProfile, "console");
   assert.equal(packageConsoleSummary.documents.every((document) => !Object.prototype.hasOwnProperty.call(document, "parserTrace")), true);

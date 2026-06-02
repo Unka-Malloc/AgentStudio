@@ -8,7 +8,9 @@
 | 基建层 | 安全权限 | `security` | `common/security` | Authentication, authorization, access control helpers, operation audit policy. |
 | 基建层 | 模块管理 | `module-management` | `common/module-manager` | Mount configuration, routing, runtime snapshots, lazy module loading. |
 | 基建层 | 数据结构 | `data-structure` | `common/data-structure` | Shared durable data structures such as checkpoint trees. |
-| 基建层 | 存储 | `storage` | `common/storage` | Metadata SQLite, raw object store, repositories, storage maintenance tools. |
+| 基建层 | 平台适配 | `platform-adapter` | `common/platform-adapter` | OS and environmental adaptation, VM/container runtime bridging. |
+| 基建层 | 资源管理 | `resource-management` | `common/resource-management` | Resource quotas, caching, local disk scheduling, and storage. |
+| 基建层 | └─ 存储 | `storage` | `common/storage` | Metadata SQLite, raw object store, repositories, storage maintenance tools. |
 | 基建层 | 运维基础 | `devops` | `common/devops` | Process status, monitor alerts, unified registration, diagnostics. |
 | 服务层 | 接口封装层 | `interface-wrapper` | `common/operation-dispatcher` | HTTP / RPC / CLI operation registry and dispatch implementation. |
 | 服务层 | 控制台 API | `console-api` | `common/console` | Console API controllers, response helpers, state facade. |

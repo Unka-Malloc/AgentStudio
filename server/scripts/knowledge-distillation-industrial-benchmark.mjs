@@ -30,7 +30,7 @@ const REFERENCE_SOURCE_MARKERS = Object.freeze({
   },
   "llama-index": {
     requiredPaths: ["llama-index-core", "docs/examples/agent", "docs/examples/graph_rag", "docs/examples/node_parsers", "docs/examples/evaluation"],
-    absorbedCapabilities: ["document agents", "nodes-with-metadata", "retrieval/evaluation patterns"]
+    absorbedCapabilities: ["document agents", "nodes-with-metadata", "retrieval/evaluation patterns", "ingestion pipeline contracts"]
   },
   marker: {
     requiredPaths: ["marker/converters", "marker/renderers", "marker/schema", "marker/processors", "data/examples/markdown", "data/examples/json"],
@@ -42,7 +42,7 @@ const REFERENCE_SOURCE_MARKERS = Object.freeze({
   },
   haystack: {
     requiredPaths: ["haystack/core/pipeline", "haystack/components/converters", "haystack/components/routers", "haystack/components/evaluators", "test/components/converters"],
-    absorbedCapabilities: ["explicit pipeline components", "component orchestration", "evaluation patterns"]
+    absorbedCapabilities: ["explicit pipeline components", "component orchestration", "evaluation patterns", "pipeline graph"]
   },
   unstructured: {
     requiredPaths: ["unstructured/partition", "unstructured/partition/pdf_image", "unstructured/chunking", "unstructured/documents", "unstructured/file_utils"],
@@ -118,6 +118,16 @@ const ABSORPTION_REQUIREMENTS = Object.freeze([
       "console-summary-json",
       "agent-message-json",
       "professional-format-manifest-json"
+    ]
+  },
+  {
+    capability: "ComponentPipelineGraph",
+    references: ["haystack", "llama-index"],
+    servicePatterns: [
+      "external-kd-configurable-component-registry.v1",
+      "haystack-llamaindex-inspired-component-pipeline-graph.v1",
+      "component-pipeline-graph-json",
+      "semantic-lexical-polarity-evidence-ranker.v1"
     ]
   },
   {
@@ -280,6 +290,9 @@ async function buildExternalIndustrialBenchmark() {
     "professional-format-manifest-json",
     "office-document-professional-adaptation.v1",
     "singleton-format-conversion-profile-registry.v1",
+    "component-pipeline-graph-json",
+    "haystack-llamaindex-inspired-component-pipeline-graph.v1",
+    "external-kd-configurable-component-registry.v1",
     "profile-guided-group-distillation-map.v1",
     "visio-opc-shape-parser.v1",
     "directory-file-ref-recursive-routing.v1",
@@ -344,6 +357,12 @@ async function buildExternalIndustrialBenchmark() {
         "console-summary-json",
         "agent-message-json",
         "human-agent-response-profile-separation.v1"
+      ]),
+      componentPipelineGraph: hasAll(serviceText, [
+        "component-pipeline-graph-json",
+        "haystack-llamaindex-inspired-component-pipeline-graph.v1",
+        "external-kd-configurable-component-registry.v1",
+        "semantic-lexical-polarity-evidence-ranker.v1"
       ]),
       professionalOfficeAdaptation: hasAll(serviceText, [
         "office-document-professional-adaptation.v1",

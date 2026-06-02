@@ -530,7 +530,7 @@ async function readJson(relativePath) {
 }
 
 async function verifyMaintenanceArtifacts() {
-  const skillPath = "skills/server-mcp/pact-gerrit-mcp-maintainer/SKILL.md";
+  const skillPath = "skills/codespace/pact-gerrit-mcp-maintainer/SKILL.md";
   const skill = await fs.readFile(path.join(repoRoot, skillPath), "utf8");
   assert.match(skill, /name: pact-gerrit-mcp-maintainer/);
   assert.match(skill, /server:verify:gerrit-mcp/);

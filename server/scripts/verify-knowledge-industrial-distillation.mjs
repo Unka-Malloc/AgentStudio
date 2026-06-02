@@ -55,6 +55,9 @@ for (const requiredPattern of [
   "professional-format-manifest-json",
   "office-document-professional-adaptation.v1",
   "format-conversion-plan-json",
+  "component-pipeline-graph-json",
+  "haystack-llamaindex-inspired-component-pipeline-graph.v1",
+  "external-kd-configurable-component-registry.v1",
   "visio-opc-shape-parser.v1",
   "directory-file-ref-recursive-routing.v1",
   "PROJECT_EVIDENCE_QUERY_STRATEGY"

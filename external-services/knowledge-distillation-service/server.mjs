@@ -314,6 +314,9 @@ const FORMAT_CONVERSION_PROFILES_CONFIG_STRATEGY = "singleton-format-conversion-
 const MODEL_DISTILLATION_PROFILES_CONFIG_PATH = path.join(SERVICE_ROOT, "model-distillation-profiles.json");
 const MODEL_DISTILLATION_PROFILES_CONFIG_PROTOCOL_VERSION = "pact.external-knowledge-distillation.model-distillation-profiles.v1";
 const MODEL_DISTILLATION_PROFILES_CONFIG_STRATEGY = "singleton-model-distillation-profile-registry.v1";
+const COMPONENT_REGISTRY_STRATEGY = "external-kd-configurable-component-registry.v1";
+const COMPONENT_PIPELINE_GRAPH_STRATEGY = "haystack-llamaindex-inspired-component-pipeline-graph.v1";
+const COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID = "component-pipeline-graph-json";
 
 function normalizeFormatRouteArray(value = []) {
   return Array.from(new Set((Array.isArray(value) ? value : [])
@@ -504,7 +507,9 @@ const EXTERNAL_RUNTIME_REQUIRED_PARSER_IDS = Object.freeze(
 
 const ROUTES_BY_EXTENSION = new Map();
 const ROUTES_BY_MEDIA_TYPE = new Map();
+const FORMAT_ROUTES_BY_ID = new Map();
 for (const route of FORMAT_ROUTES) {
+  FORMAT_ROUTES_BY_ID.set(route.id, route);
   for (const extension of route.extensions) {
     ROUTES_BY_EXTENSION.set(extension, route);
   }
@@ -1131,9 +1136,9 @@ const REFERENCE_ABSORPTION_MAP = Object.freeze({
     gaps: ["full PDF and Word layout block geometry", "formula recognition beyond SpreadsheetML and text-level elements"]
   },
   "llama-index": {
-    absorbed: ["agent-message-json", "graphEvidence text units with metadata", "evidence query API", "node-style element references on windows and text units", "directory child documents as routed nodes"],
+    absorbed: ["agent-message-json", "graphEvidence text units with metadata", "evidence query API", "node-style element references on windows and text units", "directory child documents as routed nodes", "pluggable ingestion component contract graph"],
     baseline: ["node/window metadata and project snapshot hashes"],
-    gaps: ["pluggable ingestion pipeline contracts", "agent evaluation feedback loop"]
+    gaps: ["agent evaluation feedback loop"]
   },
   marker: {
     absorbed: ["portable Markdown output", "Markdown block parsing", "JSON evidence pack", "DOCX and workspace ZIP packaging"],
@@ -1146,9 +1151,9 @@ const REFERENCE_ABSORPTION_MAP = Object.freeze({
     gaps: ["persistent graph store adapter", "learned graph ranking over multi-run evidence"]
   },
   haystack: {
-    absorbed: ["explicit route stages", "parser traces", "runtime doctor", "capabilities document", "directory file-ref expansion stage", "HTML/Markdown-style converter boundaries for markup and Markdown documents", "Word, PowerPoint, Excel, and Visio parser stages with element refs", "Word, PowerPoint, and Excel hyperlink preservation on element/cell refs", "format conversion profiles for human and agent targets"],
+    absorbed: ["explicit route stages", "parser traces", "runtime doctor", "capabilities document", "directory file-ref expansion stage", "HTML/Markdown-style converter boundaries for markup and Markdown documents", "Word, PowerPoint, Excel, and Visio parser stages with element refs", "Word, PowerPoint, and Excel hyperlink preservation on element/cell refs", "format conversion profiles for human and agent targets", "configurable parser/ranker component pipeline graph", "component registry with module boundaries and config sources"],
     baseline: ["pipeline-like deterministic execution record"],
-    gaps: ["external component registry", "configurable parser/ranker pipeline graph"]
+    gaps: ["hot-swappable external parser/ranker component execution"]
   },
   unstructured: {
     absorbed: ["partition-style format routing", "chunked windowing", "email, archive, and directory child routing", "element-type enrichment for Markdown, markup, PDF, OOXML, OpenDocument, EPUB, headings, lists, links, tables, PDF outlines, Word content controls/bookmarks, Word/PowerPoint/OpenDocument table cells, Word annotations/revisions and hyperlinks, PowerPoint comments and hyperlinks, OpenDocument hyperlinks, code, formulas, spreadsheet workbook sheet refs/defined names/comments/hyperlinks, slide shapes, PowerPoint placeholders, Visio shapes, and Visio connectors", "by-title element-aware windowing with table/code isolation"],
@@ -1251,6 +1256,11 @@ function buildReferenceGapReport(referenceFrameworks = null, { run = null, runti
         status: "absorbed",
         evidence: ["portable-markdown", "portable-docx", "agent-message-json", "workspace-package-zip"],
         references: ["marker", "llama-index", "ragflow"]
+      },
+      componentPipelineGraph: {
+        status: "absorbed",
+        evidence: [COMPONENT_REGISTRY_STRATEGY, COMPONENT_PIPELINE_GRAPH_STRATEGY, COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID],
+        references: ["haystack", "llama-index"]
       }
     },
     runtimeEvidence: runtimeStatus?.summary || null,
@@ -17648,13 +17658,349 @@ function humanAgentModeSeparation() {
     },
     agentReadable: {
       responseProfile: "agent",
-      artifacts: ["agent-message-json", "evidence-pack-json", "format-conversion-plan-json", "professional-format-manifest-json"],
-      purpose: "machine-readable route, parser, element, window, quality gate, evidence, and convergence payloads"
+      artifacts: ["agent-message-json", "evidence-pack-json", "format-conversion-plan-json", "professional-format-manifest-json", COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID],
+      purpose: "machine-readable route, parser, element, window, quality gate, evidence, pipeline, and convergence payloads"
     },
     apiReadable: {
       responseProfile: "api",
-      artifacts: ["result-json", "project-snapshot-json", "reference-gap-report-json"],
+      artifacts: ["result-json", "project-snapshot-json", "reference-gap-report-json", COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID],
       purpose: "complete integration payloads for platform services and audit tooling"
+    }
+  };
+}
+
+function componentConfigSources() {
+  return {
+    formatRoutes: {
+      source: "external-services/knowledge-distillation-service/format-routes.json",
+      protocolVersion: FORMAT_ROUTES_CONFIG_PROTOCOL_VERSION,
+      strategy: FORMAT_ROUTES_CONFIG_STRATEGY,
+      count: FORMAT_ROUTES.length
+    },
+    parserStrategies: {
+      source: "external-services/knowledge-distillation-service/parser-strategies.json",
+      protocolVersion: PARSER_STRATEGIES_CONFIG_PROTOCOL_VERSION,
+      strategy: PARSER_STRATEGIES_CONFIG_STRATEGY,
+      count: PARSER_STRATEGIES.length
+    },
+    formatConversionProfiles: {
+      source: "external-services/knowledge-distillation-service/format-conversion-profiles.json",
+      protocolVersion: FORMAT_CONVERSION_PROFILES_CONFIG_PROTOCOL_VERSION,
+      strategy: FORMAT_CONVERSION_PROFILES_CONFIG_STRATEGY,
+      count: FORMAT_CONVERSION_PROFILES.profiles.length
+    },
+    modelDistillationProfiles: {
+      source: "external-services/knowledge-distillation-service/model-distillation-profiles.json",
+      protocolVersion: MODEL_DISTILLATION_PROFILES_CONFIG_PROTOCOL_VERSION,
+      strategy: MODEL_DISTILLATION_PROFILES_CONFIG_STRATEGY,
+      count: MODEL_DISTILLATION_PROFILES.profiles.length
+    }
+  };
+}
+
+function externalKdComponentRegistry() {
+  return {
+    protocolVersion: `${PROTOCOL_VERSION}.component-registry`,
+    strategy: COMPONENT_REGISTRY_STRATEGY,
+    validation: "startup-fail-fast",
+    configSources: componentConfigSources(),
+    referencePatterns: [
+      "haystack.component-registry",
+      "haystack.pipeline-graph",
+      "llama-index.ingestion-pipeline",
+      "llama-index.nodes-with-metadata"
+    ],
+    components: [
+      {
+        id: "document-ingestion-adapter",
+        label: "Document Ingestion Adapter",
+        moduleBoundary: DOCUMENT_PARSING_MODULE_BOUNDARY,
+        componentType: "source-ingestion",
+        configSources: ["formatRoutes", "parserStrategies"],
+        inputContracts: ["pact.external-kd.parser-input.v1"],
+        outputContracts: [DISTILLATION_DOCUMENT_INPUT_CONTRACT],
+        owns: ["payloadModes", "filePath", "contentRef", "contentBase64", "manifest", "formatRouting", "parserTrace"]
+      },
+      {
+        id: "format-router",
+        label: "Route-first Format Router",
+        moduleBoundary: DOCUMENT_PARSING_MODULE_BOUNDARY,
+        componentType: "router",
+        configSources: ["formatRoutes"],
+        inputContracts: ["content-signature-extension-media-shape-routing.v2"],
+        outputContracts: ["routePlan", "parserChain"],
+        owns: ["contentSignature", "extension", "mediaType", "sourceKind", "textFallback"]
+      },
+      {
+        id: "parser-strategy-executor",
+        label: "Parser Strategy Executor",
+        moduleBoundary: DOCUMENT_PARSING_MODULE_BOUNDARY,
+        componentType: "parser",
+        configSources: ["parserStrategies"],
+        inputContracts: ["parserChain"],
+        outputContracts: [DISTILLATION_DOCUMENT_INPUT_CONTRACT],
+        owns: ["structureElements", "parserTrace", "contentHash", "elementPlan"]
+      },
+      {
+        id: "distillation-algorithm-core",
+        label: "Distillation Algorithm Core",
+        moduleBoundary: DISTILLATION_ALGORITHM_MODULE_BOUNDARY,
+        componentType: "workflow",
+        configSources: [],
+        inputContracts: [DISTILLATION_ALGORITHM_INPUT_CONTRACT],
+        outputContracts: ["distillation-workflow-state"],
+        owns: ["workflowScope", "timeFilter", "corpusPlan", "classification", "grounding", "incrementalPlan", "graphEvidence"],
+        forbiddenInputFields: PARSER_PAYLOAD_FIELD_NAMES
+      },
+      {
+        id: "classification-router",
+        label: "Classification Router",
+        moduleBoundary: DISTILLATION_ALGORITHM_MODULE_BOUNDARY,
+        componentType: "classifier",
+        configSources: [],
+        inputContracts: ["windowed-documents"],
+        outputContracts: ["classification.groups", "classification.distillationUnit"],
+        owns: ["lowCouplingHighCohesion", "garbageGroups", "topicHierarchy"],
+        strategy: CLASSIFICATION_STRATEGY
+      },
+      {
+        id: "evidence-ranker",
+        label: "Grounded Evidence Ranker",
+        moduleBoundary: DISTILLATION_ALGORITHM_MODULE_BOUNDARY,
+        componentType: "ranker",
+        configSources: [],
+        inputContracts: ["classification.groups", "claims", "documents"],
+        outputContracts: ["grounding.claims", "promotionGates"],
+        owns: ["semanticScore", "lexicalScore", "polarityConflict", "topEvidence"],
+        strategy: "semantic-lexical-polarity-evidence-ranker.v1"
+      },
+      {
+        id: "project-convergence",
+        label: "Project Convergence Builder",
+        moduleBoundary: DISTILLATION_ALGORITHM_MODULE_BOUNDARY,
+        componentType: "convergence",
+        configSources: [],
+        inputContracts: ["classification.groups", "corpusPlan"],
+        outputContracts: ["convergence", "incrementalPlan"],
+        owns: ["projectFingerprint", "changedWindows", "communityReports"],
+        strategy: PROJECT_CONVERGENCE_STRATEGY
+      },
+      {
+        id: "graph-evidence-builder",
+        label: "Graph Evidence Builder",
+        moduleBoundary: DISTILLATION_ALGORITHM_MODULE_BOUNDARY,
+        componentType: "graph-evidence",
+        configSources: [],
+        inputContracts: ["grounding", "incrementalPlan", "classification.groups"],
+        outputContracts: ["graphEvidence", "evidenceQuery"],
+        owns: ["text_units", "entities", "relationships", "covariates", "communities", "community_reports"],
+        strategy: GRAPH_EVIDENCE_STRATEGY
+      },
+      {
+        id: "model-distillation-gateway",
+        label: "Real Model Distillation Gateway",
+        moduleBoundary: MODEL_DISTILLATION_MODULE_BOUNDARY,
+        componentType: "model-worker",
+        configSources: ["modelDistillationProfiles"],
+        inputContracts: ["distillation-workflow-state", MODEL_DISTILLATION_OUTPUT_CONTRACT],
+        outputContracts: ["modelDistillation", MODEL_DISTILLATION_OUTPUT_CONTRACT],
+        owns: ["realModelInvocation", "contractValidation", "contractRepair"],
+        strategy: MODEL_DISTILLATION_GATEWAY_STRATEGY
+      },
+      {
+        id: "format-conversion-adapter",
+        label: "Professional Format Conversion Adapter",
+        moduleBoundary: FORMAT_CONVERSION_MODULE_BOUNDARY,
+        componentType: "format-converter",
+        configSources: ["formatConversionProfiles"],
+        inputContracts: ["distillation-workflow-state", "portable-markdown-draft"],
+        outputContracts: ["portable-markdown", "portable-docx", "agent-message-json", "workspace-package-zip"],
+        owns: ["humanReadableArtifacts", "agentReadableArtifacts", "openability", "artifactSelfCheck"],
+        strategy: "office-document-professional-adaptation.v1"
+      },
+      {
+        id: "result-composition",
+        label: "Result Composition",
+        moduleBoundary: "external-kd.result-composition.module.v1",
+        componentType: "composer",
+        configSources: [],
+        inputContracts: ["distillation-workflow-state", "qualityReport", "formatConversionPlan"],
+        outputContracts: [PROTOCOL_VERSION, "portable.knowledge-distillation.v1"],
+        owns: ["responseProfileSeparation", "artifactRefs", "portableDocuments"]
+      }
+    ]
+  };
+}
+
+function componentNodeStatus(componentId = "", context = {}) {
+  if (context.failure) {
+    if (["format-conversion-adapter", "result-composition"].includes(componentId)) {
+      return "completed-with-failed-run";
+    }
+    return "completed";
+  }
+  if (componentId === "model-distillation-gateway") {
+    return context.modelDistillation?.status || "completed";
+  }
+  return "completed";
+}
+
+function componentNodeMetrics(componentId = "", context = {}) {
+  const corpusPlan = context.corpusPlan || {};
+  const classification = context.classification || {};
+  const graphEvidence = context.graphEvidence || {};
+  const grounding = context.grounding || {};
+  const modelDistillation = context.modelDistillation || {};
+  const formatConversionPlan = context.formatConversionPlan || {};
+  const byId = {
+    "document-ingestion-adapter": {
+      sourceCount: Number(corpusPlan.sourceCount || 0),
+      distillableSourceCount: Number(corpusPlan.distillableSourceCount || 0),
+      totalBytes: Number(corpusPlan.totalBytes || 0)
+    },
+    "format-router": {
+      routeCount: uniqueOrdered((corpusPlan.documents || []).map((document) => document.route?.formatId || "unknown")).length
+    },
+    "parser-strategy-executor": {
+      parserTraceCount: (corpusPlan.documents || []).reduce((sum, document) => sum + (document.parserTrace || []).length, 0),
+      elementCount: Number(corpusPlan.elementCount || 0)
+    },
+    "distillation-algorithm-core": {
+      windowCount: Number(corpusPlan.windowCount || 0),
+      workflowScope: context.workflowScope || ""
+    },
+    "classification-router": {
+      groupCount: Number(classification.groupCount || 0),
+      coreGroupCount: Number(classification.coreGroupCount || 0),
+      garbageGroupCount: Number(classification.garbageGroupCount || 0)
+    },
+    "evidence-ranker": {
+      claimCount: Number(grounding.claimCount || 0),
+      supported: Number(grounding.supported || 0),
+      contradicted: Number(grounding.contradicted || 0)
+    },
+    "project-convergence": {
+      projectId: context.incrementalPlan?.projectId || "",
+      changedWindowCount: Number(context.incrementalPlan?.changedWindowCount || 0),
+      reusedWindowCount: Number(context.incrementalPlan?.reusedWindowCount || 0)
+    },
+    "graph-evidence-builder": graphEvidence.summary || {},
+    "model-distillation-gateway": {
+      status: modelDistillation.status || "",
+      profileId: modelDistillation.profileId || "",
+      groupCallCount: Number(modelDistillation.classificationDistillation?.groupGatewayCalls?.completedGroupCallCount || 0)
+    },
+    "format-conversion-adapter": {
+      documentCount: Number(formatConversionPlan.summary?.documentCount || 0),
+      outputArtifactPassedCount: Number(formatConversionPlan.summary?.outputArtifactPassedCount || 0),
+      outputArtifactFailedCount: Number(formatConversionPlan.summary?.outputArtifactFailedCount || 0)
+    },
+    "result-composition": {
+      artifactCount: Number(context.artifactCount || 0),
+      responseProfile: context.responseProfile || ""
+    }
+  };
+  return byId[componentId] || {};
+}
+
+function buildComponentPipelineGraph(context = {}) {
+  const registry = externalKdComponentRegistry();
+  const nodes = registry.components.map((component, index) => ({
+    nodeId: component.id,
+    order: index + 1,
+    label: component.label,
+    componentType: component.componentType,
+    moduleBoundary: component.moduleBoundary,
+    configSources: component.configSources,
+    inputContracts: component.inputContracts,
+    outputContracts: component.outputContracts,
+    status: componentNodeStatus(component.id, context),
+    strategy: component.strategy || "",
+    metrics: componentNodeMetrics(component.id, context),
+    owns: component.owns || [],
+    forbiddenInputFields: component.forbiddenInputFields || []
+  }));
+  const edge = (from, to, contract, reason) => ({ from, to, contract, reason });
+  const corpusDocuments = context.corpusPlan?.documents || [];
+  const parserStrategies = uniqueOrdered(corpusDocuments.flatMap((document) => [
+    ...(document.route?.parserChain || []),
+    ...(document.parserTrace || []).map((stage) => stage.stage || stage.parser || "").filter(Boolean)
+  ]));
+  const routeIds = uniqueOrdered(corpusDocuments.map((document) => document.route?.formatId || "unknown"));
+  return {
+    protocolVersion: `${PROTOCOL_VERSION}.component-pipeline-graph`,
+    strategy: COMPONENT_PIPELINE_GRAPH_STRATEGY,
+    generatedAt: nowIso(),
+    runId: context.runId || "",
+    status: context.failure ? "failed" : "completed",
+    workflowScope: context.workflowScope || "",
+    responseProfile: context.responseProfile || "",
+    referencePatterns: [
+      "haystack.pipeline-snapshot",
+      "haystack.explicit-pipeline-components",
+      "llama-index.ingestion-pipeline",
+      "llama-index.nodes-with-metadata"
+    ],
+    configSources: registry.configSources,
+    componentRegistry: {
+      protocolVersion: registry.protocolVersion,
+      strategy: registry.strategy,
+      validation: registry.validation,
+      componentCount: registry.components.length
+    },
+    nodes,
+    edges: [
+      edge("document-ingestion-adapter", "format-router", "parser-input-route-envelope", "detect file format before parser selection"),
+      edge("format-router", "parser-strategy-executor", "parserChain", "execute route-bound parser strategies"),
+      edge("parser-strategy-executor", "distillation-algorithm-core", DISTILLATION_ALGORITHM_INPUT_CONTRACT, "algorithm consumes normalized documents only"),
+      edge("distillation-algorithm-core", "classification-router", "windowed-documents", "separate unrelated topics before distillation"),
+      edge("classification-router", "evidence-ranker", "classification.groups", "rank source evidence and conflicts per group"),
+      edge("classification-router", "project-convergence", "classification.groups", "merge groups into project domains and communities"),
+      edge("evidence-ranker", "graph-evidence-builder", "grounding.claims", "materialize claim evidence and covariates"),
+      edge("project-convergence", "graph-evidence-builder", "incrementalPlan", "carry project snapshot state into graph evidence"),
+      edge("graph-evidence-builder", "model-distillation-gateway", "distillation-workflow-state", "call real model with graph-grounded evidence"),
+      edge("model-distillation-gateway", "format-conversion-adapter", "modelDistillation", "compose human and agent artifacts from validated model output"),
+      edge("format-conversion-adapter", "result-composition", "formatConversionPlan", "publish validated artifact references")
+    ],
+    routeBindings: {
+      routeCount: routeIds.length,
+      routes: routeIds.map((routeId) => {
+        const route = FORMAT_ROUTES_BY_ID.get(routeId) || null;
+        return {
+          routeId,
+          preferredParser: route?.preferredParser || "",
+          parserChain: route?.parserChain || [],
+          referenceFrameworks: route?.referenceFrameworks || []
+        };
+      })
+    },
+    parserStrategyBindings: {
+      strategyCount: parserStrategies.length,
+      strategies: parserStrategies.slice(0, 120)
+    },
+    rankers: [
+      {
+        id: "semantic-lexical-polarity-evidence-ranker",
+        strategy: "semantic-lexical-polarity-evidence-ranker.v1",
+        sourceFunction: "evidenceCandidatesForClaim",
+        inputs: ["claimText", "documents", "classification.groups"],
+        outputs: ["supportScore", "conflictScore", "topEvidence", "conflictEvidence"]
+      }
+    ],
+    contracts: {
+      documentParsingOutput: DISTILLATION_DOCUMENT_INPUT_CONTRACT,
+      distillationAlgorithmInput: DISTILLATION_ALGORITHM_INPUT_CONTRACT,
+      modelOutput: MODEL_DISTILLATION_OUTPUT_CONTRACT,
+      parserPayloadFieldsAllowedInAlgorithmCore: false
+    },
+    moduleBoundaries: uniqueOrdered(nodes.map((node) => node.moduleBoundary)),
+    runObservability: {
+      sourceCount: Number(context.allDocuments?.length || context.corpusPlan?.sourceCount || 0),
+      distillableSourceCount: Number(context.documents?.length || context.corpusPlan?.distillableSourceCount || 0),
+      windowCount: Number(context.corpusPlan?.windowCount || 0),
+      classificationGroupCount: Number(context.classification?.groupCount || 0),
+      graphTextUnitCount: Number(context.graphEvidence?.summary?.textUnitCount || 0),
+      artifactCount: Number(context.artifactCount || 0)
     }
   };
 }
@@ -17715,6 +18061,7 @@ function buildConsoleSummary(run = {}) {
       { artifactId: "portable-docx", mode: "human", fileName: `${run.runId || "distillation"}.docx` },
       { artifactId: "agent-message-json", mode: "agent", fileName: `${run.runId || "distillation"}.agent.json` },
       { artifactId: "professional-format-manifest-json", mode: "agent", fileName: `${run.runId || "distillation"}.professional-format-manifest.json` },
+      { artifactId: COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID, mode: "agent", fileName: `${run.runId || "distillation"}.component-pipeline-graph.json` },
       { artifactId: "workspace-package-zip", mode: "bundle", fileName: `${run.runId || "distillation"}.workspace-package.zip` }
     ],
     omittedForConsole: ["parserTrace", "windowPlan.windows", "graphEvidence.text_units", "graphEvidence.relationships"]
@@ -18133,6 +18480,15 @@ function jsonArtifactValidationSpec(artifactId = "") {
       requiredFields: ["protocolVersion", "strategy", "referenceFrameworks", "absorbedCapabilityMap", "frameworks", "openGaps", "nextActions"],
       requiredObjects: ["referenceFrameworks", "absorbedCapabilityMap"],
       requiredArrays: ["frameworks", "openGaps", "nextActions"]
+    },
+    [COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID]: {
+      expectedFields: {
+        protocolVersion: `${PROTOCOL_VERSION}.component-pipeline-graph`,
+        strategy: COMPONENT_PIPELINE_GRAPH_STRATEGY
+      },
+      requiredFields: ["protocolVersion", "strategy", "runId", "configSources", "componentRegistry", "nodes", "edges", "routeBindings", "parserStrategyBindings", "rankers", "contracts", "moduleBoundaries", "runObservability"],
+      requiredObjects: ["configSources", "componentRegistry", "routeBindings", "parserStrategyBindings", "contracts", "runObservability"],
+      requiredArrays: ["nodes", "edges", "rankers", "moduleBoundaries"]
     }
   };
   return specs[artifactId] || {
@@ -18270,7 +18626,7 @@ function responseProfileForArtifact(artifactId = "") {
   if (["portable-markdown", "portable-docx", "console-summary-json"].includes(artifactId)) {
     return "human-readable";
   }
-  if (["agent-message-json", "evidence-pack-json", "format-conversion-plan-json", "professional-format-manifest-json"].includes(artifactId)) {
+  if (["agent-message-json", "evidence-pack-json", "format-conversion-plan-json", "professional-format-manifest-json", COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID].includes(artifactId)) {
     return "agent";
   }
   if (["result-json", "project-snapshot-json", "reference-gap-report-json"].includes(artifactId)) {
@@ -18294,7 +18650,8 @@ function buildWorkspacePackageZip(run = {}) {
     { artifactId: "evidence-pack-json", path: "evidence-pack.json", contentType: "application/json; charset=utf-8", data: jsonArtifactBuffer(run.result?.graphEvidence || {}) },
     { artifactId: "format-conversion-plan-json", path: "format-conversion-plan.json", contentType: "application/json; charset=utf-8", data: jsonArtifactBuffer(run.result?.formatConversionPlan || {}) },
     { artifactId: "professional-format-manifest-json", path: "professional-format-manifest.json", contentType: "application/json; charset=utf-8", data: professionalFormatManifest },
-    { artifactId: "reference-gap-report-json", path: "reference-gap-report.json", contentType: "application/json; charset=utf-8", data: jsonArtifactBuffer(run.result?.referenceGapReport || {}) }
+    { artifactId: "reference-gap-report-json", path: "reference-gap-report.json", contentType: "application/json; charset=utf-8", data: jsonArtifactBuffer(run.result?.referenceGapReport || {}) },
+    { artifactId: COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID, path: "component-pipeline-graph.json", contentType: "application/json; charset=utf-8", data: jsonArtifactBuffer(run.result?.componentPipelineGraph || {}) }
   ];
   const validationByArtifactId = new Map((run.result?.formatConversionPlan?.outputArtifactValidation?.artifacts || [])
     .map((artifact) => [artifact.artifactId, artifact]));
@@ -20704,7 +21061,7 @@ function buildMarkdown({ title, query, documents, classification, routePlan, cor
   ].join("\n");
 }
 
-function buildAgentMessage({ runId, title, query, workflowScope, scopeSelection, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, modelDistillation, formatConversionPlan, runtimeStatus, failure = null }) {
+function buildAgentMessage({ runId, title, query, workflowScope, scopeSelection, documents, classification, routePlan, corpusPlan, convergence, grounding, incrementalPlan, graphEvidence, modelDistillation, formatConversionPlan, componentPipelineGraph = null, runtimeStatus, failure = null }) {
   const modelDistillationGroups = new Map((modelDistillation?.classificationDistillation?.groups || [])
     .map((group) => [group.groupId, group]));
   return {
@@ -20762,6 +21119,17 @@ function buildAgentMessage({ runId, title, query, workflowScope, scopeSelection,
     incrementalPlan,
     modelDistillation,
     formatConversionPlan,
+    componentPipelineGraph: componentPipelineGraph
+      ? {
+          artifactId: COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID,
+          strategy: componentPipelineGraph.strategy,
+          nodeCount: (componentPipelineGraph.nodes || []).length,
+          edgeCount: (componentPipelineGraph.edges || []).length,
+          moduleBoundaries: componentPipelineGraph.moduleBoundaries || [],
+          routeCount: componentPipelineGraph.routeBindings?.routeCount || 0,
+          parserStrategyCount: componentPipelineGraph.parserStrategyBindings?.strategyCount || 0
+        }
+      : null,
     graphEvidence,
     grounding,
     classification: {
@@ -22709,6 +23077,23 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     updatedAt: createdAt,
     markdown
   });
+  const componentPipelineGraph = buildComponentPipelineGraph({
+    runId,
+    responseProfile,
+    workflowScope,
+    allDocuments,
+    documents,
+    corpusPlan,
+    classification,
+    convergence,
+    grounding,
+    incrementalPlan,
+    graphEvidence,
+    modelDistillation,
+    formatConversionPlan,
+    failure,
+    artifactCount: 12
+  });
   const agentMessage = buildAgentMessage({
     runId,
     title,
@@ -22725,6 +23110,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     graphEvidence,
     modelDistillation,
     formatConversionPlan,
+    componentPipelineGraph,
     runtimeStatus,
     failure
   });
@@ -22757,6 +23143,13 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     incrementalPlan,
     modelDistillation,
     formatConversionPlan,
+    componentPipelineGraph: {
+      artifactId: COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID,
+      strategy: componentPipelineGraph.strategy,
+      nodeCount: componentPipelineGraph.nodes.length,
+      edgeCount: componentPipelineGraph.edges.length,
+      moduleBoundaries: componentPipelineGraph.moduleBoundaries
+    },
     graphEvidence: graphEvidenceSummary(graphEvidence),
     grounding,
     classification: {
@@ -22859,6 +23252,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
       incrementalPlan,
       modelDistillation,
       formatConversionPlan,
+      componentPipelineGraph,
       graphEvidence,
       referenceGapReport,
       grounding,
@@ -22959,6 +23353,12 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
         label: "Reference Gap Report JSON",
         contentType: "application/json; charset=utf-8",
         fileName: `${runId}.reference-gap-report.json`
+      },
+      {
+        artifactId: COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID,
+        label: "Component Pipeline Graph JSON",
+        contentType: "application/json; charset=utf-8",
+        fileName: `${runId}.component-pipeline-graph.json`
       },
       {
         artifactId: "workspace-package-zip",
@@ -23331,7 +23731,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       statuses: ["queued", "running", "completed", "failed", "canceled"],
       purpose: "Return immediately for large document parsing and model distillation, then expose progress through the run polling endpoint."
     },
-    artifacts: ["portable-markdown", "portable-docx", "console-summary-json", "result-json", "agent-message-json", "project-snapshot-json", "evidence-pack-json", "format-conversion-plan-json", "professional-format-manifest-json", "reference-gap-report-json", "workspace-package-zip"],
+    artifacts: ["portable-markdown", "portable-docx", "console-summary-json", "result-json", "agent-message-json", "project-snapshot-json", "evidence-pack-json", "format-conversion-plan-json", "professional-format-manifest-json", "reference-gap-report-json", COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID, "workspace-package-zip"],
     responseProfiles: ["console", "agent", "api"],
     workflowScopes: {
       requestField: "workflowScope",
@@ -23376,6 +23776,28 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         strategy: "office-document-professional-adaptation.v1",
         owns: ["portable-markdown", "portable-docx", "agent-message-json", "workspace-package-zip"]
       }
+    },
+    componentPipelineGraph: {
+      supported: true,
+      strategy: COMPONENT_PIPELINE_GRAPH_STRATEGY,
+      registryStrategy: COMPONENT_REGISTRY_STRATEGY,
+      artifact: COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID,
+      referencePatterns: [
+        "haystack.pipeline-snapshot",
+        "haystack.explicit-pipeline-components",
+        "llama-index.ingestion-pipeline",
+        "llama-index.nodes-with-metadata"
+      ],
+      configSources: componentConfigSources(),
+      moduleBoundaries: [
+        DOCUMENT_PARSING_MODULE_BOUNDARY,
+        DISTILLATION_ALGORITHM_MODULE_BOUNDARY,
+        MODEL_DISTILLATION_MODULE_BOUNDARY,
+        FORMAT_CONVERSION_MODULE_BOUNDARY,
+        "external-kd.result-composition.module.v1"
+      ],
+      componentCount: externalKdComponentRegistry().components.length,
+      parserPayloadFieldsAllowedInAlgorithmCore: false
     },
     distillationAlgorithm: {
       inputContract: DISTILLATION_ALGORITHM_INPUT_CONTRACT,
@@ -23474,6 +23896,8 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       MODEL_DISTILLATION_OUTPUT_CONTRACT,
       MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY,
       MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY,
+      COMPONENT_REGISTRY_STRATEGY,
+      COMPONENT_PIPELINE_GRAPH_STRATEGY,
       EVIDENCE_QUERY_STRATEGY,
       PROJECT_EVIDENCE_QUERY_STRATEGY,
       REFERENCE_GAP_REPORT_STRATEGY,
@@ -23994,6 +24418,12 @@ async function handleRequest(request, response) {
         if (artifactId === "reference-gap-report-json") {
           jsonResponse(response, 200, run.result?.referenceGapReport || {}, {
             "content-disposition": `attachment; filename="${run.runId}.reference-gap-report.json"`
+          });
+          return;
+        }
+        if (artifactId === COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID) {
+          jsonResponse(response, 200, run.result?.componentPipelineGraph || {}, {
+            "content-disposition": `attachment; filename="${run.runId}.component-pipeline-graph.json"`
           });
           return;
         }

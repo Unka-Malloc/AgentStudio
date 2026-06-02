@@ -432,6 +432,41 @@ function isInsideOrEqual(candidatePath, rootPath) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+function isCascadePrunableSource(relativeFilePath = "") {
+  const normalized = String(relativeFilePath || "").replace(/\\/g, "/");
+  return (
+    normalized.startsWith("server/platform/specialized/knowledge/") ||
+    normalized.startsWith("server/platform/modules/knowledge/") ||
+    normalized.startsWith("server/scripts/verify-") ||
+    normalized === "server/scripts/build-transaction-continuity.mjs" ||
+    normalized === "server/scripts/migrate-embeddings.mjs" ||
+    normalized === "server/scripts/pack-offline-server.mjs" ||
+    normalized === "server/scripts/setup-local-runtime.mjs"
+  );
+}
+
+async function collectStaticImportViolations(stagingPath, plannedRoots) {
+  const staticImportViolations = [];
+  for (const filePath of await walkSourceFiles(path.join(stagingPath, "server"))) {
+    const text = await fs.readFile(filePath, "utf8");
+    for (const specifier of staticImportSpecifiers(text)) {
+      const resolved = resolveStaticSpecifier(filePath, specifier);
+      if (!resolved) {
+        continue;
+      }
+      const violationRoot = plannedRoots.find((rootPath) => isInsideOrEqual(resolved, rootPath));
+      if (violationRoot) {
+        staticImportViolations.push({
+          file: path.relative(stagingPath, filePath),
+          specifier,
+          plannedPath: path.relative(stagingPath, violationRoot)
+        });
+      }
+    }
+  }
+  return staticImportViolations;
+}
+
 export async function applyFeatureSourcePlan(stagingPath, packagingPlan) {
   const plannedPaths = [...new Set(packagingPlan.featurePackagePlan?.removePaths || [])]
     .map((relativePath) => String(relativePath || "").trim())
@@ -453,24 +488,26 @@ export async function applyFeatureSourcePlan(stagingPath, packagingPlan) {
   }
 
   const plannedRoots = plannedPaths.map((relativePath) => path.resolve(stagingPath, relativePath));
-  const staticImportViolations = [];
-  for (const filePath of await walkSourceFiles(path.join(stagingPath, "server"))) {
-    const text = await fs.readFile(filePath, "utf8");
-    for (const specifier of staticImportSpecifiers(text)) {
-      const resolved = resolveStaticSpecifier(filePath, specifier);
-      if (!resolved) {
-        continue;
-      }
-      const violationRoot = plannedRoots.find((rootPath) => isInsideOrEqual(resolved, rootPath));
-      if (violationRoot) {
-        staticImportViolations.push({
-          file: path.relative(stagingPath, filePath),
-          specifier,
-          plannedPath: path.relative(stagingPath, violationRoot)
-        });
+  const cascadePrunedFiles = [];
+  for (;;) {
+    const violations = await collectStaticImportViolations(stagingPath, plannedRoots);
+    const prunableFiles = [...new Set(
+      violations
+        .map((violation) => violation.file)
+        .filter(isCascadePrunableSource)
+    )].sort();
+    if (prunableFiles.length === 0) {
+      break;
+    }
+    for (const relativeFilePath of prunableFiles) {
+      const targetPath = path.join(stagingPath, relativeFilePath);
+      if (await pathExists(targetPath)) {
+        await fs.rm(targetPath, { force: true });
+        cascadePrunedFiles.push(relativeFilePath);
       }
     }
   }
+  const staticImportViolations = await collectStaticImportViolations(stagingPath, plannedRoots);
 
   const report = {
     schemaVersion: 1,
@@ -478,6 +515,7 @@ export async function applyFeatureSourcePlan(stagingPath, packagingPlan) {
     edition: packagingPlan.featureProfile?.edition || "",
     requestedPaths: plannedPaths,
     applied,
+    cascadePrunedFiles,
     lingeringPaths,
     staticImportViolations,
     ok: lingeringPaths.length === 0 && staticImportViolations.length === 0
