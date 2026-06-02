@@ -4,14 +4,7 @@ import ConsoleSideNavLink from "./ConsoleSideNavLink.vue";
 
 defineOptions({ name: "ConsoleSideNavAgentSection" });
 
-const {
-  activeRouteAdminView,
-  activeRouteView,
-  hasAnyFeature,
-  hasFeature,
-  msg,
-  openAdmin,
-} = useConsoleSideNavContext();
+const { activeRouteAdminView, activeRouteView, hasAnyFeature, hasFeature, msg, openAdmin } = useConsoleSideNavContext();
 </script>
 
 <template>

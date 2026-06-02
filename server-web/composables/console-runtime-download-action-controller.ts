@@ -25,6 +25,7 @@ export function createRuntimeDownloadActionController(options: RuntimeDownloadAc
   const downloads = ref<RuntimeDependencyDownloadRun[]>([]);
   const actionBusyIds = ref<string[]>([]);
   const actionError = ref("");
+  const actionResult = ref<RuntimeDependencyActionResult | null>(null);
   const actionPolling = createConsoleIntervalController();
 
   function latestRunForTarget(targetId = "") {
@@ -79,8 +80,10 @@ export function createRuntimeDownloadActionController(options: RuntimeDownloadAc
     if (!canTrigger(item) || isTargetBusy(item.id)) return;
     actionBusyIds.value = [...new Set([...actionBusyIds.value, item.id])];
     actionError.value = "";
+    actionResult.value = null;
     try {
       const result = await options.downloadRuntimeDependency(item);
+      actionResult.value = result;
       if (result.run) {
         setDownloadRuns([
           result.run,
@@ -99,6 +102,7 @@ export function createRuntimeDownloadActionController(options: RuntimeDownloadAc
 
   return {
     actionError,
+    actionResult,
     actionRunCards,
     dependencyActionBusy,
     dependencyStatusForRow,

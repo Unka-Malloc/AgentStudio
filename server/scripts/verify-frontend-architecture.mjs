@@ -5623,8 +5623,8 @@ async function main() {
   );
   assert.match(
     workspacesClientText,
-    /\/api\/sharedspace\/drive/,
-    "workspaces-client.ts must own cloud drive endpoints used by the Workspaces page",
+    /\/api\/external\/cloud-drive/,
+    "workspaces-client.ts must own upstream cloud drive endpoints used by the Workspaces page",
   );
   assert.match(
     workspacesClientText,
@@ -5638,7 +5638,7 @@ async function main() {
   );
   assert.doesNotMatch(
     useWorkspacesConsoleText,
-    /\/api\/(?:agent-workspaces|agent-sessions|workspace\/checkpoints|sharedspace\/drive|codespace)/,
+    /\/api\/(?:agent-workspaces|agent-sessions|workspace\/checkpoints|external\/cloud-drive|codespace)/,
     "useWorkspacesConsole.ts must not own workspace API endpoint strings directly",
   );
   assert.doesNotMatch(
