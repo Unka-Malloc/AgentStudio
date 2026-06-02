@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Agent Tool Platform"
+  short_description: "Help with Pact Agent Tool Platform tasks"
+  default_prompt: "Use $pact-agent-tool-platform to handle this Pact platform task."

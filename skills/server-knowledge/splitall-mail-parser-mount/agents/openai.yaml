@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Mail Parser Mount"
-  short_description: "Help with SplitAll Mail Parser Mount tasks"
-  default_prompt: "Use $splitall-mail-parser-mount to handle this SplitAll platform task."

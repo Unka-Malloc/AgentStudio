@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Multimodal Parser Mount"
+  short_description: "Help with Pact Multimodal Parser Mount tasks"
+  default_prompt: "Use $pact-multimodal-parser-mount to handle this Pact platform task."

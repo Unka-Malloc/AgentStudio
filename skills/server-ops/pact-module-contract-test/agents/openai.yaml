@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Module Contract Test"
+  short_description: "Help with Pact Module Contract Test tasks"
+  default_prompt: "Use $pact-module-contract-test to handle this Pact platform task."

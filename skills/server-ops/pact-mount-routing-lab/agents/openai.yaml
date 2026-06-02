@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Mount Routing Lab"
+  short_description: "Help with Pact Mount Routing Lab tasks"
+  default_prompt: "Use $pact-mount-routing-lab to handle this Pact platform task."

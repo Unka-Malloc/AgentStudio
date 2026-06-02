@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Cloud Parsing Template"
+  short_description: "Help with Pact Cloud Parsing Template tasks"
+  default_prompt: "Use $pact-cloud-parsing-template to handle this Pact platform task."

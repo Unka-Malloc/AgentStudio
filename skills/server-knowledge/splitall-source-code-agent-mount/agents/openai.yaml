@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Source Code Agent Mount"
-  short_description: "Help with SplitAll Source Code Agent Mount tasks"
-  default_prompt: "Use $splitall-source-code-agent-mount to handle this SplitAll platform task."

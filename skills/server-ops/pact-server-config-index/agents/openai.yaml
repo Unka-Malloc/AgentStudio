@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Server Config Index"
+  short_description: "Help with Pact Server Config Index tasks"
+  default_prompt: "Use $pact-server-config-index to handle this Pact platform task."

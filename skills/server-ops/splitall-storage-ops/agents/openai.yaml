@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Storage Ops"
-  short_description: "Help with SplitAll Storage Ops tasks"
-  default_prompt: "Use $splitall-storage-ops to handle this SplitAll platform task."

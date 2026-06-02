@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Vector Store Adapter"
-  short_description: "Help with SplitAll Vector Store Adapter tasks"
-  default_prompt: "Use $splitall-vector-store-adapter to handle this SplitAll platform task."

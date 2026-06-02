@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Mail Import Ops"
-  short_description: "Help with SplitAll Mail Import Ops tasks"
-  default_prompt: "Use $splitall-mail-import-ops to handle this SplitAll platform task."

@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll KnowledgeSkill Maintainer"
-  short_description: "Maintain SplitAll KnowledgeSkill runtime"
-  default_prompt: "Use $splitall-knowledge-skill-maintainer to maintain SplitAll runtime KnowledgeSkill behavior."

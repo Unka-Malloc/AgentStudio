@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Postcommit Hook Mount"
-  short_description: "Help with SplitAll Postcommit Hook Mount tasks"
-  default_prompt: "Use $splitall-postcommit-hook-mount to handle this SplitAll platform task."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Source Code Agent Mount"
+  short_description: "Help with Pact Source Code Agent Mount tasks"
+  default_prompt: "Use $pact-source-code-agent-mount to handle this Pact platform task."
