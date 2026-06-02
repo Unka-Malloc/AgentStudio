@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact External Service MCP Wrapper"
+  short_description: "Wrap HTTP/RPC services into Pact MCP tools"
+  default_prompt: "Use $pact-external-service-mcp-wrapper to convert this external HTTP or RPC service into a Pact-registered MCP-compatible tool service."
