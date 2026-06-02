@@ -182,29 +182,51 @@ function verifyOperationRegistry() {
 }
 
 async function verifyFrontendWiring() {
+  const productionHealthComponentDir = path.join(repoRoot, "server-web/components/admin/production-health");
+  const productionHealthComponentFiles = await fs.readdir(productionHealthComponentDir);
+  const productionHealthComponents = (await Promise.all(
+    productionHealthComponentFiles
+      .filter((fileName) => fileName.endsWith(".vue"))
+      .sort()
+      .map((fileName) => fs.readFile(path.join(productionHealthComponentDir, fileName), "utf8"))
+  )).join("\n");
   const files = {
     router: await fs.readFile(path.join(repoRoot, "server-web/router/index.ts"), "utf8"),
     appTypes: await fs.readFile(path.join(repoRoot, "server-web/types/app.ts"), "utf8"),
     bridge: await fs.readFile(path.join(repoRoot, "server-web/lib/bridge.ts"), "utf8"),
+    productionHealth: await fs.readFile(path.join(repoRoot, "server-web/lib/production-health.ts"), "utf8"),
+    productionHealthClient: await fs.readFile(path.join(repoRoot, "server-web/lib/production-health-client.ts"), "utf8"),
     registry: await fs.readFile(path.join(repoRoot, "server/config/frontend-feature-registry.yaml"), "utf8"),
-    nav: await fs.readFile(path.join(repoRoot, "server-web/ServerConsoleApp.vue"), "utf8"),
+    nav: await fs.readFile(path.join(repoRoot, "server-web/components/shell/ConsoleSideNav.vue"), "utf8"),
+    routeController: await fs.readFile(path.join(repoRoot, "server-web/composables/console-shell-route-controller.ts"), "utf8"),
     i18n: await fs.readFile(path.join(repoRoot, "server-web/i18n/console.ts"), "utf8"),
-    view: await fs.readFile(path.join(repoRoot, "server-web/views/admin/ProductionHealthView.vue"), "utf8")
+    view: await fs.readFile(path.join(repoRoot, "server-web/views/admin/ProductionHealthView.vue"), "utf8"),
+    components: productionHealthComponents
   };
   assert.match(files.router, /ProductionHealthView/);
   assert.match(files.router, /\/admin\/production-health/);
   assert.match(files.appTypes, /productionHealth/);
   assert.match(files.bridge, /getProductionHealth/);
-  assert.match(files.bridge, /\/api\/production\/health/);
+  assert.match(files.bridge, /production-health-client/);
+  assert.doesNotMatch(files.bridge, /\/api\/production\/health/);
+  assert.match(files.productionHealthClient, /\/api\/production\/health/);
+  assert.match(files.productionHealthClient, /\/api\/v001\/baseline\/status/);
+  assert.match(files.productionHealth, /loadProductionHealthSnapshot/);
+  assert.match(files.productionHealth, /getProductionHealth\(\)/);
+  assert.doesNotMatch(files.productionHealth, /from\s+["']\.\/bridge["']/);
   assert.match(files.registry, /admin\.production-health/);
   assert.match(files.nav, /msg\.nav\.productionHealth/);
+  assert.match(files.nav, /openAdmin\('productionHealth'\)/);
+  assert.match(files.routeController, /messages\.nav\.productionHealth/);
   assert.match(files.i18n, /productionHealth:\s*"生产健康"/);
-  assert.match(files.view, /bridge\.getProductionHealth/);
-  assert.match(files.view, /Capability Kernel/);
-  assert.match(files.view, /capabilityKernel/);
-  assert.match(files.view, /Binding Guard/);
-  assert.match(files.view, /capabilityBindingGuard/);
-  assert.match(files.view, /门禁明细/);
+  assert.match(files.view, /loadProductionHealthSnapshot/);
+  assert.match(files.view, /ProductionHealthHeroCard/);
+  assert.doesNotMatch(files.view, /bridge\.getProductionHealth/);
+  assert.match(files.components, /Capability Kernel/);
+  assert.match(files.components, /capabilityKernel/);
+  assert.match(files.components, /Binding Guard/);
+  assert.match(files.components, /capabilityBindingGuard/);
+  assert.match(files.components, /门禁明细/);
 }
 
 async function main() {

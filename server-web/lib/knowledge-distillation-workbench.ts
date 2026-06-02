@@ -1,5 +1,27 @@
-import { bridge } from "./bridge";
+import {
+  getSettings,
+  probeModel,
+} from "./agent-settings-client";
+import {
+  archiveKnowledgeDistillationWorkbenchRun as archiveKnowledgeDistillationWorkbenchRunClient,
+  cancelKnowledgeDistillationWorkbenchRun as cancelKnowledgeDistillationWorkbenchRunClient,
+  compareKnowledgeDistillationWorkbenchRuns as compareKnowledgeDistillationWorkbenchRunsClient,
+  createKnowledgeDistillationWorkbenchRun as createKnowledgeDistillationWorkbenchRunClient,
+  deleteKnowledgeDistillationWorkbenchRun as deleteKnowledgeDistillationWorkbenchRunClient,
+  getKnowledgeDistillationWorkbenchRun as getKnowledgeDistillationWorkbenchRunClient,
+  getKnowledgeDistillationWorkbenchRunArtifacts as getKnowledgeDistillationWorkbenchRunArtifactsClient,
+  listKnowledgeDistillationWorkbenchRuns as listKnowledgeDistillationWorkbenchRunsClient,
+  rerunKnowledgeDistillationWorkbenchStage as rerunKnowledgeDistillationWorkbenchStageClient,
+  resumeKnowledgeDistillationWorkbenchRun as resumeKnowledgeDistillationWorkbenchRunClient,
+  type CreateKnowledgeDistillationWorkbenchRunPayload,
+  type DistillationWorkflowScope,
+} from "./knowledge-distillation-workbench-client";
 import type { AgentModelConfig, AgentSettings, ModelProbeResponse } from "./types";
+
+export {
+  knowledgeDistillationWorkbenchExportUrl,
+  knowledgeDistillationWorkbenchPackageUrl,
+} from "./knowledge-distillation-workbench-client";
 
 export type WorkbenchStage = {
   stageId: string;
@@ -10,6 +32,7 @@ export type WorkbenchStage = {
   tone?: string;
   progressPercent?: number;
   preview?: string;
+  output?: Record<string, unknown>;
   exportFormats?: string[];
   metrics?: Record<string, unknown>;
   versions?: Array<{
@@ -45,6 +68,7 @@ export type WorkbenchRun = {
   tokenBudget?: number;
   payloadBudget?: number;
   rawCorpusBatchMaxCharacters?: number;
+  workflowScope?: DistillationWorkflowScope;
   mergeStrategy?: string;
   maxRounds?: number;
   strategyVersion?: string;
@@ -78,10 +102,6 @@ export type DistillationModelProbeStatus = {
   message: string;
 };
 
-type CreateWorkbenchRunPayload = Record<string, unknown> & {
-  workflowScope: "document" | "corpus" | "project";
-};
-
 export function asWorkbenchRun(value: unknown): WorkbenchRun {
   const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
@@ -102,6 +122,9 @@ export function asWorkbenchRun(value: unknown): WorkbenchRun {
     tokenBudget: Number(record.tokenBudget || 0),
     payloadBudget: Number(record.payloadBudget || 0),
     rawCorpusBatchMaxCharacters: Number(record.rawCorpusBatchMaxCharacters || 0),
+    workflowScope: ["document", "corpus", "project"].includes(String(record.workflowScope || ""))
+      ? record.workflowScope as DistillationWorkflowScope
+      : undefined,
     mergeStrategy: String(record.mergeStrategy || ""),
     maxRounds: Number(record.maxRounds || 0),
     strategyVersion: String(record.strategyVersion || ""),
@@ -209,7 +232,7 @@ function normalizeProbeResult(result: ModelProbeResponse): DistillationModelProb
 }
 
 export async function probeDistillationModelStatus(alias = ""): Promise<DistillationModelProbeStatus> {
-  const settings = await bridge.getSettings();
+  const settings = await getSettings();
   const normalizedAlias = String(alias || "").trim();
   if (!normalizedAlias) {
     return {
@@ -220,7 +243,7 @@ export async function probeDistillationModelStatus(alias = ""): Promise<Distilla
   }
   const entry = findModelEntry(settings, normalizedAlias);
   const provider = providerForModel(settings, normalizedAlias, entry);
-  const result = await bridge.probeModel({
+  const result = await probeModel({
     provider,
     modelAlias: entry ? modelEntryKey(entry) : normalizedAlias,
     settings: probeSettingsForModel(settings, normalizedAlias, entry),
@@ -229,48 +252,44 @@ export async function probeDistillationModelStatus(alias = ""): Promise<Distilla
 }
 
 export async function listKnowledgeDistillationWorkbenchRuns(limit = 50): Promise<WorkbenchRun[]> {
-  const result = await bridge.listKnowledgeDistillationWorkbenchRuns(limit);
+  const result = await listKnowledgeDistillationWorkbenchRunsClient(limit);
   return Array.isArray((result as { items?: unknown[] }).items)
     ? (result as { items: unknown[] }).items.map(asWorkbenchRun)
     : [];
 }
 
 export async function getKnowledgeDistillationWorkbenchRun(runId: string): Promise<WorkbenchRun> {
-  return asWorkbenchRun(await bridge.getKnowledgeDistillationWorkbenchRun(runId));
+  return asWorkbenchRun(await getKnowledgeDistillationWorkbenchRunClient(runId));
 }
 
-export async function createKnowledgeDistillationWorkbenchRun(payload: CreateWorkbenchRunPayload): Promise<WorkbenchRun> {
-  return asWorkbenchRun(await bridge.createKnowledgeDistillationWorkbenchRun(payload));
+export async function createKnowledgeDistillationWorkbenchRun(payload: CreateKnowledgeDistillationWorkbenchRunPayload): Promise<WorkbenchRun> {
+  return asWorkbenchRun(await createKnowledgeDistillationWorkbenchRunClient(payload));
 }
 
 export async function cancelKnowledgeDistillationWorkbenchRun(runId: string, reason: string): Promise<WorkbenchRun> {
-  return asWorkbenchRun(await bridge.cancelKnowledgeDistillationWorkbenchRun(runId, reason));
+  return asWorkbenchRun(await cancelKnowledgeDistillationWorkbenchRunClient(runId, reason));
 }
 
 export async function archiveKnowledgeDistillationWorkbenchRun(runId: string): Promise<WorkbenchRun> {
-  return asWorkbenchRun(await bridge.archiveKnowledgeDistillationWorkbenchRun(runId));
+  return asWorkbenchRun(await archiveKnowledgeDistillationWorkbenchRunClient(runId));
 }
 
 export function deleteKnowledgeDistillationWorkbenchRun(runId: string) {
-  return bridge.deleteKnowledgeDistillationWorkbenchRun(runId);
+  return deleteKnowledgeDistillationWorkbenchRunClient(runId);
 }
 
 export async function rerunKnowledgeDistillationWorkbenchStage(runId: string, stageId: string): Promise<WorkbenchRun> {
-  return asWorkbenchRun(await bridge.rerunKnowledgeDistillationWorkbenchStage(runId, stageId));
+  return asWorkbenchRun(await rerunKnowledgeDistillationWorkbenchStageClient(runId, stageId));
 }
 
 export async function resumeKnowledgeDistillationWorkbenchRun(runId: string): Promise<WorkbenchRun> {
-  return asWorkbenchRun(await bridge.resumeKnowledgeDistillationWorkbenchRun(runId));
+  return asWorkbenchRun(await resumeKnowledgeDistillationWorkbenchRunClient(runId));
 }
 
 export function compareKnowledgeDistillationWorkbenchRuns(leftRunId: string, rightRunId: string) {
-  return bridge.compareKnowledgeDistillationWorkbenchRuns(leftRunId, rightRunId);
+  return compareKnowledgeDistillationWorkbenchRunsClient(leftRunId, rightRunId);
 }
 
-export function knowledgeDistillationWorkbenchExportUrl(runId: string, stageId: string, format: string) {
-  return bridge.knowledgeDistillationWorkbenchExportUrl(runId, stageId, format);
-}
-
-export function knowledgeDistillationWorkbenchPackageUrl(runId: string) {
-  return bridge.knowledgeDistillationWorkbenchPackageUrl(runId);
+export function getKnowledgeDistillationWorkbenchRunArtifacts(runId: string) {
+  return getKnowledgeDistillationWorkbenchRunArtifactsClient(runId);
 }

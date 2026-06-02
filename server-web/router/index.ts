@@ -1,6 +1,6 @@
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from "vue-router";
-import { isKnowledgeRouteTab } from "./routes";
-export type { AdminSection, DebugTab, KnowledgeTab } from "./routes";
+import { isExternalServiceRouteTab, isKnowledgeRouteTab } from "./routes";
+export type { AdminSection, DebugTab, ExternalServiceTab, KnowledgeTab } from "./routes";
 export { adminSectionToSlug, slugToAdminView, viewToPath } from "./routes";
 
 const validDebugTabs = new Set(["knowledgeRecall", "agentRetrieval", "knowledgeDistillation"]);
@@ -15,6 +15,16 @@ const routes: RouteRecordRaw[] = [
   { path: "/approval", component: () => import("../views/ApprovalFlowView.vue"), meta: { viewId: "approval" } },
   { path: "/sources", component: () => import("../views/SourcesView.vue"), meta: { viewId: "sources" } },
   { path: "/intelligence", redirect: "/" },
+
+  // External service management
+  { path: "/external-services", redirect: "/external-services/list" },
+  {
+    path: "/external-services/:tab",
+    component: () => import("../views/ExternalServicesView.vue"),
+    beforeEnter: (to) =>
+      isExternalServiceRouteTab(String(to.params.tab)) ? true : "/external-services/list",
+    meta: { viewId: "externalServices" },
+  },
 
   // Knowledge sub-tabs
   { path: "/knowledge", redirect: "/knowledge/management" },
@@ -55,6 +65,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/admin/agent-management", redirect: "/admin/agent-config" },
   { path: "/admin/agent-permissions", component: () => import("../views/admin/AgentPermissionsView.vue"), meta: { viewId: "admin", adminView: "agentPermissions" } },
   { path: "/admin/agent-config", component: () => import("../views/admin/AgentConfigView.vue"), meta: { viewId: "admin", adminView: "agentConfig" } },
+  { path: "/admin/agent-assignment", component: () => import("../views/admin/AgentAssignmentView.vue"), meta: { viewId: "admin", adminView: "agentAssignment" } },
   { path: "/admin/context-management", component: () => import("../views/admin/ContextManagementView.vue"), meta: { viewId: "admin", adminView: "contextManagement" } },
   { path: "/admin/maintenance-agent", component: () => import("../views/admin/MaintenanceAgentView.vue"), meta: { viewId: "admin", adminView: "maintenanceAgent" } },
 
@@ -75,6 +86,9 @@ router.beforeEach((to) => {
   }
   if (to.path.startsWith("/debug/") && !validDebugTabs.has(String(to.params.tab))) {
     return { path: "/debug/knowledgeRecall", replace: true };
+  }
+  if (to.path.startsWith("/external-services/") && !isExternalServiceRouteTab(String(to.params.tab))) {
+    return { path: "/external-services/list", replace: true };
   }
   return true;
 });

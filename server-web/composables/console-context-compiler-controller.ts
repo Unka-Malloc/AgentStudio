@@ -1,6 +1,12 @@
 import { computed, ref, type Ref } from "vue";
-import { bridge } from "../lib/bridge";
-import { downloadTextFile, formatMachineDate } from "./console-format-utils";
+import {
+  getContextProfiles,
+  listContextBuildRecords,
+  previewContextPack,
+  runContextEvaluation,
+} from "../lib/context-compiler-client";
+import { downloadTextFile } from "./console-browser-effects";
+import { formatMachineDate } from "./console-format-utils";
 import { asRecord } from "./console-model-utils";
 
 type ConsoleContextCompilerControllerOptions = {
@@ -67,8 +73,8 @@ export function createConsoleContextCompilerController(
     }
     try {
       const [profiles, records] = await Promise.all([
-        bridge.getContextProfiles(),
-        bridge.listContextBuildRecords(20),
+        getContextProfiles(),
+        listContextBuildRecords(20),
       ]);
       contextProfilesResponse.value = profiles;
       contextBuildRecordsResponse.value = records;
@@ -142,7 +148,7 @@ export function createConsoleContextCompilerController(
     options.setBusy("context:preview");
     options.error.value = "";
     try {
-      contextPreviewResult.value = await bridge.previewContextPack(contextPreviewPayload());
+      contextPreviewResult.value = await previewContextPack(contextPreviewPayload());
       await refreshContextCompiler({ silent: true });
     } catch (nextError) {
       options.error.value = nextError instanceof Error ? nextError.message : "上下文预览失败。";
@@ -157,7 +163,7 @@ export function createConsoleContextCompilerController(
     try {
       const payload = contextPreviewPayload();
       const requiredEvidenceIds = parseRequiredEvidenceIds(contextPreviewRequiredEvidence.value);
-      contextEvaluationResult.value = await bridge.runContextEvaluation({
+      contextEvaluationResult.value = await runContextEvaluation({
         profiles: [options.selectedContextProfileId()],
         cases: [
           {

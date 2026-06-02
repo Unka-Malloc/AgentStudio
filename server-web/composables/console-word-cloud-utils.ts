@@ -137,7 +137,7 @@ function collectWordCloudAbsorptionCandidates(
       threshold: normalizeWordCloudThreshold(cloud.absorbThreshold),
       labelText: normalizeWordCloudText(cloud.label),
       summaryText: normalizeWordCloudText(cloud.summary || ""),
-      termTexts: (cloud.terms || []).map((term: any) => normalizeWordCloudText(term.term)).filter(Boolean),
+      termTexts: (cloud.terms || []).map((term) => normalizeWordCloudText(term.term)).filter(Boolean),
     });
     collectWordCloudAbsorptionCandidates(cloud.children || [], depth + 1, target);
   }
@@ -223,7 +223,7 @@ export function autoAbsorbWordCloudTerms(
         const existingIds = new Set((cloud.terms || []).map((item) => wordCloudTermIdentity(item)));
         cloud.terms = [
           ...(cloud.terms || []),
-          ...nextTerms.filter((item: any) => !existingIds.has(wordCloudTermIdentity(item))),
+          ...nextTerms.filter((item) => !existingIds.has(wordCloudTermIdentity(item))),
         ];
       }
       absorbIntoClouds(cloud.children || []);
@@ -244,9 +244,9 @@ export function normalizeWordCloudCloudForUi(
     wordBagId,
     label: String(cloud.label || "词云").trim() || "词云",
     parentWordBagId,
-    terms: (cloud.terms || []).map((term: any) => normalizeWordCloudTermForUi(term)).filter((term) => term.term),
+    terms: (cloud.terms || []).map((term) => normalizeWordCloudTermForUi(term)).filter((term) => term.term),
     removedTerms: (cloud.removedTerms || [])
-      .map((term: any) => ({ ...normalizeWordCloudTermForUi(term), removed: true }))
+      .map((term) => ({ ...normalizeWordCloudTermForUi(term), removed: true }))
       .filter((term) => term.term),
     children: (cloud.children || []).map((child) => normalizeWordCloudCloudForUi(child, wordBagId)),
   };
@@ -255,8 +255,8 @@ export function normalizeWordCloudCloudForUi(
 export function normalizeWordCloudSetForUi(value: KnowledgeWordCloudSet): KnowledgeWordCloudSet {
   return {
     ...value,
-    termsSnapshot: (value.termsSnapshot || []).map((term: any) => normalizeWordCloudTermForUi(term)).filter((term) => term.term),
-    unassignedTerms: (value.unassignedTerms || []).map((term: any) => normalizeWordCloudTermForUi(term)).filter((term) => term.term),
+    termsSnapshot: (value.termsSnapshot || []).map((term) => normalizeWordCloudTermForUi(term)).filter((term) => term.term),
+    unassignedTerms: (value.unassignedTerms || []).map((term) => normalizeWordCloudTermForUi(term)).filter((term) => term.term),
     corpusPaths: normalizeWordCloudCorpusPathsForUi(value.corpusPaths || []),
     wordBags: (value.wordBags || []).map((cloud) => normalizeWordCloudCloudForUi(cloud)),
   };

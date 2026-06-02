@@ -1,4 +1,5 @@
 import type { KnowledgeAssetRef } from "../lib/types";
+import { browserLocationOrigin } from "../lib/browser-window";
 import {
   emailHeaderValue,
   escapeHtmlText,
@@ -28,7 +29,7 @@ export interface EvidenceRenderContext {
 }
 
 function contextOrigin(context: EvidenceRenderContext) {
-  return context.origin() || (typeof window === "undefined" ? "" : window.location.origin);
+  return context.origin() || browserLocationOrigin();
 }
 
 export function safeEmailImageSrc(value: string, context: EvidenceRenderContext) {

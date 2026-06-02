@@ -1,0 +1,45 @@
+.maintenance-agent-layout,
+.maintenance-agent-step-list {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.maintenance-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3-5);
+}
+
+.agent-permissions-layout {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.agent-permission-group-card {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-3-5);
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+}
+
+.agent-permission-group-card strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.agent-permission-group-card small {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.agent-permission-group-card[data-enabled="false"] {
+  opacity: 0.72;
+}
+
+.permission-group-title-grid {
+  min-width: min(620px, 100%);
+}

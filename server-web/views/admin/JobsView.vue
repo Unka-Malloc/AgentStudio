@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { useServerConsoleShellContext } from '../../composables/serverConsoleShellContext';
+import { jobStatusLabels } from '../../composables/console-defaults';
+import { formatCompactDate, jobStatusTone } from '../../composables/console-format-utils';
+import { jobElapsed } from '../../composables/console-job-display-utils';
+import { queueLifecycleLabel } from '../../composables/console-status-utils';
 import StatusPill from '../../components/StatusPill.vue';
 const {
   adminView,
@@ -7,12 +11,7 @@ const {
   consoleState,
   currentView,
   deleteJob,
-  formatCompactDate,
   isAuthenticated,
-  jobElapsed,
-  jobStatusLabels,
-  jobStatusTone,
-  queueLifecycleLabel,
   workQueueRows,
   workQueueSummary,
   queueMonitorState,

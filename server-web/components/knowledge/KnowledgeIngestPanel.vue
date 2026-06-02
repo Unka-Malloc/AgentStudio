@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import BridgeDownloadButton from "../BridgeDownloadButton.vue";
 import OptionBar from "../OptionBar.vue";
 import UploadFileListCard from "../UploadFileListCard.vue";
-import { useKnowledgeViewContext } from "../../composables/knowledgeViewContext";
+import { jobStatusLabels } from "../../composables/console-defaults";
+import { formatBytes, jobStatusTone, jsonPreview } from "../../composables/console-format-utils";
+import { useKnowledgeIngestContext } from "../../composables/knowledgeViewContext";
 import { normalizedKnowledgeDocumentUrl, previewKnowledgeDocuments } from "../../lib/knowledge-documents";
 
 const {
@@ -11,13 +14,9 @@ const {
   canWriteJobs,
   documentPreviewResult,
   dynamicParsingPreviewConfig,
-  formatBytes,
   ingestFiles,
   ingestJob,
   ingestProgress,
-  jobStatusLabels,
-  jobStatusTone,
-  jsonPreview,
   knowledgeIngestTargetDisplaySummary,
   knowledgeIngestTargetOptions,
   knowledgeIngestTargetValidationMessage,
@@ -26,7 +25,28 @@ const {
   onIngestFilesSelected,
   setKnowledgeIngestTargetValues,
   uploadFilesToKnowledge,
-} = useKnowledgeViewContext();
+} = useKnowledgeIngestContext();
+
+const knowledgeIngestReadinessItems = computed(() => [
+  {
+    key: "target",
+    label: "目标",
+    value: knowledgeIngestTargetValidationMessage.value ? "待选择" : "已选择",
+    tone: knowledgeIngestTargetValidationMessage.value ? "warning" : "success",
+  },
+  {
+    key: "files",
+    label: "文件",
+    value: ingestFiles.value.length ? `${ingestFiles.value.length} 个` : "待上传",
+    tone: ingestFiles.value.length ? "success" : "neutral",
+  },
+  {
+    key: "jobs",
+    label: "任务",
+    value: canWriteJobs.value ? "可创建" : "无写入权限",
+    tone: canWriteJobs.value ? "success" : "warning",
+  },
+]);
 
 async function previewKnowledgeDocumentParsing() {
   documentPreviewResult.value = await previewKnowledgeDocuments(ingestFiles.value, {
@@ -63,6 +83,17 @@ async function previewKnowledgeDocumentParsing() {
     <p v-if="knowledgeIngestTargetValidationMessage" class="module-note warning-note">
       {{ knowledgeIngestTargetValidationMessage }}
     </p>
+    <div class="knowledge-ingest-readiness" aria-label="入库准备状态">
+      <span
+        v-for="item in knowledgeIngestReadinessItems"
+        :key="item.key"
+        class="knowledge-ingest-readiness-pill"
+        :data-tone="item.tone"
+      >
+        <strong>{{ item.label }}</strong>
+        <span>{{ item.value }}</span>
+      </span>
+    </div>
     <div class="knowledge-ingest-section-spacer" aria-hidden="true"></div>
     <UploadFileListCard
       :files="ingestFiles"

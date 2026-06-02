@@ -1,5 +1,11 @@
 import { computed, ref, type Ref } from "vue";
-import { bridge } from "../lib/bridge";
+import {
+  createKnowledgeSource as createKnowledgeSourceApi,
+  deleteKnowledgeSource as deleteKnowledgeSourceApi,
+  getKnowledgeSources,
+  refreshKnowledgeSource as refreshKnowledgeSourceApi,
+  updateKnowledgeSource as updateKnowledgeSourceApi,
+} from "../lib/knowledge-sources-client";
 import type {
   KnowledgeConsoleState,
   KnowledgeSource,
@@ -91,7 +97,7 @@ export function createConsoleKnowledgeSourceController(options: ConsoleKnowledge
     options.setBusy("knowledge:sources");
     options.error.value = "";
     try {
-      applyKnowledgeSourceState(await bridge.getKnowledgeSources());
+      applyKnowledgeSourceState(await getKnowledgeSources());
     } catch (nextError) {
       options.error.value = nextError instanceof Error ? nextError.message : "刷新目录失败。";
     } finally {
@@ -108,7 +114,7 @@ export function createConsoleKnowledgeSourceController(options: ConsoleKnowledge
     options.setBusy("knowledge:sources:add");
     options.error.value = "";
     try {
-      const result = await bridge.createKnowledgeSource({
+      const result = await createKnowledgeSourceApi({
         label: localSourceForm.value.label.trim() || directoryNameFromPath(directoryPath),
         directoryPath,
         autoSync: localSourceForm.value.autoSync,
@@ -141,7 +147,7 @@ export function createConsoleKnowledgeSourceController(options: ConsoleKnowledge
     options.setBusy(`knowledge:source:${source.sourceId}`);
     options.error.value = "";
     try {
-      const result = await bridge.updateKnowledgeSource(source.sourceId, patch);
+      const result = await updateKnowledgeSourceApi(source.sourceId, patch);
       applyKnowledgeSourceState(result.state);
     } catch (nextError) {
       options.error.value = nextError instanceof Error ? nextError.message : "更新目录失败。";
@@ -154,7 +160,7 @@ export function createConsoleKnowledgeSourceController(options: ConsoleKnowledge
     options.setBusy(`knowledge:source:refresh:${source.sourceId}`);
     options.error.value = "";
     try {
-      const result = await bridge.refreshKnowledgeSource(source.sourceId, { force });
+      const result = await refreshKnowledgeSourceApi(source.sourceId, { force });
       applyKnowledgeSourceState(result.state);
       if (result.job) {
         options.ingestJob.value = result.job;
@@ -170,7 +176,7 @@ export function createConsoleKnowledgeSourceController(options: ConsoleKnowledge
     options.setBusy(`knowledge:source:delete:${source.sourceId}`);
     options.error.value = "";
     try {
-      const result = await bridge.deleteKnowledgeSource(source.sourceId);
+      const result = await deleteKnowledgeSourceApi(source.sourceId);
       applyKnowledgeSourceState(result.state);
     } catch (nextError) {
       options.error.value = nextError instanceof Error ? nextError.message : "删除目录失败。";

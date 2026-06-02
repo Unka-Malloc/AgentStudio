@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useServerConsoleShellContext } from '../../composables/serverConsoleShellContext';
+import { formatMachineDate } from '../../composables/console-format-utils';
 import DataTable from '../../components/DataTable.vue';
 import OptionBar from '../../components/OptionBar.vue';
 import StatusPill from '../../components/StatusPill.vue';
@@ -10,7 +11,6 @@ const {
   error,
   exportKnowledgeLogRows,
   filteredKnowledgeLogRows,
-  formatMachineDate,
   handleKnowledgeLogTableScroll,
   isAuthenticated,
   knowledgeLogAdvancedOpen,

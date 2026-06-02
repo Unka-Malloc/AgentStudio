@@ -238,7 +238,7 @@ const {
   width: 400px;
   max-width: 90vw;
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-  animation: slide-up 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  animation: slide-up 0.3s var(--ease-out);
 }
 @keyframes fade-in {
   from { opacity: 0; }
@@ -249,52 +249,4 @@ const {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-</style>
-
-<style>
-:root {
-  --pact-copy-popover-bg: color-mix(in srgb, var(--bg-surface) 92%, var(--brand-subtle) 8%);
-  --pact-copy-popover-fg: var(--text-primary);
-  --pact-copy-popover-border: color-mix(in srgb, var(--border-subtle) 82%, var(--brand) 18%);
-  --pact-copy-popover-shadow: var(--shadow-md);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not(.theme-light) {
-    --pact-copy-popover-bg: color-mix(in srgb, var(--bg-subtle) 86%, var(--brand-subtle) 14%);
-    --pact-copy-popover-fg: var(--text-primary);
-    --pact-copy-popover-border: color-mix(in srgb, var(--border-strong) 76%, var(--brand) 24%);
-    --pact-copy-popover-shadow: var(--shadow-md), inset 0 0 0 1px rgba(255,255,255,0.035);
-  }
-}
-
-html.theme-dark {
-  --pact-copy-popover-bg: color-mix(in srgb, var(--bg-subtle) 86%, var(--brand-subtle) 14%);
-  --pact-copy-popover-fg: var(--text-primary);
-  --pact-copy-popover-border: color-mix(in srgb, var(--border-strong) 76%, var(--brand) 24%);
-  --pact-copy-popover-shadow: var(--shadow-md), inset 0 0 0 1px rgba(255,255,255,0.035);
-}
-
-html.theme-light {
-  --pact-copy-popover-bg: color-mix(in srgb, var(--bg-surface) 92%, var(--brand-subtle) 8%);
-  --pact-copy-popover-fg: var(--text-primary);
-  --pact-copy-popover-border: color-mix(in srgb, var(--border-subtle) 82%, var(--brand) 18%);
-  --pact-copy-popover-shadow: var(--shadow-md);
-}
-
-.pact-copy-bubble {
-  position: fixed;
-  background: var(--pact-copy-popover-bg);
-  color: var(--pact-copy-popover-fg);
-  border: 1px solid var(--pact-copy-popover-border);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  pointer-events: none;
-  z-index: 9999;
-  opacity: 0;
-  transform: translate(-50%, -10px);
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease-out;
-  box-shadow: var(--pact-copy-popover-shadow);
-}
 </style>

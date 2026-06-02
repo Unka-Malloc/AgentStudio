@@ -1,5 +1,13 @@
 import { computed, ref, type ComputedRef, type Ref } from "vue";
-import { bridge } from "../lib/bridge";
+import {
+  approveMaintenanceAgentRun as approveMaintenanceAgentRunRequest,
+  cancelMaintenanceAgentRun as cancelMaintenanceAgentRunRequest,
+  chatMaintenanceAgent as chatMaintenanceAgentRequest,
+  getMaintenanceAgentConfig,
+  listMaintenanceAgentRuns,
+  saveMaintenanceAgentConfig as saveMaintenanceAgentConfigRequest,
+  startMaintenanceAgentRun,
+} from "../lib/maintenance-agent-client";
 import type {
   AgentModelConfig,
   MaintenanceAgentConfig,
@@ -7,6 +15,7 @@ import type {
   ServerConsoleState,
 } from "../lib/types";
 import type { OptionBarOption } from "../types/app";
+import { jsonPreview } from "./console-format-utils";
 import { asRecord } from "./console-model-utils";
 
 type MaintenanceAgentState = NonNullable<ServerConsoleState["maintenanceAgent"]>;
@@ -16,7 +25,6 @@ type ConsoleMaintenanceAgentControllerOptions = {
   clearAllBusy: () => void;
   consoleState: Ref<ServerConsoleState | null>;
   error: Ref<string>;
-  jsonPreview: (value: unknown) => string;
   modelEntryStatusKey: (entry: AgentModelConfig) => string;
   setBusy: (key: string) => void;
   visibleModelEntries: ComputedRef<AgentModelConfig[]>;
@@ -152,8 +160,8 @@ export function createConsoleMaintenanceAgentController(
     options.error.value = "";
     try {
       const [configResult, runsResult] = await Promise.all([
-        bridge.getMaintenanceAgentConfig(),
-        bridge.listMaintenanceAgentRuns(30),
+        getMaintenanceAgentConfig(),
+        listMaintenanceAgentRuns(30),
       ]);
       maintenanceAgentConfig.value = cloneConfig(configResult.config);
       maintenanceAgentRuns.value = runsResult.items;
@@ -193,7 +201,7 @@ export function createConsoleMaintenanceAgentController(
     options.setBusy("maintenance-agent:config");
     options.error.value = "";
     try {
-      const result = await bridge.saveMaintenanceAgentConfig(maintenanceAgentConfig.value);
+      const result = await saveMaintenanceAgentConfigRequest(maintenanceAgentConfig.value);
       maintenanceAgentConfig.value = cloneConfig(result.config);
       patchMaintenanceAgentState({ config: result.config });
       await refreshMaintenanceAgent({ silent: true });
@@ -217,13 +225,13 @@ export function createConsoleMaintenanceAgentController(
       const selectedAgent = options.visibleModelEntries.value.find(
         (entry) => options.modelEntryStatusKey(entry) === maintenanceAgentModelAlias.value,
       );
-      const result = await bridge.chatMaintenanceAgent({
+      const result = await chatMaintenanceAgentRequest({
         message,
         modelAlias: maintenanceAgentModelAlias.value || undefined,
         agentName: selectedAgent?.agentName || selectedAgent?.label || undefined,
         wait: true,
       });
-      maintenanceAgentResultJson.value = options.jsonPreview(result);
+      maintenanceAgentResultJson.value = jsonPreview(result);
       selectedMaintenanceAgentRun.value = result.run;
       await refreshMaintenanceAgent({ silent: true });
     } catch (nextError) {
@@ -238,11 +246,11 @@ export function createConsoleMaintenanceAgentController(
     options.setBusy("maintenance-agent:run");
     options.error.value = "";
     try {
-      const run = await bridge.startMaintenanceAgentRun({
+      const run = await startMaintenanceAgentRun({
         runbook: maintenanceAgentRunbook.value,
         wait: true,
       });
-      maintenanceAgentResultJson.value = options.jsonPreview(run);
+      maintenanceAgentResultJson.value = jsonPreview(run);
       selectedMaintenanceAgentRun.value = run;
       await refreshMaintenanceAgent({ silent: true });
     } catch (nextError) {
@@ -262,11 +270,11 @@ export function createConsoleMaintenanceAgentController(
     options.setBusy(`maintenance-agent:approve:${run.runId}`);
     options.error.value = "";
     try {
-      const result = await bridge.approveMaintenanceAgentRun(run.runId, {
+      const result = await approveMaintenanceAgentRunRequest(run.runId, {
         planHash: run.planHash,
         wait: true,
       });
-      maintenanceAgentResultJson.value = options.jsonPreview(result.run);
+      maintenanceAgentResultJson.value = jsonPreview(result.run);
       selectedMaintenanceAgentRun.value = result.run;
       await refreshMaintenanceAgent({ silent: true });
     } catch (nextError) {
@@ -281,10 +289,10 @@ export function createConsoleMaintenanceAgentController(
     options.setBusy(`maintenance-agent:cancel:${run.runId}`);
     options.error.value = "";
     try {
-      const result = await bridge.cancelMaintenanceAgentRun(run.runId, {
+      const result = await cancelMaintenanceAgentRunRequest(run.runId, {
         reason: "console",
       });
-      maintenanceAgentResultJson.value = options.jsonPreview(result.run);
+      maintenanceAgentResultJson.value = jsonPreview(result.run);
       selectedMaintenanceAgentRun.value = result.run;
       await refreshMaintenanceAgent({ silent: true });
     } catch (nextError) {

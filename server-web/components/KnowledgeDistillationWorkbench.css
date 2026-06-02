@@ -5,17 +5,14 @@
 }
 
 .distillation-command-card,
-.distillation-run-overview,
-.distillation-stage-card,
 .distillation-empty-card {
   border-radius: 8px;
 }
 
 .distillation-run-selector {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .distillation-config-grid {
@@ -34,8 +31,7 @@
 
 .config-field input,
 .config-field select,
-.config-field textarea,
-.distillation-compare-row select {
+.config-field textarea {
   width: 100%;
   box-sizing: border-box;
   border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.34));
@@ -52,23 +48,20 @@
   color: var(--text-muted, #6e7681);
 }
 
-.config-field select option,
-.distillation-compare-row select option {
+.config-field select option {
   background: var(--bg-subtle, #1c2128);
   color: var(--text-primary, #e6edf3);
 }
 
 .config-field input:hover,
 .config-field select:hover,
-.config-field textarea:hover,
-.distillation-compare-row select:hover {
+.config-field textarea:hover {
   border-color: var(--border-strong, rgba(148, 163, 184, 0.48));
 }
 
 .config-field input:focus,
 .config-field select:focus,
-.config-field textarea:focus,
-.distillation-compare-row select:focus {
+.config-field textarea:focus {
   border-color: var(--brand, #58a6ff);
   box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.18);
   outline: none;
@@ -83,122 +76,49 @@
   min-height: 66px;
 }
 
-.distillation-run-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 6px 10px;
-  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.3));
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-.distillation-run-chip.active {
-  border-color: var(--accent, #4f46e5);
-  background: rgba(79, 70, 229, 0.08);
-}
-
-.distillation-stage-card {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 14px;
-}
-
-.distillation-stage-index {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: rgba(15, 23, 42, 0.08);
-  font-weight: 700;
-}
-
-.distillation-stage-card.completed .distillation-stage-index {
-  background: rgba(34, 197, 94, 0.14);
-}
-
-.distillation-stage-card.running .distillation-stage-index {
-  background: rgba(245, 158, 11, 0.16);
-}
-
-.distillation-stage-main {
+.distillation-run-listitem {
   min-width: 0;
 }
 
-.distillation-preview-card {
-  margin-top: 14px;
-  padding: 12px;
-  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.24));
-  border-radius: 8px;
-}
-
-.distillation-preview-card pre {
-  max-height: 280px;
-  overflow: auto;
-  margin: 10px 0 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.distillation-export-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.distillation-export-actions .disabled {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-.distillation-stage-meta {
-  margin-top: 12px;
-}
-
-.distillation-compare-row {
+.distillation-run-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.distillation-compare-preview,
-.stage-version-strip {
-  margin-top: 10px;
-  padding: 10px;
-  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.24));
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.3));
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.03);
-  white-space: pre-wrap;
+  background: color-mix(in srgb, var(--bg-subtle, #1c2128) 64%, transparent);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
 }
 
-.stage-version-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 12px;
+.distillation-run-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.stage-version-strip span {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.06);
+.distillation-run-item:hover {
+  border-color: var(--border-strong, rgba(148, 163, 184, 0.48));
+  background: color-mix(in srgb, var(--bg-subtle, #1c2128) 78%, transparent);
 }
 
-.danger-action {
-  color: #b91c1c;
+.distillation-run-item:focus-visible {
+  border-color: var(--brand, #58a6ff);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.18);
+}
+
+.distillation-run-item.active {
+  border-color: var(--accent, #4f46e5);
+  background: rgba(79, 70, 229, 0.1);
 }
 
 .module-note.danger {
   color: #b91c1c;
-}
-
-@media (max-width: 720px) {
-  .distillation-compare-row {
-    grid-template-columns: 1fr;
-  }
 }

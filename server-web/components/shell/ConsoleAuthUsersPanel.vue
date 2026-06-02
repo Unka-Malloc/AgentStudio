@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import OptionBar from "../OptionBar.vue";
+import { formatCompactDate } from "../../composables/console-format-utils";
 import { useServerConsoleShellContext } from "../../composables/serverConsoleShellContext";
 
 const {
@@ -10,7 +11,6 @@ const {
   busyKey,
   canAdminAuth,
   enabledBooleanOptionBarOptions,
-  formatCompactDate,
   oidcAllowedDomainsText,
   oidcDraft,
   oidcRoleMappingText,

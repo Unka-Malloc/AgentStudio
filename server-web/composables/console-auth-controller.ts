@@ -1,28 +1,31 @@
-import type { ComputedRef, Ref } from "vue";
-import { bridge } from "../lib/bridge";
+import { computed, ref, type Ref } from "vue";
+import {
+  getAuthOidc,
+  getAuthSession,
+  listAuthAudit,
+  listAuthSessions,
+  listAuthUsers,
+  loginAuth,
+  logoutAuth,
+  revokeAuthSession,
+  saveAuthOidc,
+  updateAuthUser,
+} from "../lib/auth-client";
 import type {
   ConsoleAuditItem,
   ConsoleAuthSummary,
   ConsoleOidcConfig,
   ConsoleUser,
+} from "../lib/auth-types";
+import type {
   ServerConsoleState,
 } from "../lib/types";
 
 type RefreshState = (options?: { silent?: boolean; forceDrafts?: boolean }) => Promise<unknown>;
 
 export type ConsoleAuthControllerOptions = {
-  authState: Ref<ConsoleAuthSummary | null>;
-  authBootstrapping: Ref<boolean>;
-  authUsers: Ref<ConsoleUser[]>;
-  authAudit: Ref<ConsoleAuditItem[]>;
-  authSessions: Ref<Array<Record<string, unknown>>>;
-  canAdminAuth: ComputedRef<boolean>;
   consoleState: Ref<ServerConsoleState | null>;
   error: Ref<string>;
-  loginForm: Ref<{ username: string; password: string }>;
-  oidcAllowedDomainsText: Ref<string>;
-  oidcDraft: Ref<ConsoleOidcConfig & { clientSecret?: string }>;
-  oidcRoleMappingText: Ref<string>;
   clearAllBusy: () => void;
   refreshState: RefreshState;
   resetServerEventCursor: () => void;
@@ -32,23 +35,66 @@ export type ConsoleAuthControllerOptions = {
 };
 
 export function createConsoleAuthController(options: ConsoleAuthControllerOptions) {
+  const authState = ref<ConsoleAuthSummary | null>(null);
+  const authBootstrapping = ref(true);
+  const loginForm = ref({ username: "", password: "" });
+  const authUsers = ref<ConsoleUser[]>([]);
+  const authAudit = ref<ConsoleAuditItem[]>([]);
+  const authSessions = ref<Array<Record<string, unknown>>>([]);
+  const oidcDraft = ref<ConsoleOidcConfig & { clientSecret?: string }>({
+    enabled: false,
+    issuer: "",
+    clientId: "",
+    clientSecretConfigured: false,
+    redirectUri: "",
+    allowedDomains: [],
+    roleMapping: {},
+    updatedAt: "",
+    clientSecret: "",
+  });
+  const oidcAllowedDomainsText = ref("");
+  const oidcRoleMappingText = ref("{}");
+
+  const currentUser = computed(() => authState.value?.session.user || null);
+  const isAuthenticated = computed(
+    () => authState.value?.session.authenticated === true,
+  );
+  const currentUserScopes = computed(() => currentUser.value?.scopes || []);
+
+  function hasScope(scopeId: string) {
+    return isAuthenticated.value && currentUserScopes.value.includes(scopeId);
+  }
+
+  const canAdminAuth = computed(() => hasScope("auth:admin"));
+  const canReadKnowledge = computed(() => hasScope("knowledge:read"));
+  const canWriteKnowledge = computed(() => hasScope("knowledge:write"));
+  const canMaintainKnowledge = computed(() => hasScope("knowledge:maintain"));
+  const canAdminKnowledge = computed(() => hasScope("knowledge:admin"));
+  const canWriteJobs = computed(() => hasScope("jobs:write"));
+  const canBrowseServerPaths = computed(() => hasScope("knowledge:write"));
+  const canAdminRuntime = computed(() => hasScope("runtime:admin"));
+  const canReadMaintenanceAgent = computed(() => hasScope("maintenance:read"));
+  const canRunMaintenanceAgent = computed(() => hasScope("maintenance:run"));
+  const canApproveMaintenanceAgent = computed(() => hasScope("maintenance:approve"));
+  const canAdminMaintenanceAgent = computed(() => hasScope("maintenance:admin"));
+
   async function refreshAuthState() {
     try {
-      const session = await bridge.getAuthSession();
-      options.authState.value = session;
+      const session = await getAuthSession();
+      authState.value = session;
       if (!session.session.authenticated) {
         options.consoleState.value = null;
         options.stopServerEventSubscription();
       }
       return session;
     } catch (nextError) {
-      options.authState.value = null;
+      authState.value = null;
       options.consoleState.value = null;
       options.stopServerEventSubscription();
       options.error.value = nextError instanceof Error ? nextError.message : "加载认证状态失败。";
       return null;
     } finally {
-      options.authBootstrapping.value = false;
+      authBootstrapping.value = false;
     }
   }
 
@@ -56,7 +102,7 @@ export function createConsoleAuthController(options: ConsoleAuthControllerOption
     options.setBusy("auth:login");
     options.error.value = "";
     try {
-      await bridge.loginAuth(options.loginForm.value);
+      await loginAuth(loginForm.value);
       const session = await refreshAuthState();
       if (!session?.session.authenticated) {
         options.error.value = "登录已返回，但会话状态尚未生效，请重试。";
@@ -77,7 +123,7 @@ export function createConsoleAuthController(options: ConsoleAuthControllerOption
     options.stopServerEventSubscription();
     options.resetServerEventCursor();
     try {
-      await bridge.logoutAuth();
+      await logoutAuth();
       options.consoleState.value = null;
       await refreshAuthState();
     } catch (nextError) {
@@ -88,25 +134,25 @@ export function createConsoleAuthController(options: ConsoleAuthControllerOption
   }
 
   async function refreshAuthAdmin() {
-    if (!options.canAdminAuth.value) {
+    if (!canAdminAuth.value) {
       return;
     }
     try {
       const [users, audit, sessions, oidc] = await Promise.all([
-        bridge.listAuthUsers(),
-        bridge.listAuthAudit(80),
-        bridge.listAuthSessions(),
-        bridge.getAuthOidc(),
+        listAuthUsers(),
+        listAuthAudit(80),
+        listAuthSessions(),
+        getAuthOidc(),
       ]);
-      options.authUsers.value = users.users;
-      options.authAudit.value = audit.items;
-      options.authSessions.value = sessions.sessions;
-      options.oidcDraft.value = {
+      authUsers.value = users.users;
+      authAudit.value = audit.items;
+      authSessions.value = sessions.sessions;
+      oidcDraft.value = {
         ...oidc.oidc,
         clientSecret: "",
       };
-      options.oidcAllowedDomainsText.value = (oidc.oidc.allowedDomains || []).join("\n");
-      options.oidcRoleMappingText.value = JSON.stringify(oidc.oidc.roleMapping || {}, null, 2);
+      oidcAllowedDomainsText.value = (oidc.oidc.allowedDomains || []).join("\n");
+      oidcRoleMappingText.value = JSON.stringify(oidc.oidc.roleMapping || {}, null, 2);
     } catch (nextError) {
       options.error.value =
         nextError instanceof Error ? nextError.message : "加载认证管理数据失败。";
@@ -117,8 +163,8 @@ export function createConsoleAuthController(options: ConsoleAuthControllerOption
     options.setBusy(`auth:user:${user.userId}`);
     options.error.value = "";
     try {
-      const result = await bridge.updateAuthUser(user.userId, patch);
-      options.authUsers.value = result.users;
+      const result = await updateAuthUser(user.userId, patch);
+      authUsers.value = result.users;
     } catch (nextError) {
       options.error.value = nextError instanceof Error ? nextError.message : "更新用户失败。";
     } finally {
@@ -139,15 +185,15 @@ export function createConsoleAuthController(options: ConsoleAuthControllerOption
     options.setBusy("auth:oidc");
     options.error.value = "";
     try {
-      const result = await bridge.saveAuthOidc({
-        ...options.oidcDraft.value,
-        allowedDomains: options.oidcAllowedDomainsText.value
+      const result = await saveAuthOidc({
+        ...oidcDraft.value,
+        allowedDomains: oidcAllowedDomainsText.value
           .split(/[\n,，]/)
           .map((item) => item.trim())
           .filter(Boolean),
-        roleMapping: JSON.parse(options.oidcRoleMappingText.value || "{}") as Record<string, string>,
+        roleMapping: JSON.parse(oidcRoleMappingText.value || "{}") as Record<string, string>,
       });
-      options.oidcDraft.value = {
+      oidcDraft.value = {
         ...result.oidc,
         clientSecret: "",
       };
@@ -162,7 +208,7 @@ export function createConsoleAuthController(options: ConsoleAuthControllerOption
     options.setBusy(`auth:session:${sessionId}`);
     options.error.value = "";
     try {
-      await bridge.revokeAuthSession(sessionId);
+      await revokeAuthSession(sessionId);
       await refreshAuthAdmin();
     } catch (nextError) {
       options.error.value = nextError instanceof Error ? nextError.message : "撤销会话失败。";
@@ -172,7 +218,32 @@ export function createConsoleAuthController(options: ConsoleAuthControllerOption
   }
 
   return {
+    authAudit,
+    authBootstrapping,
+    authSessions,
+    authState,
+    authUsers,
+    canAdminAuth,
+    canAdminKnowledge,
+    canAdminMaintenanceAgent,
+    canAdminRuntime,
+    canApproveMaintenanceAgent,
+    canBrowseServerPaths,
+    canMaintainKnowledge,
+    canReadKnowledge,
+    canReadMaintenanceAgent,
+    canRunMaintenanceAgent,
+    canWriteJobs,
+    canWriteKnowledge,
+    currentUser,
+    currentUserScopes,
+    hasScope,
+    isAuthenticated,
+    loginForm,
     logoutConsole,
+    oidcAllowedDomainsText,
+    oidcDraft,
+    oidcRoleMappingText,
     refreshAuthAdmin,
     refreshAuthState,
     revokeConsoleSession,

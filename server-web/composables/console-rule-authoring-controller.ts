@@ -1,6 +1,10 @@
 import { computed, ref, watch, type Ref } from "vue";
-import { bridge } from "../lib/bridge";
+import {
+  chatKnowledgeRuleAuthoring,
+  publishGoldenRules,
+} from "../lib/knowledge-rules-client";
 import type {
+  AgentSettings,
   AgentSelectorOption,
   KnowledgeRuleAuthoringResponse,
 } from "../lib/types";
@@ -25,6 +29,7 @@ type ConsoleRuleAuthoringControllerOptions = {
   clearAllBusy: () => void;
   error: Ref<string>;
   setBusy: (key: string) => void;
+  settingsDraft: Ref<AgentSettings>;
 };
 
 type RuleOption = {
@@ -90,9 +95,12 @@ function optionLabel(options: Array<{ value: string; label: string }>, value: st
 export function createConsoleRuleAuthoringController(
   options: ConsoleRuleAuthoringControllerOptions,
 ) {
+  const defaultRuleAuthoringModelAlias = computed(() =>
+    String(options.settingsDraft.value.agentExploreDefaults?.ruleAuthoringModelAlias || "").trim(),
+  );
   const ruleAuthoringForm = ref({
     message: "",
-    modelAlias: "",
+    modelAlias: defaultRuleAuthoringModelAlias.value,
     ruleName: "",
     scope: "knowledge",
     matchStrategy: "semantic_duplicate",
@@ -106,6 +114,15 @@ export function createConsoleRuleAuthoringController(
   const ruleAuthoringModelOptions = computed(() => options.agentSelectorOptions.value);
   const selectedRuleAuthoringModel = computed(() =>
     selectedRuleAuthoringAgentFromOptions(ruleAuthoringModelOptions.value, ruleAuthoringForm.value.modelAlias),
+  );
+  watch(
+    defaultRuleAuthoringModelAlias,
+    (modelAlias) => {
+      if (modelAlias && !String(ruleAuthoringForm.value.modelAlias || "").trim()) {
+        ruleAuthoringForm.value.modelAlias = modelAlias;
+      }
+    },
+    { immediate: true },
   );
   const ruleScopeOptionBarOptions = computed<OptionBarOption[]>(() =>
     ruleScopeOptions.map((option) => ({ value: option.value, label: option.label })),
@@ -265,18 +282,6 @@ export function createConsoleRuleAuthoringController(
     Object.assign(ruleAuthoringForm.value, inferRuleDraftFromMessage(ruleAuthoringForm.value.message));
   });
 
-  function ruleAuthoringStatusLabel(status: unknown) {
-    const value = String(status || "");
-    if (value === "pending_human_confirmation") return "待人类确认";
-    if (value === "no_rule_needed") return "未触发规则";
-    if (value === "gate_failed") return "门禁未通过";
-    if (value === "template_unavailable") return "模板不可用";
-    if (value === "invalid_input") return "输入无效";
-    if (value === "runtime_unavailable") return "运行时不可用";
-    if (value === "published") return "已发布";
-    return value || "未知";
-  }
-
   async function runRuleAuthoringChat() {
     const message = ruleAuthoringEffectiveMessage.value.trim();
     if (!message) {
@@ -294,7 +299,7 @@ export function createConsoleRuleAuthoringController(
     options.setBusy("knowledge:rule-authoring");
     options.error.value = "";
     try {
-      const result = await bridge.chatKnowledgeRuleAuthoring({
+      const result = await chatKnowledgeRuleAuthoring({
         message,
         draft: ruleAuthoringDraftPayload.value,
         modelAlias: ruleCreationMode.value === "chat" ? selectedRuleAuthoringModel.value.value : "",
@@ -325,7 +330,7 @@ export function createConsoleRuleAuthoringController(
     options.setBusy("knowledge:rule-authoring:publish");
     options.error.value = "";
     try {
-      const result = await bridge.publishGoldenRules(confirmation.packageId, {
+      const result = await publishGoldenRules(confirmation.packageId, {
         version: confirmation.version,
       });
       ruleAuthoringResult.value = {
@@ -357,7 +362,6 @@ export function createConsoleRuleAuthoringController(
     ruleAuthoringManualSummary,
     ruleAuthoringModelOptions,
     ruleAuthoringResult,
-    ruleAuthoringStatusLabel,
     ruleCreationMode,
     ruleMatchStrategyOptionBarOptions,
     ruleMatchStrategyOptions,

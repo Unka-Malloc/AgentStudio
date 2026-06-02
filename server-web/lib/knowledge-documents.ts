@@ -1,5 +1,11 @@
-import { bridge } from "./bridge";
 import { createKnowledgeUploadedFilesPayload } from "./knowledge-upload-session";
+import {
+  knowledgeDocxExportUrl,
+  knowledgeHtmlExportUrl,
+  knowledgeMarkdownExportUrl,
+  normalizedDocumentUrl,
+  parseDocument,
+} from "./knowledge-documents-client";
 import type { DocumentParseResponse, DocumentParsingConfig } from "./types";
 
 export type KnowledgeDocumentExportFormat = "docx" | "markdown" | "html";
@@ -14,13 +20,13 @@ export type KnowledgeDocumentPreviewContract = {
 };
 
 export function knowledgeExportUrl(format: KnowledgeDocumentExportFormat) {
-  if (format === "markdown") return bridge.knowledgeMarkdownExportUrl();
-  if (format === "html") return bridge.knowledgeHtmlExportUrl();
-  return bridge.knowledgeDocxExportUrl();
+  if (format === "markdown") return knowledgeMarkdownExportUrl();
+  if (format === "html") return knowledgeHtmlExportUrl();
+  return knowledgeDocxExportUrl();
 }
 
 export function normalizedKnowledgeDocumentUrl(batchId: string, documentId: string) {
-  return bridge.normalizedDocumentUrl(batchId, documentId);
+  return normalizedDocumentUrl(batchId, documentId);
 }
 
 export async function previewKnowledgeDocuments(
@@ -31,7 +37,7 @@ export async function previewKnowledgeDocuments(
     return null;
   }
   const uploadedFiles = await createKnowledgeUploadedFilesPayload(files);
-  return bridge.parseDocument({
+  return parseDocument({
     pipelineId: contract.pipelineId,
     expectedOutputs: contract.expectedOutputs,
     uploadedFiles,

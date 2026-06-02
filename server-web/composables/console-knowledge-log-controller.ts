@@ -1,13 +1,14 @@
 import { computed, ref } from "vue";
 import type { KnowledgeLogRow, OptionBarOption } from "../types/app";
+import { downloadTextFile } from "./console-browser-effects";
 import {
   csvCell,
-  downloadTextFile,
   formatMachineDate,
   parseFilterDate,
   parseTime,
 } from "./console-format-utils";
 import { asRecord } from "./console-model-utils";
+import { createConsolePointerDragController } from "./console-pointer-drag-controller";
 
 type ReadonlyRef<T> = {
   readonly value: T;
@@ -157,16 +158,6 @@ export function createConsoleKnowledgeLogController(options: ConsoleKnowledgeLog
     syncKnowledgeLogTableScrollLeft(payload);
   }
 
-  function stopKnowledgeLogColumnResize() {
-    if (typeof document !== "undefined") {
-      document.removeEventListener("pointermove", handleKnowledgeLogColumnPointerMove);
-      document.removeEventListener("pointerup", stopKnowledgeLogColumnResize);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    }
-    knowledgeLogResizing.value = null;
-  }
-
   function handleKnowledgeLogColumnPointerMove(event: PointerEvent) {
     const resizing = knowledgeLogResizing.value;
     if (!resizing) {
@@ -180,19 +171,30 @@ export function createConsoleKnowledgeLogController(options: ConsoleKnowledgeLog
     };
   }
 
+  const columnResizeDrag = createConsolePointerDragController({
+    cursor: "col-resize",
+    onMove: handleKnowledgeLogColumnPointerMove,
+    onStop: () => {
+      knowledgeLogResizing.value = null;
+    },
+  });
+
+  function stopKnowledgeLogColumnResize() {
+    columnResizeDrag.stopPointerDrag();
+    knowledgeLogResizing.value = null;
+  }
+
   function startKnowledgeLogColumnResize(event: PointerEvent, key: KnowledgeLogColumnKey) {
     event.preventDefault();
     event.stopPropagation();
+    stopKnowledgeLogColumnResize();
     syncKnowledgeLogTableScrollLeft();
     knowledgeLogResizing.value = {
       key,
       startX: event.clientX,
       startWidth: knowledgeLogColumnWidths.value[key],
     };
-    document.addEventListener("pointermove", handleKnowledgeLogColumnPointerMove);
-    document.addEventListener("pointerup", stopKnowledgeLogColumnResize);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
+    columnResizeDrag.startPointerDrag(event);
   }
 
   function handleKnowledgeLogColumnDividerKeydown(event: KeyboardEvent, key: KnowledgeLogColumnKey) {

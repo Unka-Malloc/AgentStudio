@@ -93,7 +93,7 @@ function toggle() {
   border-radius: var(--radius-full);
   background: var(--bg-surface);
   box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-  transition: transform var(--dur-base) var(--ease-spring);
+  transition: transform var(--dur-base) var(--ease-emphasized);
   will-change: transform;
 }
 

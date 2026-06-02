@@ -1,12 +1,16 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
-import { bridge } from "../lib/bridge";
+import { callAgentGateway } from "../lib/agent-gateway-client";
+import {
+  listKnowledgeReviewItems,
+  resolveKnowledgeReviewItem,
+} from "../lib/knowledge-review-client";
 import type {
   AgentSelectorOption,
   AgentSettings,
   KnowledgeConsoleState,
   KnowledgeReviewItem,
 } from "../lib/types";
-import type { AppView } from "../types/app";
+import type { AppView, OptionBarOption } from "../types/app";
 import { knowledgeReviewFusionPrompt } from "./console-knowledge-review-utils";
 import { asRecord } from "./console-model-utils";
 
@@ -67,6 +71,13 @@ function selectedAgentFromOptions(
   }
   return options.find((item) => item.value === selectedValue) || inactiveAgentOption(selectedValue);
 }
+
+const knowledgeReviewStatusOptionBarOptions: OptionBarOption[] = [
+  { value: "pending", label: "待决策" },
+  { value: "resolved", label: "已解决" },
+  { value: "rejected", label: "已忽略" },
+  { value: "all", label: "全部" },
+];
 
 export function createConsoleKnowledgeReviewController(
   options: ConsoleKnowledgeReviewControllerOptions,
@@ -142,7 +153,7 @@ export function createConsoleKnowledgeReviewController(
       options.error.value = "";
     }
     try {
-      const result = await bridge.listKnowledgeReviewItems({
+      const result = await listKnowledgeReviewItems({
         status: requestedStatus,
         limit: 100,
       });
@@ -187,7 +198,7 @@ export function createConsoleKnowledgeReviewController(
     options.setBusy(`knowledge:review:${reviewId}:${resolution}`);
     options.error.value = "";
     try {
-      await bridge.resolveKnowledgeReviewItem(reviewId, { resolution, patch });
+      await resolveKnowledgeReviewItem(reviewId, { resolution, patch });
       await refreshKnowledgeConflicts({ silent: true });
       await options.refreshKnowledgeConsole({ skipReviewItems: true });
     } catch (nextError) {
@@ -200,14 +211,14 @@ export function createConsoleKnowledgeReviewController(
   async function fuseKnowledgeReview(item: KnowledgeReviewItem) {
     const model = selectedKnowledgeReviewFusionModel.value;
     if (!model?.enabled || !model.value) {
-      options.error.value = "知识融合智能体未配置可用模型，请先在智能体仓库中选择模型。";
+      options.error.value = "知识融合智能体未配置可用模型，请先在智能体分配中选择模型。";
       return;
     }
     const reviewId = String(item.reviewId || "");
     options.setBusy(`knowledge:review:${reviewId}:merge`);
     options.error.value = "";
     try {
-      const response = await bridge.callAgentGateway({
+      const response = await callAgentGateway({
         modelAlias: model.value,
         alias: model.value,
         moduleId: "agentTools",
@@ -243,6 +254,7 @@ export function createConsoleKnowledgeReviewController(
     knowledgeReviewRequestGeneration,
     knowledgeReviewRowClassName,
     knowledgeReviewStatus,
+    knowledgeReviewStatusOptionBarOptions,
     pendingKnowledgeReviewCount,
     refreshKnowledgeConflicts,
     resolveKnowledgeReview,

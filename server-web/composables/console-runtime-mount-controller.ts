@@ -1,4 +1,4 @@
-import { computed, type Ref } from "vue";
+import { computed, ref, watch, type Ref } from "vue";
 import type { AgentSettings, ServerConsoleState } from "../lib/types";
 import type { PathPickerMode } from "../types/app";
 import {
@@ -6,25 +6,15 @@ import {
   moduleNameDescriptions,
   moduleNameLabels,
 } from "./console-defaults";
+import type { RuntimeModuleRow } from "./console-runtime-module-display-utils";
 import { analysisModuleDescriptionForModule } from "./console-status-utils";
 
-type RuntimeMount = ServerConsoleState["runtime"]["mounts"][number];
-
-export type RuntimeModuleRow = {
-  name: string;
-  label: string;
-  description: string;
-  modulePath: string;
-  configuredPath: string;
-  runtimeMount: RuntimeMount | undefined;
-  externalEnabled: boolean;
-  pathHint: string;
-};
-
 export type ConsoleRuntimeMountControllerOptions = {
+  applyRemoteConsoleDraftUpdate: (update: () => void) => void;
   consoleState: Ref<ServerConsoleState | null>;
   editingMountPaths: Ref<Record<string, boolean>>;
-  mountDraft: Ref<Record<string, string>>;
+  isApplyingRemoteConsoleDrafts: () => boolean;
+  remoteDraftEquals: (left: unknown, right: unknown) => boolean;
   settingsDraft: Ref<AgentSettings>;
   openServerPathPicker: (options: {
     title: string;
@@ -38,6 +28,19 @@ export type ConsoleRuntimeMountControllerOptions = {
 };
 
 export function createConsoleRuntimeMountController(options: ConsoleRuntimeMountControllerOptions) {
+  const mountDraft = ref<Record<string, string>>({});
+  const mountDraftDirty = ref(false);
+
+  watch(
+    mountDraft,
+    () => {
+      if (!options.isApplyingRemoteConsoleDrafts()) {
+        mountDraftDirty.value = true;
+      }
+    },
+    { deep: true, flush: "sync" },
+  );
+
   const enabledMountCount = computed(
     () => (options.consoleState.value?.runtime?.mounts || []).filter((mount) => mount.enabled).length || 0,
   );
@@ -59,7 +62,7 @@ export function createConsoleRuntimeMountController(options: ConsoleRuntimeMount
 
     return names.map((name) => {
       const runtimeMount = runtimeMounts.find((mount) => mount.name === name);
-      const modulePath = options.mountDraft.value[name] ?? configured[name] ?? "";
+      const modulePath = mountDraft.value[name] ?? configured[name] ?? "";
       const configuredPath = String(modulePath || "").trim();
       const runtimeAvailable = Boolean(runtimeMount) && runtimeMount?.enabled !== false;
 
@@ -119,53 +122,12 @@ export function createConsoleRuntimeMountController(options: ConsoleRuntimeMount
     );
   });
 
-  function moduleCapabilityText(item: RuntimeModuleRow) {
-    const mount = item.runtimeMount;
-
-    if (!mount) {
-      return "未加载运行实例";
-    }
-
-    const capabilities = [
-      mount.supportsStructuredDocument ? "结构化文档" : "",
-      mount.supportsTextExtraction ? "文本提取" : "",
-      mount.supportsBatchHook ? "批次回调" : "",
-    ].filter(Boolean);
-
-    return capabilities.length > 0 ? capabilities.join(" / ") : "基础运行";
-  }
-
   function analysisModuleDescription() {
     return analysisModuleDescriptionForModule(currentAnalysisModule.value);
   }
 
-  function moduleStatusText(item: RuntimeModuleRow) {
-    if (!item.runtimeMount) {
-      return item.configuredPath ? "等待重载" : "未加载运行实例";
-    }
-
-    if (item.runtimeMount?.enabled === false) {
-      const reason = String(item.runtimeMount.reason || "").trim();
-      return !reason || reason === "disabled" ? "已禁用" : reason;
-    }
-
-    return "可用";
-  }
-
-  function moduleEnabledLabel(enabled: boolean) {
-    return enabled ? "已开启" : "已关闭";
-  }
-
-  function moduleAvailabilityLabel(item: RuntimeModuleRow) {
-    return item.runtimeMount?.enabled === false || !item.externalEnabled ? "不可用" : "可用";
-  }
-
   function isMountPathEditing(name: string) {
     return options.editingMountPaths.value[name] === true;
-  }
-
-  function currentModulePathPlaceholder(item: RuntimeModuleRow) {
-    return item.pathHint || "填写外置模块 .mjs 路径";
   }
 
   async function toggleMountPathEdit(item: RuntimeModuleRow) {
@@ -192,30 +154,49 @@ export function createConsoleRuntimeMountController(options: ConsoleRuntimeMount
     options.openServerPathPicker({
       title: `选择${moduleNameLabels[name] || name}模块文件`,
       mode: "file",
-      value: String(options.mountDraft.value[name] || ""),
+      value: String(mountDraft.value[name] || ""),
       extensions: [".mjs", ".js", ".cjs"],
       applyPath: (nextPath) => {
-        options.mountDraft.value = {
-          ...options.mountDraft.value,
+        mountDraft.value = {
+          ...mountDraft.value,
           [name]: nextPath,
         };
       },
     });
   }
 
+  function replaceMountDraftFromServer(
+    value: Record<string, string> | null | undefined,
+    replaceOptions: { markClean?: boolean } = {},
+  ) {
+    const nextDraft = {
+      ...(value || {}),
+    };
+    if (options.remoteDraftEquals(mountDraft.value, nextDraft)) {
+      if (replaceOptions.markClean !== false) {
+        mountDraftDirty.value = false;
+      }
+      return;
+    }
+    options.applyRemoteConsoleDraftUpdate(() => {
+      mountDraft.value = nextDraft;
+      if (replaceOptions.markClean !== false) {
+        mountDraftDirty.value = false;
+      }
+    });
+  }
+
   return {
     analysisModuleDescription,
     currentAnalysisModule,
-    currentModulePathPlaceholder,
     enabledMountCount,
     isMountPathEditing,
-    moduleAvailabilityLabel,
-    moduleCapabilityText,
-    moduleEnabledLabel,
     moduleGroups,
     moduleRows,
-    moduleStatusText,
+    mountDraft,
+    mountDraftDirty,
     openMountPathPicker,
+    replaceMountDraftFromServer,
     toggleMountPathEdit,
     totalMountCount,
   };

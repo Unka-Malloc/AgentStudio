@@ -1,14 +1,23 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useServerConsoleShellContext } from '../../composables/serverConsoleShellContext';
+import { formatCompactDate, jsonPreview } from '../../composables/console-format-utils';
+import {
+  scopeLabel,
+  toolRiskLabel,
+  toolStatusLabel,
+  toolsetLabel,
+} from '../../composables/console-tool-display-utils';
+
+const {
+  adminView,
+  toolManagementConsole,
+} = useServerConsoleShellContext();
 
 const {
   activeToolManagementToolCount,
-  adminView,
   busyKey,
-  formatCompactDate,
   internalToolManagementToolCount,
-  jsonPreview,
   policyPreviewGrantId,
   policyPreviewProfileId,
   policyPreviewProfileOptionBarOptions,
@@ -17,7 +26,6 @@ const {
   policyPreviewToolOptionBarOptions,
   previewToolPolicy,
   refreshToolManagement,
-  scopeLabel,
   toolGrants,
   toolManagementAuditItems,
   toolManagementCatalogState,
@@ -26,10 +34,9 @@ const {
   toolManagementRiskRows,
   toolManagementStatusRows,
   toolManagementTools,
-  toolRiskLabel,
-  toolStatusLabel,
-  toolsetLabel,
-} = useServerConsoleShellContext();
+  toolManagementToolsets,
+  toolScopes,
+} = toolManagementConsole;
 
 const isStatsView = computed(() => adminView.value === "toolStats");
 
@@ -38,6 +45,14 @@ function percentLabel(value: number, total: number) {
     return "0%";
   }
   return `${Math.round((Number(value || 0) / total) * 100)}%`;
+}
+
+function renderScopeLabel(scopeId: string) {
+  return scopeLabel(scopeId, toolScopes.value);
+}
+
+function renderToolsetLabel(toolsetId: string) {
+  return toolsetLabel(toolsetId, toolManagementToolsets.value);
 }
 
 const toolUsageRows = computed(() => {
@@ -95,8 +110,8 @@ const toolUsageRows = computed(() => {
             <strong>{{ tool.source || "未声明" }}</strong>
             <small>{{ tool.operationId || "无操作映射" }}</small>
           </span>
-          <span>{{ tool.toolsets.map(toolsetLabel).join(" / ") || "未声明" }}</span>
-          <span>{{ tool.requiredScopes.map(scopeLabel).join(" / ") || "未声明" }}</span>
+          <span>{{ tool.toolsets.map(renderToolsetLabel).join(" / ") || "未声明" }}</span>
+          <span>{{ tool.requiredScopes.map(renderScopeLabel).join(" / ") || "未声明" }}</span>
           <span>{{ toolRiskLabel(tool.risk) }}</span>
           <span>{{ toolStatusLabel(tool.status) }}</span>
         </div>

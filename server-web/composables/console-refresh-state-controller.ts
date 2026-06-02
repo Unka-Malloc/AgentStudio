@@ -1,15 +1,27 @@
-import { ref } from "vue";
+import { ref, type Ref } from "vue";
+import { getServerConsoleState } from "../lib/console-state-client";
+import type { ServerConsoleState } from "../lib/types";
 import type { RefreshStateOptions } from "../types/app";
+import { createConsoleTimeoutController } from "./console-timer-controller";
 
 export const REFRESH_STATE_DELAY_MS = 3000;
 
 export type ConsoleRefreshStateControllerOptions = {
-  performRefreshState: (options?: RefreshStateOptions) => Promise<void>;
+  applyConsoleState: (
+    nextState: ServerConsoleState,
+    options?: { forceSettings?: boolean; forceDrafts?: boolean },
+  ) => void;
+  busyKey: Ref<string>;
+  clearAllBusy: () => void;
+  error: Ref<string>;
+  serverAvailable: Ref<boolean>;
+  setBusy: (key: string) => void;
 };
 
 export function createConsoleRefreshStateController(options: ConsoleRefreshStateControllerOptions) {
   const lastRefreshStateStartedAt = ref(0);
-  const pendingRefreshStateTimer = ref<number | null>(null);
+  const pendingRefreshStateDelay = createConsoleTimeoutController();
+  const pendingRefreshStateTimer = pendingRefreshStateDelay.timer;
   const pendingRefreshStateOptions = ref<RefreshStateOptions | null>(null);
   const pendingRefreshStatePromise = ref<Promise<void> | null>(null);
   const pendingRefreshStateResolve = ref<(() => void) | null>(null);
@@ -39,10 +51,7 @@ export function createConsoleRefreshStateController(options: ConsoleRefreshState
   }
 
   function clearPendingRefreshStateTimer() {
-    if (pendingRefreshStateTimer.value) {
-      window.clearTimeout(pendingRefreshStateTimer.value);
-      pendingRefreshStateTimer.value = null;
-    }
+    pendingRefreshStateDelay.stop();
   }
 
   function scheduleDelayedRefreshState(value: RefreshStateOptions, delayMs: number) {
@@ -55,10 +64,9 @@ export function createConsoleRefreshStateController(options: ConsoleRefreshState
     if (pendingRefreshStateTimer.value) {
       return pendingRefreshStatePromise.value;
     }
-    pendingRefreshStateTimer.value = window.setTimeout(() => {
+    pendingRefreshStateDelay.schedule(() => {
       const nextOptions = pendingRefreshStateOptions.value || {};
       const resolve = pendingRefreshStateResolve.value;
-      clearPendingRefreshStateTimer();
       pendingRefreshStateOptions.value = null;
       pendingRefreshStatePromise.value = null;
       pendingRefreshStateResolve.value = null;
@@ -71,7 +79,29 @@ export function createConsoleRefreshStateController(options: ConsoleRefreshState
 
   async function performRefreshState(value: RefreshStateOptions = {}) {
     lastRefreshStateStartedAt.value = Date.now();
-    await options.performRefreshState(value);
+    const showBusy = !value.silent;
+    const forceDrafts = value.forceDrafts === true;
+    if (showBusy) {
+      options.setBusy(options.busyKey.value || "refresh");
+    }
+    options.error.value = "";
+
+    try {
+      const nextState = await getServerConsoleState();
+      options.applyConsoleState(nextState, {
+        forceSettings: value.forceSettings,
+        forceDrafts,
+      });
+      options.serverAvailable.value = true;
+    } catch (nextError) {
+      options.serverAvailable.value = false;
+      options.error.value =
+        nextError instanceof Error ? nextError.message : "加载服务端控制台失败。";
+    } finally {
+      if (showBusy) {
+        options.clearAllBusy();
+      }
+    }
   }
 
   async function refreshState(value: RefreshStateOptions = {}) {

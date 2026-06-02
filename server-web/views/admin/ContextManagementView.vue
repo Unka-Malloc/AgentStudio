@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useServerConsoleShellContext } from '../../composables/serverConsoleShellContext';
+import { formatCompactDate, jsonPreview } from '../../composables/console-format-utils';
 import ConfigFoldCard from '../../components/ConfigFoldCard.vue';
 
 const {
@@ -11,9 +12,7 @@ const {
   contextPreviewTask,
   contextProfileRows,
   exportContextBuildRecords,
-  formatCompactDate,
   highlightedConfigTarget,
-  jsonPreview,
   previewContextCompiler,
   runContextReplayEvaluation,
 } = useServerConsoleShellContext();

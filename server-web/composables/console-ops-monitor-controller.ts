@@ -1,5 +1,12 @@
 import { computed, ref, type ComputedRef, type Ref } from "vue";
-import { bridge } from "../lib/bridge";
+import {
+  acknowledgeMonitorAlert as acknowledgeMonitorAlertRequest,
+  getBackgroundProcesses,
+  getClientRuntimeStatus,
+  getMonitorAlerts,
+  recoverBackgroundSupervisor as recoverBackgroundSupervisorRequest,
+  saveMonitorAlertConfig as saveMonitorAlertConfigRequest,
+} from "../lib/ops-monitor-client";
 import type {
   BackgroundProcessStatus,
   MaintenanceAgentRun,
@@ -8,6 +15,7 @@ import type {
   ServerConsoleState,
 } from "../lib/types";
 import type { WorkQueueRow } from "../types/app";
+import { jsonPreview } from "./console-format-utils";
 import {
   maintenanceAgentRiskLabel,
   queueLifecycleTone,
@@ -22,7 +30,6 @@ type ConsoleOpsMonitorControllerOptions = {
   clearAllBusy: () => void;
   consoleState: Ref<ServerConsoleState | null>;
   error: Ref<string>;
-  jsonPreview: (value: unknown) => string;
   setBusy: (key: string) => void;
 };
 
@@ -198,12 +205,46 @@ export function createConsoleOpsMonitorController(
     options.setBusy(`monitor-alert:ack:${alertId}`);
     options.error.value = "";
     try {
-      const state = await bridge.acknowledgeMonitorAlert(alertId);
+      const state = await acknowledgeMonitorAlertRequest(alertId);
       monitorAlertState.value = state;
-      monitorAlertConfigText.value = options.jsonPreview(state.config);
+      monitorAlertConfigText.value = jsonPreview(state.config);
     } catch (nextError) {
       options.error.value =
         nextError instanceof Error ? nextError.message : "确认报警失败。";
+    } finally {
+      options.clearAllBusy();
+    }
+  }
+
+  async function recoverBackgroundSupervisor() {
+    if (!options.canAdminMaintenanceAgent.value) {
+      options.error.value = "当前账号没有维护配置权限。";
+      return;
+    }
+    options.setBusy("background-supervisor:recover");
+    options.error.value = "";
+    try {
+      const response = await recoverBackgroundSupervisorRequest();
+      if (response.backgroundProcessStatus) {
+        backgroundProcessStatus.value = response.backgroundProcessStatus;
+      } else {
+        backgroundProcessStatus.value = await getBackgroundProcesses();
+      }
+      if (response.monitorAlertState) {
+        monitorAlertState.value = response.monitorAlertState;
+        monitorAlertConfigText.value = jsonPreview(response.monitorAlertState.config);
+      } else {
+        const state = await getMonitorAlerts();
+        monitorAlertState.value = state;
+        monitorAlertConfigText.value = jsonPreview(state.config);
+      }
+      if (!response.recovery?.ok) {
+        const reason = response.recovery?.reason || response.recovery?.action || "unknown";
+        options.error.value = `拉起后台 Worker 管理进程未成功：${reason}`;
+      }
+    } catch (nextError) {
+      options.error.value =
+        nextError instanceof Error ? nextError.message : "拉起后台 Worker 管理进程失败。";
     } finally {
       options.clearAllBusy();
     }
@@ -218,7 +259,7 @@ export function createConsoleOpsMonitorController(
     }
     options.error.value = "";
     try {
-      backgroundProcessStatus.value = await bridge.getBackgroundProcesses();
+      backgroundProcessStatus.value = await getBackgroundProcesses();
     } catch (nextError) {
       options.error.value =
         nextError instanceof Error ? nextError.message : "刷新后台进程状态失败。";
@@ -235,7 +276,7 @@ export function createConsoleOpsMonitorController(
     }
     options.error.value = "";
     try {
-      const status = await bridge.getClientRuntimeStatus();
+      const status = await getClientRuntimeStatus();
       if (options.consoleState.value) {
         options.consoleState.value = {
           ...options.consoleState.value,
@@ -261,9 +302,9 @@ export function createConsoleOpsMonitorController(
     }
     options.error.value = "";
     try {
-      const state = await bridge.getMonitorAlerts();
+      const state = await getMonitorAlerts();
       monitorAlertState.value = state;
-      monitorAlertConfigText.value = options.jsonPreview(state.config);
+      monitorAlertConfigText.value = jsonPreview(state.config);
     } catch (nextError) {
       options.error.value =
         nextError instanceof Error ? nextError.message : "刷新监控报警失败。";
@@ -283,9 +324,9 @@ export function createConsoleOpsMonitorController(
     options.error.value = "";
     try {
       const parsed = JSON.parse(monitorAlertConfigText.value || "{}");
-      const state = await bridge.saveMonitorAlertConfig(parsed);
+      const state = await saveMonitorAlertConfigRequest(parsed);
       monitorAlertState.value = state;
-      monitorAlertConfigText.value = options.jsonPreview(state.config);
+      monitorAlertConfigText.value = jsonPreview(state.config);
     } catch (nextError) {
       options.error.value =
         nextError instanceof Error ? nextError.message : "保存监控报警配置失败。";
@@ -313,6 +354,7 @@ export function createConsoleOpsMonitorController(
     refreshBackgroundProcesses,
     refreshClientRuntimeStatus,
     refreshMonitorAlerts,
+    recoverBackgroundSupervisor,
     saveMonitorAlertConfig,
     workQueueRows,
     workQueueSummary,

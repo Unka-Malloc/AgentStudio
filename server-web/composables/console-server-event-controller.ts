@@ -1,6 +1,7 @@
-import { bridge } from "../lib/bridge";
+import { subscribeEvents } from "../lib/server-events-client";
 import type { ProtocolEvent } from "../lib/types";
 import { ref } from "vue";
+import { createConsoleTimeoutController } from "./console-timer-controller";
 
 export type ConsoleServerEventControllerOptions = {
   applyServerEvent: (event: ProtocolEvent) => boolean;
@@ -13,7 +14,8 @@ export function createConsoleServerEventController(options: ConsoleServerEventCo
   const serverEventSubscriptionStopped = ref(false);
   const serverEventSubscriptionGeneration = ref(0);
   const serverEventAbortController = ref<AbortController | null>(null);
-  const serverEventTimer = ref<number | null>(null);
+  const serverEventDelay = createConsoleTimeoutController();
+  const serverEventTimer = serverEventDelay.timer;
   const serverEventTimerResolve = ref<(() => void) | null>(null);
 
   function resetServerEventCursor() {
@@ -21,10 +23,7 @@ export function createConsoleServerEventController(options: ConsoleServerEventCo
   }
 
   function clearServerEventTimer() {
-    if (serverEventTimer.value) {
-      window.clearTimeout(serverEventTimer.value);
-      serverEventTimer.value = null;
-    }
+    serverEventDelay.stop();
     if (serverEventTimerResolve.value) {
       serverEventTimerResolve.value();
       serverEventTimerResolve.value = null;
@@ -33,12 +32,16 @@ export function createConsoleServerEventController(options: ConsoleServerEventCo
 
   function waitForServerEventRetry(ms: number) {
     return new Promise<void>((resolve) => {
+      clearServerEventTimer();
       serverEventTimerResolve.value = resolve;
-      serverEventTimer.value = window.setTimeout(() => {
-        serverEventTimer.value = null;
+      const scheduledTimer = serverEventDelay.schedule(() => {
         serverEventTimerResolve.value = null;
         resolve();
       }, ms);
+      if (scheduledTimer === null) {
+        serverEventTimerResolve.value = null;
+        resolve();
+      }
     });
   }
 
@@ -75,7 +78,7 @@ export function createConsoleServerEventController(options: ConsoleServerEventCo
     serverEventAbortController.value = controller;
     const requestCursor = serverEventCursor.value;
     try {
-      const response = await bridge.subscribeEvents({
+      const response = await subscribeEvents({
         cursor: requestCursor,
         topic: options.currentTopics(),
         timeoutMs: requestCursor === 0 ? 0 : 25000,
@@ -125,8 +128,7 @@ export function createConsoleServerEventController(options: ConsoleServerEventCo
       !serverEventSubscriptionStopped.value &&
       generation === serverEventSubscriptionGeneration.value
     ) {
-      serverEventTimer.value = window.setTimeout(() => {
-        serverEventTimer.value = null;
+      serverEventDelay.schedule(() => {
         void runServerEventSubscription(generation);
       }, 100);
     }

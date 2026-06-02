@@ -1,8 +1,8 @@
 import { computed, ref } from "vue";
+import { createConsolePointerDragController } from "./console-pointer-drag-controller";
 
 export function createConsoleAgentExploreLayoutController() {
   const agentExploreSplitRef = ref<HTMLElement | null>(null);
-  const agentExploreSplitDragging = ref(false);
   const agentExploreSplitLeftPercent = ref(42);
   const agentExploreTraceOpen = ref(true);
 
@@ -28,28 +28,25 @@ export function createConsoleAgentExploreLayoutController() {
     );
   }
 
-  function stopAgentExploreSplitResize() {
-    if (typeof document !== "undefined") {
-      document.removeEventListener("pointermove", handleAgentExploreSplitPointerMove);
-      document.removeEventListener("pointerup", stopAgentExploreSplitResize);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    }
-    agentExploreSplitDragging.value = false;
-  }
-
   function handleAgentExploreSplitPointerMove(event: PointerEvent) {
     updateAgentExploreSplitFromClientX(event.clientX);
   }
 
+  const splitDrag = createConsolePointerDragController({
+    cursor: "col-resize",
+    onMove: handleAgentExploreSplitPointerMove,
+  });
+
+  const agentExploreSplitDragging = splitDrag.dragging;
+
+  function stopAgentExploreSplitResize() {
+    splitDrag.stopPointerDrag();
+  }
+
   function startAgentExploreSplitResize(event: PointerEvent) {
     event.preventDefault();
-    agentExploreSplitDragging.value = true;
     updateAgentExploreSplitFromClientX(event.clientX);
-    document.addEventListener("pointermove", handleAgentExploreSplitPointerMove);
-    document.addEventListener("pointerup", stopAgentExploreSplitResize);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
+    splitDrag.startPointerDrag(event);
   }
 
   function handleAgentExploreSplitKeydown(event: KeyboardEvent) {

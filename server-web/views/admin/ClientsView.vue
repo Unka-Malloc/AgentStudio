@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { useServerConsoleShellContext } from '../../composables/serverConsoleShellContext';
+import { formatCompactDate } from '../../composables/console-format-utils';
+import {
+  clientConnectionDetail,
+  clientConnectionMethodLabel,
+  clientStatusLabel,
+  clientStatusTone,
+} from '../../composables/console-client-display-utils';
 import OptionBar from '../../components/OptionBar.vue';
 import StatusPill from '../../components/StatusPill.vue';
 const {
   clientSearchQuery,
   clientStateFilter,
   clientStateFilterOptionBarOptions,
-  clientConnectionDetail,
-  clientConnectionMethodLabel,
-  clientStatusLabel,
-  clientStatusTone,
   consoleState,
   exportClients,
   filteredClientList,
-  formatCompactDate,
   importClients,
 } = useServerConsoleShellContext();
 </script>

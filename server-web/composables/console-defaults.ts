@@ -5,7 +5,7 @@ import type {
   ExpertVocabulary,
   SplitJobStatus,
 } from "../lib/types";
-import type { AdminView, AppView, CloudProvider, DebugTab, KnowledgeTab } from "../types/app";
+import type { AdminView, AppView, CloudProvider, DebugTab, ExternalServiceTab, KnowledgeTab } from "../types/app";
 
 export const modelLibraryProviderDefinitions: Array<{
   id: CloudProvider;
@@ -146,6 +146,9 @@ export const emptySettings: AgentSettings = {
     maxIterations: 4,
     limit: 8,
     toolChoice: "auto",
+    infoFeedSummaryModelAlias: "",
+    agentRetrievalModelAlias: "",
+    ruleAuthoringModelAlias: "",
     reviewFusionModelAlias: "",
     reviewFusionSystemPrompt:
       "你是 Pact 知识冲突融合智能体。你只能基于输入的原始记录、新录入记录、冲突原因和证据字段进行分析。请判断两份知识是完全重合、部分重合还是明显不同；给出相似度、应采取的审核动作和可复核理由。不得改写原始证据，不得编造未提供的信息。",
@@ -366,6 +369,10 @@ export const knowledgeTabs: Array<{ id: KnowledgeTab; label: string }> = [
   { id: "maintenance", label: "知识库配置" },
 ];
 
+export const externalServiceTabs: Array<{ id: ExternalServiceTab; label: string }> = [
+  { id: "list", label: "服务列表" },
+];
+
 export const adminViewTitleMap: Partial<Record<AdminView, string>> = {
   jobs: "任务队列",
   logs: "日志记录",
@@ -373,7 +380,8 @@ export const adminViewTitleMap: Partial<Record<AdminView, string>> = {
   toolList: "工具列表",
   toolStats: "工具统计",
   agentPermissions: "权限组",
-  agentConfig: "智能体仓库",
+  agentConfig: "大模型配置",
+  agentAssignment: "智能体分配",
   contextManagement: "上下文管理",
   maintenanceAgent: "智能巡检",
   opsMonitor: "运维监控",
@@ -388,6 +396,7 @@ export const viewTitleMap: Record<AppView, string> = {
   feed: "信息流",
   approval: "审批流",
   sources: "数据源",
+  externalServices: "外部服务",
   knowledge: "团队资产",
   workspaces: "协作空间",
   debug: "调试面板",

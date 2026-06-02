@@ -1,4 +1,5 @@
 import { onBeforeUnmount, onMounted } from "vue";
+import { createConsoleWindowEventChannel } from "./console-window-event-channel";
 
 export const PAGE_REFRESH_EVENT = "pact:page-refresh";
 
@@ -16,6 +17,8 @@ export type PageRefreshEventDetail = PageRefreshContext & {
   addTask: (task: PageRefreshTask) => void;
 };
 
+const pageRefreshEventChannel = createConsoleWindowEventChannel<PageRefreshEventDetail>(PAGE_REFRESH_EVENT);
+
 export function collectPageRefreshTasks(context: PageRefreshContext) {
   const tasks: Promise<unknown>[] = [];
   const detail: PageRefreshEventDetail = {
@@ -24,7 +27,7 @@ export function collectPageRefreshTasks(context: PageRefreshContext) {
       tasks.push(Promise.resolve(task));
     },
   };
-  window.dispatchEvent(new CustomEvent<PageRefreshEventDetail>(PAGE_REFRESH_EVENT, { detail }));
+  pageRefreshEventChannel.dispatch(detail);
   return tasks;
 }
 
@@ -32,8 +35,8 @@ export function usePageRefreshHandler(
   predicate: (detail: PageRefreshEventDetail) => boolean,
   handler: (detail: PageRefreshEventDetail) => PageRefreshTask,
 ) {
-  const listener = (event: Event) => {
-    const detail = (event as CustomEvent<PageRefreshEventDetail>).detail;
+  let removeListener: (() => void) | null = null;
+  const listener = (detail: PageRefreshEventDetail) => {
     if (!detail || !predicate(detail)) {
       return;
     }
@@ -41,10 +44,11 @@ export function usePageRefreshHandler(
   };
 
   onMounted(() => {
-    window.addEventListener(PAGE_REFRESH_EVENT, listener);
+    removeListener = pageRefreshEventChannel.add(listener);
   });
 
   onBeforeUnmount(() => {
-    window.removeEventListener(PAGE_REFRESH_EVENT, listener);
+    removeListener?.();
+    removeListener = null;
   });
 }

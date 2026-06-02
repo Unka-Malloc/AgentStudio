@@ -8,15 +8,16 @@ import InfoFeedResultRow from "./InfoFeedResultRow.vue";
 import JsonConfigFileEditor from "./JsonConfigFileEditor.vue";
 import OptionBar from "./OptionBar.vue";
 import SafeHtmlBlock from "./SafeHtmlBlock.vue";
+import SegmentedProgressBar from "./SegmentedProgressBar.vue";
 import SegmentedToggle from "./SegmentedToggle.vue";
 import StatusPill from "./StatusPill.vue";
 
-export { AgentModelOptionBar, BinaryCheckbox, BrowseSelectButton, ConfigFoldCard, FeatureToggle, HistorySessionPanel, InfoFeedResultRow, JsonConfigFileEditor, OptionBar, SafeHtmlBlock, SegmentedToggle, StatusPill };
+export { AgentModelOptionBar, BinaryCheckbox, BrowseSelectButton, ConfigFoldCard, FeatureToggle, HistorySessionPanel, InfoFeedResultRow, JsonConfigFileEditor, OptionBar, SafeHtmlBlock, SegmentedProgressBar, SegmentedToggle, StatusPill };
 
 export type CommonComponentRegistration = {
   name: string;
   file: string;
-  category: "choice" | "picker" | "history" | "result" | "config" | "render";
+  category: "choice" | "picker" | "history" | "result" | "config" | "render" | "progress";
   description: string;
   usageRule: string;
 };
@@ -111,5 +112,12 @@ export const commonComponentRegistry: CommonComponentRegistration[] = [
     category: "choice",
     description: "多选项平铺分段控制器组件。",
     usageRule: "页面需要分段切换视图或选项时使用，替代零散的 tabs 样式或 el-radio-group。",
+  },
+  {
+    name: "SegmentedProgressBar",
+    file: "server-web/components/SegmentedProgressBar.vue",
+    category: "progress",
+    description: "标准分段式进度条，支持步骤标签和 pending/active/complete/failed 状态。",
+    usageRule: "页面需要按步骤展示进度时使用；业务页面只传步骤数据，不重新手写分段条 DOM 或颜色状态。",
   },
 ];

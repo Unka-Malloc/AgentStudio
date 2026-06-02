@@ -1,8 +1,6 @@
-export const CLEAR_LOCAL_STATE_PARAM = "clearLocalState";
+import { browserWindow } from "../lib/browser-window";
 
-function browserWindow() {
-  return typeof window === "undefined" ? null : window;
-}
+export const CLEAR_LOCAL_STATE_PARAM = "clearLocalState";
 
 export async function clearIndexedDbDatabases() {
   const browser = browserWindow();

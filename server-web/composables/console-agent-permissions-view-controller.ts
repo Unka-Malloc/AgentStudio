@@ -1,5 +1,10 @@
 import { computed, onMounted, ref, watch } from 'vue';
-import { bridge } from '../lib/bridge';
+import {
+  getAuthorizationGovernance,
+  upsertAuthorizationGovernance,
+  type AuthorizationGovernanceKind,
+} from '../lib/authorization-governance-client';
+import { formatCompactDate } from './console-format-utils';
 import { usePageRefreshHandler } from './usePageRefresh';
 import { useServerConsoleShellContext } from './serverConsoleShellContext';
 
@@ -14,7 +19,7 @@ type GovernanceSummary = {
   approvals: GovernanceItem[];
 };
 
-type GovernanceEditorKind = 'role' | 'team' | 'userPolicy' | 'agentGroup' | 'agentBinding' | 'approval';
+type GovernanceEditorKind = AuthorizationGovernanceKind;
 
 const authorizationGovernanceEditorKinds = [
   { value: 'role', label: '角色' },
@@ -156,7 +161,7 @@ export function useAgentPermissionsViewConsole() {
     authorizationGovernanceLoading.value = true;
     authorizationGovernanceError.value = '';
     try {
-      const payload = await bridge.getAuthorizationGovernance();
+      const payload = await getAuthorizationGovernance();
       authorizationGovernance.value = {
         ...emptyGovernanceSummary(),
         ...(payload?.governance || {}),
@@ -187,7 +192,7 @@ export function useAgentPermissionsViewConsole() {
     authorizationGovernanceError.value = '';
     try {
       const payload = JSON.parse(authorizationGovernanceEditorBody.value || '{}') as Record<string, unknown>;
-      await bridge.upsertAuthorizationGovernance(authorizationGovernanceEditorKind.value, payload);
+      await upsertAuthorizationGovernance(authorizationGovernanceEditorKind.value, payload);
       authorizationGovernanceEditorStatus.value = '已保存';
       await refreshAuthorizationGovernance();
     } catch (error) {
@@ -201,6 +206,7 @@ export function useAgentPermissionsViewConsole() {
     resetAuthorizationGovernanceEditor();
   });
 
+  const { toolManagementConsole } = useServerConsoleShellContext();
   const {
     addAgentPermissionGroup,
     agentPermissionGroups,
@@ -210,11 +216,9 @@ export function useAgentPermissionsViewConsole() {
     deleteGrant,
     enabledToolGrantCount,
     ensureAgentPermissionGroupsDraft,
-    formatCompactDate,
     grantHasToolset,
     grantToolRuleState,
     issuedToolToken,
-    jsonPreview,
     newGrantLabel,
     newGrantScopes,
     newGrantToolsets,
@@ -239,11 +243,9 @@ export function useAgentPermissionsViewConsole() {
     toolGrants,
     toolManagementTools,
     toolManagementToolsets,
-    toolRiskLabel,
     toolScopes,
-    toolsetLabel,
     updateGrant,
-  } = useServerConsoleShellContext();
+  } = toolManagementConsole;
 
   function handleSelectedToolChange(event: Event) {
     const target = event.target as HTMLSelectElement | null;
@@ -285,7 +287,6 @@ export function useAgentPermissionsViewConsole() {
     handleSelectedToolChange,
     issuedToolToken,
     itemText,
-    jsonPreview,
     newGrantLabel,
     newGrantScopes,
     newGrantToolsets,
@@ -316,9 +317,7 @@ export function useAgentPermissionsViewConsole() {
     toolGrants,
     toolManagementTools,
     toolManagementToolsets,
-    toolRiskLabel,
     toolScopes,
-    toolsetLabel,
     updateGrant,
   };
 }

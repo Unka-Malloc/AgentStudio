@@ -1,14 +1,10 @@
 import { ref } from "vue";
-import { bridge } from "../lib/bridge";
+import { browseServerPath } from "../lib/runtime-info-client";
 import type { ServerPathBrowseEntry } from "../lib/types";
 import type { PathPickerMode, PathPickerState } from "../types/app";
+import { formatBytes, formatCompactDate } from "./console-format-utils";
 
-export type ConsolePathPickerControllerOptions = {
-  formatBytes: (value: number | null | undefined) => string;
-  formatCompactDate: (value: string) => string;
-};
-
-export function createConsolePathPickerController(options: ConsolePathPickerControllerOptions) {
+export function createConsolePathPickerController() {
   const pathPicker = ref<PathPickerState>({
     open: false,
     title: "选择路径",
@@ -31,7 +27,7 @@ export function createConsolePathPickerController(options: ConsolePathPickerCont
     if (entry.type === "directory") {
       return "";
     }
-    return `${options.formatBytes(entry.byteSize)} / ${options.formatCompactDate(entry.modifiedAt)}`;
+    return `${formatBytes(entry.byteSize)} / ${formatCompactDate(entry.modifiedAt)}`;
   }
 
   function openServerPathPicker(pickerOptions: {
@@ -63,7 +59,7 @@ export function createConsolePathPickerController(options: ConsolePathPickerCont
     current.loading = true;
     current.error = "";
     try {
-      const response = await bridge.browseServerPath({
+      const response = await browseServerPath({
         path: nextPath ?? current.response?.currentPath ?? current.value,
         mode: current.mode,
         extensions: current.extensions,

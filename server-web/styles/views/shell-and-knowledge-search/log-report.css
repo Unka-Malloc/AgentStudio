@@ -1,0 +1,80 @@
+.knowledge-log-report {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+} /* for knowledge-log-report */
+
+.knowledge-log-filters {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(110px, 0.5fr) minmax(140px, 1fr) minmax(120px, 0.5fr) minmax(120px, 0.5fr);
+  gap: var(--space-2);
+}
+
+.knowledge-log-filters input,
+.knowledge-log-filters select {
+  min-height: 34px;
+  font-size: var(--text-sm);
+}
+
+.knowledge-log-table-shell {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+
+.knowledge-log-table-shell .el-table .cell {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.knowledge-log-table-shell .el-table th .cell {
+  min-width: max-content;
+}
+
+.knowledge-log-kind,
+.knowledge-log-target,
+.knowledge-log-target small,
+.knowledge-log-stage,
+.knowledge-log-progress,
+.knowledge-log-time,
+.knowledge-log-detail,
+.knowledge-log-error,
+.knowledge-log-table-shell .mono-compact {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.knowledge-log-status {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.knowledge-log-status .standard-status-pill {
+  max-width: none;
+}
+
+.knowledge-log-status .standard-status-pill-label {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.knowledge-log-progress {
+  display: inline-block;
+  min-width: 4ch;
+}
+
+.mono-compact {
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

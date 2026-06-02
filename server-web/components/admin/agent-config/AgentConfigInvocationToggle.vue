@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import BinaryCheckbox from "../../components/BinaryCheckbox.vue";
+import BinaryCheckbox from "../../BinaryCheckbox.vue";
 
 defineProps<{
   modelValue: boolean;

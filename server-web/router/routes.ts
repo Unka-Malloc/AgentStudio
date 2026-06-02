@@ -25,6 +25,13 @@ export function knowledgeRouteTabToViewTab(value: string): KnowledgeViewTab | nu
 
 export type DebugTab = "knowledgeRecall" | "agentRetrieval" | "knowledgeDistillation";
 
+export const externalServiceRouteTabs = ["list"] as const;
+export type ExternalServiceTab = typeof externalServiceRouteTabs[number];
+
+export function isExternalServiceRouteTab(value: string): value is ExternalServiceTab {
+  return (externalServiceRouteTabs as readonly string[]).includes(value);
+}
+
 export type AdminSection =
   | "storage"
   | "jobs"
@@ -41,6 +48,7 @@ export type AdminSection =
   | "runtimeDownloads"
   | "agent-permissions"
   | "agent-config"
+  | "agent-assignment"
   | "context-management"
   | "maintenance-agent";
 
@@ -54,6 +62,8 @@ export function viewToPath(
     case "feed":        return "/feed";
     case "approval":    return "/approval";
     case "sources":     return "/sources";
+    case "externalServices":
+      return `/external-services/${opts?.tab ?? "list"}`;
     case "workspaces":  return "/workspaces";
     case "knowledge":
       return `/knowledge/${opts?.tab ?? "management"}`;
@@ -81,6 +91,7 @@ export function adminSectionToSlug(section: string): string {
     runtimeDownloads: "runtime-downloads",
     agentPermissions: "agent-permissions",
     agentConfig: "agent-config",
+    agentAssignment: "agent-assignment",
     contextManagement: "context-management",
     maintenanceAgent: "maintenance-agent",
   };
@@ -103,6 +114,7 @@ export function slugToAdminView(slug: string): string {
     "runtime-downloads": "runtimeDownloads",
     "agent-permissions": "agentPermissions",
     "agent-config": "agentConfig",
+    "agent-assignment": "agentAssignment",
     "context-management": "contextManagement",
     "maintenance-agent": "maintenanceAgent",
   };

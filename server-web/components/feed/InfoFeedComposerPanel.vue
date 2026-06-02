@@ -4,6 +4,7 @@ import AgentModelOptionBar from "../AgentModelOptionBar.vue";
 import BrowseSelectButton from "../BrowseSelectButton.vue";
 import ConfigFoldCard from "../ConfigFoldCard.vue";
 import OptionBar from "../OptionBar.vue";
+import { infoFeedStatusLabel, infoFeedStatusTone } from "../../composables/console-info-feed-shared-utils";
 import { useFeedViewContext } from "../../composables/feedViewContext";
 
 const {
@@ -16,8 +17,6 @@ const {
   infoFeedForm,
   infoFeedInputPlaceholder,
   infoFeedModelOptions,
-  infoFeedStatusLabel,
-  infoFeedStatusTone,
   infoFeedSubmitLabel,
   removeInfoFeedAttachment,
   runInfoFeed,

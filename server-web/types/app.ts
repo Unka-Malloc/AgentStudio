@@ -22,10 +22,12 @@ export type AppView =
   | "approval"
   | "debug"
   | "sources"
+  | "externalServices"
   | "knowledge"
   | "workspaces"
   | "admin";
 export type DebugTab = "knowledgeRecall" | "agentRetrieval" | "knowledgeDistillation";
+export type ExternalServiceTab = "list";
 export type RuleAuthoringMode = "chat" | "manual";
 export type AdminView =
   | "jobs"
@@ -35,6 +37,7 @@ export type AdminView =
   | "toolStats"
   | "agentPermissions"
   | "agentConfig"
+  | "agentAssignment"
   | "contextManagement"
   | "maintenanceAgent"
   | "opsMonitor"
@@ -133,6 +136,7 @@ export type DashboardAlert = {
   tone: "warning" | "danger" | "success";
   actionLabel: string;
   source: "configuration" | "monitor";
+  actionKind?: "open" | "recover-supervisor";
   firstSeenAt?: string;
   lastSeenAt?: string;
   live?: boolean;

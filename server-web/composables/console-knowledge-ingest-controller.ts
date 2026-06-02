@@ -1,6 +1,7 @@
 import { computed, ref, type Ref } from "vue";
-import { bridge } from "../lib/bridge";
+import { getNormalizedDocuments } from "../lib/knowledge-documents-client";
 import { createKnowledgeUploadSession } from "../lib/knowledge-upload-session";
+import { createJob, getJob } from "../lib/jobs-client";
 import type {
   AgentSettings,
   KnowledgeIngestTarget,
@@ -176,7 +177,7 @@ export function createConsoleKnowledgeIngestController(
         },
       });
       ingestProgress.value = "创建入库任务…";
-      const job = await bridge.createJob({
+      const job = await createJob({
         inputText: "",
         filePaths: [],
         uploadedFiles: [],
@@ -205,10 +206,10 @@ export function createConsoleKnowledgeIngestController(
     }
     options.error.value = "";
     try {
-      const job = await bridge.getJob(ingestJob.value.id);
+      const job = await getJob(ingestJob.value.id);
       ingestJob.value = job;
       if (job?.status === "completed") {
-        normalizedManifest.value = (await bridge.getNormalizedDocuments(job.id)) || null;
+        normalizedManifest.value = (await getNormalizedDocuments(job.id)) || null;
         ingestProgress.value = "处理完成，生成的知识文档可以下载查看。";
         await options.refreshKnowledgeConsole();
       }

@@ -1,5 +1,9 @@
 import { ref, type Ref } from "vue";
-import { bridge, type McpAuthorizationRequest } from "../lib/bridge";
+import {
+  listMcpAuthorizationRequests,
+  resolveMcpAuthorizationRequest as resolveMcpAuthorizationRequestApi,
+  type McpAuthorizationRequest,
+} from "../lib/authorization-governance-client";
 import type { OptionBarOption } from "../types/app";
 
 type McpAuthorizationStatus = "all" | "pending" | "approved" | "rejected";
@@ -26,7 +30,7 @@ export function createConsoleMcpAuthorizationController(
     const busy = "mcp-authorization-requests:refresh";
     options.setBusy(busy);
     try {
-      const result = await bridge.listMcpAuthorizationRequests(mcpAuthorizationStatus.value);
+      const result = await listMcpAuthorizationRequests(mcpAuthorizationStatus.value);
       mcpAuthorizationRequests.value = Array.isArray(result.requests) ? result.requests : [];
     } catch (nextError) {
       mcpAuthorizationRequests.value = [];
@@ -45,7 +49,7 @@ export function createConsoleMcpAuthorizationController(
     const request = mcpAuthorizationRequests.value.find((item) => item.requestId === requestId);
     options.setBusy(busy);
     try {
-      await bridge.resolveMcpAuthorizationRequest(requestId, {
+      await resolveMcpAuthorizationRequestApi(requestId, {
         resolution,
         clientName: request?.clientName,
         scopes: request?.requestedScopes || [],

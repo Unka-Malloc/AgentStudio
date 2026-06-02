@@ -49,6 +49,18 @@ routes:
           - sources.sync
           - sources.inspect
 
+  - routePath: /external-services/:tab
+    viewFile: server-web/views/ExternalServicesView.vue
+    features:
+      - featureId: external-services.management
+        actions:
+          - external-services.list.view
+          - external-services.list.add-service
+          - external-services.list.edit-config
+          - external-services.config.verify
+          - external-services.config.save
+          - external-services.runtime.refresh
+
   - routePath: /knowledge/:tab
     viewFile: server-web/views/KnowledgeView.vue
     features:

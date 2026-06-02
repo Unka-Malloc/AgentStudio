@@ -1,4 +1,4 @@
-import { bridge } from "./bridge";
+import { getProductionHealth, getV001BaselineStatus } from "./production-health-client";
 import type { ProductionHealthGate, ProductionHealthResponse, V001BaselineStatus } from "./types";
 
 type ProductionHealthSnapshot = {
@@ -57,8 +57,8 @@ export function elapsedText(gate: ProductionHealthGate) {
 export async function loadProductionHealthSnapshot(): Promise<ProductionHealthSnapshot> {
   try {
     const [health, baseline] = await Promise.all([
-      bridge.getProductionHealth(),
-      bridge.getV001BaselineStatus(),
+      getProductionHealth(),
+      getV001BaselineStatus(),
     ]);
     return { health, baseline };
   } catch (error) {
@@ -66,7 +66,7 @@ export async function loadProductionHealthSnapshot(): Promise<ProductionHealthSn
       loadError: errorMessage(error),
     };
     try {
-      snapshot.baseline = await bridge.getV001BaselineStatus();
+      snapshot.baseline = await getV001BaselineStatus();
     } catch (baselineLoadError) {
       snapshot.baselineError = errorMessage(baselineLoadError);
     }

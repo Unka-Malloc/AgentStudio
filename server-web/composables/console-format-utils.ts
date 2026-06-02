@@ -39,18 +39,8 @@ export function csvCell(value: unknown) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
 
-export function downloadTextFile(
-  fileName: string,
-  content: string,
-  contentType = "text/plain;charset=utf-8",
-) {
-  const blob = new Blob([content], { type: contentType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  URL.revokeObjectURL(url);
+export function jsonPreview(value: unknown) {
+  return JSON.stringify(value ?? {}, null, 2);
 }
 
 export function safeDownloadName(value: string, fallback = "export") {
@@ -78,22 +68,6 @@ export function formatBytes(value: unknown) {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
   return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
-}
-
-export async function copyTextToClipboard(content: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(content);
-    return;
-  }
-  const textArea = document.createElement("textarea");
-  textArea.value = content;
-  textArea.setAttribute("readonly", "true");
-  textArea.style.position = "fixed";
-  textArea.style.left = "-9999px";
-  document.body.appendChild(textArea);
-  textArea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textArea);
 }
 
 export function parseTime(value?: string) {

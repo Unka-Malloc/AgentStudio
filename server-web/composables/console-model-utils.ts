@@ -62,6 +62,75 @@ export function modelEntryStringField(entry: Partial<AgentModelConfig>, keys: st
   return undefined;
 }
 
+export function modelProviderLabel(provider: CloudProvider | string) {
+  switch (provider) {
+    case "openai-chatgpt":
+      return "ChatGPT";
+    case "google-gemini":
+      return "Gemini";
+    case "openrouter":
+      return "OpenRouter";
+    case "deepseek":
+      return "DeepSeek";
+    case "copilot":
+      return "Copilot";
+    case "custom-http":
+      return "HTTP Adapter";
+    case "local-model":
+      return "本地模型";
+    default:
+      return provider || "未知";
+  }
+}
+
+export function normalizeAgentModelEntry(
+  entry: Partial<AgentModelConfig>,
+  index = 0,
+  sourceSettings: AgentSettings = emptySettings,
+): AgentModelConfig {
+  const provider = String(entry.provider || "") as CloudProvider;
+  const model = modelEntryStringField(entry, ["model", "engine"]) ?? "";
+  const label =
+    modelEntryStringField(entry, ["label", "agentName"]) ??
+    (String(entry.alias || "").trim() || `${modelProviderLabel(provider)}${model ? ` ${model}` : " 智能体"}`.trim());
+  const agentName = modelEntryStringField(entry, ["agentName", "label"]) ?? label;
+  const engine = modelEntryStringField(entry, ["engine", "model"]) ?? "";
+  const existingInstanceId = String(entry.instanceId || "").trim();
+  const explicitUid = String(entry.uid || "").trim();
+  const existingAlias = String(entry.alias || "").trim();
+  const uid = explicitUid ||
+    (existingInstanceId.startsWith("agent_") ? existingInstanceId : "") ||
+    (existingAlias.startsWith("agent_") ? existingAlias : "") ||
+    modelAgentUid(provider, existingInstanceId || existingAlias || index + 1);
+  return {
+    uid,
+    instanceId: uid,
+    provider,
+    alias: uid,
+    label,
+    baseUrl: String(entry.baseUrl || (provider === "deepseek" ? sourceSettings.deepSeekBaseUrl : "") || "").trim(),
+    url: String(entry.url || "").trim(),
+    model,
+    apiKey: String(entry.apiKey || "").trim(),
+    apiKeyConfigured: entry.apiKeyConfigured === true,
+    token: String(entry.token || "").trim(),
+    tokenConfigured: entry.tokenConfigured === true,
+    tokenHeader: String(entry.tokenHeader || "token").trim(),
+    tokenPrefix: String(entry.tokenPrefix || "").trim(),
+    agentName,
+    engine,
+    pluginList: Array.isArray(entry.pluginList) ? entry.pluginList : [],
+    systemPrompt: String(entry.systemPrompt || "").trim(),
+    parameters: asRecord(entry.parameters) || {},
+    moduleAccess: normalizeAgentModuleAccess(entry.moduleAccess),
+    permissionGroupId: String(entry.permissionGroupId || "").trim(),
+    parametersText:
+      String(entry.parametersText || "").trim() ||
+      JSON.stringify(asRecord(entry.parameters) || {}, null, 2),
+    timeoutMs: Number(entry.timeoutMs || (provider === "deepseek" ? sourceSettings.deepSeekTimeoutMs : 120000)),
+  };
+}
+
 export function normalizeAgentModuleAccess(value?: Partial<AgentModuleAccess>): AgentModuleAccess {
   const record = asRecord(value) || {};
   const mode = String(record.mode || "").trim() === "selected" ? "selected" : "all";

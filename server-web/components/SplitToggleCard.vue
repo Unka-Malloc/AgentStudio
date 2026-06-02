@@ -147,7 +147,7 @@ function toggleFromSummary(event: MouseEvent | KeyboardEvent) {
   min-width: 0;
   padding: var(--split-toggle-card-toggle-padding, 18px 0);
   border: 0;
-  border-left: 1px solid var(--split-toggle-card-divider-color, var(--border-subtle));
+  border-inline-start: 1px solid var(--split-toggle-card-divider-color, var(--border-subtle));
   background: var(--split-toggle-card-toggle-bg, transparent);
   color: var(--split-toggle-card-toggle-color, var(--text-secondary));
   cursor: pointer;

@@ -1,0 +1,161 @@
+.tool-management-card,
+.permission-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--bg-subtle);
+}
+
+.tool-management-card {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.tool-management-card-header,
+.permission-card,
+.permission-actions,
+.token-panel {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.tool-management-card-header {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.tool-management-card-header div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.tool-management-card-header strong {
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.tool-management-card-header span,
+.tool-management-card p,
+.token-panel p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.tool-management-card-header span,
+.token-panel p {
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.tool-management-card-header em {
+  flex: 0 0 auto;
+  min-height: 24px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--info-surface);
+  color: var(--info);
+  font-style: normal;
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.permission-create-card,
+.permission-form {
+  display: grid;
+  gap: var(--space-3-5);
+}
+
+.scope-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-scope-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.scope-chip {
+  min-width: 0;
+  min-height: 40px;
+  padding: 10px 12px;
+  display: grid;
+  gap: var(--space-1);
+  align-content: center;
+  text-align: left;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
+.scope-chip strong {
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.scope-chip span {
+  font-size: var(--text-sm);
+}
+
+.scope-chip.active {
+  border-color: var(--brand);
+  background: var(--info-surface);
+  color: var(--info);
+}
+
+.token-panel {
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-lg);
+  background: var(--warning-surface);
+}
+
+.permission-card {
+  align-items: stretch;
+  justify-content: space-between;
+}
+
+.permission-card[data-enabled="false"] {
+  opacity: 0.72;
+}
+
+.permission-card-main,
+.permission-card-controls {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.permission-card-main {
+  flex: 0 1 360px;
+}
+
+.permission-card-controls {
+  flex: 1 1 auto;
+}
+
+.permission-actions {
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.danger-action {
+  color: var(--danger);
+}
+
+.inline-link {
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.inline-link:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}

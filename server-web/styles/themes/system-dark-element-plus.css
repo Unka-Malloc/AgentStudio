@@ -1,0 +1,218 @@
+/* ─── System dark Element Plus overrides ───────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  /* ── 2. Element Plus global dark override ────────────────────────────── */
+  /* Covers ALL el- components (Select, Dropdown, Table, Popover, etc.)     */
+  :root,
+  .el-select,
+  .el-select-dropdown,
+  .el-dropdown,
+  .el-dropdown-menu,
+  .el-popper,
+  .el-popover,
+  .el-tooltip__trigger,
+  .el-table,
+  .el-input,
+  .el-input__wrapper,
+  .el-textarea {
+    /* Core backgrounds */
+    --el-bg-color:            #161b22;
+    --el-bg-color-page:       #0d1117;
+    --el-bg-color-overlay:    #1c2128;
+
+    /* Text */
+    --el-text-color-primary:      #e6edf3;
+    --el-text-color-regular:      #e6edf3;
+    --el-text-color-secondary:    #8b949e;
+    --el-text-color-placeholder:  #6e7681;
+    --el-text-color-disabled:     #484f58;
+
+    /* Borders */
+    --el-border-color:            #30363d;
+    --el-border-color-light:      #30363d;
+    --el-border-color-lighter:    #21262d;
+    --el-border-color-extra-light:#21262d;
+    --el-border-color-dark:       #484f58;
+    --el-border-color-darker:     #6e7681;
+    --el-border-color-hover:      #58a6ff;
+
+    /* Fill (backgrounds for inputs, tags, chips) */
+    --el-fill-color:              #1c2128;
+    --el-fill-color-blank:        #161b22;
+    --el-fill-color-light:        #1c2128;
+    --el-fill-color-lighter:      #161b22;
+    --el-fill-color-lightest:     #0d1117;
+    --el-fill-color-dark:         #21262d;
+    --el-fill-color-darker:       #30363d;
+    --el-fill-color-extra-dark:   #484f58;
+
+    /* Overlay/mask */
+    --el-mask-color:              rgba(0,0,0,0.72);
+    --el-mask-color-extra-light:  rgba(0,0,0,0.30);
+    --el-overlay-color:           rgba(0,0,0,0.80);
+    --el-overlay-color-light:     rgba(0,0,0,0.56);
+    --el-overlay-color-lighter:   rgba(0,0,0,0.40);
+
+    /* White/black primitives used internally */
+    --el-color-white:  #161b22;
+    --el-color-black:  #e6edf3;
+
+    /* Disabled states */
+    --el-disabled-bg-color:     #1c2128;
+    --el-disabled-text-color:   #484f58;
+    --el-disabled-border-color: #30363d;
+
+    /* Brand/primary */
+    --el-color-primary:           #58a6ff;
+    --el-color-primary-dark-2:    #388bfd;
+    --el-color-primary-light-3:   rgba(88,166,255,0.40);
+    --el-color-primary-light-5:   rgba(88,166,255,0.24);
+    --el-color-primary-light-7:   rgba(88,166,255,0.14);
+    --el-color-primary-light-8:   rgba(88,166,255,0.10);
+    --el-color-primary-light-9:   #0d1f33;
+
+    /* Table specific */
+    --el-table-bg-color:            #161b22;
+    --el-table-tr-bg-color:         #161b22;
+    --el-table-border-color:        #30363d;
+    --el-table-header-bg-color:     #1c2128;
+    --el-table-header-text-color:   #8b949e;
+    --el-table-row-hover-bg-color:  #1c2128;
+    --el-table-text-color:          #e6edf3;
+    --el-table-fixed-box-shadow:    none;
+
+    /* Select dropdown */
+    --el-select-dropdown-bg-color:  #1c2128;
+    --el-select-input-color:        #e6edf3;
+
+    /* Input */
+    --el-input-bg-color:            #161b22;
+    --el-input-text-color:          #e6edf3;
+    --el-input-placeholder-color:   #6e7681;
+    --el-input-border-color:        #30363d;
+    --el-input-hover-border-color:  #484f58;
+    --el-input-focus-border-color:  #58a6ff;
+
+    /* Popover / Dropdown */
+    --el-popover-bg-color:          #1c2128;
+    --el-dropdown-menuItem-hover-fill: #0d1f33;
+  }
+
+  /* ── 3. Force specific El-Plus elements ──────────────────────────────── */
+
+  /* Select wrapper */
+  .el-select .el-select__wrapper {
+    background: var(--bg-surface) !important;
+    box-shadow: 0 0 0 1px var(--border-subtle) inset !important;
+    color: var(--text-primary) !important;
+  }
+  .el-select .el-select__wrapper:hover {
+    box-shadow: 0 0 0 1px var(--border-strong) inset !important;
+  }
+  .el-select .el-select__wrapper.is-focused {
+    box-shadow: 0 0 0 1px var(--brand) inset,
+                0 0 0 3px rgba(88,166,255,0.20) !important;
+  }
+
+  /* Select dropdown panel */
+  .el-select-dropdown,
+  .el-select__popper,
+  .el-popper.is-pure {
+    background: var(--bg-subtle) !important;
+    border-color: var(--border-subtle) !important;
+    color: var(--text-primary) !important;
+  }
+
+  .el-select-dropdown__item {
+    color: var(--text-primary) !important;
+    background: transparent !important;
+  }
+  .el-select-dropdown__item.is-hovering,
+  .el-select-dropdown__item:hover {
+    background: var(--bg-inset) !important;
+    color: var(--text-primary) !important;
+  }
+  .el-select-dropdown__item.is-selected {
+    background: var(--brand-subtle) !important;
+    color: var(--brand) !important;
+  }
+  .el-select-dropdown__item.is-disabled {
+    color: var(--text-disabled) !important;
+  }
+
+  /* Select placeholder & selected text */
+  .el-select .el-select__placeholder,
+  .el-select .el-select__selected-item,
+  .el-select .el-select__input,
+  .el-select .el-select__caret {
+    color: var(--text-primary) !important;
+  }
+  .el-select .el-select__placeholder.is-transparent {
+    color: var(--text-muted) !important;
+  }
+
+  /* Native <select> elements used in some form areas */
+  select {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border-color: var(--border-subtle);
+  }
+  select option {
+    background: var(--bg-subtle);
+    color: var(--text-primary);
+  }
+
+  /* Input elements */
+  .el-input__wrapper {
+    background: var(--bg-surface) !important;
+    box-shadow: 0 0 0 1px var(--border-subtle) inset !important;
+  }
+  .el-input__inner {
+    color: var(--text-primary) !important;
+    background: transparent !important;
+  }
+
+  /* Table */
+  .el-table {
+    background: var(--bg-surface) !important;
+    color: var(--text-primary) !important;
+  }
+  .el-table th.el-table__cell {
+    background: var(--bg-subtle) !important;
+    color: var(--text-secondary) !important;
+    border-bottom-color: var(--border-subtle) !important;
+  }
+  .el-table td.el-table__cell {
+    border-bottom-color: var(--border-subtle) !important;
+  }
+  .el-table__row:hover > td,
+  .el-table__row.hover-row > td {
+    background: var(--bg-subtle) !important;
+  }
+  .el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell {
+    background: var(--bg-subtle) !important;
+  }
+  .el-table__empty-block {
+    background: var(--bg-surface) !important;
+  }
+  .el-table__empty-text {
+    color: var(--text-muted) !important;
+  }
+
+  /* Popper / Dropdown menu */
+  .el-dropdown-menu {
+    background: var(--bg-subtle) !important;
+    border-color: var(--border-subtle) !important;
+  }
+  .el-dropdown-menu__item {
+    color: var(--text-primary) !important;
+  }
+  .el-dropdown-menu__item:hover,
+  .el-dropdown-menu__item:focus {
+    background: var(--bg-inset) !important;
+    color: var(--text-primary) !important;
+  }
+  .el-popper__arrow::before {
+    background: var(--bg-subtle) !important;
+    border-color: var(--border-subtle) !important;
+  }
+}

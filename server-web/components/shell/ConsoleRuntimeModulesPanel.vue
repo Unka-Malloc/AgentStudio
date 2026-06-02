@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import BrowseSelectButton from "../BrowseSelectButton.vue";
 import StatusPill from "../StatusPill.vue";
+import {
+  currentModulePathPlaceholder,
+  moduleAvailabilityLabel,
+  moduleCapabilityText,
+  moduleStatusText,
+} from "../../composables/console-runtime-module-display-utils";
 import { useServerConsoleShellContext } from "../../composables/serverConsoleShellContext";
 
 const {
   busyKey,
   canBrowseServerPaths,
   consoleState,
-  currentModulePathPlaceholder,
   enabledMountCount,
   isMountPathEditing,
-  moduleAvailabilityLabel,
-  moduleCapabilityText,
   moduleGroups,
-  moduleStatusText,
   mountDraft,
   openMountPathPicker,
   reloadModules,

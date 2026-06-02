@@ -2,7 +2,17 @@
 import BinaryCheckbox from "../BinaryCheckbox.vue";
 import BrowseSelectButton from "../BrowseSelectButton.vue";
 import StatusPill from "../StatusPill.vue";
+import { formatBytes, formatCompactDate } from "../../composables/console-format-utils";
+import {
+  sourceDownloadStatusLabel,
+  sourceIndexStatusLabel,
+  sourceJobProgress,
+  sourceSyncLabel,
+  sourceSyncTone,
+} from "../../composables/console-knowledge-source-utils";
+import { splitJobStatusLabel } from "../../composables/console-job-display-utils";
 import { useServerConsoleShellContext } from "../../composables/serverConsoleShellContext";
+import { shortId } from "../../composables/console-agent-explore-presentation";
 
 const {
   activeKnowledgeSources,
@@ -11,18 +21,9 @@ const {
   canBrowseServerPaths,
   canWriteJobs,
   deleteKnowledgeSource,
-  formatBytes,
-  formatCompactDate,
   localSourceForm,
   openLocalSourceDirectoryPicker,
   refreshKnowledgeSource,
-  shortId,
-  sourceDownloadStatusLabel,
-  sourceIndexStatusLabel,
-  sourceJobProgress,
-  sourceSyncLabel,
-  sourceSyncTone,
-  splitJobStatusLabel,
   syncLocalSourceLabelFromPath,
   updateKnowledgeSource,
 } = useServerConsoleShellContext();

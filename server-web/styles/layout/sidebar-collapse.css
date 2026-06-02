@@ -1,0 +1,108 @@
+/* ─── Sidebar collapse support ─────────────────────────────────────────── */
+.side-nav.is-collapsed {
+  width: var(--sidebar-width-collapsed);
+  padding: 14px 4px;
+}
+
+.side-nav.is-collapsed .brand-text {
+  display: none;
+}
+
+.side-nav.is-collapsed .side-nav-section-title {
+  display: none;
+}
+
+.side-nav.is-collapsed .side-nav-disclosure {
+  padding: var(--space-1);
+}
+
+.side-nav.is-collapsed .side-nav-disclosure-summary {
+  justify-content: center;
+  min-height: 28px;
+}
+
+.side-nav.is-collapsed .side-nav-disclosure-summary > span {
+  display: none;
+}
+
+.side-nav.is-collapsed .side-nav-disclosure-summary::after {
+  margin: 0;
+}
+
+.side-nav.is-collapsed .side-nav-disclosure-content {
+  padding-top: var(--space-1);
+}
+
+.side-nav.is-collapsed .side-link {
+  justify-content: center;
+  padding: 0;
+}
+
+.side-nav.is-collapsed .side-link-label {
+  display: none;
+}
+
+.side-nav.is-collapsed .side-nav-footer {
+  border: 0;
+  padding-top: var(--space-2);
+}
+
+.side-nav.is-collapsed .side-cta {
+  padding: 0;
+  width: 36px;
+  height: 36px;
+}
+
+.side-nav.is-collapsed .side-cta .side-cta-label {
+  display: none;
+}
+
+/* ─── Sidebar link icon ──────────────────────────────────────────────── */
+.side-link-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: var(--text-muted);
+  transition: color var(--dur-fast) var(--ease-std);
+}
+
+.side-link.active .side-link-icon,
+.side-link:hover .side-link-icon {
+  color: var(--brand);
+}
+
+.side-link-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ─── Sidebar collapse toggle ────────────────────────────────────────── */
+.sidebar-collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-std);
+}
+
+.sidebar-collapse-toggle:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.sidebar-collapse-toggle svg {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--dur-base) var(--ease-std);
+}
+
+.is-collapsed .sidebar-collapse-toggle svg {
+  transform: rotate(180deg);
+}

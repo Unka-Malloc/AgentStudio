@@ -14,6 +14,8 @@ import type {
 import {
   copyTextToClipboard,
   downloadTextFile,
+} from "./console-browser-effects";
+import {
   formatMachineDate,
   safeDownloadName,
 } from "./console-format-utils";
@@ -22,6 +24,7 @@ import {
   infoFeedStatusLabel,
   infoFeedTurnQuestionCore,
 } from "./console-info-feed-utils";
+import { createConsoleTimeoutController } from "./console-timer-controller";
 
 type ReadonlyRef<T> = {
   readonly value: T;
@@ -55,6 +58,10 @@ export type ConsoleInfoFeedOutputControllerOptions = {
 };
 
 export function createConsoleInfoFeedOutputController(options: ConsoleInfoFeedOutputControllerOptions) {
+  const infoFeedSummaryStreamDelay = createConsoleTimeoutController({
+    timer: options.infoFeedSummaryStreamTimer,
+  });
+
   const infoFeedSummaryRuntime = computed(() => {
     const summary = options.infoFeedCurrentRun.value?.summary;
     return {
@@ -194,10 +201,7 @@ export function createConsoleInfoFeedOutputController(options: ConsoleInfoFeedOu
   );
 
   function clearInfoFeedSummaryStreamTimer() {
-    if (options.infoFeedSummaryStreamTimer.value !== null) {
-      window.clearTimeout(options.infoFeedSummaryStreamTimer.value);
-      options.infoFeedSummaryStreamTimer.value = null;
-    }
+    infoFeedSummaryStreamDelay.stop();
   }
 
   function streamInfoFeedSummary(answer: string, runId: string) {
@@ -214,7 +218,10 @@ export function createConsoleInfoFeedOutputController(options: ConsoleInfoFeedOu
       options.infoFeedSummaryStreamText.value += characters[index] || "";
       index += 1;
       if (index < characters.length) {
-        options.infoFeedSummaryStreamTimer.value = window.setTimeout(tick, 6);
+        const scheduledTimer = infoFeedSummaryStreamDelay.schedule(tick, 6);
+        if (scheduledTimer === null) {
+          options.infoFeedSummaryStreamText.value = answer;
+        }
       } else {
         options.infoFeedSummaryStreamTimer.value = null;
       }

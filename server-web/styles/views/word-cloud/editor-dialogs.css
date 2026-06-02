@@ -1,0 +1,172 @@
+.word-cloud-lower-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.word-cloud-editor,
+.word-cloud-editor-panel {
+  display: grid;
+  gap: var(--space-3-5);
+}
+
+.word-cloud-editor-panel {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  bottom: 18px;
+  z-index: var(--z-top);
+  width: min(352px, calc(100% - 36px));
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(37, 99, 235, 0.28);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+  box-shadow:
+    var(--shadow-xl),
+    inset 0 0 0 1px var(--border-subtle);
+  overflow: auto;
+}
+
+.compact-section-header {
+  align-items: center;
+}
+
+.word-cloud-term-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2-5);
+}
+
+.word-cloud-term-entry input,
+.word-cloud-term-source input,
+.word-cloud-dialog-controls input,
+.word-cloud-editor select,
+.word-cloud-editor-panel input,
+.word-cloud-editor-panel select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.word-cloud-term-source {
+  display: grid;
+  gap: var(--space-2-5);
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.word-cloud-term-source .source-card-header {
+  align-items: center;
+}
+
+.word-cloud-term-source .source-card-header input {
+  max-width: 240px;
+}
+
+.word-cloud-term-pool {
+  max-height: 210px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.word-cloud-dialog {
+  min-height: 100%;
+}
+
+.word-cloud-dialog-controls {
+  --word-cloud-agent-control-height: 56px;
+  display: flex;
+  gap: var(--space-2-5);
+  align-items: stretch;
+  min-width: 0;
+}
+
+.word-cloud-dialog-controls .option-bar {
+  width: 100%;
+  min-width: 0;
+}
+
+.word-cloud-dialog-controls .word-cloud-agent-select {
+  --agent-option-height: var(--word-cloud-agent-control-height);
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.word-cloud-dialog-controls .word-cloud-agent-submit {
+  flex: 0 0 190px;
+  min-height: var(--word-cloud-agent-control-height);
+  height: var(--word-cloud-agent-control-height);
+  padding-inline: 24px;
+  white-space: nowrap;
+}
+
+.word-cloud-dialog-controls label:not(.option-bar) {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.word-cloud-message-list {
+  display: grid;
+  gap: var(--space-2);
+  max-height: 220px;
+  overflow: auto;
+}
+
+.word-cloud-message {
+  display: grid;
+  gap: var(--space-1);
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+}
+
+.word-cloud-message strong {
+  color: var(--text-primary);
+  font-size: var(--text-md);
+}
+
+.word-cloud-message span,
+.word-cloud-message p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.word-cloud-message[data-role="agent"] {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: rgba(239, 246, 255, 0.58);
+}
+
+.word-cloud-message[data-role="user"] {
+  border-color: rgba(5, 150, 105, 0.24);
+  background: rgba(236, 253, 245, 0.48);
+}
+
+.maintenance-run-table .job-table-header,
+.maintenance-run-table .job-row,
+.maintenance-schedule-table .job-table-header,
+.maintenance-schedule-table .job-row {
+  grid-template-columns: minmax(0, 1.4fr) minmax(120px, 0.55fr) minmax(120px, 0.6fr);
+}
+
+.background-process-table .job-table-header,
+.background-process-table .job-row {
+  grid-template-columns:
+    minmax(180px, 1.4fr)
+    minmax(96px, 0.45fr)
+    minmax(72px, 0.32fr)
+    minmax(120px, 0.55fr);
+}

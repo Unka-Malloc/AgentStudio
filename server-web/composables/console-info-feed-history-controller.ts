@@ -7,6 +7,11 @@ import type {
   InfoFeedTurnSnapshot,
 } from "../types/app";
 import {
+  isStorageRecord,
+  readBrowserJsonStorage,
+  writeBrowserJsonStorage,
+} from "../lib/browser-storage";
+import {
   appendInfoFeedTurnSnapshotCore,
   compactInfoFeedRunForStorage as compactInfoFeedRunForStorageCore,
   createInfoFeedRunState,
@@ -25,6 +30,8 @@ import {
 } from "./console-info-feed-utils";
 import { asRecord } from "./console-model-utils";
 import { formatCompactDate } from "./console-format-utils";
+
+const INFO_FEED_HISTORY_STORAGE_VERSION = 1;
 
 export type ConsoleInfoFeedHistoryControllerOptions = {
   infoFeedAttachments: Ref<InfoFeedAttachment[]>;
@@ -228,25 +235,33 @@ export function createConsoleInfoFeedHistoryController(options: ConsoleInfoFeedH
     });
   }
 
-  function persistInfoFeedHistory() {
-    try {
-      window.localStorage.setItem(
-        options.storageKey,
-        JSON.stringify({
-          history: options.infoFeedHistory.value.map((run) =>
-            sanitizeInfoFeedRunModelReferences(compactInfoFeedRunForStorage(run)),
-          ),
-        }),
-      );
-    } catch {
-      // History is a UI cache; storage failures should not block the active run.
+  function normalizeInfoFeedHistoryStoragePayload(value: unknown) {
+    if (!isStorageRecord(value)) {
+      return [];
     }
+    const hasVersion = "version" in value;
+    const isSupportedVersion = Number(value.version) === INFO_FEED_HISTORY_STORAGE_VERSION;
+    if (hasVersion && !isSupportedVersion) {
+      return [];
+    }
+    return Array.isArray(value.history) ? value.history : [];
+  }
+
+  function persistInfoFeedHistory() {
+    const history = normalizeInfoFeedHistory(options.infoFeedHistory.value);
+    writeBrowserJsonStorage(options.storageKey, {
+      version: INFO_FEED_HISTORY_STORAGE_VERSION,
+      history,
+    });
   }
 
   function restoreInfoFeedHistory() {
     try {
-      const parsed = JSON.parse(window.localStorage.getItem(options.storageKey) || "{}");
-      const history = Array.isArray(parsed?.history) ? parsed.history : [];
+      const history = readBrowserJsonStorage<unknown[]>(
+        options.storageKey,
+        [],
+        normalizeInfoFeedHistoryStoragePayload,
+      );
       options.infoFeedHistory.value = normalizeInfoFeedHistory(history as InfoFeedRunState[]);
       if (history.length > 0) {
         persistInfoFeedHistory();

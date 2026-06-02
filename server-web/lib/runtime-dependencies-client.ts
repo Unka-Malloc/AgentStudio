@@ -1,0 +1,99 @@
+import { getJson, postJson } from "./bridge-http";
+
+export type RuntimeDependency = {
+  id: string;
+  label: string;
+  category?: string;
+  description?: string;
+  status: string;
+  present?: boolean;
+  cached?: boolean;
+  downloadable?: boolean;
+  children?: RuntimeDependency[];
+  detection?: Record<string, unknown>;
+  actions?: Record<string, unknown>;
+  accepts?: Record<string, boolean>;
+};
+
+export type RuntimeDependencyDetectionSource = {
+  kind?: string;
+  label?: string;
+  path?: string;
+  detail?: string;
+};
+
+export type RuntimeDependencyLogEntry = {
+  at?: string;
+  level?: string;
+  message?: string;
+  data?: Record<string, unknown>;
+};
+
+export type RuntimeDependencyDownloadStep = {
+  key: string;
+  label: string;
+  index?: number;
+  status: string;
+  startedAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+};
+
+export type RuntimeDependencyDownloadRun = {
+  runId: string;
+  targetId: string;
+  status: string;
+  ok?: boolean;
+  startedAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  latestMessage?: string;
+  steps?: RuntimeDependencyDownloadStep[];
+  completedSteps?: number;
+  totalSteps?: number;
+  currentStepKey?: string;
+  currentStepIndex?: number;
+  progressPercent?: number;
+  log?: RuntimeDependencyLogEntry[];
+  result?: RuntimeDependencyActionResult | null;
+};
+
+export type RuntimeDependencyListResponse = {
+  ok: boolean;
+  generatedAt?: string;
+  cacheRoot?: string;
+  sourceConfigPath?: string;
+  triggerMode?: string;
+  dependencies?: RuntimeDependency[];
+  downloads?: RuntimeDependencyDownloadRun[];
+  summary?: Record<string, number>;
+};
+
+export type RuntimeDependencyActionResult = {
+  ok: boolean;
+  targetId?: string;
+  status?: string;
+  runId?: string;
+  run?: RuntimeDependencyDownloadRun;
+  log?: RuntimeDependencyLogEntry[];
+  reason?: string;
+  mirrorHint?: string;
+  sourceConfigPath?: string;
+  detection?: RuntimeDependency;
+  results?: RuntimeDependencyActionResult[];
+};
+
+export function listRuntimeDependencies() {
+  return getJson<RuntimeDependencyListResponse>("/api/runtime/dependencies");
+}
+
+export function downloadRuntimeDependency(payload: Record<string, unknown>) {
+  return postJson<RuntimeDependencyActionResult>(
+    "/api/runtime/dependencies/download",
+    {
+      ...payload,
+      confirm: true,
+    },
+    { safetyConfirm: true },
+  );
+}
