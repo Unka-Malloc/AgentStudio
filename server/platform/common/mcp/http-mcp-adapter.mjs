@@ -187,15 +187,7 @@ const MCP_SHAREDSPACE_CORE_OPERATIONS = Object.freeze([
   "pact.sharedspace.file.write",
   "pact.sharedspace.item.delete",
   "pact.sharedspace.sync.plan",
-  "pact.sharedspace.sync.apply",
-  "pact.sharedspace.drive.connect",
-  "pact.sharedspace.drive.status",
-  "pact.sharedspace.drive.item.list",
-  "pact.sharedspace.drive.file.download",
-  "pact.sharedspace.drive.file.upload",
-  "pact.sharedspace.drive.sync.plan",
-  "pact.sharedspace.drive.sync.apply",
-  "pact.sharedspace.drive.permission.list"
+  "pact.sharedspace.sync.apply"
 ]);
 
 function sharedspaceExchangeReceiptContract() {
@@ -215,14 +207,6 @@ function sharedspaceExchangeReceiptContract() {
       "local-dirs-listed",
       "sync-planned",
       "sync-applied",
-      "drive-connected",
-      "drive-status",
-      "drive-items-listed",
-      "drive-file-downloaded",
-      "drive-file-uploaded",
-      "drive-sync-planned",
-      "drive-sync-applied",
-      "drive-permissions-listed",
       "operation"
     ],
     fields: [
@@ -230,23 +214,11 @@ function sharedspaceExchangeReceiptContract() {
       "outlet",
       "referencePolicy",
       "workspaceRef",
-      "driveRef",
-      "provider",
       "path",
       "paths",
       "itemCount",
-      "transferReceiptId",
-      "accessReceiptId",
       "checkpointId",
       "syncReceiptId",
-      "contractVerified",
-      "localAdapterVerified",
-      "remoteLiveVerified",
-      "remoteReadInvoked",
-      "remoteWriteInvoked",
-      "providerReceipt",
-      "transferBytes",
-      "bytesPerSecond",
       "nextOperations"
     ]
   };
@@ -260,6 +232,9 @@ function mcpOutletForTool(tool = {}) {
   const text = `${id} ${publicName} ${feature} ${aspects.join(" ")}`.toLowerCase();
 
   if (/^(tool_management\.|knowledge\.skills\.|knowledge\.agent_skill\.|workspace\.skill\.|capability_packages\.)/i.test(id)) {
+    return MCP_OUTLET_METADATA[MCP_SKILL_HUB_TOOL_NAME];
+  }
+  if (/^external\.mcp\./i.test(id) || aspects.includes("external-mcp-passthrough") || aspects.includes("skill-hub")) {
     return MCP_OUTLET_METADATA[MCP_SKILL_HUB_TOOL_NAME];
   }
   if (/^(repo\.|gerrit\.|github\.|workspace\.code\.)/i.test(id) || /\b(repo|repository|codespace|gerrit|github)\b/.test(text)) {
@@ -1548,6 +1523,9 @@ function inferSharedspaceExchangeReceipt({ operation = "", input = {}, payload =
   if (!/(?:^|\.)(sharedspace|agentWorkspace)\b/i.test(operationId)) {
     return null;
   }
+  if (/(?:^|\.)sharedspace\.drive\./i.test(operationId)) {
+    return null;
+  }
   const itemPaths = Array.isArray(payload.items)
     ? payload.items.map((item) => String(item?.path || item?.relativePath || "")).filter(Boolean)
     : [];
@@ -1576,22 +1554,6 @@ function inferSharedspaceExchangeReceipt({ operation = "", input = {}, payload =
     input.workspaceRef,
     input.workspaceName
   ]);
-  const driveRef = firstString([
-    payload.drive?.driveRef,
-    payload.driveRef,
-    payload.transferReceipt?.driveRef,
-    payload.accessReceipt?.driveRef,
-    payload.checkpoint?.driveRef,
-    payload.syncReceipt?.driveRef,
-    input.driveRef,
-    input.driveId
-  ]);
-  const provider = firstString([
-    payload.drive?.provider,
-    payload.provider,
-    input.provider,
-    input.driveProvider
-  ]);
   let action = "operation";
   if (/agentWorkspace\.create$/i.test(operationId)) {
     action = "workspace-created";
@@ -1599,22 +1561,6 @@ function inferSharedspaceExchangeReceipt({ operation = "", input = {}, payload =
     action = "local-dir-connected";
   } else if (/localDir\.list$/i.test(operationId)) {
     action = "local-dirs-listed";
-  } else if (/drive\.connect$/i.test(operationId)) {
-    action = "drive-connected";
-  } else if (/drive\.status$/i.test(operationId)) {
-    action = "drive-status";
-  } else if (/drive\.item\.list$/i.test(operationId)) {
-    action = "drive-items-listed";
-  } else if (/drive\.file\.download$/i.test(operationId)) {
-    action = "drive-file-downloaded";
-  } else if (/drive\.file\.upload$/i.test(operationId)) {
-    action = "drive-file-uploaded";
-  } else if (/drive\.sync\.plan$/i.test(operationId)) {
-    action = "drive-sync-planned";
-  } else if (/drive\.sync\.apply$/i.test(operationId)) {
-    action = "drive-sync-applied";
-  } else if (/drive\.permission\.list$/i.test(operationId)) {
-    action = "drive-permissions-listed";
   } else if (/sync\.plan$/i.test(operationId)) {
     action = "sync-planned";
   } else if (/sync\.apply$/i.test(operationId)) {
@@ -1634,19 +1580,9 @@ function inferSharedspaceExchangeReceipt({ operation = "", input = {}, payload =
     outlet: MCP_SHAREDSPACE_TOOL_NAME,
     referencePolicy: "use-public-workspace-ref",
     workspaceRef,
-    driveRef,
-    provider,
     path: pathValue,
     paths,
     itemCount: paths.length,
-    transferReceiptId: firstString([
-      payload.transferReceipt?.transferReceiptId,
-      payload.transferReceiptId
-    ]),
-    accessReceiptId: firstString([
-      payload.accessReceipt?.receiptId,
-      payload.accessReceiptId
-    ]),
     checkpointId: firstString([
       payload.checkpoint?.checkpointId,
       payload.checkpointId
@@ -1655,14 +1591,6 @@ function inferSharedspaceExchangeReceipt({ operation = "", input = {}, payload =
       payload.syncReceipt?.syncReceiptId,
       payload.syncReceiptId
     ]),
-    contractVerified: payload.contractVerified === true,
-    localAdapterVerified: payload.localAdapterVerified === true,
-    remoteLiveVerified: payload.remoteLiveVerified === true || payload.transferReceipt?.remoteLiveVerified === true,
-    remoteReadInvoked: payload.remoteReadInvoked === true,
-    remoteWriteInvoked: payload.remoteWriteInvoked === true,
-    providerReceipt: payload.providerReceipt || payload.transferReceipt?.provider || null,
-    transferBytes: Number(payload.telemetry?.transferBytes || payload.transferReceipt?.telemetry?.transferBytes || 0) || undefined,
-    bytesPerSecond: Number(payload.telemetry?.bytesPerSecond || payload.transferReceipt?.telemetry?.bytesPerSecond || 0) || undefined,
     nextOperations: [...MCP_SHAREDSPACE_CORE_OPERATIONS]
   };
 }

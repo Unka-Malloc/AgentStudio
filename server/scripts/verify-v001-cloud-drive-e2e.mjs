@@ -16,14 +16,14 @@ import { startHttpServer } from "../services/server-runtime/http-server.mjs";
 import { authHeaders, installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 const REQUIRED_OPERATIONS = [
-  "sharedspace.drive.connect",
-  "sharedspace.drive.status",
-  "sharedspace.drive.item.list",
-  "sharedspace.drive.file.download",
-  "sharedspace.drive.file.upload",
-  "sharedspace.drive.sync.plan",
-  "sharedspace.drive.sync.apply",
-  "sharedspace.drive.permission.list"
+  "external.cloudDrive.connect",
+  "external.cloudDrive.status",
+  "external.cloudDrive.item.list",
+  "external.cloudDrive.file.download",
+  "external.cloudDrive.file.upload",
+  "external.cloudDrive.sync.plan",
+  "external.cloudDrive.sync.apply",
+  "external.cloudDrive.permission.list"
 ];
 
 async function fetchJson(url, options = {}) {
@@ -55,13 +55,18 @@ function mcpRequest(method, params = {}, id = 1) {
 
 let mcpRequestId = 0;
 
-async function callMcpStructured({ serverUrl, token, operation, input = {}, toolName = "pact.sharedspace" }) {
+function defaultMcpToolNameForOperation(operation = "") {
+  return String(operation || "").includes("cloudDrive") ? "pact.skillHub" : "pact.sharedspace";
+}
+
+async function callMcpStructured({ serverUrl, token, operation, input = {}, toolName = "" }) {
+  const effectiveToolName = toolName || defaultMcpToolNameForOperation(operation);
   mcpRequestId += 1;
   const response = await fetchJson(`${serverUrl}/mcp`, {
     method: "POST",
     headers: mcpHeaders(token),
     body: JSON.stringify(mcpRequest("tools/call", {
-      name: toolName,
+      name: effectiveToolName,
       arguments: {
         apiVersion: "pact.mcp.v1",
         operation,
@@ -75,7 +80,7 @@ async function callMcpStructured({ serverUrl, token, operation, input = {}, tool
   return response.payload.result.structuredContent;
 }
 
-async function callMcp({ serverUrl, token, operation, input = {}, toolName = "pact.sharedspace" }) {
+async function callMcp({ serverUrl, token, operation, input = {}, toolName = "" }) {
   const structuredContent = await callMcpStructured({ serverUrl, token, operation, input, toolName });
   return structuredContent.payload || structuredContent;
 }
@@ -272,10 +277,10 @@ for (const operationId of REQUIRED_OPERATIONS) {
     driveRef: "drive_verify",
     path: "folder/file.txt"
   });
-  assert.ok(cliPath.startsWith("/api/sharedspace/drive/"), `${operationId} CLI path must target cloud drive API`);
+  assert.ok(cliPath.startsWith("/api/external/cloud-drive/"), `${operationId} CLI path must target cloud drive API`);
   const tool = toolsByOperationId.get(operationId);
   assert.ok(tool, `${operationId} must be exposed through Tool Management`);
-  assert.ok(tool.id.startsWith("pact.sharedspace.drive."), `${operationId} must map to pact.sharedspace.drive namespace`);
+  assert.ok(tool.id.startsWith("pact.external.cloudDrive."), `${operationId} must map to the upstream Cloud Drive namespace`);
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-v001-cloud-drive-"));
@@ -316,7 +321,7 @@ try {
   assert.equal(workspace.status, 201, JSON.stringify(workspace.payload, null, 2));
   const workspaceId = workspace.payload.workspace.workspaceId;
 
-  const inlineSecret = await fetchJson(`${server.url}/api/sharedspace/drive/connect`, {
+  const inlineSecret = await fetchJson(`${server.url}/api/external/cloud-drive/connect`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -331,7 +336,7 @@ try {
   });
   assert.equal(inlineSecret.status, 400, JSON.stringify(inlineSecret.payload, null, 2));
 
-  const icloudConnect = await fetchJson(`${server.url}/api/sharedspace/drive/connect`, {
+  const icloudConnect = await fetchJson(`${server.url}/api/external/cloud-drive/connect`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -380,7 +385,7 @@ try {
       "Content-Type": "application/json",
       ...authHeaders(auth, { method: "POST" })
     },
-    body: JSON.stringify(mcpRequest("sharedspace.drive.status", {
+    body: JSON.stringify(mcpRequest("external.cloudDrive.status", {
       workspaceId,
       driveRef: icloudDriveRef
     }, "rpc-drive-status"))
@@ -389,7 +394,7 @@ try {
   assert.equal(rpcStatus.payload.result.count, 1);
   assertPublicPayloadDoesNotLeak(rpcStatus.payload, icloudRoot, "RPC status payload");
 
-  const list = await fetchJson(`${server.url}/api/sharedspace/drive/items?${new URLSearchParams({
+  const list = await fetchJson(`${server.url}/api/external/cloud-drive/items?${new URLSearchParams({
     workspaceId,
     driveRef: icloudDriveRef,
     clientId: "owner",
@@ -407,7 +412,7 @@ try {
   assert.ok(list.payload.accessReceipt?.receiptId, "drive list must emit access receipt");
   assertPublicPayloadDoesNotLeak(list.payload, icloudRoot, "iCloud list payload");
 
-  const download = await fetchJson(`${server.url}/api/sharedspace/drive/files/download?${new URLSearchParams({
+  const download = await fetchJson(`${server.url}/api/external/cloud-drive/files/download?${new URLSearchParams({
     workspaceId,
     driveRef: icloudDriveRef,
     clientId: "owner",
@@ -421,7 +426,7 @@ try {
   assert.ok(download.payload.transferReceipt?.transferReceiptId, "drive download must emit transfer receipt");
   assert.equal(download.payload.transferReceipt.state, "staged");
 
-  const publicDownload = await fetchJson(`${server.url}/api/sharedspace/drive/files/download?${new URLSearchParams({
+  const publicDownload = await fetchJson(`${server.url}/api/external/cloud-drive/files/download?${new URLSearchParams({
     workspaceId,
     driveRef: icloudDriveRef,
     clientId: "owner",
@@ -435,7 +440,7 @@ try {
   assert.equal(publicDownload.payload.mapping.spaceKind, "public");
   assert.equal(publicDownload.payload.mapping.writable, false);
 
-  const exposedDownload = await fetchJson(`${server.url}/api/sharedspace/drive/files/download?${new URLSearchParams({
+  const exposedDownload = await fetchJson(`${server.url}/api/external/cloud-drive/files/download?${new URLSearchParams({
     workspaceId,
     driveRef: icloudDriveRef,
     clientId: "owner",
@@ -449,7 +454,7 @@ try {
   assert.equal(exposedDownload.payload.mapping.spaceKind, "advancedExposure");
   assert.equal(exposedDownload.payload.mapping.writable, false);
 
-  const upload = await fetchJson(`${server.url}/api/sharedspace/drive/files/upload`, {
+  const upload = await fetchJson(`${server.url}/api/external/cloud-drive/files/upload`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -472,7 +477,7 @@ try {
   assert.ok(upload.payload.transferReceipt?.transferReceiptId, "drive upload must return transfer receipt");
   assert.equal(upload.payload.transferReceipt.state, "projected");
 
-  const publicUpload = await fetchJson(`${server.url}/api/sharedspace/drive/files/upload`, {
+  const publicUpload = await fetchJson(`${server.url}/api/external/cloud-drive/files/upload`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -488,7 +493,7 @@ try {
   });
   assert.equal(publicUpload.status, 400, JSON.stringify(publicUpload.payload, null, 2));
 
-  const exposedUpload = await fetchJson(`${server.url}/api/sharedspace/drive/files/upload`, {
+  const exposedUpload = await fetchJson(`${server.url}/api/external/cloud-drive/files/upload`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -504,7 +509,7 @@ try {
   });
   assert.equal(exposedUpload.status, 400, JSON.stringify(exposedUpload.payload, null, 2));
 
-  const syncPlan = await fetchJson(`${server.url}/api/sharedspace/drive/sync/plan`, {
+  const syncPlan = await fetchJson(`${server.url}/api/external/cloud-drive/sync/plan`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -521,7 +526,7 @@ try {
   assert.equal(syncPlan.payload.dryRun, true);
   assert.ok(syncPlan.payload.actions.length >= 2, "iCloud local adapter sync plan should include local files");
 
-  const syncApply = await fetchJson(`${server.url}/api/sharedspace/drive/sync/apply`, {
+  const syncApply = await fetchJson(`${server.url}/api/external/cloud-drive/sync/apply`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -543,7 +548,7 @@ try {
 
   const providerRefs = {};
   for (const provider of ["onedrive", "google-drive", "dropbox"]) {
-    const connected = await fetchJson(`${server.url}/api/sharedspace/drive/connect`, {
+    const connected = await fetchJson(`${server.url}/api/external/cloud-drive/connect`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -579,7 +584,7 @@ try {
     providerRefs[provider] = connected.payload.drive.driveRef;
   }
 
-  const remoteLiveConnect = await fetchJson(`${server.url}/api/sharedspace/drive/connect`, {
+  const remoteLiveConnect = await fetchJson(`${server.url}/api/external/cloud-drive/connect`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -609,7 +614,7 @@ try {
   assert.equal(JSON.stringify(remoteLiveConnect.payload).includes(fakeProvider.url), false, "public remote-live connect payload must not expose endpointUrl");
   const remoteLiveDriveRef = remoteLiveConnect.payload.drive.driveRef;
 
-  const remoteLiveList = await fetchJson(`${server.url}/api/sharedspace/drive/items?${new URLSearchParams({
+  const remoteLiveList = await fetchJson(`${server.url}/api/external/cloud-drive/items?${new URLSearchParams({
     workspaceId,
     driveRef: remoteLiveDriveRef,
     clientId: "codex",
@@ -626,7 +631,7 @@ try {
   assert.ok(remoteLiveList.payload.items[0].provider.fileId, "remote-live list items must include provider file id metadata");
   assert.ok(remoteLiveList.payload.telemetry.transferBytes > 0, "remote-live list must expose transfer bytes");
 
-  const remoteLiveDownload = await fetchJson(`${server.url}/api/sharedspace/drive/files/download?${new URLSearchParams({
+  const remoteLiveDownload = await fetchJson(`${server.url}/api/external/cloud-drive/files/download?${new URLSearchParams({
     workspaceId,
     driveRef: remoteLiveDriveRef,
     clientId: "codex",
@@ -647,7 +652,7 @@ try {
   assert.ok(remoteLiveDownload.payload.transferReceipt.telemetry.transferBytes > 0, "remote-live download receipt must include transfer bytes");
   assert.ok(remoteLiveDownload.payload.transferReceipt.telemetry.bytesPerSecond > 0, "remote-live download receipt must include transfer rate");
 
-  const remoteLiveUpload = await fetchJson(`${server.url}/api/sharedspace/drive/files/upload`, {
+  const remoteLiveUpload = await fetchJson(`${server.url}/api/external/cloud-drive/files/upload`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -673,7 +678,7 @@ try {
   assert.ok(remoteLiveUpload.payload.transferReceipt.telemetry.transferBytes > 0, "remote-live upload receipt must include transfer bytes");
   assert.equal(fakeProvider.readFile(".pact-data/codex/remote-upload.txt").content.toString("utf8"), "uploaded through remote live provider\n");
 
-  const dropboxPermissions = await fetchJson(`${server.url}/api/sharedspace/drive/permissions?${new URLSearchParams({
+  const dropboxPermissions = await fetchJson(`${server.url}/api/external/cloud-drive/permissions?${new URLSearchParams({
     workspaceId,
     driveRef: providerRefs.dropbox
   })}`, {
@@ -721,7 +726,7 @@ try {
   const mcpListStructured = await callMcpStructured({
     serverUrl: server.url,
     token: grant.payload.token,
-    operation: "pact.sharedspace.drive.item.list",
+    operation: "pact.external.cloudDrive.item.list",
     input: {
       workspaceId,
       driveRef: providerRefs["google-drive"],
@@ -735,16 +740,15 @@ try {
   assert.equal(mcpList.items.every((item) => item.metadataOnly === true), true);
   assert.equal(mcpList.paths.some((itemPath) => itemPath.startsWith(".pact-data/codex/")), true);
   assert.equal(mcpList.paths.some((itemPath) => itemPath.startsWith(".pact-data/public/")), true);
-  assert.equal(mcpListStructured.exchange.action, "drive-items-listed");
-  assert.equal(mcpListStructured.exchange.driveRef, providerRefs["google-drive"]);
-  assert.equal(mcpListStructured.exchange.provider, "google-drive");
-  assert.equal(mcpListStructured.exchange.contractVerified, true);
-  assert.ok(mcpListStructured.exchange.paths.some((itemPath) => itemPath.startsWith(".pact-data/codex/")));
+  assert.equal(mcpListStructured.exchange, undefined, "external Cloud Drive is not a sharedspace exchange");
+  assert.equal(mcpList.upstreamService.serviceId, "pact.upstream.cloud-drive");
+  assert.equal(mcpList.upstreamService.upstreamType, "cloud-drive");
+  assert.equal(mcpList.upstreamService.operationId, "external.cloudDrive.item.list");
 
   const mcpUploadStructured = await callMcpStructured({
     serverUrl: server.url,
     token: grant.payload.token,
-    operation: "pact.sharedspace.drive.file.upload",
+    operation: "pact.external.cloudDrive.file.upload",
     input: {
       workspaceId,
       driveRef: providerRefs["google-drive"],
@@ -757,16 +761,16 @@ try {
   assert.equal(mcpUpload.ok, true);
   assert.equal(mcpUpload.contractVerified, true);
   assert.equal(mcpUpload.remoteWriteInvoked, false);
-  assert.equal(mcpUploadStructured.exchange.action, "drive-file-uploaded");
-  assert.equal(mcpUploadStructured.exchange.driveRef, providerRefs["google-drive"]);
-  assert.equal(mcpUploadStructured.exchange.path, ".pact-data/codex/mcp-upload.txt");
-  assert.equal(mcpUploadStructured.exchange.transferReceiptId, mcpUpload.transferReceipt.transferReceiptId);
-  assert.equal(mcpUploadStructured.exchange.checkpointId, mcpUpload.checkpoint.checkpointId);
+  assert.equal(mcpUploadStructured.exchange, undefined, "external Cloud Drive is not a sharedspace exchange");
+  assert.equal(mcpUpload.upstreamService.serviceId, "pact.upstream.cloud-drive");
+  assert.equal(mcpUpload.upstreamService.operationId, "external.cloudDrive.file.upload");
+  assert.equal(mcpUpload.transferReceipt.operationId, "external.cloudDrive.file.upload");
+  assert.equal(mcpUpload.checkpoint.operationId, "external.cloudDrive.file.upload");
 
   const mcpRemoteUploadStructured = await callMcpStructured({
     serverUrl: server.url,
     token: grant.payload.token,
-    operation: "pact.sharedspace.drive.file.upload",
+    operation: "pact.external.cloudDrive.file.upload",
     input: {
       workspaceId,
       driveRef: remoteLiveDriveRef,
@@ -780,19 +784,18 @@ try {
   assert.equal(mcpRemoteUpload.remoteLiveVerified, true);
   assert.equal(mcpRemoteUpload.contractVerified, false);
   assert.equal(mcpRemoteUpload.remoteWriteInvoked, true);
-  assert.equal(mcpRemoteUploadStructured.exchange.action, "drive-file-uploaded");
-  assert.equal(mcpRemoteUploadStructured.exchange.driveRef, remoteLiveDriveRef);
-  assert.equal(mcpRemoteUploadStructured.exchange.remoteLiveVerified, true);
-  assert.equal(mcpRemoteUploadStructured.exchange.remoteWriteInvoked, true);
-  assert.ok(mcpRemoteUploadStructured.exchange.providerReceipt.fileId, "MCP exchange must carry provider file id for remote-live upload");
-  assert.ok(mcpRemoteUploadStructured.exchange.transferBytes > 0, "MCP exchange must carry remote-live transfer bytes");
-  assert.ok(mcpRemoteUploadStructured.exchange.bytesPerSecond > 0, "MCP exchange must carry remote-live transfer rate");
+  assert.equal(mcpRemoteUploadStructured.exchange, undefined, "external Cloud Drive is not a sharedspace exchange");
+  assert.equal(mcpRemoteUpload.upstreamService.serviceId, "pact.upstream.cloud-drive");
+  assert.equal(mcpRemoteUpload.upstreamService.operationId, "external.cloudDrive.file.upload");
+  assert.ok(mcpRemoteUpload.providerReceipt.fileId, "MCP payload must carry provider file id for remote-live upload");
+  assert.ok(mcpRemoteUpload.telemetry.transferBytes > 0, "MCP payload must carry remote-live transfer bytes");
+  assert.ok(mcpRemoteUpload.telemetry.bytesPerSecond > 0, "MCP payload must carry remote-live transfer rate");
   assert.equal(fakeProvider.readFile(".pact-data/codex/mcp-remote-live-upload.txt").content.toString("utf8"), "mcp remote live upload");
 
   const mcpSyncStructured = await callMcpStructured({
     serverUrl: server.url,
     token: grant.payload.token,
-    operation: "pact.sharedspace.drive.sync.apply",
+    operation: "pact.external.cloudDrive.sync.apply",
     input: {
       workspaceId,
       driveRef: providerRefs.onedrive,
@@ -806,21 +809,22 @@ try {
   assert.equal(mcpSync.contractVerified, true);
   assert.equal(mcpSync.syncReceipt.state, "contractVerified");
   assert.equal(mcpSync.remoteSyncInvoked, false);
-  assert.equal(mcpSyncStructured.exchange.action, "drive-sync-applied");
-  assert.equal(mcpSyncStructured.exchange.driveRef, providerRefs.onedrive);
-  assert.equal(mcpSyncStructured.exchange.syncReceiptId, mcpSync.syncReceipt.syncReceiptId);
-  assert.equal(mcpSyncStructured.exchange.checkpointId, mcpSync.checkpoint.checkpointId);
+  assert.equal(mcpSyncStructured.exchange, undefined, "external Cloud Drive is not a sharedspace exchange");
+  assert.equal(mcpSync.upstreamService.serviceId, "pact.upstream.cloud-drive");
+  assert.equal(mcpSync.upstreamService.operationId, "external.cloudDrive.sync.apply");
+  assert.equal(mcpSync.syncReceipt.operationId, "external.cloudDrive.sync.apply");
+  assert.equal(mcpSync.checkpoint.operationId, "external.cloudDrive.sync.apply");
 
   const audit = await callMcp({
     serverUrl: server.url,
     token: grant.payload.token,
     operation: "pact.workspace.audit.query",
     input: {
-      operationId: "sharedspace.drive.file.upload",
+      operationId: "external.cloudDrive.file.upload",
       limit: 20
     }
   });
-  assert.ok(audit.items.some((item) => item.operationId === "sharedspace.drive.file.upload"), "drive upload must be queryable from operation audit");
+  assert.ok(audit.items.some((item) => item.operationId === "external.cloudDrive.file.upload"), "drive upload must be queryable from operation audit");
 } finally {
   if (fakeProvider?.close) {
     await fakeProvider.close().catch(() => {});

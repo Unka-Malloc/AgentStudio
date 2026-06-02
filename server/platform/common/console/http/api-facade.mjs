@@ -115,6 +115,7 @@ export async function buildConsoleState({
   consoleDomainServices = null
 }) {
   const domainServices = normalizeConsoleDomainServices(consoleDomainServices);
+  const knowledgeCoreEnabled = featureEnabled(features, "knowledge-core");
   const [
     agentSettingsProjection,
     rules,
@@ -127,10 +128,10 @@ export async function buildConsoleState({
     clientRuntimeSummary
   ] = await Promise.all([
     domainServices.buildAgentSettingsConsoleProjection({ userDataPath }),
-    domainServices.loadEmailRules(userDataPath),
-    domainServices.loadExpertVocabulary(userDataPath),
-    domainServices.loadKnowledgeTaxonomy(userDataPath),
-    domainServices.getKnowledgeGuidanceSummary(userDataPath),
+    knowledgeCoreEnabled ? domainServices.loadEmailRules(userDataPath) : Promise.resolve({}),
+    knowledgeCoreEnabled ? domainServices.loadExpertVocabulary(userDataPath) : Promise.resolve({}),
+    knowledgeCoreEnabled ? domainServices.loadKnowledgeTaxonomy(userDataPath) : Promise.resolve({}),
+    knowledgeCoreEnabled ? domainServices.getKnowledgeGuidanceSummary(userDataPath) : Promise.resolve({}),
     domainServices.buildConsoleJobsSummary({
       jobWorkflowProvider,
       limit: 50
@@ -145,7 +146,6 @@ export async function buildConsoleState({
     domainServices.buildClientRuntimeConsoleSummary({ clientRuntimeAllocator })
   ]);
   const projectedSettings = agentSettingsProjection.settings.value;
-  const knowledgeCoreEnabled = featureEnabled(features, "knowledge-core");
   const runtimeSummary = await domainServices.buildRuntimeConsoleSummary({
     userDataPath,
     runtime,

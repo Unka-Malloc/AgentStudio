@@ -267,14 +267,20 @@ export function createToolExecutionRuntime({
   policyEngine,
   securityPermissions = null,
   operations = [],
+  externalMcpPassthroughRuntime = null,
   controllers,
   operationAuditStore = null,
   operationConcurrencyScope = "tool-management",
   protocolEventBus = null,
   logger = getRuntimeLogger()
 }) {
-  const operationsById = new Map(operations.map((operation) => [operation.id, operation]));
+  let operationsById = new Map(operations.map((operation) => [operation.id, operation]));
   const toolLocks = new Map();
+
+  function refreshOperations(nextOperations = []) {
+    operationsById = new Map(nextOperations.map((operation) => [operation.id, operation]));
+    return { ok: true, operationCount: operationsById.size };
+  }
 
   function appendAuthorizationDecision(decision = {}) {
     if (!securityPermissions || typeof securityPermissions.appendDecision !== "function") {
@@ -807,6 +813,232 @@ export function createToolExecutionRuntime({
       };
     }
 
+    if (operation.externalMcp?.serviceId && operation.externalMcp?.upstreamToolName) {
+      if (!externalMcpPassthroughRuntime?.callTool) {
+        return {
+          ok: false,
+          status: 503,
+          payload: {
+            schemaVersion: 1,
+            traceId,
+            error: {
+              code: "external_mcp_passthrough_unavailable",
+              message: "External MCP passthrough runtime is unavailable.",
+              details: { toolExecutionId }
+            }
+          }
+        };
+      }
+      try {
+        const externalResult = await withToolConcurrency(tool, () =>
+          withTimeout(
+            externalMcpPassthroughRuntime.callTool({
+              serviceId: operation.externalMcp.serviceId,
+              toolName: operation.externalMcp.upstreamToolName,
+              input,
+              timeoutMs: tool.timeoutMs
+            }),
+            tool.timeoutMs
+          )
+        );
+        const result = {
+          schemaVersion: 1,
+          protocolVersion: externalResult.protocolVersion || "pact.external-mcp-passthrough.v1",
+          serviceId: operation.externalMcp.serviceId,
+          upstreamToolName: operation.externalMcp.upstreamToolName,
+          upstream: externalResult.upstream,
+          durationMs: externalResult.durationMs,
+          result: externalResult.result
+        };
+        const resultBytes = jsonByteLength(result);
+        const durationMs = Date.now() - startedAtMs;
+        if (resultBytes > Number(tool.maxResultBytes || 0)) {
+          store.appendExecution({
+            toolExecutionId,
+            traceId,
+            toolId: tool.id,
+            toolVersion: tool.version,
+            toolsetIds: tool.toolsets,
+            subjectType: "grant",
+            subjectId: authorization.grant.id,
+            grantId: authorization.grant.id,
+            agentId: context.agentId || "",
+            profileId: context.profileId || "",
+            operationId: tool.operationId,
+            risk: tool.risk,
+            decision: policy.effect,
+            input,
+            resultSummary: {
+              type: "oversize",
+              byteLength: resultBytes,
+              maxResultBytes: tool.maxResultBytes,
+              policy: policySummary
+            },
+            status: "failed",
+            errorCode: "result_too_large",
+            durationMs,
+            policyDecisionId: policy.decisionId,
+            sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+            userAgent: request?.headers?.["user-agent"] || "",
+            startedAt,
+            finishedAt: nowIso()
+          });
+          store.appendMetric({
+            traceId,
+            toolId: tool.id,
+            grantId: authorization.grant.id,
+            profileId: context.profileId || "",
+            status: "failed",
+            risk: tool.risk,
+            durationMs,
+            inputBytes,
+            resultBytes,
+            reasonCode: "result_too_large"
+          });
+          await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "failed" }, { type: "tools.execution.failed" });
+          return {
+            ok: false,
+            status: 413,
+            payload: {
+              schemaVersion: 1,
+              traceId,
+              error: {
+                code: "result_too_large",
+                message: "External MCP tool result exceeds the configured result size limit.",
+                details: {
+                  toolExecutionId,
+                  byteLength: resultBytes,
+                  maxResultBytes: tool.maxResultBytes
+                }
+              }
+            }
+          };
+        }
+        store.appendExecution({
+          toolExecutionId,
+          traceId,
+          toolId: tool.id,
+          toolVersion: tool.version,
+          toolsetIds: tool.toolsets,
+          subjectType: "grant",
+          subjectId: authorization.grant.id,
+          grantId: authorization.grant.id,
+          agentId: context.agentId || "",
+          profileId: context.profileId || "",
+          operationId: tool.operationId,
+          risk: tool.risk,
+          decision: policy.effect,
+          input,
+          result,
+          resultSummary: {
+            type: "external_mcp",
+            serviceId: operation.externalMcp.serviceId,
+            upstreamToolName: operation.externalMcp.upstreamToolName,
+            result: resultSummaryFromPayload(result),
+            policy: policySummary
+          },
+          status: "ok",
+          errorCode: "",
+          durationMs,
+          policyDecisionId: policy.decisionId,
+          sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+          userAgent: request?.headers?.["user-agent"] || "",
+          startedAt,
+          finishedAt: nowIso()
+        });
+        store.appendMetric({
+          traceId,
+          toolId: tool.id,
+          grantId: authorization.grant.id,
+          profileId: context.profileId || "",
+          status: "ok",
+          risk: tool.risk,
+          durationMs,
+          inputBytes,
+          resultBytes
+        });
+        await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "ok" }, { type: "tools.execution.completed" });
+        return {
+          ok: true,
+          status: 200,
+          payload: {
+            schemaVersion: 1,
+            toolExecutionId,
+            traceId,
+            toolId: tool.id,
+            status: "ok",
+            result,
+            grant: authorization.grant,
+            policy: policySummary
+          }
+        };
+      } catch (error) {
+        const durationMs = Date.now() - startedAtMs;
+        const message = error instanceof Error ? error.message : "External MCP tool execution failed.";
+        const errorCode = error?.code || "external_mcp_tool_execution_failed";
+        store.appendExecution({
+          toolExecutionId,
+          traceId,
+          toolId: tool.id,
+          toolVersion: tool.version,
+          toolsetIds: tool.toolsets,
+          subjectType: "grant",
+          subjectId: authorization.grant.id,
+          grantId: authorization.grant.id,
+          agentId: context.agentId || "",
+          profileId: context.profileId || "",
+          operationId: tool.operationId,
+          risk: tool.risk,
+          decision: policy.effect,
+          input,
+          resultSummary: {
+            type: "external_mcp_error",
+            errorCode,
+            serviceId: operation.externalMcp.serviceId,
+            upstreamToolName: operation.externalMcp.upstreamToolName,
+            policy: policySummary
+          },
+          status: "failed",
+          errorCode,
+          durationMs,
+          policyDecisionId: policy.decisionId,
+          sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+          userAgent: request?.headers?.["user-agent"] || "",
+          startedAt,
+          finishedAt: nowIso()
+        });
+        store.appendMetric({
+          traceId,
+          toolId: tool.id,
+          grantId: authorization.grant.id,
+          profileId: context.profileId || "",
+          status: "failed",
+          risk: tool.risk,
+          durationMs,
+          inputBytes,
+          reasonCode: errorCode
+        });
+        await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "failed" }, { type: "tools.execution.failed" });
+        return {
+          ok: false,
+          status: error?.statusCode || 502,
+          payload: {
+            schemaVersion: 1,
+            traceId,
+            error: {
+              code: errorCode,
+              message,
+              details: {
+                toolExecutionId,
+                serviceId: operation.externalMcp.serviceId,
+                upstreamToolName: operation.externalMcp.upstreamToolName
+              }
+            }
+          }
+        };
+      }
+    }
+
       const captured = createCapturedResponse();
       const directRequest = directOperation
         ? { url: directUrl, requestBody: directRequestBody, params: directParams || {} }
@@ -1325,6 +1557,7 @@ export function createToolExecutionRuntime({
   }
 
   return {
+    refreshOperations,
     executeTool,
     resumePendingOperation
   };

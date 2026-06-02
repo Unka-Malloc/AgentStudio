@@ -84,6 +84,9 @@ export const FEATURE_MANIFEST = Object.freeze({
         "agent-gateway",
         "agent-management",
         "agent-exploration",
+        "code-repository-operations",
+        "codespace-management",
+        "gerrit-service",
         "macos-mail"
       ])
     }),
@@ -109,6 +112,9 @@ export const FEATURE_MANIFEST = Object.freeze({
         "agent-gateway",
         "agent-management",
         "agent-exploration",
+        "code-repository-operations",
+        "codespace-management",
+        "gerrit-service",
         "maintenance-agent-runbooks",
         "data-connectors",
         "gmail",
@@ -247,6 +253,13 @@ export const FEATURE_MANIFEST = Object.freeze({
       group: "devops",
       required: true,
       defaultEnabled: true,
+      server: {
+        webPanels: ["logs", "production-health"]
+      },
+      web: {
+        navItems: ["admin.logs", "admin.productionHealth"],
+        panels: ["LogPanel", "ProductionHealthPanel"]
+      },
       package: {
         includePaths: ["server/platform/common/devops"],
         excludePaths: []
@@ -331,8 +344,8 @@ export const FEATURE_MANIFEST = Object.freeze({
         webPanels: ["client-runtime-allocator"]
       },
       web: {
-        navItems: ["admin.opsMonitor"],
-        panels: ["OpsMonitorPanel", "ClientRuntimeHeatmap"]
+        navItems: ["workspaces", "admin.opsMonitor"],
+        panels: ["WorkspacesPanel", "OpsMonitorPanel", "ClientRuntimeHeatmap"]
       },
       package: {
         includePaths: ["server/services/client/client-runtime-core", "server/protocols/context-core"],
@@ -506,8 +519,8 @@ export const FEATURE_MANIFEST = Object.freeze({
         webPanels: ["knowledge-core-ui", "knowledge-word-cloud", "knowledge-recall-debug"]
       },
       web: {
-        navItems: ["knowledge.management", "knowledge.wordCloud", "knowledge.logs", "knowledge.maintenance", "debug.knowledgeRecall"],
-        panels: ["KnowledgeManagementPanel", "KnowledgeWordCloudPanel", "KnowledgeRecallDebugPanel"]
+        navItems: ["sources", "knowledge.management", "knowledge.wordCloud", "knowledge.logs", "knowledge.maintenance", "debug.knowledgeRecall"],
+        panels: ["KnowledgeSourcesPanel", "KnowledgeManagementPanel", "KnowledgeWordCloudPanel", "KnowledgeRecallDebugPanel"]
       },
       client: { modules: ["knowledge-mirror", "expert-vocabulary"] },
       package: {
@@ -701,8 +714,8 @@ export const FEATURE_MANIFEST = Object.freeze({
         webPanels: ["agent-config"]
       },
       web: {
-        navItems: ["admin.agentConfig"],
-        panels: ["AgentConfigPanel"]
+        navItems: ["admin.agentConfig", "admin.contextManagement"],
+        panels: ["AgentConfigPanel", "ContextManagementPanel"]
       },
       client: { modules: ["knowledge-agent"] },
       package: {
@@ -737,6 +750,67 @@ export const FEATURE_MANIFEST = Object.freeze({
         removePaths: []
       },
       tests: { suites: ["server:verify:gateway-ingress"] }
+    },
+    {
+      featureId: "code-repository-operations",
+      label: "Code repository operations",
+      group: "capabilities",
+      dependsOn: ["tool-management-core"],
+      defaultEnabled: false,
+      server: {
+        operationPrefixes: ["repo."],
+        modules: ["RepoOperationsCompatibilityRoute"]
+      },
+      package: {
+        includePaths: [
+          "server/platform/specialized/capabilities/code-repository/repo-operations",
+          "docs/PROTOCOLS.md"
+        ]
+      },
+      tests: { suites: ["server:verify:resource-operations"] }
+    },
+    {
+      featureId: "codespace-management",
+      label: "Codespace management",
+      group: "capabilities",
+      dependsOn: ["code-repository-operations"],
+      defaultEnabled: false,
+      server: {
+        operationPrefixes: ["codespace.", "workspace.code."],
+        modules: ["CodespaceManagement"]
+      },
+      package: {
+        includePaths: [
+          "server/platform/specialized/capabilities/code-management/codespace",
+          "docs/PROTOCOLS.md"
+        ]
+      },
+      tests: { suites: ["server:verify:codespace", "server:verify:v001-codespace-e2e"] }
+    },
+    {
+      featureId: "gerrit-service",
+      label: "Gerrit service integration",
+      group: "capabilities",
+      dependsOn: ["codespace-management", "tool-management-core"],
+      defaultEnabled: false,
+      server: {
+        operationPrefixes: ["gerrit.", "runtime.dependencies."],
+        modules: ["GerritCodeReviewRoute", "RuntimeDependencies"],
+        webPanels: ["runtime-dependencies"]
+      },
+      web: {
+        navItems: ["admin.runtimeDownloads"],
+        panels: ["RuntimeDownloadsPanel"]
+      },
+      package: {
+        includePaths: [
+          "server/platform/specialized/capabilities/code-review/gerrit",
+          "server/platform/specialized/capabilities/runtime-dependencies",
+          "server/scripts/gerrit-local.mjs",
+          "docs/PROTOCOLS.md"
+        ]
+      },
+      tests: { suites: ["server:verify:gerrit-mcp", "server:verify:runtime-dependency-downloads"] }
     },
     {
       featureId: "agent-management",
@@ -1208,6 +1282,15 @@ export function operationFeatureId(operation = {}) {
   }
   if (operationId.startsWith("agent_gateway.") || operationId.startsWith("agent_sync.") || operationId.startsWith("oauth.")) {
     return "agent-gateway";
+  }
+  if (operationId.startsWith("repo.")) {
+    return "code-repository-operations";
+  }
+  if (operationId.startsWith("codespace.") || operationId.startsWith("workspace.code.")) {
+    return "codespace-management";
+  }
+  if (operationId.startsWith("gerrit.") || operationId.startsWith("runtime.dependencies.")) {
+    return "gerrit-service";
   }
 
   const featureByRegistryFeature = {

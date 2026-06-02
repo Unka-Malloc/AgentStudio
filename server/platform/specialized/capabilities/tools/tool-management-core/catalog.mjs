@@ -583,6 +583,14 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "external.knowledge.distillation.evidence.query": "pact.external.knowledge.distillation.evidence.query",
   "external.knowledge.distillation.projects.evidence.query": "pact.external.knowledge.distillation.projects.evidence.query",
   "external.knowledge.distillation.artifacts.export": "pact.external.knowledge.distillation.artifacts.export",
+  "external.cloudDrive.connect": "pact.external.cloudDrive.connect",
+  "external.cloudDrive.status": "pact.external.cloudDrive.status",
+  "external.cloudDrive.item.list": "pact.external.cloudDrive.item.list",
+  "external.cloudDrive.file.download": "pact.external.cloudDrive.file.download",
+  "external.cloudDrive.file.upload": "pact.external.cloudDrive.file.upload",
+  "external.cloudDrive.sync.plan": "pact.external.cloudDrive.sync.plan",
+  "external.cloudDrive.sync.apply": "pact.external.cloudDrive.sync.apply",
+  "external.cloudDrive.permission.list": "pact.external.cloudDrive.permission.list",
   "knowledge.skills.evaluation.runs.create": "pact.knowledge.skills.evaluation.runs.create",
   "knowledge.skills.deployments.create": "pact.knowledge.skills.deployments.create",
   "knowledge.skills.deployments.rollback": "pact.knowledge.skills.deployments.rollback",
@@ -822,7 +830,15 @@ const INTERNAL_OPERATION_IDS_HIDDEN_FROM_TOOL_CATALOG = Object.freeze(new Set([
   "knowledge.distillation.workbench.stage.export",
   "knowledge.distillation.workbench.runs.package",
   "knowledge.distillation.workbench.runs.artifacts",
-  "knowledge.distillation.workbench.runs.compare"
+  "knowledge.distillation.workbench.runs.compare",
+  "sharedspace.drive.connect",
+  "sharedspace.drive.status",
+  "sharedspace.drive.item.list",
+  "sharedspace.drive.file.download",
+  "sharedspace.drive.file.upload",
+  "sharedspace.drive.sync.plan",
+  "sharedspace.drive.sync.apply",
+  "sharedspace.drive.permission.list"
 ]));
 
 const TOOL_ALIAS_IDS_BY_OPERATION_ID = Object.freeze({
@@ -879,6 +895,14 @@ const SCOPE_BY_OPERATION_ID = Object.freeze({
   "knowledge.gold_cases.save": "knowledge:maintain",
   "external.knowledge.distillation.runs.create": "knowledge:maintain",
   "external.knowledge.distillation.runs.cancel": "knowledge:maintain",
+  "external.cloudDrive.connect": "drive:write",
+  "external.cloudDrive.status": "drive:read",
+  "external.cloudDrive.item.list": "drive:read",
+  "external.cloudDrive.file.download": "drive:read",
+  "external.cloudDrive.file.upload": "drive:write",
+  "external.cloudDrive.sync.plan": "drive:sync",
+  "external.cloudDrive.sync.apply": "drive:sync",
+  "external.cloudDrive.permission.list": "drive:share",
   "knowledge.skills.evaluation.runs.create": "knowledge:maintain",
   "knowledge.skills.deployments.create": "knowledge:maintain",
   "knowledge.skills.deployments.rollback": "knowledge:maintain",
@@ -1475,18 +1499,22 @@ export function createToolCatalog({ operations = [], activeFeatureIds = null } =
   const activeFeatureSet = activeFeatureIds?.length ? new Set(activeFeatureIds) : null;
   const tools = [];
   for (const operation of operations) {
-    const toolId = TOOL_ID_BY_OPERATION_ID[operation.id];
+    const toolId = operation.toolId || TOOL_ID_BY_OPERATION_ID[operation.id];
     if (!toolId) {
       continue;
     }
     if (INTERNAL_OPERATION_IDS_HIDDEN_FROM_TOOL_CATALOG.has(operation.id)) {
       continue;
     }
+    const explicitScopes = operation.externalMcp
+      ? uniqueStrings(operation.requiredScopes || [])
+      : [];
     const scope = operationScope(operation);
-    const requiredScopes = scope ? [scope] : [];
+    const requiredScopes = explicitScopes.length ? explicitScopes : scope ? [scope] : [];
     const { method, endpoint } = normalizeHttpEndpoint(operation);
     const risk = normalizeRisk(operation);
     const requiresApproval = operation.destructive === true || risk === "destructive" || operation.safety?.requiresConfirmation === true;
+    const exposeOperationMetadata = operation.externalMcp || operation.aspects?.includes("external-service");
     const tool = {
       id: toolId,
       version: "1",
@@ -1495,6 +1523,8 @@ export function createToolCatalog({ operations = [], activeFeatureIds = null } =
       owner: "pact",
       source: "operation-backed",
       featureId: operation.featureId || "",
+      feature: exposeOperationMetadata ? operation.feature || "" : "",
+      aspects: exposeOperationMetadata ? operation.aspects || [] : [],
       operationId: operation.id,
       handlerId: operation.target?.method || "",
       deprecated: operation.deprecated === true,
@@ -1536,7 +1566,13 @@ export function createToolCatalog({ operations = [], activeFeatureIds = null } =
         enabled: true
       },
       status: "active",
-      tags: uniqueStrings([operation.featureId || "", operation.feature, operation.binary ? "binary" : "", risk])
+      tags: uniqueStrings([
+        operation.featureId || "",
+        operation.feature,
+        ...(exposeOperationMetadata ? operation.aspects || [] : []),
+        operation.binary ? "binary" : "",
+        risk
+      ])
     };
     tools.push(tool);
     for (const aliasId of TOOL_ALIAS_IDS_BY_OPERATION_ID[operation.id] || []) {
@@ -1581,6 +1617,7 @@ export function createToolCatalogRegistry({ operations = [], activeFeatureIds = 
   let toolsByOperationId = new Map(catalog.tools.filter((tool) => tool.operationId).map((tool) => [tool.operationId, tool]));
 
   function refresh(nextOperations = operations) {
+    operations = nextOperations;
     catalog = createToolCatalog({ operations: nextOperations, activeFeatureIds });
     toolsById = new Map(catalog.tools.map((tool) => [tool.id, tool]));
     toolsByOperationId = new Map(catalog.tools.filter((tool) => tool.operationId).map((tool) => [tool.operationId, tool]));

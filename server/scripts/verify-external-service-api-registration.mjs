@@ -3,6 +3,17 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SERVER_API_OPERATIONS } from "../platform/common/operation-dispatcher/operation-registry.mjs";
+import {
+  EXTERNAL_SERVICE_CLOUD_DRIVE_PROVIDER_VALUES,
+  EXTERNAL_SERVICE_MODEL_PROTOCOL_VALUES,
+  normalizeExternalServiceConfig,
+  validateExternalServiceConfig
+} from "../platform/common/composition-management/external-service-adapter.mjs";
+import {
+  callExternalLlmService,
+  describeExternalLlmServiceAdapters,
+  isExternalLlmServiceConfig
+} from "../platform/common/composition-management/external-llm-service-adapters.mjs";
 import { createToolCatalog } from "../platform/specialized/capabilities/tools/tool-management-core/catalog.mjs";
 import {
   KERNEL_API_OPERATION_IDS,
@@ -11,6 +22,26 @@ import {
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const externalServicesRoot = path.join(repoRoot, "external-services");
+const CLOUD_DRIVE_EXTERNAL_OPERATION_IDS = Object.freeze([
+  "external.cloudDrive.connect",
+  "external.cloudDrive.status",
+  "external.cloudDrive.item.list",
+  "external.cloudDrive.file.download",
+  "external.cloudDrive.file.upload",
+  "external.cloudDrive.sync.plan",
+  "external.cloudDrive.sync.apply",
+  "external.cloudDrive.permission.list"
+]);
+const CLOUD_DRIVE_LEGACY_OPERATION_IDS = Object.freeze([
+  "sharedspace.drive.connect",
+  "sharedspace.drive.status",
+  "sharedspace.drive.item.list",
+  "sharedspace.drive.file.download",
+  "sharedspace.drive.file.upload",
+  "sharedspace.drive.sync.plan",
+  "sharedspace.drive.sync.apply",
+  "sharedspace.drive.permission.list"
+]);
 
 const SERVICE_REGISTRATION_REQUIREMENTS = Object.freeze({
   "knowledge-distillation-service": {
@@ -75,12 +106,172 @@ async function assertRequiredFiles(serviceName, requiredFiles = []) {
   }
 }
 
+async function assertExternalServiceTypeValidation() {
+  const baseConfig = {
+    schemaVersion: 1,
+    kind: "pact.external-service.config",
+    serviceId: "verify-external-service-type",
+    serviceName: "external.verify.service",
+    displayName: "Verify External Service Type",
+    mode: "connected",
+    startupPolicy: "external-only",
+    binding: {
+      mode: "passthrough",
+      outlet: "pact.skillHub",
+      requiredScopes: ["knowledge:read"],
+      risk: "read_only"
+    },
+    healthCheck: { type: "none" }
+  };
+  const acceptedUpstreams = [
+    { type: "acp", url: "http://127.0.0.1:8788/acp" },
+    { type: "llm", modelProtocol: "openai-compatible", provider: "openai", url: "https://api.openai.com:443/v1/chat/completions" },
+    { type: "llm", modelProtocol: "anthropic-messages", provider: "anthropic", url: "https://api.anthropic.com:443/v1/messages" },
+    { type: "llm", modelProtocol: "gemini-generate-content", provider: "google", url: "https://generativelanguage.googleapis.com:443/v1beta/models/gemini:generateContent" },
+    { type: "llm", modelProtocol: "bedrock-converse", provider: "aws-bedrock", url: "https://bedrock-runtime.us-east-1.amazonaws.com:443/model/test/converse" },
+    { type: "llm", modelProtocol: "ollama-native", provider: "ollama", url: "http://127.0.0.1:11434/api/chat" },
+    { type: "cloud-drive", provider: "onedrive", mode: "contract", secretRef: "secret://pact/drive/onedrive-oauth" },
+    { type: "http", url: "http://127.0.0.1:8787/health" },
+    { type: "https", url: "https://example.com:443/api" },
+    { type: "openai", url: "https://api.openai.com:443/v1" },
+    { type: "internal-proprietary-service", url: "" }
+  ];
+  for (const upstream of acceptedUpstreams) {
+    const config = normalizeExternalServiceConfig({
+      ...baseConfig,
+      serviceId: `${baseConfig.serviceId}-${upstream.type}`,
+      upstream
+    });
+    const validation = await validateExternalServiceConfig({
+      config,
+      requireKnownPaths: false
+    });
+    assert.equal(
+      validation.ok,
+      true,
+      `${upstream.type} upstream type must be accepted for external service discovery: ${JSON.stringify(validation.errors || [])}`
+    );
+    if (upstream.type === "llm") {
+      assert.equal(config.upstream.type, "llm", "LLM upstream must normalize to the generic llm service type");
+      assert.equal(config.upstream.modelProtocol, upstream.modelProtocol, "LLM upstream must retain modelProtocol for adapter routing");
+      assert.equal(config.upstream.provider, upstream.provider, "LLM upstream must retain provider for adapter routing");
+    }
+    if (upstream.type === "openai") {
+      assert.equal(config.upstream.type, "llm", "legacy openai upstream type must normalize to LLM Service");
+      assert.equal(config.upstream.modelProtocol, "openai-compatible", "legacy openai upstream must be classified as OpenAI-compatible");
+      assert.equal(config.upstream.provider, "openai", "legacy OpenAI host must infer provider openai");
+    }
+    if (upstream.type === "cloud-drive") {
+      assert.equal(config.upstream.type, "cloud-drive", "Cloud Drive upstream must keep the cloud-drive service type");
+      assert.equal(config.upstream.provider, "onedrive", "Cloud Drive upstream must retain provider for adapter routing");
+      assert.equal(config.upstream.mode, "contract", "Cloud Drive upstream must retain adapter mode");
+      assert.deepEqual(
+        EXTERNAL_SERVICE_CLOUD_DRIVE_PROVIDER_VALUES,
+        ["icloud", "onedrive", "google-drive", "dropbox"],
+        "Cloud Drive provider enum must stay explicit for gateway adapter routing"
+      );
+    }
+  }
+  const missingPortConfig = normalizeExternalServiceConfig({
+    ...baseConfig,
+    serviceId: `${baseConfig.serviceId}-missing-port`,
+    upstream: {
+      type: "http",
+      url: "http://127.0.0.1/health"
+    }
+  });
+  const missingPortValidation = await validateExternalServiceConfig({
+    config: missingPortConfig,
+    requireKnownPaths: false
+  });
+  assert.equal(missingPortValidation.ok, false, "HTTP external service URL without explicit port must be rejected");
+  assert.match(
+    JSON.stringify(missingPortValidation.errors || []),
+    /explicit port/,
+    "HTTP external service explicit-port validation must be reported"
+  );
+}
+
+function assertExternalLlmServiceAdapterScaffold() {
+  const description = describeExternalLlmServiceAdapters();
+  assert.equal(description.status, "scaffold", "LLM service adapters must be explicitly marked as scaffolds");
+  for (const protocol of EXTERNAL_SERVICE_MODEL_PROTOCOL_VALUES) {
+    const row = description.protocols.find((item) => item.protocol === protocol);
+    assert.equal(Boolean(row?.registered), true, `${protocol} must have an LLM adapter scaffold`);
+    const config = normalizeExternalServiceConfig({
+      schemaVersion: 1,
+      kind: "pact.external-service.config",
+      serviceId: `verify-llm-${protocol}`,
+      serviceName: `external.verify.llm.${protocol}`,
+      displayName: `Verify LLM ${protocol}`,
+      mode: "connected",
+      startupPolicy: "external-only",
+      upstream: {
+        type: "llm",
+        modelProtocol: protocol,
+        provider: "verify",
+        url: "http://127.0.0.1:8787/v1"
+      },
+      binding: {
+        mode: "passthrough",
+        outlet: "pact.skillHub",
+        requiredScopes: ["knowledge:read"],
+        risk: "read_only"
+      },
+      healthCheck: { type: "none" }
+    });
+    assert.equal(isExternalLlmServiceConfig(config), true, `${protocol} must be recognized as an LLM Service config`);
+    const placeholder = callExternalLlmService({ config, input: { messages: [] }, context: { verify: true } });
+    assert.equal(placeholder.status, "not_implemented", `${protocol} scaffold must not implement real adapter behavior yet`);
+    assert.equal(placeholder.adapterId, protocol, `${protocol} scaffold must route through the protocol-specific adapter`);
+  }
+}
+
 const operationsById = new Map(SERVER_API_OPERATIONS.map((operation) => [operation.id, operation]));
 const catalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
 const toolsByOperationId = new Map(catalog.tools.map((tool) => [tool.operationId, tool]));
 const toolIds = new Set(catalog.tools.map((tool) => tool.id));
 const kernelApiOperationIds = new Set(KERNEL_API_OPERATION_IDS);
 const kernelToolIds = new Set(KERNEL_TOOL_IDS);
+
+await assertExternalServiceTypeValidation();
+assertExternalLlmServiceAdapterScaffold();
+
+for (const operationId of CLOUD_DRIVE_EXTERNAL_OPERATION_IDS) {
+  const operation = operationsById.get(operationId);
+  assert.ok(operation, `${operationId} must be registered as an upstream cloud drive service operation`);
+  assert.equal(operation.feature, "external", `${operationId} must use the external feature namespace`);
+  assert.equal(operation.aspects?.includes("external-service"), true, `${operationId} must use the external-service aspect`);
+  assert.equal(operation.aspects?.includes("cloud-drive-upstream"), true, `${operationId} must use the cloud-drive-upstream aspect`);
+  assert.equal(
+    String(operation.http?.path || "").startsWith("/api/external/cloud-drive/"),
+    true,
+    `${operationId} must expose a mediated API under /api/external/cloud-drive/`
+  );
+  assert.ok(toolsByOperationId.has(operationId), `${operationId} must be exposed as a managed external cloud drive tool`);
+}
+
+for (const operationId of CLOUD_DRIVE_LEGACY_OPERATION_IDS) {
+  const operation = operationsById.get(operationId);
+  assert.ok(operation, `${operationId} legacy shim must remain registered for console/API compatibility`);
+  assert.equal(operation.deprecated, true, `${operationId} must be deprecated after Cloud Drive moves to upstream service gateway`);
+  assert.equal(operation.replacementService, "external.cloudDrive", `${operationId} must point to external.cloudDrive`);
+  assert.equal(
+    operation.lifecycle?.maintenancePolicy,
+    "compatibility-shim-only",
+    `${operationId} must be compatibility-shim-only`
+  );
+  assert.equal(
+    toolsByOperationId.has(operationId),
+    false,
+    `${operationId} must not be exposed through Tool Management as a platform core tool`
+  );
+  assert.equal(
+    kernelApiOperationIds.has(operationId),
+    false,
+    `${operationId} must not remain in the authorization kernel as a platform core API capability`
+  );
+}
 
 for (const operation of SERVER_API_OPERATIONS) {
   if (!operation.aspects?.includes("external-service")) {

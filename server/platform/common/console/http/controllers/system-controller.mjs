@@ -6,6 +6,7 @@ import { createSystemControllerAgentSettingsHandlers } from "./system-controller
 import { createSystemControllerAuthHandlers } from "./system-controller-auth-handlers.mjs";
 import { createSystemControllerCapabilityEcosystemHandlers } from "./system-controller-capability-ecosystem-handlers.mjs";
 import { createSystemControllerContexts } from "./system-controller-contexts.mjs";
+import { createSystemControllerExternalServiceHandlers } from "./system-controller-external-service-handlers.mjs";
 import { createSystemControllerFoundationHandlers } from "./system-controller-foundation-handlers.mjs";
 import { createSystemControllerKnowledgeOperationsHandlers } from "./system-controller-knowledge-operations-handlers.mjs";
 import { createSystemControllerKnowledgeRuntimeHandlers } from "./system-controller-knowledge-runtime-handlers.mjs";
@@ -68,6 +69,7 @@ export function createSystemController({
   devopsProvider = null,
   getFeatureEntries = () => null,
   getToolSkillManagementProvider = () => null,
+  getToolManagementPlatform = () => null,
   consoleDomainServices = null
 }) {
   const effectiveSecurityPermissions =
@@ -264,6 +266,11 @@ export function createSystemController({
       moduleManagement,
       getToolSkillManagementProvider,
       getStrategyManagementProvider: () => strategyManagementProvider
+    }),
+    ...createSystemControllerExternalServiceHandlers({
+      parseJsonBody,
+      userDataPath,
+      getToolManagementPlatform
     }),
     ...createSystemControllerKnowledgeOperationsHandlers({
       sendConsoleDomainOperation,

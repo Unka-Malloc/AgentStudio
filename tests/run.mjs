@@ -186,6 +186,20 @@ const suites = [
     "security",
     "regression"
   ]),
+  suite("server.external-mcp-passthrough", "External MCP passthrough gateway with FastMCP Docker service", npm("run", "server:verify:external-mcp-passthrough"), [
+    "server",
+    "external-service",
+    "mcp",
+    "docker",
+    "integration"
+  ]),
+  suite("server.external-http-adapters", "External HTTP/RPC adapters for OpenAPI, REST, JSON endpoints, and RPC", npm("run", "server:verify:external-http-adapters"), [
+    "server",
+    "external-service",
+    "http",
+    "integration",
+    "regression"
+  ]),
   suite("server.maintenance-agent", "Maintenance agent harness", npm("run", "server:verify:maintenance-agent"), [
     "server",
     "integration",

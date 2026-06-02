@@ -1,0 +1,230 @@
+{
+  "schemaVersion": 1,
+  "kind": "pact.composition.preset",
+  "presetId": "knowledge-transformation-standalone",
+  "displayName": "Knowledge Transformation Standalone Application",
+  "status": "active",
+  "compositionClass": "deployment-dependency-package",
+  "deploymentTarget": {
+    "applicationId": "knowledge-transformation",
+    "serviceName": "external.knowledge.transformation",
+    "boundary": "standalone-external-application",
+    "outputBundleId": "pact-knowledge-transformation-standalone",
+    "outputRoot": "build/composition-packages/knowledge-transformation-standalone"
+  },
+  "intent": {
+    "summary": "Package the raw-corpus to knowledge-distillation pipeline with AgentLibrary access into a dehydrated external application.",
+    "pipeline": [
+      "raw-corpus-construction",
+      "knowledge-index-construction",
+      "knowledge-distillation"
+    ],
+    "accessSurface": "agent-library",
+    "dehydrationGoal": "standalone-service-with-platform-core"
+  },
+  "coreDependencyPackage": {
+    "policy": "include-platform-core-required-by-standalone-service",
+    "featureIds": [
+      "core-platform",
+      "security-permissions",
+      "operation-dispatcher",
+      "console-shell",
+      "storage-core",
+      "module-management-core",
+      "data-structure-core",
+      "devops-core",
+      "work-queue-core"
+    ],
+    "preserveContracts": [
+      "pact.security-permissions.v1",
+      "pact.operation-dispatcher.v1",
+      "pact.storage.v1",
+      "pact.module-management.v1",
+      "pact.devops.v1"
+    ],
+    "reason": "The standalone application still needs authorization, audit, operation dispatch, storage, module lifecycle, health, uploads, raw objects, and receipts."
+  },
+  "applicationDependencyPackage": {
+    "policy": "include-knowledge-transformation-runtime-and-required-knowledge-services",
+    "featureIds": [
+      "document-parser",
+      "analysis-runtime",
+      "knowledge-core",
+      "external-knowledge-distillation",
+      "agent-gateway"
+    ],
+    "moduleDescriptors": [
+      "server/platform/specialized/knowledge/transformation/module.json",
+      "server/platform/specialized/knowledge/preprocessing/file-processor/module.json",
+      "server/platform/specialized/knowledge/storage/knowledge-core/module.json",
+      "server/platform/specialized/knowledge/storage/knowledge-backend-port/module.json",
+      "server/platform/specialized/knowledge/retrieval/embedding-runtime/module.json",
+      "server/platform/specialized/knowledge/retrieval/vector-store/module.json"
+    ],
+    "serviceRoots": [
+      "external-services/knowledge-distillation-service"
+    ],
+    "requiredProtocols": [
+      "pact.knowledge-transformation.v1",
+      "pact.knowledge.v1",
+      "pact.knowledge-access.v1",
+      "pact.agent-library.v1",
+      "pact.external-knowledge-distillation.v1"
+    ]
+  },
+  "pipeline": {
+    "orderedStages": [
+      {
+        "stageId": "raw-corpus-construction",
+        "required": true,
+        "provider": "KnowledgeTransformation",
+        "operationIds": [
+          "raw-corpus.format.convert"
+        ],
+        "inputKinds": [
+          "rawAsset",
+          "file",
+          "sourceCode",
+          "knowledge"
+        ],
+        "outputKinds": [
+          "normalizedDocument",
+          "rawCorpusExport"
+        ]
+      },
+      {
+        "stageId": "knowledge-index-construction",
+        "required": true,
+        "provider": "KnowledgeCore",
+        "mount": "knowledgeBase",
+        "protocol": "pact.knowledge.v1",
+        "operationIds": [
+          "knowledge.search",
+          "knowledge.evidence.get",
+          "knowledge.asset",
+          "knowledge.render_markdown"
+        ],
+        "outputKinds": [
+          "canonicalEvidence",
+          "knowledgeIndex",
+          "evidencePack"
+        ]
+      },
+      {
+        "stageId": "knowledge-distillation",
+        "required": true,
+        "provider": "ExternalKnowledgeDistillationService",
+        "protocol": "pact.external-knowledge-distillation.v1",
+        "serviceRoot": "external-services/knowledge-distillation-service",
+        "operationPrefixes": [
+          "external.knowledge.distillation."
+        ],
+        "outputKinds": [
+          "portableMarkdown",
+          "portableDocx",
+          "agentMessageJson",
+          "workspacePackageZip"
+        ]
+      }
+    ]
+  },
+  "agentLibrary": {
+    "required": true,
+    "role": "right-side-access-surface",
+    "contracts": [
+      "pact.knowledge-access.v1",
+      "pact.agent-library.v1"
+    ],
+    "policy": {
+      "secretHandling": "secretRef-only",
+      "receiptRequired": true,
+      "loanRecordRequired": true,
+      "deniedAuditRequired": true,
+      "enforceBefore": [
+        "search",
+        "evidence-read",
+        "context-bundle",
+        "export",
+        "distillation",
+        "memory-write"
+      ]
+    }
+  },
+  "dehydration": {
+    "profileId": "knowledge-transformation-standalone",
+    "mode": "detach-application-from-full-platform",
+    "preserveCapabilities": [
+      "authorization",
+      "operation-dispatch",
+      "audit",
+      "raw-object-storage",
+      "upload-session",
+      "checkpoint-receipt",
+      "module-lifecycle",
+      "runtime-health"
+    ],
+    "removeSurfaces": [
+      "full-control-panel",
+      "agent-workspace-ui",
+      "codespace-ui",
+      "tool-skill-admin-ui",
+      "production-readiness-console",
+      "sample-business-pack-console"
+    ],
+    "externalize": [
+      {
+        "capability": "knowledge-distillation",
+        "serviceRoot": "external-services/knowledge-distillation-service",
+        "contract": "pact.external-knowledge-distillation.v1"
+      }
+    ]
+  },
+  "dynamicModuleMount": {
+    "enabled": true,
+    "hotReloadableMounts": [
+      "documentParser",
+      "ocr",
+      "pdfProcessor",
+      "knowledgeBase",
+      "vectorStore",
+      "graphStore"
+    ],
+    "hotSwitchPolicy": "provider-contract-compatible-only",
+    "hotUnloadPolicy": "require-dependency-detach-and-health-gate"
+  },
+  "startupComposition": {
+    "enabled": true,
+    "bindProviders": [
+      {
+        "contract": "pact.knowledge-transformation.v1",
+        "provider": "KnowledgeTransformation"
+      },
+      {
+        "contract": "pact.knowledge.v1",
+        "provider": "KnowledgeCore.knowledgeBase"
+      },
+      {
+        "contract": "pact.knowledge-access.v1",
+        "provider": "AgentLibraryAccessPolicy"
+      },
+      {
+        "contract": "pact.external-knowledge-distillation.v1",
+        "provider": "ExternalKnowledgeDistillationService"
+      }
+    ],
+    "healthGates": [
+      "security-permissions",
+      "storage-core",
+      "knowledgeBase",
+      "agent-library-access",
+      "external-knowledge-distillation"
+    ],
+    "fallbackPolicy": "fail-fast-for-required-pipeline-stage"
+  },
+  "verification": [
+    "npm run server:verify:knowledge-transformation --silent",
+    "npm run server:verify:agent-library-access --silent",
+    "npm run server:verify:knowledge-distillation-standalone-service --silent",
+    "npm run server:verify:protocol-operations --silent"
+  ]
+}

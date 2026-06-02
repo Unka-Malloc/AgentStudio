@@ -1,0 +1,320 @@
+{
+  "schemaVersion": 1,
+  "kind": "pact.composition.preset",
+  "presetId": "skill-hosting-repository",
+  "displayName": "Skill Hosting Repository",
+  "status": "active",
+  "compositionClass": "deployment-dependency-package",
+  "deploymentTarget": {
+    "applicationId": "skill-hosting-repository",
+    "serviceName": "external.skill.repository",
+    "boundary": "standalone-external-application",
+    "outputBundleId": "pact-skill-hosting-repository",
+    "outputRoot": "build/composition-packages/skill-hosting-repository"
+  },
+  "intent": {
+    "summary": "Package Pact's skill hosting repository as a standalone service that stores approved skill packages centrally and lets agents pull them into local runtimes when needed.",
+    "repositoryKind": "skill-hosting",
+    "executionPolicy": "server-hosts-and-distributes-skills; agents-run-skills-locally",
+    "dehydrationGoal": "standalone-skill-repository-with-gateway-cooperation-and-async-queue"
+  },
+  "coreDependencyPackage": {
+    "policy": "include-platform-core-required-by-skill-repository",
+    "featureIds": [
+      "core-platform",
+      "security-permissions",
+      "operation-dispatcher",
+      "console-shell",
+      "storage-core",
+      "module-management-core",
+      "data-structure-core",
+      "devops-core",
+      "tool-management-core",
+      "work-queue-core",
+      "client-runtime-core",
+      "agent-memory"
+    ],
+    "preserveContracts": [
+      "pact.security-permissions.v1",
+      "pact.operation-dispatcher.v1",
+      "pact.storage.v1",
+      "pact.module-management.v1",
+      "pact.devops.v1",
+      "pact.capability-package-lifecycle.v1",
+      "pact.skill-registry.v1",
+      "pact.client-runtime-bootstrap.v1"
+    ],
+    "reason": "The standalone repository still needs authorization, operation dispatch, audit, storage, upload sessions, jobs, client bootstrap planning, module lifecycle, and runtime health."
+  },
+  "applicationDependencyPackage": {
+    "policy": "include-skill-hosting-routes-registry-and-gateway-cooperation",
+    "featureIds": [
+      "agent-gateway",
+      "agent-traffic-gateway"
+    ],
+    "moduleDescriptors": [
+      "server/platform/specialized/capabilities/agent-ingress/traffic-gateway/module.json"
+    ],
+    "moduleEntrypoints": [
+      "server/platform/specialized/capabilities/package-lifecycle/index.mjs",
+      "server/platform/specialized/capabilities/skills/tool-skill-management-provider.mjs",
+      "server/platform/specialized/capabilities/agent-ingress/traffic-gateway/index.mjs",
+      "server/services/client/client-runtime-core/client-runtime-allocator.mjs",
+      "server/services/client/client-runtime-core/client-runtime-bootstrap.mjs",
+      "server/services/client/work-queue-core/job-pipeline.mjs",
+      "server/services/client/work-queue-core/queue-monitor.mjs",
+      "server/services/client/work-queue-core/jobs/job-manager.mjs",
+      "server/services/client/work-queue-core/jobs/job-worker.mjs"
+    ],
+    "requiredProtocols": [
+      "pact.capability-package-lifecycle.v1",
+      "pact.skill-registry.v1",
+      "pact.tool-skill-management.v1",
+      "pact.skill-hub-discovery.v1",
+      "pact.agent-traffic-gateway.v1",
+      "pact.client-runtime-allocator.v1",
+      "pact.client-runtime-bootstrap.v1"
+    ],
+    "requiredOperations": [
+      "capability_packages.list",
+      "capability_packages.plan",
+      "capability_packages.submit",
+      "capability_packages.lifecycle",
+      "tool_management.catalog",
+      "tool_management.toolsets",
+      "tool_management.toolsets_resolve",
+      "tool_management.profiles",
+      "tool_management.policy_evaluate",
+      "tool_management.policy_preview",
+      "tool_management.grants",
+      "tool_management.create_grant",
+      "tool_management.audit",
+      "tool_management.metrics_health",
+      "tool_management.events",
+      "client_runtime.bootstrap.plan",
+      "client_runtime.bootstrap.pull",
+      "client_runtime.status",
+      "uploads.create_session",
+      "uploads.get_session",
+      "uploads.upload_chunk",
+      "jobs.create",
+      "jobs.list",
+      "jobs.get",
+      "agent_sync.publish",
+      "agent_sync.subscribe"
+    ]
+  },
+  "skillRepository": {
+    "storage": "server-skill-library",
+    "storageRoot": "capability-packages/skill-library",
+    "acceptedPackageKind": "skill",
+    "ingestPolicy": "capability-package-lifecycle-first",
+    "publishStates": [
+      "approved",
+      "installed",
+      "active"
+    ],
+    "serverExecutionPolicy": "never-execute-skill-code-during-hosting",
+    "pullModel": {
+      "catalogProtocol": "pact.skill-hub-discovery.v1",
+      "bundleProtocol": "pact.skill-registry.v1",
+      "agentTarget": "local-skill-hub",
+      "agentRuntime": "local",
+      "downloadReceiptRequired": true,
+      "usageReportRequired": true
+    },
+    "artifactPolicy": {
+      "manifestRequired": true,
+      "signatureRequiredByDefault": true,
+      "digestRequired": true,
+      "maxBundleFiles": 64,
+      "maxBundleFileBytes": 524288
+    }
+  },
+  "gatewayCooperation": {
+    "upstreamServiceAspect": {
+      "role": "skill-publisher-and-admin-ingress",
+      "gatewayProtocol": "pact.agent-traffic-gateway.v1",
+      "routes": [
+        "/api/capability-packages",
+        "/api/upload-sessions",
+        "/api/jobs",
+        "/api/tool-management/v1"
+      ],
+      "operationIds": [
+        "capability_packages.submit",
+        "capability_packages.lifecycle",
+        "uploads.create_session",
+        "uploads.upload_chunk",
+        "jobs.create"
+      ]
+    },
+    "downstreamClientAspect": {
+      "role": "agent-local-pull-and-bootstrap",
+      "gatewayProtocol": "pact.agent-traffic-gateway.v1",
+      "routes": [
+        "/mcp",
+        "/api/mcp",
+        "/api/client-runtime",
+        "/api/tool-management/v1/catalog"
+      ],
+      "operationIds": [
+        "tool_management.catalog",
+        "tool_management.toolsets_resolve",
+        "client_runtime.bootstrap.plan",
+        "client_runtime.bootstrap.pull",
+        "agent_sync.subscribe"
+      ]
+    },
+    "platformApplicationServiceAspect": {
+      "role": "skill-catalog-policy-audit-and-revision-events",
+      "operationIds": [
+        "tool_management.policy_evaluate",
+        "tool_management.grants",
+        "tool_management.audit",
+        "tool_management.metrics_health",
+        "agent_sync.publish"
+      ]
+    }
+  },
+  "queueManagement": {
+    "required": true,
+    "provider": "work-queue-core",
+    "asyncRuntime": true,
+    "blockingPolicy": "http-request-returns-job-or-bootstrap-plan; package-validation-and-materialization-run-in-workers",
+    "jobOperations": [
+      "jobs.create",
+      "jobs.list",
+      "jobs.get"
+    ],
+    "queues": [
+      {
+        "queueId": "skill-package-ingest",
+        "operationClass": "upload-manifest-validation-signature-digest-check",
+        "triggerOperations": [
+          "capability_packages.submit",
+          "uploads.create_session",
+          "uploads.upload_chunk"
+        ],
+        "workerPolicy": "bounded-concurrency"
+      },
+      {
+        "queueId": "skill-catalog-index-refresh",
+        "operationClass": "active-skill-catalog-revision-and-discovery-index-refresh",
+        "triggerOperations": [
+          "capability_packages.lifecycle"
+        ],
+        "workerPolicy": "debounced-single-writer"
+      },
+      {
+        "queueId": "skill-download-materialization",
+        "operationClass": "agent-visible-bundle-materialization-bootstrap-and-receipt",
+        "triggerOperations": [
+          "client_runtime.bootstrap.plan",
+          "client_runtime.bootstrap.pull"
+        ],
+        "workerPolicy": "bounded-concurrency"
+      },
+      {
+        "queueId": "skill-usage-report-ingest",
+        "operationClass": "download-receipt-usage-report-audit-and-metrics",
+        "triggerOperations": [
+          "agent_sync.publish",
+          "tool_management.audit",
+          "tool_management.events"
+        ],
+        "workerPolicy": "append-only"
+      }
+    ]
+  },
+  "dehydration": {
+    "profileId": "skill-hosting-repository",
+    "mode": "detach-skill-hosting-repository-from-full-platform",
+    "preserveCapabilities": [
+      "authorization",
+      "operation-dispatch",
+      "audit",
+      "capability-package-lifecycle",
+      "skill-registry",
+      "skill-hub-discovery",
+      "upload-session",
+      "job-queue",
+      "client-runtime-bootstrap",
+      "gateway-ingress",
+      "module-lifecycle",
+      "runtime-health"
+    ],
+    "removeSurfaces": [
+      "full-control-panel",
+      "knowledge-ui",
+      "agent-workspace-ui",
+      "codespace-ui",
+      "production-readiness-console",
+      "sample-business-pack-console"
+    ],
+    "runtimeArtifacts": {
+      "skillBundles": "stored-in-server-skill-library",
+      "skillExecutionRuntime": "excluded-agent-local-only",
+      "externalToolRuntimes": "excluded-unless-declared-as-skill-package-dependency"
+    }
+  },
+  "dynamicModuleMount": {
+    "enabled": true,
+    "hotReloadableProviders": [
+      "CapabilityPackageLifecycle",
+      "SkillHubDiscovery",
+      "ToolSkillManagement",
+      "AgentTrafficGatewayIngress",
+      "ClientRuntimeBootstrap",
+      "WorkQueueWorker"
+    ],
+    "hotSwitchPolicy": "provider-contract-compatible-only",
+    "hotUnloadPolicy": "require-no-active-skill-package-ingest-or-download-job"
+  },
+  "startupComposition": {
+    "enabled": true,
+    "bindProviders": [
+      {
+        "contract": "pact.capability-package-lifecycle.v1",
+        "provider": "CapabilityPackageLifecycle"
+      },
+      {
+        "contract": "pact.skill-registry.v1",
+        "provider": "CapabilityPackageLifecycle.skillLibrary"
+      },
+      {
+        "contract": "pact.tool-skill-management.v1",
+        "provider": "ToolSkillManagement"
+      },
+      {
+        "contract": "pact.skill-hub-discovery.v1",
+        "provider": "ToolSkillManagement.skillCatalog"
+      },
+      {
+        "contract": "pact.agent-traffic-gateway.v1",
+        "provider": "AgentTrafficGatewayIngress"
+      },
+      {
+        "contract": "pact.client-runtime-bootstrap.v1",
+        "provider": "ClientRuntimeBootstrap"
+      }
+    ],
+    "healthGates": [
+      "security-permissions",
+      "capability_packages.list",
+      "tool_management.catalog",
+      "client_runtime.status",
+      "jobs.list",
+      "gateway-ingress-profile"
+    ],
+    "fallbackPolicy": "skill-repository-starts-read-only-when-queue-or-gateway-is-degraded"
+  },
+  "verification": [
+    "npm run server:verify:tool-skill-management --silent",
+    "npm run server:verify:capability-package-lifecycle --silent",
+    "npm run server:verify:client-runtime-allocator --silent",
+    "npm run server:verify:client-runtime-bootstrap --silent",
+    "npm run server:verify:gateway-ingress --silent",
+    "npm run server:verify:protocol-operations --silent"
+  ]
+}

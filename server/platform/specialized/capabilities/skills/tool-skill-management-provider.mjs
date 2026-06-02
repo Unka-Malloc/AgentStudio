@@ -23,15 +23,7 @@ const LOCAL_GRANT_SHAREDSPACE_CORE_OPERATIONS = Object.freeze([
   "pact.sharedspace.file.write",
   "pact.sharedspace.item.delete",
   "pact.sharedspace.sync.plan",
-  "pact.sharedspace.sync.apply",
-  "pact.sharedspace.drive.connect",
-  "pact.sharedspace.drive.status",
-  "pact.sharedspace.drive.item.list",
-  "pact.sharedspace.drive.file.download",
-  "pact.sharedspace.drive.file.upload",
-  "pact.sharedspace.drive.sync.plan",
-  "pact.sharedspace.drive.sync.apply",
-  "pact.sharedspace.drive.permission.list"
+  "pact.sharedspace.sync.apply"
 ]);
 
 const LOCAL_GRANT_WRITE_TOOLSETS = Object.freeze([
@@ -237,14 +229,6 @@ function localGrantSharedspaceExchangeReceiptContract() {
       "local-dirs-listed",
       "sync-planned",
       "sync-applied",
-      "drive-connected",
-      "drive-status",
-      "drive-items-listed",
-      "drive-file-downloaded",
-      "drive-file-uploaded",
-      "drive-sync-planned",
-      "drive-sync-applied",
-      "drive-permissions-listed",
       "operation"
     ],
     fields: [
@@ -252,23 +236,11 @@ function localGrantSharedspaceExchangeReceiptContract() {
       "outlet",
       "referencePolicy",
       "workspaceRef",
-      "driveRef",
-      "provider",
       "path",
       "paths",
       "itemCount",
-      "transferReceiptId",
-      "accessReceiptId",
       "checkpointId",
       "syncReceiptId",
-      "contractVerified",
-      "localAdapterVerified",
-      "remoteLiveVerified",
-      "remoteReadInvoked",
-      "remoteWriteInvoked",
-      "providerReceipt",
-      "transferBytes",
-      "bytesPerSecond",
       "nextOperations"
     ]
   };

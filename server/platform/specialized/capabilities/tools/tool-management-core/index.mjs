@@ -10,6 +10,9 @@ import { createToolExecutionRuntime } from "./runtime.mjs";
 import { createToolManagementHttpRouter } from "./http.mjs";
 import { getRuntimeLogger } from "../../../../interactive/product-api.mjs";
 import { createSecurityPermissionsProvider } from "../../../../common/security/security-permissions-provider.mjs";
+import {
+  createExternalMcpPassthroughRuntime
+} from "../../../../common/composition-management/external-mcp-passthrough-runtime.mjs";
 
 export {
   TOOL_MANAGEMENT_SCOPES,
@@ -34,8 +37,16 @@ export function createToolManagementPlatform({
   const effectiveSecurityPermissions =
     securityPermissions ||
     (consoleAuth ? createSecurityPermissionsProvider({ consoleAuth }) : null);
+  const externalMcpPassthroughRuntime = createExternalMcpPassthroughRuntime({ userDataPath, logger });
+  function activeOperationsWithExternalMcp() {
+    return [
+      ...operations,
+      ...externalMcpPassthroughRuntime.listVirtualOperationsSync()
+    ];
+  }
+  let effectiveOperations = activeOperationsWithExternalMcp();
   const registry = createToolCatalogRegistry({
-    operations,
+    operations: effectiveOperations,
     activeFeatureIds: featureRuntime?.activeFeatureIds || null
   });
   const store = createToolManagementStore({
@@ -55,7 +66,8 @@ export function createToolManagementPlatform({
     store,
     policyEngine,
     securityPermissions: effectiveSecurityPermissions,
-    operations,
+    operations: effectiveOperations,
+    externalMcpPassthroughRuntime,
     controllers,
     operationAuditStore,
     operationConcurrencyScope,
@@ -77,6 +89,24 @@ export function createToolManagementPlatform({
   });
   store.saveCatalogSnapshot(registry.getCatalog());
 
+  function refreshExternalServiceTools() {
+    effectiveOperations = activeOperationsWithExternalMcp();
+    const catalog = registry.refresh(effectiveOperations);
+    runtime.refreshOperations?.(effectiveOperations);
+    store.saveCatalogSnapshot(catalog);
+    return {
+      ok: true,
+      toolCount: catalog.tools.length,
+      externalMcpOperationCount: effectiveOperations.filter((operation) =>
+        operation.aspects?.includes("external-mcp-passthrough")
+      ).length,
+      externalServiceOperationCount: effectiveOperations.filter((operation) =>
+        operation.aspects?.includes("external-service")
+      ).length,
+      fingerprint: catalog.fingerprint
+    };
+  }
+
   return {
     registry,
     store,
@@ -86,6 +116,8 @@ export function createToolManagementPlatform({
     securityPermissions: effectiveSecurityPermissions,
     authorizationStore,
     catalog: () => registry.getCatalog(),
+    externalMcpPassthroughRuntime,
+    refreshExternalServiceTools,
     close() {
       store.close();
     }

@@ -7,39 +7,20 @@ import { createWorkspaceGovernanceRegistry } from "../agent/workspace-governance
 import { createContributionRegistry } from "../agent/workspace-contribution/index.mjs";
 import { createCodespaceRegistry } from "../capabilities/code-management/codespace/index.mjs";
 import { createCapabilityPackageRegistry } from "../capabilities/package-lifecycle/index.mjs";
-import { createCloudDrivePort } from "../agent/cloud-drive-port/index.mjs";
-import { createAssetLineageRegistry } from "../knowledge/assets/asset-lineage/index.mjs";
-import { evaluateKnowledgeAccess } from "../knowledge/agent-library/access-policy.mjs";
 import {
-  createKnowledgeBackendPort,
-  isKnowledgeBackendEvidenceId
-} from "../knowledge/storage/knowledge-backend-port/index.mjs";
+  createCloudDriveUpstreamGateway,
+  isCloudDriveUpstreamGatewayOperation
+} from "./cloud-drive-upstream-gateway.mjs";
 import {
   GERRIT_ACTIONS,
   executeGerritCommonOperation,
   uploadGerritGitChange
 } from "../capabilities/code-review/gerrit/index.mjs";
 import { executeRepoOperation } from "../capabilities/code-repository/repo-operations/index.mjs";
-import { createDataConnectorGovernance } from "../knowledge/connectors/data-connector-governance/index.mjs";
-import {
-  listCapacityBenchmarkTargets,
-  runPerformanceCapacityBenchmark
-} from "../knowledge/performance/capacity-benchmark/index.mjs";
 import {
   downloadRuntimeDependency,
   listRuntimeDependencies
 } from "../capabilities/runtime-dependencies/index.mjs";
-import {
-  getSourceFileEvidence,
-  isSourceEvidenceId,
-  searchSourceFiles
-} from "../knowledge/retrieval/source-file-search-service.mjs";
-import { createKnowledgeTransformationProvider } from "../knowledge/transformation/knowledge-transformation-provider.mjs";
-import {
-  createExternalKnowledgeDistillationClient,
-  resolveExternalKnowledgeDistillationConfig
-} from "../knowledge/invocation/external-distillation-service/index.mjs";
-import { executeKnowledgeWordCloudOperation } from "./knowledge-word-cloud-operation-executor.mjs";
 import { getCodexOAuthStatus, startCodexDeviceLogin } from "../../common/security/auth/codex-oauth-service.mjs";
 import { buildProductionHealthReport } from "../../common/production-readiness/report-reader.mjs";
 import {
@@ -70,11 +51,48 @@ import { SECURITY_PERMISSIONS_PROTOCOL_VERSION } from "../../common/security/sec
 
 const contributionRegistries = new Map();
 const codespaceRegistries = new Map();
-const cloudDrivePorts = new Map();
+const cloudDriveUpstreamGateways = new Map();
 const knowledgeBackendPorts = new Map();
 const PATH_BROWSER_MAX_ENTRIES = 600;
 const EXTERNAL_KNOWLEDGE_DISTILLATION_SERVICE_ID = "external.knowledge.distillation";
 const EXTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_PREFIX = "external.knowledge.distillation.";
+
+async function loadKnowledgeAccessModule() {
+  return import("../knowledge/agent-library/access-policy.mjs");
+}
+
+async function loadKnowledgeBackendPortModule() {
+  return import("../knowledge/storage/knowledge-backend-port/index.mjs");
+}
+
+async function loadSourceFileSearchServiceModule() {
+  return import("../knowledge/retrieval/source-file-search-service.mjs");
+}
+
+async function loadKnowledgeTransformationModule() {
+  return import("../knowledge/transformation/knowledge-transformation-provider.mjs");
+}
+
+async function loadExternalKnowledgeDistillationModule() {
+  return import("../knowledge/invocation/external-distillation-service/index.mjs");
+}
+
+async function loadAssetLineageModule() {
+  return import("../knowledge/assets/asset-lineage/index.mjs");
+}
+
+async function loadDataConnectorGovernanceModule() {
+  return import("../knowledge/connectors/data-connector-governance/index.mjs");
+}
+
+async function loadPerformanceCapacityModule() {
+  return import("../knowledge/performance/capacity-benchmark/index.mjs");
+}
+
+async function executeKnowledgeWordCloudOperation(...args) {
+  const module = await import("./knowledge-word-cloud-operation-executor.mjs");
+  return module.executeKnowledgeWordCloudOperation(...args);
+}
 const PATH_BROWSER_IGNORED_NAMES = new Set([
   ".git",
   ".hg",
@@ -760,9 +778,10 @@ function codespaceRegistryFor(context = {}) {
   return codespaceRegistries.get(key);
 }
 
-function knowledgeBackendPortFor(context = {}) {
+async function knowledgeBackendPortFor(context = {}) {
   const key = context.userDataPath || "default";
   if (!knowledgeBackendPorts.has(key)) {
+    const { createKnowledgeBackendPort } = await loadKnowledgeBackendPortModule();
     knowledgeBackendPorts.set(key, createKnowledgeBackendPort({
       userDataPath: context.userDataPath
     }));
@@ -770,14 +789,14 @@ function knowledgeBackendPortFor(context = {}) {
   return knowledgeBackendPorts.get(key);
 }
 
-function cloudDrivePortFor(context = {}) {
+function cloudDriveUpstreamGatewayFor(context = {}) {
   const key = context.userDataPath || "default";
-  if (!cloudDrivePorts.has(key)) {
-    cloudDrivePorts.set(key, createCloudDrivePort({
+  if (!cloudDriveUpstreamGateways.has(key)) {
+    cloudDriveUpstreamGateways.set(key, createCloudDriveUpstreamGateway({
       userDataPath: context.userDataPath
     }));
   }
-  return cloudDrivePorts.get(key);
+  return cloudDriveUpstreamGateways.get(key);
 }
 
 function requireRuntimeMethod(runtime, methodName, message) {
@@ -1635,6 +1654,7 @@ async function executeKnowledgeAccessOperation({ operationId, input, context }) 
         ...((input.request && typeof input.request === "object") ? input.request : input)
       };
       const policyPayload = input.policy || input.authorizationPolicy || input;
+      const { evaluateKnowledgeAccess } = await loadKnowledgeAccessModule();
       const decision = evaluateKnowledgeAccess(requestPayload, policyPayload);
       appendAuthorizationArtifact(securityPermissions, "appendReceipt", decision.knowledgeAccessReceipt, {
         decisionId: decision.decisionId,
@@ -2139,7 +2159,7 @@ async function executeKnowledgeDocumentParsingOperation({ operationId, input, co
     return null;
   }
   const runtime = typeof context.createDocumentParsingRuntime === "function"
-    ? context.createDocumentParsingRuntime()
+    ? await context.createDocumentParsingRuntime()
     : null;
   if (!runtime || typeof runtime.parseDocuments !== "function") {
     return result(503, { error: "文档解析运行时不可用。" });
@@ -2173,7 +2193,7 @@ async function executeKnowledgeDocumentParsingOperation({ operationId, input, co
       dryRun: true
     });
     const publicResult = typeof context.toPublicDocumentParsingResult === "function"
-      ? context.toPublicDocumentParsingResult(operationResult)
+      ? await context.toPublicDocumentParsingResult(operationResult)
       : operationResult;
     return result(200, publicResult);
   } finally {
@@ -2418,7 +2438,8 @@ async function executeMonitorAlertOperation({ operationId, input = {}, context }
   const handledOperations = new Set([
     "system.monitor_alerts.get",
     "system.monitor_alerts.set",
-    "system.monitor_alerts.ack"
+    "system.monitor_alerts.ack",
+    "system.background_supervisor.recover"
   ]);
   if (!handledOperations.has(id)) {
     return null;
@@ -2451,6 +2472,32 @@ async function executeMonitorAlertOperation({ operationId, input = {}, context }
     }
     const alertId = String(input.alertId || input["alert-id"] || input.id || "").trim();
     return result(200, await devopsProvider.acknowledgeMonitorAlert({ ...input, alertId, queueMonitor: context.queueMonitor }));
+  }
+  if (id === "system.background_supervisor.recover") {
+    if (typeof devopsProvider.recoverBackgroundSupervisor !== "function") {
+      return result(503, { error: "后台 Worker 管理进程恢复接口不可用。" });
+    }
+    const recovery = await devopsProvider.recoverBackgroundSupervisor({
+      ...input,
+      userDataPath: context.userDataPath
+    });
+    const backgroundProcessStatus =
+      typeof devopsProvider.getBackgroundProcessStatus === "function"
+        ? await devopsProvider.getBackgroundProcessStatus({ userDataPath: context.userDataPath })
+        : null;
+    const monitorAlertState =
+      typeof devopsProvider.getMonitorAlertState === "function"
+        ? await devopsProvider.getMonitorAlertState({
+            ...input,
+            userDataPath: context.userDataPath,
+            queueMonitor: context.queueMonitor
+          })
+        : null;
+    return result(200, {
+      recovery,
+      backgroundProcessStatus,
+      monitorAlertState
+    });
   }
 
   return null;
@@ -5210,7 +5257,7 @@ async function executeKnowledgeBackendOperation({ operationId, input = {}, conte
   if (!handledOperations.has(id)) {
     return null;
   }
-  const port = knowledgeBackendPortFor(context);
+  const port = await knowledgeBackendPortFor(context);
   const subject = knowledgeBackendSubject(context, input);
   const workspaceId = workspaceIdFrom(input);
   try {
@@ -5237,55 +5284,22 @@ async function executeKnowledgeBackendOperation({ operationId, input = {}, conte
 
 async function executeCloudDriveOperation({ operationId, input = {}, context }) {
   const id = String(operationId || "");
-  const handledOperations = new Set([
-    "sharedspace.drive.connect",
-    "sharedspace.drive.status",
-    "sharedspace.drive.item.list",
-    "sharedspace.drive.file.download",
-    "sharedspace.drive.file.upload",
-    "sharedspace.drive.sync.plan",
-    "sharedspace.drive.sync.apply",
-    "sharedspace.drive.permission.list"
-  ]);
-  if (!handledOperations.has(id)) {
+  if (!isCloudDriveUpstreamGatewayOperation(id)) {
     return null;
   }
-  const port = cloudDrivePortFor(context);
+  const gateway = cloudDriveUpstreamGatewayFor(context);
   const operationInput = {
     ...input,
-    workspaceId: workspaceIdFrom(input),
-    operationId: id
+    workspaceId: workspaceIdFrom(input)
   };
   try {
-    if (id === "sharedspace.drive.connect") {
-      return result(200, await port.connect(operationInput));
-    }
-    if (id === "sharedspace.drive.status") {
-      return result(200, await port.status(operationInput));
-    }
-    if (id === "sharedspace.drive.item.list") {
-      return result(200, await port.listItems(operationInput));
-    }
-    if (id === "sharedspace.drive.file.download") {
-      return result(200, await port.downloadFile(operationInput));
-    }
-    if (id === "sharedspace.drive.file.upload") {
-      return result(201, await port.uploadFile(operationInput));
-    }
-    if (id === "sharedspace.drive.sync.plan") {
-      return result(200, await port.syncPlan(operationInput));
-    }
-    if (id === "sharedspace.drive.sync.apply") {
-      return result(200, await port.syncApply(operationInput));
-    }
-    if (id === "sharedspace.drive.permission.list") {
-      return result(200, await port.permissionList(operationInput));
-    }
+    const gatewayResult = await gateway.execute({ operationId: id, input: operationInput });
+    if (!gatewayResult) return null;
+    return result(gatewayResult.status, gatewayResult.payload);
   } catch (error) {
     const status = error?.code === "UNSUPPORTED_PROVIDER" || error?.code === "DRIVE_CONNECTION_NOT_FOUND" ? 404 : 400;
-    return result(status, errorPayload(error, "Cloud drive operation failed."));
+    return result(status, errorPayload(error, "Cloud drive upstream gateway operation failed."));
   }
-  return null;
 }
 
 async function executeKnowledgeEvaluationOperation({ operationId, input, context }) {
@@ -5438,6 +5452,10 @@ async function executeKnowledgeSummarizationOperation({ operationId, input, cont
 
 async function externalKnowledgeDistillationClient({ input = {}, context = {} } = {}) {
   const settings = await loadSettings(context.userDataPath);
+  const {
+    createExternalKnowledgeDistillationClient,
+    resolveExternalKnowledgeDistillationConfig
+  } = await loadExternalKnowledgeDistillationModule();
   const config = resolveExternalKnowledgeDistillationConfig({
     input,
     settings
@@ -5627,6 +5645,7 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
   if (id === "knowledge.search" || id === "knowledge.search.get") {
     let payload = normalizeKnowledgeSearchInput(input);
     if (payload.rawSourceSearch === true || payload.sourceSearch === true) {
+      const { searchSourceFiles } = await loadSourceFileSearchServiceModule();
       return result(200, await searchSourceFiles({
         userDataPath: context.userDataPath,
         query: payload.query || payload.q || "",
@@ -5635,7 +5654,7 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
       }));
     }
     if (knowledgeBackendSearchRequested(payload)) {
-      const port = knowledgeBackendPortFor(context);
+      const port = await knowledgeBackendPortFor(context);
       const operationResult = await port.search(payload, {
         subject: knowledgeBackendSubject(context, payload),
         workspaceId: workspaceIdFrom(payload)
@@ -5788,8 +5807,10 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
 
   if (id === "knowledge.evidence" || id === "knowledge.evidence.get") {
     const evidenceId = input.evidenceId || input["evidence-id"] || input.id || "";
-    if (isKnowledgeBackendEvidenceId(evidenceId) || knowledgeBackendProviderRequested(input)) {
-      const port = knowledgeBackendPortFor(context);
+    const knowledgeBackendModule = await loadKnowledgeBackendPortModule();
+    const sourceFileSearchModule = await loadSourceFileSearchServiceModule();
+    if (knowledgeBackendModule.isKnowledgeBackendEvidenceId(evidenceId) || knowledgeBackendProviderRequested(input)) {
+      const port = await knowledgeBackendPortFor(context);
       const operationResult = await port.getEvidence({ ...input, evidenceId }, {
         subject: knowledgeBackendSubject(context, input),
         workspaceId: workspaceIdFrom(input)
@@ -5798,12 +5819,12 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
         appendKnowledgeAccessDecisionArtifacts(context, operationResult.accessDecision, id);
         return result(operationResult.httpStatus || 200, operationResult);
       }
-      if (isKnowledgeBackendEvidenceId(evidenceId)) {
+      if (knowledgeBackendModule.isKnowledgeBackendEvidenceId(evidenceId)) {
         return result(404, { error: "外部知识库 evidence 不存在。" });
       }
     }
-    if (isSourceEvidenceId(evidenceId)) {
-      const operationResult = await getSourceFileEvidence({
+    if (sourceFileSearchModule.isSourceEvidenceId(evidenceId)) {
+      const operationResult = await sourceFileSearchModule.getSourceFileEvidence({
         userDataPath: context.userDataPath,
         evidenceId
       });
@@ -6860,6 +6881,7 @@ async function executeKnowledgeTransformationOperation({ operationId, input = {}
   if (id === "knowledge.distillation.export") {
     return result(410, internalKnowledgeDistillationRemovedPayload(id));
   }
+  const { createKnowledgeTransformationProvider } = await loadKnowledgeTransformationModule();
   const provider = createKnowledgeTransformationProvider({
     knowledgeCore: getKnowledgeCore(context.runtime),
     metadataStore: context.metadataStore
@@ -6956,6 +6978,7 @@ async function executeAssetLineageOperation({ operationId, input, context }) {
   if (!String(operationId || "").startsWith("asset_lineage.")) {
     return null;
   }
+  const { createAssetLineageRegistry } = await loadAssetLineageModule();
   const lineage = createAssetLineageRegistry({ userDataPath: context.userDataPath });
   if (operationId === "asset_lineage.describe") {
     return result(200, await lineage.describe());
@@ -6988,6 +7011,7 @@ async function executeDataConnectorOperation({ operationId, input, context }) {
   if (!String(operationId || "").startsWith("data_connectors.governance.")) {
     return null;
   }
+  const { createDataConnectorGovernance } = await loadDataConnectorGovernanceModule();
   const governance = createDataConnectorGovernance({ userDataPath: context.userDataPath });
   if (operationId === "data_connectors.governance.describe") {
     return result(200, await governance.describe());
@@ -7009,10 +7033,12 @@ async function executeDataConnectorOperation({ operationId, input, context }) {
 
 async function executePerformanceCapacityOperation({ operationId, input, context }) {
   if (operationId === "performance.capacity.targets") {
+    const { listCapacityBenchmarkTargets } = await loadPerformanceCapacityModule();
     return result(200, listCapacityBenchmarkTargets());
   }
   if (operationId === "performance.capacity.benchmark") {
     try {
+      const { runPerformanceCapacityBenchmark } = await loadPerformanceCapacityModule();
       return result(200, await runPerformanceCapacityBenchmark({
         userDataPath: context.userDataPath,
         profileId: input.profileId || input.profile || "smoke",

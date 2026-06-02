@@ -20,9 +20,27 @@ import { createDevopsProvider } from "../common/devops/devops-provider.mjs";
 import { registerDevopsPlatformServices } from "../common/devops/register.mjs";
 import { getAgentConfigRegistry } from "../specialized/agent/agent-configs/config-registry.mjs";
 import { createConsoleDomainServices } from "../specialized/console/console-domain-services.mjs";
-import { createKnowledgeBuiltinMountProviders } from "../specialized/knowledge/storage/builtin-mount-providers.mjs";
-import { createKnowledgeMetadataStoreDomainServices } from "../specialized/knowledge/storage/metadata-store-domain-services.mjs";
 import { createPlatformRegistry } from "./platform-registry.mjs";
+
+async function createRuntimeKnowledgeProviders({ userDataPath, featureRuntime }) {
+  if (!featureRuntime.activeFeatureIds.includes("knowledge-core")) {
+    return {
+      metadataStoreDomainServices: {},
+      builtinMountProviders: {}
+    };
+  }
+  const [
+    metadataModule,
+    mountModule
+  ] = await Promise.all([
+    import("../specialized/knowledge/storage/metadata-store-domain-services.mjs"),
+    import("../specialized/knowledge/storage/builtin-mount-providers.mjs")
+  ]);
+  return {
+    metadataStoreDomainServices: metadataModule.createKnowledgeMetadataStoreDomainServices(),
+    builtinMountProviders: mountModule.createKnowledgeBuiltinMountProviders({ userDataPath })
+  };
+}
 
 export async function createServerCompositionRoot({
   userDataPath,
@@ -49,11 +67,12 @@ export async function createServerCompositionRoot({
   const isAnyFeatureActive = (...featureIds) =>
     featureIds.some((featureId) => isFeatureActive(featureId));
 
+  const knowledgeProviders = await createRuntimeKnowledgeProviders({ userDataPath, featureRuntime });
   const runtime = await createServerRuntime({
     userDataPath,
     runtimeOptions: runtimeOptionsWithFeatures,
-    metadataStoreDomainServices: createKnowledgeMetadataStoreDomainServices(),
-    builtinMountProviders: createKnowledgeBuiltinMountProviders({ userDataPath })
+    metadataStoreDomainServices: knowledgeProviders.metadataStoreDomainServices,
+    builtinMountProviders: knowledgeProviders.builtinMountProviders
   });
   const consoleAuth = createConsoleAuth({ userDataPath });
   const securityPermissions = createSecurityPermissionsProvider({ consoleAuth });

@@ -315,6 +315,74 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     aspects: ["module-ecosystem", "sdk"]
   },
   {
+    id: "external_services.list",
+    feature: "module_management",
+    label: "外部服务列表",
+    target: { controller: "system", method: "handleExternalServices" },
+    http: { method: "GET", path: "/api/external-services", localInForwardMode: true },
+    rpc: { method: "external_services.list" },
+    cli: { command: ["external-services"], usage: "external-services" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: ["external-service-management", "composition-management", "dehydration"]
+  },
+  {
+    id: "external_services.config.get",
+    feature: "module_management",
+    label: "外部服务配置",
+    target: { controller: "system", method: "handleExternalServiceConfig" },
+    http: { method: "GET", path: "/api/external-services/config", localInForwardMode: true },
+    rpc: { method: "external_services.config.get" },
+    cli: { command: ["external-services", "config"], usage: "external-services config" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: ["external-service-management", "composition-management", "dehydration"]
+  },
+  {
+    id: "external_services.config.save",
+    feature: "module_management",
+    label: "保存外部服务配置",
+    target: { controller: "system", method: "handleExternalServiceConfigSave" },
+    http: { method: "POST", path: "/api/external-services/config", localInForwardMode: true },
+    rpc: { method: "external_services.config.save", body: "params" },
+    cli: { command: ["external-services", "config", "save"], usage: "external-services config save --body external-service.json" },
+    requiredScopes: ["runtime:admin"],
+    concurrencySafe: false,
+    concurrencyGroup: "external-services.config",
+    aspects: ["external-service-management", "composition-management", "dehydration"],
+    safety: { risk: "safe_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
+    id: "external_services.config.verify",
+    feature: "module_management",
+    label: "校验外部服务配置",
+    target: { controller: "system", method: "handleExternalServiceConfigVerify" },
+    http: { method: "POST", path: "/api/external-services/verify", localInForwardMode: true },
+    rpc: { method: "external_services.config.verify", body: "params" },
+    cli: { command: ["external-services", "config", "verify"], usage: "external-services config verify --body external-service.json" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: ["external-service-management", "composition-management", "dehydration"],
+    safety: { risk: "read_only" }
+  },
+  {
+    id: "external_services.runtime.refresh",
+    feature: "module_management",
+    label: "刷新外部服务后台",
+    target: { controller: "system", method: "handleExternalServiceRuntimeRefresh" },
+    http: { method: "POST", path: "/api/external-services/refresh", localInForwardMode: true },
+    rpc: { method: "external_services.runtime.refresh", body: "params" },
+    cli: { command: ["external-services", "refresh"], usage: "external-services refresh [--service-id id]" },
+    requiredScopes: ["runtime:admin"],
+    concurrencySafe: false,
+    concurrencyGroup: "external-services.runtime",
+    aspects: ["external-service-management", "composition-management", "dehydration", "tool-management"],
+    safety: { risk: "safe_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
     id: "workspace_governance.describe",
     feature: "agent_workspace",
     label: "工作空间组织治理总览",
@@ -2460,6 +2528,20 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { alertId: ["alert-id", "id"] }
     },
     requiredScopes: ["maintenance:admin"]
+  },
+  {
+    id: "system.background_supervisor.recover",
+    feature: "system",
+    label: "拉起后台 Worker 管理进程",
+    target: { controller: "system", method: "handleRecoverBackgroundSupervisor" },
+    http: { method: "POST", path: "/api/system/background-supervisor/recover", localInForwardMode: true },
+    rpc: { method: "system.background_supervisor.recover" },
+    cli: {
+      command: ["system", "background-supervisor", "recover"],
+      usage: "system background-supervisor recover"
+    },
+    requiredScopes: ["maintenance:admin"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
   },
   {
     id: "knowledge.affair_taxonomy",
