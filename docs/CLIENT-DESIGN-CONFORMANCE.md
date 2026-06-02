@@ -10,6 +10,10 @@ client refactor. `docs/CLIENT_ARCHITECTURE.md` and
 is retained only when it clearly serves the new six-module client. The old
 client is not a compatibility target.
 
+Historical context for the old client has been consolidated in
+`docs/CLIENT-HISTORY.md`. That document is reference-only and cannot justify
+legacy modules entering default navigation, CLI, tests, builds, or packaging.
+
 Decision values:
 
 - `keep`: stays in the main product path.

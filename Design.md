@@ -38,6 +38,12 @@ workflows, state, controls, and operational context.
    Use short transitions to clarify focus, reveal panels, or confirm state
    changes. Avoid ambient animation, decorative motion, and slow transitions.
 
+6. Truncation preserves access.
+   Ellipsis is allowed for dense operational UI, but it must not hide the real
+   value. Truncated values should reveal full text through hover or an
+   equivalent detail affordance. Copy behavior must be explicit and reserved for
+   operational targets that users naturally reuse outside the table.
+
 ## Color System
 
 Use the project tokens from `server-web/styles/tokens.css` as the source of
@@ -147,6 +153,9 @@ Layout rules:
   constrained dimensions so hover states and dynamic labels do not shift layout.
 - Text must wrap or truncate predictably and must never overlap adjacent
   controls.
+- Truncated text must remain inspectable without changing layout. Hover or an
+  equivalent detail affordance should reveal the full value. Copy is reserved
+  for explicit operational targets, not every truncated label.
 
 ## Spacing, Radius, And Shadow
 
@@ -178,6 +187,28 @@ surfaces. Reserve stronger shadows for drawers, popovers, and modals.
   a tooltip or accessible label.
 - Destructive actions use danger styling and should require clear context.
 
+### Operational Copy Values
+
+Use this pattern for literal operational values that users are likely to reuse
+outside the current component: upstream endpoints, local paths, container names,
+resource IDs, policy references, and similar technical targets.
+
+- Do not style copyable values as hyperlinks unless they navigate. Copy actions
+  must not use underlines or link-only color treatment.
+- Render the value as a compact code-value control: monospace text, subtle
+  surface background, subtle border, `--radius-sm`, single-line ellipsis, and a
+  `copy` cursor.
+- Hover should keep the control quiet: use `--brand` only for the border and
+  `--brand-subtle` for the surface. Do not switch to a loud filled button.
+- Hover and keyboard focus must show a popover or tooltip with the complete
+  value. When the value sits inside an overflowed table or scroller, the tooltip
+  should escape clipping with fixed positioning or a portal.
+- Clicking copies the complete value and shows concise feedback such as
+  `已复制`. The tooltip should not be the copy confirmation.
+- Reserve this pattern for explicit copy affordances. Ordinary labels, service
+  names, statuses, modes, and descriptive text should remain normal text even
+  when truncated.
+
 ### Cards And Panels
 
 - Panels should have white surfaces, subtle borders, and compact headers.
@@ -199,6 +230,10 @@ surfaces. Reserve stronger shadows for drawers, popovers, and modals.
 - Secondary text inside a table cell is allowed only when it describes the same
   primary value and never needs independent comparison. Operational report
   fields must favor explicit columns over stacked mixed metadata.
+- Table cells that truncate paths, URLs, container names, endpoints, or other
+  operational targets must preserve access to the full value. Copy affordances
+  should be explicit and limited to values operators naturally reuse outside the
+  table.
 - Actions should be right-aligned and predictable.
 - Empty states should say what is missing and provide the next valid action when
   one exists.

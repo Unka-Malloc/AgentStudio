@@ -20,6 +20,10 @@ plan.
 Implementation phases, checkpoints, and verifier targets are tracked in
 `docs/CLIENT-IMPLEMENTATION-PLAN.md`.
 
+Historical context for the previous desktop client direction is consolidated in
+`docs/CLIENT-HISTORY.md`. That file is reference-only; it does not override the
+new client architecture in this document.
+
 ## 1. Product Identity
 
 Pact Client is a lightweight local environment manager. It is responsible for

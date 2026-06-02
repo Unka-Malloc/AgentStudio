@@ -93,15 +93,17 @@
 
     .architecture-board {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 320px;
+      grid-template-columns: minmax(0, 1fr);
       grid-template-areas:
-        "management inject-management"
-        "service-label ."
-        "service inject-service"
-        "app-label ."
-        "app inject-application"
-        "foundation-label ."
-        "foundation inject-foundation";
+        "management"
+        "aspect-label"
+        "aspect"
+        "service-label"
+        "service"
+        "app-label"
+        "app"
+        "foundation-label"
+        "foundation";
       align-items: stretch;
       gap: 12px 14px;
       min-width: 1040px;
@@ -131,6 +133,15 @@
 
     .specialized-row {
       grid-area: app;
+    }
+
+    .aspect-connector {
+      grid-area: aspect-label;
+    }
+
+    .aspect-row {
+      grid-area: aspect;
+      display: grid;
     }
 
     .foundation-connector {
@@ -283,6 +294,7 @@
     }
 
     .knowledge-grid,
+    .knowledge-pipeline,
     .agent-stack {
       display: grid;
       gap: 8px;
@@ -291,7 +303,8 @@
     .tier,
     .agent-layer,
     .knowledge-base-strip,
-    .module-tile {
+    .module-tile,
+    .module-subtile {
       padding: 9px;
       background: #fff;
       border: 1px solid #dfe7f0;
@@ -300,6 +313,7 @@
 
     .tier strong,
     .module-tile strong,
+    .module-subtile strong,
     .knowledge-base-strip strong {
       display: block;
       margin-bottom: 4px;
@@ -308,6 +322,7 @@
 
     .tier ul,
     .module-tile ul,
+    .module-subtile ul,
     .knowledge-base-strip ul {
       margin: 0;
       padding-left: 17px;
@@ -315,10 +330,188 @@
 
     .tier li,
     .module-tile li,
+    .module-subtile li,
     .knowledge-base-strip li {
       margin: 2px 0;
       font-size: 12px;
       line-height: 1.35;
+    }
+
+    .module-subgrid {
+      display: grid;
+      gap: 7px;
+      margin-top: 8px;
+    }
+
+    .module-subtile {
+      padding: 8px;
+      background: #f0f5fa;
+      border-color: #d9e6f5;
+      border-left: 2px solid var(--blue);
+      border-radius: 4px;
+    }
+
+    .module-subtile code {
+      display: inline-block;
+      margin-bottom: 5px;
+    }
+
+    .diagram-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .diagram-actions {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+    }
+
+    .diagram-action {
+      min-height: 30px;
+      padding: 5px 10px;
+      color: #26364a;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .diagram-action:hover,
+    .diagram-action:focus-visible {
+      border-color: var(--blue);
+      outline: none;
+      box-shadow: 0 0 0 3px rgb(39 109 157 / 14%);
+    }
+
+    .collapsible-card {
+      position: relative;
+    }
+
+    .collapsible-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 22px;
+      align-items: start;
+      gap: 8px;
+      width: 100%;
+      padding: 0;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      background: transparent;
+      border: 0;
+      cursor: pointer;
+    }
+
+    .collapsible-head:focus-visible {
+      outline: 2px solid rgb(39 109 157 / 65%);
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+
+    .collapsible-title {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .collapsible-title-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .collapsible-title strong {
+      margin-bottom: 0;
+    }
+
+    .collapsible-title code {
+      justify-self: start;
+    }
+
+    .collapsible-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      margin-top: 1px;
+      background: #fff;
+      border: 1px solid #c7d4e2;
+      border-radius: 999px;
+    }
+
+    .collapsible-icon::before,
+    .collapsible-icon::after {
+      content: "";
+      grid-area: 1 / 1;
+      width: 8px;
+      height: 2px;
+      background: #38516d;
+      border-radius: 999px;
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+
+    .collapsible-icon::after {
+      transform: rotate(90deg);
+    }
+
+    .collapsible-head[aria-expanded="true"] .collapsible-icon::after {
+      opacity: 0;
+      transform: rotate(0deg);
+    }
+
+    .collapsible-body {
+      margin-top: 7px;
+    }
+
+    .collapsible-card:not(.is-expanded) > .collapsible-body {
+      display: none;
+    }
+
+    .dehydrate-legend {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      min-height: 20px;
+      padding: 2px 8px;
+      align-items: center;
+      justify-content: center;
+      color: #26364a;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.2;
+      white-space: nowrap;
+      border: 1px solid #c7d4e2;
+      border-radius: 999px;
+    }
+
+    .status-pill.is-fixed {
+      color: #24563b;
+      background: #e8f5ed;
+      border-color: #9dccad;
+    }
+
+    .status-pill.is-removable {
+      color: #6d4b16;
+      background: #fff2d6;
+      border-color: #dfbd78;
     }
 
     .tier.distill {
@@ -333,8 +526,17 @@
       border-left: 4px solid var(--green);
     }
 
+    .knowledge-grid {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: stretch;
+    }
+
+    .knowledge-pipeline {
+      grid-template-rows: repeat(3, minmax(0, 1fr));
+    }
+
     .knowledge-base-strip {
-      margin-top: 10px;
+      min-height: 100%;
       background: #fffdf8;
       border-left: 4px solid var(--brown);
     }
@@ -358,7 +560,6 @@
 
     .agent-runtime-row,
     .agent-module-grid,
-    .knowledge-grid,
     .workspace-grid,
     .codespace-grid,
     .policy-grid,
@@ -378,86 +579,92 @@
       font-size: 12px;
     }
 
-    .injection-card {
-      align-self: start;
-      position: relative;
-      background: #fffdf8;
-      border: 1px solid #eadcc9;
-      border-top: 5px solid var(--brown);
-      border-radius: 8px;
+    .aspect-layer {
       overflow: hidden;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-top: 5px solid var(--blue);
+      border-radius: 8px;
+      box-shadow: 0 10px 22px rgb(23 33 47 / 7%);
     }
 
-    .inject-management {
-      grid-area: inject-management;
-    }
-
-    .inject-service {
-      grid-area: inject-service;
-    }
-
-    .inject-application {
-      grid-area: inject-application;
-    }
-
-    .inject-foundation {
-      grid-area: inject-foundation;
-    }
-
-    .injection-card-heading {
+    .aspect-layer-heading {
       display: flex;
       min-height: 44px;
       padding: 10px 12px;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      background: #f8f1e7;
-      border-bottom: 1px solid #eadcc9;
+      background: #eef4fb;
+      border-bottom: 1px solid var(--line);
     }
 
-    .injection-card-heading h3 {
+    .aspect-layer-heading h3 {
       font-size: 15px;
       line-height: 1.25;
     }
 
-    .injection-card-body {
+    .aspect-grid {
       display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
       padding: 12px;
     }
 
-    .injection-card-body p {
-      color: #4f3f2b;
+    .aspect-caption {
+      padding: 10px 12px 0;
+      color: var(--muted);
       font-size: 12px;
       line-height: 1.45;
     }
 
-    .injection-card-body ul {
-      margin: 0;
-      padding-left: 17px;
+    .aspect-tile {
+      min-height: 0;
+      padding: 10px;
+      background: #f8fbff;
+      border: 1px solid #d9e6f5;
+      border-radius: 6px;
     }
 
-    .injection-card-body li {
+    .aspect-tile strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #26364a;
+      font-size: 13px;
+    }
+
+    .aspect-tile code {
+      display: inline-block;
+      margin-bottom: 6px;
+    }
+
+    .aspect-tile ul {
+      margin: 0;
+      padding-left: 16px;
+    }
+
+    .aspect-tile li {
       margin: 2px 0;
       font-size: 12px;
       line-height: 1.35;
     }
 
-    .injection-card::before {
-      content: "";
-      position: absolute;
-      top: 28px;
-      left: -24px;
-      width: 20px;
-      height: 1px;
-      background: var(--line);
+    .aspect-tile .collapsible-body {
+      padding-top: 2px;
     }
 
     .platform-grid {
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
       padding: 14px;
+    }
+
+    .service-capability-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 0 14px 14px;
     }
 
     @media (max-width: 860px) {
@@ -467,10 +674,11 @@
 
       header,
       .service-row,
+      .service-capability-grid,
+      .aspect-grid,
       .specialized-grid,
       .application-column,
       .platform-grid,
-      .knowledge-grid,
       .agent-runtime-row,
       .agent-module-grid,
       .workspace-grid,
@@ -483,22 +691,28 @@
       .architecture-board {
         grid-template-columns: 1fr;
         grid-template-areas:
-          "inject-management"
           "management"
+          "aspect-label"
+          "aspect"
           "service-label"
-          "inject-service"
           "service"
           "app-label"
-          "inject-application"
           "app"
           "foundation-label"
-          "inject-foundation"
           "foundation";
         min-width: 0;
       }
 
-      .injection-card::before {
-        display: none;
+      .knowledge-grid {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+
+      .knowledge-pipeline {
+        grid-template-rows: repeat(3, minmax(0, 1fr));
+      }
+
+      .knowledge-base-strip {
+        min-height: 100%;
       }
 
       .meta {
@@ -512,7 +726,7 @@
     <header>
       <div>
         <h1>Pact 系统架构图</h1>
-        <p class="lead">从管理层到基建层展示 Pact 内部系统结构，重点表达接口封装、应用能力、公共基础设施和侧边启动装配边界之间的关系。</p>
+        <p class="lead">从外观层到基建层展示 Pact 内部系统结构，重点表达控制面板、切面对接、服务能力、应用能力、公共基础设施和启动装配边界之间的关系。</p>
       </div>
       <div class="meta">
         <span>历史基线：2026-05-19</span>
@@ -522,100 +736,194 @@
     </header>
 
     <section class="diagram" aria-label="Pact 系统架构图">
+      <div class="diagram-toolbar" aria-label="架构图操作">
+        <div class="dehydrate-legend" aria-label="脱水状态图例">
+          <span>脱水状态</span>
+          <span class="status-pill is-fixed">Essential</span>
+          <span class="status-pill is-removable">Optional</span>
+        </div>
+        <div class="diagram-actions">
+          <button type="button" class="diagram-action" data-expand-all>展开全部</button>
+          <button type="button" class="diagram-action" data-collapse-all>收起全部</button>
+        </div>
+      </div>
       <div class="architecture-board">
         <div class="console-row">
           <article class="node console">
             <div class="node-heading">
-              <h3>管理层</h3>
-              <span class="base-label">Management</span>
+              <h3>外观层 <span class="status-pill is-removable">Optional</span></h3>
+              <span class="base-label">Appearance</span>
             </div>
             <ul>
-              <li>提供知识库、工作空间、调试和系统管理界面。</li>
-              <li>只调用服务层接口，不直接访问应用层运行时或基建层存储。</li>
+              <li>控制面板面向个人用户展示知识库、工作空间、调试和系统管理界面。</li>
+              <li>只通过切面层或服务层入口调用能力，不直接访问应用层运行时或基建层存储。</li>
             </ul>
           </article>
         </div>
-
-        <article class="injection-card inject-management">
-          <div class="injection-card-heading">
-            <h3>注入管理层入口</h3>
-            <span class="base-label">Composition Root</span>
-          </div>
-          <div class="injection-card-body">
-            <p>装配 Console shell、管理页面和只读系统视图。</p>
-            <ul>
-              <li>只注入服务层入口。</li>
-              <li>不暴露应用 runtime 或基建存储。</li>
-            </ul>
-          </div>
-        </article>
 
         <div class="connector service-connector"><span>服务层</span></div>
 
         <div class="service-row">
           <article class="node interface">
             <div class="node-heading">
-              <h3>接口封装层</h3>
+              <h3>接口封装层 <span class="status-pill is-fixed">Essential</span></h3>
               <span class="base-label">Interface Wrapper</span>
             </div>
             <ul>
-              <li>统一 HTTP / RPC / CLI 三种交互。</li>
-              <li>负责认证、权限、参数归一化和返回格式。</li>
-              <li>对上承接管理层，对下只调用装配后的能力。</li>
+              <li>执行协议适配与请求归一化。</li>
+              <li>认证、权限和接口合同来自基建与切面层。</li>
+              <li>角色配置以 Tag 为基础语义，组织、小组和角色都继承自标签。</li>
+              <li>认证管理作为服务能力，经切面合同装配。</li>
+              <li>对上承接外观层，对下只调用装配后的能力。</li>
             </ul>
+            <div class="service-capability-grid">
+              <div class="module-tile">
+                <strong>角色配置</strong>
+                <span class="status-pill is-fixed">Essential</span>
+                <code>character-configuration</code>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>Tag Management</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>tag-management</code>
+                    <ul>
+                      <li>tag hierarchy</li>
+                      <li>scope prerequisite</li>
+                      <li>custom tag</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Organization Management</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>organization-management</code>
+                    <ul>
+                      <li>Inherited from Tag</li>
+                      <li>organization scope tag</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Group Management</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>group-management</code>
+                    <ul>
+                      <li>Inherited from Tag</li>
+                      <li>group scope tag</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Character Management</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>character-management</code>
+                    <ul>
+                      <li>Inherited from Tag</li>
+                      <li>character tag projection</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="module-tile">
+                <strong>认证管理</strong>
+                <span class="status-pill is-fixed">Essential</span>
+                <code>authentication-management</code>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>Credential Distribution</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>credential-distribution</code>
+                    <div class="module-subgrid">
+                      <div class="module-subtile">
+                        <strong>To Pact Client</strong>
+                        <span class="status-pill is-removable">Optional</span>
+                        <code>credential-to-pact-client</code>
+                        <ul>
+                          <li>client credential projection</li>
+                          <li>secretRef only</li>
+                        </ul>
+                      </div>
+                      <div class="module-subtile">
+                        <strong>To Agent MCP</strong>
+                        <span class="status-pill is-removable">Optional</span>
+                        <code>credential-to-agent-mcp</code>
+                        <ul>
+                          <li>MCP credential projection</li>
+                          <li>capability scoped</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Authentication Aspect</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>authentication-aspect</code>
+                    <div class="module-subgrid">
+                      <div class="module-subtile">
+                        <strong>Identity Verification</strong>
+                        <span class="status-pill is-fixed">Essential</span>
+                        <code>identity-verification</code>
+                        <ul>
+                          <li>identity proof</li>
+                          <li>session validation</li>
+                        </ul>
+                      </div>
+                      <div class="module-subtile">
+                        <strong>Character &amp; Permission</strong>
+                        <span class="status-pill is-fixed">Essential</span>
+                        <code>character-permission-binding</code>
+                        <ul>
+                          <li>Credential &amp; Capability</li>
+                          <li>调用安全内核裁决</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </article>
         </div>
-
-        <article class="injection-card inject-service">
-          <div class="injection-card-heading">
-            <h3>注入接口适配器</h3>
-            <span class="base-label">Composition Root</span>
-          </div>
-          <div class="injection-card-body">
-            <p>注册 HTTP / RPC / CLI / MCP route、handler、adapter。</p>
-            <ul>
-              <li>注入认证和权限裁决端口。</li>
-              <li>注入应用层 operation/provider。</li>
-            </ul>
-          </div>
-        </article>
 
         <div class="connector app-connector"><span>应用层</span></div>
 
         <div class="specialized-row">
           <article class="node specialized">
             <div class="node-heading">
-              <h3>应用层</h3>
+              <h3>应用层 <span class="status-pill is-removable">Optional</span></h3>
               <span class="base-label">Specialized</span>
             </div>
             <div class="specialized-grid" aria-label="应用层左右两列各三个子系统">
               <div class="application-column left" aria-label="应用层左列：知识转化、共享空间、策略管理">
                 <div class="subnode knowledge">
-                  <h3>知识转化</h3>
-                  <div class="knowledge-grid" aria-label="知识转化核心能力">
-                    <div class="tier distill">
-                      <strong>知识蒸馏</strong>
-                      <ul>
-                        <li>摘要与文档化</li>
-                        <li>Markdown / DOCX</li>
-                      </ul>
-                    </div>
-                    <div class="tier index">
-                      <strong>知识索引</strong>
-                      <ul>
-                        <li>事件聚合</li>
-                        <li>embedding / 检索</li>
-                      </ul>
-                    </div>
-                    <div class="tier raw">
-                      <strong>原始语料</strong>
-                      <ul>
-                        <li>格式转换</li>
-                        <li>结构保留</li>
-                      </ul>
+                  <h3>知识转化 <span class="status-pill is-removable">Optional</span></h3>
+                  <div class="knowledge-grid" aria-label="知识转化核心能力：左侧三层，右侧图书馆">
+                    <div class="knowledge-pipeline" aria-label="知识转化三层：自下而上为原始语料、知识索引、知识蒸馏">
+                      <div class="tier distill">
+                        <strong>知识蒸馏</strong>
+                        <span class="status-pill is-removable">Optional</span>
+                        <ul>
+                          <li>摘要与文档化</li>
+                          <li>Markdown / DOCX</li>
+                        </ul>
+                      </div>
+                      <div class="tier index">
+                        <strong>知识索引</strong>
+                        <span class="status-pill is-removable">Optional</span>
+                        <ul>
+                          <li>事件聚合</li>
+                          <li>embedding / 检索</li>
+                        </ul>
+                      </div>
+                      <div class="tier raw">
+                        <strong>原始语料</strong>
+                        <span class="status-pill is-removable">Optional</span>
+                        <ul>
+                          <li>格式转换</li>
+                          <li>结构保留</li>
+                        </ul>
+                      </div>
                     </div>
                     <div class="knowledge-base-strip">
                       <strong>AgentLibrary / 图书馆</strong>
+                      <span class="status-pill is-removable">Optional</span>
                       <ul>
                         <li><code>knowledgeBase</code> mount</li>
                         <li>证据 / 导出 / 外部库适配</li>
@@ -625,10 +933,11 @@
                 </div>
 
                 <div class="subnode sharedspace">
-                  <h3>共享空间</h3>
+                  <h3>共享空间 <span class="status-pill is-removable">Optional</span></h3>
                   <div class="workspace-grid">
                     <div class="module-tile">
                       <strong>Sharedspace</strong>
+                      <span class="status-pill is-removable">Optional</span>
                       <code>agent-workspace</code>
                       <ul>
                         <li>受控文件空间</li>
@@ -637,6 +946,7 @@
                     </div>
                     <div class="module-tile">
                       <strong>协作治理</strong>
+                      <span class="status-pill is-removable">Optional</span>
                       <code>workspace-governance</code>
                       <ul>
                         <li>issue / proposal</li>
@@ -645,6 +955,7 @@
                     </div>
                     <div class="module-tile">
                       <strong>Cloud Drive Port</strong>
+                      <span class="status-pill is-removable">Optional</span>
                       <code>cloud-drive-port</code>
                       <ul>
                         <li>iCloud local projection</li>
@@ -656,10 +967,11 @@
                 </div>
 
                 <div class="subnode policy">
-                  <h3>策略管理</h3>
+                  <h3>策略管理 <span class="status-pill is-removable">Optional</span></h3>
                   <div class="policy-grid">
                     <div class="module-tile">
                       <strong>流程策略</strong>
+                      <span class="status-pill is-removable">Optional</span>
                       <code>workflow-policy</code>
                       <ul>
                         <li>处理流程选择</li>
@@ -668,6 +980,7 @@
                     </div>
                     <div class="module-tile">
                       <strong>调用策略</strong>
+                      <span class="status-pill is-removable">Optional</span>
                       <code>agent-policy</code>
                       <ul>
                         <li>模型路由</li>
@@ -681,7 +994,7 @@
 
               <div class="application-column right" aria-label="应用层右列：智能体、代码管理、通用工具与技能">
                 <div class="subnode agent">
-                  <h3>智能体</h3>
+                  <h3>智能体 <span class="status-pill is-removable">Optional</span></h3>
                   <div class="agent-stack" aria-label="智能体上下文、记忆与基座">
                     <div class="agent-layer">
                       <div class="agent-layer-name">核心组件</div>
@@ -689,6 +1002,7 @@
                         <div class="agent-runtime-row">
                           <div class="module-tile">
                             <strong>上下文（临时）</strong>
+                            <span class="status-pill is-removable">Optional</span>
                             <code>agent-context</code>
                             <ul>
                               <li>临时上下文</li>
@@ -697,6 +1011,7 @@
                           </div>
                           <div class="module-tile">
                             <strong>记忆（长期）</strong>
+                            <span class="status-pill is-removable">Optional</span>
                             <code>agent-memory</code>
                             <ul>
                               <li>长期上下文</li>
@@ -711,11 +1026,21 @@
                       <div class="agent-module-grid">
                         <div class="module-tile">
                           <strong>模型网关</strong>
+                          <span class="status-pill is-removable">Optional</span>
                           <code>agent-gateway</code>
+                          <ul>
+                            <li>model route</li>
+                            <li>provider adapter</li>
+                          </ul>
                         </div>
                         <div class="module-tile">
                           <strong>基础配置</strong>
+                          <span class="status-pill is-removable">Optional</span>
                           <code>agent-configs</code>
+                          <ul>
+                            <li>profile registry</li>
+                            <li>agent defaults</li>
+                          </ul>
                         </div>
                       </div>
                     </div>
@@ -723,10 +1048,11 @@
                 </div>
 
                 <div class="subnode codespace">
-                  <h3>代码管理</h3>
+                  <h3>代码管理 <span class="status-pill is-removable">Optional</span></h3>
                   <div class="codespace-grid">
                     <div class="module-tile">
                       <strong>Codespace</strong>
+                      <span class="status-pill is-removable">Optional</span>
                       <code>pact.codespace</code>
                       <ul>
                         <li>target registry</li>
@@ -735,6 +1061,7 @@
                     </div>
                     <div class="module-tile">
                       <strong>Code Review</strong>
+                      <span class="status-pill is-removable">Optional</span>
                       <code>pact.code-review.v1</code>
                       <ul>
                         <li>Gerrit route</li>
@@ -746,10 +1073,11 @@
                 </div>
 
                 <div class="subnode tools">
-                  <h3>通用工具与技能</h3>
+                  <h3>通用工具与技能 <span class="status-pill is-removable">Optional</span></h3>
                   <div class="module-grid">
                     <div class="module-tile">
                       <strong>工具管理</strong>
+                      <span class="status-pill is-removable">Optional</span>
                       <code>capabilities/tools/tool-management-core</code>
                       <ul>
                         <li>toolset / grant</li>
@@ -758,6 +1086,7 @@
                     </div>
                     <div class="module-tile">
                       <strong>技能管理</strong>
+                      <span class="status-pill is-removable">Optional</span>
                       <code>capabilities/skills</code>
                       <ul>
                         <li>Tool/Skill provider</li>
@@ -772,106 +1101,618 @@
           </article>
         </div>
 
-        <article class="injection-card inject-application">
-          <div class="injection-card-heading">
-            <h3>注入应用能力</h3>
-            <span class="base-label">Composition Root</span>
-          </div>
-          <div class="injection-card-body">
-            <p>创建 Knowledge、Agent、Sharedspace、Codespace、Policy、Tool、Skill providers。</p>
-            <ul>
-              <li>应用模块声明依赖。</li>
-              <li>不主动查找全局 runtime。</li>
-              <li>v0.0.1 release gate 聚合迁移、Phase 0-4 verifier 和 readiness report。</li>
-            </ul>
-          </div>
-        </article>
+        <div class="connector aspect-connector"><span>切面层</span></div>
+
+        <div class="aspect-row">
+          <aside class="aspect-layer">
+            <div class="aspect-layer-heading">
+              <h3>切面层 <span class="status-pill is-removable">Optional</span></h3>
+              <span class="base-label">Aspect</span>
+            </div>
+            <p class="aspect-caption">面向上游服务、下游客户端、前端控制面板和本地智能体调用的对外切面。</p>
+            <div class="aspect-grid">
+              <div class="aspect-tile">
+                <strong>上游服务切面</strong>
+                <span class="status-pill is-removable">Optional</span>
+                <code>upstream-service-aspect</code>
+                <ul>
+                  <li>外部服务发现</li>
+                  <li>服务接口契约</li>
+                  <li>上游 endpointRef</li>
+                  <li>上游 secretRef 投影</li>
+                </ul>
+              </div>
+              <div class="aspect-tile">
+                <strong>下游客户端切面</strong>
+                <span class="status-pill is-removable">Optional</span>
+                <code>downstream-client-aspect</code>
+                <ul>
+                  <li>客户端发现配置</li>
+                  <li>能力目录投影</li>
+                  <li>bootstrap manifest</li>
+                  <li>客户端 secretRef 投影</li>
+                </ul>
+              </div>
+              <div class="aspect-tile">
+                <strong>平台应用服务切面</strong>
+                <span class="status-pill is-removable">Optional</span>
+                <code>platform-application-service-aspect</code>
+                <ul>
+                  <li>operation manifest</li>
+                  <li>interface catalog</li>
+                  <li>HTTP / RPC / CLI 映射</li>
+                  <li>character tag projection contract</li>
+                  <li>authentication aspect contract</li>
+                  <li>secret distribution contract</li>
+                </ul>
+              </div>
+            </div>
+          </aside>
+        </div>
 
         <div class="connector foundation-connector"><span>基建层</span></div>
 
         <div class="platform-foundation-row">
           <article class="node common">
             <div class="node-heading">
-              <h3>基建层</h3>
+              <h3>基建层 <span class="status-pill is-fixed">Essential</span></h3>
               <span class="base-label">Common</span>
             </div>
             <div class="platform-grid">
               <div class="module-tile">
-                <strong>核心能力</strong>
-                <code>core</code>
-                <ul>
-                  <li>服务发现</li>
-                  <li>状态协调</li>
-                  <li>通用调度</li>
-                </ul>
-              </div>
-              <div class="module-tile">
                 <strong>安全权限</strong>
+                <span class="status-pill is-fixed">Essential</span>
                 <code>security</code>
-                <ul>
-                  <li>认证</li>
-                  <li>授权</li>
-                  <li>访问控制</li>
-                  <li>审计策略</li>
-                </ul>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>身份与主体解析</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>identity-subject</code>
+                    <ul>
+                      <li>subject resolution</li>
+                      <li>session / token 验证</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>授权内核</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>authorization-kernel</code>
+                    <ul>
+                      <li>capability decision</li>
+                      <li>tenant / resource policy</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Capability Secret 映射内核</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>capability-secret-binding</code>
+                    <ul>
+                      <li>capability 到 secretRef 绑定</li>
+                      <li>grant materialization</li>
+                      <li>不负责密钥分发</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>访问控制策略</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>access-policy</code>
+                    <ul>
+                      <li>risk boundary</li>
+                      <li>workspace asset policy</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>审计与脱敏</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>audit-redaction</code>
+                    <ul>
+                      <li>denied audit</li>
+                      <li>trace / export redaction</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
               <div class="module-tile">
                 <strong>模块管理</strong>
+                <span class="status-pill is-fixed">Essential</span>
                 <code>module-management</code>
-                <ul>
-                  <li>mount 注册</li>
-                  <li>热加载</li>
-                  <li>能力声明</li>
-                </ul>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>模块发现</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>module-discovery</code>
+                    <ul>
+                      <li>module descriptor</li>
+                      <li>mount manifest 扫描</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Mount 合同</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>mount-contract</code>
+                    <ul>
+                      <li>provider interface</li>
+                      <li>capability package shape</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>能力声明</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>capability-manifest</code>
+                    <ul>
+                      <li>capability metadata</li>
+                      <li>version / risk profile</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>生命周期管理</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>module-lifecycle</code>
+                    <ul>
+                      <li>load / unload</li>
+                      <li>reload / close hooks</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>隔离与兼容</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>module-isolation</code>
+                    <ul>
+                      <li>adapter boundary</li>
+                      <li>compat profile</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>合同测试</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>contract-test</code>
+                    <ul>
+                      <li>shape validation</li>
+                      <li>sample execution</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
               <div class="module-tile">
-                  <strong>算法和数据结构</strong>
+                <strong>装配能力</strong>
+                <span class="status-pill is-fixed">Essential</span>
+                <code>composition-management</code>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>独立部署依赖打包</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>deployment-dependency-package</code>
+                    <ul>
+                      <li>dependency contract</li>
+                      <li>platform core + app bundle</li>
+                      <li>bootstrap package manifest</li>
+                      <li>knowledge / Gerrit / skill repository presets</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>动态模块挂载</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>dynamic-module-mount</code>
+                    <ul>
+                      <li>hot load / hot switch</li>
+                      <li>hot unload / dependency detach</li>
+                      <li>provider rebinding</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>启动装配撮合</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>startup-composition</code>
+                    <ul>
+                      <li>composition graph</li>
+                      <li>provider / feature binding</li>
+                      <li>fallback resolution / health gate</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="module-tile">
+                <strong>算法和数据结构</strong>
+                <span class="status-pill is-fixed">Essential</span>
                 <code>data-structure</code>
-                <ul>
-                  <li>Merkle Index</li>
-                  <li>Prefix / Range Index</li>
-                  <li>Checkpoint Projection</li>
-                </ul>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>Checkpoint Tree</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>checkpoint-tree</code>
+                    <ul>
+                      <li>版本节点</li>
+                      <li>restore reference</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Merkle Index</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>merkle-index</code>
+                    <ul>
+                      <li>content hash</li>
+                      <li>integrity proof</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Prefix / Range Index</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>range-index</code>
+                    <ul>
+                      <li>ordered lookup</li>
+                      <li>range scan primitive</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Graph / DAG 原语</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>graph-dag-primitives</code>
+                    <ul>
+                      <li>dependency graph</li>
+                      <li>topology traversal</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Diff / Merge 算法</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>diff-merge</code>
+                    <ul>
+                      <li>change comparison</li>
+                      <li>conflict primitive</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>序列化与投影</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>serialization-projection</code>
+                    <ul>
+                      <li>stable schema</li>
+                      <li>read model projection</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
               <div class="module-tile">
-                <strong>存储</strong>
-                <code>storage</code>
-                <ul>
-                  <li>LSM Ingest</li>
-                  <li>CAS Block Store</li>
-                  <li>Merkle DAG</li>
-                  <li>任务持久化</li>
-                </ul>
+                <strong>平台适配</strong>
+                <span class="status-pill is-fixed">Essential</span>
+                <code>platform-adapter</code>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>环境画像</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>environment-profile</code>
+                    <ul>
+                      <li>platform facts</li>
+                      <li>feature flag baseline</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>操作系统适配</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>os-adapter</code>
+                    <ul>
+                      <li>OS capability probe</li>
+                      <li>system API bridge</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>路径与权限兼容</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>path-permission-adapter</code>
+                    <ul>
+                      <li>path convention</li>
+                      <li>permission model mapping</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>运行时桥接</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>runtime-bridge</code>
+                    <ul>
+                      <li>language runtime bridge</li>
+                      <li>native boundary shim</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>平台垫片</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>platform-shim</code>
+                    <ul>
+                      <li>compat layer</li>
+                      <li>fallback adapter</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="module-tile">
+                <strong>资源管理</strong>
+                <span class="status-pill is-fixed">Essential</span>
+                <code>resource-management</code>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>文件系统</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>filesystem-management</code>
+                    <ul>
+                      <li>数据目录 / 路径治理</li>
+                      <li>原子写入 / watcher 可卸载</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>内存管理</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>memory-management</code>
+                    <ul>
+                      <li>预算 / 背压 / OOM 防护</li>
+                      <li>profiler 可卸载</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>进程管理</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>process-management</code>
+                    <ul>
+                      <li>生命周期 / 退出清理</li>
+                      <li>worker pool 可卸载</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Shell 管理</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>shell-management</code>
+                    <ul>
+                      <li>受控执行合同</li>
+                      <li>shell provider 可卸载</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>终端管理</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>terminal-management</code>
+                    <ul>
+                      <li>terminal session 合同</li>
+                      <li>PTY / UI 可卸载</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>数据库</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>database-management</code>
+                    <ul>
+                      <li>最小 metadata / audit store</li>
+                      <li>SQLite / Postgres 可替换</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>消息队列</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>message-queue-management</code>
+                    <ul>
+                      <li>最小后台队列 / 回执</li>
+                      <li>外部 broker 可卸载</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>缓存管理</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>cache-management</code>
+                    <ul>
+                      <li>TTL / 热点缓存</li>
+                      <li>Redis 可卸载</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>运行时管理</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>runtime-management</code>
+                    <ul>
+                      <li>profile / feature binding</li>
+                      <li>runtime provider 可解绑</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>存储 Provider</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>storage-provider</code>
+                    <ul>
+                      <li>metadata repository</li>
+                      <li>object store / storage doctor</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>执行与状态原语</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>execution-state-primitives</code>
+                    <ul>
+                      <li>并发锁 / 执行排队</li>
+                      <li>状态锁 / 收敛原语</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
               <div class="module-tile">
                 <strong>运维基础</strong>
+                <span class="status-pill is-fixed">Essential</span>
                 <code>devops</code>
-                <ul>
-                  <li>日志</li>
-                  <li>健康状态</li>
-                  <li>监控告警</li>
-                  <li>诊断</li>
-                </ul>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>日志</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>logging</code>
+                    <ul>
+                      <li>runtime log</li>
+                      <li>structured event</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>健康状态</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>health-status</code>
+                    <ul>
+                      <li>health probe</li>
+                      <li>readiness summary</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>监控告警</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>monitoring-alerting</code>
+                    <ul>
+                      <li>metrics / alert rule</li>
+                      <li>queue monitor</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>快照</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>snapshot</code>
+                    <ul>
+                      <li>snapshot contract</li>
+                      <li>snapshot inventory</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>备份</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>backup</code>
+                    <ul>
+                      <li>backup plan</li>
+                      <li>retention policy</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>恢复编排</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>restore-orchestration</code>
+                    <ul>
+                      <li>restore plan</li>
+                      <li>drill / verification</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>诊断</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>diagnostics</code>
+                    <ul>
+                      <li>runtime doctor</li>
+                      <li>repair report</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>运维任务</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>maintenance-runner</code>
+                    <ul>
+                      <li>scheduled job</li>
+                      <li>runbook execution</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
             </div>
           </article>
         </div>
 
-        <article class="injection-card inject-foundation">
-          <div class="injection-card-heading">
-            <h3>注入基建实现</h3>
-            <span class="base-label">Composition Root</span>
-          </div>
-          <div class="injection-card-body">
-            <p>绑定 Security、Module、Storage、Data Structure、DevOps、Core 实现。</p>
-            <ul>
-              <li>基建层保持通用能力边界。</li>
-              <li>不反向理解业务语义。</li>
-            </ul>
-          </div>
-        </article>
       </div>
     </section>
   </main>
+  <script>
+    (() => {
+      const cards = [];
+
+      function setExpanded(card, expanded) {
+        const button = card.querySelector(":scope > .collapsible-head");
+        card.classList.toggle("is-expanded", expanded);
+        if (button) {
+          button.setAttribute("aria-expanded", String(expanded));
+        }
+      }
+
+      function childElementsExcept(card, excluded) {
+        return Array.from(card.childNodes).filter((node) => {
+          if (excluded.has(node)) {
+            return false;
+          }
+          return node.nodeType !== Node.TEXT_NODE || node.textContent.trim() !== "";
+        });
+      }
+
+      function makeCollapsible(card) {
+        if (card.dataset.collapsibleReady === "true") {
+          return;
+        }
+
+        const title = card.querySelector(":scope > strong");
+        if (!title) {
+          return;
+        }
+
+        const code = card.querySelector(":scope > code");
+        const status = card.querySelector(":scope > .status-pill");
+        const excluded = new Set([title]);
+        if (code) {
+          excluded.add(code);
+        }
+        if (status) {
+          excluded.add(status);
+        }
+
+        const bodyNodes = childElementsExcept(card, excluded);
+        if (!bodyNodes.length) {
+          return;
+        }
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "collapsible-head";
+        button.setAttribute("aria-expanded", "false");
+
+        const titleWrap = document.createElement("span");
+        titleWrap.className = "collapsible-title";
+        const titleLine = document.createElement("span");
+        titleLine.className = "collapsible-title-line";
+        titleLine.append(title);
+        if (status) {
+          titleLine.append(status);
+        }
+        titleWrap.append(titleLine);
+        if (code) {
+          titleWrap.append(code);
+        }
+
+        const icon = document.createElement("span");
+        icon.className = "collapsible-icon";
+        icon.setAttribute("aria-hidden", "true");
+
+        const body = document.createElement("div");
+        body.className = "collapsible-body";
+        bodyNodes.forEach((node) => body.append(node));
+
+        button.append(titleWrap, icon);
+        card.prepend(body);
+        card.prepend(button);
+        card.classList.add("collapsible-card");
+        card.dataset.collapsibleReady = "true";
+
+        button.addEventListener("click", () => {
+          setExpanded(card, !card.classList.contains("is-expanded"));
+        });
+
+        setExpanded(card, false);
+        cards.push(card);
+      }
+
+      document.querySelectorAll(".module-subtile").forEach(makeCollapsible);
+      document.querySelectorAll(".module-tile, .aspect-tile, .tier, .knowledge-base-strip").forEach(makeCollapsible);
+
+      document.querySelector("[data-expand-all]")?.addEventListener("click", () => {
+        cards.forEach((card) => setExpanded(card, true));
+      });
+
+      document.querySelector("[data-collapse-all]")?.addEventListener("click", () => {
+        cards.forEach((card) => setExpanded(card, false));
+      });
+    })();
+  </script>
 </body>
 </html>

@@ -341,13 +341,15 @@ Local agents / humans / scripts
 
 #### Presentation Layer
 
-`server-web` 是 Vue 管控台。职责：
+外观层分为两层：第一层是面向个人用户的控制面板；第二层是切面层，面向上游服务、下游客户端、前端控制面板和本地智能体调用。控制面板只负责用户可见操作和状态展示，切面层负责对外合同、发现投影、认证切面、credential / secretRef 投影和协议映射。
+
+`server-web` 是 Vue 控制面板。职责：
 
 - 展示 workspace、AgentLibrary、贡献、权限、审计、任务、checkpoint 和生产门禁。
 - 调用公开 HTTP API。
 - 不直接读取后端文件、SQLite、raw object 或内部模块。
 
-`server-web` 只能通过 `bridge`、`/api/*`、事件订阅和受控下载 URL 进入服务层；不能 import `server/platform`、`server/services`、`server/config`、Node runtime API，也不能引用 metadata store、Tool Management platform 或 agent config registry 等后端内部对象。该边界由 `npm run server:verify:management-layer` 守卫。
+`server-web` 只能通过 `bridge`、`/api/*`、事件订阅和受控下载 URL 进入切面层或服务层；不能 import `server/platform`、`server/services`、`server/config`、Node runtime API，也不能引用 metadata store、Tool Management platform 或 agent config registry 等后端内部对象。该边界由 `npm run server:verify:management-layer` 守卫。
 
 前端组件复用规则必须从 `server-web/components/common.ts` 开始。新增界面控件时，能用通用组件就用通用组件；通用组件不能直接覆盖需求时，能继承就继承；确实需要新组件时，先扩展通用组件和 `commonComponentRegistry`，再在业务页面中使用。也就是说，页面级实现必须先扩展通用组件，而不是在每个 view 内复制 checkbox、option bar、status pill、browse button、fold card 或 history/session panel 的私有实现。
 
@@ -358,7 +360,11 @@ Local agents / humans / scripts
 
 #### Protocol Adapter Layer
 
-`server/platform/common/operation-dispatcher` 维护公开 operation registry，负责把 HTTP、RPC、CLI 等入口统一到 operation 定义。
+`server/platform/common/operation-dispatcher` 只保留调度执行内核：接收切面层给出的 operation contract，完成统一分发、并发控制和执行回执。公开 operation manifest、interface catalog、HTTP/RPC/CLI 映射、discovery 投影、character tag projection contract、authentication aspect contract 和 secret distribution contract 归切面层所有。
+
+角色配置是 Pact Service 的 Tag 能力，不是传统组织 / 小组 / 角色三套根模型。`Tag Management` 是基础能力；`Organization Management`、`Group Management` 和 `Character Management` 都是继承自 Tag 的 typed projection。每个用户可以拥有多个标签，组织、小组、层级身份、管理员身份和自定义角色都表达为 tag；tag 有层级和作用域约束，授予某个组织特有标签前必须先满足该组织 scope tag，允许一个主体同时持有多个组织管理员标签。
+
+认证管理是 Pact Service 能力，不属于安全内核。认证管理包含 `Credential Distribution` 和 `Authentication Aspect`：`Credential Distribution` 负责向 Pact Client 与 Agent MCP 输出 credential / secretRef projection；`Authentication Aspect` 负责 Identity Verification，并把 Character & Permission 映射为 Credential & Capability。安全内核只裁决 `capability -> secretRef` 的绑定和授权结果；认证管理必须根据切面层给出的上游服务、下游客户端和平台应用服务投影工作，不得暴露 secret value，也不得绕过 `pact.security-permissions.v1` provider。
 
 新增或调整 MCP service 时必须遵守：
 
@@ -371,7 +377,7 @@ Local agents / humans / scripts
 
 `server/platform/specialized` 承载应用能力：
 
-- `knowledge`：三层知识模型、KnowledgeCore、外部知识库 adapter、document export、retrieval、preprocessing。
+- `knowledge`：三层知识模型、KnowledgeCore、外部知识库 adapter、document export、retrieval、preprocessing。架构图中原始语料、知识索引、知识蒸馏按自下而上的三层 pipeline 放在左侧，AgentLibrary / 图书馆作为右侧等高访问面。
 - `agent`：`pact.agent-runtime.v1` provider、agent workspace、agent context、agent memory、agent gateway、model probe、model routing 和 agent config registry。Console settings/gateway/model-routing/word-cloud agent calls 只能通过该 provider 进入 Agent Gateway、Model Probe 和 agent-configs，不能直接持有 gateway module loader 或 registry 实例。
 - `capabilities/strategy-management`：`pact.strategy-management.v1` provider，统一处理 workflow policy、agent policy、模型路由策略包装和工具调用策略预览。
 - `capabilities/tools`：Tool Management、catalog、grant、policy、execute 和 audit。
@@ -406,7 +412,7 @@ Local agents / humans / scripts
 - `storage`：SQLite、对象存储、batch repository、metadata。
 - `observability`：trace、日志、metrics 和后续 OTLP 映射。
 - `module-manager`：外部 mount、parser、knowledgeBase、vectorStore、graphStore 和 custom adapter。
-- `devops`：进程状态、统一注册、监控告警和生产运行辅助。
+- `devops`：进程状态、统一注册、监控告警、快照、备份、恢复编排和生产运行辅助。
 
 `server/platform/modules` 存放外置模块和本地运行时资源，例如 Tika、OCR、document parser 和 runtime assets。
 
@@ -415,7 +421,7 @@ Local agents / humans / scripts
 平台基础能力必须遵守低耦合、高内聚。`server/platform/common` 不是业务能力仓库，也不是跨模块 service locator；它只承载可被多个应用能力复用的稳定合同、运行时基础设施和防腐层。依赖方向固定为：
 
 ```text
-interactive composition root
+foundation composition management
   -> common platform contracts
   -> specialized capability implementations
   -> modules / external adapters
@@ -431,14 +437,41 @@ common platform contracts
 
 | 基础能力 | 高内聚边界 | 允许依赖 | 禁止依赖 |
 | --- | --- | --- | --- |
-| 核心能力 | `server/platform/common/platform-core` 与 `server/platform/common/operation-dispatcher` 统一 `pact.core-platform.v1` provider、Operation Dispatcher、operation registry、接口目录、服务发现快照、状态协调和启动期内部调度。 | operation metadata、controller method existence、platform registry、protocol event bus、runtime logger、feature runtime、组合根注入的 core provider。 | 服务入口直接 import Operation Dispatcher 或手工拼接口目录；`system.interfaces` 绕过 core provider 输出；operation registry 只声明接口但不输出 `registered/wired/implemented/verified` 生命周期；核心层反向读取具体业务 runtime 状态。 |
-| 安全和权限管理 | `server/platform/common/security` 统一认证、CSRF、`pact.security-permissions.v1` provider、subject resolution、authorization decision、tenant/resource ABAC、grant/token 裁决、toolset maxRisk 约束、workspace asset policy、audit retention、redacted audit export 和 denied audit。 | operation metadata、tool catalog metadata、独立 authorization store、operation audit store、组合根注入的 console auth 实现。 | 直接读取 knowledge、workspace、tool runtime 的内部状态；让接口层或应用层直接持有 `consoleAuth`、`authorizationEngine` 或 `authorizationStore` 执行权限裁决；为某个业务模块硬编码权限分支；把高风险 operation 挂入低风险 toolset；把 secret value、本机绝对路径或未脱敏输入输出写入 trace/export。 |
+| 安全和权限管理 | `server/platform/common/security` 统一认证、CSRF、`pact.security-permissions.v1` provider、subject resolution、authorization decision、tenant/resource ABAC、grant/token 裁决、capability 到 secretRef 绑定裁决、toolset maxRisk 约束、workspace asset policy、audit retention、redacted audit export 和 denied audit。 | 切面层输出的最小授权策略投影、独立 authorization store、operation audit store、装配能力输出的 console auth contract。 | 直接读取 knowledge、workspace、tool runtime 的内部状态；持有 operation manifest、interface catalog、secret distribution contract 或协议映射事实源；负责密钥分发；让接口层或应用层直接持有 `consoleAuth`、`authorizationEngine` 或 `authorizationStore` 执行权限裁决；为某个业务模块硬编码权限分支；把高风险 operation 挂入低风险 toolset；把 secret value、本机绝对路径或未脱敏输入输出写入 trace/export。 |
 | 模块管理 | `server/platform/common/module-manager` 统一 mount 合同、模块发现、加载、热重载、合同测试和 capability package 生命周期入口。 | mount manifest、module descriptor、runtime provider interface。 | 在模块管理器里直接实现知识、OCR、向量库或业务处理逻辑。 |
+| 装配能力 | `server/platform/common/composition-management` 统一三类装配：独立部署依赖打包、动态模块挂载、启动装配撮合。独立部署依赖打包把平台核心能力和目标应用能力所需依赖合成为部署包；动态模块挂载处理运行期热加载、热切换、热卸载和 provider rebinding；启动装配撮合在服务启动期按依赖合同、feature profile 和 provider contract 收敛模块与功能。 | module descriptor、dependency contract、deployment package manifest、bootstrap package manifest、mount contract、feature profile、provider contract、runtime health summary、切面层输出的合同投影。 | 仅作为图外说明存在；反向理解业务语义；让服务层、应用层或切面层各自私有装配 provider；绕过依赖合同或装配计划直接连接模块；把依赖打包、动态挂载、启动撮合或脱水策略散落到业务模块。 |
 | 算法和数据结构 | `server/platform/common/data-structure` 承载 Checkpoint Tree、共享图结构、排序/合并/差异算法和状态协调原语。 | 纯数据模型、序列化合同、无副作用算法。 | HTTP controller、UI 状态、业务 runtime、裸数据库细节。 |
-| 存储 | `server/platform/common/storage` 统一 SQLite migration、对象存储、raw object、metadata repository、`pact.storage.v1` provider、backup/restore 和 storage doctor。 | 数据库连接、repository interface、对象引用、migration、组合根注入的 storage provider。 | 上层直接调用 `metadataStore.getStorageSummary()`、raw object 路径解析、storage repair/backup 函数或直接拼 SQL 操作核心表；storage 反向调用知识检索、agent workspace 或 Tool Management 业务逻辑。 |
-| 运维 | `server/platform/common/devops` 统一 `pact.devops.v1` provider、进程状态、启动发现、监控告警、生产运行辅助和统一注册。 | runtime health interface、event bus、只读状态摘要、组合根注入的 queue monitor 观测端口。 | 绕过 operation/authorization 直接修复业务状态；让服务入口或 console executor 直接装配 monitor alert core / background process 实现；把运维脚本变成业务状态事实源。 |
+| 平台适配 | `server/platform/common/platform-adapter` 负责环境适配、操作系统级兼容、异构运行时桥接和平台级垫片。 | 环境变量、平台常量、标准操作系统 API。 | 任何应用层组件、接口封装层或高层存储细节。 |
+| 资源管理 | `server/platform/common/resource-management` 统一资源池、缓存空间、本地磁盘调度、执行控制和轻量状态协调原语。 | 只读状态摘要、存储系统参数、并发锁、执行队列、文件系统原子写入、序列化合同。 | 持有 operation manifest、interface catalog、HTTP/RPC/CLI 映射、discovery 投影、应用上下文、业务逻辑、智能体状态以及策略执行引擎。 |
+| ├─ File System Management | 数据目录、路径治理、原子写入、权限边界和本地文件资源预算必须保留。 | 标准 fs、私有目录、原子写入、路径归一化、文件锁。 | 文件 watcher、外部盘、导入器可动态卸载；不得暴露本机绝对路径给下游客户端。 |
+| ├─ Memory Management | 内存预算、缓存上限、背压和 OOM 防护必须保留。 | runtime memory summary、缓存预算、队列背压信号。 | 高级 profiler、外部观测器可卸载；不得让业务模块直接调全局内存策略。 |
+| ├─ Process Management | 进程生命周期、子进程隔离、退出清理和资源回收必须保留。 | process supervisor、pid/exit receipt、超时/取消信号。 | 特定 worker pool、外部 runtime launcher 可动态解绑。 |
+| ├─ Shell Management | 只保留受控执行合同、命令白名单和安全包装。 | shell execution policy、env redaction、cwd boundary。 | 具体 shell provider 可卸载；不得作为平台启动生命线。 |
+| ├─ Terminal Management | 只保留 terminal session 合同、审计和资源限制。 | PTY session contract、terminal lease、输出截断和审计。 | PTY、terminal UI、交互式 session provider 可动态卸载。 |
+| ├─ Database Management | 最小 metadata、audit、权限和状态索引能力必须保留。 | repository contract、migration、事务。 | SQLite、Postgres、外部 DB adapter 可替换；备份恢复归运维编排；不得让上层直接拼 SQL 操作核心表。 |
+| ├─ Message Queue Management | 最小后台队列、异步回执、重试和恢复能力必须保留。 | queue contract、job receipt、retry/backoff、dead-letter summary。 | 外部 MQ、复杂 broker、worker pool 可卸载或降级为本地队列。 |
+| ├─ Cache Management | 最小 TTL cache、防抖、热点缓存和失效合同必须保留。 | in-memory cache、TTL、capacity budget、invalidation hook。 | Redis、持久 cache、分布式 cache adapter 可卸载。 |
+| ├─ Runtime Management | runtime 生命周期、profile、feature binding、mount 生命周期和 provider 状态必须保留。 | runtime provider contract、feature runtime、mount lifecycle、health summary。 | 具体 runtime provider、外部 launcher、语言运行时 adapter 可动态绑定/解绑。 |
+| ├─ 执行控制 | 资源管理下的执行资源原语，负责并发锁、执行排队、超时/取消和执行回执。 | 调度合同、并发域、装配能力绑定的 executor contract。 | 理解 operation registry、接口目录、协议映射或具体业务 runtime。 |
+| ├─ 状态协调 | 资源管理下的状态资源原语，负责原子写入、JSONL 序列化、状态锁和轻量状态收敛。 | 文件系统原子写入、序列化合同、runtime logger。 | 持有 HTTP controller、UI 状态、业务 runtime、备份恢复编排或裸数据库细节；把业务策略塞进状态协调工具。 |
+| └─ Storage Provider | `server/platform/common/storage` 统一 SQLite migration、对象存储、raw object、metadata repository、`pact.storage.v1` provider 和 storage doctor。 | 数据库连接、repository interface、对象引用、migration、装配能力绑定的 storage provider contract。 | 上层直接调用 `metadataStore.getStorageSummary()`、raw object 路径解析、storage repair 函数、运维备份恢复入口或直接拼 SQL 操作核心表；storage 反向调用知识检索、agent workspace、Tool Management 或直接拥有运维备份恢复编排。 |
+| 运维 | `server/platform/common/devops` 统一 `pact.devops.v1` provider、进程状态、启动发现、监控告警、快照、备份、恢复编排、生产运行辅助和统一注册。 | runtime health interface、event bus、只读状态摘要、快照合同、备份计划、恢复演练记录、装配能力绑定的 queue monitor 观测端口。 | 绕过 operation/authorization 直接修复业务状态；让服务入口或 console executor 直接装配 monitor alert core / background process 实现；把运维脚本变成业务状态事实源；让存储或资源管理层反向拥有备份恢复策略。 |
 
-任何基础能力对应用能力的调用都必须通过组合根注入的接口、Operation Registry、Tool Management runtime 或明确的 mount contract 完成。`common/console` 对 system health/bootstrap operations、console auth/session management、authorization façade / grant / MCP authorization operations、Tool Management HTTP passthrough operations、event subscribe / agent sync operations、runtime info / console state aggregation、system interfaces / runtime path browse、maintenance agent operations、workspace audit/history、discovery/client registration operations、knowledge core operations（retrieval/evidence/knowledge graph/asset rendering/export/maintenance/review/learning）、knowledge source management、preprocessing rules、document parsing、corpus search/source vocabulary、word-cloud/domain summary、storage summary/doctor/reconcile/backup-restore、client runtime allocation/bootstrap、runtime mount operations、production readiness / executive report / architecture live map / sample business pack operations、module ecosystem operations、Codex OAuth operations、settings/model-library/Agent Gateway operations、monitor alerts、system observation/background process/checkpoint tree、job failed review、evidence sufficiency、knowledge agent skill、golden rules / rule authoring / gold cases、knowledge skills、agent evaluation、model decision、knowledge evolution、knowledge distillation/workbench、summarization、agent exploration、agent workspace file、agent workspace management/session/inheritance/lock、context runtime、workspace contribution、protocol façade / contract-registered operations、AgentLibrary knowledge access、workspace governance、asset lineage、Gerrit/repo、data connector、performance capacity 和 capability package 这类 console 操作只能提交 `operationId + input + context` 给 `server/platform/specialized/console/console-domain-operation-executor.mjs` 或同目录下的专用 operation executor，不能直接持有具体业务 registry、access policy、runtime 方法、runtime mount config/apply 方法、runtime refreshMounts 调用、production readiness/report/module ecosystem/OAuth 执行函数、settings/model-library/gateway provider 方法、model probe/gateway 调用、Agent Gateway workspace/session context 解析、discovery client registration/config 方法、console auth 方法、authorization engine/store 方法、maintenance agent service 方法、operation audit store 查询、event bus 订阅策略/agent-sync policy、Tool Management grant/authorization store/router 方法、metadataStore 业务方法、knowledge source service 方法、knowledge.search/search.query 输入策略、多模态检索策略、event/agent-sync subscription topic 策略、word-cloud corpusPath 策略、storage repair/backup 函数、client runtime allocator/bootstrap 方法、background process 函数、checkpoint tree API、job manager 查询、文件系统路径浏览、接口目录拼装、controller-to-controller 业务转调、知识配置 schema 拼装、协议占位响应或执行函数。`system-controller.mjs` 当前只保留 handler family composition、shared request/response helper 和 `securityPermissions` fallback 包装，不再直接实现任何 `async handle*` 方法；domain provider 解析、审计日志封装和 knowledge / Agent Gateway / authorization context 组装集中在 `server/platform/common/console/http/controllers/system-controller-contexts.mjs`，其中授权上下文只传递 `pact.security-permissions.v1` provider，不再传递裸 `authorizationEngine` 或 `authorizationStore`；console auth/session handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-auth-handlers.mjs`；authorization、workspace file façade、workspace contribution、AgentLibrary access、workspace skill 和 workspace asset permission 这些基础协议 handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-foundation-handlers.mjs`；system interfaces、events/agent-sync、discovery、runtime info/path/mounts/console state 和 maintenance agent 这些 runtime/system handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-runtime-handlers.mjs`；settings、model probe、Agent Gateway、agent registry 和 model routing handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-agent-settings-handlers.mjs`；workspace audit/history、checkpoint façade、workspace code change façade、raw corpus、dossier 和 distillation export handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-workspace-protocol-handlers.mjs`；knowledge workflow config、corpus、document parse、word-cloud、word-bag、storage summary/doctor/reconcile/backup 和 affair taxonomy handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-knowledge-operations-handlers.mjs`；knowledge console/source/config schema/capabilities/export/health/maintenance/review/learning/golden rules/distillation/workbench/skills/evaluation/evolution/summarization/exploration/search/graph handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-knowledge-runtime-handlers.mjs`。当前门禁要求 `server/platform/common` 到 `server/platform/specialized` 的真实 static/dynamic import 为 0，并禁止 `system-controller.mjs` 回流上述业务直接调用、context/provider assembly 或已拆出的接口族 handler；如未来确有短期迁移桥，必须先登记 owner、原因、退出条件和到期日，并在同一轮变更中给出移除计划，不能作为常态架构口径。
+装配能力的第一个预设配置是 `server/platform/common/composition-management/knowledge-transformation-standalone.preset.json`：它把原始语料建构、知识索引、知识蒸馏和 AgentLibrary 访问面打包成可脱水的独立外部应用，保留安全、审计、操作分发、存储、上传回执、模块生命周期和健康检查这些平台核心能力。
+
+第二个预设配置是 `server/platform/common/composition-management/gerrit-service.preset.json`：它打包 Pact 的 Gerrit 服务集成、代码评审路由、Codespace 管理、repo operation 兼容和 runtime dependency 下载能力，但不把 Gerrit WAR、Docker Desktop 或其它真实运行时二进制放进部署包。Gerrit 运行时由 `pact.runtime-dependencies.v1` 的 `runtime.dependencies.download targetId=gerrit` 或 `server:gerrit:download` 按需拉取、校验和缓存。
+
+第三个预设配置是 `server/platform/common/composition-management/skill-hosting-repository.preset.json`：它把技能托管仓库脱水成独立服务，只负责技能包集中存储、生命周期推进、目录发现、bootstrap 拉取计划、下载物化和回执审计；技能执行仍在智能体本地运行。该预设依赖上游发布/管理网关、下游智能体拉取网关、`work-queue-core` 队列和异步运行时，避免上传校验、索引刷新、下载物化等耗时任务阻塞服务请求线程。
+
+切面对接能力归口如下：
+
+| 切面 | 对接能力 | 高内聚边界 | 禁止依赖 |
+| --- | --- | --- | --- |
+| 上游服务切面 | 外部服务发现、上游 endpointRef、上游 secretRef 投影、服务接口契约、服务快照。 | 上游服务投影、外部服务配置、provider contract、secretRef projection 和服务快照。 | 直接读取具体业务 runtime 状态；把业务模块状态作为服务发现事实源；持有 secret value。 |
+| 下游客户端切面 | 客户端发现配置、能力目录投影、bootstrap manifest、客户端 secretRef 投影、客户端可见功能裁剪。 | 客户端 discovery config、public feature runtime、active capability manifest、connector/client bootstrap manifest 和 secretRef projection。 | 向客户端暴露应用 runtime、基建存储、本机绝对路径或 secret value。 |
+| 平台应用服务切面 | operation manifest、Operation Registry、interface catalog、HTTP / RPC / CLI 映射、character tag projection contract、authentication aspect contract、secret distribution contract、系统接口目录。 | Operation Registry、interface manifest、controller wiring 生命周期投影、协议绑定投影、character tag projection contract、authentication aspect contract 和 secret distribution contract。 | 绕过 Operation Dispatcher 执行业务；接口目录只声明接口但不输出 `registered/wired/implemented/verified` 生命周期；绕过安全内核直接分发密钥。 |
+
+任何基础能力对应用能力的调用都必须通过装配能力输出的接口、切面层 Operation Registry / interface catalog、Tool Management runtime 或明确的 mount contract 完成。`common/console` 对 system health/bootstrap operations、console auth/session management、authorization façade / grant / MCP authorization operations、Tool Management HTTP passthrough operations、event subscribe / agent sync operations、runtime info / console state aggregation、system interfaces / runtime path browse、maintenance agent operations、workspace audit/history、discovery/client registration operations、knowledge core operations（retrieval/evidence/knowledge graph/asset rendering/export/maintenance/review/learning）、knowledge source management、preprocessing rules、document parsing、corpus search/source vocabulary、word-cloud/domain summary、storage summary/doctor/reconcile/backup-restore、client runtime allocation/bootstrap、runtime mount operations、production readiness / executive report / architecture live map / sample business pack operations、module ecosystem operations、Codex OAuth operations、settings/model-library/Agent Gateway operations、monitor alerts、system observation/background process/checkpoint tree、job failed review、evidence sufficiency、knowledge agent skill、golden rules / rule authoring / gold cases、knowledge skills、agent evaluation、model decision、knowledge evolution、knowledge distillation/workbench、summarization、agent exploration、agent workspace file、agent workspace management/session/inheritance/lock、context runtime、workspace contribution、protocol façade / contract-registered operations、AgentLibrary knowledge access、workspace governance、asset lineage、Gerrit/repo、data connector、performance capacity 和 capability package 这类 console 操作只能提交 `operationId + input + context` 给 `server/platform/specialized/console/console-domain-operation-executor.mjs` 或同目录下的专用 operation executor，不能直接持有具体业务 registry、access policy、runtime 方法、runtime mount config/apply 方法、runtime refreshMounts 调用、production readiness/report/module ecosystem/OAuth 执行函数、settings/model-library/gateway provider 方法、model probe/gateway 调用、Agent Gateway workspace/session context 解析、discovery client registration/config 方法、console auth 方法、authorization engine/store 方法、maintenance agent service 方法、operation audit store 查询、event bus 订阅策略/agent-sync policy、Tool Management grant/authorization store/router 方法、metadataStore 业务方法、knowledge source service 方法、knowledge.search/search.query 输入策略、多模态检索策略、event/agent-sync subscription topic 策略、word-cloud corpusPath 策略、storage repair/backup 函数、client runtime allocator/bootstrap 方法、background process 函数、checkpoint tree API、job manager 查询、文件系统路径浏览、接口目录拼装、controller-to-controller 业务转调、知识配置 schema 拼装、协议占位响应或执行函数。`system-controller.mjs` 当前只保留 handler family composition、shared request/response helper 和 `securityPermissions` fallback 包装，不再直接实现任何 `async handle*` 方法；domain provider 解析、审计日志封装和 knowledge / Agent Gateway / authorization context 组装集中在 `server/platform/common/console/http/controllers/system-controller-contexts.mjs`，其中授权上下文只传递 `pact.security-permissions.v1` provider，不再传递裸 `authorizationEngine` 或 `authorizationStore`；console auth/session handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-auth-handlers.mjs`；authorization、workspace file façade、workspace contribution、AgentLibrary access、workspace skill 和 workspace asset permission 这些基础协议 handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-foundation-handlers.mjs`；system interfaces、events/agent-sync、discovery、runtime info/path/mounts/console state 和 maintenance agent 这些 runtime/system handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-runtime-handlers.mjs`；settings、model probe、Agent Gateway、agent registry 和 model routing handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-agent-settings-handlers.mjs`；workspace audit/history、checkpoint façade、workspace code change façade、raw corpus、dossier 和 distillation export handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-workspace-protocol-handlers.mjs`；knowledge workflow config、corpus、document parse、word-cloud、word-bag、storage summary/doctor/reconcile/backup 和 affair taxonomy handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-knowledge-operations-handlers.mjs`；knowledge console/source/config schema/capabilities/export/health/maintenance/review/learning/golden rules/distillation/workbench/skills/evaluation/evolution/summarization/exploration/search/graph handler 已按接口族进入 `server/platform/common/console/http/controllers/system-controller-knowledge-runtime-handlers.mjs`。当前门禁要求 `server/platform/common` 到 `server/platform/specialized` 的真实 static/dynamic import 为 0，并禁止 `system-controller.mjs` 回流上述业务直接调用、context/provider assembly 或已拆出的接口族 handler；如未来确有短期迁移桥，必须先登记 owner、原因、退出条件和到期日，并在同一轮变更中给出移除计划，不能作为常态架构口径。
 
 `server/platform/common/console/http/controllers/system-controller-ops-observation-handlers.mjs` 已承接 failed jobs review、background processes、checkpoint tree observation 和 monitor alerts handler。`system-controller.mjs` 只能通过 `createSystemControllerOpsObservationHandlers(...)` 组合这些运维观测方法，不能回到主文件内直接调用 background process 函数、checkpoint tree API、monitor alert API 或 job manager 查询。
 
@@ -448,13 +481,13 @@ common platform contracts
 
 `server/platform/common/console/http/controllers/system-controller-knowledge-runtime-handlers.mjs` 已承接 knowledge console/source/config schema/capabilities/export/health/maintenance/review/learning/golden rules/distillation/workbench/skills/evaluation/evolution/summarization/exploration/search/graph 等知识运行时 handler。`system-controller.mjs` 只能通过 `createSystemControllerKnowledgeRuntimeHandlers(...)` 组合这一组知识运行时入口，不能回到主文件内承载知识源、检索、蒸馏、技能、评估或进化 handler。
 
-服务端内部工作流也必须遵守同一条协议边界。`server/services/server-runtime/http-server.mjs` 发布启动期 `system.interfaces.snapshot`、`discovery.config.snapshot`、`agent_sync.config.snapshot`、`system.console_state.snapshot` 和 `storage.summary.snapshot` 时只能通过 `dispatchInternalOperation(...)` 进入 Operation Dispatcher，不能直接调用 `buildConsoleState()`、`loadAgentSyncConfig()`、`metadataStore.getStorageSummary()` 或手工拼装 interface/discovery/storage 快照；内部调度、HTTP 和 RPC 都必须复用同一份 operation contract、并发控制、审计和 trace 语义。
+服务端内部工作流也必须遵守同一条协议边界。`server/services/server-runtime/http-server.mjs` 发布启动期 `system.interfaces.snapshot`、`discovery.config.snapshot`、`agent_sync.config.snapshot`、`system.console_state.snapshot` 和 `storage.summary.snapshot` 时只能通过切面层提供的 operation contract 进入 Operation Dispatcher，不能直接调用 `buildConsoleState()`、`loadAgentSyncConfig()`、`metadataStore.getStorageSummary()` 或手工拼装 interface/discovery/storage 快照；内部调度、HTTP 和 RPC 的合同、接口目录和发现投影归切面层维护，dispatcher 只执行并发控制和调用分发。
 
-服务入口不得直接装配 specialized agent 配置注册表。`server/services/server-runtime/http-server.mjs` 不能 import 或调用 `getAgentConfigRegistry()`；agent config registry refresh 归 `server/platform/interactive/composition-root.mjs` 所有，随 feature runtime、platform registry、console domain services 和 storage/runtime provider 一起完成交互层组合。
+服务入口不得直接装配 specialized agent 配置注册表。`server/services/server-runtime/http-server.mjs` 不能 import 或调用 `getAgentConfigRegistry()`；agent config registry refresh 归基建层装配能力所有，随 feature runtime、platform registry、console domain services 和 storage/runtime provider 一起完成装配图收敛。
 
-服务入口也不得直接装配 agent memory、context runtime 或 Agent Gateway adapter。`server/services/server-runtime/http-server.mjs` 不能 import 或调用 `createAgentMemory()`、`createContextRuntime()` 或 `agent-gateway/index.mjs`；这些 agent runtime provider 由 `server/platform/interactive/server-runtime-providers.mjs` 按 feature runtime 和 provider contract 创建，再作为组合根产物注入 controller、maintenance agent、summarization、agent exploration 和其它 workflow。
+服务入口也不得直接装配 agent memory、context runtime 或 Agent Gateway adapter。`server/services/server-runtime/http-server.mjs` 不能 import 或调用 `createAgentMemory()`、`createContextRuntime()` 或 `agent-gateway/index.mjs`；这些 agent runtime provider 由基建层装配能力按 feature runtime 和 provider contract 建立绑定，再作为装配产物提供给 controller、maintenance agent、summarization、agent exploration 和其它 workflow。
 
-Tool Management runtime 也归交互层 provider 装配。`server/services/server-runtime/http-server.mjs` 不能直接 import `tool-management-core/index.mjs` 或调用 `createToolManagementPlatform()`；服务入口只能调用 `server/platform/interactive/server-runtime-providers.mjs` 暴露的 `createServerToolManagementPlatform(...)`，由 provider 层注入 operations、feature runtime、controllers、audit/concurrency/protocol event bus、console auth 和 logger。
+Tool Management runtime 也归基建层装配能力。`server/services/server-runtime/http-server.mjs` 不能直接 import `tool-management-core/index.mjs` 或调用 `createToolManagementPlatform()`；服务入口只能消费装配能力输出的 Tool Management provider，由装配图绑定 operations、feature runtime、controllers、audit/concurrency/protocol event bus、console auth 和 logger。
 
 Checkpoint upload session 属于协议工作流实现，不属于 `common/console` 的稳定基础能力。`server/platform/common/console/http/controllers/jobs-controller.mjs` 和 `system-controller-contexts.mjs` 不能直接 import `protocols/checkpoint/upload-session-store.mjs`；它们只能通过 `server/platform/specialized/console/console-domain-services.mjs` 注入的 `uploadSessionStore` provider 调用创建/查询/追加 chunk、receipt 构建、文件解析和清理能力。
 
@@ -848,10 +881,10 @@ C0 -> C1(A change) -> C2(B change) -> R1(restore to C1) -> R2(restore to C0)
 存储原则：
 
 - SQLite 和对象目录是本地默认实现，不是协议边界。
-- 上层只能通过 `pact.storage.v1` provider 或明确 repository contract 访问 storage summary、raw object、client registry、doctor/reconcile、backup/restore、source vocabulary 和 corpus search 端口。
+- 上层只能通过 `pact.storage.v1` provider 或明确 repository contract 访问 storage summary、raw object、client registry、doctor/reconcile、source vocabulary 和 corpus search 端口；备份恢复由运维基础编排。
 - 外部知识库、向量库、图谱库只能通过 adapter / mount 进入，不能成为智能体直连面。
 - checkpoint metadata 和 Operation Ledger 是产品恢复事实源；git commit 是文件树 projection。
-- 备份恢复必须覆盖 metadata DB、knowledge DB、raw objects、assets、jobs、settings、mount configs、model configs 和 auth DB。
+- 运维备份恢复必须覆盖 metadata DB、knowledge DB、raw objects、assets、jobs、settings、mount configs、model configs 和 auth DB。
 
 ### 权限与安全设计
 
@@ -1187,12 +1220,16 @@ Storage and Indexes
 
 ## 代码分层
 
-- `server/platform/common`
-  - 基建层：security、operation-dispatcher、storage、module management、data structure、devops、console API 基础设施。
+- 外观层 / 控制面板
+  - 个人用户控制面板：server-web、client-gui、console shell 和只读系统视图，只通过切面层或服务层入口进入平台。
+- 切面层
+  - 对接能力：upstream service aspect、downstream client aspect、platform application service aspect，承载服务发现、上游 endpointRef、客户端发现配置、bootstrap manifest、secretRef 投影、character tag projection contract、authentication aspect contract、secret distribution contract、operation manifest、Operation Registry、interface catalog 和 HTTP/RPC/CLI 映射。
 - `server/platform/interactive`
-  - 服务层装配：composition root、provider registry、feature profile、runtime providers、public call surface。
+  - 服务层能力：public call surface、character configuration（Tag Management、Organization Management、Group Management、Character Management）、authentication management（Credential Distribution、Authentication Aspect）；独立部署依赖打包、动态模块挂载、启动装配撮合和 runtime provider 装配归基建层装配能力。
 - `server/platform/specialized`
   - 应用能力层：knowledge、agent workspace/context/memory、capabilities/tools、capabilities/skills，其中通用工具与技能通过 `pact.tool-skill-management.v1` provider 聚合对外访问。
+- `server/platform/common`
+  - 基建层：security、module management、composition management（deployment dependency package、dynamic module mount、startup composition）、data structure、platform adapter、resource management（file system、memory、process、shell、terminal、database、message queue、cache、runtime、execution control、state coordination、storage provider）、devops（snapshot、backup、restore orchestration）、console API 基础设施。
 - `server/platform/modules`
   - 外置模块和本地运行时资源，例如 Tika、OCR、document parser、可替换 mount runtime。
 - `server/services`
@@ -1486,6 +1523,8 @@ Gerrit route 必须遵守这些边界：
 1. `raw-corpus-construction`：原始语料建构和格式转换。
 2. `knowledge-index-construction`：canonical evidence/index，权威检索和证据回读。
 3. `knowledge-distillation`：有损蒸馏背景，只供上下文和交付使用，不能替代 evidence。
+
+架构图中这三层作为左侧纵向 pipeline 表达，自下而上为原始语料、知识索引、知识蒸馏；右侧的 AgentLibrary / 图书馆与三层高度相等，表示它是面向智能体的等高访问面，而不是第四层知识加工流程。
 
 详见 `docs/KNOWLEDGE-GOVERNANCE.md`。
 
