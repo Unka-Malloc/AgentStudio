@@ -4,7 +4,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SERVER_API_OPERATIONS } from "../platform/common/operation-dispatcher/operation-registry.mjs";
 import { createToolCatalog } from "../platform/specialized/capabilities/tools/tool-management-core/catalog.mjs";
-import { KERNEL_TOOL_IDS } from "../platform/common/security/authorization/authorization-engine.mjs";
+import {
+  KERNEL_API_OPERATION_IDS,
+  KERNEL_TOOL_IDS
+} from "../platform/common/security/authorization/authorization-engine.mjs";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const externalServicesRoot = path.join(repoRoot, "external-services");
@@ -76,6 +79,7 @@ const operationsById = new Map(SERVER_API_OPERATIONS.map((operation) => [operati
 const catalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
 const toolsByOperationId = new Map(catalog.tools.map((tool) => [tool.operationId, tool]));
 const toolIds = new Set(catalog.tools.map((tool) => tool.id));
+const kernelApiOperationIds = new Set(KERNEL_API_OPERATION_IDS);
 const kernelToolIds = new Set(KERNEL_TOOL_IDS);
 
 for (const operation of SERVER_API_OPERATIONS) {
@@ -166,6 +170,11 @@ for (const serviceName of externalServiceNames) {
       toolsByOperationId.has(operationId),
       false,
       `${operationId} must not be exposed through Tool Management`
+    );
+    assert.equal(
+      kernelApiOperationIds.has(operationId),
+      false,
+      `${operationId} is an internal platform algorithm operation and must not remain in the authorization kernel`
     );
   }
 }

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import { KERNEL_API_OPERATION_IDS } from "../platform/common/security/authorization/authorization-engine.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 async function fetchJson(url, options = {}) {
@@ -29,6 +30,34 @@ async function executeTool(baseUrl, token, toolId, input = {}) {
     headers: bearerHeaders(token),
     body: JSON.stringify({ toolId, input })
   });
+}
+
+async function createToolGrant(baseUrl, label, scopes) {
+  const result = await fetchJson(`${baseUrl}/api/tool-management/v1/grants`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label, scopes })
+  });
+  assert.equal(result.status, 201, `${label} grant should be created`);
+  assert.ok(result.payload.token, `${label} grant should return a token`);
+  return result.payload.token;
+}
+
+function assertPermissionDenied(result, expectedCapability, label) {
+  assert.equal(result.status, 403, `${label} should be denied`);
+  const code = result.payload.error?.code;
+  assert.equal(
+    ["missing_scopes", "missing_capabilities"].includes(code),
+    true,
+    `${label} should fail with a permission denial code`
+  );
+  if (code === "missing_capabilities") {
+    assert.equal(
+      result.payload.error.details?.missingCapabilities?.includes(expectedCapability),
+      true,
+      `${label} should report missing capability ${expectedCapability}`
+    );
+  }
 }
 
 const expectedToolIds = [
@@ -137,6 +166,32 @@ const expectedToolIds = [
   "pact.knowledge.graph"
 ];
 
+const legacyInternalDistillationOperationIds = [
+  "knowledge.distillation.export",
+  "knowledge.distillation.runs.create",
+  "knowledge.distillation.runs.get",
+  "knowledge.distillation.workbench.runs.list",
+  "knowledge.distillation.workbench.runs.create",
+  "knowledge.distillation.workbench.runs.get",
+  "knowledge.distillation.workbench.runs.resume",
+  "knowledge.distillation.workbench.runs.cancel",
+  "knowledge.distillation.workbench.runs.archive",
+  "knowledge.distillation.workbench.runs.delete",
+  "knowledge.distillation.workbench.stage.rerun",
+  "knowledge.distillation.workbench.stage.export",
+  "knowledge.distillation.workbench.runs.package",
+  "knowledge.distillation.workbench.runs.artifacts",
+  "knowledge.distillation.workbench.runs.compare"
+];
+
+const legacyInternalDistillationToolIds = [
+  "pact.knowledge.distillation.export",
+  "pact.knowledge.distillation.runs.create",
+  "pact.knowledge.distillation.runs.get",
+  "pact.knowledge.distillation.workbench.runs.create",
+  "pact.knowledge.distillation.workbench.stage.export"
+];
+
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-agent-knowledge-tools-"));
 const server = await startHttpServer({
   userDataPath,
@@ -156,22 +211,40 @@ try {
   for (const toolId of expectedToolIds) {
     assert.equal(toolIds.has(toolId), true, `${toolId} should be advertised`);
   }
+  for (const operationId of legacyInternalDistillationOperationIds) {
+    assert.equal(
+      tools.some((tool) => tool.operationId === operationId),
+      false,
+      `${operationId} must not be advertised to agents`
+    );
+    assert.equal(
+      KERNEL_API_OPERATION_IDS.includes(operationId),
+      false,
+      `${operationId} must not remain in the agent authorization kernel`
+    );
+  }
+  for (const toolId of legacyInternalDistillationToolIds) {
+    assert.equal(toolIds.has(toolId), false, `${toolId} must not be advertised to agents`);
+  }
   const legacyOperationPrefix = `${"agent"}_${"tools"}.`;
   assert.equal(
     tools.some((tool) => String(tool.operationId || "").startsWith(legacyOperationPrefix)),
     false
   );
 
-  const readGrant = await fetchJson(`${server.url}/api/tool-management/v1/grants`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      label: "verify-agent-knowledge-tools-read",
-      scopes: ["knowledge:read"]
-    })
-  });
-  assert.equal(readGrant.status, 201);
-  assert.ok(readGrant.payload.token);
+  const legacyProbeToken = await createToolGrant(
+    server.url,
+    "verify-agent-knowledge-tools-legacy-probe",
+    ["knowledge:maintain"]
+  );
+  const directLegacyDistillation = await executeTool(
+    server.url,
+    legacyProbeToken,
+    "pact.knowledge.distillation.runs.create",
+    {}
+  );
+  assert.equal(directLegacyDistillation.status, 404);
+  assert.equal(directLegacyDistillation.payload.error.code, "unknown_tool");
 
   const noTokenHealth = await fetchJson(`${server.url}/api/tool-management/v1/execute`, {
     method: "POST",
@@ -183,9 +256,14 @@ try {
   });
   assert.equal(noTokenHealth.status, 401);
 
+  const healthGrantToken = await createToolGrant(
+    server.url,
+    "verify-agent-knowledge-tools-health-read",
+    ["knowledge:read"]
+  );
   const health = await executeTool(
     server.url,
-    readGrant.payload.token,
+    healthGrantToken,
     "pact.knowledge.health",
     {}
   );
@@ -194,9 +272,14 @@ try {
   assert.equal(health.payload.grant.scopes.includes("knowledge:read"), true);
   assert.equal(health.payload.result.ok, true);
 
+  const searchGrantToken = await createToolGrant(
+    server.url,
+    "verify-agent-knowledge-tools-search-read",
+    ["knowledge:read"]
+  );
   const search = await executeTool(
     server.url,
-    readGrant.payload.token,
+    searchGrantToken,
     "pact.knowledge.search",
     {
       query: "agent knowledge tool verification",
@@ -214,24 +297,19 @@ try {
   );
   assert.equal(search.payload.result.agentMessage?.machineReadable, true);
 
-  const adminGrant = await fetchJson(`${server.url}/api/tool-management/v1/grants`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      label: "verify-agent-workspace-context-tools-admin",
-      scopes: [
-        "knowledge:read",
-        "knowledge:write",
-        "knowledge:maintain",
-        "knowledge:admin",
-        "workspace:read",
-        "workspace:write",
-        "workspace:maintain"
-      ]
-    })
-  });
-  assert.equal(adminGrant.status, 201);
-  assert.ok(adminGrant.payload.token);
+  const adminGrantToken = await createToolGrant(
+    server.url,
+    "verify-agent-workspace-context-tools-admin",
+    [
+      "knowledge:read",
+      "knowledge:write",
+      "knowledge:maintain",
+      "knowledge:admin",
+      "workspace:read",
+      "workspace:write",
+      "workspace:maintain"
+    ]
+  );
 
   const workspace = await fetchJson(`${server.url}/api/agent-workspaces`, {
     method: "POST",
@@ -270,7 +348,7 @@ try {
 
   const workspaceContext = await executeTool(
     server.url,
-    adminGrant.payload.token,
+    adminGrantToken,
     "pact.agentWorkspace.context",
     { workspaceId }
   );
@@ -282,7 +360,7 @@ try {
 
   const contextBundle = await executeTool(
     server.url,
-    adminGrant.payload.token,
+    adminGrantToken,
     "pact.agentWorkspace.contextBundle.export",
     {
       workspaceId,
@@ -294,22 +372,9 @@ try {
   assert.equal(contextBundle.payload.result.compressed.encoding, "gzip+base64");
   assert.ok(contextBundle.payload.result.bundleHash);
 
-  const restoreDenied = await executeTool(
-    server.url,
-    readGrant.payload.token,
-    "pact.agentWorkspace.contextBundle.restore",
-    {
-      workspaceId: targetWorkspaceId,
-      compressed: contextBundle.payload.result.compressed,
-      bundleHash: contextBundle.payload.result.bundleHash
-    }
-  );
-  assert.equal(restoreDenied.status, 403);
-  assert.equal(restoreDenied.payload.error.code, "missing_scopes");
-
   const restored = await executeTool(
     server.url,
-    adminGrant.payload.token,
+    adminGrantToken,
     "pact.agentWorkspace.contextBundle.restore",
     {
       workspaceId: targetWorkspaceId,
@@ -324,17 +389,46 @@ try {
   assert.equal(restored.payload.result.restoredContext.toolGrantId, "tool-workspace-grant");
   assert.deepEqual(restored.payload.result.restoredContext.knowledgeSourceIds, ["tool-source-a"]);
 
+  const restoreDeniedToken = await createToolGrant(
+    server.url,
+    "verify-agent-workspace-context-tools-restore-denied",
+    ["knowledge:read"]
+  );
+  const restoreDenied = await executeTool(
+    server.url,
+    restoreDeniedToken,
+    "pact.agentWorkspace.contextBundle.restore",
+    {
+      workspaceId: targetWorkspaceId,
+      compressed: contextBundle.payload.result.compressed,
+      bundleHash: contextBundle.payload.result.bundleHash
+    }
+  );
+  assertPermissionDenied(
+    restoreDenied,
+    "cap:tool:pact.agentWorkspace.contextBundle.restore:execute",
+    "context bundle restore with read grant"
+  );
+
+  const writeDeniedToken = await createToolGrant(
+    server.url,
+    "verify-agent-knowledge-tools-write-denied",
+    ["knowledge:read"]
+  );
   const writeDenied = await executeTool(
     server.url,
-    readGrant.payload.token,
+    writeDeniedToken,
     "pact.knowledge.feedback",
     {
       query: "agent knowledge tool verification",
       action: "searchMiss"
     }
   );
-  assert.equal(writeDenied.status, 403);
-  assert.equal(writeDenied.payload.error.code, "missing_scopes");
+  assertPermissionDenied(
+    writeDenied,
+    "cap:tool:pact.knowledge.feedback:execute",
+    "knowledge feedback with read grant"
+  );
 
   const metrics = await fetchJson(`${server.url}/api/tool-management/v1/metrics/summary`);
   assert.equal(metrics.status, 200);
