@@ -1,8 +1,9 @@
 # Pact Unified Test Framework
 
 Pact has server runtime code, a Vue server console, a Flutter desktop client,
-Rust native client binaries, platform adapters, and large mail fixtures. The test
-framework is intentionally layered instead of tied to one language runner.
+Rust native client binaries, platform adapters, and external document/mail
+evaluation corpora. The test framework is intentionally layered instead of tied
+to one language runner.
 
 The single repository entrypoint is:
 
@@ -23,15 +24,118 @@ The runner writes machine-readable reports to `build/test-reports/`, including
 
 - One entrypoint: every repository-level check is registered in `tests/run.mjs`.
 - Owned tests stay near owned code: Rust tests stay in `client-cli`, Flutter
-  tests stay in `client-gui`, server verification stays in `server/scripts`.
+  tests stay in `client-gui`, existing server verifier scripts stay in
+  `server/scripts`, and new focused Node/Vue unit tests use the standard Vitest
+  stack.
 - Profiles compose suites: developers run fast tests locally; CI and release
   workflows run standard, security, coverage, and platform profiles.
 - Security is part of default regression: secret hygiene and production
   dependency audit run before broader integration work.
 - Generated output stays under `build/`; root and source-tree hygiene tests
   reject misplaced artifacts.
+- Runtime settings, provider manifests, mount config, local data dirs, and
+  credential state stay outside the repository under `~/.pact-server-data/`.
+- Raw agent conversation history and real mail download/import directories are
+  external data and must not be kept under the project checkout.
+- Downloaded evaluation corpora, real mailboxes, imported messages, and real
+  document sample sets stay outside the repository under
+  `~/.pact-server-data/evaluation-corpora/`. Repository tests may keep only
+  small synthetic fixtures and manifests.
 - Every feature or refactor must update the smallest suite that can fail for
   the changed behavior, then any integration suite needed for the contract.
+
+## Standard Test Stack
+
+Pact standardizes new Node.js and Vue tests on the Vite-native test stack:
+
+| Layer | Standard | Scope |
+| --- | --- | --- |
+| Node.js server unit tests | `vitest` | Pure modules, state reducers, authorization helpers, runtime policies, storage utilities, and other deterministic server logic. |
+| Node.js server integration tests | `vitest` | HTTP/API behavior, temporary filesystem state, SQLite-backed flows, and focused runtime workflows. |
+| Vue console unit/component tests | `vitest` + `@vue/test-utils` + `jsdom` or `happy-dom` | Composables, route-level controllers, component rendering, emitted events, forms, and DOM assertions that do not require a real browser. |
+| Browser E2E tests | `@playwright/test` | Full console workflows, routing, real browser behavior, network boundaries, and user-visible regressions. |
+| Node/Vue coverage | `@vitest/coverage-v8` | Text, HTML, and LCOV coverage reports for Vitest-owned server and Vue tests, with optional thresholds for CI gates. |
+
+Existing `server/scripts/verify-*.mjs` checks remain valid contract and
+regression gates. New narrowly scoped server unit tests should prefer Vitest;
+broader system-contract checks may stay as verifier scripts when they exercise
+process boundaries, generated reports, or multi-step runtime workflows.
+
+Coverage is supported by the standard stack. Vitest can collect V8 coverage via
+`@vitest/coverage-v8` for Node.js server modules, Vue composables, and Vue
+component tests. Playwright remains the E2E runner; it should not be the primary
+source of unit coverage, though E2E suites can still be used as release
+confidence gates. Flutter coverage continues to use `flutter test --coverage`,
+and Rust CLI coverage uses `cargo-llvm-cov`.
+
+## Coverage Baseline
+
+Baseline captured on 2026-06-03:
+
+| Area | Command | Line coverage | Covered / total lines | Report |
+| --- | --- | --- | --- | --- |
+| `server` | `npm run test:node-vue:coverage` | 0.91% | 387 / 42,684 | `build/coverage/node-vue/lcov.info` filtered to `server/` |
+| `server-web` | `npm run test:node-vue:coverage` | 0.22% | 26 / 12,024 | `build/coverage/node-vue/lcov.info` filtered to `server-web/` |
+| `client-gui` | `npm run client:test:coverage` | 52.40% | 251 / 479 | `client-gui/coverage/lcov.info` |
+| `client-cli` | `npm run client:native:test:coverage` | 73.66% | 2,137 / 2,901 | `build/coverage/client-cli/lcov.info` |
+
+The `server` and `server-web` baselines come from the same Vitest LCOV report
+and are split by `SF:` path prefix. The Node/Vue baseline is intentionally
+repository-wide over `server/**/*.mjs`, `server-web/**/*.ts`, and
+`server-web/**/*.vue`, excluding verifier scripts, generated/runtime bundles,
+static public assets, and non-source documents. The first Node/Vue baseline is
+low because it only contains the initial Vitest seed tests; new server and Vue
+work should raise this value by adding focused Vitest tests for changed modules.
+Rust CLI coverage uses `cargo-llvm-cov`; local and CI environments need that
+Cargo subcommand available before running `npm run client:native:test:coverage`.
+
+Latest non-ACP scan captured on 2026-06-05 after the latest Vitest coverage
+expansion. The Node/Vue report was produced by the non-ACP Vitest coverage run
+that excludes ACP relay, downstream-client, and communication-service protocol
+work left for the ACP batch:
+
+| Area | Command | Line coverage | Covered / total lines | Report |
+| --- | --- | --- | --- | --- |
+| `server` non-ACP | non-ACP `vitest --coverage` + `PACT_UNIT_COVERAGE_NODE_VUE_REPORT=build/coverage/node-vue-non-acp/lcov.info npm run test:unit-coverage:scan` | 95.002% | 40,465 / 42,594 | `build/coverage/node-vue-non-acp/lcov.info` filtered to `server/`, excluding ACP relay/downstream/communication-service paths |
+| `server-web` | non-ACP `vitest --coverage` + `PACT_UNIT_COVERAGE_NODE_VUE_REPORT=build/coverage/node-vue-non-acp/lcov.info npm run test:unit-coverage:scan` | 95.493% | 11,970 / 12,535 | `build/coverage/node-vue-non-acp/lcov.info` filtered to `server-web/` |
+| `client-gui` | `npm run client:test:coverage` + `npm run test:unit-coverage:scan` | 95.73% | 561 / 586 | `client-gui/coverage/lcov.info` |
+| `client-cli` | `npm run client:native:test:coverage` + `npm run test:unit-coverage:scan` | 95.11% | 3,696 / 3,886 | `build/coverage/client-cli/lcov.info` |
+
+## Coverage Gate
+
+The first quality gate for future changes is the direct unit coverage scan.
+The repository runner registers `coverage.unit-threshold` as the first suite in
+every `tests/run.mjs` profile, including the dynamically selected `changed`
+profile; coverage is checked before the broader hygiene, security, build, and
+regression gates. The first gate runs:
+
+```sh
+npm run test:unit-coverage:scan
+```
+
+This command directly runs `tests/verify-unit-coverage-threshold.mjs` over the
+existing LCOV reports. Report paths can be overridden with
+`PACT_UNIT_COVERAGE_NODE_VUE_REPORT`, `PACT_UNIT_COVERAGE_CLIENT_GUI_REPORT`,
+and `PACT_UNIT_COVERAGE_CLIENT_CLI_REPORT` when scanning a scoped report such as
+`build/coverage/node-vue-non-acp/lcov.info`. Each code area must be strictly
+greater than 95.00% line coverage:
+
+- `server`
+- `server-web`
+- `client-gui`
+- `client-cli`
+
+When reports need to be refreshed before scanning, run:
+
+```sh
+npm run test:unit-coverage:gate
+```
+
+That command runs the coverage tools for all four code areas, then runs the same
+direct scan. Every `tests/run.mjs` profile starts with the scan-only gate. As of
+the 2026-06-05 non-ACP scan above, the four submitted areas are above the
+strict >95% threshold; ACP relay/downstream/communication-service coverage is
+tracked separately with the remaining ACP work.
 
 ## Profiles
 
@@ -39,7 +143,7 @@ The runner writes machine-readable reports to `build/test-reports/`, including
 | --- | --- | --- |
 | `fast` | `npm test` / `npm run test:fast` | Local pre-commit loop: repo hygiene, secret hygiene, destructive client gates, Flutter analyze/tests, Rust client tests. |
 | `standard` | `npm run test:regression` / `npm run test:standard` | Full cross-layer regression: security, server console build, server runtime checks, client tests, hygiene after generated output. |
-| `coverage` | `npm run test:coverage` | Flutter coverage plus Rust client tests. |
+| `coverage` | `npm run test:coverage` | Coverage profile: first runs the direct unit coverage threshold scan and enforces the >95% line threshold. Refresh LCOV reports with `npm run test:unit-coverage:gate` when needed. |
 | `security` | `npm run test:security` | Secret scan, dependency audit, server smoke, client native tests. |
 | `server` | `npm run test:server` | Server console and server runtime verification. |
 | `client` | `npm run test:client` | Flutter and Rust client verification. |
@@ -79,8 +183,11 @@ node tests/run.mjs --tag security
 
 - Flutter unit/widget tests live under `client-gui/test`.
 - Rust unit tests live beside `client-cli/src` code.
-- Server module-level checks should be added to focused scripts under
-  `server/scripts` or local test modules when a script would be too broad.
+- New Node.js server unit tests should use Vitest.
+- Vue console composable and component tests should use Vitest with
+  `@vue/test-utils` and a DOM environment such as `jsdom` or `happy-dom`.
+- Existing server verifier scripts under `server/scripts` remain the right
+  place for broader contract, architecture, and runtime workflow checks.
 
 ### Contract and Integration
 

@@ -252,6 +252,7 @@
     "client:test": "cd client-gui && flutter test",
     "client:test:coverage": "cd client-gui && flutter test --coverage",
     "client:native:test": "cargo test --manifest-path client-cli/Cargo.toml",
+    "client:native:test:coverage": "mkdir -p build/coverage/client-cli && cargo llvm-cov --manifest-path client-cli/Cargo.toml --lcov --output-path build/coverage/client-cli/lcov.info",
     "client:verify:architecture": "node client-gui/scripts/verify-client-architecture.mjs",
     "client:verify:plan": "node client-gui/scripts/verify-client-plan.mjs",
     "client:verify:targets": "cargo test --manifest-path client-cli/Cargo.toml targets --quiet",
@@ -263,7 +264,7 @@
     "client:verify:mcp-opencode-connector": "cargo test --manifest-path client-cli/Cargo.toml mcp_plugins_opencode --quiet",
     "client:verify:ui-new-architecture": "npm run client:analyze && npm run client:test",
     "client:verify": "npm run client:verify:architecture && npm run client:verify:plan && npm run client:verify:state-store && npm run client:verify:targets && npm run client:verify:config-writes && npm run client:verify:pairing-skill-cli && npm run client:verify:mcp-plugins && npm run client:verify:mcp-opencode-connector && npm run client:verify:thin-forwarding && npm run client:verify:ui-new-architecture && npm run client:native:test",
-    "client:verify:coverage": "npm run client:analyze && npm run client:test:coverage && npm run client:native:test",
+    "client:verify:coverage": "npm run client:analyze && npm run client:test:coverage && npm run client:native:test:coverage",
     "client:run:macos": "cd client-gui && flutter run -d macos",
     "client:package:plan": "node client-gui/scripts/package-client.mjs --dry-run",
     "client:build:macos": "node client-gui/scripts/package-client.mjs --platform macos",
@@ -282,6 +283,10 @@
     "test:prebuild": "node tests/run.mjs --profile prebuild",
     "test:full": "node tests/run.mjs --profile release",
     "test:coverage": "node tests/run.mjs --profile coverage",
+    "test:node-vue": "vitest run --config vitest.config.ts",
+    "test:node-vue:coverage": "vitest run --config vitest.config.ts --coverage",
+    "test:unit-coverage:scan": "node tests/verify-unit-coverage-threshold.mjs",
+    "test:unit-coverage:gate": "npm run test:node-vue:coverage && npm run client:test:coverage && npm run client:native:test:coverage && npm run test:unit-coverage:scan",
     "test:security": "node tests/run.mjs --profile security",
     "test:server": "node tests/run.mjs --profile server",
     "test:client": "node tests/run.mjs --profile client",
@@ -316,10 +321,15 @@
     }
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/node": "^24.0.10",
     "@vitejs/plugin-vue": "^6.0.6",
+    "@vitest/coverage-v8": "^4.1.8",
+    "@vue/test-utils": "^2.4.10",
+    "jsdom": "^29.1.1",
     "typescript": "^5.8.3",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "vitest": "^4.1.8"
   },
   "optionalDependencies": {
     "pg": "^8.20.0"

@@ -11,6 +11,12 @@ const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const defaultReportDir = path.join(repoRoot, "build", "test-reports");
 
 const suites = [
+  suite("coverage.unit-threshold", "Unit coverage threshold scan", npm("run", "test:unit-coverage:scan"), [
+    "coverage",
+    "gate",
+    "unit",
+    "quality"
+  ]),
   suite("repo.hygiene.pre", "Repository path hygiene", npm("run", "repo:hygiene"), [
     "repo",
     "hygiene",
@@ -227,6 +233,14 @@ const suites = [
     "gate",
     "regression"
   ]),
+  suite("node-vue.coverage", "Vitest Node/Vue coverage", npm("run", "test:node-vue:coverage"), [
+    "server",
+    "web",
+    "node",
+    "vue",
+    "unit",
+    "coverage"
+  ]),
   suite("server.business-scenarios", "Server business scenario black-box framework", npm("run", "server:verify:business-scenarios"), [
     "server",
     "business",
@@ -318,6 +332,14 @@ const suites = [
     "flutter",
     "coverage"
   ]),
+  suite("client.native.coverage", "Rust future client CLI tests with coverage", npm("run", "client:native:test:coverage"), [
+    "client",
+    "rust",
+    "unit",
+    "integration",
+    "cli",
+    "coverage"
+  ]),
   suite("client.native.test", "Rust future client CLI tests", npm("run", "client:native:test"), [
     "client",
     "rust",
@@ -364,6 +386,7 @@ const suiteById = new Map(suites.map((entry) => [entry.id, entry]));
 
 const profileSuites = {
   fast: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "server.external-service-api-registration",
@@ -381,6 +404,7 @@ const profileSuites = {
     "client.native.test"
   ],
   standard: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "security.npm-audit",
@@ -426,6 +450,7 @@ const profileSuites = {
     "repo.hygiene.post"
   ],
   coverage: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "client.architecture",
@@ -441,6 +466,7 @@ const profileSuites = {
     "client.native.test"
   ],
   security: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "security.npm-audit",
@@ -470,6 +496,7 @@ const profileSuites = {
     "repo.hygiene.post"
   ],
   server: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "server.web.build",
@@ -503,6 +530,7 @@ const profileSuites = {
     "repo.hygiene.post"
   ],
   smoke: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "server.source-evidence",
@@ -524,6 +552,7 @@ const profileSuites = {
     "repo.hygiene.post"
   ],
   prebuild: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "security.npm-audit",
@@ -571,6 +600,7 @@ const profileSuites = {
     "repo.hygiene.post"
   ],
   client: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "client.architecture",
@@ -587,14 +617,17 @@ const profileSuites = {
     "repo.hygiene.post"
   ],
   linux: [
+    "coverage.unit-threshold",
     "client.linux.build",
     "client.linux.smoke",
     "client.linux.gui-smoke"
   ],
   ubuntu: [
+    "coverage.unit-threshold",
     "client.ubuntu.verify"
   ],
   release: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "security.npm-audit",
@@ -842,7 +875,7 @@ function changedSuiteIds(baseRef) {
     changedFiles.add(file);
   }
 
-  const selected = new Set(["repo.hygiene.pre", "security.secret-hygiene"]);
+  const selected = new Set(["coverage.unit-threshold", "repo.hygiene.pre", "security.secret-hygiene"]);
   for (const file of changedFiles) {
     if (file === "package.json" || file === "package-lock.json" || file.startsWith("tests/")) {
       selected.add("security.npm-audit");
