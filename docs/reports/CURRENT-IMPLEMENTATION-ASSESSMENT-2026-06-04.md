@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-06
+- Last updated: 2026-06-07
 - Status: Superseded assessment retained for planning context
 - Scope: Current Implementation Assessment.
-- Staleness check: Scanned on 2026-06-06; older blocked/readiness statements are historical context and are superseded by docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-07; older blocked/readiness statements are historical context and are superseded by docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 日期：2026-06-04  
 范围：按 `docs/reports/ORDERED-IMPLEMENTATION-TASKS-2026-06-03.md` 的 T00-T23 核对 2026-06-04 当时工作树。

@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-06
+- Last updated: 2026-06-07
 - Status: Current maintained document
 - Scope: Pact Server.
-- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-07; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 `server` 是当前唯一受维护的服务端实现。本文档记录服务端的启动方式、配置文件、接口、存储结构、挂载机制与运维能力。
 
@@ -57,21 +57,52 @@
 - [20. 工具管理平台](#20-工具管理平台)
 - [21. 服务端语言策略](#21-服务端语言策略)
 
-## 1. 启动
+## 1. 启动与部署模式 / Startup and Deployment Modes
 
-安装依赖：
+Pact 支持以下五种不同的运行与部署口径，以明确区分开发和生产边界：
 
-```bash
-npm install
-```
+### 1.1 本机开发 (Local Development)
+- **环境要求**：最低 Node.js 22+，推荐使用 Node.js 24。
+- **启动步骤**：
+  ```bash
+  npm install
+  npm run server:setup-runtime
+  npm run start:all
+  ```
+  这一步拉取 JRE 和 Tika 只会写入项目内 `server/platform/modules/knowledge/` 和本地数据目录，不向系统全局安装软件。
+  本地控制台访问地址：`http://127.0.0.1:7228`。
 
-拉取项目内 JRE 和 Tika：
+### 1.2 Docker 本机启动 (Local Docker Startup)
+- **说明**：无本地工具链时，快速拉起单机容器体验：
+  ```bash
+  docker compose up -d
+  ```
+  控制台监听端口映射为 `7228:7228`，访问 `http://127.0.0.1:7228`。
 
-```bash
-npm run server:setup-runtime
-```
+### 1.3 开发联调 (Dev Integration & HMR)
+- **说明**：前端 Vue 控制台启用 Vite HMR 热更新，后端 API 启用：
+  ```bash
+  npm run start:all -- --dev
+  ```
+  前端服务器监听 `5173`，API 服务器监听 `7228`。
 
-这一步只会写入项目内 `server/platform/modules/knowledge/` 和本地数据目录，不向系统安装软件。
+### 1.4 局域网/公网监听 (LAN/WAN Listening)
+- **说明**：通过指定 `--host 0.0.0.0` 使得局域网/外网可接入：
+  ```bash
+  npm run server:start:public
+  ```
+  *警告*：此模式直接监听 `0.0.0.0`，在不安全的网络环境中存在安全隐患。
+
+### 1.5 企业生产部署与安全加固 (Enterprise Production Deployment & Hardening)
+> [!IMPORTANT]
+> **生产门禁未关闭前不建议对外宣称生产可用 (Before the production gates are closed, it is not recommended to claim production readiness)**。
+
+生产环境部署时，**严禁直接暴露 HTTP 端口**，必须实施以下生产级安全策略：
+- **HTTPS 反向代理**：必须配置 Caddy、Nginx 或 Ingress 等反向代理进行 HTTPS 终止，确保所有的 API 调用和控制台流量使用加密传输。
+- **受控网段**：将 Pact Server 限制在隔离的内网网段 (VPC/Subnet) 内，仅允许受控客户端或专用智能体网络接入。
+- **密钥管理**：真实 API Token、密钥不随代码与配置落盘，必须由外部安全密钥管理服务 (如 Vault/KMS) 或系统运行态安全密钥库进行受控注入。
+- **审计归档**：使用 immutable Operation Ledger 记录所有操作事实，并配置日志流的归档保存策略以供安全合规审计。
+- **备份恢复**：配置针对 SQLite 元数据库和原始对象存储 (dataDir) 的定期自动备份和异地灾备恢复策略。
 
 ### 常用命令
 

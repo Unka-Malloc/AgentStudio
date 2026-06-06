@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-06
+- Last updated: 2026-06-07
 - Status: Current maintained document
 - Scope: External Service MCP DSL EBNF.
-- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-07; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 本文定义 `pact.external-service.config` 的声明式 DSL 语法草案。该 DSL 的目标是让任意已有外部服务在不改造上游代码的前提下，通过配置注册为 Pact 可治理的 MCP 工具面。
 

@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-06
+- Last updated: 2026-06-07
 - Status: Current maintained document
 - Scope: Pact 生产级能力差距清单.
-- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-07; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 审计日期：2026-05-20（本地环境）。本文用于决策，不用于宣传。
 
@@ -70,7 +70,7 @@
 
 - 可以继续作为内部工程基线和真实样例试点。
 - 不建议直接承诺生产可用。
-- P0 未关闭前，不建议对外宣称“工业领先”或“正式生产可用”。
+- 生产门禁未关闭前不建议对外宣称生产可用，且不建议对外宣称“工业领先”或“正式生产可用”。
 
 ## 2026-05-25 协议化重构校准
 
