@@ -371,7 +371,7 @@ Local agents / humans / scripts
 `server/platform/specialized` 承载应用能力：
 
 - `knowledge`：三层知识模型、KnowledgeCore、外部知识库 adapter、document export、retrieval、preprocessing。架构图中原始语料、知识索引、知识蒸馏按自下而上的三层 pipeline 放在左侧，AgentLibrary / 图书馆作为右侧等高访问面。
-- 共享空间：上层为云盘共享，承载 Cloud Drive Port、iCloud local projection、OneDrive live adapter 和后续 OAuth contractVerified 外部云盘接入；下层为本地共享，承载受控文件空间和 StateCommit。
+- 共享空间：上层为云盘共享，承载 Cloud Drive Port、iCloud / OneDrive local projection 和后续 OAuth / Remote 外部云盘接入；下层为本地共享，承载受控文件空间和 StateCommit。
 - 代码管理：Codespace、代码变更记录、代码评审路由和 GitHub/Gerrit provider 兼容。
 - `capabilities/tools`：Tool Management、catalog、grant、policy、execute 和 audit。
 - `capabilities/skills`：`pact.tool-skill-management.v1` provider、SkillLibrary、skill registry、skill bundle、MCP Skill Hub 语义入口和 skill 使用事件。MCP adapter、console grant / authorization / passthrough、client connection projection 只能通过该 provider 访问 Tool/Skill 能力，不能直接持有 Tool Management `registry/store/runtime/router`。
@@ -834,7 +834,7 @@ Agent calls MCP `pact.sharedspace` with operation `sharedspace.drive.file.upload
   -> cloud drive projection status
 ```
 
-验收要求：Sharedspace 仍是 Pact 权威状态，云盘只作为外部 adapter/projection。iCloud local adapter 默认只创建 `.pact-data/<client>` 可写空间和 `.pact-data/public` 只读公共空间；用户显式添加的高级目录暴露默认只读，不能被当成整盘映射。公开响应只能返回 `driveRef`、root hash、目录映射、receipt 和 checkpoint，不返回本机绝对路径。P0 第一批真实 provider 固定为 iCloud + OneDrive：OneDrive 必须通过真实 OAuth / live adapter 完成上传、下载和 provider receipt，并标记 `remoteLiveVerified` 或 `realE2EVerified`；Google Drive、Dropbox 缺少真实 OAuth 凭据时只能标记 `contractVerified`，不能把 contract-mode 说成真实上传、真实同步或 production ready。
+验收要求：Sharedspace 仍是 Pact 权威状态，云盘只作为外部 adapter/projection。iCloud / OneDrive local projection adapter 默认只创建 `.pact-data/<client>` 可写空间和 `.pact-data/public` 只读公共空间；用户显式添加的高级目录暴露默认只读，不能被当成整盘映射。公开响应只能返回 `driveRef`、root hash、目录映射、receipt 和 checkpoint，不返回本机绝对路径。v0.0.1 第一批真实可运行 provider 固定为 iCloud + OneDrive 本机目录投影，只能标记 `localAdapterVerified` / `localProjectionVerified`；OneDrive OAuth / Microsoft Graph remote-live 是后续目标。Google Drive、Dropbox 缺少真实 OAuth 凭据时只能标记 `contractVerified`，不能把 contract-mode 说成真实上传、真实同步或 production ready。
 
 #### 知识再授权流程
 
@@ -1051,7 +1051,7 @@ npm run server:verify:mcp-demo
 
 v0.0.1 单机交付验收由 `npm run server:verify:v001` 聚合 Phase 0-4 verifier、非破坏迁移报告、MCP/Tool/Policy 注册和前端 raw build，输出 `docs/reports/history/v001-readiness/<run-id>/report.{json,md}`。该报告只能证明单机可交付和 contract-mode 外部 adapter 合同通过。
 
-生产级验收最终必须收敛为 `npm run server:verify:production-readiness`，并输出可汇报的 Markdown / JSON 报告。缺少真实 GitHub/Gerrit/Dify/RAGFlow/云盘 OAuth 凭据时，readiness 必须明确标为 `contractVerified` 或未配置，不能声明真实外部 E2E、真实上传、真实同步或 production ready。场景 06 的第一批 live scope 是 iCloud + OneDrive；Google Drive / Dropbox 或 fake provider 的 contract pass 不得替代 OneDrive live smoke。
+生产级验收最终必须收敛为 `npm run server:verify:production-readiness`，并输出可汇报的 Markdown / JSON 报告。缺少真实 GitHub/Gerrit/Dify/RAGFlow/Google Drive/Dropbox 凭据时，readiness 必须明确标为 `contractVerified` 或未配置，不能声明真实外部 E2E、真实上传、真实同步或 production ready。场景 06 的 v0.0.1 scope 是 iCloud + OneDrive 本机目录投影；Google Drive / Dropbox 或 fake provider 的 contract pass 不得替代本地投影 smoke，本地投影也不得替代后续 OneDrive remote-live smoke。
 
 ## 核心原则
 

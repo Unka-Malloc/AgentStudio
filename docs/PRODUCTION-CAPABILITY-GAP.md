@@ -150,7 +150,7 @@
 
 - `server/platform/specialized/knowledge/agent-library/access-policy.mjs` 实现 `pact.knowledge-access.v1` 和 `pact.agent-library.v1` 的源头裁决、标准 `accessMode`、`requestedEgress`、`authorizationOverlay`、`knowledgeAccessReceipt`、`loanRecord` 和 denied request audit；`server/platform/specialized/console/console-domain-operation-executor.mjs` 负责控制台协议入口绑定，`common/console` 不再直接持有 access policy。
 - `server/platform/specialized/knowledge/storage/knowledge-backend-port/index.mjs` 实现 v0.0.1 Dify/RAGFlow `pact.knowledge-backend-port.v1` contract-mode：运行配置写入 `ServerConfig.getDataDir()/knowledge/knowledge-backends.json`，只保存 `secretRef` / `endpointRef`；safe discovery 不返回正文、snippet、上游裸 ID 或私有路径；授权 evidence 读取写 receipt/loan record，拒绝读取和拒绝导出写 denied request audit。缺少真实 Dify/RAGFlow 凭据时只能标记 `contractVerified`。
-- `server/platform/specialized/agent/cloud-drive-port/index.mjs` 实现 v0.0.1 `pact.cloud-drive-port.v1`：运行连接配置写入 `ServerConfig.getDataDir()/agent-workspaces/cloud-drive-connections.json`，ledger 写入 `agent-workspaces/cloud-drive-ledger.json`；iCloud local adapter 对 `.pact-data/<client>` 默认空间实读实写，对 `.pact-data/public` 和高级暴露目录默认只读，公开响应不暴露本机绝对路径；P0 已确认第一批 live provider 是 iCloud + OneDrive，因此 OneDrive 必须从 OAuth / contract-mode 补成真实上传、下载和 provider receipt；Google Drive、Dropbox 无真实 OAuth 凭据时只能标记 `contractVerified`，并通过 transfer receipt、access receipt、checkpoint 和 operation audit 证明合同链路。
+- `server/platform/specialized/agent/cloud-drive-port/index.mjs` 实现 v0.0.1 `pact.cloud-drive-port.v1`：运行连接配置写入 `ServerConfig.getDataDir()/agent-workspaces/cloud-drive-connections.json`，ledger 写入 `agent-workspaces/cloud-drive-ledger.json`；iCloud 和 OneDrive 当前按本机同步目录 / local projection 支持，对 `.pact-data/<client>` 默认空间实读实写，对 `.pact-data/public` 和高级暴露目录默认只读，公开响应不暴露本机绝对路径；Google Drive、Dropbox 无真实 OAuth 凭据时只能标记 `contractVerified`，并通过 transfer receipt、access receipt、checkpoint 和 operation audit 证明合同链路。OneDrive OAuth / Microsoft Graph remote-live、真实 provider fileId / eTag / webUrl receipt 和真实远端同步证据是后续适配目标，不属于 v0.0.1 当前完成口径。
 - `npm run server:verify:agent-library-access` 验证 A/B 再授权：A 获取授权范围并产生 receipt / loan record，B 在所有出口 `searchResult`、`evidenceRead`、`contextBundle`、`artifactWrite`、`exportFile`、`distillationInput`、`distillationOutput`、`memoryWrite`、`toolCall`、`evaluationSample` 都被同一套裁决拒绝。
 - `npm run server:verify:production-readiness` 已把该能力纳入 P0 门禁。
 
@@ -209,7 +209,7 @@
 - `npm run server:verify:production-readiness` 作为 release gate；存在 P0 未通过或必需覆盖缺失时，报告状态为 `blocked`，默认以非零退出码阻断发布。
 - 该 gate 只能证明被覆盖项，不会把单点 verify 的通过误判为整体生产就绪。
 - `server/scripts/verify-v001.mjs` 作为 v0.0.1 单机 release 收口门禁，聚合 Phase 0-4 verifier、迁移保留报告、MCP/Tool/Policy 注册和 renderer raw build，并输出 `docs/reports/history/v001-readiness/<run-id>/report.{json,md}`。
-- v0.0.1 readiness 报告把 GitHub、Gerrit、Dify、RAGFlow、Google Drive 和 Dropbox 缺少真实凭据的状态标为 `contractVerified`；这只证明接口合同，不计为真实外部 E2E 或 production ready。P0 云盘 live scope 已选 iCloud + OneDrive，OneDrive 必须由专用 live verifier 或真实 adapter receipt 提升为 `remoteLiveVerified` / `realE2EVerified` 后，才能声明第一版真实云盘接通。
+- v0.0.1 readiness 报告把 iCloud 和 OneDrive 作为本地目录投影证据记录为 `localProjectionVerified` / `localAdapterVerified`；这只证明本机目录读写、受控映射、receipt、checkpoint 和审计，不声明远端云 API 同步。GitHub、Gerrit、Dify、RAGFlow、Google Drive 和 Dropbox 缺少真实凭据时仍标为 `contractVerified`；这只证明接口合同，不计为真实外部 E2E 或 production ready。OneDrive OAuth / remote-live 适配必须由后续专用 live verifier 或真实 adapter receipt 提升为 `remoteLiveVerified` / `realE2EVerified` 后，才能声明远端 OneDrive 接通。
 
 补全效果：项目从“功能验证”升级为“可汇报验收”；每次决策可以基于同一份报告，而不是临时问当前能不能用。
 

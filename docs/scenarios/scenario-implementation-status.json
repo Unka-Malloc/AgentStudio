@@ -164,8 +164,7 @@
         "server/scripts/verify-external-service-api-registration.mjs"
       ],
       "blockers": [
-        "T12 OneDrive remote-live smoke depends on real OAuth credentials",
-        "T12 iCloud local-live adapter wording and receipt evidence need final pass"
+        "OneDrive OAuth / Microsoft Graph remote-live adapter remains a future target after v0.0.1 local projection"
       ]
     },
     {

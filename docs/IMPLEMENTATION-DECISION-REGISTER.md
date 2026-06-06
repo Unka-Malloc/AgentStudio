@@ -73,7 +73,7 @@
 | `DEC-P0-17` MCP 新五类入口 | MCP outlet 硬切为 discovery/knowledge/sharedspace/codespace/skillHub，外部智能体长链路必须有主动回信。 |
 | `DEC-P0-18` 2-3-5 安全模型 | 安全模型分为两条边界、三个环境、五个对象：客户端 MCP 入口、服务端 API 出口；终端智能体、平台运行时、应用服务器；身份与准入认证、权限与行为策略、数据与状态语义、流量与资源管理、审计与事实验证。 |
 | `DEC-P0-19` Skill Hub 独立技能库 | `pact.skillHub.upload` 是真实技能包上传入口；技能包必须进入独立 server Skill Hub / skill library，不能混在 workspace contribution 里。 |
-| `DEC-P0-20` 云盘第一批 live provider | 外部云盘第一版真实上传 / 下载固定接 iCloud + OneDrive；Google Drive / Dropbox 暂留 contract-mode，fake provider 只用于 CI 合同测试。 |
+| `DEC-P0-20` 云盘第一批本地投影 provider | 外部云盘 v0.0.1 可运行范围固定为 iCloud + OneDrive 本机目录投影；OAuth / Remote live 作为后续适配目标，Google Drive / Dropbox 暂留 contract-mode，fake provider 只用于 CI 合同测试。 |
 | `DEC-P0-21` 调度内核与统一操作账本 | 所有受管 operation 都必须进入 Operation Scheduling Kernel 和统一 Operation Ledger；非内核操作一律拒绝，模块本地 audit、provider ledger、queue event 和 runtime log 只能作为投影或回执。 |
 | `DEC-P0-22` 统一审批流 | 高危 operation 必须由 Operation Scheduling Kernel 挂起为 `pending_operation`，统一进入独立 `/approval` 页面；批准后恢复原 operation，拒绝或过期不执行。 |
 | `DEC-P0-23` 外部知识蒸馏服务门禁优先 | 外部知识蒸馏默认远程容器部署，必须先通过入站鉴权、非 root、Tika checksum、healthcheck、资源限制和密钥外置门禁；门禁未过前不得继续增加新解析或蒸馏能力。 |
@@ -888,26 +888,27 @@
 - 若产生 workspace contribution，该 contribution 必须只引用 skill library record。
 - 发布、禁用、回滚后，`pact.skillHub` 可见目录和 audit / trace 同步更新。
 
-### DEC-P0-20 云盘第一批 live provider
+### DEC-P0-20 云盘第一批本地投影 provider
 
 已决议：
 
-- 场景 06 外部云盘第一版真实上传 / 下载固定接 iCloud + OneDrive。
+- 场景 06 外部云盘 v0.0.1 第一版真实可运行范围固定接 iCloud + OneDrive 本机目录投影。
 - iCloud 继续作为受控本机 iCloud Drive 路径 / projection：默认空间可写、公共空间只读、高级暴露目录默认只读，公开响应不得暴露本机绝对路径。
-- OneDrive 必须通过真实 OAuth / live adapter 完成远端上传、下载、列目录、权限摘要和 provider receipt；密钥只通过 `secretRef` / `endpointRef` 存在 `ServerConfig.getDataDir()` 下。
+- OneDrive v0.0.1 作为受控本机 OneDrive 同步目录 / projection：默认空间可写、公共空间只读、高级暴露目录默认只读，公开响应不得暴露本机绝对路径。
+- OneDrive OAuth / Microsoft Graph live adapter 是后续适配目标，届时必须完成远端上传、下载、列目录、权限摘要和 provider receipt；密钥只通过 `secretRef` / `endpointRef` 存在 `ServerConfig.getDataDir()` 下。
 - Google Drive / Dropbox 暂时保留 contract-mode 和后续 provider 插槽，不计入本轮 P0 live 完成。
 - fake provider server 只能作为 CI / contract harness，不能替代真实 provider 验收。
 
 拒绝选项：
 
-- 不接受继续用 OneDrive contract-mode 冒充真实云盘已接通。
+- 不接受继续用 OneDrive contract-mode 冒充真实云盘已接通；v0.0.1 只能声明 OneDrive local projection，不声明 remote cloud API 成功。
 - 不接受把 fake provider server 的 green test 标成产品真实上传 / 下载。
 - 不接受一次铺开 OneDrive、Google Drive、Dropbox 三家而没有第一批 live smoke 和 receipt 事实源。
 
 最小验收：
 
-- 同一最小样例文件可以分别上传到 iCloud 和 OneDrive，再凭 receipt 下载并校验 byte count 与 hash。
-- OneDrive receipt 必须包含 provider、connectionId、scope snapshot、driveId、itemId/fileId、revision 或 eTag/cTag、provider request id、audit id、checkpoint id 和 `remoteLiveVerified` / `realE2EVerified` 状态。
+- 同一最小样例文件可以分别上传到 iCloud 和 OneDrive 本机目录投影，再凭 receipt 下载并校验 byte count 与 hash。
+- OneDrive v0.0.1 receipt 必须包含 provider、connectionId、scope snapshot、local projection path digest、audit id、checkpoint id 和 `localAdapterVerified` / `localProjectionVerified` 状态；后续 remote receipt 才要求 driveId、itemId/fileId、revision 或 eTag/cTag、provider request id 和 `remoteLiveVerified` / `realE2EVerified` 状态。
 - provider manifest 和 transfer receipt 不得包含 raw token、refresh token、client secret 或私有下载 URL。
 
 ### DEC-P0-21 调度内核与统一操作账本

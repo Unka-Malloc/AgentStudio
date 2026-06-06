@@ -28,7 +28,7 @@ const {
   <div class="surface-card drawer-panel">
     <div class="panel-header">
       <h4>云盘 — {{ selected?.title }}</h4>
-      <p>云盘只作为 Sharedspace 的外部 adapter/projection；OAuth provider 当前显示 contractVerified。</p>
+      <p>云盘只作为 Sharedspace 的外部 adapter/projection；iCloud 和 OneDrive 当前使用本地目录投影。</p>
     </div>
     <div class="form-grid">
       <OptionBar
@@ -51,6 +51,10 @@ const {
       <label v-if="cloudDriveForm.provider === 'icloud'">
         <span>iCloud 受控目录</span>
         <input v-model="cloudDriveForm.rootPath" autocomplete="off" placeholder="留空使用系统 iCloud Drive 默认路径" />
+      </label>
+      <label v-else-if="cloudDriveForm.provider === 'onedrive'">
+        <span>OneDrive 本地目录</span>
+        <input v-model="cloudDriveForm.rootPath" autocomplete="off" placeholder="留空使用系统 OneDrive 默认路径" />
       </label>
       <label><span>Pact 根目录</span><input v-model="cloudDriveForm.managedFolderRoot" autocomplete="off" /></label>
       <label><span>公共目录</span><input v-model="cloudDriveForm.publicFolder" autocomplete="off" /></label>

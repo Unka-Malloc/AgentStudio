@@ -1116,16 +1116,16 @@ v0.0.1 Codespace 语义入口：
 
 v0.0.1 Cloud Drive 语义入口：
 
-- `sharedspace.drive.connect`：创建云盘连接或本机 iCloud 受控目录 mount；基础模式固定暴露 `default/` 和 `public/` 两个 agent 视图，分别映射到 `.pact-data/<client>` 可写默认空间和 `.pact-data/public` 只读公共空间；高级模式只能额外暴露用户显式选择的既有目录，默认只读。OAuth provider 只保存 `secretRef`，不保存 token value。
+- `sharedspace.drive.connect`：创建云盘连接或本机 iCloud / OneDrive 受控目录 mount；基础模式固定暴露 `default/` 和 `public/` 两个 agent 视图，分别映射到 `.pact-data/<client>` 可写默认空间和 `.pact-data/public` 只读公共空间；高级模式只能额外暴露用户显式选择的既有目录，默认只读。后续 OAuth provider 只保存 `secretRef`，不保存 token value。
 - `sharedspace.drive.status`、`sharedspace.drive.item.list`、`sharedspace.drive.permission.list`：只返回安全元数据、连接状态、目录映射、读写语义、ACL 摘要和 provider contract 标记，不返回私有本机路径、上游裸 ID、下载 URL 或 secret value。
-- `sharedspace.drive.file.download`、`sharedspace.drive.file.upload`：所有传输都必须生成 `transferReceipt`；iCloud local adapter 只能在 `default/` 可写空间实写，`public/` 和高级暴露目录默认只读；P0 第一批真实 provider 是 iCloud + OneDrive，OneDrive 必须返回真实远端 upload/download receipt 并标记 `remoteLiveVerified` 或 `realE2EVerified`；Google Drive/Dropbox 缺少真实 OAuth 凭据时只能返回 `contractVerified`，不能说成真实上传或真实下载。
+- `sharedspace.drive.file.download`、`sharedspace.drive.file.upload`：所有传输都必须生成 `transferReceipt`；iCloud / OneDrive local projection adapter 只能在 `default/` 可写空间实写，`public/` 和高级暴露目录默认只读；v0.0.1 当前完成口径是 iCloud + OneDrive 本机目录投影，必须标记 `localAdapterVerified` / `localProjectionVerified`，不得说成远端云 API 已同步。OneDrive OAuth / Microsoft Graph 远端 upload/download receipt 是后续目标，只有真实远端请求才能标记 `remoteLiveVerified` 或 `realE2EVerified`；Google Drive/Dropbox 缺少真实 OAuth 凭据时只能返回 `contractVerified`，不能说成真实上传或真实下载。
 - `sharedspace.drive.sync.plan`、`sharedspace.drive.sync.apply`：同步以 Sharedspace 为 Pact 权威状态，云盘只是外部 adapter/projection；apply 必须写 sync receipt 和 checkpoint，contract-mode 只能证明操作合同，不声明 remote sync completed。
 
 v0.0.1 release readiness 语义：
 
 - `server:migrate:v001` 只在 `ServerConfig.getDataDir()` 对应运行目录生成迁移/保留报告、恢复点 manifest 和 rollback preview，不移动运行配置回 repo，也不清空旧 runtime 状态。
 - `server:verify:v001` 聚合 Phase 0-4 verifier、迁移报告、Tool/Policy/MCP 注册和 renderer raw build，输出 `docs/reports/history/v001-readiness/<run-id>/report.{json,md}`。
-- readiness report 的结论只能声明 v0.0.1 单机可交付；缺少真实外部凭据的 GitHub、Gerrit、Dify、RAGFlow、Google Drive 和 Dropbox 必须保留 `contractVerified`，不能被文案提升为真实外部 E2E、真实上传、真实同步或 production ready。P0 云盘 live scope 是 iCloud + OneDrive，OneDrive 只有通过专用 live verifier 或真实 adapter receipt 后才能从 contract-mode 提升为真实云盘接通。
+- readiness report 的结论只能声明 v0.0.1 单机可交付；iCloud / OneDrive 只能声明本机目录投影 verified，不能被文案提升为远端云 API 已同步。缺少真实外部凭据的 GitHub、Gerrit、Dify、RAGFlow、Google Drive 和 Dropbox 必须保留 `contractVerified`，不能被文案提升为真实外部 E2E、真实上传、真实同步或 production ready。OneDrive 只有在后续通过专用 OAuth / Microsoft Graph live verifier 或真实 adapter receipt 后，才能从本地投影提升为远端云盘接通。
 
 v0.0.1 本地 secret 初始化入口：
 

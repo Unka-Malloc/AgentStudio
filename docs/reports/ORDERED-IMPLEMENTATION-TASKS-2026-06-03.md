@@ -124,7 +124,7 @@
 | T09 | 11 个智能体安装、配对和客户端清理 | P0-10, P1-A, P1-F |
 | T10 | 代码提交 durable workflow | P0-02 |
 | T11 | Skill Hub 独立库和 lifecycle | P0-05, P1-C |
-| T12 | provider mode、receipt 和 iCloud/OneDrive live | P0-06, P2-D |
+| T12 | provider mode、receipt 和 iCloud/OneDrive local projection | P0-06, P2-D |
 | T13 | 共享空间产品化 | P1-B |
 | T14 | 真实办公文档解析基准 | P0-01 |
 | T15 | 知识蒸馏算法和办公文档质量升级 | P1-G |
@@ -163,7 +163,7 @@
 | T09 | L | 客户端安装 + 配对 + 旧模块清理 | 高 | T03, T08 | 产品底座 |
 | T10 | XL | durable workflow + GitHub live | 极高 | T06, T07, T08 | 场景高风险 |
 | T11 | XL | Skill Hub + lifecycle + catalog | 极高 | T06, T07, T08 | 基础高难 |
-| T12 | XL | provider mode + iCloud/OneDrive live | 极高 | T03, T06, T07, T08 | 基础高难 |
+| T12 | XL | provider mode + iCloud/OneDrive local projection | 极高 | T03, T06, T07, T08 | 基础高难 |
 | T13 | L | 共享空间 + ACL + 大文件 + 恢复 | 高 | T06, T07, T08 | 核心能力 |
 | T14 | L | 外部 corpus + parser 基准 + lineage | 高 | T03 | 质量底座 |
 | T15 | XL | 外部知识蒸馏 + 算法 + 办公文档 | 极高 | T03, T08, T14 | 场景高风险 |
@@ -272,7 +272,7 @@
 - T12：
   - T12-a：provider mode schema 和统一词表。
   - T12-b：receipt 字段统一。
-  - T12-c：OneDrive remote-live adapter 和 live smoke。
+  - T12-c：OneDrive local projection adapter 和本地读写 smoke。
   - T12-d：iCloud local-live adapter 和文案边界。
   - T12-e：UI/API/文档 provider mode 展示。
   - T12-f：contract/fake provider 不能替代 live 的门禁。
@@ -842,18 +842,18 @@
 - 签名、扫描、pin、rollback、catalog 原子刷新和 grant 可见性必须在同一 lifecycle 中维护。
 - 禁用或撤销必须同步影响 Tool Management catalog、MCP discovery、agent profile 和执行授权。
 
-## T12 provider mode、receipt 和 iCloud/OneDrive live
+## T12 provider mode、receipt 和 iCloud/OneDrive local projection
 
 ### 目标
 
 - 统一 provider mode：`contract`、`local-live`、`remote-live`、`dry-run`、`failed`。
-- iCloud + OneDrive 第一批真实上传/下载。
+- iCloud + OneDrive 第一批本机目录投影上传/下载。
 
 ### 涉及的功能改造
 
 - receipt 必须声明 provider mode、verification source、remote id 或 local projection id。
-- OneDrive 从 contract-mode 升级 live adapter。
-- iCloud 本机 adapter 明确 `local-live`，不能说成远端云盘成功。
+- OneDrive 从 contract-mode 升级为本机目录投影 adapter。
+- iCloud / OneDrive 本机 adapter 明确 `local-live` / `localProjectionVerified`，不能说成远端云盘成功。
 - UI/API/文档区分合同验证、本机成功和远端 provider 成功。
 
 ### 测试方法
@@ -861,26 +861,26 @@
 - `npm run server:verify:v001-cloud-drive-e2e`
 - `npm run server:verify:external-service-api-registration`
 - `npm run server:verify:scenario-catalog`
-- live provider smoke：OneDrive 上传、下载、覆盖、删除。
+- local projection provider smoke：OneDrive 上传、下载、覆盖、只读目录拒绝和同步计划。
 
 ### 验收门禁
 
 - provider mode 词表必须在 API、receipt、UI、日志和文档中统一为 `contract`、`local-live`、`remote-live`、`dry-run`、`failed`。
-- OneDrive live smoke 必须证明真实上传、下载、覆盖和删除，并记录 remote id、etag 或等价字段；缺 OAuth/凭据时不得关闭 live 门禁。
+- OneDrive v0.0.1 smoke 必须证明本机目录投影真实上传、下载、覆盖和只读拒绝，并记录 local projection receipt；不得写成远端同步成功。
 - iCloud 第一版如果只是本机目录 adapter，只能标 `local-live`；不得写成远端同步成功。
-- Google Drive、Dropbox 或 fake provider 的 contract pass 不得替代 iCloud + OneDrive 第一批验收。
+- Google Drive、Dropbox 或 fake provider 的 contract pass 不得替代 iCloud + OneDrive 第一批本地投影验收。
 
 ### 用例
 
 - contract provider 不显示为真实远端成功。
-- OneDrive 上传后 receipt 包含 fileId / etag / webUrl 或等价字段。
-- iCloud 本机目录写入只标记 `local-live`。
+- OneDrive 上传后 receipt 包含 local projection 状态、byte count、hash、checkpoint 和 audit 引用；不伪造 fileId / etag / webUrl。
+- iCloud / OneDrive 本机目录写入只标记 `local-live` / `localProjectionVerified`。
 
 ### 设计理念和维护规范
 
 - provider mode 是产品事实，不是 UI 标签；receipt、API、日志、报告和控制台必须使用同一词表。
-- OneDrive 第一版目标是 `remote-live`；iCloud 第一版可为本机 adapter `local-live`，不得宣传成远端云端已同步。
-- Google Drive、Dropbox 或 fake provider 的 contract pass 不能替代 OneDrive/iCloud 第一批 live 验收。
+- OneDrive 第一版目标调整为本机目录投影；OAuth / Microsoft Graph `remote-live` 是后续适配目标。
+- Google Drive、Dropbox 或 fake provider 的 contract pass 不能替代 OneDrive/iCloud 第一批本地投影验收。
 - 每次外部写入都必须返回可追溯 remote id、local projection id、verification source 和失败原因。
 
 ## T13 共享空间产品化

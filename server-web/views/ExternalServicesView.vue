@@ -286,12 +286,12 @@ const selectHelp: Record<string, SelectHelpItems> = {
   ],
   cloudDriveProvider: [
     ["iCloud Drive", "通过本机 iCloud Drive 受控目录适配。"],
-    ["OneDrive", "通过 OAuth secretRef 和上游网关适配。"],
+    ["OneDrive", "v0.0.1 通过本机 OneDrive 同步目录投影适配。"],
     ["Google Drive", "通过 OAuth secretRef 和上游网关适配。"],
     ["Dropbox", "通过 OAuth secretRef 和上游网关适配。"],
   ],
   cloudDriveMode: [
-    ["local", "本机目录适配，当前主要用于 iCloud Drive。"],
+    ["local", "本机目录投影，当前用于 iCloud Drive 和 OneDrive。"],
     ["contract", "只验证连接合同、secretRef、receipt 和权限语义，不调用真实远端 API。"],
     ["remote-live", "调用真实上游 provider endpoint，需要显式 endpoint 和 secretRef。"],
   ],
@@ -544,7 +544,7 @@ const selectHelp: Record<string, SelectHelpItems> = {
                 @input="externalServicesView.updateUpstreamField('timeoutMs', ($event.target as HTMLInputElement).value)"
               />
             </label>
-            <label v-if="externalServicesView.isCloudDriveServiceDraft">
+            <label v-if="externalServicesView.isCloudDriveServiceDraft && externalServicesView.configDraft.upstream?.mode !== 'local'">
               <span>Secret Ref</span>
               <input
                 autocomplete="off"
@@ -553,7 +553,7 @@ const selectHelp: Record<string, SelectHelpItems> = {
                 @input="externalServicesView.updateUpstreamField('secretRef', ($event.target as HTMLInputElement).value)"
               />
             </label>
-            <label v-if="externalServicesView.isCloudDriveServiceDraft">
+            <label v-if="externalServicesView.isCloudDriveServiceDraft && externalServicesView.configDraft.upstream?.mode !== 'local'">
               <span>Endpoint Ref</span>
               <input
                 autocomplete="off"
@@ -567,6 +567,15 @@ const selectHelp: Record<string, SelectHelpItems> = {
               <input
                 autocomplete="off"
                 placeholder="/Users/name/Library/Mobile Documents/com~apple~CloudDocs"
+                :value="externalServicesView.configDraft.upstream?.rootPath"
+                @input="externalServicesView.updateUpstreamField('rootPath', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <label v-if="externalServicesView.isCloudDriveServiceDraft && externalServicesView.configDraft.upstream?.provider === 'onedrive' && externalServicesView.configDraft.upstream?.mode === 'local'" class="external-service-form-wide">
+              <span>OneDrive Local Root Path</span>
+              <input
+                autocomplete="off"
+                placeholder="/Users/name/Library/CloudStorage/OneDrive"
                 :value="externalServicesView.configDraft.upstream?.rootPath"
                 @input="externalServicesView.updateUpstreamField('rootPath', ($event.target as HTMLInputElement).value)"
               />

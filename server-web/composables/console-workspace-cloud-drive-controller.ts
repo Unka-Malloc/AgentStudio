@@ -17,6 +17,10 @@ function splitCsv(value: string) {
     .filter(Boolean);
 }
 
+function isLocalProjectionProvider(provider: string) {
+  return provider === "icloud" || provider === "onedrive";
+}
+
 export function useWorkspaceCloudDriveController(options: WorkspaceCloudDriveControllerOptions) {
   const cloudDriveData = ref<any>(null);
   const cloudDriveResult = ref<any>(null);
@@ -110,7 +114,7 @@ export function useWorkspaceCloudDriveController(options: WorkspaceCloudDriveCon
       const payload: Record<string, unknown> = {
         workspaceId: options.selectedId.value,
         provider,
-        mode: provider === "icloud" ? "local" : "contract",
+        mode: isLocalProjectionProvider(provider) ? "local" : "contract",
         managedFolder: true,
         managedFolderRoot: cloudDriveForm.managedFolderRoot.trim() || ".pact-data",
         publicFolder: cloudDriveForm.publicFolder.trim() || "public",
@@ -118,8 +122,8 @@ export function useWorkspaceCloudDriveController(options: WorkspaceCloudDriveCon
         defaultClient: cloudDriveForm.clientId.trim() || cloudDriveAllowedClients()[0] || "owner",
         directoryMappings: cloudDriveExposurePayload(),
       };
-      if (provider === "icloud" && cloudDriveForm.rootPath.trim()) payload.rootPath = cloudDriveForm.rootPath.trim();
-      if (provider !== "icloud") payload.secretRef = `secret://pact/drive/${provider}-oauth`;
+      if (isLocalProjectionProvider(provider) && cloudDriveForm.rootPath.trim()) payload.rootPath = cloudDriveForm.rootPath.trim();
+      if (!isLocalProjectionProvider(provider)) payload.secretRef = `secret://pact/drive/${provider}-oauth`;
       const connected = await workspacesClient.connectWorkspaceCloudDrive(payload);
       cloudDriveForm.driveRef = connected.drive?.driveRef || cloudDriveForm.driveRef;
       await refreshCloudDriveStatus();

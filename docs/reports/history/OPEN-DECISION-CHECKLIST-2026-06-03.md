@@ -25,7 +25,8 @@ S-01 批准：单独 CSP 批次
 | [ ] | P0-02 | 代码提交进入 durable workflow / queue，补 GitHub live receipt。 | 保持 P0，继续做。 |
 | [ ] | P0-04 | 权限变更后刷新 MCP grant/key、SSE、网关缓存和 policy version。 | 保持 P0，继续做。 |
 | [ ] | P0-05 | Skill Hub 上传进入独立技能库，workspace contribution 只保存引用和统计。 | 保持 P0，继续做。 |
-| [ ] | P0-06 | iCloud + OneDrive 第一批真实云盘上传 / 下载，OneDrive 从 contract-mode 升级 live adapter。 | 保持 P0，继续做。 |
+| [x] | P0-06 | iCloud + OneDrive v0.0.1 第一批本机目录投影上传 / 下载。 | 当前范围已收敛为 local projection，并由 `server:verify:v001-cloud-drive-e2e` 覆盖。 |
+| [ ] | P1/P2 | OneDrive OAuth / Microsoft Graph remote-live adapter 和真实远端 upload/download receipt。 | 后续适配目标；不能作为 v0.0.1 当前完成口径。 |
 | [ ] | P0-07 | Operation Dispatcher 升级为 Operation Scheduling Kernel，所有操作统一落账。 | 保持 P0，继续做。 |
 | [ ] | P0-08 | 高危 operation 挂起到独立 `/approval`，批准后恢复原 operation。 | 保持 P0，继续做。 |
 | [ ] | P0-10 | 11 个智能体客户端目标在代码、文档、安装器、grant matcher、verifier 中完全一致。 | 保持 P0，继续做。 |

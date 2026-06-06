@@ -21,7 +21,7 @@
 | 03 权限配置 | Authorization Governance store、策略裁决、approval grant | 缺少上下游网关刷新和 MCP key/grant 实时刷新闭环 |
 | 04 工作空间文件传输 | MCP 上传、下载、stat、patch、checkpoint、restore verifier | 未发现阻断级 P0 |
 | 05 技能管理 | `pact.skillHub` outlet、workspace contribution、capability package manifest lifecycle | 缺少“智能体上传技能包到独立技能库”的真实上传和激活链路 |
-| 06 云盘共享 | iCloud 本机目录 adapter、OneDrive / Google Drive / Dropbox contract-mode | 缺少外部云盘真实上传/下载 adapter |
+| 06 云盘共享 | iCloud / OneDrive 本机同步目录投影、Google Drive / Dropbox contract-mode | 缺少 OAuth / Remote 真实上传下载 adapter |
 | 07 日志记录 | operation audit、console audit、tool audit、局部 ledger | 缺少“所有操作有一个算一个”的统一落账强制覆盖 |
 | 08 操作审核 | requiresConfirmation、MCP 授权请求页、知识冲突审批页 | 缺少高危 MCP 操作挂起、主页审批、审批后恢复原请求 |
 
@@ -189,33 +189,35 @@
 - approve/install/activate 后，`pact.discovery` 能看到更新后的技能能力。
 - disabled/deprecated 后，同一 MCP grant 不再可见或不可执行。
 
-### P0-07：云盘共享只有 iCloud 本机 adapter，外部云盘是 contract-mode
+### P0-07：云盘共享已到本机目录投影，OAuth / Remote 仍未完成
 
 涉及场景：06 云盘共享。
 
 当前实现：
 
 - CloudDrivePort 支持 provider 名称：iCloud、OneDrive、Google Drive、Dropbox。
-- iCloud 使用本机目录 adapter，可以真实读写本地受控目录。
-- OneDrive / Google Drive / Dropbox 创建的是 `mode: "contract"`，`contractVerified: true`，upload/download 生成 receipt，但不调用真实 provider API。
-- module metadata 也标注这些 provider 是 contract-mode adapters。
+- iCloud 使用本机 iCloud Drive 同步目录 projection，可以真实读写本地受控目录。
+- OneDrive v0.0.1 范围已调整为本机 OneDrive 同步目录 projection，可以真实读写本地受控目录；这不是 Microsoft Graph / OAuth 远端同步。
+- Google Drive / Dropbox 创建的是 `mode: "contract"`，`contractVerified: true`，upload/download 生成 receipt，但不调用真实 provider API。
+- readiness 口径必须把 iCloud / OneDrive 本地投影记为 `localProjectionVerified` 或 `localAdapterVerified`，不能宣传成远端云 API 已接通。
 
 为什么是 P0：
 
-场景 06 明确是“上传文件到外部云盘的全链路，以及下载文件”。contract-mode 只能证明 Pact 内部协议与 receipt，不证明外部云盘实际写入或读取。
+场景 06 的第一版现在收敛为“上传文件到本机同步目录投影，并能从该投影下载文件”。这可以支持用户把 iCloud Drive / OneDrive 已同步到本机的目录纳入 Pact 受控空间，但 contract-mode 和 local projection 都不证明外部云盘远端 API 实际写入或读取。
 
 需要补的实现：
 
-- 为 OneDrive、Google Drive、Dropbox 增加 live adapter。
+- 为 OneDrive、Google Drive、Dropbox 增加后续 live adapter；OneDrive 先做 Microsoft OAuth / Graph，Google Drive / Dropbox 继续按后续优先级推进。
 - 接入 OAuth token secretRef、endpointRef、refresh、scope 校验。
 - 上传、下载、列目录、权限列表和 sync apply 调用真实 API。
-- receipt 必须包含 provider fileId / revision / webUrl / etag 或等价字段。
-- contract-mode 保留为测试模式，但 UI 和 API 要清楚区分。
+- remote receipt 必须包含 provider fileId / revision / webUrl / etag 或等价字段。
+- contract-mode、本地投影和 remote-live 必须在 UI、API、readiness report 和文档中清楚区分。
 
 验收标准：
 
-- 可用 fake provider server 或官方 sandbox 跑 E2E，断言远端文件被创建、读取、覆盖和删除。
-- receipt 中 `contractVerified` 与 `localAdapterVerified` 不能被误用为 live success。
+- v0.0.1 verifier 断言 iCloud / OneDrive 本地投影可以连接、列目录、上传、下载、只读 public 拦截、sync plan/apply，并产生 receipt / checkpoint / audit。
+- 后续 remote-live verifier 可用官方 sandbox 或真实账号凭据跑 E2E，断言远端文件被创建、读取、覆盖和删除。
+- receipt 中 `contractVerified` 与 `localAdapterVerified` 不能被误用为 remote live success。
 
 ### P0-08：日志记录没有全系统强制落账覆盖
 

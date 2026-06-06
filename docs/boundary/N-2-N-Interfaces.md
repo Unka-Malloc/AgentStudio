@@ -61,7 +61,7 @@
 | `graphStore` mount | 将实体和边同步到外部图索引 | 当前主要是 mount/template 能力，不应宣称已有完整内置 provider |
 | Agent Gateway / Model Probe | 统一探测和调用模型 provider、企业代理或自定义 HTTP 模型端点 | 多 provider 运行路径，具体可用性取决于模型配置和凭据 |
 | Codespace / repo operations / code review | 抽象仓库读写、diff、提交、push、review、merge、submit 等代码协作操作 | GitHub、Gerrit 为配置化 provider；GitLab 在 repo operation provider 集合中 |
-| Cloud Drive Port | 管理云盘连接、列表、权限、下载、上传和同步计划 | P0 live scope 为 iCloud + OneDrive；iCloud 是受控本机路径 / projection，OneDrive 必须走真实 OAuth / live adapter；Google Drive、Dropbox 暂为 OAuth / contract-mode |
+| Cloud Drive Port | 管理云盘连接、列表、权限、下载、上传和同步计划 | v0.0.1 scope 为 iCloud + OneDrive 本机目录 projection；OAuth / Remote live adapter 是后续目标；Google Drive、Dropbox 暂为 contract-mode |
 | Data Connector Governance | 规范外部数据源 connector 的 auth、sync、cursor、mirror、本地查询和卸载策略 | Gmail、Outlook、Google Drive、OneDrive、Slack、Teams、macOS Mail 等通过 feature/client module 暴露 |
 | Module Ecosystem | 给外部团队生成 parser、analysis、knowledgeBase、vectorStore、graphStore、customMount、Tool Package、Skill Package 的模板和 contract test | scaffold/template |
 | Agent Exploration Runtime | 通过 allowlist 约束的 HTTP request 和 local command 接入特定外部端点或本地命令 | 运行路径，受 allowlist 和权限控制 |

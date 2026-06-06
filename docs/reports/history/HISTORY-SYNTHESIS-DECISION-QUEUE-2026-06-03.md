@@ -165,19 +165,20 @@
 
 状态：已确认。
 
-问题：iCloud 本机 adapter 有真实路径，OneDrive / Google Drive / Dropbox 仍大量是 contract-mode。场景 06 的终点是外部云盘真实上传 / 下载，不是内部 receipt。
+问题：历史口径曾要求 OneDrive 必须从 contract-mode 直接升级 remote-live。2026-06-06 已重新决议：v0.0.1 当前范围先收敛为 iCloud / OneDrive 本机目录投影；Google Drive / Dropbox 仍是 contract-mode；外部云盘远端 API 真实上传 / 下载作为后续目标。
 
 确认结论：
 
-- 第一批真实上传 / 下载 provider 固定为 iCloud + OneDrive。
+- 第一批 v0.0.1 真实可运行上传 / 下载 provider 固定为 iCloud + OneDrive 本机目录投影。
 - iCloud 继续走受控本机路径 / 本机 iCloud Drive 投影，必须保持默认空间、公共空间和高级只读目录的路径隔离；公开响应不得泄漏本机绝对路径。
-- OneDrive 必须做真实 OAuth / live adapter，支持 secretRef、refresh、scope 校验、上传、下载、列目录、权限摘要和 provider receipt。
+- OneDrive 当前先走受控本机 OneDrive 同步目录投影，必须保持默认空间、公共空间和高级只读目录的路径隔离；公开响应不得泄漏本机绝对路径。
+- OneDrive OAuth / Microsoft Graph live adapter 是后续适配目标，届时支持 secretRef、refresh、scope 校验、上传、下载、列目录、权限摘要和 provider receipt。
 - Google Drive / Dropbox 暂时保留 contract-mode / 后续 provider 位置，不能计入本轮 P0 live 完成。
 - fake provider server 只能作为 CI / contract harness，不能作为产品第一版真实云盘完成口径。
-- P0 receipt 至少包含 provider、connectionId、secretRef 或 endpointRef、scope snapshot、driveId、itemId/fileId、parent/path 摘要、revision 或 eTag/cTag、content hash、byte count、upload/download receipt、provider request id、audit id、checkpoint id、`remoteLiveVerified` / `realE2EVerified` 状态；不得包含 raw token 或私有下载 URL。
-- P0 验收必须覆盖：同一最小样例文件可以分别上传到 iCloud 和 OneDrive，再凭 receipt 下载校验 hash；OneDrive receipt 必须来自真实远端请求，不得只标 `contractVerified`。
+- v0.0.1 local projection receipt 至少包含 provider、connectionId、scope snapshot、local projection path digest、content hash、byte count、upload/download receipt、audit id、checkpoint id、`localAdapterVerified` / `localProjectionVerified` 状态；不得包含本机绝对路径、raw token 或私有下载 URL。
+- v0.0.1 验收必须覆盖：同一最小样例文件可以分别上传到 iCloud 和 OneDrive 本机投影，再凭 receipt 下载校验 hash；OneDrive receipt 不得只标 `contractVerified`，也不得伪装成 `remoteLiveVerified`。
 
-下一步：把 OneDrive 从 OAuth / contract-mode 提升为 live adapter；把 fake provider server 固定为 contract 测试工具；补 iCloud + OneDrive live smoke 和 readiness 报告字段。
+下一步：把 OneDrive OAuth / Microsoft Graph remote-live adapter 作为后续目标；把 fake provider server 固定为 contract 测试工具；readiness 报告继续区分 local projection、contract 和 remote-live。
 
 来源：
 

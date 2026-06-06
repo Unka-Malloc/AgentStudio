@@ -855,9 +855,11 @@ export function useExternalServicesViewController(shell: ServerConsoleShellConte
 
   function updateCloudDriveProvider(value: string) {
     const provider = String(value || "").trim();
-    const mode = provider === "icloud"
-      ? (configDraft.value.upstream?.mode || "local")
-      : (configDraft.value.upstream?.mode === "local" ? "contract" : configDraft.value.upstream?.mode || "contract");
+    const isLocalProjectionProvider = provider === "icloud" || provider === "onedrive";
+    const currentMode = configDraft.value.upstream?.mode;
+    const mode = isLocalProjectionProvider
+      ? (currentMode === "remote-live" ? "remote-live" : "local")
+      : (currentMode === "local" ? "contract" : currentMode || "contract");
     commitConfigDraft({
       ...configDraft.value,
       upstream: {

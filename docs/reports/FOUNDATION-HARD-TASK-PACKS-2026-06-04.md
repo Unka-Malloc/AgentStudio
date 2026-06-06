@@ -251,11 +251,11 @@
 - 依赖任务：T12-a。
 - 回写文档：`docs/SERVER.md`。
 
-### T12-c OneDrive remote-live adapter
-- 目标：接通 OneDrive 真实上传/下载/覆盖/删除 smoke。
+### T12-c OneDrive local projection adapter
+- 目标：接通 OneDrive 本机同步目录投影上传/下载/覆盖/只读拒绝 smoke。
 - 可改文件范围：`server/platform/common/composition-management/external-service-registry.mjs`、`server/platform/specialized/**cloud*`。
-- 禁止项：无凭据情况下声明 live 完成。
-- 验收门禁：缺凭据时标 contract-only/blocked。
+- 禁止项：把本机目录投影声明为 remote-live 或远端云 API 成功。
+- 验收门禁：本机投影标 `localAdapterVerified` / `localProjectionVerified`；OAuth / remote-live 缺凭据时标 contract-only/blocked。
 - 测试命令：`npm run server:verify:v001-cloud-drive-e2e`。
 - 依赖任务：T12-b。
 - 回写文档：`docs/reports/ORDERED-IMPLEMENTATION-TASKS-2026-06-03.md`。

@@ -1,7 +1,7 @@
 {
   "name": "CloudDrivePort",
   "version": 1,
-  "description": "Internal backing adapter for the upstream Cloud Drive service gateway; iCloud local adapter and OneDrive, Google Drive, Dropbox contract-mode adapters are exposed through external.cloudDrive.* operations.",
+  "description": "Internal backing adapter for the upstream Cloud Drive service gateway; iCloud and OneDrive local directory projections plus Google Drive and Dropbox contract-mode adapters are exposed through external.cloudDrive.* operations.",
   "defaultLoaded": false,
   "protocol": "pact.cloud-drive-port.v1",
   "components": {

@@ -70,7 +70,7 @@ Pact 的目标不是替代下游智能体，也不是替代上游知识库或业
 - 共享空间操作：workspace、folder、file、artifact、proposal、checkpoint 等方向已有协议和操作入口。
 - 知识蒸馏、知识访问治理、AgentLibrary、贡献资产治理、审批流、操作审计和可观测性。
 - MCP connector 已有一条命令安装、便携包、doctor、目标扫描和配置写入方向。
-- 云盘端口已有 iCloud 本地路径和 OneDrive、Google Drive、Dropbox contract-mode 适配。
+- 云盘端口已有 iCloud / OneDrive 本机目录投影和 Google Drive / Dropbox contract-mode 适配。
 - Docker、离线包、Feature Profile、生产就绪门禁和场景验证脚本已有基础。
 
 已通过的关键验证包括：
@@ -145,7 +145,7 @@ MCP connector 已经接近目标，但还需要把“安装效率极高”做成
 
 共享空间是商业化核心场景。当前已有协议和局部实现，但还未形成可售卖体验：
 
-- iCloud 本地路径较实，OneDrive、Google Drive、Dropbox 多数仍偏 contract-mode。
+- iCloud / OneDrive 本机目录投影较实，Google Drive / Dropbox 仍偏 contract-mode；OneDrive OAuth / Remote live 仍是后续目标。
 - 尚未完整支持 WebDAV、S3、SFTP、NAS、用户指定云主机和任意本地目录。
 - 跨设备同步、冲突处理、版本恢复、离线写入和差量上传仍需产品化。
 - 共享文件、上下文、artifact、proposal、checkpoint 的 UI 和审计体验仍需闭合。

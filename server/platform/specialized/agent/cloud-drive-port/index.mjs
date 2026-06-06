@@ -13,6 +13,7 @@ const DEFAULT_MANAGED_FOLDER_ROOT = ".pact-data";
 const DEFAULT_MANAGED_CLIENT = "owner";
 const DEFAULT_PUBLIC_FOLDER = "public";
 const SUPPORTED_PROVIDERS = Object.freeze(["icloud", "onedrive", "google-drive", "dropbox"]);
+const LOCAL_PROJECTION_PROVIDERS = new Set(["icloud", "onedrive"]);
 const OAUTH_PROVIDERS = new Set(["onedrive", "google-drive", "dropbox"]);
 const REMOTE_LIVE_MODES = new Set(["remote-live", "live", "remote", "sandbox-live"]);
 const REMOTE_PROVIDER_PATHS = Object.freeze({
@@ -96,6 +97,33 @@ function defaultICloudRootPath() {
   return path.join(os.homedir(), "Library", "Mobile Documents", "com~apple~CloudDocs");
 }
 
+function defaultOneDriveRootPath() {
+  const cloudStorageRoot = path.join(os.homedir(), "Library", "CloudStorage");
+  try {
+    const candidates = fsSync.readdirSync(cloudStorageRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && /^OneDrive(?:[-\s]|$)/iu.test(entry.name))
+      .map((entry) => path.join(cloudStorageRoot, entry.name))
+      .sort((left, right) => left.length - right.length || left.localeCompare(right));
+    if (candidates.length) return candidates[0];
+  } catch {
+    // OneDrive local folders are platform and user dependent.
+  }
+  try {
+    const candidates = fsSync.readdirSync(os.homedir(), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && /^OneDrive(?:[-\s]|$)/iu.test(entry.name))
+      .map((entry) => path.join(os.homedir(), entry.name))
+      .sort((left, right) => left.length - right.length || left.localeCompare(right));
+    if (candidates.length) return candidates[0];
+  } catch {
+    // Older OneDrive installs may not exist or may be unreadable.
+  }
+  return path.join(cloudStorageRoot, "OneDrive");
+}
+
+function defaultLocalProjectionRootPath(provider) {
+  return provider === "onedrive" ? defaultOneDriveRootPath() : defaultICloudRootPath();
+}
+
 function defaultConfig() {
   return {
     schemaVersion: 1,
@@ -151,6 +179,32 @@ function providerLabel(provider) {
 function normalizeRemoteAdapterMode(value = "") {
   const raw = text(value || "contract").toLowerCase().replace(/[_\s]+/g, "-");
   return REMOTE_LIVE_MODES.has(raw) ? "remote-live" : "contract";
+}
+
+function normalizeLocalProjectionMode(value = "") {
+  const raw = text(value || "").toLowerCase().replace(/[_\s]+/g, "-");
+  if (["local", "local-live", "local-directory", "local-projection", "directory", "projection"].includes(raw)) {
+    return "local";
+  }
+  return "";
+}
+
+function isLocalProjectionProvider(provider = "") {
+  return LOCAL_PROJECTION_PROVIDERS.has(normalizeProvider(provider));
+}
+
+function wantsLocalProjection(provider = "", input = {}) {
+  if (!isLocalProjectionProvider(provider)) return false;
+  if (provider === "icloud") return true;
+  const requestedMode = text(input.mode || input.requestedMode || input.adapterMode || "");
+  if (normalizeLocalProjectionMode(requestedMode)) return true;
+  if (REMOTE_LIVE_MODES.has(requestedMode.toLowerCase().replace(/[_\s]+/g, "-"))) return false;
+  if (text(input.rootPath || input.sourcePath || input.localPath || input.path)) return true;
+  return !requestedMode;
+}
+
+function isLocalProjectionConnection(connection = {}) {
+  return connection.localAdapterVerified === true && Boolean(text(connection.rootPath));
 }
 
 function normalizeEndpointUrl(value = "") {
@@ -834,21 +888,23 @@ async function provisionLocalManagedFolders(rootPath, managed = {}) {
   return provisioned;
 }
 
-async function validateLocalICloudRoot(rootPath) {
-  const rawPath = text(rootPath || defaultICloudRootPath());
+async function validateLocalProjectionRoot(provider, rootPath) {
+  const normalizedProvider = normalizeProvider(provider || "icloud");
+  const label = normalizedProvider === "icloud" ? "iCloud" : providerLabel(normalizedProvider);
+  const rawPath = text(rootPath || defaultLocalProjectionRootPath(normalizedProvider));
   if (!rawPath) {
-    throw new Error("iCloud rootPath 不能为空。");
+    throw new Error(`${label} rootPath 不能为空。`);
   }
   const absolutePath = path.resolve(rawPath);
   if (absolutePath === path.parse(absolutePath).root) {
-    throw new Error("不能把文件系统根目录作为 iCloud 受控根目录。");
+    throw new Error(`不能把文件系统根目录作为 ${label} 受控根目录。`);
   }
   const stat = await fs.lstat(absolutePath);
   if (stat.isSymbolicLink()) {
-    throw new Error("不允许连接符号链接 iCloud 根目录。");
+    throw new Error(`不允许连接符号链接 ${label} 根目录。`);
   }
   if (!stat.isDirectory()) {
-    throw new Error("iCloud rootPath 必须是目录。");
+    throw new Error(`${label} rootPath 必须是目录。`);
   }
   return {
     absolutePath,
@@ -905,10 +961,10 @@ function publicConnection(connection = {}, { configFilePath = "" } = {}) {
     driveRef: text(connection.driveRef),
     provider,
     label: text(connection.label || providerLabel(provider)),
-    mode: text(connection.mode || (provider === "icloud" ? "local" : "contract")),
+    mode: text(connection.mode || (isLocalProjectionProvider(provider) ? "local" : "contract")),
     requestedMode: text(connection.requestedMode || ""),
     status: text(connection.status || "active"),
-    authType: text(connection.authType || (provider === "icloud" ? "localDirectory" : "oauth2")),
+    authType: text(connection.authType || (isLocalProjectionProvider(provider) ? "localDirectory" : "oauth2")),
     secretRef: text(connection.secretRef || ""),
     endpointRef: text(connection.endpointRef || ""),
     rootName: text(connection.rootName || ""),
@@ -944,26 +1000,37 @@ function providerManifest(config = {}, configFilePath = "") {
     .map((connection) => publicConnection(connection, { configFilePath }))
     .sort((left, right) => left.provider.localeCompare(right.provider) || left.driveRef.localeCompare(right.driveRef));
   const connectedProviders = new Set(connections.map((connection) => connection.provider));
-  const providers = SUPPORTED_PROVIDERS.map((provider) => ({
-    provider,
-    label: providerLabel(provider),
-    connected: connectedProviders.has(provider),
-    authType: provider === "icloud" ? "localDirectory" : "oauth2",
-    mode: provider === "icloud" ? "local" : "contract",
-    supportedModes: provider === "icloud" ? ["local"] : ["contract", "remote-live"],
-    secretRef: SECRET_REF_BY_PROVIDER[provider] || "",
-    contractOnly: OAUTH_PROVIDERS.has(provider) && !connections.some((connection) => connection.provider === provider && connection.remoteLiveVerified === true),
-    capabilities: [
-      "drive.connect",
-      "drive.status",
-      "drive.item.list",
-      "drive.file.download",
-      "drive.file.upload",
-      "drive.sync.plan",
-      "drive.sync.apply",
-      "drive.permission.list"
-    ]
-  }));
+  const providers = SUPPORTED_PROVIDERS.map((provider) => {
+    const providerConnections = connections.filter((connection) => connection.provider === provider);
+    const localProjectionSupported = isLocalProjectionProvider(provider);
+    const hasLocalProjection = providerConnections.some((connection) => connection.localAdapterVerified === true);
+    const hasRemoteLive = providerConnections.some((connection) => connection.remoteLiveVerified === true);
+    const hasContract = providerConnections.some((connection) => connection.contractVerified === true);
+    return {
+      provider,
+      label: providerLabel(provider),
+      connected: connectedProviders.has(provider),
+      authType: localProjectionSupported ? "localDirectory" : "oauth2",
+      mode: localProjectionSupported ? "local" : "contract",
+      supportedModes: provider === "icloud" ? ["local"] : localProjectionSupported ? ["local", "contract", "remote-live"] : ["contract", "remote-live"],
+      secretRef: SECRET_REF_BY_PROVIDER[provider] || "",
+      contractOnly: hasContract && !hasLocalProjection && !hasRemoteLive,
+      localProjectionSupported,
+      localProjectionVerified: hasLocalProjection,
+      remoteOAuthTarget: OAUTH_PROVIDERS.has(provider),
+      releaseSupport: localProjectionSupported ? "localDirectoryProjection" : "contractMode",
+      capabilities: [
+        "drive.connect",
+        "drive.status",
+        "drive.item.list",
+        "drive.file.download",
+        "drive.file.upload",
+        "drive.sync.plan",
+        "drive.sync.apply",
+        "drive.permission.list"
+      ]
+    };
+  });
   return {
     ok: true,
     schemaVersion: Number(config.schemaVersion || 1),
@@ -1275,8 +1342,8 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
     );
     let connection;
     let connectTelemetry = null;
-    if (provider === "icloud") {
-      const root = await validateLocalICloudRoot(input.rootPath || input.sourcePath || input.localPath || input.path);
+    if (wantsLocalProjection(provider, input)) {
+      const root = await validateLocalProjectionRoot(provider, input.rootPath || input.sourcePath || input.localPath || input.path);
       const provisionedMappings = await provisionLocalDirectoryMappings(root.realPath, directoryMappings, managedFolder);
       const driveRef = text(input.driveRef || input.driveId) || stableId("cloud_drive", {
         provider,
@@ -1286,7 +1353,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       connection = {
         driveRef,
         provider,
-        label: text(input.label || "iCloud Drive Local Adapter"),
+        label: text(input.label || `${providerLabel(provider)} Local Projection`),
         mode: "local",
         requestedMode: text(input.mode || "local"),
         authType: "localDirectory",
@@ -1433,9 +1500,8 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
     const config = await loadConfig();
     const manifestPayload = providerManifest(config, configFilePath);
     for (const connection of manifestPayload.connections) {
-      if (connection.provider !== "icloud") continue;
       const privateConnection = config.connections[connection.driveRef];
-      if (privateConnection?.rootPath) {
+      if (isLocalProjectionConnection(privateConnection)) {
         connection.quota = await statfsSummary(privateConnection.rootPath);
         connection.syncStatus = fsSync.existsSync(privateConnection.rootPath)
           ? "localAdapterVerified"
@@ -1464,7 +1530,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
     let basePath = "";
     let mapping = null;
     let listTelemetry = null;
-    if (connection.provider === "icloud") {
+    if (isLocalProjectionConnection(connection)) {
       if (hasRequestedPath) {
         const resolved = resolveMappedDrivePath(connection, requestedPath, { allowRoot: true, input });
         basePath = resolved.drivePath;
@@ -1598,7 +1664,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       providerMetadata = providerReceiptMetadata(remotePayload);
       telemetry = remote.telemetry;
       remoteReadInvoked = true;
-    } else if (connection.provider === "icloud") {
+    } else if (isLocalProjectionConnection(connection)) {
       const target = await assertExistingLocalItemWithinRoot(connection.rootPath, drivePath);
       if (!target.stat.isFile()) {
         const error = new Error("云盘下载目标必须是文件。");
@@ -1719,7 +1785,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       providerMetadata = providerReceiptMetadata(remotePayload);
       telemetry = remote.telemetry;
       remoteWriteInvoked = true;
-    } else if (connection.provider === "icloud") {
+    } else if (isLocalProjectionConnection(connection)) {
       const target = safeJoinLocal(connection.rootPath, drivePath, { allowRoot: false });
       const exists = fsSync.existsSync(target.absolutePath);
       if (exists && input.overwrite !== true) {
@@ -1761,7 +1827,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       byteSize: content.length,
       contentSha256,
       remoteWriteInvoked,
-      localWriteInvoked: connection.provider === "icloud",
+      localWriteInvoked: isLocalProjectionConnection(connection),
       contractVerified: connection.contractVerified === true,
       localAdapterVerified,
       remoteLiveVerified: connection.remoteLiveVerified === true,
@@ -1782,7 +1848,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       checkpoint,
       transferReceipt,
       remoteWriteInvoked,
-      localWriteInvoked: connection.provider === "icloud",
+      localWriteInvoked: isLocalProjectionConnection(connection),
       ...(providerMetadata ? { providerReceipt: providerMetadata } : {}),
       ...(telemetry ? { telemetry } : {}),
       contractVerified: connection.contractVerified === true,
@@ -1805,7 +1871,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       const resolved = resolveMappedDrivePath(connection, requestedPath, { allowRoot: true, input });
       basePath = resolved.drivePath || "/";
       mapping = resolved.mapping;
-      if (connection.provider === "icloud") {
+      if (isLocalProjectionConnection(connection)) {
         items = await listLocalItems(connection.rootPath, resolved.drivePath, { recursive: true, includeHash: true, limit });
       } else if (isRemoteLiveConnection(connection)) {
         const remote = await callRemoteProvider(connection, "list", {
@@ -1822,7 +1888,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       } else {
         items = [contractItem(connection.provider, connection, 0, mapping, input)];
       }
-    } else if (connection.provider === "icloud") {
+    } else if (isLocalProjectionConnection(connection)) {
       for (const directoryMapping of normalizeDirectoryMappings(connection.directoryMappings || [], connection.managedFolder)) {
         if (items.length >= limit) break;
         assertMappingAccess(directoryMapping, input);

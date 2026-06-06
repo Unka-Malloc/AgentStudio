@@ -376,8 +376,10 @@ function normalizeCloudDriveDescriptor(input = {}) {
     provider,
     ...asArray(input.providers || input.driveProviders).map(normalizeCloudDriveProvider)
   ]).filter((item) => EXTERNAL_SERVICE_CLOUD_DRIVE_PROVIDER_VALUES.includes(item));
+  const localProjectionProvider = provider === EXTERNAL_SERVICE_CLOUD_DRIVE_PROVIDER.ICLOUD ||
+    provider === EXTERNAL_SERVICE_CLOUD_DRIVE_PROVIDER.ONEDRIVE;
   const mode = normalizeCloudDriveMode(input.mode || input.adapterMode || input.requestedMode) ||
-    (provider === EXTERNAL_SERVICE_CLOUD_DRIVE_PROVIDER.ICLOUD ? EXTERNAL_SERVICE_CLOUD_DRIVE_MODE.LOCAL : EXTERNAL_SERVICE_CLOUD_DRIVE_MODE.CONTRACT);
+    (localProjectionProvider ? EXTERNAL_SERVICE_CLOUD_DRIVE_MODE.LOCAL : EXTERNAL_SERVICE_CLOUD_DRIVE_MODE.CONTRACT);
   const endpointUrl = String(input.endpointUrl || input.remoteEndpointUrl || input.baseUrl || input.url || "").trim();
   return {
     ...input,

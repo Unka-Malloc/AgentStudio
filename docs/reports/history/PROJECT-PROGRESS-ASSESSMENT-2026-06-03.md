@@ -118,13 +118,13 @@ Pact 当前已经具备继续商业化推进的软件基础：架构边界清晰
 已实现：
 
 - CloudDrivePort 已覆盖 iCloud、OneDrive、Google Drive、Dropbox 等 provider 名称和统一 receipt 形态。
-- iCloud 本机目录 adapter 能进行受控目录实读实写。
+- iCloud / OneDrive 本机目录 projection 能进行受控目录实读实写。
 - contract-mode adapter 能证明内部协议、receipt、ledger、checkpoint 和审计链路。
 - 近期外部服务 gateway registration 为更多 provider 接入提供了统一注册、doctor、prepare、smoke 和运行时桥接基础。
 
 仍未实现：
 
-- OneDrive、Google Drive、Dropbox 的真实 OAuth、真实上传下载、列目录、权限列表、etag/revision/webUrl receipt 仍未完成。
+- OneDrive、Google Drive、Dropbox 的真实 OAuth / Remote、真实远端上传下载、列目录、权限列表、etag/revision/webUrl receipt 仍未完成；其中 OneDrive v0.0.1 已先收敛为本机同步目录 projection。
 - WebDAV、S3、SFTP、NAS、用户指定云主机和更多本地目录模式仍未产品化。
 - 还缺真实 provider lab、fake provider server、nightly contract test 和真实凭据 smoke 的分层验证策略。
 
@@ -211,7 +211,7 @@ Pact 当前已经具备继续商业化推进的软件基础：架构边界清晰
 | 03 | 权限配置 | 部分实现 | Governance store、策略裁决、approval grant、Tool/MCP grant、policy revision receipt 基础已有。 | 权限变更后 MCP key/grant 实时刷新、SSE 通知、网关缓存失效、active grant 重算和上下游拦截证据仍需完成。 |
 | 04 | 工作空间文件传输 | 接近闭合 | MCP 上传/下载/stat/patch/checkpoint/restore、本机目录、受控路径、checkpoint、operation audit 和 verifier 基础较完整。 | 大文件流式传输、断点续传、路径 ACL、配额、冲突处理、跨设备同步和 UI drilldown 仍需生产硬化。 |
 | 05 | 技能管理 | 部分实现且近期有进展 | Tool/Skill provider、capability package lifecycle、skill package 独立存储、active skills discovery 已有基础。 | MCP 上传到独立 skill library 的全链路、扫描、激活、目录刷新、客户端安装/执行/撤销体验和运行时隔离仍未完全闭合。 |
-| 06 | 云盘共享 | 部分实现 | iCloud 本机 adapter、统一 CloudDrivePort、contract-mode provider、transfer/access receipt、checkpoint 和外部服务注册基础已存在。 | OneDrive/Google Drive/Dropbox 真实 live adapter、OAuth、真实上传下载、provider receipt、nightly real provider smoke 仍未完成。 |
+| 06 | 云盘共享 | 部分实现 | iCloud / OneDrive 本机目录 projection、统一 CloudDrivePort、Google Drive / Dropbox contract-mode provider、transfer/access receipt、checkpoint 和外部服务注册基础已存在。 | OneDrive/Google Drive/Dropbox 真实 remote live adapter、OAuth、真实远端上传下载、provider receipt、nightly real provider smoke 仍未完成。 |
 | 07 | 日志记录 | 部分实现 | Operation audit、console audit、tool audit、provider ledger、trace/observability/API 审计导出基础已存在。 | 还缺全局强制 audit facade、覆盖率 verifier、所有 mutation/外部 IO/后台任务统一落账和同一 trace drilldown。 |
 | 08 | 操作审核 | 部分实现且近期有进展 | `requiresConfirmation`、Tool policy、MCP authorization request、pending operation store/runtime 已有基础。 | 主页审批 UI、原请求 payload 挂起、审批后恢复执行、超时/撤销/幂等、客户端 `operation_reply` 体验仍需闭合。 |
 

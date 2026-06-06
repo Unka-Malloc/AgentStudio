@@ -245,16 +245,16 @@ flowchart LR
 | T11-e | Tool Management catalog / MCP discovery 原子刷新。 | 刷新失败不产生半启用状态。 | T11-d |
 | T11-f | disabled/revoked 可见性和执行拒绝。 | revoke 后同 grant 不可见且不可执行，并写 audit。 | T11-e |
 
-### T12 provider mode、receipt 和 iCloud/OneDrive live
+### T12 provider mode、receipt 和 iCloud/OneDrive local projection
 
 | 子任务 | 功能项改造点 | 验收目标 | 依赖 |
 | --- | --- | --- | --- |
 | T12-a | provider mode schema 和统一词表。 | API/UI/receipt/log 使用 `contract/local-live/remote-live/dry-run/failed`。 | T03, T06, T07, T08 |
 | T12-b | receipt 字段统一。 | receipt 包含 mode、verificationSource、remoteId 或 localProjectionId。 | T12-a |
-| T12-c | OneDrive remote-live adapter 和 live smoke。 | 真实上传/下载/覆盖/删除通过；缺 OAuth 标 blocked，不宣称 live。 | T12-b |
-| T12-d | iCloud local-live adapter 和文案边界。 | 本机 adapter 只标 local-live，不宣传远端同步。 | T12-a |
+| T12-c | OneDrive local projection adapter 和本地 smoke。 | 本机目录上传/下载/覆盖/只读拒绝通过；不宣称 remote-live。 | T12-b |
+| T12-d | iCloud / OneDrive local-live adapter 和文案边界。 | 本机 adapter 只标 local-live / localProjectionVerified，不宣传远端同步。 | T12-a |
 | T12-e | UI/API/文档 provider mode 展示。 | contract/fake 不显示为真实远端成功。 | T12-a, T12-b |
-| T12-f | contract/fake provider 不能替代 live 的门禁。 | live 门禁必须要真实 remote 字段或明确 blocked。 | T12-c |
+| T12-f | contract/fake provider 不能替代 local projection 或 future remote-live 的门禁。 | v0.0.1 local projection 必须有本机读写证据；future remote-live 必须要真实 remote 字段或明确 blocked。 | T12-c |
 
 ### T13 共享空间产品化
 

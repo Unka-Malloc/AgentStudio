@@ -1132,7 +1132,7 @@ async function detectCloudDrives(context = {}) {
     id: "cloud-drives",
     label: "Cloud drives",
     category: "cloud",
-    description: "iCloud local folder and OAuth-backed OneDrive/Google Drive/Dropbox connection manifests.",
+    description: "iCloud and OneDrive local folder projections plus contract/remote manifests for later OAuth-backed cloud drive adapters.",
     status: dependencyStatus({ present }),
     present,
     downloadable: false,
@@ -1148,7 +1148,7 @@ async function detectCloudDrives(context = {}) {
       cloudStorageRoot,
       cloudStorageAvailable,
       source,
-      sourcePolicy: "local folder or OAuth/secret-ref adapter configuration"
+      sourcePolicy: "local folder projection first; OAuth/secret-ref remote adapters are future or contract-mode configuration"
     },
     actions: {
       download: "local-provider-auth"

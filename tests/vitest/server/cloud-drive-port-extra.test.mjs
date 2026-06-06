@@ -149,6 +149,82 @@ describe("cloud drive port", () => {
     expect(status.connections[0].syncStatus).toBe("localAdapterVerified");
   });
 
+  it("connects OneDrive as a local directory projection for v0.0.1", async () => {
+    const userDataPath = await tempDir("pact-cloud-drive-onedrive-data-");
+    const oneDriveRoot = await tempDir("pact-onedrive-root-");
+    await writeText(path.join(oneDriveRoot, ".pact-data", "owner", "note.txt"), "onedrive note\n");
+    await writeText(path.join(oneDriveRoot, ".pact-data", "public", "readme.txt"), "onedrive public\n");
+    await writeText(path.join(oneDriveRoot, "TeamDocs", "team.txt"), "onedrive team\n");
+    const port = createCloudDrivePort({ userDataPath });
+
+    const connected = await port.connect({
+      provider: "onedrive",
+      rootPath: oneDriveRoot,
+      managedFolder: true,
+      managedFolderRoot: ".pact-data",
+      publicFolder: "public",
+      allowedClients: ["owner", "codex"],
+      defaultClient: "owner",
+      directoryMappings: [
+        {
+          name: "Team Docs",
+          alias: "team",
+          drivePath: "TeamDocs",
+          accessPolicy: { mode: "all" },
+        },
+      ],
+    });
+
+    expect(connected.localAdapterVerified).toBe(true);
+    expect(connected.contractVerified).toBe(false);
+    expect(connected.remoteLiveVerified).toBe(false);
+    expect(connected.drive).toMatchObject({
+      provider: "onedrive",
+      mode: "local",
+      authType: "localDirectory",
+      localAdapterVerified: true,
+    });
+    expect(JSON.stringify(connected)).not.toContain(oneDriveRoot);
+
+    const listed = await port.listItems({
+      driveRef: connected.drive.driveRef,
+      clientId: "owner",
+      path: "default",
+      recursive: true,
+      includeHash: true,
+    });
+    expect(listed.localAdapterVerified).toBe(true);
+    expect(listed.contractVerified).toBe(false);
+    expect(listed.paths).toContain(".pact-data/owner/note.txt");
+
+    const downloaded = await port.downloadFile({
+      driveRef: connected.drive.driveRef,
+      clientId: "owner",
+      path: "default/note.txt",
+    });
+    expect(downloaded.content).toBe("onedrive note\n");
+    expect(downloaded.localAdapterVerified).toBe(true);
+
+    const uploaded = await port.uploadFile({
+      driveRef: connected.drive.driveRef,
+      clientId: "owner",
+      path: "default/uploaded.txt",
+      content: "onedrive upload\n",
+    });
+    expect(uploaded.localWriteInvoked).toBe(true);
+    expect(await fs.readFile(path.join(oneDriveRoot, ".pact-data", "owner", "uploaded.txt"), "utf8")).toBe("onedrive upload\n");
+
+    const manifest = await port.manifest();
+    const oneDriveProvider = manifest.providers.find((item) => item.provider === "onedrive");
+    expect(oneDriveProvider).toMatchObject({
+      connected: true,
+      contractOnly: false,
+      localProjectionSupported: true,
+      localProjectionVerified: true,
+      releaseSupport: "localDirectoryProjection",
+    });
+  });
+
   it("uses secret references for contract OAuth providers and blocks inline secrets", async () => {
     const userDataPath = await tempDir("pact-cloud-drive-contract-");
     const port = createCloudDrivePort({ userDataPath });

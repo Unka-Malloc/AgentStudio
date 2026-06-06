@@ -285,6 +285,7 @@ for (const operationId of REQUIRED_OPERATIONS) {
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-v001-cloud-drive-"));
 const icloudRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-icloud-drive-"));
+const oneDriveRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-onedrive-projection-"));
 let server = null;
 let fixtureProvider = null;
 
@@ -295,6 +296,12 @@ try {
   await fs.writeFile(path.join(icloudRoot, ".pact-data", "owner", "note.txt"), "icloud default writable space\n", "utf8");
   await fs.writeFile(path.join(icloudRoot, ".pact-data", "public", "readme.txt"), "icloud public readonly space\n", "utf8");
   await fs.writeFile(path.join(icloudRoot, "TeamDocs", "team.txt"), "icloud exposed readonly directory\n", "utf8");
+  await fs.mkdir(path.join(oneDriveRoot, ".pact-data", "owner"), { recursive: true });
+  await fs.mkdir(path.join(oneDriveRoot, ".pact-data", "public"), { recursive: true });
+  await fs.mkdir(path.join(oneDriveRoot, "TeamDocs"), { recursive: true });
+  await fs.writeFile(path.join(oneDriveRoot, ".pact-data", "owner", "note.txt"), "onedrive default writable projection\n", "utf8");
+  await fs.writeFile(path.join(oneDriveRoot, ".pact-data", "public", "readme.txt"), "onedrive public readonly projection\n", "utf8");
+  await fs.writeFile(path.join(oneDriveRoot, "TeamDocs", "team.txt"), "onedrive exposed readonly projection\n", "utf8");
 
   server = await startHttpServer({
     userDataPath,
@@ -546,8 +553,134 @@ try {
   assert.equal(syncApply.payload.remoteSyncInvoked, false);
   assert.ok(syncApply.payload.checkpoint?.checkpointId, "drive sync apply must return checkpoint");
 
+  const oneDriveConnect = await fetchJson(`${server.url}/api/external/cloud-drive/connect`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(auth, { method: "POST" })
+    },
+    body: JSON.stringify({
+      workspaceId,
+      provider: "onedrive",
+      mode: "local",
+      rootPath: oneDriveRoot,
+      managedFolder: true,
+      managedFolderRoot: ".pact-data",
+      publicFolder: "public",
+      allowedClients: ["owner", "codex"],
+      defaultClient: "owner",
+      directoryMappings: [
+        {
+          name: "Team Docs",
+          alias: "team",
+          drivePath: "TeamDocs",
+          accessPolicy: { mode: "all" }
+        }
+      ]
+    })
+  });
+  assert.equal(oneDriveConnect.status, 200, JSON.stringify(oneDriveConnect.payload, null, 2));
+  assert.equal(oneDriveConnect.payload.localAdapterVerified, true);
+  assert.equal(oneDriveConnect.payload.contractVerified, false);
+  assert.equal(oneDriveConnect.payload.remoteLiveVerified, false);
+  assert.equal(oneDriveConnect.payload.drive.authType, "localDirectory");
+  assert.equal(oneDriveConnect.payload.drive.mode, "local");
+  assert.equal(oneDriveConnect.payload.drive.managedFolder.provisioningState, "localAdapterVerified");
+  assertPublicPayloadDoesNotLeak(oneDriveConnect.payload, oneDriveRoot, "OneDrive local projection connect payload");
+  const oneDriveRef = oneDriveConnect.payload.drive.driveRef;
+  await fs.access(path.join(oneDriveRoot, ".pact-data", "codex"));
+
+  const oneDriveList = await fetchJson(`${server.url}/api/external/cloud-drive/items?${new URLSearchParams({
+    workspaceId,
+    driveRef: oneDriveRef,
+    clientId: "owner",
+    path: "default",
+    recursive: "true",
+    includeHash: "true"
+  })}`, {
+    headers: authHeaders(auth)
+  });
+  assert.equal(oneDriveList.status, 200, JSON.stringify(oneDriveList.payload, null, 2));
+  assert.equal(oneDriveList.payload.localAdapterVerified, true);
+  assert.equal(oneDriveList.payload.contractVerified, false);
+  assert.equal(oneDriveList.payload.paths.includes(".pact-data/owner/note.txt"), true);
+  assertPublicPayloadDoesNotLeak(oneDriveList.payload, oneDriveRoot, "OneDrive local projection list payload");
+
+  const oneDriveDownload = await fetchJson(`${server.url}/api/external/cloud-drive/files/download?${new URLSearchParams({
+    workspaceId,
+    driveRef: oneDriveRef,
+    clientId: "owner",
+    path: "default/note.txt",
+    includeText: "true"
+  })}`, {
+    headers: authHeaders(auth)
+  });
+  assert.equal(oneDriveDownload.status, 200, JSON.stringify(oneDriveDownload.payload, null, 2));
+  assert.equal(oneDriveDownload.payload.content, "onedrive default writable projection\n");
+  assert.equal(oneDriveDownload.payload.localAdapterVerified, true);
+  assert.equal(oneDriveDownload.payload.transferReceipt.state, "staged");
+
+  const oneDriveUpload = await fetchJson(`${server.url}/api/external/cloud-drive/files/upload`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(auth, { method: "POST" })
+    },
+    body: JSON.stringify({
+      workspaceId,
+      driveRef: oneDriveRef,
+      clientId: "owner",
+      path: "default/uploaded.txt",
+      content: "uploaded through OneDrive local projection\n"
+    })
+  });
+  assert.equal(oneDriveUpload.status, 201, JSON.stringify(oneDriveUpload.payload, null, 2));
+  assert.equal(
+    await fs.readFile(path.join(oneDriveRoot, ".pact-data", "owner", "uploaded.txt"), "utf8"),
+    "uploaded through OneDrive local projection\n"
+  );
+  assert.equal(oneDriveUpload.payload.localWriteInvoked, true);
+  assert.equal(oneDriveUpload.payload.localAdapterVerified, true);
+  assert.equal(oneDriveUpload.payload.contractVerified, false);
+  assert.equal(oneDriveUpload.payload.remoteWriteInvoked, false);
+  assertPublicPayloadDoesNotLeak(oneDriveUpload.payload, oneDriveRoot, "OneDrive local projection upload payload");
+
+  const oneDrivePublicUpload = await fetchJson(`${server.url}/api/external/cloud-drive/files/upload`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(auth, { method: "POST" })
+    },
+    body: JSON.stringify({
+      workspaceId,
+      driveRef: oneDriveRef,
+      clientId: "owner",
+      path: "public/blocked.txt",
+      content: "must not write OneDrive public projection\n"
+    })
+  });
+  assert.equal(oneDrivePublicUpload.status, 400, JSON.stringify(oneDrivePublicUpload.payload, null, 2));
+
+  const oneDriveSyncPlan = await fetchJson(`${server.url}/api/external/cloud-drive/sync/plan`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(auth, { method: "POST" })
+    },
+    body: JSON.stringify({
+      workspaceId,
+      driveRef: oneDriveRef,
+      clientId: "owner",
+      targetPath: "cloud-drive"
+    })
+  });
+  assert.equal(oneDriveSyncPlan.status, 200, JSON.stringify(oneDriveSyncPlan.payload, null, 2));
+  assert.equal(oneDriveSyncPlan.payload.localAdapterVerified, true);
+  assert.ok(oneDriveSyncPlan.payload.actions.length >= 2, "OneDrive local projection sync plan should include local files");
+
   const providerRefs = {};
-  for (const provider of ["onedrive", "google-drive", "dropbox"]) {
+  providerRefs.onedrive = oneDriveRef;
+  for (const provider of ["google-drive", "dropbox"]) {
     const connected = await fetchJson(`${server.url}/api/external/cloud-drive/connect`, {
       method: "POST",
       headers: {
@@ -806,8 +939,9 @@ try {
   });
   const mcpSync = mcpSyncStructured.payload;
   assert.equal(mcpSync.ok, true);
-  assert.equal(mcpSync.contractVerified, true);
-  assert.equal(mcpSync.syncReceipt.state, "contractVerified");
+  assert.equal(mcpSync.contractVerified, false);
+  assert.equal(mcpSync.localAdapterVerified, true);
+  assert.equal(mcpSync.syncReceipt.state, "projected");
   assert.equal(mcpSync.remoteSyncInvoked, false);
   assert.equal(mcpSyncStructured.exchange, undefined, "external Cloud Drive is not a sharedspace exchange");
   assert.equal(mcpSync.upstreamService.serviceId, "pact.upstream.cloud-drive");
@@ -834,6 +968,7 @@ try {
   }
   await fs.rm(userDataPath, { recursive: true, force: true }).catch(() => {});
   await fs.rm(icloudRoot, { recursive: true, force: true }).catch(() => {});
+  await fs.rm(oneDriveRoot, { recursive: true, force: true }).catch(() => {});
 }
 
 console.log("v0.0.1 cloud drive E2E verification passed");
