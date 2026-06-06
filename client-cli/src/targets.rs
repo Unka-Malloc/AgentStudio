@@ -59,11 +59,39 @@ struct ManualTarget {
 fn target_defs() -> Vec<TargetDef> {
     vec![
         TargetDef {
+            id: "openclaw",
+            label: "OpenClaw",
+            kind: "vm-cli",
+            config_hint: "OpenClaw VM MCP configuration",
+            binary_names: &["openclaw"],
+        },
+        TargetDef {
+            id: "claude-code",
+            label: "Claude Code",
+            kind: "cli",
+            config_hint: "Claude Code MCP CLI configuration",
+            binary_names: &["claude"],
+        },
+        TargetDef {
             id: "codex",
             label: "Codex",
             kind: "cli",
             config_hint: "Codex MCP configuration",
             binary_names: &["codex"],
+        },
+        TargetDef {
+            id: "gemini-cli",
+            label: "Gemini CLI",
+            kind: "cli",
+            config_hint: "Gemini CLI MCP configuration",
+            binary_names: &["gemini"],
+        },
+        TargetDef {
+            id: "antigravity",
+            label: "Antigravity",
+            kind: "cli",
+            config_hint: "Antigravity MCP configuration",
+            binary_names: &["antigravity"],
         },
         TargetDef {
             id: "opencode",
@@ -73,18 +101,18 @@ fn target_defs() -> Vec<TargetDef> {
             binary_names: &["opencode"],
         },
         TargetDef {
-            id: "openclaw",
-            label: "OpenClaw",
-            kind: "vm-cli",
-            config_hint: "OpenClaw VM MCP configuration",
-            binary_names: &["openclaw"],
+            id: "copilot",
+            label: "Copilot",
+            kind: "cli",
+            config_hint: "Copilot MCP CLI configuration",
+            binary_names: &["copilot"],
         },
         TargetDef {
-            id: "antigravity",
-            label: "Antigravity",
+            id: "kilo-code",
+            label: "Kilo Code",
             kind: "cli",
-            config_hint: "Antigravity MCP configuration",
-            binary_names: &["antigravity"],
+            config_hint: "Kilo Code MCP configuration",
+            binary_names: &["kilo"],
         },
         TargetDef {
             id: "cursor",
@@ -101,11 +129,11 @@ fn target_defs() -> Vec<TargetDef> {
             binary_names: &["windsurf"],
         },
         TargetDef {
-            id: "gemini-cli",
-            label: "Gemini CLI",
-            kind: "cli",
-            config_hint: "Gemini CLI MCP configuration",
-            binary_names: &["gemini"],
+            id: "hermes",
+            label: "Hermes Agent",
+            kind: "vm-cli",
+            config_hint: "Hermes Agent MCP configuration",
+            binary_names: &["hermes"],
         },
     ]
 }
@@ -564,9 +592,13 @@ fn target_param(params: &Value) -> Result<String> {
 
 fn normalize_target(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
+        "claude" | "claude_code" | "claudecode" => "claude-code".to_string(),
         "gemini" | "gemini_cli" => "gemini-cli".to_string(),
+        "kilo" | "kilo_code" | "kilocode" => "kilo-code".to_string(),
+        "github-copilot" => "copilot".to_string(),
         "open-code" | "open_code" => "opencode".to_string(),
         "openclaw-kate" | "openclaw_kate" => "openclaw".to_string(),
+        "hermes-agent" | "hermes_serena" | "hermes-serena" => "hermes".to_string(),
         other => other.to_string(),
     }
 }
@@ -598,10 +630,28 @@ fn target_fields_with_values(target: &str, base_url: &str, token_ref: &str) -> V
             {"path": "mcpServers.pact.url", "value": mcp_url},
             {"path": "mcpServers.pact.headers.X-Pact-Api-Key", "value": token_ref}
         ]),
+        "claude-code" | "copilot" => json!([
+            {"path": "cli.mcp.command", "value": format!("{} mcp add", target)},
+            {"path": "cli.mcp.transport", "value": "http"},
+            {"path": "cli.mcp.url", "value": mcp_url},
+            {"path": "cli.mcp.headers.X-Pact-Api-Key", "value": token_ref}
+        ]),
+        "kilo-code" => json!([
+            {"path": "mcp.pact.type", "value": "remote"},
+            {"path": "mcp.pact.url", "value": mcp_url},
+            {"path": "mcp.pact.headers.X-Pact-Api-Key", "value": token_ref},
+            {"path": "mcp.pact.enabled", "value": true}
+        ]),
         "openclaw" => json!([
             {"path": "vm.name", "value": "<vm>"},
             {"path": "mcp.pact.url", "value": mcp_url},
             {"path": "mcp.pact.headers.X-Pact-Api-Key", "value": token_ref}
+        ]),
+        "hermes" => json!([
+            {"path": "vm.name", "value": "<vm>"},
+            {"path": "hermes.mcp.pact.url", "value": mcp_url},
+            {"path": "hermes.mcp.pact.auth", "value": "header"},
+            {"path": "hermes.mcp.pact.headers.X-Pact-Api-Key", "value": token_ref}
         ]),
         "cursor" | "windsurf" => json!([
             {"path": "mcpServers.pact.command", "value": "pact-mcp"},
@@ -619,9 +669,8 @@ fn apply_structured_patch(
 ) -> Result<String> {
     match target {
         "codex" => apply_codex_patch(current, base_url),
-        "opencode" | "antigravity" | "cursor" | "windsurf" | "gemini-cli" | "openclaw" => {
-            apply_json_patch(target, current, base_url, token_ref)
-        }
+        "opencode" | "antigravity" | "cursor" | "windsurf" | "gemini-cli" | "openclaw"
+        | "kilo-code" => apply_json_patch(target, current, base_url, token_ref),
         _ => Err(anyhow!("Unsupported target adapter: {}", target)),
     }
 }
@@ -703,6 +752,15 @@ fn json_patch_entries(target: &str, base_url: &str, token_ref: &str) -> Vec<(Str
                 json!(token_ref),
             ),
         ],
+        "kilo-code" => vec![
+            ("mcp.pact.type".to_string(), json!("remote")),
+            ("mcp.pact.url".to_string(), json!(mcp_url)),
+            (
+                "mcp.pact.headers.X-Pact-Api-Key".to_string(),
+                json!(token_ref),
+            ),
+            ("mcp.pact.enabled".to_string(), json!(true)),
+        ],
         "openclaw" => vec![
             ("mcp.pact.type".to_string(), json!("remote")),
             ("mcp.pact.url".to_string(), json!(mcp_url)),
@@ -721,6 +779,9 @@ fn json_patch_entries(target: &str, base_url: &str, token_ref: &str) -> Vec<(Str
 }
 
 fn set_json_path(root: &mut Map<String, Value>, path: &str, value: Value) -> Result<()> {
+    if path.is_empty() {
+        return Err(anyhow!("Empty config path"));
+    }
     let mut current = root;
     let parts = path.split('.').collect::<Vec<_>>();
     for part in parts.iter().take(parts.len().saturating_sub(1)) {
@@ -814,22 +875,26 @@ fn stored_config_path(def: &TargetDef, params: &Value) -> Result<Option<PathBuf>
 }
 
 fn normalize_base_url(params: &Value) -> String {
+    normalize_base_url_with_env(params, env::var("PACT_MCP_URL").ok())
+}
+
+fn normalize_base_url_with_env(params: &Value, mcp_url: Option<String>) -> String {
     params
         .get("baseUrl")
         .or_else(|| params.get("url"))
         .and_then(Value::as_str)
         .and_then(normalize_url_value)
         .or_else(|| discovered_base_url_from_params(params))
-        .or_else(|| {
-            env::var("PACT_MCP_URL")
-                .ok()
-                .and_then(|value| normalize_url_value(&value))
-        })
+        .or_else(|| mcp_url.as_deref().and_then(normalize_url_value))
         .or_else(discovered_base_url_from_environment)
         .unwrap_or_else(|| "http://127.0.0.1:7228".to_string())
 }
 
 fn token_ref(params: &Value) -> String {
+    token_ref_with_env(params, env::var("PACT_MCP_TOKEN").ok())
+}
+
+fn token_ref_with_env(params: &Value, mcp_token: Option<String>) -> String {
     params
         .get("token")
         .or_else(|| params.get("apiKey"))
@@ -838,10 +903,11 @@ fn token_ref(params: &Value) -> String {
         .filter(|value| !value.trim().is_empty())
         .map(str::to_string)
         .or_else(|| {
-            env::var("PACT_MCP_TOKEN")
-                .ok()
-                .map(|value| value.trim().to_string())
+            mcp_token
+                .as_deref()
+                .map(str::trim)
                 .filter(|value| !value.is_empty())
+                .map(str::to_string)
         })
         .unwrap_or_else(|| "${PACT_MCP_TOKEN}".to_string())
 }
@@ -1085,7 +1151,11 @@ fn default_config_path(target: &str) -> Option<PathBuf> {
                 .join("mcp_config.json"),
         ),
         "gemini-cli" => Some(home.join(".gemini").join("settings.json")),
+        "kilo-code" => Some(home.join(".config").join("kilo").join("kilo.json")),
         "openclaw" => None,
+        "claude-code" => None,
+        "copilot" => None,
+        "hermes" => None,
         _ => None,
     }
 }
@@ -1139,13 +1209,17 @@ mod tests {
         assert_eq!(
             ids,
             vec![
-                "codex",
-                "opencode",
                 "openclaw",
+                "claude-code",
+                "codex",
+                "gemini-cli",
                 "antigravity",
+                "opencode",
+                "copilot",
+                "kilo-code",
                 "cursor",
                 "windsurf",
-                "gemini-cli"
+                "hermes"
             ]
         );
     }
@@ -1382,6 +1456,385 @@ mod tests {
         assert_eq!(result["ok"], false);
         assert_eq!(result["status"], "field_conflict");
         assert_eq!(fs::read_to_string(&config_path).unwrap(), r#"{"mcp":{}}"#);
+    }
+
+    #[test]
+    fn targets_public_inspect_entrypoint_uses_default_scan_path() {
+        let inspected = inspect_target("opencode").unwrap();
+        assert_eq!(inspected["target"]["target"], "opencode");
+    }
+
+    #[test]
+    fn targets_target_params_and_aliases_are_normalized() {
+        assert_eq!(
+            target_param(&json!({"positionals": ["open_code"]})).unwrap(),
+            "opencode"
+        );
+        assert_eq!(normalize_target("claude"), "claude-code");
+        assert_eq!(normalize_target("kilo-code"), "kilo-code");
+    }
+
+    #[test]
+    fn targets_add_updates_existing_manual_entry_created_at() {
+        let dir = temp_test_dir("manual-update");
+        let state_root = dir.join("future-client");
+        let first = add_target(&json!({
+            "target": "opencode",
+            "stateRoot": display_path(state_root.clone()),
+            "label": "First"
+        }))
+        .unwrap();
+        let second = add_target(&json!({
+            "target": "opencode",
+            "stateRoot": display_path(state_root),
+            "label": "Second"
+        }))
+        .unwrap();
+        assert_eq!(first["record"]["createdAt"], second["record"]["createdAt"]);
+        assert_eq!(second["record"]["label"], "Second");
+    }
+
+    #[test]
+    fn targets_config_apply_raises_missing_path_for_target_without_default_path() {
+        let err = mcp_config_apply(&json!({"target": "openclaw"})).unwrap_err();
+        assert!(err.to_string().contains("requires --config-path"));
+    }
+
+    #[test]
+    fn targets_rollback_from_snapshot_path_without_snapshot_store() {
+        let dir = temp_test_dir("rollback-path");
+        let state_root = dir.join("future-client");
+        let config_path = dir.join("opencode.jsonc");
+        fs::write(&config_path, r#"{"existing":true}"#).unwrap();
+        let snapshot_path = dir.join("snapshot.json");
+        let snapshot = json!({
+            "schemaVersion": 1,
+            "snapshotId": "manual-snapshot",
+            "sourcePath": display_path(config_path.clone()),
+            "existed": true,
+            "content": r#"{"rollback":"snapshot"}"#
+        });
+        fs::write(
+            &snapshot_path,
+            serde_json::to_string_pretty(&snapshot).unwrap(),
+        )
+        .unwrap();
+
+        let result = mcp_config_rollback(&json!({
+            "target": "opencode",
+            "stateRoot": display_path(state_root),
+            "snapshotPath": display_path(snapshot_path)
+        }))
+        .unwrap();
+        assert_eq!(result["status"], "rolled_back");
+        assert_eq!(result["restoredSnapshotId"], "manual-snapshot");
+        assert_eq!(
+            fs::read_to_string(&config_path).unwrap(),
+            r#"{"rollback":"snapshot"}"#
+        );
+    }
+
+    #[test]
+    fn targets_rollback_snapshot_path_removes_config_when_snapshot_marked_missing() {
+        let dir = temp_test_dir("rollback-missing");
+        let state_root = dir.join("future-client");
+        let config_path = dir.join("opencode.jsonc");
+        fs::write(&config_path, r#"{"before":true}"#).unwrap();
+        let snapshot_path = dir.join("snapshot-missing.json");
+        let snapshot = json!({
+            "schemaVersion": 1,
+            "snapshotId": "manual-snapshot",
+            "sourcePath": display_path(config_path.clone()),
+            "existed": false,
+            "content": r#"{"new":"snapshot"}"#
+        });
+        fs::write(
+            &snapshot_path,
+            serde_json::to_string_pretty(&snapshot).unwrap(),
+        )
+        .unwrap();
+
+        let result = mcp_config_rollback(&json!({
+            "target": "opencode",
+            "stateRoot": display_path(state_root),
+            "snapshotPath": display_path(snapshot_path)
+        }))
+        .unwrap();
+        assert_eq!(result["status"], "rolled_back");
+        assert!(!config_path.exists());
+    }
+
+    #[test]
+    fn targets_scan_candidate_discovery_variants_are_supported() {
+        assert_eq!(
+            extract_discovery_base_url(&json!({"discovery": {"httpUrl": "http://discovery:7228"}}))
+                .unwrap(),
+            "http://discovery:7228"
+        );
+        assert_eq!(
+            extract_discovery_base_url(
+                &json!({"candidates": [{"httpUrl": "http://candidate:7228/mcp"}]})
+            )
+            .unwrap(),
+            "http://candidate:7228/mcp"
+        );
+    }
+
+    #[test]
+    fn targets_target_path_and_patch_helpers_cover_error_paths() {
+        let root = json!({"mcp": 1});
+        let mut root_map = root.as_object().cloned().unwrap_or_default();
+        set_json_path(&mut root_map, "mcp.enabled", json!(true)).unwrap();
+        assert_eq!(root_map["mcp"]["enabled"], true);
+
+        let mut empty = json!({});
+        let mut empty_map = empty.as_object_mut().unwrap();
+        assert!(set_json_path(&mut empty_map, "", json!(1)).is_err());
+    }
+
+    #[test]
+    fn targets_strip_json_comments_handles_line_and_block_forms() {
+        let stripped = strip_json_comments(
+            r#"{"mcp":{"x":1}} // line
+            /* block */
+            {"mcp":{"y":2}}"#,
+        );
+        let compact = stripped.replace('\n', "");
+        assert!(compact.contains(r#"{"mcp":{"x":1}}"#));
+        assert!(compact.contains(r#"{"mcp":{"y":2}}"#));
+        assert!(!compact.to_lowercase().contains("line"));
+        assert!(!compact.to_lowercase().contains("block"));
+    }
+
+    #[test]
+    fn targets_apply_helpers_hit_error_and_normalized_input_paths() {
+        let current = r#"{ "mcp": {"enabled": true}, /* comment */ "other": 1 }"#;
+        let updated =
+            apply_json_patch("opencode", current, "http://127.0.0.1:7228", "token").unwrap();
+        assert!(updated.contains("\"mcp\""));
+        assert!(updated.contains("\"url\""));
+        assert!(updated.contains("127.0.0.1:7228/mcp"));
+
+        let codex_patch = apply_codex_patch("", "http://127.0.0.1:7228").unwrap();
+        assert!(codex_patch.contains("PACT_MCP_TOKEN"));
+
+        let unknown = apply_structured_patch("unknown", "", "http://127.0.0.1:7228", "token");
+        assert!(unknown.is_err());
+
+        assert!(apply_json_patch("opencode", "[", "http://127.0.0.1:7228", "token").is_err());
+    }
+
+    #[test]
+    fn targets_token_ref_comes_from_env_when_not_set() {
+        let token = token_ref_with_env(
+            &json!({"target": "opencode"}),
+            Some("token-from-env".to_string()),
+        );
+        assert_eq!(token, "token-from-env");
+    }
+
+    #[test]
+    fn targets_base_url_uses_env_when_not_in_params() {
+        let base_url = normalize_base_url_with_env(
+            &json!({"target": "opencode"}),
+            Some("http://env-mcp:7228".to_string()),
+        );
+        assert_eq!(base_url, "http://env-mcp:7228");
+    }
+
+    #[test]
+    fn targets_target_field_and_patch_variants_are_covered() {
+        let codex = target_fields("codex")
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["path"].as_str().unwrap_or_default().to_string())
+            .collect::<Vec<_>>();
+        assert!(codex.contains(&"mcp_servers.pact.url".to_string()));
+        assert!(codex.contains(&"mcp_servers.pact.bearer_token_env_var".to_string()));
+
+        let antigravity = target_fields("antigravity")
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["path"].as_str().unwrap_or_default().to_string())
+            .collect::<Vec<_>>();
+        assert!(antigravity.contains(&"mcpServers.pact.serverUrl".to_string()));
+
+        let kilo = target_fields("kilo-code")
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["path"].as_str().unwrap_or_default().to_string())
+            .collect::<Vec<_>>();
+        assert!(kilo.contains(&"mcp.pact.type".to_string()));
+
+        let gemini = target_fields("gemini-cli")
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["path"].as_str().unwrap_or_default().to_string())
+            .collect::<Vec<_>>();
+        assert!(gemini.contains(&"mcpServers.pact.transport".to_string()));
+
+        let hermes = target_fields("hermes")
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["path"].as_str().unwrap_or_default().to_string())
+            .collect::<Vec<_>>();
+        assert!(
+            hermes
+                .iter()
+                .any(|item| item.starts_with("hermes.mcp.pact"))
+        );
+
+        let cursor = target_fields("cursor")
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["path"].as_str().unwrap_or_default().to_string())
+            .collect::<Vec<_>>();
+        assert!(
+            cursor
+                .iter()
+                .any(|item| item.contains("mcpServers.pact.command"))
+        );
+        assert!(cursor.contains(&"mcpServers.pact.args".to_string()));
+
+        assert!(target_fields("mystery").as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn targets_target_apply_helpers_cover_empty_and_structured_variants() {
+        let empty_json =
+            apply_json_patch("opencode", "", "http://127.0.0.1:7228", "token").unwrap();
+        assert!(empty_json.contains("\"mcp\""));
+
+        let codex = apply_codex_patch("", "http://127.0.0.1:7228").unwrap();
+        assert!(codex.contains("PACT_MCP_TOKEN"));
+
+        let antigravity =
+            apply_json_patch("antigravity", "{}", "http://127.0.0.1:7228", "token").unwrap();
+        assert!(antigravity.contains("\"mcpServers\""));
+        assert!(antigravity.contains("\"token\""));
+
+        let cursor = json_patch_entries("cursor", "http://127.0.0.1:7228", "token");
+        assert_eq!(cursor.len(), 2);
+        assert!(
+            cursor
+                .iter()
+                .any(|(path, _)| path == "mcpServers.pact.command")
+        );
+        assert!(
+            cursor
+                .iter()
+                .any(|(path, _)| path == "mcpServers.pact.args")
+        );
+
+        let opencode_patch = json_patch_entries("opencode", "http://127.0.0.1:7228", "token");
+        assert_eq!(opencode_patch.len(), 4);
+        assert!(
+            opencode_patch
+                .iter()
+                .any(|(path, value)| path == "mcp.pact.url"
+                    && value == &json!("http://127.0.0.1:7228/mcp"))
+        );
+
+        let unknown = json_patch_entries("unknown", "http://127.0.0.1:7228", "token");
+        assert!(unknown.is_empty());
+    }
+
+    #[test]
+    fn targets_manual_target_filter_skips_invalid_items() {
+        let store = test_store("manual-targets-invalid");
+        let items = json!({
+            "collection": "targets",
+            "items": [
+                {"target": "", "label": "bad-target"},
+                {"target": "non-existent", "label": "missing"},
+                {"target": "opencode", "label": "OpenCode"}
+            ]
+        });
+        store.write_collection("targets", items).unwrap();
+
+        let items = manual_targets(&store).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].target, "opencode");
+    }
+
+    #[test]
+    fn targets_discovery_url_extracts_from_nested_server_variants() {
+        assert_eq!(
+            extract_discovery_base_url(&json!({"servers":{"active":{"url":"http://active.local:7228/mcp"}, "other":{"url":"http://other.local:7228/mcp"}}, "activeServer":"active"})).unwrap(),
+            "http://active.local:7228/mcp"
+        );
+        assert_eq!(
+            extract_discovery_base_url(
+                &json!({"server":{"endpoint":"https://example.service:7228/mcp"}})
+            )
+            .unwrap(),
+            "https://example.service:7228/mcp"
+        );
+        assert_eq!(
+            extract_discovery_base_url(
+                &json!({"candidates":{"local":{"endpoint":"http://candidate.local:7228/mcp"}}})
+            )
+            .unwrap(),
+            "http://candidate.local:7228/mcp"
+        );
+        assert!(extract_discovery_base_url(&json!({"server":{"bad":false}})).is_none());
+        assert!(normalize_url_value("   ").is_none());
+    }
+
+    #[test]
+    fn targets_uses_portable_dir_state_root_and_default_config_path_fallback() {
+        let dir = temp_test_dir("portable-state-root");
+        let portable_root = dir.join("portable");
+        fs::create_dir_all(&portable_root).unwrap();
+        let state_root = portable_root.join("future-client");
+        let _ = state_root;
+
+        let plan = mcp_config_plan(&json!({
+            "target": "opencode",
+            "baseUrl": "http://127.0.0.1:7228",
+            "portableDir": portable_root.to_string_lossy()
+        }))
+        .unwrap();
+        assert_eq!(plan["status"], "planned");
+
+        assert!(default_config_path("openclaw").is_none());
+    }
+
+    #[test]
+    fn targets_rollback_by_snapshot_id_reuses_snapshot_store() {
+        let dir = temp_test_dir("rollback-snapshot-id");
+        let config_path = dir.join("opencode.jsonc");
+        fs::write(&config_path, "{}").unwrap();
+        let state_root = dir.join("future-client");
+
+        let applied = mcp_config_apply(&json!({
+            "target": "opencode",
+            "configPath": display_path(config_path.clone()),
+            "stateRoot": display_path(state_root.clone()),
+            "baseUrl": "http://127.0.0.1:7228",
+            "token": "snapshot-id-token",
+        }))
+        .unwrap();
+
+        let rollback = mcp_config_rollback(&json!({
+            "target": "opencode",
+            "stateRoot": display_path(state_root),
+            "snapshotId": applied["snapshotId"].as_str().unwrap()
+        }))
+        .unwrap();
+        assert_eq!(rollback["status"], "rolled_back");
+        assert_eq!(rollback["target"], "opencode");
+    }
+
+    fn test_store(name: &str) -> crate::client_state::ClientStateStore {
+        let dir = temp_test_dir(&format!("target-test-store-{}", name));
+        crate::client_state::ClientStateStore::new(dir).unwrap()
     }
 
     fn temp_test_dir(name: &str) -> PathBuf {

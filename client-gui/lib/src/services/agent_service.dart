@@ -4,6 +4,12 @@ import 'package:path/path.dart' as p;
 
 part 'agent_service_actions.dart';
 
+typedef _RunCliExecutable = Future<ProcessResult> Function(
+  String executable,
+  List<String> args,
+);
+typedef _ResolveCliBinary = Future<File?> Function();
+
 class TargetCandidate {
   final String target;
   final String label;
@@ -49,7 +55,29 @@ class TargetCandidate {
 }
 
 class AgentService with AgentServiceActions {
+  AgentService({
+    Future<File?> Function()? resolveCliBinary,
+    Future<ProcessResult> Function(String executable, List<String> args)?
+        runCliExecutable,
+  }) : _resolveCliBinaryOverride = resolveCliBinary,
+       _runCliExecutable = runCliExecutable ?? _defaultRunCliExecutable;
+
+  final _ResolveCliBinary? _resolveCliBinaryOverride;
+  final _RunCliExecutable _runCliExecutable;
+
+  static Future<ProcessResult> _defaultRunCliExecutable(
+    String executable,
+    List<String> args,
+  ) {
+    return Process.run(executable, args);
+  }
+
   Future<File?> _resolveCliBinary() async {
+    final resolveCliBinaryOverride = _resolveCliBinaryOverride;
+    if (resolveCliBinaryOverride != null) {
+      return resolveCliBinaryOverride();
+    }
+
     final suffix = Platform.isWindows ? '.exe' : '';
     final override = Platform.environment['PACT_CLIENT_PATH'];
     final candidates = <String>[
@@ -88,7 +116,7 @@ class AgentService with AgentServiceActions {
     if (cli == null) {
       // Fallback to expecting pact-client in PATH
       try {
-        final result = await Process.run('pact-client', args);
+        final result = await _runCliExecutable('pact-client', args);
         if (result.exitCode != 0) {
           throw Exception('pact-client failed: ${result.stderr}');
         }
@@ -98,7 +126,7 @@ class AgentService with AgentServiceActions {
       }
     }
 
-    final result = await Process.run(cli.path, args);
+    final result = await _runCliExecutable(cli.path, args);
     if (result.exitCode != 0) {
       throw Exception('pact-client failed: ${result.stderr}');
     }

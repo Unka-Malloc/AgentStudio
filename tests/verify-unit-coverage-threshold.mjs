@@ -28,8 +28,21 @@ const scopedGates = [
   },
 ];
 
+function firstExistingCoverageReport(candidates) {
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(repoRoot, candidate))) {
+      return candidate;
+    }
+  }
+  return candidates[0];
+}
+
 const reports = {
-  nodeVue: process.env.PACT_UNIT_COVERAGE_NODE_VUE_REPORT || "build/coverage/node-vue/lcov.info",
+  nodeVue: process.env.PACT_UNIT_COVERAGE_NODE_VUE_REPORT || firstExistingCoverageReport([
+    "build/coverage/node-vue/lcov.info",
+    "build/coverage/node-vue-non-acp-strict/lcov.info",
+    "build/coverage/node-vue-non-acp/lcov.info",
+  ]),
   clientGui: process.env.PACT_UNIT_COVERAGE_CLIENT_GUI_REPORT || "client-gui/coverage/lcov.info",
   clientCli: process.env.PACT_UNIT_COVERAGE_CLIENT_CLI_REPORT || "build/coverage/client-cli/lcov.info",
 };

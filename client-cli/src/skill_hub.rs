@@ -517,6 +517,136 @@ mod tests {
         assert_eq!(result["copyToWorkspace"], "not_supported");
     }
 
+    #[test]
+    fn pairing_skill_hub_public_wrappers_work_with_temp_portable_state() {
+        let dir = temp_test_dir("public-wrappers");
+        let _guard = PortableDataDirOverrideGuard::set(dir);
+
+        let requested = pair_request(&json!({"agent": "codex", "target": "codex"})).unwrap();
+        assert_eq!(requested["status"], STATUS_REQUESTED);
+
+        let approved = pair_approve(&json!({"agent": "codex"})).unwrap();
+        assert_eq!(approved["status"], STATUS_APPROVED);
+
+        let listed = pair_list(&json!({"agent": "codex"})).unwrap();
+        assert_eq!(listed["pairings"].as_array().unwrap().len(), 1);
+
+        let pinned =
+            skill_pin(&json!({"agent": "codex", "skill": "review", "version": "0.1.0"})).unwrap();
+        assert_eq!(pinned["version"], "0.1.0");
+
+        let visibility =
+            skill_visibility(&json!({"agent": "codex", "skill": "review", "hidden": "on"}))
+                .unwrap();
+        assert_eq!(visibility["hidden"], true);
+
+        let list = skill_list(&json!({"agent": "codex"})).unwrap();
+        assert_eq!(list["ok"], true);
+    }
+
+    #[test]
+    fn pairing_skill_hub_parsing_helpers_support_aliases_and_positionals() {
+        assert_eq!(
+            string_param(&json!({"agentId": "codex"}), &["agent", "agentId"], 0).unwrap(),
+            "codex"
+        );
+        assert_eq!(
+            string_param(
+                &json!({"positionals": ["target-id", "skill-id"]}),
+                &["agent", "agentId"],
+                1
+            )
+            .unwrap(),
+            "skill-id"
+        );
+        assert_eq!(
+            bool_param(&json!({"hidden": "hidden"}), "hidden"),
+            Some(true)
+        );
+        assert_eq!(bool_param(&json!({"hidden": "no"}), "hidden"), Some(false));
+    }
+
+    #[test]
+    fn pairing_skill_hub_upsert_policy_item_replaces_matching_visibility_entry_only() {
+        let mut items = vec![
+            json!({"agentId":"codex","skillId":"review","hidden":false}),
+            json!({"kind":"skill","agentId":"codex","skillId":"review","hidden":false}),
+        ];
+        upsert_policy_item(
+            &mut items,
+            "codex",
+            "review",
+            json!({"agentId":"codex","skillId":"review","hidden":true}),
+        );
+        assert_eq!(items.len(), 2);
+        assert_eq!(
+            items
+                .iter()
+                .filter(|item| item.get("kind").is_none())
+                .filter(|item| item.get("agentId") == Some(&json!("codex")))
+                .filter(|item| item.get("skillId") == Some(&json!("review")))
+                .find_map(|item| item.get("hidden").and_then(Value::as_bool)),
+            Some(true)
+        );
+        assert_eq!(
+            items
+                .iter()
+                .filter(|item| item.get("kind") == Some(&json!("skill")))
+                .filter(|item| item.get("agentId") == Some(&json!("codex")))
+                .filter(|item| item.get("skillId") == Some(&json!("review")))
+                .find_map(|item| item.get("hidden").and_then(Value::as_bool)),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn pairing_skill_cli_approve_missing_pairing_returns_error() {
+        let store = test_store("approve-missing");
+        let approved = pair_approve_in(&store, &json!({"agent": "codex"})).unwrap();
+        assert_eq!(approved["ok"], false);
+        assert_eq!(approved["error"], "pairing_not_found");
+    }
+
+    #[test]
+    fn pairing_skill_cli_pin_uses_positionals_version() {
+        let store = test_store("pin-positionals");
+        pair_request_in(&store, &json!({"agent": "codex", "target": "codex"})).unwrap();
+        pair_approve_in(&store, &json!({"agent": "codex"})).unwrap();
+        seed_skill(&store, "review", "1.0.0");
+
+        let pinned = skill_pin_in(
+            &store,
+            &json!({
+                "agent": "codex",
+                "skill": "review",
+                "positionals": ["ignored", "2.0.0"],
+            }),
+        )
+        .unwrap();
+        assert_eq!(pinned["ok"], true);
+        assert_eq!(pinned["version"], "2.0.0");
+    }
+
+    #[test]
+    fn pairing_skill_hub_visibility_filters_listed_skills() {
+        let store = test_store("visibility-filters-list");
+        pair_request_in(&store, &json!({"agent": "codex", "target": "codex"})).unwrap();
+        pair_approve_in(&store, &json!({"agent": "codex"})).unwrap();
+        seed_skill(&store, "review", "1.0.0");
+        skill_visibility_in(
+            &store,
+            &json!({"agent":"codex","skill":"review","hidden": "hidden"}),
+        )
+        .unwrap();
+
+        let list = pair_list_in(&store, &json!({"agent":"codex"})).unwrap();
+        assert_eq!(list["pairings"].as_array().unwrap().len(), 1);
+        assert!(list["pairings"][0]["status"] == "approved");
+
+        let visible = skill_list_in(&store, &json!({"agent":"codex"})).unwrap();
+        assert!(visible["skills"].as_array().unwrap().is_empty());
+    }
+
     fn seed_skill(store: &ClientStateStore, skill_id: &str, version: &str) {
         let mut document = store.read_collection("skills").unwrap();
         collection_items_mut(&mut document).unwrap().push(json!({
@@ -535,5 +665,33 @@ mod tests {
             env::temp_dir().join(format!("pact-pairing-skill-{}-{}", name, timestamp()));
         fs::create_dir_all(&dir).unwrap();
         ClientStateStore::new(dir).unwrap()
+    }
+
+    struct PortableDataDirOverrideGuard {
+        previous: Option<PathBuf>,
+    }
+
+    impl PortableDataDirOverrideGuard {
+        fn set(path: PathBuf) -> Self {
+            let previous = crate::paths::set_portable_data_dir_override(Some(path));
+            Self { previous }
+        }
+    }
+
+    impl Drop for PortableDataDirOverrideGuard {
+        fn drop(&mut self) {
+            crate::paths::set_portable_data_dir_override(self.previous.take());
+        }
+    }
+
+    fn temp_test_dir(name: &str) -> PathBuf {
+        let dir = env::temp_dir().join(format!(
+            "pact-skill-hub-{}-{}-{}",
+            name,
+            timestamp(),
+            timestamp()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        dir
     }
 }

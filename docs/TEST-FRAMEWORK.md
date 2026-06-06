@@ -114,7 +114,10 @@ npm run test:unit-coverage:scan
 ```
 
 This command directly runs `tests/verify-unit-coverage-threshold.mjs` over the
-existing LCOV reports. Report paths can be overridden with
+existing LCOV reports. For the combined Node/Vue report, the scanner uses
+`build/coverage/node-vue/lcov.info` when present and otherwise falls back to the
+current strict non-ACP reports under `build/coverage/node-vue-non-acp-strict/`
+or `build/coverage/node-vue-non-acp/`. Report paths can be overridden with
 `PACT_UNIT_COVERAGE_NODE_VUE_REPORT`, `PACT_UNIT_COVERAGE_CLIENT_GUI_REPORT`,
 and `PACT_UNIT_COVERAGE_CLIENT_CLI_REPORT` when scanning a scoped report such as
 `build/coverage/node-vue-non-acp/lcov.info`. Each code area must be strictly
@@ -172,8 +175,11 @@ node tests/run.mjs --tag security
 
 ### Static and Hygiene
 
-- `repo.hygiene.*`: validates repository layout and prevents generated output
-  from leaking into source roots.
+- `repo.hygiene.*`: validates repository layout, prevents generated output
+  from leaking into source roots, and blocks project-local runtime or
+  credential state such as local Pact data dirs, runtime `settings.json`,
+  provider manifests, mount config, `.env`, private keys, service account
+  files, client secrets, and token files anywhere under the repository.
 - `security.secret-hygiene`: scans source, docs, and tests for high-risk secret
   patterns such as private keys, cloud credentials, GitHub tokens, and API keys.
 - `security.npm-audit`: fails on high-risk production dependency advisories.
@@ -319,6 +325,13 @@ then update this list in the same patch.
   `prebuild`, and `release` profiles across headless runtime, MCP HTTP,
   continuity, checkpoints, rebuild, ops, knowledge, policy, trace, logging, and
   business scenario suites.
+- [x] `acp-agent-relay`: enforced by `server:verify:acp-agent-relay` and
+  `npm run server:verify:acp-agent-relay`; validates ACP relay protocol
+  contract and phase 0/1 governance behavior, including virtual agent mapping,
+  durable wake/policy recalculation, reasoning visibility gating, fail-closed
+  policy kernels, write approval/receipt behavior, terminal denial, and relay-scope MCP
+  projection without source token leakage, plus Tool Management-mediated REST
+  facade execution and persisted relay store state.
 - [x] `external-service-api-registration`: enforced by
   `server.external-service-api-registration`,
   `npm run server:verify:external-service-api-registration`, and the production

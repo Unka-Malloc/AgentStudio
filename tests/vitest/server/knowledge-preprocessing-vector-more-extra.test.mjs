@@ -198,7 +198,7 @@ function createFakeVectorDb() {
   }
 
   return {
-    name: "/tmp/fake-vector.db",
+    name: "/tmp/pact-vector-test.db",
     exec: vi.fn(),
     transaction(fn) {
       return (...args) => fn(...args);

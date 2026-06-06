@@ -409,13 +409,13 @@ describe("runtime dependencies final extra coverage", () => {
   });
 
   it("completes a mocked JRE install and refreshes detection after setup-local-runtime", async () => {
-    const fakeJavaPath = path.join(workspaceDir, "runtime", "jre", "bin", "java");
-    const fakeTikaPath = path.join(workspaceDir, "runtime", "tika", "tika.jar");
+    const testJavaPath = path.join(workspaceDir, "runtime", "jre", "bin", "java");
+    const testTikaPath = path.join(workspaceDir, "runtime", "tika", "tika.jar");
     loadSettingsMock
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({
-        javaBinPath: fakeJavaPath,
-        tikaJarPath: fakeTikaPath
+        javaBinPath: testJavaPath,
+        tikaJarPath: testTikaPath
       });
 
     spawnMock.mockImplementation((command, args = []) => {
@@ -425,11 +425,11 @@ describe("runtime dependencies final extra coverage", () => {
         return child;
       }
       setImmediate(() => {
-        fsSync.mkdirSync(path.dirname(fakeJavaPath), { recursive: true });
-        fsSync.writeFileSync(fakeJavaPath, "#!/bin/sh\n");
-        fsSync.chmodSync(fakeJavaPath, 0o755);
-        fsSync.mkdirSync(path.dirname(fakeTikaPath), { recursive: true });
-        fsSync.writeFileSync(fakeTikaPath, "tika-jar");
+        fsSync.mkdirSync(path.dirname(testJavaPath), { recursive: true });
+        fsSync.writeFileSync(testJavaPath, "#!/bin/sh\n");
+        fsSync.chmodSync(testJavaPath, 0o755);
+        fsSync.mkdirSync(path.dirname(testTikaPath), { recursive: true });
+        fsSync.writeFileSync(testTikaPath, "tika-jar");
         child.stdout.emit("data", "setup complete\n");
         child.emit("close", 0, null);
       });
@@ -445,7 +445,7 @@ describe("runtime dependencies final extra coverage", () => {
     expect(result.status).toBe("installed");
     expect(result.before.present).toBe(false);
     expect(result.detection.present).toBe(true);
-    expect(result.detection.detection.javaPath).toBe(fakeJavaPath);
+    expect(result.detection.detection.javaPath).toBe(testJavaPath);
     expect(result.commandResult).toMatchObject({ status: 0 });
   });
 
