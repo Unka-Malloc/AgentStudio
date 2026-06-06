@@ -372,6 +372,13 @@ export function createToolExecutionRuntime({
     const profile = context.profileId
       ? registry.listProfiles().find((item) => item.id === context.profileId)
       : null;
+    const relayChildOperation = context.relayChildOperation && typeof context.relayChildOperation === "object" && !Array.isArray(context.relayChildOperation)
+      ? context.relayChildOperation
+      : null;
+    const appendExecution = (entry = {}) => store.appendExecution({
+      ...entry,
+      ...(relayChildOperation ? { relayChildOperation } : {})
+    });
 
     if (!tool || !operation) {
       logTool("warn", "tool_management.execute.denied", {
@@ -383,7 +390,7 @@ export function createToolExecutionRuntime({
       });
       const status = tool ? 500 : 404;
       const reasonCode = tool ? "operation_missing" : "unknown_tool";
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: toolId || "",
@@ -507,7 +514,7 @@ export function createToolExecutionRuntime({
         missingCapabilities: authorization.missingCapabilities || [],
         redactedReason: authorization.error || "Tool token authorization denied."
       });
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,
@@ -610,7 +617,7 @@ export function createToolExecutionRuntime({
         userAgent: request?.headers?.["user-agent"] || "",
         expiresAt: context.expiresAt || context.approvalExpiresAt || ""
       });
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,
@@ -689,7 +696,7 @@ export function createToolExecutionRuntime({
         decisionId: policy.decisionId,
         durationMs
       });
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,
@@ -763,7 +770,7 @@ export function createToolExecutionRuntime({
         },
         policy
       };
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,
@@ -853,7 +860,7 @@ export function createToolExecutionRuntime({
         const resultBytes = jsonByteLength(result);
         const durationMs = Date.now() - startedAtMs;
         if (resultBytes > Number(tool.maxResultBytes || 0)) {
-          store.appendExecution({
+          appendExecution({
             toolExecutionId,
             traceId,
             toolId: tool.id,
@@ -914,7 +921,7 @@ export function createToolExecutionRuntime({
             }
           };
         }
-        store.appendExecution({
+        appendExecution({
           toolExecutionId,
           traceId,
           toolId: tool.id,
@@ -976,7 +983,7 @@ export function createToolExecutionRuntime({
         const durationMs = Date.now() - startedAtMs;
         const message = error instanceof Error ? error.message : "External MCP tool execution failed.";
         const errorCode = error?.code || "external_mcp_tool_execution_failed";
-        store.appendExecution({
+        appendExecution({
           toolExecutionId,
           traceId,
           toolId: tool.id,
@@ -1060,7 +1067,7 @@ export function createToolExecutionRuntime({
         error: schemaValidation.error,
         durationMs
       });
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,
@@ -1184,7 +1191,7 @@ export function createToolExecutionRuntime({
           maxResultBytes: tool.maxResultBytes,
           durationMs
         });
-        store.appendExecution({
+        appendExecution({
           toolExecutionId,
           traceId,
           toolId: tool.id,
@@ -1257,7 +1264,7 @@ export function createToolExecutionRuntime({
         resultBytes: buffer.length,
         durationMs
       });
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,
@@ -1328,7 +1335,7 @@ export function createToolExecutionRuntime({
         durationMs,
         error: summarizeError(error)
       });
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,

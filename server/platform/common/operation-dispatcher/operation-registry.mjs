@@ -106,6 +106,55 @@ function repoInputSchema(required = []) {
   return { type: "object", required, properties };
 }
 
+function parseOperationBody(value) {
+  if (value === null || value === undefined) {
+    return {};
+  }
+  if (Buffer.isBuffer(value)) {
+    if (value.length === 0) {
+      return {};
+    }
+    return parseOperationBody(value.toString("utf8"));
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return {};
+    }
+    try {
+      return parseOperationBody(JSON.parse(trimmed));
+    } catch {
+      return {};
+    }
+  }
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return {};
+}
+
+function isReadOnlyPrompt(context = {}) {
+  const input = {
+    ...parseOperationBody(context.requestBody),
+    ...(context.params && typeof context.params === "object" ? context.params : {})
+  };
+  const mode = String(input.mode || input.promptMode || input.askMode || "").trim().toLowerCase();
+  if (mode === "read" || mode === "read_only" || mode === "readonly") {
+    return true;
+  }
+  if (input.readOnly === true || input.readOnly === 1 || input.readOnly === "true") {
+    return true;
+  }
+  if (input.noWrite === true || input.noWrite === 1 || input.noWrite === "true") {
+    return true;
+  }
+  return false;
+}
+
+function resolveAcpPromptRisk(context = {}) {
+  return isReadOnlyPrompt(context) ? "read_only" : "repair_write";
+}
+
 function repoOperationDefinition([id, scope, label, required, risk, readOnly]) {
   const command = id.split(".");
   return {
@@ -2011,6 +2060,450 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     cli: { command: ["tools", "pending", "resolve"], usage: "tools pending resolve --id PENDING_OPERATION_ID --body decision.json" },
     requiredScopes: ["runtime:admin"],
     safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
+    id: "acp_agent_relay.virtual_agents.list",
+    feature: "tool_management",
+    label: "列出可见虚拟 ACP 中继 Agent",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/agent-relay/v1/virtual-agents",
+      localInForwardMode: true,
+      query: [
+        { name: "workspaceId", aliases: ["workspaceId", "workspace-id", "workspaceId"] }
+      ]
+    },
+    rpc: {
+      method: "acp_agent_relay.virtual_agents.list",
+      syntheticPath: "/api/agent-relay/v1/virtual-agents",
+      query: [{ name: "workspaceId", aliases: ["workspaceId", "workspace-id", "workspace-id"] }]
+    },
+    cli: { command: ["agent-relay", "virtual-agents", "list"], usage: "agent-relay virtual-agents list --workspace-id WORKSPACE_ID" },
+    requiredScopes: ["agent_relay:view"],
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.virtual_agents.upsert",
+    feature: "tool_management",
+    label: "注册或更新虚拟 ACP 中继 Agent",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/virtual-agents",
+      localInForwardMode: true,
+      body: "params"
+    },
+    rpc: {
+      method: "acp_agent_relay.virtual_agents.upsert",
+      syntheticPath: "/api/agent-relay/v1/virtual-agents",
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "virtual-agents", "upsert"],
+      usage: "agent-relay virtual-agents upsert --body virtual-agent.json"
+    },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "agent_relay:operate" },
+    aspects: ["tool-management", "agent-relay", "internal"]
+  },
+  {
+    id: "acp_agent_relay.targets.list",
+    feature: "tool_management",
+    label: "列出可用目标 ACP",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/agent-relay/v1/targets",
+      localInForwardMode: true
+    },
+    rpc: { method: "acp_agent_relay.targets.list", syntheticPath: "/api/agent-relay/v1/targets" },
+    cli: { command: ["agent-relay", "targets", "list"], usage: "agent-relay targets list" },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay", "internal"]
+  },
+  {
+    id: "acp_agent_relay.targets.upsert",
+    feature: "tool_management",
+    label: "注册或更新目标 ACP",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/targets",
+      localInForwardMode: true,
+      body: "params"
+    },
+    rpc: { method: "acp_agent_relay.targets.upsert", syntheticPath: "/api/agent-relay/v1/targets", body: "params" },
+    cli: { command: ["agent-relay", "targets", "upsert"], usage: "agent-relay targets upsert --body target.json" },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "agent_relay:operate" },
+    aspects: ["tool-management", "agent-relay", "internal"]
+  },
+  {
+    id: "acp_agent_relay.downstream_clients.refresh",
+    feature: "tool_management",
+    label: "刷新下游智能体适配层",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/downstream-clients/refresh",
+      localInForwardMode: true,
+      body: "params"
+    },
+    rpc: {
+      method: "acp_agent_relay.downstream_clients.refresh",
+      syntheticPath: "/api/agent-relay/v1/downstream-clients/refresh",
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "downstream-clients", "refresh"],
+      usage: "agent-relay downstream-clients refresh --body refresh.json"
+    },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "agent_relay:operate" },
+    aspects: ["tool-management", "agent-relay", "internal"]
+  },
+  {
+    id: "acp_agent_relay.sessions.list",
+    feature: "tool_management",
+    label: "列出 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/agent-relay/v1/sessions",
+      localInForwardMode: true,
+      query: [
+        { name: "sourceId", aliases: ["sourceId", "source-id"] },
+        { name: "workspaceId", aliases: ["workspaceId", "workspace-id"] },
+        { name: "virtualAgentId", aliases: ["virtualAgentId", "virtual-agent-id", "agentId", "agent-id"] },
+        { name: "targetId", aliases: ["targetId", "target-id"] },
+        { name: "lifecycleState", aliases: ["lifecycleState", "lifecycle-state", "status", "state"] },
+        { name: "includePendingPermissionRequests", aliases: ["includePendingPermissionRequests", "include-pending-permission-requests", "includePendingPermissions"], type: "boolean" },
+        { name: "limit", aliases: ["limit"] }
+      ],
+      coerce: { limit: "number", includePendingPermissionRequests: "boolean" }
+    },
+    rpc: {
+      method: "acp_agent_relay.sessions.list",
+      syntheticPath: "/api/agent-relay/v1/sessions",
+      query: [
+        { name: "sourceId", aliases: ["sourceId", "source-id"] },
+        { name: "workspaceId", aliases: ["workspaceId", "workspace-id"] },
+        { name: "virtualAgentId", aliases: ["virtualAgentId", "virtual-agent-id", "agentId", "agent-id"] },
+        { name: "targetId", aliases: ["targetId", "target-id"] },
+        { name: "lifecycleState", aliases: ["lifecycleState", "lifecycle-state", "status", "state"] },
+        { name: "includePendingPermissionRequests", aliases: ["includePendingPermissionRequests", "include-pending-permission-requests", "includePendingPermissions"], type: "boolean" },
+        { name: "limit", aliases: ["limit"] }
+      ]
+    },
+    cli: { command: ["agent-relay", "sessions", "list"], usage: "agent-relay sessions list --workspace-id WORKSPACE_ID" },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.sessions.get",
+    feature: "tool_management",
+    label: "读取 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/agent-relay/v1/sessions/:sessionId",
+      localInForwardMode: true,
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      query: [{ name: "includePendingPermissionRequests", aliases: ["includePendingPermissionRequests", "include-pending-permission-requests", "includePendingPermissions"], type: "boolean" }],
+      coerce: { includePendingPermissionRequests: "boolean" }
+    },
+    rpc: {
+      method: "acp_agent_relay.sessions.get",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      query: [{ name: "includePendingPermissionRequests", aliases: ["includePendingPermissionRequests", "include-pending-permission-requests", "includePendingPermissions"], type: "boolean" }]
+    },
+    cli: { command: ["agent-relay", "sessions", "get"], usage: "agent-relay sessions get --id SESSION_ID" },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.turns.list",
+    feature: "tool_management",
+    label: "列出 ACP 中继会话 Turn",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/agent-relay/v1/sessions/:sessionId/turns",
+      localInForwardMode: true,
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      query: [
+        { name: "limit", aliases: ["limit"] },
+        { name: "includePendingPermissionRequests", aliases: ["includePendingPermissionRequests", "include-pending-permission-requests", "includePendingPermissions"], type: "boolean" }
+      ],
+      coerce: { limit: "number", includePendingPermissionRequests: "boolean" }
+    },
+    rpc: {
+      method: "acp_agent_relay.turns.list",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/turns",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      query: [
+        { name: "limit", aliases: ["limit"] },
+        { name: "includePendingPermissionRequests", aliases: ["includePendingPermissionRequests", "include-pending-permission-requests", "includePendingPermissions"], type: "boolean" }
+      ]
+    },
+    cli: { command: ["agent-relay", "turns", "list"], usage: "agent-relay turns list --id SESSION_ID" },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.turn.observe",
+    feature: "tool_management",
+    label: "刷新 ACP 中继 Turn 目标观测",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/turns/:turnId/observe",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.turn.observe",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/turns/:turnId/observe",
+      params: [
+        { name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true },
+        { name: "turnId", aliases: ["turnId", "turn-id", "relayTurnId", "relay-turn-id"], required: true }
+      ],
+      body: "params"
+    },
+    cli: { command: ["agent-relay", "turn", "observe"], usage: "agent-relay turn observe --id SESSION_ID --turn-id TURN_ID" },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay", "observability"]
+  },
+  {
+    id: "acp_agent_relay.virtual_agent.initialize",
+    feature: "tool_management",
+    label: "初始化虚拟 ACP 中继 Agent 会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/virtual-agents/:virtualAgentId/initialize",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.virtual_agent.initialize",
+      syntheticPath: "/api/agent-relay/v1/virtual-agents/:virtualAgentId/initialize",
+      params: [{ name: "virtualAgentId", aliases: ["virtualAgentId", "virtual-agent-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "virtual-agents", "initialize"],
+      usage: "agent-relay virtual-agents initialize --id VIRTUAL_AGENT_ID --body init.json"
+    },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.session.create",
+    feature: "tool_management",
+    label: "创建 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: { method: "POST", path: "/api/agent-relay/v1/sessions", localInForwardMode: true },
+    rpc: { method: "acp_agent_relay.session.create", syntheticPath: "/api/agent-relay/v1/sessions", body: "params" },
+    cli: { command: ["agent-relay", "session", "create"], usage: "agent-relay session create --body session.json" },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.session.resume",
+    feature: "tool_management",
+    label: "恢复 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/resume",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.session.resume",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/resume",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: { command: ["agent-relay", "session", "resume"], usage: "agent-relay session resume --id SESSION_ID --body resume.json" },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.session.wake",
+    feature: "tool_management",
+    label: "唤醒 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/wake",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.session.wake",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/wake",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: { command: ["agent-relay", "session", "wake"], usage: "agent-relay session wake --id SESSION_ID" },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.prompt.send",
+    feature: "tool_management",
+    label: "发送 ACP 中继 Prompt",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/prompt",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.prompt.send",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/prompt",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "prompt", "send"],
+      usage: "agent-relay prompt send --id SESSION_ID --body prompt.json"
+    },
+    requiredScopes: ["agent_relay:operate"],
+    safety: {
+      risk: "repair_write",
+      approvalScope: "agent_relay:operate",
+      resolveRisk: resolveAcpPromptRisk
+    },
+    aspects: ["tool-management", "agent-relay", "prompt"]
+  },
+  {
+    id: "acp_agent_relay.fs.read_text_file",
+    feature: "tool_management",
+    label: "读取 ACP 中继工作区文本文件",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/fs/read-text-file",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.fs.read_text_file",
+      syntheticPath: "/api/agent-relay/v1/fs/read-text-file",
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "fs", "read-text-file"],
+      usage: "agent-relay fs read-text-file --body read.json"
+    },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay", "filesystem"]
+  },
+  {
+    id: "acp_agent_relay.fs.write_text_file",
+    feature: "tool_management",
+    label: "写入 ACP 中继工作区文本文件",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/fs/write-text-file",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.fs.write_text_file",
+      syntheticPath: "/api/agent-relay/v1/fs/write-text-file",
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "fs", "write-text-file"],
+      usage: "agent-relay fs write-text-file --body write.json"
+    },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "agent_relay:operate" },
+    aspects: ["tool-management", "agent-relay", "filesystem"]
+  },
+  {
+    id: "acp_agent_relay.session.cancel",
+    feature: "tool_management",
+    label: "取消 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/cancel",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.session.cancel",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/cancel",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: { command: ["agent-relay", "session", "cancel"], usage: "agent-relay session cancel --id SESSION_ID" },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.session.close",
+    feature: "tool_management",
+    label: "关闭 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/close",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.session.close",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/close",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: { command: ["agent-relay", "session", "close"], usage: "agent-relay session close --id SESSION_ID" },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.permission.resolve",
+    feature: "tool_management",
+    label: "解析 ACP 中继 Permission 请求",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/permission/resolve",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.permission.resolve",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/permission/resolve",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "permission", "resolve"],
+      usage: "agent-relay permission resolve --id SESSION_ID --body decision.json"
+    },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false, approvalScope: "agent_relay:operate" },
+    aspects: ["tool-management", "agent-relay", "internal"]
   },
   {
     id: "tool_management.mcp.request_authorization",

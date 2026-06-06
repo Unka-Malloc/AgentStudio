@@ -762,6 +762,64 @@ function summarizeValue(value) {
   return summary;
 }
 
+function relayChildOperationSummary(value = null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const text = (field) => String(value[field] || "").trim();
+  const mismatches = Array.isArray(value.requestBindingMismatches)
+    ? value.requestBindingMismatches.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 16)
+    : [];
+  const summary = {
+    schemaVersion: 1,
+    binding: text("binding") || "pact.acp-agent-relay.child-operation.v1",
+    relaySessionId: text("relaySessionId"),
+    relayTurnId: text("relayTurnId"),
+    virtualAgentId: text("virtualAgentId"),
+    targetId: text("targetId"),
+    relayMcpGrantId: text("relayMcpGrantId"),
+    grantType: text("grantType"),
+    grantBindingVerified: value.grantBindingVerified === true,
+    requestBindingMismatches: mismatches,
+    traceId: text("traceId"),
+    parentOperationId: text("parentOperationId"),
+    operationId: text("operationId")
+  };
+  if (!summary.relayMcpGrantId && !summary.relaySessionId && !summary.relayTurnId) {
+    return null;
+  }
+  return summary;
+}
+
+function executionResultSummary(entry = {}) {
+  const base = entry.resultSummary !== undefined
+    ? entry.resultSummary
+    : summarizeValue(entry.result || {});
+  const relayChildOperation = relayChildOperationSummary(
+    {
+      ...(entry.relayChildOperation ||
+        entry.context?.relayChildOperation ||
+        (base && typeof base === "object" && !Array.isArray(base) ? base.relayChildOperation : null) ||
+        {}),
+      operationId: entry.operationId || entry.relayChildOperation?.operationId || entry.context?.relayChildOperation?.operationId
+    }
+  );
+  if (!relayChildOperation) {
+    return base;
+  }
+  if (base && typeof base === "object" && !Array.isArray(base)) {
+    return {
+      ...base,
+      relayChildOperation
+    };
+  }
+  return {
+    type: "summary",
+    value: base,
+    relayChildOperation
+  };
+}
+
 function rowToPendingOperation(row, { includeOriginalInput = false } = {}) {
   if (!row) {
     return null;
@@ -1426,7 +1484,8 @@ export function createToolManagementStore({
   capabilityResolver = null,
   capabilityKeyProvider = null,
   capabilityBindingGuard = null,
-  governancePolicyRevisionProvider = null
+  governancePolicyRevisionProvider = null,
+  changeListener = null
 }) {
   const rootPath = path.join(userDataPath, "tool-management");
   fs.mkdirSync(rootPath, { recursive: true });
@@ -1469,6 +1528,49 @@ export function createToolManagementStore({
           "auto",
         alias: process.env.PACT_TOOL_GRANT_BINDING_GUARD_ALIAS || "pact-tool-bindings"
       });
+  const pendingChangeNotifications = new Set();
+
+  function notifyChange(event = {}) {
+    if (typeof changeListener !== "function") {
+      return null;
+    }
+    try {
+      const result = changeListener({
+        schemaVersion: 1,
+        source: "tool-management-store",
+        at: nowIso(),
+        ...event
+      });
+      if (!result || (typeof result.then !== "function" && typeof result.catch !== "function")) {
+        return result;
+      }
+      let tracked;
+      tracked = Promise.resolve(result)
+        .catch(() => null)
+        .finally(() => {
+          pendingChangeNotifications.delete(tracked);
+        });
+      pendingChangeNotifications.add(tracked);
+      return tracked;
+    } catch {
+      return null;
+    }
+  }
+
+  async function flushChangeNotifications() {
+    const pending = [...pendingChangeNotifications];
+    if (pending.length === 0) {
+      return {
+        ok: true,
+        flushed: 0
+      };
+    }
+    await Promise.allSettled(pending);
+    return {
+      ok: true,
+      flushed: pending.length
+    };
+  }
 
   function currentGovernancePolicyRevision() {
     if (typeof governancePolicyRevisionProvider !== "function") {
@@ -1616,6 +1718,11 @@ export function createToolManagementStore({
       policyRevision: grant.metadata.policyRevision || 0,
       toolsets: grant.toolsets
     });
+    await notifyChange({
+      type: "grant_created",
+      grantId: grant.id,
+      reasonCode: "grant_created"
+    });
     return {
       grant: publicGrant(grant),
       token
@@ -1645,6 +1752,11 @@ export function createToolManagementStore({
     );
     upsertGrant(updated);
     appendGrantEvent(updated.id, "updated", { patch: summarizeValue(patch) });
+    notifyChange({
+      type: "grant_updated",
+      grantId: updated.id,
+      reasonCode: "grant_updated"
+    });
     return publicGrant(updated);
   }
 
@@ -1655,6 +1767,11 @@ export function createToolManagementStore({
     }
     db.prepare("DELETE FROM tool_grants WHERE id = ?").run(existing.id);
     appendGrantEvent(existing.id, "deleted", {});
+    notifyChange({
+      type: "grant_deleted",
+      grantId: existing.id,
+      reasonCode: "grant_deleted"
+    });
     return true;
   }
 
@@ -1684,6 +1801,12 @@ export function createToolManagementStore({
     };
     upsertGrant(updated);
     appendGrantEvent(updated.id, "revoked", { reason: updated.reason });
+    await notifyChange({
+      type: "grant_revoked",
+      grantId: updated.id,
+      reasonCode: "grant_revoked",
+      reason: updated.reason || "grant_revoked"
+    });
     return publicGrant(updated);
   }
 
@@ -1755,6 +1878,11 @@ export function createToolManagementStore({
     };
     upsertGrant(updated);
     appendGrantEvent(updated.id, "rotated", { tokenPrefix: updated.tokenPrefix });
+    await notifyChange({
+      type: "grant_token_rotated",
+      grantId: updated.id,
+      reasonCode: "grant_token_rotated"
+    });
     return {
       grant: publicGrant(updated),
       token
@@ -1979,7 +2107,7 @@ export function createToolManagementStore({
       String(entry.decision || ""),
       String(entry.inputHash || hashValue(entry.input || {})),
       stringifyJson(entry.redactedInput || summarizeValue(entry.input || {})),
-      stringifyJson(entry.resultSummary || summarizeValue(entry.result || {})),
+      stringifyJson(executionResultSummary(entry)),
       String(entry.status || ""),
       String(entry.errorCode || ""),
       Math.max(0, Number(entry.durationMs || 0)),
@@ -2056,14 +2184,21 @@ export function createToolManagementStore({
     );
   }
 
-  function saveCatalogSnapshot(catalog = {}) {
+  function saveCatalogSnapshot(catalog = {}, { notify = true } = {}) {
     if (!catalog.fingerprint) {
       return null;
     }
-    db.prepare(`
+    const result = db.prepare(`
       INSERT OR IGNORE INTO tool_catalog_snapshots (fingerprint, catalog_json, created_at)
       VALUES (?, ?, ?)
     `).run(catalog.fingerprint, stringifyJson(catalog), nowIso());
+    if (notify !== false && result.changes > 0) {
+      notifyChange({
+        type: "catalog_snapshot_saved",
+        reasonCode: "catalog_snapshot_saved",
+        catalogFingerprint: String(catalog.fingerprint || "")
+      });
+    }
     return { fingerprint: catalog.fingerprint };
   }
 
@@ -3187,6 +3322,7 @@ export function createToolManagementStore({
     appendMetric,
     appendHttpRequestMetric,
     saveCatalogSnapshot,
+    flushChangeNotifications,
     listAudit,
     getAudit,
     metricsSummary,

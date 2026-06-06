@@ -152,6 +152,16 @@ const DEFAULT_TOOL_MANAGEMENT_SCOPES = Object.freeze([
     id: "auth:admin",
     label: "Administer authorization",
     description: "Create, revoke, inspect, and evaluate unified authorization grants and decisions."
+  },
+  {
+    id: "agent_relay:view",
+    label: "View ACP agent relay",
+    description: "List source-visible virtual ACP agents, concrete relay targets, and relay status."
+  },
+  {
+    id: "agent_relay:operate",
+    label: "Operate ACP agent relay",
+    description: "Register targets and create, wake, prompt, cancel, and close governed ACP agent relay sessions."
   }
 ]);
 
@@ -361,6 +371,22 @@ const DEFAULT_TOOL_MANAGEMENT_TOOLSETS = Object.freeze([
     label: "Agent sync publish",
     requiredScopes: ["agent_sync:publish"],
     maxRisk: "safe_write",
+    grantable: true,
+    defaultForAgents: false
+  },
+  {
+    id: "pact.agent.relay.read",
+    label: "ACP agent relay read",
+    requiredScopes: ["agent_relay:view"],
+    maxRisk: "read_only",
+    grantable: true,
+    defaultForAgents: false
+  },
+  {
+    id: "pact.agent.relay",
+    label: "ACP agent relay",
+    requiredScopes: ["agent_relay:view", "agent_relay:operate"],
+    maxRisk: "repair_write",
     grantable: true,
     defaultForAgents: false
   },
@@ -717,6 +743,24 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "knowledge.render_markdown": "pact.knowledge.renderMarkdown",
   "knowledge.graph": "pact.knowledge.graph",
   "agent_sync.publish": "pact.agentSync.publish",
+  "acp_agent_relay.virtual_agents.list": "pact.agentRelay.virtualAgents.list",
+  "acp_agent_relay.virtual_agents.upsert": "pact.agentRelay.virtualAgents.upsert",
+  "acp_agent_relay.targets.list": "pact.agentRelay.targets.list",
+  "acp_agent_relay.targets.upsert": "pact.agentRelay.targets.upsert",
+  "acp_agent_relay.downstream_clients.refresh": "pact.agentRelay.downstreamClients.refresh",
+  "acp_agent_relay.sessions.list": "pact.agentRelay.sessions.list",
+  "acp_agent_relay.sessions.get": "pact.agentRelay.sessions.get",
+  "acp_agent_relay.turns.list": "pact.agentRelay.turns.list",
+  "acp_agent_relay.turn.observe": "pact.agentRelay.turn.observe",
+  "acp_agent_relay.virtual_agent.initialize": "pact.agentRelay.virtualAgent.initialize",
+  "acp_agent_relay.session.create": "pact.agentRelay.session.create",
+  "acp_agent_relay.session.resume": "pact.agentRelay.session.resume",
+  "acp_agent_relay.session.wake": "pact.agentRelay.session.wake",
+  "acp_agent_relay.prompt.send": "pact.agentRelay.prompt",
+  "acp_agent_relay.fs.read_text_file": "pact.agentRelay.fs.readTextFile",
+  "acp_agent_relay.fs.write_text_file": "pact.agentRelay.fs.writeTextFile",
+  "acp_agent_relay.session.cancel": "pact.agentRelay.cancel",
+  "acp_agent_relay.session.close": "pact.agentRelay.session.close",
   "data_connectors.governance.describe": "pact.dataConnectors.governance",
   "data_connectors.governance.plan": "pact.dataConnectors.governance.plan",
   "data_connectors.governance.conformance": "pact.dataConnectors.governance.conformance",
@@ -816,6 +860,7 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
 });
 
 const INTERNAL_OPERATION_IDS_HIDDEN_FROM_TOOL_CATALOG = Object.freeze(new Set([
+  "acp_agent_relay.permission.resolve",
   "knowledge.distillation.export",
   "knowledge.distillation.runs.create",
   "knowledge.distillation.runs.get",
@@ -851,6 +896,25 @@ const TOOL_ALIAS_IDS_BY_OPERATION_ID = Object.freeze({
 });
 
 const SCOPE_BY_OPERATION_ID = Object.freeze({
+  "acp_agent_relay.virtual_agents.list": "agent_relay:view",
+  "acp_agent_relay.virtual_agents.upsert": "agent_relay:operate",
+  "acp_agent_relay.targets.list": "agent_relay:view",
+  "acp_agent_relay.targets.upsert": "agent_relay:operate",
+  "acp_agent_relay.downstream_clients.refresh": "agent_relay:operate",
+  "acp_agent_relay.sessions.list": "agent_relay:view",
+  "acp_agent_relay.sessions.get": "agent_relay:view",
+  "acp_agent_relay.turns.list": "agent_relay:view",
+  "acp_agent_relay.turn.observe": "agent_relay:view",
+  "acp_agent_relay.virtual_agent.initialize": "agent_relay:operate",
+  "acp_agent_relay.session.create": "agent_relay:operate",
+  "acp_agent_relay.session.resume": "agent_relay:operate",
+  "acp_agent_relay.session.wake": "agent_relay:operate",
+  "acp_agent_relay.prompt.send": "agent_relay:operate",
+  "acp_agent_relay.fs.read_text_file": "agent_relay:view",
+  "acp_agent_relay.fs.write_text_file": "agent_relay:operate",
+  "acp_agent_relay.session.cancel": "agent_relay:operate",
+  "acp_agent_relay.session.close": "agent_relay:operate",
+  "acp_agent_relay.permission.resolve": "agent_relay:operate",
   "v001.baseline.status": "console:read",
   "system.health": "storage:read",
   "runtime.info": "storage:read",
@@ -1119,6 +1183,8 @@ const TOOLSET_BY_SCOPE = Object.freeze({
   "jobs:read": "pact.jobs.read",
   "console:read": "pact.console.read",
   "agent_sync:publish": "pact.agent.sync.publish",
+  "agent_relay:view": "pact.agent.relay",
+  "agent_relay:operate": "pact.agent.relay",
   "auth:admin": "pact.authorization.admin"
 });
 

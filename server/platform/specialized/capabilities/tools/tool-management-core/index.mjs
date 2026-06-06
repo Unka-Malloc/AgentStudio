@@ -10,6 +10,7 @@ import { createToolExecutionRuntime } from "./runtime.mjs";
 import { createToolManagementHttpRouter } from "./http.mjs";
 import { getRuntimeLogger } from "../../../../interactive/product-api.mjs";
 import { createSecurityPermissionsProvider } from "../../../../common/security/security-permissions-provider.mjs";
+import { broadcastMcpToolListChanged } from "../../../../common/mcp/http-mcp-adapter.mjs";
 import {
   createExternalMcpPassthroughRuntime
 } from "../../../../common/composition-management/external-mcp-passthrough-runtime.mjs";
@@ -32,8 +33,80 @@ export function createToolManagementPlatform({
   securityPermissions = null,
   strategyManagementProvider = null,
   featureRuntime = null,
+  changeHandlers = [],
   logger = getRuntimeLogger()
 }) {
+  const registeredChangeHandlers = new Set(
+    (Array.isArray(changeHandlers) ? changeHandlers : [changeHandlers])
+      .filter((handler) => typeof handler === "function")
+  );
+
+  function notifyMcpToolCatalogChanged(event = {}) {
+    const reasonCode = String(event.reasonCode || event.type || "tool_management_changed");
+    const publicEvent = {
+      schemaVersion: 1,
+      source: String(event.source || "tool-management-platform"),
+      type: String(event.type || reasonCode),
+      reasonCode,
+      grantId: String(event.grantId || ""),
+      catalogFingerprint: String(event.catalogFingerprint || ""),
+      at: String(event.at || new Date().toISOString())
+    };
+    const reasonByCode = {
+      grant_created: "Tool grant was created; target-visible MCP catalog may have changed.",
+      grant_updated: "Tool grant was updated; target-visible MCP catalog must refresh.",
+      grant_deleted: "Tool grant was deleted; target-visible MCP catalog must refresh.",
+      grant_revoked: "Tool grant was revoked; target-visible MCP catalog must refresh.",
+      grant_token_rotated: "Tool grant token was rotated; target-visible MCP catalog must refresh.",
+      catalog_snapshot_saved: "Pact MCP tool catalog changed.",
+      external_service_catalog_refreshed: "External service tools changed; Pact MCP tool catalog must refresh."
+    };
+    const notification = broadcastMcpToolListChanged({
+      grantId: publicEvent.grantId,
+      reasonCode,
+      reason: event.reason || reasonByCode[reasonCode] || "Pact MCP tool catalog changed.",
+      details: {
+        source: publicEvent.source,
+        type: publicEvent.type,
+        catalogFingerprint: publicEvent.catalogFingerprint
+      }
+    });
+    const pendingNotifications = [];
+    if (typeof protocolEventBus?.publish === "function") {
+      const publishResult = protocolEventBus.publish("tool_management.mcp_catalog_changed", {
+        ...publicEvent,
+        notification
+      }, {
+        delivery: "best-effort"
+      });
+      if (publishResult && (typeof publishResult.then === "function" || typeof publishResult.catch === "function")) {
+        pendingNotifications.push(Promise.resolve(publishResult).catch(() => null));
+      }
+    }
+    for (const handler of registeredChangeHandlers) {
+      try {
+        const handled = handler({
+          ...publicEvent,
+          notification
+        });
+        if (handled && (typeof handled.then === "function" || typeof handled.catch === "function")) {
+          pendingNotifications.push(Promise.resolve(handled).catch(() => null));
+        }
+      } catch {
+        // best-effort notification hook
+      }
+    }
+    logger?.debug?.("tool_management.mcp.list_changed", {
+      reasonCode,
+      grantId: publicEvent.grantId,
+      deliveredConnectionCount: notification.deliveredConnectionCount || 0
+    });
+    if (pendingNotifications.length > 0) {
+      return Promise.allSettled(pendingNotifications).then(() => notification);
+    }
+    return notification;
+  }
+
   const effectiveSecurityPermissions =
     securityPermissions ||
     (consoleAuth ? createSecurityPermissionsProvider({ consoleAuth }) : null);
@@ -52,7 +125,8 @@ export function createToolManagementPlatform({
   const store = createToolManagementStore({
     userDataPath,
     registry,
-    governancePolicyRevisionProvider: () => effectiveSecurityPermissions?.getGovernancePolicyRevision?.()
+    governancePolicyRevisionProvider: () => effectiveSecurityPermissions?.getGovernancePolicyRevision?.(),
+    changeListener: notifyMcpToolCatalogChanged
   });
   const authorizationStore = effectiveSecurityPermissions?.authorizationStore || null;
   const policyEngine = createToolPolicyEngine({
@@ -93,7 +167,12 @@ export function createToolManagementPlatform({
     effectiveOperations = activeOperationsWithExternalMcp();
     const catalog = registry.refresh(effectiveOperations);
     runtime.refreshOperations?.(effectiveOperations);
-    store.saveCatalogSnapshot(catalog);
+    store.saveCatalogSnapshot(catalog, { notify: false });
+    notifyMcpToolCatalogChanged({
+      type: "external_service_catalog_refreshed",
+      reasonCode: "external_service_catalog_refreshed",
+      catalogFingerprint: catalog.fingerprint
+    });
     return {
       ok: true,
       toolCount: catalog.tools.length,
@@ -118,6 +197,15 @@ export function createToolManagementPlatform({
     catalog: () => registry.getCatalog(),
     externalMcpPassthroughRuntime,
     refreshExternalServiceTools,
+    registerChangeHandler(handler) {
+      if (typeof handler !== "function") {
+        return () => {};
+      }
+      registeredChangeHandlers.add(handler);
+      return () => {
+        registeredChangeHandlers.delete(handler);
+      };
+    },
     close() {
       store.close();
     }

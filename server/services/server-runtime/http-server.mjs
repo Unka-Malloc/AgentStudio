@@ -50,6 +50,7 @@ import { handlePactMcpHttpRequest } from "../../platform/common/mcp/http-mcp-ada
 import { loadOrCreateMcpIdentity } from "../../platform/common/mcp/identity.mjs";
 import { createJobsController } from "../../platform/common/console/http/controllers/jobs-controller.mjs";
 import { createSystemController } from "../../platform/common/console/http/controllers/system-controller.mjs";
+import { getAcpAgentRelayRuntime } from "../../platform/specialized/console/console-domain-operation-executor.mjs";
 import {
   defaultAdvertisedHost,
   formatUrlHost,
@@ -613,6 +614,27 @@ export async function startHttpServer({
     logger: runtimeLogger
   });
   toolManagementPlatformRef = toolManagementPlatform;
+  toolManagementPlatform.registerChangeHandler?.(async (event = {}) => {
+    const reasonCode = String(event.reasonCode || event.type || "");
+    if (![
+      "grant_updated",
+      "grant_deleted",
+      "grant_revoked",
+      "grant_token_rotated"
+    ].includes(reasonCode) || !event.grantId) {
+      return {
+        ok: true,
+        ignored: true,
+        reasonCode: "acp_relay_change_not_relevant"
+      };
+    }
+    const acpRuntime = await getAcpAgentRelayRuntime({
+      userDataPath,
+      workspaceRoot: process.cwd(),
+      protocolEventBus
+    });
+    return acpRuntime.handleToolManagementChange?.(event);
+  });
   const toolSkillManagementProvider = createServerToolSkillManagementProvider({
     toolManagementPlatform,
     userDataPath,

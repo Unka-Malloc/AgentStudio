@@ -44,15 +44,17 @@ const MCP_BOOTSTRAP_CURL_FLAGS = "-fL --retry 3 --connect-timeout 20 -sS";
 const MCP_BOOTSTRAP_INSTALL_SCRIPT = "pact-mcp-install.sh";
 const MCP_BOOTSTRAP_INSTALL_SCRIPT_ZH_CN = "pact-mcp-install.zh-CN.sh";
 export const MCP_CLIENT_TARGETS = Object.freeze([
-  { target: "codex", label: "Codex", priority: true, installMode: "codex-release-plugin-and-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
-  { target: "claude-code", label: "Claude Code", priority: true, installMode: "claude-code-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
-  { target: "gemini-cli", label: "Gemini CLI", priority: false, installMode: "gemini-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
-  { target: "kilo-code", label: "Kilo Code", priority: false, installMode: "kilo-release-global-kilo-json", locations: ["local", "orbstack", "remote-linux"] },
-  { target: "copilot", label: "Copilot", priority: false, installMode: "copilot-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
   { target: "openclaw", label: "OpenClaw", priority: true, installMode: "openclaw-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
-  { target: "hermes", label: "Hermes Agent", priority: false, installMode: "hermes-remote-mcp-cli", locations: ["orbstack", "remote-linux"] },
+  { target: "claude-code", label: "Claude Code", priority: true, installMode: "claude-code-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
+  { target: "codex", label: "Codex", priority: true, installMode: "codex-release-plugin-and-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
+  { target: "gemini-cli", label: "Gemini CLI", priority: false, installMode: "gemini-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
   { target: "antigravity", label: "Antigravity", priority: false, installMode: "antigravity-release-mcp-config", locations: ["local"] },
-  { target: "opencode", label: "OpenCode", priority: true, installMode: "opencode-release-mcp-config", locations: ["local", "orbstack", "remote-linux"] }
+  { target: "opencode", label: "OpenCode", priority: true, installMode: "opencode-release-mcp-config", locations: ["local", "orbstack", "remote-linux"] },
+  { target: "copilot", label: "Copilot", priority: false, installMode: "copilot-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
+  { target: "kilo-code", label: "Kilo Code", priority: false, installMode: "kilo-release-global-kilo-json", locations: ["local", "orbstack", "remote-linux"] },
+  { target: "cursor", label: "Cursor", priority: false, installMode: "cursor-release-mcp-config", locations: ["local"] },
+  { target: "hermes", label: "Hermes Agent", priority: false, installMode: "hermes-remote-mcp-cli", locations: ["orbstack", "remote-linux"] },
+  { target: "windsurf", label: "Windsurf", priority: false, installMode: "windsurf-release-mcp-config", locations: ["local"] }
 ]);
 export const MCP_PRIORITY_INSTALL_TARGETS = Object.freeze(["claude-code", "codex", "openclaw"]);
 const MCP_PRIORITY_INSTALL_TARGET = MCP_PRIORITY_INSTALL_TARGETS.join(",");
@@ -126,6 +128,125 @@ function localMcpGrantTargets(grant) {
 function normalizeGrantValues(value, limit = 64) {
   const items = Array.isArray(value) ? value : String(value || "").split(",");
   return [...new Set(items.map((item) => String(item || "").trim()).filter(Boolean))].slice(0, limit);
+}
+
+function requestHeader(request = null, name = "") {
+  const lowerName = String(name || "").toLowerCase();
+  if (!lowerName) {
+    return "";
+  }
+  const headers = request?.headers || {};
+  return String(
+    headers[lowerName] ??
+      Object.entries(headers).find(([headerName]) => String(headerName || "").toLowerCase() === lowerName)?.[1] ??
+      ""
+  ).trim();
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    const text = String(value || "").trim();
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+}
+
+function relayChildOperationFromMcpCall({
+  payload = {},
+  request = null,
+  authorization = {},
+  envelope = {},
+  operation = ""
+} = {}) {
+  const grant = authorization?.grant || null;
+  const metadata = grantMetadata(grant);
+  if (metadata.relayMcp !== true && metadata.issuedBy !== "pact-acp-agent-relay" && grant?.type !== "relay-mcp-child") {
+    return null;
+  }
+  const relayMcp = payload?.relayMcp && typeof payload.relayMcp === "object" ? payload.relayMcp : {};
+  const childOperation = payload?.relayChildOperation && typeof payload.relayChildOperation === "object"
+    ? payload.relayChildOperation
+    : (relayMcp.childOperation && typeof relayMcp.childOperation === "object" ? relayMcp.childOperation : {});
+  const requested = {
+    relayMcpGrantId: firstText(
+      childOperation.relayMcpGrantId,
+      childOperation.grantId,
+      relayMcp.relayMcpGrantId,
+      relayMcp.grantId,
+      payload.relayMcpGrantId,
+      requestHeader(request, "X-Pact-Relay-Mcp-Grant-Id")
+    ),
+    relaySessionId: firstText(
+      childOperation.relaySessionId,
+      relayMcp.relaySessionId,
+      payload.relaySessionId,
+      requestHeader(request, "X-Pact-Relay-Session-Id")
+    ),
+    virtualAgentId: firstText(
+      childOperation.virtualAgentId,
+      relayMcp.virtualAgentId,
+      payload.virtualAgentId,
+      requestHeader(request, "X-Pact-Virtual-Agent-Id")
+    ),
+    targetId: firstText(
+      childOperation.targetId,
+      relayMcp.targetId,
+      payload.targetId,
+      requestHeader(request, "X-Pact-Target-Agent-Id")
+    )
+  };
+  const canonical = {
+    relayMcpGrantId: String(grant?.id || "").trim(),
+    relaySessionId: String(metadata.relaySessionId || "").trim(),
+    relayTurnId: String(metadata.relayTurnId || "").trim(),
+    virtualAgentId: String(metadata.virtualAgentId || "").trim(),
+    targetId: String(metadata.targetId || "").trim()
+  };
+  const requestedRelayTurnId = firstText(
+    childOperation.relayTurnId,
+    relayMcp.relayTurnId,
+    payload.relayTurnId,
+    requestHeader(request, "X-Pact-Relay-Turn-Id")
+  );
+  const parentOperationId = firstText(
+    childOperation.parentOperationId,
+    childOperation.relayOperationId,
+    relayMcp.parentOperationId,
+    relayMcp.operationId,
+    payload.relayOperationId,
+    requestHeader(request, "X-Pact-Relay-Operation-Id")
+  );
+  canonical.parentOperationId = String(metadata.parentOperationId || "").trim();
+  const requestedForMismatch = { ...requested, relayTurnId: requestedRelayTurnId, parentOperationId };
+  const mismatches = Object.entries(canonical)
+    .filter(([, value]) => value)
+    .filter(([key, value]) => requestedForMismatch[key] && requestedForMismatch[key] !== value)
+    .map(([key]) => key);
+  const traceId = firstText(
+    childOperation.traceId,
+    relayMcp.traceId,
+    payload.traceId,
+    payload.trace_id,
+    requestHeader(request, "X-Pact-Trace-Id"),
+    envelope.traceId
+  );
+  return {
+    schemaVersion: 1,
+    binding: "pact.acp-agent-relay.child-operation.v1",
+    relaySessionId: canonical.relaySessionId || requested.relaySessionId,
+    relayTurnId: canonical.relayTurnId || requestedRelayTurnId,
+    virtualAgentId: canonical.virtualAgentId || requested.virtualAgentId,
+    targetId: canonical.targetId || requested.targetId,
+    relayMcpGrantId: canonical.relayMcpGrantId || requested.relayMcpGrantId,
+    grantType: String(grant?.type || "").trim(),
+    grantBindingVerified: Boolean(canonical.relayMcpGrantId && (canonical.relaySessionId || canonical.targetId)),
+    requestBindingMismatches: mismatches,
+    traceId,
+    parentOperationId: String(metadata.parentOperationId || "").trim() || parentOperationId,
+    operationId: String(operation || "").trim()
+  };
 }
 
 function hasMcpAuthToken(request = null) {
@@ -1619,16 +1740,58 @@ function sseWrite(connection, payload) {
   }
 }
 
-function broadcastMcpNotification(payload, { grantId = "" } = {}) {
+function broadcastMcpNotification(payload, { grantId = "", includePrivate = false } = {}) {
+  let delivered = 0;
+  let matched = 0;
   for (const connection of activeSseConnections) {
     if (grantId && connection.grantId !== grantId) {
       continue;
     }
-    if (!grantId && connection.privateOnly === true) {
+    if (!grantId && !includePrivate && connection.privateOnly === true) {
       continue;
     }
-    sseWrite(connection, payload);
+    matched += 1;
+    if (sseWrite(connection, payload)) {
+      delivered += 1;
+    }
   }
+  return {
+    activeConnectionCount: activeSseConnections.size,
+    matchedConnectionCount: matched,
+    deliveredConnectionCount: delivered
+  };
+}
+
+export function broadcastMcpToolListChanged({
+  grantId = "",
+  reason = "Pact MCP tool surface or schema version changed.",
+  reasonCode = "tool_list_changed",
+  listenUrl = "",
+  discoveryState = null,
+  details = {},
+  includePrivate = true
+} = {}) {
+  const scopedGrantId = String(grantId || "").trim();
+  const safeReason = publicMcpEnvelopeString(reason || reasonCode || "Pact MCP tool catalog changed.");
+  const change = publicMcpEnvelopeValue({
+    schemaVersion: 1,
+    reasonCode: String(reasonCode || "tool_list_changed"),
+    grantId: scopedGrantId,
+    changedAt: new Date().toISOString(),
+    ...(details && typeof details === "object" && !Array.isArray(details) ? details : {})
+  });
+  const delivery = broadcastMcpNotification(jsonRpcNotification("notifications/tools/list_changed", {
+    ...mcpRuntimeMetadata({ listenUrl, discoveryState }),
+    reason: safeReason,
+    change
+  }), { grantId: scopedGrantId, includePrivate });
+  return {
+    ok: true,
+    notification: "notifications/tools/list_changed",
+    grantId: scopedGrantId,
+    reasonCode: change.reasonCode || "tool_list_changed",
+    ...delivery
+  };
 }
 
 function broadcastMcpOperationReply({ envelope, operation, status, target, exchange = null, payload = {}, error = null, authorization = null, workspaceDirectory = null }) {
@@ -1760,6 +1923,30 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider,
       error.id = id;
       return error;
     }
+    const relayChildOperation = relayChildOperationFromMcpCall({
+      payload: params.arguments,
+      request,
+      authorization,
+      envelope: parsedCall.envelope,
+      operation: parsedCall.operation
+    });
+    if (
+      relayChildOperation &&
+      (
+        relayChildOperation.grantBindingVerified !== true ||
+        (Array.isArray(relayChildOperation.requestBindingMismatches) &&
+          relayChildOperation.requestBindingMismatches.length > 0)
+      )
+    ) {
+      return {
+        httpStatus: 200,
+        body: jsonRpcError(id, -32001, "Relay MCP child operation binding mismatch.", {
+          code: "relay_child_operation_binding_mismatch",
+          relayChildOperation,
+          requestBindingMismatches: relayChildOperation.requestBindingMismatches || []
+        })
+      };
+    }
     if (toolName !== MCP_STABLE_TOOL_NAME) {
       const expectedOutlet = mcpOutletForOperation({
         operation: parsedCall.operation,
@@ -1809,7 +1996,7 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider,
     const mcpExecutionContext = {
       transport: "mcp",
       client: request?.headers?.["user-agent"] || "",
-      traceId: parsedCall.envelope.traceId,
+      traceId: relayChildOperation?.traceId || parsedCall.envelope.traceId,
       operatorId: parsedCall.envelope.operatorId,
       agentId: parsedCall.envelope.agentProfileId || parsedCall.envelope.operatorId,
       profileId: parsedCall.envelope.agentProfileId,
@@ -1818,7 +2005,15 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider,
       workspaceId: parsedCall.envelope.workspaceId,
       intent: parsedCall.envelope.intent,
       idempotencyKey: parsedCall.envelope.idempotencyKey,
-      requestedScopes: parsedCall.envelope.requestedScopes
+      requestedScopes: parsedCall.envelope.requestedScopes,
+      ...(relayChildOperation ? {
+        relayChildOperation,
+        relayMcpGrantId: relayChildOperation.relayMcpGrantId,
+        relaySessionId: relayChildOperation.relaySessionId,
+        relayTurnId: relayChildOperation.relayTurnId,
+        virtualAgentId: relayChildOperation.virtualAgentId,
+        targetId: relayChildOperation.targetId
+      } : {})
     };
     const resolvedWorkspaceInput = await toolSkillManagementProvider.resolveMcpWorkspaceInput({
       input: parsedCall.input,

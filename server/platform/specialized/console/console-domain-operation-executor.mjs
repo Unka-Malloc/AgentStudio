@@ -48,11 +48,13 @@ import {
 } from "../../common/platform-core/discovery/config.mjs";
 import { AUTHORIZATION_PROTOCOL_VERSION } from "../../common/security/authorization/authorization-engine.mjs";
 import { SECURITY_PERMISSIONS_PROTOCOL_VERSION } from "../../common/security/security-permissions-provider.mjs";
+import { ServerConfig } from "../../common/config/ServerConfig.mjs";
 
 const contributionRegistries = new Map();
 const codespaceRegistries = new Map();
 const cloudDriveUpstreamGateways = new Map();
 const knowledgeBackendPorts = new Map();
+const acpAgentRelayRuntimes = new Map();
 const PATH_BROWSER_MAX_ENTRIES = 600;
 const EXTERNAL_KNOWLEDGE_DISTILLATION_SERVICE_ID = "external.knowledge.distillation";
 const EXTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_PREFIX = "external.knowledge.distillation.";
@@ -87,6 +89,10 @@ async function loadDataConnectorGovernanceModule() {
 
 async function loadPerformanceCapacityModule() {
   return import("../knowledge/performance/capacity-benchmark/index.mjs");
+}
+
+async function loadAcpAgentRelayModule() {
+  return import("../capabilities/agent-relay/acp-agent-relay/index.mjs");
 }
 
 async function executeKnowledgeWordCloudOperation(...args) {
@@ -4493,9 +4499,51 @@ async function executeToolManagementAuthorizationOperation({ operationId, input 
   return null;
 }
 
+export async function getAcpAgentRelayRuntime(context = {}) {
+  const defaultUserDataPath = ServerConfig.getDataDir();
+  const userDataPath = String(context.userDataPath || defaultUserDataPath).trim() || defaultUserDataPath;
+  if (acpAgentRelayRuntimes.has(userDataPath)) {
+    return acpAgentRelayRuntimes.get(userDataPath);
+  }
+  const module = await loadAcpAgentRelayModule();
+  const storeAdapter = module.createFileRelaySessionAdapter({ userDataPath });
+  const runtime = module.createAcpRelayRuntime({
+    userDataPath,
+    storeAdapter,
+    workspaceRoot: String(context.workspaceRoot || process.cwd()),
+    protocolEventBus: context.protocolEventBus || null
+  });
+  acpAgentRelayRuntimes.set(userDataPath, runtime);
+  return runtime;
+}
+
+async function executeAcpAgentRelayRuntimeOperation({ operationId, input = {}, context }) {
+  const id = String(operationId || "");
+  if (!id.startsWith("acp_agent_relay.")) {
+    return null;
+  }
+  if (context.request?.__pactToolRuntimeAuthorization?.ok !== true) {
+    return null;
+  }
+  const runtime = await getAcpAgentRelayRuntime(context);
+  const operationResult = await runtime.execute(id, input, {
+    ...context,
+    toolRuntimeAuthorization: context.request.__pactToolRuntimeAuthorization,
+    sourceAuthorization: context.request.__pactToolRuntimeAuthorization
+  });
+  const status = operationResult.ok
+    ? 200
+    : Number(operationResult.error?.status || operationResult.status || 400) || 400;
+  return result(status, operationResult);
+}
+
 async function executeToolManagementPassthroughOperation({ operationId, context }) {
   const id = String(operationId || "tool_management.http.passthrough");
-  if (id !== "tool_management.http.passthrough" && !id.startsWith("tool_management.")) {
+  if (
+    id !== "tool_management.http.passthrough" &&
+    !id.startsWith("tool_management.") &&
+    !id.startsWith("acp_agent_relay.")
+  ) {
     return null;
   }
 
@@ -7101,6 +7149,7 @@ export async function executeConsoleDomainOperation({ operationId, input = {}, c
     executeAgentSyncOperation,
     executeToolManagementAuthorizationOperation,
     executeStrategyManagementOperation,
+    executeAcpAgentRelayRuntimeOperation,
     executeToolManagementPassthroughOperation,
     executeRuntimeMountOperation,
     executeDiscoveryOperation,
