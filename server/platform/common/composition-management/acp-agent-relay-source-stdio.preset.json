@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "kind": "pact.composition.preset",
+  "presetId": "acp-agent-relay-source-stdio",
+  "displayName": "ACP Agent Relay Source Stdio",
+  "status": "active",
+  "compositionClass": "deployment-dependency-package",
+  "deploymentTarget": {
+    "applicationId": "acp-agent-relay-source-stdio",
+    "serviceName": "external.agent-relay.source-stdio",
+    "boundary": "agent-client-protocol",
+    "outputBundleId": "pact-acp-agent-relay-source-stdio",
+    "outputRoot": "build/composition-packages/acp-agent-relay-source-stdio"
+  },
+  "intent": {
+    "summary": "Expose Pact as a source-facing ACP stdio agent so one agent can delegate to another through Pact policy, operation, and relay runtime.",
+    "serviceKind": "agent-relay",
+    "protocol": "acp",
+    "transport": "stdio",
+    "dehydrationGoal": "external-source-agent-launches-pact-acp-stdio-relay"
+  },
+  "coreDependencyPackage": {
+    "policy": "include-platform-core-required-by-governed-agent-relay",
+    "featureIds": [
+      "core-platform",
+      "security-permissions",
+      "operation-dispatcher",
+      "storage-core",
+      "tool-management-core"
+    ],
+    "preserveContracts": [
+      "pact.security-permissions.v1",
+      "pact.operation-dispatcher.v1",
+      "pact.storage.v1",
+      "pact.tool-management.v1"
+    ],
+    "reason": "The ACP relay stdio entrypoint still needs authorization, operation dispatch, durable relay state, Tool Management boundaries, and audit receipts."
+  },
+  "applicationDependencyPackage": {
+    "policy": "include-acp-agent-relay-runtime-and-source-stdio-entrypoint",
+    "featureIds": [],
+    "moduleDescriptors": [
+      "server/platform/specialized/capabilities/agent-relay/acp-agent-relay/module.json"
+    ],
+    "moduleEntrypoints": [
+      "server/platform/specialized/capabilities/agent-relay/acp-agent-relay/index.mjs",
+      "server/platform/specialized/capabilities/agent-relay/acp-agent-relay/acp-source-stdio-server.mjs"
+    ],
+    "scripts": [
+      "server/scripts/acp-agent-relay-source-stdio.mjs",
+      "server/scripts/verify-acp-agent-relay-codex-antigravity.mjs"
+    ],
+    "requiredProtocols": [
+      "pact.acp-agent-relay.v1"
+    ],
+    "requiredOperations": [
+      "acp_agent_relay.virtual_agents.list",
+      "acp_agent_relay.virtual_agent.initialize",
+      "acp_agent_relay.session.create",
+      "acp_agent_relay.session.resume",
+      "acp_agent_relay.session.wake",
+      "acp_agent_relay.prompt.send",
+      "acp_agent_relay.session.cancel",
+      "acp_agent_relay.session.close"
+    ]
+  },
+  "externalService": {
+    "schemaVersion": 1,
+    "kind": "pact.external-service.config",
+    "serviceId": "acp-agent-relay-source-stdio",
+    "serviceName": "external.agent-relay.source-stdio",
+    "displayName": "ACP Agent Relay Source Stdio",
+    "mode": "on-demand",
+    "startupPolicy": "external-only",
+    "description": "Source agents launch this ACP stdio entrypoint and communicate with Pact using newline-delimited JSON-RPC. stdout is reserved for ACP frames; diagnostics are emitted on stderr.",
+    "upstream": {
+      "type": "acp",
+      "transport": "stdio",
+      "command": {
+        "executable": "node",
+        "args": [
+          "server/scripts/acp-agent-relay-source-stdio.mjs"
+        ]
+      },
+      "metadata": {
+        "protocol": "pact.acp-agent-relay.v1",
+        "entrypoint": "server/scripts/acp-agent-relay-source-stdio.mjs",
+        "stdout": "json-rpc-only",
+        "diagnostics": "stderr",
+        "agentProfileId": "pact.acp.source_stdio"
+      }
+    },
+    "binding": {
+      "mode": "passthrough",
+      "outlet": "pact.agentRelay",
+      "requiredScopes": [
+        "agent_relay:operate",
+        "agent_relay:view"
+      ],
+      "risk": "repair_write",
+      "metadata": {
+        "operationBoundary": "acp_agent_relay.*"
+      }
+    },
+    "healthCheck": {
+      "type": "none"
+    },
+    "scripts": {
+      "smoke": {
+        "path": "server/scripts/verify-acp-agent-relay-codex-antigravity.mjs",
+        "required": false,
+        "description": "Runs the external source ACP stdio process and verifies a real Antigravity Agent API conversation when available."
+      }
+    },
+    "metadata": {
+      "sourceContextEnv": [
+        "PACT_ACP_SOURCE_STDIO_RUNTIME_JSON",
+        "PACT_ACP_SOURCE_STDIO_CONTEXT_JSON",
+        "PACT_ACP_SOURCE_ID",
+        "PACT_ACP_SOURCE_SUBJECT_ID",
+        "PACT_ACP_WORKSPACE_ID",
+        "PACT_ACP_SOURCE_IDENTITY_JSON",
+        "PACT_ACP_SOURCE_STDIO_STORE_PATH",
+        "PACT_ACP_SOURCE_STDIO_USER_DATA_PATH",
+        "PACT_ACP_RELAY_STORE_PATH",
+        "PACT_ACP_RELAY_USER_DATA_PATH"
+      ]
+    }
+  },
+  "serviceContracts": {
+    "requiredScopes": [
+      "agent_relay:view",
+      "agent_relay:operate"
+    ],
+    "auditRequired": true,
+    "stdioContract": {
+      "stdout": "newline-delimited-json-rpc",
+      "stderr": "diagnostics-only",
+      "failClosed": true
+    }
+  },
+  "dehydration": {
+    "profileId": "acp-agent-relay-source-stdio",
+    "mode": "expose-source-acp-entrypoint-with-platform-governance",
+    "preserveCapabilities": [
+      "authorization",
+      "operation-dispatch",
+      "durable-relay-state",
+      "tool-management-catalog",
+      "audit"
+    ]
+  }
+}
