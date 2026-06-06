@@ -4,6 +4,7 @@ import path from "node:path";
 import { unzipSync } from "fflate";
 import {
   detectExtensionBySignature,
+  getImportDefaultRoutingTable,
   importFileDescriptorForExtension,
   importFileDescriptorForMediaType,
   importFileDescriptorForPath,
@@ -11,7 +12,6 @@ import {
   importReadableTextDetection,
   inferZipContainerExtension,
   isImportArchiveDescriptor,
-  isImportExtensionSupported,
   isImportFilePathSupported,
   isImportImageDescriptor,
   isImportTextDescriptor,
@@ -122,38 +122,257 @@ function inferZipDocumentExtension(buffer, fallbackExtension = "") {
   }
 }
 
-function inferUploadedExtension(buffer) {
-  const signatureExtension = detectExtensionBySignature(buffer);
-  if (isImportArchiveDescriptor(importFileDescriptorForExtension(signatureExtension))) {
-    return inferZipDocumentExtension(buffer, signatureExtension);
+function normalizeRoutingExtension(value = "") {
+  const trimmed = String(value || "").trim().toLowerCase();
+  if (!trimmed) {
+    return "";
   }
-  if (signatureExtension) {
-    return signatureExtension;
-  }
-  if (looksLikeText(buffer)) {
-    const text = buffer.subarray(0, Math.min(buffer.length, 8192)).toString("utf8");
-    return sniffTextExtension(text) || importPlainTextFallbackExtension();
-  }
-  return "";
+  return trimmed.startsWith(".") ? trimmed : `.${trimmed}`;
 }
 
-function chooseUploadedExtension({ detectedExtension, declaredExtension }) {
-  if (!declaredExtension || !isImportExtensionSupported(declaredExtension)) {
-    return detectedExtension;
+function routeFileNameWithExtension(fileName = "", extension = "") {
+  const normalizedExtension = normalizeRoutingExtension(extension);
+  const rawFileName = String(fileName || "").trim();
+  if (!rawFileName || !normalizedExtension) {
+    return rawFileName;
+  }
+  const currentExtension = path.extname(rawFileName).toLowerCase();
+  if (currentExtension === normalizedExtension) {
+    return rawFileName;
+  }
+  if (!currentExtension) {
+    return `${rawFileName}${normalizedExtension}`;
+  }
+  return `${rawFileName.slice(0, -currentExtension.length)}${normalizedExtension}`;
+}
+
+function descriptorKind(descriptor, mediaType = "") {
+  return String(descriptor?.kind || (String(mediaType || "").startsWith("text/") ? "text" : "")).trim();
+}
+
+function descriptorSupportsMediaType(descriptor, mediaType = "") {
+  const normalizedMediaType = String(mediaType || "").trim().toLowerCase();
+  if (!descriptor || !normalizedMediaType) {
+    return false;
+  }
+  return (
+    String(descriptor.mediaType || "").trim().toLowerCase() === normalizedMediaType ||
+    asArray(descriptor.mediaTypes).some((entry) => String(entry || "").trim().toLowerCase() === normalizedMediaType)
+  );
+}
+
+function createRoutingCandidate({
+  extension = "",
+  descriptor = null,
+  mediaType = "",
+  source = "",
+  confidence = 0,
+  fileName = ""
+}) {
+  const normalizedExtension = normalizeRoutingExtension(extension || descriptor?.extension || "");
+  const normalizedMediaType = String(mediaType || "").trim().toLowerCase();
+  const resolvedDescriptor =
+    descriptor ||
+    importFileDescriptorForExtension(normalizedExtension) ||
+    importFileDescriptorForMediaType(normalizedMediaType) ||
+    importFileDescriptorForPath(fileName);
+  const resolvedExtension = normalizedExtension || normalizeRoutingExtension(resolvedDescriptor?.extension || "");
+
+  if (!resolvedDescriptor) {
+    return null;
   }
 
-  if (!detectedExtension) {
-    return declaredExtension;
-  }
+  return {
+    extension: resolvedExtension,
+    descriptor: resolvedDescriptor,
+    mediaType: normalizedMediaType,
+    source,
+    confidence,
+    fileName: String(fileName || "").trim(),
+    kind: descriptorKind(resolvedDescriptor, normalizedMediaType)
+  };
+}
 
-  if (detectedExtension === importPlainTextFallbackExtension()) {
-    const declaredDescriptor = importFileDescriptorForExtension(declaredExtension);
-    if (declaredDescriptor && !isImportImageDescriptor(declaredDescriptor)) {
-      return declaredExtension;
+function collectFileRoutingCandidates({
+  buffer,
+  fileName = "",
+  filePath = "",
+  declaredFileNames = [],
+  mediaTypeHint = "",
+  allowTextFallback = true
+}) {
+  const candidates = [];
+  const pushCandidate = (candidate) => {
+    if (candidate) {
+      candidates.push(candidate);
     }
+  };
+  const signatureExtension = detectExtensionBySignature(buffer);
+  if (isImportArchiveDescriptor(importFileDescriptorForExtension(signatureExtension))) {
+    pushCandidate(createRoutingCandidate({
+      extension: inferZipDocumentExtension(buffer, signatureExtension),
+      source: "zip-container",
+      confidence: 100,
+      fileName: fileName || filePath
+    }));
+  } else if (signatureExtension) {
+    pushCandidate(createRoutingCandidate({
+      extension: signatureExtension,
+      source: "binary-signature",
+      confidence: 100,
+      fileName: fileName || filePath
+    }));
   }
 
-  return detectedExtension;
+  const declaredPaths = [
+    ...declaredFileNames,
+    fileName,
+    filePath
+  ].map((entry) => String(entry || "").trim()).filter(Boolean);
+  const seenDeclaredPaths = new Set();
+  for (const declaredPath of declaredPaths) {
+    const normalizedPath = declaredPath.toLowerCase();
+    if (seenDeclaredPaths.has(normalizedPath)) {
+      continue;
+    }
+    seenDeclaredPaths.add(normalizedPath);
+    const descriptor = importFileDescriptorForPath(declaredPath);
+    pushCandidate(createRoutingCandidate({
+      extension: path.extname(declaredPath),
+      descriptor,
+      source: "declared-path",
+      confidence: 80,
+      fileName: declaredPath
+    }));
+  }
+
+  pushCandidate(createRoutingCandidate({
+    descriptor: importFileDescriptorForMediaType(mediaTypeHint),
+    mediaType: mediaTypeHint,
+    source: "media-type",
+    confidence: 70,
+    fileName: fileName || filePath
+  }));
+
+  const isReadableText = looksLikeText(buffer);
+  if (isReadableText && allowTextFallback) {
+    const text = buffer.subarray(0, Math.min(buffer.length, 8192)).toString("utf8");
+    const sniffedExtension = sniffTextExtension(text);
+    pushCandidate(createRoutingCandidate({
+      extension: sniffedExtension || importPlainTextFallbackExtension(),
+      source: sniffedExtension ? "text-sniff" : "text-fallback",
+      confidence: sniffedExtension ? 35 : 10,
+      fileName: fileName || filePath
+    }));
+  }
+
+  return {
+    candidates,
+    isReadableText
+  };
+}
+
+function pickFileRoutingCandidate(candidates = []) {
+  const orderedCandidates = asArray(candidates).filter(Boolean);
+  return (
+    orderedCandidates.find((candidate) => candidate.source === "zip-container") ||
+    orderedCandidates.find((candidate) => candidate.source === "binary-signature") ||
+    orderedCandidates.find((candidate) => candidate.source === "declared-path") ||
+    orderedCandidates.find((candidate) => candidate.source === "media-type") ||
+    orderedCandidates.find((candidate) => candidate.source === "text-sniff") ||
+    orderedCandidates.find((candidate) => candidate.source === "text-fallback") ||
+    orderedCandidates.sort((left, right) => right.confidence - left.confidence)[0] ||
+    null
+  );
+}
+
+function resolveRoutingMediaType({ selectedCandidate, descriptor, extension, mediaTypeHint }) {
+  if (descriptor?.mediaType) {
+    return descriptor.mediaType;
+  }
+  if (descriptorSupportsMediaType(descriptor, selectedCandidate?.mediaType)) {
+    return selectedCandidate.mediaType;
+  }
+  if (descriptorSupportsMediaType(descriptor, mediaTypeHint)) {
+    return String(mediaTypeHint || "").trim().toLowerCase();
+  }
+  return mediaTypeForImportExtension(extension) ||
+    (isImportTextDescriptor(descriptor) ? mediaTypeForImportExtension(importPlainTextFallbackExtension()) : "");
+}
+
+export function createFileRoutingDecision({
+  buffer = Buffer.alloc(0),
+  fileName = "",
+  filePath = "",
+  declaredFileNames = [],
+  mediaTypeHint = "",
+  allowTextFallback = shouldIncludeUnknownReadableText()
+} = {}) {
+  const { candidates, isReadableText } = collectFileRoutingCandidates({
+    buffer,
+    fileName,
+    filePath,
+    declaredFileNames,
+    mediaTypeHint,
+    allowTextFallback
+  });
+  const selectedCandidate = pickFileRoutingCandidate(candidates);
+  const descriptor =
+    selectedCandidate?.descriptor ||
+    importFileDescriptorForExtension(selectedCandidate?.extension) ||
+    importFileDescriptorForMediaType(selectedCandidate?.mediaType) ||
+    importFileDescriptorForPath(selectedCandidate?.fileName || fileName || filePath);
+  const extension = normalizeRoutingExtension(
+    selectedCandidate?.extension ||
+      descriptor?.extension ||
+      ""
+  );
+  const resolvedMediaType = resolveRoutingMediaType({
+    selectedCandidate,
+    descriptor,
+    extension,
+    mediaTypeHint
+  });
+  const kind = descriptorKind(descriptor, resolvedMediaType) ||
+    (extension ? "document" : isReadableText ? "text" : "");
+
+  return {
+    extension,
+    descriptor,
+    kind,
+    mediaTypeHint: resolvedMediaType,
+    selectedSource: selectedCandidate?.source || "unsupported",
+    selectedConfidence: selectedCandidate?.confidence || 0,
+    isReadableText,
+    routedFileName: routeFileNameWithExtension(fileName || path.basename(filePath || ""), extension),
+    signals: candidates.map((candidate) => ({
+      source: candidate.source,
+      extension: candidate.extension,
+      kind: candidate.kind,
+      mediaType: candidate.mediaType,
+      confidence: candidate.confidence,
+      fileName: candidate.fileName
+    }))
+  };
+}
+
+function hasResolvedImportRoute(routeDecision = {}) {
+  if (routeDecision.descriptor || routeDecision.extension) {
+    return true;
+  }
+  return Boolean(shouldIncludeUnknownReadableText() && routeDecision.isReadableText);
+}
+
+function effectiveFileNameForRouting(name = "", filePath = "", extension = "") {
+  const rawName = name || filePath;
+  if (!rawName || !extension) {
+    return rawName;
+  }
+  const descriptor = importFileDescriptorForPath(rawName);
+  if (descriptor && !descriptor.extension && descriptor.fileName) {
+    return rawName;
+  }
+  return routeFileNameWithExtension(rawName, extension);
 }
 
 function mediaTypeForExtension(extension) {
@@ -250,8 +469,88 @@ function buildRouteExtractionWarning(name, fileType, route, error) {
   return `${name} 通过 ${routeLabel} 解析未完成：${message}`;
 }
 
+function createFailureReason({
+  reasonCode,
+  message,
+  sourceName = "",
+  sourcePath = "",
+  sourceKind = "",
+  parserId = "",
+  route = null,
+  details = {}
+} = {}) {
+  return {
+    reasonCode: String(reasonCode || "document_parse_failed").trim() || "document_parse_failed",
+    message: String(message || "文档解析失败。"),
+    sourceName: String(sourceName || ""),
+    sourcePath: String(sourcePath || ""),
+    sourceKind: String(sourceKind || ""),
+    parserId: String(parserId || ""),
+    route: route && typeof route === "object" && !Array.isArray(route)
+      ? {
+          mountName: String(route.mountName || ""),
+          action: String(route.action || ""),
+          matchedBy: String(route.matchedBy || "")
+        }
+      : null,
+    details: details && typeof details === "object" && !Array.isArray(details) ? details : {}
+  };
+}
+
+function createFailureError(message, reasonCode, failureReasons = []) {
+  const error = new Error(String(message || "文档解析失败。"));
+  error.reasonCode = String(reasonCode || "document_parse_failed");
+  error.failureReasons = Array.isArray(failureReasons) ? failureReasons : [];
+  return error;
+}
+
+function buildRouteExtractionFailureReason(name, fileType, route, error) {
+  return createFailureReason({
+    reasonCode: fileType === "image" ? "image_parse_failed" : "document_route_extraction_failed",
+    message: buildRouteExtractionWarning(name, fileType, route, error),
+    sourceName: name,
+    sourcePath: name,
+    sourceKind: fileType,
+    route,
+    details: {
+      error: error instanceof Error ? error.message : "未知错误"
+    }
+  });
+}
+
 function getMountedHandler(runtime, mountName = "") {
   return runtime?.mounts?.[mountName] || null;
+}
+
+function routeTargetWithMatch(route = null, matchedBy = "") {
+  const mountName = String(route?.mountName || "").trim();
+  if (!mountName) {
+    return null;
+  }
+  return {
+    mountName,
+    action: String(route?.action || "extractDocument").trim() || "extractDocument",
+    matchedBy
+  };
+}
+
+function resolveConfiguredDocumentRoute({ sourceKind = "", extension = "", mediaTypeHint = "" } = {}) {
+  const routing = getImportDefaultRoutingTable();
+  const normalizedExtension = normalizeRoutingExtension(extension);
+  const normalizedMediaType = String(mediaTypeHint || "").toLowerCase().trim();
+  const normalizedKind = String(sourceKind || "").trim();
+
+  return (
+    routeTargetWithMatch(routing.extensionRoutes?.[normalizedExtension], "extension") ||
+    routeTargetWithMatch(routing.mediaTypeRoutes?.[normalizedMediaType], "mediaType") ||
+    routeTargetWithMatch(routing.kindRoutes?.[normalizedKind], "kind") ||
+    routeTargetWithMatch(routing.kindRoutes?.document, "default-kind") ||
+    {
+      mountName: "documentParser",
+      action: "extractDocument",
+      matchedBy: "default"
+    }
+  );
 }
 
 function resolveDocumentRoute({ runtime, sourceKind, extension = "", mediaTypeHint = "" }) {
@@ -263,18 +562,11 @@ function resolveDocumentRoute({ runtime, sourceKind, extension = "", mediaTypeHi
     });
   }
 
-  if (sourceKind === "image") {
-    return {
-      mountName: "ocr",
-      action: "extractText"
-    };
-  }
-
-  return {
-    mountName: "documentParser",
-    action: "extractDocument",
-    matchedBy: "default"
-  };
+  return resolveConfiguredDocumentRoute({
+    sourceKind,
+    extension,
+    mediaTypeHint
+  });
 }
 
 function normalizeDocumentParseResult(result, parserId = "") {
@@ -312,8 +604,31 @@ function normalizeDocumentParseResult(result, parserId = "") {
     embeddedDocuments,
     visualElements: asArray(result?.visualElements),
     warnings: asArray(result?.warnings).map((entry) => String(entry || "").trim()).filter(Boolean),
-    mediaType: String(result?.mediaType || metadata["Content-Type"] || "")
+    mediaType: String(result?.mediaType || metadata["Content-Type"] || ""),
+    failureReason:
+      result?.failureReason && typeof result.failureReason === "object" && !Array.isArray(result.failureReason)
+        ? result.failureReason
+        : null
   };
+}
+
+function decodePlainTextBuffer(buffer) {
+  return Buffer.isBuffer(buffer)
+    ? buffer.toString("utf8").replace(/^\uFEFF/, "")
+    : Buffer.from(buffer || "").toString("utf8").replace(/^\uFEFF/, "");
+}
+
+function shouldReadStructuredBufferDirectly({ descriptor = null, sourceKind = "", mediaTypeHint = "" } = {}) {
+  return (
+    isImportTextDescriptor(descriptor) ||
+    String(sourceKind || "").trim() === "text" ||
+    String(mediaTypeHint || "").trim().toLowerCase().startsWith("text/")
+  );
+}
+
+function routeRequiresMountedExtraction(route = {}) {
+  const mountName = String(route?.mountName || "").trim();
+  return Boolean(mountName && mountName !== "documentParser");
 }
 
 function documentParserSupports({ extension, mediaTypeHint, runtime, sourceKind = "document" }) {
@@ -471,6 +786,7 @@ async function tryExtractWithOcr({
       metadata: result.metadata || {},
       embeddedDocuments: result.embeddedDocuments || [],
       warnings: [],
+      failureReason: result.failureReason || null,
       attempted: true
     };
   } catch (error) {
@@ -480,6 +796,7 @@ async function tryExtractWithOcr({
       metadata: {},
       embeddedDocuments: [],
       warnings: [buildRouteExtractionWarning(name || filePath || "未命名文件", fileType, route, error)],
+      failureReason: buildRouteExtractionFailureReason(name || filePath || "未命名文件", fileType, route, error),
       attempted: true
     };
   }
@@ -489,29 +806,46 @@ async function readStructuredBuffer({
   buffer,
   filePath,
   name,
+  extension = "",
   mediaTypeHint,
   settings,
   userDataPath,
   runtime
 }) {
-  const extension = path.extname(name || filePath).toLowerCase();
-  const descriptor = importFileDescriptorForPath(name || filePath) ||
-    importFileDescriptorForExtension(extension) ||
+  const resolvedExtension = normalizeRoutingExtension(extension || path.extname(name || filePath));
+  const routedFileName = effectiveFileNameForRouting(name || filePath, filePath, resolvedExtension);
+  const descriptor =
+    importFileDescriptorForExtension(resolvedExtension) ||
+    importFileDescriptorForPath(name || filePath) ||
     importFileDescriptorForMediaType(mediaTypeHint);
   const sourceKind = descriptor?.kind || (mediaTypeHint?.startsWith("text/") ? "text" : "document");
   const route = resolveDocumentRoute({
     runtime,
     sourceKind,
-    extension,
+    extension: resolvedExtension,
     mediaTypeHint
   });
+
+  if (
+    !routeRequiresMountedExtraction(route) &&
+    shouldReadStructuredBufferDirectly({ descriptor, sourceKind, mediaTypeHint })
+  ) {
+    return normalizeDocumentParseResult({
+      parserId: "builtin/text-direct",
+      text: decodePlainTextBuffer(buffer),
+      metadata: {
+        "Content-Type": mediaTypeHint || descriptor?.mediaType || mediaTypeForImportExtension(resolvedExtension)
+      },
+      mediaType: mediaTypeHint || descriptor?.mediaType || mediaTypeForImportExtension(resolvedExtension)
+    }, "builtin/text-direct");
+  }
 
   return executeRouteExtraction({
     runtime,
     route,
     buffer,
     filePath,
-    fileName: name || filePath,
+    fileName: routedFileName,
     mediaTypeHint,
     settings,
     userDataPath,
@@ -582,8 +916,15 @@ async function parseArchiveInput({
       continue;
     }
 
-    const extension = path.posix.extname(entryPath).toLowerCase();
+    const entryBufferObject = Buffer.from(entryBuffer);
+    const routeDecision = createFileRoutingDecision({
+      buffer: entryBufferObject,
+      fileName: entryPath,
+      filePath: entryPath
+    });
+    const extension = routeDecision.extension || path.posix.extname(entryPath).toLowerCase();
     if (
+      !hasResolvedImportRoute(routeDecision) &&
       !isImportFilePathSupported(entryPath) &&
       !hasConfiguredRoute({
         runtime,
@@ -598,7 +939,7 @@ async function parseArchiveInput({
       id: `${id}::${entryPath}`,
       name: entryPath,
       filePath: `${filePath || name}#${entryPath}`,
-      buffer: Buffer.from(entryBuffer),
+      buffer: entryBufferObject,
       mediaTypeHint: "",
       sourceTimes,
       settings,
@@ -745,8 +1086,10 @@ async function parseStructuredInput({
   sourceContainerPath = "",
   checkpointMaterialPath = ""
 }) {
-  const descriptor = importFileDescriptorForPath(name || filePath) ||
-    importFileDescriptorForExtension(extension) ||
+  const resolvedExtension = normalizeRoutingExtension(extension || path.extname(name || filePath));
+  const descriptor =
+    (resolvedExtension ? importFileDescriptorForExtension(resolvedExtension) : null) ||
+    importFileDescriptorForPath(name || filePath) ||
     importFileDescriptorForMediaType(mediaTypeHint);
   const descriptorKind = descriptor?.kind || (mediaTypeHint?.startsWith("text/") ? "text" : "document");
   const isEmailDocument = descriptorKind === "email";
@@ -762,6 +1105,7 @@ async function parseStructuredInput({
     buffer,
     filePath,
     name,
+    extension: resolvedExtension,
     mediaTypeHint,
     settings,
     userDataPath,
@@ -802,7 +1146,7 @@ async function parseStructuredInput({
       mediaType:
         mediaTypeHint ||
         descriptor?.mediaType ||
-        mediaTypeForImportExtension(extension),
+        mediaTypeForImportExtension(resolvedExtension),
       ingestOrigin,
       clientUid,
       sourceType: sourceType || kind || ingestOrigin,
@@ -831,6 +1175,7 @@ async function parseStructuredInput({
     embeddedDocuments: document.embeddedDocuments || [],
     visualElements: document.visualElements || [],
     warnings,
+    failureReason: document.failureReason || null,
     ocrAttempted,
     ...normalizeConnectorSourceMetadata({
       providerId,
@@ -842,7 +1187,7 @@ async function parseStructuredInput({
     }),
     ...buildOriginalPayload({
       buffer,
-      extension,
+      extension: resolvedExtension,
       originalRelativePath,
       ingestOrigin,
       sourceContainerPath,
@@ -879,15 +1224,22 @@ async function parseBufferInput({
   depth = 0
 }) {
   const sourcePath = name || filePath;
-  const descriptor = importFileDescriptorForPath(sourcePath) ||
-    importFileDescriptorForMediaType(mediaTypeHint);
-  const extension = descriptor?.extension || path.extname(sourcePath).toLowerCase();
-  const mediaType = resolveImageMediaType(extension, mediaTypeHint);
+  const routeDecision = createFileRoutingDecision({
+    buffer,
+    fileName: name,
+    filePath,
+    mediaTypeHint
+  });
+  const descriptor = routeDecision.descriptor;
+  const extension = routeDecision.extension || path.extname(sourcePath).toLowerCase();
+  const effectiveMediaTypeHint = routeDecision.mediaTypeHint || mediaTypeHint;
+  const routedName = effectiveFileNameForRouting(name, filePath, extension);
+  const mediaType = resolveImageMediaType(extension, effectiveMediaTypeHint);
 
-  if (isZipArchive(extension, mediaTypeHint)) {
+  if (isZipArchive(extension, effectiveMediaTypeHint)) {
     return parseArchiveInput({
       id,
-      name,
+      name: routedName || name,
       filePath,
       buffer,
       sourceTimes,
@@ -911,7 +1263,7 @@ async function parseBufferInput({
   if (mediaType) {
     return [await parseImageInput({
       id,
-      name,
+      name: routedName || name,
       filePath,
       buffer,
       mediaType,
@@ -937,17 +1289,17 @@ async function parseBufferInput({
 
   if (
     isImportTextDescriptor(descriptor) ||
-    mediaTypeHint?.startsWith("text/") ||
-    (shouldIncludeUnknownReadableText() && looksLikeText(buffer))
+    effectiveMediaTypeHint?.startsWith("text/") ||
+    (shouldIncludeUnknownReadableText() && routeDecision.isReadableText)
   ) {
     return [await parseStructuredInput({
       id,
-      name,
+      name: routedName || name,
       filePath,
       buffer,
       extension,
       mediaTypeHint:
-        mediaTypeHint ||
+        effectiveMediaTypeHint ||
         descriptor?.mediaType ||
         mediaTypeForImportPath(sourcePath) ||
         mediaTypeForImportExtension(importPlainTextFallbackExtension()),
@@ -973,17 +1325,17 @@ async function parseBufferInput({
   }
 
   if (
-    descriptor ||
-    hasConfiguredRoute({ runtime, extension, mediaTypeHint, sourceKind: "document" }) ||
-    documentParserSupports({ extension, mediaTypeHint, runtime })
+    hasResolvedImportRoute(routeDecision) ||
+    hasConfiguredRoute({ runtime, extension, mediaTypeHint: effectiveMediaTypeHint, sourceKind: "document" }) ||
+    documentParserSupports({ extension, mediaTypeHint: effectiveMediaTypeHint, runtime })
   ) {
     return [await parseStructuredInput({
       id,
-      name,
+      name: routedName || name,
       filePath,
       buffer,
       extension,
-      mediaTypeHint,
+      mediaTypeHint: effectiveMediaTypeHint,
       sourceTimes,
       settings,
       userDataPath,
@@ -1046,22 +1398,28 @@ async function parseUploadedFile(uploadedFile, index, options) {
   const serverTokenName = path.basename(
     String(uploadedFile.relativePath || uploadedFile.name || originalFileName)
   );
-  const detectedExtension = inferUploadedExtension(buffer);
-  const declaredExtension = path.extname(serverTokenName).toLowerCase();
-  const originalExtension = path.extname(originalFileName).toLowerCase();
-  const extension = chooseUploadedExtension({
-    detectedExtension,
-    declaredExtension: originalExtension || declaredExtension
+  const uploadedMediaType = String(
+    uploadedFile.mediaType ||
+      uploadedFile.mimeType ||
+      uploadedFile.contentType ||
+      uploadedFile.type ||
+      ""
+  ).trim();
+  const routeDecision = createFileRoutingDecision({
+    buffer,
+    fileName: originalFileName,
+    filePath: serverTokenName,
+    declaredFileNames: [originalFileName, serverTokenName],
+    mediaTypeHint: uploadedMediaType
   });
-  const name = extension
-    ? `${originalFileName.replace(/\.[a-z0-9]+$/i, "")}${extension}`
-    : originalFileName;
+  const extension = routeDecision.extension;
+  const name = routeDecision.routedFileName || originalFileName;
   return parseBufferInput({
     id: serverTokenName || `upload-${index + 1}`,
     name,
     filePath: name,
     buffer,
-    mediaTypeHint: mediaTypeForExtension(extension),
+    mediaTypeHint: routeDecision.mediaTypeHint || mediaTypeForExtension(extension),
     originalRelativePath: originalFileName || name,
     ingestOrigin: "upload",
     ...options,
@@ -1091,16 +1449,19 @@ export async function isSupportedImportFilePath(filePath) {
   if (isSupportedImportPath(filePath)) {
     return true;
   }
-  if (!shouldIncludeUnknownReadableText()) {
-    return false;
-  }
   try {
     const handle = await fs.open(filePath, "r");
     try {
       const detection = importReadableTextDetection();
-      const buffer = Buffer.alloc(detection.sampleBytes);
-      const { bytesRead } = await handle.read(buffer, 0, detection.sampleBytes, 0);
-      return looksLikeText(buffer.subarray(0, bytesRead));
+      const sampleBytes = Math.max(detection.sampleBytes, 64 * 1024);
+      const buffer = Buffer.alloc(sampleBytes);
+      const { bytesRead } = await handle.read(buffer, 0, sampleBytes, 0);
+      const routeDecision = createFileRoutingDecision({
+        buffer: buffer.subarray(0, bytesRead),
+        fileName: path.basename(filePath),
+        filePath
+      });
+      return hasResolvedImportRoute(routeDecision);
     } finally {
       await handle.close();
     }
@@ -1131,6 +1492,34 @@ function buildEmptyContentWarning(parsed) {
   }
 
   return `${parsed.name} 没有提取到可用内容，已跳过。`;
+}
+
+function buildEmptyContentFailureReason(parsed) {
+  const kind = String(parsed?.kind || "document").trim();
+  const looksLikePdf =
+    kind === "pdf" ||
+    String(parsed?.mediaType || "").toLowerCase() === "application/pdf" ||
+    String(parsed?.name || parsed?.path || "").toLowerCase().endsWith(".pdf");
+  const reasonCodeByKind = {
+    email: "email_body_not_extracted",
+    docx: "docx_no_text_extracted",
+    document: "document_no_text_extracted",
+    pdf: parsed?.ocrAttempted ? "pdf_ocr_no_text_extracted" : "pdf_no_text_extracted"
+  };
+  return createFailureReason({
+    reasonCode: looksLikePdf
+      ? (parsed?.ocrAttempted ? "pdf_ocr_no_text_extracted" : "pdf_no_text_extracted")
+      : (reasonCodeByKind[kind] || "no_usable_content_extracted"),
+    message: buildEmptyContentWarning(parsed),
+    sourceName: parsed?.name || "",
+    sourcePath: parsed?.path || "",
+    sourceKind: kind,
+    parserId: parsed?.documentParserId || parsed?.parserId || "",
+    details: {
+      ocrAttempted: parsed?.ocrAttempted === true,
+      mediaType: parsed?.mediaType || ""
+    }
+  });
 }
 
 async function collectSupportedFilesFromDirectory(
@@ -1251,16 +1640,26 @@ async function loadInputFileManifest({ userDataPath, fileManifestPath }) {
   const files = Array.isArray(parsed.files) ? parsed.files : [];
   const fileEntries = [];
   const warnings = [];
+  const failureReasons = [];
   for (const file of files) {
     const rawAbsolutePath = String(file.absolutePath || "").trim();
     if (!rawAbsolutePath) {
-      warnings.push("知识源文件清单包含空路径，已跳过。");
+      const message = "知识源文件清单包含空路径，已跳过。";
+      warnings.push(message);
+      failureReasons.push(createFailureReason({ reasonCode: "manifest_empty_path", message, sourceKind: "manifest" }));
       continue;
     }
     const absolutePath = path.resolve(rawAbsolutePath);
     const relativePath = String(file.relativePath || path.basename(absolutePath)).replace(/\\/g, "/");
     if (!relativePath || relativePath.includes("../") || path.isAbsolute(relativePath)) {
-      warnings.push("知识源文件清单包含不安全路径，已跳过。");
+      const message = "知识源文件清单包含不安全路径，已跳过。";
+      warnings.push(message);
+      failureReasons.push(createFailureReason({
+        reasonCode: "manifest_unsafe_path",
+        message,
+        sourcePath: absolutePath,
+        sourceKind: "manifest"
+      }));
       continue;
     }
     fileEntries.push({
@@ -1272,6 +1671,7 @@ async function loadInputFileManifest({ userDataPath, fileManifestPath }) {
   return {
     fileEntries,
     warnings,
+    failureReasons,
     manifest: parsed
   };
 }
@@ -1358,29 +1758,38 @@ async function restoreSourcesFromImportCheckpoint({
       userDataPath,
       sources: entry.sources || []
     }),
-    warnings: Array.isArray(entry.warnings) ? entry.warnings : []
+    warnings: Array.isArray(entry.warnings) ? entry.warnings : [],
+    failureReasons: Array.isArray(entry.failureReasons) ? entry.failureReasons : []
   };
 }
 
-function appendUsableParsedEntries({ parsedEntries, sources, warnings }) {
+function appendUsableParsedEntries({ parsedEntries, sources, warnings, failureReasons }) {
   const acceptedSources = [];
   const entryWarnings = [];
+  const entryFailureReasons = [];
 
   for (const parsed of parsedEntries || []) {
     entryWarnings.push(...(parsed.warnings || []));
+    if (parsed.failureReason && typeof parsed.failureReason === "object") {
+      entryFailureReasons.push(parsed.failureReason);
+    }
 
     if (parsed.kind === "image" || parsed.text) {
       acceptedSources.push(parsed);
     } else {
-      entryWarnings.push(buildEmptyContentWarning(parsed));
+      const failureReason = buildEmptyContentFailureReason(parsed);
+      entryFailureReasons.push(failureReason);
+      entryWarnings.push(failureReason.message);
     }
   }
 
   warnings.push(...entryWarnings);
+  failureReasons.push(...entryFailureReasons);
   sources.push(...acceptedSources);
   return {
     acceptedSources,
-    entryWarnings
+    entryWarnings,
+    entryFailureReasons
   };
 }
 
@@ -1391,6 +1800,7 @@ async function appendCheckpointedInputSources({
   workItem,
   sources,
   warnings,
+  failureReasons,
   runtime,
   generatedAt,
   parse
@@ -1419,16 +1829,18 @@ async function appendCheckpointedInputSources({
   });
   if (restored) {
     warnings.push(...restored.warnings);
+    failureReasons.push(...(restored.failureReasons || []));
     sources.push(...restored.sources);
     await publishIncrementalSearchIndex(restored.sources);
     return rawObjectPathsFromSources(restored.sources);
   }
 
   const parsedEntries = await parse();
-  const { acceptedSources, entryWarnings } = appendUsableParsedEntries({
+  const { acceptedSources, entryWarnings, entryFailureReasons } = appendUsableParsedEntries({
     parsedEntries,
     sources,
-    warnings
+    warnings,
+    failureReasons
   });
 
   if (batchId && acceptedSources.length > 0) {
@@ -1439,7 +1851,8 @@ async function appendCheckpointedInputSources({
       inputKind: workItem.inputKind,
       signature: workItem.signature,
       sources: acceptedSources,
-      warnings: entryWarnings
+      warnings: entryWarnings,
+      failureReasons: entryFailureReasons
     });
     await publishIncrementalSearchIndex(acceptedSources);
   }
@@ -1469,6 +1882,7 @@ export async function readInputSources({
 }) {
   const sources = [];
   const warnings = [];
+  const failureReasons = [];
   const reportImportProgress = createThrottledImportProgressReporter(reportProgress);
   reportImportProgress({
     stage: "展开输入目录",
@@ -1479,6 +1893,7 @@ export async function readInputSources({
   const manifestInput = await loadInputFileManifest({ userDataPath, fileManifestPath });
   const expanded = manifestInput || await expandInputFilePaths(filePaths, runtime);
   warnings.push(...expanded.warnings);
+  failureReasons.push(...(expanded.failureReasons || []));
   const fileWorkItems = [];
   const uploadWorkItems = uploadedFiles.map((uploadedFile, index) =>
     createUploadedImportWorkItem(uploadedFile, index)
@@ -1553,6 +1968,7 @@ export async function readInputSources({
         workItem,
         sources,
         warnings,
+        failureReasons,
         runtime,
         generatedAt,
         parse: () =>
@@ -1577,7 +1993,18 @@ export async function readInputSources({
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "未知错误";
-      warnings.push(`${path.basename(workItem.fileEntry.absolutePath)} 读取失败：${message}`);
+      const fullMessage = `${path.basename(workItem.fileEntry.absolutePath)} 读取失败：${message}`;
+      warnings.push(fullMessage);
+      failureReasons.push(...(Array.isArray(error?.failureReasons)
+        ? error.failureReasons
+        : [createFailureReason({
+            reasonCode: error?.reasonCode || "filesystem_input_parse_failed",
+            message: fullMessage,
+            sourceName: path.basename(workItem.fileEntry.absolutePath),
+            sourcePath: workItem.fileEntry.absolutePath,
+            sourceKind: "filesystem",
+            details: { error: message }
+          })]));
     }
     processedWorkItems += 1;
     reportImportProgress({
@@ -1598,6 +2025,7 @@ export async function readInputSources({
         workItem,
         sources,
         warnings,
+        failureReasons,
         runtime,
         generatedAt,
         parse: () =>
@@ -1623,7 +2051,18 @@ export async function readInputSources({
     } catch (error) {
       const message = error instanceof Error ? error.message : "未知错误";
       const fallbackName = `upload-${workItem.signature.index + 1}`;
-      warnings.push(`${workItem.uploadedFile.name || fallbackName} 读取失败：${message}`);
+      const fullMessage = `${workItem.uploadedFile.name || fallbackName} 读取失败：${message}`;
+      warnings.push(fullMessage);
+      failureReasons.push(...(Array.isArray(error?.failureReasons)
+        ? error.failureReasons
+        : [createFailureReason({
+            reasonCode: error?.reasonCode || "upload_input_parse_failed",
+            message: fullMessage,
+            sourceName: workItem.uploadedFile.name || fallbackName,
+            sourcePath: workItem.uploadedFile.relativePath || "",
+            sourceKind: "upload",
+            details: { error: message }
+          })]));
     }
     processedWorkItems += 1;
     reportImportProgress({
@@ -1647,21 +2086,34 @@ export async function readInputSources({
 
   if (sources.length === 0) {
     if (warnings.length > 0) {
-      throw new Error(`没有可处理的内容。${warnings.join("；")}`);
+      throw createFailureError(
+        `没有可处理的内容。${warnings.join("；")}`,
+        "document_parse_no_usable_content",
+        failureReasons
+      );
     }
 
-    throw new Error("没有可处理的内容。请粘贴文本或选择可解析的文件。");
+    throw createFailureError(
+      "没有可处理的内容。请粘贴文本或选择可解析的文件。",
+      "document_parse_input_missing",
+      failureReasons
+    );
   }
 
   const usableText = sources.some((source) => source.text);
   const usableImage = sources.some((source) => source.kind === "image");
 
   if (!usableText && !usableImage) {
-    throw new Error("输入中没有可供智能体处理的文本或图片。");
+    throw createFailureError(
+      "输入中没有可供智能体处理的文本或图片。",
+      "document_parse_no_text_or_image",
+      failureReasons
+    );
   }
 
   return {
     sources,
-    warnings
+    warnings,
+    failureReasons
   };
 }

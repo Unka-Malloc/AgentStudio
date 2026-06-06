@@ -8,35 +8,60 @@ import {
   waitForStateIdle
 } from "../platform-core/state-coordinator.mjs";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const DEFAULT_IMPORT_FILE_TYPES_PATH = path.resolve(__dirname, "../../../config/default-import-file-types.json");
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const DEFAULT_IMPORT_FILE_TYPES_PATH = path.resolve(MODULE_DIR, "../../../config/default-import-file-types.json");
+
+function routeTarget(value = {}) {
+  const mountName = String(value?.mountName || value?.mount || "").trim();
+  if (!mountName) {
+    return null;
+  }
+  return {
+    mountName,
+    action: String(value?.action || value?.capability || "extractDocument").trim() || "extractDocument"
+  };
+}
 
 function readDefaultImportRoutes() {
-  const filePath = path.resolve(process.env.PACT_IMPORT_FILE_TYPES_PATH || DEFAULT_IMPORT_FILE_TYPES_PATH);
   try {
-    const parsed = JSON.parse(fsSync.readFileSync(filePath, "utf8"));
-    const normalizeRoute = (route = {}, fallbackMountName = "", fallbackAction = "extractDocument") =>
-      normalizeRouteTarget(route, fallbackMountName, fallbackAction);
+    const raw = JSON.parse(fsSync.readFileSync(
+      path.resolve(process.env.PACT_IMPORT_FILE_TYPES_PATH || DEFAULT_IMPORT_FILE_TYPES_PATH),
+      "utf8"
+    ));
     const kindRoutes = Object.fromEntries(
-      Object.entries(parsed.kindRoutes || {}).map(([kind, route]) => [kind, normalizeRoute(route)])
+      Object.entries(raw.kindRoutes || {})
+        .map(([kind, route]) => [String(kind || "").trim(), routeTarget(route)])
+        .filter(([kind, route]) => Boolean(kind && route))
     );
     const extensionRoutes = {};
-    for (const group of Array.isArray(parsed.groups) ? parsed.groups : []) {
-      const groupRoute = normalizeRoute(group.route);
+    const mediaTypeRoutes = {};
+    for (const group of Array.isArray(raw.groups) ? raw.groups : []) {
       for (const entry of Array.isArray(group.entries) ? group.entries : []) {
-        const entryRoute = normalizeRoute(entry.route, groupRoute?.mountName || "", groupRoute?.action || "extractDocument");
+        const route = routeTarget(entry.route || group.route || {});
+        if (!route) {
+          continue;
+        }
         for (const extension of Array.isArray(entry.extensions) ? entry.extensions : []) {
           const normalizedExtension = String(extension || "").toLowerCase().trim();
-          if (normalizedExtension && entryRoute.mountName) {
-            extensionRoutes[normalizedExtension.startsWith(".") ? normalizedExtension : `.${normalizedExtension}`] = entryRoute;
+          if (normalizedExtension) {
+            extensionRoutes[normalizedExtension.startsWith(".") ? normalizedExtension : `.${normalizedExtension}`] = route;
+          }
+        }
+        for (const mediaType of [
+          entry.mediaType || group.mediaType || "",
+          ...(Array.isArray(entry.mediaTypes) ? entry.mediaTypes : []),
+          ...(Array.isArray(group.mediaTypes) ? group.mediaTypes : [])
+        ]) {
+          const normalizedMediaType = String(mediaType || "").toLowerCase().trim();
+          if (normalizedMediaType) {
+            mediaTypeRoutes[normalizedMediaType] = route;
           }
         }
       }
     }
-    return { kindRoutes, extensionRoutes };
+    return { kindRoutes, extensionRoutes, mediaTypeRoutes };
   } catch {
-    return { kindRoutes: {}, extensionRoutes: {} };
+    return { kindRoutes: {}, extensionRoutes: {}, mediaTypeRoutes: {} };
   }
 }
 
@@ -86,7 +111,8 @@ function normalizeRouteTarget(value = {}, fallbackMountName = "", fallbackAction
 export function normalizeMountRouting(value = {}) {
   const {
     kindRoutes: defaultKindRouteTargets,
-    extensionRoutes: defaultExtensionRouteTargets
+    extensionRoutes: defaultExtensionRouteTargets,
+    mediaTypeRoutes: defaultMediaTypeRouteTargets
   } = readDefaultImportRoutes();
   const kindRoutes = {
     ...Object.fromEntries(
@@ -108,7 +134,10 @@ export function normalizeMountRouting(value = {}) {
   );
 
   const mediaTypeRoutes = Object.fromEntries(
-    Object.entries(value.mediaTypeRoutes || {}).map(([mediaType, route]) => [
+    [
+      ...Object.entries(defaultMediaTypeRouteTargets),
+      ...Object.entries(value.mediaTypeRoutes || {})
+    ].map(([mediaType, route]) => [
       String(mediaType || "").toLowerCase().trim(),
       normalizeRouteTarget(route)
     ])

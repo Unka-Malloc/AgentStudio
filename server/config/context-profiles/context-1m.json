@@ -1,0 +1,20 @@
+{
+  "profileId": "context-1m",
+  "label": "1M Context",
+  "modelAlias": "default",
+  "contextWindowTokens": 1048576,
+  "outputReserveTokens": 8192,
+  "toolReserveTokens": 16384,
+  "fixedMemoryBudget": 8192,
+  "knowledgeBudget": 500000,
+  "historyBudget": 300000,
+  "recentTurnBudget": 215808,
+  "compression": {
+    "enabled": true,
+    "threshold": 0.75,
+    "targetRatio": 0.45,
+    "protectLastNTurns": 24,
+    "summaryMaxTokens": 64000,
+    "strategy": "workbench-reconstruction"
+  }
+}

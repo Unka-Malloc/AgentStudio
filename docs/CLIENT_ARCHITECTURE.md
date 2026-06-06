@@ -10,23 +10,17 @@ implementation. Existing client features may be reused only when they fit this
 contract. Features that require a heavy local business runtime should be moved
 into Skills, MCP plugins, or removed from the main client.
 
-This document and `docs/CLIENT-IMPLEMENTATION-PLAN.md` are the only authority
-for the destructive desktop-client refactor. The old client implementation is
-not a compatibility target. Code that does not clearly serve this architecture
-must be deleted, replaced, or moved under `legacy/dev-only` so it cannot enter
-the default product navigation, default CLI, default build, or default package
-plan.
-
-Implementation phases, checkpoints, and verifier targets are tracked in
-`docs/CLIENT-IMPLEMENTATION-PLAN.md`.
+This document is the active authority for the destructive desktop-client
+refactor. The current client is the only maintained implementation. Code that
+does not clearly serve this architecture must be deleted or replaced so it
+cannot enter product navigation, CLI, build, or package plan.
 
 ## 1. Product Identity
 
 Pact Client is a lightweight local environment manager. It is responsible for
 visual MCP configuration, local Skill Hub management, model request forwarding,
-and target-specific adapter flows for tools such as Codex, OpenCode, OpenClaw,
-Antigravity, Cursor, Windsurf, Gemini CLI, and other supported intelligent
-agent runtimes.
+and target-specific adapter flows for OpenClaw, Claude Code, Codex, Gemini CLI,
+Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, and Windsurf.
 
 Pact Client is not an agent harness, network proxy, permission broker, local
 analysis engine, or universal MCP aggregation gateway.
@@ -45,7 +39,7 @@ records.
 - Do not execute local tools on behalf of intelligent agents.
 - Do not approve or reject runtime tool calls. The endpoint that executes a
   tool owns the approval UX.
-- Do not preserve old desktop-client UI, CLI, daemon, HTTP panel,
+- Do not preserve removed desktop-client UI, CLI, daemon, HTTP panel,
   DataConnector, Mail, Knowledge Graph, upload queue, or agent invocation
   surfaces as compatibility shells.
 - Do not keep `local-agents` as a formal CLI or GUI dependency.
@@ -74,11 +68,9 @@ The main client should be organized around a small set of first-level modules:
 The client must not retain a server-console-style information architecture as
 the main product. Existing HTTP panels, upload queues, DataConnector pages,
 Mail import flows, knowledge graph pages, checkpoint views, and local daemon
-surfaces are old-client residue. They must be removed from the default product
-path unless a module-by-module conformance decision explicitly keeps them in
-the new six-module architecture. Reference-only code may live under
-`legacy/dev-only`, but it must not enter default navigation, default CLI,
-default build, or default packaging.
+surfaces are outside the current client boundary. They must be removed unless a
+new explicit design decision reclassifies them into the six-module
+architecture.
 
 ## 4. Out-of-Band MCP Configuration
 
@@ -99,9 +91,13 @@ Rules:
 ## 5. Target Adapters
 
 Pact Client adapts external frameworks. The adapter layer should understand the
-real configuration shape and operational expectations of each target, including
-Codex, OpenCode, OpenClaw, Antigravity, Cursor, Windsurf, Gemini CLI, and future
-targets.
+real configuration shape and operational expectations of each first-class target:
+OpenClaw, Claude Code, Codex, Gemini CLI, Antigravity, OpenCode, Copilot,
+Kilo Code, Cursor, Hermes Agent, and Windsurf.
+
+This target set is already decided and must not be reopened as a P0 scope
+question. New targets require an explicit implementation decision and verifier
+updates.
 
 Rules:
 
@@ -361,8 +357,8 @@ ledger and not a record of what an agent did after it took a Skill.
 
 ## 16. Refactor Rule
 
-During implementation, prefer deletion or migration over preserving old client
-weight.
+During implementation, prefer deletion or migration over preserving removed
+client weight.
 
 Use this decision rule:
 
@@ -374,7 +370,5 @@ Use this decision rule:
 3. If an existing feature needs a heavy local daemon, custom business API,
    agent harness, or client-owned analysis runtime, remove it from the main
    client unless a new explicit design decision reclassifies it.
-4. If an old feature is temporarily retained only because a test or release
-   entry cannot be removed in the same batch, the implementation plan must name
-   its deletion batch and the verifier that prevents it from re-entering the
-   new mainline.
+4. If a removed feature is reintroduced, it must first have a new explicit
+   design decision and a verifier that keeps it inside the current architecture.

@@ -21,6 +21,7 @@ const props = withDefaults(
     buttonClass?: string;
     size?: string;
     disabled?: boolean;
+    loading?: boolean;
     plain?: boolean;
     multiple?: boolean;
     accept?: string;
@@ -32,6 +33,7 @@ const props = withDefaults(
     buttonClass: "",
     size: "default",
     disabled: false,
+    loading: false,
     plain: false,
     multiple: true,
     accept: "",
@@ -160,7 +162,7 @@ async function openLocalDirectoryPicker() {
 }
 
 function onClick() {
-  if (props.disabled) {
+  if (props.disabled || props.loading) {
     return;
   }
   if (isLocalDirectory.value) {
@@ -202,6 +204,7 @@ function onFileChange(event: Event) {
       :plain="plain"
       :size="size"
       :disabled="disabled"
+      :loading="loading"
       @click="onClick"
     >
       <slot>{{ resolvedButtonText }}</slot>

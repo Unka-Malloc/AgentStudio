@@ -1,0 +1,11 @@
+{
+  "id": "pact.agent.relay",
+  "label": "Agent Relay",
+  "requiredScopes": [
+    "agent_relay:view",
+    "agent_relay:operate"
+  ],
+  "maxRisk": "repair_write",
+  "grantable": true,
+  "defaultForAgents": false
+}

@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "reportType": "pact.production-readiness.v1",
+  "runId": "20260521T155415Z",
+  "generatedAt": "2026-05-21T15:54:20.405Z",
+  "mode": "quick",
+  "repoRoot": "/Users/unka/DevSpace/Unka-Malloc/splitall",
+  "git": {
+    "branch": "main",
+    "commit": "f12ebd577c323ed3cb86814f3c38d841315f3f2d",
+    "dirtyFileCount": 4
+  },
+  "overallStatus": "blocked",
+  "summary": {
+    "pass": 3,
+    "fail": 0,
+    "timeout": 0,
+    "blockedP0": 0
+  },
+  "coverage": {
+    "required": [
+      "architecture",
+      "document-parsing-real-sample",
+      "external-knowledge-base-consistency",
+      "rag-evaluation",
+      "distillation-evaluation",
+      "session-thread",
+      "tool-permission",
+      "backup-restore",
+      "upgrade-migration",
+      "ui-smoke",
+      "offline-license"
+    ],
+    "byRequirement": {
+      "architecture": [
+        "architecture"
+      ],
+      "document-parsing-real-sample": [
+        "document-parsing-real-sample"
+      ],
+      "external-knowledge-base-consistency": [],
+      "rag-evaluation": [],
+      "distillation-evaluation": [],
+      "session-thread": [],
+      "tool-permission": [],
+      "backup-restore": [],
+      "upgrade-migration": [],
+      "ui-smoke": [
+        "ui-smoke"
+      ],
+      "offline-license": []
+    },
+    "missing": [
+      "external-knowledge-base-consistency",
+      "rag-evaluation",
+      "distillation-evaluation",
+      "session-thread",
+      "tool-permission",
+      "backup-restore",
+      "upgrade-migration",
+      "offline-license"
+    ]
+  },
+  "gates": [
+    {
+      "id": "architecture",
+      "title": "架构门禁",
+      "blockerLevel": "P0",
+      "owner": "platform-architecture",
+      "coverage": [
+        "architecture"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260521T155415Z/architecture.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:architecture-patterns",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 93
+        },
+        {
+          "command": "npm run server:verify:knowledge-architecture-governance",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 109
+        },
+        {
+          "command": "npm run server:verify:platform-layout",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 130
+        }
+      ],
+      "nextStep": "修复架构治理、平台分层或核心文档与实现偏差。"
+    },
+    {
+      "id": "document-parsing-real-sample",
+      "title": "文档解析真实样例",
+      "blockerLevel": "P0",
+      "owner": "knowledge-ingestion",
+      "coverage": [
+        "document-parsing-real-sample"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260521T155415Z/document-parsing-real-sample.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:dynamic-document-parsing",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 100
+        },
+        {
+          "command": "npm run server:verify:document-preview-consistency",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 89
+        },
+        {
+          "command": "npm run server:verify:document-parser-dry-run",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1356
+        },
+        {
+          "command": "npm run server:verify:knowledge-docx-export",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 161
+        }
+      ],
+      "nextStep": "补齐真实文档解析 fixture、结构锚点、动态切分和 DOCX 导出基准。"
+    },
+    {
+      "id": "ui-smoke",
+      "title": "端到端 UI smoke",
+      "blockerLevel": "P0",
+      "owner": "console-frontend",
+      "coverage": [
+        "ui-smoke"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260521T155415Z/ui-smoke.log",
+      "commands": [
+        {
+          "command": "npm run build:renderer:raw",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1641
+        },
+        {
+          "command": "npm run server:verify:frontend-feature-registry",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 106
+        },
+        {
+          "command": "npm run server:verify:knowledge-console",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1257
+        }
+      ],
+      "nextStep": "补齐控制台生产健康页、关键路由 smoke、前端 feature registry 和页面验收。"
+    }
+  ]
+}

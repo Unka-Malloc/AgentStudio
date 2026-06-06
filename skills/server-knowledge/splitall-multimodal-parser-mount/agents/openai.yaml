@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Multimodal Parser Mount"
-  short_description: "Help with SplitAll Multimodal Parser Mount tasks"
-  default_prompt: "Use $splitall-multimodal-parser-mount to handle this SplitAll platform task."

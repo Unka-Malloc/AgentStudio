@@ -85,6 +85,46 @@ function assertCodespaceOk(response, operation) {
   return payload;
 }
 
+async function approvePendingCodespaceOperation(serverUrl, payload, operation) {
+  assert.equal(payload?.status, "pending_approval", JSON.stringify(payload || {}, null, 2));
+  assert.equal(payload.pendingOperation?.status, "pending", JSON.stringify(payload || {}, null, 2));
+  assert.equal(payload.pendingOperation?.operationId, operation.replace(/^pact\./u, ""), JSON.stringify(payload || {}, null, 2));
+  assert.equal(payload.pendingOperation?.reasonCode, "tool_approval_required", JSON.stringify(payload || {}, null, 2));
+  const resolved = await fetchJson(
+    `${serverUrl}/api/tool-management/v1/pending-operations/${encodeURIComponent(payload.pendingOperation.pendingOperationId)}/resolve`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-pact-safety-confirm": "true"
+      },
+      body: JSON.stringify({
+        resolution: "approved",
+        resolvedBy: "verify-codespace-protocol",
+        reason: `Approve ${operation} in unified approval verifier.`
+      })
+    }
+  );
+  assert.equal(resolved.status, 200, JSON.stringify(resolved.payload, null, 2));
+  assert.equal(resolved.payload.pendingOperation?.status, "completed", JSON.stringify(resolved.payload, null, 2));
+  assert.ok(resolved.payload.pendingOperation?.resumedToolExecutionId, JSON.stringify(resolved.payload, null, 2));
+  assert.equal(typeof resolved.payload.result, "object", JSON.stringify(resolved.payload, null, 2));
+  assert.equal(resolved.payload.result?.ok, true, JSON.stringify(resolved.payload, null, 2));
+  return resolved.payload.result;
+}
+
+async function assertCodespaceOkAfterApproval(response, operation, serverUrl) {
+  assert.equal(response.status, 200, JSON.stringify(response.payload, null, 2));
+  assert.equal(response.payload.error, undefined, JSON.stringify(response.payload.error || {}, null, 2));
+  assert.equal(response.payload.result.structuredContent.operation, operation);
+  const payload = structuredPayload(response);
+  if (payload?.status === "pending_approval") {
+    return approvePendingCodespaceOperation(serverUrl, payload, operation);
+  }
+  assert.equal(payload?.ok, true, JSON.stringify(payload || {}, null, 2));
+  return payload;
+}
+
 async function createGitReviewWorktree(rootPath) {
   const repoPath = path.join(rootPath, "review-worktree");
   await fs.mkdir(repoPath, { recursive: true });
@@ -211,7 +251,7 @@ try {
   assert.equal(synced.submitStatus, "merged");
 
   const repoPath = await createGitReviewWorktree(userDataPath);
-  const upload = assertCodespaceOk(await callCodespaceOperation({
+  const upload = await assertCodespaceOkAfterApproval(await callCodespaceOperation({
     serverUrl: server.url,
     token,
     operation: "pact.workspace.code.change.upload",
@@ -224,7 +264,7 @@ try {
     dryRun: true,
     confirm: true
     }
-  }), "pact.workspace.code.change.upload");
+  }), "pact.workspace.code.change.upload", server.url);
   assert.equal(upload.ok, true);
   assert.equal(upload.dryRun, true);
   assert.equal(upload.target.targetKind, "codespace");

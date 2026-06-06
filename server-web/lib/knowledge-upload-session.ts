@@ -1,4 +1,7 @@
-import { bridge } from "./bridge";
+import {
+  createUploadSession,
+  uploadSessionChunk,
+} from "./upload-session-client";
 import type { UploadedFilePayload, UploadSessionResponse } from "./types";
 
 export type KnowledgeUploadFileDigest = {
@@ -167,7 +170,7 @@ export async function createKnowledgeUploadSession(
     message: "准备上传会话...",
   });
 
-  const session = await bridge.createUploadSession({
+  const session = await createUploadSession({
     manifest: {
       manifestDigest,
       inputDigest,
@@ -203,7 +206,7 @@ export async function createKnowledgeUploadSession(
     let offset = Math.min(Number(sessionFile?.receivedBytes || 0), file.size);
     while (offset < file.size) {
       const chunk = file.slice(offset, Math.min(offset + chunkSize, file.size));
-      await bridge.uploadSessionChunk(session.sessionId, fileIndex, offset, chunk);
+      await uploadSessionChunk(session.sessionId, fileIndex, offset, chunk);
       offset += chunk.size;
       uploadedBytes += chunk.size;
       const percent = totalBytes > 0 ? Math.round((uploadedBytes / totalBytes) * 100) : 100;

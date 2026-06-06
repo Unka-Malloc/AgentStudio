@@ -7,13 +7,13 @@ Pact MCP 以 GitHub Release connector 包分发。普通用户不需要克隆 Pa
 中文安装脚本：
 
 ```bash
-/bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)"
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)"
 ```
 
 英文安装脚本：
 
 ```bash
-/bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
 ```
 
 安装脚本会从 GitHub Releases 下载最新 connector，校验 SHA256，把 connector 安装到 `~/.pact/mcp/connector`，然后打开多选 TUI。机器上有 Node.js 20+ 时使用小体积源码 tarball；没有 Node.js 时下载更大的 portable zip，zip 内置 Node 运行时。
@@ -49,7 +49,7 @@ TUI 操作：
 
 安装完成后，connector 会输出精简安装报告，包括已验证 MCP URL、所选客户端、每个客户端的成功或失败状态、token 来源和验证状态。它不会把客户端配置文件完整打印出来。只有脚本需要机器可读详情时才使用 `--json`。
 
-支持的 target 是 `codex`、`gemini-cli`、`kilo-code`、`copilot`、`openclaw`、`hermes` 和 `antigravity`。OpenClaw 兼容的 OrbStack 智能体，例如 IronClaw 或 ZeroClaw，会通过同一套 Claw-compatible 扫描发现。
+支持的 target 是 OpenClaw（`openclaw`）、Claude Code（`claude-code`）、Codex（`codex`）、Gemini CLI（`gemini-cli`）、Antigravity（`antigravity`）、OpenCode（`opencode`）、Copilot（`copilot`）、Kilo Code（`kilo-code`）、Cursor（`cursor`）、Hermes Agent（`hermes`）和 Windsurf（`windsurf`）。OpenClaw 兼容的 OrbStack 智能体，例如 IronClaw 或 ZeroClaw，会通过同一套 Claw-compatible 扫描发现。
 
 ## 选项
 
@@ -57,20 +57,53 @@ TUI 操作：
 
 ```bash
 PACT_MCP_BASE_URL=http://<host>:<port> \
-  /bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)"
+  /bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)"
 ```
 
 使用自定义本地安装目录：
 
 ```bash
 PACT_MCP_INSTALL_DIR="$HOME/.local/share/pact-mcp" \
-  /bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)"
+  /bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)"
 ```
 
 在 shell 命令后传递 connector 安装参数：
 
 ```bash
-/bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)" -- --no-verify
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)" -- --no-verify
+```
+
+非交互智能体 shell 可以直接使用自动检测模式：
+
+```bash
+~/.pact/mcp/connector/current/pact-mcp install --target auto --json
+```
+
+`auto` 会安装 connector 能验证到的所有受支持客户端。没有 TTY 且未传
+`--target` 的 `pact-mcp install` 也会走同一条自动检测路径，避免智能体脚本
+因为缺少交互菜单而直接失败。确实需要先限制到重点智能体客户端时，使用
+`--target claude-code,codex,openclaw --json`。
+
+如果智能体需要一条可直接复制执行的 GitHub Release 命令，使用无人值守
+auto target 形态。它会覆盖 OpenClaw、Claude Code、Codex、Gemini CLI、
+Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf
+以及 connector 能验证到的所有其它受支持客户端：
+
+```bash
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)" -- --target auto --json
+```
+
+如果已知要安装的单一客户端，把 `<client>` 替换成任意受支持 target，例如
+`openclaw`、`claude-code`、`codex`、`gemini-cli`、`antigravity`、`opencode`、`copilot`、`kilo-code`、`cursor`、`hermes` 或 `windsurf`：
+
+```bash
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)" -- --target <client> --json
+```
+
+如果要优先一次覆盖 Claude Code、Codex 和 OpenClaw：
+
+```bash
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)" -- --target claude-code,codex,openclaw --json
 ```
 
 管理本机服务端地址 profile：
@@ -99,13 +132,13 @@ zip 包内置 Node.js 运行时。
 中文卸载脚本：
 
 ```bash
-/bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-uninstall.zh-CN.sh)"
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-uninstall.zh-CN.sh)"
 ```
 
 英文卸载脚本：
 
 ```bash
-/bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-uninstall.sh)"
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-uninstall.sh)"
 ```
 
 ## 验证

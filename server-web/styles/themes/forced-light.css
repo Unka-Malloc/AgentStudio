@@ -1,0 +1,150 @@
+/* ─── Force light ─────────────────────────────────────────────────────────── */
+
+html.theme-light {
+  color-scheme: light;
+  --bg-base:    #f3f4f6;
+  --bg-surface: #ffffff;
+  --bg-subtle:  #f9fafb;
+  --bg-inset:   #f3f4f6;
+  --border-subtle: #e5e7eb;
+  --border-strong: #d1d5db;
+  --text-primary:   #111827;
+  --text-secondary: #4b5563;
+  --text-muted:     #6b7280;
+  --text-disabled:  #9ca3af;
+  --brand:        #2563eb;
+  --brand-strong: #1d4ed8;
+  --brand-subtle: #eff6ff;
+  --brand-muted:  #dbeafe;
+  --info:         #2563eb;
+  --info-surface: #eff6ff;
+  --info-border:  #dbeafe;
+  --success:         #16a34a;
+  --success-surface: #f0fdf4;
+  --success-border:  #bbf7d0;
+  --warning:         #d97706;
+  --warning-text:    #92400e;
+  --warning-surface: #fffbeb;
+  --warning-border:  #fde68a;
+  --danger:         #dc2626;
+  --danger-surface: #fef2f2;
+  --danger-border:  #fecaca;
+  --shadow-xs:   0 1px 2px rgba(0,0,0,.05);
+  --shadow-sm:   0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:   0 4px 12px rgba(0,0,0,.08), 0 2px 4px rgba(0,0,0,.04);
+  --shadow-lg:   0 8px 24px rgba(0,0,0,.10), 0 4px 8px rgba(0,0,0,.04);
+  --shadow-xl:   0 20px 48px rgba(0,0,0,.14), 0 8px 16px rgba(0,0,0,.06);
+  --shadow-soft: var(--shadow-md);
+  --skeleton-base:      #e5e7eb;
+  --skeleton-highlight: #f3f4f6;
+}
+
+/* Reset El-Plus dark vars when forcing light */
+html.theme-light,
+html.theme-light .el-select,
+html.theme-light .el-select-dropdown,
+html.theme-light .el-dropdown,
+html.theme-light .el-dropdown-menu,
+html.theme-light .el-popper,
+html.theme-light .el-popover,
+html.theme-light .el-tooltip__trigger,
+html.theme-light .el-table,
+html.theme-light .el-input,
+html.theme-light .el-input__wrapper,
+html.theme-light .el-textarea {
+  --el-bg-color:            #ffffff;
+  --el-bg-color-page:       #f3f4f6;
+  --el-bg-color-overlay:    #ffffff;
+  --el-text-color-primary:      #111827;
+  --el-text-color-regular:      #111827;
+  --el-text-color-secondary:    #4b5563;
+  --el-text-color-placeholder:  #6b7280;
+  --el-text-color-disabled:     #9ca3af;
+  --el-border-color:            #e5e7eb;
+  --el-border-color-light:      #e5e7eb;
+  --el-border-color-lighter:    #f3f4f6;
+  --el-border-color-extra-light:#f9fafb;
+  --el-border-color-dark:       #d1d5db;
+  --el-border-color-darker:     #9ca3af;
+  --el-border-color-hover:      #2563eb;
+  --el-fill-color:              #f9fafb;
+  --el-fill-color-blank:        #ffffff;
+  --el-fill-color-light:        #f9fafb;
+  --el-fill-color-lighter:      #ffffff;
+  --el-fill-color-lightest:     #f3f4f6;
+  --el-fill-color-dark:         #f3f4f6;
+  --el-fill-color-darker:       #e5e7eb;
+  --el-fill-color-extra-dark:   #d1d5db;
+  --el-mask-color:              rgba(0,0,0,0.30);
+  --el-mask-color-extra-light:  rgba(0,0,0,0.10);
+  --el-overlay-color:           rgba(0,0,0,0.40);
+  --el-overlay-color-light:     rgba(0,0,0,0.20);
+  --el-overlay-color-lighter:   rgba(0,0,0,0.12);
+  --el-color-white:  #ffffff;
+  --el-color-black:  #111827;
+  --el-disabled-bg-color:     #f9fafb;
+  --el-disabled-text-color:   #9ca3af;
+  --el-disabled-border-color: #e5e7eb;
+  --el-color-primary:           #2563eb;
+  --el-color-primary-dark-2:    #1d4ed8;
+  --el-color-primary-light-3:   rgba(37,99,235,0.40);
+  --el-color-primary-light-5:   rgba(37,99,235,0.24);
+  --el-color-primary-light-7:   rgba(37,99,235,0.14);
+  --el-color-primary-light-8:   rgba(37,99,235,0.10);
+  --el-color-primary-light-9:   #eff6ff;
+  --el-table-bg-color:            #ffffff;
+  --el-table-tr-bg-color:         #ffffff;
+  --el-table-border-color:        #e5e7eb;
+  --el-table-header-bg-color:     #f9fafb;
+  --el-table-header-text-color:   #4b5563;
+  --el-table-row-hover-bg-color:  #f9fafb;
+  --el-table-text-color:          #111827;
+  --el-table-fixed-box-shadow:    unset;
+  --el-select-dropdown-bg-color:  #f9fafb;
+  --el-select-input-color:        #111827;
+  --el-input-bg-color:            #ffffff;
+  --el-input-text-color:          #111827;
+  --el-input-placeholder-color:   #6b7280;
+  --el-input-border-color:        #e5e7eb;
+  --el-input-hover-border-color:  #d1d5db;
+  --el-input-focus-border-color:  #2563eb;
+  --el-popover-bg-color:          #ffffff;
+  --el-dropdown-menuItem-hover-fill: #eff6ff;
+}
+
+/* Override hardcoded dark colors when forcing light */
+html.theme-light .info-feed-input-dock,
+html.theme-light .info-feed-clarification-dock {
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent) !important;
+  box-shadow: inset 0 0 0 1px var(--border-subtle), inset 0 -1px 0 rgba(0,0,0,0.04) !important;
+}
+html.theme-light .info-feed-input-dock textarea {
+  background: var(--bg-surface) !important;
+}
+html.theme-light .word-cloud-architecture {
+  background:
+    linear-gradient(180deg, var(--bg-subtle), var(--bg-surface)),
+    radial-gradient(circle at 18% 18%, rgba(37,99,235,0.08), transparent 28%),
+    radial-gradient(circle at 78% 20%, rgba(5,150,105,0.08), transparent 30%) !important;
+}
+html.theme-light .surface-card { box-shadow: var(--shadow-xs) !important; }
+html.theme-light .topbar { background: color-mix(in srgb, var(--bg-surface) 92%, transparent) !important; }
+html.theme-light .metric-card:hover { box-shadow: var(--shadow-sm) !important; }
+html.theme-light .el-select .el-select__wrapper {
+  background: var(--bg-surface) !important;
+  box-shadow: 0 0 0 1px var(--border-subtle) inset !important;
+  color: var(--text-primary) !important;
+}
+html.theme-light .el-input__wrapper {
+  background: var(--bg-surface) !important;
+  box-shadow: 0 0 0 1px var(--border-subtle) inset !important;
+}
+html.theme-light .el-input__inner { color: var(--text-primary) !important; background: transparent !important; }
+html.theme-light .el-table { background: var(--bg-surface) !important; color: var(--text-primary) !important; }
+html.theme-light .el-select-dropdown,
+html.theme-light .el-select__popper,
+html.theme-light .el-popper.is-pure { background: var(--bg-surface) !important; border-color: var(--border-subtle) !important; color: var(--text-primary) !important; }
+html.theme-light .el-dropdown-menu { background: var(--bg-surface) !important; border-color: var(--border-subtle) !important; }
+html.theme-light .el-dropdown-menu__item { color: var(--text-primary) !important; }
+html.theme-light select { background: var(--bg-surface); color: var(--text-primary); border-color: var(--border-subtle); }
+html.theme-light select option { background: var(--bg-surface); color: var(--text-primary); }

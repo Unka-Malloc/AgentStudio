@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import {
   CONTEXT_COMPACTION_PROTOCOL_VERSION,
@@ -13,7 +15,7 @@ import {
 
 export const CONTEXT_RUNTIME_PROTOCOL_VERSION = "pact.context.v1";
 
-const DEFAULT_PROFILES = [
+const FALLBACK_CONTEXT_PROFILES = [
   {
     profileId: "context-32k",
     label: "32K Context",
@@ -136,6 +138,54 @@ const DEFAULT_PROFILES = [
   }
 ];
 
+class ContextProfileManager {
+  constructor() {
+    this.profiles = [];
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    this.profilesDir = path.resolve(__dirname, "../../../../../config/context-profiles");
+  }
+
+  loadProfilesSync() {
+    let loaded = [];
+    if (!fsSync.existsSync(this.profilesDir)) {
+      loaded = [];
+    } else {
+      const files = fsSync.readdirSync(this.profilesDir).sort();
+      for (const file of files) {
+        if (file.endsWith(".json")) {
+          try {
+            const content = fsSync.readFileSync(path.join(this.profilesDir, file), "utf8");
+            loaded.push(JSON.parse(content));
+          } catch (error) {
+            console.error(`Failed to load context profile from ${file}:`, error);
+          }
+        }
+      }
+    }
+    const byId = new Map();
+    for (const profile of loaded.filter(Boolean)) {
+      if (profile && typeof profile === "object" && profile.profileId) {
+        byId.set(String(profile.profileId), profile);
+      }
+    }
+    for (const profile of FALLBACK_CONTEXT_PROFILES) {
+      const profileId = String(profile.profileId);
+      if (!byId.has(profileId)) {
+        byId.set(profileId, profile);
+      }
+    }
+    this.profiles = [...byId.values()];
+  }
+
+  getProfiles() {
+    this.loadProfilesSync();
+    return this.profiles;
+  }
+}
+
+const contextProfileManager = new ContextProfileManager();
+
 const DEFAULT_BUDGET_POLICY = {
   mode: "auto",
   fixedMemoryRatio: 0.06,
@@ -238,7 +288,7 @@ export function estimateTokens(value) {
 }
 
 function normalizeProfile(profile = {}) {
-  const fallback = DEFAULT_PROFILES[0];
+  const fallback = contextProfileManager.getProfiles()[0];
   const compression = {
     ...fallback.compression,
     ...asObject(profile.compression)
@@ -340,7 +390,7 @@ function normalizeProfile(profile = {}) {
 
 function normalizeProfiles(profiles) {
   const incoming = asArray(profiles).map(normalizeProfile);
-  const byId = new Map(DEFAULT_PROFILES.map((profile) => [profile.profileId, normalizeProfile(profile)]));
+  const byId = new Map(contextProfileManager.getProfiles().map((profile) => [profile.profileId, normalizeProfile(profile)]));
   for (const profile of incoming) {
     byId.set(profile.profileId, profile);
   }
@@ -845,7 +895,7 @@ export function createContextRuntime({
     return {
       protocolVersion: CONTEXT_RUNTIME_PROTOCOL_VERSION,
       profiles,
-      defaults: DEFAULT_PROFILES,
+      defaults: contextProfileManager.getProfiles(),
       path: profilesPath
     };
   }
@@ -875,7 +925,7 @@ export function createContextRuntime({
       profiles.find((profile) => profile.profileId === target) ||
       profiles.find((profile) => profile.modelAlias === target) ||
       profiles.find((profile) => profile.profileId === "balanced") ||
-      normalizeProfile(DEFAULT_PROFILES[0])
+      normalizeProfile(contextProfileManager.getProfiles()[0])
     );
   }
 

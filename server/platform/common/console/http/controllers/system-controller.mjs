@@ -1,11 +1,12 @@
 import {
-  contentDispositionFileName,
+  contentDispositionHeader,
   sendJson
 } from "../http-utils.mjs";
 import { createSystemControllerAgentSettingsHandlers } from "./system-controller-agent-settings-handlers.mjs";
 import { createSystemControllerAuthHandlers } from "./system-controller-auth-handlers.mjs";
 import { createSystemControllerCapabilityEcosystemHandlers } from "./system-controller-capability-ecosystem-handlers.mjs";
 import { createSystemControllerContexts } from "./system-controller-contexts.mjs";
+import { createSystemControllerExternalServiceHandlers } from "./system-controller-external-service-handlers.mjs";
 import { createSystemControllerFoundationHandlers } from "./system-controller-foundation-handlers.mjs";
 import { createSystemControllerKnowledgeOperationsHandlers } from "./system-controller-knowledge-operations-handlers.mjs";
 import { createSystemControllerKnowledgeRuntimeHandlers } from "./system-controller-knowledge-runtime-handlers.mjs";
@@ -55,7 +56,6 @@ export function createSystemController({
   goldenRuleRuntime = null,
   knowledgeRuleAuthoringRuntime = null,
   knowledgeSkillRuntime = null,
-  knowledgeDistillationRuntime = null,
   agentEvaluationRuntime = null,
   modelDecisionRuntime = null,
   strategyManagementProvider = null,
@@ -69,6 +69,7 @@ export function createSystemController({
   devopsProvider = null,
   getFeatureEntries = () => null,
   getToolSkillManagementProvider = () => null,
+  getToolManagementPlatform = () => null,
   consoleDomainServices = null
 }) {
   const effectiveSecurityPermissions =
@@ -101,7 +102,6 @@ export function createSystemController({
     goldenRuleRuntime,
     knowledgeRuleAuthoringRuntime,
     knowledgeSkillRuntime,
-    knowledgeDistillationRuntime,
     agentEvaluationRuntime,
     modelDecisionRuntime,
     strategyManagementProvider,
@@ -154,13 +154,17 @@ export function createSystemController({
       }
       if (operationResult.payload?.__binaryResponse) {
         const disposition = operationResult.payload.disposition || "inline";
+        const buffer = Buffer.isBuffer(operationResult.payload.buffer)
+          ? operationResult.payload.buffer
+          : Buffer.alloc(0);
         response.writeHead(operationResult.status || 200, {
           "Content-Type": operationResult.payload.contentType || "application/octet-stream",
-          "Content-Disposition": `${disposition}; filename="${contentDispositionFileName(operationResult.payload.fileName || "asset.bin")}"`,
+          "Content-Disposition": contentDispositionHeader(disposition, operationResult.payload.fileName || "asset.bin"),
+          "Content-Length": String(buffer.length),
           "Cache-Control": "no-store",
           ...(operationResult.payload.headers || {})
         });
-        response.end(operationResult.payload.buffer || Buffer.alloc(0));
+        response.end(buffer);
         return;
       }
       if (operationResult.payload?.__htmlResponse) {
@@ -262,6 +266,11 @@ export function createSystemController({
       moduleManagement,
       getToolSkillManagementProvider,
       getStrategyManagementProvider: () => strategyManagementProvider
+    }),
+    ...createSystemControllerExternalServiceHandlers({
+      parseJsonBody,
+      userDataPath,
+      getToolManagementPlatform
     }),
     ...createSystemControllerKnowledgeOperationsHandlers({
       sendConsoleDomainOperation,

@@ -4,7 +4,8 @@ import http from "node:http";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { createBatchDeletionCoordinator } from "../client/work-queue-core/batch-deletion-coordinator.mjs";
 import { resolveArchiveBatchIdentity } from "../client/work-queue-core/archive-batch-id.mjs";
 import { createClientRuntimeAllocator } from "../client/client-runtime-core/client-runtime-allocator.mjs";
@@ -48,8 +49,10 @@ import {
 } from "../../platform/common/observability/trace-context.mjs";
 import { handlePactMcpHttpRequest } from "../../platform/common/mcp/http-mcp-adapter.mjs";
 import { loadOrCreateMcpIdentity } from "../../platform/common/mcp/identity.mjs";
+import { ServerConfig } from "../../platform/common/config/ServerConfig.mjs";
 import { createJobsController } from "../../platform/common/console/http/controllers/jobs-controller.mjs";
 import { createSystemController } from "../../platform/common/console/http/controllers/system-controller.mjs";
+import { getAcpAgentRelayRuntime } from "../../platform/specialized/console/console-domain-operation-executor.mjs";
 import {
   defaultAdvertisedHost,
   formatUrlHost,
@@ -57,6 +60,24 @@ import {
   sendJson,
   serveStaticFile
 } from "../../platform/common/console/http/http-utils.mjs";
+
+const sourceCheckoutRoot = path.resolve(fileURLToPath(new URL("../../..", import.meta.url)));
+
+function isPathInside(parentPath, candidatePath) {
+  const relative = path.relative(path.resolve(parentPath), path.resolve(candidatePath));
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function resolveServerUserDataPath(inputUserDataPath) {
+  const resolved = path.resolve(String(inputUserDataPath || ServerConfig.getDataDir()));
+  const runningFromSourceCheckout = fsSync.existsSync(path.join(sourceCheckoutRoot, ".git"));
+  if (runningFromSourceCheckout && isPathInside(sourceCheckoutRoot, resolved)) {
+    throw new Error(
+      `Refusing project-local Pact server data dir: ${resolved}. Use ServerConfig.getDataDir() or an external PACT_SERVER_DATA_DIR.`
+    );
+  }
+  return resolved;
+}
 
 async function proxyApiRequest({
   request,
@@ -201,7 +222,30 @@ async function proxyApiRequest({
   });
 }
 
-async function handleStaticFallback({ url, response, distPath, discoveryState }) {
+function shouldRenderConsoleIndexFallback(pathname) {
+  return pathname === "/" || pathname === "/console" || pathname === "/index.html";
+}
+
+async function serveConsoleIndexFallback(response, distPath, scriptNonce = "") {
+  if (!distPath) {
+    return false;
+  }
+  const fallback = await fs.readFile(path.join(distPath, "index.html"));
+  response.writeHead(200, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store"
+  });
+  response.end(injectCspNonceIntoInlineScripts(fallback, scriptNonce));
+  return true;
+}
+
+async function handleStaticFallback({
+  url,
+  response,
+  distPath,
+  discoveryState,
+  scriptNonce = ""
+}) {
   if (url.pathname === "/" && !distPath) {
     sendJson(response, 200, {
       ok: true,
@@ -209,6 +253,10 @@ async function handleStaticFallback({ url, response, distPath, discoveryState })
       serverId: discoveryState.serverId,
       activeServiceUrl: discoveryState.activeServiceUrl
     });
+    return;
+  }
+
+  if (shouldRenderConsoleIndexFallback(url.pathname) && await serveConsoleIndexFallback(response, distPath, scriptNonce)) {
     return;
   }
 
@@ -231,15 +279,10 @@ async function handleStaticFallback({ url, response, distPath, discoveryState })
     return;
   }
 
-  const fallback = await fs.readFile(path.join(distPath, "index.html"));
-  response.writeHead(200, {
-    "Content-Type": "text/html; charset=utf-8",
-    "Cache-Control": "no-store"
-  });
-  response.end(fallback);
+  await serveConsoleIndexFallback(response, distPath, scriptNonce);
 }
 
-function applySecurityHeaders(response, { isHttps = false } = {}) {
+function applySecurityHeaders(response, { isHttps = false, scriptNonce = "" } = {}) {
   if (response.headersSent) {
     return;
   }
@@ -252,7 +295,7 @@ function applySecurityHeaders(response, { isHttps = false } = {}) {
     "Content-Security-Policy",
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'", // Vue runtime needs inline scripts
+      `script-src 'self' 'nonce-${scriptNonce}'`,
       "style-src 'self' 'unsafe-inline'",  // Element Plus uses inline styles
       "img-src 'self' data: blob:",
       "font-src 'self' data:",
@@ -265,6 +308,23 @@ function applySecurityHeaders(response, { isHttps = false } = {}) {
   if (isHttps) {
     response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }
+}
+
+function injectCspNonceIntoInlineScripts(html, scriptNonce) {
+  if (!scriptNonce) {
+    return String(html || "");
+  }
+  const safeNonce = String(scriptNonce).replace(/["']/g, "");
+  return String(html || "").replace(
+    /<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/g,
+    (_match, attributes, body) => {
+      if (/\bnonce\s*=\s*(["']).*?\1/i.test(attributes)) {
+        return `<script${attributes}>${body}</script>`;
+      }
+      const hasAttributes = String(attributes || "").trim();
+      return `<script${hasAttributes ? `${hasAttributes} ` : " "}nonce="${safeNonce}">${body}</script>`;
+    }
+  );
 }
 
 function resolveConsoleAuthEnabled({ runtimeOptions = {} }) {
@@ -309,6 +369,241 @@ function assertSafeListenHost(host, runtimeOptions = {}) {
   );
 }
 
+function responseChunkBytes(chunk, encoding) {
+  if (chunk === undefined || chunk === null || typeof chunk === "function") {
+    return 0;
+  }
+  if (Buffer.isBuffer(chunk)) {
+    return chunk.length;
+  }
+  if (chunk instanceof Uint8Array) {
+    return chunk.byteLength;
+  }
+  return Buffer.byteLength(String(chunk), typeof encoding === "string" ? encoding : "utf8");
+}
+
+function trackResponseBodyBytes(response) {
+  let responseBytes = 0;
+  const originalWrite = response.write.bind(response);
+  const originalEnd = response.end.bind(response);
+  response.write = function writeWithMetrics(chunk, encoding, callback) {
+    responseBytes += responseChunkBytes(chunk, encoding);
+    return originalWrite(chunk, encoding, callback);
+  };
+  response.end = function endWithMetrics(chunk, encoding, callback) {
+    if (typeof chunk === "function") {
+      return originalEnd(chunk);
+    }
+    responseBytes += responseChunkBytes(chunk, encoding);
+    if (typeof encoding === "function") {
+      return originalEnd(chunk, encoding);
+    }
+    return originalEnd(chunk, encoding, callback);
+  };
+  return () => responseBytes;
+}
+
+function parsePositiveInt(value, fallback) {
+  const valueText = String(value || "").trim();
+  const parsed = Number(valueText);
+  if (!Number.isInteger(parsed) || !Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function createFixedWindowRateLimiter({
+  limit,
+  windowMs,
+  label
+}) {
+  const max = Math.max(1, Math.floor(Number(limit) || 0));
+  const windowMsValue = Math.max(1_000, Math.floor(Number(windowMs) || 60_000));
+  const buckets = new Map();
+
+  function shouldAllow(identifier) {
+    const key = String(identifier || "").trim() || "default";
+    const now = Date.now();
+    if (Math.random() < 0.02) {
+      for (const [existingKey, record] of buckets.entries()) {
+        if (record.expiresAt <= now) {
+          buckets.delete(existingKey);
+        }
+      }
+    }
+    const record = buckets.get(key);
+    if (!record || record.expiresAt <= now) {
+      const next = {
+        count: 1,
+        windowStart: now,
+        expiresAt: now + windowMsValue,
+        key
+      };
+      buckets.set(key, next);
+      return {
+        allowed: true,
+        allowedAt: 1,
+        key,
+        limit: max,
+        remaining: max - 1,
+        resetAt: next.expiresAt
+      };
+    }
+
+    record.count += 1;
+    if (record.count <= max) {
+      return {
+        allowed: true,
+        allowedAt: record.count,
+        key,
+        limit: max,
+        remaining: max - record.count,
+        resetAt: record.expiresAt
+      };
+    }
+
+    return {
+      allowed: false,
+      key,
+      limit: max,
+      remaining: 0,
+      resetAt: record.expiresAt,
+      retryAfterSec: Math.max(1, Math.ceil((record.expiresAt - now) / 1000))
+    };
+  }
+
+  return {
+    shouldAllow,
+    windowMs: windowMsValue,
+    label
+  };
+}
+
+function isTrustedProxy(request) {
+  const remoteAddr = String(request?.socket?.remoteAddress || "").replace(/^::ffff:/, "");
+  if (remoteAddr === "127.0.0.1" || remoteAddr === "::1" || remoteAddr === "localhost") {
+    return true;
+  }
+  const trusted = (process.env.PACT_TRUSTED_PROXIES || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return trusted.includes(remoteAddr);
+}
+
+function normalizeClientIp(request) {
+  const remoteAddress = String(request?.socket?.remoteAddress || "").replace(/^\[|\]$/g, "");
+  if (isTrustedProxy(request)) {
+    const forwarded = String(request.headers?.["x-forwarded-for"] || "").split(",")[0].trim();
+    if (forwarded) {
+      return forwarded;
+    }
+  }
+
+  if (!remoteAddress) {
+    return "unknown";
+  }
+
+  if (remoteAddress === "::1" || remoteAddress === "127.0.0.1") {
+    return remoteAddress;
+  }
+
+  if (remoteAddress.startsWith("::ffff:")) {
+    return remoteAddress.slice("::ffff:".length);
+  }
+
+  return remoteAddress;
+}
+
+function resolveRequestSubjectKey(request, consoleAuth = null) {
+  const url = (() => {
+    try {
+      return new URL(request.url || "/", "http://127.0.0.1").pathname;
+    } catch {
+      return "/";
+    }
+  })();
+
+  if (consoleAuth && typeof consoleAuth.getSessionFromRequest === "function") {
+    const session = consoleAuth.getSessionFromRequest(request);
+    if (session?.user?.username) {
+      return `subject:${session.user.username}`;
+    }
+  }
+
+  return "subject:anonymous";
+}
+
+function sendRateLimitResponse(response, details = {}) {
+  const {
+    reason = "请求过于频繁",
+    windowMs = 60_000,
+    limit = 0,
+    resetAt = Date.now() + windowMs,
+    retryAfterSec = Math.max(1, Math.ceil(windowMs / 1000))
+  } = details;
+  response.setHeader("Retry-After", String(retryAfterSec));
+  response.setHeader("X-RateLimit-Limit", String(limit));
+  response.setHeader("X-RateLimit-Remaining", "0");
+  response.setHeader("X-RateLimit-Reset", String(Math.floor(resetAt / 1000)));
+  sendJson(response, 429, {
+    error: reason,
+    policy: "rate-limited"
+  });
+}
+
+function routeFromRequestUrl(value = "") {
+  try {
+    return new URL(value || "/", "http://127.0.0.1").pathname;
+  } catch {
+    return value || "/";
+  }
+}
+
+function metricTransportForRoute(route = "") {
+  if (route === "/mcp" || route.startsWith("/api/mcp") || route === "/.well-known/pact/mcp.json") {
+    return "mcp";
+  }
+  if (route.startsWith("/api/tool-management/v1")) {
+    return "tool-management";
+  }
+  return "http";
+}
+
+function numericHeader(value) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = Number(raw || 0);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function resolveHttpRateLimits(runtimeOptions = {}) {
+  const httpRateLimitWindowMs = parsePositiveInt(
+    runtimeOptions.httpRateLimitWindowMs,
+    parsePositiveInt(process.env.PACT_HTTP_RATE_LIMIT_WINDOW_MS, 60_000)
+  );
+  return {
+    ip: {
+      limit: parsePositiveInt(
+        runtimeOptions.httpRateLimitPerIpPerMinute,
+        parsePositiveInt(process.env.PACT_HTTP_RATE_LIMIT_IP_PER_MINUTE, 1_200)
+      )
+    },
+    subject: {
+      limit: parsePositiveInt(
+        runtimeOptions.httpRateLimitPerSubjectPerMinute,
+        parsePositiveInt(process.env.PACT_HTTP_RATE_LIMIT_SUBJECT_PER_MINUTE, 1_000)
+      )
+    },
+    login: {
+      limit: parsePositiveInt(
+        runtimeOptions.httpRateLimitLoginPerIpPerMinute,
+        parsePositiveInt(process.env.PACT_HTTP_RATE_LIMIT_LOGIN_PER_MINUTE, 40)
+      )
+    },
+    windowMs: Math.max(1_000, httpRateLimitWindowMs)
+  };
+}
+
 export async function startHttpServer({
   userDataPath,
   distPath,
@@ -320,8 +615,9 @@ export async function startHttpServer({
   advertisedHost = ""
 }) {
   assertSafeListenHost(host, runtimeOptions);
+  const resolvedUserDataPath = resolveServerUserDataPath(userDataPath);
   const runtimeLogger = createRuntimeLogger({
-    userDataPath,
+    userDataPath: resolvedUserDataPath,
     runtimeOptions,
     component: "server"
   });
@@ -331,17 +627,17 @@ export async function startHttpServer({
     port,
     advertisedHost,
     distPath,
-    userDataPath,
+    userDataPath: resolvedUserDataPath,
     profile: runtimeOptions?.profile || "",
     logDir: runtimeLogger.logDir,
     retentionDays: runtimeLogger.retentionDays
   });
   const compositionRoot = await createServerCompositionRoot({
-    userDataPath,
+    userDataPath: resolvedUserDataPath,
     runtimeOptions,
     runtimeLogger
   });
-  const mcpIdentity = await loadOrCreateMcpIdentity(userDataPath);
+  const mcpIdentity = await loadOrCreateMcpIdentity(resolvedUserDataPath);
   const {
     featureRuntime,
     allApiOperationCount,
@@ -381,8 +677,9 @@ export async function startHttpServer({
   if (initialOwner.created) {
     // H-1: write credentials to a file with mode 0600 instead of printing them to stdout
     // (stdout is captured by all process supervisors / log aggregators)
-    const credsPath = path.join(userDataPath, "auth", "initial-credentials.txt");
+    const credsPath = path.join(resolvedUserDataPath, "auth", "initial-credentials.txt");
     initialCredentialsPath = credsPath;
+    fsSync.mkdirSync(path.dirname(credsPath), { recursive: true, mode: 0o700 });
     const credsContent = [
       "Pact Console Initial Credentials",
       "=====================================",
@@ -396,15 +693,16 @@ export async function startHttpServer({
       `Generated : ${new Date().toISOString()}`,
     ].join("\n");
     fsSync.writeFileSync(credsPath, credsContent, { mode: 0o600 });
-    console.log(`Console initial owner username: ${initialOwner.username}`);
-    console.log(`Console initial owner credentials written to: ${credsPath}`);
-    console.log("File will be deleted automatically after the first successful login.");
-    console.log("Change/reset it with: npm run server:auth -- set-password --username owner --generate-password");
+    runtimeLogger.warn("server.initialOwner.credentials_file", {
+      credentialsPath: credsPath,
+      message: "Initial owner credentials have been written to a secured file."
+    });
+    console.log("初始 owner 已创建，请参考日志中的初始化文件路径与重置命令。此信息不再输出到标准输出。");
   }
   const jobManager =
     incomingJobManager ||
     createJobManager({
-      userDataPath,
+      userDataPath: resolvedUserDataPath,
       runtimeOptions: runtime.runtimeOptions,
       getRuntimeOptions: () => runtime.runtimeOptions,
       protocolEventBus,
@@ -416,27 +714,27 @@ export async function startHttpServer({
   const registeredStorageProvider = requirePlatformInterface(platformRegistry, "storage.provider").value || storageProvider;
   const registeredDevopsProvider = requirePlatformInterface(platformRegistry, "devops.provider").value || devopsProvider;
   const deletionCoordinator = createBatchDeletionCoordinator({
-    userDataPath,
+    userDataPath: resolvedUserDataPath,
     jobManager,
     metadataStore: registeredMetadataStore,
     runtime
   });
   const jobWorkflowProvider = createJobWorkflowProvider({ jobManager });
   const queueMonitorAdapter = {
-    registerStarted: (input) => registerQueueStarted(userDataPath, input),
-    registerHeartbeat: (input) => registerQueueHeartbeat(userDataPath, input),
-    registerClosed: (input) => registerQueueClosed(userDataPath, input),
-    inspect: (input) => inspectQueueMonitor({ userDataPath, ...input }),
-    acknowledge: (alertId) => acknowledgeQueueMonitorAlert(userDataPath, alertId)
+    registerStarted: (input) => registerQueueStarted(resolvedUserDataPath, input),
+    registerHeartbeat: (input) => registerQueueHeartbeat(resolvedUserDataPath, input),
+    registerClosed: (input) => registerQueueClosed(resolvedUserDataPath, input),
+    inspect: (input) => inspectQueueMonitor({ userDataPath: resolvedUserDataPath, ...input }),
+    acknowledge: (alertId) => acknowledgeQueueMonitorAlert(resolvedUserDataPath, alertId)
   };
-  const clientRuntimeAllocator = createClientRuntimeAllocator({ userDataPath });
-  let discoveryState = await loadDiscoveryConfig(userDataPath);
+  const clientRuntimeAllocator = createClientRuntimeAllocator({ userDataPath: resolvedUserDataPath });
+  let discoveryState = await loadDiscoveryConfig(resolvedUserDataPath);
   let listenUrl = "";
   let controllersRef = null;
   let toolManagementPlatformRef = null;
   let toolSkillManagementProviderRef = null;
   const runtimeProviders = await createServerRuntimeProviders({
-    userDataPath,
+    userDataPath: resolvedUserDataPath,
     runtime,
     jobManager,
     metadataStore,
@@ -469,7 +767,6 @@ export async function startHttpServer({
     knowledgeRuleAuthoringRuntime,
     knowledgeSkillRuntime,
     agentEvaluationRuntime,
-    knowledgeDistillationRuntime,
     knowledgeEvolutionRuntime,
     summarizationRuntime,
     agentExplorationRuntime
@@ -478,7 +775,7 @@ export async function startHttpServer({
   const exposedKnowledgeSourceService = knowledgeSourceService;
 
   const jobsController = createJobsController({
-    userDataPath,
+    userDataPath: resolvedUserDataPath,
     jobWorkflowProvider,
     storageProvider: registeredStorageProvider,
     deletionCoordinator,
@@ -490,7 +787,7 @@ export async function startHttpServer({
     resolveArchiveBatchIdentity
   });
   const systemController = createSystemController({
-    userDataPath,
+    userDataPath: resolvedUserDataPath,
     distPath,
     runtime,
     moduleManagement,
@@ -519,7 +816,6 @@ export async function startHttpServer({
     goldenRuleRuntime,
     knowledgeRuleAuthoringRuntime,
     knowledgeSkillRuntime,
-    knowledgeDistillationRuntime,
     agentEvaluationRuntime,
     modelDecisionRuntime,
     strategyManagementProvider,
@@ -534,6 +830,7 @@ export async function startHttpServer({
     queueMonitor: queueMonitorAdapter,
     checkpointTreeApi: dataStructures.checkpointTree,
     devopsProvider: registeredDevopsProvider,
+    getToolManagementPlatform: () => toolManagementPlatformRef,
     getToolSkillManagementProvider: () => toolSkillManagementProviderRef,
     consoleDomainServices
   });
@@ -543,7 +840,7 @@ export async function startHttpServer({
   };
   controllersRef = controllers;
   const toolManagementPlatform = createServerToolManagementPlatform({
-    userDataPath,
+    userDataPath: resolvedUserDataPath,
     operations: activeApiOperations,
     featureRuntime: publicFeatures(),
     controllers,
@@ -556,12 +853,51 @@ export async function startHttpServer({
     logger: runtimeLogger
   });
   toolManagementPlatformRef = toolManagementPlatform;
+  toolManagementPlatform.registerChangeHandler?.(async (event = {}) => {
+    const reasonCode = String(event.reasonCode || event.type || "");
+    if (![
+      "grant_updated",
+      "grant_deleted",
+      "grant_revoked",
+      "grant_token_rotated"
+    ].includes(reasonCode) || !event.grantId) {
+      return {
+        ok: true,
+        ignored: true,
+        reasonCode: "acp_relay_change_not_relevant"
+      };
+    }
+    const acpRuntime = await getAcpAgentRelayRuntime({
+      userDataPath: resolvedUserDataPath,
+      workspaceRoot: process.cwd(),
+      protocolEventBus
+    });
+    return acpRuntime.handleToolManagementChange?.(event);
+  });
   const toolSkillManagementProvider = createServerToolSkillManagementProvider({
     toolManagementPlatform,
+    userDataPath: resolvedUserDataPath,
     securityPermissions,
     logger: runtimeLogger
   });
   toolSkillManagementProviderRef = toolSkillManagementProvider;
+
+  const rateLimits = resolveHttpRateLimits(runtimeOptions);
+  const ipRateLimiter = createFixedWindowRateLimiter({
+    limit: rateLimits.ip.limit,
+    windowMs: rateLimits.windowMs,
+    label: "ip"
+  });
+  const subjectRateLimiter = createFixedWindowRateLimiter({
+    limit: rateLimits.subject.limit,
+    windowMs: rateLimits.windowMs,
+    label: "subject"
+  });
+  const loginRateLimiter = createFixedWindowRateLimiter({
+    limit: rateLimits.login.limit,
+    windowMs: rateLimits.windowMs,
+    label: "login"
+  });
 
   // ── H-4: in-flight request tracker for graceful drain ───────────────────
   let inFlightCount = 0;
@@ -586,6 +922,8 @@ export async function startHttpServer({
   const server = http.createServer(async (request, response) => {
     const requestId = randomUUID();
     const startedAt = Date.now();
+    const getResponseBytes = trackResponseBodyBytes(response);
+    let requestBodyBytes = numericHeader(request.headers["content-length"]);
 
     const traceContext = createTraceContext({
       requestId,
@@ -596,23 +934,50 @@ export async function startHttpServer({
     response.setHeader("X-Pact-Trace-Id", traceContext.traceId);
     request.__pactRequestId = requestId;
     let finished = false;
+    let requestMetricRecorded = false;
+    const recordRequestMetric = (completionStatus = "completed") => {
+      if (requestMetricRecorded) {
+        return;
+      }
+      requestMetricRecorded = true;
+      try {
+        const route = routeFromRequestUrl(request.url || "/");
+        toolManagementPlatformRef?.store?.appendHttpRequestMetric?.({
+          traceId: traceContext.traceId,
+          requestId,
+          transport: metricTransportForRoute(route),
+          method: request.method || "GET",
+          route,
+          statusCode: response.statusCode || 0,
+          completionStatus,
+          requestBytes: requestBodyBytes,
+          responseBytes: getResponseBytes(),
+          durationMs: Date.now() - startedAt,
+          userAgent: request.headers["user-agent"] || ""
+        });
+      } catch (error) {
+        runtimeLogger.warn("http.request_metric.failed", {
+          traceId: traceContext.traceId,
+          requestId,
+          error: summarizeError(error)
+        });
+      }
+    };
     response.once("finish", () => {
       finished = true;
+      const responseBytes = getResponseBytes();
       runtimeLogger.info("http.request.completed", {
         traceId: traceContext.traceId,
         requestId,
         method: request.method || "GET",
-        route: (() => {
-          try {
-            return new URL(request.url || "/", "http://127.0.0.1").pathname;
-          } catch {
-            return request.url || "/";
-          }
-        })(),
+        route: routeFromRequestUrl(request.url || "/"),
         statusCode: response.statusCode,
+        requestBytes: requestBodyBytes,
+        responseBytes,
         contentLength: response.getHeader("content-length") || "",
         durationMs: Date.now() - startedAt
       });
+      recordRequestMetric("completed");
     });
     response.once("close", () => {
       if (finished) {
@@ -622,16 +987,13 @@ export async function startHttpServer({
         traceId: traceContext.traceId,
         requestId,
         method: request.method || "GET",
-        route: (() => {
-          try {
-            return new URL(request.url || "/", "http://127.0.0.1").pathname;
-          } catch {
-            return request.url || "/";
-          }
-        })(),
+        route: routeFromRequestUrl(request.url || "/"),
         statusCode: response.statusCode,
+        requestBytes: requestBodyBytes,
+        responseBytes: getResponseBytes(),
         durationMs: Date.now() - startedAt
       });
+      recordRequestMetric("closed");
     });
     // H-4: track in-flight to enable graceful drain before DB close
     incrementInflight();
@@ -639,9 +1001,11 @@ export async function startHttpServer({
     await runWithTraceContext(traceContext, async () => {
     try {
       const isHttps = Boolean(request.socket?.encrypted);
-      applySecurityHeaders(response, { isHttps });
+      const scriptNonce = randomBytes(16).toString("base64");
+      applySecurityHeaders(response, { isHttps, scriptNonce });
       const method = request.method || "GET";
       const url = new URL(request.url || "/", "http://127.0.0.1");
+      const isLoginRequest = method === "POST" && url.pathname === "/api/auth/login";
       runtimeLogger.info("http.request.started", {
         traceId: traceContext.traceId,
         requestId,
@@ -655,6 +1019,72 @@ export async function startHttpServer({
       });
       const requestBody =
         method === "GET" || method === "HEAD" ? Buffer.alloc(0) : await readRequestBody(request);
+      requestBodyBytes = requestBody.length;
+
+      const clientIp = normalizeClientIp(request);
+      const ipRateLimit = ipRateLimiter.shouldAllow(`ip:${clientIp}`);
+      if (!ipRateLimit.allowed) {
+        runtimeLogger.warn("http.request.rate_limited", {
+          reason: "ip",
+          requestId,
+          actor: "anonymous",
+          subjectKey: `ip:${clientIp}`,
+          route: url.pathname,
+          limit: ipRateLimit.limit,
+          retryAfterSec: ipRateLimit.retryAfterSec
+        });
+        sendRateLimitResponse(response, {
+          reason: "访问频率过高（IP 限流）。",
+          limit: ipRateLimit.limit,
+          resetAt: ipRateLimit.resetAt,
+          retryAfterSec: ipRateLimit.retryAfterSec,
+          windowMs: rateLimits.windowMs
+        });
+        return;
+      }
+
+      let subjectKey = "subject:anonymous";
+      if (isLoginRequest) {
+        const loginRateLimit = loginRateLimiter.shouldAllow(`login-ip:${clientIp}`);
+        if (!loginRateLimit.allowed) {
+          runtimeLogger.warn("http.request.rate_limited", {
+            reason: "login",
+            requestId,
+            route: url.pathname,
+            limit: loginRateLimit.limit,
+            retryAfterSec: loginRateLimit.retryAfterSec
+          });
+          sendRateLimitResponse(response, {
+            reason: "登录尝试过于频繁（登录限流）。",
+            limit: loginRateLimit.limit,
+            resetAt: loginRateLimit.resetAt,
+            retryAfterSec: loginRateLimit.retryAfterSec,
+            windowMs: rateLimits.windowMs
+          });
+          return;
+        }
+      }
+
+      subjectKey = resolveRequestSubjectKey(request, consoleAuth);
+      const subjectRateLimit = subjectRateLimiter.shouldAllow(subjectKey);
+      if (!subjectRateLimit.allowed) {
+        runtimeLogger.warn("http.request.rate_limited", {
+          reason: "subject",
+          requestId,
+          subjectKey,
+          route: url.pathname,
+          limit: subjectRateLimit.limit,
+          retryAfterSec: subjectRateLimit.retryAfterSec
+        });
+        sendRateLimitResponse(response, {
+          reason: "访问频率过高（主体限流）。",
+          limit: subjectRateLimit.limit,
+          resetAt: subjectRateLimit.resetAt,
+          retryAfterSec: subjectRateLimit.retryAfterSec,
+          windowMs: rateLimits.windowMs
+        });
+        return;
+      }
 
       if (
         await handlePactMcpHttpRequest({
@@ -730,7 +1160,8 @@ export async function startHttpServer({
         url,
         response,
         distPath,
-        discoveryState
+        discoveryState,
+        scriptNonce
       });
     } catch (error) {
       const statusCode = typeof error?.statusCode === "number" ? error.statusCode : 500;
@@ -801,7 +1232,7 @@ export async function startHttpServer({
   const listenHost = typeof address.address === "string" ? address.address : host;
   const resolvedAdvertisedHost = advertisedHost || defaultAdvertisedHost(host);
   listenUrl = `http://${formatUrlHost(resolvedAdvertisedHost)}:${address.port}`;
-  discoveryState = await resolveDiscoveryState(userDataPath, {
+  discoveryState = await resolveDiscoveryState(resolvedUserDataPath, {
     listenUrl,
     serverLabel,
     overrides: discoveryOptions
@@ -810,7 +1241,7 @@ export async function startHttpServer({
     ...discoveryState,
     mcpIdentity
   };
-  await saveDiscoveryConfig(userDataPath, discoveryState, {
+  await saveDiscoveryConfig(resolvedUserDataPath, discoveryState, {
     listenUrl,
     serverLabel
   });

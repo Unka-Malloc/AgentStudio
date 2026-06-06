@@ -79,10 +79,14 @@ export const FEATURE_MANIFEST = Object.freeze({
         "pdf-processor",
         "analysis-runtime",
         "knowledge-core",
+        "external-knowledge-distillation",
         "knowledge-distillation",
         "agent-gateway",
         "agent-management",
         "agent-exploration",
+        "code-repository-operations",
+        "codespace-management",
+        "gerrit-service",
         "macos-mail"
       ])
     }),
@@ -101,12 +105,16 @@ export const FEATURE_MANIFEST = Object.freeze({
         "multimodal-parser",
         "analysis-runtime",
         "knowledge-core",
+        "external-knowledge-distillation",
         "knowledge-distillation",
         "knowledge-evolution",
         "knowledge-outline-reasoning",
         "agent-gateway",
         "agent-management",
         "agent-exploration",
+        "code-repository-operations",
+        "codespace-management",
+        "gerrit-service",
         "maintenance-agent-runbooks",
         "data-connectors",
         "gmail",
@@ -150,7 +158,7 @@ export const FEATURE_MANIFEST = Object.freeze({
         ]
       },
       web: {
-        navItems: ["dashboard", "admin.storage", "admin.clients", "drawer.discovery", "drawer.users", "drawer.modules"],
+        navItems: ["dashboard", "approval", "admin.storage", "admin.clients", "drawer.discovery", "drawer.users", "drawer.modules"],
         panels: ["ConsoleShell", "StoragePanel", "ClientPanel", "SettingsDrawer", "ModulesDrawer"]
       },
       package: {
@@ -245,6 +253,13 @@ export const FEATURE_MANIFEST = Object.freeze({
       group: "devops",
       required: true,
       defaultEnabled: true,
+      server: {
+        webPanels: ["logs", "production-health"]
+      },
+      web: {
+        navItems: ["admin.logs", "admin.productionHealth"],
+        panels: ["LogPanel", "ProductionHealthPanel"]
+      },
       package: {
         includePaths: ["server/platform/common/devops"],
         excludePaths: []
@@ -263,7 +278,7 @@ export const FEATURE_MANIFEST = Object.freeze({
         webPanels: ["tool-management-core"]
       },
       web: {
-        navItems: ["admin.tools", "admin.agentPermissions"],
+        navItems: ["admin.toolList", "admin.toolStats", "admin.agentPermissions"],
         panels: ["ToolManagementPanel", "AgentPermissionPanel"]
       },
       package: {
@@ -329,8 +344,8 @@ export const FEATURE_MANIFEST = Object.freeze({
         webPanels: ["client-runtime-allocator"]
       },
       web: {
-        navItems: ["admin.opsMonitor"],
-        panels: ["OpsMonitorPanel", "ClientRuntimeHeatmap"]
+        navItems: ["workspaces", "admin.opsMonitor"],
+        panels: ["WorkspacesPanel", "OpsMonitorPanel", "ClientRuntimeHeatmap"]
       },
       package: {
         includePaths: ["server/services/client/client-runtime-core", "server/protocols/context-core"],
@@ -504,8 +519,8 @@ export const FEATURE_MANIFEST = Object.freeze({
         webPanels: ["knowledge-core-ui", "knowledge-word-cloud", "knowledge-recall-debug"]
       },
       web: {
-        navItems: ["knowledge.management", "knowledge.wordCloud", "knowledge.conflicts", "knowledge.logs", "knowledge.maintenance", "debug.knowledgeRecall"],
-        panels: ["KnowledgeManagementPanel", "KnowledgeWordCloudPanel", "KnowledgeRecallDebugPanel"]
+        navItems: ["sources", "knowledge.management", "knowledge.wordCloud", "knowledge.logs", "knowledge.maintenance", "debug.knowledgeRecall"],
+        panels: ["KnowledgeSourcesPanel", "KnowledgeManagementPanel", "KnowledgeWordCloudPanel", "KnowledgeRecallDebugPanel"]
       },
       client: { modules: ["knowledge-mirror", "expert-vocabulary"] },
       package: {
@@ -531,10 +546,56 @@ export const FEATURE_MANIFEST = Object.freeze({
       tests: { suites: ["server:verify:knowledge"] }
     },
     {
-      featureId: "knowledge-distillation",
-      label: "Knowledge distillation, summarization, golden rules, and skill authoring",
+      featureId: "external-knowledge-distillation",
+      label: "External knowledge distillation service proxy",
       group: "knowledge",
-      dependsOn: ["knowledge-core", "agent-gateway"],
+      dependsOn: [
+        "core-platform",
+        "security-permissions",
+        "operation-dispatcher",
+        "console-shell",
+        "tool-management-core",
+        "work-queue-core",
+        "agent-gateway"
+      ],
+      defaultEnabled: false,
+      server: {
+        operationPrefixes: ["external.knowledge.distillation."],
+        modules: ["ExternalKnowledgeDistillationService"],
+        webPanels: ["external-knowledge-distillation"]
+      },
+      lifecycle: {
+        serviceName: "external.knowledge.distillation",
+        deploymentBoundary: "standalone-external-service",
+        platformRole: "configuration, authorization, operation proxy, upload receipt and queue orchestration, model gateway invocation",
+        algorithmSurface: "external-service-only",
+        internalWorkflowPolicy: "not-required",
+        modelGatewayPolicy: "required-real-model-call",
+        uploadPolicy: "reuse-platform-upload-sessions-and-checkpoints"
+      },
+      web: {
+        navItems: ["knowledge.distillation"],
+        panels: ["KnowledgeDistillationWorkbench"]
+      },
+      package: {
+        includePaths: [
+          "external-services/knowledge-distillation-service",
+          "server/platform/specialized/knowledge/invocation/external-distillation-service",
+          "server/platform/specialized/agent/agent-gateway",
+          "server/protocols/agent-sync",
+          "server/platform/common/console/http/controllers/system-controller-knowledge-runtime-handlers.mjs",
+          "server/platform/common/operation-dispatcher/operation-registry.mjs",
+          "server/platform/specialized/console/console-domain-operation-executor.mjs"
+        ],
+        removePaths: []
+      },
+      tests: { suites: ["server:verify:knowledge-distillation-standalone-service"] }
+    },
+    {
+      featureId: "knowledge-distillation",
+      label: "Deprecated internal knowledge distillation workflow migration shims",
+      group: "knowledge",
+      dependsOn: ["external-knowledge-distillation", "knowledge-core", "agent-gateway"],
       defaultEnabled: false,
       server: {
         operationPrefixes: [
@@ -543,7 +604,6 @@ export const FEATURE_MANIFEST = Object.freeze({
           "knowledge.golden_rules.",
           "knowledge.rule_authoring.",
           "knowledge.gold_cases.",
-          "knowledge.distillation.",
           "knowledge.summarization.",
           "knowledge.training_sets.",
           "knowledge.evaluation.",
@@ -551,12 +611,32 @@ export const FEATURE_MANIFEST = Object.freeze({
           "knowledge.model_decision"
         ],
         operations: ["knowledge.evidence_gate.evaluate"],
-        modules: ["KnowledgeDistillationRuntime", "KnowledgeSkillRuntime", "SummarizationRuntime"],
+        modules: ["ExternalKnowledgeDistillationService", "KnowledgeSkillRuntime", "SummarizationRuntime"],
         webPanels: ["knowledge-distillation", "knowledge-distillation-workbench"]
       },
+      lifecycle: {
+        status: "must-migrate",
+        internalKnowledgeDistillation: "removed-from-runtime",
+        replacementService: "external.knowledge.distillation",
+        replacementFeature: "external-knowledge-distillation",
+        maintenancePolicy: "migration-shim-only",
+        internalWorkflows: [
+          { id: "knowledge.agent_skill", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.skills", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.golden_rules", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.rule_authoring", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.gold_cases", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.summarization", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.training_sets", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.evaluation", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.model_roles", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.model_decision", status: "must-migrate", target: "external.knowledge.distillation" },
+          { id: "knowledge.evidence_gate.evaluate", status: "must-migrate", target: "external.knowledge.distillation" }
+        ]
+      },
       web: {
-        navItems: ["knowledge.distillation"],
-        panels: ["KnowledgeDistillationWorkbench"]
+        navItems: ["knowledge.distillation", "debug.knowledgeDistillation"],
+        panels: ["KnowledgeDistillationWorkbench", "KnowledgeDistillationDebugPanel"]
       },
       package: {
         includePaths: ["server/platform/specialized/knowledge/storage/knowledge-core"],
@@ -565,15 +645,12 @@ export const FEATURE_MANIFEST = Object.freeze({
           "server/platform/specialized/knowledge/retrieval/evidence-sufficiency-gate",
           "server/platform/specialized/knowledge/invocation/golden-rule-runtime",
           "server/platform/specialized/knowledge/invocation/knowledge-agent-skill-runtime",
-          "server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime",
           "server/platform/specialized/knowledge/invocation/knowledge-rule-authoring-runtime",
           "server/platform/specialized/knowledge/invocation/knowledge-skill-runtime",
           "server/platform/specialized/agent/agent-gateway/multi-agent-coordinator",
           "server/platform/specialized/knowledge/invocation/knowledge-summarization-runtime",
           "server/scripts/distill-existing-knowledge-skills.mjs",
-          "server/scripts/knowledge-distillation-industrial-benchmark.mjs",
           "server/scripts/verify-knowledge-golden-distillation.mjs",
-          "server/scripts/verify-knowledge-industrial-distillation.mjs",
           "server/scripts/verify-knowledge-rule-authoring.mjs",
           "server/scripts/verify-knowledge-skillization.mjs",
           "server/scripts/verify-multi-agent-summarization.mjs",
@@ -637,8 +714,8 @@ export const FEATURE_MANIFEST = Object.freeze({
         webPanels: ["agent-config"]
       },
       web: {
-        navItems: ["admin.agentConfig"],
-        panels: ["AgentConfigPanel"]
+        navItems: ["admin.agentConfig", "admin.contextManagement"],
+        panels: ["AgentConfigPanel", "ContextManagementPanel"]
       },
       client: { modules: ["knowledge-agent"] },
       package: {
@@ -675,18 +752,74 @@ export const FEATURE_MANIFEST = Object.freeze({
       tests: { suites: ["server:verify:gateway-ingress"] }
     },
     {
+      featureId: "code-repository-operations",
+      label: "Code repository operations",
+      group: "capabilities",
+      dependsOn: ["tool-management-core"],
+      defaultEnabled: false,
+      server: {
+        operationPrefixes: ["repo."],
+        modules: ["RepoOperationsCompatibilityRoute"]
+      },
+      package: {
+        includePaths: [
+          "server/platform/specialized/capabilities/code-repository/repo-operations",
+          "docs/PROTOCOLS.md"
+        ]
+      },
+      tests: { suites: ["server:verify:resource-operations"] }
+    },
+    {
+      featureId: "codespace-management",
+      label: "Codespace management",
+      group: "capabilities",
+      dependsOn: ["code-repository-operations"],
+      defaultEnabled: false,
+      server: {
+        operationPrefixes: ["codespace.", "workspace.code."],
+        modules: ["CodespaceManagement"]
+      },
+      package: {
+        includePaths: [
+          "server/platform/specialized/capabilities/code-management/codespace",
+          "docs/PROTOCOLS.md"
+        ]
+      },
+      tests: { suites: ["server:verify:codespace", "server:verify:v001-codespace-e2e"] }
+    },
+    {
+      featureId: "gerrit-service",
+      label: "Gerrit service integration",
+      group: "capabilities",
+      dependsOn: ["codespace-management", "tool-management-core"],
+      defaultEnabled: false,
+      server: {
+        operationPrefixes: ["gerrit.", "runtime.dependencies."],
+        modules: ["GerritCodeReviewRoute", "RuntimeDependencies"],
+        webPanels: ["runtime-dependencies"]
+      },
+      web: {
+        navItems: ["admin.runtimeDownloads"],
+        panels: ["RuntimeDownloadsPanel"]
+      },
+      package: {
+        includePaths: [
+          "server/platform/specialized/capabilities/code-review/gerrit",
+          "server/platform/specialized/capabilities/runtime-dependencies",
+          "server/scripts/gerrit-local.mjs",
+          "docs/PROTOCOLS.md"
+        ]
+      },
+      tests: { suites: ["server:verify:gerrit-mcp", "server:verify:runtime-dependency-downloads"] }
+    },
+    {
       featureId: "agent-management",
       label: "Agent management",
       group: "agent",
       dependsOn: ["agent-gateway", "tool-management-core"],
       defaultEnabled: false,
       server: {
-        operations: ["agents.list", "agents.create", "agents.update", "agents.delete"],
-        webPanels: ["agent-management"]
-      },
-      web: {
-        navItems: ["admin.agentManagement"],
-        panels: ["AgentManagementPanel"]
+        operations: ["agents.list", "agents.create", "agents.update", "agents.delete"]
       },
       client: { modules: ["agent-registry"] },
       tests: { suites: ["server:verify:agent-management"] }
@@ -964,8 +1097,14 @@ export function resolveFeatureRuntime({
   const active = new Set();
   const reasons = {};
 
-  function addFeature(featureId, reason = "selected") {
-    if (!featureId || disabled.has(featureId)) {
+  function addFeature(featureId, reason = "selected", requiredBy = "") {
+    if (!featureId) {
+      return;
+    }
+    if (disabled.has(featureId)) {
+      if (requiredBy) {
+        throw new Error(`Feature dependency cannot be disabled: ${requiredBy} depends on ${featureId}`);
+      }
       return;
     }
     const feature = featureMap.get(featureId);
@@ -978,7 +1117,7 @@ export function resolveFeatureRuntime({
     active.add(featureId);
     reasons[featureId] = reasons[featureId] || reason;
     for (const dependencyId of feature.dependsOn || []) {
-      addFeature(dependencyId, `dependency of ${featureId}`);
+      addFeature(dependencyId, `dependency of ${featureId}`, featureId);
     }
   }
 
@@ -1052,6 +1191,7 @@ function publicFeatureDefinition(feature = {}, reason = "") {
     defaultEnabled: feature.defaultEnabled === true,
     dependsOn: [...(feature.dependsOn || [])],
     conflictsWith: [...(feature.conflictsWith || [])],
+    lifecycle: feature.lifecycle || null,
     reason
   };
 }
@@ -1105,6 +1245,11 @@ export function operationFeatureId(operation = {}) {
     return "knowledge-evolution";
   }
   if (
+    operationId.startsWith("external.knowledge.distillation.")
+  ) {
+    return "external-knowledge-distillation";
+  }
+  if (
     operationId.startsWith("knowledge.agent_skill.") ||
     operationId.startsWith("knowledge.skills.") ||
     operationId.startsWith("knowledge.golden_rules.") ||
@@ -1137,6 +1282,15 @@ export function operationFeatureId(operation = {}) {
   }
   if (operationId.startsWith("agent_gateway.") || operationId.startsWith("agent_sync.") || operationId.startsWith("oauth.")) {
     return "agent-gateway";
+  }
+  if (operationId.startsWith("repo.")) {
+    return "code-repository-operations";
+  }
+  if (operationId.startsWith("codespace.") || operationId.startsWith("workspace.code.")) {
+    return "codespace-management";
+  }
+  if (operationId.startsWith("gerrit.") || operationId.startsWith("runtime.dependencies.")) {
+    return "gerrit-service";
   }
 
   const featureByRegistryFeature = {
@@ -1206,7 +1360,7 @@ export function publicFeatureRuntime(featureRuntime, operations = []) {
   };
 }
 
-export function validateFeatureManifest({ operations = [], clientModules = [] } = {}) {
+export function validateFeatureManifest({ operations = [], clientModules = [], validateClientModules = true } = {}) {
   const featureMap = getFeatureMap();
   const errors = [];
   for (const feature of FEATURE_MANIFEST.features) {
@@ -1240,11 +1394,13 @@ export function validateFeatureManifest({ operations = [], clientModules = [] } 
   const normalizedClientModules = Array.isArray(clientModules)
     ? clientModules
     : Object.entries(clientModules || {}).map(([id, module]) => ({ id, ...(module || {}) }));
-  const clientModuleIds = new Set(normalizedClientModules.map((module) => module.id));
-  for (const feature of FEATURE_MANIFEST.features) {
-    for (const moduleId of feature.client?.modules || []) {
-      if (!clientModuleIds.has(moduleId)) {
-        errors.push(`Feature ${feature.featureId} references unknown client module ${moduleId}.`);
+  if (validateClientModules) {
+    const clientModuleIds = new Set(normalizedClientModules.map((module) => module.id));
+    for (const feature of FEATURE_MANIFEST.features) {
+      for (const moduleId of feature.client?.modules || []) {
+        if (!clientModuleIds.has(moduleId)) {
+          errors.push(`Feature ${feature.featureId} references unknown client module ${moduleId}.`);
+        }
       }
     }
   }
@@ -1330,8 +1486,11 @@ export function buildClientPackagingConfig(baseConfig = {}, featureRuntime = {})
   };
 }
 
-export function collectPackagePlan(featureRuntime = {}) {
+export function collectPackagePlan(featureRuntime = {}, options = {}) {
   const featureMap = getFeatureMap();
+  const surface = String(options.surface || "all").trim() || "all";
+  const includeClientSurface = surface !== "server";
+  const includeWebSurface = surface !== "server";
   const includePaths = new Set();
   const excludePaths = new Set();
   const removePaths = new Set();
@@ -1341,7 +1500,7 @@ export function collectPackagePlan(featureRuntime = {}) {
   const webPanels = new Set();
   const webNavItems = new Set();
   const eventTopics = new Set();
-  const clientModules = new Set(activeClientModuleIds(featureRuntime));
+  const clientModules = new Set(includeClientSurface ? activeClientModuleIds(featureRuntime) : []);
 
   for (const featureId of featureRuntime.activeFeatureIds || []) {
     const feature = featureMap.get(featureId);
@@ -1350,10 +1509,12 @@ export function collectPackagePlan(featureRuntime = {}) {
     for (const item of feature?.tests?.suites || []) tests.add(item);
     for (const item of feature?.server?.modules || []) serverModules.add(item);
     for (const item of feature?.server?.mounts || []) mounts.add(item);
-    for (const item of feature?.server?.webPanels || []) webPanels.add(item);
     for (const item of feature?.server?.eventTopics || []) eventTopics.add(item);
-    for (const item of feature?.web?.panels || []) webPanels.add(item);
-    for (const item of feature?.web?.navItems || []) webNavItems.add(item);
+    if (includeWebSurface) {
+      for (const item of feature?.server?.webPanels || []) webPanels.add(item);
+      for (const item of feature?.web?.panels || []) webPanels.add(item);
+      for (const item of feature?.web?.navItems || []) webNavItems.add(item);
+    }
   }
   for (const featureId of featureRuntime.disabledFeatureIds || []) {
     const feature = featureMap.get(featureId);
@@ -1364,6 +1525,7 @@ export function collectPackagePlan(featureRuntime = {}) {
 
   return {
     edition: featureRuntime.edition,
+    surface,
     activeFeatureIds: [...(featureRuntime.activeFeatureIds || [])],
     includePaths: [...includePaths].sort(),
     excludePaths: [...excludePaths].sort(),

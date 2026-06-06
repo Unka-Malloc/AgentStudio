@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Mail Parser Mount"
+  short_description: "Help with Pact Mail Parser Mount tasks"
+  default_prompt: "Use $pact-mail-parser-mount to handle this Pact platform task."

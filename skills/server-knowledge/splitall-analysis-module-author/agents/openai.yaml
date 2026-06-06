@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Analysis Module Author"
-  short_description: "Help with SplitAll Analysis Module Author tasks"
-  default_prompt: "Use $splitall-analysis-module-author to handle this SplitAll platform task."

@@ -506,31 +506,17 @@ Pact keeps three user-facing export semantics plus one canonical corpus export f
 
 Offline exports are portable artifacts. Agents must still use `knowledge.search`, evidence packs, asset protocol, and configured workspace source scopes for live context assembly. Exported files are not a runtime index, and `knowledge.export.docx` must not be treated as a replacement for raw format conversion, timeline dossier export, or distillation result export.
 
-## Knowledge Distillation Workbench
+## External Knowledge Distillation
 
-The console-facing distillation workflow is a durable workbench, not a loose button. It runs the full project-document path as ordered stages:
-
-1. Raw corpus format conversion.
-2. Raw corpus filing / normalized corpus package.
-3. Project dossier rough concatenation.
-4. Knowledge index evidence summary.
-5. Self-contained knowledge distillation document.
-
-Each stage has a human-readable explanation, a persisted preview, export formats, metrics, warnings, checkpoint metadata, and an activity write-verification record. The run state is stored under `knowledge-distillation-workbench/runs/<runId>/run.json`, and every run is also registered in `queue-monitor`, so the console can leave the page and the Admin Jobs page still shows the task. Interrupted or failed runs are resumed through the same workbench API instead of silently re-running unrelated stages.
+Knowledge distillation is maintained as the independently deployed `external.knowledge.distillation` service. The embedded workbench/runtime implementation has been removed from the server runtime path; legacy `knowledge.distillation.*` and `knowledge.distillation.workbench.*` operations are migration shims that return machine-readable replacement metadata.
 
 | Operation | HTTP | Purpose |
 | --- | --- | --- |
-| `knowledge.distillation.workbench.runs.list` | `GET /api/knowledge/distillation/workbench/runs` | List persisted workbench runs. |
-| `knowledge.distillation.workbench.runs.create` | `POST /api/knowledge/distillation/workbench/runs` | Create a background workbench run from a completed project parse job. |
-| `knowledge.distillation.workbench.runs.get` | `GET /api/knowledge/distillation/workbench/runs/:runId` | Read current run state and stage previews. |
-| `knowledge.distillation.workbench.runs.resume` | `POST /api/knowledge/distillation/workbench/runs/:runId/resume` | Resume a waiting or failed run from persisted stage state. |
-| `knowledge.distillation.workbench.runs.cancel` | `POST /api/knowledge/distillation/workbench/runs/:runId/cancel` | Cancel a queued/running/waiting run and close its queue-monitor item. |
-| `knowledge.distillation.workbench.runs.archive` | `POST /api/knowledge/distillation/workbench/runs/:runId/archive` | Hide an obsolete run from the default task list without deleting its package. |
-| `knowledge.distillation.workbench.runs.delete` | `DELETE /api/knowledge/distillation/workbench/runs/:runId` | Remove an obsolete workbench run directory. |
-| `knowledge.distillation.workbench.stage.rerun` | `POST /api/knowledge/distillation/workbench/runs/:runId/stages/:stageId/rerun` | Preserve the current stage output as a version and rerun that stage plus downstream stages. |
-| `knowledge.distillation.workbench.stage.export` | `GET /api/knowledge/distillation/workbench/runs/:runId/exports/:stageId?format=markdown\|docx\|html\|json\|package` | Export any completed stage result or a ZIP package with the stage artifact and normalized corpus assets. |
-| `knowledge.distillation.workbench.runs.package` | `GET /api/knowledge/distillation/workbench/runs/:runId/package` | Download the whole workbench package, including stage outputs, run metadata, normalized DOCX, YAML sidecars, source materials, and assets. |
-| `knowledge.distillation.workbench.runs.compare` | `GET /api/knowledge/distillation/workbench/runs/:runId/compare?rightRunId=<id>` | Compare two workbench versions by stage status, metrics, warnings, and output size. |
+| `external.knowledge.distillation.runs.create` | `POST /api/external/knowledge/distillation/runs` | Create an external distillation run with route-first parsing, classification, convergence, and artifact generation. |
+| `external.knowledge.distillation.runs.get` | `GET /api/external/knowledge/distillation/runs/:runId` | Read run state and artifact metadata from the external service. |
+| `external.knowledge.distillation.evidence.query` | `GET /api/external/knowledge/distillation/runs/:runId/evidence` | Query bounded graph evidence for agents without downloading full artifacts. |
+| `external.knowledge.distillation.projects.evidence.query` | `GET /api/external/knowledge/distillation/projects/:projectId/evidence` | Query cross-run project evidence for large project convergence. |
+| `external.knowledge.distillation.artifacts.export` | `GET /api/external/knowledge/distillation/runs/:runId/artifacts/:artifactId` | Export Markdown, DOCX, Agent JSON, professional manifests, or workspace packages. |
 
 ## Asset URL Policy
 

@@ -145,6 +145,52 @@ function sourceForArtifact(sourceMap, block = {}) {
   return sourceMap.get(scalar(block.sourceId)) || {};
 }
 
+function stableJson(value) {
+  if (value === undefined || value === null) {
+    return "null";
+  }
+  if (typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJson(item)).join(",")}]`;
+  }
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+}
+
+function sourceMetadataHash(source = {}) {
+  const metadata = shallowObject(source.sourceMetadata || source.rawObject?.sourceMetadata);
+  return Object.keys(metadata).length > 0 ? `sha256:${sha256(stableJson(metadata))}` : "";
+}
+
+function sourceLocator(source = {}, block = {}) {
+  const blockMetadata = shallowObject(block.metadata);
+  const metadata = shallowObject(source.sourceMetadata || source.rawObject?.sourceMetadata);
+  return {
+    page: Number(blockMetadata.page || metadata.page || metadata.pageNumber || metadata.pageIndex || 0) || 0,
+    slideIndex: Number(blockMetadata.slideIndex || metadata.slideIndex || 0) || 0,
+    sheetName: scalar(blockMetadata.sheetName || metadata.sheetName),
+    bbox: blockMetadata.bbox || metadata.bbox || metadata.boundingBox || []
+  };
+}
+
+function parserTraceRef(source = {}) {
+  const documentMetadata = shallowObject(source.documentMetadata);
+  return {
+    parserId: scalar(source.documentParserId),
+    parserVersion: scalar(
+      source.documentParserVersion ||
+      documentMetadata.parserVersion ||
+      documentMetadata?.parser?.version ||
+      documentMetadata?.runtime?.version
+    ),
+    modelId: scalar(documentMetadata.modelId || documentMetadata?.model?.id || documentMetadata?.runtime?.modelId),
+    modelVersion: scalar(
+      documentMetadata.modelVersion || documentMetadata?.model?.version || documentMetadata?.runtime?.modelVersion
+    )
+  };
+}
+
 export function createStructureArtifacts({ sources = [], blocks = [] } = {}) {
   const map = sourceById(sources);
   return asArray(blocks)
@@ -191,7 +237,12 @@ export function createStructureArtifacts({ sources = [], blocks = [] } = {}) {
           ...shallowObject(block.metadata),
           sourceRange,
           blockKind: scalar(block.kind || block.blockType),
-          sourceMediaType: scalar(source.mediaType)
+          sourceMediaType: scalar(source.mediaType),
+          rawObjectId: scalar(source.rawObject?.objectId),
+          contentHash: scalar(source.contentHash || source.rawObject?.contentHash || source.originalSha256),
+          sourceMetadataHash: sourceMetadataHash(source),
+          sourceLocator: sourceLocator(source, block),
+          parserTraceRef: parserTraceRef(source)
         }
       };
     })

@@ -146,7 +146,7 @@ Security Model 只覆盖安全领域，不承载 API 对接、数据链路或业
 
 典型组件：
 
-- Codex、OpenClaw、Gemini CLI、Kilo Code、Copilot、Hermes、Antigravity、OpenCode 等本地智能体或 agent client。
+- OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf 等本地智能体或 agent client。
 - MCP connector、stdio/HTTP MCP client、本机 discovery 和 local grant installer。
 - `pact-client-cli`、client runtime、clientd、upload queue、checkpoint upload adapter。
 - 本机文件系统、本机命令、本机缓存、本机 bridge、本机 runtime module。

@@ -167,7 +167,7 @@ try {
 const agentRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-knowledge-skill-agent-"));
 const agentWorkspace = createAgentWorkspace({ userDataPath: agentRoot });
 const contextRuntime = createContextRuntime({ userDataPath: agentRoot });
-const fakeKnowledgeCore = {
+const fixtureKnowledgeCore = {
   enabled: true,
   async search(input = {}) {
     return {
@@ -194,7 +194,7 @@ const fakeKnowledgeCore = {
     };
   }
 };
-const fakeKnowledgeSkillRuntime = {
+const fixtureKnowledgeSkillRuntime = {
   buildContextForQuery() {
     return {
       protocolVersion: "pact.knowledge-skill.v1",
@@ -255,12 +255,12 @@ const explorationRuntime = createAgentExplorationRuntime({
   userDataPath: agentRoot,
   runtime: {
     mounts: {
-      knowledgeBase: fakeKnowledgeCore
+      knowledgeBase: fixtureKnowledgeCore
     }
   },
   agentWorkspace,
   contextRuntime,
-  knowledgeSkillRuntime: fakeKnowledgeSkillRuntime,
+  knowledgeSkillRuntime: fixtureKnowledgeSkillRuntime,
   agentGatewayCall: async (input = {}) => {
     callCount += 1;
     assert.match(input.messages[0].content, /KnowledgeSkillContext/);

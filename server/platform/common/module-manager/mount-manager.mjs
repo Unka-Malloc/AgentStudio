@@ -315,6 +315,22 @@ function validateMountRoutingCapabilities(mounts = {}, mountRouting = {}) {
   }
 }
 
+function filterMountRoutingForLoadedMounts(mountRouting = {}, mounts = {}) {
+  const filterRoutes = (routes = {}) =>
+    Object.fromEntries(
+      Object.entries(routes || {}).filter(([, route]) => {
+        const mountName = String(route?.mountName || "").trim();
+        return !mountName || Boolean(mounts[mountName]);
+      })
+    );
+
+  return {
+    kindRoutes: filterRoutes(mountRouting.kindRoutes),
+    extensionRoutes: filterRoutes(mountRouting.extensionRoutes),
+    mediaTypeRoutes: filterRoutes(mountRouting.mediaTypeRoutes)
+  };
+}
+
 async function closeMounts(mounts = {}) {
   await Promise.all(
     Object.values(mounts).map(async (mount) => {
@@ -422,11 +438,16 @@ export async function createMountManager({
       })
     );
     const mounts = Object.fromEntries(mountEntries);
-    validateMountRoutingCapabilities(mounts, nextRuntimeOptions.mountRouting || {});
+    const effectiveRuntimeOptions = {
+      ...nextRuntimeOptions,
+      mountRouting: filterMountRoutingForLoadedMounts(nextRuntimeOptions.mountRouting || {}, mounts)
+    };
+    validateMountRoutingCapabilities(mounts, effectiveRuntimeOptions.mountRouting || {});
 
     return {
       generation: nextGeneration,
-      mounts
+      mounts,
+      runtimeOptions: effectiveRuntimeOptions
     };
   }
 
@@ -451,13 +472,17 @@ export async function createMountManager({
         )
       });
 
-      const { generation: nextGeneration, mounts: nextMounts } = await instantiateMounts(
+      const {
+        generation: nextGeneration,
+        mounts: nextMounts,
+        runtimeOptions: effectiveRuntimeOptions
+      } = await instantiateMounts(
         normalizedNext,
         settings
       );
       const previousMounts = currentMounts;
       currentMounts = nextMounts;
-      currentRuntimeOptions = normalizedNext;
+      currentRuntimeOptions = effectiveRuntimeOptions;
       generation = nextGeneration;
       await closeMounts(previousMounts);
       return createExecutionView();

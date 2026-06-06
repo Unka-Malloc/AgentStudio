@@ -13,6 +13,7 @@ import {
   applyFeatureSourcePlan,
   runtimeDependenciesForPackagingPlan
 } from "./pack-offline-server.mjs";
+import { applyFeatureUiPlan } from "./composition-ui-layout.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, "../..");
@@ -66,6 +67,7 @@ function usage() {
     "  --skip-ui-build        Reuse existing build/dist instead of building renderer first.",
     "  --no-docs              Do not copy selected docs into the target tree.",
     "  --no-verify           Skip generated tree self-checks.",
+    "  --no-source-trim      Keep the full server source tree while still writing the feature profile.",
     "  --install              Run npm install --omit=dev inside the target tree.",
     "  --start                Start the generated server after instantiation.",
     "  --port PORT            Port used with --start. Default: 8791.",
@@ -104,8 +106,17 @@ function packageJsonForTarget({ rootPackage, dependencies, edition }) {
     scripts: {
       start: `node server/scripts/start-server.mjs --with-ui --profile minimal --edition ${edition}`,
       "server:start": `node server/scripts/start-server.mjs --with-ui --profile minimal --edition ${edition}`,
-      "server:verify:platform-layout": "node server/scripts/verify-platform-layout.mjs",
-      "server:verify:feature-profiles": `node server/scripts/feature-profiles.mjs verify --edition ${edition}`
+      "composition:service:start": `node server/scripts/start-composition-service.mjs --profile minimal --edition ${edition}`,
+      "composition:external:verify": "node server/scripts/composition-external-service.mjs verify",
+      "composition:external:prepare": "node server/scripts/composition-external-service.mjs prepare",
+      "composition:external:start": "node server/scripts/composition-external-service.mjs start",
+      "composition:external:stop": "node server/scripts/composition-external-service.mjs stop",
+      "composition:external:doctor": "node server/scripts/composition-external-service.mjs doctor",
+      "composition:external:smoke": "node server/scripts/composition-external-service.mjs smoke",
+      "composition:external:health": "node server/scripts/composition-external-service.mjs health",
+      "composition:verify:source": "node server/scripts/verify-composition-source.mjs",
+      "composition:regression": "npm run composition:verify:source",
+      "server:verify": "npm run composition:regression"
     },
     dependencies
   };
@@ -208,12 +219,14 @@ async function writeReadme({ targetPath, featureRuntime }) {
       "```bash",
       "npm install --omit=dev",
       "npm run server:start -- --port 8791 --data-dir ./data",
+      "npm run composition:service:start -- --port 8791 --data-dir ./data",
       "```",
       "",
       "## Generated Files",
       "",
       "- `feature-profile/feature-profile.json`",
       "- `feature-profile/source-layout-report.json`",
+      "- `feature-profile/ui-layout-report.json`",
       "- `feature-profile/active-features.json`",
       "- `feature-profile/disabled-features.json`",
       "",
@@ -246,6 +259,7 @@ async function instantiateMinimalSource(args = {}) {
   const skipUiBuild = normalizeBooleanDisabled(args, "skip-ui-build");
   const noDocs = normalizeBooleanDisabled(args, "no-docs");
   const noVerify = normalizeBooleanDisabled(args, "no-verify");
+  const noSourceTrim = normalizeBooleanDisabled(args, "no-source-trim");
   const install = normalizeBooleanDisabled(args, "install");
 
   if (await pathExists(targetPath)) {
@@ -301,7 +315,29 @@ async function instantiateMinimalSource(args = {}) {
     }, null, 2)}\n`,
     "utf8"
   );
-  const sourceLayoutReport = await applyFeatureSourcePlan(targetPath, packagingPlan);
+  const uiLayoutReport = await applyFeatureUiPlan(targetPath, packagingPlan);
+  let sourceLayoutReport;
+  if (noSourceTrim) {
+    sourceLayoutReport = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      edition: packagingPlan.featureProfile.edition,
+      requestedPaths: packagingPlan.featurePackagePlan?.removePaths || [],
+      applied: [],
+      lingeringPaths: [],
+      staticImportViolations: [],
+      trimSkipped: true,
+      reason: "source trim disabled; feature profile and operation surface are still generated",
+      ok: true
+    };
+    await fs.writeFile(
+      path.join(targetPath, "feature-profile", "source-layout-report.json"),
+      `${JSON.stringify(sourceLayoutReport, null, 2)}\n`,
+      "utf8"
+    );
+  } else {
+    sourceLayoutReport = await applyFeatureSourcePlan(targetPath, packagingPlan);
+  }
   await writeTargetPackageJson({ targetPath, packagingPlan });
   await writeReadme({ targetPath, featureRuntime });
   await fs.writeFile(
@@ -329,9 +365,17 @@ async function instantiateMinimalSource(args = {}) {
     disabledFeatureCount: featureRuntime.disabledFeatureIds.length,
     sourceLayout: {
       ok: sourceLayoutReport.ok,
+      trimSkipped: sourceLayoutReport.trimSkipped === true,
       requestedPathCount: sourceLayoutReport.requestedPaths.length,
       appliedPathCount: sourceLayoutReport.applied.length,
       staticImportViolationCount: sourceLayoutReport.staticImportViolations.length
+    },
+    uiLayout: {
+      ok: uiLayoutReport.ok,
+      trimSkipped: uiLayoutReport.trimSkipped === true,
+      activeRouteCount: uiLayoutReport.activeRoutes?.length || 0,
+      inactiveRouteCount: uiLayoutReport.inactiveRoutes?.length || 0,
+      removedAssetCount: uiLayoutReport.removedAssets?.length || 0
     },
     installed: install
   };

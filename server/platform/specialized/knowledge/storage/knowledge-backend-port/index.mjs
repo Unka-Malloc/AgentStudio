@@ -586,7 +586,9 @@ export function createKnowledgeBackendPort({ userDataPath = "" } = {}) {
     const config = await loadConfig();
     const ledger = await loadLedger();
     const query = text(input.query || input.q || "");
-    const limit = Math.max(1, Math.min(20, Number(input.limit || 10) || 10));
+    const limitInput = input.limit === undefined || input.limit === null || input.limit === "" ? 10 : input.limit;
+    const parsedLimit = Number(limitInput);
+    const limit = Math.max(1, Math.min(20, Number.isFinite(parsedLimit) ? parsedLimit : 10));
     const providerFilter = text(input.provider || input.backend || "");
     const spaceFilter = text(input.spaceId || input.knowledgeSpaceId || input.space || "");
     const allSpaces = (await listSpaces({ provider: providerFilter })).spaces;

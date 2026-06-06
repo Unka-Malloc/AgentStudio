@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Runtime Doctor"
-  short_description: "Help with SplitAll Runtime Doctor tasks"
-  default_prompt: "Use $splitall-runtime-doctor to handle this SplitAll platform task."

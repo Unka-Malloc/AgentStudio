@@ -188,7 +188,13 @@ export function createLanceDbVectorStore(options = {}) {
 
   function deleteByTargetIds(input = {}) {
     ensureSchema();
-    const ids = new Set(asArray(input.targetIds || input.ids || input.targetId || input).filter(Boolean).map(String));
+    const rawIds = input.targetIds ?? input.ids ?? input.targetId ?? [];
+    const normalizedIds = Array.isArray(rawIds)
+      ? rawIds
+      : typeof rawIds === "string" || typeof rawIds === "number"
+        ? [rawIds]
+        : [];
+    const ids = new Set(normalizedIds.filter(Boolean).map(String));
     if (!ids.size) {
       return {
         protocolVersion: VECTOR_PROTOCOL_VERSION,

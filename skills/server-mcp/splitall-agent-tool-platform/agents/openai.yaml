@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Agent Tool Platform"
-  short_description: "Help with SplitAll Agent Tool Platform tasks"
-  default_prompt: "Use $splitall-agent-tool-platform to handle this SplitAll platform task."

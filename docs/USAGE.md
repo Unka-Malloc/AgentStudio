@@ -119,6 +119,23 @@ cat google-drive-oauth.json | npm run cli -- secret google-drive init --oauth-js
 cat dropbox-oauth.json | npm run cli -- secret dropbox init --oauth-json-stdin
 ```
 
+外部知识蒸馏服务按远程容器部署时，容器默认要求 API token，运行数据也必须放在项目目录外：
+
+```bash
+mkdir -p "$HOME/.pact-server-data/external-kd"
+docker run --rm \
+  -p 127.0.0.1:8799:8799 \
+  -e PACT_EXTERNAL_KD_API_TOKEN="$PACT_EXTERNAL_KD_API_TOKEN" \
+  -v "$HOME/.pact-server-data/external-kd:/data" \
+  pact-external-knowledge-distillation:local
+```
+
+先跑门禁：
+
+```bash
+npm run server:verify:external-knowledge-distillation-service-gates
+```
+
 也可以直接走本机 OAuth 跳转。CLI 会监听 `127.0.0.1` 临时回调地址，打开浏览器完成授权，校验 state/PKCE，换取 token 后写入同一个运行态 secret store。云盘应用后台的 redirect URI 需要填 CLI 打印的 `oauthRedirectUri`，或用固定端口提前配置：
 
 ```bash
@@ -140,7 +157,7 @@ printf '%s' "$DROPBOX_CLIENT_SECRET" | npm run cli -- secret dropbox oauth \
 
 无桌面浏览器或 CI 环境可加 `--no-open`，再手动打开 stderr 中的 `oauthAuthorizationUrl`。如果 provider 后台不接受动态端口，使用 `--port` 固定回调地址，例如 `http://127.0.0.1:7392/oauth/callback`。
 
-云盘连接完成后，Pact 默认使用两层 agent 视图：`default/` 映射到 `.pact-data/<client>`，是当前智能体的可写默认空间；`public/` 映射到 `.pact-data/public`，是所有智能体可读的公共空间。控制台的 Cloud Drive 面板可以开启高级模式并添加只读目录卡片，把用户选定的既有路径暴露到智能体视野中；这些暴露目录默认不可写，真实 token 仍只通过 `secretRef` 留在运行态 secret store。
+云盘连接完成后，Pact 默认使用两层 agent 视图：`default/` 映射到 `.pact-data/<client>`，是当前智能体的可写默认空间；`public/` 映射到 `.pact-data/public`，是所有智能体可读的公共空间。控制台的 Cloud Drive 面板可以开启高级模式并添加只读目录卡片，把用户选定的既有路径暴露到智能体视野中；这些暴露目录默认不可写，真实 token 仍只通过 `secretRef` 留在运行态 secret store。第一版真实云盘验收范围是 iCloud + OneDrive；Google Drive / Dropbox 的 contract-mode 通过不等于真实云盘接通。
 
 等价点号命令也可用，例如：
 
@@ -163,7 +180,7 @@ CLI 只在运行态目录写入：
 - `secrets/audit.jsonl`：初始化/更新审计。
 - `code-management/codespace-providers.json`、`knowledge/knowledge-backends.json`、`agent-workspaces/cloud-drive-connections.json`：只保存 `secretRef` / `endpointRef`，不保存 token。
 
-配置了凭据只表示 `credentialConfigured=true`。除 Gerrit live verifier 等明确真实验证链路外，contract-mode provider 仍只能报告 `contractVerified`，不能说成真实上传、真实同步或 production ready。
+配置了凭据只表示 `credentialConfigured=true`。除 Gerrit、OneDrive live verifier 等明确真实验证链路外，contract-mode provider 仍只能报告 `contractVerified`，不能说成真实上传、真实同步或 production ready。
 
 上传文件或目录时，CLI 复用服务端 upload session、checkpoint、分块上传和任务提交链路。示例：
 

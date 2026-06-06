@@ -1,17 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../controllers/app_controller.dart';
-import 'theme.dart';
+
+import '../controllers/future_client_controller.dart';
 import '../services/agent_service.dart';
+import 'agents_empty_state.dart';
+import 'agents_toolbar.dart';
+import 'manual_target_dialog.dart';
+import 'target_card.dart';
+import 'theme.dart';
 
 class AgentsCanvas extends StatefulWidget {
-  final AppController controller;
-  final double width;
-
   const AgentsCanvas({
     super.key,
     required this.controller,
     required this.width,
   });
+
+  final FutureClientController controller;
+  final double width;
 
   @override
   State<AgentsCanvas> createState() => _AgentsCanvasState();
@@ -32,82 +39,37 @@ class _AgentsCanvasState extends State<AgentsCanvas> {
       listenable: widget.controller,
       builder: (context, _) {
         final scanning = widget.controller.isScanningTargets;
+        final adding = widget.controller.isAddingTarget;
         final targets = widget.controller.scannedTargets;
 
         return Scaffold(
           backgroundColor: PactColors.background,
           body: Padding(
-            padding: const EdgeInsets.all(32.0),
+            padding: const EdgeInsets.all(32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Agents',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: PactColors.text,
-                          ),
-                    ),
-                    FilledButton.icon(
-                      onPressed: scanning
-                          ? null
-                          : widget.controller.scanTargets,
-                      icon: scanning
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.refresh, size: 18),
-                      label: Text(scanning ? 'Scanning...' : 'Rescan'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: PactColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ],
+                AgentsToolbar(
+                  scanning: scanning,
+                  adding: adding,
+                  onRescan: widget.controller.scanTargets,
+                  onAddTarget: _showAddTargetDialog,
                 ),
                 const SizedBox(height: 8),
-                Text(
+                const Text(
                   'Manage target adapters and MCP configuration plans for local IDEs and AI tools.',
                   style: TextStyle(color: PactColors.textMuted, fontSize: 14),
                 ),
                 const SizedBox(height: 32),
-                if (targets.isEmpty && !scanning)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 64.0),
-                      child: Text(
-                        'No supported targets detected.',
-                        style: TextStyle(color: PactColors.textMuted),
-                      ),
-                    ),
-                  )
-                else
-                  Expanded(
-                    child: GridView.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 400,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 2.2,
-                          ),
-                      itemCount: targets.length,
-                      itemBuilder: (context, index) {
-                        return _buildTargetCard(targets[index]);
-                      },
-                    ),
-                  ),
+                Expanded(
+                  child: targets.isEmpty && !scanning
+                      ? AgentsEmptyState(onAddTarget: _showAddTargetDialog)
+                      : _TargetsGrid(
+                          targets: targets,
+                          onInspect: widget.controller.inspectTarget,
+                          onPlan: widget.controller.planTargetConfig,
+                        ),
+                ),
               ],
             ),
           ),
@@ -116,119 +78,50 @@ class _AgentsCanvasState extends State<AgentsCanvas> {
     );
   }
 
-  Widget _buildTargetCard(TargetCandidate target) {
-    final configured = target.configured;
-    return Card(
-      elevation: 0,
-      color: PactColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: PactColors.line),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: PactColors.surfaceLow,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.smart_toy_outlined,
-                    color: PactColors.primary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        target.label,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: configured
-                                  ? PactColors.success
-                                  : PactColors.textMuted,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            configured ? 'Configured' : 'Not configured',
-                            style: TextStyle(
-                              color: configured
-                                  ? PactColors.success
-                                  : PactColors.textMuted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const Spacer(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _targetStatusLabel(target),
-                  style: TextStyle(color: PactColors.textMuted, fontSize: 12),
-                ),
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: () =>
-                          widget.controller.inspectTarget(target.target),
-                      child: const Text('Inspect'),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: () =>
-                          widget.controller.planTargetConfig(target.target),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: PactColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        minimumSize: const Size(80, 32),
-                      ),
-                      child: const Text('Plan', style: TextStyle(fontSize: 13)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+  Future<void> _showAddTargetDialog() async {
+    final draft = await showDialog<ManualTargetDraft>(
+      context: context,
+      builder: (context) => const ManualTargetDialog(),
     );
+    if (draft == null) {
+      return;
+    }
+    unawaited(widget.controller.addManualTarget(
+      target: draft.target,
+      configPath: draft.configPath,
+      binaryPath: draft.binaryPath,
+    ));
   }
+}
 
-  String _targetStatusLabel(TargetCandidate target) {
-    return switch (target.status) {
-      'configured' => 'Configured',
-      'detected' => 'Detected',
-      _ => 'Not detected',
-    };
+class _TargetsGrid extends StatelessWidget {
+  const _TargetsGrid({
+    required this.targets,
+    required this.onInspect,
+    required this.onPlan,
+  });
+
+  final List<TargetCandidate> targets;
+  final ValueChanged<String> onInspect;
+  final ValueChanged<String> onPlan;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 400,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 2.2,
+      ),
+      itemCount: targets.length,
+      itemBuilder: (context, index) {
+        return TargetCard(
+          target: targets[index],
+          onInspect: onInspect,
+          onPlan: onPlan,
+        );
+      },
+    );
   }
 }

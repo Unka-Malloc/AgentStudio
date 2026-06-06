@@ -28,6 +28,26 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function assertMarkdownUploadRouting(result, label) {
+  const sources = Array.isArray(result.sources) ? result.sources : [];
+  const routedSource = sources.find((source) => source.name === "dry-run.md");
+  assert.ok(routedSource, `${label} should preserve the declared .md upload name`);
+  assert.equal(routedSource.kind, "text", `${label} should route declared markdown as text`);
+  assert.notEqual(
+    routedSource.mediaType,
+    "message/rfc822",
+    `${label} should not pass declared markdown to Tika as RFC822 email`
+  );
+  assert.equal(
+    sources.some((source) => source.kind === "email" || source.name === "dry-run.eml"),
+    false,
+    `${label} should not let weak text sniffing convert markdown into email`
+  );
+  assert.equal(routedSource.documentParserId, "builtin/text-direct", `${label} should bypass Tika for markdown text`);
+  assert.match(routedSource.text || "", /^# Dry-run parsing/, `${label} should preserve markdown source text`);
+  assert.doesNotMatch(routedSource.text || "", /<html|X-TIKA/i, `${label} should not wrap markdown in Tika XHTML`);
+}
+
 function documentParsingConfig({
   pipelineId = "dynamic-parameter-v1",
   expectedOutput = "chunks",
@@ -74,6 +94,8 @@ try {
     [
       "# Dry-run parsing",
       "",
+      "Date: 2026-05-30",
+      "",
       "| key | value |",
       "| --- | --- |",
       "| alpha | beta |",
@@ -114,6 +136,7 @@ try {
     directParsed.sources.some((source) => String(source.name || source.path || "").includes("dry-run.md")),
     "direct dry-run parser should expose the uploaded file as a parsed source"
   );
+  assertMarkdownUploadRouting(directParsed, "direct dry-run parser");
   assert.ok(directParsed.summary.chunks >= 1, "direct dry-run parser should return chunks");
 
   const manifestDigest = sha256(JSON.stringify([[fileDigest.relativePath, fileDigest.sha256, fileDigest.byteSize]]));
@@ -193,6 +216,7 @@ try {
     parsed.sources.some((source) => String(source.name || source.path || "").includes("dry-run.md")),
     "dry-run parser should expose the uploaded file as a parsed source"
   );
+  assertMarkdownUploadRouting(parsed, "upload-session dry-run parser");
   assert.ok(parsed.summary.chunks >= 1, "dry-run parser should return chunks");
   assert.ok(parsed.preprocessResult, "unified knowledge ingest parser should return a preprocess result");
   assert.ok(

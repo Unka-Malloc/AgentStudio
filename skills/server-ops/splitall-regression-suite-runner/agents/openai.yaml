@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Regression Suite Runner"
-  short_description: "Help with SplitAll Regression Suite Runner tasks"
-  default_prompt: "Use $splitall-regression-suite-runner to handle this SplitAll platform task."

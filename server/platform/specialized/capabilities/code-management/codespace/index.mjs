@@ -200,11 +200,84 @@ function contractVerifiedReceipt({ operationId, provider = {}, input = {}, reaso
     contractVerified: true,
     provider: provider.provider || providerKeyFor(input),
     providerMode: provider.mode || "contract",
+    uploadState: "contract",
     secretRef: provider.secretRef || "",
     operationId,
     repositoryRef: repositoryRefFrom(input),
     branch: branchFrom(input),
     reason: reason || "External provider credentials are represented by secretRef and this verification ran in contract mode."
+  };
+}
+
+function firstText(...values) {
+  return values.map(text).find(Boolean) || "";
+}
+
+function githubPullRequestNumberFromUrl(value = "") {
+  const match = String(value || "").match(/github\.com\/[^/\s]+\/[^/\s]+\/pull\/(\d+)/i);
+  return match?.[1] || "";
+}
+
+function firstGithubUrl(...values) {
+  for (const value of values.map(text).filter(Boolean)) {
+    const match = value.match(/https?:\/\/github\.com\/[^\s"'<>]+\/pull\/\d+/i);
+    if (match) {
+      return match[0];
+    }
+    if (/^https?:\/\/github\.com\/[^\s"'<>]+\/pull\/\d+$/i.test(value)) {
+      return value;
+    }
+  }
+  return "";
+}
+
+function normalizeGithubProposalReceipt({ repoOperation = {}, provider = {}, input = {} } = {}) {
+  const receipt = asObject(repoOperation.data || repoOperation);
+  const dryRun = input.dryRun !== false || receipt.dryRun === true;
+  const providerMode = firstText(receipt.providerMode, provider.mode, receipt.contractVerified === true ? "contract" : "live");
+  const contractVerified = dryRun || providerMode === "contract" || receipt.contractVerified === true;
+  const uploadState = dryRun ? "dry-run" : (contractVerified ? "contract" : "remote-live");
+  const reviewUrl = firstText(
+    input.reviewUrl,
+    receipt.reviewUrl,
+    receipt.htmlUrl,
+    receipt.url,
+    firstGithubUrl(receipt.stdout, receipt.stderr)
+  );
+  const pullRequestNumber = firstText(
+    input.pullRequestNumber,
+    input.prNumber,
+    input.number,
+    receipt.pullRequestNumber,
+    receipt.prNumber,
+    receipt.number,
+    githubPullRequestNumberFromUrl(reviewUrl)
+  );
+  if (uploadState === "remote-live" && !reviewUrl) {
+    return {
+      ok: false,
+      status: 502,
+      error: "GitHub live PR creation did not return a review URL; refusing to record it as a remote-live upload.",
+      receipt,
+      providerMode,
+      uploadState
+    };
+  }
+  return {
+    ok: true,
+    contractVerified,
+    providerMode,
+    uploadState,
+    reviewUrl,
+    pullRequestNumber,
+    receipt: {
+      ...receipt,
+      contractVerified,
+      providerMode,
+      uploadState,
+      reviewUrl,
+      pullRequestNumber
+    }
   };
 }
 
@@ -990,6 +1063,21 @@ export function createCodespaceRegistry({
         providerConfig: config
       };
     }
+    const githubReceipt = normalizeGithubProposalReceipt({ repoOperation, provider, input });
+    if (githubReceipt.ok !== true) {
+      return {
+        ok: false,
+        status: githubReceipt.status || 502,
+        protocolVersion: CODESPACE_PROTOCOL_VERSION,
+        operationId: "codespace.change.upload",
+        error: githubReceipt.error || "GitHub upload receipt could not be normalized.",
+        provider: "github",
+        providerMode: githubReceipt.providerMode,
+        uploadState: githubReceipt.uploadState,
+        receipt: githubReceipt.receipt,
+        providerConfig: config
+      };
+    }
     return mutate(async (registry) => {
       const timestamp = nowIso();
       const existing = findChange(registry, input);
@@ -1002,7 +1090,7 @@ export function createCodespaceRegistry({
         reviewUrl: text(input.reviewUrl || "")
       });
       targetRecord.targetKind = "githubPullRequest";
-      targetRecord.status = input.dryRun === false ? "uploaded" : "contractVerified";
+      targetRecord.status = githubReceipt.uploadState === "remote-live" ? "uploaded" : "contractVerified";
       registry.targets[targetRecord.targetId] = {
         ...registry.targets[targetRecord.targetId],
         ...targetRecord,
@@ -1014,10 +1102,14 @@ export function createCodespaceRegistry({
         targetId: targetRecord.targetId,
         codeChangeId,
         provider: "github",
-        contractVerified: true
+        contractVerified: githubReceipt.contractVerified,
+        providerMode: githubReceipt.providerMode,
+        uploadState: githubReceipt.uploadState
       });
-      const reviewId = text(input.reviewId || input.pullRequestNumber || "") || stableId("github_pr", { codeChangeId, repositoryRef: repositoryRefFrom(input), branch: branchFrom(input) });
-      const reviewUrl = text(input.reviewUrl || "") || `https://github.example.invalid/${repositoryRefFrom(input) || "owner/repo"}/pull/${reviewId.replace(/^github_pr_/, "")}`;
+      const reviewId = githubReceipt.pullRequestNumber
+        ? `github_pr_${githubReceipt.pullRequestNumber}`
+        : text(input.reviewId || "") || stableId("github_pr", { codeChangeId, repositoryRef: repositoryRefFrom(input), branch: branchFrom(input) });
+      const reviewUrl = githubReceipt.reviewUrl || `https://github.example.invalid/${repositoryRefFrom(input) || "owner/repo"}/pull/${reviewId.replace(/^github_pr_/, "")}`;
       const change = {
         protocolVersion: CODESPACE_PROTOCOL_VERSION,
         ...(existing || {}),
@@ -1028,7 +1120,7 @@ export function createCodespaceRegistry({
         repositoryRef: text(input.repositoryRef || input.repoId || input.worktreePath || ""),
         branch: branchFrom(input),
         changeId: reviewId,
-        changeNumber: reviewId,
+        changeNumber: githubReceipt.pullRequestNumber || reviewId,
         changeRef: reviewId,
         gerritChangeUrl: "",
         reviewUrl,
@@ -1048,16 +1140,18 @@ export function createCodespaceRegistry({
           reviewUrl
         },
         completion: {
-          confirmed: input.dryRun === false && input.contractVerified !== true,
+          confirmed: githubReceipt.uploadState === "remote-live",
           dryRun: input.dryRun !== false,
-          contractVerified: true,
+          contractVerified: githubReceipt.contractVerified,
+          providerMode: githubReceipt.providerMode,
+          uploadState: githubReceipt.uploadState,
           provider: "github",
-          receipt: repoOperation.data || repoOperation,
+          receipt: githubReceipt.receipt,
           secretRef: provider.secretRef
         },
         statusHistory: [
           ...(existing?.statusHistory || []),
-          { status: input.dryRun === false ? "uploaded" : "contract_verified", at: timestamp, auditId: audit.eventId }
+          { status: githubReceipt.uploadState === "remote-live" ? "uploaded" : "contract_verified", at: timestamp, auditId: audit.eventId }
         ],
         createdAt: existing?.createdAt || timestamp,
         updatedAt: timestamp
@@ -1070,7 +1164,9 @@ export function createCodespaceRegistry({
         operationId: "codespace.change.upload",
         protocolVersion: CODESPACE_PROTOCOL_VERSION,
         provider: "github",
-        contractVerified: true,
+        contractVerified: githubReceipt.contractVerified,
+        providerMode: githubReceipt.providerMode,
+        uploadState: githubReceipt.uploadState,
         dryRun: input.dryRun !== false,
         codeChange: publicCodeChange(change),
         codeChangeId,

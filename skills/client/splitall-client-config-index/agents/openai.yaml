@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Client Config Index"
-  short_description: "Help with SplitAll Client Config Index tasks"
-  default_prompt: "Use $splitall-client-config-index to handle this SplitAll platform task."

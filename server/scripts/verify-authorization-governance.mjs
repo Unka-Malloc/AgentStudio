@@ -6,11 +6,36 @@ import { createAuthorizationEngine } from "../platform/common/security/authoriza
 import { createAuthorizationGovernanceStore } from "../platform/common/security/authorization/authorization-governance-store.mjs";
 import { createAuthorizationStore } from "../platform/common/security/authorization/authorization-store.mjs";
 import { CONSOLE_ROLES } from "../platform/common/security/auth/console-auth.mjs";
+import { createSecurityPermissionsProvider } from "../platform/common/security/security-permissions-provider.mjs";
+import { PROTOCOL_OPERATION_DEFINITIONS } from "../platform/common/operation-dispatcher/protocol-operation-definitions.mjs";
+import { createToolCatalogRegistry } from "../platform/specialized/capabilities/tools/tool-management-core/catalog.mjs";
+import { createToolPolicyEngine } from "../platform/specialized/capabilities/tools/tool-management-core/policy.mjs";
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-authz-governance-"));
 const authorizationStore = createAuthorizationStore({ userDataPath });
 const governanceStore = createAuthorizationGovernanceStore({ userDataPath, builtinRoles: CONSOLE_ROLES });
 const authorizationEngine = createAuthorizationEngine({ store: authorizationStore, governanceStore });
+const securityPermissions = createSecurityPermissionsProvider({
+  authorizationEngine,
+  authorizationStore,
+  authorizationGovernanceStore: governanceStore
+});
+const toolRegistry = createToolCatalogRegistry({ operations: PROTOCOL_OPERATION_DEFINITIONS });
+const toolPolicyStore = {
+  decisions: [],
+  appendPolicyDecision(decision) {
+    this.decisions.push(decision);
+    return { decisionId: decision.decisionId };
+  },
+  getRawGrant() {
+    return null;
+  }
+};
+const toolPolicyEngine = createToolPolicyEngine({
+  registry: toolRegistry,
+  store: toolPolicyStore,
+  securityPermissions
+});
 
 const REPO_A = "github:unka/pact";
 const REPO_B = "gerrit:pact/server";
@@ -80,6 +105,10 @@ function evaluate({
 }
 
 try {
+  const initialRevision = governanceStore.getPolicyRevision();
+  assert.equal(initialRevision.protocolVersion, "pact.authorization.governance.policy-revision.v1");
+  assert.equal(initialRevision.revision, 0);
+
   const builtins = governanceStore.listRoles();
   for (const roleId of ["owner", "admin", "operator", "viewer"]) {
     assert.ok(builtins.some((role) => role.roleId === roleId && role.system), `builtin role missing: ${roleId}`);
@@ -139,6 +168,76 @@ try {
   assert.ok(multiTeamAllowed.decisionId);
   assert.ok(multiTeamAllowed.auditId);
   assert.equal(multiTeamAllowed.traceId, "trace-governance-team-union");
+  const currentRevision = governanceStore.getPolicyRevision();
+  assert.equal(currentRevision.revision > initialRevision.revision, true);
+  assert.deepEqual(multiTeamAllowed.effectivePolicySnapshot.policyRevision, currentRevision);
+  assert.deepEqual(securityPermissions.getGovernanceSummary().policyRevision, currentRevision);
+
+  const tool = toolRegistry.getToolByOperationId("codespace.change.upload");
+  assert.ok(tool, "codespace upload tool must exist");
+  const staleGrantDecision = toolPolicyEngine.evaluate({
+    tool,
+    grant: {
+      ...grant(),
+      metadata: {
+        ...grant().metadata,
+        policyRevision: Math.max(1, currentRevision.revision - 1)
+      }
+    },
+    input: {
+      resourceType: "repo",
+      resourceId: REPO_B,
+      repositoryRef: REPO_B,
+      provider: "gerrit",
+      targetProvider: "gerrit",
+      confirm: true
+    },
+    context: {
+      agentId: AGENT_ID,
+      boundUserId: USER_ID,
+      teamIds: ["team-github", "team-gerrit"],
+      resource: {
+        resourceType: "repo",
+        resourceId: REPO_B,
+        targetProvider: "gerrit"
+      }
+    },
+    traceId: "trace-governance-stale-grant"
+  });
+  assert.equal(staleGrantDecision.effect, "allow");
+  assert.equal(staleGrantDecision.grantPolicyState, currentRevision.revision > 1 ? "stale" : "fresh");
+  assert.deepEqual(staleGrantDecision.governancePolicyRevision, currentRevision);
+  const freshGrantDecision = toolPolicyEngine.evaluate({
+    tool,
+    grant: {
+      ...grant(),
+      metadata: {
+        ...grant().metadata,
+        policyRevision: currentRevision.revision
+      }
+    },
+    input: {
+      resourceType: "repo",
+      resourceId: REPO_B,
+      repositoryRef: REPO_B,
+      provider: "gerrit",
+      targetProvider: "gerrit",
+      confirm: true
+    },
+    context: {
+      agentId: AGENT_ID,
+      boundUserId: USER_ID,
+      teamIds: ["team-github", "team-gerrit"],
+      resource: {
+        resourceType: "repo",
+        resourceId: REPO_B,
+        targetProvider: "gerrit"
+      }
+    },
+    traceId: "trace-governance-fresh-grant"
+  });
+  assert.equal(freshGrantDecision.effect, "allow");
+  assert.equal(freshGrantDecision.grantPolicyState, "fresh");
 
   const teamDenied = evaluate({ resourceId: REPO_C, provider: "github" });
   assert.equal(teamDenied.effect, "deny");

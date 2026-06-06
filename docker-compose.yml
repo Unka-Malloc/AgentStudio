@@ -1,3 +1,9 @@
+# 说明：本文件是开发环境快捷启动，默认仅用于本机开发与本机回环 HTTPS 明确由反向代理提供。
+# 生产 / enterprise 场景禁止直接复用本文件的 HTTP 地址；请改用反代（Caddy/Nginx/Ingress）终止 HTTPS，
+# 并保持服务仅在受控网段内暴露。下方以 HTTPS 为生产示例：
+#   - PACT_BOOTSTRAP_URL: https://pact.example.com
+#   - PACT_ADVERTISED_BASE_URL: https://pact.example.com
+#   - PACT_ACTIVE_SERVICE_URL: https://pact.example.com
 services:
   pact-server:
     build:
@@ -18,5 +24,5 @@ services:
       PACT_ACTIVE_SERVICE_URL: http://127.0.0.1:8787
       CODEX_HOME: /codex-home
     volumes:
-      - ./.pact-server-data:/data
+      - ${HOME}/.pact-server-data:/data
       - ${HOME}/.codex:/codex-home

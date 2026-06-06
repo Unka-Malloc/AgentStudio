@@ -42,6 +42,17 @@ function jobItems(payload) {
   return payload?.jobs || payload?.items || [];
 }
 
+function eventItems(payload) {
+  return [
+    ...(Array.isArray(payload?.events) ? payload.events : []),
+    ...(Array.isArray(payload?.snapshots) ? payload.snapshots : [])
+  ];
+}
+
+function findEventByRevision(payload, revision) {
+  return eventItems(payload).find((event) => Number(event?.payload?.policyRevision?.revision || 0) === revision);
+}
+
 async function saveSettings(harness, auth, patch) {
   const current = await harness.get("/api/settings", { auth });
   expectOk(current, "settings get");
@@ -291,6 +302,14 @@ const scenarios = [
     async run({ harness, state }) {
       state.interfaces = await harness.get("/api/interfaces", { auth: state.owner });
       state.catalog = await harness.get("/api/tool-management/v1/catalog", { auth: state.owner });
+      state.initialGovernanceUpdate = await harness.post(
+        "/api/authorization/teams",
+        {
+          teamId: "business-scenario-bootstrap-team",
+          label: "Business Scenario Bootstrap Team"
+        },
+        { auth: state.owner }
+      );
       state.grant = await harness.post(
         "/api/tool-management/v1/grants",
         {
@@ -308,6 +327,38 @@ const scenarios = [
         },
         { auth: state.owner }
       );
+      state.governanceUpdate = await harness.post(
+        "/api/authorization/teams",
+        {
+          teamId: "business-scenario-tool-team",
+          label: "Business Scenario Tool Team"
+        },
+        { auth: state.owner }
+      );
+      state.previewAfterGovernanceUpdate = await harness.post(
+        "/api/tool-management/v1/policy/preview",
+        {
+          toolId: "pact.knowledge.health",
+          grantId: state.grant.payload.grant.id
+        },
+        { auth: state.owner }
+      );
+      state.governanceEvents = await harness.get("/api/events", {
+        auth: state.owner,
+        query: {
+          topic: "authorization.governance.updated",
+          includeSnapshot: 1,
+          limit: 20
+        }
+      });
+      state.permissionEvents = await harness.get("/api/events", {
+        auth: state.owner,
+        query: {
+          topic: "permissions.updated",
+          includeSnapshot: 1,
+          limit: 20
+        }
+      });
       state.executed = await harness.post(
         "/api/tool-management/v1/execute",
         {
@@ -366,9 +417,35 @@ const scenarios = [
       assert.equal([...ids].some((id) => id.startsWith("agent_tools.")), false);
       expectOk(state.catalog, "tool catalog");
       assert.ok(state.catalog.payload.tools.some((tool) => tool.id === "pact.knowledge.health"));
+      expectOk(state.initialGovernanceUpdate, "initial authorization governance update");
       expectStatus(state.grant, 201, "create grant");
+      assert.equal(
+        state.grant.payload.grant.metadata.policyRevision,
+        state.initialGovernanceUpdate.payload.policyRevision.revision
+      );
       expectOk(state.previewAllowed, "policy preview");
       assert.equal(state.previewAllowed.payload.decision.effect, "allow");
+      expectOk(state.governanceUpdate, "authorization governance update");
+      assert.equal(state.governanceUpdate.payload.refresh.grantRefreshRequired, true);
+      assert.equal(state.governanceUpdate.payload.refresh.gatewayPolicyReloadRequired, true);
+      assert.equal(state.governanceUpdate.payload.events.governance.topic, "authorization.governance.updated");
+      assert.equal(state.governanceUpdate.payload.events.permissions.topic, "permissions.updated");
+      expectOk(state.previewAfterGovernanceUpdate, "policy preview after governance update");
+      assert.equal(state.previewAfterGovernanceUpdate.payload.decision.grantPolicyState, "stale");
+      const policyRevision = state.governanceUpdate.payload.policyRevision.revision;
+      const grantPolicyRevision = Number(state.grant.payload.grant.metadata.policyRevision || 0);
+      assert.equal(policyRevision > grantPolicyRevision, true);
+      expectOk(state.governanceEvents, "authorization governance event stream");
+      const governanceEvent = findEventByRevision(state.governanceEvents.payload, policyRevision);
+      assert.ok(governanceEvent, "governance update must publish a retained event");
+      assert.equal(governanceEvent.payload.refresh.grantRefreshRequired, true);
+      assert.equal(governanceEvent.payload.mutation.entityType, "team");
+      assert.equal(governanceEvent.payload.mutation.entityId, "business-scenario-tool-team");
+      expectOk(state.permissionEvents, "permissions update event stream");
+      const permissionEvent = findEventByRevision(state.permissionEvents.payload, policyRevision);
+      assert.ok(permissionEvent, "permission update must be visible to clients");
+      assert.equal(permissionEvent.payload.sourceTopic, "authorization.governance.updated");
+      assert.equal(permissionEvent.payload.refresh.gatewayPolicyReloadRequired, true);
       expectOk(state.executed, "execute allowed tool");
       expectStatus(state.denied, 403, "deny tool outside allowlist");
       expectAuditEvent(

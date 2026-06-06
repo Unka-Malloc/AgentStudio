@@ -92,6 +92,17 @@ const DEFAULT_ROLE_PROFILES = [
     }
   },
   {
+    roleId: "knowledge_raw_batch_extractor",
+    modelAlias: "deepseek-v3-671b",
+    fallback: "deterministic-raw-batch-extraction",
+    purpose: "Extract compact core findings from one bounded raw-corpus batch for later knowledge distillation.",
+    budget: {
+      maxInputTokens: 14000,
+      maxOutputTokens: 1600,
+      maxCallsPerRun: 40
+    }
+  },
+  {
     roleId: "gold_rule_applier",
     modelAlias: "qwen-v3-32b",
     fallback: "deterministic-gold-rule-application",
@@ -576,6 +587,36 @@ function deterministicKnowledgeSkillDistillation(input = {}) {
   };
 }
 
+function deterministicRawBatchExtraction(input = {}) {
+  const batch = asObject(input.batch);
+  const documents = asArray(batch.documents);
+  const coreFindings = documents.slice(0, 12).map((document, index) => {
+    const body = normalizeText(document.text || document.snippet || "");
+    return {
+      findingId: `batch_${batch.batchNumber || 1}_finding_${index + 1}`,
+      statement: body
+        ? `${normalizeText(document.title || `Document ${index + 1}`)}：${body.slice(0, 240)}`
+        : normalizeText(document.title || `Document ${index + 1}`),
+      importance: index === 0 ? "primary" : "supporting",
+      confidence: 0.55,
+      citations: [normalizeText(document.title || document.sourceLocator?.sourcePath || "")].filter(Boolean)
+    };
+  });
+  return {
+    summary: `批次 ${batch.batchNumber || 1} 覆盖 ${Number(batch.documentCount || documents.length)} 份材料，形成 ${coreFindings.length} 条候选核心点。`,
+    coreFindings,
+    sourceCoverage: {
+      batchNumber: Number(batch.batchNumber || 1),
+      documentCount: Number(batch.documentCount || documents.length),
+      characterCount: Number(batch.characterCount || 0),
+      modelCharacterCount: Number(batch.modelCharacterCount || 0),
+      truncatedForModel: batch.truncatedForModel === true
+    },
+    risks: batch.truncatedForModel === true ? ["batch_text_truncated_for_model_budget"] : [],
+    notes: ["deterministic fallback; no model output was used"]
+  };
+}
+
 function deterministicGoldRuleApplication(input = {}) {
   const goldenRule = asObject(input.goldenRule || input.goldenRuleDecision);
   return {
@@ -701,6 +742,9 @@ function fallbackDecision(roleId, input) {
   }
   if (roleId === "knowledge_skill_distiller") {
     return deterministicKnowledgeSkillDistillation(input);
+  }
+  if (roleId === "knowledge_raw_batch_extractor") {
+    return deterministicRawBatchExtraction(input);
   }
   if (roleId === "gold_rule_applier") {
     return deterministicGoldRuleApplication(input);

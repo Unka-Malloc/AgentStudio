@@ -95,6 +95,17 @@ function normalizeRule(input = {}, fallback = {}) {
   };
 }
 
+function normalizeSupervisorRecovery(input = {}, fallback = {}) {
+  return {
+    ...fallback,
+    ...input,
+    enabled: normalizeBoolean(input.enabled, fallback.enabled !== false),
+    cooldownMs: normalizeInteger(input.cooldownMs ?? fallback.cooldownMs, 30000, 1000, 3600000),
+    startupWaitMs: normalizeInteger(input.startupWaitMs ?? fallback.startupWaitMs, 1200, 0, 60000),
+    plistPath: String(input.plistPath || fallback.plistPath || "").trim()
+  };
+}
+
 export async function loadMonitorAlertConfig(userDataPath) {
   const defaults = asObject(await readJsonIfExists(DEFAULT_CONFIG_PATH, {}));
   const override = asObject(await readJsonIfExists(monitorAlertConfigPath(userDataPath), {}));
@@ -129,6 +140,10 @@ export async function loadMonitorAlertConfig(userDataPath) {
     ),
     historyLimit: normalizeInteger(override.historyLimit ?? defaults.historyLimit, 200, 10, 5000),
     serviceLabel: String(override.serviceLabel || defaults.serviceLabel || DEFAULT_SERVICE_LABEL),
+    supervisorRecovery: normalizeSupervisorRecovery(
+      asObject(override.supervisorRecovery),
+      asObject(defaults.supervisorRecovery)
+    ),
     rules
   };
 }
@@ -162,6 +177,10 @@ async function normalizeMonitorAlertConfig(input = {}) {
     heartbeatStaleMs: normalizeInteger(merged.heartbeatStaleMs, 15000, 1000, 600000),
     queueHeartbeatStaleMs: normalizeInteger(merged.queueHeartbeatStaleMs, 60000, 5000, 3600000),
     recoverInterruptedQueues: normalizeBoolean(merged.recoverInterruptedQueues, true),
+    supervisorRecovery: normalizeSupervisorRecovery(
+      asObject(merged.supervisorRecovery),
+      asObject(defaults.supervisorRecovery)
+    ),
     historyLimit: normalizeInteger(merged.historyLimit, 200, 10, 5000),
     serviceLabel: String(merged.serviceLabel || DEFAULT_SERVICE_LABEL),
     rules
@@ -217,6 +236,46 @@ function buildAlert({ alertId, ruleId, rule, variables, active = true, extra = {
   };
 }
 
+function normalizeLegacyAlertText(value) {
+  let normalized = String(value || "")
+    .replaceAll("后台进程守护器", "后台 Worker 管理进程")
+    .replaceAll("后台守护进程", "后台 Worker 管理进程")
+    .replaceAll("维护任务 Worker", "智能巡检 Worker")
+    .replaceAll("智能体 Worker 未正常运行", "智能体未配置或未接通")
+    .replaceAll("维护任务队列", "智能巡检队列")
+    .replaceAll("维护任务和智能巡检", "智能巡检")
+    .replaceAll("已被守护进程重启", "已由后台 Worker 管理进程重启")
+    .replaceAll("工作队列", "任务队列");
+  normalized = normalized.replace(
+    /智能体 Worker 当前状态为 (?:missing|stopped|stale|failed|exited).*?[。.]/g,
+    "智能体模型库未配置或未接通，请在智能体仓库配置并探测可用模型。"
+  );
+  const supervisorMessage = normalized.match(
+    /^后台 Worker 管理进程未运行[，,]\s*PID\s+(.+?)[。.]请检查 launchd 服务\s+(.+?)[。.]$/
+  );
+  if (supervisorMessage) {
+    normalized =
+      `后台 Worker 管理进程未运行，PID ${supervisorMessage[1]}。` +
+      `它负责拉起和管理导入解析、目录同步、智能巡检和智能体 Worker；请检查 launchd 服务 ${supervisorMessage[2]}。`;
+  }
+  return normalized;
+}
+
+function normalizeLegacyAlertCopy(value) {
+  if (typeof value === "string") {
+    return normalizeLegacyAlertText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeLegacyAlertCopy(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, normalizeLegacyAlertCopy(item)])
+    );
+  }
+  return value;
+}
+
 function attachAlertRegistration(alert) {
   return {
     ...alert,
@@ -229,7 +288,8 @@ function attachAlertRegistrations(alerts = []) {
 }
 
 async function loadState(userDataPath) {
-  return asObject(await readJsonIfExists(monitorAlertStatePath(userDataPath), {}));
+  const state = await readJsonIfExists(monitorAlertStatePath(userDataPath), {});
+  return asObject(normalizeLegacyAlertCopy(state));
 }
 
 function existingSystemRegistrations(state, originalType) {
@@ -263,7 +323,7 @@ function buildMonitorSystemStatus({
       configPath: state.configPath || "",
       summary: state.summary || {},
       features: ["运维监控", "报警"],
-      monitors: ["后台进程状态", "工作队列闭环", "中断恢复"],
+      monitors: ["后台进程状态", "任务队列闭环", "中断恢复"],
       alerts: Object.keys(config.rules || {})
     }),
     ...activeAlerts.map((alert) => alert.unifiedRegistration || unifiedRegistrationForAlert(alert)),
@@ -428,6 +488,12 @@ function evaluateAlerts({ backgroundStatus, queueMonitor, config }) {
     }));
   }
   for (const processItem of backgroundStatus.processes || []) {
+    if (processItem.role === "background-supervisor" && supervisorRule.enabled) {
+      continue;
+    }
+    if (processItem.desired === false) {
+      continue;
+    }
     const variables = {
       source: "background-process",
       role: processItem.role,

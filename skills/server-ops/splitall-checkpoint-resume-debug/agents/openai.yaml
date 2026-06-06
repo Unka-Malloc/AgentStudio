@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Checkpoint Resume Debug"
-  short_description: "Help with SplitAll Checkpoint Resume Debug tasks"
-  default_prompt: "Use $splitall-checkpoint-resume-debug to handle this SplitAll platform task."

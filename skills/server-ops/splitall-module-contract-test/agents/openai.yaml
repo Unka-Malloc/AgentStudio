@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Module Contract Test"
-  short_description: "Help with SplitAll Module Contract Test tasks"
-  default_prompt: "Use $splitall-module-contract-test to handle this SplitAll platform task."

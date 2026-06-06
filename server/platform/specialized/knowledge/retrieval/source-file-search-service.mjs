@@ -197,37 +197,6 @@ function nativePrefilterGroups(groups) {
   };
 }
 
-function decodeMimeWord(charset, encoding, encodedText) {
-  let buffer;
-  if (String(encoding).toUpperCase() === "B") {
-    buffer = Buffer.from(String(encodedText || ""), "base64");
-  } else {
-    const bytes = [];
-    const text = String(encodedText || "").replace(/_/g, " ");
-    for (let index = 0; index < text.length; index += 1) {
-      if (text[index] === "=" && /^[0-9A-Fa-f]{2}$/.test(text.slice(index + 1, index + 3))) {
-        bytes.push(Number.parseInt(text.slice(index + 1, index + 3), 16));
-        index += 2;
-      } else {
-        bytes.push(text.charCodeAt(index));
-      }
-    }
-    buffer = Buffer.from(bytes);
-  }
-  const label = String(charset || "utf-8").toLowerCase();
-  try {
-    return new TextDecoder(label).decode(buffer);
-  } catch {
-    return buffer.toString("utf8");
-  }
-}
-
-function decodeMimeEncodedWords(value) {
-  return String(value || "").replace(/=\?([^?]+)\?([BQbq])\?([^?]*)\?=/g, (_match, charset, encoding, encodedText) =>
-    decodeMimeWord(charset, encoding, encodedText)
-  );
-}
-
 function matchQueryGroups(text, groups) {
   const textLower = lower(text);
   const matches = groups.map((group) => ({
@@ -247,64 +216,6 @@ function matchQueryGroups(text, groups) {
 
 function headerValue(raw, name) {
   return extractEmailHeaderValue(raw, name);
-}
-
-function stripHtml(raw) {
-  return String(raw || "")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function stripUrlNoise(raw) {
-  return String(raw || "")
-    .replace(/https?:\/\/[^\s"'<>]+/gi, " ")
-    .replace(/mailto:[^\s"'<>]+/gi, " ")
-    .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi, " ")
-    .replace(/\b(?:utm|campaign|tracking|token|signature|redirect|url|href|src|osub|sojtags|emid|crd|mpre|ch|bu|user-id|instance|site-id|templateid|trackingcode)[a-z0-9_-]*=[^\s"'<>]+/gi, " ");
-}
-
-function stripTransportEncodingNoise(raw) {
-  const output = [];
-  let skippingBase64Part = false;
-  for (const line of String(raw || "").split(/\r?\n/)) {
-    const value = line.trim();
-    if (/^--[A-Za-z0-9'()+_,./:=?-]+/.test(value)) {
-      skippingBase64Part = false;
-      output.push(line);
-      continue;
-    }
-    if (/^Content-Transfer-Encoding:\s*base64\b/i.test(value)) {
-      skippingBase64Part = true;
-      continue;
-    }
-    if (skippingBase64Part) {
-      continue;
-    }
-    const compact = value.replace(/\s+/g, "");
-    if (compact.length >= 40) {
-      const base64Like = /^[A-Za-z0-9+/=_-]+$/.test(compact) && /[A-Za-z]/.test(compact) && /[0-9+/=_-]/.test(compact);
-      const quotedPrintableBinary = /(?:=[A-F0-9]{2}){4,}/i.test(compact);
-      const urlEncodedNoise = /(?:%[A-F0-9]{2}){4,}/i.test(compact);
-      if (base64Like || quotedPrintableBinary || urlEncodedNoise) {
-        continue;
-      }
-    }
-    output.push(line);
-  }
-  return output.join("\n");
-}
-
-function rawEmailBody(raw) {
-  const text = String(raw || "");
-  const splitIndex = text.search(/\r?\n\r?\n/);
-  return splitIndex >= 0 ? text.slice(splitIndex) : text;
 }
 
 function searchableTextFromRawEmail(raw) {

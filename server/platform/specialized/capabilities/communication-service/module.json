@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "name": "CommunicationService",
+  "version": 1,
+  "category": "agent-client-protocol",
+  "agentCommunicationKind": "mcp-acp",
+  "applicationSubsystem": "communication-service",
+  "description": "Platform communication capability directory for ACP Relay and MCP Server Side.",
+  "defaultLoaded": true,
+  "protocol": "pact.communication-service.v1",
+  "services": [
+    {
+      "serviceId": "acp-agent-relay",
+      "label": "ACP Relay",
+      "protocol": "acp",
+      "routeTarget": "acp-agent-relay",
+      "modulePath": "server/platform/specialized/capabilities/agent-relay/acp-agent-relay"
+    },
+    {
+      "serviceId": "mcp-server-side",
+      "label": "MCP Server",
+      "protocol": "mcp",
+      "routeTarget": "mcp-server-side",
+      "modulePath": "server/platform/common/mcp/http-mcp-adapter.mjs"
+    }
+  ],
+  "components": {
+    "communicationService": {
+      "path": "./index.mjs",
+      "factory": "createCommunicationServiceProvider",
+      "exports": [
+        "COMMUNICATION_SERVICE_ID",
+        "COMMUNICATION_SERVICE_PROTOCOL_VERSION",
+        "DEFAULT_COMMUNICATION_SERVICE_RECORDS",
+        "createCommunicationServiceProvider"
+      ],
+      "requiredScopes": [
+        "agent_relay:view",
+        "tool_management:view"
+      ],
+      "maxRisk": "read_only",
+      "auditRequired": true
+    }
+  },
+  "verification": [
+    "npm run server:verify:communication-service --silent"
+  ]
+}

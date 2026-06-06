@@ -1,0 +1,924 @@
+{
+  "protocolVersion": "pact.external-knowledge-distillation.format-routes.v1",
+  "generatedFrom": "external-services/knowledge-distillation-service/server.mjs",
+  "routeCount": 24,
+  "extensionCount": 141,
+  "mediaTypeCount": 132,
+  "strategy": "singleton-format-route-registry.v1",
+  "routes": [
+    {
+      "id": "pdf",
+      "label": "PDF document",
+      "extensions": [
+        ".pdf"
+      ],
+      "mediaTypes": [
+        "application/pdf"
+      ],
+      "contentShape": "pdf",
+      "preferredParser": "pdf.text.tika-safe",
+      "fallbackParsers": [
+        "pdf.visual.layout",
+        "ocr.page"
+      ],
+      "parserChain": [
+        "pdf.route",
+        "pdf.text.tika-safe",
+        "pdf.text.pdftotext",
+        "pdf.text.file-ref-elements",
+        "pdf.hyperlinks",
+        "pdf.outlines",
+        "pdf.visual.layout",
+        "ocr.page"
+      ],
+      "streamingUnit": "page",
+      "referenceFrameworks": [
+        "docling",
+        "mineru",
+        "marker",
+        "unstructured"
+      ]
+    },
+    {
+      "id": "word",
+      "label": "Word document",
+      "extensions": [
+        ".docx",
+        ".docm",
+        ".dotx",
+        ".dotm",
+        ".doc",
+        ".dot",
+        ".rtf"
+      ],
+      "mediaTypes": [
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-word.document.macroenabled.12",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
+        "application/vnd.ms-word.template.macroenabled.12",
+        "application/msword",
+        "application/rtf",
+        "text/rtf"
+      ],
+      "contentShape": "office-document",
+      "preferredParser": "office.word.structured",
+      "fallbackParsers": [
+        "tika.text",
+        "ocr.embedded-images"
+      ],
+      "parserChain": [
+        "office.route",
+        "office.word.structured",
+        "office.word.styles",
+        "office.word.numbering",
+        "office.word.tables",
+        "office.word.content-controls",
+        "office.word.bookmarks",
+        "office.word.annotations",
+        "office.word.revisions",
+        "office.word.hyperlinks",
+        "office.word.images",
+        "office.word.charts",
+        "tika.text"
+      ],
+      "streamingUnit": "section",
+      "referenceFrameworks": [
+        "docling",
+        "mineru",
+        "unstructured"
+      ]
+    },
+    {
+      "id": "presentation",
+      "label": "Presentation",
+      "extensions": [
+        ".pptx",
+        ".pptm",
+        ".ppsx",
+        ".ppsm",
+        ".potx",
+        ".potm",
+        ".ppt",
+        ".pps",
+        ".pot"
+      ],
+      "mediaTypes": [
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.ms-powerpoint.presentation.macroenabled.12",
+        "application/vnd.openxmlformats-officedocument.presentationml.slideshow",
+        "application/vnd.ms-powerpoint.slideshow.macroenabled.12",
+        "application/vnd.openxmlformats-officedocument.presentationml.template",
+        "application/vnd.ms-powerpoint.template.macroenabled.12",
+        "application/vnd.ms-powerpoint"
+      ],
+      "contentShape": "presentation",
+      "preferredParser": "office.presentation.slides",
+      "fallbackParsers": [
+        "tika.text",
+        "ocr.slide-images"
+      ],
+      "parserChain": [
+        "office.route",
+        "office.presentation.slides",
+        "office.presentation.layouts",
+        "office.presentation.placeholders",
+        "office.presentation.tables",
+        "office.presentation.hyperlinks",
+        "office.presentation.images",
+        "office.presentation.charts",
+        "office.presentation.speaker-notes",
+        "office.presentation.comments",
+        "tika.text",
+        "ocr.slide-images"
+      ],
+      "streamingUnit": "slide",
+      "referenceFrameworks": [
+        "docling",
+        "mineru",
+        "unstructured"
+      ]
+    },
+    {
+      "id": "visio",
+      "label": "Visio drawing",
+      "extensions": [
+        ".vsdx",
+        ".vsdm",
+        ".vssx",
+        ".vssm",
+        ".vstx",
+        ".vstm",
+        ".vsd",
+        ".vss",
+        ".vst",
+        ".vdx"
+      ],
+      "mediaTypes": [
+        "application/vnd.ms-visio.drawing.main+xml",
+        "application/vnd.ms-visio.drawing.macroenabled.main+xml",
+        "application/vnd.ms-visio.stencil.main+xml",
+        "application/vnd.ms-visio.stencil.macroenabled.main+xml",
+        "application/vnd.ms-visio.template.main+xml",
+        "application/vnd.ms-visio.template.macroenabled.main+xml",
+        "application/vnd.visio",
+        "application/vnd.ms-visio",
+        "application/x-visio",
+        "application/visio"
+      ],
+      "contentShape": "office-drawing",
+      "preferredParser": "office.visio.pages",
+      "fallbackParsers": [
+        "tika.text",
+        "text.direct"
+      ],
+      "parserChain": [
+        "office.route",
+        "office.visio.pages",
+        "office.visio.shapes",
+        "office.visio.connectors",
+        "office.visio.text",
+        "tika.text"
+      ],
+      "streamingUnit": "page",
+      "referenceFrameworks": [
+        "docling",
+        "unstructured",
+        "haystack",
+        "llama-index"
+      ]
+    },
+    {
+      "id": "spreadsheet",
+      "label": "Spreadsheet",
+      "extensions": [
+        ".xlsx",
+        ".xlsm",
+        ".xltx",
+        ".xltm",
+        ".xls",
+        ".xlsb",
+        ".csv",
+        ".tsv"
+      ],
+      "mediaTypes": [
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel.sheet.macroenabled.12",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.template",
+        "application/vnd.ms-excel.template.macroenabled.12",
+        "application/vnd.ms-excel",
+        "application/vnd.ms-excel.sheet.binary.macroenabled.12",
+        "text/csv",
+        "text/tab-separated-values"
+      ],
+      "contentShape": "spreadsheet",
+      "preferredParser": "table.sheet.structured",
+      "fallbackParsers": [
+        "tika.text",
+        "text.direct"
+      ],
+      "parserChain": [
+        "table.route",
+        "table.sheet.structured",
+        "table.workbook.sheets",
+        "table.sheet.headers",
+        "table.sheet.cells",
+        "table.sheet.merged-cells",
+        "table.sheet.comments",
+        "table.sheet.date-styles",
+        "table.sheet.formulas",
+        "table.sheet.hyperlinks",
+        "table.sheet.charts",
+        "table.rows.windowed"
+      ],
+      "streamingUnit": "sheet",
+      "referenceFrameworks": [
+        "docling",
+        "mineru",
+        "unstructured",
+        "haystack"
+      ]
+    },
+    {
+      "id": "open-document",
+      "label": "OpenDocument",
+      "extensions": [
+        ".odt",
+        ".ott",
+        ".ods",
+        ".ots",
+        ".odp",
+        ".otp"
+      ],
+      "mediaTypes": [
+        "application/vnd.oasis.opendocument.text",
+        "application/vnd.oasis.opendocument.text-template",
+        "application/vnd.oasis.opendocument.spreadsheet",
+        "application/vnd.oasis.opendocument.spreadsheet-template",
+        "application/vnd.oasis.opendocument.presentation",
+        "application/vnd.oasis.opendocument.presentation-template"
+      ],
+      "contentShape": "open-document",
+      "preferredParser": "open-document.structured",
+      "fallbackParsers": [
+        "tika.text"
+      ],
+      "parserChain": [
+        "open-document.route",
+        "open-document.structured",
+        "open-document.tables",
+        "open-document.hyperlinks",
+        "tika.text"
+      ],
+      "streamingUnit": "section",
+      "referenceFrameworks": [
+        "docling",
+        "unstructured",
+        "haystack"
+      ]
+    },
+    {
+      "id": "ebook",
+      "label": "Ebook",
+      "extensions": [
+        ".epub"
+      ],
+      "mediaTypes": [
+        "application/epub+zip"
+      ],
+      "contentShape": "ebook",
+      "preferredParser": "ebook.epub",
+      "fallbackParsers": [
+        "tika.text"
+      ],
+      "parserChain": [
+        "ebook.route",
+        "ebook.epub",
+        "tika.text"
+      ],
+      "streamingUnit": "chapter",
+      "referenceFrameworks": [
+        "unstructured",
+        "llama-index",
+        "haystack"
+      ]
+    },
+    {
+      "id": "email",
+      "label": "Email",
+      "extensions": [
+        ".eml",
+        ".msg",
+        ".mbox"
+      ],
+      "mediaTypes": [
+        "message/rfc822",
+        "application/vnd.ms-outlook",
+        "application/mbox",
+        "application/x-mbox"
+      ],
+      "contentShape": "email",
+      "preferredParser": "email.headers-body-attachments",
+      "fallbackParsers": [
+        "tika.text",
+        "text.direct"
+      ],
+      "parserChain": [
+        "email.route",
+        "email.msg.tika",
+        "email.headers-body-attachments",
+        "attachment.route"
+      ],
+      "streamingUnit": "message",
+      "referenceFrameworks": [
+        "unstructured",
+        "llama-index",
+        "haystack"
+      ]
+    },
+    {
+      "id": "image",
+      "label": "Image",
+      "extensions": [
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".tif",
+        ".tiff",
+        ".webp",
+        ".bmp",
+        ".heic",
+        ".pbm",
+        ".pgm",
+        ".pnm"
+      ],
+      "mediaTypes": [
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/tiff",
+        "image/webp",
+        "image/bmp",
+        "image/heic",
+        "image/x-portable-bitmap",
+        "image/x-portable-graymap",
+        "image/x-portable-anymap"
+      ],
+      "contentShape": "image",
+      "preferredParser": "ocr.image",
+      "fallbackParsers": [
+        "multimodal.image"
+      ],
+      "parserChain": [
+        "image.route",
+        "ocr.image",
+        "multimodal.image"
+      ],
+      "streamingUnit": "image",
+      "referenceFrameworks": [
+        "docling",
+        "mineru",
+        "unstructured"
+      ]
+    },
+    {
+      "id": "markdown",
+      "label": "Markdown",
+      "extensions": [
+        ".md",
+        ".markdown",
+        ".mdown"
+      ],
+      "mediaTypes": [
+        "text/markdown",
+        "text/x-markdown"
+      ],
+      "contentShape": "text",
+      "preferredParser": "text.direct.markdown",
+      "fallbackParsers": [
+        "text.direct"
+      ],
+      "parserChain": [
+        "text.route",
+        "text.direct.markdown"
+      ],
+      "streamingUnit": "heading",
+      "referenceFrameworks": [
+        "llama-index",
+        "haystack"
+      ]
+    },
+    {
+      "id": "plain-text",
+      "label": "Plain text",
+      "extensions": [
+        ".txt",
+        ".text",
+        ".log"
+      ],
+      "mediaTypes": [
+        "text/plain"
+      ],
+      "contentShape": "text",
+      "preferredParser": "text.direct",
+      "fallbackParsers": [
+        "tika.text"
+      ],
+      "parserChain": [
+        "text.route",
+        "text.direct"
+      ],
+      "streamingUnit": "section",
+      "referenceFrameworks": [
+        "unstructured",
+        "llama-index",
+        "haystack"
+      ]
+    },
+    {
+      "id": "markup",
+      "label": "Markup document",
+      "extensions": [
+        ".html",
+        ".htm",
+        ".xhtml",
+        ".xml",
+        ".rst",
+        ".adoc",
+        ".asciidoc",
+        ".org",
+        ".tex",
+        ".latex",
+        ".wiki",
+        ".mediawiki"
+      ],
+      "mediaTypes": [
+        "text/html",
+        "application/xhtml+xml",
+        "application/xml",
+        "text/xml",
+        "text/x-rst",
+        "text/x-asciidoc",
+        "text/org",
+        "text/x-org",
+        "text/x-tex",
+        "application/x-latex",
+        "text/x-mediawiki"
+      ],
+      "contentShape": "structured-markup",
+      "preferredParser": "markup.structure",
+      "fallbackParsers": [
+        "text.direct",
+        "tika.text"
+      ],
+      "parserChain": [
+        "markup.route",
+        "markup.structure",
+        "text.direct"
+      ],
+      "streamingUnit": "element",
+      "referenceFrameworks": [
+        "docling",
+        "unstructured",
+        "haystack",
+        "llama-index"
+      ]
+    },
+    {
+      "id": "config",
+      "label": "Configuration",
+      "extensions": [
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".conf",
+        ".properties",
+        ".env"
+      ],
+      "mediaTypes": [
+        "application/yaml",
+        "application/x-yaml",
+        "text/yaml",
+        "application/toml",
+        "text/toml",
+        "text/x-toml",
+        "text/x-ini",
+        "application/x-ini",
+        "text/x-java-properties",
+        "text/x-properties"
+      ],
+      "contentShape": "structured-config",
+      "preferredParser": "config.key-value",
+      "fallbackParsers": [
+        "text.direct"
+      ],
+      "parserChain": [
+        "config.route",
+        "config.key-value",
+        "text.direct"
+      ],
+      "streamingUnit": "section",
+      "referenceFrameworks": [
+        "llama-index",
+        "haystack",
+        "unstructured"
+      ]
+    },
+    {
+      "id": "json",
+      "label": "Structured JSON",
+      "extensions": [
+        ".json",
+        ".jsonc",
+        ".jsonl",
+        ".ndjson"
+      ],
+      "mediaTypes": [
+        "application/json",
+        "application/jsonc",
+        "application/x-jsonc",
+        "application/x-ndjson"
+      ],
+      "contentShape": "structured",
+      "preferredParser": "structured.json",
+      "fallbackParsers": [
+        "text.direct"
+      ],
+      "parserChain": [
+        "structured.route",
+        "structured.json",
+        "text.direct"
+      ],
+      "streamingUnit": "record",
+      "referenceFrameworks": [
+        "llama-index",
+        "haystack"
+      ]
+    },
+    {
+      "id": "notebook",
+      "label": "Jupyter Notebook",
+      "extensions": [
+        ".ipynb"
+      ],
+      "mediaTypes": [
+        "application/x-ipynb+json",
+        "application/vnd.jupyter",
+        "application/x-jupyter-notebook"
+      ],
+      "contentShape": "notebook",
+      "preferredParser": "notebook.cells",
+      "fallbackParsers": [
+        "structured.json",
+        "text.direct"
+      ],
+      "parserChain": [
+        "notebook.route",
+        "notebook.cells",
+        "structured.json"
+      ],
+      "streamingUnit": "cell",
+      "referenceFrameworks": [
+        "llama-index",
+        "haystack",
+        "unstructured"
+      ]
+    },
+    {
+      "id": "diff",
+      "label": "Patch / Diff",
+      "extensions": [
+        ".diff",
+        ".patch"
+      ],
+      "mediaTypes": [
+        "text/x-diff",
+        "text/x-patch"
+      ],
+      "contentShape": "change-set",
+      "preferredParser": "diff.unified",
+      "fallbackParsers": [
+        "text.direct"
+      ],
+      "parserChain": [
+        "diff.route",
+        "diff.unified",
+        "text.direct"
+      ],
+      "streamingUnit": "hunk",
+      "referenceFrameworks": [
+        "haystack",
+        "llama-index",
+        "graphrag"
+      ]
+    },
+    {
+      "id": "calendar",
+      "label": "Calendar",
+      "extensions": [
+        ".ics",
+        ".vcs"
+      ],
+      "mediaTypes": [
+        "text/calendar",
+        "application/ics",
+        "text/x-vcalendar"
+      ],
+      "contentShape": "calendar",
+      "preferredParser": "calendar.ics",
+      "fallbackParsers": [
+        "text.direct"
+      ],
+      "parserChain": [
+        "calendar.route",
+        "calendar.ics",
+        "text.direct"
+      ],
+      "streamingUnit": "event",
+      "referenceFrameworks": [
+        "llama-index",
+        "haystack",
+        "unstructured"
+      ]
+    },
+    {
+      "id": "transcript",
+      "label": "Timed transcript / subtitle",
+      "extensions": [
+        ".vtt",
+        ".webvtt",
+        ".srt",
+        ".sbv"
+      ],
+      "mediaTypes": [
+        "text/vtt",
+        "text/webvtt",
+        "application/x-subrip",
+        "text/x-subrip",
+        "text/x-subtitle"
+      ],
+      "contentShape": "timed-transcript",
+      "preferredParser": "transcript.cues",
+      "fallbackParsers": [
+        "text.direct"
+      ],
+      "parserChain": [
+        "transcript.route",
+        "transcript.webvtt",
+        "transcript.srt",
+        "transcript.speaker-turns",
+        "transcript.time-index",
+        "text.direct"
+      ],
+      "streamingUnit": "cue",
+      "referenceFrameworks": [
+        "docling",
+        "unstructured",
+        "llama-index",
+        "haystack"
+      ]
+    },
+    {
+      "id": "financial-report",
+      "label": "XBRL / Inline XBRL financial report",
+      "extensions": [
+        ".xbrl",
+        ".ixbrl"
+      ],
+      "mediaTypes": [
+        "application/xbrl+xml",
+        "application/ixbrl+xml",
+        "application/x-inline-xbrl",
+        "text/xbrl"
+      ],
+      "contentShape": "financial-facts",
+      "preferredParser": "xbrl.facts",
+      "fallbackParsers": [
+        "markup.structure",
+        "text.direct"
+      ],
+      "parserChain": [
+        "financial-report.route",
+        "xbrl.contexts",
+        "xbrl.facts",
+        "xbrl.units",
+        "markup.structure",
+        "text.direct"
+      ],
+      "streamingUnit": "fact",
+      "referenceFrameworks": [
+        "docling",
+        "unstructured",
+        "llama-index",
+        "haystack"
+      ]
+    },
+    {
+      "id": "audio",
+      "label": "Audio / speech recording",
+      "extensions": [
+        ".wav",
+        ".mp3",
+        ".m4a",
+        ".aac",
+        ".flac",
+        ".ogg",
+        ".opus"
+      ],
+      "mediaTypes": [
+        "audio/wav",
+        "audio/wave",
+        "audio/mpeg",
+        "audio/mp4",
+        "audio/aac",
+        "audio/flac",
+        "audio/ogg",
+        "audio/opus"
+      ],
+      "contentShape": "audio",
+      "preferredParser": "audio.transcript-sidecar",
+      "fallbackParsers": [
+        "audio.asr.external",
+        "metadata.only"
+      ],
+      "parserChain": [
+        "audio.route",
+        "audio.metadata",
+        "audio.transcript-sidecar",
+        "audio.asr.external"
+      ],
+      "streamingUnit": "track",
+      "referenceFrameworks": [
+        "docling",
+        "unstructured",
+        "haystack"
+      ]
+    },
+    {
+      "id": "source-code",
+      "label": "Source code",
+      "extensions": [
+        ".js",
+        ".mjs",
+        ".ts",
+        ".tsx",
+        ".py",
+        ".java",
+        ".go",
+        ".rs",
+        ".swift",
+        ".kt",
+        ".c",
+        ".cc",
+        ".cpp",
+        ".h",
+        ".hpp"
+      ],
+      "mediaTypes": [
+        "text/x-source-code",
+        "application/javascript",
+        "text/javascript",
+        "text/x-python"
+      ],
+      "contentShape": "source-code",
+      "preferredParser": "code.structure",
+      "fallbackParsers": [
+        "text.direct"
+      ],
+      "parserChain": [
+        "code.route",
+        "code.structure",
+        "text.direct"
+      ],
+      "streamingUnit": "symbol",
+      "referenceFrameworks": [
+        "llama-index",
+        "haystack",
+        "graphrag"
+      ]
+    },
+    {
+      "id": "diagram",
+      "label": "Diagram",
+      "extensions": [
+        ".svg",
+        ".drawio",
+        ".dio",
+        ".mmd",
+        ".mermaid",
+        ".puml",
+        ".plantuml"
+      ],
+      "mediaTypes": [
+        "image/svg+xml",
+        "application/vnd.jgraph.mxfile",
+        "text/vnd.graphviz",
+        "text/x-mermaid",
+        "text/x-plantuml"
+      ],
+      "contentShape": "diagram",
+      "preferredParser": "diagram.structure",
+      "fallbackParsers": [
+        "text.direct",
+        "ocr.image"
+      ],
+      "parserChain": [
+        "diagram.route",
+        "diagram.structure",
+        "text.direct"
+      ],
+      "streamingUnit": "node-edge",
+      "referenceFrameworks": [
+        "haystack",
+        "llama-index",
+        "unstructured",
+        "graphrag"
+      ]
+    },
+    {
+      "id": "archive",
+      "label": "Archive",
+      "extensions": [
+        ".zip",
+        ".tar",
+        ".gz",
+        ".tgz",
+        ".tar.gz",
+        ".7z"
+      ],
+      "mediaTypes": [
+        "application/zip",
+        "application/x-tar",
+        "application/gzip",
+        "application/x-gzip",
+        "application/x-gtar",
+        "application/x-7z-compressed"
+      ],
+      "contentShape": "archive",
+      "preferredParser": "archive.expand-route",
+      "fallbackParsers": [
+        "manifest.only"
+      ],
+      "parserChain": [
+        "archive.route",
+        "archive.container-detect",
+        "archive.expand-route",
+        "child-file.route"
+      ],
+      "streamingUnit": "entry",
+      "referenceFrameworks": [
+        "ragflow",
+        "unstructured",
+        "haystack"
+      ]
+    },
+    {
+      "id": "directory",
+      "label": "Mounted directory / project package",
+      "extensions": [
+        ".directory",
+        ".folder",
+        ".pages",
+        ".numbers",
+        ".key",
+        ".keynote",
+        ".xcodeproj",
+        ".xcworkspace"
+      ],
+      "mediaTypes": [
+        "inode/directory",
+        "application/x-directory",
+        "application/vnd.apple.pages",
+        "application/vnd.apple.numbers",
+        "application/vnd.apple.keynote",
+        "application/x-iwork-pages-sffpages",
+        "application/x-iwork-numbers-sffnumbers",
+        "application/x-iwork-keynote-sffkey",
+        "application/x-xcode-project",
+        "application/x-xcode-workspace"
+      ],
+      "contentShape": "directory-project-package",
+      "preferredParser": "directory.file-ref.expand",
+      "fallbackParsers": [
+        "directory.child-route",
+        "payload.file-ref-binary-profile"
+      ],
+      "parserChain": [
+        "directory.route",
+        "directory.file-ref.expand",
+        "directory.entry-file-ref",
+        "content.signature",
+        "route.child-documents"
+      ],
+      "streamingUnit": "file",
+      "referenceFrameworks": [
+        "ragflow",
+        "llama-index",
+        "haystack",
+        "unstructured"
+      ]
+    }
+  ]
+}

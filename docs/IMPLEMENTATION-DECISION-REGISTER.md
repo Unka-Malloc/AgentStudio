@@ -72,6 +72,18 @@
 | `DEC-P0-16` 存储权威 | Ledger、permission、receipt、loan record、checkpoint metadata 是权威；文件树和索引是 projection。 |
 | `DEC-P0-17` MCP 新五类入口 | MCP outlet 硬切为 discovery/knowledge/sharedspace/codespace/skillHub，外部智能体长链路必须有主动回信。 |
 | `DEC-P0-18` 2-3-5 安全模型 | 安全模型分为两条边界、三个环境、五个对象：客户端 MCP 入口、服务端 API 出口；终端智能体、平台运行时、应用服务器；身份与准入认证、权限与行为策略、数据与状态语义、流量与资源管理、审计与事实验证。 |
+| `DEC-P0-19` Skill Hub 独立技能库 | `pact.skillHub.upload` 是真实技能包上传入口；技能包必须进入独立 server Skill Hub / skill library，不能混在 workspace contribution 里。 |
+| `DEC-P0-20` 云盘第一批 live provider | 外部云盘第一版真实上传 / 下载固定接 iCloud + OneDrive；Google Drive / Dropbox 暂留 contract-mode，fake provider 只用于 CI 合同测试。 |
+| `DEC-P0-21` 调度内核与统一操作账本 | 所有受管 operation 都必须进入 Operation Scheduling Kernel 和统一 Operation Ledger；非内核操作一律拒绝，模块本地 audit、provider ledger、queue event 和 runtime log 只能作为投影或回执。 |
+| `DEC-P0-22` 统一审批流 | 高危 operation 必须由 Operation Scheduling Kernel 挂起为 `pending_operation`，统一进入独立 `/approval` 页面；批准后恢复原 operation，拒绝或过期不执行。 |
+| `DEC-P0-23` 外部知识蒸馏服务门禁优先 | 外部知识蒸馏默认远程容器部署，必须先通过入站鉴权、非 root、Tika checksum、healthcheck、资源限制和密钥外置门禁；门禁未过前不得继续增加新解析或蒸馏能力。 |
+| `DEC-P0-24` 智能体客户端支持目标 | 第一批一等支持目标固定为 OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf；后续不再作为 P0 反复确认。 |
+| `DEC-P0-25` 前端统一接口边界 | 前端页面和组件不得直接访问后端；后端路径、HTTP method、参数和返回类型必须收敛到 `server-web/lib/*-client.ts`，页面只调用对应 controller。 |
+| `DEC-P0-26` 历史报告归档口径 | `docs/reports/history/` 只作为历史证据归档；不重写历史正文，过期或冲突内容通过顶部标注和核心文档回写处理。 |
+| `DEC-P0-27` 安全审计发布阻塞项 | H-1 CSRF 时间安全比较和 H-2 主 Dockerfile 非 root 运行是立即修复的 P0 阻塞项；H-3 CSP 去 `unsafe-inline` 独立批次做。 |
+| `DEC-P0-28` 知识蒸馏上游网关切面 | 外部知识蒸馏所有 run、evidence、artifact、download/export/compare/delete/archive 操作必须走同一上游网关切面；兼容工作台只能返回迁移报文。 |
+| `DEC-P0-29` 未决事项批量 Checklist 确认 | 2026-06-03 批量决策已完成，过程文档归档到 `docs/reports/history/`；当前执行顺序、目标、改造、测试方法和用例统一进入 `docs/reports/ORDERED-IMPLEMENTATION-TASKS-2026-06-03.md`。 |
+| `DEC-P0-30` 安全硬化剩余排期 | S-01 到 S-09 均批准；S-07 和 S-09 合并；S-10 接受残余风险，维护时处理。 |
 
 ### P1 已决议
 
@@ -87,6 +99,14 @@
 | `DEC-P1-08` 评估基准 | 建立最小真实样例集，覆盖 RAG、蒸馏、Agent、工具调用、权限拒绝、恢复演练。 |
 | `DEC-P1-09` 贡献生态 | 贡献生态先走报表驱动，不单独做完整市场。 |
 | `DEC-P1-10` 授权工作流 | 贡献资产、AgentLibrary 资产、外部知识库派生资产共用 permission request，审批人由资产类型和 workspace policy 决定。 |
+| `DEC-P1-11` 安装接入产品化 | 安装、发现、配对、配置写入、doctor、回滚和远端接入升级为 P1 产品能力，覆盖 11 个一等智能体目标。 |
+| `DEC-P1-12` 共享空间产品化 | 共享空间继续产品化，补齐大文件、路径级 ACL、版本恢复、冲突处理、跨智能体演示和审计 drilldown。 |
+| `DEC-P1-13` Skill lifecycle | Skill Hub lifecycle 批准，拆短批次，优先签名、扫描、pin、回滚和 Tool Management catalog 原子刷新。 |
+| `DEC-P1-14` 配置存储工程护栏 | 配置边界、SQLite migration、后端大模块拆分和静态边界检查进入 P1 工程治理。 |
+| `DEC-P1-15` runtime 资产外移 | JRE、Tika、模型和下载缓存等 runtime 资产必须迁出源码目录，进入外部数据/cache/release artifact。 |
+| `DEC-P1-16` 客户端清理和配对 | 客户端 GUI 继续 Flutter，CLI 后端继续 Rust；其它旧遗留按 keep/migrate/remove/dev-only 清单清理，并补非 GUI pairing。 |
+| `DEC-P1-17` 知识蒸馏质量升级 | 知识蒸馏 P1 优先算法升级；文档解析优先支持 DOCX、XLSX、PPTX、PDF 等流行办公文档。 |
+| `DEC-P1-18` 前端门禁扩展 | 前端 i18n、style、shared type、组件测试和稳定 id 边界进入 P1，门禁优先做。 |
 
 ### P2 已决议
 
@@ -99,16 +119,23 @@
 | `DEC-P2-05` 会话合并 | 冲突治理走 merge proposal，不自动写 decision。 |
 | `DEC-P2-06` 成本配额 | 建立按 workspace/subject/agentProfile 的 budget policy。 |
 | `DEC-P2-07` SDK/CLI/OpenAPI | 正式面长期以 MCP service 为主；SDK/CLI/OpenAPI 不作为同级承诺。 |
+| `DEC-P2-08` 多端客户端降级 | 手机端先不做；桌面 GUI 继续 Flutter，CLI 后端继续 Rust。 |
+| `DEC-P2-09` 个人和企业预设构建线 | 个人电脑轻量预设和企业私有化预设两条线优先做；所有附加功能必须可脱水，企业中间件通过 port/adapter 替换，个人电脑不部署集群。 |
+| `DEC-P2-10` 场景状态门禁 | 场景级 verifier 和 `scenario-implementation-status.json` 批准并提前到 P1 门禁批次。 |
+| `DEC-P2-11` provider mode 词表 | provider mode 和 receipt 字段统一提前到 P1，固定 `contract`、`local-live`、`remote-live`、`dry-run`、`failed`。 |
+| `DEC-P2-12` 模块和外部服务生态 | 模块和外部服务接入生态批准；必须提供统一治理逻辑和模块划分。 |
+| `DEC-P2-13` 脚本和依赖治理 | package scripts、Node/Flutter/Rust 版本元数据和依赖 ownership 批准，优先拆分。 |
 
 ### P3 已决议
 
 | 决策 | 结论 |
 | --- | --- |
-| `DEC-P3-01` 贡献生态 | 长期以资产贡献统计报表演进为主，逐步增加贡献者主页和推荐。 |
+| `DEC-P3-01` 贡献者生态和市场 | 完整贡献者生态、市场和统计面板进入 P3，不降级，不回退。 |
 | `DEC-P3-02` 管理驾驶舱 | 管理驾驶舱优先，第一版突出资产价值。 |
 | `DEC-P3-03` A2A/模型网关 | A2A adapter 和 OpenAI-compatible model gateway 保持可选，不进入核心闭环。 |
 | `DEC-P3-04` Agent Traffic Gateway | 智能体流量负载网关保持可选、可拆卸；拆除后 Pact direct mode 必须正常运行。 |
 | `DEC-P3-05` 联邦工作空间 | 暂不做；等单实例 workspace governance 稳定后再评估。 |
+| `DEC-P3-06` P3-C 大包搁置拆分 | connector SDK、多租户、分布式 worker、mTLS fleet、插件市场拆成单独决策，不作为一个大包启动。 |
 
 ## P0 决策
 
@@ -129,7 +156,7 @@
 
 需要决策：
 
-- OpenClaw、Codex、Claude Code、Cursor Agent、脚本型 agent 是否统一通过 Pact MCP service / Workspace API 接入。
+- OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf、脚本型 agent 是否统一通过 Pact MCP service / Workspace API 接入。
 - REST / OpenAPI / CLI / SDK 是不是只作为同一协议的其它 adapter。
 - 第一版 MCP 工具集是否只覆盖 workspace、asset、knowledge、contribution、checkpoint、permission、audit。
 
@@ -482,6 +509,70 @@
 
 决议后回写：`PROTOCOLS.md`、`WORKSPACE-ASSET-GOVERNANCE.md`。
 
+### DEC-P1-11 安装接入产品化
+
+已决议：安装、发现、配对、配置写入、doctor、回滚和远端接入升级为 P1 产品能力，覆盖 OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf。
+
+最小验收：任意一等支持目标都能输出安装计划、应用配置、运行 doctor、失败回滚；远端安装能回传机器可读状态；配置写入有快照和审计记录。
+
+决议后回写：`docs/reports/history/P1-DECISION-EXPLANATION-2026-06-03.md`、`docs/reports/ORDERED-IMPLEMENTATION-TASKS-2026-06-03.md`、`docs/AGENT-CLIENT-SUPPORT-TARGETS.md`、`docs/MCP_INSTALL.md`、`docs/USAGE.md`。
+
+### DEC-P1-12 共享空间产品化
+
+已决议：共享空间继续产品化，补齐大文件流式传输、路径级 ACL、版本恢复、冲突处理、跨智能体真实演示和审计 drilldown。
+
+最小验收：大文件不一次性读入内存；任意路径访问能解释主体、权限、版本和操作记录；版本恢复产生新的受管 operation。
+
+决议后回写：`docs/WORKSPACE-ASSET-GOVERNANCE.md`、`docs/PROTOCOLS.md`、`docs/scenarios/06-cloud-drive-sharing.md`、`docs/scenarios/07-operation-logging.md`。
+
+### DEC-P1-13 Skill lifecycle
+
+已决议：Skill Hub lifecycle 批准，拆成短批次，先做签名、扫描、pin、回滚和 Tool Management catalog 原子刷新。
+
+最小验收：上传最小技能包后进入独立 Skill Hub 记录；审批/激活后 `pact.discovery` 可见；禁用或撤销后同一 grant 不可见或不可执行；catalog 刷新不能出现半状态。
+
+决议后回写：`docs/PROTOCOLS.md`、`docs/WORKSPACE-ASSET-GOVERNANCE.md`、`docs/KNOWLEDGE-GOVERNANCE.md`。
+
+### DEC-P1-14 配置存储工程护栏
+
+已决议：配置边界、SQLite migration、后端大模块拆分和静态边界检查进入 P1 工程治理；所有密钥、外部服务配置和本地数据默认外移到 `${PACT_SERVER_DATA_DIR}`，默认 `~/.pact-server-data`。
+
+最小验收：空用户配置保持空；migration 有明确版本和执行记录；repo hygiene / secret hygiene 阻断项目目录内密钥、fake path、跨层私有 import 和裸路径拼接回流。
+
+决议后回写：`docs/SERVER.md`、`docs/PRODUCTION-CAPABILITY-GAP.md`。
+
+### DEC-P1-15 runtime 资产外移
+
+已决议：JRE、Tika、模型和下载缓存等 runtime 资产必须迁出源码目录，进入外部数据/cache/release artifact；源码目录只保留元数据、manifest、校验规则和必要占位文件。
+
+最小验收：源码 checkout 不包含真实 JRE、Tika jar、模型大文件或下载缓存；runtime dependency verifier 能解释来源、版本、checksum 和落地位置。
+
+决议后回写：`docs/SERVER.md`、`docs/WORKSPACE-ASSET-GOVERNANCE.md`。
+
+### DEC-P1-16 客户端清理和配对
+
+已决议：客户端 GUI 继续 Flutter，CLI 后端继续 Rust；其它旧遗留按 keep / migrate / remove / dev-only 清单清理，并补齐非 GUI pairing。
+
+最小验收：每个旧模块都有清理结论；非 GUI target 能通过 CLI 发起 pairing request 并在控制台批准或撤销；旧 smoke 脚本更新到新架构或明确归档。
+
+决议后回写：`docs/CLIENT_ARCHITECTURE.md`、`docs/AGENT-CLIENT-SUPPORT-TARGETS.md`、`client-gui/README.md`、`client-cli/Cargo.toml`。
+
+### DEC-P1-17 知识蒸馏质量升级
+
+已决议：知识蒸馏 P1 优先算法升级；文档解析优先支持 DOCX、XLSX、PPTX、PDF 等流行办公文档。所有新能力继续只进入 `external.knowledge.distillation` 外部服务边界。
+
+最小验收：外部服务能对真实流行办公文档输出可下载 Markdown 或包；评估样本位于外部数据目录；算法、解析、成本、错误率和证据保真进入 operation/job/trace 记录。
+
+决议后回写：`docs/KNOWLEDGE-GOVERNANCE.md`、`docs/DOCUMENT-EVALUATION-CORPUS.md`、`docs/PROTOCOLS.md`。
+
+### DEC-P1-18 前端门禁扩展
+
+已决议：前端 i18n、style、shared type、组件测试和稳定 id 边界进入 P1，门禁优先做。
+
+最小验收：`npm run server:verify:frontend-architecture` 继续守住 API/client/controller 边界，并逐步增加 i18n/style/type/component 检查；新增公共组件有 focused test 或明确豁免理由。
+
+决议后回写：`docs/Architecture.md`、`docs/PRODUCTION-CAPABILITY-GAP.md`。
+
 ## P2 决策
 
 ### DEC-P2-01 多租户、组织和团队边界
@@ -582,19 +673,77 @@
 
 决议后回写：`PROTOCOLS.md`。
 
+### DEC-P2-08 多端客户端降级
+
+已决议：手机端先不做。桌面 GUI 继续 Flutter，CLI 后端继续 Rust。iOS / Android Flutter shell 只保留后续路线，不进入当前实现批次。
+
+最小验收：P1-A/P1-F 稳定前，不新增手机端实现任务；后续如重启手机端，必须继续使用轻量 Flutter shell，不能绕过 Operation Scheduling Kernel、统一审批和操作账本。
+
+决议后回写：`docs/reports/history/P2-DECISION-EXPLANATION-2026-06-03.md`、`docs/reports/ORDERED-IMPLEMENTATION-TASKS-2026-06-03.md`、`docs/FEATURE-PROFILES.md`、`docs/CLIENT_ARCHITECTURE.md`。
+
+### DEC-P2-09 个人和企业预设构建线
+
+已决议：优先做个人电脑轻量预设和企业私有化预设两条线。必须结合平台功能模块脱水能力，把企业和个人所需模块分开维护；所有附加功能都作为可脱水模块。企业私有化部署时，中间件必须能替换为企业内部已有服务；个人电脑上不部署集群。
+
+最小验收：Feature Profile / composition preset 能输出个人电脑轻量预设和企业私有化预设计划；任意附加功能能说明是否可脱水、依赖哪些模块、在哪个预设启用；企业私有化中间件通过 port / adapter 替换，不污染个人电脑默认路径。
+
+决议后回写：`docs/FEATURE-PROFILES.md`、`docs/PRODUCTION-CAPABILITY-GAP.md`、`docs/SERVER.md`。
+
+### DEC-P2-10 场景状态门禁
+
+已决议：场景级 verifier 和 `scenario-implementation-status.json` 批准，提前到 P1 门禁批次。
+
+最小验收：每个场景节点记录 status、operationIds、toolIds、verifier、evidence 和 blockers；operation 删除、重命名或 verifier 缺失时，场景门禁失败。
+
+决议后回写：`docs/scenarios/README.md`、`docs/PRODUCTION-CAPABILITY-GAP.md`。
+
+### DEC-P2-11 provider mode 词表
+
+已决议：provider mode 和 receipt 字段统一提前到 P1，先固定 `contract`、`local-live`、`remote-live`、`dry-run`、`failed`。UI、API、receipt 和文档必须区分合同验证、本机适配器成功和远端 provider 成功。
+
+最小验收：contract-mode provider 不能显示为真实远端成功；receipt 必须声明 provider mode、verification source、remote id 或 local projection id。
+
+决议后回写：`docs/PROTOCOLS.md`、`docs/scenarios/06-cloud-drive-sharing.md`、`docs/boundary/U-1-Data.md`。
+
+### DEC-P2-12 模块和外部服务生态
+
+已决议：模块和外部服务接入生态批准；提供统一治理逻辑和模块划分。模块、外部服务、Skill、Tool Package 和 mount 不能各自发明治理状态。
+
+最小验收：新模块可用模板生成并通过 contract test；外部服务和模块使用同一治理口径描述注册、启用、禁用、授权、审计和撤销；多模态资产能从结果追溯到来源对象和解析步骤。
+
+决议后回写：`docs/PROTOCOLS.md`、`docs/PRODUCTION-CAPABILITY-GAP.md`、`docs/Architecture.md`。
+
+### DEC-P2-13 脚本和依赖治理
+
+已决议：package scripts、Node/Flutter/Rust 版本元数据和依赖 ownership 批准，优先拆分。新增验证入口不能继续无限塞进根 `package.json` 的单层脚本清单。
+
+最小验收：新人与 CI 能根据版本元数据复现开发和验证环境；重要依赖升级有 owner、影响范围和 verifier；脚本入口按 server/client/docs/security/runtime/scenario 等责任域收敛。
+
+决议后回写：`docs/TEST-FRAMEWORK.md`、`docs/PRODUCTION-CAPABILITY-GAP.md`、`package.json`。
+
 ## P3 决策
 
 ### DEC-P3-01 高级排行榜和贡献生态
 
-需要决策：
+已决议：完整贡献者生态、市场和统计面板进入 P3，不降级，不回退。
 
-- 是否做贡献者主页、贡献资产订阅、贡献请求、维护 SLA。
-- 是否支持跨团队贡献市场。
-- 是否允许公开推荐高复用 Skills。
+范围：
 
-默认建议：主闭环稳定后再做贡献生态。
+- 贡献者主页、贡献资产列表、贡献请求、维护 SLA、订阅、评分、推荐和使用统计。
+- Skill、知识包、服务和贡献资产的市场展示、授权、安装、撤销、审计和排行。
+- 贡献者声誉、维护新鲜度、风险提示和滥用防护。
 
-已决议：长期以资产贡献统计报表演进为主。
+拒绝选项：
+
+- 不接受把 P3-A 降级为普通统计报表。
+- 不接受市场绕过 P2-E 的模块/外部服务治理、签名、撤销、审批和审计。
+- 不接受把 P3-C 的分布式 worker、mTLS fleet、企业 S3/MinIO 生产部署和多租户大包混进 P3-A。
+
+最小验收：
+
+- 市场上展示的每个条目都有来源、版本、签名状态、授权范围、安装/撤销记录和风险提示。
+- 统计和推荐基于真实 operation / usage / rollback / revoke 事件。
+- 撤销后可证明 discovery、grant、Tool Management catalog 和多智能体可见性同步失效。
 
 ### DEC-P3-02 可视化和管理驾驶舱
 
@@ -644,6 +793,42 @@
 
 已决议：暂不做联邦工作空间。
 
+### DEC-P3-06 P3-C 大包搁置拆分
+
+已决议：第三方 connector SDK、插件市场、多组织多租户、分布式 worker、mTLS fleet、S3/MinIO 生产部署不作为一个大 P3 包启动。该大包搁置，并拆成 connector SDK、多租户、分布式 worker、mTLS fleet、插件市场后再单独决策。
+
+拒绝选项：
+
+- 不接受把分布式 worker、mTLS fleet、S3/MinIO 变成默认依赖。
+- 不接受把多租户和企业私有化混成一件事。
+- 不接受用 P3-C 的搁置结论回退 P3-A 已批准的完整贡献者生态、市场和统计面板。
+
+最小验收：
+
+- 重启任一 P3-C 子方向前，必须单独说明依赖、风险、预设线、脱水方式和验收门禁。
+
+### DEC-P0-30 安全硬化剩余排期
+
+已决议：
+
+- S-01 CSP 去掉 `script-src 'unsafe-inline'`：批准，单独 CSP 批次。
+- S-02 iframe sandbox 策略加固：批准。
+- S-03 初始 owner 凭据提示减少 stdout 暴露：批准。
+- S-04 HTTP 层全局请求频率限制：批准。
+- S-05 `.dockerignore` 加固：批准。
+- S-06 Docker Compose 生产 TLS 口径：批准。
+- S-07 `v-html` 防御深度加固：批准，和 S-09 合并。
+- S-08 Vite 代理 HTTPS 证书验证：批准。
+- S-09 邮件 HTML 消毒 allowlist：批准，和 S-07 合并。
+- S-10 低危残余风险：批准为接受残余风险，维护时处理。
+
+最小验收：
+
+- S-01 单独落地，不和小修混做。
+- S-07/S-09 作为同一个 HTML 渲染安全批次关闭。
+- S-10 不作为当前发布阻塞；维护相关文件时收窄输出、添加说明或补审计可见性。
+- 每个安全项关闭时必须补 verifier 或回归检查，并回写 `docs/SECURITY-VULNERABILITY-AUDIT.md` 和 `docs/reports/SECURITY-HARDENING-BACKLOG-2026-06-03.md`。
+
 ### DEC-P0-17 MCP 新五类入口和外部智能体回信闭环
 
 已决议：
@@ -681,7 +866,252 @@
 
 生命周期状态归入“数据与状态语义”，不作为第五类对象。审计与事实验证只负责证明状态迁移、权限裁决、外部副作用和拒绝结果。
 
-决议后回写：`Architecture.md`、`PRODUCTION-CAPABILITY-GAP.md`、`V0.0.1-IMPLEMENTATION-PLAN.md`。
+决议后回写：`Architecture.md`、`PRODUCTION-CAPABILITY-GAP.md`、`docs/reports/history/V0.0.1-IMPLEMENTATION-PLAN.md`。
+
+### DEC-P0-19 Skill Hub 独立技能库
+
+已决议：
+
+- `pact.skillHub.upload` 固定为真实技能包上传入口。
+- 技能包必须进入独立 server Skill Hub / skill library，并通过 capability package lifecycle 完成 manifest 校验、风险扫描、审批、发布、禁用、回滚和 MCP discovery 刷新。
+- Workspace contribution 只能记录来源、审核、采用、排行榜、usage 和引用关系；不能保存技能包文件、版本、发布状态、启用状态或 rollback target。
+- `workspace.skill.upload/list/download/usage.report` 如果继续保留，只能作为兼容 operation 路由到 Skill Hub，不能直接写 workspace contribution registry。
+
+拒绝选项：
+
+- 不接受把 skill package 只作为 `contributionType: "skill"` 的普通 workspace contribution。
+- 不接受 capability package lifecycle 只登记 manifest、不管理真实 bundle 文件和 active discovery。
+
+最小验收：
+
+- MCP 上传最小技能包后，`<userDataPath>/knowledge-skills/` 或等价 Skill Hub store 出现独立记录。
+- 若产生 workspace contribution，该 contribution 必须只引用 skill library record。
+- 发布、禁用、回滚后，`pact.skillHub` 可见目录和 audit / trace 同步更新。
+
+### DEC-P0-20 云盘第一批 live provider
+
+已决议：
+
+- 场景 06 外部云盘第一版真实上传 / 下载固定接 iCloud + OneDrive。
+- iCloud 继续作为受控本机 iCloud Drive 路径 / projection：默认空间可写、公共空间只读、高级暴露目录默认只读，公开响应不得暴露本机绝对路径。
+- OneDrive 必须通过真实 OAuth / live adapter 完成远端上传、下载、列目录、权限摘要和 provider receipt；密钥只通过 `secretRef` / `endpointRef` 存在 `ServerConfig.getDataDir()` 下。
+- Google Drive / Dropbox 暂时保留 contract-mode 和后续 provider 插槽，不计入本轮 P0 live 完成。
+- fake provider server 只能作为 CI / contract harness，不能替代真实 provider 验收。
+
+拒绝选项：
+
+- 不接受继续用 OneDrive contract-mode 冒充真实云盘已接通。
+- 不接受把 fake provider server 的 green test 标成产品真实上传 / 下载。
+- 不接受一次铺开 OneDrive、Google Drive、Dropbox 三家而没有第一批 live smoke 和 receipt 事实源。
+
+最小验收：
+
+- 同一最小样例文件可以分别上传到 iCloud 和 OneDrive，再凭 receipt 下载并校验 byte count 与 hash。
+- OneDrive receipt 必须包含 provider、connectionId、scope snapshot、driveId、itemId/fileId、revision 或 eTag/cTag、provider request id、audit id、checkpoint id 和 `remoteLiveVerified` / `realE2EVerified` 状态。
+- provider manifest 和 transfer receipt 不得包含 raw token、refresh token、client secret 或私有下载 URL。
+
+### DEC-P0-21 调度内核与统一操作账本
+
+已决议：
+
+- 所有受管 operation 都必须进入统一 Operation Scheduling Kernel，再由内核写统一 Operation Ledger / audit facade。
+- 只有调度内核受理、分配 `operationId`、写入 `started` / `pending` 账本、完成策略裁决并返回执行许可的 operation，才是 Pact 的真实操作。
+- 范围覆盖 API、RPC、MCP、CLI、控制台、后台任务、workflow activity、队列状态变更、provider adapter、webhook、工具执行、模型调用、文件上传下载、知识检索和读取、解析、蒸馏、代码提交、云盘同步、配置变更、密钥引用变更、权限裁决和拒绝。
+- Operation Registry 是目录和合同来源，不是执行许可。HTTP / RPC / CLI / MCP / 控制台 / worker 只能提交 intent envelope 给调度内核，不能直接调用业务 executor。
+- Operation Ledger 是事实源；console log、tool audit、provider ledger、queue event、runtime log、trace span、readiness report 只能作为投影、回执、索引或报告。
+- 写操作和外部副作用必须先追加 `started` / `pending` ledger entry，再执行副作用；如果账本不可写，操作必须失败在副作用之前。
+- 读请求也必须入账。高频读可以在任务会话内做聚合，但聚合结果仍必须可按 `operationId`、`traceId`、`subject`、`targetRef`、`reasonCode` 查询。
+- 同一次外部请求内的内部 helper、projection 读取和存储索引读取不递归创建新 operation，但必须继承父 `operationId` / `traceId`，重要子步骤作为 span、receipt 或 child event 关联回统一账本。
+
+拒绝选项：
+
+- 不接受后台 worker、provider helper 或 domain helper 直接写状态，只事后补普通日志。
+- 不接受模块各自维护不可关联的 audit / ledger / queue event 并把它们当事实源。
+- 不接受 Operation Registry、HTTP handler、RPC method、CLI command、MCP tool、控制台 handler、worker 或 provider adapter 自行决定“这是一个真实操作”。
+- 不接受未带调度内核准入印记的业务函数、provider side effect、状态写入或工具执行继续运行；这类路径必须拒绝为 `operation_unmanaged` / `operation_not_scheduled`。
+- 不接受账本写失败时继续执行外部副作用或持久状态变更。
+
+最小验收：
+
+- 任一 MCP tool call、控制台操作、CLI operation、后台 worker activity、provider upload/download、权限拒绝和失败重试，都能先从 Operation Scheduling Kernel 查到 accepted/rejected decision，再从同一 Operation Ledger 按 `operationId` / `traceId` 查到 started、policy、effect、receipt、checkpoint、status 和 failure。
+- 静态门禁阻止新代码绕过调度内核直接调用 executor、直接落状态、直接写模块私有 audit 作为唯一事实源，或在外部副作用之后才补 ledger。
+- 账本不可写时，写操作、外部 IO 和 durable workflow activity 必须失败或暂停为 blocked，不得静默继续。
+
+### DEC-P0-22 统一审批流
+
+已决议：
+
+- 高危 operation 必须由 Operation Scheduling Kernel 挂起为 `pending_operation`，统一进入独立 `/approval` 页面审批。
+- 审批范围覆盖 API、RPC、CLI、MCP、控制台、worker 和 provider side effect，不只覆盖 MCP gateway。
+- `/approval` 统一承载 MCP 授权请求、高危 operation pending execution、代码提交审批、云盘外发审批、配置 / 密钥引用变更审批、恢复 / 删除 / reindex / runtime mount 等高危维护审批。
+- `pending_operation` 必须保存原始 intent envelope、operationId、traceId、idempotencyKey、subject、operator、agentProfile、workspace、grant / token 摘要、requestedScopes、risk reason、policy decision、approvalScope、expiresAt、payload hash、redacted input summary 和 resume pointer。
+- 审批通过后只能恢复原 operation，沿用原 `operationId` / `traceId`，追加 approval decision、receipt 和 checkpoint，再由调度内核继续执行。
+- 审批拒绝、过期、撤销或上层 hard deny 时，原 operation 终止，不允许产生业务副作用。
+- 审批只能满足人工确认 / 授权门槛，不能覆盖租户、workspace、dataClass、egress、provider scope、Capability Kernel 或 Binding Guard 的硬拒绝。
+
+拒绝选项：
+
+- 不接受 `requiresConfirmation=true` 或 `confirm=true` 直接等同于审批完成。
+- 不接受不同模块各建一套审批队列，导致控制台、MCP、Tool Management 和 worker 审批状态不一致。
+- 不接受审批通过后创建一个新 operation 绕过原 operation 的 trace、policy、idempotency 和恢复链。
+- 不接受业务 provider 已执行后再补审批记录。
+
+最小验收：
+
+- 高危 MCP tool、控制台 repair 操作、CLI 写操作和 worker 外部副作用都会被调度内核挂起为 `pending_operation`，并出现在 `/approval`。
+- 批准后原 operation 恢复执行，智能体或调用方收到沿用原 trace 的 `operation_reply`。
+- 拒绝、过期或撤销后，原 operation 状态为 denied/expired/revoked，业务副作用不发生。
+- 审批记录、原 operation、ledger、checkpoint、receipt 和 audit 可以互相追溯。
+
+### DEC-P0-23 外部知识蒸馏服务门禁优先
+
+已决议：
+
+- `external.knowledge.distillation` 默认按远程容器服务部署，通过网络由 Pact 上游网关或受控 adapter 调用。
+- 容器态必须默认要求 `PACT_EXTERNAL_KD_API_TOKEN`；API token、模型 key、OAuth token 和其它配置密钥只能来自外部数据目录、运行配置或 secret store，不能进入项目目录。
+- 服务入口必须集中鉴权。`/health` 和 `/v1/runtime/health` 可以公开给编排器，其它业务 API 必须通过 bearer gate。
+- Docker 镜像必须固定 Tika 下载 checksum，运行非 root 用户，声明 healthcheck，并让 `/data` 由服务用户持有。
+- 解析、OCR、Tika、PDF、压缩包、目录、邮件和模型网关调用必须有超时、大小、深度、数量和队列边界；默认远程容器不能依赖项目内 `.pact-server-data`。
+- `external-services/knowledge-distillation-service/server.mjs` 后续必须拆分，但门禁优先；拆分前只允许安全、运维、门禁和缺陷修复，不继续堆新格式解析或模型蒸馏能力。
+
+拒绝选项：
+
+- 不接受外部知识蒸馏容器默认裸 API。
+- 不接受把 token 或 key 写入仓库任何目录，包括 `docs/`、`external-services/`、`.pact-server-data/` 或测试 fixtures。
+- 不接受 checksum、healthcheck、非 root、入口鉴权缺失时继续推进新解析器、新导出或新模型能力。
+
+最小验收：
+
+- `npm run server:verify:external-knowledge-distillation-service-gates` 必须通过，并在默认 `server:verify` 的外部服务段先于知识蒸馏功能回归执行。
+- 无 token 启动的 required-auth 服务必须失败；无 token 或错 token 访问业务 API 必须返回 `EXTERNAL_KD_AUTH_REQUIRED`；正确 bearer 才能访问业务 API。
+- Dockerfile 必须可被静态 verifier 证明：有 checksum 校验、非 root 用户、healthcheck、required-auth 默认值，且没有内置 API token。
+
+### DEC-P0-24 智能体客户端支持目标
+
+已决议：
+
+- 第一批一等支持目标固定为 OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf。
+- 该目标集适用于桌面客户端 target adapters、`pact-mcp-connector`、server MCP discovery metadata、local grant target match、安装 / 卸载 / doctor、文档和 verifier。
+- 支持目标不是待确认 P0。新增目标只能通过明确实现决策进入，并同步更新 `server:verify:agent-client-support-targets`。
+
+拒绝选项：
+
+- 不接受只覆盖 Codex、OpenClaw、Claude Code、Cursor 或任意子集后宣称完成第一批客户端支持；Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Hermes Agent 和 Windsurf 也必须按一等目标进入同一批。
+- 不接受文档写全量目标、代码安装器或 grant matcher 只支持部分目标。
+- 不接受把 OpenCode、Hermes Agent 或 Windsurf 留在“以后再确认”的模糊状态。
+
+最小验收：
+
+- `client-cli` scan / plan、`client-gui` 手动目标、`pact-mcp-connector` supported targets、server MCP discovery、local grant target match、release verifier 和安装文档都包含同一份 11 项清单。
+- `npm run server:verify:agent-client-support-targets`、`npm run client:verify:architecture`、`npm run client:verify:plan` 和 `npm run client:verify:targets` 通过。
+
+### DEC-P0-25 前端统一接口边界
+
+已决议：
+
+- 前端后端访问必须收敛到统一接口层。`server-web/lib/*-client.ts` 负责后端路径、HTTP method、请求参数、返回类型和下载 / SSE / JSON 等底层差异。
+- 页面和组件只负责展示、输入和用户动作；不得直接 `fetch()`、直接调用全局 `bridge.*`、自行拼 `/api/...` URL 或绕过对应 controller。
+- 页面状态、loading/error、刷新、确认和业务动作必须放在对应 view/domain controller 中；组件只消费 controller 暴露的字段和方法。
+- `useConsole()` 继续瘦身，只保留全局 shell、登录态、导航和公共刷新；具体业务能力迁回各自 controller。
+- `bridge.*` 只作为兼容 facade 或明确 allowlist 边界存在，不能作为新页面的通用后端入口。
+
+拒绝选项：
+
+- 不接受新 view/component 直接请求后端或硬编码 `/api` 路径。
+- 不接受为了快速开发把业务状态、副作用和后端调用继续塞回 `useConsole()`。
+- 不接受 CSS、类型和 controller 重新变成跨领域大单体。
+
+最小验收：
+
+- `npm run server:verify:frontend-architecture` 必须阻断 view/component 直接 import 全局 bridge、直接 `bridge.*`、直接 `fetch()` 和硬编码 `/api` URL。
+- `server-web/lib/*-client.ts` 是后端路径事实位置；view/domain controller 调用 client，页面组件调用 controller。
+- 现有明确例外必须进入 allowlist，并且 allowlist 条目失效时 verifier 必须失败。
+
+### DEC-P0-26 历史报告归档口径
+
+已决议：
+
+- `docs/reports/history/` 只作为历史审计、阶段计划、临时进度、生产 readiness run 输出和旧任务总结归档。
+- 历史正文不重写，避免破坏当时证据；旧结论过期或冲突时，只在目录说明和关键文档顶部追加归档标注。
+- 当前架构、协议、权限、客户端支持目标、生产状态和 verifier 口径，必须以核心文档、决策登记和当前脚本为准。
+- 新安全审计、当前缺陷和新 P0 不塞回 history；应进入 `docs/reports/` 下的当前报告或综合决策队列。
+
+拒绝选项：
+
+- 不接受继续把 history 报告当成当前实现事实源。
+- 不接受为“修正历史”大规模改写旧报告正文，导致审计链路不可追溯。
+- 不接受从旧报告复制旧 MCP 工具名、旧 Workspace API 路径、旧客户端目标或旧完成度结论到新实现。
+
+最小验收：
+
+- `docs/reports/history/README.md` 明确说明 history 目录只作归档。
+- 关键旧报告顶部有归档标注，并指向核心事实源。
+- 综合决策队列记录 P0-12 已确认，后续新增缺陷另起当前报告或新 P0 条目。
+
+### DEC-P0-27 安全审计发布阻塞项
+
+已决议：
+
+- `docs/SECURITY-VULNERABILITY-AUDIT.md` 的 H-1 CSRF token 时间安全比较和 H-2 主 Dockerfile 非 root 运行列为立即修复的 P0 发布阻塞项。
+- H-1 必须在控制台认证边界使用 `crypto.timingSafeEqual` 支撑的时间安全比较，不能用 `csrf !== session.csrfToken`。
+- H-2 要求主 `Dockerfile` runtime stage 创建专用 `pact` 用户和组，运行时切到 `USER pact`，并确保 `/data` 与 `/codex-home` 由该用户持有。
+- H-3 / S-01 CSP 去掉 `unsafe-inline` 已批准，等 Vite 构建 nonce/hash 方案一起做，不能为了快速通过而破坏控制台构建。
+- S-02 到 S-09 已批准待实现；S-07 和 S-09 合并为 HTML 渲染安全批次。
+- S-10 已批准为接受残余风险，维护相关文件时处理。
+
+拒绝选项：
+
+- 不接受 CSRF 校验继续使用普通字符串比较。
+- 不接受主运行容器默认 root 执行。
+- 不接受把 CSP 大改和小修混在一个补丁里导致控制台构建风险扩大。
+
+最小验收：
+
+- `npm run server:verify:security-hardening` 必须静态阻断 CSRF 直接字符串比较，并检查主 Dockerfile runtime stage 为非 root。
+- `npm run server:verify:console-auth` 必须继续通过，证明正常登录、CSRF 缺失拒绝和合法 CSRF 写操作未被破坏。
+- 安全审计报告和综合决策队列必须标出 H-1/H-2 已处理，S-01 到 S-09 已批准待实现，S-10 接受残余风险。
+
+### DEC-P0-28 知识蒸馏上游网关切面
+
+已决议：
+
+- 知识蒸馏不建立专属权限体系；它是 `external.knowledge.distillation` 外部服务能力，权限与其它外部服务一样由上游网关切面统一管理。
+- `external.knowledge.distillation.runs.list/get/create/cancel`、`evidence.query`、`projects.evidence.query`、`artifacts.export` 必须全部带 `external-upstream-gateway` 切面、required scopes、受控 `/api/external/knowledge/distillation/*` 路径和 Tool Management 映射。
+- 产物下载 URL、package export、stage export、compare、delete/archive 不能绕过同一权限切面；下载和导出只能通过受控 operation 返回，不能暴露绕开授权的裸 URL。
+- 兼容工作台操作 `knowledge.distillation.workbench.*` 只能作为 deprecated migration shim 保留；进入兼容壳前仍要经过 console authorization，且不对智能体或 Tool Management 暴露。
+
+拒绝选项：
+
+- 不接受知识蒸馏 run、evidence、artifact 或下载导出路径绕过外部服务上游网关。
+- 不接受用可直接访问的产物 URL、临时文件路径或静态下载路径绕过 operation authorization。
+- 不接受继续维护内部 `knowledge.distillation.workbench.*` 作为真实算法面。
+
+最小验收：
+
+- `npm run server:verify:knowledge-distillation-workbench` 必须证明外部操作和兼容工作台操作都受控，兼容壳只返回迁移报文。
+- `npm run server:verify:external-service-api-registration` 必须证明 `external.knowledge.distillation.*` 带 `external-upstream-gateway` 切面，并位于受控外部服务 API 下。
+- Tool Management 只能暴露 `external.knowledge.distillation.*` 真实外部服务入口，不能暴露内部 workbench 兼容操作。
+
+### DEC-P0-29 未决事项批量 Checklist 确认
+
+已决议：
+
+- 后续不再一个问题一个问题地追问维护者。
+- 2026-06-03 的批量 checklist 已完成，并归档到 `docs/reports/history/OPEN-DECISION-CHECKLIST-2026-06-03.md`。
+- 维护者已按编号批量回复 P1/P2/P3/S 系列决策；这些决策不再作为开放问题反复询问。
+- 当前执行顺序、目标、涉及的功能改造、测试方法和用例统一维护在 `docs/reports/ORDERED-IMPLEMENTATION-TASKS-2026-06-03.md`。
+
+拒绝选项：
+
+- 不接受在没有新事实的情况下反复确认已经拍板的 P0。
+- 不接受把后续 P1/P2/P3 方向拆成多轮零散追问，增加沟通成本。
+- 不接受只在对话里保存决策，必须有文档化入口。
+
+最小验收：
+
+- `docs/reports/history/OPEN-DECISION-CHECKLIST-2026-06-03.md` 必须保留为历史过程记录。
+- `docs/reports/ORDERED-IMPLEMENTATION-TASKS-2026-06-03.md` 必须存在，并按任务先后顺序列出目标、功能改造、测试方法和用例。
+- 后续新增未决事项不得写回历史 checklist，应新开当前决策入口，并同步更新核心文档和任务排序文档。
 
 ## 原建议决策顺序
 

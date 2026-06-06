@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "originalDesignScenarioCount": 16,
+  "confirmedScenarioCount": 8,
+  "confirmedScenarios": [
+    {
+      "number": 1,
+      "id": "agent-code-submission",
+      "title": "代码提交",
+      "entry": "智能体 MCP",
+      "endpoint": "Gerrit / GitHub",
+      "document": "01-agent-code-submission.md",
+      "chain": [
+        "智能体 MCP",
+        "Pact MCP adapter",
+        "Tool Management",
+        "代码提交 operation",
+        "权限裁决与必要审批",
+        "代码提交任务队列 / durable workflow",
+        "Codespace / Code Review worker",
+        "Gerrit / GitHub adapter",
+        "远程代码库变更",
+        "receipt / audit / trace / console 状态"
+      ]
+    },
+    {
+      "number": 2,
+      "id": "knowledge-distillation",
+      "title": "知识蒸馏",
+      "entry": "管控台",
+      "endpoint": "蒸馏结果输出",
+      "document": "02-knowledge-distillation.md",
+      "chain": [
+        "管控台蒸馏入口",
+        "蒸馏任务 operation",
+        "权限与模型配置检查",
+        "知识蒸馏 runtime",
+        "蒸馏结果持久化",
+        "结果导出 / 下载",
+        "audit / trace / job 状态"
+      ]
+    },
+    {
+      "number": 3,
+      "id": "permission-configuration",
+      "title": "权限配置",
+      "entry": "管控台",
+      "endpoint": "上下游网关拦截生效 + 智能体 MCP 密钥权限刷新",
+      "document": "03-permission-configuration.md",
+      "chain": [
+        "管控台权限入口",
+        "authorization governance operation",
+        "策略持久化",
+        "上下游网关策略刷新",
+        "智能体 MCP grant / key 权限刷新",
+        "拦截验证",
+        "audit / trace / receipt"
+      ]
+    },
+    {
+      "number": 4,
+      "id": "workspace-file-transfer",
+      "title": "工作空间文件传输",
+      "entry": "智能体 MCP",
+      "endpoint": "服务端工作空间文件夹上传 / 下载",
+      "document": "04-workspace-file-transfer.md",
+      "chain": [
+        "智能体 MCP",
+        "workspace file operation",
+        "身份与 workspace 权限裁决",
+        "服务端工作空间文件夹写入",
+        "文件元数据与回执",
+        "工作空间文件下载",
+        "audit / checkpoint / trace"
+      ]
+    },
+    {
+      "number": 5,
+      "id": "skill-management",
+      "title": "技能管理",
+      "entry": "智能体 MCP",
+      "endpoint": "服务端技能库单独存放管理",
+      "document": "05-skill-management.md",
+      "chain": [
+        "智能体 MCP",
+        "skillHub upload operation",
+        "权限与风险裁决",
+        "技能包校验",
+        "服务端技能库隔离存储",
+        "版本 / 发布 / 禁用管理",
+        "audit / trace / receipt"
+      ]
+    },
+    {
+      "number": 6,
+      "id": "cloud-drive-sharing",
+      "title": "云盘共享",
+      "entry": "智能体 MCP",
+      "endpoint": "外部云盘上传 / 下载",
+      "document": "06-cloud-drive-sharing.md",
+      "chain": [
+        "智能体 MCP",
+        "cloud drive operation",
+        "身份、workspace 与云盘授权裁决",
+        "外部云盘 adapter",
+        "上传文件到外部云盘",
+        "从外部云盘下载文件",
+        "provider receipt / audit / trace"
+      ]
+    },
+    {
+      "number": 7,
+      "id": "operation-logging",
+      "title": "日志记录",
+      "entry": "全系统操作入口",
+      "endpoint": "所有操作记录落账",
+      "document": "07-operation-logging.md",
+      "chain": [
+        "HTTP / RPC / CLI / MCP / 管控台入口",
+        "Operation Scheduling Kernel",
+        "身份与权限上下文",
+        "账本 started / pending",
+        "业务执行",
+        "ledger / audit / trace / report 写入",
+        "查询与导出"
+      ]
+    },
+    {
+      "number": 8,
+      "id": "risk-approval-flow",
+      "title": "操作审核",
+      "entry": "全系统受管入口 -> Operation Scheduling Kernel",
+      "endpoint": "/approval 统一审批拦截 / 审批后恢复原 operation",
+      "document": "08-risk-approval-flow.md",
+      "chain": [
+        "API / RPC / CLI / MCP / 管控台 / worker 请求",
+        "Operation Scheduling Kernel",
+        "高危行为识别",
+        "pending_operation",
+        "/approval 统一审批",
+        "用户 / 管理员审批",
+        "审批通过后恢复原 operation",
+        "拒绝 / 超时 / 放行审计"
+      ]
+    }
+  ],
+  "unconfirmedScenarioSlots": [9, 10, 11, 12, 13, 14, 15, 16]
+}

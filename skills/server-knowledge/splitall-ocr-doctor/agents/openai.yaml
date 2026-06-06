@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Ocr Doctor"
-  short_description: "Help with SplitAll Ocr Doctor tasks"
-  default_prompt: "Use $splitall-ocr-doctor to handle this SplitAll platform task."

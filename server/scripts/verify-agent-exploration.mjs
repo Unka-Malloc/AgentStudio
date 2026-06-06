@@ -24,7 +24,7 @@ const toolServer = await new Promise((resolve, reject) => {
   });
 });
 
-const fakeKnowledgeCore = {
+const fixtureKnowledgeCore = {
   enabled: true,
   async search(input = {}) {
     assert.equal(input.retrievalMode, "hybrid");
@@ -139,7 +139,7 @@ const runtime = createAgentExplorationRuntime({
   userDataPath: tempRoot,
   runtime: {
     mounts: {
-      knowledgeBase: fakeKnowledgeCore
+      knowledgeBase: fixtureKnowledgeCore
     }
   },
   agentWorkspace,
@@ -320,11 +320,11 @@ try {
     runtime: {
       mounts: {
         knowledgeBase: {
-          ...fakeKnowledgeCore,
+          ...fixtureKnowledgeCore,
           async search(input = {}) {
             scopedSearchInput = input;
             assert.deepEqual(input.scopeSourceIds, ["workspace-source-a"]);
-            return fakeKnowledgeCore.search(input);
+            return fixtureKnowledgeCore.search(input);
           }
         }
       }
@@ -416,7 +416,7 @@ try {
     userDataPath: tempRoot,
     runtime: {
       mounts: {
-        knowledgeBase: fakeKnowledgeCore
+        knowledgeBase: fixtureKnowledgeCore
       }
     },
     agentWorkspace,
@@ -479,7 +479,7 @@ try {
     userDataPath: tempRoot,
     runtime: {
       mounts: {
-        knowledgeBase: fakeKnowledgeCore
+        knowledgeBase: fixtureKnowledgeCore
       }
     },
     agentWorkspace,
@@ -523,7 +523,7 @@ try {
     userDataPath: tempRoot,
     runtime: {
       mounts: {
-        knowledgeBase: fakeKnowledgeCore
+        knowledgeBase: fixtureKnowledgeCore
       }
     },
     agentWorkspace,
@@ -577,7 +577,7 @@ try {
     userDataPath: tempRoot,
     runtime: {
       mounts: {
-        knowledgeBase: fakeKnowledgeCore
+        knowledgeBase: fixtureKnowledgeCore
       }
     },
     agentWorkspace,
@@ -679,7 +679,7 @@ try {
     userDataPath: tempRoot,
     runtime: {
       mounts: {
-        knowledgeBase: fakeKnowledgeCore
+        knowledgeBase: fixtureKnowledgeCore
       }
     },
     agentWorkspace,

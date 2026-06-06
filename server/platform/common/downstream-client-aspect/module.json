@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "name": "DownstreamClientAspect",
+  "version": 1,
+  "category": "agent-client-protocol",
+  "agentCommunicationKind": "mcp-acp",
+  "applicationSubsystem": "agent-relay",
+  "description": "Facing-agent downstream client aspect that assembles independent MCP and ACP framework adapter layers at service startup.",
+  "defaultLoaded": true,
+  "protocol": "pact.downstream-client-aspect.v1",
+  "adapterLayers": [
+    {
+      "layerId": "mcp",
+      "protocol": "mcp",
+      "adapterKind": "agent-framework-mcp-adapter-layer",
+      "boundary": "agent-to-pact"
+    },
+    {
+      "layerId": "acp",
+      "protocol": "acp",
+      "adapterKind": "agent-framework-acp-adapter-layer",
+      "boundary": "agent-to-agent-through-pact"
+    }
+  ],
+  "components": {
+    "downstreamClientAspect": {
+      "path": "./index.mjs",
+      "factory": "createDownstreamClientAspectService",
+      "exports": [
+        "DOWNSTREAM_CLIENT_ASPECT_PROTOCOL_VERSION",
+        "DOWNSTREAM_CLIENT_ASPECT_SERVICE_KIND",
+        "DOWNSTREAM_CLIENT_ASPECT_ROUTE_TARGETS",
+        "DownstreamClientAspectService",
+        "McpAgentFrameworkAdapterLayer",
+        "AcpAgentFrameworkAdapterLayer",
+        "assembleDownstreamClientAspect",
+        "createDefaultDownstreamClientAspectLayers",
+        "createDownstreamClientAspectService",
+        "defaultDownstreamClientFrameworks",
+        "normalizeFrameworkDefinition",
+        "resolveCommandCandidate"
+      ],
+      "requiredScopes": [
+        "agent_relay:view",
+        "agent_relay:operate"
+      ],
+      "maxRisk": "repair_write",
+      "auditRequired": true
+    }
+  },
+  "verification": [
+    "npm run server:verify:downstream-client-aspect --silent"
+  ]
+}

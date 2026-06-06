@@ -157,7 +157,7 @@ function assertRoleScopes() {
 }
 
 function assertRegistryRiskIsAuthoritative() {
-  const fakeRegistry = {
+  const fixtureRegistry = {
     getTool(toolId) {
       if (toolId === "knowledge.reindex") {
         return { id: toolId, risk: "repair_write" };
@@ -179,7 +179,7 @@ function assertRegistryRiskIsAuthoritative() {
         }
       ]
     },
-    fakeRegistry
+    fixtureRegistry
   );
   assert.equal(normalized.risk, "repair_write");
   assert.equal(normalized.steps[0].risk, "repair_write");

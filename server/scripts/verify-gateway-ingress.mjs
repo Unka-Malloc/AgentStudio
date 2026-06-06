@@ -73,9 +73,9 @@ assert.match(example.config, /example-edge/);
 
 const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-gateway-ingress-"));
 try {
-  const fakeBin = path.join(tempRoot, "fake-caddy");
-  await fs.writeFile(fakeBin, "#!/bin/sh\nexit 0\n", "utf8");
-  await fs.chmod(fakeBin, 0o755);
+  const fixtureCaddyBin = path.join(tempRoot, "fixture-caddy");
+  await fs.writeFile(fixtureCaddyBin, "#!/bin/sh\nexit 0\n", "utf8");
+  await fs.chmod(fixtureCaddyBin, 0o755);
 
   const writeResult = spawnSync(
     process.execPath,
@@ -129,7 +129,7 @@ try {
       "--runtime-cache-dir",
       tempRoot,
       "--runtime-binary",
-      fakeBin
+      fixtureCaddyBin
     ],
     { encoding: "utf8" }
   );

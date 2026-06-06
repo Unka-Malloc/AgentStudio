@@ -91,6 +91,26 @@ function parseCapturedJson(captured) {
   }
 }
 
+function policyRevisionSummary(policy = {}) {
+  const revision = policy.governancePolicyRevision &&
+    typeof policy.governancePolicyRevision === "object" &&
+    !Array.isArray(policy.governancePolicyRevision)
+    ? policy.governancePolicyRevision
+    : {};
+  return {
+    decisionId: policy.decisionId || "",
+    effect: policy.effect || "",
+    reasonCode: policy.reasonCode || "",
+    grantPolicyRevision: Number(policy.grantPolicyRevision || 0),
+    grantPolicyState: String(policy.grantPolicyState || ""),
+    governancePolicyRevision: {
+      protocolVersion: String(revision.protocolVersion || ""),
+      revision: Number(revision.revision || 0),
+      updatedAt: String(revision.updatedAt || "")
+    }
+  };
+}
+
 function sourceIpFromRequest(request) {
   return String(
     request?.headers?.["x-forwarded-for"] ||
@@ -163,6 +183,14 @@ function resultSummaryFromPayload(payload) {
     return { type: "object", keys: Object.keys(result).slice(0, 40) };
   }
   return { value: result };
+}
+
+function jsonByteLength(value) {
+  try {
+    return Buffer.byteLength(JSON.stringify(value ?? null), "utf8");
+  } catch {
+    return 0;
+  }
 }
 
 function validateInputSchema(operation, input = {}) {
@@ -239,14 +267,20 @@ export function createToolExecutionRuntime({
   policyEngine,
   securityPermissions = null,
   operations = [],
+  externalMcpPassthroughRuntime = null,
   controllers,
   operationAuditStore = null,
   operationConcurrencyScope = "tool-management",
   protocolEventBus = null,
   logger = getRuntimeLogger()
 }) {
-  const operationsById = new Map(operations.map((operation) => [operation.id, operation]));
+  let operationsById = new Map(operations.map((operation) => [operation.id, operation]));
   const toolLocks = new Map();
+
+  function refreshOperations(nextOperations = []) {
+    operationsById = new Map(nextOperations.map((operation) => [operation.id, operation]));
+    return { ok: true, operationCount: operationsById.size };
+  }
 
   function appendAuthorizationDecision(decision = {}) {
     if (!securityPermissions || typeof securityPermissions.appendDecision !== "function") {
@@ -323,18 +357,28 @@ export function createToolExecutionRuntime({
     directOperation = null,
     directUrl = null,
   directRequestBody = null,
-  directParams = null
+  directParams = null,
+  authorizedGrant = null,
+  approvedPendingOperation = null
   } = {}) {
     const requestTrace = traceContextFromRequest(request);
     const traceId = context.traceId || requestTrace?.traceId || randomId("trace");
     const toolExecutionId = randomId("tool_exec");
     const startedAtMs = Date.now();
     const startedAt = nowIso();
+    const inputBytes = jsonByteLength(input);
     const tool = registry.getTool(toolId);
     const operation = directOperation || operationsById.get(tool?.operationId || "");
     const profile = context.profileId
       ? registry.listProfiles().find((item) => item.id === context.profileId)
       : null;
+    const relayChildOperation = context.relayChildOperation && typeof context.relayChildOperation === "object" && !Array.isArray(context.relayChildOperation)
+      ? context.relayChildOperation
+      : null;
+    const appendExecution = (entry = {}) => store.appendExecution({
+      ...entry,
+      ...(relayChildOperation ? { relayChildOperation } : {})
+    });
 
     if (!tool || !operation) {
       logTool("warn", "tool_management.execute.denied", {
@@ -346,7 +390,7 @@ export function createToolExecutionRuntime({
       });
       const status = tool ? 500 : 404;
       const reasonCode = tool ? "operation_missing" : "unknown_tool";
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: toolId || "",
@@ -357,7 +401,7 @@ export function createToolExecutionRuntime({
         startedAt,
         finishedAt: nowIso()
       });
-      store.appendMetric({ traceId, toolId, status: "denied", reasonCode });
+      store.appendMetric({ traceId, toolId, status: "denied", reasonCode, inputBytes });
       appendAuthorizationDecision({
         decisionId: randomId("authz_decision"),
         traceId,
@@ -404,12 +448,18 @@ export function createToolExecutionRuntime({
     });
     await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "started" }, { type: "tools.execution.started" });
 
-    const authorization = await store.authorizeRequest({
-      request,
-      requiredScopes: tool.requiredScopes,
-      tool,
-      context
-    });
+    const authorization = authorizedGrant
+      ? {
+          ok: true,
+          grant: authorizedGrant,
+          sourceIp: approvedPendingOperation?.sourceIp || sourceIpFromRequest(request)
+        }
+      : await store.authorizeRequest({
+          request,
+          requiredScopes: tool.requiredScopes,
+          tool,
+          context
+        });
     if (!authorization.ok) {
       const durationMs = Date.now() - startedAtMs;
       logTool("warn", "tool_management.execute.denied", {
@@ -464,7 +514,7 @@ export function createToolExecutionRuntime({
         missingCapabilities: authorization.missingCapabilities || [],
         redactedReason: authorization.error || "Tool token authorization denied."
       });
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,
@@ -496,6 +546,7 @@ export function createToolExecutionRuntime({
         status: "denied",
         risk: tool.risk,
         durationMs,
+        inputBytes,
         reasonCode: decision.reasonCode
       });
       await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "denied" }, { type: "tools.execution.denied" });
@@ -528,19 +579,45 @@ export function createToolExecutionRuntime({
       traceId,
       toolExecutionId
     });
-    if (!["allow", "dry_run_only"].includes(policy.effect)) {
+
+    const approvalAlreadyGranted = approvedPendingOperation ||
+      context.approval?.approved === true ||
+      context.pendingOperationApproved === true;
+    const policySummary = policyRevisionSummary(policy);
+    const pendingApprovalRequested = String(context.transport || "").toLowerCase() === "mcp" ||
+      context.requirePendingOperation === true ||
+      context.pendingApprovalRequired === true;
+    if (
+      !dryRun &&
+      policy.effect !== "dry_run_only" &&
+      ["allow", "require_confirmation"].includes(policy.effect) &&
+      tool.requiresApproval === true &&
+      pendingApprovalRequested &&
+      !approvalAlreadyGranted
+    ) {
       const durationMs = Date.now() - startedAtMs;
-      logTool("warn", "tool_management.execute.denied", {
+      const pendingOperation = store.createPendingOperation({
         traceId,
         toolExecutionId,
         toolId: tool.id,
+        toolVersion: tool.version,
+        toolsetIds: tool.toolsets,
         operationId: tool.operationId,
         risk: tool.risk,
-        reason: policy.reasonCode,
-        decisionId: policy.decisionId,
-        durationMs
+        approvalScope: tool.approvalScope || operation.safety?.approvalScope || "",
+        grantId: authorization.grant.id,
+        agentId: context.agentId || context.agentProfileId || "",
+        profileId: context.profileId || context.agentProfileId || "",
+        idempotencyKey: context.idempotencyKey || "",
+        reasonCode: "tool_approval_required",
+        riskReason: `Tool ${tool.id} requires approval before execution.`,
+        originalInput: input,
+        context,
+        sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+        userAgent: request?.headers?.["user-agent"] || "",
+        expiresAt: context.expiresAt || context.approvalExpiresAt || ""
       });
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,
@@ -555,6 +632,89 @@ export function createToolExecutionRuntime({
         risk: tool.risk,
         decision: policy.effect,
         input,
+        resultSummary: {
+          type: "pending_operation",
+          pendingOperationId: pendingOperation.pendingOperationId,
+          status: pendingOperation.status,
+          policy: policySummary
+        },
+        status: "pending_approval",
+        errorCode: "tool_approval_required",
+        durationMs,
+        policyDecisionId: policy.decisionId,
+        approvalId: pendingOperation.pendingOperationId,
+        sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+        userAgent: request?.headers?.["user-agent"] || "",
+        startedAt,
+        finishedAt: nowIso()
+      });
+      store.appendMetric({
+        traceId,
+        toolId: tool.id,
+        grantId: authorization.grant.id,
+        profileId: context.profileId || "",
+        status: "pending_approval",
+        risk: tool.risk,
+        durationMs,
+        inputBytes,
+        resultBytes: jsonByteLength(pendingOperation),
+        reasonCode: "tool_approval_required"
+      });
+      await publishEvent("tools.pending_operation", {
+        pendingOperationId: pendingOperation.pendingOperationId,
+        traceId,
+        toolExecutionId,
+        toolId: tool.id,
+        operationId: tool.operationId,
+        risk: tool.risk,
+        status: "pending"
+      }, { type: "tools.pending_operation.created" });
+      return {
+        ok: true,
+        status: 202,
+        payload: {
+          schemaVersion: 1,
+          toolExecutionId,
+          traceId,
+          toolId: tool.id,
+          status: "pending_approval",
+          pendingOperation,
+          policy: policySummary
+        }
+      };
+    }
+
+    if (!["allow", "dry_run_only"].includes(policy.effect)) {
+      const durationMs = Date.now() - startedAtMs;
+      logTool("warn", "tool_management.execute.denied", {
+        traceId,
+        toolExecutionId,
+        toolId: tool.id,
+        operationId: tool.operationId,
+        risk: tool.risk,
+        reason: policy.reasonCode,
+        decisionId: policy.decisionId,
+        durationMs
+      });
+      appendExecution({
+        toolExecutionId,
+        traceId,
+        toolId: tool.id,
+        toolVersion: tool.version,
+        toolsetIds: tool.toolsets,
+        subjectType: "grant",
+        subjectId: authorization.grant.id,
+        grantId: authorization.grant.id,
+        agentId: context.agentId || "",
+        profileId: context.profileId || "",
+        operationId: tool.operationId,
+        risk: tool.risk,
+        decision: policy.effect,
+        input,
+        resultSummary: {
+          type: "policy_denial",
+          policy: policySummary
+        },
         status: "denied",
         errorCode: policy.reasonCode,
         durationMs,
@@ -572,6 +732,7 @@ export function createToolExecutionRuntime({
         status: "denied",
         risk: tool.risk,
         durationMs,
+        inputBytes,
         reasonCode: policy.reasonCode
       });
       await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "denied" }, { type: "tools.execution.denied" });
@@ -586,6 +747,7 @@ export function createToolExecutionRuntime({
             message: policy.redactedReason,
             details: {
               decisionId: policy.decisionId,
+              policy: policySummary,
               missingScopes: policy.missingScopes,
               missingCapabilities: policy.missingCapabilities,
               missingToolsets: policy.missingToolsets
@@ -608,7 +770,7 @@ export function createToolExecutionRuntime({
         },
         policy
       };
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,
@@ -632,7 +794,7 @@ export function createToolExecutionRuntime({
         startedAt,
         finishedAt: nowIso()
       });
-      store.appendMetric({ traceId, toolId: tool.id, grantId: authorization.grant.id, profileId: context.profileId || "", status: "ok", risk: tool.risk, durationMs });
+      store.appendMetric({ traceId, toolId: tool.id, grantId: authorization.grant.id, profileId: context.profileId || "", status: "ok", risk: tool.risk, durationMs, inputBytes, resultBytes: jsonByteLength(result) });
       logTool("info", "tool_management.execute.dry_run_completed", {
         traceId,
         toolExecutionId,
@@ -653,11 +815,235 @@ export function createToolExecutionRuntime({
           status: "ok",
           result,
           grant: authorization.grant,
-          policy: {
-            decisionId: policy.decisionId
-          }
+          policy: policySummary
         }
       };
+    }
+
+    if (operation.externalMcp?.serviceId && operation.externalMcp?.upstreamToolName) {
+      if (!externalMcpPassthroughRuntime?.callTool) {
+        return {
+          ok: false,
+          status: 503,
+          payload: {
+            schemaVersion: 1,
+            traceId,
+            error: {
+              code: "external_mcp_passthrough_unavailable",
+              message: "External MCP passthrough runtime is unavailable.",
+              details: { toolExecutionId }
+            }
+          }
+        };
+      }
+      try {
+        const externalResult = await withToolConcurrency(tool, () =>
+          withTimeout(
+            externalMcpPassthroughRuntime.callTool({
+              serviceId: operation.externalMcp.serviceId,
+              toolName: operation.externalMcp.upstreamToolName,
+              input,
+              timeoutMs: tool.timeoutMs
+            }),
+            tool.timeoutMs
+          )
+        );
+        const result = {
+          schemaVersion: 1,
+          protocolVersion: externalResult.protocolVersion || "pact.external-mcp-passthrough.v1",
+          serviceId: operation.externalMcp.serviceId,
+          upstreamToolName: operation.externalMcp.upstreamToolName,
+          upstream: externalResult.upstream,
+          durationMs: externalResult.durationMs,
+          result: externalResult.result
+        };
+        const resultBytes = jsonByteLength(result);
+        const durationMs = Date.now() - startedAtMs;
+        if (resultBytes > Number(tool.maxResultBytes || 0)) {
+          appendExecution({
+            toolExecutionId,
+            traceId,
+            toolId: tool.id,
+            toolVersion: tool.version,
+            toolsetIds: tool.toolsets,
+            subjectType: "grant",
+            subjectId: authorization.grant.id,
+            grantId: authorization.grant.id,
+            agentId: context.agentId || "",
+            profileId: context.profileId || "",
+            operationId: tool.operationId,
+            risk: tool.risk,
+            decision: policy.effect,
+            input,
+            resultSummary: {
+              type: "oversize",
+              byteLength: resultBytes,
+              maxResultBytes: tool.maxResultBytes,
+              policy: policySummary
+            },
+            status: "failed",
+            errorCode: "result_too_large",
+            durationMs,
+            policyDecisionId: policy.decisionId,
+            sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+            userAgent: request?.headers?.["user-agent"] || "",
+            startedAt,
+            finishedAt: nowIso()
+          });
+          store.appendMetric({
+            traceId,
+            toolId: tool.id,
+            grantId: authorization.grant.id,
+            profileId: context.profileId || "",
+            status: "failed",
+            risk: tool.risk,
+            durationMs,
+            inputBytes,
+            resultBytes,
+            reasonCode: "result_too_large"
+          });
+          await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "failed" }, { type: "tools.execution.failed" });
+          return {
+            ok: false,
+            status: 413,
+            payload: {
+              schemaVersion: 1,
+              traceId,
+              error: {
+                code: "result_too_large",
+                message: "External MCP tool result exceeds the configured result size limit.",
+                details: {
+                  toolExecutionId,
+                  byteLength: resultBytes,
+                  maxResultBytes: tool.maxResultBytes
+                }
+              }
+            }
+          };
+        }
+        appendExecution({
+          toolExecutionId,
+          traceId,
+          toolId: tool.id,
+          toolVersion: tool.version,
+          toolsetIds: tool.toolsets,
+          subjectType: "grant",
+          subjectId: authorization.grant.id,
+          grantId: authorization.grant.id,
+          agentId: context.agentId || "",
+          profileId: context.profileId || "",
+          operationId: tool.operationId,
+          risk: tool.risk,
+          decision: policy.effect,
+          input,
+          result,
+          resultSummary: {
+            type: "external_mcp",
+            serviceId: operation.externalMcp.serviceId,
+            upstreamToolName: operation.externalMcp.upstreamToolName,
+            result: resultSummaryFromPayload(result),
+            policy: policySummary
+          },
+          status: "ok",
+          errorCode: "",
+          durationMs,
+          policyDecisionId: policy.decisionId,
+          sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+          userAgent: request?.headers?.["user-agent"] || "",
+          startedAt,
+          finishedAt: nowIso()
+        });
+        store.appendMetric({
+          traceId,
+          toolId: tool.id,
+          grantId: authorization.grant.id,
+          profileId: context.profileId || "",
+          status: "ok",
+          risk: tool.risk,
+          durationMs,
+          inputBytes,
+          resultBytes
+        });
+        await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "ok" }, { type: "tools.execution.completed" });
+        return {
+          ok: true,
+          status: 200,
+          payload: {
+            schemaVersion: 1,
+            toolExecutionId,
+            traceId,
+            toolId: tool.id,
+            status: "ok",
+            result,
+            grant: authorization.grant,
+            policy: policySummary
+          }
+        };
+      } catch (error) {
+        const durationMs = Date.now() - startedAtMs;
+        const message = error instanceof Error ? error.message : "External MCP tool execution failed.";
+        const errorCode = error?.code || "external_mcp_tool_execution_failed";
+        appendExecution({
+          toolExecutionId,
+          traceId,
+          toolId: tool.id,
+          toolVersion: tool.version,
+          toolsetIds: tool.toolsets,
+          subjectType: "grant",
+          subjectId: authorization.grant.id,
+          grantId: authorization.grant.id,
+          agentId: context.agentId || "",
+          profileId: context.profileId || "",
+          operationId: tool.operationId,
+          risk: tool.risk,
+          decision: policy.effect,
+          input,
+          resultSummary: {
+            type: "external_mcp_error",
+            errorCode,
+            serviceId: operation.externalMcp.serviceId,
+            upstreamToolName: operation.externalMcp.upstreamToolName,
+            policy: policySummary
+          },
+          status: "failed",
+          errorCode,
+          durationMs,
+          policyDecisionId: policy.decisionId,
+          sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+          userAgent: request?.headers?.["user-agent"] || "",
+          startedAt,
+          finishedAt: nowIso()
+        });
+        store.appendMetric({
+          traceId,
+          toolId: tool.id,
+          grantId: authorization.grant.id,
+          profileId: context.profileId || "",
+          status: "failed",
+          risk: tool.risk,
+          durationMs,
+          inputBytes,
+          reasonCode: errorCode
+        });
+        await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "failed" }, { type: "tools.execution.failed" });
+        return {
+          ok: false,
+          status: error?.statusCode || 502,
+          payload: {
+            schemaVersion: 1,
+            traceId,
+            error: {
+              code: errorCode,
+              message,
+              details: {
+                toolExecutionId,
+                serviceId: operation.externalMcp.serviceId,
+                upstreamToolName: operation.externalMcp.upstreamToolName
+              }
+            }
+          }
+        };
+      }
     }
 
       const captured = createCapturedResponse();
@@ -681,7 +1067,7 @@ export function createToolExecutionRuntime({
         error: schemaValidation.error,
         durationMs
       });
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,
@@ -696,6 +1082,11 @@ export function createToolExecutionRuntime({
         risk: tool.risk,
         decision: policy.effect,
         input,
+        resultSummary: {
+          type: "invalid_input",
+          error: schemaValidation.error,
+          policy: policySummary
+        },
         status: "denied",
         errorCode: "invalid_input",
         durationMs,
@@ -713,6 +1104,7 @@ export function createToolExecutionRuntime({
         status: "denied",
         risk: tool.risk,
         durationMs,
+        inputBytes,
         reasonCode: "invalid_input"
       });
       await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "denied" }, { type: "tools.execution.denied" });
@@ -727,7 +1119,8 @@ export function createToolExecutionRuntime({
             message: schemaValidation.error,
             details: {
               toolExecutionId,
-              decisionId: policy.decisionId
+              decisionId: policy.decisionId,
+              policy: policySummary
             }
           }
         }
@@ -798,7 +1191,7 @@ export function createToolExecutionRuntime({
           maxResultBytes: tool.maxResultBytes,
           durationMs
         });
-        store.appendExecution({
+        appendExecution({
           toolExecutionId,
           traceId,
           toolId: tool.id,
@@ -813,7 +1206,12 @@ export function createToolExecutionRuntime({
           risk: tool.risk,
           decision: policy.effect,
           input,
-          resultSummary: { type: "oversize", byteLength: buffer.length, maxResultBytes: tool.maxResultBytes },
+          resultSummary: {
+            type: "oversize",
+            byteLength: buffer.length,
+            maxResultBytes: tool.maxResultBytes,
+            policy: policySummary
+          },
           status: "failed",
           errorCode: "result_too_large",
           durationMs,
@@ -831,6 +1229,7 @@ export function createToolExecutionRuntime({
           status: "failed",
           risk: tool.risk,
           durationMs,
+          inputBytes,
           resultBytes: buffer.length,
           reasonCode: "result_too_large"
         });
@@ -865,7 +1264,7 @@ export function createToolExecutionRuntime({
         resultBytes: buffer.length,
         durationMs
       });
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,
@@ -881,7 +1280,10 @@ export function createToolExecutionRuntime({
         decision: policy.effect,
         input,
         result: payload,
-        resultSummary: tool.transport?.binary ? { type: "binary", byteLength: buffer.length } : resultSummaryFromPayload(payload),
+        resultSummary: {
+          ...(tool.transport?.binary ? { type: "binary", byteLength: buffer.length } : resultSummaryFromPayload(payload)),
+          policy: policySummary
+        },
         status,
         errorCode: status === "ok" ? "" : "tool_handler_failed",
         durationMs,
@@ -899,6 +1301,7 @@ export function createToolExecutionRuntime({
         status,
         risk: tool.risk,
         durationMs,
+        inputBytes,
         resultBytes: buffer.length,
         reasonCode: status === "ok" ? "" : "tool_handler_failed"
       });
@@ -915,9 +1318,7 @@ export function createToolExecutionRuntime({
           status,
           result: payload?.result !== undefined ? payload.result : payload,
           grant: authorization.grant,
-          policy: {
-            decisionId: policy.decisionId
-          }
+          policy: policySummary
         }
       };
     } catch (error) {
@@ -934,7 +1335,7 @@ export function createToolExecutionRuntime({
         durationMs,
         error: summarizeError(error)
       });
-      store.appendExecution({
+      appendExecution({
         toolExecutionId,
         traceId,
         toolId: tool.id,
@@ -949,6 +1350,11 @@ export function createToolExecutionRuntime({
         risk: tool.risk,
         decision: policy.effect,
         input,
+        resultSummary: {
+          type: "runtime_error",
+          errorCode,
+          policy: policySummary
+        },
         status: "failed",
         errorCode,
         durationMs,
@@ -966,6 +1372,7 @@ export function createToolExecutionRuntime({
         status: "failed",
         risk: tool.risk,
         durationMs,
+        inputBytes,
         reasonCode: errorCode
       });
       await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "failed" }, { type: "tools.execution.failed" });
@@ -980,7 +1387,8 @@ export function createToolExecutionRuntime({
             message,
             details: {
               toolExecutionId,
-              decisionId: policy.decisionId
+              decisionId: policy.decisionId,
+              policy: policySummary
             }
           }
         }
@@ -990,7 +1398,174 @@ export function createToolExecutionRuntime({
     }
   }
 
+  async function resumePendingOperation({
+    pendingOperationId,
+    resolution = "approved",
+    request,
+    context = {},
+    resolvedBy = "",
+    reason = ""
+  } = {}) {
+    const pending = store.getPendingOperation?.(pendingOperationId, { includeOriginalInput: true });
+    if (!pending) {
+      return {
+        ok: false,
+        status: 404,
+        payload: {
+          schemaVersion: 1,
+          error: {
+            code: "pending_operation_not_found",
+            message: "Pending operation was not found."
+          }
+        }
+      };
+    }
+    if (pending.status !== "pending") {
+      return {
+        ok: false,
+        status: 409,
+        payload: {
+          schemaVersion: 1,
+          pendingOperation: pending,
+          error: {
+            code: "pending_operation_not_pending",
+            message: "Pending operation is not awaiting approval."
+          }
+        }
+      };
+    }
+    if (resolution === "rejected") {
+      const rejected = store.resolvePendingOperation({
+        pendingOperationId: pending.pendingOperationId,
+        resolution: "rejected",
+        resolvedBy,
+        reason,
+        errorCode: "pending_operation_rejected",
+        resultSummary: { type: "approval_decision", resolution: "rejected" }
+      });
+      store.appendMetric({
+        traceId: pending.traceId,
+        toolId: pending.toolId,
+        grantId: pending.grantId,
+        profileId: pending.profileId,
+        status: "rejected",
+        risk: pending.risk,
+        reasonCode: "pending_operation_rejected"
+      });
+      await publishEvent("tools.pending_operation", {
+        pendingOperationId: pending.pendingOperationId,
+        traceId: pending.traceId,
+        toolId: pending.toolId,
+        status: "rejected"
+      }, { type: "tools.pending_operation.rejected" });
+      return {
+        ok: true,
+        status: 200,
+        payload: {
+          schemaVersion: 1,
+          status: "rejected",
+          pendingOperation: rejected
+        }
+      };
+    }
+    if (resolution !== "approved") {
+      return {
+        ok: false,
+        status: 400,
+        payload: {
+          schemaVersion: 1,
+          error: {
+            code: "invalid_pending_operation_resolution",
+            message: "Pending operation resolution must be approved or rejected."
+          }
+        }
+      };
+    }
+    const approved = store.resolvePendingOperation({
+      pendingOperationId: pending.pendingOperationId,
+      resolution: "approved",
+      resolvedBy,
+      reason,
+      resultSummary: { type: "approval_decision", resolution: "approved" }
+    });
+    const grant = store.getRawGrant?.(pending.grantId);
+    if (!grant || grant.enabled === false || grant.revokedAt) {
+      const failed = store.resolvePendingOperation({
+        pendingOperationId: pending.pendingOperationId,
+        resolution: "failed",
+        resolvedBy,
+        reason,
+        errorCode: "pending_operation_grant_unavailable",
+        resultSummary: { type: "approval_resume_failed", reason: "grant_unavailable" }
+      });
+      return {
+        ok: false,
+        status: 409,
+        payload: {
+          schemaVersion: 1,
+          status: "failed",
+          pendingOperation: failed,
+          error: {
+            code: "pending_operation_grant_unavailable",
+            message: "Original tool grant is no longer available."
+          }
+        }
+      };
+    }
+    await publishEvent("tools.pending_operation", {
+      pendingOperationId: pending.pendingOperationId,
+      traceId: pending.traceId,
+      toolId: pending.toolId,
+      status: "approved"
+    }, { type: "tools.pending_operation.approved" });
+    const result = await executeTool({
+      toolId: pending.toolId,
+      input: pending.originalInput || {},
+      request,
+      context: {
+        ...pending.context,
+        ...context,
+        traceId: pending.traceId,
+        approval: {
+          approved: true,
+          pendingOperationId: pending.pendingOperationId,
+          resolvedBy,
+          resolvedAt: approved?.resolvedAt || nowIso()
+        },
+        pendingOperationApproved: true
+      },
+      authorizedGrant: grant,
+      approvedPendingOperation: approved || pending
+    });
+    const finalStatus = result.ok ? "completed" : "failed";
+    const completed = store.resolvePendingOperation({
+      pendingOperationId: pending.pendingOperationId,
+      resolution: finalStatus,
+      resolvedBy,
+      reason,
+      errorCode: result.ok ? "" : result.payload?.error?.code || "pending_operation_resume_failed",
+      resumedToolExecutionId: result.payload?.toolExecutionId || "",
+      resultSummary: resultSummaryFromPayload(result.payload || {})
+    });
+    await publishEvent("tools.pending_operation", {
+      pendingOperationId: pending.pendingOperationId,
+      traceId: pending.traceId,
+      toolId: pending.toolId,
+      status: finalStatus,
+      resumedToolExecutionId: result.payload?.toolExecutionId || ""
+    }, { type: result.ok ? "tools.pending_operation.completed" : "tools.pending_operation.failed" });
+    return {
+      ...result,
+      payload: {
+        ...(result.payload || {}),
+        pendingOperation: completed
+      }
+    };
+  }
+
   return {
-    executeTool
+    refreshOperations,
+    executeTool,
+    resumePendingOperation
   };
 }

@@ -10,7 +10,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 RUN npm ci
-RUN npm run build:renderer
+RUN npm run build:renderer:raw
 RUN npm prune --omit=dev
 
 # ── runtime-deps stage ────────────────────────────────────────────────────────
@@ -48,15 +48,21 @@ ENV NODE_ENV=production \
     CODEX_HOME=/codex-home \
     PATH=/app/node_modules/.bin:$PATH
 
+RUN groupadd --system --gid 10001 pact \
+    && useradd --system --uid 10001 --gid pact --home-dir /home/pact --create-home --shell /usr/sbin/nologin pact
+
 WORKDIR /app
 
-COPY --from=build /app/package.json /app/package-lock.json ./
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/build/dist ./build/dist
-COPY --from=build /app/server ./server
-COPY --from=runtime-deps /modules ./server/modules
+COPY --chown=pact:pact --from=build /app/package.json /app/package-lock.json ./
+COPY --chown=pact:pact --from=build /app/node_modules ./node_modules
+COPY --chown=pact:pact --from=build /app/build/dist ./build/dist
+COPY --chown=pact:pact --from=build /app/server ./server
+COPY --chown=pact:pact --from=runtime-deps /modules ./server/modules
 
-RUN mkdir -p /data /codex-home
+RUN mkdir -p /data /codex-home \
+    && chown -R pact:pact /data /codex-home
+
+USER pact
 
 EXPOSE 8787
 

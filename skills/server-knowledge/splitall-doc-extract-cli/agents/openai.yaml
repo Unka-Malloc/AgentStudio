@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Doc Extract CLI"
-  short_description: "Help with SplitAll Doc Extract CLI tasks"
-  default_prompt: "Use $splitall-doc-extract-cli to handle this SplitAll platform task."

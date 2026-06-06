@@ -131,6 +131,9 @@ const DEFAULT_AGENT_EXPLORE_DEFAULTS = {
   contextProfileId: "context-128k",
   thinkingMode: "default",
   toolChoice: "auto",
+  infoFeedSummaryModelAlias: "",
+  agentRetrievalModelAlias: "",
+  ruleAuthoringModelAlias: "",
   reviewFusionModelAlias: "",
   reviewFusionSystemPrompt:
     "你是 Pact 知识冲突融合智能体。你只能基于输入的原始记录、新录入记录、冲突原因和证据字段进行分析。请判断两份知识是完全重合、部分重合还是明显不同；给出相似度、应采取的审核动作和可复核理由。不得改写原始证据，不得编造未提供的信息。",
@@ -170,27 +173,27 @@ const DEFAULT_AGENT_TOOL_EXECUTION = {
 export const MODEL_USAGE_DEFINITIONS = [
   {
     id: "knowledgeTaxonomy",
-    label: "事务归类",
-    description: "邮件和文档进入知识图谱前的领域、关键词和意图抽象。",
-    requiresIntelligence: true
+    label: "文档分类智能体",
+    description: "邮件和文档进入知识图谱前的领域、关键词和意图分类。",
+    requiresIntelligence: false
   },
   {
     id: "graphInsight",
-    label: "知识图谱增强",
+    label: "知识图谱智能体",
     description: "节点聚合、关系解释和高频实体抽象。",
     requiresIntelligence: true
   },
   {
     id: "timelineDistillation",
-    label: "时间线提炼",
+    label: "时序提炼智能体",
     description: "围绕具体事务提炼阶段、事件和关键节点。",
     requiresIntelligence: true
   },
   {
     id: "agentTools",
     label: "智能体工具调用",
-    description: "智能体使用服务端工具前的意图理解和结果整理。",
-    requiresIntelligence: true
+    description: "智能体可使用服务端工具的权限范围，不需要单独绑定智能体。",
+    requiresIntelligence: false
   },
   {
     id: "localOcr",
@@ -209,6 +212,10 @@ function defaultModuleIntelligence() {
 export const DEFAULT_SETTINGS = {
   tikaJarPath: process.env.PACT_TIKA_JAR_PATH || "",
   javaBinPath: process.env.PACT_JAVA_BIN_PATH || "",
+  tikaTimeoutMs: (() => {
+    const value = Number(process.env.PACT_TIKA_TIMEOUT_MS || 0);
+    return Number.isFinite(value) && value > 0 ? value : 30 * 60 * 1000;
+  })(),
   modelIntelligenceEnabled:
     process.env.PACT_MODEL_INTELLIGENCE_ENABLED === "1" ||
     process.env.PACT_GOOGLE_API_KEY
@@ -642,18 +649,23 @@ function normalizeModuleAgentProfiles(value = {}, modelLibraryAgents = [], modul
   return normalized;
 }
 
-function normalizeModuleIntelligence(moduleIntelligence) {
+function normalizeModuleIntelligence(moduleIntelligence, moduleModelAssignments = {}) {
   const defaults = defaultModuleIntelligence();
   const incoming =
     moduleIntelligence && typeof moduleIntelligence === "object" ? moduleIntelligence : {};
 
   return Object.fromEntries(
-    MODEL_USAGE_DEFINITIONS.map((definition) => [
-      definition.id,
-      incoming[definition.id] === undefined
-        ? defaults[definition.id]
-        : incoming[definition.id] !== false
-    ])
+    MODEL_USAGE_DEFINITIONS.map((definition) => {
+      const hasAssignment = Boolean(moduleModelAssignments?.[definition.id]);
+      return [
+        definition.id,
+        hasAssignment
+          ? true
+          : incoming[definition.id] === undefined
+            ? defaults[definition.id]
+            : incoming[definition.id] !== false
+      ];
+    })
   );
 }
 
@@ -957,6 +969,15 @@ function normalizeAgentExploreDefaults(value = {}) {
     ),
     limit: sanitizeNumericSetting(incoming.limit, DEFAULT_AGENT_EXPLORE_DEFAULTS.limit),
     toolChoice: String(incoming.toolChoice || DEFAULT_AGENT_EXPLORE_DEFAULTS.toolChoice).trim() || "auto",
+    infoFeedSummaryModelAlias: String(
+      incoming.infoFeedSummaryModelAlias || DEFAULT_AGENT_EXPLORE_DEFAULTS.infoFeedSummaryModelAlias
+    ).trim(),
+    agentRetrievalModelAlias: String(
+      incoming.agentRetrievalModelAlias || DEFAULT_AGENT_EXPLORE_DEFAULTS.agentRetrievalModelAlias
+    ).trim(),
+    ruleAuthoringModelAlias: String(
+      incoming.ruleAuthoringModelAlias || DEFAULT_AGENT_EXPLORE_DEFAULTS.ruleAuthoringModelAlias
+    ).trim(),
     reviewFusionModelAlias: String(
       incoming.reviewFusionModelAlias || DEFAULT_AGENT_EXPLORE_DEFAULTS.reviewFusionModelAlias
     ).trim(),
@@ -1003,7 +1024,7 @@ function normalizeAgentToolExecution(value = {}) {
       ...DEFAULT_AGENT_TOOL_EXECUTION.local,
       ...local,
       enabled: local.enabled !== false,
-      allowDirectCommands: local.allowDirectCommands === true,
+      allowDirectCommands: false,
       timeoutMs: Number.isFinite(localTimeoutMs) && localTimeoutMs > 0 ? localTimeoutMs : 30000,
       maxOutputBytes: Number.isFinite(maxOutputBytes) && maxOutputBytes > 0 ? maxOutputBytes : 65536,
       nodeCommand: configuredNodeCommand,
@@ -1100,7 +1121,10 @@ export function normalizeSettings(settings) {
     modelLibraryAgents,
     moduleModelAssignments
   );
-  const moduleIntelligence = normalizeModuleIntelligence(settings?.moduleIntelligence);
+  const moduleIntelligence = normalizeModuleIntelligence(
+    settings?.moduleIntelligence,
+    moduleModelAssignments
+  );
 
   return {
     ...DEFAULT_SETTINGS,
@@ -1122,6 +1146,10 @@ export function normalizeSettings(settings) {
     defaultModelProvider,
     defaultModel,
     modelLibraryEntries: normalizeModelLibraryEntries(settings?.modelLibraryEntries, settings),
+    tikaTimeoutMs: sanitizeNumericSetting(
+      settings?.tikaTimeoutMs,
+      DEFAULT_SETTINGS.tikaTimeoutMs
+    ),
     modelLibraryAgentIds: modelLibraryAgents.map((model) => modelAgentId(model)).filter(Boolean),
     modelLibraryAgents,
     agentPermissionGroups: normalizeAgentPermissionGroups(settings?.agentPermissionGroups),
@@ -1197,7 +1225,7 @@ export function resolveModelForModule(settings = {}, moduleId = "") {
 
   if (!requiresIntelligence) {
     return {
-      provider: "local-model",
+      provider: "",
       model: "",
       enabled: false,
       moduleId

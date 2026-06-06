@@ -340,6 +340,7 @@ async function invokeRegisteredOperation({
     requestBody,
     url,
     authSession,
+    params,
     ...params
   };
   if (applyHttpQuery) {

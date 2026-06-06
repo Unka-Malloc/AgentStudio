@@ -5,6 +5,8 @@ import {
   loadMonitorAlertConfig,
   runMonitorAlertCycle
 } from "../platform/common/devops/monitor-alert-core/monitor-alerts.mjs";
+import { getBackgroundProcessStatus } from "../platform/common/devops/process-status/background-process-status.mjs";
+import { recoverBackgroundSupervisor } from "../platform/common/devops/supervisor-recovery/supervisor-recovery.mjs";
 import { inspectQueueMonitor } from "../services/client/work-queue-core/queue-monitor.mjs";
 import { ServerConfig } from "../platform/common/config/ServerConfig.mjs";
 
@@ -42,9 +44,54 @@ const projectRoot =
 const dataDir = path.resolve(
   String(args.dataDir || process.env.PACT_SERVER_DATA_DIR || ServerConfig.getDataDir())
 );
+let lastSupervisorRecoveryAt = 0;
+let lastSupervisorRecovery = null;
 
 async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function recoverSupervisorIfNeeded(config) {
+  const recoveryConfig = config.supervisorRecovery || {};
+  if (recoveryConfig.enabled === false) {
+    return {
+      ok: false,
+      attempted: false,
+      reason: "disabled",
+      checkedAt: nowIso()
+    };
+  }
+  const backgroundStatus = await getBackgroundProcessStatus(dataDir);
+  if (backgroundStatus.supervisor?.alive) {
+    return {
+      ok: true,
+      attempted: false,
+      reason: "already_running",
+      checkedAt: nowIso()
+    };
+  }
+  const cooldownMs = normalizeInteger(recoveryConfig.cooldownMs, 30000, 1000, 3600000);
+  const nowMs = Date.now();
+  if (lastSupervisorRecoveryAt && nowMs - lastSupervisorRecoveryAt < cooldownMs) {
+    return {
+      ...(lastSupervisorRecovery || {}),
+      ok: false,
+      attempted: false,
+      reason: "cooldown",
+      cooldownMs,
+      checkedAt: nowIso()
+    };
+  }
+  lastSupervisorRecoveryAt = nowMs;
+  lastSupervisorRecovery = await recoverBackgroundSupervisor({
+    backgroundStatus,
+    serviceLabel: config.serviceLabel,
+    plistPath: recoveryConfig.plistPath || ""
+  });
+  if (lastSupervisorRecovery.ok) {
+    await sleep(normalizeInteger(recoveryConfig.startupWaitMs, 1200, 0, 60000));
+  }
+  return lastSupervisorRecovery;
 }
 
 async function loop() {
@@ -53,6 +100,7 @@ async function loop() {
     try {
       const config = await loadMonitorAlertConfig(dataDir);
       intervalMs = normalizeInteger(config.intervalMs, 5000, 1000, 600000);
+      const supervisorRecovery = await recoverSupervisorIfNeeded(config);
       await runMonitorAlertCycle(dataDir, {
         queueMonitor: {
           inspect: (input) => inspectQueueMonitor({ userDataPath: dataDir, ...input })
@@ -64,6 +112,7 @@ async function loop() {
           projectRoot,
           dataDir,
           supervisorServiceLabel: config.serviceLabel || "dev.pact.background-supervisor",
+          supervisorRecovery,
           runtime: "node"
         }
       });

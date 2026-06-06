@@ -1,0 +1,88 @@
+/* ─── Topbar page title ─── */
+.topbar-page-title {
+  margin: 0 0 2px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Mobile hamburger button ─── */
+.topbar-hamburger {
+  display: none;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.topbar-hamburger span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+  transition: transform var(--dur-base) var(--ease-std), opacity var(--dur-base) var(--ease-std);
+}
+
+.topbar-hamburger[aria-expanded="true"] span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.topbar-hamburger[aria-expanded="true"] span:nth-child(2) {
+  opacity: 0;
+}
+
+.topbar-hamburger[aria-expanded="true"] span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+/* ─── Auth gate brand block ─── */
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.auth-connecting {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  color: var(--text-tertiary);
+}
+
+.auth-language-button {
+  margin-left: auto;
+}
+
+.auth-language-button + .auth-connecting {
+  margin-left: var(--space-2);
+}
+
+.auth-spinner-icon {
+  display: block;
+  animation: spin 0.9s linear infinite;
+}
+
+.auth-brand-name {
+  margin: 0;
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: var(--brand);
+  letter-spacing: -0.03em;
+}

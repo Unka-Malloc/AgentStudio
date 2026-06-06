@@ -1,32 +1,6 @@
+import path from "node:path";
 import { getAgentConfigRegistry } from "../agent/agent-configs/config-registry.mjs";
 import { createAgentRuntimeProvider } from "../agent/agent-runtime-provider.mjs";
-import { listAvailableAnalysisModules } from "../knowledge/preprocessing/analysis-engine-registry.mjs";
-import {
-  getEmailRulesPath,
-  loadEmailRules,
-  saveEmailRules
-} from "../knowledge/preprocessing/domain/rules/email-rules.mjs";
-import {
-  getExpertVocabularyPath,
-  getExpertVocabularySummary,
-  listExpertVocabularyVersions,
-  loadExpertVocabulary,
-  saveExpertVocabulary
-} from "../knowledge/preprocessing/domain/rules/expert-vocabulary.mjs";
-import {
-  getKnowledgeGuidanceSummary,
-  getKnowledgeTaxonomyPath,
-  listKnowledgeTaxonomyVersions,
-  loadKnowledgeTaxonomy,
-  saveKnowledgeTaxonomy
-} from "../knowledge/preprocessing/domain/knowledge-taxonomy/index.mjs";
-import { preprocessWordCloudVocabulary } from "../knowledge/preprocessing/word-cloud/preprocess.mjs";
-import {
-  createDocumentParsingRuntime,
-  toPublicDocumentParsingResult
-} from "../knowledge/preprocessing/document-parsing-runtime.mjs";
-import { enhanceAffairTaxonomy } from "../knowledge/preprocessing/domain/knowledge-taxonomy/service.mjs";
-import { createKnowledgeDistillationWorkbench } from "../knowledge/invocation/knowledge-distillation-workbench/index.mjs";
 import { executeConsoleDomainOperation } from "./console-domain-operation-executor.mjs";
 import {
   buildAgentSettingsConsoleProjection as buildAgentSettingsConsoleProjectionBase,
@@ -37,7 +11,6 @@ import {
   buildRuntimeInfoSettings
 } from "./console-state-projections.mjs";
 import { buildKnowledgeConsoleSummary } from "./knowledge-console-summary.mjs";
-import { resumeKnowledgeWordCloudClassificationTasks } from "./knowledge-word-cloud-operation-executor.mjs";
 import { buildRuntimeConsoleSummary } from "./runtime-console-summary.mjs";
 import { buildToolManagementClientConnectionRows } from "./tool-management-client-connections.mjs";
 import {
@@ -51,6 +24,122 @@ import {
 
 async function loadNormalizedDocumentStore() {
   return import("../knowledge/preprocessing/file-processor/FileNormalizer/NormalizedDocuments/store.mjs");
+}
+
+async function loadAnalysisEngineRegistry() {
+  return import("../knowledge/preprocessing/analysis-engine-registry.mjs");
+}
+
+async function loadEmailRulesModule() {
+  return import("../knowledge/preprocessing/domain/rules/email-rules.mjs");
+}
+
+async function loadExpertVocabularyModule() {
+  return import("../knowledge/preprocessing/domain/rules/expert-vocabulary.mjs");
+}
+
+async function loadKnowledgeTaxonomyModule() {
+  return import("../knowledge/preprocessing/domain/knowledge-taxonomy/index.mjs");
+}
+
+async function loadDocumentParsingRuntimeModule() {
+  return import("../knowledge/preprocessing/document-parsing-runtime.mjs");
+}
+
+function getRulesDirectory(userDataPath) {
+  return path.join(userDataPath, "rules");
+}
+
+function getEmailRulesPath(userDataPath) {
+  return path.join(getRulesDirectory(userDataPath), "email-rules.json");
+}
+
+function getExpertVocabularyPath(userDataPath) {
+  return path.join(getRulesDirectory(userDataPath), "expert-vocabulary.json");
+}
+
+function getKnowledgeTaxonomyPath(userDataPath) {
+  return path.join(getRulesDirectory(userDataPath), "knowledge-taxonomy.json");
+}
+
+async function listAvailableAnalysisModules(...args) {
+  const module = await loadAnalysisEngineRegistry();
+  return module.listAvailableAnalysisModules(...args);
+}
+
+async function loadEmailRules(...args) {
+  const module = await loadEmailRulesModule();
+  return module.loadEmailRules(...args);
+}
+
+async function saveEmailRules(...args) {
+  const module = await loadEmailRulesModule();
+  return module.saveEmailRules(...args);
+}
+
+async function getExpertVocabularySummary(...args) {
+  const module = await loadExpertVocabularyModule();
+  return module.getExpertVocabularySummary(...args);
+}
+
+async function listExpertVocabularyVersions(...args) {
+  const module = await loadExpertVocabularyModule();
+  return module.listExpertVocabularyVersions(...args);
+}
+
+async function loadExpertVocabulary(...args) {
+  const module = await loadExpertVocabularyModule();
+  return module.loadExpertVocabulary(...args);
+}
+
+async function saveExpertVocabulary(...args) {
+  const module = await loadExpertVocabularyModule();
+  return module.saveExpertVocabulary(...args);
+}
+
+async function getKnowledgeGuidanceSummary(...args) {
+  const module = await loadKnowledgeTaxonomyModule();
+  return module.getKnowledgeGuidanceSummary(...args);
+}
+
+async function listKnowledgeTaxonomyVersions(...args) {
+  const module = await loadKnowledgeTaxonomyModule();
+  return module.listKnowledgeTaxonomyVersions(...args);
+}
+
+async function loadKnowledgeTaxonomy(...args) {
+  const module = await loadKnowledgeTaxonomyModule();
+  return module.loadKnowledgeTaxonomy(...args);
+}
+
+async function saveKnowledgeTaxonomy(...args) {
+  const module = await loadKnowledgeTaxonomyModule();
+  return module.saveKnowledgeTaxonomy(...args);
+}
+
+async function preprocessWordCloudVocabulary(...args) {
+  const module = await import("../knowledge/preprocessing/word-cloud/preprocess.mjs");
+  return module.preprocessWordCloudVocabulary(...args);
+}
+
+async function createDocumentParsingRuntime(...args) {
+  const module = await loadDocumentParsingRuntimeModule();
+  return module.createDocumentParsingRuntime(...args);
+}
+
+async function toPublicDocumentParsingResult(...args) {
+  const module = await loadDocumentParsingRuntimeModule();
+  return module.toPublicDocumentParsingResult(...args);
+}
+
+async function enhanceAffairTaxonomy(...args) {
+  const module = await import("../knowledge/preprocessing/domain/knowledge-taxonomy/service.mjs");
+  return module.enhanceAffairTaxonomy(...args);
+}
+
+async function resumeKnowledgeWordCloudClassificationTasks(...args) {
+  const module = await import("./knowledge-word-cloud-operation-executor.mjs");
+  return module.resumeKnowledgeWordCloudClassificationTasks(...args);
 }
 
 async function loadAgentGatewayModule() {
@@ -97,7 +186,6 @@ export function createConsoleDomainServices() {
     createDocumentParsingRuntime,
     toPublicDocumentParsingResult,
     enhanceAffairTaxonomy,
-    createKnowledgeDistillationWorkbench,
     buildAgentSettingsConsoleProjection: (input = {}) =>
       buildAgentSettingsConsoleProjectionBase({
         ...input,

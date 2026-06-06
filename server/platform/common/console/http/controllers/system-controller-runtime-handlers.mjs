@@ -242,6 +242,32 @@ export function createSystemControllerRuntimeHandlers({
         errorMessage: "重载挂载配置失败。"
       });
     },
+    async handleListRuntimeDependencies({ operation, response }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "runtime.dependencies.list",
+        response,
+        context: {},
+        errorMessage: "读取运行时依赖状态失败。"
+      });
+    },
+    async handleDownloadRuntimeDependency({ operation, requestBody, response }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "runtime.dependencies.download",
+        input: parseJsonBody(requestBody),
+        response,
+        context: {},
+        errorMessage: "准备运行时依赖失败。"
+      });
+    },
+    async handleConfigureRuntimeDependency({ operation, requestBody, response }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "runtime.dependencies.configure",
+        input: parseJsonBody(requestBody),
+        response,
+        context: {},
+        errorMessage: "保存运行时依赖配置失败。"
+      });
+    },
     async handleGetConsoleState({ operation, request, response }) {
       await sendConsoleDomainOperation({
         operationId: operation?.id || "system.console_state",

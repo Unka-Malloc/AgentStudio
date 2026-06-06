@@ -1,12 +1,11 @@
 import {
-  createDocumentParsingRuntime,
-  listAvailableAnalysisModules,
-  loadEmailRules,
+  loadKnowledgeAnalysisRuntime,
+  loadKnowledgeDocumentParsingRuntime,
+  loadKnowledgeEmailRulesRuntime,
   loadKnowledgeFileProcessorRuntime,
   loadKnowledgeNormalizedDocumentsRuntime,
-  runConfiguredAnalysisModule,
+  loadKnowledgePreprocessResultRuntime,
   saveSettings,
-  summarizePreprocessResult
 } from "../../../platform/interactive/product-api.mjs";
 import { resolveUploadSessionFiles } from "../../../protocols/checkpoint/upload-session-store.mjs";
 import { resolveArchiveBatchIdentity } from "./archive-batch-id.mjs";
@@ -112,7 +111,6 @@ function createInitialContext({
 }
 
 export function createJobPipeline({ userDataPath, payload, runtime, reportProgress, jobId, generatedAt }) {
-  const documentParsingRuntime = createDocumentParsingRuntime();
   const archiveBatchIdentity = resolveArchiveBatchIdentity({
     archiveBatchId:
       payload?.checkpointReceipt?.archiveBatchId ||
@@ -197,7 +195,20 @@ export function createJobPipeline({ userDataPath, payload, runtime, reportProgre
         stage: "保存配置"
       });
       context.settings = await saveSettings(userDataPath, payload.settings);
-      context.rules = await loadEmailRules(userDataPath);
+      await loadFileProcessorRuntime(context.runtime);
+      const [
+        documentParsingModule,
+        emailRulesModule,
+        analysisModule,
+        preprocessResultModule
+      ] = await Promise.all([
+        loadKnowledgeDocumentParsingRuntime(),
+        loadKnowledgeEmailRulesRuntime(),
+        loadKnowledgeAnalysisRuntime(),
+        loadKnowledgePreprocessResultRuntime()
+      ]);
+      const documentParsingRuntime = documentParsingModule.createDocumentParsingRuntime();
+      context.rules = await emailRulesModule.loadEmailRules(userDataPath);
       context.metadataStore.beginBatch({
         batchId: context.archiveBatchId,
         jobId,
@@ -212,7 +223,6 @@ export function createJobPipeline({ userDataPath, payload, runtime, reportProgre
       if (payload.uploadSessionId) {
         context.uploadSessionFiles = await resolveUploadSessionFiles(userDataPath, payload.uploadSessionId);
       }
-      await loadFileProcessorRuntime(context.runtime);
       const documentParseResult = await documentParsingRuntime.parseDocuments({
         inputText: payload.inputText || "",
         filePaths: Array.isArray(payload.filePaths) ? payload.filePaths : [],
@@ -266,7 +276,7 @@ export function createJobPipeline({ userDataPath, payload, runtime, reportProgre
         progressPercent: 76,
         stage: "分析事务与人物网络"
       });
-      const analysisResult = await runConfiguredAnalysisModule({
+      const analysisResult = await analysisModule.runConfiguredAnalysisModule({
         runtime: context.runtime,
         sources: context.sources,
         chunks: context.prepared.chunks,
@@ -319,7 +329,7 @@ export function createJobPipeline({ userDataPath, payload, runtime, reportProgre
         lifecycle: context.lifecycle.summary,
         analysisRuntime: {
           ...analysisResult.runtimeInfo,
-          availableModules: await listAvailableAnalysisModules(
+          availableModules: await analysisModule.listAvailableAnalysisModules(
             context.runtime,
             context.settings
           ),
@@ -327,7 +337,7 @@ export function createJobPipeline({ userDataPath, payload, runtime, reportProgre
         },
         retrieval: context.analysis.retrieval,
         preprocess: context.preprocessResult,
-        preprocessSummary: summarizePreprocessResult(context.preprocessResult),
+        preprocessSummary: preprocessResultModule.summarizePreprocessResult(context.preprocessResult),
         warnings: context.warnings,
         normalizedDocuments: context.normalizedDocuments,
         sourceFiles: serializeSourceFilesForClient(context.sources)

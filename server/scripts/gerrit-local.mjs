@@ -11,9 +11,13 @@ import { ServerConfig } from "../platform/common/config/ServerConfig.mjs";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const serverDataDir = path.resolve(ServerConfig.getDataDir());
+const runtimeDependencyCacheRoot = path.resolve(
+  String(process.env.PACT_RUNTIME_DEPENDENCY_CACHE_DIR || "").trim() ||
+    path.join(serverDataDir, "runtime", "runtime-dependencies")
+);
 
 const DEFAULT_VERSION = "3.14.0";
-const DEFAULT_ROOT = path.join(repoRoot, "build", "local-data", "gerrit");
+const DEFAULT_ROOT = path.join(runtimeDependencyCacheRoot, "gerrit");
 const DEFAULT_HTTP_PORT = 18080;
 const DEFAULT_SSH_PORT = 29418;
 const DEFAULT_CONTAINER = "pact-local-gerrit";
@@ -71,7 +75,7 @@ function usage() {
 
 Commands:
   doctor       Show local Java/Docker availability.
-  download     Download the Gerrit WAR into build/local-data/gerrit.
+  download     Download the Gerrit WAR into the server runtime dependency cache.
   start        Start local Gerrit. Auto-selects Java WAR if Java exists, Docker otherwise.
   stop         Stop the local Gerrit process/container.
   status       Print local Gerrit status.

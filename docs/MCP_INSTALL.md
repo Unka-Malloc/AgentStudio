@@ -10,13 +10,13 @@ missing, it falls back to the portable package with its own runtime.
 ## One Command
 
 ```bash
-/bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
 ```
 
 A localized Chinese installer script is also published:
 
 ```bash
-/bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)"
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)"
 ```
 
 The command downloads the latest connector from GitHub Releases, verifies its
@@ -78,9 +78,12 @@ verified MCP URL, selected clients, per-client success or failure, token source,
 and verification status. It does not dump client configuration files. Use
 `--json` only when a script needs machine-readable details.
 
-Supported targets are `codex`, `gemini-cli`, `kilo-code`, `copilot`,
-`openclaw`, `hermes`, and `antigravity`. OpenClaw-compatible OrbStack agents such
-as IronClaw or ZeroClaw are discovered through the same Claw-compatible scan.
+Supported targets are OpenClaw (`openclaw`), Claude Code (`claude-code`),
+Codex (`codex`), Gemini CLI (`gemini-cli`), Antigravity (`antigravity`),
+OpenCode (`opencode`), Copilot (`copilot`), Kilo Code (`kilo-code`),
+Cursor (`cursor`), Hermes Agent (`hermes`), and Windsurf (`windsurf`).
+OpenClaw-compatible OrbStack agents such as IronClaw or ZeroClaw are discovered
+through the same Claw-compatible scan.
 
 ## Options
 
@@ -90,20 +93,54 @@ verification:
 
 ```bash
 PACT_MCP_BASE_URL=http://<host>:<port> \
-  /bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
+  /bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
 ```
 
 Use a custom local install directory:
 
 ```bash
 PACT_MCP_INSTALL_DIR="$HOME/.local/share/pact-mcp" \
-  /bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
+  /bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
 ```
 
 Pass connector install flags after the shell command:
 
 ```bash
-/bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)" -- --no-verify
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)" -- --no-verify
+```
+
+Unattended agent shells can use automatic detection directly:
+
+```bash
+~/.pact/mcp/connector/current/pact-mcp install --target auto --json
+```
+
+`auto` installs every supported client the connector can verify. A
+non-interactive `pact-mcp install` without `--target` uses the same
+auto-detected path. Use `--target claude-code,codex,openclaw --json` only when a
+script must intentionally limit the install scope to the priority agent clients first.
+
+For an agent that needs one copyable GitHub Release command, use the unattended
+auto target form. This covers OpenClaw, Claude Code, Codex, Gemini CLI,
+Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, Windsurf, and
+every other supported client that the connector can verify:
+
+```bash
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)" -- --target auto --json
+```
+
+For a known single client, replace `<client>` with any supported target, for
+example `openclaw`, `claude-code`, `codex`, `gemini-cli`, `antigravity`,
+`opencode`, `copilot`, `kilo-code`, `cursor`, `hermes`, or `windsurf`:
+
+```bash
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)" -- --target <client> --json
+```
+
+To prioritize Claude Code, Codex, and OpenClaw in one unattended pass:
+
+```bash
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)" -- --target claude-code,codex,openclaw --json
 ```
 
 Manage local server address profiles:

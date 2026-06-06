@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Mount Routing Lab"
-  short_description: "Help with SplitAll Mount Routing Lab tasks"
-  default_prompt: "Use $splitall-mount-routing-lab to handle this SplitAll platform task."

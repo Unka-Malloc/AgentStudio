@@ -30,7 +30,7 @@ function productionHealth(overrides = {}) {
     status: overrides.status || "pass",
     latestReport: {
       runId: "20260522T000000Z",
-      reportPath: "reports/production-readiness/20260522T000000Z/report.json"
+      reportPath: "docs/reports/history/production-readiness/20260522T000000Z/report.json"
     },
     summary: { pass: ALL_GATE_IDS.length, fail: 0, timeout: 0, blockedP0: 0 },
     coverage: { required: [], missing: [] },

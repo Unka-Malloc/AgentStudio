@@ -1,0 +1,282 @@
+{
+  "schemaVersion": 1,
+  "kind": "pact.composition.preset",
+  "presetId": "gerrit-service",
+  "displayName": "Gerrit Service",
+  "status": "active",
+  "compositionClass": "deployment-dependency-package",
+  "deploymentTarget": {
+    "applicationId": "gerrit-service",
+    "serviceName": "external.code-review.gerrit",
+    "boundary": "external-service-compatibility",
+    "outputBundleId": "pact-gerrit-service",
+    "outputRoot": "build/composition-packages/gerrit-service"
+  },
+  "intent": {
+    "summary": "Package Pact's Gerrit service integration without bundling the Gerrit runtime binary; Gerrit is fetched through the platform runtime dependency download capability.",
+    "serviceKind": "code-review",
+    "provider": "gerrit",
+    "dehydrationGoal": "standalone-gerrit-service-integration-with-runtime-pull"
+  },
+  "coreDependencyPackage": {
+    "policy": "include-platform-core-required-by-external-code-review-service",
+    "featureIds": [
+      "core-platform",
+      "security-permissions",
+      "operation-dispatcher",
+      "console-shell",
+      "storage-core",
+      "module-management-core",
+      "data-structure-core",
+      "devops-core",
+      "tool-management-core"
+    ],
+    "preserveContracts": [
+      "pact.security-permissions.v1",
+      "pact.operation-dispatcher.v1",
+      "pact.storage.v1",
+      "pact.module-management.v1",
+      "pact.devops.v1"
+    ],
+    "reason": "The Gerrit integration still needs authorization, secretRef handling, operation dispatch, audit, provider registration, module lifecycle, health, and tool exposure."
+  },
+  "applicationDependencyPackage": {
+    "policy": "include-code-review-routes-and-runtime-download-capability-only",
+    "featureIds": [
+      "code-repository-operations",
+      "codespace-management",
+      "gerrit-service"
+    ],
+    "moduleDescriptors": [
+      "server/platform/specialized/capabilities/code-review/gerrit/module.json",
+      "server/platform/specialized/capabilities/code-management/codespace/module.json",
+      "server/platform/specialized/capabilities/code-repository/repo-operations/module.json"
+    ],
+    "moduleEntrypoints": [
+      "server/platform/specialized/capabilities/runtime-dependencies/index.mjs",
+      "server/platform/specialized/capabilities/package-lifecycle/index.mjs"
+    ],
+    "scripts": [
+      "server/scripts/gerrit-local.mjs"
+    ],
+    "requiredProtocols": [
+      "pact.code-review.v1",
+      "pact.codespace.v1",
+      "pact.resource-operation.v1",
+      "pact.runtime-dependencies.v1"
+    ],
+    "requiredOperations": [
+      "runtime.dependencies.list",
+      "runtime.dependencies.download",
+      "gerrit.read",
+      "gerrit.write",
+      "gerrit.maintain",
+      "gerrit.git_upload",
+      "codespace.providers.manifest",
+      "codespace.change.prepare",
+      "codespace.change.upload",
+      "codespace.review.status.sync",
+      "workspace.code.target.evaluate",
+      "workspace.code.change.prepare",
+      "workspace.code.change.upload",
+      "workspace.code.change.link",
+      "workspace.code.change.status.sync"
+    ]
+  },
+  "runtimeDependencyPackage": {
+    "policy": "descriptor-and-fetch-plan-only",
+    "doNotBundleRuntimeBinaries": true,
+    "targets": [
+      {
+        "targetId": "gerrit",
+        "required": true,
+        "artifactKind": "gerrit-war",
+        "defaultVersion": "3.14.0",
+        "cacheRoot": "ServerConfig.getDataDir()/runtime/runtime-dependencies/gerrit/downloads",
+        "sourceConfig": "runtime/runtime-dependency-sources.json",
+        "downloadOperation": {
+          "operationId": "runtime.dependencies.download",
+          "input": {
+            "targetId": "gerrit",
+            "confirm": true
+          }
+        },
+        "fallbackCommand": "npm run server:gerrit:download -- --version 3.14.0",
+        "sourcePolicy": "local WAR cache -> configured mirror -> Maven Central -> Google Gerrit release storage",
+        "checksumPolicy": "verify-when-known"
+      },
+      {
+        "targetId": "jre",
+        "required": true,
+        "artifactKind": "java-runtime",
+        "downloadOperation": {
+          "operationId": "runtime.dependencies.download",
+          "input": {
+            "targetId": "jre",
+            "confirm": true
+          }
+        },
+        "sourcePolicy": "configured java path -> bundled JRE -> PATH -> Temurin JRE download"
+      },
+      {
+        "targetId": "docker",
+        "required": false,
+        "artifactKind": "container-runtime",
+        "usage": "fallback runner when WAR/JRE runner is unavailable",
+        "downloadOperation": {
+          "operationId": "runtime.dependencies.download",
+          "input": {
+            "targetId": "docker",
+            "confirm": true
+          }
+        }
+      }
+    ]
+  },
+  "serviceRuntime": {
+    "runner": "war-or-docker",
+    "preferredRunner": "war",
+    "defaultPorts": {
+      "http": 18080,
+      "ssh": 29418
+    },
+    "stateRoot": "ServerConfig.getDataDir()/runtime/runtime-dependencies/gerrit",
+    "startCommand": "npm run server:gerrit:start -- --runner auto",
+    "stopCommand": "npm run server:gerrit:stop",
+    "doctorCommand": "npm run server:gerrit:doctor",
+    "smokeCommand": "npm run server:gerrit:smoke"
+  },
+  "externalService": {
+    "schemaVersion": 1,
+    "kind": "pact.external-service.config",
+    "serviceId": "gerrit-service",
+    "serviceName": "external.code-review.gerrit",
+    "displayName": "Gerrit Service",
+    "mode": "on-demand",
+    "startupPolicy": "on-demand",
+    "description": "Gerrit is managed through Pact runtime dependency download and local runner scripts when the operator chooses to start it.",
+    "scripts": {
+      "prepare": {
+        "path": "server/scripts/gerrit-local.mjs",
+        "args": ["download", "--version", "3.14.0"],
+        "required": false
+      },
+      "start": {
+        "path": "server/scripts/gerrit-local.mjs",
+        "args": ["start", "--runner", "auto"],
+        "required": false
+      },
+      "stop": {
+        "path": "server/scripts/gerrit-local.mjs",
+        "args": ["stop"],
+        "required": false
+      },
+      "doctor": {
+        "path": "server/scripts/gerrit-local.mjs",
+        "args": ["doctor"],
+        "required": false
+      },
+      "smoke": {
+        "path": "server/scripts/gerrit-local.mjs",
+        "args": ["smoke"],
+        "required": false
+      }
+    },
+    "healthCheck": {
+      "type": "http",
+      "host": "127.0.0.1",
+      "port": 18080,
+      "path": "/",
+      "timeoutMs": 60000,
+      "required": false
+    }
+  },
+  "serviceContracts": {
+    "endpointRefs": [
+      "config://pact/codespace/gerrit-endpoint"
+    ],
+    "secretRefs": [
+      "secret://pact/codespace/gerrit-service-account"
+    ],
+    "requiredScopes": [
+      "repo:read",
+      "repo:write",
+      "repo:maintain"
+    ],
+    "auditRequired": true,
+    "secretHandling": "secretRef-only"
+  },
+  "dehydration": {
+    "profileId": "gerrit-service",
+    "mode": "detach-external-service-integration-from-full-platform",
+    "preserveCapabilities": [
+      "authorization",
+      "operation-dispatch",
+      "audit",
+      "secret-ref-resolution",
+      "runtime-dependency-download",
+      "module-lifecycle",
+      "runtime-health",
+      "tool-management-catalog"
+    ],
+    "removeSurfaces": [
+      "full-control-panel",
+      "knowledge-ui",
+      "agent-workspace-ui",
+      "tool-skill-admin-ui",
+      "production-readiness-console",
+      "sample-business-pack-console"
+    ],
+    "runtimeBinaries": {
+      "gerritWar": "excluded-from-package",
+      "javaRuntime": "excluded-unless-already-bundled-by-runtime-dependency-policy",
+      "dockerDesktop": "excluded-from-package"
+    }
+  },
+  "dynamicModuleMount": {
+    "enabled": true,
+    "hotReloadableProviders": [
+      "GerritCodeReviewRoute",
+      "CodespaceManagement",
+      "RepoOperationsCompatibilityRoute"
+    ],
+    "hotSwitchPolicy": "provider-contract-compatible-only",
+    "hotUnloadPolicy": "require-no-active-code-review-operation"
+  },
+  "startupComposition": {
+    "enabled": true,
+    "bindProviders": [
+      {
+        "contract": "pact.runtime-dependencies.v1",
+        "provider": "RuntimeDependencies"
+      },
+      {
+        "contract": "pact.code-review.v1",
+        "provider": "GerritCodeReviewRoute"
+      },
+      {
+        "contract": "pact.codespace.v1",
+        "provider": "CodespaceManagement"
+      },
+      {
+        "contract": "pact.resource-operation.v1",
+        "provider": "RepoOperationsCompatibilityRoute"
+      }
+    ],
+    "healthGates": [
+      "security-permissions",
+      "runtime.dependencies.list:gerrit",
+      "runtime.dependencies.list:jre",
+      "codespace.providers.manifest",
+      "gerrit.smoke"
+    ],
+    "fallbackPolicy": "remote-gerrit-endpoint-or-runtime-download-required"
+  },
+  "verification": [
+    "npm run server:verify:runtime-dependency-downloads --silent",
+    "npm run server:verify:gerrit-mcp --silent",
+    "npm run server:verify:codespace --silent",
+    "npm run server:verify:v001-codespace-e2e --silent",
+    "npm run server:verify:protocol-operations --silent"
+  ]
+}

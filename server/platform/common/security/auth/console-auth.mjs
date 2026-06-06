@@ -332,6 +332,12 @@ async function verifyPassword(password, salt, passwordHash) {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
+function timingSafeStringEqual(leftValue, rightValue) {
+  const left = crypto.createHash("sha256").update(String(leftValue || ""), "utf8").digest();
+  const right = crypto.createHash("sha256").update(String(rightValue || ""), "utf8").digest();
+  return crypto.timingSafeEqual(left, right);
+}
+
 function ensureSchema(db) {
   db.exec(`
     PRAGMA journal_mode = WAL;
@@ -584,14 +590,28 @@ export function createConsoleAuth({ userDataPath }) {
     db.prepare("UPDATE console_sessions SET last_seen_at = ? WHERE session_id = ?").run(
       now, row.session_id
     );
-    // L-1: soft-validate user-agent binding (log suspicious mismatches, do not hard-reject
+    // L-1: soft-validate user-agent binding (audit suspicious mismatches, do not hard-reject
     // to avoid breaking legitimate users whose UA changes between requests)
     if (request && row.user_agent_hash) {
       const incomingUaHash = hashToken(request?.headers?.["user-agent"] || "");
       if (incomingUaHash !== row.user_agent_hash) {
-        // SECURITY NOTE: this is an advisory warning, not a hard reject.
-        // A hard reject would break VPN users and some browsers.  The mismatch
-        // is recorded in the audit log via the normal request audit trail.
+        audit({
+          user: {
+            userId: row.user_id,
+            username: row.username
+          },
+          operationId: "auth.session",
+          action: "user-agent-mismatch",
+          method: String(request?.method || "GET"),
+          path: String(request?.url || ""),
+          status: "warning",
+          error: "user-agent mismatch",
+          target: {
+            userAgentHashMismatch: true,
+            storedUserAgentHash: row.user_agent_hash,
+            incomingUserAgentHash: incomingUaHash
+          }
+        });
       }
     }
     // M-3: CSRF token is derived via HMAC from the raw session token — never stored
@@ -626,7 +646,7 @@ export function createConsoleAuth({ userDataPath }) {
   function getSessionFromRequest(request) {
     const cookies = parseCookies(request);
     const cookieToken = cookies[CONSOLE_SESSION_COOKIE] || "";
-    return sessionFromToken(cookieToken);
+    return sessionFromToken(cookieToken, request);
   }
 
   async function createUser(input = {}) {
@@ -1099,8 +1119,7 @@ export function createConsoleAuth({ userDataPath }) {
       !safeRequestMethod(method);
     if (needsCsrf) {
       const csrf = String(request?.headers?.["x-pact-csrf"] || "").trim();
-      // M-3: session.csrfToken is HMAC-derived; compare timing-safely
-      if (!csrf || csrf !== session.csrfToken) {
+      if (!csrf || !timingSafeStringEqual(csrf, session.csrfToken)) {
         audit({
           user: session.user,
           operationId: operation?.id || "",

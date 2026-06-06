@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { useConsole } from '../../composables/useConsole';
+import { ref } from 'vue';
+import { useServerConsoleShellContext } from '../../composables/serverConsoleShellContext';
+import { formatCompactDate, jsonPreview } from '../../composables/console-format-utils';
 import ConfigFoldCard from '../../components/ConfigFoldCard.vue';
+import { saveContextProfiles } from '../../lib/context-compiler-client';
 
 const {
   busyKey,
@@ -11,13 +14,56 @@ const {
   contextPreviewTask,
   contextProfileRows,
   exportContextBuildRecords,
-  formatCompactDate,
   highlightedConfigTarget,
-  jsonPreview,
   previewContextCompiler,
-  refreshContextCompiler,
   runContextReplayEvaluation,
-} = useConsole();
+} = useServerConsoleShellContext();
+
+const showAddPresetModal = ref(false);
+const newPresetForm = ref({
+  profileId: '',
+  label: '',
+  contextWindowTokens: 64000,
+  knowledgeBudget: 18000,
+  historyBudget: 16000,
+  expertGuidanceRatio: 0.2,
+});
+
+async function saveNewPreset() {
+  const newProfile = {
+    ...newPresetForm.value,
+    compression: {
+      enabled: true,
+      threshold: 0.6,
+      targetRatio: 0.3,
+      protectLastNTurns: 8,
+      summaryMaxTokens: 8000,
+      strategy: "deterministic-extractive"
+    }
+  };
+
+  // Update UI optimistically
+  contextProfileRows.value.push(newProfile);
+  showAddPresetModal.value = false;
+
+  // Persist to backend
+  try {
+    const allProfiles = contextProfileRows.value;
+    await saveContextProfiles({ profiles: allProfiles });
+  } catch (err) {
+    console.error("Failed to save profiles:", err);
+  }
+
+  // Reset form
+  newPresetForm.value = {
+    profileId: '',
+    label: '',
+    contextWindowTokens: 64000,
+    knowledgeBudget: 18000,
+    historyBudget: 16000,
+    expertGuidanceRatio: 0.2,
+  };
+}
 </script>
 
 <template>
@@ -27,81 +73,76 @@ const {
                 <div class="section-header">
                   <div>
                     <h3>上下文编译器</h3>
-                    <p>每次调用无状态模型前，本地把记忆、证据、专家意见和工具状态编译成可审计 ContextPack。</p>
                   </div>
                   <div class="section-actions">
                     <button
-                      class="tool-button tool-button-ghost compact-action"
+                      class="tool-button"
                       type="button"
-                      :disabled="busyKey === 'context:refresh'"
-                      @click="refreshContextCompiler()"
+                      @click="showAddPresetModal = true"
                     >
-                      {{ busyKey === "context:refresh" ? "刷新中" : "刷新" }}
-                    </button>
-                    <button
-                      class="tool-button compact-action"
-                      type="button"
-                      :disabled="!contextBuildRecordRows.length"
-                      @click="exportContextBuildRecords"
-                    >
-                      导出记录
+                      新增预设
                     </button>
                   </div>
                 </div>
 
-                <div class="context-profile-grid">
+                <div class="context-profile-list">
                   <article
                     v-for="profile in contextProfileRows"
                     :key="profile.profileId"
-                    class="context-profile-card"
+                    class="context-profile-item"
                   >
-                    <div>
-                      <strong>{{ profile.label || profile.profileId }}</strong>
-                      <span>{{ profile.profileId }} · {{ profile.compressionMode }} · {{ profile.strategy }}</span>
+                    <header>
+                      <h4 class="profile-title">{{ profile.label || profile.profileId }}</h4>
+                      <span class="profile-mode">{{ profile.compressionMode }} / {{ profile.strategy }}</span>
+                    </header>
+                    <div class="profile-budgets">
+                      <div class="budget-item">
+                        <span class="budget-label">窗口总量</span>
+                        <span class="budget-value">{{ profile.contextWindowTokens.toLocaleString() }}</span>
+                      </div>
+                      <div class="budget-item">
+                        <span class="budget-label">知识分配</span>
+                        <span class="budget-value">{{ profile.knowledgeBudget.toLocaleString() }}</span>
+                      </div>
+                      <div class="budget-item">
+                        <span class="budget-label">历史分配</span>
+                        <span class="budget-value">{{ profile.historyBudget.toLocaleString() }}</span>
+                      </div>
+                      <div class="budget-item">
+                        <span class="budget-label">专家介入</span>
+                        <span class="budget-value">{{ Math.round(profile.expertGuidanceRatio * 100) }}%</span>
+                      </div>
                     </div>
-                    <dl>
-                      <div>
-                        <dt>窗口</dt>
-                        <dd>{{ profile.contextWindowTokens.toLocaleString() }}</dd>
-                      </div>
-                      <div>
-                        <dt>知识</dt>
-                        <dd>{{ profile.knowledgeBudget.toLocaleString() }}</dd>
-                      </div>
-                      <div>
-                        <dt>历史</dt>
-                        <dd>{{ profile.historyBudget.toLocaleString() }}</dd>
-                      </div>
-                      <div>
-                        <dt>专家权重</dt>
-                        <dd>{{ Math.round(profile.expertGuidanceRatio * 100) }}%</dd>
-                      </div>
-                    </dl>
-                    <small>
-                      保护字段：{{ profile.protectedEvidenceFields.slice(0, 6).join(", ") || "默认" }}
-                    </small>
-                    <small>
-                      模型压缩：{{ profile.modelCompressionEnabled ? (profile.modelCompressionAlias || "已启用") : "关闭" }}
-                    </small>
+                    <footer class="profile-meta">
+                      <span class="meta-badge" v-if="profile.protectedEvidenceFields && profile.protectedEvidenceFields.length">
+                        保护: {{ profile.protectedEvidenceFields.slice(0, 4).join(", ") }}
+                      </span>
+                      <span class="meta-badge" v-else>
+                        保护: 默认规则
+                      </span>
+                      <span class="meta-badge">
+                        模型压缩: {{ profile.modelCompressionEnabled ? (profile.modelCompressionAlias || "开启") : "关闭" }}
+                      </span>
+                    </footer>
                   </article>
-                  <div v-if="!contextProfileRows.length" class="empty-note">
-                    尚未加载上下文 profile。
+                  <div v-if="!contextProfileRows.length" class="empty-profile-state">
+                    暂无上下文配置。您可以点击右上角“新增预设”进行添加。
                   </div>
                 </div>
 
-                <div class="form-grid compact-form-grid">
-                  <label class="full-row">
+                <div class="preview-task-form">
+                  <label>
                     <span>预览任务</span>
-                    <textarea v-model="contextPreviewTask" rows="3" spellcheck="false"></textarea>
+                    <textarea v-model="contextPreviewTask" rows="3" spellcheck="false" placeholder="输入你想在此上下文中进行的操作或预览提示..."></textarea>
                   </label>
                   <label>
                     <span>必须保留的 evidenceId</span>
                     <input v-model="contextPreviewRequiredEvidence" placeholder="ev_1, evidence::abc" autocomplete="off" />
                   </label>
                 </div>
-                <div class="source-actions">
+                <div class="context-action-bar">
                   <button
-                    class="tool-button"
+                    class="tool-button primary-action"
                     type="button"
                     :disabled="busyKey === 'context:preview'"
                     @click="previewContextCompiler"
@@ -115,6 +156,15 @@ const {
                     @click="runContextReplayEvaluation"
                   >
                     {{ busyKey === "context:evaluation" ? "评估中" : "运行 Replay 评估" }}
+                  </button>
+                  <div class="action-divider"></div>
+                  <button
+                    class="tool-button tool-button-ghost"
+                    type="button"
+                    :disabled="!contextBuildRecordRows.length"
+                    @click="exportContextBuildRecords"
+                  >
+                    导出记录
                   </button>
                 </div>
 
@@ -155,6 +205,329 @@ const {
                   </div>
                 </ConfigFoldCard>
               </div>
+
+              <!-- Add Preset Modal -->
+              <div v-if="showAddPresetModal" class="pact-modal-overlay" @click.self="showAddPresetModal = false">
+                <div class="pact-modal">
+                  <header class="pact-modal-header">
+                    <h3>新增上下文配置</h3>
+                  </header>
+                  <div class="pact-modal-body form-grid">
+                    <label class="full-row">
+                      <span>配置标识 (Profile ID)</span>
+                      <input v-model="newPresetForm.profileId" placeholder="例如: my-custom-preset" />
+                    </label>
+                    <label class="full-row">
+                      <span>配置名称 (Label)</span>
+                      <input v-model="newPresetForm.label" placeholder="例如: 自定义均衡配置" />
+                    </label>
+                    <label>
+                      <span>窗口总量</span>
+                      <input type="number" v-model.number="newPresetForm.contextWindowTokens" />
+                    </label>
+                    <label>
+                      <span>知识分配</span>
+                      <input type="number" v-model.number="newPresetForm.knowledgeBudget" />
+                    </label>
+                    <label>
+                      <span>历史分配</span>
+                      <input type="number" v-model.number="newPresetForm.historyBudget" />
+                    </label>
+                    <label>
+                      <span>专家介入权重 (0-1)</span>
+                      <input type="number" step="0.1" v-model.number="newPresetForm.expertGuidanceRatio" />
+                    </label>
+                  </div>
+                  <footer class="pact-modal-footer">
+                    <button class="tool-button tool-button-ghost" type="button" @click="showAddPresetModal = false">取消</button>
+                    <button class="tool-button" type="button" @click="saveNewPreset">保存配置</button>
+                  </footer>
+                </div>
+              </div>
             </article>
           </section>
 </template>
+
+<style scoped>
+.context-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.context-profile-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  transition: border-color 0.2s ease;
+}
+
+.context-profile-item:hover {
+  border-color: var(--el-border-color);
+}
+
+.context-profile-item header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding-bottom: 0.75rem;
+}
+
+.profile-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  letter-spacing: -0.01em;
+}
+
+.profile-mode {
+  font-size: 0.875rem;
+  color: var(--el-text-color-secondary);
+  font-weight: 500;
+}
+
+.profile-budgets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+}
+
+.budget-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.budget-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--el-text-color-secondary);
+}
+
+.budget-value {
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}
+
+.meta-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.625rem;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--el-text-color-regular);
+}
+
+.empty-profile-state {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  background: var(--el-bg-color-page);
+  border: 1px dashed var(--el-border-color);
+  border-radius: 8px;
+  color: var(--el-text-color-secondary);
+  font-size: 0.875rem;
+}
+
+/* Modal Styles */
+.pact-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+  animation: fade-in 0.2s ease-out;
+}
+
+.pact-modal {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  width: 440px;
+  max-width: 90vw;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.pact-modal-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.pact-modal-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  letter-spacing: -0.01em;
+}
+
+.pact-modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  max-height: 70vh;
+}
+
+.pact-modal-body label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pact-modal-body label span {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--el-text-color-regular);
+}
+
+.pact-modal-body input {
+  width: 100%;
+  height: 40px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  background: var(--el-bg-color-overlay);
+  color: var(--el-text-color-primary);
+  font-size: 0.875rem;
+  transition: border-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
+}
+
+.pact-modal-body input:focus {
+  outline: none;
+  border-color: var(--el-color-primary);
+}
+
+.pact-modal-body input::placeholder {
+  color: var(--el-text-color-placeholder);
+}
+
+.pact-modal-footer {
+  padding: 1.25rem 1.5rem;
+  border-top: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  background: var(--el-bg-color-page);
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.preview-task-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+  background: var(--el-bg-color-overlay);
+  padding: 1.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--el-border-color-light);
+}
+
+.preview-task-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.preview-task-form label span {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--el-text-color-regular);
+}
+
+.preview-task-form input,
+.preview-task-form textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  background: var(--el-bg-color-page);
+  color: var(--el-text-color-primary);
+  font-size: 0.875rem;
+  font-family: inherit;
+  transition: border-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
+}
+
+.preview-task-form input:focus,
+.preview-task-form textarea:focus {
+  outline: none;
+  border-color: var(--el-color-primary);
+}
+
+.preview-task-form textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Unified Action Bar */
+.context-action-bar {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color-light);
+  padding: 1rem;
+  border-radius: 8px;
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.context-action-bar .tool-button {
+  flex: 1;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.context-action-bar .primary-action {
+  background: var(--el-color-primary);
+  color: var(--el-color-white);
+  border: none;
+}
+
+.context-action-bar .primary-action:not(:disabled):hover {
+  background: var(--el-color-primary-light-3);
+}
+
+.action-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--el-border-color-lighter);
+  margin: 0 0.5rem;
+}
+</style>

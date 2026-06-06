@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Mail Import Ops"
+  short_description: "Help with Pact Mail Import Ops tasks"
+  default_prompt: "Use $pact-mail-import-ops to handle this Pact platform task."

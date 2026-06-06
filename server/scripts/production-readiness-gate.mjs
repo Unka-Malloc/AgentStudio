@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const DEFAULT_OUTPUT_ROOT = "reports/production-readiness";
+const DEFAULT_OUTPUT_ROOT = "docs/reports/history/production-readiness";
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
 const REQUIRED_COVERAGE = [
@@ -15,6 +15,11 @@ const REQUIRED_COVERAGE = [
   "workspace-contribution-governance",
   "document-parsing-real-sample",
   "external-knowledge-base-consistency",
+  "external-service-api-registration",
+  "capability-kernel-api-capability",
+  "key-management-storage-distribution",
+  "permission-management-auth-config",
+  "mcp-gateway-client-push",
   "rag-evaluation",
   "distillation-evaluation",
   "session-thread",
@@ -83,6 +88,18 @@ const GATES = [
     nextStep: "补齐外部知识库 conformance：权限预过滤、删除/tombstone、回读和重建语义。"
   },
   {
+    id: "external-service-api-registration",
+    title: "外部服务 API 注册治理",
+    blockerLevel: "P0",
+    owner: "external-service-governance",
+    coverage: ["external-service-api-registration"],
+    commands: [
+      ["npm", "run", "server:verify:external-service-api-registration"],
+      ["npm", "run", "server:verify:external-knowledge-distillation"]
+    ],
+    nextStep: "所有服务必须通过 external.* operation 和 /api/external/* 中介 API 注册；Tool Management 不得暴露平台内部算法能力。"
+  },
+  {
     id: "rag-evaluation",
     title: "RAG 检索评估",
     blockerLevel: "P0",
@@ -126,7 +143,7 @@ const GATES = [
     title: "工具权限和安全策略",
     blockerLevel: "P0",
     owner: "security-tooling",
-    coverage: ["tool-permission"],
+    coverage: ["tool-permission", "permission-management-auth-config"],
     commands: [
       ["npm", "run", "server:verify:2-3-5-security-model"],
       ["npm", "run", "server:verify:tool-management"],
@@ -142,7 +159,7 @@ const GATES = [
     title: "Capability Kernel 与密钥边界",
     blockerLevel: "P0",
     owner: "security-kernel",
-    coverage: ["capability-kernel-security"],
+    coverage: ["capability-kernel-security", "capability-kernel-api-capability"],
     commands: [
       ["npm", "run", "server:verify:authorization-capabilities"],
       ["npm", "run", "server:verify:opaque-capability-key"],
@@ -152,6 +169,34 @@ const GATES = [
       ["npm", "run", "server:verify:windows-security-backends"]
     ],
     nextStep: "补齐 Capability Kernel、opaque key、Binding Guard、helper、recovery 和 OS backend 的生产验收。"
+  },
+  {
+    id: "key-management-storage-distribution",
+    title: "密钥存储和下发",
+    blockerLevel: "P0",
+    owner: "security-kernel",
+    coverage: ["key-management-storage-distribution"],
+    commands: [
+      ["npm", "run", "server:verify:secret-init"],
+      ["npm", "run", "server:verify:opaque-capability-key"],
+      ["npm", "run", "server:verify:tool-management"],
+      ["npm", "run", "server:verify:mcp-http"]
+    ],
+    nextStep: "补齐密钥初始化、opaque capability key、grant 存储/轮换/撤销，以及 MCP local-grant 下发链路。"
+  },
+  {
+    id: "mcp-gateway-client-push",
+    title: "MCP 网关下游推送",
+    blockerLevel: "P0",
+    owner: "mcp-gateway",
+    coverage: ["mcp-gateway-client-push"],
+    commands: [
+      ["npm", "run", "server:verify:mcp-http"],
+      ["npm", "run", "server:verify:mcp-release"],
+      ["npm", "run", "client:verify:mcp-plugins"],
+      ["npm", "run", "server:verify:client-runtime-bootstrap"]
+    ],
+    nextStep: "补齐 MCP discovery、tools/list_changed、connector 版本发布、客户端 MCP 配置更新和密钥授权下发验收。"
   },
   {
     id: "model-routing",
@@ -520,7 +565,7 @@ function buildMarkdownReport(report) {
   lines.push("");
   lines.push("- Passing this gate is required before claiming production readiness.");
   lines.push("- A passing command is only counted for the gate it explicitly covers; uncovered design requirements remain blockers.");
-  lines.push("- Reports are append-only run artifacts under `reports/production-readiness/<run-id>/`.");
+  lines.push("- Reports are append-only run artifacts under `docs/reports/history/production-readiness/<run-id>/`.");
   return `${lines.join("\n")}\n`;
 }
 

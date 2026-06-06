@@ -1,0 +1,157 @@
+.knowledge-import-card {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.knowledge-import-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.knowledge-import-header h3 {
+  color: var(--brand);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.knowledge-import-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.knowledge-import-mode {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.knowledge-import-dropzone {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 14px;
+  border: 1px dashed color-mix(in srgb, var(--brand) 36%, var(--border-strong) 64%);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--info-surface) 68%, var(--bg-surface) 32%);
+  transition:
+    background var(--dur-fast) var(--ease-std),
+    border-color var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std);
+}
+
+.knowledge-import-card.active .knowledge-import-dropzone,
+.knowledge-import-dropzone:focus-within {
+  border-color: var(--brand);
+  background: var(--info-surface);
+  box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.12);
+  outline: 0;
+}
+
+.knowledge-import-dropcopy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.knowledge-import-dropcopy strong {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+}
+
+.knowledge-import-dropcopy span {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.knowledge-import-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.knowledge-import-submit {
+  min-height: 32px;
+  white-space: nowrap;
+}
+
+.ingest-queue-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ingest-job-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.ingest-queue-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.ingest-queue-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.knowledge-import-export-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: nowrap;
+}
+
+.knowledge-export-select {
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 6px);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.knowledge-export-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

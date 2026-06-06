@@ -1,51 +1,32 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useConsole } from '../../composables/useConsole';
-import OptionBar from '../../components/OptionBar.vue';
-import StatusPill from '../../components/StatusPill.vue';
-const {
-  adminView,
-  busyKey,
-  canAdminRuntime,
-  clientMigrationMessages,
-  clientSearchQuery,
-  clientStateFilter,
-  clientStateFilterOptionBarOptions,
+import { useServerConsoleShellContext } from '../../composables/serverConsoleShellContext';
+import { formatCompactDate } from '../../composables/console-format-utils';
+import {
+  clientConfigReportLabel,
+  clientConfigReportTone,
   clientConnectionDetail,
   clientConnectionMethodLabel,
   clientStatusLabel,
   clientStatusTone,
+} from '../../composables/console-client-display-utils';
+import OptionBar from '../../components/OptionBar.vue';
+import StatusPill from '../../components/StatusPill.vue';
+const {
+  clientSearchQuery,
+  clientStateFilter,
+  clientStateFilterOptionBarOptions,
   consoleState,
-  currentView,
   exportClients,
-  filter,
   filteredClientList,
-  formatCompactDate,
   importClients,
-  isAuthenticated,
-  migrationStateLabels,
-  migrationTone,
-  refreshState,
-  requestClientMigration,
-} = useConsole();
-
-const latestClient = computed(() => {
-  const sorted = [...filteredClientList.value].sort((a, b) =>
-    String(b.lastSeenAt ?? '').localeCompare(String(a.lastSeenAt ?? ''))
-  );
-  return sorted[0] ?? null;
-});
-
-const migratableClientList = computed(() =>
-  filteredClientList.value.filter((item) => item.supportsMigration !== false)
-);
+} = useServerConsoleShellContext();
 </script>
 
 <template>
           <section id="clients-list" class="surface-card clients-card">
               <div class="section-header">
                 <div>
-                  <h3>设备管理</h3>
+                  <h3>客户端列表</h3>
               </div>
               <div class="section-tags">
                 <span
@@ -79,14 +60,6 @@ const migratableClientList = computed(() =>
                 <button
                   class="tool-button tool-button-ghost"
                   type="button"
-                  :disabled="busyKey === 'refresh'"
-                  @click="refreshState()"
-                >
-                  {{ busyKey === "refresh" ? "刷新中" : "刷新" }}
-                </button>
-                <button
-                  class="tool-button tool-button-ghost"
-                  type="button"
                   @click="importClients"
                 >
                   导入
@@ -103,15 +76,22 @@ const migratableClientList = computed(() =>
 
             <div class="table-shell">
               <table class="jobs-table clients-table">
+                <colgroup>
+                  <col class="clients-table-client-col" />
+                  <col class="clients-table-version-col" />
+                  <col class="clients-table-status-col" />
+                  <col class="clients-table-config-col" />
+                  <col class="clients-table-connection-col" />
+                  <col class="clients-table-seen-col" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>客户端信息</th>
-                    <th>平台环境</th>
                     <th>版本</th>
-                    <th>当前服务</th>
+                    <th>状态</th>
+                    <th>配置上报</th>
                     <th>连接方式</th>
                     <th>最近活跃</th>
-                    <th>状态</th>
                   </tr>
                 </thead>
                 <tbody v-if="filteredClientList.length > 0">
@@ -127,38 +107,33 @@ const migratableClientList = computed(() =>
                     </td>
                     <td>
                       <div class="primary-cell">
-                        <strong>{{ item.platform }}</strong>
-                        <span>{{ item.hostname }}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div class="primary-cell">
                         <strong>{{ item.appVersion || "未上报" }}</strong>
-                        <span>配置 {{ item.configVersion || "未上报" }}</span>
                       </div>
                     </td>
                     <td>
-                      <span class="url-badge">{{
-                        item.currentServiceUrl || "未接入"
-                      }}</span>
+                      <div class="client-status-stack">
+                        <StatusPill
+                          :tone="clientStatusTone(item)"
+                          :label="clientStatusLabel(item)"
+                        />
+                      </div>
+                    </td>
+                    <td>
+                      <StatusPill
+                        :tone="clientConfigReportTone(item)"
+                        :label="clientConfigReportLabel(item)"
+                      />
                     </td>
                     <td>
                       <div class="primary-cell">
                         <strong>{{ clientConnectionMethodLabel(item) }}</strong>
-                        <span>{{ clientConnectionDetail(item) }}</span>
+                        <span v-if="clientConnectionDetail(item)">{{ clientConnectionDetail(item) }}</span>
                       </div>
                     </td>
                     <td>
                       <div class="time-cell">
                         <strong>{{ formatCompactDate(item.lastSeenAt) }}</strong>
-                        <span>{{ item.lastSeenServerId || "N/A" }}</span>
                       </div>
-                    </td>
-                    <td>
-	                      <StatusPill
-	                        :tone="clientStatusTone(item)"
-	                        :label="clientStatusLabel(item)"
-	                      />
                     </td>
                   </tr>
                 </tbody>
@@ -174,105 +149,4 @@ const migratableClientList = computed(() =>
             </div>
           </section>
 
-          <aside id="network" class="surface-card migration-card">
-            <div class="section-header">
-              <div>
-                <h3>迁移控制</h3>
-              </div>
-              <div class="section-tags">
-                <span
-                  >已切换
-                  {{ consoleState?.clients?.summary?.alignedCount || 0 }}</span
-                >
-                <span
-                  >迁移中
-                  {{ consoleState?.clients?.summary?.drainingCount || 0 }}</span
-                >
-              </div>
-            </div>
-
-            <div class="migration-form-list" v-if="migratableClientList.length > 0">
-              <form
-                v-for="item in migratableClientList"
-                :key="item.clientId"
-                class="module-panel migration-control-form"
-                :data-tone="migrationTone(item.migrationState)"
-                @submit.prevent="requestClientMigration(item)"
-              >
-                <div class="migration-item-header">
-                  <div>
-                    <strong>{{ item.clientLabel || item.clientId }}</strong>
-                    <span>{{
-                      item.hostname || item.platform || item.clientId
-                    }}</span>
-                  </div>
-                  <em>{{ migrationStateLabels[item.migrationState] }}</em>
-                </div>
-
-                <div class="form-grid compact-form-grid">
-                  <label>
-                    <span>客户端版本</span>
-                    <input :value="item.appVersion || '未上报'" readonly />
-                  </label>
-                  <label>
-                    <span>配置版本</span>
-                    <input :value="item.configVersion || '未上报'" readonly />
-                  </label>
-                  <label>
-                    <span>当前服务</span>
-                    <input :value="item.currentServiceUrl || '未上报'" readonly />
-                  </label>
-                  <label>
-                    <span>目标服务</span>
-                    <input :value="item.desiredServiceUrl || consoleState?.discovery?.value?.activeServiceUrl || '未设置'" readonly />
-                  </label>
-                  <label>
-                    <span>任务服务</span>
-                    <input :value="item.currentJobServiceUrl || '无运行任务'" readonly />
-                  </label>
-                  <label>
-                    <span>最近上报</span>
-                    <input :value="formatCompactDate(item.lastSeenAt)" readonly />
-                  </label>
-                </div>
-
-                <p v-if="item.lastError" class="module-note danger-text">
-                  {{ item.lastError }}
-                </p>
-                <p v-if="clientMigrationMessages[item.clientId]" class="module-note">
-                  {{ clientMigrationMessages[item.clientId] }}
-                </p>
-
-                <div class="module-panel-footer">
-                  <button
-                    class="tool-button"
-                    type="submit"
-                    :disabled="!canAdminRuntime || busyKey === `client:migration:${item.clientId}`"
-                  >
-                    {{ busyKey === `client:migration:${item.clientId}` ? "发布中" : "拉起迁移" }}
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            <div v-else class="migration-empty">
-              <strong>暂无 pact-client 迁移流量</strong>
-              <p>
-                引导地址
-                  {{ consoleState?.discovery?.value?.bootstrapBaseUrl || "未配置" }}
-              </p>
-              <p>
-                离线判定
-                  {{ consoleState?.discovery?.value?.offlineAfterSeconds || 0 }} 秒
-              </p>
-              <p>
-                最近客户端
-                {{
-                  latestClient
-                    ? formatCompactDate(latestClient.lastSeenAt)
-                    : "暂无上报"
-                }}
-              </p>
-            </div>
-          </aside>
 </template>

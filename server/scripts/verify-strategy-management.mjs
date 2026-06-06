@@ -63,7 +63,7 @@ function startRoutingMockServer() {
   });
 }
 
-function fakeToolPlatform(decisions) {
+function fixtureToolPlatform(decisions) {
   const tool = {
     id: "pact.runtime.info",
     requiredScopes: ["console:read"],
@@ -95,7 +95,7 @@ function fakeToolPlatform(decisions) {
 
 async function verifyProviderBoundary() {
   const policyDecisions = [];
-  const platform = fakeToolPlatform(policyDecisions);
+  const platform = fixtureToolPlatform(policyDecisions);
   const provider = createStrategyManagementProvider({
     userDataPath: "",
     modelDecisionRuntime: {
@@ -120,6 +120,26 @@ async function verifyProviderBoundary() {
   const agent = provider.evaluateAgentPolicy({ roleId: "writer" });
   assert.equal(agent.protocolVersion, STRATEGY_MANAGEMENT_PROTOCOL_VERSION);
   assert.equal(agent.effect, "allow");
+
+  const routePolicy = provider.evaluateRoutePolicy({
+    routeId: "downstream.acp.codex",
+    fromAspect: "downstream-client-aspect",
+    protocol: "acp",
+    internalCapabilityId: "acp-agent-relay"
+  });
+  assert.equal(routePolicy.protocolVersion, STRATEGY_MANAGEMENT_PROTOCOL_VERSION);
+  assert.equal(routePolicy.policyType, "route-policy");
+  assert.equal(routePolicy.effect, "allow");
+  assert.equal(routePolicy.fromAspect, "downstream-client-aspect");
+  assert.equal(routePolicy.internalCapabilityId, "acp-agent-relay");
+
+  const deniedRoutePolicy = provider.evaluateRoutePolicy({
+    routeId: "upstream.external.missing",
+    fromAspect: "upstream-service-aspect",
+    routeKind: "external-service"
+  });
+  assert.equal(deniedRoutePolicy.effect, "deny");
+  assert.equal(deniedRoutePolicy.reasonCode, "route_target_missing");
 
   const modelDecision = await provider.createModelDecisionRuntimePort().decide({ roleId: "writer" });
   assert.equal(modelDecision.strategyProtocolVersion, STRATEGY_MANAGEMENT_PROTOCOL_VERSION);
@@ -220,6 +240,22 @@ async function verifyHttpOperations() {
     assert.equal(agent.payload.protocolVersion, STRATEGY_MANAGEMENT_PROTOCOL_VERSION);
     assert.equal(agent.payload.policyType, "agent-policy");
 
+    const route = await fetchJson(`${server.url}/api/strategy/route-policy/evaluate`, {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({
+        routeId: "verify.downstream.mcp",
+        fromAspect: "downstream-client-aspect",
+        protocol: "mcp",
+        internalCapabilityId: "mcp-server-side"
+      })
+    });
+    assert.equal(route.status, 200);
+    assert.equal(route.payload.protocolVersion, STRATEGY_MANAGEMENT_PROTOCOL_VERSION);
+    assert.equal(route.payload.policyType, "route-policy");
+    assert.equal(route.payload.effect, "allow");
+    assert.equal(route.payload.internalCapabilityId, "mcp-server-side");
+
     const strategyTool = await fetchJson(`${server.url}/api/strategy/tool-policy/preview`, {
       method: "POST",
       headers: jsonHeaders(),
@@ -251,6 +287,7 @@ function verifyOperationRegistry() {
     "strategy.describe",
     "strategy.workflow_policy.evaluate",
     "strategy.agent_policy.evaluate",
+    "strategy.route_policy.evaluate",
     "strategy.tool_policy.preview"
   ];
   const byId = new Map(SERVER_API_OPERATIONS.map((operation) => [operation.id, operation]));

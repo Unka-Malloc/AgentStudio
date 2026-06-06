@@ -1,48 +1,38 @@
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from "vue-router";
-export type { AdminSection, DebugTab, KnowledgeTab } from "./routes";
+import { isExternalServiceRouteTab, isKnowledgeRouteTab } from "./routes";
+export type { AdminSection, DebugTab, ExternalServiceTab, KnowledgeTab } from "./routes";
 export { adminSectionToSlug, slugToAdminView, viewToPath } from "./routes";
 
-// ─── Views ────────────────────────────────────────────────────────────────────
-import WorkspacesView from "../views/WorkspacesView.vue";
-import DashboardView from "../views/DashboardView.vue";
-import DebugView from "../views/DebugView.vue";
-import FeedView from "../views/FeedView.vue";
-import KnowledgeView from "../views/KnowledgeView.vue";
-import SourcesView from "../views/SourcesView.vue";
-import AgentConfigView from "../views/admin/AgentConfigView.vue";
-import AgentManagementView from "../views/admin/AgentManagementView.vue";
-import AgentPermissionsView from "../views/admin/AgentPermissionsView.vue";
-import ClientsView from "../views/admin/ClientsView.vue";
-import ContextManagementView from "../views/admin/ContextManagementView.vue";
-import JobsView from "../views/admin/JobsView.vue";
-import LogsView from "../views/admin/LogsView.vue";
-import MaintenanceAgentView from "../views/admin/MaintenanceAgentView.vue";
-import ModulesView from "../views/admin/ModulesView.vue";
-import OpsMonitorView from "../views/admin/OpsMonitorView.vue";
-import ProductionHealthView from "../views/admin/ProductionHealthView.vue";
-import StorageView from "../views/admin/StorageView.vue";
-import ToolsView from "../views/admin/ToolsView.vue";
-
-const validKnowledgeTabs = new Set(["management", "wordCloud", "conflicts", "maintenance"]);
-const validDebugTabs = new Set(["knowledgeRecall", "agentRetrieval"]);
+const validDebugTabs = new Set(["knowledgeRecall", "agentRetrieval", "knowledgeDistillation"]);
 
 const routes: RouteRecordRaw[] = [
   // Agent workspace
-  { path: "/workspaces", component: WorkspacesView, meta: { viewId: "workspaces" } },
+  { path: "/workspaces", component: () => import("../views/WorkspacesView.vue"), meta: { viewId: "workspaces" } },
 
   // Core views
-  { path: "/", component: DashboardView, meta: { viewId: "dashboard" } },
-  { path: "/feed", component: FeedView, meta: { viewId: "feed" } },
-  { path: "/sources", component: SourcesView, meta: { viewId: "sources" } },
+  { path: "/", component: () => import("../views/DashboardView.vue"), meta: { viewId: "dashboard" } },
+  { path: "/feed", component: () => import("../views/FeedView.vue"), meta: { viewId: "feed" } },
+  { path: "/approval", component: () => import("../views/ApprovalFlowView.vue"), meta: { viewId: "approval" } },
+  { path: "/sources", component: () => import("../views/SourcesView.vue"), meta: { viewId: "sources" } },
   { path: "/intelligence", redirect: "/" },
+
+  // External service management
+  { path: "/external-services", redirect: "/external-services/list" },
+  {
+    path: "/external-services/:tab",
+    component: () => import("../views/ExternalServicesView.vue"),
+    beforeEnter: (to) =>
+      isExternalServiceRouteTab(String(to.params.tab)) ? true : "/external-services/list",
+    meta: { viewId: "externalServices" },
+  },
 
   // Knowledge sub-tabs
   { path: "/knowledge", redirect: "/knowledge/management" },
   {
     path: "/knowledge/:tab",
-    component: KnowledgeView,
+    component: () => import("../views/KnowledgeView.vue"),
     beforeEnter: (to) =>
-      validKnowledgeTabs.has(String(to.params.tab)) ? true : "/knowledge/management",
+      isKnowledgeRouteTab(String(to.params.tab)) ? true : "/knowledge/management",
     meta: { viewId: "knowledge" },
   },
 
@@ -53,7 +43,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: "/debug/:tab",
-    component: DebugView,
+    component: () => import("../views/DebugView.vue"),
     beforeEnter: (to) =>
       validDebugTabs.has(String(to.params.tab)) ? true : "/debug/knowledgeRecall",
     meta: { viewId: "debug" },
@@ -61,19 +51,23 @@ const routes: RouteRecordRaw[] = [
 
   // Admin views
   { path: "/admin", redirect: "/admin/storage" },
-  { path: "/admin/storage", component: StorageView, meta: { viewId: "admin", adminView: "storage" } },
-  { path: "/admin/jobs", component: JobsView, meta: { viewId: "admin", adminView: "jobs" } },
-  { path: "/admin/logs", component: LogsView, meta: { viewId: "admin", adminView: "logs" } },
-  { path: "/admin/ops-monitor", component: OpsMonitorView, meta: { viewId: "admin", adminView: "opsMonitor" } },
-  { path: "/admin/production-health", component: ProductionHealthView, meta: { viewId: "admin", adminView: "productionHealth" } },
-  { path: "/admin/clients", component: ClientsView, meta: { viewId: "admin", adminView: "clients" } },
-  { path: "/admin/tools", component: ToolsView, meta: { viewId: "admin", adminView: "tools" } },
-  { path: "/admin/modules", component: ModulesView, meta: { viewId: "admin", adminView: "modules" } },
-  { path: "/admin/agent-management", component: AgentManagementView, meta: { viewId: "admin", adminView: "agentManagement" } },
-  { path: "/admin/agent-permissions", component: AgentPermissionsView, meta: { viewId: "admin", adminView: "agentPermissions" } },
-  { path: "/admin/agent-config", component: AgentConfigView, meta: { viewId: "admin", adminView: "agentConfig" } },
-  { path: "/admin/context-management", component: ContextManagementView, meta: { viewId: "admin", adminView: "contextManagement" } },
-  { path: "/admin/maintenance-agent", component: MaintenanceAgentView, meta: { viewId: "admin", adminView: "maintenanceAgent" } },
+  { path: "/admin/storage", component: () => import("../views/admin/StorageView.vue"), meta: { viewId: "admin", adminView: "storage" } },
+  { path: "/admin/jobs", component: () => import("../views/admin/JobsView.vue"), meta: { viewId: "admin", adminView: "jobs" } },
+  { path: "/admin/logs", component: () => import("../views/admin/LogsView.vue"), meta: { viewId: "admin", adminView: "logs" } },
+  { path: "/admin/ops-monitor", component: () => import("../views/admin/OpsMonitorView.vue"), meta: { viewId: "admin", adminView: "opsMonitor" } },
+  { path: "/admin/runtime-downloads", component: () => import("../views/admin/RuntimeDownloadsView.vue"), meta: { viewId: "admin", adminView: "runtimeDownloads" } },
+  { path: "/admin/production-health", component: () => import("../views/admin/ProductionHealthView.vue"), meta: { viewId: "admin", adminView: "productionHealth" } },
+  { path: "/admin/clients", component: () => import("../views/admin/ClientsView.vue"), meta: { viewId: "admin", adminView: "clients" } },
+  { path: "/admin/tools", redirect: "/admin/tool-list" },
+  { path: "/admin/tool-list", component: () => import("../views/admin/ToolsView.vue"), meta: { viewId: "admin", adminView: "toolList" } },
+  { path: "/admin/tool-stats", component: () => import("../views/admin/ToolsView.vue"), meta: { viewId: "admin", adminView: "toolStats" } },
+  { path: "/admin/modules", component: () => import("../views/admin/ModulesView.vue"), meta: { viewId: "admin", adminView: "modules" } },
+  { path: "/admin/agent-management", redirect: "/admin/agent-config" },
+  { path: "/admin/agent-permissions", component: () => import("../views/admin/AgentPermissionsView.vue"), meta: { viewId: "admin", adminView: "agentPermissions" } },
+  { path: "/admin/agent-config", component: () => import("../views/admin/AgentConfigView.vue"), meta: { viewId: "admin", adminView: "agentConfig" } },
+  { path: "/admin/agent-assignment", component: () => import("../views/admin/AgentAssignmentView.vue"), meta: { viewId: "admin", adminView: "agentAssignment" } },
+  { path: "/admin/context-management", component: () => import("../views/admin/ContextManagementView.vue"), meta: { viewId: "admin", adminView: "contextManagement" } },
+  { path: "/admin/maintenance-agent", component: () => import("../views/admin/MaintenanceAgentView.vue"), meta: { viewId: "admin", adminView: "maintenanceAgent" } },
 
   // Catch-all → dashboard
   { path: "/:pathMatch(.*)*", redirect: "/" },
@@ -87,11 +81,14 @@ export const router = createRouter({
 });
 
 router.beforeEach((to) => {
-  if (to.path.startsWith("/knowledge/") && !validKnowledgeTabs.has(String(to.params.tab))) {
+  if (to.path.startsWith("/knowledge/") && !isKnowledgeRouteTab(String(to.params.tab))) {
     return { path: "/knowledge/management", replace: true };
   }
   if (to.path.startsWith("/debug/") && !validDebugTabs.has(String(to.params.tab))) {
     return { path: "/debug/knowledgeRecall", replace: true };
+  }
+  if (to.path.startsWith("/external-services/") && !isExternalServiceRouteTab(String(to.params.tab))) {
+    return { path: "/external-services/list", replace: true };
   }
   return true;
 });

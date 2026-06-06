@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "reportType": "pact.production-readiness.v1",
+  "runId": "20260528T155858Z",
+  "generatedAt": "2026-05-28T15:59:05.170Z",
+  "mode": "quick",
+  "repoRoot": "/Users/unka/DevSpace/Unka-Malloc/Pact",
+  "git": {
+    "branch": "main",
+    "commit": "74c293b862c16de76d03d009ce530aedec07103c",
+    "dirtyFileCount": 88
+  },
+  "overallStatus": "blocked",
+  "summary": {
+    "pass": 3,
+    "fail": 0,
+    "timeout": 0,
+    "blockedP0": 0
+  },
+  "coverage": {
+    "required": [
+      "architecture",
+      "agent-library-access",
+      "capability-kernel-security",
+      "workspace-contribution-governance",
+      "document-parsing-real-sample",
+      "external-knowledge-base-consistency",
+      "rag-evaluation",
+      "distillation-evaluation",
+      "session-thread",
+      "tool-permission",
+      "trace-observability",
+      "durable-workflow",
+      "backup-restore",
+      "upgrade-migration",
+      "ui-smoke",
+      "offline-license"
+    ],
+    "byRequirement": {
+      "architecture": [
+        "architecture"
+      ],
+      "agent-library-access": [],
+      "capability-kernel-security": [],
+      "workspace-contribution-governance": [],
+      "document-parsing-real-sample": [
+        "document-parsing-real-sample"
+      ],
+      "external-knowledge-base-consistency": [],
+      "rag-evaluation": [],
+      "distillation-evaluation": [],
+      "session-thread": [],
+      "tool-permission": [],
+      "trace-observability": [],
+      "durable-workflow": [],
+      "backup-restore": [],
+      "upgrade-migration": [],
+      "ui-smoke": [
+        "ui-smoke"
+      ],
+      "offline-license": []
+    },
+    "missing": [
+      "agent-library-access",
+      "capability-kernel-security",
+      "workspace-contribution-governance",
+      "external-knowledge-base-consistency",
+      "rag-evaluation",
+      "distillation-evaluation",
+      "session-thread",
+      "tool-permission",
+      "trace-observability",
+      "durable-workflow",
+      "backup-restore",
+      "upgrade-migration",
+      "offline-license"
+    ]
+  },
+  "gates": [
+    {
+      "id": "architecture",
+      "title": "架构门禁",
+      "blockerLevel": "P0",
+      "owner": "platform-architecture",
+      "coverage": [
+        "architecture"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260528T155858Z/architecture.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:architecture-patterns",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 126
+        },
+        {
+          "command": "npm run server:verify:knowledge-architecture-governance",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 131
+        },
+        {
+          "command": "npm run server:verify:platform-layout",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 165
+        }
+      ],
+      "nextStep": "修复架构治理、平台分层或核心文档与实现偏差。"
+    },
+    {
+      "id": "document-parsing-real-sample",
+      "title": "文档解析真实样例",
+      "blockerLevel": "P0",
+      "owner": "knowledge-ingestion",
+      "coverage": [
+        "document-parsing-real-sample"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260528T155858Z/document-parsing-real-sample.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:dynamic-document-parsing",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 130
+        },
+        {
+          "command": "npm run server:verify:document-preview-consistency",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 123
+        },
+        {
+          "command": "npm run server:verify:document-parser-dry-run",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1457
+        },
+        {
+          "command": "npm run server:verify:knowledge-docx-export",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 177
+        }
+      ],
+      "nextStep": "补齐真实文档解析 fixture、结构锚点、动态切分和 DOCX 导出基准。"
+    },
+    {
+      "id": "ui-smoke",
+      "title": "端到端 UI smoke",
+      "blockerLevel": "P0",
+      "owner": "console-frontend",
+      "coverage": [
+        "ui-smoke"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260528T155858Z/ui-smoke.log",
+      "commands": [
+        {
+          "command": "npm run build:renderer:raw",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1801
+        },
+        {
+          "command": "npm run server:verify:frontend-feature-registry",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 247
+        },
+        {
+          "command": "npm run server:verify:knowledge-console",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1835
+        }
+      ],
+      "nextStep": "补齐控制台生产健康页、关键路由 smoke、前端 feature registry 和页面验收。"
+    }
+  ]
+}

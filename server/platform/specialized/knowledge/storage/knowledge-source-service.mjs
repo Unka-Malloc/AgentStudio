@@ -171,7 +171,13 @@ async function readSources(userDataPath) {
   try {
     const raw = await fs.readFile(sourcesPath(userDataPath), "utf8");
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed.sources) ? parsed.sources.map((item) => normalizeSource(item, item)) : [];
+    return Array.isArray(parsed.sources)
+      ? parsed.sources.map((item) => {
+        const normalized = normalizeSource(item, item);
+        normalized.updatedAt = String(item?.updatedAt || normalized.updatedAt || "");
+        return normalized;
+      })
+      : [];
   } catch (error) {
     if (error?.code === "ENOENT") {
       return [];

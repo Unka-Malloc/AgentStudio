@@ -6,14 +6,17 @@ This directory stores repository-level test assets.
   platform gates, and JSON reports.
 - `tests/verify-secret-hygiene.mjs`: source, docs, and test secret scan.
 - `tests/server`: server verification mounts and mock modules.
-- `tests/fixtures`: large sample mailboxes and imported message fixtures.
+- `tests/fixtures`: small synthetic fixtures only.
 
 Package-local tests remain with their owning implementation:
 
 - `client-cli/tests`
 - `client-gui/test`
 
-Generated test output must still go under `build/`; `tests/` is for reusable
-fixtures, mock modules, and source-controlled test code.
+Generated test output must still go under `build/`; downloaded evaluation
+corpora, real mailboxes, imported messages, and other real document sample sets
+must live outside the repository under `~/.pact-server-data/evaluation-corpora/`.
+`tests/` is for small synthetic fixtures, mock modules, and source-controlled
+test code.
 
 See `docs/TEST-FRAMEWORK.md` for the full framework contract.

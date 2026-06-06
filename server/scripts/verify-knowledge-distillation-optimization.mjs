@@ -47,9 +47,11 @@ const modelDecisionRuntime = {
     };
   }
 };
-const knowledgeDistillationRuntime = {
-  async runDistillation(input = {}) {
+const knowledgeDistillationService = {
+  service: "external.knowledge.distillation",
+  async createRun(input = {}) {
     return {
+      service: "external.knowledge.distillation",
       runId: input.runId,
       candidates: [
         {
@@ -104,7 +106,7 @@ try {
     knowledgeCore,
     agentEvaluationRuntime,
     modelDecisionRuntime,
-    knowledgeDistillationRuntime,
+    knowledgeDistillationService,
     goldenRuleRuntime,
     knowledgeSkillRuntime
   });
@@ -119,6 +121,8 @@ try {
   assert.equal(first.protocolVersion, KNOWLEDGE_EVOLUTION_PROTOCOL_VERSION);
   assert.equal(first.status, "skillset_evaluation_failed");
   assert.equal(first.distillationOptimization.protocolVersion, KNOWLEDGE_DISTILLATION_OPTIMIZATION_PROTOCOL_VERSION);
+  assert.equal(first.distillationService.service, "external.knowledge.distillation");
+  assert.equal(first.stages.externalDistillationServiceCalled, true);
   assert.equal(first.distillationOptimization.promptVersion, "prompt:v1");
   assert.equal(first.distillationOptimization.evaluationDataset.caseCount, 1);
   assert.equal(first.distillationOptimization.errorAttribution.available, true);

@@ -5,7 +5,7 @@ Copyright (C) 2026 Unka Y.Y.
 
 Pact is free software: you can redistribute it and/or modify it under the
 terms of the GNU General Public License as published by the Free Software
-Foundation, version 3 of the License only.
+Foundation, either version 3 of the License, or any later version.
 
 Pact is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
@@ -13,7 +13,7 @@ PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 The canonical license identifier for this repository is:
 
-SPDX-License-Identifier: GPL-3.0-only
+SPDX-License-Identifier: GPL-3.0-or-later
 
 The full GNU General Public License version 3 text is published by the Free
 Software Foundation at:

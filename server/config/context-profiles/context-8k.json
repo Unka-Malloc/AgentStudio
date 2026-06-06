@@ -1,0 +1,20 @@
+{
+  "profileId": "context-8k",
+  "label": "8K Context",
+  "modelAlias": "default",
+  "contextWindowTokens": 8192,
+  "outputReserveTokens": 2048,
+  "toolReserveTokens": 1024,
+  "fixedMemoryBudget": 512,
+  "knowledgeBudget": 2048,
+  "historyBudget": 1536,
+  "recentTurnBudget": 1024,
+  "compression": {
+    "enabled": true,
+    "threshold": 0.5,
+    "targetRatio": 0.25,
+    "protectLastNTurns": 3,
+    "summaryMaxTokens": 1024,
+    "strategy": "deterministic-extractive"
+  }
+}

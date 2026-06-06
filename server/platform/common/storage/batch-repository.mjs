@@ -69,28 +69,6 @@ function parseJsonValue(value, fallback = {}) {
   }
 }
 
-function parseTermCountsJson(rawValue) {
-  let parsed = {};
-  try {
-    parsed = JSON.parse(rawValue || "{}");
-  } catch {
-    parsed = {};
-  }
-
-  const counts = new Map();
-  for (const [term, rawCount] of Object.entries(parsed || {})) {
-    const normalizedTerm = String(term || "").trim();
-    const count = Number(rawCount || 0);
-    if (!normalizedTerm || !Number.isFinite(count) || count <= 0) {
-      continue;
-    }
-
-    counts.set(normalizedTerm, Math.floor(count));
-  }
-
-  return counts;
-}
-
 function termCountsToJson(counts) {
   const payload = {};
   for (const [term, count] of counts.entries()) {

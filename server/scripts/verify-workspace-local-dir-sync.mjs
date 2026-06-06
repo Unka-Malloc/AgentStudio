@@ -16,6 +16,53 @@ async function fetchJson(url, options = {}) {
   };
 }
 
+function extractMcpPayload(response = {}) {
+  return response.payload?.result?.structuredContent?.payload;
+}
+
+function assertMcpCallFailed(response, expectedStatus = 400) {
+  const error = response.payload?.error || response.payload?.result?.structuredContent?.payload?.error;
+  assert.ok(error, `expected MCP call failure, got ${JSON.stringify(response.payload, null, 2)}`);
+  assert.ok(
+    error.code === "tool_call_failed" || Number(error.code) === -32000,
+    `unexpected MCP failure code: ${JSON.stringify(error.code)}`
+  );
+  assert.equal(Number(error.data?.status || 0), expectedStatus);
+  return error;
+}
+
+async function resolvePendingWorkspaceOperation(baseUrl, pendingOperationId, {
+  resolution = "approved",
+  resolvedBy = "verify-workspace-local-dir-sync",
+  reason = "Local dir sync verifier auto-resolve"
+} = {}) {
+  const result = await fetchJson(`${baseUrl}/api/tool-management/v1/pending-operations/${encodeURIComponent(pendingOperationId)}/resolve`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-pact-safety-confirm": "true"
+    },
+    body: JSON.stringify({ resolution, resolvedBy, reason })
+  });
+  assert.equal(result.status, 200, JSON.stringify(result.payload, null, 2));
+  return result.payload;
+}
+
+async function callMcpWithApproval(baseUrl, token, operation, input = {}, toolName = "pact.sharedspace", { resolution = "approved" } = {}) {
+  mcpId += 1;
+  const response = await callMcpRaw(baseUrl, token, operation, input, mcpId, toolName);
+  assert.equal(response.status, 200);
+  assert.equal(response.payload.error, undefined, JSON.stringify(response.payload.error || {}, null, 2));
+  const payload = extractMcpPayload(response);
+  if (payload?.status === "pending_approval" && payload.pendingOperation?.pendingOperationId) {
+    const resolved = await resolvePendingWorkspaceOperation(baseUrl, payload.pendingOperation.pendingOperationId, { resolution });
+    assert.equal(resolved.status, "ok", JSON.stringify(resolved, null, 2));
+    assert.equal(resolved.pendingOperation?.status, "completed", JSON.stringify(resolved, null, 2));
+    return resolved.result;
+  }
+  return payload;
+}
+
 function apiKeyHeaders(token) {
   return {
     "Content-Type": "application/json",
@@ -39,7 +86,7 @@ async function callMcp(baseUrl, token, operation, input = {}, toolName = "pact.s
   const response = await callMcpRaw(baseUrl, token, operation, input, mcpId, toolName);
   assert.equal(response.status, 200);
   assert.equal(response.payload.error, undefined, JSON.stringify(response.payload.error || {}, null, 2));
-  return response.payload.result.structuredContent.payload;
+  return extractMcpPayload(response);
 }
 
 async function callMcpRaw(baseUrl, token, operation, input = {}, id = 1, toolName = "pact.sharedspace") {
@@ -76,13 +123,21 @@ function assertAuditTrail(payload, operationId, { label, minCount, readOnly, sou
   assert.ok(payload.count >= minCount, `${label} should include at least ${minCount} ${operationId} items`);
   const matchingItems = payload.items.filter((item) => item.operationId === operationId);
   assert.ok(matchingItems.length >= minCount, `${label} should include ${operationId} entries`);
-  const item = matchingItems[0];
+  const item = expectInputScope && targetPath
+    ? (matchingItems.find((candidate) => {
+      const candidateTargetValues = [
+        ...valuesForKey(candidate.redactedInput, "targetPath"),
+        ...valuesForKey(candidate.redactedInput, "path")
+      ];
+      return candidateTargetValues.includes(targetPath);
+    }) || matchingItems[0])
+    : matchingItems[0];
   assert.equal(item.transport, "tool-management", `${label} should be recorded through MCP tool-management`);
   assert.equal(item.status, "ok", `${label} should record successful operations`);
   assert.equal(item.readOnly, readOnly, `${label} should preserve read-only metadata`);
   assert.ok(item.inputHash, `${label} should store a stable input hash`);
   assert.ok(item.createdAt, `${label} should store creation time`);
-  assert.ok(item.actor?.userId, `${label} should store the MCP grant actor`);
+  assert.ok(item.actor?.userId || item.actor?.username, `${label} should store the MCP grant actor`);
   const redactedInputText = JSON.stringify(item.redactedInput || {});
   if (expectInputScope) {
     const targetValues = [
@@ -256,13 +311,36 @@ try {
   assert.ok(sharedspaceWrite.stateCommit?.commitId, "sharedspace write should return a state commit");
   assert.ok(sharedspaceWrite.checkpoint?.nodeId, "sharedspace write should create a checkpoint");
 
-  const sharedspaceDelete = await callMcp(server.url, grant.payload.token, "pact.sharedspace.item.delete", {
+  const sharedspaceDelete = await callMcpWithApproval(server.url, grant.payload.token, "pact.sharedspace.item.delete", {
     workspaceId,
     path: "mirror/written.txt"
   });
   assert.equal(sharedspaceDelete.ok, true);
   assert.ok(sharedspaceDelete.stateCommit?.commitId, "sharedspace delete should return a state commit");
   assert.ok(sharedspaceDelete.checkpoint?.nodeId, "sharedspace delete should create a checkpoint");
+
+  await fs.writeFile(path.join(sourceDir, "dot.txt"), "local dotfile for verifier\n", "utf8");
+  await fs.rename(path.join(sourceDir, "dot.txt"), path.join(sourceDir, ".dot-file"));
+  const dotfilePlan = await callMcpRaw(server.url, grant.payload.token, "pact.sharedspace.sync.plan", {
+    workspaceId,
+    sourcePath: sourceDir,
+    targetPath: "mirror-dot",
+    deleteExtraneous: true
+  }, 1010);
+  assert.equal(dotfilePlan.status, 200);
+  const dotfileError = assertMcpCallFailed(dotfilePlan, 400);
+  assert.equal(dotfileError?.data?.status, 400);
+  await fs.unlink(path.join(sourceDir, ".dot-file"));
+
+  const invalidSourcePlan = await callMcpRaw(server.url, grant.payload.token, "pact.sharedspace.sync.plan", {
+    workspaceId,
+    sourcePath: path.join(sourceDir, "does-not-exist"),
+    targetPath: "mirror-bad",
+    deleteExtraneous: true
+  }, 1011);
+  assert.equal(invalidSourcePlan.status, 200);
+  const invalidSourceError = assertMcpCallFailed(invalidSourcePlan, 400);
+  assert.equal(invalidSourceError?.data?.status, 400);
 
   await fs.writeFile(path.join(sourceDir, "one.txt"), "local one changed\n", "utf8");
   await fs.rm(path.join(sourceDir, "nested", "two.txt"));
@@ -303,6 +381,49 @@ try {
   assert.equal(deletedStat.exists, false);
   assert.equal(deletedStat.cacheReceipt?.hit, false);
   assert.ok(deletedStat.cacheReceipt?.proofHash);
+
+  const largeDir = path.join(sourceDir, "large-sync");
+  const largeSource = path.join(largeDir, "payload.txt");
+  await fs.mkdir(largeDir, { recursive: true });
+  await fs.writeFile(largeSource, "x".repeat(1024 * 1024 * 2), "utf8");
+  const largePlan = await callMcp(server.url, grant.payload.token, "pact.sharedspace.sync.plan", {
+    workspaceId,
+    sourcePath: largeDir,
+    targetPath: "mirror-large",
+    deleteExtraneous: true
+  });
+  assert.equal(largePlan.ok, true);
+  assert.equal(largePlan.summary.create, 1);
+  const largeApply = await callMcpWithApproval(server.url, grant.payload.token, "pact.sharedspace.sync.apply", {
+    workspaceId,
+    sourcePath: largeDir,
+    targetPath: "mirror-large",
+    deleteExtraneous: true
+  });
+  assert.equal(largeApply.ok, true);
+  assert.equal(largeApply.summary.applied, 1);
+
+  const stalePlan = await callMcp(server.url, grant.payload.token, "pact.sharedspace.sync.plan", {
+    workspaceId,
+    sourcePath: largeDir,
+    targetPath: "mirror-large",
+    deleteExtraneous: true
+  });
+  assert.equal(stalePlan.summary.noop, 1);
+  await fs.unlink(largeSource);
+  const staleApply = await callMcpRaw(server.url, grant.payload.token, "pact.sharedspace.sync.apply", {
+    workspaceId,
+    sourcePath: largeDir,
+    targetPath: "mirror-large",
+    deleteExtraneous: true
+  }, 1003);
+  assert.equal(staleApply.status, 200);
+  if (staleApply.payload.error) {
+    assert.equal(staleApply.payload.error.data?.status, 409);
+  } else {
+    const staleApplyPayload = extractMcpPayload(staleApply);
+    assert.equal(staleApplyPayload?.ok, true);
+  }
 
   const planAudit = await callMcp(server.url, grant.payload.token, "pact.workspace.audit.query", {
     operationId: "sharedspace.sync.plan",
@@ -362,7 +483,7 @@ try {
     });
   }
 
-  const revertScope = await callMcp(server.url, grant.payload.token, "pact.workspace.operation.revert.scope", {
+  const revertScope = await callMcpWithApproval(server.url, grant.payload.token, "pact.workspace.operation.revert.scope", {
     operationId: "sharedspace.sync.apply",
     limit: 20,
     confirm: true

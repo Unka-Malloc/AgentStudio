@@ -36,16 +36,34 @@ const policyEngine = createToolPolicyEngine({
 });
 const codespace = createCodespaceRegistry({
   userDataPath,
-  executeRepoOperation: async ({ operationId, input }) => ({
-    ok: true,
-    status: 200,
-    data: {
-      contractVerified: true,
-      operationId,
-      provider: input.provider || "github",
-      repositoryRef: input.repositoryRef || input.repoId || ""
+  executeRepoOperation: async ({ operationId, input }) => {
+    if (input.liveProviderReceipt === true) {
+      return {
+        ok: true,
+        status: 201,
+        data: {
+          contractVerified: false,
+          providerMode: "live",
+          operationId,
+          provider: input.provider || "github",
+          repositoryRef: input.repositoryRef || input.repoId || "",
+          pullRequestNumber: "77",
+          reviewUrl: "https://github.com/unka/pact/pull/77",
+          stdout: "https://github.com/unka/pact/pull/77\n"
+        }
+      };
     }
-  }),
+    return {
+      ok: true,
+      status: 200,
+      data: {
+        contractVerified: true,
+        operationId,
+        provider: input.provider || "github",
+        repositoryRef: input.repositoryRef || input.repoId || ""
+      }
+    };
+  },
   uploadGerritGitChange: async (input = {}) => ({
     ok: true,
     status: 200,
@@ -256,14 +274,21 @@ try {
   assert.equal(githubDraft.ok, true);
   assert.equal(githubDraft.provider, "github");
   assert.equal(githubDraft.contractVerified, true);
+  assert.equal(githubDraft.providerMode, "contract");
+  assert.equal(githubDraft.uploadState, "dry-run");
   assert.equal(githubDraft.codeChange.reviewStatus, "draft");
   assert.ok(githubDraft.auditId);
   assert.ok(githubDraft.completion.receipt.contractVerified);
 
+  const providerConfigPath = path.join(userDataPath, "code-management", "codespace-providers.json");
+  const providerConfig = JSON.parse(await fs.readFile(providerConfigPath, "utf8"));
+  providerConfig.providers.github.mode = "live";
+  await fs.writeFile(providerConfigPath, `${JSON.stringify(providerConfig, null, 2)}\n`, "utf8");
+
   const githubReadyDecision = evaluateTool({
     operationId: "codespace.change.upload",
     provider: "github",
-    extraInput: { codeChangeId: prepared.codeChangeId, dryRun: false },
+    extraInput: { codeChangeId: prepared.codeChangeId, dryRun: false, liveProviderReceipt: true },
     traceId: "trace-github-ready-pr"
   });
   assert.equal(githubReadyDecision.effect, "allow");
@@ -271,14 +296,25 @@ try {
     workspaceId: "workspace-code-submit",
     codeChangeId: prepared.codeChangeId,
     provider: "github",
+    repoId: "mock-live-github-repo",
     repositoryRef: REPO,
     branch: "main",
-    dryRun: false
+    dryRun: false,
+    liveProviderReceipt: true
   });
   assert.equal(githubReady.ok, true);
   assert.equal(githubReady.provider, "github");
   assert.equal(githubReady.codeChange.reviewStatus, "open");
-  assert.equal(githubReady.completion.contractVerified, true);
+  assert.equal(githubReady.contractVerified, false);
+  assert.equal(githubReady.providerMode, "live");
+  assert.equal(githubReady.uploadState, "remote-live");
+  assert.equal(githubReady.completion.contractVerified, false);
+  assert.equal(githubReady.completion.confirmed, true);
+  assert.equal(githubReady.completion.providerMode, "live");
+  assert.equal(githubReady.completion.uploadState, "remote-live");
+  assert.equal(githubReady.completion.receipt.pullRequestNumber, "77");
+  assert.equal(githubReady.codeChange.changeNumber, "77");
+  assert.doesNotMatch(githubReady.codeChange.reviewUrl, /github\.example\.invalid/);
 
   const gerritDecision = evaluateTool({
     operationId: "codespace.change.upload",

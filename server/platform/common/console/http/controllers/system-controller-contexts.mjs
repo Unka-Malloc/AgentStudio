@@ -21,7 +21,6 @@ export function createSystemControllerContexts({
   goldenRuleRuntime = null,
   knowledgeRuleAuthoringRuntime = null,
   knowledgeSkillRuntime = null,
-  knowledgeDistillationRuntime = null,
   agentEvaluationRuntime = null,
   modelDecisionRuntime = null,
   strategyManagementProvider = null,
@@ -73,7 +72,6 @@ export function createSystemControllerContexts({
   const createDocumentParsingRuntime = requireDomainService("createDocumentParsingRuntime");
   const toPublicDocumentParsingResult = requireDomainService("toPublicDocumentParsingResult");
   const enhanceAffairTaxonomy = requireDomainService("enhanceAffairTaxonomy");
-  const createKnowledgeDistillationWorkbench = requireDomainService("createKnowledgeDistillationWorkbench");
   const executeConsoleDomainOperation = requireDomainService("executeConsoleDomainOperation");
   const resumeKnowledgeWordCloudClassificationTasks = requireDomainService("resumeKnowledgeWordCloudClassificationTasks");
   const uploadSessionStore = requireDomainProvider(
@@ -157,8 +155,6 @@ export function createSystemControllerContexts({
       modelDecisionRuntime,
       strategyManagementProvider,
       knowledgeEvolutionRuntime,
-      knowledgeDistillationRuntime,
-      createKnowledgeDistillationWorkbench,
       jobWorkflowProvider,
       queueMonitor,
       contextRuntime,
@@ -189,6 +185,7 @@ export function createSystemControllerContexts({
   function authorizationFacadeContext(authSession = null, extra = {}) {
     return {
       securityPermissions,
+      protocolEventBus,
       authSession,
       ...extra
     };

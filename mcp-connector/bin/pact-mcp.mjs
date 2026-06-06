@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, execSync } from "node:child_process";
 import { createPublicKey, randomBytes, verify } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -9,8 +9,36 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const packageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
 
+const isChinese = (() => {
+  const lang = String(process.env.LANG || process.env.LC_ALL || process.env.LC_MESSAGES || "").toLowerCase();
+  if (lang.includes("zh")) {
+    return true;
+  }
+  try {
+    if (os.platform() === "darwin") {
+      const output = execSync("defaults read -g AppleLanguages 2>/dev/null", { encoding: "utf8" });
+      if (output && /zh-/i.test(output)) {
+        return true;
+      }
+    } else if (os.platform() === "win32") {
+      const output = execSync("powershell -NoProfile -Command \"[System.Globalization.CultureInfo]::CurrentCulture.Name\" 2>$null", { encoding: "utf8" });
+      if (output && /zh-/i.test(output)) {
+        return true;
+      }
+    }
+  } catch (error) {
+    // Silently ignore command failures and fall back
+  }
+  return false;
+})();
+
+function msg(en, zh) {
+  return isChinese ? zh : en;
+}
+
 const DEFAULT_TOKEN_ENV = "PACT_MCP_TOKEN";
 const DEFAULT_CODEX_BIN = "codex";
+const DEFAULT_CLAUDE_BIN = "claude";
 const DEFAULT_GEMINI_BIN = "gemini";
 const DEFAULT_KILO_BIN = "kilo";
 const DEFAULT_COPILOT_BIN = "copilot";
@@ -37,6 +65,12 @@ const AGENT_CLI_TARGETS = [
     commandNames: ["codex"]
   },
   {
+    target: "claude-code",
+    label: "Claude Code",
+    binOption: "claude-bin",
+    commandNames: ["claude"]
+  },
+  {
     target: "gemini-cli",
     label: "Gemini CLI",
     binOption: "gemini-bin",
@@ -61,7 +95,7 @@ const AGENT_CLI_TARGETS = [
     commandNames: ["opencode"]
   }
 ];
-const ORB_AGENT_CLI_TARGETS = AGENT_CLI_TARGETS.filter((descriptor) => descriptor.target !== "codex");
+const ORB_AGENT_CLI_TARGETS = AGENT_CLI_TARGETS;
 const APP_DISCOVERY_NAME_HINTS = [
   "pact",
   "antigravity",
@@ -96,17 +130,25 @@ const GEMINI_EXTENSION_NAME = "Pact";
 const MCP_SERVER_NAME = "pact";
 const MCP_STABLE_TOOL_NAME = "pact.call";
 const MCP_INTERFACE_VERSION = "pact.mcp.v1";
+const BOOTSTRAP_CURL_FLAGS = "-fL --retry 3 --connect-timeout 20 -sS";
+const BOOTSTRAP_INSTALL_SCRIPT = "pact-mcp-install.sh";
+const BOOTSTRAP_INSTALL_SCRIPT_ZH_CN = "pact-mcp-install.zh-CN.sh";
 const HTTP_TIMEOUT_MS = 300000;
 const SUPPORTED_TARGETS = [
+  "openclaw",
+  "claude-code",
   "codex",
   "gemini-cli",
-  "kilo-code",
-  "copilot",
-  "openclaw",
-  "hermes",
   "antigravity",
-  "opencode"
+  "opencode",
+  "copilot",
+  "kilo-code",
+  "cursor",
+  "hermes",
+  "windsurf"
 ];
+const PRIORITY_INSTALL_TARGETS = Object.freeze(["claude-code", "codex", "openclaw"]);
+const PRIORITY_INSTALL_TARGET = PRIORITY_INSTALL_TARGETS.join(",");
 const PACT_MCP_URL_ENV = "PACT_MCP_URL";
 const PACT_MCP_DISCOVERY_URL_ENV = "PACT_MCP_DISCOVERY_URL";
 const PACT_MCP_DISCOVERY_FILE_ENV = "PACT_MCP_DISCOVERY_FILE";
@@ -115,35 +157,65 @@ const DEFAULT_SCAN_PORTS = [7228, 7229, 7230, 7231, 7232, 7233, 7234, 7235, 7236
 const TARGET_ALIASES = new Map([
   ["gemini", "gemini-cli"],
   ["gemini_cli", "gemini-cli"],
+  ["claude", "claude-code"],
+  ["claude_code", "claude-code"],
+  ["claudecode", "claude-code"],
+  ["anthropic-claude-code", "claude-code"],
   ["kilo", "kilo-code"],
   ["kilocode", "kilo-code"],
   ["kilo_code", "kilo-code"],
   ["github-copilot", "copilot"],
   ["hermes-agent", "hermes"],
+  ["cursor-agent", "cursor"],
   ["open-code", "opencode"]
 ]);
 const TARGET_LABELS = {
+  openclaw: "OpenClaw",
+  "claude-code": "Claude Code",
   codex: "Codex",
   "gemini-cli": "Gemini CLI",
-  "kilo-code": "Kilo Code",
-  copilot: "Copilot",
-  openclaw: "OpenClaw",
-  hermes: "Hermes Agent",
   antigravity: "Antigravity",
-  opencode: "OpenCode"
+  opencode: "OpenCode",
+  copilot: "Copilot",
+  "kilo-code": "Kilo Code",
+  cursor: "Cursor",
+  hermes: "Hermes Agent",
+  windsurf: "Windsurf"
 };
 const TARGET_INSTALL_MODES = {
+  openclaw: "openclaw-release-mcp-cli",
+  "claude-code": "claude-code-release-mcp-cli",
   codex: "codex-release-plugin-and-mcp-cli",
   "gemini-cli": "gemini-release-mcp-cli",
-  "kilo-code": "kilo-release-global-kilo-json",
-  copilot: "copilot-release-mcp-cli",
-  openclaw: "openclaw-release-mcp-cli",
-  hermes: "hermes-remote-mcp-cli",
   antigravity: "antigravity-release-mcp-config",
-  opencode: "opencode-release-mcp-config"
+  opencode: "opencode-release-mcp-config",
+  copilot: "copilot-release-mcp-cli",
+  "kilo-code": "kilo-release-global-kilo-json",
+  cursor: "cursor-release-mcp-config",
+  hermes: "hermes-remote-mcp-cli",
+  windsurf: "windsurf-release-mcp-config"
 };
+const TARGET_LOCATIONS = Object.freeze({
+  openclaw: ["local", "orbstack", "remote-linux"],
+  "claude-code": ["local", "orbstack", "remote-linux"],
+  codex: ["local", "orbstack", "remote-linux"],
+  "gemini-cli": ["local", "orbstack", "remote-linux"],
+  antigravity: ["local"],
+  opencode: ["local", "orbstack", "remote-linux"],
+  copilot: ["local", "orbstack", "remote-linux"],
+  "kilo-code": ["local", "orbstack", "remote-linux"],
+  cursor: ["local"],
+  hermes: ["orbstack", "remote-linux"],
+  windsurf: ["local"]
+});
 const SCAN_COMMAND_TIMEOUT_MS = 3000;
 const REMOTE_SCAN_COMMAND_TIMEOUT_MS = 8000;
+const INSTALL_COMMAND_TIMEOUT_MS = positiveIntegerEnv("PACT_MCP_INSTALL_COMMAND_TIMEOUT_MS", 120000);
+const PACKAGE_MANAGER_DISCOVERY_ENV = Object.freeze({
+  HOMEBREW_NO_AUTO_UPDATE: "1",
+  HOMEBREW_NO_ANALYTICS: "1",
+  HOMEBREW_NO_ENV_HINTS: "1"
+});
 const HOST_PLATFORM = Object.freeze({
   MACOS: "darwin",
   LINUX: "linux",
@@ -156,6 +228,100 @@ const PACKAGE_SOURCE_KIND = Object.freeze({
   COMMAND_PATHS: "command-paths",
   COMMAND_PREFIX_DIRS: "command-prefix-dirs"
 });
+const SHAREDSPACE_CORE_OPERATIONS = Object.freeze([
+  "pact.agentWorkspace.create",
+  "pact.sharedspace.localDir.connect",
+  "pact.sharedspace.localDir.list",
+  "pact.sharedspace.item.list",
+  "pact.sharedspace.file.read",
+  "pact.sharedspace.file.write",
+  "pact.sharedspace.item.delete",
+  "pact.sharedspace.sync.plan",
+  "pact.sharedspace.sync.apply",
+  "pact.sharedspace.drive.connect",
+  "pact.sharedspace.drive.status",
+  "pact.sharedspace.drive.item.list",
+  "pact.sharedspace.drive.file.download",
+  "pact.sharedspace.drive.file.upload",
+  "pact.sharedspace.drive.sync.plan",
+  "pact.sharedspace.drive.sync.apply",
+  "pact.sharedspace.drive.permission.list"
+]);
+
+function supportedTargetDetails() {
+  return SUPPORTED_TARGETS.map((target) => ({
+    target,
+    label: TARGET_LABELS[target] || target,
+    priority: PRIORITY_INSTALL_TARGETS.includes(target) || target === "opencode",
+    installMode: TARGET_INSTALL_MODES[target] || "supported",
+    locations: [...(TARGET_LOCATIONS[target] || ["local"])]
+  }));
+}
+
+function sharedspaceExchangeReceiptContract() {
+  return {
+    schemaVersion: "pact.mcp.sharedspace-exchange.v1",
+    locations: [
+      "structuredContent.exchange",
+      "notifications/pact/operation_reply.params.exchange"
+    ],
+    actions: [
+      "workspace-created",
+      "file-written",
+      "file-read",
+      "items-listed",
+      "item-deleted",
+      "local-dir-connected",
+      "local-dirs-listed",
+      "sync-planned",
+      "sync-applied",
+      "drive-connected",
+      "drive-status",
+      "drive-items-listed",
+      "drive-file-downloaded",
+      "drive-file-uploaded",
+      "drive-sync-planned",
+      "drive-sync-applied",
+      "drive-permissions-listed",
+      "operation"
+    ],
+    fields: [
+      "action",
+      "outlet",
+      "referencePolicy",
+      "workspaceRef",
+      "driveRef",
+      "provider",
+      "path",
+      "paths",
+      "itemCount",
+      "transferReceiptId",
+      "accessReceiptId",
+      "checkpointId",
+      "syncReceiptId",
+      "contractVerified",
+      "localAdapterVerified",
+      "nextOperations"
+    ]
+  };
+}
+
+function sharedHubContract({ mcpUrl = "", vmMcpUrl = "" } = {}) {
+  return {
+    canonicalMcpUrl: mcpUrl,
+    vmMcpUrl,
+    clientPolicy: "discover-shared-hub-then-opt-in",
+    defaultClientMutation: "none",
+    directHttp: true,
+    sharedspace: {
+      outlet: "pact.sharedspace",
+      referencePolicy: "use-public-workspace-ref",
+      exchangeReceipt: sharedspaceExchangeReceiptContract(),
+      coreOperations: [...SHAREDSPACE_CORE_OPERATIONS]
+    }
+  };
+}
+
 const GENERIC_REMOTE_CONTEXT_KINDS = [
   "docker",
   "podman",
@@ -170,16 +336,22 @@ const GENERIC_REMOTE_CONTEXT_KINDS = [
   "parallels"
 ];
 
+function positiveIntegerEnv(name, fallback) {
+  const value = Number.parseInt(String(process.env[name] || ""), 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 function usage() {
   return [
     "Usage:",
     "  pact-mcp register",
     "  pact-mcp install",
-    "  pact-mcp install --target codex",
+    "  pact-mcp install --target auto",
+    "  pact-mcp install --target claude-code,codex,openclaw",
     "  pact-mcp uninstall",
-    "  pact-mcp uninstall --target codex",
+    "  pact-mcp uninstall --target claude-code,codex,openclaw",
     "  pact-mcp scan --json",
-    "  pact-mcp discover-local",
+    "  pact-mcp discover-local --json",
     "  pact-mcp doctor",
     "  pact-mcp discover",
     "  pact-mcp server-config --set --url http://host:port --name local",
@@ -188,7 +360,8 @@ function usage() {
     "  pact-mcp server-config --reset",
     "",
     "Options:",
-    "  --target LIST                 Comma-separated targets for non-interactive install. Default: codex.",
+    "  --target LIST                 Comma-separated targets for non-interactive install. Use auto for detected clients.",
+    `                                Supported targets: ${SUPPORTED_TARGETS.join(", ")}.`,
     "  --url URL                     Explicit Pact base URL. Still requires signed MCP handshake.",
     "  --scan-ports LIST            Local ports to scan when --url is omitted. Default: 7228-7237.",
     "  --token TOKEN                 Pact MCP token. Prefer --token-stdin or --token-env.",
@@ -202,10 +375,13 @@ function usage() {
     "  --discovery-file PATH         Registry file used by register/discover-local. Default: ~/.pact/mcp/servers.json.",
     "  --auto-update                 Enable automatic push updates when installing (non-interactive mode).",
     "  --codex-bin COMMAND           Codex CLI command or explicit path. Default: codex.",
+    "  --claude-bin COMMAND          Claude Code CLI command or explicit path. Default: claude.",
     "  --gemini-bin COMMAND          Gemini CLI command or explicit path. Default: gemini.",
     "  --kilo-bin COMMAND            Kilo Code CLI command or explicit path. Default: kilo.",
     "  --copilot-bin COMMAND         Copilot CLI command or explicit path. Default: copilot.",
     "  --opencode-bin COMMAND         OpenCode CLI command or explicit path. Default: opencode.",
+    "  --cursor-config PATH           Cursor MCP settings path.",
+    "  --windsurf-config PATH         Windsurf MCP settings path.",
     "  --orb-bin COMMAND             OrbStack CLI command or explicit path. Default: orb.",
     "  --docker-bin COMMAND          Docker CLI command or explicit path. Default: docker.",
     "  --podman-bin COMMAND          Podman CLI command or explicit path. Default: podman.",
@@ -302,6 +478,11 @@ function parseTargets(rawTarget) {
   return deduped;
 }
 
+function isAutoTargetRequest(rawTarget) {
+  const target = normalizeTarget(rawTarget);
+  return ["auto", "detected", "all-detected"].includes(target);
+}
+
 function targetLabel(target) {
   return TARGET_LABELS[target] || target;
 }
@@ -310,12 +491,403 @@ function targetInstallMode(target) {
   return TARGET_INSTALL_MODES[target] || "pact-mcp-client-install";
 }
 
+function notDetectedTargetDetail(target) {
+  if (target === "openclaw") {
+    return "OpenClaw-compatible MCP CLI was not detected. Pass --openclaw-bin or run scan in the target VM/context.";
+  }
+  if (target === "hermes") {
+    return "Hermes MCP CLI was not detected in an OrbStack VM or remote Linux context. Pass --vm/--vm-user or run scan where Hermes is installed.";
+  }
+  if (target === "antigravity") {
+    return "Antigravity config path not found yet.";
+  }
+  if (target === "cursor") {
+    return "Cursor MCP config path not found yet. Pass --cursor-config with an explicit path.";
+  }
+  if (target === "windsurf") {
+    return "Windsurf MCP config path not found yet. Pass --windsurf-config with an explicit path.";
+  }
+  const descriptor = AGENT_CLI_TARGETS.find((item) => item.target === target);
+  if (descriptor) {
+    return `${descriptor.commandNames.join("/")} executable was not detected. Pass --${descriptor.binOption} with an explicit command or path.`;
+  }
+  return `${targetLabel(target)} was not detected.`;
+}
+
+function targetBinOption(target) {
+  if (target === "openclaw") {
+    return "openclaw-bin";
+  }
+  if (target === "hermes") {
+    return "hermes-bin";
+  }
+  const descriptor = AGENT_CLI_TARGETS.find((item) => item.target === target);
+  return descriptor?.binOption || "";
+}
+
+function targetDefaultCommand(target) {
+  if (target === "claude-code") {
+    return "claude";
+  }
+  if (target === "gemini-cli") {
+    return "gemini";
+  }
+  if (target === "kilo-code") {
+    return "kilo";
+  }
+  return target || "codex";
+}
+
+function shellCommandForInstall({
+  target = "codex",
+  binOption = "",
+  includeUrl = false,
+  baseUrl = "http://127.0.0.1:7228",
+  includeToken = false,
+  tokenEnv = ""
+} = {}) {
+  const parts = ["pact-mcp", "install", "--target", target];
+  if (binOption) {
+    parts.push(`--${binOption}`, targetDefaultCommand(target));
+  }
+  if (includeUrl) {
+    parts.push("--url", shellQuote(baseUrl));
+  }
+  if (tokenEnv && tokenEnv !== DEFAULT_TOKEN_ENV) {
+    parts.push("--token-env", shellQuote(tokenEnv));
+  }
+  if (includeToken) {
+    parts.push("--token-stdin");
+  }
+  parts.push("--json");
+  return parts.join(" ");
+}
+
+function commandGuidanceBaseUrl(options = {}) {
+  return normalizeBaseUrl(option(options, "resolved-url", explicitBaseUrl(options)));
+}
+
+function commandGuidanceContext(options = {}) {
+  return {
+    baseUrl: commandGuidanceBaseUrl(options),
+    tokenEnv: String(option(options, "token-env", DEFAULT_TOKEN_ENV))
+  };
+}
+
+function appendGuidanceContextArgs(parts, { baseUrl = "", tokenEnv = DEFAULT_TOKEN_ENV, includeUrl = false } = {}) {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  if (includeUrl && normalizedBaseUrl) {
+    parts.push("--url", shellQuote(normalizedBaseUrl));
+  }
+  if (tokenEnv && tokenEnv !== DEFAULT_TOKEN_ENV) {
+    parts.push("--token-env", shellQuote(tokenEnv));
+  }
+  return parts;
+}
+
+function shellCommandForScan({ includeUrl = false, baseUrl = "", tokenEnv = DEFAULT_TOKEN_ENV } = {}) {
+  const parts = ["pact-mcp", "scan"];
+  appendGuidanceContextArgs(parts, { includeUrl, baseUrl, tokenEnv });
+  parts.push("--json");
+  return parts.join(" ");
+}
+
+function shellCommandForDiscoverLocal({ includeUrl = false, baseUrl = "" } = {}) {
+  const parts = ["pact-mcp", "discover-local"];
+  appendGuidanceContextArgs(parts, { includeUrl, baseUrl, tokenEnv: DEFAULT_TOKEN_ENV });
+  parts.push("--json");
+  return parts.join(" ");
+}
+
+function shellCommandForDoctor({
+  includeToken = false,
+  includeUrl = false,
+  baseUrl = "",
+  tokenEnv = DEFAULT_TOKEN_ENV
+} = {}) {
+  const parts = ["pact-mcp", "doctor"];
+  appendGuidanceContextArgs(parts, { includeUrl, baseUrl, tokenEnv });
+  if (includeToken) {
+    parts.push("--token-stdin");
+  }
+  parts.push("--json");
+  return parts.join(" ");
+}
+
+function shellCommandForUninstall({ target = "codex", includeUrl = false, baseUrl = "" } = {}) {
+  const parts = ["pact-mcp", "uninstall", "--target", target];
+  appendGuidanceContextArgs(parts, { includeUrl, baseUrl, tokenEnv: DEFAULT_TOKEN_ENV });
+  parts.push("--json");
+  return parts.join(" ");
+}
+
+function shellCommandForServerConfig({ baseUrl = "http://127.0.0.1:7228" } = {}) {
+  return `pact-mcp server-config --set --url ${shellQuote(normalizeBaseUrl(baseUrl) || "http://127.0.0.1:7228")}`;
+}
+
+function githubOneLineInstallGuidance({ includeUrl = false, baseUrl = "", tokenEnv = DEFAULT_TOKEN_ENV } = {}) {
+  const command = githubOneLineMcpInstallCommand();
+  const commandZhCN = githubOneLineMcpInstallCommand(BOOTSTRAP_INSTALL_SCRIPT_ZH_CN);
+  const contextArgs = [
+    includeUrl && baseUrl ? ` --url ${shellQuote(baseUrl)}` : "",
+    tokenEnv && tokenEnv !== DEFAULT_TOKEN_ENV ? ` --token-env ${shellQuote(tokenEnv)}` : ""
+  ].join("");
+  const build = (oneLineCommand) => ({
+    installCommand: contextArgs ? `${oneLineCommand} --${contextArgs}` : oneLineCommand,
+    clientInstallJsonCommand: `${oneLineCommand} -- --target <client>${contextArgs} --json`,
+    autoInstallCommand: `${oneLineCommand} -- --target auto${contextArgs} --json`,
+    priorityInstallCommand: `${oneLineCommand} -- --target ${PRIORITY_INSTALL_TARGET}${contextArgs} --json`
+  });
+  const english = build(command);
+  const zhCN = build(commandZhCN);
+  return {
+    githubOneLineCommand: command,
+    githubOneLineInstallCommand: english.installCommand,
+    githubOneLineClientInstallJsonCommand: english.clientInstallJsonCommand,
+    githubOneLineAutoInstallCommand: english.autoInstallCommand,
+    githubOneLinePriorityInstallCommand: english.priorityInstallCommand,
+    githubOneLineCommandZhCN: commandZhCN,
+    githubOneLineInstallCommandZhCN: zhCN.installCommand,
+    githubOneLineClientInstallJsonCommandZhCN: zhCN.clientInstallJsonCommand,
+    githubOneLineAutoInstallCommandZhCN: zhCN.autoInstallCommand,
+    githubOneLinePriorityInstallCommandZhCN: zhCN.priorityInstallCommand,
+    oneCommandInstall: english.installCommand,
+    oneCommandInstallZhCN: zhCN.installCommand,
+    oneCommandClientInstallJson: english.clientInstallJsonCommand,
+    oneCommandClientInstallJsonZhCN: zhCN.clientInstallJsonCommand,
+    oneCommandAutoInstall: english.autoInstallCommand,
+    oneCommandAutoInstallZhCN: zhCN.autoInstallCommand,
+    oneCommandPriorityInstall: english.priorityInstallCommand,
+    oneCommandPriorityInstallZhCN: zhCN.priorityInstallCommand
+  };
+}
+
+function installGuidanceMetadata({ includeUrl = false, baseUrl = "", tokenEnv = DEFAULT_TOKEN_ENV } = {}) {
+  const oneLineGuidance = githubOneLineInstallGuidance({ includeUrl, baseUrl, tokenEnv });
+  return {
+    priorityTargets: [...PRIORITY_INSTALL_TARGETS],
+    supportedTargets: [...SUPPORTED_TARGETS],
+    supportedTargetDetails: supportedTargetDetails(),
+    ...oneLineGuidance,
+    discoverCommand: shellCommandForDiscoverLocal({ includeUrl, baseUrl }),
+    scanCommand: shellCommandForScan({ includeUrl, baseUrl, tokenEnv }),
+    doctorCommand: shellCommandForDoctor({ includeUrl, baseUrl, tokenEnv }),
+    clientInstallJsonCommand: shellCommandForInstall({ target: "<client>", includeUrl, baseUrl, tokenEnv }),
+    autoInstallCommand: shellCommandForInstall({ target: "auto", includeUrl, baseUrl, tokenEnv }),
+    priorityInstallCommand: shellCommandForInstall({
+      target: PRIORITY_INSTALL_TARGET,
+      includeUrl,
+      baseUrl,
+      tokenEnv
+    })
+  };
+}
+
+function commandFailureGuidance({ command = "", message = "", options = {} } = {}) {
+  const normalized = String(message || "");
+  const lower = normalized.toLowerCase();
+  const { baseUrl, tokenEnv } = commandGuidanceContext(options);
+  const includeUrl = Boolean(baseUrl);
+  if (/unsupported install target/i.test(normalized)) {
+    const scanCommand = shellCommandForScan({ includeUrl, baseUrl, tokenEnv });
+    return {
+      errorCode: "UNSUPPORTED_TARGET",
+      nextCommand: scanCommand,
+      repairCommands: [
+        scanCommand,
+        shellCommandForInstall({ target: "auto", includeUrl, baseUrl, tokenEnv })
+      ],
+      ...installGuidanceMetadata({ includeUrl, baseUrl, tokenEnv })
+    };
+  }
+  if (lower.includes("no signed pact mcp hub was discovered")) {
+    const discoverCommand = shellCommandForDiscoverLocal({ includeUrl, baseUrl });
+    const fallbackBaseUrl = baseUrl || "http://127.0.0.1:7228";
+    return {
+      errorCode: "PACT_HUB_NOT_DISCOVERED",
+      nextCommand: discoverCommand,
+      repairCommands: [
+        discoverCommand,
+        shellCommandForServerConfig({ baseUrl: fallbackBaseUrl }),
+        shellCommandForInstall({ target: "auto", includeUrl: true, baseUrl: fallbackBaseUrl, tokenEnv })
+      ],
+      ...installGuidanceMetadata({ includeUrl: true, baseUrl: fallbackBaseUrl, tokenEnv })
+    };
+  }
+  if (lower.includes("missing token")) {
+    const target = String(option(options, "target", "codex")) || "codex";
+    const urlArgs = baseUrl ? ` --url ${shellQuote(baseUrl)}` : "";
+    const tokenEnvArgs = tokenEnv && tokenEnv !== DEFAULT_TOKEN_ENV ? ` --token-env ${shellQuote(tokenEnv)}` : "";
+    return {
+      errorCode: "MISSING_TOKEN",
+      nextCommand: shellCommandForInstall({ target, includeToken: true, includeUrl: Boolean(baseUrl), baseUrl, tokenEnv }),
+      repairCommands: [
+        shellCommandForInstall({ target, includeToken: true, includeUrl: Boolean(baseUrl), baseUrl, tokenEnv }),
+        `${tokenEnv}=your-token pact-mcp ${command || "install"} --target ${target}${urlArgs}${tokenEnvArgs} --json`
+      ],
+      ...installGuidanceMetadata({ includeUrl: Boolean(baseUrl), baseUrl, tokenEnv })
+    };
+  }
+  if (lower.includes("interactive mode requires a tty")) {
+    const uninstallCommand = shellCommandForUninstall({ target: "codex", includeUrl, baseUrl });
+    return {
+      errorCode: "NON_INTERACTIVE_TARGET_REQUIRED",
+      nextCommand: uninstallCommand,
+      repairCommands: [
+        shellCommandForScan({ includeUrl, baseUrl, tokenEnv }),
+        uninstallCommand
+      ],
+      ...installGuidanceMetadata({ includeUrl, baseUrl, tokenEnv })
+    };
+  }
+  return {
+    errorCode: "COMMAND_FAILED",
+    nextCommand: command === "install"
+      ? shellCommandForInstall({ target: "auto", includeUrl, baseUrl, tokenEnv })
+      : shellCommandForDoctor({ includeUrl, baseUrl, tokenEnv }),
+    repairCommands: [
+      shellCommandForDoctor({ includeUrl, baseUrl, tokenEnv }),
+      shellCommandForScan({ includeUrl, baseUrl, tokenEnv })
+    ],
+    ...installGuidanceMetadata({ includeUrl, baseUrl, tokenEnv })
+  };
+}
+
+function commandOptionArgs(options = {}) {
+  const args = [];
+  for (const [key, value] of Object.entries(options)) {
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+    args.push(`--${key}`, shellQuote(value));
+  }
+  return args;
+}
+
+function candidateInstallCommand(candidate, settings) {
+  const args = ["pact-mcp", "install", "--target", candidate.target];
+  if (settings.baseUrl) {
+    args.push("--url", shellQuote(settings.baseUrl));
+  }
+  args.push(...commandOptionArgs(candidate.optionOverrides || {}));
+  if (settings.tokenEnv && settings.tokenEnv !== DEFAULT_TOKEN_ENV) {
+    args.push("--token-env", shellQuote(settings.tokenEnv));
+  }
+  args.push("--json");
+  return args.join(" ");
+}
+
+function candidateRepairCommand(candidate, settings) {
+  const binOption = targetBinOption(candidate.target);
+  return shellCommandForInstall({
+    target: candidate.target,
+    binOption,
+    includeUrl: Boolean(settings.baseUrl),
+    baseUrl: settings.baseUrl || "http://127.0.0.1:7228",
+    tokenEnv: settings.tokenEnv || DEFAULT_TOKEN_ENV
+  });
+}
+
+function candidateDoctorCommand(settings) {
+  return shellCommandForDoctor({
+    includeUrl: Boolean(settings.baseUrl),
+    baseUrl: settings.baseUrl,
+    tokenEnv: settings.tokenEnv || DEFAULT_TOKEN_ENV
+  });
+}
+
+function withInstallCandidateGuidance(candidate, settings) {
+  return {
+    ...candidate,
+    installCommand: candidate.status === "detected" ? candidateInstallCommand(candidate, settings) : "",
+    repairCommand: candidate.status === "detected" ? "" : candidateRepairCommand(candidate, settings),
+    doctorCommand: candidateDoctorCommand(settings)
+  };
+}
+
+function doctorGuidance(checks = {}, options = {}) {
+  const installedTargets = checks.deviceManifest?.installedTargets || [];
+  const { baseUrl, tokenEnv } = commandGuidanceContext(options);
+  const includeUrl = Boolean(baseUrl);
+  const discoverCommand = shellCommandForDiscoverLocal({ includeUrl, baseUrl });
+  const scanCommand = shellCommandForScan({ includeUrl, baseUrl, tokenEnv });
+  const installAutoCommand = shellCommandForInstall({ target: "auto", includeUrl, baseUrl, tokenEnv });
+  const doctorWithTokenCommand = shellCommandForDoctor({ includeToken: true, includeUrl, baseUrl, tokenEnv });
+  if (!checks.signedDiscovery?.ok || !checks.discovery?.ok || !checks.initialize?.ok) {
+    return {
+      nextCommand: discoverCommand,
+      repairCommands: [
+        discoverCommand,
+        shellCommandForServerConfig({ baseUrl: baseUrl || "http://127.0.0.1:7228" })
+      ]
+    };
+  }
+  if (installedTargets.length === 0) {
+    return {
+      nextCommand: scanCommand,
+      repairCommands: [
+        scanCommand,
+        installAutoCommand
+      ]
+    };
+  }
+  if (checks.toolsList?.skipped || checks.systemHealth?.skipped) {
+    return {
+      nextCommand: doctorWithTokenCommand,
+      repairCommands: [
+        doctorWithTokenCommand
+      ]
+    };
+  }
+  if (!checks.toolsList?.ok || !checks.systemHealth?.ok) {
+    return {
+      nextCommand: installAutoCommand,
+      repairCommands: [
+        installAutoCommand,
+        doctorWithTokenCommand
+      ]
+    };
+  }
+  return {
+    nextCommand: "",
+    repairCommands: []
+  };
+}
+
 function redactToken(value) {
   const text = String(value || "");
   if (text.length <= 12) {
     return "***";
   }
   return `${text.slice(0, 8)}...${text.slice(-4)}`;
+}
+
+function redactSensitiveText(value, secrets = []) {
+  let text = String(value || "");
+  for (const secret of uniqueValues(secrets.map((item) => String(item || "")).filter((item) => item.length > 0))) {
+    text = text.split(secret).join("<redacted-token>");
+  }
+  return text
+    .replace(/(^|[\s"'=:(])((?:\/(?:Users|home|root|private|var|tmp|opt|usr|Volumes)\/)[^\s"',)\]}]+)/g, "$1<local-path>")
+    .replace(/(^|[\s"'=:(])([A-Za-z]:[\\/][^\s"',)\]}]+)/g, "$1<local-path>")
+    .replace(/\b(Authorization\s*:\s*Bearer\s+)[^\s"',;)\]}]+/gi, "$1<redacted-token>")
+    .replace(/\b(X-Pact-Api-Key\s*:\s*)[^\s"',;)\]}]+/gi, "$1<redacted-token>")
+    .replace(/\b(x-pact-tool-token\s*:\s*)[^\s"',;)\]}]+/gi, "$1<redacted-token>")
+    .replace(/(^|[\s"'=:(])(--token(?:=|\s+))[^\s"',;)\]}]+/gi, "$1$2<redacted-token>")
+    .replace(/\b(token|access_token|refresh_token|api_key|apiKey|secret|password)=([^\s"',;)\]}]+)/gi, "$1=<redacted-secret>");
+}
+
+function sensitiveOptionValues(options = {}) {
+  const values = [];
+  if (options.token) {
+    values.push(String(options.token));
+  }
+  const tokenEnv = String(option(options, "token-env", DEFAULT_TOKEN_ENV));
+  const envToken = String(process.env[tokenEnv] || "").trim();
+  if (envToken) {
+    values.push(envToken);
+  }
+  return values;
 }
 
 function vmBaseUrl(baseUrl) {
@@ -341,6 +913,23 @@ function uniqueValues(values) {
 
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
+function githubOwnerRepo(pkg = packageJson) {
+  const repositoryUrl = String(pkg.repository?.url || pkg.homepage || "");
+  const match = repositoryUrl.match(/github\.com[:/](.+?)(?:\.git)?(?:#.*)?$/);
+  return match?.[1] || "Unka-Malloc/Pact";
+}
+
+function githubOneLineMcpInstallCommand(scriptName = BOOTSTRAP_INSTALL_SCRIPT) {
+  return `/bin/sh -c "$(curl ${BOOTSTRAP_CURL_FLAGS} https://github.com/${githubOwnerRepo()}/releases/latest/download/${scriptName})"`;
+}
+
+function assertSafeEnvName(name) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(String(name || ""))) {
+    throw new Error(`Invalid environment variable name: ${name}`);
+  }
+  return String(name);
 }
 
 function expandHomePath(value) {
@@ -375,14 +964,19 @@ function deviceDiscoveryEnv({ baseUrl, primaryPath }) {
   };
 }
 
+function childProcessEnv(extraEnv = {}) {
+  return {
+    ...process.env,
+    ...PACKAGE_MANAGER_DISCOVERY_ENV,
+    ...(extraEnv || {})
+  };
+}
+
 async function run(command, args = [], options = {}) {
   try {
     const result = await execFileAsync(command, args, {
       cwd: options.cwd || process.cwd(),
-      env: {
-        ...process.env,
-        ...(options.env || {})
-      },
+      env: childProcessEnv(options.env),
       timeout: options.timeoutMs || 0,
       killSignal: options.killSignal || "SIGKILL",
       maxBuffer: 10 * 1024 * 1024
@@ -393,30 +987,71 @@ async function run(command, args = [], options = {}) {
       stderr: result.stderr || ""
     };
   } catch (error) {
+    const timeoutMessage = options.timeoutMs && error?.killed
+      ? `command timed out after ${options.timeoutMs} ms`
+      : "";
     if (options.allowFailure) {
       return {
         ok: false,
         stdout: error.stdout || "",
-        stderr: error.stderr || error.message || ""
+        stderr: error.stderr || timeoutMessage || error.message || ""
       };
     }
-    const message = error.stderr || error.stdout || error.message || "command failed";
+    const message = error.stderr || error.stdout || timeoutMessage || error.message || "command failed";
     throw new Error(`${command} failed: ${message}`);
   }
 }
 
+async function runInstallCommand(command, args = [], options = {}) {
+  return run(command, args, {
+    ...options,
+    timeoutMs: options.timeoutMs || INSTALL_COMMAND_TIMEOUT_MS
+  });
+}
+
 async function runWithInput(command, args = [], input = "", options = {}) {
   return new Promise((resolve, reject) => {
+    const timeoutMs = Number(options.timeoutMs || 0);
+    const useProcessGroup = timeoutMs > 0 && process.platform !== "win32";
     const child = spawn(command, args, {
       cwd: options.cwd || process.cwd(),
-      env: {
-        ...process.env,
-        ...(options.env || {})
-      },
-      stdio: ["pipe", "pipe", "pipe"]
+      env: childProcessEnv(options.env),
+      stdio: ["pipe", "pipe", "pipe"],
+      detached: useProcessGroup
     });
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
+    let settled = false;
+    const timer = timeoutMs > 0
+      ? setTimeout(() => {
+          timedOut = true;
+          const signal = options.killSignal || "SIGKILL";
+          try {
+            if (useProcessGroup && child.pid) {
+              process.kill(-child.pid, signal);
+            } else {
+              child.kill(signal);
+            }
+          } catch {
+            try {
+              child.kill(signal);
+            } catch {
+              // The process may have exited between timeout firing and signal delivery.
+            }
+          }
+        }, timeoutMs)
+      : null;
+    const settle = (callback) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      callback();
+    };
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
     });
@@ -424,23 +1059,37 @@ async function runWithInput(command, args = [], input = "", options = {}) {
       stderr += chunk.toString();
     });
     child.on("error", (error) => {
-      if (options.allowFailure) {
-        resolve({ ok: false, stdout, stderr: stderr || error.message || "" });
-        return;
-      }
-      reject(error);
+      settle(() => {
+        if (options.allowFailure) {
+          resolve({ ok: false, stdout, stderr: stderr || error.message || "" });
+          return;
+        }
+        reject(error);
+      });
     });
     child.on("close", (code) => {
-      if (code === 0) {
-        resolve({ ok: true, stdout, stderr });
-        return;
-      }
-      if (options.allowFailure) {
-        resolve({ ok: false, stdout, stderr });
-        return;
-      }
-      reject(new Error(`${command} exited with ${code}: ${stderr || stdout}`));
+      settle(() => {
+        if (timedOut) {
+          const timeoutMessage = `command timed out after ${timeoutMs} ms`;
+          if (options.allowFailure) {
+            resolve({ ok: false, stdout, stderr: stderr || timeoutMessage });
+            return;
+          }
+          reject(new Error(timeoutMessage));
+          return;
+        }
+        if (code === 0) {
+          resolve({ ok: true, stdout, stderr });
+          return;
+        }
+        if (options.allowFailure) {
+          resolve({ ok: false, stdout, stderr });
+          return;
+        }
+        reject(new Error(`${command} exited with ${code}: ${stderr || stdout}`));
+      });
     });
+    child.stdin.on("error", () => {});
     child.stdin.end(input);
   });
 }
@@ -840,7 +1489,8 @@ async function ensureService(baseUrl) {
 function authHeaders(token) {
   return {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`
+    Authorization: `Bearer ${token}`,
+    "X-Pact-Api-Key": token
   };
 }
 
@@ -879,10 +1529,17 @@ async function verifyMcpTools({ baseUrl, token }) {
   ) {
     throw new Error("MCP HTTP verification failed.");
   }
+  const runtimeMeta = toolsList.payload?.result?._meta || {};
+  const runtimeSupportedTargets = Array.isArray(runtimeMeta.supportedTargets)
+    ? runtimeMeta.supportedTargets.map((target) => target.target).filter(Boolean)
+    : [];
   return {
     toolCount: tools.length,
     stableToolName: tools.find(t => t.name === MCP_STABLE_TOOL_NAME || t.name === "pact.discovery")?.name || tools[0]?.name || "",
-    systemHealthOk: health.payload?.result?.structuredContent?.payload?.ok === true
+    systemHealthOk: health.payload?.result?.structuredContent?.payload?.ok === true,
+    sharedHubOk: runtimeMeta.sharedHub?.sharedspace?.outlet === "pact.sharedspace",
+    priorityTargets: Array.isArray(runtimeMeta.priorityTargets) ? runtimeMeta.priorityTargets : [],
+    supportedTargets: runtimeSupportedTargets
   };
 }
 
@@ -954,14 +1611,14 @@ async function createCodexPlugin({ marketplaceRoot, baseUrl, tokenEnv }) {
 }
 
 async function installCodex({ baseUrl, token, tokenEnv, codexBin, marketplaceRoot }) {
-  await run("launchctl", ["setenv", tokenEnv, token], { allowFailure: true });
+  await runInstallCommand("launchctl", ["setenv", tokenEnv, token], { allowFailure: true });
   process.env[tokenEnv] = token;
   const plugin = await createCodexPlugin({ marketplaceRoot, baseUrl, tokenEnv });
-  await run(codexBin, ["plugin", "marketplace", "add", marketplaceRoot], { allowFailure: true });
-  await run(codexBin, ["plugin", "remove", `${PLUGIN_NAME}@${MARKETPLACE_NAME}`], { allowFailure: true });
-  const pluginAdd = await run(codexBin, ["plugin", "add", `${PLUGIN_NAME}@${MARKETPLACE_NAME}`], { allowFailure: true });
-  await run(codexBin, ["mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
-  await run(codexBin, [
+  await runInstallCommand(codexBin, ["plugin", "marketplace", "add", marketplaceRoot], { allowFailure: true });
+  await runInstallCommand(codexBin, ["plugin", "remove", `${PLUGIN_NAME}@${MARKETPLACE_NAME}`], { allowFailure: true });
+  const pluginAdd = await runInstallCommand(codexBin, ["plugin", "add", `${PLUGIN_NAME}@${MARKETPLACE_NAME}`], { allowFailure: true });
+  await runInstallCommand(codexBin, ["mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  await runInstallCommand(codexBin, [
     "mcp",
     "add",
     MCP_SERVER_NAME,
@@ -970,7 +1627,7 @@ async function installCodex({ baseUrl, token, tokenEnv, codexBin, marketplaceRoo
     "--bearer-token-env-var",
     tokenEnv
   ]);
-  const mcpGet = await run(codexBin, ["mcp", "get", MCP_SERVER_NAME], {
+  const mcpGet = await runInstallCommand(codexBin, ["mcp", "get", MCP_SERVER_NAME], {
     env: { [tokenEnv]: token }
   });
   return {
@@ -981,6 +1638,193 @@ async function installCodex({ baseUrl, token, tokenEnv, codexBin, marketplaceRoo
     pluginRoot: plugin.pluginRoot,
     marketplacePath: plugin.marketplacePath,
     mcpGet: mcpGet.stdout
+  };
+}
+
+function codexMcpAddArgs({ baseUrl, tokenEnv }) {
+  return [
+    "mcp",
+    "add",
+    MCP_SERVER_NAME,
+    "--url",
+    `${baseUrl}/mcp`,
+    "--bearer-token-env-var",
+    tokenEnv
+  ];
+}
+
+function codexRemoteTokenEnvScript() {
+  return [
+    "set -e",
+    "IFS= read -r token",
+    "env_name=\"$PACT_TOKEN_ENV\"",
+    "case \"$env_name\" in",
+    "  ''|*[!A-Za-z0-9_]*|[0-9]*) echo 'invalid token env' >&2; exit 2 ;;",
+    "esac",
+    "mkdir -p \"$HOME/.pact/mcp\"",
+    "umask 077",
+    "escaped=$(printf '%s' \"$token\" | sed \"s/'/'\\\\''/g\")",
+    "printf \"export %s='%s'\\n\" \"$env_name\" \"$escaped\" > \"$HOME/.pact/mcp/env\"",
+    "profile=\"$HOME/.profile\"",
+    "if ! grep -q 'Pact MCP token env' \"$profile\" 2>/dev/null; then",
+    "  printf '\\n# Pact MCP token env\\n[ -f \"$HOME/.pact/mcp/env\" ] && . \"$HOME/.pact/mcp/env\"\\n' >> \"$profile\"",
+    "fi"
+  ].join("\n");
+}
+
+async function installCodexOrb({ baseUrl, token, tokenEnv, orbBin, vmName, vmUser, codexBin }) {
+  if (!vmName || !vmUser || !codexBin) {
+    throw new Error("Codex VM install requires a discovered or explicit OrbStack VM, user, and codex CLI path.");
+  }
+  assertSafeEnvName(tokenEnv);
+  const urlBase = vmBaseUrl(baseUrl);
+  const envWrite = await runWithInput(orbBin, [
+    "-m",
+    vmName,
+    "-u",
+    vmUser,
+    "env",
+    `PACT_TOKEN_ENV=${tokenEnv}`,
+    "bash",
+    "-lc",
+    codexRemoteTokenEnvScript()
+  ], `${token}\n`, { allowFailure: true, timeoutMs: INSTALL_COMMAND_TIMEOUT_MS });
+  if (!envWrite.ok) {
+    throw new Error(`Codex VM token environment setup failed: ${envWrite.stderr || envWrite.stdout}`);
+  }
+  await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, codexBin, "mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, codexBin, ...codexMcpAddArgs({ baseUrl: urlBase, tokenEnv })]);
+  const mcpGet = await runInstallCommand(orbBin, [
+    "-m",
+    vmName,
+    "-u",
+    vmUser,
+    "env",
+    `${tokenEnv}=${token}`,
+    codexBin,
+    "mcp",
+    "get",
+    MCP_SERVER_NAME
+  ]);
+  return {
+    installMode: "codex-orbstack-mcp-cli",
+    vm: vmName,
+    vmUser,
+    url: `${urlBase}/mcp`,
+    tokenEnv,
+    mcpGetHasPact: mcpOutputHasPact(mcpGet)
+  };
+}
+
+async function installCodexRemote({ baseUrl, token, tokenEnv, context, codexBin }) {
+  if (!context?.kind || !context?.id || !context?.bin || !codexBin) {
+    throw new Error("Codex remote install requires a discovered remote context and codex CLI path.");
+  }
+  assertSafeEnvName(tokenEnv);
+  const urlBase = await remoteClientBaseUrl(context, baseUrl);
+  const envWrite = await remoteLinuxShellWithInput(context, codexRemoteTokenEnvScript(), `${token}\n`, {
+    PACT_TOKEN_ENV: tokenEnv
+  });
+  if (!envWrite.ok) {
+    throw new Error(`Codex remote token environment setup failed in ${remoteContextLabel(context)}: ${envWrite.stderr || envWrite.stdout}`);
+  }
+  await runRemoteLinuxCommand(context, [codexBin, "mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  await runRemoteLinuxCommand(context, [codexBin, ...codexMcpAddArgs({ baseUrl: urlBase, tokenEnv })]);
+  const mcpGet = await runRemoteLinuxCommand(context, [
+    "env",
+    `${tokenEnv}=${token}`,
+    codexBin,
+    "mcp",
+    "get",
+    MCP_SERVER_NAME
+  ]);
+  return {
+    installMode: `codex-${context.kind}-mcp-cli`,
+    remote: remoteContextLabel(context),
+    url: `${urlBase}/mcp`,
+    tokenEnv,
+    mcpGetHasPact: mcpOutputHasPact(mcpGet)
+  };
+}
+
+function claudeCodeServerJson({ baseUrl, token }) {
+  return JSON.stringify({
+    type: "http",
+    url: `${baseUrl}/mcp`,
+    headers: {
+      "X-Pact-Api-Key": token
+    }
+  });
+}
+
+async function installClaudeCode({ baseUrl, token, claudeBin }) {
+  await runInstallCommand(claudeBin, ["mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  await runInstallCommand(claudeBin, [
+    "mcp",
+    "add-json",
+    "--scope",
+    "user",
+    MCP_SERVER_NAME,
+    claudeCodeServerJson({ baseUrl, token })
+  ]);
+  const get = await runInstallCommand(claudeBin, ["mcp", "get", MCP_SERVER_NAME]);
+  return {
+    installMode: "claude-code-release-mcp-cli",
+    mcpGetHasPact: get.stdout.includes(MCP_SERVER_NAME) || get.stdout.includes(`${baseUrl}/mcp`)
+  };
+}
+
+async function installClaudeCodeOrb({ baseUrl, token, orbBin, vmName, vmUser, claudeBin }) {
+  if (!vmName || !vmUser || !claudeBin) {
+    throw new Error("Claude Code VM install requires a discovered or explicit OrbStack VM, user, and claude CLI path.");
+  }
+  const url = `${vmBaseUrl(baseUrl)}/mcp`;
+  await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, claudeBin, "mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  await runInstallCommand(orbBin, [
+    "-m",
+    vmName,
+    "-u",
+    vmUser,
+    claudeBin,
+    "mcp",
+    "add-json",
+    "--scope",
+    "user",
+    MCP_SERVER_NAME,
+    claudeCodeServerJson({ baseUrl: vmBaseUrl(baseUrl), token })
+  ]);
+  const get = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, claudeBin, "mcp", "get", MCP_SERVER_NAME]);
+  return {
+    installMode: "claude-code-orbstack-mcp-cli",
+    vm: vmName,
+    vmUser,
+    url,
+    mcpGetHasPact: get.stdout.includes(MCP_SERVER_NAME) || get.stdout.includes(url)
+  };
+}
+
+async function installClaudeCodeRemote({ baseUrl, token, context, claudeBin }) {
+  if (!context?.kind || !context?.id || !context?.bin || !claudeBin) {
+    throw new Error("Claude Code remote install requires a discovered remote context and claude CLI path.");
+  }
+  const urlBase = await remoteClientBaseUrl(context, baseUrl);
+  const url = `${urlBase}/mcp`;
+  await runRemoteLinuxCommand(context, [claudeBin, "mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  await runRemoteLinuxCommand(context, [
+    claudeBin,
+    "mcp",
+    "add-json",
+    "--scope",
+    "user",
+    MCP_SERVER_NAME,
+    claudeCodeServerJson({ baseUrl: urlBase, token })
+  ]);
+  const get = await runRemoteLinuxCommand(context, [claudeBin, "mcp", "get", MCP_SERVER_NAME]);
+  return {
+    installMode: `claude-code-${context.kind}-mcp-cli`,
+    remote: remoteContextLabel(context),
+    url,
+    mcpGetHasPact: get.stdout.includes(MCP_SERVER_NAME) || get.stdout.includes(url)
   };
 }
 
@@ -1007,9 +1851,9 @@ async function createGeminiExtension({ extensionRoot, baseUrl, token }) {
 
 async function installGemini({ baseUrl, token, geminiBin, extensionRoot }) {
   await createGeminiExtension({ extensionRoot, baseUrl, token });
-  await run(geminiBin, ["extensions", "validate", extensionRoot]);
-  await run(geminiBin, ["mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
-  await run(geminiBin, [
+  await runInstallCommand(geminiBin, ["extensions", "validate", extensionRoot]);
+  await runInstallCommand(geminiBin, ["mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
+  await runInstallCommand(geminiBin, [
     "mcp",
     "add",
     "--scope",
@@ -1026,7 +1870,7 @@ async function installGemini({ baseUrl, token, geminiBin, extensionRoot }) {
     MCP_SERVER_NAME,
     `${baseUrl}/mcp`
   ]);
-  const list = await run(geminiBin, ["mcp", "list"]);
+  const list = await runInstallCommand(geminiBin, ["mcp", "list"]);
   const listOutput = `${list.stdout}\n${list.stderr}`;
   if (!listOutput.includes(MCP_SERVER_NAME)) {
     throw new Error("Gemini CLI MCP list does not include pact after install.");
@@ -1043,8 +1887,8 @@ async function installGeminiOrb({ baseUrl, token, orbBin, vmName, vmUser, gemini
     throw new Error("Gemini VM install requires a discovered or explicit OrbStack VM, user, and gemini CLI path.");
   }
   const url = `${vmBaseUrl(baseUrl)}/mcp`;
-  await run(orbBin, ["-m", vmName, "-u", vmUser, geminiBin, "mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
-  await run(orbBin, [
+  await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, geminiBin, "mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
+  await runInstallCommand(orbBin, [
     "-m",
     vmName,
     "-u",
@@ -1066,7 +1910,7 @@ async function installGeminiOrb({ baseUrl, token, orbBin, vmName, vmUser, gemini
     MCP_SERVER_NAME,
     url
   ]);
-  const list = await run(orbBin, ["-m", vmName, "-u", vmUser, geminiBin, "mcp", "list"]);
+  const list = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, geminiBin, "mcp", "list"]);
   const listOutput = `${list.stdout}\n${list.stderr}`;
   if (!listOutput.includes(MCP_SERVER_NAME)) {
     throw new Error("Gemini CLI MCP list inside OrbStack does not include pact after install.");
@@ -1133,7 +1977,7 @@ async function installKilo({ baseUrl, token, kiloBin, kiloConfigPath }) {
     }
   };
   await writeJson(kiloConfigPath, config);
-  const list = await run(kiloBin, ["mcp", "list"], { allowFailure: true });
+  const list = await runInstallCommand(kiloBin, ["mcp", "list"], { allowFailure: true });
   return {
     installMode: "kilo-release-global-kilo-json",
     configPath: kiloConfigPath,
@@ -1185,7 +2029,7 @@ async function installKiloOrb({ baseUrl, token, orbBin, vmName, vmUser, kiloBin 
     "bash",
     "-lc",
     script
-  ], `${token}\n`);
+  ], `${token}\n`, { timeoutMs: INSTALL_COMMAND_TIMEOUT_MS });
   return {
     installMode: "kilo-orbstack-global-kilo-json",
     vm: vmName,
@@ -1243,8 +2087,8 @@ async function installKiloRemote({ baseUrl, token, context, kiloBin }) {
 }
 
 async function installCopilot({ baseUrl, token, copilotBin }) {
-  await run(copilotBin, ["mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
-  await run(copilotBin, [
+  await runInstallCommand(copilotBin, ["mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  await runInstallCommand(copilotBin, [
     "mcp",
     "add",
     "--transport",
@@ -1256,7 +2100,7 @@ async function installCopilot({ baseUrl, token, copilotBin }) {
     MCP_SERVER_NAME,
     `${baseUrl}/mcp`
   ]);
-  const get = await run(copilotBin, ["mcp", "get", MCP_SERVER_NAME]);
+  const get = await runInstallCommand(copilotBin, ["mcp", "get", MCP_SERVER_NAME]);
   return {
     installMode: "copilot-release-mcp-cli",
     mcpGetHasPact: get.stdout.includes(MCP_SERVER_NAME) || get.stdout.includes(`${baseUrl}/mcp`)
@@ -1268,8 +2112,8 @@ async function installCopilotOrb({ baseUrl, token, orbBin, vmName, vmUser, copil
     throw new Error("Copilot VM install requires a discovered or explicit OrbStack VM, user, and copilot CLI path.");
   }
   const url = `${vmBaseUrl(baseUrl)}/mcp`;
-  await run(orbBin, ["-m", vmName, "-u", vmUser, copilotBin, "mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
-  await run(orbBin, [
+  await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, copilotBin, "mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  await runInstallCommand(orbBin, [
     "-m",
     vmName,
     "-u",
@@ -1286,7 +2130,7 @@ async function installCopilotOrb({ baseUrl, token, orbBin, vmName, vmUser, copil
     MCP_SERVER_NAME,
     url
   ]);
-  const get = await run(orbBin, ["-m", vmName, "-u", vmUser, copilotBin, "mcp", "get", MCP_SERVER_NAME]);
+  const get = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, copilotBin, "mcp", "get", MCP_SERVER_NAME]);
   return {
     installMode: "copilot-orbstack-mcp-cli",
     vm: vmName,
@@ -1325,12 +2169,22 @@ async function installCopilotRemote({ baseUrl, token, context, copilotBin }) {
 }
 
 async function installAntigravity({ baseUrl, token, configPath }) {
+  return installMcpServersJsonConfig({
+    baseUrl,
+    token,
+    configPath,
+    installMode: "antigravity-release-mcp-config",
+    urlKey: "serverUrl"
+  });
+}
+
+async function installMcpServersJsonConfig({ baseUrl, token, configPath, installMode, urlKey = "url" }) {
   const config = await readJson(configPath, { mcpServers: {} });
   const backupPath = await backupIfExists(configPath);
   config.mcpServers = {
     ...(config.mcpServers || {}),
     [MCP_SERVER_NAME]: {
-      serverUrl: `${baseUrl}/mcp`,
+      [urlKey]: `${baseUrl}/mcp`,
       headers: {
         "X-Pact-Api-Key": token
       },
@@ -1339,7 +2193,7 @@ async function installAntigravity({ baseUrl, token, configPath }) {
   };
   await writeJson(configPath, config);
   return {
-    installMode: "antigravity-release-mcp-config",
+    installMode,
     configPath,
     backupPath
   };
@@ -1367,6 +2221,101 @@ async function installOpenCode({ baseUrl, token, configPath }) {
   };
 }
 
+function openCodeRemoteInstallScript() {
+  return [
+    "set -e",
+    "IFS= read -r token",
+    "node - \"$PACT_URL\" \"$token\" <<'NODE'",
+    "const fs = require('fs');",
+    "const os = require('os');",
+    "const path = require('path');",
+    "const url = process.argv[2];",
+    "const token = process.argv[3];",
+    "const filePath = path.join(os.homedir(), '.config', 'opencode', 'opencode.jsonc');",
+    "fs.mkdirSync(path.dirname(filePath), { recursive: true });",
+    "let config = {};",
+    "try { config = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch {}",
+    "config.mcp = {",
+    "  ...(config.mcp || {}),",
+    "  pact: {",
+    "    type: 'remote',",
+    "    url,",
+    "    headers: { 'X-Pact-Api-Key': token },",
+    "    enabled: true",
+    "  }",
+    "};",
+    "fs.writeFileSync(filePath, `${JSON.stringify(config, null, 2)}\\n`);",
+    "NODE"
+  ].join("\n");
+}
+
+function openCodeRemoteUninstallScript() {
+  return [
+    "set -e",
+    "node - <<'NODE'",
+    "const fs = require('fs');",
+    "const os = require('os');",
+    "const path = require('path');",
+    "const filePath = path.join(os.homedir(), '.config', 'opencode', 'opencode.jsonc');",
+    "let config = {};",
+    "try { config = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch { console.log('not-installed'); process.exit(0); }",
+    "const removed = Boolean(config.mcp && Object.prototype.hasOwnProperty.call(config.mcp, 'pact'));",
+    "if (removed) {",
+    "  delete config.mcp.pact;",
+    "  fs.writeFileSync(filePath, `${JSON.stringify(config, null, 2)}\\n`);",
+    "}",
+    "console.log(removed ? 'removed' : 'not-installed');",
+    "NODE"
+  ].join("\n");
+}
+
+async function installOpenCodeOrb({ baseUrl, token, orbBin, vmName, vmUser }) {
+  if (!vmName || !vmUser) {
+    throw new Error("OpenCode VM install requires a discovered or explicit OrbStack VM and user.");
+  }
+  const url = `${vmBaseUrl(baseUrl)}/mcp`;
+  const result = await runWithInput(orbBin, [
+    "-m",
+    vmName,
+    "-u",
+    vmUser,
+    "env",
+    `PACT_URL=${url}`,
+    "bash",
+    "-lc",
+    openCodeRemoteInstallScript()
+  ], `${token}\n`, { allowFailure: true, timeoutMs: INSTALL_COMMAND_TIMEOUT_MS });
+  if (!result.ok) {
+    throw new Error(`OpenCode VM install failed: ${result.stderr || result.stdout}`);
+  }
+  return {
+    installMode: "opencode-orbstack-mcp-config",
+    vm: vmName,
+    vmUser,
+    url,
+    configPath: "~/.config/opencode/opencode.jsonc"
+  };
+}
+
+async function installOpenCodeRemote({ baseUrl, token, context }) {
+  if (!context?.kind || !context?.id || !context?.bin) {
+    throw new Error("OpenCode remote install requires a discovered remote context.");
+  }
+  const url = `${await remoteClientBaseUrl(context, baseUrl)}/mcp`;
+  const result = await remoteLinuxShellWithInput(context, openCodeRemoteInstallScript(), `${token}\n`, {
+    PACT_URL: url
+  });
+  if (!result.ok) {
+    throw new Error(`OpenCode remote install failed in ${remoteContextLabel(context)}: ${result.stderr || result.stdout}`);
+  }
+  return {
+    installMode: `opencode-${context.kind}-mcp-config`,
+    remote: remoteContextLabel(context),
+    url,
+    configPath: "~/.config/opencode/opencode.jsonc"
+  };
+}
+
 async function installOpenClaw({ baseUrl, token, orbBin, vmName, vmUser, openclawBin }) {
   if (!openclawBin) {
     throw new Error("OpenClaw install requires a discovered or explicit OpenClaw-like CLI path.");
@@ -1386,13 +2335,13 @@ async function installOpenClaw({ baseUrl, token, orbBin, vmName, vmUser, opencla
     enabled: true
   };
   if (isOrb) {
-    await run(orbBin, ["-m", vmName, "-u", vmUser, openclawBin, "mcp", "set", MCP_SERVER_NAME, JSON.stringify(config)]);
+    await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, openclawBin, "mcp", "set", MCP_SERVER_NAME, JSON.stringify(config)]);
   } else {
-    await run(openclawBin, ["mcp", "set", MCP_SERVER_NAME, JSON.stringify(config)]);
+    await runInstallCommand(openclawBin, ["mcp", "set", MCP_SERVER_NAME, JSON.stringify(config)]);
   }
   const show = isOrb
-    ? await run(orbBin, ["-m", vmName, "-u", vmUser, openclawBin, "mcp", "show", MCP_SERVER_NAME])
-    : await run(openclawBin, ["mcp", "show", MCP_SERVER_NAME]);
+    ? await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, openclawBin, "mcp", "show", MCP_SERVER_NAME])
+    : await runInstallCommand(openclawBin, ["mcp", "show", MCP_SERVER_NAME]);
   return {
     installMode: isOrb ? "openclaw-orbstack-mcp-cli" : "openclaw-release-mcp-cli",
     vm: vmName,
@@ -1458,7 +2407,7 @@ async function installHermes({ baseUrl, token, orbBin, vmName, vmUser, hermesBin
     "bash",
     "-lc",
     script
-  ], `${token}\n`);
+  ], `${token}\n`, { timeoutMs: INSTALL_COMMAND_TIMEOUT_MS });
   const enableScript = [
     "set -e",
     "if [ -d \"$HOME/.hermes/hermes-agent\" ]; then",
@@ -1473,9 +2422,9 @@ async function installHermes({ baseUrl, token, orbBin, vmName, vmUser, hermesBin
     "PY",
     "fi"
   ].join("\n");
-  await run(orbBin, ["-m", vmName, "-u", vmUser, "bash", "-lc", enableScript]);
-  await run(orbBin, ["-m", vmName, "-u", vmUser, hermesBin, "mcp", "test", MCP_SERVER_NAME]);
-  const list = await run(orbBin, ["-m", vmName, "-u", vmUser, hermesBin, "mcp", "list"]);
+  await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, "bash", "-lc", enableScript]);
+  await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, hermesBin, "mcp", "test", MCP_SERVER_NAME]);
+  const list = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, hermesBin, "mcp", "list"]);
   const listOutput = `${list.stdout}\n${list.stderr}`;
   return {
     installMode: "hermes-orbstack-mcp-cli",
@@ -1548,14 +2497,51 @@ function buildDeviceHubManifest({
   codex,
   marketplaceRoot,
   codexPluginRoot,
+  tokenEnv = DEFAULT_TOKEN_ENV,
   discoveryPath = discoveryRegistryPath()
 }) {
   const parsed = new URL(baseUrl);
   const port = parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+  const mcpUrl = `${baseUrl}/mcp`;
+  const vmMcpUrl = `${parsed.protocol}//host.orb.internal:${port}/mcp`;
   const env = deviceDiscoveryEnv({ baseUrl, primaryPath: discoveryPath });
-  const discoverCommand = `npx ${packageJson.name}@${packageJson.version} discover-local`;
-  const interactiveInstallCommand = `npx ${packageJson.name}@${packageJson.version} install`;
-  const scanCommand = `npx ${packageJson.name}@${packageJson.version} scan --json`;
+  const packageExec = `npx ${packageJson.name}@${packageJson.version}`;
+  const urlArgs = ` --url ${shellQuote(baseUrl)}`;
+  const tokenEnvArgs = tokenEnv && tokenEnv !== DEFAULT_TOKEN_ENV ? ` --token-env ${shellQuote(tokenEnv)}` : "";
+  const contextArgs = `${urlArgs}${tokenEnvArgs}`;
+  const githubOneLineCommand = githubOneLineMcpInstallCommand();
+  const githubOneLineCommandZhCN = githubOneLineMcpInstallCommand(BOOTSTRAP_INSTALL_SCRIPT_ZH_CN);
+  const githubOneLineInstallCommand = `${githubOneLineCommand} --${contextArgs}`;
+  const githubOneLineInstallCommandZhCN = `${githubOneLineCommandZhCN} --${contextArgs}`;
+  const githubOneLineClientInstallJsonCommand = `${githubOneLineCommand} -- --target <client>${contextArgs} --json`;
+  const githubOneLineClientInstallJsonCommandZhCN = `${githubOneLineCommandZhCN} -- --target <client>${contextArgs} --json`;
+  const githubOneLineAutoInstallCommand = `${githubOneLineCommand} -- --target auto${contextArgs} --json`;
+  const githubOneLineAutoInstallCommandZhCN = `${githubOneLineCommandZhCN} -- --target auto${contextArgs} --json`;
+  const githubOneLinePriorityInstallCommand = `${githubOneLineCommand} -- --target ${PRIORITY_INSTALL_TARGET}${contextArgs} --json`;
+  const githubOneLinePriorityInstallCommandZhCN = `${githubOneLineCommandZhCN} -- --target ${PRIORITY_INSTALL_TARGET}${contextArgs} --json`;
+  const discoverCommand = `${packageExec} discover-local${urlArgs} --json`;
+  const interactiveInstallCommand = `${packageExec} install${urlArgs}${tokenEnvArgs}`;
+  const clientInstallJsonCommand = `${packageExec} install --target <client>${urlArgs}${tokenEnvArgs} --json`;
+  const autoInstallCommand = `${packageExec} install --target auto${urlArgs}${tokenEnvArgs} --json`;
+  const priorityInstallCommand = `${packageExec} install --target ${PRIORITY_INSTALL_TARGET}${urlArgs}${tokenEnvArgs} --json`;
+  const scanCommand = `${packageExec} scan${urlArgs}${tokenEnvArgs} --json`;
+  const doctorCommand = `${packageExec} doctor${urlArgs}${tokenEnvArgs} --json`;
+  const codexInstallCommand = `${packageExec} install --target codex${urlArgs}${tokenEnvArgs}`;
+  const codexManifest = codex
+    ? {
+        ...codex,
+        tokenEnv,
+        installCommand: codexInstallCommand
+      }
+    : codexPluginRoot
+    ? {
+        plugin: `${PLUGIN_NAME}@${MARKETPLACE_NAME}`,
+        marketplaceRoot,
+        pluginRoot: codexPluginRoot,
+        tokenEnv,
+        installCommand: codexInstallCommand
+      }
+    : null;
   return {
     version: 1,
     schemaVersion: "pact.mcp.device-hub.v1",
@@ -1573,7 +2559,7 @@ function buildDeviceHubManifest({
       localFiles: [discoveryPath],
       env,
       lookupOrder: [
-        "pact-mcp discover-local",
+        "pact-mcp discover-local --json",
         "PACT_MCP_URL",
         "PACT_MCP_DISCOVERY_URL",
         "PACT_MCP_DISCOVERY_FILE",
@@ -1584,43 +2570,82 @@ function buildDeviceHubManifest({
       [MCP_SERVER_NAME]: {
         name: "Pact",
         transport: "streamable-http",
-        httpUrl: `${baseUrl}/mcp`,
-        vmHttpUrl: `${parsed.protocol}//host.orb.internal:${port}/mcp`,
+        httpUrl: mcpUrl,
+        vmHttpUrl: vmMcpUrl,
         discoveryUrl: `${baseUrl}/.well-known/pact/mcp.json`,
         apiDiscoveryUrl: `${baseUrl}/api/mcp/discovery`,
         stableToolName: MCP_STABLE_TOOL_NAME,
+        sharedHub: sharedHubContract({ mcpUrl, vmMcpUrl }),
         connector: {
           packageName: packageJson.name,
           packageVersion: packageJson.version,
-          registerCommand: `npx ${packageJson.name}@${packageJson.version} register`,
+          registerCommand: `${packageExec} register${urlArgs}${tokenEnvArgs}`,
           interactiveInstallCommand,
-          installCommand: `npx ${packageJson.name}@${packageJson.version} install --target <client>`,
-          uninstallCommand: `npx ${packageJson.name}@${packageJson.version} uninstall --target <client>`,
+          githubOneLineCommand,
+          githubOneLineCommandZhCN,
+          githubOneLineInstallCommand,
+          githubOneLineInstallCommandZhCN,
+          githubOneLineClientInstallJsonCommand,
+          githubOneLineClientInstallJsonCommandZhCN,
+          githubOneLineAutoInstallCommand,
+          githubOneLineAutoInstallCommandZhCN,
+          githubOneLinePriorityInstallCommand,
+          githubOneLinePriorityInstallCommandZhCN,
+          oneCommandInstall: githubOneLineInstallCommand,
+          oneCommandInstallZhCN: githubOneLineInstallCommandZhCN,
+          oneCommandClientInstallJson: githubOneLineClientInstallJsonCommand,
+          oneCommandClientInstallJsonZhCN: githubOneLineClientInstallJsonCommandZhCN,
+          oneCommandAutoInstall: githubOneLineAutoInstallCommand,
+          oneCommandAutoInstallZhCN: githubOneLineAutoInstallCommandZhCN,
+          oneCommandPriorityInstall: githubOneLinePriorityInstallCommand,
+          oneCommandPriorityInstallZhCN: githubOneLinePriorityInstallCommandZhCN,
+          autoInstallCommand,
+          priorityInstallCommand,
+          priorityTargets: [...PRIORITY_INSTALL_TARGETS],
+          supportedTargets: [...SUPPORTED_TARGETS],
+          supportedTargetDetails: supportedTargetDetails(),
+          installCommand: `${packageExec} install --target <client>${urlArgs}${tokenEnvArgs}`,
+          clientInstallJsonCommand,
+          uninstallCommand: `${packageExec} uninstall --target <client>${urlArgs}`,
           discoverCommand,
-          scanCommand
+          scanCommand,
+          doctorCommand
+        },
+        upgrade: {
+          listChanged: true,
+          notification: "notifications/tools/list_changed",
+          reinstallCommand: githubOneLineInstallCommand,
+          reinstallCommandZhCN: githubOneLineInstallCommandZhCN,
+          clientReinstallJsonCommand: githubOneLineClientInstallJsonCommand,
+          clientReinstallJsonCommandZhCN: githubOneLineClientInstallJsonCommandZhCN,
+          agentReinstallCommand: githubOneLineAutoInstallCommand,
+          agentReinstallCommandZhCN: githubOneLineAutoInstallCommandZhCN,
+          priorityAgentReinstallCommand: githubOneLinePriorityInstallCommand,
+          priorityAgentReinstallCommandZhCN: githubOneLinePriorityInstallCommandZhCN,
+          oneCommandReinstall: githubOneLineInstallCommand,
+          oneCommandReinstallZhCN: githubOneLineInstallCommandZhCN,
+          oneCommandClientReinstallJson: githubOneLineClientInstallJsonCommand,
+          oneCommandClientReinstallJsonZhCN: githubOneLineClientInstallJsonCommandZhCN,
+          oneCommandAgentReinstall: githubOneLineAutoInstallCommand,
+          oneCommandAgentReinstallZhCN: githubOneLineAutoInstallCommandZhCN,
+          oneCommandPriorityAgentReinstall: githubOneLinePriorityInstallCommand,
+          oneCommandPriorityAgentReinstallZhCN: githubOneLinePriorityInstallCommandZhCN,
+          priorityTargets: [...PRIORITY_INSTALL_TARGETS]
         },
         auth: {
           type: "auto-local-grant-or-provided-token",
           acceptedHeaders: ["Authorization: Bearer <token>", "X-Pact-Api-Key"],
-          tokenEnv: DEFAULT_TOKEN_ENV
+          tokenEnv
         },
-        codex: codex || (codexPluginRoot
-          ? {
-              plugin: `${PLUGIN_NAME}@${MARKETPLACE_NAME}`,
-              marketplaceRoot,
-              pluginRoot: codexPluginRoot,
-              tokenEnv: DEFAULT_TOKEN_ENV,
-              installCommand: `npx ${packageJson.name}@${packageJson.version} install --target codex`
-            }
-          : null),
+        codex: codexManifest,
         targets
       }
     }
   };
 }
 
-async function publishDeviceHubManifest({ baseUrl, targets, codex, marketplaceRoot = "", codexPluginRoot = "", publishEnv = true, discoveryPath = discoveryRegistryPath() }) {
-  const manifest = buildDeviceHubManifest({ baseUrl, targets, codex, marketplaceRoot, codexPluginRoot, discoveryPath });
+async function publishDeviceHubManifest({ baseUrl, targets, codex, marketplaceRoot = "", codexPluginRoot = "", tokenEnv = DEFAULT_TOKEN_ENV, publishEnv = true, discoveryPath = discoveryRegistryPath() }) {
+  const manifest = buildDeviceHubManifest({ baseUrl, targets, codex, marketplaceRoot, codexPluginRoot, tokenEnv, discoveryPath });
   await writeJson(discoveryPath, manifest);
   const envPublished = publishEnv ? await publishLaunchctlEnv(manifest.discovery.env) : false;
   return {
@@ -1633,9 +2658,9 @@ async function publishDeviceHubManifest({ baseUrl, targets, codex, marketplaceRo
 }
 
 async function uninstallCodex({ tokenEnv, codexBin, marketplaceRoot }) {
-  const removeMcp = await run(codexBin, ["mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
-  const removePlugin = await run(codexBin, ["plugin", "remove", `${PLUGIN_NAME}@${MARKETPLACE_NAME}`], { allowFailure: true });
-  await run("launchctl", ["unsetenv", tokenEnv], { allowFailure: true });
+  const removeMcp = await runInstallCommand(codexBin, ["mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  const removePlugin = await runInstallCommand(codexBin, ["plugin", "remove", `${PLUGIN_NAME}@${MARKETPLACE_NAME}`], { allowFailure: true });
+  await runInstallCommand("launchctl", ["unsetenv", tokenEnv], { allowFailure: true });
   const pluginRoot = path.join(marketplaceRoot, "plugins", PLUGIN_NAME);
   await removeDirIfExists(pluginRoot);
   const marketplaceBackupPath = await removeCodexMarketplacePlugin({ marketplaceRoot });
@@ -1648,8 +2673,82 @@ async function uninstallCodex({ tokenEnv, codexBin, marketplaceRoot }) {
   };
 }
 
+async function uninstallCodexOrb({ orbBin, vmName, vmUser, codexBin }) {
+  if (!vmName || !vmUser || !codexBin) {
+    throw new Error("Codex VM uninstall requires a discovered or explicit OrbStack VM, user, and codex CLI path.");
+  }
+  const remove = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, codexBin, "mcp", "remove", MCP_SERVER_NAME], {
+    allowFailure: true
+  });
+  const get = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, codexBin, "mcp", "get", MCP_SERVER_NAME], {
+    allowFailure: true
+  });
+  return {
+    uninstallMode: "codex-orbstack-mcp-cli",
+    vm: vmName,
+    vmUser,
+    removedMcp: remove.ok,
+    mcpGetHasPact: get.ok && mcpOutputHasPact(get)
+  };
+}
+
+async function uninstallCodexRemote({ context, codexBin }) {
+  if (!context?.kind || !context?.id || !context?.bin || !codexBin) {
+    throw new Error("Codex remote uninstall requires a discovered remote context and codex CLI path.");
+  }
+  const remove = await runRemoteLinuxCommand(context, [codexBin, "mcp", "remove", MCP_SERVER_NAME], {
+    allowFailure: true
+  });
+  const get = await runRemoteLinuxCommand(context, [codexBin, "mcp", "get", MCP_SERVER_NAME], {
+    allowFailure: true
+  });
+  return {
+    uninstallMode: `codex-${context.kind}-mcp-cli`,
+    remote: remoteContextLabel(context),
+    removedMcp: remove.ok,
+    mcpGetHasPact: get.ok && mcpOutputHasPact(get)
+  };
+}
+
+async function uninstallClaudeCode({ claudeBin }) {
+  const remove = await runInstallCommand(claudeBin, ["mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  return {
+    uninstallMode: "claude-code-release-mcp-cli",
+    removedMcp: remove.ok
+  };
+}
+
+async function uninstallClaudeCodeOrb({ orbBin, vmName, vmUser, claudeBin }) {
+  if (!vmName || !vmUser || !claudeBin) {
+    throw new Error("Claude Code VM uninstall requires a discovered or explicit OrbStack VM, user, and claude CLI path.");
+  }
+  const remove = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, claudeBin, "mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  const get = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, claudeBin, "mcp", "get", MCP_SERVER_NAME], { allowFailure: true });
+  return {
+    uninstallMode: "claude-code-orbstack-mcp-cli",
+    vm: vmName,
+    vmUser,
+    removedMcp: remove.ok,
+    mcpGetHasPact: get.ok && get.stdout.includes(MCP_SERVER_NAME)
+  };
+}
+
+async function uninstallClaudeCodeRemote({ context, claudeBin }) {
+  if (!context?.kind || !context?.id || !context?.bin || !claudeBin) {
+    throw new Error("Claude Code remote uninstall requires a discovered remote context and claude CLI path.");
+  }
+  const remove = await runRemoteLinuxCommand(context, [claudeBin, "mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  const get = await runRemoteLinuxCommand(context, [claudeBin, "mcp", "get", MCP_SERVER_NAME], { allowFailure: true });
+  return {
+    uninstallMode: `claude-code-${context.kind}-mcp-cli`,
+    remote: remoteContextLabel(context),
+    removedMcp: remove.ok,
+    mcpGetHasPact: get.ok && get.stdout.includes(MCP_SERVER_NAME)
+  };
+}
+
 async function uninstallGemini({ geminiBin, extensionRoot }) {
-  const remove = await run(geminiBin, ["mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
+  const remove = await runInstallCommand(geminiBin, ["mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
   await removeDirIfExists(extensionRoot);
   return {
     uninstallMode: "gemini-release-mcp-cli",
@@ -1662,8 +2761,8 @@ async function uninstallGeminiOrb({ orbBin, vmName, vmUser, geminiBin }) {
   if (!vmName || !vmUser || !geminiBin) {
     throw new Error("Gemini VM uninstall requires a discovered or explicit OrbStack VM, user, and gemini CLI path.");
   }
-  const remove = await run(orbBin, ["-m", vmName, "-u", vmUser, geminiBin, "mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
-  const list = await run(orbBin, ["-m", vmName, "-u", vmUser, geminiBin, "mcp", "list"], { allowFailure: true });
+  const remove = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, geminiBin, "mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
+  const list = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, geminiBin, "mcp", "list"], { allowFailure: true });
   const listOutput = `${list.stdout}\n${list.stderr}`;
   return {
     uninstallMode: "gemini-orbstack-mcp-cli",
@@ -1708,7 +2807,7 @@ async function removeNamedMcpEntry({ filePath, rootKey }) {
 
 async function uninstallKilo({ kiloConfigPath, kiloBin }) {
   const removed = await removeNamedMcpEntry({ filePath: kiloConfigPath, rootKey: "mcp" });
-  const list = await run(kiloBin, ["mcp", "list"], { allowFailure: true });
+  const list = await runInstallCommand(kiloBin, ["mcp", "list"], { allowFailure: true });
   return {
     uninstallMode: "kilo-release-global-kilo-json",
     configPath: kiloConfigPath,
@@ -1742,7 +2841,7 @@ async function uninstallKiloOrb({ orbBin, vmName, vmUser, kiloBin }) {
   if (!vmName || !vmUser || !kiloBin) {
     throw new Error("Kilo VM uninstall requires a discovered or explicit OrbStack VM, user, and kilo CLI path.");
   }
-  const remove = await run(orbBin, [
+  const remove = await runInstallCommand(orbBin, [
     "-m",
     vmName,
     "-u",
@@ -1778,7 +2877,7 @@ async function uninstallKiloRemote({ context, kiloBin }) {
 }
 
 async function uninstallCopilot({ copilotBin }) {
-  const remove = await run(copilotBin, ["mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  const remove = await runInstallCommand(copilotBin, ["mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
   return {
     uninstallMode: "copilot-release-mcp-cli",
     removedMcp: remove.ok
@@ -1789,8 +2888,8 @@ async function uninstallCopilotOrb({ orbBin, vmName, vmUser, copilotBin }) {
   if (!vmName || !vmUser || !copilotBin) {
     throw new Error("Copilot VM uninstall requires a discovered or explicit OrbStack VM, user, and copilot CLI path.");
   }
-  const remove = await run(orbBin, ["-m", vmName, "-u", vmUser, copilotBin, "mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
-  const get = await run(orbBin, ["-m", vmName, "-u", vmUser, copilotBin, "mcp", "get", MCP_SERVER_NAME], { allowFailure: true });
+  const remove = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, copilotBin, "mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  const get = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, copilotBin, "mcp", "get", MCP_SERVER_NAME], { allowFailure: true });
   return {
     uninstallMode: "copilot-orbstack-mcp-cli",
     vm: vmName,
@@ -1815,9 +2914,16 @@ async function uninstallCopilotRemote({ context, copilotBin }) {
 }
 
 async function uninstallAntigravity({ configPath }) {
+  return uninstallMcpServersJsonConfig({
+    configPath,
+    uninstallMode: "antigravity-release-mcp-config"
+  });
+}
+
+async function uninstallMcpServersJsonConfig({ configPath, uninstallMode }) {
   const removed = await removeNamedMcpEntry({ filePath: configPath, rootKey: "mcpServers" });
   return {
-    uninstallMode: "antigravity-release-mcp-config",
+    uninstallMode,
     configPath,
     backupPath: removed.backupPath,
     removedConfigEntry: removed.removed
@@ -1834,6 +2940,33 @@ async function uninstallOpenCode({ configPath }) {
   };
 }
 
+async function uninstallOpenCodeOrb({ orbBin, vmName, vmUser }) {
+  if (!vmName || !vmUser) {
+    throw new Error("OpenCode VM uninstall requires a discovered or explicit OrbStack VM and user.");
+  }
+  const result = await run(orbBin, ["-m", vmName, "-u", vmUser, "bash", "-lc", openCodeRemoteUninstallScript()], {
+    allowFailure: true
+  });
+  return {
+    uninstallMode: "opencode-orbstack-mcp-config",
+    vm: vmName,
+    vmUser,
+    removedConfigEntry: result.ok && /removed/.test(result.stdout)
+  };
+}
+
+async function uninstallOpenCodeRemote({ context }) {
+  if (!context?.kind || !context?.id || !context?.bin) {
+    throw new Error("OpenCode remote uninstall requires a discovered remote context.");
+  }
+  const result = await remoteLinuxShell(context, openCodeRemoteUninstallScript(), { timeoutMs: SCAN_COMMAND_TIMEOUT_MS });
+  return {
+    uninstallMode: `opencode-${context.kind}-mcp-config`,
+    remote: remoteContextLabel(context),
+    removedConfigEntry: result.ok && /removed/.test(result.stdout)
+  };
+}
+
 async function uninstallOpenClaw({ orbBin, vmName, vmUser, openclawBin }) {
   if (!openclawBin) {
     throw new Error("OpenClaw uninstall requires a discovered or explicit OpenClaw-like CLI path.");
@@ -1843,11 +2976,11 @@ async function uninstallOpenClaw({ orbBin, vmName, vmUser, openclawBin }) {
     throw new Error("OpenClaw VM uninstall requires both OrbStack VM and user.");
   }
   const remove = isOrb
-    ? await run(orbBin, ["-m", vmName, "-u", vmUser, openclawBin, "mcp", "unset", MCP_SERVER_NAME], { allowFailure: true })
-    : await run(openclawBin, ["mcp", "unset", MCP_SERVER_NAME], { allowFailure: true });
+    ? await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, openclawBin, "mcp", "unset", MCP_SERVER_NAME], { allowFailure: true })
+    : await runInstallCommand(openclawBin, ["mcp", "unset", MCP_SERVER_NAME], { allowFailure: true });
   const show = isOrb
-    ? await run(orbBin, ["-m", vmName, "-u", vmUser, openclawBin, "mcp", "show", MCP_SERVER_NAME], { allowFailure: true })
-    : await run(openclawBin, ["mcp", "show", MCP_SERVER_NAME], { allowFailure: true });
+    ? await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, openclawBin, "mcp", "show", MCP_SERVER_NAME], { allowFailure: true })
+    : await runInstallCommand(openclawBin, ["mcp", "show", MCP_SERVER_NAME], { allowFailure: true });
   return {
     uninstallMode: isOrb ? "openclaw-orbstack-mcp-cli" : "openclaw-release-mcp-cli",
     vm: vmName,
@@ -1889,7 +3022,7 @@ async function uninstallHermes({ orbBin, vmName, vmUser, hermesBin }) {
     "PY",
     "fi"
   ].join("\n");
-  const remove = await run(orbBin, [
+  const remove = await runInstallCommand(orbBin, [
     "-m",
     vmName,
     "-u",
@@ -1900,7 +3033,7 @@ async function uninstallHermes({ orbBin, vmName, vmUser, hermesBin }) {
     "-lc",
     script
   ], { allowFailure: true });
-  const list = await run(orbBin, ["-m", vmName, "-u", vmUser, hermesBin, "mcp", "list"], { allowFailure: true });
+  const list = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, hermesBin, "mcp", "list"], { allowFailure: true });
   const listOutput = `${list.stdout}\n${list.stderr}`;
   return {
     uninstallMode: "hermes-orbstack-mcp-cli",
@@ -1940,7 +3073,7 @@ async function uninstallHermesRemote({ context, hermesBin }) {
   };
 }
 
-async function writeDeviceDiscovery({ baseUrl, marketplaceRoot, codexPluginRoot, installed, token, publishEnv = true, discoveryPath = discoveryRegistryPath() }) {
+async function writeDeviceDiscovery({ baseUrl, marketplaceRoot, codexPluginRoot, installed, token, tokenEnv = DEFAULT_TOKEN_ENV, publishEnv = true, discoveryPath = discoveryRegistryPath() }) {
   const manifestPath = discoveryPath;
   const existingManifest = await readJson(manifestPath, {});
   const existingServer = existingManifest?.servers?.[MCP_SERVER_NAME] || {};
@@ -1970,16 +3103,18 @@ async function writeDeviceDiscovery({ baseUrl, marketplaceRoot, codexPluginRoot,
     codex: normalizeCodexDiscovery(existingServer.codex),
     marketplaceRoot,
     codexPluginRoot,
+    tokenEnv,
     publishEnv,
     discoveryPath: manifestPath
   });
   return published.primaryPath;
 }
 
-async function writeDeviceUninstall({ baseUrl, uninstalled, publishEnv = true, discoveryPath = discoveryRegistryPath() }) {
+async function writeDeviceUninstall({ baseUrl, uninstalled, tokenEnv = DEFAULT_TOKEN_ENV, publishEnv = true, discoveryPath = discoveryRegistryPath() }) {
   const manifestPath = discoveryPath;
   const existingManifest = await readJson(manifestPath, {});
   const existingServer = existingManifest?.servers?.[MCP_SERVER_NAME] || {};
+  const effectiveTokenEnv = tokenEnv || existingManifestTokenEnv(existingServer);
   const existingTargets = existingServer.targets || {};
   const targets = Object.fromEntries(SUPPORTED_TARGETS.map((target) => [
     target,
@@ -2003,6 +3138,7 @@ async function writeDeviceUninstall({ baseUrl, uninstalled, publishEnv = true, d
     baseUrl,
     targets,
     codex: normalizeCodexDiscovery(existingServer.codex),
+    tokenEnv: effectiveTokenEnv,
     publishEnv,
     discoveryPath: manifestPath
   });
@@ -2045,14 +3181,22 @@ function normalizeCodexDiscovery(codex) {
   };
 }
 
+function existingManifestTokenEnv(server = {}) {
+  return String(server.auth?.tokenEnv || server.codex?.tokenEnv || DEFAULT_TOKEN_ENV);
+}
+
 async function writeServerConfigProfile({ options, name = "default", discovered, publishEnv = true }) {
   const discoveryPath = discoveryRegistryPath(options);
   const existingManifest = await readJson(discoveryPath, {});
   const existingServer = existingManifest?.servers?.[MCP_SERVER_NAME] || {};
+  const tokenEnv = Object.hasOwn(options, "token-env")
+    ? String(option(options, "token-env", DEFAULT_TOKEN_ENV))
+    : existingManifestTokenEnv(existingServer);
   const published = await publishDeviceHubManifest({
     baseUrl: discovered.baseUrl,
     targets: defaultTargetStatuses(existingServer.targets || {}),
     codex: normalizeCodexDiscovery(existingServer.codex),
+    tokenEnv,
     publishEnv,
     discoveryPath
   });
@@ -2071,7 +3215,8 @@ async function writeServerConfigProfile({ options, name = "default", discovered,
     ok: true,
     path: published.primaryPath,
     activeName: name,
-    profile: manifest.serverConfig.profiles[name]
+    profile: manifest.serverConfig.profiles[name],
+    tokenEnv
   };
 }
 
@@ -2086,14 +3231,14 @@ async function resetServerConfig({ options, publishEnv = true }) {
       strategy: "shared-device-hub",
       localEntry: {
         type: "pact-mcp-discover-local",
-        command: `npx ${packageJson.name}@${packageJson.version} discover-local`,
+        command: `npx ${packageJson.name}@${packageJson.version} discover-local --json`,
         registryFile: discoveryPath
       },
       registryFile: discoveryPath,
       localFiles: [discoveryPath],
       env: {},
       lookupOrder: [
-        "pact-mcp discover-local",
+        "pact-mcp discover-local --json",
         "signed local port scan"
       ]
     },
@@ -2495,26 +3640,8 @@ const PLATFORM_PACKAGE_DIR_SOURCES = {
 };
 
 const PLATFORM_PACKAGE_EXECUTABLE_PATH_SOURCES = {
-  [HOST_PLATFORM.MACOS]: [
-    packageSource("homebrew-package-prefix", PACKAGE_SOURCE_KIND.COMMAND_PREFIX_DIRS, {
-      executable: "brew",
-      argsForCommand: (command) => ["--prefix", command],
-      mapOutput: (stdout) => {
-        const prefix = lastOutputLine(stdout);
-        return prefix ? [path.join(prefix, "bin"), path.join(prefix, "sbin")] : [];
-      }
-    })
-  ],
-  [HOST_PLATFORM.LINUX]: [
-    packageSource("homebrew-package-prefix", PACKAGE_SOURCE_KIND.COMMAND_PREFIX_DIRS, {
-      executable: "brew",
-      argsForCommand: (command) => ["--prefix", command],
-      mapOutput: (stdout) => {
-        const prefix = lastOutputLine(stdout);
-        return prefix ? [path.join(prefix, "bin"), path.join(prefix, "sbin")] : [];
-      }
-    })
-  ],
+  [HOST_PLATFORM.MACOS]: [],
+  [HOST_PLATFORM.LINUX]: [],
   [HOST_PLATFORM.WINDOWS]: [
     packageSource("scoop-which", PACKAGE_SOURCE_KIND.COMMAND_PATHS, {
       executables: ["scoop.cmd", "scoop"],
@@ -2810,13 +3937,16 @@ async function detectOrbVms(orbBin) {
 function linuxExecutableScanScript(command) {
   return [
     "set +e",
+    "export HOMEBREW_NO_AUTO_UPDATE=\"${HOMEBREW_NO_AUTO_UPDATE:-1}\"",
+    "export HOMEBREW_NO_ANALYTICS=\"${HOMEBREW_NO_ANALYTICS:-1}\"",
+    "export HOMEBREW_NO_ENV_HINTS=\"${HOMEBREW_NO_ENV_HINTS:-1}\"",
     `command_name=${shellQuote(command)}`,
     "candidate_rows() {",
     "  type -a -p \"$command_name\" 2>/dev/null | while IFS= read -r item; do printf '%s\\n' \"$item\"; done",
     "  for manager in brew npm pnpm yarn bun; do",
     "    if command -v \"$manager\" >/dev/null 2>&1; then",
     "      case \"$manager\" in",
-    "        brew) dir=$($manager --prefix 2>/dev/null); [ -n \"$dir\" ] && printf '%s\\n' \"$dir/bin/$command_name\" \"$dir/sbin/$command_name\"; package_dir=$($manager --prefix \"$command_name\" 2>/dev/null); [ -n \"$package_dir\" ] && printf '%s\\n' \"$package_dir/bin/$command_name\" \"$package_dir/sbin/$command_name\" ;;",
+    "        brew) dir=$($manager --prefix 2>/dev/null); [ -n \"$dir\" ] && printf '%s\\n' \"$dir/bin/$command_name\" \"$dir/sbin/$command_name\" ;;",
     "        npm) dir=$($manager prefix -g 2>/dev/null); [ -n \"$dir\" ] && printf '%s\\n' \"$dir/bin/$command_name\" ;;",
     "        pnpm) dir=$($manager bin -g 2>/dev/null); [ -n \"$dir\" ] && printf '%s\\n' \"$dir/$command_name\" ;;",
     "        yarn) dir=$($manager global bin 2>/dev/null | tail -n 1); [ -n \"$dir\" ] && printf '%s\\n' \"$dir/$command_name\" ;;",
@@ -3136,55 +4266,64 @@ async function remoteLinuxShell(context, script, options = {}) {
   return { ok: false, stdout: "", stderr: `Unsupported remote context: ${context.kind}` };
 }
 
-async function remoteLinuxShellWithInput(context, script, input = "", env = {}) {
+async function remoteLinuxShellWithInput(context, script, input = "", env = {}, options = {}) {
   const envArgs = Object.entries(env).map(([name, value]) => `${name}=${value}`);
+  const runOptions = {
+    allowFailure: true,
+    timeoutMs: options.timeoutMs || INSTALL_COMMAND_TIMEOUT_MS
+  };
   if (["docker", "podman", "nerdctl"].includes(context.kind)) {
     const runtimeEnvArgs = Object.entries(env).flatMap(([name, value]) => ["-e", `${name}=${value}`]);
-    return runWithInput(context.bin, ["exec", "-i", ...runtimeEnvArgs, context.id, "sh", "-lc", script], input, { allowFailure: true });
+    return runWithInput(context.bin, ["exec", "-i", ...runtimeEnvArgs, context.id, "sh", "-lc", script], input, runOptions);
   }
   if (context.kind === "wsl") {
-    return runWithInput(context.bin, ["-d", context.id, "--", "env", ...envArgs, "bash", "-lc", script], input, { allowFailure: true });
+    return runWithInput(context.bin, ["-d", context.id, "--", "env", ...envArgs, "bash", "-lc", script], input, runOptions);
   }
   if (context.kind === "lima") {
-    return runWithInput(context.bin, ["shell", context.id, "env", ...envArgs, "bash", "-lc", script], input, { allowFailure: true });
+    return runWithInput(context.bin, ["shell", context.id, "env", ...envArgs, "bash", "-lc", script], input, runOptions);
   }
   if (context.kind === "colima") {
-    return runWithInput(context.bin, ["ssh", context.id, "--", "env", ...envArgs, "bash", "-lc", script], input, { allowFailure: true });
+    return runWithInput(context.bin, ["ssh", context.id, "--", "env", ...envArgs, "bash", "-lc", script], input, runOptions);
   }
   if (["multipass", "lxc", "incus"].includes(context.kind)) {
-    return runWithInput(context.bin, ["exec", context.id, "--", "env", ...envArgs, "bash", "-lc", script], input, { allowFailure: true });
+    return runWithInput(context.bin, ["exec", context.id, "--", "env", ...envArgs, "bash", "-lc", script], input, runOptions);
   }
   if (context.kind === "vagrant") {
     const command = `env ${envArgs.map(shellQuote).join(" ")} bash -lc ${shellQuote(script)}`;
-    return runWithInput(context.bin, ["ssh", context.id, "-c", command], input, { allowFailure: true });
+    return runWithInput(context.bin, ["ssh", context.id, "-c", command], input, runOptions);
   }
   if (context.kind === "parallels") {
-    return runWithInput(context.bin, ["exec", context.id, "env", ...envArgs, "bash", "-lc", script], input, { allowFailure: true });
+    return runWithInput(context.bin, ["exec", context.id, "env", ...envArgs, "bash", "-lc", script], input, runOptions);
   }
   return { ok: false, stdout: "", stderr: `Unsupported remote context: ${context.kind}` };
 }
 
 async function runRemoteLinuxCommand(context, args = [], options = {}) {
+  const timeoutMs = options.timeoutMs || INSTALL_COMMAND_TIMEOUT_MS;
+  const runOptions = {
+    allowFailure: options.allowFailure,
+    timeoutMs
+  };
   if (["docker", "podman", "nerdctl"].includes(context.kind)) {
-    return run(context.bin, ["exec", context.id, ...args], { allowFailure: options.allowFailure, timeoutMs: options.timeoutMs });
+    return run(context.bin, ["exec", context.id, ...args], runOptions);
   }
   if (context.kind === "wsl") {
-    return run(context.bin, ["-d", context.id, "--", ...args], { allowFailure: options.allowFailure, timeoutMs: options.timeoutMs });
+    return run(context.bin, ["-d", context.id, "--", ...args], runOptions);
   }
   if (context.kind === "lima") {
-    return run(context.bin, ["shell", context.id, ...args], { allowFailure: options.allowFailure, timeoutMs: options.timeoutMs });
+    return run(context.bin, ["shell", context.id, ...args], runOptions);
   }
   if (context.kind === "colima") {
-    return run(context.bin, ["ssh", context.id, "--", ...args], { allowFailure: options.allowFailure, timeoutMs: options.timeoutMs });
+    return run(context.bin, ["ssh", context.id, "--", ...args], runOptions);
   }
   if (["multipass", "lxc", "incus"].includes(context.kind)) {
-    return run(context.bin, ["exec", context.id, "--", ...args], { allowFailure: options.allowFailure, timeoutMs: options.timeoutMs });
+    return run(context.bin, ["exec", context.id, "--", ...args], runOptions);
   }
   if (context.kind === "vagrant") {
-    return run(context.bin, ["ssh", context.id, "-c", args.map(shellQuote).join(" ")], { allowFailure: options.allowFailure, timeoutMs: options.timeoutMs });
+    return run(context.bin, ["ssh", context.id, "-c", args.map(shellQuote).join(" ")], runOptions);
   }
   if (context.kind === "parallels") {
-    return run(context.bin, ["exec", context.id, ...args], { allowFailure: options.allowFailure, timeoutMs: options.timeoutMs });
+    return run(context.bin, ["exec", context.id, ...args], runOptions);
   }
   const message = `Unsupported remote context: ${context.kind}`;
   if (options.allowFailure) {
@@ -3281,28 +4420,41 @@ function candidateIdentity(candidate) {
     return "";
   }
   if (candidate?.target === "openclaw") {
+    const openclawBin = String(overrides["openclaw-bin"] || "").trim();
     if (location === "orb") {
       const vmName = String(overrides["orb-vm"] || overrides["openclaw-vm"] || "").trim();
       const vmUser = String(overrides["orb-user"] || overrides["openclaw-user"] || "").trim();
-      return vmName && vmUser ? `openclaw:orb:${vmName}:${vmUser}` : "";
+      return vmName && vmUser && openclawBin ? `openclaw:orb:${vmName}:${vmUser}:${openclawBin}` : "";
     }
     if (isGenericRemoteLocation(location)) {
       const remoteId = String(overrides["remote-id"] || "").trim();
-      return remoteId ? `openclaw:${location}:${remoteId}` : "";
+      return remoteId && openclawBin ? `openclaw:${location}:${remoteId}:${openclawBin}` : "";
     }
-    const openclawBin = String(overrides["openclaw-bin"] || "").trim();
     return openclawBin ? `openclaw:local:${openclawBin}` : "";
   }
-  if (location === "orb" && ["gemini-cli", "copilot", "kilo-code", "opencode"].includes(candidate?.target)) {
+  if (candidate?.target === "claude-code") {
+    if (location === "orb") {
+      const vmName = String(overrides["orb-vm"] || "").trim();
+      const vmUser = String(overrides["orb-user"] || "").trim();
+      return vmName && vmUser ? `claude-code:orb:${vmName}:${vmUser}` : "";
+    }
+    if (isGenericRemoteLocation(location)) {
+      const remoteId = String(overrides["remote-id"] || "").trim();
+      return remoteId ? `claude-code:${location}:${remoteId}` : "";
+    }
+    const claudeBin = String(overrides["claude-bin"] || "").trim();
+    return claudeBin ? `claude-code:local:${claudeBin}` : "";
+  }
+  if (location === "orb" && ["codex", "gemini-cli", "copilot", "kilo-code", "opencode"].includes(candidate?.target)) {
     const vmName = String(overrides["orb-vm"] || "").trim();
     const vmUser = String(overrides["orb-user"] || "").trim();
     return vmName && vmUser ? `${candidate.target}:orb:${vmName}:${vmUser}` : "";
   }
-  if (isGenericRemoteLocation(location) && ["gemini-cli", "copilot", "kilo-code", "opencode"].includes(candidate?.target)) {
+  if (isGenericRemoteLocation(location) && ["codex", "gemini-cli", "copilot", "kilo-code", "opencode"].includes(candidate?.target)) {
     const remoteId = String(overrides["remote-id"] || "").trim();
     return remoteId ? `${candidate.target}:${location}:${remoteId}` : "";
   }
-  if (location === "local" && ["codex", "gemini-cli", "copilot", "kilo-code", "opencode"].includes(candidate?.target)) {
+  if (location === "local" && ["codex", "gemini-cli", "copilot", "kilo-code", "opencode", "claude-code"].includes(candidate?.target)) {
     const descriptor = AGENT_CLI_TARGETS.find((item) => item.target === candidate.target);
     const binPath = descriptor ? String(overrides[descriptor.binOption] || "").trim() : "";
     return binPath ? `${candidate.target}:local:${binPath}` : "";
@@ -3389,6 +4541,9 @@ function candidateBin(candidate, settings) {
   const overrides = candidate.optionOverrides || {};
   if (candidate.target === "codex") {
     return String(overrides["codex-bin"] || settings.codexBin || "");
+  }
+  if (candidate.target === "claude-code") {
+    return String(overrides["claude-bin"] || settings.claudeBin || "");
   }
   if (candidate.target === "gemini-cli") {
     return String(overrides["gemini-bin"] || settings.geminiBin || "");
@@ -3493,13 +4648,25 @@ async function candidateHasInstalledPactMcp(settings, candidate) {
   if (candidate.target === "antigravity") {
     return localJsonConfigHasPact(settings.antigravityConfigPath);
   }
+  if (candidate.target === "cursor") {
+    return localJsonConfigHasPact(settings.cursorConfigPath);
+  }
+  if (candidate.target === "windsurf") {
+    return localJsonConfigHasPact(settings.windsurfConfigPath);
+  }
   if (candidate.target === "opencode") {
-    return localJsonConfigHasPact(settings.opencodeConfigPath);
+    return candidateLocation(candidate) === "local"
+      ? localJsonConfigHasPact(settings.opencodeConfigPath)
+      : remoteHomeConfigHasPact(settings, candidate, ".config/opencode/opencode.jsonc");
   }
   if (candidate.status !== "detected") {
     return false;
   }
   if (candidate.target === "codex") {
+    const result = await runCandidateClientCommand(settings, candidate, ["mcp", "get", MCP_SERVER_NAME]);
+    return result.ok && mcpOutputHasPact(result);
+  }
+  if (candidate.target === "claude-code") {
     const result = await runCandidateClientCommand(settings, candidate, ["mcp", "get", MCP_SERVER_NAME]);
     return result.ok && mcpOutputHasPact(result);
   }
@@ -3577,6 +4744,70 @@ async function detectLocalClawCompatibleTargets() {
         }
       });
     }
+  }
+  return candidates;
+}
+
+function descriptorConfiguredBin(settings, descriptor) {
+  if (descriptor.target === "codex") return settings.codexBin;
+  if (descriptor.target === "claude-code") return settings.claudeBin;
+  if (descriptor.target === "gemini-cli") return settings.geminiBin;
+  if (descriptor.target === "copilot") return settings.copilotBin;
+  if (descriptor.target === "kilo-code") return settings.kiloBin;
+  if (descriptor.target === "opencode") return settings.opencodeBin;
+  return "";
+}
+
+async function detectExplicitLocalAgentCliTargets(settings, options = {}) {
+  const candidates = [];
+  for (const descriptor of AGENT_CLI_TARGETS) {
+    if (!Object.hasOwn(options, descriptor.binOption)) {
+      continue;
+    }
+    const configuredBin = descriptorConfiguredBin(settings, descriptor);
+    const paths = await detectLocalCommandPaths(configuredBin);
+    for (const detectedPath of paths) {
+      const supportsMcp = await commandSupportsMcp(detectedPath);
+      candidates.push({
+        id: `${descriptor.target}:local:${detectedPath}`,
+        target: descriptor.target,
+        label: descriptor.label,
+        status: "detected",
+        mcpProbe: supportsMcp ? "supported" : "inconclusive",
+        detail: supportsMcp ? detectedPath : `${detectedPath} (explicit path; MCP probe inconclusive)`,
+        optionOverrides: {
+          "execution-location": "local",
+          [descriptor.binOption]: detectedPath
+        }
+      });
+    }
+  }
+  return candidates;
+}
+
+async function detectExplicitLocalClawCompatibleTargets(settings, options = {}) {
+  const openclawBin = String(option(options, "openclaw-bin", settings.openclawBin || "")).trim();
+  if (!openclawBin || !Object.hasOwn(options, "openclaw-bin")) {
+    return [];
+  }
+  const paths = await detectLocalCommandPaths(openclawBin);
+  const candidates = [];
+  for (const detectedPath of paths) {
+    const supportsMcp = await commandSupportsMcp(detectedPath);
+    candidates.push({
+      id: `claw-compatible:local:${detectedPath}`,
+      target: "openclaw",
+      label: targetLabel("openclaw"),
+      status: "detected",
+      mcpProbe: supportsMcp ? "supported" : "inconclusive",
+      detail: supportsMcp
+        ? `claw-compatible MCP CLI at ${detectedPath}`
+        : `claw-compatible explicit CLI at ${detectedPath}; MCP probe inconclusive`,
+      optionOverrides: {
+        "execution-location": "local",
+        "openclaw-bin": detectedPath
+      }
+    });
   }
   return candidates;
 }
@@ -3928,8 +5159,18 @@ async function scanInstallTargets(options = {}) {
       mergeInstallCandidate(candidates, candidate);
     }
   } else {
+    const explicitCandidates = [
+      ...await detectExplicitLocalAgentCliTargets(settings, options),
+      ...await detectExplicitLocalClawCompatibleTargets(settings, options)
+    ];
+    for (const candidate of explicitCandidates) {
+      mergeInstallCandidate(candidates, candidate);
+    }
     for (const descriptor of AGENT_CLI_TARGETS) {
-      candidates.push({
+      if (explicitCandidates.some((candidate) => candidate.target === descriptor.target)) {
+        continue;
+      }
+      mergeInstallCandidate(candidates, {
         id: descriptor.target,
         target: descriptor.target,
         label: descriptor.label,
@@ -3940,13 +5181,36 @@ async function scanInstallTargets(options = {}) {
   }
   const antigravityConfigDir = path.dirname(settings.antigravityConfigPath);
   const antigravityDetected = await pathExists(settings.antigravityConfigPath) || await directoryExists(antigravityConfigDir);
-  candidates.push({
-    id: "antigravity",
-    target: "antigravity",
-    label: targetLabel("antigravity"),
-    status: antigravityDetected ? "detected" : "not-detected",
-    detail: antigravityDetected ? `config: ${settings.antigravityConfigPath}` : "Antigravity config path not found yet"
-  });
+  const cursorConfigDir = path.dirname(settings.cursorConfigPath);
+  const cursorDetected = await pathExists(settings.cursorConfigPath) || await directoryExists(cursorConfigDir);
+  const windsurfConfigDir = path.dirname(settings.windsurfConfigPath);
+  const windsurfDetected = await pathExists(settings.windsurfConfigPath) || await directoryExists(windsurfConfigDir);
+  for (const configTarget of [
+    ["antigravity", settings.antigravityConfigPath, antigravityDetected],
+    ["cursor", settings.cursorConfigPath, cursorDetected],
+    ["windsurf", settings.windsurfConfigPath, windsurfDetected]
+  ]) {
+    const [target, configPath, detected] = configTarget;
+    candidates.push({
+      id: target,
+      target,
+      label: targetLabel(target),
+      status: detected ? "detected" : "not-detected",
+      detail: detected ? `config: ${configPath}` : notDetectedTargetDetail(target)
+    });
+  }
+  for (const target of SUPPORTED_TARGETS) {
+    if (candidates.some((candidate) => candidate.target === target)) {
+      continue;
+    }
+    candidates.push({
+      id: target,
+      target,
+      label: targetLabel(target),
+      status: "not-detected",
+      detail: notDetectedTargetDetail(target)
+    });
+  }
   await annotateInstalledCandidates(settings, candidates);
 
   return {
@@ -3956,7 +5220,7 @@ async function scanInstallTargets(options = {}) {
     hostOs: settings.hostOs,
     baseUrl: settings.baseUrl,
     mcpUrl: settings.baseUrl ? `${settings.baseUrl}/mcp` : "",
-    candidates
+    candidates: candidates.map((candidate) => withInstallCandidateGuidance(candidate, settings))
   };
 }
 
@@ -3978,6 +5242,7 @@ function installerOptions(options) {
     baseUrl: normalizeBaseUrl(option(options, "resolved-url", explicitBaseUrl(options))),
     tokenEnv: String(option(options, "token-env", DEFAULT_TOKEN_ENV)),
     codexBin: String(option(options, "codex-bin", process.env.CODEX_CLI_PATH || DEFAULT_CODEX_BIN)),
+    claudeBin: String(option(options, "claude-bin", process.env.CLAUDE_CODE_CLI_PATH || DEFAULT_CLAUDE_BIN)),
     geminiBin: String(option(options, "gemini-bin", process.env.GEMINI_CLI_PATH || DEFAULT_GEMINI_BIN)),
     kiloBin: String(option(options, "kilo-bin", process.env.KILO_CLI_PATH || DEFAULT_KILO_BIN)),
     copilotBin: String(option(options, "copilot-bin", process.env.COPILOT_CLI_PATH || DEFAULT_COPILOT_BIN)),
@@ -4006,6 +5271,8 @@ function installerOptions(options) {
     kiloConfigPath: path.resolve(String(option(options, "kilo-config", path.join(os.homedir(), ".config", "kilo", "kilo.json")))),
     antigravityConfigPath: path.resolve(String(option(options, "antigravity-config", path.join(os.homedir(), ".gemini", "antigravity", "mcp_config.json")))),
     opencodeConfigPath: path.resolve(String(option(options, "opencode-config", path.join(os.homedir(), ".config", "opencode", "opencode.jsonc")))),
+    cursorConfigPath: path.resolve(String(option(options, "cursor-config", path.join(os.homedir(), "Library", "Application Support", "Cursor", "User", "globalStorage", "saoudrizwan.claude-dev", "settings", "cline_mcp_settings.json")))),
+    windsurfConfigPath: path.resolve(String(option(options, "windsurf-config", path.join(os.homedir(), ".codeium", "windsurf", "mcp_config.json")))),
     openclawVm: String(option(options, "openclaw-vm", sharedVmName)),
     openclawVmUser: String(option(options, "openclaw-user", sharedVmUser)),
     openclawBin: String(option(options, "openclaw-bin", "")),
@@ -4046,20 +5313,20 @@ function selectionGlyph(selected) {
 
 function renderInstallMenu({ candidates, index, selectedIds, baseUrl, message = "", mode = "install" }) {
   const action = mode === "uninstall" ? "uninstall" : "install";
-  const title = mode === "uninstall" ? "Pact MCP uninstall" : "Pact MCP install";
-  const mcpLine = baseUrl ? `MCP: ${baseUrl}/mcp` : "MCP: no server URL required for local client removal";
+  const title = mode === "uninstall" ? msg("Pact MCP uninstall", "Pact MCP 卸载") : msg("Pact MCP install", "Pact MCP 安装");
+  const mcpLine = baseUrl ? `MCP: ${baseUrl}/mcp` : msg("MCP: no server URL required for local client removal", "MCP: 本地卸载无需服务端 URL");
   const rows = [
     "\x1b[2J\x1b[H",
     title,
     "",
     mcpLine,
-    `Use Up/Down or j/k, Space to toggle, a to toggle detected, Enter to ${action}, q to cancel.`,
+    msg(`Use Up/Down or j/k, Space to toggle, a to toggle detected, Enter to ${action}, q to cancel.`, `使用上下键或 j/k 移动，空格键选择/取消，按 a 全选检测到的客户端，Enter 键确认${action === "uninstall" ? "卸载" : "安装"}，q 键取消。`),
     "",
     ...candidates.map((candidate, candidateIndex) => {
       const pointer = candidateIndex === index ? ">" : " ";
       const selected = selectedIds.has(candidate.id);
       const label = `${candidate.label}`.padEnd(28, " ");
-      const installed = candidate.installed ? "[installed] " : "";
+      const installed = candidate.installed ? msg("[installed] ", "[已安装] ") : "";
       return `${pointer} [${selectionGlyph(selected)}] ${installed}${label} ${candidate.detail || ""}`;
     }),
     "",
@@ -4070,21 +5337,21 @@ function renderInstallMenu({ candidates, index, selectedIds, baseUrl, message = 
 function renderAutoUpdateMenu({ enabled }) {
   const rows = [
     "\x1b[2J\x1b[H",
-    "Pact MCP Auto-Update Preference",
+    msg("Pact MCP Auto-Update Preference", "Pact MCP 自动推送更新设置"),
     "",
-    "Do you want to enable automatic push updates?",
-    "If enabled, your local AI agent will automatically download and install updates when the server pushes them.",
-    "(This is disabled by default for security).",
+    msg("Do you want to enable automatic push updates?", "您是否希望启用自动推送更新？"),
+    msg("If enabled, your local AI agent will automatically download and install updates when the server pushes them.", "如果启用，当服务端推送更新时，您的本地 AI 智能体将自动下载并安装更新。"),
+    msg("(This is disabled by default for security).", "（出于安全考虑，此功能默认禁用）。"),
     "",
-    `  [${enabled ? "x" : " "}] Enable automatic push updates`,
-    `> [${enabled ? " " : "x"}] Disable automatic push updates (Recommended)`,
+    enabled
+      ? msg("> [x] Enable automatic push updates", "> [x] 启用自动推送更新")
+      : msg("  [ ] Enable automatic push updates", "  [ ] 启用自动推送更新"),
+    enabled
+      ? msg("  [ ] Disable automatic push updates (Recommended)", "  [ ] 禁用自动推送更新 (推荐)")
+      : msg("> [x] Disable automatic push updates (Recommended)", "> [x] 禁用自动推送更新 (推荐)"),
     "",
-    "Use Up/Down to toggle, Enter to confirm."
+    msg("Use Up/Down to toggle, Enter to confirm.", "使用上下键切换，Enter 键确认。")
   ];
-  if (enabled) {
-    rows[7] = `> [x] Enable automatic push updates`;
-    rows[8] = `  [ ] Disable automatic push updates (Recommended)`;
-  }
   process.stdout.write(rows.join("\n") + "\n");
 }
 
@@ -4143,7 +5410,7 @@ async function chooseInstallCandidates({ candidates, baseUrl }) {
     index = 0;
   }
   const selectedIds = new Set();
-  let message = "Space selects one or more clients. Enter installs selected clients.";
+  let message = msg("Space selects one or more clients. Enter installs selected clients.", "空格键选择一个或多个客户端，Enter 键确认安装。");
   return new Promise((resolve, reject) => {
     const stdin = process.stdin;
     const wasRaw = stdin.isRaw;
@@ -4170,7 +5437,7 @@ async function chooseInstallCandidates({ candidates, baseUrl }) {
       if (key === "\r" || key === "\n") {
         const selected = candidates.filter((candidate) => selectedIds.has(candidate.id));
         if (selected.length === 0) {
-          message = "No clients selected. Press Space to select at least one client.";
+          message = msg("No clients selected. Press Space to select at least one client.", "未选中任何客户端，请按空格键至少选择一个。");
           renderInstallMenu({ candidates, index, selectedIds, baseUrl, message });
           return;
         }
@@ -4185,7 +5452,7 @@ async function chooseInstallCandidates({ candidates, baseUrl }) {
         } else {
           selectedIds.add(selected.id);
         }
-        message = selectedIds.size === 1 ? "1 client selected." : `${selectedIds.size} clients selected.`;
+        message = selectedIds.size === 1 ? msg("1 client selected.", "已选择 1 个客户端。") : msg(`${selectedIds.size} clients selected.`, `已选择 ${selectedIds.size} 个客户端。`);
       } else if (key === "a" || key === "A") {
         const detected = candidates.filter((candidate) => candidate.status === "detected");
         const shouldSelect = detected.some((candidate) => !selectedIds.has(candidate.id));
@@ -4197,8 +5464,8 @@ async function chooseInstallCandidates({ candidates, baseUrl }) {
           }
         }
         message = shouldSelect
-          ? `${detected.length} detected clients selected.`
-          : "Detected clients cleared.";
+          ? msg(`${detected.length} detected clients selected.`, `已选择检测到的 ${detected.length} 个客户端。`)
+          : msg("Detected clients cleared.", "已清除选中的检测客户端。");
       }
       if (key === "\u001b[A" || key === "k" || key === "K") {
         index = (index - 1 + candidates.length) % candidates.length;
@@ -4227,7 +5494,7 @@ async function chooseUninstallCandidates({ candidates, baseUrl }) {
     index = 0;
   }
   const selectedIds = new Set();
-  let message = "Space selects one or more clients. Enter removes Pact MCP from selected clients.";
+  let message = msg("Space selects one or more clients. Enter removes Pact MCP from selected clients.", "空格键选择一个或多个客户端，Enter 键确认移除所选客户端的 Pact MCP 服务。");
   return new Promise((resolve, reject) => {
     const stdin = process.stdin;
     const wasRaw = stdin.isRaw;
@@ -4254,7 +5521,7 @@ async function chooseUninstallCandidates({ candidates, baseUrl }) {
       if (key === "\r" || key === "\n") {
         const selected = candidates.filter((candidate) => selectedIds.has(candidate.id));
         if (selected.length === 0) {
-          message = "No clients selected. Press Space to select at least one client.";
+          message = msg("No clients selected. Press Space to select at least one client.", "未选中任何客户端，请按空格键至少选择一个。");
           renderInstallMenu({ candidates, index, selectedIds, baseUrl, message, mode: "uninstall" });
           return;
         }
@@ -4269,7 +5536,7 @@ async function chooseUninstallCandidates({ candidates, baseUrl }) {
         } else {
           selectedIds.add(selected.id);
         }
-        message = selectedIds.size === 1 ? "1 client selected for removal." : `${selectedIds.size} clients selected for removal.`;
+        message = selectedIds.size === 1 ? msg("1 client selected for removal.", "已选择 1 个客户端用于移除。") : msg(`${selectedIds.size} clients selected for removal.`, `已选择 ${selectedIds.size} 个客户端用于移除。`);
       } else if (key === "a" || key === "A") {
         const detected = candidates.filter((candidate) => candidate.status === "detected");
         const shouldSelect = detected.some((candidate) => !selectedIds.has(candidate.id));
@@ -4281,8 +5548,8 @@ async function chooseUninstallCandidates({ candidates, baseUrl }) {
           }
         }
         message = shouldSelect
-          ? `${detected.length} detected clients selected for removal.`
-          : "Detected clients cleared.";
+          ? msg(`${detected.length} detected clients selected for removal.`, `已选择检测到的 ${detected.length} 个客户端用于移除。`)
+          : msg("Detected clients cleared.", "已清除选中的检测客户端。");
       }
       if (key === "\u001b[A" || key === "k" || key === "K") {
         index = (index - 1 + candidates.length) % candidates.length;
@@ -4535,13 +5802,53 @@ async function installTargets({ options, targets, token, tokenInfo = null, optio
     try {
       let clientResult = null;
       if (target === "codex") {
-        clientResult = await installCodex({
-          baseUrl: settings.baseUrl,
-          token,
-          tokenEnv: settings.tokenEnv,
-          codexBin: settings.codexBin,
-          marketplaceRoot: settings.marketplaceRoot
-        });
+        clientResult = remoteContext
+          ? await installCodexRemote({
+              baseUrl: settings.baseUrl,
+              token,
+              tokenEnv: settings.tokenEnv,
+              context: remoteContext,
+              codexBin: settings.codexBin
+            })
+          : settings.executionLocation === "orb"
+          ? await installCodexOrb({
+              baseUrl: settings.baseUrl,
+              token,
+              tokenEnv: settings.tokenEnv,
+              orbBin: settings.orbBin,
+              vmName: settings.orbVm,
+              vmUser: settings.orbUser,
+              codexBin: settings.codexBin
+            })
+          : await installCodex({
+              baseUrl: settings.baseUrl,
+              token,
+              tokenEnv: settings.tokenEnv,
+              codexBin: settings.codexBin,
+              marketplaceRoot: settings.marketplaceRoot
+            });
+      } else if (target === "claude-code") {
+        clientResult = remoteContext
+          ? await installClaudeCodeRemote({
+              baseUrl: settings.baseUrl,
+              token,
+              context: remoteContext,
+              claudeBin: settings.claudeBin
+            })
+          : settings.executionLocation === "orb"
+          ? await installClaudeCodeOrb({
+              baseUrl: settings.baseUrl,
+              token,
+              orbBin: settings.orbBin,
+              vmName: settings.orbVm,
+              vmUser: settings.orbUser,
+              claudeBin: settings.claudeBin
+            })
+          : await installClaudeCode({
+              baseUrl: settings.baseUrl,
+              token,
+              claudeBin: settings.claudeBin
+            });
       } else if (target === "gemini-cli") {
         clientResult = remoteContext
           ? await installGeminiRemote({
@@ -4648,12 +5955,40 @@ async function installTargets({ options, targets, token, tokenInfo = null, optio
           token,
           configPath: settings.antigravityConfigPath
         });
-      } else if (target === "opencode") {
-        clientResult = await installOpenCode({
+      } else if (target === "cursor") {
+        clientResult = await installMcpServersJsonConfig({
           baseUrl: settings.baseUrl,
           token,
-          configPath: settings.opencodeConfigPath
+          configPath: settings.cursorConfigPath,
+          installMode: "cursor-release-mcp-config"
         });
+      } else if (target === "windsurf") {
+        clientResult = await installMcpServersJsonConfig({
+          baseUrl: settings.baseUrl,
+          token,
+          configPath: settings.windsurfConfigPath,
+          installMode: "windsurf-release-mcp-config"
+        });
+      } else if (target === "opencode") {
+        clientResult = remoteContext
+          ? await installOpenCodeRemote({
+              baseUrl: settings.baseUrl,
+              token,
+              context: remoteContext
+            })
+          : settings.executionLocation === "orb"
+          ? await installOpenCodeOrb({
+              baseUrl: settings.baseUrl,
+              token,
+              orbBin: settings.orbBin,
+              vmName: settings.orbVm,
+              vmUser: settings.orbUser
+            })
+          : await installOpenCode({
+              baseUrl: settings.baseUrl,
+              token,
+              configPath: settings.opencodeConfigPath
+            });
       }
       const httpVerification = verify ? await verifyMcpTools({ baseUrl: settings.baseUrl, token }) : null;
       installed[target] = {
@@ -4667,7 +6002,7 @@ async function installTargets({ options, targets, token, tokenInfo = null, optio
         ok: false,
         status: "failed",
         installMode: targetInstallMode(target),
-        error: error?.message || String(error)
+        error: redactSensitiveText(error?.message || String(error), [token])
       };
     }
   }
@@ -4678,6 +6013,7 @@ async function installTargets({ options, targets, token, tokenInfo = null, optio
     codexPluginRoot: installed.codex?.pluginRoot || "",
     installed,
     token,
+    tokenEnv: settings.tokenEnv,
     discoveryPath: discoveryRegistryPath(mergedOptions)
   });
 
@@ -4782,7 +6118,75 @@ async function installSelectedCandidates({ options, selected, tokenInfo }) {
   };
 }
 
+function summarizeInstallCandidate(candidate) {
+  return {
+    id: candidate.id,
+    target: candidate.target,
+    label: candidate.label,
+    detail: candidate.detail || "",
+    ...(candidate.mcpProbe ? { mcpProbe: candidate.mcpProbe } : {}),
+    installed: Boolean(candidate.installed),
+    installCommand: candidate.installCommand || "",
+    repairCommand: candidate.repairCommand || "",
+    doctorCommand: candidate.doctorCommand || "pact-mcp doctor --json"
+  };
+}
+
+function noDetectedClientGuidance(candidates = [], options = {}) {
+  const explicitTargets = candidates
+    .map((candidate) => candidate.target)
+    .filter((target, index, values) => target && values.indexOf(target) === index);
+  const priorityTargets = PRIORITY_INSTALL_TARGETS.filter((target) => explicitTargets.includes(target));
+  const suggestedTarget = priorityTargets[0] || explicitTargets[0] || "codex";
+  const binOption = targetBinOption(suggestedTarget);
+  const { baseUrl, tokenEnv } = commandGuidanceContext(options);
+  const includeUrl = Boolean(baseUrl);
+  const scanCommand = shellCommandForScan({ includeUrl, baseUrl, tokenEnv });
+  return {
+    errorCode: "NO_SUPPORTED_MCP_CLIENTS_DETECTED",
+    nextCommand: scanCommand,
+    repairCommands: [
+      scanCommand,
+      shellCommandForInstall({ target: suggestedTarget, binOption, includeUrl, baseUrl, tokenEnv }),
+      shellCommandForInstall({ target: "auto", includeUrl, baseUrl, tokenEnv })
+    ],
+    ...installGuidanceMetadata({ includeUrl, baseUrl, tokenEnv })
+  };
+}
+
+async function installAutoDetectedCommand(resolvedOptions) {
+  const scan = await scanInstallTargets(resolvedOptions);
+  const selected = scan.candidates.filter((candidate) => candidate.status === "detected");
+  const candidates = scan.candidates.map(summarizeInstallCandidate);
+  if (selected.length === 0) {
+    return {
+      ok: false,
+      autoDetected: true,
+      packageName: packageJson.name,
+      packageVersion: packageJson.version,
+      baseUrl: installerOptions(resolvedOptions).baseUrl,
+      error: "No supported MCP clients were detected. Pass --target <client>, --target auto with an explicit --<client>-bin, or run in a TTY for selection.",
+      ...noDetectedClientGuidance(candidates, resolvedOptions),
+      candidates
+    };
+  }
+  const autoUpdate = Boolean(resolvedOptions["auto-update"]);
+  resolvedOptions.__pactAutoUpdate = autoUpdate;
+  const selectedTargets = [...new Set(selected.map((candidate) => candidate.target))];
+  const tokenInfo = await resolveInstallToken(resolvedOptions, { targets: selectedTargets, autoUpdate });
+  const result = await installSelectedCandidates({ options: resolvedOptions, selected, tokenInfo });
+  return {
+    ...result,
+    autoDetected: true,
+    selected: selected.map(summarizeInstallCandidate)
+  };
+}
+
 async function installCommand(options) {
+  const initialTargetOpt = option(options, "target", "");
+  const prevalidatedTargets = initialTargetOpt && !isAutoTargetRequest(initialTargetOpt)
+    ? parseTargets(initialTargetOpt)
+    : null;
   const resolvedOptions = await resolveHubForInstall(options);
   if (resolvedOptions.__pactSkippedDiscovery) {
     return {
@@ -4798,14 +6202,12 @@ async function installCommand(options) {
   }
   const targetOpt = option(resolvedOptions, "target", "");
   if (!targetOpt) {
-    return {
-      ok: false,
-      packageName: packageJson.name,
-      packageVersion: packageJson.version,
-      error: "Interactive mode requires a TTY. Please specify --target <client> for non-interactive use."
-    };
+    return installAutoDetectedCommand(resolvedOptions);
   }
-  const targets = parseTargets(targetOpt);
+  if (isAutoTargetRequest(targetOpt)) {
+    return installAutoDetectedCommand(resolvedOptions);
+  }
+  const targets = prevalidatedTargets || parseTargets(targetOpt);
   const autoUpdate = Boolean(resolvedOptions["auto-update"]);
   resolvedOptions.__pactAutoUpdate = autoUpdate;
   const tokenInfo = await resolveInstallToken(resolvedOptions, { targets, autoUpdate });
@@ -4838,11 +6240,39 @@ async function uninstallTargets({ options, targets, optionOverrides = {} }) {
   for (const target of targets) {
     try {
       if (target === "codex") {
-        uninstalled[target] = await uninstallCodex({
-          tokenEnv: settings.tokenEnv,
-          codexBin: settings.codexBin,
-          marketplaceRoot: settings.marketplaceRoot
-        });
+        uninstalled[target] = remoteContext
+          ? await uninstallCodexRemote({
+              context: remoteContext,
+              codexBin: settings.codexBin
+            })
+          : settings.executionLocation === "orb"
+          ? await uninstallCodexOrb({
+              orbBin: settings.orbBin,
+              vmName: settings.orbVm,
+              vmUser: settings.orbUser,
+              codexBin: settings.codexBin
+            })
+          : await uninstallCodex({
+              tokenEnv: settings.tokenEnv,
+              codexBin: settings.codexBin,
+              marketplaceRoot: settings.marketplaceRoot
+            });
+      } else if (target === "claude-code") {
+        uninstalled[target] = remoteContext
+          ? await uninstallClaudeCodeRemote({
+              context: remoteContext,
+              claudeBin: settings.claudeBin
+            })
+          : settings.executionLocation === "orb"
+          ? await uninstallClaudeCodeOrb({
+              orbBin: settings.orbBin,
+              vmName: settings.orbVm,
+              vmUser: settings.orbUser,
+              claudeBin: settings.claudeBin
+            })
+          : await uninstallClaudeCode({
+              claudeBin: settings.claudeBin
+            });
       } else if (target === "gemini-cli") {
         uninstalled[target] = remoteContext
           ? await uninstallGeminiRemote({
@@ -4921,10 +6351,30 @@ async function uninstallTargets({ options, targets, optionOverrides = {} }) {
         uninstalled[target] = await uninstallAntigravity({
           configPath: settings.antigravityConfigPath
         });
-      } else if (target === "opencode") {
-        uninstalled[target] = await uninstallOpenCode({
-          configPath: settings.opencodeConfigPath
+      } else if (target === "cursor") {
+        uninstalled[target] = await uninstallMcpServersJsonConfig({
+          configPath: settings.cursorConfigPath,
+          uninstallMode: "cursor-release-mcp-config"
         });
+      } else if (target === "windsurf") {
+        uninstalled[target] = await uninstallMcpServersJsonConfig({
+          configPath: settings.windsurfConfigPath,
+          uninstallMode: "windsurf-release-mcp-config"
+        });
+      } else if (target === "opencode") {
+        uninstalled[target] = remoteContext
+          ? await uninstallOpenCodeRemote({
+              context: remoteContext
+            })
+          : settings.executionLocation === "orb"
+          ? await uninstallOpenCodeOrb({
+              orbBin: settings.orbBin,
+              vmName: settings.orbVm,
+              vmUser: settings.orbUser
+            })
+          : await uninstallOpenCode({
+              configPath: settings.opencodeConfigPath
+            });
       }
       uninstalled[target] = {
         ok: true,
@@ -4936,7 +6386,7 @@ async function uninstallTargets({ options, targets, optionOverrides = {} }) {
         ok: false,
         status: "failed",
         uninstallMode: targetInstallMode(target),
-        error: error?.message || String(error)
+        error: redactSensitiveText(error?.message || String(error), sensitiveOptionValues(mergedOptions))
       };
     }
   }
@@ -4944,6 +6394,7 @@ async function uninstallTargets({ options, targets, optionOverrides = {} }) {
     ? await writeDeviceUninstall({
         baseUrl: settings.baseUrl,
         uninstalled,
+        tokenEnv: Object.hasOwn(mergedOptions, "token-env") ? settings.tokenEnv : "",
         discoveryPath: discoveryRegistryPath(mergedOptions)
       })
     : "";
@@ -4961,7 +6412,7 @@ async function uninstallTargets({ options, targets, optionOverrides = {} }) {
     } catch (error) {
       serverUninstall = {
         ok: false,
-        error: error?.message || String(error)
+        error: redactSensitiveText(error?.message || String(error), sensitiveOptionValues(mergedOptions))
       };
       for (const target of successfulTargets) {
         uninstalled[target] = {
@@ -4969,7 +6420,7 @@ async function uninstallTargets({ options, targets, optionOverrides = {} }) {
           ok: false,
           status: "failed",
           serverDeviceRemoved: false,
-          error: error?.message || String(error)
+          error: redactSensitiveText(error?.message || String(error), sensitiveOptionValues(mergedOptions))
         };
       }
     }
@@ -5127,6 +6578,10 @@ async function uninstallCommand(options) {
 async function registerCommand(options) {
   const resolvedOptions = await optionsWithDiscoveredBaseUrl(options);
   const settings = installerOptions(resolvedOptions);
+  const parsedBaseUrl = new URL(settings.baseUrl);
+  const port = parsedBaseUrl.port || (parsedBaseUrl.protocol === "https:" ? "443" : "80");
+  const mcpUrl = `${settings.baseUrl}/mcp`;
+  const vmMcpUrl = `${parsedBaseUrl.protocol}//host.orb.internal:${port}/mcp`;
   const profile = await writeServerConfigProfile({
     options: resolvedOptions,
     name: String(option(resolvedOptions, "name", "default")).trim() || "default",
@@ -5136,21 +6591,28 @@ async function registerCommand(options) {
   const discoveryManifest = profile.path;
   const localFiles = deviceDiscoveryPaths(resolvedOptions);
   const env = deviceDiscoveryEnv({ baseUrl: settings.baseUrl, primaryPath: discoveryManifest });
+  const tokenEnv = profile.tokenEnv || settings.tokenEnv;
+  const includeUrl = Boolean(settings.baseUrl);
+  const guidance = installGuidanceMetadata({ includeUrl, baseUrl: settings.baseUrl, tokenEnv });
   return {
     ok: true,
     packageName: packageJson.name,
     packageVersion: packageJson.version,
     mode: "device-hub-registration",
     baseUrl: settings.baseUrl,
-    mcpUrl: `${settings.baseUrl}/mcp`,
+    mcpUrl,
+    sharedHub: sharedHubContract({ mcpUrl, vmMcpUrl }),
     discoveryManifest,
     localEntry: {
-      command: "pact-mcp discover-local",
+      command: shellCommandForDiscoverLocal({ includeUrl: Boolean(settings.baseUrl), baseUrl: settings.baseUrl }),
       registryFile: discoveryManifest
     },
     localFiles,
     env,
-    clientInstall: `pact-mcp install --target <client>`,
+    ...guidance,
+    clientInstall: guidance.clientInstallJsonCommand,
+    autoInstall: guidance.autoInstallCommand,
+    priorityInstall: guidance.priorityInstallCommand,
     verifiedHandshake: resolvedOptions.__pactDiscovery?.handshake?.payload?.identity?.keyId || "",
     serverConfig: profile.profile,
     note: "Discovered and registered the signed Pact MCP endpoint without installing it into any client."
@@ -5224,6 +6686,10 @@ async function doctorCommand(options) {
   const token = await resolveToken(resolvedOptions, { required: false });
   const discovery = await fetchJson(`${settings.baseUrl}/api/mcp/discovery`);
   const initialize = await ensureService(settings.baseUrl);
+  const initializeMeta = initialize.payload?.result?._meta || {};
+  const initializeSupportedTargets = Array.isArray(initializeMeta.supportedTargets)
+    ? initializeMeta.supportedTargets.map((target) => target.target).filter(Boolean)
+    : [];
   const checks = {
     signedDiscovery: {
       ok: Boolean(discovered?.ok),
@@ -5242,7 +6708,11 @@ async function doctorCommand(options) {
       serverName: initialize.payload?.result?.serverInfo?.name || "",
       serverVersion: initialize.payload?.result?.serverInfo?.version || "",
       stableToolName: initialize.payload?.result?._meta?.stableToolName || "",
-      listChanged: initialize.payload?.result?.capabilities?.tools?.listChanged === true
+      listChanged: initialize.payload?.result?.capabilities?.tools?.listChanged === true,
+      sharedHubOk: initializeMeta.sharedHub?.sharedspace?.outlet === "pact.sharedspace",
+      sharedHub: initializeMeta.sharedHub || discovery.payload?.sharedHub || null,
+      priorityTargets: Array.isArray(initializeMeta.priorityTargets) ? initializeMeta.priorityTargets : [],
+      supportedTargets: initializeSupportedTargets
     },
     toolsList: {
       ok: false,
@@ -5265,20 +6735,42 @@ async function doctorCommand(options) {
   };
 
   if (token) {
-    const verification = await verifyMcpTools({ baseUrl: settings.baseUrl, token });
-    checks.toolsList = {
-      ok: verification.toolCount === 5 && verification.stableToolName === "pact.discovery",
-      skipped: false,
-      toolCount: verification.toolCount,
-      stableToolOnly: false,
-      categorizedOutletsOnly: verification.toolCount === 5
-    };
-    checks.systemHealth = {
-      ok: verification.systemHealthOk,
-      skipped: false,
-      healthy: verification.systemHealthOk,
-      operation: "system.health"
-    };
+    try {
+      const verification = await verifyMcpTools({ baseUrl: settings.baseUrl, token });
+      checks.toolsList = {
+        ok: verification.toolCount === 5 && verification.stableToolName === "pact.discovery",
+        skipped: false,
+        toolCount: verification.toolCount,
+        stableToolOnly: false,
+        categorizedOutletsOnly: verification.toolCount === 5,
+        sharedHubOk: verification.sharedHubOk,
+        priorityTargets: verification.priorityTargets,
+        supportedTargets: verification.supportedTargets
+      };
+      checks.systemHealth = {
+        ok: verification.systemHealthOk,
+        skipped: false,
+        healthy: verification.systemHealthOk,
+        operation: "system.health"
+      };
+    } catch (error) {
+      const reason = error?.message || String(error);
+      checks.toolsList = {
+        ok: false,
+        skipped: false,
+        toolCount: 0,
+        stableToolOnly: false,
+        categorizedOutletsOnly: false,
+        reason
+      };
+      checks.systemHealth = {
+        ok: false,
+        skipped: false,
+        healthy: false,
+        operation: "system.health",
+        reason
+      };
+    }
   }
 
   const manifestPath = checks.deviceManifest.path;
@@ -5297,6 +6789,9 @@ async function doctorCommand(options) {
     };
   }
 
+  const guidance = doctorGuidance(checks, resolvedOptions);
+  const { baseUrl, tokenEnv } = commandGuidanceContext(resolvedOptions);
+  const includeUrl = Boolean(baseUrl);
   return {
     ok: checks.signedDiscovery.ok
       && checks.discovery.ok
@@ -5304,6 +6799,9 @@ async function doctorCommand(options) {
       && (!token || (checks.toolsList.ok && checks.systemHealth.ok)),
     packageName: packageJson.name,
     packageVersion: packageJson.version,
+    sharedHub: checks.initialize.sharedHub,
+    ...installGuidanceMetadata({ includeUrl, baseUrl, tokenEnv }),
+    ...guidance,
     checks
   };
 }
@@ -5328,6 +6826,29 @@ function yesNo(value) {
   return value ? "yes" : "no";
 }
 
+function formatLocalPathForDisplay(value) {
+  const text = String(value || "");
+  if (!text) {
+    return "";
+  }
+  const normalized = path.normalize(text);
+  const home = path.normalize(os.homedir());
+  if (home && normalized === home) {
+    return "~";
+  }
+  if (home && normalized.startsWith(`${home}${path.sep}`)) {
+    const relativePath = path.relative(home, normalized)
+      .split(path.sep)
+      .filter(Boolean)
+      .join("/");
+    return relativePath ? `~/${relativePath}` : "~";
+  }
+  if (path.isAbsolute(normalized)) {
+    return `<local-path>/${path.basename(normalized) || "path"}`;
+  }
+  return text;
+}
+
 function formatTargetInstallLine(target, item = {}) {
   const failed = item.status === "failed" || item.ok === false || Boolean(item.error);
   const status = failed ? "FAIL" : "OK";
@@ -5345,6 +6866,45 @@ function formatTargetInstallLine(target, item = {}) {
     );
   }
   return lines;
+}
+
+function resultHasInstallRepair(result) {
+  const commands = [
+    result?.nextCommand,
+    ...(Array.isArray(result?.repairCommands) ? result.repairCommands : [])
+  ].filter(Boolean);
+  return commands.some((command) => /\bpact-mcp\s+install\b/.test(String(command)));
+}
+
+function appendInstallShortcutLines(lines, result) {
+  const shortcuts = [];
+  const pushShortcut = (label, command) => {
+    if (!command || shortcuts.some(([, existing]) => existing === command)) {
+      return;
+    }
+    shortcuts.push([label, command]);
+  };
+  pushShortcut("One-command priority install", result?.oneCommandPriorityInstall || result?.githubOneLinePriorityInstallCommand);
+  pushShortcut("One-command auto install", result?.oneCommandAutoInstall || result?.githubOneLineAutoInstallCommand);
+  pushShortcut("Priority install", result?.priorityInstallCommand);
+  pushShortcut("Auto install", result?.autoInstallCommand);
+  if (shortcuts.length === 0 || (result?.ok !== false && !resultHasInstallRepair(result))) {
+    return;
+  }
+  lines.push("", "Install shortcuts:");
+  for (const [label, command] of shortcuts) {
+    lines.push(`  ${label}: ${command}`);
+  }
+}
+
+function appendRepairCommandLines(lines, result) {
+  if (!Array.isArray(result?.repairCommands) || result.repairCommands.length === 0) {
+    return;
+  }
+  lines.push("", "Repair commands:");
+  for (const command of result.repairCommands) {
+    lines.push(`  ${command}`);
+  }
 }
 
 function formatInstallResult(result) {
@@ -5370,12 +6930,22 @@ function formatInstallResult(result) {
   if (result.error) {
     lines.push(`Reason: ${result.error}`, "");
   }
+  if (result.nextCommand) {
+    lines.push(`Next command: ${result.nextCommand}`);
+  }
+  if (!result.ok) {
+    appendInstallShortcutLines(lines, result);
+    appendRepairCommandLines(lines, result);
+  }
+  if (lines.at(-1) !== "") {
+    lines.push("");
+  }
   lines.push(
     "Server:",
     `  MCP URL: ${result.baseUrl ? `${result.baseUrl}/mcp` : "unknown"}`
   );
   if (result.discoveryManifest) {
-    lines.push(`  Local registry: ${result.discoveryManifest}`);
+    lines.push(`  Local registry: ${formatLocalPathForDisplay(result.discoveryManifest)}`);
   }
   lines.push("", "Clients:");
   const installed = result.installed || {};
@@ -5390,12 +6960,26 @@ function formatInstallResult(result) {
     lines.push("");
     lines.push("  OpenCode quick test:");
     lines.push(`    curl -s ${result.baseUrl}/mcp -H 'Content-Type: application/json' \\`);
-    lines.push(`      -H 'X-Pact-Api-Key: ${Object.values(result.installed || {}).find(i => i?.tokenPrefix)?.tokenPrefix || "<token>"}' \\`);
+    lines.push("      -H 'X-Pact-Api-Key: <token>' \\");
     lines.push(`      -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'`);
   }
   if (!result.ok) {
     lines.push("  Re-run failed clients after fixing the reason above.");
   }
+  return lines.join("\n");
+}
+
+function formatErrorResult(result) {
+  const lines = [
+    `Pact MCP ${result.command || "command"} failed.`,
+    "",
+    `Reason: ${result.error || "Command failed."}`
+  ];
+  if (result.nextCommand) {
+    lines.push("", "Next:", `  ${result.nextCommand}`);
+  }
+  appendInstallShortcutLines(lines, result);
+  appendRepairCommandLines(lines, result);
   return lines.join("\n");
 }
 
@@ -5405,7 +6989,7 @@ function formatRegisterResult(result) {
     "",
     `MCP URL: ${result.mcpUrl || (result.baseUrl ? `${result.baseUrl}/mcp` : "unknown")}`,
     `Verified handshake: ${result.verifiedHandshake || "yes"}`,
-    `Local registry: ${result.discoveryManifest || ""}`,
+    `Local registry: ${formatLocalPathForDisplay(result.discoveryManifest)}`,
     "",
     "Next:",
     "  pact-mcp install"
@@ -5431,7 +7015,7 @@ function formatUninstallResult(result) {
     lines.push(`  [${item.removedMcp === false ? "WARN" : "OK"}] ${targetLabel(target)} (${target})`);
   }
   if (result.discoveryManifest) {
-    lines.push("", `Local registry: ${result.discoveryManifest}`);
+    lines.push("", `Local registry: ${formatLocalPathForDisplay(result.discoveryManifest)}`);
   }
   return lines.join("\n");
 }
@@ -5455,7 +7039,12 @@ function formatDoctorResult(result) {
   } else {
     lines.push(`  [${checks.systemHealth?.ok ? "OK" : "FAIL"}] Authenticated system.health`);
   }
-  lines.push(`  [${checks.deviceManifest?.ok ? "OK" : "WARN"}] Local registry${checks.deviceManifest?.path ? `: ${checks.deviceManifest.path}` : ""}`);
+  lines.push(`  [${checks.deviceManifest?.ok ? "OK" : "WARN"}] Local registry${checks.deviceManifest?.path ? `: ${formatLocalPathForDisplay(checks.deviceManifest.path)}` : ""}`);
+  if (result.nextCommand) {
+    lines.push("", "Next:", `  ${result.nextCommand}`);
+  }
+  appendInstallShortcutLines(lines, result);
+  appendRepairCommandLines(lines, result);
   return lines.join("\n");
 }
 
@@ -5464,7 +7053,7 @@ function formatServerConfigResult(result) {
     return [
       "Pact MCP server config reset.",
       "",
-      `Local registry: ${result.path || ""}`,
+      `Local registry: ${formatLocalPathForDisplay(result.path)}`,
       "Next install will scan for a signed Pact server again."
     ].join("\n");
   }
@@ -5475,7 +7064,7 @@ function formatServerConfigResult(result) {
       "",
       `Active profile: ${result.activeName || "(none)"}`,
       `Profiles: ${names.length ? names.join(", ") : "(none)"}`,
-      `Local registry: ${result.path || ""}`
+      `Local registry: ${formatLocalPathForDisplay(result.path)}`
     ].join("\n");
   }
   return [
@@ -5483,11 +7072,14 @@ function formatServerConfigResult(result) {
     "",
     `Active profile: ${result.activeName || result.profile?.name || "default"}`,
     `MCP URL: ${result.profile?.mcpUrl || (result.profile?.baseUrl ? `${result.profile.baseUrl}/mcp` : "")}`,
-    `Local registry: ${result.path || ""}`
+    `Local registry: ${formatLocalPathForDisplay(result.path)}`
   ].join("\n");
 }
 
 function formatHumanResult(command, result) {
+  if (result?.ok === false && result?.commandFailed) {
+    return formatErrorResult(result);
+  }
   if (command === "install") {
     return formatInstallResult(result);
   }
@@ -5515,6 +7107,20 @@ function emitResult(result, options, command = "") {
   if (result?.ok === false) {
     process.exitCode = 1;
   }
+}
+
+function emitCommandError(error, options = {}, command = "") {
+  const message = redactSensitiveText(error?.message || String(error), sensitiveOptionValues(options));
+  const guidance = commandFailureGuidance({ command, message, options });
+  emitResult({
+    ok: false,
+    commandFailed: true,
+    command,
+    packageName: packageJson.name,
+    packageVersion: packageJson.version,
+    error: message,
+    ...guidance
+  }, options, command);
 }
 
 async function main() {
@@ -5587,6 +7193,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error?.message || String(error));
-  process.exitCode = 1;
+  const { command, options } = parseArgs(process.argv.slice(2));
+  emitCommandError(error, options, command);
 });

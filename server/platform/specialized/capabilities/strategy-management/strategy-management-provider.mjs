@@ -64,6 +64,60 @@ function shouldUseModelRouting(input = {}, settings = {}) {
   );
 }
 
+function routeTargetFrom(input = {}) {
+  const target = input.target || {};
+  const route = input.route || {};
+  return {
+    routeId: compactText(input.routeId || route.routeId || target.routeId || "route.default"),
+    fromAspect: compactText(input.fromAspect || input.gatewayId || route.fromAspect || "aspect.unspecified"),
+    protocol: compactText(input.protocol || route.protocol || target.protocol || ""),
+    routeKind: compactText(input.routeKind || route.kind || target.kind || (
+      input.externalServiceId || target.externalServiceId || input.endpointRef || target.endpointRef
+        ? "external-service"
+        : "platform-capability"
+    )),
+    internalCapabilityId: compactText(
+      input.internalCapabilityId ||
+        input.platformCapabilityId ||
+        target.internalCapabilityId ||
+        target.platformCapabilityId ||
+        target.capabilityId ||
+        ""
+    ),
+    externalServiceId: compactText(input.externalServiceId || target.externalServiceId || target.serviceId || ""),
+    endpointRef: compactText(input.endpointRef || target.endpointRef || "")
+  };
+}
+
+function routePolicyEffect(route = {}, input = {}) {
+  if (input.blocked === true || input.route?.blocked === true || input.target?.blocked === true) {
+    return {
+      effect: "deny",
+      reasonCode: "route_blocked",
+      allowed: false
+    };
+  }
+  if (!route.internalCapabilityId && !route.externalServiceId && !route.endpointRef) {
+    return {
+      effect: "deny",
+      reasonCode: "route_target_missing",
+      allowed: false
+    };
+  }
+  if (route.routeKind === "external-service" && !route.externalServiceId && !route.endpointRef) {
+    return {
+      effect: "deny",
+      reasonCode: "route_external_target_missing",
+      allowed: false
+    };
+  }
+  return {
+    effect: "allow",
+    reasonCode: "route_allowed",
+    allowed: true
+  };
+}
+
 async function loadModelRoutingCore() {
   return import("../../agent/agent-gateway/model-routing/index.mjs");
 }
@@ -171,6 +225,7 @@ export function createStrategyManagementProvider({
       capabilities: [
         "workflow-policy.evaluate",
         "agent-policy.evaluate",
+        "route-policy.evaluate",
         "model-routing.run",
         "model-routing.inspect",
         "model-decision.decide",
@@ -210,6 +265,27 @@ export function createStrategyManagementProvider({
       routeId: compactText(input.routeId || input.modelRouting?.routeId || roleId),
       effect: "allow",
       reasonCode: "agent_policy_allowed",
+      createdAt: nowIso()
+    };
+  }
+
+  function evaluateRoutePolicy(input = {}) {
+    const route = routeTargetFrom(input);
+    const effect = routePolicyEffect(route, input);
+    return {
+      schemaVersion: 1,
+      protocolVersion: STRATEGY_MANAGEMENT_PROTOCOL_VERSION,
+      policyType: "route-policy",
+      decisionId: randomDecisionId("route"),
+      routeId: route.routeId,
+      fromAspect: route.fromAspect,
+      protocol: route.protocol,
+      routeKind: route.routeKind,
+      internalCapabilityId: route.internalCapabilityId,
+      externalServiceId: route.externalServiceId,
+      endpointRef: route.endpointRef,
+      evaluatedLayers: ["strategy_management", "route_policy"],
+      ...effect,
       createdAt: nowIso()
     };
   }
@@ -303,6 +379,7 @@ export function createStrategyManagementProvider({
     describe,
     evaluateWorkflowPolicy,
     evaluateAgentPolicy,
+    evaluateRoutePolicy,
     decideWithModel,
     createModelDecisionRuntimePort,
     shouldUseModelRouting,

@@ -1,0 +1,33 @@
+@media (max-width: 1280px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .knowledge-entry-grid,
+  .knowledge-metrics,
+	  .knowledge-source-form,
+	  .knowledge-library-detail-grid,
+	  .ingest-upload-grid,
+	  .knowledge-ingest-target-grid,
+	  .knowledge-ingest-target-detail-grid,
+	  .evidence-grid,
+  .module-grid,
+  .module-assignment-row,
+  .module-assignment-card-body,
+  .mount-config-item,
+  .tool-management-grid,
+  .scope-grid,
+  .compact-scope-grid,
+  .vocabulary-controls,
+  .document-chunking-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .document-chunking-input {
+    min-height: 260px;
+  }
+}

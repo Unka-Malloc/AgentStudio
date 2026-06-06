@@ -102,60 +102,6 @@ async function waitForScreenshot(pathname, env, windowId, timeoutMs) {
   throw lastError || new Error(`Timed out waiting for screenshot: ${pathname}`);
 }
 
-function writeSmokeWorkspace(dataDir) {
-  const mailDir = path.join(dataDir, "mail-imports");
-  const indexDir = path.join(mailDir, "index");
-  mkdirSync(indexDir, { recursive: true });
-  writeFileSync(
-    path.join(dataDir, "settings.json"),
-    `${JSON.stringify(
-      {
-        schemaVersion: 1,
-        bootstrapBaseUrl: "",
-        resolvedServiceBaseUrl: "",
-        expertVocabularySyncPolicy: "manual",
-        indexHotUpdatePolicy: "automatic",
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  writeFileSync(
-    path.join(mailDir, "expert-vocabulary.json"),
-    `${JSON.stringify(
-      {
-        schemaVersion: 1,
-        version: 101,
-        updatedAt: "unix:101",
-        publishedAt: "unix:101",
-        source: "linux-gui-smoke",
-        checksum: "linux-gui-smoke-checksum",
-        entries: [
-          {
-            id: "contract",
-            pathSegments: ["专家", "合同"],
-            label: "合同",
-            keywords: ["msa", "framework agreement"],
-            domains: ["legal.example"],
-            status: "active",
-            notes: "",
-          },
-        ],
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  writeFileSync(
-    path.join(indexDir, "docs.tsv"),
-    [
-      "1\tm1\tmail-1.eml\tMSA review\tLegal <counsel@legal.example>\t\t\t\t\t\tInbox\tok\t\t\t\t0\t未分类",
-      "2\tm2\tmail-2.eml\tInternal note\tteam@example.com\t\t\t\t\t\tInbox\tok\t\t\t\t0\t未分类",
-      "",
-    ].join("\n"),
-  );
-}
-
 async function main() {
   if (process.platform !== "linux") {
     throw new Error("Linux GUI smoke tests must run inside Linux.");
@@ -169,9 +115,8 @@ async function main() {
   const bundleDir = findLinuxBundle();
   const flutterBinary = path.join(bundleDir, "flutter_client");
   const cli = path.join(bundleDir, "pact-client");
-  const daemon = path.join(bundleDir, "pact-clientd");
   const packagingManifest = path.join(bundleDir, "portable-data", "future-client", "packaging-modules.json");
-  for (const file of [flutterBinary, cli, daemon]) {
+  for (const file of [flutterBinary, cli]) {
     if (!existsSync(file)) {
       throw new Error(`Bundle binary is missing: ${file}`);
     }
@@ -181,9 +126,10 @@ async function main() {
   }
   const manifest = JSON.parse(readFileSync(packagingManifest, "utf8"));
   const enabledModuleIds = new Set(manifest.modules?.map((item) => item.id) || []);
-  const skippedModuleIds = new Set(manifest.skippedModules?.map((item) => item.id) || []);
-  if (enabledModuleIds.has("macos-mail-import") || skippedModuleIds.has("macos-mail-import")) {
-    throw new Error("Linux GUI bundle manifest must not include macOS-only module: macos-mail-import");
+  for (const moduleId of ["client-gui", "client-cli", "portable-data", "target-adapters"]) {
+    if (!enabledModuleIds.has(moduleId)) {
+      throw new Error(`Packaging manifest does not include required module: ${moduleId}`);
+    }
   }
   const macOSMailTool = path.join(bundleDir, "pact-macos-mail-tool");
   if (existsSync(macOSMailTool)) {
@@ -198,7 +144,6 @@ async function main() {
 
   const dataDir = path.join(os.tmpdir(), `pact-linux-gui-${process.pid}-${Date.now()}`);
   mkdirSync(dataDir, { recursive: true });
-  writeSmokeWorkspace(dataDir);
 
   const display = `:${100 + (process.pid % 400)}`;
   const env = {
@@ -209,7 +154,6 @@ async function main() {
     LIBGL_ALWAYS_SOFTWARE: "1",
     NO_AT_BRIDGE: "1",
     PACT_PORTABLE_DIR: dataDir,
-    PACT_CLIENTD_PATH: daemon,
   };
   const xvfb = spawn(
     "Xvfb",
@@ -280,25 +224,19 @@ async function main() {
       10_000,
     );
 
-    const stateFile = path.join(dataDir, "backend", "runtime-state.json");
-    const state = existsSync(stateFile)
-      ? JSON.parse(readFileSync(stateFile, "utf8"))
-      : null;
-
     console.log(JSON.stringify({
       ok: true,
       bundleDir,
       artifactDir,
       dataDir,
       windowId,
-      runtimeStateSeen: Boolean(state),
       screenshots: [initial, afterInteraction],
       checks: [
         "Flutter Linux bundle launches under Ubuntu X11",
         "visible window is discoverable",
         "screenshots are nonblank",
         "basic pointer and keyboard interaction does not crash",
-        "sidecar daemon path is available to the app",
+        "current client sidecar is bundled",
       ],
     }, null, 2));
   } finally {
@@ -311,7 +249,6 @@ async function main() {
         app.kill("SIGKILL");
       }
     }
-    spawnSync(cli, ["daemon", "stop"], { env, stdio: "ignore" });
     if (xvfb.exitCode == null) {
       xvfb.kill("SIGTERM");
     }

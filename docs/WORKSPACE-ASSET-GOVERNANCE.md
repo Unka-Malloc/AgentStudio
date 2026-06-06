@@ -57,7 +57,7 @@ Pact 不关心智能体之间如何互相协作，也不把智能体当作可信
 
 三个兼容层的治理边界如下：
 
-- `agent-client-mcp-compatibility`：OpenClaw、Codex、Claude Code、Cursor Agent、其它机器人体系或脚本都不是核心抽象；统一通过 Pact MCP service / Workspace API 访问工作空间。
+- `agent-client-mcp-compatibility`：OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf、其它机器人体系或脚本都不是核心抽象；统一通过 Pact MCP service / Workspace API 访问工作空间。
 - `external-service-compatibility`：知识库、网站订阅、文件库、业务系统、人工整理和智能体上传文档都先进入 workspace asset model，再统一治理。
 - `pact-internal-compatibility`：容器、虚拟机、本机、云端、Linux、macOS、Windows 以及内部 mount/module/runtime 差异都只是环境差异；安装 Pact 管理软件后，智能体访问工作空间必须经过 Pact 的权限、路径、快照和审计适配。
 
@@ -292,16 +292,23 @@ assetContributionReportV0 =
 
 ## 演示场景：Skill 贡献排行榜
 
-目标：证明终端贡献可以从上传、公开、发现、下载、使用到贡献值增长形成闭环。
+目标：证明终端贡献可以记录 Skill Hub 技能的来源、采用、下载、使用和贡献值增长，但技能包本体、版本、发布状态和启用状态必须由独立 Skill Hub / skill library 管理。
 
 流程：
 
-1. A 上传 Skill manifest、说明、执行约束和必要文件；内容到达服务器后先进入 `preview`。
-2. A 设置默认公开权限，例如同 workspace 内主体默认允许 `read`、`install` 和 `use`。
-3. Pact 扫描 Skill 的权限需求、脚本风险、依赖和许可；通过后进入 `published`，发布到 `workspace/skills/`、SkillLibrary、贡献面板和排行榜候选池。
-4. B 在面板中看到该 Skill，也可以通过 Pact MCP service 调用 `workspace.skill.list` 发现它。
-5. B 下载、安装或调用该 Skill 时，Pact 按真实完成阶段记录 `skill.downloaded`、`skill.installed` 或 `skill.used`，同时生成 `loanRecord` 和 `auditId`。
-6. A 的 `usageCount` 增加，排行榜刷新。
+1. A 通过 `pact.skillHub.upload` 上传 Skill manifest、说明、执行约束和必要文件；内容到达服务器后进入 capability package lifecycle。
+2. A 设置默认可见策略，例如同 workspace 内主体默认允许 `read`、`install` 和 `use`。
+3. Pact 扫描 Skill 的权限需求、脚本风险、依赖和许可；通过后进入 Skill Hub / SkillLibrary 的 `published` 状态，并向贡献面板和排行榜候选池写入引用记录。
+4. Workspace contribution 只能保存 skill library record 引用、来源、审核、采用和统计信息，不能保存技能包文件、版本、发布状态或启用状态。
+5. B 在面板中看到该 Skill，也可以通过 Pact MCP service 调用 `pact.skillHub.list` 发现它。
+6. B 下载、安装或调用该 Skill 时，Pact 按真实完成阶段记录 `skill.downloaded`、`skill.installed` 或 `skill.used`，同时生成 `loanRecord` 和 `auditId`。
+7. A 的 `usageCount` 增加，排行榜刷新。
+
+Skill 路由治理证据（兼容入口约束）：
+
+- `pact.skillHub.upload` 是技能包的真实入口，技能包必须进入 capability package lifecycle 与 SkillLibrary，再形成 `published` / `active` / `disabled` / `revoked` 状态。
+- `workspace.skill.upload`、`workspace.skill.list`、`workspace.skill.download`、`workspace.skill.usage.report` 保持兼容 operation，不能直接持有技能包文件、版本、发布状态和启用状态；它们只反映来自 SkillHub 的可见引用或调用统计。
+- `workspace.skill.list` 的资产治理证据应覆盖到 `workspace contribution` 层的引用关系（来源、审核、采用、统计）与 SkillHub 层事实（版本、状态、生命周期）双轨一致。
 
 第一版贡献值算法保持简单，但以真实使用质量为主：
 
@@ -328,13 +335,17 @@ rankScoreV0 =
 
 设备级 MCP Hub 的安装目标包括：
 
+- OpenClaw
+- Claude Code
 - Codex
 - Gemini CLI
-- Kilo Code
-- Copilot
-- OpenClaw（OrbStack Kate）
-- Hermes Agent（OrbStack Serena）
 - Antigravity
+- OpenCode
+- Copilot
+- Kilo Code
+- Cursor
+- Hermes Agent
+- Windsurf
 
 五阶段演示的首批真实 agent 固定为：
 
@@ -382,16 +393,20 @@ Agent 安装策略：
 
 - 统一服务端入口：connector 扫描本机 Pact 候选服务并通过 `/api/mcp/handshake` 验证签名后，使用 discovery 返回的 HTTP MCP URL；OrbStack VM 内使用 discovery 返回的 VM advertised URL。
 - 统一按 Stitch MCP 形态安装：HTTP MCP endpoint + 客户端侧认证 metadata / headers；Pact 的 API key header 是 `X-Pact-Api-Key`，值为 Tool Management grant token；Codex CLI 使用其标准 bearer token env var，服务端同时接受 bearer 和 header。
-- 终端用户安装不得依赖完整服务端 checkout；统一通过 `pact-mcp-connector` release 包扫描本机 Pact 服务并验证签名，再运行 `npx pact-mcp-connector@latest install` 进入 TUI 选择要连接的客户端。安装器默认向已验证的本机 Pact 申请 Tool Management grant token 并写入客户端配置；脚本化场景使用 `--target codex` 即可，`--token-stdin` 只用于预先签发的自定义 grant。显式服务端地址必须先通过 `server-config --set --url <Pact>` 验证并保存。
+- 终端用户安装不得依赖完整服务端 checkout；统一通过 `pact-mcp-connector` release 包扫描本机 Pact 服务并验证签名，再运行 `npx pact-mcp-connector@latest install` 进入 TUI 选择要连接的客户端。安装器默认向已验证的本机 Pact 申请 Tool Management grant token 并写入客户端配置；脚本化场景默认使用 `--target auto`，需要限制范围时才指定 `--target <client>` 或逗号分隔的目标清单，`--token-stdin` 只用于预先签发的自定义 grant。显式服务端地址必须先通过 `server-config --set --url <Pact>` 验证并保存。
 - 一行安装脚本优先使用已有 Node.js 20+ 下载小体积 source tarball；没有 Node.js、npm、npx 或包管理器的智能体宿主机必须 fallback 到 portable zip release 包：`pact-mcp-connector-<version>-<platform>.zip` 内置 Node runtime，提供 `./pact-mcp install` TUI、`./pact-mcp install --target <client>` 和 macOS `install.command`。
 - stdio proxy：仅作为目标 agent 不支持 HTTP MCP 或 headers 时的未来兼容入口；当前 release 安装路径默认不启用 stdio。
+- OpenClaw：通过 VM / remote 环境内 `openclaw mcp set` 写入已发现 HTTP endpoint。
+- Claude Code：通过 `claude mcp add-json` 或等价 CLI 配置写入。
 - Codex：通过 `codex mcp add --url --bearer-token-env-var` 安装；如需兼容旧版 CLI，可再尝试 `codex plugin marketplace add` 与 `codex plugin add`（失败不影响主流程）。
 - Gemini CLI：通过 `gemini mcp add --transport http --header X-Pact-Api-Key` 安装，同时生成并校验 Stitch extension 同构 manifest。
-- Kilo Code：按 Kilo 标准 `~/.config/kilo/kilo.json` 的 remote MCP 配置格式结构化写入。
-- Copilot：通过 `copilot mcp add --transport http --header X-Pact-Api-Key` 安装。
-- OpenClaw（OrbStack Kate）：通过 VM 内 `openclaw mcp set` 配置 `http://host.orb.internal:7228/mcp`。
-- Hermes Agent（OrbStack Serena）：通过 VM 内 `hermes mcp add --url --auth header` 安装，安装器随后用 Hermes config helper 启用并执行 `hermes mcp test`。
 - Antigravity：按官方 `~/.gemini/antigravity/mcp_config.json` 的 `serverUrl` + `headers` 格式结构化写入。
+- OpenCode：按 `~/.config/opencode/opencode.jsonc` 的 remote MCP 配置格式结构化写入。
+- Copilot：通过 `copilot mcp add --transport http --header X-Pact-Api-Key` 安装。
+- Kilo Code：按 Kilo 标准 `~/.config/kilo/kilo.json` 的 remote MCP 配置格式结构化写入。
+- Cursor：按 Cursor MCP settings 的 `mcpServers.pact` 结构化写入。
+- Hermes Agent：通过 VM / remote 环境内 `hermes mcp add --url --auth header` 安装，安装器随后用 Hermes config helper 启用并执行 `hermes mcp test`。
+- Windsurf：按 `~/.codeium/windsurf/mcp_config.json` 的 `mcpServers.pact` 结构化写入。
 - 所有 installer 修改前必须生成目标配置回滚副本，只追加或替换 `pact` 条目，不打印完整 agent config，避免泄漏现有 token、API key 或 bot token。
 
 实现默认约束：
@@ -465,15 +480,15 @@ defaultSummaryChars: 800
 
 目标：证明 Pact 不只交换文件和知识，也能让智能体贡献可复用能力，并通过 MCP 操作公共工作空间。
 
-本阶段只做低风险 Skill：不执行任意 shell，不下载外部依赖，只作为带 manifest 的 workspace skill 资产。文件修改先做文本 read/write/patch，不做自动冲突合并。
+本阶段只做低风险 Skill：不执行任意 shell，不下载外部依赖，只作为带 manifest 的 Skill Hub 技能包。workspace contribution 只能引用该技能包并记录采用/统计视图。文件修改先做文本 read/write/patch，不做自动冲突合并。
 
 最小工具：
 
 ```text
-workspace.skill.upload
-workspace.skill.list
-workspace.skill.download
-workspace.skill.usage.report
+pact.skillHub.upload
+pact.skillHub.list
+pact.skillHub.download
+pact.skillHub.usage.report
 workspace.file.read
 workspace.file.write
 workspace.file.patch
@@ -579,7 +594,7 @@ Base.
 
 第一轮任务按下列 P0 包推进：
 
-- `P0-A Device MCP Hub Shell`：新增 Stitch 形态 HTTP `/mcp`、agent-specific grant/token、统一本机入口 `pact-mcp discover-local`、canonical registry `~/.pact/mcp/servers.json`、`/.well-known/pact/mcp.json` 和 `pact-mcp-connector` release discovery publisher；stdio proxy 仅作为兼容兜底；release 包默认注册共享 Hub，不批量写入客户端；Codex、Gemini CLI、Kilo Code、Copilot、OpenClaw、Hermes Agent 和 Antigravity 只有在用户明确 opt-in 时才写入对应配置；对外 MCP tool surface 收敛为单一稳定工具 `pact.call`，内部 operation 通过参数路由。
+- `P0-A Device MCP Hub Shell`：新增 Stitch 形态 HTTP `/mcp`、agent-specific grant/token、统一本机入口 `pact-mcp discover-local`、canonical registry `~/.pact/mcp/servers.json`、`/.well-known/pact/mcp.json` 和 `pact-mcp-connector` release discovery publisher；stdio proxy 仅作为兼容兜底；release 包默认注册共享 Hub，不批量写入客户端；OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf 只有在用户明确 opt-in 时才写入对应配置；对外 MCP tool surface 收敛为单一稳定工具 `pact.call`，内部 operation 通过参数路由。
 - `P0-B Local Workspace Store`：初始化 demo workspace，建立 asset metadata，文件上传落盘，下载走 asset id。
 - `P0-C Operation Ledger + Checkpoint Node`：每个 MCP operation 写 ledger，文件上传、下载、读取、修改都写 checkpoint node。
 - `P0-D Knowledge Seed + Search`：写入 `Pact 简介` seed knowledge，暴露 knowledge contribution/search/evidence，返回先做硬限制。
@@ -721,7 +736,9 @@ Checkpoint Tree 是公共工作空间的统一状态树，不只是任务队列�
 
 ## Operation Ledger
 
-所有进入公共空间边界的行为都必须进入 Operation Ledger。写入操作、访问请求、权限拒绝、文件变动、知识贡献、技能调用和恢复动作都不是普通接口日志，而是可回放的 workspace event。
+所有进入 Pact 受管边界的 operation 都必须进入 Operation Ledger。写入操作、访问请求、权限拒绝、文件变动、知识贡献、技能调用、后台任务、provider side effect 和恢复动作都不是普通接口日志，而是可回放的 workspace / system event。
+
+Operation Ledger 必须由 Operation Scheduling Kernel 写入。HTTP、RPC、CLI、MCP、控制台、worker、provider adapter 和业务 helper 不能自行宣布“真实操作”；它们只能提交 intent envelope 给调度内核。没有内核 accepted / rejected 记录的动作必须拒绝为 `operation_unmanaged` / `operation_not_scheduled`，不能改变状态、调用 provider 或写入资产。
 
 最小字段：
 
@@ -742,6 +759,8 @@ Checkpoint Tree 是公共工作空间的统一状态树，不只是任务队列�
 - `createdAt`
 
 Ledger 记录的是业务状态和治理状态变更，不是接口日志。接口日志回答“谁调了接口”；Operation Ledger 回答“公共空间发生了什么变化、谁知道了什么、谁带走了什么、谁被拒绝了什么、为什么变化、如何恢复”。
+
+模块本地 audit、provider ledger、queue event、runtime log 和 trace span 只能作为投影、回执或索引，不能替代统一账本。写操作和外部副作用必须由调度内核先追加 `started` / `pending` ledger entry；账本不可写时，操作必须失败在副作用之前。
 
 ## Snapshot Boundary
 
@@ -841,7 +860,7 @@ Context Compiler 输入：
 
 ## 本地智能体接入
 
-本地智能体是 workspace operator。它可以是 OpenClaw、Codex、Claude Code、Cursor Agent、脚本型 agent 或人工 CLI。
+本地智能体是 workspace operator。它可以是 OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf、脚本型 agent 或人工 CLI。
 
 允许动作使用当前 operation id：
 
@@ -855,6 +874,7 @@ Context Compiler 输入：
 - `workspace.proposal.create`
 - `workspace.contribution.permission.request`
 - `knowledge.search`（带 `workspaceId`）
+- `workspace.skill.list`
 - `workspace.audit.query`
 
 高风险动作使用当前 operation id：

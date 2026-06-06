@@ -1,10 +1,36 @@
-export type KnowledgeTab =
-  | "management"
-  | "wordCloud"
-  | "conflicts"
-  | "maintenance";
+export const knowledgeRouteTabs = [
+  "management",
+  "wordCloud",
+  "maintenance",
+  "chunking",
+  "distillation",
+] as const;
 
-export type DebugTab = "knowledgeRecall" | "agentRetrieval";
+export type KnowledgeTab = typeof knowledgeRouteTabs[number];
+export type KnowledgeViewTab = "management" | "wordCloud" | "maintenance";
+
+export function isKnowledgeRouteTab(value: string): value is KnowledgeTab {
+  return (knowledgeRouteTabs as readonly string[]).includes(value);
+}
+
+export function knowledgeRouteTabToViewTab(value: string): KnowledgeViewTab | null {
+  if (value === "chunking" || value === "distillation") {
+    return "management";
+  }
+  if (value === "management" || value === "wordCloud" || value === "maintenance") {
+    return value;
+  }
+  return null;
+}
+
+export type DebugTab = "knowledgeRecall" | "agentRetrieval" | "knowledgeDistillation";
+
+export const externalServiceRouteTabs = ["list"] as const;
+export type ExternalServiceTab = typeof externalServiceRouteTabs[number];
+
+export function isExternalServiceRouteTab(value: string): value is ExternalServiceTab {
+  return (externalServiceRouteTabs as readonly string[]).includes(value);
+}
 
 export type AdminSection =
   | "storage"
@@ -13,11 +39,16 @@ export type AdminSection =
   | "ops-monitor"
   | "clients"
   | "tools"
+  | "toolList"
+  | "toolStats"
+  | "tool-list"
+  | "tool-stats"
   | "modules"
   | "productionHealth"
-  | "agent-management"
+  | "runtimeDownloads"
   | "agent-permissions"
   | "agent-config"
+  | "agent-assignment"
   | "context-management"
   | "maintenance-agent";
 
@@ -29,7 +60,10 @@ export function viewToPath(
   switch (view) {
     case "dashboard":   return "/";
     case "feed":        return "/feed";
+    case "approval":    return "/approval";
     case "sources":     return "/sources";
+    case "externalServices":
+      return `/external-services/${opts?.tab ?? "list"}`;
     case "workspaces":  return "/workspaces";
     case "knowledge":
       return `/knowledge/${opts?.tab ?? "management"}`;
@@ -49,12 +83,15 @@ export function adminSectionToSlug(section: string): string {
     logs: "logs",
     opsMonitor: "ops-monitor",
     clients: "clients",
-    tools: "tools",
+    tools: "tool-list",
+    toolList: "tool-list",
+    toolStats: "tool-stats",
     modules: "modules",
     productionHealth: "production-health",
-    agentManagement: "agent-management",
+    runtimeDownloads: "runtime-downloads",
     agentPermissions: "agent-permissions",
     agentConfig: "agent-config",
+    agentAssignment: "agent-assignment",
     contextManagement: "context-management",
     maintenanceAgent: "maintenance-agent",
   };
@@ -69,12 +106,15 @@ export function slugToAdminView(slug: string): string {
     logs: "logs",
     "ops-monitor": "opsMonitor",
     clients: "clients",
-    tools: "tools",
+    tools: "toolList",
+    "tool-list": "toolList",
+    "tool-stats": "toolStats",
     modules: "modules",
     "production-health": "productionHealth",
-    "agent-management": "agentManagement",
+    "runtime-downloads": "runtimeDownloads",
     "agent-permissions": "agentPermissions",
     "agent-config": "agentConfig",
+    "agent-assignment": "agentAssignment",
     "context-management": "contextManagement",
     "maintenance-agent": "maintenanceAgent",
   };

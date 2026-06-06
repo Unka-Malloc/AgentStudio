@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Console Operator Guide"
-  short_description: "Help with SplitAll Console Operator Guide tasks"
-  default_prompt: "Use $splitall-console-operator-guide to handle this SplitAll platform task."

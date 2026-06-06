@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Graph Store Adapter"
-  short_description: "Help with SplitAll Graph Store Adapter tasks"
-  default_prompt: "Use $splitall-graph-store-adapter to handle this SplitAll platform task."
