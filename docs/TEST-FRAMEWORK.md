@@ -89,15 +89,15 @@ work should raise this value by adding focused Vitest tests for changed modules.
 Rust CLI coverage uses `cargo-llvm-cov`; local and CI environments need that
 Cargo subcommand available before running `npm run client:native:test:coverage`.
 
-Latest non-ACP scan captured on 2026-06-05 after the latest Vitest coverage
-expansion. The Node/Vue report was produced by the non-ACP Vitest coverage run
-that excludes ACP relay, downstream-client, and communication-service protocol
-work left for the ACP batch:
+Latest strict non-ACP scan captured on 2026-06-06 after the latest Vitest
+coverage expansion. The Node/Vue report was produced by the strict non-ACP
+Vitest coverage run over 507 test files, excluding ACP relay, downstream-client,
+and communication-service protocol work left for the ACP batch:
 
 | Area | Command | Line coverage | Covered / total lines | Report |
 | --- | --- | --- | --- | --- |
-| `server` non-ACP | non-ACP `vitest --coverage` + `PACT_UNIT_COVERAGE_NODE_VUE_REPORT=build/coverage/node-vue-non-acp/lcov.info npm run test:unit-coverage:scan` | 95.002% | 40,465 / 42,594 | `build/coverage/node-vue-non-acp/lcov.info` filtered to `server/`, excluding ACP relay/downstream/communication-service paths |
-| `server-web` | non-ACP `vitest --coverage` + `PACT_UNIT_COVERAGE_NODE_VUE_REPORT=build/coverage/node-vue-non-acp/lcov.info npm run test:unit-coverage:scan` | 95.493% | 11,970 / 12,535 | `build/coverage/node-vue-non-acp/lcov.info` filtered to `server-web/` |
+| `server` non-ACP | strict non-ACP `vitest --coverage` + `PACT_UNIT_COVERAGE_NODE_VUE_REPORT=build/coverage/node-vue-non-acp-strict/lcov.info npm run test:unit-coverage:scan` | 95.01% | 40,725 / 42,866 | `build/coverage/node-vue-non-acp-strict/lcov.info` filtered to `server/`, excluding ACP relay/downstream/communication-service paths |
+| `server-web` | strict non-ACP `vitest --coverage` + `PACT_UNIT_COVERAGE_NODE_VUE_REPORT=build/coverage/node-vue-non-acp-strict/lcov.info npm run test:unit-coverage:scan` | 95.44% | 11,963 / 12,535 | `build/coverage/node-vue-non-acp-strict/lcov.info` filtered to `server-web/` |
 | `client-gui` | `npm run client:test:coverage` + `npm run test:unit-coverage:scan` | 95.73% | 561 / 586 | `client-gui/coverage/lcov.info` |
 | `client-cli` | `npm run client:native:test:coverage` + `npm run test:unit-coverage:scan` | 95.11% | 3,696 / 3,886 | `build/coverage/client-cli/lcov.info` |
 
