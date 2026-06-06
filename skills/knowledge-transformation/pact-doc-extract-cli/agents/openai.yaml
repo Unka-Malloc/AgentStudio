@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Doc Extract CLI"
+  short_description: "Help with Pact Doc Extract CLI tasks"
+  default_prompt: "Use $pact-doc-extract-cli to handle this Pact platform task."

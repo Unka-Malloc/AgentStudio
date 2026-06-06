@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Regression Suite Runner"
+  short_description: "Help with Pact Regression Suite Runner tasks"
+  default_prompt: "Use $pact-regression-suite-runner to handle this Pact platform task."

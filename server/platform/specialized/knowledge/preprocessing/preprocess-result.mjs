@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export const PREPROCESS_RESULT_SCHEMA_VERSION = 1;
 export const PREPROCESS_RESULT_TYPE = "pact.knowledge.preprocess-result";
 
@@ -11,6 +13,23 @@ function scalar(value) {
 
 function shallowObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function stableJson(value) {
+  if (value === undefined || value === null) {
+    return "null";
+  }
+  if (typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJson(item)).join(",")}]`;
+  }
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+}
+
+function hashJson(value) {
+  return `sha256:${createHash("sha256").update(stableJson(value)).digest("hex")}`;
 }
 
 function lineNumber(value) {
@@ -32,6 +51,28 @@ function sanitizeSourceRange(value = {}) {
 
 function sanitizeSource(source = {}) {
   const rawObject = shallowObject(source.rawObject);
+  const documentMetadata = shallowObject(source.documentMetadata);
+  const sourceMetadata = shallowObject(source.sourceMetadata || rawObject.sourceMetadata);
+  const sourceMetadataHash = Object.keys(sourceMetadata).length > 0 ? hashJson(sourceMetadata) : "";
+  const parserTrace = sanitizeParserTrace(
+    asArray(source.parserTrace).length ? source.parserTrace : documentMetadata.parserTrace,
+    {
+      parserId: scalar(source.documentParserId),
+      parserVersion: scalar(
+        source.documentParserVersion ||
+        documentMetadata.parserVersion ||
+        documentMetadata?.parser?.version ||
+        documentMetadata?.runtime?.version
+      ),
+      modelId: scalar(documentMetadata.modelId || documentMetadata?.model?.id || documentMetadata?.runtime?.modelId),
+      modelVersion: scalar(
+        documentMetadata.modelVersion || documentMetadata?.model?.version || documentMetadata?.runtime?.modelVersion
+      ),
+      contentHash: scalar(source.contentHash || rawObject.contentHash || source.originalSha256),
+      sourceMetadataHash,
+      mediaType: scalar(source.mediaType || rawObject.mediaType)
+    }
+  );
   return {
     id: scalar(source.id),
     name: scalar(source.name),
@@ -54,9 +95,45 @@ function sanitizeSource(source = {}) {
     originalRelativePath: scalar(rawObject.originalRelativePath || source.originalRelativePath),
     storageRelativePath: scalar(rawObject.storageRelativePath),
     documentParserId: scalar(source.documentParserId),
-    documentMetadata: shallowObject(source.documentMetadata),
-    sourceMetadata: shallowObject(source.sourceMetadata || rawObject.sourceMetadata)
+    documentMetadata,
+    sourceMetadata,
+    sourceMetadataHash,
+    parserTrace
   };
+}
+
+function sanitizeParserTraceEntry(entry = {}, defaults = {}, index = 0) {
+  const trace = shallowObject(entry);
+  return {
+    stage: scalar(trace.stage || trace.name || defaults.stage || `document-parser.stage.${index + 1}`),
+    status: scalar(trace.status || defaults.status || "completed"),
+    parserId: scalar(trace.parserId || defaults.parserId),
+    parserVersion: scalar(trace.parserVersion || defaults.parserVersion),
+    modelId: scalar(trace.modelId || defaults.modelId),
+    modelVersion: scalar(trace.modelVersion || defaults.modelVersion),
+    contentHash: scalar(trace.contentHash || defaults.contentHash),
+    sourceMetadataHash: scalar(trace.sourceMetadataHash || defaults.sourceMetadataHash),
+    mediaType: scalar(trace.mediaType || defaults.mediaType),
+    details: shallowObject(trace.details),
+    metrics: shallowObject(trace.metrics)
+  };
+}
+
+function sanitizeParserTrace(entries = [], defaults = {}) {
+  const normalized = asArray(entries)
+    .map((entry, index) => sanitizeParserTraceEntry(entry, defaults, index))
+    .filter((entry) => entry.stage);
+  if (normalized.length > 0) {
+    return normalized;
+  }
+  if (!defaults.parserId && !defaults.contentHash && !defaults.sourceMetadataHash) {
+    return [];
+  }
+  return [sanitizeParserTraceEntry({}, {
+    ...defaults,
+    stage: "document-parser.extract",
+    status: "completed"
+  })];
 }
 
 function sanitizeBlock(block = {}, position = 0) {

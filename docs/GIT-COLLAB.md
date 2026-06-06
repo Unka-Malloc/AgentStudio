@@ -1,9 +1,16 @@
 # GitHub 协作约定
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: GitHub 协作约定.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 这个仓库现在按“源码仓”管理，只允许这些内容进入 Git：
 
 - 源代码
-- 配置文件
+- 源码级配置文件
 - 构建脚本
 - 文本文档
 - 轻量占位文件，例如 `.gitkeep`
@@ -11,10 +18,13 @@
 默认不进 Git 的内容：
 
 - `node_modules/`
+- `.pact-agent-history/`
 - `build/dist/`
 - `build/release/`
+- `build/server-data/`
 - `client-cli/target/`
 - `build/local-data/`
+- `build/mailapp-full-download/`
 - `server/platform/modules/knowledge/runtime/jre/` 里的 JRE 二进制
 - `server/platform/modules/knowledge/tika/*.jar`
 - `server/platform/modules/knowledge/ocr/runtime/` 里的 Python / PaddleOCR / 模型二进制
@@ -32,7 +42,17 @@
 
 ## 本地如何补齐运行时
 
-如果你要在本地准备完整服务运行时，运行时资产放在：
+运行态配置、密钥状态、provider manifest、mount config、SQLite、日志、对象存储、后台队列、本地服务状态和原始 agent history 默认都放在：
+
+- `~/.pact-server-data/`
+
+项目目录里的 `build/` 不能作为服务端运行数据或配置目录。
+
+真实邮件下载件、邮箱导入件和测评语料默认放在：
+
+- `~/.pact-server-data/evaluation-corpora/`
+
+如果你要在本地准备完整服务运行时，运行时二进制资产放在：
 
 - `server/platform/modules/knowledge/runtime/jre/<platform-arch>/`
 - `server/platform/modules/knowledge/tika/`

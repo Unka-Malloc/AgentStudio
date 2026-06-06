@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -246,7 +247,33 @@ async function assertRuntimeBinding() {
       path: "dynamic.md",
       kind: "text",
       mediaType: "text/markdown",
-      text: markdown
+      text: markdown,
+      contentHash: "sha256:dynamic-source-hash",
+      sourceMetadata: {
+        page: 2,
+        slideIndex: 0,
+        sheetName: "Sheet-A",
+        bbox: [10, 20, 300, 180]
+      },
+      rawObject: {
+        objectId: "raw-object-1",
+        contentHash: "sha256:dynamic-source-hash",
+        mediaType: "text/markdown"
+      },
+      documentMetadata: {
+        parserVersion: "2026.06",
+        modelId: "layout-model",
+        modelVersion: "1.2.3",
+        parserTrace: [
+          {
+            stage: "document-parser.route",
+            status: "completed",
+            parserId: "mock-markdown-parser",
+            parserVersion: "2026.06"
+          }
+        ]
+      },
+      documentParserId: "mock-markdown-parser"
     }],
     chunking: { maxTokens: 64, maxChars: 320, sectionLevel: 2 },
     contextBudget: { knowledgeTokens: 64, budgetScope: "verify" },
@@ -274,6 +301,15 @@ async function assertRuntimeBinding() {
   assert.ok(result.preprocessResult.granularityFragments.length === result.granularityFragments.length);
   assert.ok(result.chunks.every((chunk) => chunk.metadata?.parentArtifactId));
   assert.ok(result.chunks.every((chunk) => chunk.metadata?.fragmentationTrace));
+  assert.equal(result.sources[0].contentHash, "sha256:dynamic-source-hash");
+  assert.deepEqual(result.sources[0].sourceMetadata?.bbox, [10, 20, 300, 180]);
+  assert.equal(result.preprocessResult.sourceTrace["dynamic-source"].sourceMetadataHash.startsWith("sha256:"), true);
+  assert.equal(result.preprocessResult.sourceTrace["dynamic-source"].parserTrace[0].stage, "document-parser.route");
+  assert.equal(result.preprocessResult.sourceTrace["dynamic-source"].parserTrace[0].parserVersion, "2026.06");
+  assert.equal(result.structureArtifacts[0].metadata?.rawObjectId, "raw-object-1");
+  assert.equal(result.structureArtifacts[0].metadata?.sourceMetadataHash.startsWith("sha256:"), true);
+  assert.deepEqual(result.structureArtifacts[0].metadata?.sourceLocator?.bbox, [10, 20, 300, 180]);
+  assert.equal(result.structureArtifacts[0].metadata?.parserTraceRef?.modelVersion, "1.2.3");
 }
 
 async function assertRuntimeDefaultBinding() {
@@ -314,12 +350,76 @@ async function assertRuntimeDefaultBinding() {
   assert.ok(result.chunks.every((chunk) => chunk.metadata?.fragmentationTrace?.algorithm === "original-structure-v1"));
 }
 
+async function assertMachineReadableFailureReason() {
+  const runtime = createDocumentParsingRuntime();
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-dynamic-parse-failure-"));
+  const pdfPath = path.join(tempRoot, "empty.pdf");
+  await fs.writeFile(pdfPath, "%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n", "utf8");
+
+  const emptyParserRuntime = {
+    mounts: {
+      documentParser: {
+        enabled: true,
+        id: "test/empty-document-parser",
+        async extractDocument() {
+          return {
+            parserId: "test/empty-document-parser",
+            text: "",
+            metadata: {},
+            warnings: []
+          };
+        }
+      }
+    },
+    resolveDocumentRoute() {
+      return {
+        mountName: "documentParser",
+        action: "extractDocument",
+        matchedBy: "extension"
+      };
+    }
+  };
+
+  await assert.rejects(
+    runtime.parseDocuments({
+      filePaths: [pdfPath],
+      userDataPath: tempRoot,
+      runtime: emptyParserRuntime,
+      expectedOutputs: ["sources"]
+    }),
+    (error) => {
+      assert.equal(error.reasonCode, "document_parse_no_usable_content");
+      assert.ok(Array.isArray(error.failureReasons));
+      assert.ok(error.failureReasons.some((item) => item.reasonCode === "pdf_ocr_no_text_extracted"));
+      assert.ok(error.failureReasons.every((item) => typeof item.message === "string" && item.message.length > 0));
+      return true;
+    }
+  );
+}
+
 async function assertFrontendBinding() {
   const knowledgeView = await read("server-web/views/KnowledgeView.vue");
+  const knowledgeIngestPanel = await read("server-web/components/knowledge/KnowledgeIngestPanel.vue");
+  const knowledgeViewConsole = await read("server-web/composables/useKnowledgeViewConsole.ts");
   const types = await read("server-web/lib/types.ts");
   const bridge = await read("server-web/lib/bridge.ts");
   const registry = await read("server/platform/common/operation-dispatcher/operation-registry.mjs");
   const packageJson = await read("package.json");
+
+  assert.ok(knowledgeView.includes("KnowledgeIngestPanel"), "KnowledgeView.vue must mount the ingest panel");
+  assert.ok(knowledgeView.includes("dynamicParsingPolicySignature"), "KnowledgeView.vue must expose the dynamic parsing policy signature");
+
+  for (const needle of [
+    "dynamicParsingPreviewConfig",
+    "contextBudget",
+    "payloadBudget",
+    "granularity",
+    "dynamicParsing",
+    "structureArtifacts",
+    "granularityFragments"
+  ]) {
+    assert.ok(knowledgeIngestPanel.includes(needle), `KnowledgeIngestPanel.vue must bind ${needle}`);
+  }
 
   for (const needle of [
     "dynamic-parameter-v1",
@@ -332,12 +432,12 @@ async function assertFrontendBinding() {
     "granularityFragments",
     "parentArtifactId"
   ]) {
-    assert.ok(knowledgeView.includes(needle), `KnowledgeView.vue must bind ${needle}`);
+    assert.ok(knowledgeViewConsole.includes(needle), `useKnowledgeViewConsole.ts must configure ${needle}`);
   }
   assert.match(
-    knowledgeView,
+    knowledgeViewConsole,
     /secondaryParse:\s*{\s*enabled:\s*false/,
-    "KnowledgeView.vue must keep secondary parsing disabled by default"
+    "useKnowledgeViewConsole.ts must keep secondary parsing disabled by default"
   );
 
   for (const [file, text] of [
@@ -360,6 +460,7 @@ async function main() {
   assertRuntimeDefaultsCannotEnableSecondaryParse();
   await assertRuntimeBinding();
   await assertRuntimeDefaultBinding();
+  await assertMachineReadableFailureReason();
   await assertFrontendBinding();
   console.log("dynamic document parsing verification passed");
 }

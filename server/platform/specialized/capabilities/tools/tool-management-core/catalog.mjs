@@ -152,6 +152,16 @@ const DEFAULT_TOOL_MANAGEMENT_SCOPES = Object.freeze([
     id: "auth:admin",
     label: "Administer authorization",
     description: "Create, revoke, inspect, and evaluate unified authorization grants and decisions."
+  },
+  {
+    id: "agent_relay:view",
+    label: "View ACP agent relay",
+    description: "List source-visible virtual ACP agents, concrete relay targets, and relay status."
+  },
+  {
+    id: "agent_relay:operate",
+    label: "Operate ACP agent relay",
+    description: "Register targets and create, wake, prompt, cancel, and close governed ACP agent relay sessions."
   }
 ]);
 
@@ -365,6 +375,22 @@ const DEFAULT_TOOL_MANAGEMENT_TOOLSETS = Object.freeze([
     defaultForAgents: false
   },
   {
+    id: "pact.agent.relay.read",
+    label: "ACP agent relay read",
+    requiredScopes: ["agent_relay:view"],
+    maxRisk: "read_only",
+    grantable: true,
+    defaultForAgents: false
+  },
+  {
+    id: "pact.agent.relay",
+    label: "ACP agent relay",
+    requiredScopes: ["agent_relay:view", "agent_relay:operate"],
+    maxRisk: "repair_write",
+    grantable: true,
+    defaultForAgents: false
+  },
+  {
     id: "pact.authorization.admin",
     label: "Authorization admin",
     requiredScopes: ["auth:admin"],
@@ -573,8 +599,24 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "knowledge.rule_authoring.runs.get": "pact.knowledge.ruleAuthoring.run",
   "knowledge.gold_cases.list": "pact.knowledge.goldCases.list",
   "knowledge.gold_cases.save": "pact.knowledge.goldCases.set",
-  "knowledge.distillation.runs.create": "pact.knowledge.distillation.runs.create",
-  "knowledge.distillation.runs.get": "pact.knowledge.distillation.runs.get",
+  "external.knowledge.distillation.service.health": "pact.external.knowledge.distillation.health",
+  "external.knowledge.distillation.service.capabilities": "pact.external.knowledge.distillation.capabilities",
+  "external.knowledge.distillation.service.runtime_health": "pact.external.knowledge.distillation.runtimeHealth",
+  "external.knowledge.distillation.runs.list": "pact.external.knowledge.distillation.runs.list",
+  "external.knowledge.distillation.runs.create": "pact.external.knowledge.distillation.runs.create",
+  "external.knowledge.distillation.runs.get": "pact.external.knowledge.distillation.runs.get",
+  "external.knowledge.distillation.runs.cancel": "pact.external.knowledge.distillation.runs.cancel",
+  "external.knowledge.distillation.evidence.query": "pact.external.knowledge.distillation.evidence.query",
+  "external.knowledge.distillation.projects.evidence.query": "pact.external.knowledge.distillation.projects.evidence.query",
+  "external.knowledge.distillation.artifacts.export": "pact.external.knowledge.distillation.artifacts.export",
+  "external.cloudDrive.connect": "pact.external.cloudDrive.connect",
+  "external.cloudDrive.status": "pact.external.cloudDrive.status",
+  "external.cloudDrive.item.list": "pact.external.cloudDrive.item.list",
+  "external.cloudDrive.file.download": "pact.external.cloudDrive.file.download",
+  "external.cloudDrive.file.upload": "pact.external.cloudDrive.file.upload",
+  "external.cloudDrive.sync.plan": "pact.external.cloudDrive.sync.plan",
+  "external.cloudDrive.sync.apply": "pact.external.cloudDrive.sync.apply",
+  "external.cloudDrive.permission.list": "pact.external.cloudDrive.permission.list",
   "knowledge.skills.evaluation.runs.create": "pact.knowledge.skills.evaluation.runs.create",
   "knowledge.skills.deployments.create": "pact.knowledge.skills.deployments.create",
   "knowledge.skills.deployments.rollback": "pact.knowledge.skills.deployments.rollback",
@@ -701,6 +743,24 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "knowledge.render_markdown": "pact.knowledge.renderMarkdown",
   "knowledge.graph": "pact.knowledge.graph",
   "agent_sync.publish": "pact.agentSync.publish",
+  "acp_agent_relay.virtual_agents.list": "pact.agentRelay.virtualAgents.list",
+  "acp_agent_relay.virtual_agents.upsert": "pact.agentRelay.virtualAgents.upsert",
+  "acp_agent_relay.targets.list": "pact.agentRelay.targets.list",
+  "acp_agent_relay.targets.upsert": "pact.agentRelay.targets.upsert",
+  "acp_agent_relay.downstream_clients.refresh": "pact.agentRelay.downstreamClients.refresh",
+  "acp_agent_relay.sessions.list": "pact.agentRelay.sessions.list",
+  "acp_agent_relay.sessions.get": "pact.agentRelay.sessions.get",
+  "acp_agent_relay.turns.list": "pact.agentRelay.turns.list",
+  "acp_agent_relay.turn.observe": "pact.agentRelay.turn.observe",
+  "acp_agent_relay.virtual_agent.initialize": "pact.agentRelay.virtualAgent.initialize",
+  "acp_agent_relay.session.create": "pact.agentRelay.session.create",
+  "acp_agent_relay.session.resume": "pact.agentRelay.session.resume",
+  "acp_agent_relay.session.wake": "pact.agentRelay.session.wake",
+  "acp_agent_relay.prompt.send": "pact.agentRelay.prompt",
+  "acp_agent_relay.fs.read_text_file": "pact.agentRelay.fs.readTextFile",
+  "acp_agent_relay.fs.write_text_file": "pact.agentRelay.fs.writeTextFile",
+  "acp_agent_relay.session.cancel": "pact.agentRelay.cancel",
+  "acp_agent_relay.session.close": "pact.agentRelay.session.close",
   "data_connectors.governance.describe": "pact.dataConnectors.governance",
   "data_connectors.governance.plan": "pact.dataConnectors.governance.plan",
   "data_connectors.governance.conformance": "pact.dataConnectors.governance.conformance",
@@ -796,9 +856,34 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "codespace.review.approve": "pact.codespace.review.approve",
   "codespace.review.status.sync": "pact.codespace.review.status.sync",
   "raw-corpus.format.convert": "pact.rawCorpus.format.convert",
-  "knowledge.dossier.export": "pact.knowledge.dossier.export",
-  "knowledge.distillation.export": "pact.knowledge.distillation.export"
+  "knowledge.dossier.export": "pact.knowledge.dossier.export"
 });
+
+const INTERNAL_OPERATION_IDS_HIDDEN_FROM_TOOL_CATALOG = Object.freeze(new Set([
+  "acp_agent_relay.permission.resolve",
+  "knowledge.distillation.export",
+  "knowledge.distillation.runs.create",
+  "knowledge.distillation.runs.get",
+  "knowledge.distillation.workbench.runs.list",
+  "knowledge.distillation.workbench.runs.create",
+  "knowledge.distillation.workbench.runs.get",
+  "knowledge.distillation.workbench.runs.resume",
+  "knowledge.distillation.workbench.runs.cancel",
+  "knowledge.distillation.workbench.runs.archive",
+  "knowledge.distillation.workbench.runs.delete",
+  "knowledge.distillation.workbench.stage.rerun",
+  "knowledge.distillation.workbench.stage.export",
+  "knowledge.distillation.workbench.runs.package",
+  "knowledge.distillation.workbench.runs.artifacts",
+  "knowledge.distillation.workbench.runs.compare",
+  "sharedspace.drive.status",
+  "sharedspace.drive.item.list",
+  "sharedspace.drive.file.download",
+  "sharedspace.drive.file.upload",
+  "sharedspace.drive.sync.plan",
+  "sharedspace.drive.sync.apply",
+  "sharedspace.drive.permission.list"
+]));
 
 const TOOL_ALIAS_IDS_BY_OPERATION_ID = Object.freeze({
   "agent_workspaces.create": ["pact.workspace.create"],
@@ -810,6 +895,25 @@ const TOOL_ALIAS_IDS_BY_OPERATION_ID = Object.freeze({
 });
 
 const SCOPE_BY_OPERATION_ID = Object.freeze({
+  "acp_agent_relay.virtual_agents.list": "agent_relay:view",
+  "acp_agent_relay.virtual_agents.upsert": "agent_relay:operate",
+  "acp_agent_relay.targets.list": "agent_relay:view",
+  "acp_agent_relay.targets.upsert": "agent_relay:operate",
+  "acp_agent_relay.downstream_clients.refresh": "agent_relay:operate",
+  "acp_agent_relay.sessions.list": "agent_relay:view",
+  "acp_agent_relay.sessions.get": "agent_relay:view",
+  "acp_agent_relay.turns.list": "agent_relay:view",
+  "acp_agent_relay.turn.observe": "agent_relay:view",
+  "acp_agent_relay.virtual_agent.initialize": "agent_relay:operate",
+  "acp_agent_relay.session.create": "agent_relay:operate",
+  "acp_agent_relay.session.resume": "agent_relay:operate",
+  "acp_agent_relay.session.wake": "agent_relay:operate",
+  "acp_agent_relay.prompt.send": "agent_relay:operate",
+  "acp_agent_relay.fs.read_text_file": "agent_relay:view",
+  "acp_agent_relay.fs.write_text_file": "agent_relay:operate",
+  "acp_agent_relay.session.cancel": "agent_relay:operate",
+  "acp_agent_relay.session.close": "agent_relay:operate",
+  "acp_agent_relay.permission.resolve": "agent_relay:operate",
   "v001.baseline.status": "console:read",
   "system.health": "storage:read",
   "runtime.info": "storage:read",
@@ -852,7 +956,16 @@ const SCOPE_BY_OPERATION_ID = Object.freeze({
   "knowledge.golden_rules.rollback": "knowledge:maintain",
   "knowledge.rule_authoring.chat": "knowledge:maintain",
   "knowledge.gold_cases.save": "knowledge:maintain",
-  "knowledge.distillation.runs.create": "knowledge:maintain",
+  "external.knowledge.distillation.runs.create": "knowledge:maintain",
+  "external.knowledge.distillation.runs.cancel": "knowledge:maintain",
+  "external.cloudDrive.connect": "drive:write",
+  "external.cloudDrive.status": "drive:read",
+  "external.cloudDrive.item.list": "drive:read",
+  "external.cloudDrive.file.download": "drive:read",
+  "external.cloudDrive.file.upload": "drive:write",
+  "external.cloudDrive.sync.plan": "drive:sync",
+  "external.cloudDrive.sync.apply": "drive:sync",
+  "external.cloudDrive.permission.list": "drive:share",
   "knowledge.skills.evaluation.runs.create": "knowledge:maintain",
   "knowledge.skills.deployments.create": "knowledge:maintain",
   "knowledge.skills.deployments.rollback": "knowledge:maintain",
@@ -1043,8 +1156,7 @@ const SCOPE_BY_OPERATION_ID = Object.freeze({
   "codespace.review.approve": "repo:approve",
   "codespace.review.status.sync": "repo:read",
   "raw-corpus.format.convert": "knowledge:write",
-  "knowledge.dossier.export": "knowledge:read",
-  "knowledge.distillation.export": "knowledge:read"
+  "knowledge.dossier.export": "knowledge:read"
 });
 
 const TOOLSET_BY_SCOPE = Object.freeze({
@@ -1070,6 +1182,8 @@ const TOOLSET_BY_SCOPE = Object.freeze({
   "jobs:read": "pact.jobs.read",
   "console:read": "pact.console.read",
   "agent_sync:publish": "pact.agent.sync.publish",
+  "agent_relay:view": "pact.agent.relay",
+  "agent_relay:operate": "pact.agent.relay",
   "auth:admin": "pact.authorization.admin"
 });
 
@@ -1122,6 +1236,7 @@ function operationScope(operation) {
   const operationId = String(operation.id || "");
   if (
     operationId.startsWith("knowledge.") ||
+    operationId.startsWith("external.knowledge.") ||
     operationId.startsWith("context.") ||
     operationId.startsWith("client_runtime.") ||
     operationId.startsWith("agent_workspaces.") ||
@@ -1449,15 +1564,22 @@ export function createToolCatalog({ operations = [], activeFeatureIds = null } =
   const activeFeatureSet = activeFeatureIds?.length ? new Set(activeFeatureIds) : null;
   const tools = [];
   for (const operation of operations) {
-    const toolId = TOOL_ID_BY_OPERATION_ID[operation.id];
+    const toolId = operation.toolId || TOOL_ID_BY_OPERATION_ID[operation.id];
     if (!toolId) {
       continue;
     }
+    if (INTERNAL_OPERATION_IDS_HIDDEN_FROM_TOOL_CATALOG.has(operation.id)) {
+      continue;
+    }
+    const explicitScopes = operation.externalMcp
+      ? uniqueStrings(operation.requiredScopes || [])
+      : [];
     const scope = operationScope(operation);
-    const requiredScopes = scope ? [scope] : [];
+    const requiredScopes = explicitScopes.length ? explicitScopes : scope ? [scope] : [];
     const { method, endpoint } = normalizeHttpEndpoint(operation);
     const risk = normalizeRisk(operation);
     const requiresApproval = operation.destructive === true || risk === "destructive" || operation.safety?.requiresConfirmation === true;
+    const exposeOperationMetadata = operation.externalMcp || operation.aspects?.includes("external-service");
     const tool = {
       id: toolId,
       version: "1",
@@ -1466,8 +1588,14 @@ export function createToolCatalog({ operations = [], activeFeatureIds = null } =
       owner: "pact",
       source: "operation-backed",
       featureId: operation.featureId || "",
+      feature: exposeOperationMetadata ? operation.feature || "" : "",
+      aspects: exposeOperationMetadata ? operation.aspects || [] : [],
       operationId: operation.id,
       handlerId: operation.target?.method || "",
+      deprecated: operation.deprecated === true,
+      replacementService: operation.replacementService || "",
+      replacementOperationPrefix: operation.replacementOperationPrefix || "",
+      lifecycle: operation.lifecycle || {},
       transport: {
         http: {
           method,
@@ -1503,7 +1631,13 @@ export function createToolCatalog({ operations = [], activeFeatureIds = null } =
         enabled: true
       },
       status: "active",
-      tags: uniqueStrings([operation.featureId || "", operation.feature, operation.binary ? "binary" : "", risk])
+      tags: uniqueStrings([
+        operation.featureId || "",
+        operation.feature,
+        ...(exposeOperationMetadata ? operation.aspects || [] : []),
+        operation.binary ? "binary" : "",
+        risk
+      ])
     };
     tools.push(tool);
     for (const aliasId of TOOL_ALIAS_IDS_BY_OPERATION_ID[operation.id] || []) {
@@ -1548,6 +1682,7 @@ export function createToolCatalogRegistry({ operations = [], activeFeatureIds = 
   let toolsByOperationId = new Map(catalog.tools.filter((tool) => tool.operationId).map((tool) => [tool.operationId, tool]));
 
   function refresh(nextOperations = operations) {
+    operations = nextOperations;
     catalog = createToolCatalog({ operations: nextOperations, activeFeatureIds });
     toolsById = new Map(catalog.tools.map((tool) => [tool.id, tool]));
     toolsByOperationId = new Map(catalog.tools.filter((tool) => tool.operationId).map((tool) => [tool.operationId, tool]));

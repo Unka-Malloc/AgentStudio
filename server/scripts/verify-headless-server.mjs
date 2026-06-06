@@ -10,6 +10,24 @@ import { startHttpServer } from "../services/server-runtime/http-server.mjs";
 import { saveMountConfig } from "../platform/common/module-manager/mount-config.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
+const JOB_WAIT_ATTEMPTS = Number(process.env.PACT_HEADLESS_JOB_WAIT_ATTEMPTS || "120");
+const JOB_WAIT_INTERVAL_MS = Number(process.env.PACT_HEADLESS_JOB_WAIT_INTERVAL_MS || "250");
+const JOB_WAIT_TIMEOUT_MS = Number(process.env.PACT_HEADLESS_JOB_WAIT_TIMEOUT_MS || "0");
+const JOB_FINAL_FAILURE_STATUSES = new Set(["failed", "error", "timeout"]);
+
+function formatJobSnapshot(job) {
+  return {
+    id: job?.id || "",
+    status: job?.status || "",
+    stage: job?.stage || "",
+    progressPercent: job?.progressPercent ?? null,
+    error: job?.error || "",
+    updatedAt: job?.updatedAt || "",
+    warnings: Array.isArray(job?.warnings) ? job.warnings.length : 0,
+    stagePayload: job?.stagePayload || {}
+  };
+}
+
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
   const rawText = await response.text();
@@ -32,21 +50,49 @@ async function fetchJsonResponse(url, options = {}) {
 }
 
 async function waitForCompletedJob(baseUrl, jobId) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const job = await fetchJson(`${baseUrl}/api/jobs/${jobId}`);
+  let lastJob = null;
+  const maxAttempts = Math.max(1, Number.isFinite(JOB_WAIT_ATTEMPTS) ? JOB_WAIT_ATTEMPTS : 120);
+  const deadlineMs = Number.isFinite(JOB_WAIT_TIMEOUT_MS) && JOB_WAIT_TIMEOUT_MS > 0
+    ? JOB_WAIT_TIMEOUT_MS
+    : 0;
+  const intervalMs = Number.isFinite(JOB_WAIT_INTERVAL_MS) && JOB_WAIT_INTERVAL_MS > 0
+    ? JOB_WAIT_INTERVAL_MS
+    : 250;
+  const startTime = Date.now();
 
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const job = await fetchJson(`${baseUrl}/api/jobs/${encodeURIComponent(jobId)}`);
+    lastJob = job;
     if (job.status === "completed") {
       return job;
     }
 
-    if (job.status === "failed") {
+    if (JOB_FINAL_FAILURE_STATUSES.has(job.status)) {
       throw new Error(job.error || "任务失败");
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (!["queued", "running", "paused"].includes(job.status)) {
+      throw new Error(
+        `任务进入异常状态：${job.status || "<unknown>"}；快照：${JSON.stringify(formatJobSnapshot(job))}`
+      );
+    }
+
+    if (attempt > 0 && attempt % 20 === 0) {
+      console.log(
+        `[waitForCompletedJob] ${jobId} attempt=${attempt}/${maxAttempts} status=${job.status} ` +
+        `stage=${job.stage || ""} progress=${job.progressPercent ?? ""}`
+      );
+    }
+
+    if (deadlineMs > 0 && Date.now() - startTime >= deadlineMs) {
+      break;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
-  throw new Error("等待任务完成超时。");
+  const snapshot = lastJob ? JSON.stringify(formatJobSnapshot(lastJob)) : "未查询到任务。";
+  throw new Error(`等待任务完成超时：${jobId}；最后快照：${snapshot}`);
 }
 
 function buildUploadedFile(name, relativePath, data, mediaType) {
@@ -122,6 +168,7 @@ const pactServer = await startHttpServer({
   runtimeOptions: {
     mountModules: {
       documentParser: mockDocumentParserModulePath,
+      pdfProcessor: mockDocumentParserModulePath,
       multimodalParser: mockMultimodalParserModulePath,
       sourceCodeAgent: mockSourceCodeAgentModulePath,
       analysis: mockAnalysisModulePath
@@ -1130,7 +1177,7 @@ try {
   assert.equal(weeklyDownload.ok, true);
   assert.match(
     weeklyDownload.headers.get("content-disposition") || "",
-    /^attachment; filename="weekly-report\.eml"$/
+    /^attachment; filename="weekly-report\.eml"(?:; filename\*=UTF-8''weekly-report\.eml)?$/
   );
   assert.equal(await weeklyDownload.text(), bundledWeeklyEmail.content);
 

@@ -14,33 +14,38 @@ export type DrawerTab =
   | "preferences"
   | "discovery"
   | "users"
-  | "modules"
   | "syncDirectories";
 export type AppView =
   | "dashboard"
   | "feed"
+  | "approval"
   | "debug"
   | "sources"
+  | "externalServices"
   | "knowledge"
   | "workspaces"
   | "admin";
-export type DebugTab = "knowledgeRecall" | "agentRetrieval";
+export type DebugTab = "knowledgeRecall" | "agentRetrieval" | "knowledgeDistillation";
+export type ExternalServiceTab = "list";
 export type RuleAuthoringMode = "chat" | "manual";
 export type AdminView =
   | "jobs"
   | "logs"
   | "tools"
-  | "agentManagement"
+  | "toolList"
+  | "toolStats"
   | "agentPermissions"
   | "agentConfig"
+  | "agentAssignment"
   | "contextManagement"
   | "maintenanceAgent"
   | "opsMonitor"
+  | "runtimeDownloads"
   | "productionHealth"
   | "clients"
   | "storage"
   | "modules";
-export type KnowledgeTab = "wordCloud" | "chunking" | "parsing" | "retrieval" | "distillation" | "review" | "rules" | "maintenance" | "management";
+export type KnowledgeTab = "management" | "wordCloud" | "maintenance" | "chunking" | "distillation";
 export type KnowledgeManagementPanel = "knowledge" | "rules" | "expert";
 export type OptionBarValue = string | number | boolean;
 export type OptionBarOption = {
@@ -130,6 +135,7 @@ export type DashboardAlert = {
   tone: "warning" | "danger" | "success";
   actionLabel: string;
   source: "configuration" | "monitor";
+  actionKind?: "open" | "recover-supervisor";
   firstSeenAt?: string;
   lastSeenAt?: string;
   live?: boolean;

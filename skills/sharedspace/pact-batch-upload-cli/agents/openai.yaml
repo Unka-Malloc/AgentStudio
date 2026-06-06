@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Batch Upload CLI"
+  short_description: "Help with Pact Batch Upload CLI tasks"
+  default_prompt: "Use $pact-batch-upload-cli to handle this Pact platform task."

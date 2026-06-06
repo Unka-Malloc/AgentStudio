@@ -1,136 +1,16 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { SERVER_API_OPERATIONS } from "../platform/common/operation-dispatcher/operation-registry.mjs";
-import { createKnowledgeDistillationWorkbench } from "../platform/specialized/knowledge/invocation/knowledge-distillation-workbench/index.mjs";
+import { createToolCatalog } from "../platform/specialized/capabilities/tools/tool-management-core/catalog.mjs";
+import { executeConsoleDomainOperation } from "../platform/specialized/console/console-domain-operation-executor.mjs";
 
-const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-distillation-workbench-"));
+const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 
-const fakeResult = {
-  generatedAt: "2026-05-20T00:00:00.000Z",
-  normalizedDocuments: {
-    schemaVersion: 1,
-    packageType: "pact.normalized-documents",
-    batchId: "job-project-1",
-    generatedAt: "2026-05-20T00:00:00.000Z",
-    documents: [
-      {
-        documentId: "doc-1",
-        sourceId: "source-1",
-        title: "README",
-        granularity: "source",
-        relativePath: "normalized-documents/readme.docx"
-      },
-      {
-        documentId: "doc-2",
-        sourceId: "source-2",
-        title: "ARCH",
-        granularity: "section",
-        relativePath: "normalized-documents/arch.docx"
-      }
-    ],
-    sourceMaterials: [{ documentId: "mat-1", title: "README raw", relativePath: "source-materials/readme.md" }],
-    assets: [{ assetId: "asset-1", artifactType: "image", title: "Architecture diagram", relativePath: "assets/arch.png", sourceId: "source-2" }],
-    summary: { documentCount: 2, sourceMaterialCount: 1, assetCount: 1, byGranularity: { source: 1, section: 1 } },
-    warnings: []
-  },
-  preprocess: {
-    blocks: [
-      { id: "block-1", sourceId: "source-1", kind: "heading", text: "Project", headingPath: ["Project"], sourceStartLine: 1, sourceEndLine: 1 },
-      { id: "block-2", sourceId: "source-2", kind: "paragraph", text: "Knowledge conversion has raw corpus, index, and distillation stages.", headingPath: ["Architecture"], sourceStartLine: 1, sourceEndLine: 3 }
-    ],
-    chunks: [
-      { id: "chunk-1", sourceId: "source-1", blockIds: ["block-1"], content: "Project supports workspace switching.", tokenCount: 5 }
-    ]
-  },
-  sourceFiles: [
-    {
-      id: "source-1",
-      name: "README.md",
-      originalRelativePath: "README.md",
-      kind: "text",
-      text: "# Project\n\nThis project supports workspace switching and knowledge distillation.",
-      capturedAt: "2026-05-20T00:00:00.000Z",
-      contentHash: "sha256:readme",
-      embeddedDocuments: []
-    },
-    {
-      id: "source-2",
-      name: "docs/ARCH.md",
-      originalRelativePath: "docs/ARCH.md",
-      kind: "text",
-      text: "# Architecture\n\nKnowledge conversion has raw corpus, index, and distillation stages.",
-      capturedAt: "2026-05-19T00:00:00.000Z",
-      contentHash: "sha256:arch",
-      visualElements: [
-        { kind: "image", sequence: 1, title: "Architecture diagram", mediaType: "image/png" },
-        { kind: "table", sequence: 2, title: "Layer table", markdown: "| Layer | Role |\\n| --- | --- |\\n| Raw | Convert |" }
-      ]
-    }
-  ],
-  retrieval: {
-    items: [{ id: "evidence-1", documentId: "doc-1", title: "Project architecture evidence", score: 0.9 }]
-  },
-  timeline: [{ title: "Initial document" }]
-};
-
-const queueEvents = [];
-const queueMonitor = {
-  registerStarted(input) {
-    queueEvents.push({ type: "started", input });
-    return Promise.resolve(input);
-  },
-  registerHeartbeat(input) {
-    queueEvents.push({ type: "heartbeat", input });
-    return Promise.resolve(input);
-  },
-  registerClosed(input) {
-    queueEvents.push({ type: "closed", input });
-    return Promise.resolve(input);
-  }
-};
-
-const workbench = createKnowledgeDistillationWorkbench({
-  userDataPath: tempRoot,
-  jobManager: {
-    async getJob(jobId) {
-      assert.equal(jobId, "job-project-1");
-      return { id: jobId, status: "completed", progressPercent: 100 };
-    },
-    async getJobResult(jobId) {
-      assert.equal(jobId, "job-project-1");
-      return fakeResult;
-    }
-  },
-  queueMonitor,
-  knowledgeDistillationRuntime: {
-    async runDistillation(input) {
-      assert.equal(input.query, "项目全部文档通用知识蒸馏");
-      assert.ok(input.rawDocuments.length >= 1);
-      assert.equal(input.modelEnabled, true);
-      assert.equal(input.modelAlias, "deepseek-v4-flash");
-      return {
-        status: "completed",
-        candidates: [{ candidateId: "candidate-1" }],
-        portableDocuments: [
-          {
-            document: {
-              title: "Project distilled document",
-              markdown: "# Project distilled document\n\nWorkspace switching and knowledge distillation are core capabilities.",
-              selfContained: true,
-              runtimeDependencies: [],
-              citations: [{ citationKey: "C1", excerpt: "workspace switching" }],
-              evidenceAppendix: [{ citationKey: "C1", excerpt: "workspace switching" }]
-            }
-          }
-        ]
-      };
-    }
-  }
-});
-
-const requiredOperationIds = [
+const INTERNAL_OPERATION_IDS = Object.freeze([
+  "knowledge.distillation.runs.create",
+  "knowledge.distillation.runs.get",
   "knowledge.distillation.workbench.runs.list",
   "knowledge.distillation.workbench.runs.create",
   "knowledge.distillation.workbench.runs.get",
@@ -141,130 +21,160 @@ const requiredOperationIds = [
   "knowledge.distillation.workbench.stage.rerun",
   "knowledge.distillation.workbench.stage.export",
   "knowledge.distillation.workbench.runs.package",
-  "knowledge.distillation.workbench.runs.compare"
-];
-const operationIds = new Set(SERVER_API_OPERATIONS.map((operation) => operation.id));
-for (const id of requiredOperationIds) {
-  assert.equal(operationIds.has(id), true, `operation registry must include ${id}`);
+  "knowledge.distillation.workbench.runs.artifacts",
+  "knowledge.distillation.workbench.runs.compare",
+  "knowledge.distillation.export"
+]);
+
+const EXTERNAL_OPERATION_IDS = Object.freeze([
+  "external.knowledge.distillation.service.health",
+  "external.knowledge.distillation.service.capabilities",
+  "external.knowledge.distillation.service.runtime_health",
+  "external.knowledge.distillation.runs.list",
+  "external.knowledge.distillation.runs.create",
+  "external.knowledge.distillation.runs.get",
+  "external.knowledge.distillation.runs.cancel",
+  "external.knowledge.distillation.evidence.query",
+  "external.knowledge.distillation.projects.evidence.query",
+  "external.knowledge.distillation.artifacts.export"
+]);
+
+const operationsById = new Map(SERVER_API_OPERATIONS.map((operation) => [operation.id, operation]));
+const catalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
+const toolOperationIds = new Set(catalog.tools.map((tool) => tool.operationId).filter(Boolean));
+
+for (const operationId of EXTERNAL_OPERATION_IDS) {
+  const operation = operationsById.get(operationId);
+  assert.ok(operation, `${operationId} must stay registered as the maintained external distillation surface`);
+  assert.equal(operation.feature, "external", `${operationId} must use the external feature namespace`);
+  assert.equal(operation.aspects?.includes("external-service"), true, `${operationId} must be an external service operation`);
+  assert.equal(operation.aspects?.includes("external-upstream-gateway"), true, `${operationId} must go through the external upstream gateway aspect`);
+  assert.equal(operation.aspects?.includes("knowledge-distillation"), true, `${operationId} must keep the knowledge-distillation aspect`);
+  assert.equal(operation.public === true || operation.externalAuth === true, false, `${operationId} must not bypass console authorization as public/externalAuth`);
+  assert.ok(Array.isArray(operation.requiredScopes) && operation.requiredScopes.length > 0, `${operationId} must declare required scopes`);
+  assert.equal(String(operation.http?.path || "").startsWith("/api/external/knowledge/distillation/"), true, `${operationId} must stay behind the mediated external knowledge distillation API`);
+  assert.equal(toolOperationIds.has(operationId), true, `${operationId} must be exposed to Tool Management`);
 }
 
-await assert.rejects(
-  () => workbench.createRun({
-    jobId: "job-project-1",
-    title: "Invalid distillation",
-    query: "项目全部文档通用知识蒸馏",
-    modelEnabled: false
-  }),
-  /必须启用模型闭环/
+for (const operationId of INTERNAL_OPERATION_IDS) {
+  const operation = operationsById.get(operationId);
+  assert.ok(operation, `${operationId} must remain as a temporary migration shim`);
+  assert.equal(operation.deprecated, true, `${operationId} must be explicitly deprecated`);
+  assert.equal(operation.replacementService, "external.knowledge.distillation", `${operationId} must point to the external service`);
+  assert.equal(operation.lifecycle?.maintenancePolicy, "compatibility-shim-only", `${operationId} must not be maintained as an algorithm surface`);
+  assert.equal(operation.aspects?.includes("internal-deprecated"), true, `${operationId} must expose the internal-deprecated aspect`);
+  assert.equal(operation.aspects?.includes("external-replaced"), true, `${operationId} must expose the external-replaced aspect`);
+  assert.ok(Array.isArray(operation.requiredScopes) && operation.requiredScopes.length > 0, `${operationId} must still require console authorization before returning migration metadata`);
+  assert.equal(toolOperationIds.has(operationId), false, `${operationId} must not be exposed to agents`);
+}
+
+for (const operationId of INTERNAL_OPERATION_IDS) {
+  const migrationResult = await executeConsoleDomainOperation({
+    operationId,
+    input: { jobId: "deprecated-internal-workbench", runId: "deprecated-run", artifactId: "deprecated-artifact" },
+    context: {}
+  });
+  assert.equal(migrationResult.status, 410, `${operationId} must return migration metadata instead of running the old internal surface`);
+  assert.equal(migrationResult.payload.code, "INTERNAL_KNOWLEDGE_DISTILLATION_REMOVED");
+  assert.equal(migrationResult.payload.replacementService, "external.knowledge.distillation");
+  assert.equal(migrationResult.payload.migration.createRun, "external.knowledge.distillation.runs.create");
+}
+
+const runtimeProvidersText = await fs.readFile(
+  path.join(repoRoot, "server/platform/interactive/server-runtime-providers.mjs"),
+  "utf8"
 );
-
-const created = await workbench.createRun({
-  jobId: "job-project-1",
-  batchId: "job-project-1",
-  title: "Verify project distillation",
-  query: "项目全部文档通用知识蒸馏"
-});
-assert.equal(created.status, "queued");
-
-let run = null;
-for (let attempt = 0; attempt < 60; attempt += 1) {
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  run = await workbench.getRun({ runId: created.runId });
-  if (run?.status === "completed" || run?.status === "failed") {
-    break;
-  }
-}
-
-assert.equal(run?.status, "completed", run?.error || "workbench run should complete");
-assert.equal(run.stages.length, 5);
-assert.equal(run.stages.every((stage) => stage.status === "completed"), true);
-assert.ok(run.storage.rootRelativePath.includes("knowledge-distillation-workbench"));
-assert.equal(run.taskManagement.queue, "queue-monitor");
-assert.equal(queueEvents.some((event) => event.type === "started"), true);
-assert.equal(queueEvents.some((event) => event.type === "closed" && event.input.status === "completed"), true);
-
-const markdown = await workbench.exportStage({
-  runId: created.runId,
-  stageId: "knowledge-distillation",
-  format: "markdown"
-});
-assert.equal(markdown.contentType.includes("text/markdown"), true);
-assert.ok(markdown.buffer.toString("utf8").includes("Project distilled document"));
-
-const docx = await workbench.exportStage({
-  runId: created.runId,
-  stageId: "knowledge-distillation",
-  format: "docx"
-});
-assert.equal(docx.contentType, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-assert.ok(docx.buffer.length > 1000);
-
-const stagePackage = await workbench.exportStage({
-  runId: created.runId,
-  stageId: "raw-format-conversion",
-  format: "package"
-});
-assert.equal(stagePackage.contentType, "application/zip");
-assert.ok(stagePackage.buffer.length > 100);
-
-const runPackage = await workbench.exportRunPackage({ runId: created.runId });
-assert.equal(runPackage.contentType, "application/zip");
-assert.ok(runPackage.buffer.length > 100);
-
-let rerun = await workbench.rerunStage({
-  runId: created.runId,
-  stageId: "project-dossier"
-});
-assert.equal(rerun.status, "queued");
-for (let attempt = 0; attempt < 60; attempt += 1) {
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  rerun = await workbench.getRun({ runId: created.runId });
-  if (rerun?.status === "completed" || rerun?.status === "failed") {
-    break;
-  }
-}
-assert.equal(rerun.status, "completed");
 assert.equal(
-  rerun.stages.find((stage) => stage.stageId === "project-dossier").versions.length,
-  1
+  runtimeProvidersText.includes("knowledge-distillation-runtime/index.mjs"),
+  false,
+  "the server runtime must not dynamically load the internal knowledge distillation runtime"
+);
+assert.equal(
+  runtimeProvidersText.includes("knowledgeDistillationRuntime"),
+  false,
+  "the server runtime must not keep an internal knowledgeDistillationRuntime compatibility slot"
 );
 
-const second = await workbench.createRun({
-  jobId: "job-project-1",
-  batchId: "job-project-1",
-  title: "Verify project distillation v2",
-  query: "项目全部文档通用知识蒸馏"
-});
-let secondRun = null;
-for (let attempt = 0; attempt < 60; attempt += 1) {
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  secondRun = await workbench.getRun({ runId: second.runId });
-  if (secondRun?.status === "completed" || secondRun?.status === "failed") {
-    break;
+const consoleDomainServicesText = await fs.readFile(
+  path.join(repoRoot, "server/platform/specialized/console/console-domain-services.mjs"),
+  "utf8"
+);
+assert.equal(
+  consoleDomainServicesText.includes("knowledge-distillation-workbench/index.mjs"),
+  false,
+  "console domain services must not import the internal knowledge distillation workbench"
+);
+
+async function readOptional(relativePath) {
+  try {
+    return await fs.readFile(path.join(repoRoot, relativePath), "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return "";
+    }
+    throw error;
   }
 }
-assert.equal(secondRun.status, "completed");
-const comparison = await workbench.compareRuns({
-  leftRunId: created.runId,
-  rightRunId: second.runId
-});
-assert.equal(comparison.stages.length, 5);
 
-const archived = await workbench.archiveRun({ runId: second.runId });
-assert.ok(archived.archivedAt);
+const workbenchFacadeText = await fs.readFile(
+  path.join(repoRoot, "server-web/lib/knowledge-distillation-workbench.ts"),
+  "utf8"
+);
+const workbenchComponentText = await fs.readFile(
+  path.join(repoRoot, "server-web/components/KnowledgeDistillationWorkbench.vue"),
+  "utf8"
+);
+const legacyDebugDistillationControllerText = await fs.readFile(
+  path.join(repoRoot, "server-web/composables/console-debug-distillation-controller.ts"),
+  "utf8"
+);
+const extractedWorkbenchControllerText = await readOptional(
+  "server-web/composables/knowledge-distillation-workbench-controller.ts"
+);
+const extractedDebugDistillationRunnerText = await readOptional(
+  "server-web/composables/console-debug-distillation-runner.ts"
+);
+const consoleWorkbenchCallerText = [
+  workbenchComponentText,
+  extractedWorkbenchControllerText
+].join("\n");
+const consoleDebugDistillationCallerText = [
+  legacyDebugDistillationControllerText,
+  extractedDebugDistillationRunnerText
+].join("\n");
 
-const cancelTarget = await workbench.createRun({
-  rawDocuments: [{ title: "cancel target", text: "cancel me" }],
-  title: "Cancel target",
-  query: "项目全部文档通用知识蒸馏"
-});
-const canceled = await workbench.cancelRun({ runId: cancelTarget.runId, reason: "verify cancel" });
-assert.equal(canceled.status, "canceled");
+assert.ok(
+  /type\s+CreateWorkbenchRunPayload\s*=\s*Record<string,\s*unknown>\s*&\s*\{\s*workflowScope:\s*"document"\s*\|\s*"corpus"\s*\|\s*"project";\s*\}/.test(workbenchFacadeText) ||
+    /CreateKnowledgeDistillationWorkbenchRunPayload/.test(workbenchFacadeText),
+  "console workbench facade must require workflowScope in the create payload type"
+);
+assert.match(
+  consoleWorkbenchCallerText,
+  /workflowScope:\s*"project"/,
+  "project-directory workbench runs must explicitly pass workflowScope=project"
+);
+assert.match(
+  consoleDebugDistillationCallerText,
+  /workflowScope:\s*"document"/,
+  "single-file debug distillation runs must explicitly pass workflowScope=document"
+);
+assert.match(
+  consoleDebugDistillationCallerText,
+  /fileName:\s*file\.name/,
+  "single-file debug distillation must pass the known fileName as the document selector"
+);
 
-const deleted = await workbench.deleteRun({ runId: second.runId });
-assert.equal(deleted.ok, true);
+const externalCreateOperation = operationsById.get("external.knowledge.distillation.runs.create");
+assert.ok(externalCreateOperation, "external distillation create operation must exist");
+assert.equal(
+  externalCreateOperation.inputSchema?.required?.includes("workflowScope"),
+  true,
+  "external distillation create operation must force workflowScope at the platform boundary"
+);
+assert.deepEqual(
+  externalCreateOperation.inputSchema?.properties?.workflowScope?.enum,
+  ["document", "corpus", "project"],
+  "external distillation create operation must expose workflowScope as an enum"
+);
 
-const listing = await workbench.listRuns();
-assert.equal(listing.items.some((item) => item.runId === created.runId), true);
-
-console.log("knowledge distillation workbench verification passed");
+console.log("knowledge distillation internal workbench deprecation verification passed");

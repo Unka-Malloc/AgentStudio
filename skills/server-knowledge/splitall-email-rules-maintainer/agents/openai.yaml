@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Email Rules Maintainer"
-  short_description: "Help with SplitAll Email Rules Maintainer tasks"
-  default_prompt: "Use $splitall-email-rules-maintainer to handle this SplitAll platform task."

@@ -1,13 +1,16 @@
 use crate::targets;
-use anyhow::{anyhow, Result};
-use serde_json::{json, Value};
+use anyhow::{Result, anyhow};
+use serde_json::{Value, json};
 
 const PACT_PLUGIN_ID: &str = "pact-mcp";
 
 pub fn plugin_status(params: &Value) -> Result<Value> {
     let target = target_param(params)?;
-    let inspected = targets::inspect_target(&target)?;
-    let target_info = inspected.get("target").cloned().unwrap_or_else(|| json!({}));
+    let inspected = targets::inspect_target_with_params(params)?;
+    let target_info = inspected
+        .get("target")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     let configured = target_info
         .get("configured")
         .and_then(Value::as_bool)
@@ -31,7 +34,8 @@ pub fn plugin_status(params: &Value) -> Result<Value> {
 
 pub fn plugin_update(params: &Value) -> Result<Value> {
     let target = target_param(params)?;
-    if bool_param(params, "dryRun").unwrap_or(false) || bool_param(params, "plan").unwrap_or(false) {
+    if bool_param(params, "dryRun").unwrap_or(false) || bool_param(params, "plan").unwrap_or(false)
+    {
         let plan = targets::mcp_config_plan(params)?;
         return Ok(json!({
             "ok": true,
@@ -111,22 +115,26 @@ mod tests {
         assert_eq!(status["pluginId"], PACT_PLUGIN_ID);
         assert_eq!(status["pluginRole"], "peer");
         assert_eq!(status["privilegedHost"], false);
-        assert!(status["targetNative"]["fields"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|field| field["path"] == "mcp.pact.url"));
+        assert!(
+            status["targetNative"]["fields"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|field| field["path"] == "mcp.pact.url")
+        );
     }
 
     #[test]
     fn mcp_plugins_opencode_update_writes_remote_connector_shape() {
         let dir = temp_test_dir("opencode-update");
         let config_path = dir.join("opencode.jsonc");
+        let state_root = dir.join("future-client");
         fs::write(&config_path, r#"{"mcp":{"other":{"enabled":true}}}"#).unwrap();
 
         let update = plugin_update(&json!({
             "target": "opencode",
             "configPath": config_path.to_string_lossy(),
+            "stateRoot": state_root.to_string_lossy(),
             "baseUrl": "http://127.0.0.1:7228",
             "token": "peer-token"
         }))
@@ -138,7 +146,10 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
         assert_eq!(updated["mcp"]["pact"]["type"], "remote");
         assert_eq!(updated["mcp"]["pact"]["url"], "http://127.0.0.1:7228/mcp");
-        assert_eq!(updated["mcp"]["pact"]["headers"]["X-Pact-Api-Key"], "peer-token");
+        assert_eq!(
+            updated["mcp"]["pact"]["headers"]["X-Pact-Api-Key"],
+            "peer-token"
+        );
         assert_eq!(updated["mcp"]["pact"]["enabled"], true);
     }
 
@@ -146,27 +157,63 @@ mod tests {
     fn mcp_plugins_rollback_restores_target_native_config() {
         let dir = temp_test_dir("opencode-rollback");
         let config_path = dir.join("opencode.jsonc");
+        let state_root = dir.join("future-client");
         let original = r#"{"mcp":{"other":{"enabled":true}}}"#;
         fs::write(&config_path, original).unwrap();
 
         let update = plugin_update(&json!({
             "target": "opencode",
             "configPath": config_path.to_string_lossy(),
+            "stateRoot": state_root.to_string_lossy(),
             "token": "rollback-token"
         }))
         .unwrap();
-        let snapshot_path = update["apply"]["snapshotPath"].as_str().unwrap();
+        let snapshot_id = update["apply"]["snapshotId"].as_str().unwrap();
         assert_ne!(fs::read_to_string(&config_path).unwrap(), original);
 
         let rollback = plugin_rollback(&json!({
             "target": "opencode",
             "configPath": config_path.to_string_lossy(),
-            "snapshotPath": snapshot_path
+            "stateRoot": state_root.to_string_lossy(),
+            "snapshotId": snapshot_id
         }))
         .unwrap();
 
         assert_eq!(rollback["ok"], true);
         assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+    }
+
+    #[test]
+    fn mcp_plugins_target_positionals_and_dry_run_supports_config_plan() {
+        let result = plugin_update(&json!({
+            "positionals": ["opencode", "plan"],
+            "dryRun": true,
+            "stateRoot": temp_test_dir("positionals").join("future-client").to_string_lossy(),
+        }))
+        .unwrap();
+        assert_eq!(result["status"], "planned");
+        assert_eq!(result["plan"]["status"], "planned");
+    }
+
+    #[test]
+    fn mcp_plugins_respects_plan_string_toggle() {
+        let result = plugin_update(&json!({
+            "target": "opencode",
+            "plan": "on",
+            "stateRoot": temp_test_dir("plan-string").join("future-client").to_string_lossy(),
+        }))
+        .unwrap();
+        assert_eq!(result["status"], "planned");
+        assert_eq!(result["plan"]["plan"]["operation"], "mcp.config.apply");
+    }
+
+    #[test]
+    fn mcp_plugins_status_accepts_positionals_target() {
+        let status = plugin_status(&json!({
+            "positionals": ["opencode"]
+        }))
+        .unwrap();
+        assert!(status["status"] == "configured" || status["status"] == "not-configured");
     }
 
     fn temp_test_dir(name: &str) -> PathBuf {

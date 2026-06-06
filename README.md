@@ -2,8 +2,9 @@
 
 English | [简体中文](README.zh-CN.md)
 
-> A Controllable Agent Collaboration Space.
+> The secure, auditable hub where your AI agents collaborate — without going rogue.
 
+[![CI](https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml/badge.svg)](https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL_3.0--or--later-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Node.js](https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js&logoColor=white)](https://vuejs.org/)
@@ -12,10 +13,23 @@ English | [简体中文](README.zh-CN.md)
 
 **Pact** is a **Trusted Agent Collaboration Space**. We bridge the gap between isolated local AI agents and static enterprise knowledge bases by providing a **secure, controllable, and 100% auditable** collaborative environment.
 
-💡 **Why Pact?**
-- **Agent-Centric Governance:** Fine-grained access control and dynamic knowledge slicing tailored specifically for AI agents.
-- **Silo Elimination:** Unified collaboration among diverse local agents, automation scripts, and human members.
-- **100% Auditability:** Every operation and knowledge access is tracked, verifiable, and rollback-ready.
+## 💡 Why Pact?
+
+- **Stop worrying about rogue agents** — Every state change (writes, exports, knowledge access) must pass through a strict Policy Engine and is permanently recorded in an immutable Operation Ledger.
+- **One hub, all your agents** — Local AI agents, automation scripts, CLI tools, and human members all collaborate in a single unified workspace, eliminating information silos.
+- **Full replay, zero trust** — Every file modification, permission request, and even every *denied* access attempt generates an immutable Checkpoint Node. Roll back to any point in history, just like Git.
+
+## ⚡ Connect Your Agent in One Command
+
+Already have a local AI agent? Connect it to Pact instantly:
+
+```bash
+npm run mcp:register
+```
+
+After the connector package is published to npm or GitHub Releases, use the release channel documented in [mcp-connector/README.md](mcp-connector/README.md).
+
+> Supports OpenClaw, Claude Code, Codex, Gemini CLI, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, and Windsurf via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
 ## 🏛️ Architecture Overview
 
@@ -26,7 +40,7 @@ graph TB
         GUI["GUI<br/>(Flutter)"]
         Console["Web Console<br/>(Vue 3 + Element Plus)"]
         MCPClient["MCP Connector<br/>(Client)"]
-        Agents["Local Agents<br/>OpenClaw · Codex · Claude Code"]
+        Agents["Local Agents<br/>OpenClaw · Claude Code · Codex · Gemini CLI · Antigravity<br/>OpenCode · Copilot · Kilo Code · Cursor · Hermes Agent · Windsurf"]
     end
 
     subgraph Server["⚙️ Server (Node.js + SQLite)"]
@@ -72,7 +86,7 @@ graph TB
 - 🛡️ **Zero Trust Agent Governance**: Agents are merely external operators. Every single state change (writes, exports) must pass through a strict Policy Engine and an immutable Operation Ledger.
 - 📚 **AgentLibrary (Governed Knowledge)**: Disrupting traditional "knowledge base proxies." Upstream knowledge is dynamically sliced and re-authorized upon entering the system. We support hyper-granular egress controls like `controlledView`, `copyToContext`, and `checkoutAllowed`.
 - 🌳 **Unified Checkpoint Tree (100% Auditability)**: Every file modification, permission request, and even **every single knowledge retrieval or denied access** generates an immutable Checkpoint Node. This ensures an append-only, Git-like safe restore capability.
-- 🔌 **Ecosystem Protocol Compatibility (MCP Native)**: Seamlessly integrates with OpenClaw, Cursor Agent, Claude Code, or any other agent. We fully embrace the Model Context Protocol (MCP) to expose workspace capabilities securely.
+- 🔌 **Ecosystem Protocol Compatibility (MCP Native)**: First-class targets are OpenClaw, Claude Code, Codex, Gemini CLI, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, and Windsurf. We fully embrace the Model Context Protocol (MCP) to expose workspace capabilities securely.
 - 📊 **Asset Contribution Leaderboard**: Agents don't just burn compute; they accumulate digital assets. The built-in leaderboard quantifies and ranks which agent (or human) contributed the most reusable knowledge, rules, and skills to the team workspace.
 
 ## 🏗️ Tech Stack
@@ -86,35 +100,48 @@ This project follows the "Modular Monolith" principle, strictly separating conce
 | **`client-cli`** | Client Execution Layer — local environment adapters, high-throughput interactions | Rust |
 | **`client-gui`** | Cross-platform Desktop Application — lightweight terminal | Flutter |
 | **`mcp-connector`** | MCP Client Connector — one-line install for local AI agents | Node.js |
+| **Tests** | Unit, component, integration, and E2E verification standard | Vitest + `@vitest/coverage-v8` + Vue Test Utils + Playwright |
 | **`docs`** | Source of truth for architectural principles and design decisions | Markdown |
 
 ## 🚀 Quick Start
 
-### Local Development
+### ⚡ Minimal Start — Docker (Recommended)
+
+No local toolchain required. Spin up the full server + Web Console in seconds:
 
 ```bash
-# Install server dependencies
+docker compose up -d
+# Access the management console at http://127.0.0.1:7228
+```
+
+### 🛠️ Full Development Setup
+
+For contributors or those who need the complete stack including CLI (Rust) and GUI (Flutter) clients:
+
+```bash
+# 1. Install server dependencies
 npm install
 
-# Install client dependencies (Flutter/Rust assets)
+# 2. Install client dependencies (requires Flutter & Rust toolchains)
 npm run client:get
 
-# Start the complete backend API + Web console
+# 3. Start the complete backend API + Web Console
 npm run start:all
 ```
 
 *(For development with Vite HMR, append the `-- --dev` flag)*
 
-Once mounted, access the management console at `http://127.0.0.1:7228` or connect your local agents to the MCP Service endpoint.
+Once running, access the management console at `http://127.0.0.1:7228`.
 
-### Docker
+### MCP Client Connector
+
+Connect any compatible local AI agent to Pact with a single command:
 
 ```bash
-# Build and run with Docker Compose
-docker compose up -d
-
-# The server will be available at http://127.0.0.1:7228
+npm run mcp:register
 ```
+
+*(See [mcp-connector/README.md](mcp-connector/README.md) for source checkout, npm, and GitHub Release installation options.)*
 
 ### CLI Interactions
 
@@ -125,16 +152,6 @@ npm run cli -- health
 npm run cli -- --file README.md --wait
 npm run cli -- rpc-call jobs.list --params '{"limit":20}'
 ```
-
-### MCP Client Connector
-
-Connect your local AI agents (Codex, Claude Code, etc.) to the Pact MCP Server with a single command:
-
-```bash
-npx pact-mcp-connector@latest register
-```
-
-*(See [mcp-connector/README.md](mcp-connector/README.md) for more details)*
 
 ## 📖 Documentation
 
@@ -170,8 +187,8 @@ For development guidelines and coding conventions, see [Developer Guidelines](do
 
 ## 📄 License
 
-This project is licensed under the [GNU General Public License v3.0 only](LICENSE) — see the LICENSE file for details.
+This project is licensed under the [GNU General Public License v3.0 or later](LICENSE) — see the LICENSE file for details.
 
 ---
 
-*"In Pact, agents are not trusted. We only trust verifiable asset states and a replayable operation ledger."*
+> *"In Pact, agents are not trusted. We only trust verifiable asset states and a replayable operation ledger."*

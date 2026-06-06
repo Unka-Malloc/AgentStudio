@@ -13,7 +13,15 @@ const DEFAULT_MANAGED_FOLDER_ROOT = ".pact-data";
 const DEFAULT_MANAGED_CLIENT = "owner";
 const DEFAULT_PUBLIC_FOLDER = "public";
 const SUPPORTED_PROVIDERS = Object.freeze(["icloud", "onedrive", "google-drive", "dropbox"]);
+const LOCAL_PROJECTION_PROVIDERS = new Set(["icloud", "onedrive"]);
 const OAUTH_PROVIDERS = new Set(["onedrive", "google-drive", "dropbox"]);
+const REMOTE_LIVE_MODES = new Set(["remote-live", "live", "remote", "sandbox-live"]);
+const REMOTE_PROVIDER_PATHS = Object.freeze({
+  connect: "/connect",
+  list: "/items/list",
+  download: "/files/download",
+  upload: "/files/upload"
+});
 const SECRET_REF_BY_PROVIDER = Object.freeze({
   onedrive: "secret://pact/drive/onedrive-oauth",
   "google-drive": "secret://pact/drive/google-drive-oauth",
@@ -30,6 +38,7 @@ const SECRET_VALUE_KEYS = new Set([
   "password",
   "authorization"
 ]);
+const SECRET_URL_KEYS = /(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|authorization|signature|sig|secret)/i;
 
 function nowIso() {
   return new Date().toISOString();
@@ -88,6 +97,33 @@ function defaultICloudRootPath() {
   return path.join(os.homedir(), "Library", "Mobile Documents", "com~apple~CloudDocs");
 }
 
+function defaultOneDriveRootPath() {
+  const cloudStorageRoot = path.join(os.homedir(), "Library", "CloudStorage");
+  try {
+    const candidates = fsSync.readdirSync(cloudStorageRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && /^OneDrive(?:[-\s]|$)/iu.test(entry.name))
+      .map((entry) => path.join(cloudStorageRoot, entry.name))
+      .sort((left, right) => left.length - right.length || left.localeCompare(right));
+    if (candidates.length) return candidates[0];
+  } catch {
+    // OneDrive local folders are platform and user dependent.
+  }
+  try {
+    const candidates = fsSync.readdirSync(os.homedir(), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && /^OneDrive(?:[-\s]|$)/iu.test(entry.name))
+      .map((entry) => path.join(os.homedir(), entry.name))
+      .sort((left, right) => left.length - right.length || left.localeCompare(right));
+    if (candidates.length) return candidates[0];
+  } catch {
+    // Older OneDrive installs may not exist or may be unreadable.
+  }
+  return path.join(cloudStorageRoot, "OneDrive");
+}
+
+function defaultLocalProjectionRootPath(provider) {
+  return provider === "onedrive" ? defaultOneDriveRootPath() : defaultICloudRootPath();
+}
+
 function defaultConfig() {
   return {
     schemaVersion: 1,
@@ -138,6 +174,194 @@ function providerLabel(provider) {
     "google-drive": "Google Drive",
     dropbox: "Dropbox"
   }[provider] || provider;
+}
+
+function normalizeRemoteAdapterMode(value = "") {
+  const raw = text(value || "contract").toLowerCase().replace(/[_\s]+/g, "-");
+  return REMOTE_LIVE_MODES.has(raw) ? "remote-live" : "contract";
+}
+
+function normalizeLocalProjectionMode(value = "") {
+  const raw = text(value || "").toLowerCase().replace(/[_\s]+/g, "-");
+  if (["local", "local-live", "local-directory", "local-projection", "directory", "projection"].includes(raw)) {
+    return "local";
+  }
+  return "";
+}
+
+function isLocalProjectionProvider(provider = "") {
+  return LOCAL_PROJECTION_PROVIDERS.has(normalizeProvider(provider));
+}
+
+function wantsLocalProjection(provider = "", input = {}) {
+  if (!isLocalProjectionProvider(provider)) return false;
+  if (provider === "icloud") return true;
+  const requestedMode = text(input.mode || input.requestedMode || input.adapterMode || "");
+  if (normalizeLocalProjectionMode(requestedMode)) return true;
+  if (REMOTE_LIVE_MODES.has(requestedMode.toLowerCase().replace(/[_\s]+/g, "-"))) return false;
+  if (text(input.rootPath || input.sourcePath || input.localPath || input.path)) return true;
+  return !requestedMode;
+}
+
+function isLocalProjectionConnection(connection = {}) {
+  return connection.localAdapterVerified === true && Boolean(text(connection.rootPath));
+}
+
+function normalizeEndpointUrl(value = "") {
+  const raw = text(value);
+  if (!raw) return "";
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    const error = new Error("Remote cloud drive endpointUrl must be a valid http(s) URL.");
+    error.code = "REMOTE_ENDPOINT_INVALID";
+    throw error;
+  }
+  if (!["http:", "https:"].includes(url.protocol)) {
+    const error = new Error("Remote cloud drive endpointUrl must use http or https.");
+    error.code = "REMOTE_ENDPOINT_INVALID";
+    throw error;
+  }
+  if (url.username || url.password || url.search) {
+    const error = new Error("Remote cloud drive endpointUrl must not embed credentials or query secrets.");
+    error.code = "REMOTE_ENDPOINT_SECRET_RISK";
+    throw error;
+  }
+  url.hash = "";
+  return url.toString().replace(/\/+$/, "");
+}
+
+function isRemoteLiveConnection(connection = {}) {
+  return text(connection.mode) === "remote-live" && connection.remoteLiveVerified === true;
+}
+
+function connectionVerifiedState(connection = {}, fallback = "projected") {
+  if (connection.contractVerified === true) return "contractVerified";
+  if (isRemoteLiveConnection(connection)) return "remoteLiveVerified";
+  if (connection.localAdapterVerified === true) return "localAdapterVerified";
+  return fallback;
+}
+
+function sanitizeProviderWebUrl(value = "") {
+  const raw = text(value);
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.username = "";
+    url.password = "";
+    url.hash = "";
+    for (const key of [...url.searchParams.keys()]) {
+      if (SECRET_URL_KEYS.test(key)) {
+        url.searchParams.set(key, "REDACTED");
+      }
+    }
+    return url.toString();
+  } catch {
+    return raw.slice(0, 2048);
+  }
+}
+
+function providerReceiptMetadata(value = {}) {
+  const payload = asObject(value);
+  const metadata = {
+    fileId: text(payload.providerFileId || payload.fileId || payload.id || payload.itemId || ""),
+    revision: text(payload.revision || payload.rev || payload.version || payload.providerRevision || ""),
+    webUrl: sanitizeProviderWebUrl(payload.webUrl || payload.web_url || payload.url || payload.shareUrl || ""),
+    etag: text(payload.etag || payload.eTag || payload.providerEtag || "")
+  };
+  return Object.values(metadata).some(Boolean) ? metadata : null;
+}
+
+function transferTelemetry({ operation = "", status = 0, requestBytes = 0, responseBytes = 0, durationMs = 0, endpointRef = "" } = {}) {
+  const measuredDurationMs = Math.max(1, Math.round(Number(durationMs || 0)));
+  const transferBytes = Math.max(0, Number(requestBytes || 0)) + Math.max(0, Number(responseBytes || 0));
+  return {
+    protocolVersion: "pact.cloud-drive.transfer-telemetry.v1",
+    operation: text(operation),
+    adapterMode: "remote-live",
+    status: Number(status || 0),
+    requestBytes: Math.max(0, Number(requestBytes || 0)),
+    responseBytes: Math.max(0, Number(responseBytes || 0)),
+    transferBytes,
+    durationMs: measuredDurationMs,
+    bytesPerSecond: Math.round((transferBytes * 1000) / measuredDurationMs),
+    endpointRef: text(endpointRef)
+  };
+}
+
+function remoteEndpointUrl(connection = {}, operation = "") {
+  const route = REMOTE_PROVIDER_PATHS[operation];
+  if (!route) {
+    const error = new Error(`Unsupported remote cloud drive operation: ${operation}`);
+    error.code = "REMOTE_OPERATION_UNSUPPORTED";
+    throw error;
+  }
+  const baseUrl = normalizeEndpointUrl(connection.endpointUrl || connection.remoteEndpointUrl || "");
+  if (!baseUrl) {
+    const error = new Error("Remote cloud drive connection requires endpointUrl.");
+    error.code = "REMOTE_ENDPOINT_REQUIRED";
+    throw error;
+  }
+  return new URL(route.replace(/^\/+/, ""), `${baseUrl}/`).toString();
+}
+
+async function callRemoteProvider(connection = {}, operation = "", payload = {}) {
+  const requestBody = JSON.stringify({
+    protocolVersion: CLOUD_DRIVE_PORT_PROTOCOL_VERSION,
+    operation,
+    provider: normalizeProvider(connection.provider),
+    driveRef: text(connection.driveRef),
+    credentialRefHash: digest(connection.secretRef || "", 32),
+    payload
+  });
+  const requestBytes = Buffer.byteLength(requestBody, "utf8");
+  const startedAt = Date.now();
+  let response;
+  let responseText = "";
+  try {
+    response = await fetch(remoteEndpointUrl(connection, operation), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Pact-Cloud-Drive-Protocol": CLOUD_DRIVE_PORT_PROTOCOL_VERSION,
+        "X-Pact-Drive-Provider": normalizeProvider(connection.provider),
+        "X-Pact-Secret-Ref-Hash": digest(connection.secretRef || "", 32)
+      },
+      body: requestBody
+    });
+    responseText = await response.text();
+  } catch (error) {
+    const wrapped = new Error(`Remote cloud drive provider is unavailable: ${error?.message || error}`);
+    wrapped.code = "REMOTE_PROVIDER_UNAVAILABLE";
+    throw wrapped;
+  }
+  const metrics = transferTelemetry({
+    operation,
+    status: response.status,
+    requestBytes,
+    responseBytes: Buffer.byteLength(responseText, "utf8"),
+    durationMs: Date.now() - startedAt,
+    endpointRef: connection.endpointRef
+  });
+  let parsed = {};
+  if (responseText.trim()) {
+    try {
+      parsed = JSON.parse(responseText);
+    } catch {
+      const error = new Error("Remote cloud drive provider returned invalid JSON.");
+      error.code = "REMOTE_PROVIDER_INVALID_RESPONSE";
+      error.telemetry = metrics;
+      throw error;
+    }
+  }
+  if (!response.ok || parsed.ok === false) {
+    const error = new Error(text(parsed.error || parsed.message) || `Remote cloud drive provider failed with HTTP ${response.status}.`);
+    error.code = text(parsed.code) || "REMOTE_PROVIDER_REQUEST_FAILED";
+    error.telemetry = metrics;
+    throw error;
+  }
+  return { payload: asObject(parsed), telemetry: metrics };
 }
 
 function assertSupportedProvider(provider) {
@@ -644,7 +868,7 @@ function publicManagedFolder(connection = {}) {
     },
     userAction: "dragFilesIntoManagedFolderOrExposeReadOnlyDirectory",
     directMapping: false,
-    provisioningState: text(managed.provisioningState || (connection.provider === "icloud" ? "localAdapterVerified" : "contractVerified"))
+    provisioningState: text(managed.provisioningState || connectionVerifiedState(connection))
   };
 }
 
@@ -664,21 +888,23 @@ async function provisionLocalManagedFolders(rootPath, managed = {}) {
   return provisioned;
 }
 
-async function validateLocalICloudRoot(rootPath) {
-  const rawPath = text(rootPath || defaultICloudRootPath());
+async function validateLocalProjectionRoot(provider, rootPath) {
+  const normalizedProvider = normalizeProvider(provider || "icloud");
+  const label = normalizedProvider === "icloud" ? "iCloud" : providerLabel(normalizedProvider);
+  const rawPath = text(rootPath || defaultLocalProjectionRootPath(normalizedProvider));
   if (!rawPath) {
-    throw new Error("iCloud rootPath 不能为空。");
+    throw new Error(`${label} rootPath 不能为空。`);
   }
   const absolutePath = path.resolve(rawPath);
   if (absolutePath === path.parse(absolutePath).root) {
-    throw new Error("不能把文件系统根目录作为 iCloud 受控根目录。");
+    throw new Error(`不能把文件系统根目录作为 ${label} 受控根目录。`);
   }
   const stat = await fs.lstat(absolutePath);
   if (stat.isSymbolicLink()) {
-    throw new Error("不允许连接符号链接 iCloud 根目录。");
+    throw new Error(`不允许连接符号链接 ${label} 根目录。`);
   }
   if (!stat.isDirectory()) {
-    throw new Error("iCloud rootPath 必须是目录。");
+    throw new Error(`${label} rootPath 必须是目录。`);
   }
   return {
     absolutePath,
@@ -730,14 +956,15 @@ async function statfsSummary(rootPath) {
 function publicConnection(connection = {}, { configFilePath = "" } = {}) {
   const provider = normalizeProvider(connection.provider);
   const directoryMappings = publicDirectoryMappings(connection);
+  const remoteProvider = asObject(connection.remoteProvider, null);
   return {
     driveRef: text(connection.driveRef),
     provider,
     label: text(connection.label || providerLabel(provider)),
-    mode: text(connection.mode || (provider === "icloud" ? "local" : "contract")),
+    mode: text(connection.mode || (isLocalProjectionProvider(provider) ? "local" : "contract")),
     requestedMode: text(connection.requestedMode || ""),
     status: text(connection.status || "active"),
-    authType: text(connection.authType || (provider === "icloud" ? "localDirectory" : "oauth2")),
+    authType: text(connection.authType || (isLocalProjectionProvider(provider) ? "localDirectory" : "oauth2")),
     secretRef: text(connection.secretRef || ""),
     endpointRef: text(connection.endpointRef || ""),
     rootName: text(connection.rootName || ""),
@@ -746,12 +973,14 @@ function publicConnection(connection = {}, { configFilePath = "" } = {}) {
     secretPolicy: "secretRefOnly",
     contractVerified: connection.contractVerified === true,
     localAdapterVerified: connection.localAdapterVerified === true,
+    remoteLiveVerified: connection.remoteLiveVerified === true,
+    ...(remoteProvider ? { remoteProvider } : {}),
     managedFolder: publicManagedFolder(connection),
     directoryMappings,
     directoryMappingCount: directoryMappings.length,
     directMappingDefault: false,
     stateSemantics: {
-      providerState: connection.contractVerified === true ? "contractVerified" : "projected",
+      providerState: connectionVerifiedState(connection),
       canonicalState: "pactSharedspace",
       driveRole: "mappedDirectoryProjection",
       accessModel: "directoryMapping",
@@ -771,25 +1000,37 @@ function providerManifest(config = {}, configFilePath = "") {
     .map((connection) => publicConnection(connection, { configFilePath }))
     .sort((left, right) => left.provider.localeCompare(right.provider) || left.driveRef.localeCompare(right.driveRef));
   const connectedProviders = new Set(connections.map((connection) => connection.provider));
-  const providers = SUPPORTED_PROVIDERS.map((provider) => ({
-    provider,
-    label: providerLabel(provider),
-    connected: connectedProviders.has(provider),
-    authType: provider === "icloud" ? "localDirectory" : "oauth2",
-    mode: provider === "icloud" ? "local" : "contract",
-    secretRef: SECRET_REF_BY_PROVIDER[provider] || "",
-    contractOnly: OAUTH_PROVIDERS.has(provider),
-    capabilities: [
-      "drive.connect",
-      "drive.status",
-      "drive.item.list",
-      "drive.file.download",
-      "drive.file.upload",
-      "drive.sync.plan",
-      "drive.sync.apply",
-      "drive.permission.list"
-    ]
-  }));
+  const providers = SUPPORTED_PROVIDERS.map((provider) => {
+    const providerConnections = connections.filter((connection) => connection.provider === provider);
+    const localProjectionSupported = isLocalProjectionProvider(provider);
+    const hasLocalProjection = providerConnections.some((connection) => connection.localAdapterVerified === true);
+    const hasRemoteLive = providerConnections.some((connection) => connection.remoteLiveVerified === true);
+    const hasContract = providerConnections.some((connection) => connection.contractVerified === true);
+    return {
+      provider,
+      label: providerLabel(provider),
+      connected: connectedProviders.has(provider),
+      authType: localProjectionSupported ? "localDirectory" : "oauth2",
+      mode: localProjectionSupported ? "local" : "contract",
+      supportedModes: provider === "icloud" ? ["local"] : localProjectionSupported ? ["local", "contract", "remote-live"] : ["contract", "remote-live"],
+      secretRef: SECRET_REF_BY_PROVIDER[provider] || "",
+      contractOnly: hasContract && !hasLocalProjection && !hasRemoteLive,
+      localProjectionSupported,
+      localProjectionVerified: hasLocalProjection,
+      remoteOAuthTarget: OAUTH_PROVIDERS.has(provider),
+      releaseSupport: localProjectionSupported ? "localDirectoryProjection" : "contractMode",
+      capabilities: [
+        "drive.connect",
+        "drive.status",
+        "drive.item.list",
+        "drive.file.download",
+        "drive.file.upload",
+        "drive.sync.plan",
+        "drive.sync.apply",
+        "drive.permission.list"
+      ]
+    };
+  });
   return {
     ok: true,
     schemaVersion: Number(config.schemaVersion || 1),
@@ -802,6 +1043,7 @@ function providerManifest(config = {}, configFilePath = "") {
     count: connections.length,
     secretPolicy: "secretRefOnly",
     contractMode: connections.some((connection) => connection.contractVerified),
+    remoteLiveMode: connections.some((connection) => connection.remoteLiveVerified),
     updatedAt: text(config.updatedAt || "")
   };
 }
@@ -858,7 +1100,10 @@ function createTransferReceipt({
   contentSha256 = "",
   state = "projected",
   contractVerified = false,
-  localAdapterVerified = false
+  localAdapterVerified = false,
+  remoteLiveVerified = false,
+  providerMetadata = null,
+  telemetry = null
 } = {}) {
   const createdAt = nowIso();
   return {
@@ -881,6 +1126,9 @@ function createTransferReceipt({
     state,
     contractVerified,
     localAdapterVerified,
+    remoteLiveVerified,
+    ...(providerMetadata ? { provider: providerMetadata } : {}),
+    ...(telemetry ? { telemetry: clone(telemetry) } : {}),
     createdAt
   };
 }
@@ -912,6 +1160,45 @@ function contractItem(provider, connection, index = 0, mapping = null, input = {
     localAdapterVerified: false,
     redactions: ["downloadUrl", "privatePath", "providerNativeId", "token"]
   };
+}
+
+function remoteItem(provider, connection, rawItem = {}, index = 0) {
+  const item = asObject(rawItem);
+  const fallbackName = `remote-live-${index + 1}.txt`;
+  const itemPath = normalizeDriveRelativePath(item.path || item.drivePath || item.name || fallbackName, { allowEmpty: false });
+  const name = text(item.name || path.posix.basename(itemPath) || fallbackName);
+  const providerMetadata = providerReceiptMetadata(item);
+  return {
+    itemId: stableId("cloud_drive_remote_item", {
+      provider,
+      driveRef: connection.driveRef,
+      itemPath,
+      providerFileId: item.providerFileId || item.fileId || item.id || ""
+    }),
+    provider,
+    driveRef: connection.driveRef,
+    name,
+    path: itemPath,
+    itemType: text(item.itemType || item.type || "file") === "folder" ? "folder" : "file",
+    mimeType: text(item.mimeType || item.contentType || "application/octet-stream"),
+    sizeBytes: Math.max(0, Number(item.sizeBytes ?? item.size ?? 0) || 0),
+    modifiedAt: text(item.modifiedAt || item.updatedAt || ""),
+    metadataOnly: true,
+    contractVerified: false,
+    localAdapterVerified: false,
+    remoteLiveVerified: true,
+    ...(providerMetadata ? { provider: providerMetadata } : {}),
+    redactions: ["downloadUrl", "privatePath", "providerNativeId", "token", "authorization"]
+  };
+}
+
+function remoteItems(provider, connection, payload = {}, limit = 200) {
+  const items = Array.isArray(payload.items)
+    ? payload.items
+    : Array.isArray(payload.files)
+      ? payload.files
+      : [];
+  return items.slice(0, limit).map((item, index) => remoteItem(provider, connection, item, index));
 }
 
 async function listLocalItems(rootPath, basePath = "", { recursive = false, limit = 200, includeHash = false } = {}) {
@@ -964,7 +1251,8 @@ function syncPlanFromItems({ connection, items, direction = "import_to_sharedspa
     sizeBytes: item.sizeBytes,
     contentSha256: item.contentSha256 || "",
     contractVerified: item.contractVerified === true,
-    localAdapterVerified: item.localAdapterVerified === true
+    localAdapterVerified: item.localAdapterVerified === true,
+    remoteLiveVerified: item.remoteLiveVerified === true
   }));
   return {
     dryRun: true,
@@ -1053,8 +1341,9 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       managedFolder
     );
     let connection;
-    if (provider === "icloud") {
-      const root = await validateLocalICloudRoot(input.rootPath || input.sourcePath || input.localPath || input.path);
+    let connectTelemetry = null;
+    if (wantsLocalProjection(provider, input)) {
+      const root = await validateLocalProjectionRoot(provider, input.rootPath || input.sourcePath || input.localPath || input.path);
       const provisionedMappings = await provisionLocalDirectoryMappings(root.realPath, directoryMappings, managedFolder);
       const driveRef = text(input.driveRef || input.driveId) || stableId("cloud_drive", {
         provider,
@@ -1064,7 +1353,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       connection = {
         driveRef,
         provider,
-        label: text(input.label || "iCloud Drive Local Adapter"),
+        label: text(input.label || `${providerLabel(provider)} Local Projection`),
         mode: "local",
         requestedMode: text(input.mode || "local"),
         authType: "localDirectory",
@@ -1094,38 +1383,75 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
         error.code = "SECRET_REF_REQUIRED";
         throw error;
       }
+      const adapterMode = normalizeRemoteAdapterMode(input.mode || input.requestedMode || "contract");
+      const endpointUrl = adapterMode === "remote-live"
+        ? normalizeEndpointUrl(input.endpointUrl || input.remoteEndpointUrl || input.baseUrl || "")
+        : "";
       const driveRef = text(input.driveRef || input.driveId) || stableId("cloud_drive", {
         provider,
         secretRef,
-        workspaceId: input.workspaceId || ""
+        workspaceId: input.workspaceId || "",
+        mode: adapterMode,
+        endpointUrl
       });
+      const endpointRef = text(input.endpointRef || `config://pact/drive/${provider}-endpoint`);
+      let providerConnection = null;
+      if (adapterMode === "remote-live") {
+        const remote = await callRemoteProvider({
+          driveRef,
+          provider,
+          mode: adapterMode,
+          secretRef,
+          endpointRef,
+          endpointUrl
+        }, "connect", {
+          workspaceId: text(input.workspaceId || ""),
+          managedFolder,
+          directoryMappings: publicDirectoryMappings({ directoryMappings, managedFolder }),
+          requestedAt: timestamp
+        });
+        providerConnection = asObject(remote.payload.connection || remote.payload.drive || remote.payload);
+        connectTelemetry = remote.telemetry;
+      }
+      const provisioningState = adapterMode === "remote-live" ? "remoteLiveVerified" : "contractVerified";
       connection = {
         driveRef,
         provider,
-        label: text(input.label || `${providerLabel(provider)} Contract Adapter`),
-        mode: "contract",
-        requestedMode: text(input.mode || "contract"),
+        label: text(input.label || `${providerLabel(provider)} ${adapterMode === "remote-live" ? "Remote Live Adapter" : "Contract Adapter"}`),
+        mode: adapterMode,
+        requestedMode: text(input.mode || adapterMode),
         authType: text(input.authType || "oauth2"),
         secretRef,
-        endpointRef: text(input.endpointRef || `config://pact/drive/${provider}-endpoint`),
-        rootName: `${provider}-contract-root`,
-        rootHash: digest(`${provider}:${secretRef}`, 64),
+        endpointRef,
+        ...(endpointUrl ? { endpointUrl } : {}),
+        rootName: text(providerConnection?.rootName || providerConnection?.name || "") || `${provider}-${adapterMode}-root`,
+        rootHash: digest(`${provider}:${endpointUrl || endpointRef}:${secretRef}`, 64),
         status: "active",
-        contractVerified: true,
+        contractVerified: adapterMode !== "remote-live",
         localAdapterVerified: false,
+        remoteLiveVerified: adapterMode === "remote-live",
+        ...(providerConnection ? {
+          remoteProvider: {
+            rootId: text(providerConnection.rootId || providerConnection.id || ""),
+            rootName: text(providerConnection.rootName || providerConnection.name || ""),
+            revision: text(providerConnection.revision || providerConnection.version || ""),
+            accountId: text(providerConnection.accountId || providerConnection.tenantId || ""),
+            telemetry: connectTelemetry
+          }
+        } : {}),
         managedFolder: {
           ...managedFolder,
-          provisioningState: "contractVerified",
+          provisioningState,
           provisionedFolders: directoryMappings.map((mapping) => mapping.displayPath)
         },
         directoryMappings: directoryMappings.map((mapping) => ({
           ...mapping,
-          provisioningState: "contractVerified"
+          provisioningState
         })),
         directoryProvisioning: directoryMappings.map((mapping) => ({
           mappingId: mapping.mappingId,
           drivePath: mapping.displayPath,
-          state: "contractVerified"
+          state: provisioningState
         })),
         connectedAt: timestamp,
         updatedAt: timestamp
@@ -1145,6 +1471,8 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       mode: connection.mode,
       contractVerified: connection.contractVerified === true,
       localAdapterVerified: connection.localAdapterVerified === true,
+      remoteLiveVerified: connection.remoteLiveVerified === true,
+      ...(connectTelemetry ? { telemetry: connectTelemetry } : {}),
       managedFolderRoot: connection.managedFolder?.rootPath || DEFAULT_MANAGED_FOLDER_ROOT,
       directoryMappingCount: connection.directoryMappings?.length || 0,
       directoryMappings: publicDirectoryMappings(connection),
@@ -1162,7 +1490,9 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       manifest: providerManifest(config, configFilePath),
       secretPolicy: "secretRefOnly",
       contractVerified: connection.contractVerified === true,
-      localAdapterVerified: connection.localAdapterVerified === true
+      localAdapterVerified: connection.localAdapterVerified === true,
+      remoteLiveVerified: connection.remoteLiveVerified === true,
+      ...(connectTelemetry ? { telemetry: connectTelemetry } : {})
     };
   }
 
@@ -1170,9 +1500,8 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
     const config = await loadConfig();
     const manifestPayload = providerManifest(config, configFilePath);
     for (const connection of manifestPayload.connections) {
-      if (connection.provider !== "icloud") continue;
       const privateConnection = config.connections[connection.driveRef];
-      if (privateConnection?.rootPath) {
+      if (isLocalProjectionConnection(privateConnection)) {
         connection.quota = await statfsSummary(privateConnection.rootPath);
         connection.syncStatus = fsSync.existsSync(privateConnection.rootPath)
           ? "localAdapterVerified"
@@ -1200,7 +1529,8 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
     let items;
     let basePath = "";
     let mapping = null;
-    if (connection.provider === "icloud") {
+    let listTelemetry = null;
+    if (isLocalProjectionConnection(connection)) {
       if (hasRequestedPath) {
         const resolved = resolveMappedDrivePath(connection, requestedPath, { allowRoot: true, input });
         basePath = resolved.drivePath;
@@ -1231,6 +1561,25 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
         provider: connection.provider,
         driveRef: connection.driveRef
       }));
+    } else if (isRemoteLiveConnection(connection)) {
+      if (hasRequestedPath) {
+        const resolved = resolveMappedDrivePath(connection, requestedPath, { allowRoot: true, input });
+        basePath = resolved.drivePath || "/";
+        mapping = resolved.mapping;
+      } else {
+        basePath = "/";
+      }
+      const remote = await callRemoteProvider(connection, "list", {
+        workspaceId: text(input.workspaceId || ""),
+        clientId: subjectForInput(input),
+        path: basePath,
+        recursive,
+        includeHash,
+        limit,
+        directoryMappings: publicDirectoryMappings(connection)
+      });
+      listTelemetry = remote.telemetry;
+      items = remoteItems(connection.provider, connection, remote.payload, limit);
     } else {
       if (hasRequestedPath) {
         const resolved = resolveMappedDrivePath(connection, requestedPath, { allowRoot: true, input });
@@ -1247,7 +1596,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       driveRef: connection.driveRef,
       drivePath: basePath || "/",
       action: "drive.item.list",
-      state: connection.contractVerified ? "contractVerified" : "cached"
+      state: connection.contractVerified ? "contractVerified" : isRemoteLiveConnection(connection) ? "remoteLiveVerified" : "cached"
     });
     ledger.accessReceipts[accessReceipt.receiptId] = accessReceipt;
     appendEvent(ledger, "sharedspace.drive.item.list", {
@@ -1255,7 +1604,9 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       provider: connection.provider,
       basePath,
       itemCount: items.length,
-      contractVerified: connection.contractVerified === true
+      contractVerified: connection.contractVerified === true,
+      remoteLiveVerified: connection.remoteLiveVerified === true,
+      ...(listTelemetry ? { telemetry: listTelemetry } : {})
     });
     await saveLedger(ledger);
     return {
@@ -1271,7 +1622,9 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       metadataPolicy: "safeMetadataOnly",
       accessReceipt,
       contractVerified: connection.contractVerified === true,
-      localAdapterVerified: connection.localAdapterVerified === true
+      localAdapterVerified: connection.localAdapterVerified === true,
+      remoteLiveVerified: connection.remoteLiveVerified === true,
+      ...(listTelemetry ? { telemetry: listTelemetry } : {})
     };
   }
 
@@ -1285,7 +1638,33 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
     const drivePath = resolved.drivePath;
     let content = Buffer.from(`Contract drive content for ${connection.provider}:${drivePath}\n`, "utf8");
     let localAdapterVerified = false;
-    if (connection.provider === "icloud") {
+    let remoteReadInvoked = false;
+    let providerMetadata = null;
+    let telemetry = null;
+    if (isRemoteLiveConnection(connection)) {
+      const remote = await callRemoteProvider(connection, "download", {
+        workspaceId: text(input.workspaceId || ""),
+        clientId: subjectForInput(input),
+        path: drivePath,
+        requestedPath: resolved.requestedPath
+      });
+      const remotePayload = asObject(remote.payload.file || remote.payload.download || remote.payload);
+      if (remotePayload.contentBase64 !== undefined) {
+        content = Buffer.from(String(remotePayload.contentBase64 || ""), "base64");
+      } else {
+        content = Buffer.from(String(remotePayload.content || ""), remotePayload.encoding || "utf8");
+      }
+      const expectedSha256 = text(remotePayload.contentSha256 || remotePayload.sha256 || "");
+      const actualSha256 = sha256Buffer(content);
+      if (expectedSha256 && expectedSha256 !== actualSha256) {
+        const error = new Error("Remote cloud drive provider content digest mismatch.");
+        error.code = "REMOTE_CONTENT_DIGEST_MISMATCH";
+        throw error;
+      }
+      providerMetadata = providerReceiptMetadata(remotePayload);
+      telemetry = remote.telemetry;
+      remoteReadInvoked = true;
+    } else if (isLocalProjectionConnection(connection)) {
       const target = await assertExistingLocalItemWithinRoot(connection.rootPath, drivePath);
       if (!target.stat.isFile()) {
         const error = new Error("云盘下载目标必须是文件。");
@@ -1303,16 +1682,19 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       direction: "download",
       byteSize: content.length,
       contentSha256,
-      state: connection.contractVerified ? "contractVerified" : "staged",
+      state: connection.contractVerified ? "contractVerified" : isRemoteLiveConnection(connection) ? "remoteLiveVerified" : "staged",
       contractVerified: connection.contractVerified === true,
-      localAdapterVerified
+      localAdapterVerified,
+      remoteLiveVerified: connection.remoteLiveVerified === true,
+      providerMetadata,
+      telemetry
     });
     const accessReceipt = createAccessReceipt({
       operationId: input.operationId || "sharedspace.drive.file.download",
       driveRef: connection.driveRef,
       drivePath,
       action: "drive.file.download",
-      state: connection.contractVerified ? "contractVerified" : "staged"
+      state: connection.contractVerified ? "contractVerified" : isRemoteLiveConnection(connection) ? "remoteLiveVerified" : "staged"
     });
     ledger.transfers[transferReceipt.transferReceiptId] = transferReceipt;
     ledger.accessReceipts[accessReceipt.receiptId] = accessReceipt;
@@ -1322,8 +1704,12 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       drivePath,
       byteSize: content.length,
       contentSha256,
+      remoteReadInvoked,
       contractVerified: connection.contractVerified === true,
-      localAdapterVerified
+      localAdapterVerified,
+      remoteLiveVerified: connection.remoteLiveVerified === true,
+      ...(providerMetadata ? { provider: providerMetadata } : {}),
+      ...(telemetry ? { telemetry } : {})
     });
     await saveLedger(ledger);
     const includeText = !["0", "false", "no"].includes(text(input.includeText ?? input["include-text"] ?? "true").toLowerCase());
@@ -1340,8 +1726,12 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       ...(includeText ? { content: content.toString(input.encoding || "utf8") } : {}),
       transferReceipt,
       accessReceipt,
+      remoteReadInvoked,
+      ...(providerMetadata ? { providerReceipt: providerMetadata } : {}),
+      ...(telemetry ? { telemetry } : {}),
       contractVerified: connection.contractVerified === true,
-      localAdapterVerified
+      localAdapterVerified,
+      remoteLiveVerified: connection.remoteLiveVerified === true
     };
   }
 
@@ -1371,7 +1761,31 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       createdAt: nowIso()
     };
     let localAdapterVerified = false;
-    if (connection.provider === "icloud") {
+    let remoteWriteInvoked = false;
+    let providerMetadata = null;
+    let telemetry = null;
+    if (isRemoteLiveConnection(connection)) {
+      const remote = await callRemoteProvider(connection, "upload", {
+        workspaceId: text(input.workspaceId || ""),
+        clientId: subjectForInput(input),
+        path: drivePath,
+        requestedPath: resolved.requestedPath,
+        contentBase64: content.toString("base64"),
+        byteSize: content.length,
+        contentSha256,
+        overwrite: input.overwrite === true
+      });
+      const remotePayload = asObject(remote.payload.file || remote.payload.upload || remote.payload);
+      const providerSha256 = text(remotePayload.contentSha256 || remotePayload.sha256 || "");
+      if (providerSha256 && providerSha256 !== contentSha256) {
+        const error = new Error("Remote cloud drive provider upload digest mismatch.");
+        error.code = "REMOTE_UPLOAD_DIGEST_MISMATCH";
+        throw error;
+      }
+      providerMetadata = providerReceiptMetadata(remotePayload);
+      telemetry = remote.telemetry;
+      remoteWriteInvoked = true;
+    } else if (isLocalProjectionConnection(connection)) {
       const target = safeJoinLocal(connection.rootPath, drivePath, { allowRoot: false });
       const exists = fsSync.existsSync(target.absolutePath);
       if (exists && input.overwrite !== true) {
@@ -1388,7 +1802,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       driveRef: connection.driveRef,
       drivePath,
       action: "drive.file.upload",
-      state: connection.contractVerified ? "contractVerified" : "projected"
+      state: connection.contractVerified ? "contractVerified" : isRemoteLiveConnection(connection) ? "remoteLiveVerified" : "projected"
     });
     const transferReceipt = createTransferReceipt({
       operationId: input.operationId || "sharedspace.drive.file.upload",
@@ -1397,9 +1811,12 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       direction: "upload",
       byteSize: content.length,
       contentSha256,
-      state: connection.contractVerified ? "contractVerified" : "projected",
+      state: connection.contractVerified ? "contractVerified" : isRemoteLiveConnection(connection) ? "remoteLiveVerified" : "projected",
       contractVerified: connection.contractVerified === true,
-      localAdapterVerified
+      localAdapterVerified,
+      remoteLiveVerified: connection.remoteLiveVerified === true,
+      providerMetadata,
+      telemetry
     });
     ledger.checkpoints[checkpoint.checkpointId] = checkpoint;
     ledger.transfers[transferReceipt.transferReceiptId] = transferReceipt;
@@ -1409,9 +1826,13 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       drivePath,
       byteSize: content.length,
       contentSha256,
-      remoteWriteInvoked: connection.provider === "icloud",
+      remoteWriteInvoked,
+      localWriteInvoked: isLocalProjectionConnection(connection),
       contractVerified: connection.contractVerified === true,
-      localAdapterVerified
+      localAdapterVerified,
+      remoteLiveVerified: connection.remoteLiveVerified === true,
+      ...(providerMetadata ? { provider: providerMetadata } : {}),
+      ...(telemetry ? { telemetry } : {})
     });
     await saveLedger(ledger);
     return {
@@ -1426,9 +1847,13 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       policyDecision,
       checkpoint,
       transferReceipt,
-      remoteWriteInvoked: connection.provider === "icloud",
+      remoteWriteInvoked,
+      localWriteInvoked: isLocalProjectionConnection(connection),
+      ...(providerMetadata ? { providerReceipt: providerMetadata } : {}),
+      ...(telemetry ? { telemetry } : {}),
       contractVerified: connection.contractVerified === true,
-      localAdapterVerified
+      localAdapterVerified,
+      remoteLiveVerified: connection.remoteLiveVerified === true
     };
   }
 
@@ -1441,14 +1866,29 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
     let basePath = "/";
     let mapping = null;
     let items = [];
+    let telemetry = null;
     if (hasRequestedPath) {
       const resolved = resolveMappedDrivePath(connection, requestedPath, { allowRoot: true, input });
       basePath = resolved.drivePath || "/";
       mapping = resolved.mapping;
-      items = connection.provider === "icloud"
-        ? await listLocalItems(connection.rootPath, resolved.drivePath, { recursive: true, includeHash: true, limit })
-        : [contractItem(connection.provider, connection, 0, mapping, input)];
-    } else if (connection.provider === "icloud") {
+      if (isLocalProjectionConnection(connection)) {
+        items = await listLocalItems(connection.rootPath, resolved.drivePath, { recursive: true, includeHash: true, limit });
+      } else if (isRemoteLiveConnection(connection)) {
+        const remote = await callRemoteProvider(connection, "list", {
+          workspaceId: text(input.workspaceId || ""),
+          clientId: subjectForInput(input),
+          path: basePath,
+          recursive: true,
+          includeHash: true,
+          limit,
+          directoryMappings: publicDirectoryMappings(connection)
+        });
+        telemetry = remote.telemetry;
+        items = remoteItems(connection.provider, connection, remote.payload, limit);
+      } else {
+        items = [contractItem(connection.provider, connection, 0, mapping, input)];
+      }
+    } else if (isLocalProjectionConnection(connection)) {
       for (const directoryMapping of normalizeDirectoryMappings(connection.directoryMappings || [], connection.managedFolder)) {
         if (items.length >= limit) break;
         assertMappingAccess(directoryMapping, input);
@@ -1460,6 +1900,18 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
         });
         items.push(...mappedItems);
       }
+    } else if (isRemoteLiveConnection(connection)) {
+      const remote = await callRemoteProvider(connection, "list", {
+        workspaceId: text(input.workspaceId || ""),
+        clientId: subjectForInput(input),
+        path: basePath,
+        recursive: true,
+        includeHash: true,
+        limit,
+        directoryMappings: publicDirectoryMappings(connection)
+      });
+      telemetry = remote.telemetry;
+      items = remoteItems(connection.provider, connection, remote.payload, limit);
     } else {
       items = contractItemsForMappings(connection.provider, connection, limit, input);
     }
@@ -1477,8 +1929,10 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       requestedPath: hasRequestedPath ? normalizeMappingDrivePath(requestedPath, { allowRoot: true }) : "",
       mapping: mapping ? publicMapping(mapping) : null,
       ...plan,
+      ...(telemetry ? { telemetry } : {}),
       contractVerified: connection.contractVerified === true,
-      localAdapterVerified: connection.localAdapterVerified === true
+      localAdapterVerified: connection.localAdapterVerified === true,
+      remoteLiveVerified: connection.remoteLiveVerified === true
     };
   }
 
@@ -1491,7 +1945,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       driveRef: connection.driveRef,
       drivePath: plan.basePath || "/",
       action: "drive.sync.apply",
-      state: connection.contractVerified ? "contractVerified" : "projected"
+      state: connection.contractVerified ? "contractVerified" : isRemoteLiveConnection(connection) ? "remoteLiveVerified" : "projected"
     });
     const syncReceipt = {
       protocolVersion: "pact.cloud-drive.sync-receipt.v1",
@@ -1506,10 +1960,11 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       driveRef: connection.driveRef,
       direction: plan.direction,
       actionCount: plan.actionCount,
-      state: connection.contractVerified ? "contractVerified" : "projected",
+      state: connection.contractVerified ? "contractVerified" : isRemoteLiveConnection(connection) ? "remoteLiveVerified" : "projected",
       remoteSyncInvoked: false,
       contractVerified: connection.contractVerified === true,
       localAdapterVerified: connection.localAdapterVerified === true,
+      remoteLiveVerified: connection.remoteLiveVerified === true,
       createdAt: nowIso()
     };
     ledger.checkpoints[checkpoint.checkpointId] = checkpoint;
@@ -1519,7 +1974,8 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       direction: plan.direction,
       actionCount: plan.actionCount,
       syncReceiptId: syncReceipt.syncReceiptId,
-      contractVerified: connection.contractVerified === true
+      contractVerified: connection.contractVerified === true,
+      remoteLiveVerified: connection.remoteLiveVerified === true
     });
     await saveLedger(ledger);
     return {
@@ -1530,7 +1986,8 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       appliedActions: connection.contractVerified ? [] : plan.actions,
       remoteSyncInvoked: false,
       contractVerified: connection.contractVerified === true,
-      localAdapterVerified: connection.localAdapterVerified === true
+      localAdapterVerified: connection.localAdapterVerified === true,
+      remoteLiveVerified: connection.remoteLiveVerified === true
     };
   }
 
@@ -1573,12 +2030,14 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
           drivePath: mapping.displayPath,
           inherited: !hasRequestedPath,
           metadataOnly: true,
-          contractVerified: connection.contractVerified === true
+          contractVerified: connection.contractVerified === true,
+          remoteLiveVerified: connection.remoteLiveVerified === true
         };
       }),
       redactions: ["shareLink", "providerNativeId", "token"],
       contractVerified: connection.contractVerified === true,
-      localAdapterVerified: connection.localAdapterVerified === true
+      localAdapterVerified: connection.localAdapterVerified === true,
+      remoteLiveVerified: connection.remoteLiveVerified === true
     };
   }
 

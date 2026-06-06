@@ -10,7 +10,10 @@ import { ServerConfig } from "../platform/common/config/ServerConfig.mjs";
 import {
   MCP_CONNECTOR_PACKAGE_NAME,
   MCP_CONNECTOR_VERSION,
+  MCP_CLIENT_TARGETS,
   MCP_INTERFACE_VERSION,
+  MCP_PRIORITY_INSTALL_TARGETS,
+  MCP_SHAREDSPACE_TOOL_NAME,
   MCP_SERVER_VERSION,
   MCP_STABLE_TOOL_NAME,
   MCP_TOOLSET_VERSION
@@ -19,6 +22,77 @@ import {
 const execFileAsync = promisify(execFile);
 const projectRoot = path.resolve(new URL("../..", import.meta.url).pathname);
 const connectorRoot = path.join(projectRoot, "mcp-connector");
+const BOOTSTRAP_CURL_FLAGS = "-fL --retry 3 --connect-timeout 20 -sS";
+const PRIORITY_INSTALL_TARGET = MCP_PRIORITY_INSTALL_TARGETS.join(",");
+const SHAREDSPACE_CORE_OPERATIONS = Object.freeze([
+  "pact.agentWorkspace.create",
+  "pact.sharedspace.localDir.connect",
+  "pact.sharedspace.localDir.list",
+  "pact.sharedspace.item.list",
+  "pact.sharedspace.file.read",
+  "pact.sharedspace.file.write",
+  "pact.sharedspace.item.delete",
+  "pact.sharedspace.sync.plan",
+  "pact.sharedspace.sync.apply"
+]);
+
+function supportedTargetDetails() {
+  return MCP_CLIENT_TARGETS.map(({ target, label, priority, installMode, locations }) => ({
+    target,
+    label,
+    priority,
+    installMode,
+    locations: [...locations]
+  }));
+}
+
+function sharedspaceExchangeReceiptContract() {
+  return {
+    schemaVersion: "pact.mcp.sharedspace-exchange.v1",
+    locations: [
+      "structuredContent.exchange",
+      "notifications/pact/operation_reply.params.exchange"
+    ],
+    actions: [
+      "workspace-created",
+      "file-written",
+      "file-read",
+      "items-listed",
+      "item-deleted",
+      "local-dir-connected",
+      "local-dirs-listed",
+      "sync-planned",
+      "sync-applied",
+      "operation"
+    ],
+    fields: [
+      "action",
+      "outlet",
+      "referencePolicy",
+      "workspaceRef",
+      "path",
+      "paths",
+      "itemCount",
+      "checkpointId",
+      "syncReceiptId",
+      "nextOperations"
+    ]
+  };
+}
+
+function sharedHubContract() {
+  return {
+    clientPolicy: "discover-shared-hub-then-opt-in",
+    defaultClientMutation: "none",
+    directHttp: true,
+    sharedspace: {
+      outlet: MCP_SHAREDSPACE_TOOL_NAME,
+      referencePolicy: "use-public-workspace-ref",
+      exchangeReceipt: sharedspaceExchangeReceiptContract(),
+      coreOperations: [...SHAREDSPACE_CORE_OPERATIONS]
+    }
+  };
+}
 
 function parseArgs(argv) {
   const args = {
@@ -346,16 +420,22 @@ async function createPortableBundle({ outputDir, packageJson, target, bundledVer
     "The connector scans local Pact candidates and verifies the MCP identity signature before using a URL.",
     "",
     "Discover the local shared hub:",
-    "  ./pact-mcp discover-local",
+    "  ./pact-mcp discover-local --json",
     "",
     "Connect clients interactively:",
     "  ./pact-mcp install",
     "",
-    "Connect one client from a script:",
-    "  ./pact-mcp install --target codex",
+    "Connect every detected client from a script:",
+    "  ./pact-mcp install --target auto --json",
+    "",
+    "Connect a known client from a script:",
+    "  ./pact-mcp install --target <client> --json",
+    "",
+    "Connect the priority agent clients from a script:",
+    `  ./pact-mcp install --target ${PRIORITY_INSTALL_TARGET} --json`,
     "",
     "Use --token-stdin only when installing with a pre-issued custom grant token:",
-    "  printf '%s\\n' '<issued-token>' | ./pact-mcp install --target codex --token-stdin",
+    "  printf '%s\\n' '<issued-token>' | ./pact-mcp install --target auto --token-stdin --json",
     "",
     "macOS double-click flow:",
     "  Open install.command, choose one or more clients. The connector requests a local Pact grant automatically.",
@@ -363,8 +443,8 @@ async function createPortableBundle({ outputDir, packageJson, target, bundledVer
     "Uninstall:",
     "  ./pact-mcp uninstall",
     "",
-    "Uninstall one client from a script:",
-    "  ./pact-mcp uninstall --target codex",
+    "Uninstall priority clients from a script:",
+    `  ./pact-mcp uninstall --target ${PRIORITY_INSTALL_TARGET}`,
     "",
     `Platform: ${platform}`,
     `Connector: ${packageJson.name}@${packageJson.version}`,
@@ -430,9 +510,28 @@ async function createBootstrapInstaller({ outputDir, packageJson, tarballName, t
     "BASE_URL=\"${PACT_MCP_RELEASE_BASE_URL:-https://github.com/${REPO}/releases/latest/download}\"",
     "INSTALL_PARENT=\"${PACT_MCP_INSTALL_DIR:-$HOME/.pact/mcp/connector}\"",
     "",
+    "# Detect language",
+    "SYSTEM_LANG=\"en\"",
+    "if [ -n \"${LANG:-}\" ] && echo \"$LANG\" | grep -iq \"zh\"; then",
+    "  SYSTEM_LANG=\"zh\"",
+    "elif command -v defaults >/dev/null 2>&1 && defaults read -g AppleLanguages 2>/dev/null | head -n 2 | grep -iq \"zh\"; then",
+    "  SYSTEM_LANG=\"zh\"",
+    "fi",
+    "",
+    "msg() {",
+    "  key=\"$1\"",
+    "  zh_val=\"$2\"",
+    "  en_val=\"$3\"",
+    "  if [ \"$SYSTEM_LANG\" = \"zh\" ]; then",
+    "    echo \"$zh_val\"",
+    "  else",
+    "    echo \"$en_val\"",
+    "  fi",
+    "}",
+    "",
     "require_command() {",
     "  if ! command -v \"$1\" >/dev/null 2>&1; then",
-    "    echo \"Missing required command: $1\" >&2",
+    "    echo \"$(msg \"missing_cmd\" \"缺少必需命令: $1\" \"Missing required command: $1\")\" >&2",
     "    exit 1",
     "  fi",
     "}",
@@ -446,7 +545,7 @@ async function createBootstrapInstaller({ outputDir, packageJson, tarballName, t
     "    sha256sum \"$1\" | awk '{print $1}'",
     "    return",
     "  fi",
-    "  echo \"Missing shasum or sha256sum for release verification.\" >&2",
+    "  echo \"$(msg \"missing_sha\" \"缺少用于校验发布包的 shasum 或 sha256sum。\" \"Missing shasum or sha256sum for release verification.\")\" >&2",
     "  exit 1",
     "}",
     "",
@@ -478,13 +577,13 @@ async function createBootstrapInstaller({ outputDir, packageJson, tarballName, t
     "  require_command tar",
     "  tarball_path=\"$tmp_dir/$SOURCE_TARBALL\"",
     "  download_url=\"${BASE_URL%/}/$SOURCE_TARBALL\"",
-    "  echo \"Downloading Pact MCP connector $VERSION source package...\"",
+    "  echo \"$(msg \"download_src\" \"正在下载 Pact MCP connector $VERSION 源码包...\" \"Downloading Pact MCP connector $VERSION source package...\")\"",
     "  curl -fL --retry 3 --connect-timeout 20 -o \"$tarball_path\" \"$download_url\"",
     "  actual_sha256=$(hash_file \"$tarball_path\")",
     "  if [ \"$actual_sha256\" != \"$SOURCE_TARBALL_SHA256\" ]; then",
-    "    echo \"Checksum mismatch for $SOURCE_TARBALL\" >&2",
-    "    echo \"expected: $SOURCE_TARBALL_SHA256\" >&2",
-    "    echo \"actual:   $actual_sha256\" >&2",
+    "    echo \"$(msg \"checksum_err\" \"校验和不匹配: $SOURCE_TARBALL\" \"Checksum mismatch for $SOURCE_TARBALL\")\" >&2",
+    "    echo \"$(msg \"expected\" \"预期: $SOURCE_TARBALL_SHA256\" \"expected: $SOURCE_TARBALL_SHA256\")\" >&2",
+    "    echo \"$(msg \"actual\" \"实际:   $actual_sha256\" \"actual:   $actual_sha256\")\" >&2",
     "    exit 1",
     "  fi",
     "  extract_dir=\"$tmp_dir/source\"",
@@ -496,8 +595,8 @@ async function createBootstrapInstaller({ outputDir, packageJson, tarballName, t
     "  chmod +x \"$target_dir/bin/pact-mcp.mjs\" 2>/dev/null || true",
     "  rm -f \"$INSTALL_PARENT/current\"",
     "  ln -s \"$target_dir\" \"$INSTALL_PARENT/current\" 2>/dev/null || true",
-    "  echo \"Installed Pact MCP connector at $target_dir\"",
-    "  echo \"Opening Pact MCP client selector...\"",
+    "  echo \"$(msg \"installed\" \"Pact MCP connector 已安装到 $target_dir\" \"Installed Pact MCP connector at $target_dir\")\"",
+    "  echo \"$(msg \"opening_sel\" \"正在打开 Pact MCP 客户端选择器...\" \"Opening Pact MCP client selector...\")\"",
     "  if [ ! -t 0 ] && [ -c /dev/tty ]; then",
     "    exec node \"$target_dir/bin/pact-mcp.mjs\" install \"$@\" < /dev/tty",
     "  else",
@@ -532,8 +631,8 @@ async function createBootstrapInstaller({ outputDir, packageJson, tarballName, t
       ];
     }),
     "    *)",
-    "      echo \"No usable Node.js runtime was found and this release has no portable archive for: $platform\" >&2",
-    `      echo "This release contains ${portablePlatformList}. Build and upload the matching portable archive for this platform." >&2`,
+    "      echo \"$(msg \"no_portable\" \"未找到可用的 Node.js 运行时，并且此发布版本没有适用于该平台的便携包: $platform\" \"No usable Node.js runtime was found and this release has no portable archive for: $platform\")\" >&2",
+    "      echo \"$(msg \"release_contains\" \"此发布版本包含 ${portablePlatformList}。请为该平台构建并上传配置的便携包。\" \"This release contains ${portablePlatformList}. Build and upload the matching portable archive for this platform.\")\" >&2",
     "      exit 1",
     "      ;;",
     "  esac",
@@ -542,13 +641,13 @@ async function createBootstrapInstaller({ outputDir, packageJson, tarballName, t
     "    require_command unzip",
     "  fi",
     "  download_url=\"${BASE_URL%/}/$archive\"",
-    "  echo \"Downloading Pact MCP connector $VERSION portable runtime for $platform...\"",
+    "  echo \"$(msg \"download_portable\" \"正在下载 Pact MCP connector $VERSION 适用于 $platform 的便携运行时...\" \"Downloading Pact MCP connector $VERSION portable runtime for $platform...\")\"",
     "  curl -fL --retry 3 --connect-timeout 20 -o \"$archive_path\" \"$download_url\"",
     "  actual_sha256=$(hash_file \"$archive_path\")",
     "  if [ \"$actual_sha256\" != \"$archive_sha256\" ]; then",
-    "    echo \"Checksum mismatch for $archive\" >&2",
-    "    echo \"expected: $archive_sha256\" >&2",
-    "    echo \"actual:   $actual_sha256\" >&2",
+    "    echo \"$(msg \"checksum_archive_err\" \"校验和不匹配: $archive\" \"Checksum mismatch for $archive\")\" >&2",
+    "    echo \"$(msg \"expected\" \"预期: $archive_sha256\" \"expected: $archive_sha256\")\" >&2",
+    "    echo \"$(msg \"actual\" \"实际:   $actual_sha256\" \"actual:   $actual_sha256\")\" >&2",
     "    exit 1",
     "  fi",
     "  extract_dir=\"$tmp_dir/portable\"",
@@ -563,8 +662,8 @@ async function createBootstrapInstaller({ outputDir, packageJson, tarballName, t
     "  mv \"$extract_dir/$archive_root\" \"$target_dir\"",
     "  rm -f \"$INSTALL_PARENT/current\"",
     "  ln -s \"$target_dir\" \"$INSTALL_PARENT/current\" 2>/dev/null || true",
-    "  echo \"Installed Pact MCP connector at $target_dir\"",
-    "  echo \"Opening Pact MCP client selector...\"",
+    "  echo \"$(msg \"installed\" \"Pact MCP connector 已安装到 $target_dir\" \"Installed Pact MCP connector at $target_dir\")\"",
+    "  echo \"$(msg \"opening_sel\" \"正在打开 Pact MCP 客户端选择器...\" \"Opening Pact MCP client selector...\")\"",
     "  if [ ! -t 0 ] && [ -c /dev/tty ]; then",
     "    exec \"$target_dir/pact-mcp\" install \"$@\" < /dev/tty",
     "  else",
@@ -576,7 +675,7 @@ async function createBootstrapInstaller({ outputDir, packageJson, tarballName, t
     "  install_from_source_tarball \"$@\"",
     "fi",
     "",
-    "echo \"No usable Node.js $MINIMUM_NODE_MAJOR+ runtime found; falling back to the portable connector.\"",
+    "echo \"$(msg \"fallback_portable\" \"未找到可用的 Node.js $MINIMUM_NODE_MAJOR+ 运行时，正在回退到便携版 connector。\" \"No usable Node.js $MINIMUM_NODE_MAJOR+ runtime found; falling back to the portable connector.\")\"",
     "install_from_portable_archive \"$@\"",
     ""
   ].join("\n");
@@ -584,39 +683,14 @@ async function createBootstrapInstaller({ outputDir, packageJson, tarballName, t
   await fs.chmod(scriptPath, 0o755);
   const uninstallContent = content
     .replaceAll("Opening Pact MCP client selector...", "Opening Pact MCP client removal selector...")
+    .replaceAll("正在打开 Pact MCP 客户端选择器...", "正在打开 Pact MCP 客户端移除选择器...")
     .replaceAll(" install \"$@\"", " uninstall \"$@\"");
   await fs.writeFile(uninstallScriptPath, uninstallContent);
   await fs.chmod(uninstallScriptPath, 0o755);
-  const zhCnContent = localizeBootstrapShell(content, [
-    ["Missing required command: $1", "缺少必需命令: $1"],
-    ["Missing shasum or sha256sum for release verification.", "缺少用于校验发布包的 shasum 或 sha256sum。"],
-    ["Downloading Pact MCP connector $VERSION source package...", "正在下载 Pact MCP connector $VERSION 源码包..."],
-    ["Checksum mismatch for $SOURCE_TARBALL", "校验和不匹配: $SOURCE_TARBALL"],
-    ["expected: $SOURCE_TARBALL_SHA256", "预期: $SOURCE_TARBALL_SHA256"],
-    ["actual:   $actual_sha256", "实际:   $actual_sha256"],
-    ["Installed Pact MCP connector at $target_dir", "Pact MCP connector 已安装到 $target_dir"],
-    ["Opening Pact MCP client selector...", "正在打开 Pact MCP 客户端选择器..."],
-    [
-      "No usable Node.js runtime was found and this release has no portable archive for: $platform",
-      "未找到可用的 Node.js 运行时，并且此发布版本没有适用于该平台的便携包: $platform"
-    ],
-    [
-      `This release contains ${portablePlatformList}. Build and upload the matching portable archive for this platform.`,
-      `此发布版本包含 ${portablePlatformList}。请为该平台构建并上传匹配的便携包。`
-    ],
-    [
-      "Downloading Pact MCP connector $VERSION portable runtime for $platform...",
-      "正在下载 Pact MCP connector $VERSION 适用于 $platform 的便携运行时..."
-    ],
-    ["Checksum mismatch for $archive", "校验和不匹配: $archive"],
-    ["expected: $archive_sha256", "预期: $archive_sha256"],
-    ["No usable Node.js $MINIMUM_NODE_MAJOR+ runtime found; falling back to the portable connector.", "未找到可用的 Node.js $MINIMUM_NODE_MAJOR+ 运行时，正在回退到便携版 connector。"]
-  ]);
+  const zhCnContent = content;
   await fs.writeFile(zhCnScriptPath, zhCnContent);
   await fs.chmod(zhCnScriptPath, 0o755);
-  const zhCnUninstallContent = zhCnContent
-    .replaceAll("正在打开 Pact MCP 客户端选择器...", "正在打开 Pact MCP 客户端移除选择器...")
-    .replaceAll(" install \"$@\"", " uninstall \"$@\"");
+  const zhCnUninstallContent = uninstallContent;
   await fs.writeFile(zhCnUninstallScriptPath, zhCnUninstallContent);
   await fs.chmod(zhCnUninstallScriptPath, 0o755);
   const zhCnSha256 = await sha256(zhCnScriptPath);
@@ -626,24 +700,30 @@ async function createBootstrapInstaller({ outputDir, packageJson, tarballName, t
     scriptPath,
     sha256: await sha256(scriptPath),
     githubLatestUrl: `https://github.com/${repo}/releases/latest/download/${scriptName}`,
-    oneLineCommand: `/bin/sh -c "$(curl -fsSL https://github.com/${repo}/releases/latest/download/${scriptName})"`,
+    oneLineCommand: `/bin/sh -c "$(curl ${BOOTSTRAP_CURL_FLAGS} https://github.com/${repo}/releases/latest/download/${scriptName})"`,
+    oneLineClientInstallJsonCommand: `/bin/sh -c "$(curl ${BOOTSTRAP_CURL_FLAGS} https://github.com/${repo}/releases/latest/download/${scriptName})" -- --target <client> --json`,
+    oneLineAutoInstallCommand: `/bin/sh -c "$(curl ${BOOTSTRAP_CURL_FLAGS} https://github.com/${repo}/releases/latest/download/${scriptName})" -- --target auto --json`,
+    oneLinePriorityInstallCommand: `/bin/sh -c "$(curl ${BOOTSTRAP_CURL_FLAGS} https://github.com/${repo}/releases/latest/download/${scriptName})" -- --target ${PRIORITY_INSTALL_TARGET} --json`,
     uninstallScriptName,
     uninstallScriptPath,
     uninstallSha256: await sha256(uninstallScriptPath),
     githubLatestUninstallUrl: `https://github.com/${repo}/releases/latest/download/${uninstallScriptName}`,
-    oneLineUninstallCommand: `/bin/sh -c "$(curl -fsSL https://github.com/${repo}/releases/latest/download/${uninstallScriptName})"`,
+    oneLineUninstallCommand: `/bin/sh -c "$(curl ${BOOTSTRAP_CURL_FLAGS} https://github.com/${repo}/releases/latest/download/${uninstallScriptName})"`,
     localized: {
       zhCN: {
         scriptName: zhCnScriptName,
         scriptPath: zhCnScriptPath,
         sha256: zhCnSha256,
         githubLatestUrl: `https://github.com/${repo}/releases/latest/download/${zhCnScriptName}`,
-        oneLineCommand: `/bin/sh -c "$(curl -fsSL https://github.com/${repo}/releases/latest/download/${zhCnScriptName})"`,
+        oneLineCommand: `/bin/sh -c "$(curl ${BOOTSTRAP_CURL_FLAGS} https://github.com/${repo}/releases/latest/download/${zhCnScriptName})"`,
+        oneLineClientInstallJsonCommand: `/bin/sh -c "$(curl ${BOOTSTRAP_CURL_FLAGS} https://github.com/${repo}/releases/latest/download/${zhCnScriptName})" -- --target <client> --json`,
+        oneLineAutoInstallCommand: `/bin/sh -c "$(curl ${BOOTSTRAP_CURL_FLAGS} https://github.com/${repo}/releases/latest/download/${zhCnScriptName})" -- --target auto --json`,
+        oneLinePriorityInstallCommand: `/bin/sh -c "$(curl ${BOOTSTRAP_CURL_FLAGS} https://github.com/${repo}/releases/latest/download/${zhCnScriptName})" -- --target ${PRIORITY_INSTALL_TARGET} --json`,
         uninstallScriptName: zhCnUninstallScriptName,
         uninstallScriptPath: zhCnUninstallScriptPath,
         uninstallSha256: zhCnUninstallSha256,
         githubLatestUninstallUrl: `https://github.com/${repo}/releases/latest/download/${zhCnUninstallScriptName}`,
-        oneLineUninstallCommand: `/bin/sh -c "$(curl -fsSL https://github.com/${repo}/releases/latest/download/${zhCnUninstallScriptName})"`
+        oneLineUninstallCommand: `/bin/sh -c "$(curl ${BOOTSTRAP_CURL_FLAGS} https://github.com/${repo}/releases/latest/download/${zhCnUninstallScriptName})"`
       }
     }
   };
@@ -671,6 +751,7 @@ function releaseManifest({ channel, packageJson, tarballName, tarballPath, check
     toolsetVersion: MCP_TOOLSET_VERSION,
     serverVersion: MCP_SERVER_VERSION,
     stableToolName: MCP_STABLE_TOOL_NAME,
+    sharedHub: sharedHubContract(),
     connector: {
       packageName: packageJson.name,
       packageVersion: packageJson.version,
@@ -701,6 +782,11 @@ function releaseManifest({ channel, packageJson, tarballName, tarballPath, check
       installArchiveType: portable.zipArchiveName ? "zip" : "tar",
       installCommand: `./${portable.executable} register`,
       clientInstallCommand: `./${portable.executable} install --target <client>`,
+      clientInstallJsonCommand: `./${portable.executable} install --target <client> --json`,
+      autoInstallCommand: `./${portable.executable} install --target auto --json`,
+      priorityInstallCommand: `./${portable.executable} install --target ${PRIORITY_INSTALL_TARGET} --json`,
+      priorityTargets: [...MCP_PRIORITY_INSTALL_TARGETS],
+      supportedTargetDetails: supportedTargetDetails(),
       interactiveUninstallCommand: `./${portable.executable} uninstall`,
       clientUninstallCommand: `./${portable.executable} uninstall --target <client>`,
       doubleClickEntry: process.platform === "win32" ? "" : "install.command"
@@ -708,28 +794,61 @@ function releaseManifest({ channel, packageJson, tarballName, tarballPath, check
     install: {
       githubOneLineCommand: bootstrap.oneLineCommand,
       githubOneLineCommandZhCN: bootstrap.localized.zhCN.oneLineCommand,
+      githubOneLineClientInstallJsonCommand: bootstrap.oneLineClientInstallJsonCommand,
+      githubOneLineClientInstallJsonCommandZhCN: bootstrap.localized.zhCN.oneLineClientInstallJsonCommand,
+      githubOneLineAutoInstallCommand: bootstrap.oneLineAutoInstallCommand,
+      githubOneLineAutoInstallCommandZhCN: bootstrap.localized.zhCN.oneLineAutoInstallCommand,
+      githubOneLinePriorityInstallCommand: bootstrap.oneLinePriorityInstallCommand,
+      githubOneLinePriorityInstallCommandZhCN: bootstrap.localized.zhCN.oneLinePriorityInstallCommand,
       githubOneLineUninstallCommand: bootstrap.oneLineUninstallCommand,
       githubOneLineUninstallCommandZhCN: bootstrap.localized.zhCN.oneLineUninstallCommand,
+      oneCommandInstall: bootstrap.oneLineCommand,
+      oneCommandInstallZhCN: bootstrap.localized.zhCN.oneLineCommand,
+      oneCommandClientInstallJson: bootstrap.oneLineClientInstallJsonCommand,
+      oneCommandClientInstallJsonZhCN: bootstrap.localized.zhCN.oneLineClientInstallJsonCommand,
+      oneCommandAutoInstall: bootstrap.oneLineAutoInstallCommand,
+      oneCommandAutoInstallZhCN: bootstrap.localized.zhCN.oneLineAutoInstallCommand,
+      oneCommandPriorityInstall: bootstrap.oneLinePriorityInstallCommand,
+      oneCommandPriorityInstallZhCN: bootstrap.localized.zhCN.oneLinePriorityInstallCommand,
+      oneCommandUninstall: bootstrap.oneLineUninstallCommand,
+      oneCommandUninstallZhCN: bootstrap.localized.zhCN.oneLineUninstallCommand,
       registryCommand: `npx ${packageJson.name}@latest register`,
       tarballCommand: `npm exec --package ./build/release/mcp/${tarballName} -- pact-mcp register`,
       portableCommand: `./${portable.executable} register`,
       interactiveInstallCommand: `npx ${packageJson.name}@latest install`,
+      autoInstallCommand: `npx ${packageJson.name}@latest install --target auto --json`,
+      priorityInstallCommand: `npx ${packageJson.name}@latest install --target ${PRIORITY_INSTALL_TARGET} --json`,
+      priorityTargets: [...MCP_PRIORITY_INSTALL_TARGETS],
       clientInstallCommand: `npx ${packageJson.name}@latest install --target <client>`,
+      clientInstallJsonCommand: `npx ${packageJson.name}@latest install --target <client> --json`,
       interactiveUninstallCommand: `npx ${packageJson.name}@latest uninstall`,
       uninstallCommand: `npx ${packageJson.name}@latest uninstall --target <client>`,
       doctorCommand: `npx ${packageJson.name}@latest doctor`,
-      discoverCommand: `npx ${packageJson.name}@latest discover-local`,
+      discoverCommand: `npx ${packageJson.name}@latest discover-local --json`,
       scanCommand: `npx ${packageJson.name}@latest scan --json`,
-      supportedTargets: [
-        "codex",
-        "gemini-cli",
-        "kilo-code",
-        "copilot",
-        "openclaw",
-        "hermes",
-        "antigravity",
-        "opencode"
-      ]
+      supportedTargets: MCP_CLIENT_TARGETS.map((target) => target.target),
+      supportedTargetDetails: supportedTargetDetails()
+    },
+    upgrade: {
+      listChanged: true,
+      notification: "notifications/tools/list_changed",
+      reinstallCommand: bootstrap.oneLineCommand,
+      reinstallCommandZhCN: bootstrap.localized.zhCN.oneLineCommand,
+      clientReinstallJsonCommand: bootstrap.oneLineClientInstallJsonCommand,
+      clientReinstallJsonCommandZhCN: bootstrap.localized.zhCN.oneLineClientInstallJsonCommand,
+      agentReinstallCommand: bootstrap.oneLineAutoInstallCommand,
+      agentReinstallCommandZhCN: bootstrap.localized.zhCN.oneLineAutoInstallCommand,
+      priorityAgentReinstallCommand: bootstrap.oneLinePriorityInstallCommand,
+      priorityAgentReinstallCommandZhCN: bootstrap.localized.zhCN.oneLinePriorityInstallCommand,
+      oneCommandReinstall: bootstrap.oneLineCommand,
+      oneCommandReinstallZhCN: bootstrap.localized.zhCN.oneLineCommand,
+      oneCommandClientReinstallJson: bootstrap.oneLineClientInstallJsonCommand,
+      oneCommandClientReinstallJsonZhCN: bootstrap.localized.zhCN.oneLineClientInstallJsonCommand,
+      oneCommandAgentReinstall: bootstrap.oneLineAutoInstallCommand,
+      oneCommandAgentReinstallZhCN: bootstrap.localized.zhCN.oneLineAutoInstallCommand,
+      oneCommandPriorityAgentReinstall: bootstrap.oneLinePriorityInstallCommand,
+      oneCommandPriorityAgentReinstallZhCN: bootstrap.localized.zhCN.oneLinePriorityInstallCommand,
+      priorityTargets: [...MCP_PRIORITY_INSTALL_TARGETS]
     },
     bootstrap: {
       scriptName: bootstrap.scriptName,
@@ -858,9 +977,25 @@ async function main() {
     bootstrapUninstallerZhCNPath: bootstrap.localized.zhCN.uninstallScriptPath,
     bootstrapUninstallerZhCNSha256: bootstrap.localized.zhCN.uninstallSha256,
     githubOneLineCommand: bootstrap.oneLineCommand,
+    githubOneLineClientInstallJsonCommand: bootstrap.oneLineClientInstallJsonCommand,
     githubOneLineUninstallCommand: bootstrap.oneLineUninstallCommand,
+    githubOneLineAutoInstallCommand: bootstrap.oneLineAutoInstallCommand,
+    githubOneLinePriorityInstallCommand: bootstrap.oneLinePriorityInstallCommand,
     githubOneLineCommandZhCN: bootstrap.localized.zhCN.oneLineCommand,
+    githubOneLineClientInstallJsonCommandZhCN: bootstrap.localized.zhCN.oneLineClientInstallJsonCommand,
+    githubOneLineAutoInstallCommandZhCN: bootstrap.localized.zhCN.oneLineAutoInstallCommand,
+    githubOneLinePriorityInstallCommandZhCN: bootstrap.localized.zhCN.oneLinePriorityInstallCommand,
     githubOneLineUninstallCommandZhCN: bootstrap.localized.zhCN.oneLineUninstallCommand,
+    oneCommandInstall: bootstrap.oneLineCommand,
+    oneCommandInstallZhCN: bootstrap.localized.zhCN.oneLineCommand,
+    oneCommandClientInstallJson: bootstrap.oneLineClientInstallJsonCommand,
+    oneCommandClientInstallJsonZhCN: bootstrap.localized.zhCN.oneLineClientInstallJsonCommand,
+    oneCommandAutoInstall: bootstrap.oneLineAutoInstallCommand,
+    oneCommandAutoInstallZhCN: bootstrap.localized.zhCN.oneLineAutoInstallCommand,
+    oneCommandPriorityInstall: bootstrap.oneLinePriorityInstallCommand,
+    oneCommandPriorityInstallZhCN: bootstrap.localized.zhCN.oneLinePriorityInstallCommand,
+    oneCommandUninstall: bootstrap.oneLineUninstallCommand,
+    oneCommandUninstallZhCN: bootstrap.localized.zhCN.oneLineUninstallCommand,
     publishCommand: manifest.publish.npmCommand,
     installCommand: manifest.install.registryCommand,
     published: Boolean(publishResult),

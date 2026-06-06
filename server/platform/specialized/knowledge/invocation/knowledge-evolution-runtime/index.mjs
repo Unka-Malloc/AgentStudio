@@ -22,6 +22,35 @@ function normalizeText(value) {
     .trim();
 }
 
+function compactError(error) {
+  return {
+    message: error instanceof Error ? error.message : String(error || ""),
+    statusCode: Number(error?.statusCode || error?.status || 0) || 0,
+    service: "external.knowledge.distillation",
+    pactExternalServiceCall: error?.externalServiceCall || null
+  };
+}
+
+function distillationCandidates(distillationRun = null) {
+  return [
+    ...asArray(distillationRun?.candidates),
+    ...asArray(distillationRun?.result?.candidates),
+    ...asArray(distillationRun?.candidateSkills),
+    ...asArray(distillationRun?.result?.candidateSkills)
+  ];
+}
+
+function candidateSkillId(candidate = {}) {
+  return normalizeText(
+    candidate.skill?.skillId ||
+      candidate.skill?.skill?.skillId ||
+      candidate.skillId ||
+      candidate.candidateSkillId ||
+      candidate.generatedSkillId ||
+      ""
+  );
+}
+
 function stableRunId(prefix = "knowledge_evolution") {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -184,8 +213,8 @@ function buildDistillationOptimizationReport({
   const cases = asArray(input.cases).length ? asArray(input.cases) : asArray(goldCases.items);
   const candidateSkillIds = [
     ...new Set(
-      asArray(distillationRun?.candidates)
-        .map((candidate) => candidate.skill?.skillId || candidate.skill?.skill?.skillId || candidate.skillId)
+      distillationCandidates(distillationRun)
+        .map(candidateSkillId)
         .filter(Boolean)
     )
   ];
@@ -241,7 +270,7 @@ export function createKnowledgeEvolutionRuntime({
   modelDecisionRuntime,
   knowledgeSkillRuntime = null,
   goldenRuleRuntime = null,
-  knowledgeDistillationRuntime = null
+  knowledgeDistillationService = null
 } = {}) {
   const rootPath = path.join(userDataPath, "knowledge-evolution");
   const runsPath = path.join(rootPath, "evolution-runs.json");
@@ -345,15 +374,23 @@ export function createKnowledgeEvolutionRuntime({
         })
       : null;
     if (target === "knowledgeSkillSet") {
-      const distillationRun = knowledgeDistillationRuntime && typeof knowledgeDistillationRuntime.runDistillation === "function"
-        ? await knowledgeDistillationRuntime.runDistillation({
+      let distillationRun = null;
+      let distillationServiceError = null;
+      if (knowledgeDistillationService && typeof knowledgeDistillationService.createRun === "function") {
+        try {
+          distillationRun = await knowledgeDistillationService.createRun({
             ...(asObject(input.distillation) || {}),
             runId: input.distillationRunId || `${runId}-distillation`,
             query: input.query || input.seedQuery || asArray(feedback).find((item) => item.query)?.query || "",
             modelEnabled: input.modelEnabled === true,
-            modelAlias: input.modelAlias || ""
-          })
-        : null;
+            modelAlias: input.modelAlias || "",
+            responseProfile: input.responseProfile || "agent",
+            projectId: input.projectId || input.workspaceId || ""
+          });
+        } catch (error) {
+          distillationServiceError = compactError(error);
+        }
+      }
       const goldCases = goldenRuleRuntime && typeof goldenRuleRuntime.listGoldCases === "function"
         ? await goldenRuleRuntime.listGoldCases({ limit: input.caseLimit || 100 })
         : { items: [] };
@@ -366,8 +403,8 @@ export function createKnowledgeEvolutionRuntime({
         : null;
       const candidateSkillIds = [
         ...new Set(
-          asArray(distillationRun?.candidates)
-            .map((candidate) => candidate.skill?.skillId)
+          distillationCandidates(distillationRun)
+            .map(candidateSkillId)
             .filter(Boolean)
         )
       ];
@@ -409,11 +446,17 @@ export function createKnowledgeEvolutionRuntime({
           feedbackCollected: true,
           failuresAttributed: Boolean(failureAttribution),
           candidateGenerated: Boolean(distillationRun),
+          externalDistillationServiceCalled: Boolean(distillationRun || distillationServiceError),
           goldenRuleGateApplied: true,
           offlineEvaluated: Boolean(evaluationRun),
           canaryPublished: Boolean(deployment)
         },
         distillationRun,
+        distillationService: {
+          service: "external.knowledge.distillation",
+          ok: Boolean(distillationRun),
+          error: distillationServiceError
+        },
         evaluationRun,
         deployment,
         distillationOptimization,

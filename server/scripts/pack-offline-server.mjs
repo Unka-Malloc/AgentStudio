@@ -161,6 +161,7 @@ function usage() {
     "  --node-version VERSION           Default: current Node version.",
     "  --modules LIST                   Optional modules to include, e.g. FileProcessor.",
     "  --file-processor-components LIST Optional FileProcessor components, e.g. tika,pdfProcessor,ocr.",
+    "  --dry-run                        Validate the package plan and license gate without downloading or building.",
     "  --no-verify-docker               Build only; skip Ubuntu container verification.",
     "  --keep-staging                   Keep unpacked package directory."
   ].join("\n");
@@ -431,6 +432,41 @@ function isInsideOrEqual(candidatePath, rootPath) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+function isCascadePrunableSource(relativeFilePath = "") {
+  const normalized = String(relativeFilePath || "").replace(/\\/g, "/");
+  return (
+    normalized.startsWith("server/platform/specialized/knowledge/") ||
+    normalized.startsWith("server/platform/modules/knowledge/") ||
+    normalized.startsWith("server/scripts/verify-") ||
+    normalized === "server/scripts/build-transaction-continuity.mjs" ||
+    normalized === "server/scripts/migrate-embeddings.mjs" ||
+    normalized === "server/scripts/pack-offline-server.mjs" ||
+    normalized === "server/scripts/setup-local-runtime.mjs"
+  );
+}
+
+async function collectStaticImportViolations(stagingPath, plannedRoots) {
+  const staticImportViolations = [];
+  for (const filePath of await walkSourceFiles(path.join(stagingPath, "server"))) {
+    const text = await fs.readFile(filePath, "utf8");
+    for (const specifier of staticImportSpecifiers(text)) {
+      const resolved = resolveStaticSpecifier(filePath, specifier);
+      if (!resolved) {
+        continue;
+      }
+      const violationRoot = plannedRoots.find((rootPath) => isInsideOrEqual(resolved, rootPath));
+      if (violationRoot) {
+        staticImportViolations.push({
+          file: path.relative(stagingPath, filePath),
+          specifier,
+          plannedPath: path.relative(stagingPath, violationRoot)
+        });
+      }
+    }
+  }
+  return staticImportViolations;
+}
+
 export async function applyFeatureSourcePlan(stagingPath, packagingPlan) {
   const plannedPaths = [...new Set(packagingPlan.featurePackagePlan?.removePaths || [])]
     .map((relativePath) => String(relativePath || "").trim())
@@ -452,24 +488,26 @@ export async function applyFeatureSourcePlan(stagingPath, packagingPlan) {
   }
 
   const plannedRoots = plannedPaths.map((relativePath) => path.resolve(stagingPath, relativePath));
-  const staticImportViolations = [];
-  for (const filePath of await walkSourceFiles(path.join(stagingPath, "server"))) {
-    const text = await fs.readFile(filePath, "utf8");
-    for (const specifier of staticImportSpecifiers(text)) {
-      const resolved = resolveStaticSpecifier(filePath, specifier);
-      if (!resolved) {
-        continue;
-      }
-      const violationRoot = plannedRoots.find((rootPath) => isInsideOrEqual(resolved, rootPath));
-      if (violationRoot) {
-        staticImportViolations.push({
-          file: path.relative(stagingPath, filePath),
-          specifier,
-          plannedPath: path.relative(stagingPath, violationRoot)
-        });
+  const cascadePrunedFiles = [];
+  for (;;) {
+    const violations = await collectStaticImportViolations(stagingPath, plannedRoots);
+    const prunableFiles = [...new Set(
+      violations
+        .map((violation) => violation.file)
+        .filter(isCascadePrunableSource)
+    )].sort();
+    if (prunableFiles.length === 0) {
+      break;
+    }
+    for (const relativeFilePath of prunableFiles) {
+      const targetPath = path.join(stagingPath, relativeFilePath);
+      if (await pathExists(targetPath)) {
+        await fs.rm(targetPath, { force: true });
+        cascadePrunedFiles.push(relativeFilePath);
       }
     }
   }
+  const staticImportViolations = await collectStaticImportViolations(stagingPath, plannedRoots);
 
   const report = {
     schemaVersion: 1,
@@ -477,6 +515,7 @@ export async function applyFeatureSourcePlan(stagingPath, packagingPlan) {
     edition: packagingPlan.featureProfile?.edition || "",
     requestedPaths: plannedPaths,
     applied,
+    cascadePrunedFiles,
     lingeringPaths,
     staticImportViolations,
     ok: lingeringPaths.length === 0 && staticImportViolations.length === 0
@@ -970,6 +1009,7 @@ async function writeRunbook(stagingPath, targetKey, packagingPlan) {
       packagingPlan.includeTika
         ? "- `PACT_TIKA_JAR_PATH`: defaults to bundled Tika"
         : "- `PACT_TIKA_JAR_PATH`: not set unless supplied by operator",
+      "- `PACT_TIKA_TIMEOUT_MS`: defaults to 1800000",
       "",
       packagingPlan.includeTika
         ? "The package still requires a compatible Linux kernel and glibc from the host OS, but it does not require host Node.js, npm, Java, Tika, Python, or any apt-installed application dependency."
@@ -1017,15 +1057,15 @@ async function prepareSourceTree(stagingPath, targetKey, target, nodeVersion, pa
     await downloadFile(target.jreUrl, jreArchivePath);
     await extractTar(jreArchivePath, path.join(stagingPath, "modules", "jre", targetKey));
 
+    const tikaUrl = `https://repo.maven.apache.org/maven2/org/apache/tika/tika-app/${TIKA_VERSION}/tika-app-${TIKA_VERSION}.jar`;
     const tikaSourcePath = path.join(tikaResourceRoot, `tika-app-${TIKA_VERSION}.jar`);
     const tikaTargetPath = path.join(stagingPath, "modules", "tika", `tika-app-${TIKA_VERSION}.jar`);
     await ensureDirectory(path.dirname(tikaTargetPath));
-    if (await pathExists(tikaSourcePath)) {
-      await fs.copyFile(tikaSourcePath, tikaTargetPath);
-    } else {
-      const tikaUrl = `https://repo.maven.apache.org/maven2/org/apache/tika/tika-app/${TIKA_VERSION}/tika-app-${TIKA_VERSION}.jar`;
-      await downloadFile(tikaUrl, tikaTargetPath);
+    console.log(`Ensuring Tika runtime: ${tikaUrl}`);
+    if (!(await pathExists(tikaSourcePath))) {
+      await downloadFile(tikaUrl, tikaSourcePath);
     }
+    await fs.copyFile(tikaSourcePath, tikaTargetPath);
   }
 
   await writeLauncherScripts(stagingPath, targetKey, packagingPlan);
@@ -1079,8 +1119,8 @@ async function installLinuxNodeModules(stagingPath, target) {
   throw lastError;
 }
 
-async function writeOfflineManifest(stagingPath, targetKey, nodeVersion, packagingPlan) {
-  const manifest = {
+function createOfflineManifest(targetKey, nodeVersion, packagingPlan) {
+  return {
     schemaVersion: 1,
     packageType: "pact.offline-server",
     target: targetKey,
@@ -1103,6 +1143,10 @@ async function writeOfflineManifest(stagingPath, targetKey, nodeVersion, packagi
     runtimeDependencies: runtimeDependenciesForPackagingPlan(packagingPlan),
     noAptRequiredAtRuntime: true
   };
+}
+
+async function writeOfflineManifest(stagingPath, targetKey, nodeVersion, packagingPlan) {
+  const manifest = createOfflineManifest(targetKey, nodeVersion, packagingPlan);
   await fs.writeFile(path.join(stagingPath, "offline-manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
 }
 
@@ -1406,6 +1450,63 @@ async function createArchive(packageRoot, packageName, outputDir) {
   return { archivePath, sha256 };
 }
 
+async function createDryRunReport({
+  targetKey,
+  target,
+  nodeVersion,
+  outputDir,
+  packageName,
+  packagingPlan
+}) {
+  const nodeArchiveName = `node-v${nodeVersion}-${target.nodePlatform}.tar.xz`;
+  const nodeArchivePath = path.join(jreResourceRoot, "downloads", nodeArchiveName);
+  const jreArchivePath = path.join(jreResourceRoot, "downloads", target.jreFileName);
+  const tikaArchivePath = path.join(tikaResourceRoot, `tika-app-${TIKA_VERSION}.jar`);
+  const tikaUrl = `https://repo.maven.apache.org/maven2/org/apache/tika/tika-app/${TIKA_VERSION}/tika-app-${TIKA_VERSION}.jar`;
+  const licenseManifest = await createKnowledgeLicenseManifest({ packagingPlan });
+  const licenseValidation = validateKnowledgeLicenseManifest(licenseManifest);
+  if (!licenseValidation.ok) {
+    throw new Error(`License manifest validation failed:\n${licenseValidation.errors.map((entry) => `- ${entry}`).join("\n")}`);
+  }
+
+  return {
+    packageType: "pact.offline-server",
+    dryRun: true,
+    target: targetKey,
+    packageName,
+    outputDir,
+    offlineManifest: createOfflineManifest(targetKey, nodeVersion, packagingPlan),
+    license: {
+      ok: true,
+      productionDependencyCount: licenseValidation.productionDependencyCount,
+      warnings: licenseValidation.warnings
+    },
+    runtimeAssets: {
+      node: {
+        url: `https://nodejs.org/dist/v${nodeVersion}/${nodeArchiveName}`,
+        cachePath: path.relative(projectRoot, nodeArchivePath),
+        cached: await pathExists(nodeArchivePath)
+      },
+      jre: packagingPlan.includeTika
+        ? {
+            url: target.jreUrl,
+            cachePath: path.relative(projectRoot, jreArchivePath),
+            cached: await pathExists(jreArchivePath)
+          }
+        : null,
+      tika: packagingPlan.includeTika
+        ? {
+            url: tikaUrl,
+            cachePath: path.relative(projectRoot, tikaArchivePath),
+            cached: await pathExists(tikaArchivePath)
+          }
+        : null
+    },
+    wouldBuildConsoleDist: !(await pathExists(path.join(projectRoot, "build", "dist", "index.html"))),
+    noAptRequiredAtRuntime: true
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || args.h) {
@@ -1432,6 +1533,19 @@ async function main() {
   const outputDir = path.resolve(String(args["output-dir"] || path.join("build", "release")));
   const packageName = `pact-server-${targetKey}`;
   const stagingPath = path.join(outputDir, packageName);
+
+  if (args["dry-run"]) {
+    const report = await createDryRunReport({
+      targetKey,
+      target,
+      nodeVersion,
+      outputDir,
+      packageName,
+      packagingPlan
+    });
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return;
+  }
 
   if (!(await pathExists(path.join(projectRoot, "build", "dist", "index.html")))) {
     console.log("Building bundled console build/dist ...");

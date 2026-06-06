@@ -8,6 +8,9 @@ export const TOOL_PACKAGE_PROTOCOL_VERSION = "pact.tool-package.v1";
 export const SKILL_REGISTRY_PROTOCOL_VERSION = "pact.skill-registry.v1";
 
 const REGISTRY_FILE = path.join("capability-packages", "registry.json");
+const SKILL_LIBRARY_DIR = path.join("capability-packages", "skill-library");
+const MAX_SKILL_BUNDLE_FILES = 64;
+const MAX_SKILL_BUNDLE_FILE_BYTES = 512 * 1024;
 const KIND_PROTOCOL = Object.freeze({
   tool: TOOL_PACKAGE_PROTOCOL_VERSION,
   skill: SKILL_REGISTRY_PROTOCOL_VERSION
@@ -59,6 +62,10 @@ function sha256(value) {
   return crypto.createHash("sha256").update(String(value || "")).digest("hex");
 }
 
+function sha256Buffer(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
 export function capabilityPackageSignedPayload(manifest = {}) {
   const value = asObject(manifest);
   return {
@@ -87,6 +94,10 @@ function registryPath(userDataPath = "") {
   return path.join(userDataPath || ServerConfig.getDataDir(), REGISTRY_FILE);
 }
 
+function skillLibraryRoot(userDataPath = "", packageId = "") {
+  return path.join(userDataPath || ServerConfig.getDataDir(), SKILL_LIBRARY_DIR, normalizeText(packageId));
+}
+
 async function readJson(filePath, fallback) {
   try {
     return JSON.parse(await fs.readFile(filePath, "utf8"));
@@ -109,6 +120,82 @@ function packageKey(kind, name) {
 
 function packageIdFor(manifest = {}) {
   return `${normalizeText(manifest.kind)}_${sha256(`${manifest.kind}:${manifest.name}:${manifest.version}`).slice(0, 16)}`;
+}
+
+function manifestInputFromPackageInput(input = {}) {
+  const value = asObject(input);
+  return asObject(value.manifest || value.skillManifest || value.packageManifest || value);
+}
+
+function safeBundlePath(value = "") {
+  const normalized = String(value || "").replace(/\\/g, "/").trim();
+  const parts = normalized.split("/").filter(Boolean);
+  if (!parts.length || normalized.startsWith("/") || parts.some((part) => part === "." || part === "..")) {
+    throw new Error(`Invalid skill bundle file path: ${value}`);
+  }
+  return parts.join("/");
+}
+
+function decodeBundleFileContent(file = {}) {
+  if (file.contentBase64 !== undefined) {
+    return Buffer.from(String(file.contentBase64 || ""), "base64");
+  }
+  return Buffer.from(String(file.content || ""), "utf8");
+}
+
+function normalizeSkillBundleFiles(input = {}) {
+  const value = asObject(input);
+  const rawFiles = asArray(value.files || value.bundle?.files || value.artifacts?.files).slice(0, MAX_SKILL_BUNDLE_FILES);
+  return rawFiles.map((file) => {
+    const source = asObject(file);
+    const relativePath = safeBundlePath(source.path || source.filePath || source.name);
+    const content = decodeBundleFileContent(source);
+    if (content.byteLength > MAX_SKILL_BUNDLE_FILE_BYTES) {
+      throw new Error(`Skill bundle file is too large: ${relativePath}`);
+    }
+    return {
+      path: relativePath,
+      content,
+      byteLength: content.byteLength,
+      digestSha256: sha256Buffer(content)
+    };
+  });
+}
+
+async function writeSkillLibraryBundle({ userDataPath = "", manifest = {}, files = [], actor = "" } = {}) {
+  const root = skillLibraryRoot(userDataPath, manifest.packageId);
+  const filesRoot = path.join(root, "files");
+  await fs.rm(root, { recursive: true, force: true });
+  await fs.mkdir(filesRoot, { recursive: true });
+  await writeJson(path.join(root, "manifest.json"), manifest);
+  for (const file of files) {
+    const targetPath = path.join(filesRoot, file.path);
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.writeFile(targetPath, file.content);
+  }
+  const publicFiles = files.map((file) => ({
+    path: file.path,
+    byteLength: file.byteLength,
+    digestSha256: file.digestSha256
+  }));
+  const totalBytes = publicFiles.reduce((sum, file) => sum + file.byteLength, 0);
+  const descriptor = {
+    schemaVersion: 1,
+    protocolVersion: SKILL_REGISTRY_PROTOCOL_VERSION,
+    storage: "server-skill-library",
+    packageId: manifest.packageId,
+    actor: normalizeText(actor),
+    root: path.join(SKILL_LIBRARY_DIR, manifest.packageId),
+    manifestPath: path.join(SKILL_LIBRARY_DIR, manifest.packageId, "manifest.json"),
+    filesRoot: path.join(SKILL_LIBRARY_DIR, manifest.packageId, "files"),
+    fileCount: publicFiles.length,
+    totalBytes,
+    artifactDigestSha256: sha256(stableJson(publicFiles)),
+    files: publicFiles,
+    createdAt: nowIso()
+  };
+  await writeJson(path.join(root, "library.json"), descriptor);
+  return descriptor;
 }
 
 function normalizeDependency(value = {}) {
@@ -229,6 +316,7 @@ function normalizeRecord(record = {}) {
     activatedAt: normalizeText(record.activatedAt),
     deprecatedAt: normalizeText(record.deprecatedAt),
     rollbackOf: normalizeText(record.rollbackOf),
+    library: asObject(record.library),
     createdAt: normalizeText(record.createdAt || nowIso()),
     updatedAt: normalizeText(record.updatedAt || nowIso()),
     lifecycleEvents: asArray(record.lifecycleEvents)
@@ -465,13 +553,13 @@ export function createCapabilityPackageRegistry({ userDataPath = "" } = {}) {
 
   async function plan(manifestInput = {}) {
     const registry = await loadRegistry();
-    const manifest = normalizeCapabilityPackageManifest(manifestInput);
+    const manifest = normalizeCapabilityPackageManifest(manifestInputFromPackageInput(manifestInput));
     return buildInstallPlan(manifest, registry);
   }
 
   async function submit(manifestInput = {}, options = {}) {
     const registry = await loadRegistry();
-    const manifest = normalizeCapabilityPackageManifest(manifestInput);
+    const manifest = normalizeCapabilityPackageManifest(manifestInputFromPackageInput(manifestInput));
     const installPlan = buildInstallPlan(manifest, registry);
     if (!installPlan.validation.ok) {
       const error = new Error("Capability package manifest is invalid.");
@@ -483,19 +571,25 @@ export function createCapabilityPackageRegistry({ userDataPath = "" } = {}) {
       error.details = installPlan.missingDependencies;
       throw error;
     }
+    const actor = normalizeText(options.submittedBy || options.actor || "system");
+    const files = manifest.kind === "skill" ? normalizeSkillBundleFiles(manifestInput) : [];
+    const library = manifest.kind === "skill"
+      ? await writeSkillLibraryBundle({ userDataPath, manifest, files, actor })
+      : {};
     const record = appendLifecycle({
       manifest,
       status: "submitted",
-      submittedBy: normalizeText(options.submittedBy || options.actor || "system"),
+      submittedBy: actor,
       reviewedBy: "",
       installedAt: "",
       activatedAt: "",
       deprecatedAt: "",
       rollbackOf: "",
+      library,
       createdAt: nowIso(),
       updatedAt: nowIso(),
       lifecycleEvents: []
-    }, { action: "submit", actor: normalizeText(options.submittedBy || options.actor || "system") });
+    }, { action: "submit", actor });
     const nextRegistry = addAudit({
       ...registry,
       packages: {

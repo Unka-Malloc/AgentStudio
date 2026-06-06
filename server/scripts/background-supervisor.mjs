@@ -5,9 +5,16 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
   backgroundDefinitionForRole,
+  getBackgroundProcessStatus,
+  inspectAgentWorkerDemand,
+  inspectImportParseWorkerDemand,
+  inspectMaintenanceWorkerDemand,
+  inspectSourceWatcherDemand,
   normalizeBackgroundRoleList,
+  statusForInactiveDemand,
   writeBackgroundProcessState
 } from "../platform/common/devops/process-status/background-process-status.mjs";
+import { recoverSystemInspection } from "../platform/common/devops/supervisor-recovery/supervisor-recovery.mjs";
 import {
   createRuntimeLogger,
   setRuntimeLogger,
@@ -82,6 +89,18 @@ const userDataPath = path.resolve(
 const roles = normalizeBackgroundRoleList(args.roles || args.role);
 const intervalMs = normalizePositiveInteger(args["interval-ms"], 2500, 500, 60000);
 const restartDelayMs = normalizePositiveInteger(args["restart-delay-ms"], 1500, 200, 60000);
+const systemInspectionRecoveryCooldownMs = normalizePositiveInteger(
+  args["system-inspection-recovery-cooldown-ms"],
+  30000,
+  1000,
+  3600000
+);
+const systemInspectionRecoveryStartupWaitMs = normalizePositiveInteger(
+  args["system-inspection-recovery-startup-wait-ms"],
+  1200,
+  0,
+  60000
+);
 const logger = createRuntimeLogger({
   userDataPath,
   runtimeOptions: {
@@ -93,8 +112,11 @@ const logger = createRuntimeLogger({
 setRuntimeLogger(logger);
 const children = new Map();
 const records = new Map(roles.map((role) => [role, processRecordForRole(role)]));
+const suppressRestartRoles = new Set();
 let closing = false;
 let stateTimer = null;
+let lastSystemInspectionRecoveryAt = 0;
+let lastSystemInspectionRecovery = null;
 
 function serializeState() {
   return {
@@ -104,6 +126,7 @@ function serializeState() {
       status: closing ? "stopping" : "running",
       intervalMs,
       restartDelayMs,
+      systemInspectionRecovery: lastSystemInspectionRecovery,
       roles
     },
     processes: roles.map((role) => records.get(role) || processRecordForRole(role))
@@ -119,6 +142,121 @@ async function persistState() {
   logger.debug("background.supervisor.state.persisted", {
     roles,
     records: summarizeForLog(roles.map((role) => records.get(role) || processRecordForRole(role)))
+  });
+}
+
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function recoverSystemInspectionIfNeeded(reason = "interval") {
+  if (closing) {
+    return {
+      ok: false,
+      attempted: false,
+      reason: "closing",
+      checkedAt: nowIso()
+    };
+  }
+  const backgroundStatus = await getBackgroundProcessStatus(userDataPath);
+  const inspectionProcess = (backgroundStatus.processes || []).find((item) => item.role === "system-inspection");
+  if (inspectionProcess?.alive && inspectionProcess.status === "running") {
+    return {
+      ok: true,
+      attempted: false,
+      reason: "already_running",
+      checkedAt: nowIso()
+    };
+  }
+  const nowMs = Date.now();
+  if (
+    lastSystemInspectionRecoveryAt &&
+    nowMs - lastSystemInspectionRecoveryAt < systemInspectionRecoveryCooldownMs
+  ) {
+    return {
+      ...(lastSystemInspectionRecovery || {}),
+      ok: false,
+      attempted: false,
+      reason: "cooldown",
+      cooldownMs: systemInspectionRecoveryCooldownMs,
+      checkedAt: nowIso()
+    };
+  }
+  lastSystemInspectionRecoveryAt = nowMs;
+  logger.warn("background.supervisor.system_inspection.recovery_requested", {
+    reason,
+    status: inspectionProcess?.status || "",
+    pid: inspectionProcess?.pid || 0,
+    alive: inspectionProcess?.alive === true
+  });
+  lastSystemInspectionRecovery = await recoverSystemInspection({
+    backgroundStatus
+  });
+  logger.info("background.supervisor.system_inspection.recovery_completed", {
+    reason,
+    recovery: summarizeForLog(lastSystemInspectionRecovery)
+  });
+  if (lastSystemInspectionRecovery.ok) {
+    await sleep(systemInspectionRecoveryStartupWaitMs);
+  }
+  return lastSystemInspectionRecovery;
+}
+
+function isOnDemandRole(role) {
+  return role === "import-worker" ||
+    role === "source-watcher" ||
+    role === "maintenance-worker" ||
+    role === "agent-worker";
+}
+
+async function inspectRoleDemand(role) {
+  if (role === "import-worker") {
+    return inspectImportParseWorkerDemand(userDataPath);
+  }
+  if (role === "source-watcher") {
+    return inspectSourceWatcherDemand(userDataPath);
+  }
+  if (role === "maintenance-worker") {
+    return inspectMaintenanceWorkerDemand(userDataPath);
+  }
+  if (role === "agent-worker") {
+    return inspectAgentWorkerDemand(userDataPath);
+  }
+  return {
+    kind: "always_on",
+    active: true,
+    checkedAt: nowIso()
+  };
+}
+
+function recordIdleRole(role, demand = {}, patch = {}) {
+  const previous = records.get(role) || processRecordForRole(role);
+  const child = children.get(role);
+  records.set(role, processRecordForRole(role, {
+    ...previous,
+    desired: false,
+    status: child ? "stopping" : statusForInactiveDemand(demand),
+    mode: "on-demand",
+    pid: child?.pid || 0,
+    lastHeartbeatAt: nowIso(),
+    error: "",
+    details: {
+      ...(previous.details || {}),
+      demand
+    },
+    ...patch
+  }));
+}
+
+function updateRoleDemand(role, demand = {}) {
+  const previous = records.get(role) || processRecordForRole(role);
+  records.set(role, {
+    ...previous,
+    desired: true,
+    details: {
+      ...(previous.details || {}),
+      demand
+    }
   });
 }
 
@@ -200,32 +338,44 @@ function spawnRole(role) {
 
   child.once("exit", (code, signal) => {
     const current = records.get(role) || processRecordForRole(role);
+    const restartSuppressed = suppressRestartRoles.delete(role);
     children.delete(role);
     logger.warn("background.supervisor.child_exited", {
       role,
       pid: child.pid || 0,
       code,
       signal,
-      closing
+      closing,
+      restartSuppressed
     });
     records.set(role, {
       ...current,
-      status: closing ? "stopped" : "exited",
+      desired: restartSuppressed ? false : current.desired !== false,
+      status: closing ? "stopped" : restartSuppressed ? "standby" : "exited",
       lastExit: {
         code,
         signal,
         at: nowIso()
       },
       pid: 0,
-      restartCount: Number(current.restartCount || 0) + (closing ? 0 : 1)
+      restartCount: Number(current.restartCount || 0) + (closing || restartSuppressed ? 0 : 1)
     });
     void persistState();
-    if (!closing) {
+    if (!closing && !restartSuppressed) {
       logger.info("background.supervisor.restart_scheduled", {
         role,
         restartDelayMs
       });
-      setTimeout(() => spawnRole(role), restartDelayMs).unref?.();
+      setTimeout(() => {
+        void reconcileRole(role)
+          .then(() => persistState())
+          .catch((error) => {
+            logger.error("background.supervisor.restart_reconcile.failed", {
+              role,
+              error: summarizeError(error)
+            });
+          });
+      }, restartDelayMs).unref?.();
     }
   });
 
@@ -244,6 +394,60 @@ function spawnRole(role) {
     });
     void persistState();
   });
+}
+
+async function reconcileRole(role) {
+  if (!isOnDemandRole(role)) {
+    if (!children.has(role)) {
+      spawnRole(role);
+    }
+    return;
+  }
+  const demand = await inspectRoleDemand(role);
+  if (demand.active) {
+    updateRoleDemand(role, demand);
+    if (!children.has(role)) {
+      logger.info("background.supervisor.on_demand.spawn", {
+        role,
+        demand: summarizeForLog(demand)
+      });
+      spawnRole(role);
+    }
+    return;
+  }
+  const child = children.get(role);
+  recordIdleRole(role, demand);
+  if (!child) {
+    return;
+  }
+  logger.info("background.supervisor.on_demand.stop_idle", {
+    role,
+    pid: child.pid || 0,
+    demand: summarizeForLog(demand)
+  });
+  suppressRestartRoles.add(role);
+  try {
+    child.kill("SIGTERM");
+  } catch (error) {
+    logger.warn("background.supervisor.on_demand.stop_idle.failed", {
+      role,
+      pid: child.pid || 0,
+      error: summarizeError(error)
+    });
+    suppressRestartRoles.delete(role);
+  }
+}
+
+async function reconcileRoles(reason = "interval") {
+  logger.debug("background.supervisor.reconcile.started", {
+    reason,
+    roles
+  });
+  for (const role of roles) {
+    await reconcileRole(role);
+  }
+  await recoverSystemInspectionIfNeeded(reason);
+  await persistState();
 }
 
 async function shutdown(code = 0) {
@@ -286,13 +490,14 @@ logger.info("background.supervisor.starting", {
   restartDelayMs,
   pid: process.pid
 });
-for (const role of roles) {
-  spawnRole(role);
-}
+await reconcileRoles("startup");
 stateTimer = setInterval(() => {
-  void persistState();
+  void reconcileRoles("interval").catch((error) => {
+    logger.error("background.supervisor.reconcile.failed", {
+      error: summarizeError(error)
+    });
+  });
 }, intervalMs);
-stateTimer.unref?.();
 await persistState();
 
 process.on("SIGINT", () => {

@@ -60,9 +60,13 @@ function assertOnlyOccurrences(files, needle, allowedRelativePaths, message) {
 }
 
 const knowledgeView = await readText("server-web/views/KnowledgeView.vue");
+const knowledgeIngestPanel = await readText("server-web/components/knowledge/KnowledgeIngestPanel.vue");
+const knowledgeDocuments = await readText("server-web/lib/knowledge-documents.ts");
+const knowledgeDocumentsClient = await readText("server-web/lib/knowledge-documents-client.ts");
 const useConsole = await readText("server-web/composables/useConsole.ts");
 const uploadSession = await readText("server-web/lib/knowledge-upload-session.ts");
 const bridge = await readText("server-web/lib/bridge.ts");
+const bridgeTypes = await readText("server-web/lib/bridge-types.ts");
 const systemController = await readText("server/platform/common/console/http/controllers/system-controller.mjs");
 const knowledgeOperationsHandlers = await readText(
   "server/platform/common/console/http/controllers/system-controller-knowledge-operations-handlers.mjs"
@@ -78,25 +82,19 @@ const serverWebFiles = await Promise.all(
 const parseDocumentHits = assertOnlyOccurrences(
   serverWebFiles,
   "bridge.parseDocument(",
-  ["server-web/views/KnowledgeView.vue"],
-  "文档解析预览只能由知识库文档切分页调用，新增页面不得私接第二套预览入口。"
+  [],
+  "文档解析预览不得回穿全局 bridge；必须经知识文档 domain client。"
 );
-const parseDocumentCalls = [...knowledgeView.matchAll(/bridge\.parseDocument\(/g)];
 assert.equal(
   parseDocumentHits.reduce((sum, hit) => sum + hit.count, 0),
-  1,
-  "前端只能保留一个文档解析预览调用点。"
-);
-assert.equal(
-  parseDocumentCalls.length,
-  1,
-  "文档预览应只有一个前端 parseDocument 调用点，避免页面间分叉。"
+  0,
+  "前端不得保留 bridge.parseDocument 预览调用点。"
 );
 assertOnlyOccurrences(
   serverWebFiles,
   "bridge.createUploadSession(",
-  ["server-web/lib/knowledge-upload-session.ts"],
-  "前端不得在页面或 composable 中直接创建上传会话；必须经统一上传模块。"
+  [],
+  "前端不得回穿全局 bridge 创建上传会话；必须经统一上传模块和 upload-session client。"
 );
 assertOnlyOccurrences(
   serverWebFiles,
@@ -106,21 +104,51 @@ assertOnlyOccurrences(
 );
 assertIncludes(
   knowledgeView,
-  "createKnowledgeUploadedFilesPayload",
-  "文档切分预览必须用 uploadedFiles 进入后端解析运行时。"
-);
-assertNotIncludes(
-  knowledgeView,
-  "uploadSessionId:",
-  "文档切分页面预览不能使用持久化 upload session。"
+  "<KnowledgeIngestPanel",
+  "知识库文档切分页必须挂载统一入库面板。"
 );
 assertIncludes(
-  knowledgeView,
+  knowledgeIngestPanel,
+  "previewKnowledgeDocuments",
+  "文档切分预览页面必须经统一 helper 进入后端解析运行时。"
+);
+assertNotIncludes(
+  knowledgeIngestPanel,
+  "bridge.parseDocument(",
+  "文档切分页面组件不能直接调用 bridge.parseDocument。"
+);
+assertIncludes(
+  knowledgeDocuments,
+  "parseDocument({",
+  "文档预览 helper 必须只通过知识文档 domain client 调用解析入口。"
+);
+assertIncludes(
+  knowledgeDocuments,
+  "from \"./knowledge-documents-client\"",
+  "文档预览 helper 必须依赖知识文档 domain client。"
+);
+assertNotIncludes(
+  knowledgeDocuments,
+  "from \"./bridge\"",
+  "文档预览 helper 不能再依赖全局 bridge facade。"
+);
+assertIncludes(
+  knowledgeDocuments,
+  "createKnowledgeUploadedFilesPayload",
+  "文档切分预览 helper 必须用 uploadedFiles 进入后端解析运行时。"
+);
+assertNotIncludes(
+  knowledgeDocuments,
+  "uploadSessionId:",
+  "文档切分预览 helper 不能使用持久化 upload session。"
+);
+assertIncludes(
+  knowledgeDocuments,
   "dryRun: true",
   "文档预览必须显式声明 dryRun。"
 );
 assertIncludes(
-  knowledgeView,
+  knowledgeDocuments,
   "uploadedFiles,",
   "文档预览必须把文件 payload 交给统一后端解析入口。"
 );
@@ -136,16 +164,41 @@ assertIncludes(
 );
 assertIncludes(
   uploadSession,
+  "from \"./upload-session-client\"",
+  "正式入库 upload session helper 必须依赖 upload-session domain client。"
+);
+assertNotIncludes(
+  uploadSession,
+  "from \"./bridge\"",
+  "正式入库 upload session helper 不能再依赖全局 bridge facade。"
+);
+assertIncludes(
+  uploadSession,
+  "createUploadSession({",
+  "正式入库必须继续通过统一 upload session client 创建会话。"
+);
+assertIncludes(
+  uploadSession,
   "createKnowledgeUploadedFilesPayload",
   "预览文件 payload 逻辑必须集中在共用模块。"
 );
 assertIncludes(
-  bridge,
+  knowledgeDocumentsClient,
   'postJson<DocumentParseResponse>("/api/knowledge/document-parser/parse", payload)',
-  "前端文档预览必须调用统一文档解析 HTTP 入口。"
+  "前端文档预览必须调用统一文档解析 HTTP 入口，且端点归属知识文档 client。"
 );
 assertIncludes(
   bridge,
+  "parseDocument,",
+  "bridge facade 必须保留 parseDocument 兼容导出。"
+);
+assertIncludes(
+  bridge,
+  "from \"./knowledge-documents-client\"",
+  "bridge facade 必须从知识文档 domain client 取得 parseDocument。"
+);
+assertIncludes(
+  bridgeTypes,
   "cleanupUploadSession?: boolean",
   "统一文档解析入口需要支持临时 upload session 清理。"
 );

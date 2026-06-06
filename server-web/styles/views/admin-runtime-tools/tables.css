@@ -1,0 +1,64 @@
+.ops-process-table .job-table-header,
+.ops-process-table .job-row {
+  grid-template-columns:
+    minmax(160px, 1fr)
+    minmax(92px, 0.42fr)
+    minmax(96px, 0.42fr)
+    minmax(74px, 0.3fr)
+    minmax(128px, 0.5fr)
+    minmax(0, 1.8fr);
+}
+
+.work-queue-table .job-table-header,
+.work-queue-table .job-row {
+  grid-template-columns:
+    minmax(180px, 1.15fr)
+    minmax(150px, 0.85fr)
+    minmax(92px, 0.38fr)
+    minmax(138px, 0.72fr)
+    minmax(0, 1.35fr);
+}
+
+.tool-list-table .job-table-header,
+.tool-list-table .job-row {
+  grid-template-columns:
+    minmax(180px, 1.15fr)
+    minmax(140px, 0.75fr)
+    minmax(130px, 0.85fr)
+    minmax(130px, 0.85fr)
+    minmax(82px, 0.35fr)
+    minmax(92px, 0.42fr);
+}
+
+.tool-stats-table .job-table-header,
+.tool-stats-table .job-row {
+  grid-template-columns:
+    minmax(92px, 0.45fr)
+    minmax(140px, 1fr)
+    minmax(82px, 0.35fr)
+    minmax(92px, 0.35fr);
+}
+
+.tool-audit-table .job-table-header,
+.tool-audit-table .job-row {
+  grid-template-columns:
+    minmax(180px, 1fr)
+    minmax(160px, 0.85fr)
+    minmax(120px, 0.55fr)
+    minmax(82px, 0.35fr)
+    minmax(120px, 0.55fr);
+}
+
+.permission-tool-rule-table .job-table-header,
+.permission-tool-rule-table .job-row {
+  grid-template-columns: minmax(180px, 1fr) minmax(92px, 0.35fr) minmax(220px, 0.9fr);
+}
+
+.grant-tool-rule-table .job-table-header,
+.grant-tool-rule-table .job-row {
+  grid-template-columns:
+    minmax(150px, 0.75fr)
+    minmax(180px, 1fr)
+    minmax(92px, 0.35fr)
+    minmax(220px, 0.9fr);
+}

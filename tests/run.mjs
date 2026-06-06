@@ -11,6 +11,12 @@ const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const defaultReportDir = path.join(repoRoot, "build", "test-reports");
 
 const suites = [
+  suite("coverage.unit-threshold", "Unit coverage threshold scan", npm("run", "test:unit-coverage:scan"), [
+    "coverage",
+    "gate",
+    "unit",
+    "quality"
+  ]),
   suite("repo.hygiene.pre", "Repository path hygiene", npm("run", "repo:hygiene"), [
     "repo",
     "hygiene",
@@ -41,6 +47,12 @@ const suites = [
     "server",
     "mcp",
     "integration",
+    "regression"
+  ]),
+  suite("server.agent-client-support-targets", "Canonical agent client support target gate", npm("run", "server:verify:agent-client-support-targets"), [
+    "server",
+    "mcp",
+    "client",
     "regression"
   ]),
   suite("server.continuity", "Transaction continuity", npm("run", "server:verify:continuity"), [
@@ -179,6 +191,27 @@ const suites = [
     "connectors",
     "regression"
   ]),
+  suite("server.external-service-api-registration", "External service API registration and internal algorithm rejection", npm("run", "server:verify:external-service-api-registration"), [
+    "server",
+    "external-service",
+    "operation",
+    "security",
+    "regression"
+  ]),
+  suite("server.external-mcp-passthrough", "External MCP passthrough gateway with FastMCP Docker service", npm("run", "server:verify:external-mcp-passthrough"), [
+    "server",
+    "external-service",
+    "mcp",
+    "docker",
+    "integration"
+  ]),
+  suite("server.external-http-adapters", "External HTTP/RPC adapters for OpenAPI, REST, JSON endpoints, and RPC", npm("run", "server:verify:external-http-adapters"), [
+    "server",
+    "external-service",
+    "http",
+    "integration",
+    "regression"
+  ]),
   suite("server.maintenance-agent", "Maintenance agent harness", npm("run", "server:verify:maintenance-agent"), [
     "server",
     "integration",
@@ -205,6 +238,14 @@ const suites = [
     "feature-registry",
     "gate",
     "regression"
+  ]),
+  suite("node-vue.coverage", "Vitest Node/Vue coverage", npm("run", "test:node-vue:coverage"), [
+    "server",
+    "web",
+    "node",
+    "vue",
+    "unit",
+    "coverage"
   ]),
   suite("server.business-scenarios", "Server business scenario black-box framework", npm("run", "server:verify:business-scenarios"), [
     "server",
@@ -297,6 +338,14 @@ const suites = [
     "flutter",
     "coverage"
   ]),
+  suite("client.native.coverage", "Rust future client CLI tests with coverage", npm("run", "client:native:test:coverage"), [
+    "client",
+    "rust",
+    "unit",
+    "integration",
+    "cli",
+    "coverage"
+  ]),
   suite("client.native.test", "Rust future client CLI tests", npm("run", "client:native:test"), [
     "client",
     "rust",
@@ -343,8 +392,10 @@ const suiteById = new Map(suites.map((entry) => [entry.id, entry]));
 
 const profileSuites = {
   fast: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
+    "server.external-service-api-registration",
     "server.frontend-feature-registry",
     "client.architecture",
     "client.plan",
@@ -359,6 +410,7 @@ const profileSuites = {
     "client.native.test"
   ],
   standard: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "security.npm-audit",
@@ -384,6 +436,7 @@ const profileSuites = {
     "server.singleton-boundaries",
     "server.source-evidence",
     "server.multi-source-connectors",
+    "server.external-service-api-registration",
     "server.maintenance-agent",
     "server.monitor-alerts",
     "server.feature-profiles",
@@ -403,6 +456,7 @@ const profileSuites = {
     "repo.hygiene.post"
   ],
   coverage: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "client.architecture",
@@ -413,11 +467,10 @@ const profileSuites = {
     "client.pairing-skill",
     "client.mcp-plugins",
     "client.thin-forwarding",
-    "client.flutter.analyze",
-    "client.flutter.coverage",
-    "client.native.test"
+    "client.flutter.analyze"
   ],
   security: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "security.npm-audit",
@@ -437,6 +490,7 @@ const profileSuites = {
     "server.singleton-boundaries",
     "server.source-evidence",
     "server.multi-source-connectors",
+    "server.external-service-api-registration",
     "server.maintenance-agent",
     "server.feature-profiles",
     "server.frontend-feature-registry",
@@ -446,6 +500,7 @@ const profileSuites = {
     "repo.hygiene.post"
   ],
   server: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "server.web.build",
@@ -467,6 +522,7 @@ const profileSuites = {
     "server.singleton-boundaries",
     "server.source-evidence",
     "server.multi-source-connectors",
+    "server.external-service-api-registration",
     "server.maintenance-agent",
     "server.monitor-alerts",
     "server.feature-profiles",
@@ -478,10 +534,12 @@ const profileSuites = {
     "repo.hygiene.post"
   ],
   smoke: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "server.source-evidence",
     "server.multi-source-connectors",
+    "server.external-service-api-registration",
     "server.console-auth",
     "server.dispatcher-unified",
     "server.trace-context",
@@ -498,6 +556,7 @@ const profileSuites = {
     "repo.hygiene.post"
   ],
   prebuild: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "security.npm-audit",
@@ -523,6 +582,7 @@ const profileSuites = {
     "server.singleton-boundaries",
     "server.source-evidence",
     "server.multi-source-connectors",
+    "server.external-service-api-registration",
     "server.maintenance-agent",
     "server.feature-profiles",
     "server.frontend-feature-registry",
@@ -544,6 +604,7 @@ const profileSuites = {
     "repo.hygiene.post"
   ],
   client: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "client.architecture",
@@ -560,14 +621,17 @@ const profileSuites = {
     "repo.hygiene.post"
   ],
   linux: [
+    "coverage.unit-threshold",
     "client.linux.build",
     "client.linux.smoke",
     "client.linux.gui-smoke"
   ],
   ubuntu: [
+    "coverage.unit-threshold",
     "client.ubuntu.verify"
   ],
   release: [
+    "coverage.unit-threshold",
     "repo.hygiene.pre",
     "security.secret-hygiene",
     "security.npm-audit",
@@ -587,6 +651,7 @@ const profileSuites = {
     "server.singleton-boundaries",
     "server.source-evidence",
     "server.multi-source-connectors",
+    "server.external-service-api-registration",
     "server.maintenance-agent",
     "server.feature-profiles",
     "server.frontend-feature-registry",
@@ -814,7 +879,7 @@ function changedSuiteIds(baseRef) {
     changedFiles.add(file);
   }
 
-  const selected = new Set(["repo.hygiene.pre", "security.secret-hygiene"]);
+  const selected = new Set(["coverage.unit-threshold", "repo.hygiene.pre", "security.secret-hygiene"]);
   for (const file of changedFiles) {
     if (file === "package.json" || file === "package-lock.json" || file.startsWith("tests/")) {
       selected.add("security.npm-audit");
@@ -836,6 +901,7 @@ function changedSuiteIds(baseRef) {
       selected.add("server.knowledge");
       selected.add("server.source-evidence");
       selected.add("server.multi-source-connectors");
+      selected.add("server.external-service-api-registration");
       selected.add("server.maintenance-agent");
       selected.add("server.feature-profiles");
       selected.add("server.frontend-feature-registry");
@@ -860,6 +926,9 @@ function changedSuiteIds(baseRef) {
     }
     if (file.startsWith("docs/") || file === "README.md") {
       selected.add("repo.hygiene.post");
+    }
+    if (file.startsWith("external-services/")) {
+      selected.add("server.external-service-api-registration");
     }
   }
 

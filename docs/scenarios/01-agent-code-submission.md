@@ -1,20 +1,75 @@
-# Scenario 01: 智能体提交代码
+# Scenario 01: 代码提交
 
-状态：讨论记录草案
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Scenario draft with machine-readable status tracking
+- Scope: Scenario 01: 代码提交.
+- Staleness check: Scanned on 2026-06-06; scenario live/contract/local status must match docs/scenarios/scenario-implementation-status.json and the latest readiness reports.
+
+状态：已确认场景草案
+
+## 元数据
+
+### 执行路线
+
+```text
+智能体 MCP -> Pact MCP adapter -> Tool Management -> 代码提交 operation -> 身份绑定与三层权限裁决 -> 用户审批或长期授权 -> 代码提交任务队列 / durable workflow -> Codespace / Code Review worker -> Gerrit Change / GitHub PR -> receipt / audit / trace / 管控台状态
+```
+
+### 涉及模块
+
+#### 接入层
+
+| 模块 / 入口 | 本场景职责 | 关键暴露 |
+| --- | --- | --- |
+| MCP 服务端入口 | 接收智能体发起的代码提交请求，承接 MCP transport、工具发现和调用上下文。 | `tools/list`、`tools/call`、HTTP MCP / stdio proxy |
+| `pact.codespace` | 面向智能体暴露代码空间与代码提交能力，承载代码提交场景的业务语义入口。 | `pact.workspace.code.change.upload` 等 codespace operation |
+| `pact.call` | 作为底层稳定调用工具，按 tool name / operation id 转发到 Pact operation。 | 统一 `pact.call` envelope、operation payload |
+| Tool Management | 管理工具目录、grant token、能力发现、scope / toolset 约束和调用路由。 | tool catalog、grant token、policy decision |
+| 智能体连接与回包 | 维护客户端连接、身份绑定和任务完成通知。 | SSE `notifications/pact/operation_reply` |
+
+#### 调度层
+
+- Operation Registry / Dispatcher。
+- Console Domain Operation Executor。
+- 代码提交任务队列 / durable workflow。
+- Codespace / Code Review worker。
+- 代码提交任务状态、异步通知和失败重试。
+
+#### 安全治理层
+
+- Console Auth、主体解析和会话上下文。
+- Authorization Governance、团队 / 用户 / 智能体三层权限裁决。
+- 审批流、长期授权、风险策略和 operation policy。
+
+#### 业务能力层
+
+- Codespace / workspace code change runtime。
+- ChangeSet / CodeChange / UploadReceipt 抽象。
+- GitHub PR adapter 与 Gerrit Change adapter。
+
+#### 数据与观测层
+
+- 工作空间文件与代码变更留档。
+- Operation Ledger、Audit、Trace、Report。
+- Checkpoint / receipt / 外部 provider 状态同步。
 
 ## 场景目标
 
-智能体通过 Pact MCP 工具发起代码提交请求。Pact 必须完成智能体身份识别、用户与团队权限裁决、必要的用户或管理员审批、代码变更抽象、GitHub / Gerrit 目标适配、外部提交、状态同步、审计、报表、trace 和回溯记录，并把结果返回给智能体与管控台。
+智能体通过 Pact MCP 工具发起代码提交请求，链路必须从智能体 MCP 一路打到 Gerrit / GitHub。Pact 必须完成智能体身份识别、用户与团队权限裁决、必要的用户或管理员审批、代码变更抽象、GitHub / Gerrit 目标适配、外部提交、状态同步、审计、报表、trace 和回溯记录，并把结果返回给智能体与管控台。
 
 本场景不是单个“代码管理模块”能力，而是一条从客户端到服务端后端的完整业务链路：
 
 ```text
 智能体
 -> MCP 工具调用
--> Pact MCP adapter / Tool Management
+-> Pact MCP adapter
+-> Tool Management
 -> 身份绑定与三层权限裁决
 -> 用户审批或长期授权
--> Codespace / Code Review provider
+-> 代码提交任务队列 / durable workflow
+-> Codespace / Code Review worker
 -> GitHub PR 或 Gerrit Change
 -> Operation Ledger / Audit / Trace / Report / Checkpoint
 -> 智能体响应与管控台可见状态
@@ -35,9 +90,17 @@
 
 第一版至少要覆盖：
 
-- Codex 类智能体。
 - OpenClaw 类智能体。
-- Claude Code / Cursor Agent 类 MCP 客户端。
+- Claude Code 类 MCP 客户端。
+- Codex 类智能体。
+- Gemini CLI 类 MCP 客户端。
+- Antigravity 类 MCP 客户端。
+- OpenCode 类 MCP 客户端。
+- Copilot 类 MCP 客户端。
+- Kilo Code 类 MCP 客户端。
+- Cursor 类 MCP 客户端。
+- Hermes Agent 类智能体。
+- Windsurf 类 MCP 客户端。
 - 脚本型 MCP 客户端。
 
 验收口径：
@@ -257,10 +320,11 @@ GitHub 和 Gerrit 的差异必须由后端 adapter 吸收。智能体面对的 M
 8. 如果需要审批，管控台通知用户审批。
 9. 用户选择本次允许、限时允许或永久允许。
 10. Pact 准备 `CodeChange` / `ChangeSet`。
-11. Pact 根据目标创建 GitHub Draft PR、GitHub 正式 PR 或 Gerrit Change。
-12. Pact 写入 ledger、audit、trace、report、checkpoint 和 upload receipt。
-13. Pact 向智能体返回目标系统 URL、状态和审计引用。
-14. 管控台展示完整链路和结果。
+11. Pact 将已授权的代码提交请求写入任务队列 / durable workflow。
+12. Codespace / Code Review worker 领取任务并根据目标创建 GitHub Draft PR、GitHub 正式 PR 或 Gerrit Change。
+13. Pact 写入 ledger、audit、trace、report、checkpoint 和 upload receipt。
+14. Pact 向智能体返回目标系统 URL、状态和审计引用。
+15. 管控台展示完整链路和结果。
 
 ## 拒绝链路
 

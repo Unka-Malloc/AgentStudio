@@ -30,7 +30,21 @@ assert.equal(
   "kernel capability permissions must be unique"
 );
 
+function isDeprecatedCompatibilityShim(operation = {}) {
+  return operation.deprecated === true &&
+    operation.aspects?.includes("internal-deprecated") &&
+    operation.lifecycle?.maintenancePolicy === "compatibility-shim-only";
+}
+
 for (const operation of SERVER_API_OPERATIONS) {
+  if (isDeprecatedCompatibilityShim(operation)) {
+    assert.equal(
+      apiCapabilities.has(apiCapabilityId(operation.id)),
+      false,
+      `${operation.id} is a deprecated compatibility shim and must not remain in the authorization kernel`
+    );
+    continue;
+  }
   assert.ok(
     apiCapabilities.has(apiCapabilityId(operation.id)),
     `missing API capability for operation ${operation.id}`

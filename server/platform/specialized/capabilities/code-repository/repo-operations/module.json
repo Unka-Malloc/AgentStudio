@@ -10,7 +10,7 @@
   "defaultLoaded": true,
   "protocol": "pact.resource-operation.v1",
   "adapterProtocol": "git-cli.v1+review-provider-plan.v1",
-  "maintenanceSkill": "skills/server-mcp/pact-gerrit-mcp-maintainer/SKILL.md",
+  "maintenanceSkill": "skills/codespace/pact-gerrit-mcp-maintainer/SKILL.md",
   "components": {
     "repoOperationRoute": {
       "path": "./index.mjs",

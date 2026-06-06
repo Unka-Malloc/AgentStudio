@@ -3,6 +3,10 @@ import { createStrategyManagementProvider } from "../specialized/capabilities/st
 import { createToolSkillManagementProvider } from "../specialized/capabilities/skills/tool-skill-management-provider.mjs";
 import { createToolManagementPlatform } from "../specialized/capabilities/tools/tool-management-core/index.mjs";
 import { createToolManagementStore } from "../specialized/capabilities/tools/tool-management-core/store.mjs";
+import {
+  createExternalKnowledgeDistillationClient,
+  resolveExternalKnowledgeDistillationConfig
+} from "../specialized/knowledge/invocation/external-distillation-service/index.mjs";
 
 async function createProvider(enabled, specifier, exportName, args = []) {
   if (!enabled) {
@@ -14,6 +18,26 @@ async function createProvider(enabled, specifier, exportName, args = []) {
     throw new Error(`Runtime provider ${specifier} does not export ${exportName}.`);
   }
   return factory(...args);
+}
+
+function createExternalKnowledgeDistillationService({ userDataPath }) {
+  async function clientFor(input = {}) {
+    const settings = await loadSettings(userDataPath);
+    const config = resolveExternalKnowledgeDistillationConfig({ input, settings });
+    return createExternalKnowledgeDistillationClient(config);
+  }
+  return Object.freeze({
+    service: "external.knowledge.distillation",
+    async createRun(input = {}) {
+      return (await clientFor(input)).createRun(input);
+    },
+    async getRun(input = {}) {
+      return (await clientFor(input)).getRun(input);
+    },
+    async queryEvidence(input = {}) {
+      return (await clientFor(input)).queryEvidence(input);
+    }
+  });
 }
 
 export function createServerToolManagementPlatform({
@@ -46,11 +70,13 @@ export function createServerToolManagementPlatform({
 
 export function createServerToolSkillManagementProvider({
   toolManagementPlatform,
+  userDataPath,
   securityPermissions,
   logger
 }) {
   return createToolSkillManagementProvider({
     toolManagementPlatform,
+    userDataPath,
     securityPermissions,
     logger
   });
@@ -224,20 +250,7 @@ export async function createServerRuntimeProviders({
       knowledgeAgentSkill
     }]
   );
-  const knowledgeDistillationRuntime = await createProvider(
-    isFeatureActive("knowledge-distillation"),
-    "../specialized/knowledge/invocation/knowledge-distillation-runtime/index.mjs",
-    "createKnowledgeDistillationRuntime",
-    [{
-      userDataPath,
-      runtime,
-      metadataStore,
-      knowledgeSkillRuntime,
-      goldenRuleRuntime,
-      evidenceGate: evidenceSufficiencyGate,
-      modelDecisionRuntime
-    }]
-  );
+  const knowledgeDistillationService = createExternalKnowledgeDistillationService({ userDataPath });
   const knowledgeEvolutionRuntime = await createProvider(
     isFeatureActive("knowledge-evolution"),
     "../specialized/knowledge/invocation/knowledge-evolution-runtime/index.mjs",
@@ -249,7 +262,7 @@ export async function createServerRuntimeProviders({
       modelDecisionRuntime,
       knowledgeSkillRuntime,
       goldenRuleRuntime,
-      knowledgeDistillationRuntime
+      knowledgeDistillationService
     }]
   );
   const summarizationRuntime = await createProvider(
@@ -299,7 +312,6 @@ export async function createServerRuntimeProviders({
     knowledgeRuleAuthoringRuntime,
     knowledgeSkillRuntime,
     agentEvaluationRuntime,
-    knowledgeDistillationRuntime,
     knowledgeEvolutionRuntime,
     summarizationRuntime,
     agentExplorationRuntime

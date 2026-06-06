@@ -1,21 +1,25 @@
 import BinaryCheckbox from "./BinaryCheckbox.vue";
 import AgentModelOptionBar from "./AgentModelOptionBar.vue";
 import BrowseSelectButton from "./BrowseSelectButton.vue";
+import ConfigFloatingPanel from "./ConfigFloatingPanel.vue";
 import ConfigFoldCard from "./ConfigFoldCard.vue";
+import ConfigListSummaryBubble from "./ConfigListSummaryBubble.vue";
 import FeatureToggle from "./FeatureToggle.vue";
 import HistorySessionPanel from "./HistorySessionPanel.vue";
 import InfoFeedResultRow from "./InfoFeedResultRow.vue";
 import JsonConfigFileEditor from "./JsonConfigFileEditor.vue";
 import OptionBar from "./OptionBar.vue";
+import SafeHtmlBlock from "./SafeHtmlBlock.vue";
+import SegmentedProgressBar from "./SegmentedProgressBar.vue";
 import SegmentedToggle from "./SegmentedToggle.vue";
 import StatusPill from "./StatusPill.vue";
 
-export { AgentModelOptionBar, BinaryCheckbox, BrowseSelectButton, ConfigFoldCard, FeatureToggle, HistorySessionPanel, InfoFeedResultRow, JsonConfigFileEditor, OptionBar, SegmentedToggle, StatusPill };
+export { AgentModelOptionBar, BinaryCheckbox, BrowseSelectButton, ConfigFloatingPanel, ConfigFoldCard, ConfigListSummaryBubble, FeatureToggle, HistorySessionPanel, InfoFeedResultRow, JsonConfigFileEditor, OptionBar, SafeHtmlBlock, SegmentedProgressBar, SegmentedToggle, StatusPill };
 
 export type CommonComponentRegistration = {
   name: string;
   file: string;
-  category: "choice" | "picker" | "history" | "result" | "config";
+  category: "choice" | "picker" | "history" | "result" | "config" | "render" | "progress";
   description: string;
   usageRule: string;
 };
@@ -70,6 +74,20 @@ export const commonComponentRegistry: CommonComponentRegistration[] = [
     usageRule: "页面需要触发浏览文件、文件夹或本地路径选择时使用，按钮文案和选择类型由调用方传入。",
   },
   {
+    name: "配置悬浮框",
+    file: "server-web/components/ConfigFloatingPanel.vue",
+    category: "config",
+    description: "可编辑配置弹层的标准外壳，统一标题、副标题、状态、校验按钮、关闭行为和滚动容器。",
+    usageRule: "页面需要新增或修改配置时使用；业务页面通过 slot 传入输入框、选择框、校验结果和保存按钮，不重复手写弹层外壳。",
+  },
+  {
+    name: "配置列表简化展示气泡",
+    file: "server-web/components/ConfigListSummaryBubble.vue",
+    category: "config",
+    description: "配置项只读概览气泡，统一锚点定位、关闭行为、分组列表和值状态展示。",
+    usageRule: "页面只需要快速查看配置来源和值时使用；需要修改配置时使用配置悬浮框。",
+  },
+  {
     name: "ConfigFoldCard",
     file: "server-web/components/ConfigFoldCard.vue",
     category: "config",
@@ -98,10 +116,24 @@ export const commonComponentRegistry: CommonComponentRegistration[] = [
     usageRule: "需要与信息流结果保持一致的召回/规划结果展示时使用，避免重新绘制相似卡片。",
   },
   {
+    name: "SafeHtmlBlock",
+    file: "server-web/components/SafeHtmlBlock.vue",
+    category: "render",
+    description: "已净化或沙箱化 HTML 的唯一页面渲染边界。",
+    usageRule: "页面需要渲染 HTML 时使用；调用方必须传入由 markdownToSafeHtml 或 renderEvidenceReadableHtml 生成的内容，并声明 source。",
+  },
+  {
     name: "SegmentedToggle",
     file: "server-web/components/SegmentedToggle.vue",
     category: "choice",
     description: "多选项平铺分段控制器组件。",
     usageRule: "页面需要分段切换视图或选项时使用，替代零散的 tabs 样式或 el-radio-group。",
+  },
+  {
+    name: "SegmentedProgressBar",
+    file: "server-web/components/SegmentedProgressBar.vue",
+    category: "progress",
+    description: "标准分段式进度条，支持步骤标签和 pending/active/complete/failed 状态。",
+    usageRule: "页面需要按步骤展示进度时使用；业务页面只传步骤数据，不重新手写分段条 DOM 或颜色状态。",
   },
 ];

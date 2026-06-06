@@ -74,7 +74,7 @@ async function assertStaticSingletonBoundaries() {
 
 async function verifyStateDispatcherLoggerSingleton() {
   const events = [];
-  const fakeLogger = {
+  const fixtureLogger = {
     debug(event, details = {}) {
       events.push({ level: "debug", event, details });
     },
@@ -84,7 +84,7 @@ async function verifyStateDispatcherLoggerSingleton() {
   };
 
   getStateMutationDispatcher();
-  setRuntimeLogger(fakeLogger);
+  setRuntimeLogger(fixtureLogger);
   try {
     await mutateState({
       key: "verify-singleton-boundaries:logger",

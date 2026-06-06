@@ -1,0 +1,149 @@
+.word-cloud-term-grid,
+.word-cloud-selected-terms,
+.word-cloud-term-pool {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.word-cloud-term-chip {
+  min-height: 28px;
+  max-width: 100%;
+  padding: 4px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.word-cloud-term-chip:hover,
+.word-cloud-term-chip:focus-visible,
+.word-cloud-term-chip.selected {
+  border-color: var(--brand);
+  color: var(--brand);
+  outline: none;
+}
+
+.word-cloud-term-chip.removable:hover::after {
+  content: " ×";
+}
+
+.word-cloud-term-list {
+  display: grid;
+  gap: var(--space-1-5);
+  max-height: 148px;
+  overflow-y: auto;
+  margin-top: var(--space-2-5);
+}
+
+.word-cloud-term-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+
+.word-cloud-term-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.word-cloud-term-label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.word-cloud-term-label small {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+
+.word-cloud-term-label span::after {
+  content: none;
+}
+
+.word-cloud-term-label span + small::before {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 0.8em;
+  background: var(--border-subtle);
+  margin-right: var(--space-2);
+  vertical-align: middle;
+  opacity: 0.7;
+}
+
+.word-cloud-term-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--dur-base) var(--ease-std);
+}
+
+.word-cloud-term-remove:hover {
+  color: var(--danger);
+  background: transparent;
+  box-shadow: none;
+}
+
+.word-cloud-term-row.removed {
+  opacity: 0.48;
+  background: rgba(226, 232, 240, 0.72);
+}
+
+.word-cloud-term-row.removed span {
+  text-decoration: line-through;
+}
+
+.word-cloud-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-6) 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.word-cloud-loading-icon {
+  animation: spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+
+.empty-state.word-cloud-empty {
+  box-sizing: border-box;
+  width: min(560px, 100%);
+  min-height: 260px;
+  margin: 0 auto;
+}

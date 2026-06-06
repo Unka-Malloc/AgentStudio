@@ -121,7 +121,7 @@ function toggle() {
   opacity: 0;
   transform: scale(0.6);
   transition: opacity var(--dur-fast) var(--ease-std),
-              transform var(--dur-fast) var(--ease-spring);
+              transform var(--dur-fast) var(--ease-emphasized);
 }
 
 .binary-checkbox[data-checked="true"] .binary-checkbox-icon svg {

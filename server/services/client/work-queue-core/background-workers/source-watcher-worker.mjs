@@ -9,7 +9,7 @@ export async function createSourceWatcherWorkerRuntime({ userDataPath }) {
     processingEnabled: false,
     protocolEventBus
   });
-  const knowledgeSourceService = createKnowledgeSourceService({
+  const knowledgeSourceService = await createKnowledgeSourceService({
     userDataPath,
     jobManager,
     protocolEventBus,

@@ -1,6 +1,6 @@
 # Pact MCP Connector
 
-Release-packaged installer for connecting local AI agents to an Pact MCP HTTP endpoint.
+Release-packaged installer for connecting local AI agents to a Pact MCP HTTP endpoint.
 
 This package is the client-side connector only. It does not contain the Pact server.
 
@@ -9,7 +9,7 @@ This package is the client-side connector only. It does not contain the Pact ser
 One command from GitHub Release:
 
 ```bash
-/bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
 ```
 
 This downloads the connector from GitHub Releases, verifies its checksum,
@@ -25,7 +25,7 @@ For normal local installs, it also requests a Tool Management grant token from
 the verified Pact service. Users do not need to manually copy
 `PACT_MCP_TOKEN`.
 
-For npm-based installs:
+For npm-based installs after the package is published:
 
 ```bash
 npx pact-mcp-connector@latest register
@@ -33,7 +33,7 @@ npx pact-mcp-connector@latest register
 
 This writes one local registry at `~/.pact/mcp/servers.json`. It does not mutate any agent client config.
 
-For one target:
+For interactive multi-client install:
 
 ```bash
 pact-mcp install
@@ -43,10 +43,49 @@ The interactive installer scans local clients and lets you choose one or more ta
 The default output is a human install report with per-client success or failure,
 not a raw configuration dump. Use `--json` for scripts.
 
-For scripts:
+Supported targets are OpenClaw (`openclaw`), Claude Code (`claude-code`),
+Codex (`codex`), Gemini CLI (`gemini-cli`), Antigravity (`antigravity`),
+OpenCode (`opencode`), Copilot (`copilot`), Kilo Code (`kilo-code`),
+Cursor (`cursor`), Hermes Agent (`hermes`), and Windsurf (`windsurf`).
+
+For scripts and unattended agent shells:
 
 ```bash
-npx pact-mcp-connector@latest install --target codex
+npx pact-mcp-connector@latest install --target auto --json
+```
+
+`auto` installs every supported client that the connector can verify on this
+machine or in a detected runtime context. A non-interactive `pact-mcp install`
+with no `--target` uses the same auto-detected path.
+
+For a known single client:
+
+```bash
+npx pact-mcp-connector@latest install --target <client> --json
+```
+
+Limit scope only when a script intentionally targets a known client set:
+
+```bash
+npx pact-mcp-connector@latest install --target claude-code,codex,openclaw --json
+```
+
+For a single copyable GitHub Release command in an unattended agent shell:
+
+```bash
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)" -- --target auto --json
+```
+
+For a known client, replace `<client>` with any supported target:
+
+```bash
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)" -- --target <client> --json
+```
+
+Priority clients can be installed in one unattended pass:
+
+```bash
+/bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)" -- --target claude-code,codex,openclaw --json
 ```
 
 Use `--token-stdin` only when installing with a pre-issued custom grant token.
@@ -80,7 +119,7 @@ cd pact-mcp-connector-<version>-<platform>
 For scripts:
 
 ```bash
-./pact-mcp install --target codex
+./pact-mcp install --target auto --json
 ```
 
 The portable zip package includes its own Node.js runtime. macOS users can open `install.command` and follow the prompts.
@@ -97,7 +136,7 @@ one automatically.
 ## Discover Local Hub
 
 ```bash
-npx pact-mcp-connector@latest discover-local
+npx pact-mcp-connector@latest discover-local --json
 ```
 
 Agents should use this command as the unified local discovery entrypoint.
@@ -111,7 +150,12 @@ npx pact-mcp-connector@latest scan --json
 ## Uninstall
 
 ```bash
-npx pact-mcp-connector@latest uninstall --target codex
+npx pact-mcp-connector@latest uninstall --target claude-code,codex,openclaw
 ```
 
-Supported targets: `codex`, `gemini-cli`, `kilo-code`, `copilot`, `openclaw`, `hermes`, `antigravity`.
+Non-interactive uninstall requires an explicit target list.
+
+Supported targets: OpenClaw (`openclaw`), Claude Code (`claude-code`),
+Codex (`codex`), Gemini CLI (`gemini-cli`), Antigravity (`antigravity`),
+OpenCode (`opencode`), Copilot (`copilot`), Kilo Code (`kilo-code`),
+Cursor (`cursor`), Hermes Agent (`hermes`), and Windsurf (`windsurf`).

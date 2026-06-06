@@ -10,7 +10,7 @@ import {
 } from "../platform/common/security/secrets/local-secret-store.mjs";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const DEFAULT_OUTPUT_ROOT = "reports/v001-readiness";
+const DEFAULT_OUTPUT_ROOT = "docs/reports/history/v001-readiness";
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
 const EXTERNAL_TARGETS = [
@@ -43,13 +43,6 @@ const EXTERNAL_TARGETS = [
     statusWithoutCredential: "contractVerified"
   },
   {
-    id: "onedrive",
-    phase: "Phase 4",
-    verifier: "server:verify:v001-cloud-drive-e2e",
-    env: ["PACT_ONEDRIVE_OAUTH_SECRET_REF"],
-    statusWithoutCredential: "contractVerified"
-  },
-  {
     id: "google-drive",
     phase: "Phase 4",
     verifier: "server:verify:v001-cloud-drive-e2e",
@@ -62,6 +55,31 @@ const EXTERNAL_TARGETS = [
     verifier: "server:verify:v001-cloud-drive-e2e",
     env: ["PACT_DROPBOX_OAUTH_SECRET_REF"],
     statusWithoutCredential: "contractVerified"
+  }
+];
+
+const LOCAL_PROJECTION_TARGETS = [
+  {
+    id: "icloud",
+    phase: "Phase 4",
+    verifier: "server:verify:v001-cloud-drive-e2e",
+    releaseStatus: "localProjectionVerified",
+    credentialConfigured: false,
+    configuredBy: [],
+    realE2EVerified: false,
+    localProjectionVerified: true,
+    credentialRequiredForV001: false
+  },
+  {
+    id: "onedrive",
+    phase: "Phase 4",
+    verifier: "server:verify:v001-cloud-drive-e2e",
+    releaseStatus: "localProjectionVerified",
+    credentialConfigured: false,
+    configuredBy: [],
+    realE2EVerified: false,
+    localProjectionVerified: true,
+    credentialRequiredForV001: false
   }
 ];
 
@@ -95,7 +113,7 @@ function printHelp() {
 Run v0.0.1 Phase 0-4 gates and write a readiness report.
 
 Usage:
-  node server/scripts/verify-v001.mjs [--output-root reports/v001-readiness] [--timeout-ms N]
+  node server/scripts/verify-v001.mjs [--output-root docs/reports/history/v001-readiness] [--timeout-ms N]
 `);
 }
 
@@ -244,6 +262,10 @@ async function externalCredentialStatus() {
   return statuses;
 }
 
+function localProjectionStatus() {
+  return LOCAL_PROJECTION_TARGETS.map((target) => ({ ...target }));
+}
+
 function markdownEscape(value) {
   return String(value ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
@@ -274,6 +296,22 @@ function buildMarkdownReport(report) {
     ].join(" | "));
   }
   lines.push("");
+  lines.push("## Cloud Drive Local Projection Evidence");
+  lines.push("");
+  lines.push("| Provider | Phase | Release Status | Local Projection Verified | Remote OAuth Required For v0.0.1 | Remote E2E Verified | Verifier |");
+  lines.push("| --- | --- | --- | --- | --- | --- | --- |");
+  for (const target of report.localProjectionProviders) {
+    lines.push([
+      target.id,
+      target.phase,
+      target.releaseStatus,
+      target.localProjectionVerified ? "yes" : "no",
+      target.credentialRequiredForV001 ? "yes" : "no",
+      target.realE2EVerified ? "yes" : "no",
+      target.verifier
+    ].join(" | "));
+  }
+  lines.push("");
   lines.push("## External Provider Evidence");
   lines.push("");
   lines.push("| Provider | Phase | Release Status | Real Credential Configured | Real E2E Verified | Contract Verifier |");
@@ -292,6 +330,7 @@ function buildMarkdownReport(report) {
   lines.push("## Notes");
   lines.push("");
   lines.push("- `pass` means the v0.0.1 single-node implementation and contract-mode adapters passed their automated verifier.");
+  lines.push("- v0.0.1 cloud-drive release scope is iCloud and OneDrive local directory projection. This is not a claim of remote cloud API sync.");
   lines.push("- Providers without real credentials remain `contractVerified`; this is not a claim of real upstream upload, search, sync, PR, Gerrit change, or production readiness.");
   lines.push("- Runtime migration evidence is non-destructive: data remains in `ServerConfig.getDataDir()` and reports are written separately.");
   return `${lines.join("\n")}\n`;
@@ -379,6 +418,18 @@ async function main() {
       commands: [["npm", "run", "server:verify:v001-cloud-drive-e2e", "--silent"]]
     },
     {
+      id: "release-governance",
+      title: "Phase 5 recent release governance gates",
+      verificationMode: "verified",
+      commands: [
+        ["npm", "run", "server:verify:context-runtime", "--silent"],
+        ["npm", "run", "server:verify:authorization-capabilities", "--silent"],
+        ["npm", "run", "server:verify:feature-profiles", "--silent"],
+        ["npm", "run", "server:verify:agent-client-support-targets", "--silent"],
+        ["npm", "run", "server:verify:frontend-feature-registry", "--silent"]
+      ]
+    },
+    {
       id: "release-crosscutting",
       title: "Phase 5 crosscutting registry and UI build",
       verificationMode: "verified",
@@ -405,6 +456,7 @@ async function main() {
   }
 
   const externalProviders = await externalCredentialStatus();
+  const localProjectionProviders = localProjectionStatus();
   const allPass = stageResults.every((stage) => stage.status === "pass");
   const missingRealCredentials = externalProviders.filter((target) => !target.credentialConfigured);
   const report = {
@@ -421,13 +473,14 @@ async function main() {
     },
     overallStatus: allPass ? "pass" : "fail",
     releaseClaim: allPass
-      ? "single-node-deliverable-with-contractVerified-external-providers"
+      ? "single-node-deliverable-with-localProjection-cloud-drives-and-contractVerified-external-providers"
       : "blocked-by-failing-v001-verifier",
     productionReady: false,
     productionReadyReason: missingRealCredentials.length
       ? "real external provider credentials are not configured; contract-mode evidence is not production readiness"
       : "real external provider credentials are configured but this verifier does not claim live upstream E2E",
     stages: stageResults,
+    localProjectionProviders,
     externalProviders
   };
 

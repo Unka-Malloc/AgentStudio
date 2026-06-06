@@ -23,18 +23,6 @@ export {
   serverToken
 } from "../common/security/client-strings.mjs";
 export { sendJson } from "../common/console/http/http-utils.mjs";
-export { createKnowledgePipeline } from "../specialized/knowledge/preprocessing/chunking/pipeline.mjs";
-export {
-  createDocumentParsingRuntime,
-  toPublicDocumentParsingResult
-} from "../specialized/knowledge/preprocessing/document-parsing-runtime.mjs";
-export { summarizePreprocessResult } from "../specialized/knowledge/preprocessing/preprocess-result.mjs";
-export {
-  listAvailableAnalysisModules,
-  runConfiguredAnalysisModule
-} from "../specialized/knowledge/preprocessing/analysis-engine-registry.mjs";
-export { loadEmailRules } from "../specialized/knowledge/preprocessing/domain/rules/email-rules.mjs";
-export { createKnowledgeSourceService } from "../specialized/knowledge/storage/knowledge-source-service.mjs";
 export async function callAgentGateway(...args) {
   const module = await import("../specialized/agent/agent-gateway/index.mjs");
   return module.callAgentGateway(...args);
@@ -111,17 +99,58 @@ export {
 } from "../common/workflow/durable-workflow-store.mjs";
 
 import { createServerRuntime as createCommonServerRuntime } from "../common/module-manager/server-runtime.mjs";
-import { createKnowledgeBuiltinMountProviders } from "../specialized/knowledge/storage/builtin-mount-providers.mjs";
-import { createKnowledgeMetadataStoreDomainServices } from "../specialized/knowledge/storage/metadata-store-domain-services.mjs";
+
+function isRuntimeFeatureActive(runtimeOptions = {}, featureId = "") {
+  const activeFeatureIds = runtimeOptions.featureRuntime?.activeFeatureIds;
+  return !Array.isArray(activeFeatureIds) || activeFeatureIds.length === 0 || activeFeatureIds.includes(featureId);
+}
+
+export async function loadKnowledgePipelineRuntime() {
+  return import("../specialized/knowledge/preprocessing/chunking/pipeline.mjs");
+}
+
+export async function loadKnowledgeDocumentParsingRuntime() {
+  return import("../specialized/knowledge/preprocessing/document-parsing-runtime.mjs");
+}
+
+export async function loadKnowledgePreprocessResultRuntime() {
+  return import("../specialized/knowledge/preprocessing/preprocess-result.mjs");
+}
+
+export async function loadKnowledgeAnalysisRuntime() {
+  return import("../specialized/knowledge/preprocessing/analysis-engine-registry.mjs");
+}
+
+export async function loadKnowledgeEmailRulesRuntime() {
+  return import("../specialized/knowledge/preprocessing/domain/rules/email-rules.mjs");
+}
+
+export async function loadKnowledgeSourceServiceRuntime() {
+  return import("../specialized/knowledge/storage/knowledge-source-service.mjs");
+}
+
+export async function createKnowledgeSourceService(...args) {
+  const module = await loadKnowledgeSourceServiceRuntime();
+  return module.createKnowledgeSourceService(...args);
+}
 
 export async function createServerRuntime(options = {}) {
+  const runtimeOptions = options.runtimeOptions || {};
+  const metadataStoreDomainServices = options.metadataStoreDomainServices ||
+    (isRuntimeFeatureActive(runtimeOptions, "knowledge-core")
+      ? (await import("../specialized/knowledge/storage/metadata-store-domain-services.mjs"))
+          .createKnowledgeMetadataStoreDomainServices()
+      : {});
+  const builtinMountProviders = options.builtinMountProviders ||
+    (isRuntimeFeatureActive(runtimeOptions, "knowledge-core")
+      ? (await import("../specialized/knowledge/storage/builtin-mount-providers.mjs"))
+          .createKnowledgeBuiltinMountProviders({
+            userDataPath: options.userDataPath
+          })
+      : {});
   return createCommonServerRuntime({
     ...options,
-    metadataStoreDomainServices:
-      options.metadataStoreDomainServices || createKnowledgeMetadataStoreDomainServices(),
-    builtinMountProviders:
-      options.builtinMountProviders || createKnowledgeBuiltinMountProviders({
-        userDataPath: options.userDataPath
-      })
+    metadataStoreDomainServices,
+    builtinMountProviders
   });
 }

@@ -1,5 +1,12 @@
 # Pact 生产级能力差距清单
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Pact 生产级能力差距清单.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 审计日期：2026-05-20（本地环境）。本文用于决策，不用于宣传。
 
 ## 目录 / Table of Contents
@@ -27,6 +34,7 @@
   - [P1-05 数据连接器和本地镜像同步还不完整](#p1-05-数据连接器和本地镜像同步还不完整)
   - [P1-06 性能和容量基准不足](#p1-06-性能和容量基准不足)
 - [P2 规模化缺口](#p2-规模化缺口)
+  - [P2-00 个人和企业两套可脱水预设构建线](#p2-00-个人和企业两套可脱水预设构建线)
   - [P2-01 知识蒸馏需要从"评估脚本"升级为"持续优化系统"](#p2-01-知识蒸馏需要从评估脚本升级为持续优化系统)
   - [P2-02 插件/模块生态还缺 SDK 和模板](#p2-02-插件模块生态还缺-sdk-和模板)
   - [P2-03 工作空间共享还缺组织级治理](#p2-03-工作空间共享还缺组织级治理)
@@ -66,7 +74,7 @@
 
 ## 2026-05-25 协议化重构校准
 
-本文的“差距”口径只用于生产级能力判断，不再用于表示架构分层是否完成。协议化重构的架构节点状态以 `docs/SUBSYSTEM-REFACTOR-CHECKLIST.md` 为准；截至 2026-05-25，管理层、服务层、应用层六个模块、基建层五个模块和启动装配边界均已有 provider / operation / domain service 边界和 `server:verify:*` 门禁。
+本文的“差距”口径只用于生产级能力判断，不再用于表示架构分层是否完成。协议化重构的架构节点状态以 `docs/reports/history/SUBSYSTEM-REFACTOR-CHECKLIST.md` 为准；截至 2026-05-25，管理层、服务层、应用层六个模块、基建层五个模块和启动装配边界均已有 provider / operation / domain service 边界和 `server:verify:*` 门禁。
 
 后续生产缺口使用四级完成度描述：
 
@@ -149,7 +157,7 @@
 
 - `server/platform/specialized/knowledge/agent-library/access-policy.mjs` 实现 `pact.knowledge-access.v1` 和 `pact.agent-library.v1` 的源头裁决、标准 `accessMode`、`requestedEgress`、`authorizationOverlay`、`knowledgeAccessReceipt`、`loanRecord` 和 denied request audit；`server/platform/specialized/console/console-domain-operation-executor.mjs` 负责控制台协议入口绑定，`common/console` 不再直接持有 access policy。
 - `server/platform/specialized/knowledge/storage/knowledge-backend-port/index.mjs` 实现 v0.0.1 Dify/RAGFlow `pact.knowledge-backend-port.v1` contract-mode：运行配置写入 `ServerConfig.getDataDir()/knowledge/knowledge-backends.json`，只保存 `secretRef` / `endpointRef`；safe discovery 不返回正文、snippet、上游裸 ID 或私有路径；授权 evidence 读取写 receipt/loan record，拒绝读取和拒绝导出写 denied request audit。缺少真实 Dify/RAGFlow 凭据时只能标记 `contractVerified`。
-- `server/platform/specialized/agent/cloud-drive-port/index.mjs` 实现 v0.0.1 `pact.cloud-drive-port.v1`：运行连接配置写入 `ServerConfig.getDataDir()/agent-workspaces/cloud-drive-connections.json`，ledger 写入 `agent-workspaces/cloud-drive-ledger.json`；iCloud local adapter 对 `.pact-data/<client>` 默认空间实读实写，对 `.pact-data/public` 和高级暴露目录默认只读，公开响应不暴露本机绝对路径；OneDrive、Google Drive、Dropbox 无真实 OAuth 凭据时只能标记 `contractVerified`，并通过 transfer receipt、access receipt、checkpoint 和 operation audit 证明合同链路。
+- `server/platform/specialized/agent/cloud-drive-port/index.mjs` 实现 v0.0.1 `pact.cloud-drive-port.v1`：运行连接配置写入 `ServerConfig.getDataDir()/agent-workspaces/cloud-drive-connections.json`，ledger 写入 `agent-workspaces/cloud-drive-ledger.json`；iCloud 和 OneDrive 当前按本机同步目录 / local projection 支持，对 `.pact-data/<client>` 默认空间实读实写，对 `.pact-data/public` 和高级暴露目录默认只读，公开响应不暴露本机绝对路径；Google Drive、Dropbox 无真实 OAuth 凭据时只能标记 `contractVerified`，并通过 transfer receipt、access receipt、checkpoint 和 operation audit 证明合同链路。OneDrive OAuth / Microsoft Graph remote-live、真实 provider fileId / eTag / webUrl receipt 和真实远端同步证据是后续适配目标，不属于 v0.0.1 当前完成口径。
 - `npm run server:verify:agent-library-access` 验证 A/B 再授权：A 获取授权范围并产生 receipt / loan record，B 在所有出口 `searchResult`、`evidenceRead`、`contextBundle`、`artifactWrite`、`exportFile`、`distillationInput`、`distillationOutput`、`memoryWrite`、`toolCall`、`evaluationSample` 都被同一套裁决拒绝。
 - `npm run server:verify:production-readiness` 已把该能力纳入 P0 门禁。
 
@@ -198,7 +206,7 @@
 怎么补：
 
 - 增加 `npm run server:verify:production-readiness`。
-- 输出 `reports/production-readiness/<run-id>/report.md` 和 `report.json`。
+- 输出 `docs/reports/history/production-readiness/<run-id>/report.md` 和 `report.json`。
 - 汇总运行：架构门禁、文档解析真实样例、外部知识库一致性、RAG 评估、蒸馏评估、会话线程、工具权限、备份恢复、升级迁移、端到端 UI smoke、离线包 license gate。
 - 每个 gate 输出：状态、证据文件、阻塞级别、负责人、下一步、`verificationMode=verified|mocked`。mocked 只能证明接口合同，不计入真实完成率。
 
@@ -207,14 +215,18 @@
 - `server/scripts/production-readiness-gate.mjs` 聚合上述门禁并写出 Markdown / JSON 报告。
 - `npm run server:verify:production-readiness` 作为 release gate；存在 P0 未通过或必需覆盖缺失时，报告状态为 `blocked`，默认以非零退出码阻断发布。
 - 该 gate 只能证明被覆盖项，不会把单点 verify 的通过误判为整体生产就绪。
-- `server/scripts/verify-v001.mjs` 作为 v0.0.1 单机 release 收口门禁，聚合 Phase 0-4 verifier、迁移保留报告、MCP/Tool/Policy 注册和 renderer raw build，并输出 `reports/v001-readiness/<run-id>/report.{json,md}`。
-- v0.0.1 readiness 报告把 GitHub、Gerrit、Dify、RAGFlow、OneDrive、Google Drive 和 Dropbox 缺少真实凭据的状态标为 `contractVerified`；这只证明接口合同，不计为真实外部 E2E 或 production ready。
+- `server/scripts/verify-v001.mjs` 作为 v0.0.1 单机 release 收口门禁，聚合 Phase 0-4 verifier、迁移保留报告、MCP/Tool/Policy 注册和 renderer raw build，并输出 `docs/reports/history/v001-readiness/<run-id>/report.{json,md}`。
+- v0.0.1 readiness 报告把 iCloud 和 OneDrive 作为本地目录投影证据记录为 `localProjectionVerified` / `localAdapterVerified`；这只证明本机目录读写、受控映射、receipt、checkpoint 和审计，不声明远端云 API 同步。GitHub、Gerrit、Dify、RAGFlow、Google Drive 和 Dropbox 缺少真实凭据时仍标为 `contractVerified`；这只证明接口合同，不计为真实外部 E2E 或 production ready。OneDrive OAuth / remote-live 适配必须由后续专用 live verifier 或真实 adapter receipt 提升为 `remoteLiveVerified` / `realE2EVerified` 后，才能声明远端 OneDrive 接通。
 
 补全效果：项目从“功能验证”升级为“可汇报验收”；每次决策可以基于同一份报告，而不是临时问当前能不能用。
 
 ### P0-02 内部 Trace 与可观测性不足
 
 当前差距：项目有日志、审计和若干状态接口，但还没有统一的 `pact.trace.v1` 内部 Trace schema；模型调用、检索、文档解析、外部知识库、工具调用、会话分叉、队列任务之间无法用同一个 trace 串起来。OpenTelemetry 应作为导出映射，不是内部事实源。
+
+P0 已确认所有操作都必须进入统一 Operation Scheduling Kernel 和 Operation Ledger：API / RPC / MCP / CLI / 控制台、读写请求、权限拒绝、后台任务、workflow activity、队列状态变更、provider side effect、工具执行和模型调用都不能只停留在模块本地 audit、provider ledger、queue event 或 runtime log。只有调度内核 accepted 的 operation 才能产生真实副作用；其它路径必须拒绝为 unmanaged / not scheduled。
+
+P0 也已确认统一审批：高危 operation 必须由 Operation Scheduling Kernel 挂起为 `pending_operation`，统一进入独立 `/approval` 页面。现有 `requiresConfirmation`、Tool Management pending operations、authorization approvals 和控制台审批流需要收敛到同一 pending operation 模型，不能各自成为事实源。
 
 对标依据：OpenTelemetry 是 vendor/tool agnostic 的 traces、metrics、logs 标准；LlamaIndex 已把 LLM、Agent、RAG pipeline 事件导出为 OpenTelemetry；Phoenix 的 evaluator traces 会记录输入、judge prompt、推理、分数和耗时。
 
@@ -225,6 +237,8 @@
 怎么补：
 
 - 定义 `pact.trace.v1`：trace/span 命名、属性、敏感字段脱敏、采样、成本、token、权限裁决、asset/evidence/checkpoint 引用。
+- 定义统一 Operation Scheduling Kernel facade：任何受管 operation 先获得内核 accepted / rejected decision、`operationId` / `traceId` 和 `started` / `pending` 账本记录，写操作和外部副作用在账本不可写或未获内核许可时必须失败在副作用之前。
+- 定义统一 pending operation 模型：调度内核保存原 intent envelope、risk、policy、approvalScope、expiresAt 和 resume pointer；`/approval` 批准后恢复原 operation，拒绝 / 过期 / 撤销时不执行副作用。
 - 定义 `pact.trace.v1 -> OpenTelemetry` 映射：内部 Trace 是事实源，OTel/OTLP 是可选导出目标。
 - 为这些路径打 span：upload、parse、normalize、ingest、search、evidence、distill、agent gateway、tool execution、session fork、workspace context load。
 - 接入可选 OTLP exporter，默认本地可关闭，生产可接 Jaeger、Tempo、Phoenix 或其它 OTel backend。
@@ -232,7 +246,7 @@
 
 当前实现入口：
 
-- `server/platform/common/observability/trace-context.mjs` 提供 `traceId/spanId/parentSpanId/operationId/actor` 上下文，并由 operation dispatcher、HTTP 请求和审计链路继承。
+- `server/platform/common/observability/trace-context.mjs` 提供 `traceId/spanId/parentSpanId/operationId/actor` 上下文，并由 Operation Scheduling Kernel、HTTP 请求和审计链路继承。
 - `server/platform/common/observability/runtime-logger.mjs` 提供 JSONL 运行日志、trace 字段、敏感字段脱敏、路径脱敏和日志保留策略。
 - `/api/observability/traces/:traceId`、`observability.trace.get` 和 `auth audit export --trace-id` 提供基于 operation audit 与 authorization decisions 的 trace drill-down；导出内容默认只包含脱敏输入、输出摘要和引用字段。
 - `server/scripts/verify-trace-context.mjs` 验证 HTTP header、operation audit、runtime log 和事件流都携带同一 trace。
@@ -313,7 +327,7 @@
 
 怎么补：
 
-- 建立 `fixtures/real-documents/` 或外部大文件 fixture registry，覆盖 PDF/PPTX/DOCX/XLSX/EML/MSG/Markdown/图片扫描件。
+- 建立外部文档测评集 registry，默认位于 `~/.pact-server-data/evaluation-corpora/`，覆盖 PDF/PPTX/DOCX/XLSX/EML/MSG/Markdown/图片扫描件；真实测评集不得放入项目源码目录。
 - 每个样例维护 expected structure：标题树、页序、图片序、表格数、表头、关键单元格、引用锚点。
 - 增加 parser score：structure recall、table accuracy、image order accuracy、text coverage、source anchor accuracy。
 - 对扫描件和图片型 PDF 引入 cloud multimodal parser mount；本地 OCR 只做可选 fallback。
@@ -349,7 +363,8 @@
 当前实现入口：
 
 - `server/platform/specialized/knowledge/retrieval/evidence-sufficiency-gate/index.mjs` 和 `retrieval-scoring.mjs` 提供 evidence sufficiency、score reason 和检索质量基础。
-- `server/platform/specialized/knowledge/invocation/knowledge-distillation-runtime/industrial-benchmark.mjs`、`knowledge-distillation-workbench/index.mjs` 和 `knowledge-evolution-runtime/index.mjs` 提供蒸馏基准、工作台、错误归因、趋势和候选改进闭环。
+- `external-services/knowledge-distillation-service/`、`server/platform/specialized/knowledge/invocation/external-distillation-service/index.mjs` 和 `knowledge-evolution-runtime/index.mjs` 提供外部蒸馏基准、服务调用、错误归因、趋势和候选改进闭环。
+- `npm run server:verify:external-knowledge-distillation-service-gates` 是外部知识蒸馏远程容器部署前置门禁，覆盖 required-auth、业务 API bearer gate、非 root 容器、Tika checksum、healthcheck 和密钥外置；该门禁未通过时，不继续增加新解析或模型蒸馏能力。
 - `server/platform/specialized/knowledge/invocation/golden-rule-runtime/index.mjs` 支持黄金规则、测试场景和规则命中评估。
 - `server/scripts/verify-knowledge-retrieval-quality.mjs`、`verify-knowledge-distillation-workbench.mjs`、`verify-knowledge-industrial-distillation.mjs`、`verify-knowledge-distillation-optimization.mjs`、`verify-knowledge-evolution-loop.mjs`、`verify-knowledge-rule-authoring.mjs` 和 `verify-business-scenarios.mjs` 覆盖 RAG、蒸馏、Agent/工具业务流和回归趋势。
 - `npm run server:verify:production-readiness` 已把 `rag-evaluation`、`distillation-evaluation` 和 `business-scenarios` 纳入门禁。
@@ -592,6 +607,8 @@ request(userId, agentId, namespace, operation, opaqueKey)
 - `/api/auth/audit/export`、`/api/auth/audit/retention`、`/api/auth/audit/prune` 和 `/api/observability/traces/:traceId` 提供 API/RPC/CLI 可达的内审、保留和 trace drill-down 路径。
 - `server/platform/specialized/capabilities/tools/tool-management-core/catalog.mjs` 与 Tool Management runtime 提供 tool catalog、scope、toolset、grant、policy preview/evaluate、execute、audit 和 metrics；新 grant 默认发放 opaque capability key，Tool Management DB 只保存 credential 摘要，工具执行前按 `cap:tool:<toolId>:execute` 进入 Capability Key Kernel 裁决；携带 `ock_` 凭据但 Kernel provider 不可用或缺少 `verify()` 时拒绝为 `capability_kernel_unavailable`，不退回 legacy grant。
 - `server/platform/common/operation-dispatcher/operation-decorators.mjs`、operation policy 和 safety-confirm 约束写操作、风险等级、CSRF 和审批边界。
+- `server/platform/common/operation-dispatcher/operation-dispatcher.mjs` 必须收敛为 Operation Scheduling Kernel：非内核 accepted operation 不允许调用业务 executor、provider adapter 或持久状态写入。
+- `server-web/router/index.ts` 已有独立 `/approval` 路由；该页面必须成为 pending operation 的统一审批入口，而不是各模块审批列表的普通聚合页。
 - `server/platform/specialized/knowledge/agent-library/access-policy.mjs` 提供 source-level knowledge access、checkoutPolicy、receipt、loanRecord、export/context injection 裁决。
 - `server/platform/common/observability/runtime-logger.mjs` 对 token、password、secret、API key、cookie 和绝对路径做摘要/脱敏。
 - `server/scripts/verify-console-auth.mjs`、`verify-security-hardening.mjs`、`verify-tool-management-platform.mjs`、`verify-organization-model.mjs`、`verify-authorization-governance.mjs`、`verify-authorization-capabilities.mjs`、`verify-opaque-capability-key.mjs`、`verify-capability-binding-guard.mjs`、`verify-capability-security-helper.mjs`、`verify-production-health-console.mjs`、`verify-operation-policy.mjs`、`verify-agent-library-access.mjs` 和 `verify-runtime-logging.mjs` 覆盖越权、工具风险、组织树边界、用户/智能体治理、知识权限、tenant/ABAC、opaque key 发放/验证/轮换/撤销、Binding Guard 错绑拒绝、helper 子进程内联合裁决、grant projection 篡改不提权、统一 security recovery 导出/导入并同时恢复 Capability Kernel 与 Binding Guard、doctor/production health 降级可见性、审计脱敏导出、trace drill-down、CSRF/safety 和 secret leak。
@@ -603,7 +620,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前差距：有 SQLite、对象存储、jobs、upload session、knowledge-core 等多处状态，但缺少面向独立备份服务器/灾备目标的统一 backup manifest、restore drill、schema migration report、外部知识库重放策略、版本兼容策略。这里的 backup 不是 v0.0.1 上传留档、Checkpoint Restore 或 cloud sync 的同义词。
 
-更关键的是，任务和队列层面的 checkpoint tree 还不够。系统必须把所有访问请求、文件变动、知识贡献、技能调用、权限裁决、上下文暴露和恢复动作都纳入统一 Checkpoint Tree。否则只能恢复部分任务或文件状态，不能真正回答智能体在公共空间里读过什么、带走过什么、调用过什么、贡献过什么、被拒绝过什么，也就不能做到真正不怕智能体乱搞。
+更关键的是，任务和队列层面的 checkpoint tree 还不够。系统必须把所有访问请求、文件变动、知识贡献、技能调用、权限裁决、上下文暴露、后台任务 activity、provider side effect 和恢复动作都纳入统一 Checkpoint Tree。否则只能恢复部分任务或文件状态，不能真正回答智能体在公共空间里读过什么、带走过什么、调用过什么、贡献过什么、被拒绝过什么，也就不能做到真正不怕智能体乱搞。
 
 对标依据：Temporal、OpenSearch、Qdrant 等生产系统都把状态恢复和可重放作为核心能力之一；LlamaIndex ingestion cache/docstore/hash 也说明输入和派生产物要可判定是否需要重处理。
 
@@ -663,7 +680,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前实现入口：
 
-- `server/platform/common/production-readiness/report-reader.mjs` 读取 `reports/production-readiness/<run-id>/report.json`，输出 `pact.production-health.v1`，按生产准入、知识质量、智能体运行时、权限安全、可观测性、连续性聚合状态。
+- `server/platform/common/production-readiness/report-reader.mjs` 读取 `docs/reports/history/production-readiness/<run-id>/report.json`，输出 `pact.production-health.v1`，按生产准入、知识质量、智能体运行时、权限安全、可观测性、连续性聚合状态。
 - `GET /api/production/health` / `production.health` 提供控制台和外部调用可复用的生产健康摘要，权限要求为 `console:read`。
 - `server-web/views/admin/ProductionHealthView.vue` 提供 `/admin/production-health` 管理页，展示最新 release gate、覆盖缺口、门禁明细、报告历史和执行入口。
 - `npm run server:verify:production-health-console` 验证报告读取、操作注册、前端路由、桥接方法和 feature registry 是否闭环。
@@ -743,6 +760,21 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 ## P2 规模化缺口
 
+### P2-00 个人和企业两套可脱水预设构建线
+
+当前差距：项目已有 Feature Profile、composition preset 和模块管理基础，但产品交付还需要明确分成个人电脑轻量预设和企业私有化预设。个人电脑不应部署集群；企业私有化部署可以启用企业级能力，但中间件必须通过 port / adapter 替换为企业内部已有服务。
+
+已批准方向：优先做两套预设构建路线。个人电脑轻量预设默认使用模块化单体、SQLite、本机文件对象存储、本机目录和可选网关；企业私有化预设允许接入 Postgres、Redis、S3-compatible storage、KMS、企业网关和审计导出，但这些都必须是可脱水模块，不能污染个人版默认路径。
+
+补全方式：
+
+- Feature Profile / composition preset 输出个人电脑轻量预设和企业私有化预设计划。
+- 每个附加功能声明 profile membership、required ports、runtime assets、secret refs、audit behavior 和 verification commands。
+- 企业中间件只能通过 port / adapter 接入，业务模块不得直接依赖某个企业服务或云厂商 SDK。
+- `composition:dehydrate`、`composition:verify` 和 production readiness 报告必须能解释某个功能在哪条预设线启用、如何裁剪、如何替换中间件。
+
+效果：Pact 可以同时服务个人电脑轻量运行和企业私有化部署，而不是用一套重配置强行覆盖所有场景。
+
 ### P2-01 知识蒸馏需要从“评估脚本”升级为“持续优化系统”
 
 当前差距：已有工业蒸馏基准方向，但还需要版本化 prompt、技能 baseline、评估数据集、错误归因、回归趋势和人工审核闭环。
@@ -760,9 +792,9 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 ### P2-02 插件/模块生态还缺 SDK 和模板
 
-当前差距：mount 机制存在，但外部团队要写 parser、knowledgeBase、tool、skill 仍需要读很多内部代码。
+当前差距：mount 机制存在，但外部团队要写 parser、knowledgeBase、tool、skill 或外部服务 adapter 仍需要读很多内部代码。模块、外部服务、Skill、Tool Package 和 mount 也需要共用一套注册、启用、禁用、授权、审计和撤销口径，不能各自发明治理状态。
 
-补全方式：提供 `pact create-module`、contract test、示例模块、CI 模板、schema docs。
+补全方式：提供 `pact create-module`、contract test、示例模块、CI 模板、schema docs，并把外部服务注册、健康检查、capability 声明、scope、secretRef、审计、降级和撤销纳入同一治理逻辑。
 
 当前实现入口：
 

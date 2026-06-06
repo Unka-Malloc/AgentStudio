@@ -39,7 +39,26 @@ export function parseEntityTypes(searchParams) {
 }
 
 export function contentDispositionFileName(value) {
-  return String(value || "download.bin").replace(/["\r\n]/g, "_");
+  const fallback = String(value || "download.bin")
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7e]+/g, "_")
+    .replace(/[\\/:*?<>|";\r\n]+/g, "_")
+    .replace(/_+/g, "_")
+    .trim();
+  return fallback || "download.bin";
+}
+
+function encodeRfc5987Value(value) {
+  return encodeURIComponent(String(value || "download.bin").replace(/[\r\n]/g, "_"))
+    .replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+export function contentDispositionHeader(disposition = "attachment", fileName = "download.bin") {
+  const safeDisposition = /^[A-Za-z][A-Za-z0-9!#$&+.^_`|~-]*$/.test(String(disposition || ""))
+    ? String(disposition)
+    : "attachment";
+  const rawFileName = String(fileName || "download.bin").replace(/[\r\n]/g, "_");
+  return `${safeDisposition}; filename="${contentDispositionFileName(rawFileName)}"; filename*=UTF-8''${encodeRfc5987Value(rawFileName)}`;
 }
 
 const DEFAULT_MAX_BODY_BYTES = 32 * 1024 * 1024; // 32 MB

@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Batch Upload CLI"
-  short_description: "Help with SplitAll Batch Upload CLI tasks"
-  default_prompt: "Use $splitall-batch-upload-cli to handle this SplitAll platform task."

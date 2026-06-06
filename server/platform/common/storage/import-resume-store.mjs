@@ -160,7 +160,8 @@ export async function saveImportCheckpointEntry({
   inputKind,
   signature,
   sources,
-  warnings = []
+  warnings = [],
+  failureReasons = []
 }) {
   const now = nowIso();
   const entry = {
@@ -172,6 +173,7 @@ export async function saveImportCheckpointEntry({
     signature,
     sources: serializeSourcesForImportCheckpoint(sources),
     warnings: Array.isArray(warnings) ? warnings.map((item) => String(item || "")) : [],
+    failureReasons: Array.isArray(failureReasons) ? failureReasons : [],
     updatedAt: now
   };
   const existing = await loadImportCheckpointEntry({ userDataPath, batchId, entryId });

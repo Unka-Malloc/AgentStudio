@@ -1,0 +1,229 @@
+.context-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-2-5);
+}
+
+.context-profile-card,
+.context-build-record {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.context-profile-card > div,
+.context-build-record > div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.context-profile-card strong,
+.context-build-record strong {
+  color: var(--text-primary);
+}
+
+.context-profile-card span,
+.context-profile-card small,
+.context-build-record span,
+.context-build-record small {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.context-profile-card dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-1-5);
+  margin: 0;
+}
+
+.context-profile-card dl div {
+  display: grid;
+  gap: var(--space-0-5);
+  min-width: 0;
+  padding: 7px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.context-profile-card dt,
+.context-profile-card dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.context-profile-card dt {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.context-profile-card dd {
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.context-build-record-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.context-build-record code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--brand);
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 860px) {
+  .tool-catalog-management-grid,
+  .tool-catalog-card-list {
+    grid-template-columns: 1fr;
+  }
+
+  .tool-catalog-card-list {
+    max-height: none;
+  }
+
+  .info-feed-input-stack {
+    max-height: none;
+  }
+
+  .info-feed-input-dock {
+    max-height: none;
+  }
+
+  .info-feed-input-actions,
+  .info-feed-model-pause {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .info-feed-advanced-dialog {
+    max-height: 94vh;
+  }
+
+  .word-cloud-lower-grid,
+  .word-cloud-dialog-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .word-cloud-architecture {
+    min-height: 620px;
+  }
+
+  .word-cloud-card-list {
+    inset: 14px 14px 150px;
+  }
+
+  .word-cloud-class-card {
+    margin-left: 0 !important;
+  }
+
+  .word-cloud-card-header {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .word-cloud-card-header {
+    display: grid;
+  }
+
+  .word-cloud-foundation {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+
+  .word-cloud-foundation span {
+    min-height: 58px;
+    padding: 8px 6px;
+    font-size: var(--text-md);
+  }
+
+  .info-feed-summary-meta {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .info-feed-input-dock,
+  .info-feed-clarification-dock {
+    max-height: none;
+    padding: 12px;
+    border-radius: var(--radius-2xl);
+  }
+
+  .info-feed-advanced-backdrop {
+    padding: 10px;
+  }
+
+  .info-feed-advanced-form,
+  .info-feed-advanced-header {
+    padding: 14px;
+  }
+
+  .info-feed-advanced-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .info-feed-input-dock textarea {
+    min-height: 88px;
+  }
+}
+
+.distillation-result-file-list.upload-file-list-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  container-type: inline-size;
+}
+
+.distillation-result-file-list .upload-file-list-body,
+.distillation-result-file-list .upload-file-row[data-mode="download"] {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.distillation-result-file-list .upload-file-row[data-mode="download"] {
+  grid-template-columns: minmax(0, 52%) minmax(0, 28%) minmax(0, 20%);
+  gap: clamp(8px, 2cqi, 16px);
+}
+
+.distillation-result-file-list .upload-file-download-actions {
+  width: 100%;
+  justify-content: stretch;
+}
+
+.distillation-result-file-list .upload-file-download-actions .tool-button {
+  width: 100%;
+  max-width: 100%;
+  justify-content: center;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+@container (max-width: 640px) {
+  .distillation-result-file-list .upload-file-row[data-mode="download"] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+
+  .distillation-result-file-list .upload-file-result-meta,
+  .distillation-result-file-list .upload-file-download-actions {
+    justify-self: stretch;
+  }
+}

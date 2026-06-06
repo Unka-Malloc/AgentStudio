@@ -28,7 +28,12 @@ function protocolOperation({
   requiresConfirmation = false,
   approvalScope = "",
   inputSchema = DEFAULT_SCHEMA,
-  aliases = []
+  aliases = [],
+  deprecated = false,
+  replacementService = "",
+  replacementOperationPrefix = "",
+  lifecycle = {},
+  aspects = []
 }) {
   const command = id.split(".");
   const normalizedMethod = String(method || "POST").toUpperCase();
@@ -59,6 +64,11 @@ function protocolOperation({
       requiresConfirmationExplicit: true,
       approvalScope: approvalScope || (risk === "read_only" ? "" : scopes[0] || "maintenance:approve")
     },
+    deprecated: deprecated === true,
+    replacementService,
+    replacementOperationPrefix,
+    lifecycle,
+    aspects,
     ...(readOnly === undefined ? {} : { readOnly })
   };
 }
@@ -81,6 +91,78 @@ const DRIVE_QUERY = [
   { name: "path", aliases: ["path", "filePath", "file-path", "folderPath", "folder-path"] },
   { name: "clientId", aliases: ["client-id", "clientId", "client", "subjectId", "subject-id"] }
 ];
+
+const CLOUD_DRIVE_PROVIDER_SCHEMA = { type: "string", enum: ["icloud", "onedrive", "google-drive", "dropbox"] };
+const CLOUD_DRIVE_MODE_SCHEMA = { type: "string", enum: ["local", "contract", "remote-live", "live"] };
+const CLOUD_DRIVE_CONNECT_SCHEMA = schema(["provider"], {
+  workspaceId: { type: "string" },
+  provider: CLOUD_DRIVE_PROVIDER_SCHEMA,
+  rootPath: { type: "string" },
+  secretRef: { type: "string" },
+  endpointRef: { type: "string" },
+  endpointUrl: { type: "string" },
+  mode: CLOUD_DRIVE_MODE_SCHEMA,
+  managedFolder: { type: "boolean" },
+  managedFolderRoot: { type: "string" },
+  publicFolder: { type: "string" },
+  allowedClients: { type: "array" },
+  defaultClient: { type: "string" },
+  directoryMappings: { type: "array" },
+  exposedDirectories: { type: "array" }
+});
+const CLOUD_DRIVE_UPLOAD_SCHEMA = schema(["driveRef"], {
+  workspaceId: { type: "string" },
+  provider: { type: "string" },
+  driveRef: { type: "string" },
+  clientId: { type: "string" },
+  path: { type: "string" },
+  name: { type: "string" },
+  parentPath: { type: "string" },
+  content: { type: "string" },
+  contentBase64: { type: "string" },
+  overwrite: { type: "boolean" }
+});
+const CLOUD_DRIVE_SYNC_SCHEMA = schema(["driveRef"], {
+  workspaceId: { type: "string" },
+  provider: { type: "string" },
+  driveRef: { type: "string" },
+  clientId: { type: "string" },
+  path: { type: "string" },
+  direction: { type: "string" },
+  targetPath: { type: "string" },
+  limit: { type: "number" },
+  confirm: { type: "boolean" }
+});
+const CLOUD_DRIVE_UPSTREAM_ASPECTS = Object.freeze(["external-service", "cloud-drive-upstream", "skill-hub"]);
+const CLOUD_DRIVE_LEGACY_ASPECTS = Object.freeze(["cloud-drive-legacy-shim", "internal-deprecated", "external-replaced"]);
+const CLOUD_DRIVE_REPLACEMENT_SERVICE = "external.cloudDrive";
+const CLOUD_DRIVE_REPLACEMENT_PREFIX = "external.cloudDrive.";
+const CLOUD_DRIVE_LEGACY_LIFECYCLE = Object.freeze({
+  status: "deprecated",
+  reason: "Cloud Drive Port has moved to the upstream service aspect gateway.",
+  maintenancePolicy: "compatibility-shim-only",
+  replacementService: CLOUD_DRIVE_REPLACEMENT_SERVICE
+});
+
+function cloudDriveUpstreamOperation(options = {}) {
+  return protocolOperation({
+    feature: "external",
+    aspects: CLOUD_DRIVE_UPSTREAM_ASPECTS,
+    ...options
+  });
+}
+
+function cloudDriveLegacyOperation(options = {}) {
+  return protocolOperation({
+    feature: "agent_workspace",
+    deprecated: true,
+    replacementService: CLOUD_DRIVE_REPLACEMENT_SERVICE,
+    replacementOperationPrefix: CLOUD_DRIVE_REPLACEMENT_PREFIX,
+    lifecycle: CLOUD_DRIVE_LEGACY_LIFECYCLE,
+    aspects: CLOUD_DRIVE_LEGACY_ASPECTS,
+    ...options
+  });
+}
 
 export const PROTOCOL_OPERATION_DEFINITIONS = Object.freeze([
   protocolOperation({
@@ -756,33 +838,104 @@ export const PROTOCOL_OPERATION_DEFINITIONS = Object.freeze([
     })
   }),
 
-  protocolOperation({
+  cloudDriveUpstreamOperation({
+    id: "external.cloudDrive.connect",
+    label: "连接上游云盘服务",
+    targetMethod: "handleSharedspaceDriveConnect",
+    path: "/api/external/cloud-drive/connect",
+    scopes: ["drive:write"],
+    risk: "safe_write",
+    inputSchema: CLOUD_DRIVE_CONNECT_SCHEMA
+  }),
+  cloudDriveUpstreamOperation({
+    id: "external.cloudDrive.status",
+    label: "读取上游云盘连接状态",
+    targetMethod: "handleSharedspaceDriveStatus",
+    method: "GET",
+    path: "/api/external/cloud-drive/status",
+    query: DRIVE_QUERY,
+    scopes: ["drive:read"],
+    readOnly: true
+  }),
+  cloudDriveUpstreamOperation({
+    id: "external.cloudDrive.item.list",
+    label: "列出上游云盘安全元数据",
+    targetMethod: "handleSharedspaceDriveItemList",
+    method: "GET",
+    path: "/api/external/cloud-drive/items",
+    query: [
+      ...DRIVE_QUERY,
+      { name: "recursive", aliases: ["recursive"] },
+      { name: "includeHash", aliases: ["include-hash", "includeHash"] },
+      { name: "limit", aliases: ["limit"] }
+    ],
+    scopes: ["drive:read"],
+    readOnly: true
+  }),
+  cloudDriveUpstreamOperation({
+    id: "external.cloudDrive.file.download",
+    label: "下载上游云盘文件",
+    targetMethod: "handleSharedspaceDriveFileDownload",
+    method: "GET",
+    path: "/api/external/cloud-drive/files/download",
+    query: [
+      ...DRIVE_QUERY,
+      { name: "includeText", aliases: ["include-text", "includeText"] },
+      { name: "encoding", aliases: ["encoding"] }
+    ],
+    scopes: ["drive:read"],
+    readOnly: true
+  }),
+  cloudDriveUpstreamOperation({
+    id: "external.cloudDrive.file.upload",
+    label: "上传上游云盘文件",
+    targetMethod: "handleSharedspaceDriveFileUpload",
+    path: "/api/external/cloud-drive/files/upload",
+    scopes: ["drive:write"],
+    risk: "safe_write",
+    inputSchema: CLOUD_DRIVE_UPLOAD_SCHEMA
+  }),
+  cloudDriveUpstreamOperation({
+    id: "external.cloudDrive.sync.plan",
+    label: "生成上游云盘同步计划",
+    targetMethod: "handleSharedspaceDriveSyncPlan",
+    path: "/api/external/cloud-drive/sync/plan",
+    scopes: ["drive:sync"],
+    risk: "read_only",
+    readOnly: true,
+    inputSchema: CLOUD_DRIVE_SYNC_SCHEMA
+  }),
+  cloudDriveUpstreamOperation({
+    id: "external.cloudDrive.sync.apply",
+    label: "应用上游云盘同步计划",
+    targetMethod: "handleSharedspaceDriveSyncApply",
+    path: "/api/external/cloud-drive/sync/apply",
+    scopes: ["drive:sync"],
+    risk: "safe_write",
+    inputSchema: CLOUD_DRIVE_SYNC_SCHEMA
+  }),
+  cloudDriveUpstreamOperation({
+    id: "external.cloudDrive.permission.list",
+    label: "读取上游云盘权限元数据",
+    targetMethod: "handleSharedspaceDrivePermissionList",
+    method: "GET",
+    path: "/api/external/cloud-drive/permissions",
+    query: DRIVE_QUERY,
+    scopes: ["drive:share"],
+    readOnly: true
+  }),
+
+  cloudDriveLegacyOperation({
     id: "sharedspace.drive.connect",
-    feature: "agent_workspace",
     label: "连接云盘适配器",
     targetMethod: "handleSharedspaceDriveConnect",
     path: "/api/sharedspace/drive/connect",
     scopes: ["drive:write"],
     risk: "safe_write",
-    inputSchema: schema(["provider"], {
-      workspaceId: { type: "string" },
-      provider: { type: "string", enum: ["icloud", "onedrive", "google-drive", "dropbox"] },
-      rootPath: { type: "string" },
-      secretRef: { type: "string" },
-      endpointRef: { type: "string" },
-      mode: { type: "string", enum: ["local", "contract", "live"] },
-      managedFolder: { type: "boolean" },
-      managedFolderRoot: { type: "string" },
-      publicFolder: { type: "string" },
-      allowedClients: { type: "array" },
-      defaultClient: { type: "string" },
-      directoryMappings: { type: "array" },
-      exposedDirectories: { type: "array" }
-    })
+    inputSchema: CLOUD_DRIVE_CONNECT_SCHEMA
   }),
-  protocolOperation({
+  cloudDriveLegacyOperation({
     id: "sharedspace.drive.status",
-    feature: "agent_workspace",
     label: "读取云盘连接状态",
     targetMethod: "handleSharedspaceDriveStatus",
     method: "GET",
@@ -791,9 +944,8 @@ export const PROTOCOL_OPERATION_DEFINITIONS = Object.freeze([
     scopes: ["drive:read"],
     readOnly: true
   }),
-  protocolOperation({
+  cloudDriveLegacyOperation({
     id: "sharedspace.drive.item.list",
-    feature: "agent_workspace",
     label: "列出云盘安全元数据",
     targetMethod: "handleSharedspaceDriveItemList",
     method: "GET",
@@ -807,9 +959,8 @@ export const PROTOCOL_OPERATION_DEFINITIONS = Object.freeze([
     scopes: ["drive:read"],
     readOnly: true
   }),
-  protocolOperation({
+  cloudDriveLegacyOperation({
     id: "sharedspace.drive.file.download",
-    feature: "agent_workspace",
     label: "下载云盘文件",
     targetMethod: "handleSharedspaceDriveFileDownload",
     method: "GET",
@@ -822,69 +973,36 @@ export const PROTOCOL_OPERATION_DEFINITIONS = Object.freeze([
     scopes: ["drive:read"],
     readOnly: true
   }),
-  protocolOperation({
+  cloudDriveLegacyOperation({
     id: "sharedspace.drive.file.upload",
-    feature: "agent_workspace",
     label: "上传云盘文件",
     targetMethod: "handleSharedspaceDriveFileUpload",
     path: "/api/sharedspace/drive/files/upload",
     scopes: ["drive:write"],
     risk: "safe_write",
-    inputSchema: schema(["driveRef"], {
-      workspaceId: { type: "string" },
-      provider: { type: "string" },
-      driveRef: { type: "string" },
-      clientId: { type: "string" },
-      path: { type: "string" },
-      name: { type: "string" },
-      parentPath: { type: "string" },
-      content: { type: "string" },
-      contentBase64: { type: "string" },
-      overwrite: { type: "boolean" }
-    })
+    inputSchema: CLOUD_DRIVE_UPLOAD_SCHEMA
   }),
-  protocolOperation({
+  cloudDriveLegacyOperation({
     id: "sharedspace.drive.sync.plan",
-    feature: "agent_workspace",
     label: "生成云盘同步计划",
     targetMethod: "handleSharedspaceDriveSyncPlan",
     path: "/api/sharedspace/drive/sync/plan",
     scopes: ["drive:sync"],
     risk: "read_only",
     readOnly: true,
-    inputSchema: schema(["driveRef"], {
-      workspaceId: { type: "string" },
-      provider: { type: "string" },
-      driveRef: { type: "string" },
-      clientId: { type: "string" },
-      path: { type: "string" },
-      direction: { type: "string" },
-      targetPath: { type: "string" },
-      limit: { type: "number" }
-    })
+    inputSchema: CLOUD_DRIVE_SYNC_SCHEMA
   }),
-  protocolOperation({
+  cloudDriveLegacyOperation({
     id: "sharedspace.drive.sync.apply",
-    feature: "agent_workspace",
     label: "应用云盘同步计划",
     targetMethod: "handleSharedspaceDriveSyncApply",
     path: "/api/sharedspace/drive/sync/apply",
     scopes: ["drive:sync"],
     risk: "safe_write",
-    inputSchema: schema(["driveRef"], {
-      workspaceId: { type: "string" },
-      provider: { type: "string" },
-      driveRef: { type: "string" },
-      clientId: { type: "string" },
-      path: { type: "string" },
-      direction: { type: "string" },
-      targetPath: { type: "string" },
-      confirm: { type: "boolean" }
-    })
+    inputSchema: CLOUD_DRIVE_SYNC_SCHEMA
   }),
-  protocolOperation({
+  cloudDriveLegacyOperation({
     id: "sharedspace.drive.permission.list",
-    feature: "agent_workspace",
     label: "读取云盘权限元数据",
     targetMethod: "handleSharedspaceDrivePermissionList",
     method: "GET",
@@ -1301,9 +1419,21 @@ export const PROTOCOL_OPERATION_DEFINITIONS = Object.freeze([
     id: "knowledge.distillation.export",
     feature: "knowledge",
     label: "导出知识蒸馏结果",
+    description: "Deprecated internal knowledge distillation export compatibility endpoint. Use external.knowledge.distillation.artifacts.export instead.",
     targetMethod: "handleKnowledgeDistillationExport",
     path: "/api/knowledge/distillation/export",
-    scopes: ["knowledge:read"]
+    scopes: ["knowledge:read"],
+    deprecated: true,
+    replacementService: "external.knowledge.distillation",
+    replacementOperationPrefix: "external.knowledge.distillation.",
+    lifecycle: {
+      status: "deprecated",
+      reason: "Internal knowledge distillation exports are being removed with the embedded algorithm runtime.",
+      maintenancePolicy: "compatibility-shim-only",
+      replacementService: "external.knowledge.distillation",
+      replacementOperation: "external.knowledge.distillation.artifacts.export"
+    },
+    aspects: ["knowledge-distillation", "internal-deprecated", "external-replaced"]
   })
 ]);
 

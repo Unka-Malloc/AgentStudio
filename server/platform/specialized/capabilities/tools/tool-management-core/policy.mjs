@@ -6,6 +6,33 @@ function uniqueStrings(values = []) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
+function revisionNumber(value) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function grantPolicyRevision(grant = null) {
+  const metadata = grant?.metadata && typeof grant.metadata === "object" && !Array.isArray(grant.metadata)
+    ? grant.metadata
+    : {};
+  return revisionNumber(grant?.policyRevision || grant?.policy_revision || metadata.policyRevision || metadata.policy_revision);
+}
+
+function grantPolicyState(currentRevision = {}, grant = null) {
+  const current = revisionNumber(currentRevision?.revision);
+  const grantRevision = grantPolicyRevision(grant);
+  if (!current) {
+    return "unversioned";
+  }
+  if (!grant) {
+    return "no-grant";
+  }
+  if (!grantRevision) {
+    return "grant-unversioned";
+  }
+  return grantRevision >= current ? "fresh" : "stale";
+}
+
 export function createToolPolicyEngine({
   registry,
   store,
@@ -57,6 +84,9 @@ export function createToolPolicyEngine({
           evaluatedLayers: [],
           createdAt: nowIso()
         };
+    const governancePolicyRevision = securityPermissions?.getGovernancePolicyRevision?.() ||
+      authorizationDecision.effectivePolicySnapshot?.policyRevision ||
+      null;
     const decision = {
       ...authorizationDecision,
       decisionId: `policy_${cryptoRandomSuffix()}`,
@@ -68,6 +98,9 @@ export function createToolPolicyEngine({
       missingToolsets: authorizationDecision.effect === "deny"
         ? uniqueStrings(authorizationDecision.missingToolsets || [])
         : [],
+      governancePolicyRevision,
+      grantPolicyRevision: grantPolicyRevision(grant),
+      grantPolicyState: grantPolicyState(governancePolicyRevision, grant),
       evaluatedLayers: uniqueStrings([...(authorizationDecision.evaluatedLayers || []), ...evaluatedLayers]),
       createdAt: authorizationDecision.createdAt || nowIso()
     };

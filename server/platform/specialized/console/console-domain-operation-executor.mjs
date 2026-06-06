@@ -7,31 +7,21 @@ import { createWorkspaceGovernanceRegistry } from "../agent/workspace-governance
 import { createContributionRegistry } from "../agent/workspace-contribution/index.mjs";
 import { createCodespaceRegistry } from "../capabilities/code-management/codespace/index.mjs";
 import { createCapabilityPackageRegistry } from "../capabilities/package-lifecycle/index.mjs";
-import { createCloudDrivePort } from "../agent/cloud-drive-port/index.mjs";
-import { createAssetLineageRegistry } from "../knowledge/assets/asset-lineage/index.mjs";
-import { evaluateKnowledgeAccess } from "../knowledge/agent-library/access-policy.mjs";
 import {
-  createKnowledgeBackendPort,
-  isKnowledgeBackendEvidenceId
-} from "../knowledge/storage/knowledge-backend-port/index.mjs";
+  createCloudDriveUpstreamGateway,
+  isCloudDriveUpstreamGatewayOperation
+} from "./cloud-drive-upstream-gateway.mjs";
 import {
   GERRIT_ACTIONS,
   executeGerritCommonOperation,
   uploadGerritGitChange
 } from "../capabilities/code-review/gerrit/index.mjs";
 import { executeRepoOperation } from "../capabilities/code-repository/repo-operations/index.mjs";
-import { createDataConnectorGovernance } from "../knowledge/connectors/data-connector-governance/index.mjs";
 import {
-  listCapacityBenchmarkTargets,
-  runPerformanceCapacityBenchmark
-} from "../knowledge/performance/capacity-benchmark/index.mjs";
-import {
-  getSourceFileEvidence,
-  isSourceEvidenceId,
-  searchSourceFiles
-} from "../knowledge/retrieval/source-file-search-service.mjs";
-import { createKnowledgeTransformationProvider } from "../knowledge/transformation/knowledge-transformation-provider.mjs";
-import { executeKnowledgeWordCloudOperation } from "./knowledge-word-cloud-operation-executor.mjs";
+  downloadRuntimeDependency,
+  listRuntimeDependencies,
+  updateRuntimeDependencyConfiguration
+} from "../capabilities/runtime-dependencies/index.mjs";
 import { getCodexOAuthStatus, startCodexDeviceLogin } from "../../common/security/auth/codex-oauth-service.mjs";
 import { buildProductionHealthReport } from "../../common/production-readiness/report-reader.mjs";
 import {
@@ -59,13 +49,57 @@ import {
 } from "../../common/platform-core/discovery/config.mjs";
 import { AUTHORIZATION_PROTOCOL_VERSION } from "../../common/security/authorization/authorization-engine.mjs";
 import { SECURITY_PERMISSIONS_PROTOCOL_VERSION } from "../../common/security/security-permissions-provider.mjs";
+import { ServerConfig } from "../../common/config/ServerConfig.mjs";
 
 const contributionRegistries = new Map();
 const codespaceRegistries = new Map();
-const cloudDrivePorts = new Map();
+const cloudDriveUpstreamGateways = new Map();
 const knowledgeBackendPorts = new Map();
-const knowledgeDistillationWorkbenchInstances = new Map();
+const acpAgentRelayRuntimes = new Map();
 const PATH_BROWSER_MAX_ENTRIES = 600;
+const EXTERNAL_KNOWLEDGE_DISTILLATION_SERVICE_ID = "external.knowledge.distillation";
+const EXTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_PREFIX = "external.knowledge.distillation.";
+
+async function loadKnowledgeAccessModule() {
+  return import("../knowledge/agent-library/access-policy.mjs");
+}
+
+async function loadKnowledgeBackendPortModule() {
+  return import("../knowledge/storage/knowledge-backend-port/index.mjs");
+}
+
+async function loadSourceFileSearchServiceModule() {
+  return import("../knowledge/retrieval/source-file-search-service.mjs");
+}
+
+async function loadKnowledgeTransformationModule() {
+  return import("../knowledge/transformation/knowledge-transformation-provider.mjs");
+}
+
+async function loadExternalKnowledgeDistillationModule() {
+  return import("../knowledge/invocation/external-distillation-service/index.mjs");
+}
+
+async function loadAssetLineageModule() {
+  return import("../knowledge/assets/asset-lineage/index.mjs");
+}
+
+async function loadDataConnectorGovernanceModule() {
+  return import("../knowledge/connectors/data-connector-governance/index.mjs");
+}
+
+async function loadPerformanceCapacityModule() {
+  return import("../knowledge/performance/capacity-benchmark/index.mjs");
+}
+
+async function loadAcpAgentRelayModule() {
+  return import("../capabilities/agent-relay/acp-agent-relay/index.mjs");
+}
+
+async function executeKnowledgeWordCloudOperation(...args) {
+  const module = await import("./knowledge-word-cloud-operation-executor.mjs");
+  return module.executeKnowledgeWordCloudOperation(...args);
+}
 const PATH_BROWSER_IGNORED_NAMES = new Set([
   ".git",
   ".hg",
@@ -76,6 +110,31 @@ const PATH_BROWSER_IGNORED_NAMES = new Set([
 
 function result(status, payload) {
   return { status, payload };
+}
+
+function internalKnowledgeDistillationRemovedPayload(operationId = "") {
+  return {
+    ok: false,
+    status: 410,
+    error: "内部知识蒸馏实现已废弃并停止维护，请改用独立部署的 external.knowledge.distillation 服务。",
+    code: "INTERNAL_KNOWLEDGE_DISTILLATION_REMOVED",
+    deprecated: true,
+    removedFromMaintenance: true,
+    operationId,
+    replacementService: EXTERNAL_KNOWLEDGE_DISTILLATION_SERVICE_ID,
+    replacementOperationPrefix: EXTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_PREFIX,
+    migration: {
+      health: "external.knowledge.distillation.service.health",
+      capabilities: "external.knowledge.distillation.service.capabilities",
+      createRun: "external.knowledge.distillation.runs.create",
+      getRun: "external.knowledge.distillation.runs.get",
+      listRuns: "external.knowledge.distillation.runs.list",
+      evidenceQuery: "external.knowledge.distillation.evidence.query",
+      projectEvidenceQuery: "external.knowledge.distillation.projects.evidence.query",
+      artifactExport: "external.knowledge.distillation.artifacts.export"
+    },
+    maintenancePolicy: "external-service-only"
+  };
 }
 
 function requireStorageProvider(context = {}) {
@@ -402,6 +461,8 @@ function normalizeKnowledgeSearchInput(input = {}) {
     clientId: firstInputValue(source, ["clientId", "client-id"], ""),
     clientUid: firstInputValue(source, ["clientUid", "client-uid"], ""),
     workspaceId: firstInputValue(source, ["workspaceId", "workspace-id", "workspace_id"], ""),
+    requestSurface: firstInputValue(source, ["requestSurface", "request-surface", "surface"], ""),
+    responseProfile: firstInputValue(source, ["responseProfile", "response-profile", "outputProfile", "output-profile"], ""),
     modalityPolicy: "multimodal"
   };
 
@@ -421,6 +482,15 @@ function normalizeKnowledgeSearchInput(input = {}) {
   if (explain !== undefined) {
     normalized.explain = explain;
   }
+  const machineReadable = parseOptionalBooleanFlag(
+    source,
+    ["machineReadable", "machine-readable", "agentMessage", "agent-message"],
+    undefined
+  );
+  if (machineReadable !== undefined) {
+    normalized.machineReadable = machineReadable;
+    normalized.agentMessage = machineReadable;
+  }
 
   if (Object.keys(filters).length > 0) {
     normalized.filters = filters;
@@ -432,6 +502,38 @@ function normalizeKnowledgeSearchInput(input = {}) {
   delete normalized.mediaType;
   delete normalized.mediaTypes;
   return normalized;
+}
+
+function normalizeKnowledgeSearchResponseProfile(value = "") {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[_\s]+/g, "-");
+  if (["agent", "mcp", "tool", "tool-grant", "machine", "machine-readable"].includes(normalized)) {
+    return "agent";
+  }
+  if (["api", "http", "rpc", "cli", "integration", "service"].includes(normalized)) {
+    return "api";
+  }
+  if (["console", "ui", "human", "control-plane", "management-console"].includes(normalized)) {
+    return "console";
+  }
+  return "";
+}
+
+function knowledgeSearchFromToolGrant(context = {}) {
+  const user = context.authSession?.user || {};
+  return user.roleId === "tool-grant" || user.type === "tool-grant";
+}
+
+function resolveKnowledgeSearchResponseProfile(payload = {}, context = {}) {
+  const explicit = normalizeKnowledgeSearchResponseProfile(
+    payload.responseProfile || payload.requestSurface || payload.surface || payload.outputProfile || ""
+  );
+  if (explicit) {
+    return explicit;
+  }
+  if (payload.machineReadable === true || payload.agentMessage === true || knowledgeSearchFromToolGrant(context)) {
+    return "agent";
+  }
+  return "api";
 }
 
 function subjectFromAuthSession(authSession = null) {
@@ -683,9 +785,10 @@ function codespaceRegistryFor(context = {}) {
   return codespaceRegistries.get(key);
 }
 
-function knowledgeBackendPortFor(context = {}) {
+async function knowledgeBackendPortFor(context = {}) {
   const key = context.userDataPath || "default";
   if (!knowledgeBackendPorts.has(key)) {
+    const { createKnowledgeBackendPort } = await loadKnowledgeBackendPortModule();
     knowledgeBackendPorts.set(key, createKnowledgeBackendPort({
       userDataPath: context.userDataPath
     }));
@@ -693,14 +796,14 @@ function knowledgeBackendPortFor(context = {}) {
   return knowledgeBackendPorts.get(key);
 }
 
-function cloudDrivePortFor(context = {}) {
+function cloudDriveUpstreamGatewayFor(context = {}) {
   const key = context.userDataPath || "default";
-  if (!cloudDrivePorts.has(key)) {
-    cloudDrivePorts.set(key, createCloudDrivePort({
+  if (!cloudDriveUpstreamGateways.has(key)) {
+    cloudDriveUpstreamGateways.set(key, createCloudDriveUpstreamGateway({
       userDataPath: context.userDataPath
     }));
   }
-  return cloudDrivePorts.get(key);
+  return cloudDriveUpstreamGateways.get(key);
 }
 
 function requireRuntimeMethod(runtime, methodName, message) {
@@ -722,33 +825,120 @@ function getKnowledgeCore(runtime) {
   return mount;
 }
 
-function getKnowledgeDistillationWorkbench(context = {}) {
-  if (context.knowledgeDistillationWorkbench) {
-    return context.knowledgeDistillationWorkbench;
-  }
-  if (typeof context.createKnowledgeDistillationWorkbench !== "function") {
-    return null;
-  }
-  const key = context.userDataPath || "default";
-  if (!knowledgeDistillationWorkbenchInstances.has(key)) {
-    knowledgeDistillationWorkbenchInstances.set(
-      key,
-      context.createKnowledgeDistillationWorkbench({
-        userDataPath: context.userDataPath,
-        jobManager: context.jobWorkflowProvider,
-        knowledgeDistillationRuntime: context.knowledgeDistillationRuntime,
-        queueMonitor: context.queueMonitor
-      })
-    );
-  }
-  return knowledgeDistillationWorkbenchInstances.get(key);
-}
-
 async function publishProtocolEvent(protocolEventBus, topic, payload, options = {}) {
   if (!protocolEventBus || typeof protocolEventBus.publish !== "function") {
     return null;
   }
   return protocolEventBus.publish(topic, payload, options);
+}
+
+function publicActorFromSession(authSession = null) {
+  const user = authSession?.user && typeof authSession.user === "object" ? authSession.user : {};
+  return {
+    userId: String(user.userId || "").trim(),
+    username: String(user.username || "").trim(),
+    roleId: String(user.roleId || "").trim()
+  };
+}
+
+function governanceEntityId(entityType, entity = {}) {
+  const source = entity && typeof entity === "object" && !Array.isArray(entity) ? entity : {};
+  const keys = {
+    role: ["roleId", "id"],
+    team: ["teamId", "id"],
+    "user-policy": ["userId", "subjectId", "id"],
+    "agent-group": ["groupId", "id"],
+    "agent-binding": ["agentId", "profileId", "id"],
+    approval: ["approvalId", "id"]
+  }[entityType] || ["id"];
+  for (const key of keys) {
+    const value = String(source[key] || "").trim();
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
+
+function governanceStringList(value) {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((item) => String(item || "").trim()).filter(Boolean))];
+  }
+  if (typeof value === "string") {
+    return governanceStringList(value.split(","));
+  }
+  return [];
+}
+
+function governanceAffectedSubjects(entityType, entity = {}) {
+  const source = entity && typeof entity === "object" && !Array.isArray(entity) ? entity : {};
+  return {
+    roleIds: entityType === "role" ? [source.roleId].filter(Boolean) : [],
+    teamIds: entityType === "team" ? [source.teamId].filter(Boolean) : governanceStringList(source.teamIds),
+    userIds: [source.userId, source.boundUserId].filter(Boolean),
+    agentIds: [source.agentId].filter(Boolean),
+    agentGroupIds: entityType === "agent-group" ? [source.groupId].filter(Boolean) : governanceStringList(source.groupIds),
+    approvalIds: entityType === "approval" ? [source.approvalId].filter(Boolean) : []
+  };
+}
+
+async function publishAuthorizationGovernanceUpdate({
+  context,
+  operationId,
+  entityType,
+  eventType,
+  entity
+}) {
+  const securityPermissions = context.securityPermissions;
+  const policyRevision = securityPermissions?.getGovernancePolicyRevision?.() || null;
+  const entityId = governanceEntityId(entityType, entity);
+  const payload = {
+    schemaVersion: 1,
+    protocolVersion: "pact.authorization.governance.update.v1",
+    operationId,
+    mutation: {
+      entityType,
+      entityId,
+      eventType
+    },
+    affectedSubjects: governanceAffectedSubjects(entityType, entity),
+    policyRevision,
+    refresh: {
+      required: true,
+      reasonCode: "governance_policy_revision_changed",
+      gatewayPolicyReloadRequired: true,
+      grantRefreshRequired: true,
+      staleGrantBehavior: "existing grants remain usable only through live policy evaluation until reissued or rotated"
+    },
+    actor: publicActorFromSession(context.authSession)
+  };
+  const governanceEvent = await publishProtocolEvent(
+    context.protocolEventBus,
+    "authorization.governance.updated",
+    payload,
+    { type: "authorization.governance.updated" }
+  );
+  const permissionsEvent = await publishProtocolEvent(
+    context.protocolEventBus,
+    "permissions.updated",
+    {
+      ...payload,
+      sourceTopic: "authorization.governance.updated"
+    },
+    { type: "permissions.updated" }
+  );
+  return {
+    policyRevision,
+    refresh: payload.refresh,
+    events: {
+      governance: governanceEvent
+        ? { id: governanceEvent.id, offset: governanceEvent.offset, topic: governanceEvent.topic }
+        : null,
+      permissions: permissionsEvent
+        ? { id: permissionsEvent.id, offset: permissionsEvent.offset, topic: permissionsEvent.topic }
+        : null
+    }
+  };
 }
 
 function defaultAgentSyncPolicy() {
@@ -1471,6 +1661,7 @@ async function executeKnowledgeAccessOperation({ operationId, input, context }) 
         ...((input.request && typeof input.request === "object") ? input.request : input)
       };
       const policyPayload = input.policy || input.authorizationPolicy || input;
+      const { evaluateKnowledgeAccess } = await loadKnowledgeAccessModule();
       const decision = evaluateKnowledgeAccess(requestPayload, policyPayload);
       appendAuthorizationArtifact(securityPermissions, "appendReceipt", decision.knowledgeAccessReceipt, {
         decisionId: decision.decisionId,
@@ -1975,7 +2166,7 @@ async function executeKnowledgeDocumentParsingOperation({ operationId, input, co
     return null;
   }
   const runtime = typeof context.createDocumentParsingRuntime === "function"
-    ? context.createDocumentParsingRuntime()
+    ? await context.createDocumentParsingRuntime()
     : null;
   if (!runtime || typeof runtime.parseDocuments !== "function") {
     return result(503, { error: "文档解析运行时不可用。" });
@@ -2009,7 +2200,7 @@ async function executeKnowledgeDocumentParsingOperation({ operationId, input, co
       dryRun: true
     });
     const publicResult = typeof context.toPublicDocumentParsingResult === "function"
-      ? context.toPublicDocumentParsingResult(operationResult)
+      ? await context.toPublicDocumentParsingResult(operationResult)
       : operationResult;
     return result(200, publicResult);
   } finally {
@@ -2254,7 +2445,8 @@ async function executeMonitorAlertOperation({ operationId, input = {}, context }
   const handledOperations = new Set([
     "system.monitor_alerts.get",
     "system.monitor_alerts.set",
-    "system.monitor_alerts.ack"
+    "system.monitor_alerts.ack",
+    "system.background_supervisor.recover"
   ]);
   if (!handledOperations.has(id)) {
     return null;
@@ -2287,6 +2479,32 @@ async function executeMonitorAlertOperation({ operationId, input = {}, context }
     }
     const alertId = String(input.alertId || input["alert-id"] || input.id || "").trim();
     return result(200, await devopsProvider.acknowledgeMonitorAlert({ ...input, alertId, queueMonitor: context.queueMonitor }));
+  }
+  if (id === "system.background_supervisor.recover") {
+    if (typeof devopsProvider.recoverBackgroundSupervisor !== "function") {
+      return result(503, { error: "后台 Worker 管理进程恢复接口不可用。" });
+    }
+    const recovery = await devopsProvider.recoverBackgroundSupervisor({
+      ...input,
+      userDataPath: context.userDataPath
+    });
+    const backgroundProcessStatus =
+      typeof devopsProvider.getBackgroundProcessStatus === "function"
+        ? await devopsProvider.getBackgroundProcessStatus({ userDataPath: context.userDataPath })
+        : null;
+    const monitorAlertState =
+      typeof devopsProvider.getMonitorAlertState === "function"
+        ? await devopsProvider.getMonitorAlertState({
+            ...input,
+            userDataPath: context.userDataPath,
+            queueMonitor: context.queueMonitor
+          })
+        : null;
+    return result(200, {
+      recovery,
+      backgroundProcessStatus,
+      monitorAlertState
+    });
   }
 
   return null;
@@ -3889,7 +4107,14 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "权限角色存储不可用。" });
     }
     const role = securityPermissions.upsertGovernanceRole(input);
-    return result(200, protocolPayload({ role }));
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "role",
+      eventType: "upserted",
+      entity: role
+    });
+    return result(200, protocolPayload({ role, ...governanceUpdate }));
   }
 
   if (id === "authorization.teams.list") {
@@ -3902,7 +4127,14 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "权限团队存储不可用。" });
     }
     const team = securityPermissions.upsertGovernanceTeam(input);
-    return result(200, protocolPayload({ team }));
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "team",
+      eventType: "upserted",
+      entity: team
+    });
+    return result(200, protocolPayload({ team, ...governanceUpdate }));
   }
 
   if (id === "authorization.users.policies.list") {
@@ -3915,7 +4147,14 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "用户授权策略存储不可用。" });
     }
     const userPolicy = securityPermissions.upsertGovernanceUserPolicy(input);
-    return result(200, protocolPayload({ userPolicy }));
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "user-policy",
+      eventType: "upserted",
+      entity: userPolicy
+    });
+    return result(200, protocolPayload({ userPolicy, ...governanceUpdate }));
   }
 
   if (id === "authorization.agent_groups.list") {
@@ -3928,7 +4167,14 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "智能体分组存储不可用。" });
     }
     const agentGroup = securityPermissions.upsertGovernanceAgentGroup(input);
-    return result(200, protocolPayload({ agentGroup }));
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "agent-group",
+      eventType: "upserted",
+      entity: agentGroup
+    });
+    return result(200, protocolPayload({ agentGroup, ...governanceUpdate }));
   }
 
   if (id === "authorization.agents.bindings.list") {
@@ -3941,7 +4187,14 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "智能体绑定存储不可用。" });
     }
     const agentBinding = securityPermissions.upsertGovernanceAgentBinding(input);
-    return result(200, protocolPayload({ agentBinding }));
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "agent-binding",
+      eventType: "upserted",
+      entity: agentBinding
+    });
+    return result(200, protocolPayload({ agentBinding, ...governanceUpdate }));
   }
 
   if (id === "authorization.approvals.list") {
@@ -3958,7 +4211,14 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "审批授权存储不可用。" });
     }
     const approval = securityPermissions.upsertGovernanceApproval(input);
-    return result(200, protocolPayload({ approval }));
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "approval",
+      eventType: "upserted",
+      entity: approval
+    });
+    return result(200, protocolPayload({ approval, ...governanceUpdate }));
   }
 
   if (id === "authorization.approvals.revoke") {
@@ -3966,9 +4226,17 @@ async function executeAuthorizationFacadeOperation({ operationId, input = {}, co
       return result(503, { error: "审批授权存储不可用。" });
     }
     const approval = securityPermissions.revokeGovernanceApproval(input.approvalId || input.id, input.reason || "");
-    return approval
-      ? result(200, protocolPayload({ approval }))
-      : result(404, { error: "审批授权不存在。" });
+    if (!approval) {
+      return result(404, { error: "审批授权不存在。" });
+    }
+    const governanceUpdate = await publishAuthorizationGovernanceUpdate({
+      context,
+      operationId: id,
+      entityType: "approval",
+      eventType: "revoked",
+      entity: approval
+    });
+    return result(200, protocolPayload({ approval, ...governanceUpdate }));
   }
 
   if (id === "authorization.receipts.list") {
@@ -4232,9 +4500,51 @@ async function executeToolManagementAuthorizationOperation({ operationId, input 
   return null;
 }
 
+export async function getAcpAgentRelayRuntime(context = {}) {
+  const defaultUserDataPath = ServerConfig.getDataDir();
+  const userDataPath = String(context.userDataPath || defaultUserDataPath).trim() || defaultUserDataPath;
+  if (acpAgentRelayRuntimes.has(userDataPath)) {
+    return acpAgentRelayRuntimes.get(userDataPath);
+  }
+  const module = await loadAcpAgentRelayModule();
+  const storeAdapter = module.createFileRelaySessionAdapter({ userDataPath });
+  const runtime = module.createAcpRelayRuntime({
+    userDataPath,
+    storeAdapter,
+    workspaceRoot: String(context.workspaceRoot || process.cwd()),
+    protocolEventBus: context.protocolEventBus || null
+  });
+  acpAgentRelayRuntimes.set(userDataPath, runtime);
+  return runtime;
+}
+
+async function executeAcpAgentRelayRuntimeOperation({ operationId, input = {}, context }) {
+  const id = String(operationId || "");
+  if (!id.startsWith("acp_agent_relay.")) {
+    return null;
+  }
+  if (context.request?.__pactToolRuntimeAuthorization?.ok !== true) {
+    return null;
+  }
+  const runtime = await getAcpAgentRelayRuntime(context);
+  const operationResult = await runtime.execute(id, input, {
+    ...context,
+    toolRuntimeAuthorization: context.request.__pactToolRuntimeAuthorization,
+    sourceAuthorization: context.request.__pactToolRuntimeAuthorization
+  });
+  const status = operationResult.ok
+    ? 200
+    : Number(operationResult.error?.status || operationResult.status || 400) || 400;
+  return result(status, operationResult);
+}
+
 async function executeToolManagementPassthroughOperation({ operationId, context }) {
   const id = String(operationId || "tool_management.http.passthrough");
-  if (id !== "tool_management.http.passthrough" && !id.startsWith("tool_management.")) {
+  if (
+    id !== "tool_management.http.passthrough" &&
+    !id.startsWith("tool_management.") &&
+    !id.startsWith("acp_agent_relay.")
+  ) {
     return null;
   }
 
@@ -4263,6 +4573,7 @@ async function executeStrategyManagementOperation({ operationId, input = {}, con
     "strategy.describe",
     "strategy.workflow_policy.evaluate",
     "strategy.agent_policy.evaluate",
+    "strategy.route_policy.evaluate",
     "strategy.tool_policy.preview"
   ]);
   if (!handledOperations.has(id)) {
@@ -4280,6 +4591,9 @@ async function executeStrategyManagementOperation({ operationId, input = {}, con
   }
   if (id === "strategy.agent_policy.evaluate") {
     return result(200, strategyManagementProvider.evaluateAgentPolicy(input));
+  }
+  if (id === "strategy.route_policy.evaluate") {
+    return result(200, strategyManagementProvider.evaluateRoutePolicy(input));
   }
   if (id === "strategy.tool_policy.preview") {
     return result(200, {
@@ -4996,7 +5310,7 @@ async function executeKnowledgeBackendOperation({ operationId, input = {}, conte
   if (!handledOperations.has(id)) {
     return null;
   }
-  const port = knowledgeBackendPortFor(context);
+  const port = await knowledgeBackendPortFor(context);
   const subject = knowledgeBackendSubject(context, input);
   const workspaceId = workspaceIdFrom(input);
   try {
@@ -5023,55 +5337,22 @@ async function executeKnowledgeBackendOperation({ operationId, input = {}, conte
 
 async function executeCloudDriveOperation({ operationId, input = {}, context }) {
   const id = String(operationId || "");
-  const handledOperations = new Set([
-    "sharedspace.drive.connect",
-    "sharedspace.drive.status",
-    "sharedspace.drive.item.list",
-    "sharedspace.drive.file.download",
-    "sharedspace.drive.file.upload",
-    "sharedspace.drive.sync.plan",
-    "sharedspace.drive.sync.apply",
-    "sharedspace.drive.permission.list"
-  ]);
-  if (!handledOperations.has(id)) {
+  if (!isCloudDriveUpstreamGatewayOperation(id)) {
     return null;
   }
-  const port = cloudDrivePortFor(context);
+  const gateway = cloudDriveUpstreamGatewayFor(context);
   const operationInput = {
     ...input,
-    workspaceId: workspaceIdFrom(input),
-    operationId: id
+    workspaceId: workspaceIdFrom(input)
   };
   try {
-    if (id === "sharedspace.drive.connect") {
-      return result(200, await port.connect(operationInput));
-    }
-    if (id === "sharedspace.drive.status") {
-      return result(200, await port.status(operationInput));
-    }
-    if (id === "sharedspace.drive.item.list") {
-      return result(200, await port.listItems(operationInput));
-    }
-    if (id === "sharedspace.drive.file.download") {
-      return result(200, await port.downloadFile(operationInput));
-    }
-    if (id === "sharedspace.drive.file.upload") {
-      return result(201, await port.uploadFile(operationInput));
-    }
-    if (id === "sharedspace.drive.sync.plan") {
-      return result(200, await port.syncPlan(operationInput));
-    }
-    if (id === "sharedspace.drive.sync.apply") {
-      return result(200, await port.syncApply(operationInput));
-    }
-    if (id === "sharedspace.drive.permission.list") {
-      return result(200, await port.permissionList(operationInput));
-    }
+    const gatewayResult = await gateway.execute({ operationId: id, input: operationInput });
+    if (!gatewayResult) return null;
+    return result(gatewayResult.status, gatewayResult.payload);
   } catch (error) {
     const status = error?.code === "UNSUPPORTED_PROVIDER" || error?.code === "DRIVE_CONNECTION_NOT_FOUND" ? 404 : 400;
-    return result(status, errorPayload(error, "Cloud drive operation failed."));
+    return result(status, errorPayload(error, "Cloud drive upstream gateway operation failed."));
   }
-  return null;
 }
 
 async function executeKnowledgeEvaluationOperation({ operationId, input, context }) {
@@ -5222,11 +5503,132 @@ async function executeKnowledgeSummarizationOperation({ operationId, input, cont
   return null;
 }
 
+async function externalKnowledgeDistillationClient({ input = {}, context = {} } = {}) {
+  const settings = await loadSettings(context.userDataPath);
+  const {
+    createExternalKnowledgeDistillationClient,
+    resolveExternalKnowledgeDistillationConfig
+  } = await loadExternalKnowledgeDistillationModule();
+  const config = resolveExternalKnowledgeDistillationConfig({
+    input,
+    settings
+  });
+  return createExternalKnowledgeDistillationClient(config);
+}
+
+async function executeExternalKnowledgeDistillationOperation({ operationId, input, context }) {
+  const id = String(operationId || "");
+  const handledOperations = new Set([
+    "external.knowledge.distillation.service.health",
+    "external.knowledge.distillation.service.capabilities",
+    "external.knowledge.distillation.service.runtime_health",
+    "external.knowledge.distillation.runs.list",
+    "external.knowledge.distillation.runs.create",
+    "external.knowledge.distillation.runs.get",
+    "external.knowledge.distillation.runs.cancel",
+    "external.knowledge.distillation.evidence.query",
+    "external.knowledge.distillation.projects.evidence.query",
+    "external.knowledge.distillation.artifacts.export"
+  ]);
+  if (!handledOperations.has(id)) {
+    return null;
+  }
+
+  try {
+    const client = await externalKnowledgeDistillationClient({ input, context });
+    if (id === "external.knowledge.distillation.service.health") {
+      const operationResult = await client.health();
+      return result(200, {
+        ...operationResult,
+        pactRegistration: {
+          namespace: "external.knowledge.distillation",
+          baseUrl: client.baseUrl
+        }
+      });
+    }
+    if (id === "external.knowledge.distillation.service.capabilities") {
+      const operationResult = await client.capabilities();
+      return result(200, {
+        ...operationResult,
+        pactRegistration: {
+          namespace: "external.knowledge.distillation",
+          baseUrl: client.baseUrl
+        }
+      });
+    }
+    if (id === "external.knowledge.distillation.service.runtime_health") {
+      const operationResult = await client.runtimeHealth();
+      return result(200, {
+        ...operationResult,
+        pactRegistration: {
+          namespace: "external.knowledge.distillation",
+          baseUrl: client.baseUrl
+        }
+      });
+    }
+    if (id === "external.knowledge.distillation.runs.list") {
+      return result(200, await client.listRuns(input));
+    }
+    if (id === "external.knowledge.distillation.runs.create") {
+      const operationResult = await client.createRun(input);
+      await publishProtocolEvent(context.protocolEventBus, "external.knowledge.distillation", operationResult, {
+        type: "external.knowledge.distillation.created"
+      });
+      return result(201, operationResult);
+    }
+    if (id === "external.knowledge.distillation.runs.get") {
+      return result(200, await client.getRun(input));
+    }
+    if (id === "external.knowledge.distillation.runs.cancel") {
+      const operationResult = await client.cancelRun(input);
+      await publishProtocolEvent(context.protocolEventBus, "external.knowledge.distillation", operationResult, {
+        type: "external.knowledge.distillation.canceled"
+      });
+      return result(202, operationResult);
+    }
+    if (id === "external.knowledge.distillation.evidence.query") {
+      return result(200, await client.queryEvidence(input));
+    }
+    if (id === "external.knowledge.distillation.projects.evidence.query") {
+      return result(200, await client.queryProjectEvidence(input));
+    }
+    if (id === "external.knowledge.distillation.artifacts.export") {
+      const operationResult = await client.exportArtifact(input);
+      const externalCall = operationResult.pactExternalServiceCall || {};
+      return result(200, {
+        __binaryResponse: true,
+        contentType: operationResult.contentType,
+        disposition: "attachment",
+        fileName: operationResult.fileName,
+        buffer: operationResult.buffer,
+        headers: {
+          "X-Pact-External-Service": "external.knowledge.distillation",
+          "X-Pact-External-Service-Duration-Ms": String(externalCall.durationMs || 0),
+          "X-Pact-External-Service-Transfer-Bytes": String(externalCall.transferBytes || 0),
+          "X-Pact-External-Service-Bytes-Per-Second": String(externalCall.bytesPerSecond || 0)
+        }
+      });
+    }
+  } catch (error) {
+    const status = Number(error?.statusCode || 502);
+    return result(status >= 400 && status < 600 ? status : 502, errorPayload(error, "外部知识蒸馏服务调用失败。", {
+      service: "external.knowledge.distillation",
+      code: error?.payload?.code || error?.code || "EXTERNAL_KNOWLEDGE_DISTILLATION_CALL_FAILED",
+      details: error?.payload?.details || error?.details || null,
+      externalServiceError: error?.payload || null,
+      pactExternalServiceCall: error?.externalServiceCall || null
+    }));
+  }
+
+  return null;
+}
+
 async function executeKnowledgeDistillationWorkflowOperation({ operationId, input, context }) {
   const id = String(operationId || "");
   const handledOperations = new Set([
     "knowledge.distillation.runs.create",
     "knowledge.distillation.runs.get",
+    "knowledge.distillation.export",
     "knowledge.distillation.workbench.runs.list",
     "knowledge.distillation.workbench.runs.create",
     "knowledge.distillation.workbench.runs.get",
@@ -5237,173 +5639,14 @@ async function executeKnowledgeDistillationWorkflowOperation({ operationId, inpu
     "knowledge.distillation.workbench.stage.rerun",
     "knowledge.distillation.workbench.stage.export",
     "knowledge.distillation.workbench.runs.package",
+    "knowledge.distillation.workbench.runs.artifacts",
     "knowledge.distillation.workbench.runs.compare"
   ]);
   if (!handledOperations.has(id)) {
     return null;
   }
 
-  if (id === "knowledge.distillation.runs.create" || id === "knowledge.distillation.runs.get") {
-    const runtime = context.knowledgeDistillationRuntime;
-    if (!runtime) {
-      return result(503, { error: "知识蒸馏运行时不可用。" });
-    }
-    if (id === "knowledge.distillation.runs.create") {
-      const operationResult = await runtime.runDistillation(input);
-      await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation", operationResult, {
-        type: "knowledge.distillation.completed"
-      });
-      return result(201, operationResult);
-    }
-    const operationResult = await runtime.getRun({ runId: input.runId || input["run-id"] || input.id || "" });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏任务不存在。" });
-    }
-    return result(200, operationResult);
-  }
-
-  const workbench = getKnowledgeDistillationWorkbench(context);
-  if (!workbench) {
-    return result(503, { error: "知识蒸馏工作台运行时不可用。" });
-  }
-  const runId = input.runId || input["run-id"] || input.id || "";
-
-  if (id === "knowledge.distillation.workbench.runs.list") {
-    return result(200, await workbench.listRuns({
-      limit: Number(input.limit || 50),
-      includeArchived: parseBooleanFlag(input.includeArchived ?? input["include-archived"], false)
-    }));
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.create") {
-    const operationResult = await workbench.createRun(input);
-    await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation.workbench", operationResult, {
-      type: "knowledge.distillation.workbench.created"
-    });
-    return result(202, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.get") {
-    const operationResult = await workbench.getRun({ runId });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台任务不存在。" });
-    }
-    return result(200, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.resume") {
-    const operationResult = await workbench.resumeRun({ runId });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台任务不存在。" });
-    }
-    await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation.workbench", operationResult, {
-      type: "knowledge.distillation.workbench.resumed"
-    });
-    return result(202, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.cancel") {
-    const operationResult = await workbench.cancelRun({
-      runId,
-      reason: input.reason || input.message || ""
-    });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台任务不存在。" });
-    }
-    await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation.workbench", operationResult, {
-      type: "knowledge.distillation.workbench.canceled"
-    });
-    return result(202, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.archive") {
-    const operationResult = await workbench.archiveRun({ runId });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台任务不存在。" });
-    }
-    await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation.workbench", operationResult, {
-      type: "knowledge.distillation.workbench.archived"
-    });
-    return result(202, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.delete") {
-    const operationResult = await workbench.deleteRun({ runId });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台任务不存在。" });
-    }
-    await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation.workbench", operationResult, {
-      type: "knowledge.distillation.workbench.deleted"
-    });
-    return result(200, operationResult);
-  }
-
-  if (id === "knowledge.distillation.workbench.stage.rerun") {
-    try {
-      const operationResult = await workbench.rerunStage({
-        runId,
-        stageId: input.stageId || input["stage-id"] || input.stage || ""
-      });
-      if (!operationResult) {
-        return result(404, { error: "知识蒸馏工作台任务不存在。" });
-      }
-      await publishProtocolEvent(context.protocolEventBus, "knowledge.distillation.workbench", operationResult, {
-        type: "knowledge.distillation.workbench.stage.rerun"
-      });
-      return result(202, operationResult);
-    } catch (error) {
-      return result(error?.code === "UNKNOWN_STAGE" ? 400 : 500, {
-        error: error instanceof Error ? error.message : "重跑知识蒸馏阶段失败。"
-      });
-    }
-  }
-
-  if (id === "knowledge.distillation.workbench.stage.export") {
-    const operationResult = await workbench.exportStage({
-      runId,
-      stageId: input.stageId || input["stage-id"] || input.stage || "",
-      format: input.format || "markdown"
-    });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台阶段导出不存在。" });
-    }
-    return result(200, {
-      __binaryResponse: true,
-      contentType: operationResult.contentType,
-      disposition: "attachment",
-      fileName: operationResult.fileName,
-      buffer: operationResult.buffer,
-      headers: { "X-Pact-Knowledge-Export": "distillation-workbench" }
-    });
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.package") {
-    const operationResult = await workbench.exportRunPackage({ runId });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台整包导出不存在。" });
-    }
-    return result(200, {
-      __binaryResponse: true,
-      contentType: operationResult.contentType,
-      disposition: "attachment",
-      fileName: operationResult.fileName,
-      buffer: operationResult.buffer,
-      headers: { "X-Pact-Knowledge-Export": "distillation-workbench-package" }
-    });
-  }
-
-  if (id === "knowledge.distillation.workbench.runs.compare") {
-    const operationResult = await workbench.compareRuns({
-      leftRunId: runId,
-      rightRunId: input.rightRunId || input["right-run-id"] || input.right || ""
-    });
-    if (!operationResult) {
-      return result(404, { error: "知识蒸馏工作台比较对象不存在。" });
-    }
-    return result(200, operationResult);
-  }
-
-  return null;
+  return result(410, internalKnowledgeDistillationRemovedPayload(id));
 }
 
 async function executeAgentExplorationOperation({ operationId, input, context }) {
@@ -5457,6 +5700,7 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
   if (id === "knowledge.search" || id === "knowledge.search.get") {
     let payload = normalizeKnowledgeSearchInput(input);
     if (payload.rawSourceSearch === true || payload.sourceSearch === true) {
+      const { searchSourceFiles } = await loadSourceFileSearchServiceModule();
       return result(200, await searchSourceFiles({
         userDataPath: context.userDataPath,
         query: payload.query || payload.q || "",
@@ -5465,7 +5709,7 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
       }));
     }
     if (knowledgeBackendSearchRequested(payload)) {
-      const port = knowledgeBackendPortFor(context);
+      const port = await knowledgeBackendPortFor(context);
       const operationResult = await port.search(payload, {
         subject: knowledgeBackendSubject(context, payload),
         workspaceId: workspaceIdFrom(payload)
@@ -5491,6 +5735,11 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
         });
       }
       payload = workspaceApplied.input;
+      const responseProfile = resolveKnowledgeSearchResponseProfile(payload, context);
+      const agentMessageEnabled =
+        responseProfile === "agent" &&
+        payload.machineReadable !== false &&
+        payload.agentMessage !== false;
       const query = payload.query || payload.q || "";
       const hierarchyReasoning =
         payload.hierarchyReasoning === true ||
@@ -5515,6 +5764,10 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
         batchId: payload.batchId || "",
         retrievalMode: payload.retrievalMode || payload.mode || "",
         keywordOnly: payload.keywordOnly === true,
+        requestSurface: responseProfile,
+        responseProfile,
+        machineReadable: agentMessageEnabled,
+        agentMessage: agentMessageEnabled,
         retrievalProfileId: payload.retrievalProfileId || payload.profileId || "",
         profileKey: payload.profileKey || payload.retrievalProfileKey || "",
         retrievalProfile:
@@ -5531,7 +5784,7 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
         clientId: payload.clientId || payload.client_id || "",
         scopeSourceIds: payload.scopeSourceIds || payload.sourceIds || [],
         learningEnabled: payload.learningEnabled !== false,
-        explain: Boolean(payload.explain),
+        explain: agentMessageEnabled || Boolean(payload.explain),
         modalityPolicy: "multimodal"
       });
       if (allocationResult?.allocation) {
@@ -5609,8 +5862,10 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
 
   if (id === "knowledge.evidence" || id === "knowledge.evidence.get") {
     const evidenceId = input.evidenceId || input["evidence-id"] || input.id || "";
-    if (isKnowledgeBackendEvidenceId(evidenceId) || knowledgeBackendProviderRequested(input)) {
-      const port = knowledgeBackendPortFor(context);
+    const knowledgeBackendModule = await loadKnowledgeBackendPortModule();
+    const sourceFileSearchModule = await loadSourceFileSearchServiceModule();
+    if (knowledgeBackendModule.isKnowledgeBackendEvidenceId(evidenceId) || knowledgeBackendProviderRequested(input)) {
+      const port = await knowledgeBackendPortFor(context);
       const operationResult = await port.getEvidence({ ...input, evidenceId }, {
         subject: knowledgeBackendSubject(context, input),
         workspaceId: workspaceIdFrom(input)
@@ -5619,12 +5874,12 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
         appendKnowledgeAccessDecisionArtifacts(context, operationResult.accessDecision, id);
         return result(operationResult.httpStatus || 200, operationResult);
       }
-      if (isKnowledgeBackendEvidenceId(evidenceId)) {
+      if (knowledgeBackendModule.isKnowledgeBackendEvidenceId(evidenceId)) {
         return result(404, { error: "外部知识库 evidence 不存在。" });
       }
     }
-    if (isSourceEvidenceId(evidenceId)) {
-      const operationResult = await getSourceFileEvidence({
+    if (sourceFileSearchModule.isSourceEvidenceId(evidenceId)) {
+      const operationResult = await sourceFileSearchModule.getSourceFileEvidence({
         userDataPath: context.userDataPath,
         evidenceId
       });
@@ -6450,11 +6705,11 @@ async function executeCapabilityPackageOperation({ operationId, input, context }
     return result(200, await registry.describe());
   }
   if (operationId === "capability_packages.plan") {
-    return result(200, await registry.plan(input.manifest || input));
+    return result(200, await registry.plan(input));
   }
   if (operationId === "capability_packages.submit") {
     try {
-      return result(200, await registry.submit(input.manifest || input, {
+      return result(200, await registry.submit(input, {
         submittedBy: actorFrom(context.authSession, input)
       }));
     } catch (error) {
@@ -6678,10 +6933,13 @@ async function executeKnowledgeTransformationOperation({ operationId, input = {}
   if (!handledOperations.has(id)) {
     return null;
   }
+  if (id === "knowledge.distillation.export") {
+    return result(410, internalKnowledgeDistillationRemovedPayload(id));
+  }
+  const { createKnowledgeTransformationProvider } = await loadKnowledgeTransformationModule();
   const provider = createKnowledgeTransformationProvider({
     knowledgeCore: getKnowledgeCore(context.runtime),
-    metadataStore: context.metadataStore,
-    knowledgeDistillationRuntime: context.knowledgeDistillationRuntime
+    metadataStore: context.metadataStore
   });
   const subject = subjectFromAuthSession(context.authSession);
   try {
@@ -6775,6 +7033,7 @@ async function executeAssetLineageOperation({ operationId, input, context }) {
   if (!String(operationId || "").startsWith("asset_lineage.")) {
     return null;
   }
+  const { createAssetLineageRegistry } = await loadAssetLineageModule();
   const lineage = createAssetLineageRegistry({ userDataPath: context.userDataPath });
   if (operationId === "asset_lineage.describe") {
     return result(200, await lineage.describe());
@@ -6807,6 +7066,7 @@ async function executeDataConnectorOperation({ operationId, input, context }) {
   if (!String(operationId || "").startsWith("data_connectors.governance.")) {
     return null;
   }
+  const { createDataConnectorGovernance } = await loadDataConnectorGovernanceModule();
   const governance = createDataConnectorGovernance({ userDataPath: context.userDataPath });
   if (operationId === "data_connectors.governance.describe") {
     return result(200, await governance.describe());
@@ -6828,10 +7088,12 @@ async function executeDataConnectorOperation({ operationId, input, context }) {
 
 async function executePerformanceCapacityOperation({ operationId, input, context }) {
   if (operationId === "performance.capacity.targets") {
+    const { listCapacityBenchmarkTargets } = await loadPerformanceCapacityModule();
     return result(200, listCapacityBenchmarkTargets());
   }
   if (operationId === "performance.capacity.benchmark") {
     try {
+      const { runPerformanceCapacityBenchmark } = await loadPerformanceCapacityModule();
       return result(200, await runPerformanceCapacityBenchmark({
         userDataPath: context.userDataPath,
         profileId: input.profileId || input.profile || "smoke",
@@ -6840,6 +7102,38 @@ async function executePerformanceCapacityOperation({ operationId, input, context
       }));
     } catch (error) {
       return result(400, errorPayload(error, "Performance capacity benchmark failed."));
+    }
+  }
+  return null;
+}
+
+async function executeRuntimeDependencyOperation({ operationId, input, context }) {
+  if (operationId === "runtime.dependencies.list") {
+    return result(200, await listRuntimeDependencies({
+      ...input,
+      userDataPath: context.userDataPath
+    }));
+  }
+  if (operationId === "runtime.dependencies.download") {
+    try {
+      const operationResult = await downloadRuntimeDependency({
+        ...input,
+        userDataPath: context.userDataPath
+      });
+      return result(operationResult.ok ? 200 : 400, operationResult);
+    } catch (error) {
+      return result(400, errorPayload(error, "Runtime dependency download failed."));
+    }
+  }
+  if (operationId === "runtime.dependencies.configure") {
+    try {
+      const operationResult = await updateRuntimeDependencyConfiguration({
+        ...input,
+        userDataPath: context.userDataPath
+      });
+      return result(200, operationResult);
+    } catch (error) {
+      return result(400, errorPayload(error, "Runtime dependency configuration update failed."));
     }
   }
   return null;
@@ -6872,6 +7166,7 @@ export async function executeConsoleDomainOperation({ operationId, input = {}, c
     executeWorkspaceAuditOperation,
     executeAgentSyncOperation,
     executeToolManagementAuthorizationOperation,
+    executeAcpAgentRelayRuntimeOperation,
     executeStrategyManagementOperation,
     executeToolManagementPassthroughOperation,
     executeRuntimeMountOperation,
@@ -6884,6 +7179,7 @@ export async function executeConsoleDomainOperation({ operationId, input = {}, c
     executeKnowledgeEvaluationOperation,
     executeKnowledgeEvolutionOperation,
     executeKnowledgeSummarizationOperation,
+    executeExternalKnowledgeDistillationOperation,
     executeKnowledgeDistillationWorkflowOperation,
     executeAgentExplorationOperation,
     executeKnowledgeBackendOperation,
@@ -6902,7 +7198,8 @@ export async function executeConsoleDomainOperation({ operationId, input = {}, c
     executeRepoDomainOperation,
     executeAssetLineageOperation,
     executeDataConnectorOperation,
-    executePerformanceCapacityOperation
+    executePerformanceCapacityOperation,
+    executeRuntimeDependencyOperation
   ]) {
     const operationResult = await executor({ operationId, input, context });
     if (operationResult) {

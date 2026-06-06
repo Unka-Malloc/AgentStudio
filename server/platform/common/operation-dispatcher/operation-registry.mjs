@@ -4,6 +4,50 @@ import {
 } from "./operation-decorators.mjs";
 import { PROTOCOL_OPERATION_DEFINITIONS } from "./protocol-operation-definitions.mjs";
 
+const INTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_DEPRECATION = Object.freeze({
+  deprecated: true,
+  replacementService: "external.knowledge.distillation",
+  replacementOperationPrefix: "external.knowledge.distillation.",
+  lifecycle: Object.freeze({
+    status: "deprecated",
+    reason: "Internal knowledge distillation is being removed; the independently deployed external service is the only maintained algorithm surface.",
+    maintenancePolicy: "compatibility-shim-only",
+    removalTarget: "remove internal knowledge distillation modules after console callers migrate",
+    replacementService: "external.knowledge.distillation"
+  })
+});
+
+const INTERNAL_KNOWLEDGE_DISTILLATION_DEPRECATED_ASPECTS = Object.freeze([
+  "knowledge-distillation",
+  "internal-deprecated",
+  "external-replaced"
+]);
+
+const EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS = Object.freeze([
+  "external-service",
+  "external-upstream-gateway",
+  "knowledge-distillation"
+]);
+
+function internalKnowledgeDistillationOperation(operation = {}) {
+  return {
+    ...operation,
+    ...INTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_DEPRECATION,
+    description: operation.description ||
+      "Deprecated internal knowledge distillation compatibility endpoint. Use external.knowledge.distillation instead.",
+    lifecycle: {
+      ...INTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_DEPRECATION.lifecycle,
+      ...(operation.lifecycle || {})
+    },
+    aspects: [
+      ...new Set([
+        ...INTERNAL_KNOWLEDGE_DISTILLATION_DEPRECATED_ASPECTS,
+        ...(operation.aspects || [])
+      ])
+    ]
+  };
+}
+
 const REPO_OPERATION_SPECS = Object.freeze([
   ["repo.status", "repo:read", "查看代码库对象状态", ["repoId", "targetType"], "read_only", true],
   ["repo.file.read", "repo:read", "读取代码库文件", ["repoId", "path"], "read_only", true],
@@ -66,6 +110,55 @@ function repoInputSchema(required = []) {
     dryRun: { type: "boolean" }
   };
   return { type: "object", required, properties };
+}
+
+function parseOperationBody(value) {
+  if (value === null || value === undefined) {
+    return {};
+  }
+  if (Buffer.isBuffer(value)) {
+    if (value.length === 0) {
+      return {};
+    }
+    return parseOperationBody(value.toString("utf8"));
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return {};
+    }
+    try {
+      return parseOperationBody(JSON.parse(trimmed));
+    } catch {
+      return {};
+    }
+  }
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return {};
+}
+
+function isReadOnlyPrompt(context = {}) {
+  const input = {
+    ...parseOperationBody(context.requestBody),
+    ...(context.params && typeof context.params === "object" ? context.params : {})
+  };
+  const mode = String(input.mode || input.promptMode || input.askMode || "").trim().toLowerCase();
+  if (mode === "read" || mode === "read_only" || mode === "readonly") {
+    return true;
+  }
+  if (input.readOnly === true || input.readOnly === 1 || input.readOnly === "true") {
+    return true;
+  }
+  if (input.noWrite === true || input.noWrite === 1 || input.noWrite === "true") {
+    return true;
+  }
+  return false;
+}
+
+function resolveAcpPromptRisk(context = {}) {
+  return isReadOnlyPrompt(context) ? "read_only" : "repair_write";
 }
 
 function repoOperationDefinition([id, scope, label, required, risk, readOnly]) {
@@ -275,6 +368,74 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     readOnly: true,
     concurrencySafe: false,
     aspects: ["module-ecosystem", "sdk"]
+  },
+  {
+    id: "external_services.list",
+    feature: "module_management",
+    label: "外部服务列表",
+    target: { controller: "system", method: "handleExternalServices" },
+    http: { method: "GET", path: "/api/external-services", localInForwardMode: true },
+    rpc: { method: "external_services.list" },
+    cli: { command: ["external-services"], usage: "external-services" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: ["external-service-management", "composition-management", "dehydration"]
+  },
+  {
+    id: "external_services.config.get",
+    feature: "module_management",
+    label: "外部服务配置",
+    target: { controller: "system", method: "handleExternalServiceConfig" },
+    http: { method: "GET", path: "/api/external-services/config", localInForwardMode: true },
+    rpc: { method: "external_services.config.get" },
+    cli: { command: ["external-services", "config"], usage: "external-services config" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: ["external-service-management", "composition-management", "dehydration"]
+  },
+  {
+    id: "external_services.config.save",
+    feature: "module_management",
+    label: "保存外部服务配置",
+    target: { controller: "system", method: "handleExternalServiceConfigSave" },
+    http: { method: "POST", path: "/api/external-services/config", localInForwardMode: true },
+    rpc: { method: "external_services.config.save", body: "params" },
+    cli: { command: ["external-services", "config", "save"], usage: "external-services config save --body external-service.json" },
+    requiredScopes: ["runtime:admin"],
+    concurrencySafe: false,
+    concurrencyGroup: "external-services.config",
+    aspects: ["external-service-management", "composition-management", "dehydration"],
+    safety: { risk: "safe_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
+    id: "external_services.config.verify",
+    feature: "module_management",
+    label: "校验外部服务配置",
+    target: { controller: "system", method: "handleExternalServiceConfigVerify" },
+    http: { method: "POST", path: "/api/external-services/verify", localInForwardMode: true },
+    rpc: { method: "external_services.config.verify", body: "params" },
+    cli: { command: ["external-services", "config", "verify"], usage: "external-services config verify --body external-service.json" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: ["external-service-management", "composition-management", "dehydration"],
+    safety: { risk: "read_only" }
+  },
+  {
+    id: "external_services.runtime.refresh",
+    feature: "module_management",
+    label: "刷新外部服务后台",
+    target: { controller: "system", method: "handleExternalServiceRuntimeRefresh" },
+    http: { method: "POST", path: "/api/external-services/refresh", localInForwardMode: true },
+    rpc: { method: "external_services.runtime.refresh", body: "params" },
+    cli: { command: ["external-services", "refresh"], usage: "external-services refresh [--service-id id]" },
+    requiredScopes: ["runtime:admin"],
+    concurrencySafe: false,
+    concurrencyGroup: "external-services.runtime",
+    aspects: ["external-service-management", "composition-management", "dehydration", "tool-management"],
+    safety: { risk: "safe_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
   },
   {
     id: "workspace_governance.describe",
@@ -1132,6 +1293,70 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["console:read"]
   },
   {
+    id: "runtime.dependencies.list",
+    feature: "runtime",
+    label: "运行时依赖状态",
+    target: { controller: "system", method: "handleListRuntimeDependencies" },
+    http: { method: "GET", path: "/api/runtime/dependencies" },
+    rpc: { method: "runtime.dependencies.list" },
+    cli: { command: ["runtime", "dependencies"], usage: "runtime dependencies" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false }
+  },
+  {
+    id: "runtime.dependencies.download",
+    feature: "runtime",
+    label: "按需准备运行时依赖",
+    target: { controller: "system", method: "handleDownloadRuntimeDependency" },
+    http: { method: "POST", path: "/api/runtime/dependencies/download" },
+    rpc: { method: "runtime.dependencies.download", body: "params" },
+    cli: { command: ["runtime", "dependencies", "download"], usage: "runtime dependencies download --body request.json" },
+    requiredScopes: ["runtime:admin"],
+    concurrencyGroup: "runtime.dependencies.download",
+    inputSchema: {
+      type: "object",
+      required: ["targetId"],
+      properties: {
+        targetId: { type: "string" },
+        version: { type: "string" },
+        root: { type: "string" },
+        dryRun: { type: "boolean" },
+        confirm: { type: "boolean" }
+      }
+    },
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
+    id: "runtime.dependencies.configure",
+    feature: "runtime",
+    label: "保存运行时依赖配置",
+    target: { controller: "system", method: "handleConfigureRuntimeDependency" },
+    http: { method: "POST", path: "/api/runtime/dependencies/configuration" },
+    rpc: { method: "runtime.dependencies.configure", body: "params" },
+    cli: { command: ["runtime", "dependencies", "configuration"], usage: "runtime dependencies configuration --body request.json" },
+    requiredScopes: ["runtime:admin"],
+    inputSchema: {
+      type: "object",
+      required: ["entries"],
+      properties: {
+        targetId: { type: "string" },
+        entries: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["key"],
+            properties: {
+              key: { type: "string" },
+              value: { type: "string" }
+            }
+          }
+        }
+      }
+    },
+    safety: { risk: "safe_write", requiresConfirmation: false, approvalScope: "runtime:admin" }
+  },
+  {
     id: "runtime.path_browse",
     feature: "runtime",
     label: "服务端路径浏览",
@@ -1322,6 +1547,20 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     concurrencySafe: true,
     safety: { risk: "read_only", requiresConfirmation: false },
     aspects: ["strategy-management", "agent-policy", "model-routing"]
+  },
+  {
+    id: "strategy.route_policy.evaluate",
+    feature: "strategy_management",
+    label: "评估切面路由策略",
+    target: { controller: "system", method: "handleStrategyManagement" },
+    http: { method: "POST", path: "/api/strategy/route-policy/evaluate" },
+    rpc: { method: "strategy.route_policy.evaluate", body: "params" },
+    cli: { command: ["strategy", "route-policy", "evaluate"], usage: "strategy route-policy evaluate --body payload.json" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["strategy-management", "route-policy", "upstream-service-aspect", "downstream-client-aspect"]
   },
   {
     id: "strategy.tool_policy.preview",
@@ -1706,13 +1945,124 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       query: [
         { name: "limit", aliases: ["limit"] },
         { name: "since", aliases: ["since"] },
-        { name: "until", aliases: ["until"] }
+        { name: "until", aliases: ["until"] },
+        { name: "toolId", aliases: ["toolId", "tool-id"] },
+        { name: "route", aliases: ["route"] },
+        { name: "transport", aliases: ["transport"] },
+        { name: "status", aliases: ["status"] },
+        { name: "statusCode", aliases: ["statusCode", "status-code"] },
+        { name: "completionStatus", aliases: ["completionStatus", "completion-status"] },
+        { name: "bucketSeconds", aliases: ["bucketSeconds", "bucket-seconds"] }
       ],
-      coerce: { limit: "number" }
+      coerce: { limit: "number", statusCode: "number", bucketSeconds: "number" }
     },
-    rpc: {method:"tool_management.metrics_summary",syntheticPath:"/api/tool-management/v1/metrics/summary",query:[{name:"limit",aliases:["limit"]},{name:"since",aliases:["since"]},{name:"until",aliases:["until"]}]},
-    cli: { command: ["tools", "metrics"], usage: "tools metrics" },
+    rpc: {method:"tool_management.metrics_summary",syntheticPath:"/api/tool-management/v1/metrics/summary",query:[{name:"limit",aliases:["limit"]},{name:"since",aliases:["since"]},{name:"until",aliases:["until"]},{name:"toolId",aliases:["toolId","tool-id"]},{name:"route",aliases:["route"]},{name:"transport",aliases:["transport"]},{name:"status",aliases:["status"]},{name:"statusCode",aliases:["statusCode","status-code"]},{name:"completionStatus",aliases:["completionStatus","completion-status"]},{name:"bucketSeconds",aliases:["bucketSeconds","bucket-seconds"]}]},
+    cli: { command: ["tools", "metrics"], usage: "tools metrics [--tool-id ID] [--route PATH] [--transport KIND] [--bucket-seconds N]" },
     requiredScopes: ["console:read"]
+  },
+  {
+    id: "tool_management.metrics_export",
+    feature: "tool_management",
+    label: "工具指标导出",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/tool-management/v1/metrics/export",
+      localInForwardMode: true,
+      query: [
+        { name: "limit", aliases: ["limit"] },
+        { name: "since", aliases: ["since"] },
+        { name: "until", aliases: ["until"] },
+        { name: "kind", aliases: ["kind"] },
+        { name: "toolId", aliases: ["toolId", "tool-id"] },
+        { name: "route", aliases: ["route"] },
+        { name: "transport", aliases: ["transport"] },
+        { name: "status", aliases: ["status"] },
+        { name: "statusCode", aliases: ["statusCode", "status-code"] },
+        { name: "completionStatus", aliases: ["completionStatus", "completion-status"] }
+      ],
+      coerce: { limit: "number", statusCode: "number" }
+    },
+    rpc: {method:"tool_management.metrics_export",syntheticPath:"/api/tool-management/v1/metrics/export",query:[{name:"limit",aliases:["limit"]},{name:"since",aliases:["since"]},{name:"until",aliases:["until"]},{name:"kind",aliases:["kind"]},{name:"toolId",aliases:["toolId","tool-id"]},{name:"route",aliases:["route"]},{name:"transport",aliases:["transport"]},{name:"status",aliases:["status"]},{name:"statusCode",aliases:["statusCode","status-code"]},{name:"completionStatus",aliases:["completionStatus","completion-status"]}]},
+    cli: { command: ["tools", "metrics", "export"], usage: "tools metrics export [--kind all|tool|request] [--output metrics.json]" },
+    requiredScopes: ["console:read"]
+  },
+  {
+    id: "tool_management.metrics_health",
+    feature: "tool_management",
+    label: "工具指标健康状态",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/tool-management/v1/metrics/health",
+      localInForwardMode: true,
+      query: [
+        { name: "windowSeconds", aliases: ["windowSeconds", "window-seconds"] },
+        { name: "maxRequestErrorRate", aliases: ["maxRequestErrorRate", "max-request-error-rate"] },
+        { name: "maxToolFailureRate", aliases: ["maxToolFailureRate", "max-tool-failure-rate"] },
+        { name: "maxDeniedRate", aliases: ["maxDeniedRate", "max-denied-rate"] },
+        { name: "minRequests", aliases: ["minRequests", "min-requests"] }
+      ],
+      coerce: {
+        windowSeconds: "number",
+        maxRequestErrorRate: "number",
+        maxToolFailureRate: "number",
+        maxDeniedRate: "number",
+        minRequests: "number"
+      }
+    },
+    rpc: {method:"tool_management.metrics_health",syntheticPath:"/api/tool-management/v1/metrics/health",query:[{name:"windowSeconds",aliases:["windowSeconds","window-seconds"]},{name:"maxRequestErrorRate",aliases:["maxRequestErrorRate","max-request-error-rate"]},{name:"maxToolFailureRate",aliases:["maxToolFailureRate","max-tool-failure-rate"]},{name:"maxDeniedRate",aliases:["maxDeniedRate","max-denied-rate"]},{name:"minRequests",aliases:["minRequests","min-requests"]}]},
+    cli: { command: ["tools", "metrics", "health"], usage: "tools metrics health [--window-seconds 300]" },
+    requiredScopes: ["console:read"]
+  },
+  {
+    id: "tool_management.metrics_prometheus",
+    feature: "tool_management",
+    label: "工具指标 Prometheus 导出",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/tool-management/v1/metrics/prometheus",
+      localInForwardMode: true,
+      query: [
+        { name: "windowSeconds", aliases: ["windowSeconds", "window-seconds"] },
+        { name: "maxRequestErrorRate", aliases: ["maxRequestErrorRate", "max-request-error-rate"] },
+        { name: "maxToolFailureRate", aliases: ["maxToolFailureRate", "max-tool-failure-rate"] },
+        { name: "maxDeniedRate", aliases: ["maxDeniedRate", "max-denied-rate"] },
+        { name: "minRequests", aliases: ["minRequests", "min-requests"] }
+      ],
+      coerce: {
+        windowSeconds: "number",
+        maxRequestErrorRate: "number",
+        maxToolFailureRate: "number",
+        maxDeniedRate: "number",
+        minRequests: "number"
+      }
+    },
+    rpc: {method:"tool_management.metrics_prometheus",syntheticPath:"/api/tool-management/v1/metrics/prometheus",query:[{name:"windowSeconds",aliases:["windowSeconds","window-seconds"]},{name:"maxRequestErrorRate",aliases:["maxRequestErrorRate","max-request-error-rate"]},{name:"maxToolFailureRate",aliases:["maxToolFailureRate","max-tool-failure-rate"]},{name:"maxDeniedRate",aliases:["maxDeniedRate","max-denied-rate"]},{name:"minRequests",aliases:["minRequests","min-requests"]}]},
+    cli: { command: ["tools", "metrics", "prometheus"], usage: "tools metrics prometheus [--window-seconds 300]" },
+    requiredScopes: ["console:read"]
+  },
+  {
+    id: "tool_management.metrics_storage",
+    feature: "tool_management",
+    label: "工具指标存储摘要",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: { method: "GET", path: "/api/tool-management/v1/metrics/storage", localInForwardMode: true },
+    rpc: {method:"tool_management.metrics_storage",syntheticPath:"/api/tool-management/v1/metrics/storage"},
+    cli: { command: ["tools", "metrics", "storage"], usage: "tools metrics storage" },
+    requiredScopes: ["console:read"]
+  },
+  {
+    id: "tool_management.metrics_prune",
+    feature: "tool_management",
+    label: "工具指标清理",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: { method: "POST", path: "/api/tool-management/v1/metrics/prune", localInForwardMode: true },
+    rpc: {method:"tool_management.metrics_prune",syntheticPath:"/api/tool-management/v1/metrics/prune",body:"params"},
+    cli: { command: ["tools", "metrics", "prune"], usage: "tools metrics prune --confirm --body prune.json" },
+    requiredScopes: ["runtime:admin"],
+    safety: { risk: "repair_write" }
   },
   {
     id: "tool_management.events",
@@ -1728,6 +2078,481 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     },
     rpc: {method:"tool_management.events",syntheticPath:"/api/tool-management/v1/events",query:[{name:"limit",aliases:["limit"]}]},
     requiredScopes: ["console:read"]
+  },
+  {
+    id: "tool_management.pending_operations.list",
+    feature: "tool_management",
+    label: "待审批工具操作",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/tool-management/v1/pending-operations",
+      localInForwardMode: true,
+      query: [
+        { name: "status", aliases: ["status"] },
+        { name: "limit", aliases: ["limit"] }
+      ],
+      coerce: { limit: "number" }
+    },
+    rpc: {method:"tool_management.pending_operations.list",syntheticPath:"/api/tool-management/v1/pending-operations",query:[{name:"status",aliases:["status"]},{name:"limit",aliases:["limit"]}]},
+    cli: { command: ["tools", "pending", "list"], usage: "tools pending list [--status pending]" },
+    requiredScopes: ["console:read"],
+    safety: { risk: "read_only", requiresConfirmation: false }
+  },
+  {
+    id: "tool_management.pending_operations.resolve",
+    feature: "tool_management",
+    label: "审批待执行工具操作",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: { method: "POST", path: "/api/tool-management/v1/pending-operations/:pendingOperationId/resolve", localInForwardMode: true },
+    rpc: {method:"tool_management.pending_operations.resolve",syntheticPath:"/api/tool-management/v1/pending-operations/:pendingOperationId/resolve",params:[{name:"pendingOperationId",aliases:["pendingOperationId","pending-operation-id","id"],required:true}],body:"params"},
+    cli: { command: ["tools", "pending", "resolve"], usage: "tools pending resolve --id PENDING_OPERATION_ID --body decision.json" },
+    requiredScopes: ["runtime:admin"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
+    id: "acp_agent_relay.virtual_agents.list",
+    feature: "tool_management",
+    label: "列出可见虚拟 ACP 中继 Agent",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/agent-relay/v1/virtual-agents",
+      localInForwardMode: true,
+      query: [
+        { name: "workspaceId", aliases: ["workspaceId", "workspace-id", "workspaceId"] }
+      ]
+    },
+    rpc: {
+      method: "acp_agent_relay.virtual_agents.list",
+      syntheticPath: "/api/agent-relay/v1/virtual-agents",
+      query: [{ name: "workspaceId", aliases: ["workspaceId", "workspace-id", "workspace-id"] }]
+    },
+    cli: { command: ["agent-relay", "virtual-agents", "list"], usage: "agent-relay virtual-agents list --workspace-id WORKSPACE_ID" },
+    requiredScopes: ["agent_relay:view"],
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.virtual_agents.upsert",
+    feature: "tool_management",
+    label: "注册或更新虚拟 ACP 中继 Agent",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/virtual-agents",
+      localInForwardMode: true,
+      body: "params"
+    },
+    rpc: {
+      method: "acp_agent_relay.virtual_agents.upsert",
+      syntheticPath: "/api/agent-relay/v1/virtual-agents",
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "virtual-agents", "upsert"],
+      usage: "agent-relay virtual-agents upsert --body virtual-agent.json"
+    },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "agent_relay:operate" },
+    aspects: ["tool-management", "agent-relay", "internal"]
+  },
+  {
+    id: "acp_agent_relay.targets.list",
+    feature: "tool_management",
+    label: "列出可用目标 ACP",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/agent-relay/v1/targets",
+      localInForwardMode: true
+    },
+    rpc: { method: "acp_agent_relay.targets.list", syntheticPath: "/api/agent-relay/v1/targets" },
+    cli: { command: ["agent-relay", "targets", "list"], usage: "agent-relay targets list" },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay", "internal"]
+  },
+  {
+    id: "acp_agent_relay.targets.upsert",
+    feature: "tool_management",
+    label: "注册或更新目标 ACP",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/targets",
+      localInForwardMode: true,
+      body: "params"
+    },
+    rpc: { method: "acp_agent_relay.targets.upsert", syntheticPath: "/api/agent-relay/v1/targets", body: "params" },
+    cli: { command: ["agent-relay", "targets", "upsert"], usage: "agent-relay targets upsert --body target.json" },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "agent_relay:operate" },
+    aspects: ["tool-management", "agent-relay", "internal"]
+  },
+  {
+    id: "acp_agent_relay.downstream_clients.refresh",
+    feature: "tool_management",
+    label: "刷新下游智能体适配层",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/downstream-clients/refresh",
+      localInForwardMode: true,
+      body: "params"
+    },
+    rpc: {
+      method: "acp_agent_relay.downstream_clients.refresh",
+      syntheticPath: "/api/agent-relay/v1/downstream-clients/refresh",
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "downstream-clients", "refresh"],
+      usage: "agent-relay downstream-clients refresh --body refresh.json"
+    },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "agent_relay:operate" },
+    aspects: ["tool-management", "agent-relay", "internal"]
+  },
+  {
+    id: "acp_agent_relay.sessions.list",
+    feature: "tool_management",
+    label: "列出 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/agent-relay/v1/sessions",
+      localInForwardMode: true,
+      query: [
+        { name: "sourceId", aliases: ["sourceId", "source-id"] },
+        { name: "workspaceId", aliases: ["workspaceId", "workspace-id"] },
+        { name: "virtualAgentId", aliases: ["virtualAgentId", "virtual-agent-id", "agentId", "agent-id"] },
+        { name: "targetId", aliases: ["targetId", "target-id"] },
+        { name: "lifecycleState", aliases: ["lifecycleState", "lifecycle-state", "status", "state"] },
+        { name: "includePendingPermissionRequests", aliases: ["includePendingPermissionRequests", "include-pending-permission-requests", "includePendingPermissions"], type: "boolean" },
+        { name: "limit", aliases: ["limit"] }
+      ],
+      coerce: { limit: "number", includePendingPermissionRequests: "boolean" }
+    },
+    rpc: {
+      method: "acp_agent_relay.sessions.list",
+      syntheticPath: "/api/agent-relay/v1/sessions",
+      query: [
+        { name: "sourceId", aliases: ["sourceId", "source-id"] },
+        { name: "workspaceId", aliases: ["workspaceId", "workspace-id"] },
+        { name: "virtualAgentId", aliases: ["virtualAgentId", "virtual-agent-id", "agentId", "agent-id"] },
+        { name: "targetId", aliases: ["targetId", "target-id"] },
+        { name: "lifecycleState", aliases: ["lifecycleState", "lifecycle-state", "status", "state"] },
+        { name: "includePendingPermissionRequests", aliases: ["includePendingPermissionRequests", "include-pending-permission-requests", "includePendingPermissions"], type: "boolean" },
+        { name: "limit", aliases: ["limit"] }
+      ]
+    },
+    cli: { command: ["agent-relay", "sessions", "list"], usage: "agent-relay sessions list --workspace-id WORKSPACE_ID" },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.sessions.get",
+    feature: "tool_management",
+    label: "读取 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/agent-relay/v1/sessions/:sessionId",
+      localInForwardMode: true,
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      query: [{ name: "includePendingPermissionRequests", aliases: ["includePendingPermissionRequests", "include-pending-permission-requests", "includePendingPermissions"], type: "boolean" }],
+      coerce: { includePendingPermissionRequests: "boolean" }
+    },
+    rpc: {
+      method: "acp_agent_relay.sessions.get",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      query: [{ name: "includePendingPermissionRequests", aliases: ["includePendingPermissionRequests", "include-pending-permission-requests", "includePendingPermissions"], type: "boolean" }]
+    },
+    cli: { command: ["agent-relay", "sessions", "get"], usage: "agent-relay sessions get --id SESSION_ID" },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.turns.list",
+    feature: "tool_management",
+    label: "列出 ACP 中继会话 Turn",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/agent-relay/v1/sessions/:sessionId/turns",
+      localInForwardMode: true,
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      query: [
+        { name: "limit", aliases: ["limit"] },
+        { name: "includePendingPermissionRequests", aliases: ["includePendingPermissionRequests", "include-pending-permission-requests", "includePendingPermissions"], type: "boolean" }
+      ],
+      coerce: { limit: "number", includePendingPermissionRequests: "boolean" }
+    },
+    rpc: {
+      method: "acp_agent_relay.turns.list",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/turns",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      query: [
+        { name: "limit", aliases: ["limit"] },
+        { name: "includePendingPermissionRequests", aliases: ["includePendingPermissionRequests", "include-pending-permission-requests", "includePendingPermissions"], type: "boolean" }
+      ]
+    },
+    cli: { command: ["agent-relay", "turns", "list"], usage: "agent-relay turns list --id SESSION_ID" },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.turn.observe",
+    feature: "tool_management",
+    label: "刷新 ACP 中继 Turn 目标观测",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/turns/:turnId/observe",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.turn.observe",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/turns/:turnId/observe",
+      params: [
+        { name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true },
+        { name: "turnId", aliases: ["turnId", "turn-id", "relayTurnId", "relay-turn-id"], required: true }
+      ],
+      body: "params"
+    },
+    cli: { command: ["agent-relay", "turn", "observe"], usage: "agent-relay turn observe --id SESSION_ID --turn-id TURN_ID" },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay", "observability"]
+  },
+  {
+    id: "acp_agent_relay.virtual_agent.initialize",
+    feature: "tool_management",
+    label: "初始化虚拟 ACP 中继 Agent 会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/virtual-agents/:virtualAgentId/initialize",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.virtual_agent.initialize",
+      syntheticPath: "/api/agent-relay/v1/virtual-agents/:virtualAgentId/initialize",
+      params: [{ name: "virtualAgentId", aliases: ["virtualAgentId", "virtual-agent-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "virtual-agents", "initialize"],
+      usage: "agent-relay virtual-agents initialize --id VIRTUAL_AGENT_ID --body init.json"
+    },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.session.create",
+    feature: "tool_management",
+    label: "创建 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: { method: "POST", path: "/api/agent-relay/v1/sessions", localInForwardMode: true },
+    rpc: { method: "acp_agent_relay.session.create", syntheticPath: "/api/agent-relay/v1/sessions", body: "params" },
+    cli: { command: ["agent-relay", "session", "create"], usage: "agent-relay session create --body session.json" },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.session.resume",
+    feature: "tool_management",
+    label: "恢复 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/resume",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.session.resume",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/resume",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: { command: ["agent-relay", "session", "resume"], usage: "agent-relay session resume --id SESSION_ID --body resume.json" },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.session.wake",
+    feature: "tool_management",
+    label: "唤醒 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/wake",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.session.wake",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/wake",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: { command: ["agent-relay", "session", "wake"], usage: "agent-relay session wake --id SESSION_ID" },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.prompt.send",
+    feature: "tool_management",
+    label: "发送 ACP 中继 Prompt",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/prompt",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.prompt.send",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/prompt",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "prompt", "send"],
+      usage: "agent-relay prompt send --id SESSION_ID --body prompt.json"
+    },
+    requiredScopes: ["agent_relay:operate"],
+    safety: {
+      risk: "repair_write",
+      approvalScope: "agent_relay:operate",
+      resolveRisk: resolveAcpPromptRisk
+    },
+    aspects: ["tool-management", "agent-relay", "prompt"]
+  },
+  {
+    id: "acp_agent_relay.fs.read_text_file",
+    feature: "tool_management",
+    label: "读取 ACP 中继工作区文本文件",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/fs/read-text-file",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.fs.read_text_file",
+      syntheticPath: "/api/agent-relay/v1/fs/read-text-file",
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "fs", "read-text-file"],
+      usage: "agent-relay fs read-text-file --body read.json"
+    },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay", "filesystem"]
+  },
+  {
+    id: "acp_agent_relay.fs.write_text_file",
+    feature: "tool_management",
+    label: "写入 ACP 中继工作区文本文件",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/fs/write-text-file",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.fs.write_text_file",
+      syntheticPath: "/api/agent-relay/v1/fs/write-text-file",
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "fs", "write-text-file"],
+      usage: "agent-relay fs write-text-file --body write.json"
+    },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "agent_relay:operate" },
+    aspects: ["tool-management", "agent-relay", "filesystem"]
+  },
+  {
+    id: "acp_agent_relay.session.cancel",
+    feature: "tool_management",
+    label: "取消 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/cancel",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.session.cancel",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/cancel",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: { command: ["agent-relay", "session", "cancel"], usage: "agent-relay session cancel --id SESSION_ID" },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.session.close",
+    feature: "tool_management",
+    label: "关闭 ACP 中继会话",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/close",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.session.close",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/close",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: { command: ["agent-relay", "session", "close"], usage: "agent-relay session close --id SESSION_ID" },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay"]
+  },
+  {
+    id: "acp_agent_relay.permission.resolve",
+    feature: "tool_management",
+    label: "解析 ACP 中继 Permission 请求",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/:sessionId/permission/resolve",
+      localInForwardMode: true
+    },
+    rpc: {
+      method: "acp_agent_relay.permission.resolve",
+      syntheticPath: "/api/agent-relay/v1/sessions/:sessionId/permission/resolve",
+      params: [{ name: "sessionId", aliases: ["sessionId", "session-id", "id"], required: true }],
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "permission", "resolve"],
+      usage: "agent-relay permission resolve --id SESSION_ID --body decision.json"
+    },
+    requiredScopes: ["agent_relay:operate"],
+    safety: { risk: "safe_write", requiresConfirmation: false, approvalScope: "agent_relay:operate" },
+    aspects: ["tool-management", "agent-relay", "internal"]
   },
   {
     id: "tool_management.mcp.request_authorization",
@@ -2175,7 +3000,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
   {
     id: "system.background_processes",
     feature: "system",
-    label: "后台守护进程状态",
+    label: "后台 Worker 管理进程状态",
     target: { controller: "system", method: "handleGetBackgroundProcesses" },
     http: { method: "GET", path: "/api/system/background-processes", localInForwardMode: true },
     rpc: { method: "system.background_processes" },
@@ -2245,6 +3070,20 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { alertId: ["alert-id", "id"] }
     },
     requiredScopes: ["maintenance:admin"]
+  },
+  {
+    id: "system.background_supervisor.recover",
+    feature: "system",
+    label: "拉起后台 Worker 管理进程",
+    target: { controller: "system", method: "handleRecoverBackgroundSupervisor" },
+    http: { method: "POST", path: "/api/system/background-supervisor/recover", localInForwardMode: true },
+    rpc: { method: "system.background_supervisor.recover" },
+    cli: {
+      command: ["system", "background-supervisor", "recover"],
+      usage: "system background-supervisor recover"
+    },
+    requiredScopes: ["maintenance:admin"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
   },
   {
     id: "knowledge.affair_taxonomy",
@@ -3002,7 +3841,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     cli: { command: ["knowledge", "gold-cases", "save"], usage: "knowledge gold-cases save --body gold-case.json" },
     requiredScopes: ["knowledge:maintain"]
   },
-  {
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.runs.create",
     feature: "knowledge",
     label: "创建知识蒸馏任务",
@@ -3018,8 +3857,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       ]
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.runs.get",
     feature: "knowledge",
     label: "读取知识蒸馏任务",
@@ -3035,8 +3874,352 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:read"]
+  }),
+  {
+    id: "external.knowledge.distillation.service.health",
+    feature: "external",
+    label: "外部知识蒸馏服务健康检查",
+    description: "Health probe for the registered external knowledge distillation service. Deprecated internal knowledge.distillation.* APIs only return migration metadata.",
+    target: { controller: "system", method: "handleExternalKnowledgeDistillationHealth" },
+    http: {
+      method: "GET",
+      path: "/api/external/knowledge/distillation/health",
+      query: [
+        { name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] }
+      ]
+    },
+    rpc: {
+      method: "external.knowledge.distillation.service.health",
+      query: [{ name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] }]
+    },
+    cli: {
+      command: ["external", "knowledge", "distillation", "health"],
+      usage: "external knowledge distillation health [--base-url URL]"
+    },
+    requiredScopes: ["knowledge:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
   },
   {
+    id: "external.knowledge.distillation.service.capabilities",
+    feature: "external",
+    label: "外部知识蒸馏服务能力",
+    description: "Capability document for the registered external knowledge distillation service.",
+    target: { controller: "system", method: "handleExternalKnowledgeDistillationCapabilities" },
+    http: {
+      method: "GET",
+      path: "/api/external/knowledge/distillation/capabilities",
+      query: [
+        { name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] }
+      ]
+    },
+    rpc: {
+      method: "external.knowledge.distillation.service.capabilities",
+      query: [{ name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] }]
+    },
+    cli: {
+      command: ["external", "knowledge", "distillation", "capabilities"],
+      usage: "external knowledge distillation capabilities [--base-url URL]"
+    },
+    requiredScopes: ["knowledge:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
+  },
+  {
+    id: "external.knowledge.distillation.service.runtime_health",
+    feature: "external",
+    label: "外部知识蒸馏服务运行时状态",
+    description: "Runtime dependency doctor for the registered external knowledge distillation service, including OCR and PDF visual parser availability.",
+    target: { controller: "system", method: "handleExternalKnowledgeDistillationRuntimeHealth" },
+    http: {
+      method: "GET",
+      path: "/api/external/knowledge/distillation/runtime/health",
+      query: [
+        { name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] }
+      ]
+    },
+    rpc: {
+      method: "external.knowledge.distillation.service.runtime_health",
+      query: [{ name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] }]
+    },
+    cli: {
+      command: ["external", "knowledge", "distillation", "runtime", "health"],
+      usage: "external knowledge distillation runtime health [--base-url URL]"
+    },
+    requiredScopes: ["knowledge:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: [...EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS, "runtime-doctor"]
+  },
+  {
+    id: "external.knowledge.distillation.runs.list",
+    feature: "external",
+    label: "列出外部知识蒸馏任务",
+    target: { controller: "system", method: "handleExternalKnowledgeDistillationRunsList" },
+    http: {
+      method: "GET",
+      path: "/api/external/knowledge/distillation/runs",
+      query: [
+        { name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] },
+        { name: "limit", aliases: ["limit"] }
+      ],
+      coerce: { limit: "number" }
+    },
+    rpc: {
+      method: "external.knowledge.distillation.runs.list",
+      query: [
+        { name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] },
+        { name: "limit", aliases: ["limit"] }
+      ]
+    },
+    cli: {
+      command: ["external", "knowledge", "distillation", "list"],
+      usage: "external knowledge distillation list [--base-url URL] [--limit 50]"
+    },
+    requiredScopes: ["knowledge:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
+  },
+  {
+    id: "external.knowledge.distillation.runs.create",
+    feature: "external",
+    label: "创建外部知识蒸馏任务",
+    description: "Create a run on the registered external knowledge distillation service.",
+    target: { controller: "system", method: "handleExternalKnowledgeDistillationRunsCreate" },
+    http: { method: "POST", path: "/api/external/knowledge/distillation/runs" },
+    rpc: { method: "external.knowledge.distillation.runs.create", body: "params" },
+    cli: {
+      command: ["external", "knowledge", "distillation", "run"],
+      usage: "external knowledge distillation run --body request.json"
+    },
+    inputSchema: {
+      type: "object",
+      required: ["workflowScope"],
+      properties: {
+        workflowScope: {
+          type: "string",
+          enum: ["document", "corpus", "project"],
+          default: "project",
+          description: "Selects the distillation workflow boundary explicitly. Use document for a single source, corpus for a multi-document corpus, and project for project-level convergence."
+        },
+        targetDocumentId: { type: "string" },
+        documentId: { type: "string" },
+        sourceId: { type: "string" },
+        fileName: { type: "string" },
+        targetTitle: { type: "string" },
+        documentTitle: { type: "string" },
+        targetDocumentTitle: { type: "string" },
+        query: { type: "string" },
+        title: { type: "string" },
+        normalizedDocuments: {
+          type: "array",
+          description: "Preferred parsed document contract input. The distillation algorithm consumes this boundary, not raw file payloads."
+        },
+        normalizedDocumentSet: {
+          type: "object",
+          description: "Preferred parsed document set envelope containing documents and an optional contract."
+        },
+        documents: {
+          type: "array",
+          description: "Parsed document records. Use this for already-normalized source text and metadata."
+        },
+        rawDocuments: {
+          type: "array",
+          deprecated: true,
+          description: "Legacy alias for parsed document records. Do not send raw files through the distillation algorithm boundary."
+        },
+        rawDocumentsManifestPath: {
+          type: "string",
+          deprecated: true,
+          description: "Legacy ingestion-adapter manifest path. Platform parsing should normally produce normalizedDocuments before distillation."
+        },
+        responseProfile: { type: "string", enum: ["console", "agent", "api"] }
+      }
+    },
+    requiredScopes: ["knowledge:maintain"],
+    safety: { risk: "safe_write" },
+    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
+  },
+  {
+    id: "external.knowledge.distillation.runs.get",
+    feature: "external",
+    label: "读取外部知识蒸馏任务",
+    target: { controller: "system", method: "handleExternalKnowledgeDistillationRunGet" },
+    http: {
+      method: "GET",
+      path: "/api/external/knowledge/distillation/runs/:runId",
+      query: [
+        { name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] }
+      ]
+    },
+    rpc: {
+      method: "external.knowledge.distillation.runs.get",
+      params: [{ name: "runId", aliases: ["run-id", "id"], required: true }],
+      query: [{ name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] }]
+    },
+    cli: {
+      command: ["external", "knowledge", "distillation", "get"],
+      usage: "external knowledge distillation get --id RUN_ID [--base-url URL]",
+      pathParams: { runId: ["run-id", "id"] }
+    },
+    requiredScopes: ["knowledge:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
+  },
+  {
+    id: "external.knowledge.distillation.runs.cancel",
+    feature: "external",
+    label: "取消外部知识蒸馏任务",
+    target: { controller: "system", method: "handleExternalKnowledgeDistillationRunCancel" },
+    http: { method: "POST", path: "/api/external/knowledge/distillation/runs/:runId/cancel" },
+    rpc: { method: "external.knowledge.distillation.runs.cancel", body: "params" },
+    cli: {
+      command: ["external", "knowledge", "distillation", "cancel"],
+      usage: "external knowledge distillation cancel --id RUN_ID",
+      pathParams: { runId: ["run-id", "id"] }
+    },
+    requiredScopes: ["knowledge:maintain"],
+    safety: { risk: "safe_write" },
+    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
+  },
+  {
+    id: "external.knowledge.distillation.evidence.query",
+    feature: "external",
+    label: "查询外部知识蒸馏证据",
+    description: "Machine-readable filtered graph evidence query for agents. Returns bounded text units, entities, relationships, claims, and community reports without downloading the full evidence artifact.",
+    target: { controller: "system", method: "handleExternalKnowledgeDistillationEvidenceQuery" },
+    http: {
+      method: "GET",
+      path: "/api/external/knowledge/distillation/runs/:runId/evidence",
+      query: [
+        { name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] },
+        { name: "entity", aliases: ["entity", "entityQuery", "entity-query"] },
+        { name: "relationship", aliases: ["relationship", "relationshipQuery", "relationship-query"] },
+        { name: "claimStatus", aliases: ["claim-status", "status"] },
+        { name: "claim", aliases: ["claim", "claimQuery", "claim-query"] },
+        { name: "sourceId", aliases: ["source-id", "documentId", "document-id"] },
+        { name: "groupId", aliases: ["group-id", "communityId", "community-id"] },
+        { name: "timeFrom", aliases: ["time-from", "from"] },
+        { name: "timeTo", aliases: ["time-to", "to"] },
+        { name: "limit", aliases: ["limit", "pageSize", "page-size"] }
+      ],
+      coerce: { limit: "number" }
+    },
+    rpc: {
+      method: "external.knowledge.distillation.evidence.query",
+      params: [{ name: "runId", aliases: ["run-id", "id"], required: true }],
+      query: [
+        { name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] },
+        { name: "entity", aliases: ["entity", "entityQuery", "entity-query"] },
+        { name: "relationship", aliases: ["relationship", "relationshipQuery", "relationship-query"] },
+        { name: "claimStatus", aliases: ["claim-status", "status"] },
+        { name: "claim", aliases: ["claim", "claimQuery", "claim-query"] },
+        { name: "sourceId", aliases: ["source-id", "documentId", "document-id"] },
+        { name: "groupId", aliases: ["group-id", "communityId", "community-id"] },
+        { name: "timeFrom", aliases: ["time-from", "from"] },
+        { name: "timeTo", aliases: ["time-to", "to"] },
+        { name: "limit", aliases: ["limit", "pageSize", "page-size"] }
+      ]
+    },
+    cli: {
+      command: ["external", "knowledge", "distillation", "evidence"],
+      usage: "external knowledge distillation evidence --id RUN_ID [--entity invoice] [--claim-status TRUE] [--time-from 2026-05-01]",
+      pathParams: { runId: ["run-id", "id"] }
+    },
+    requiredScopes: ["knowledge:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: [...EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS, "evidence-query"]
+  },
+  {
+    id: "external.knowledge.distillation.projects.evidence.query",
+    feature: "external",
+    label: "查询外部知识蒸馏项目证据",
+    description: "Machine-readable project-level graph evidence query for agents. Merges evidence across runs for the same projectId so large engineering projects can converge without scanning every run artifact.",
+    target: { controller: "system", method: "handleExternalKnowledgeDistillationProjectEvidenceQuery" },
+    http: {
+      method: "GET",
+      path: "/api/external/knowledge/distillation/projects/:projectId/evidence",
+      query: [
+        { name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] },
+        { name: "mode", aliases: ["mode"] },
+        { name: "runLimit", aliases: ["run-limit"] },
+        { name: "entity", aliases: ["entity", "entityQuery", "entity-query"] },
+        { name: "relationship", aliases: ["relationship", "relationshipQuery", "relationship-query"] },
+        { name: "claimStatus", aliases: ["claim-status", "status"] },
+        { name: "claim", aliases: ["claim", "claimQuery", "claim-query"] },
+        { name: "sourceId", aliases: ["source-id", "documentId", "document-id"] },
+        { name: "groupId", aliases: ["group-id", "communityId", "community-id"] },
+        { name: "timeFrom", aliases: ["time-from", "from"] },
+        { name: "timeTo", aliases: ["time-to", "to"] },
+        { name: "limit", aliases: ["limit", "pageSize", "page-size"] }
+      ],
+      coerce: { limit: "number", runLimit: "number" }
+    },
+    rpc: {
+      method: "external.knowledge.distillation.projects.evidence.query",
+      params: [{ name: "projectId", aliases: ["project-id", "id"], required: true }],
+      query: [
+        { name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] },
+        { name: "mode", aliases: ["mode"] },
+        { name: "runLimit", aliases: ["run-limit"] },
+        { name: "entity", aliases: ["entity", "entityQuery", "entity-query"] },
+        { name: "relationship", aliases: ["relationship", "relationshipQuery", "relationship-query"] },
+        { name: "claimStatus", aliases: ["claim-status", "status"] },
+        { name: "claim", aliases: ["claim", "claimQuery", "claim-query"] },
+        { name: "sourceId", aliases: ["source-id", "documentId", "document-id"] },
+        { name: "groupId", aliases: ["group-id", "communityId", "community-id"] },
+        { name: "timeFrom", aliases: ["time-from", "from"] },
+        { name: "timeTo", aliases: ["time-to", "to"] },
+        { name: "limit", aliases: ["limit", "pageSize", "page-size"] }
+      ]
+    },
+    cli: {
+      command: ["external", "knowledge", "distillation", "project-evidence"],
+      usage: "external knowledge distillation project-evidence --project-id PROJECT_ID [--mode all] [--entity parser] [--time-from 2026-05-01]",
+      pathParams: { projectId: ["project-id", "id"] }
+    },
+    requiredScopes: ["knowledge:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: [...EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS, "evidence-query", "project-convergence"]
+  },
+  {
+    id: "external.knowledge.distillation.artifacts.export",
+    feature: "external",
+    label: "导出外部知识蒸馏产物",
+    target: { controller: "system", method: "handleExternalKnowledgeDistillationArtifactExport" },
+    http: {
+      method: "GET",
+      path: "/api/external/knowledge/distillation/runs/:runId/artifacts/:artifactId",
+      query: [
+        { name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] }
+      ]
+    },
+    rpc: {
+      method: "external.knowledge.distillation.artifacts.export",
+      params: [
+        { name: "runId", aliases: ["run-id", "id"], required: true },
+        { name: "artifactId", aliases: ["artifact-id", "artifact"], required: true }
+      ],
+      query: [{ name: "baseUrl", aliases: ["base-url", "serviceUrl", "service-url", "endpoint"] }]
+    },
+    cli: {
+      command: ["external", "knowledge", "distillation", "export"],
+      usage: "external knowledge distillation export --id RUN_ID --artifact-id portable-markdown",
+      pathParams: { runId: ["run-id", "id"], artifactId: ["artifact-id", "artifact"] }
+    },
+    requiredScopes: ["knowledge:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    binary: true,
+    aspects: [...EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS, "result-export"]
+  },
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.list",
     feature: "knowledge",
     label: "列出知识蒸馏工作台任务",
@@ -3051,8 +4234,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       usage: "knowledge distillation workbench list [--limit 50]"
     },
     requiredScopes: ["knowledge:read"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.create",
     feature: "knowledge",
     label: "创建知识蒸馏工作台任务",
@@ -3070,8 +4253,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       ]
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.get",
     feature: "knowledge",
     label: "读取知识蒸馏工作台任务",
@@ -3087,8 +4270,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:read"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.resume",
     feature: "knowledge",
     label: "恢复知识蒸馏工作台任务",
@@ -3104,8 +4287,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.cancel",
     feature: "knowledge",
     label: "取消知识蒸馏工作台任务",
@@ -3118,8 +4301,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.archive",
     feature: "knowledge",
     label: "归档知识蒸馏工作台任务",
@@ -3135,8 +4318,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.delete",
     feature: "knowledge",
     label: "删除知识蒸馏工作台任务",
@@ -3152,8 +4335,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.stage.rerun",
     feature: "knowledge",
     label: "重跑知识蒸馏工作台阶段",
@@ -3172,8 +4355,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"], stageId: ["stage-id", "stage"] }
     },
     requiredScopes: ["knowledge:maintain"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.stage.export",
     feature: "knowledge",
     label: "导出知识蒸馏工作台阶段结果",
@@ -3196,8 +4379,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       ]
     },
     requiredScopes: ["knowledge:read"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.package",
     feature: "knowledge",
     label: "导出知识蒸馏工作台整包",
@@ -3213,8 +4396,25 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       pathParams: { runId: ["run-id", "id"] }
     },
     requiredScopes: ["knowledge:read"]
-  },
-  {
+  }),
+  internalKnowledgeDistillationOperation({
+    id: "knowledge.distillation.workbench.runs.artifacts",
+    feature: "knowledge",
+    label: "读取知识蒸馏工作台产物信息",
+    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchRunArtifacts" },
+    http: { method: "GET", path: "/api/knowledge/distillation/workbench/runs/:runId/artifacts" },
+    rpc: {
+      method: "knowledge.distillation.workbench.runs.artifacts",
+      params: [{ name: "runId", aliases: ["run-id", "id"], required: true }]
+    },
+    cli: {
+      command: ["knowledge", "distillation", "workbench", "artifacts"],
+      usage: "knowledge distillation workbench artifacts --id RUN_ID",
+      pathParams: { runId: ["run-id", "id"] }
+    },
+    requiredScopes: ["knowledge:read"]
+  }),
+  internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.compare",
     feature: "knowledge",
     label: "比较知识蒸馏工作台版本",
@@ -3234,7 +4434,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       queryParams: [{ name: "rightRunId", aliases: ["right-run-id", "right"] }]
     },
     requiredScopes: ["knowledge:read"]
-  },
+  }),
   {
     id: "knowledge.skills.evaluation.runs.create",
     feature: "knowledge",
@@ -4931,6 +6131,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
         { name: "batchId", aliases: ["batch-id", "batchId"] },
         { name: "clientUid", aliases: ["client-uid", "clientUid"] },
         { name: "clientId", aliases: ["client-id", "clientId"] },
+        { name: "responseProfile", aliases: ["response-profile", "responseProfile"] },
         { name: "retrievalProfileId", aliases: ["profile", "profile-id", "retrievalProfileId"] },
         { name: "workspaceId", aliases: ["workspace-id", "workspaceId"] },
         { name: "learningEnabled", aliases: ["learning", "learning-enabled"], type: "boolean" },
@@ -4956,6 +6157,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
         { name: "batchId", aliases: ["batch-id", "batchId"] },
         { name: "clientUid", aliases: ["client-uid", "clientUid"] },
         { name: "clientId", aliases: ["client-id", "clientId"] },
+        { name: "responseProfile", aliases: ["response-profile", "responseProfile"] },
         { name: "retrievalProfileId", aliases: ["profile", "profile-id", "retrievalProfileId"] },
         { name: "workspaceId", aliases: ["workspace-id", "workspaceId"] },
         { name: "learningEnabled", aliases: ["learning", "learning-enabled"] },
@@ -5383,6 +6585,10 @@ export function listInterfaceCatalog(operations = SERVER_API_OPERATIONS) {
     concurrencySafe: operation.concurrencySafe === true,
     audit: operation.audit || {},
     log: operation.log || {},
+    deprecated: operation.deprecated === true,
+    replacementService: operation.replacementService || "",
+    replacementOperationPrefix: operation.replacementOperationPrefix || "",
+    lifecycle: operation.lifecycle || {},
     inputSchema: operation.inputSchema || {}
   }));
 }

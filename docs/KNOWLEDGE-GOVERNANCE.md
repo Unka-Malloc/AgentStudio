@@ -1,5 +1,12 @@
 # AgentLibrary Governance
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: AgentLibrary Governance.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 本文定义 Pact 的 `AgentLibrary / 图书馆` 治理边界。图书馆不是资产后台，也不是智能体私有记忆；它是公共工作空间可安全引用、可共享、可借阅、可登记、可管控的 evidence runtime。
 
 ## 目录 / Table of Contents
@@ -430,53 +437,53 @@ ingest
 
 这些都应生成 maintenance issue，进入 review / repair / reindex / distill / archive 流程。
 
-## 工业级蒸馏验收流程
+## 外部知识蒸馏验收流程
 
-工业级蒸馏使用 `pact.knowledge-distillation-industrial.v1`。
+知识蒸馏唯一维护面是 `external.knowledge.distillation`。内部 `knowledge.distillation.*` 模块只保留迁移报文，不再承接算法、解析或导出增强。
 
-项目 Markdown 蒸馏：
+`external.knowledge.distillation` 的所有 run、evidence、artifact、下载、导出、compare、delete 和 archive 操作都必须先进入外部服务上游网关切面。网关切面统一裁决 subject、tenant、workspace、source scope、artifact export、egress 和 audit receipt；兼容工作台 `knowledge.distillation.workbench.*` 只能返回迁移报文，不能绕过网关继续访问旧内部产物或旧下载路径。
 
-- `markdown-project-digest`
-- `buildMarkdownProjectDigest`
-- 外部 baseline 可参考 Repomix、Gitingest。
+参考框架：
 
-邮件线程蒸馏：
+- RAGFlow
+- MinerU
+- Docling
+- LlamaIndex
+- Marker
+- GraphRAG
+- Haystack
+- Unstructured
 
-- `email-thread-digest`
-- `buildEmailThreadDigest`
-- RFC 5322
-- RFC 5256
-- `Message-ID`
-- `In-Reply-To`
-- `References`
+验收重点：
 
-默认模型：
-
-- `deepseek-v4-flash`
-
-评价指标：
-
-- `coverage`
-- `same-matter merge`
-- `timeline order`
-- `source trace`
-- `unsupported claims`
-
-评价函数：
-
-- `evaluateIndustrialDistillationGap`
-
-评价框架可参考 DeepEval / G-Eval 的 rubric 和 judge trace 形式，但不能把外部工具变成不可替换依赖。
+- 外部知识蒸馏服务部署门禁：required-auth、业务 API bearer gate、非 root 容器、Tika checksum、healthcheck 和密钥外置。
+- route-first 文件分流。
+- 大文件 streaming/windowing。
+- 分类蒸馏与 project convergence。
+- `human-agent-response-profile-separation.v1`。
+- `office-document-professional-adaptation.v1`。
+- Graph evidence、reference gap report 和 external service API 注册。
 
 验证入口：
 
 ```bash
 npm run server:verify:knowledge-architecture-governance
-npm run server:verify:knowledge-markdown-chunking
-npm run server:verify:knowledge-docx-export
 npm run server:verify:knowledge-industrial-distillation
-npm run server:verify:dynamic-document-parsing
+npm run server:verify:external-knowledge-distillation-service-gates
+npm run server:verify:external-knowledge-distillation
+npm run server:verify:external-knowledge-distillation-container
+npm run server:verify:external-knowledge-distillation-references
 ```
+
+`server:verify:external-knowledge-distillation-service-gates` 是前置门禁。未通过时，不继续推进外部知识蒸馏的新解析器、格式路由、导出或模型蒸馏能力。
+
+### 外部知识蒸馏当前状态（2026-06-04）
+
+- `npm run server:verify:external-knowledge-distillation-service-gates` 通过。
+- `npm run server:verify:external-knowledge-distillation` 通过。
+- `npm run server:verify:external-service-api-registration` 通过。
+- `npm run server:verify:knowledge-industrial-distillation` 通过。
+- `sharedspace.drive.*` 兼容 shim 仍保留 `deprecated` + `compatibility-shim-only` 生命周期，但不再以平台核心方式出现在 Tool Management 中；相关能力已收敛到上游网关和外部服务切面。
 
 ## 与工作空间的关系
 

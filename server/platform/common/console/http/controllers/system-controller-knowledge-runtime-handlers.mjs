@@ -323,6 +323,112 @@ export function createSystemControllerKnowledgeRuntimeHandlers({
         errorMessage: "读取知识蒸馏任务失败。"
       });
     },
+    async handleExternalKnowledgeDistillationHealth({ operation, url, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "external.knowledge.distillation.service.health",
+        input: protocolPayload(Buffer.alloc(0), url),
+        response,
+        context: knowledgeWorkflowContext(authSession),
+        errorMessage: "读取外部知识蒸馏服务健康状态失败。"
+      });
+    },
+    async handleExternalKnowledgeDistillationCapabilities({ operation, url, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "external.knowledge.distillation.service.capabilities",
+        input: protocolPayload(Buffer.alloc(0), url),
+        response,
+        context: knowledgeWorkflowContext(authSession),
+        errorMessage: "读取外部知识蒸馏服务能力失败。"
+      });
+    },
+    async handleExternalKnowledgeDistillationRuntimeHealth({ operation, url, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "external.knowledge.distillation.service.runtime_health",
+        input: protocolPayload(Buffer.alloc(0), url),
+        response,
+        context: knowledgeWorkflowContext(authSession),
+        errorMessage: "读取外部知识蒸馏服务运行时状态失败。"
+      });
+    },
+    async handleExternalKnowledgeDistillationRunsList({ operation, url, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "external.knowledge.distillation.runs.list",
+        input: protocolPayload(Buffer.alloc(0), url),
+        response,
+        context: knowledgeWorkflowContext(authSession),
+        errorMessage: "列出外部知识蒸馏任务失败。"
+      });
+    },
+    async handleExternalKnowledgeDistillationRunsCreate({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "external.knowledge.distillation.runs.create",
+        input: parseJsonBody(requestBody),
+        response,
+        context: knowledgeWorkflowContext(authSession),
+        errorMessage: "创建外部知识蒸馏任务失败。"
+      });
+    },
+    async handleExternalKnowledgeDistillationRunGet({ operation, url, runId, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "external.knowledge.distillation.runs.get",
+        input: {
+          ...protocolPayload(Buffer.alloc(0), url),
+          runId
+        },
+        response,
+        context: knowledgeWorkflowContext(authSession),
+        errorMessage: "读取外部知识蒸馏任务失败。"
+      });
+    },
+    async handleExternalKnowledgeDistillationRunCancel({ operation, runId, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "external.knowledge.distillation.runs.cancel",
+        input: {
+          ...parseJsonBody(requestBody),
+          runId
+        },
+        response,
+        context: knowledgeWorkflowContext(authSession),
+        errorMessage: "取消外部知识蒸馏任务失败。"
+      });
+    },
+    async handleExternalKnowledgeDistillationEvidenceQuery({ operation, url, runId, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "external.knowledge.distillation.evidence.query",
+        input: {
+          ...protocolPayload(Buffer.alloc(0), url),
+          runId
+        },
+        response,
+        context: knowledgeWorkflowContext(authSession),
+        errorMessage: "查询外部知识蒸馏证据失败。"
+      });
+    },
+    async handleExternalKnowledgeDistillationProjectEvidenceQuery({ operation, url, projectId, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "external.knowledge.distillation.projects.evidence.query",
+        input: {
+          ...protocolPayload(Buffer.alloc(0), url),
+          projectId
+        },
+        response,
+        context: knowledgeWorkflowContext(authSession),
+        errorMessage: "查询外部知识蒸馏项目证据失败。"
+      });
+    },
+    async handleExternalKnowledgeDistillationArtifactExport({ operation, url, runId, artifactId, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "external.knowledge.distillation.artifacts.export",
+        input: {
+          ...protocolPayload(Buffer.alloc(0), url),
+          runId,
+          artifactId
+        },
+        response,
+        context: knowledgeWorkflowContext(authSession),
+        errorMessage: "导出外部知识蒸馏产物失败。"
+      });
+    },
     async handleKnowledgeDistillationWorkbenchRunsList({ operation, url, response, authSession }) {
       await sendConsoleDomainOperation({
         operationId: operation?.id || "knowledge.distillation.workbench.runs.list",
@@ -409,6 +515,15 @@ export function createSystemControllerKnowledgeRuntimeHandlers({
         response,
         context: knowledgeWorkflowContext(authSession),
         errorMessage: "导出知识蒸馏工作台阶段失败。"
+      });
+    },
+    async handleKnowledgeDistillationWorkbenchRunArtifacts({ operation, runId, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "knowledge.distillation.workbench.runs.artifacts",
+        input: { runId },
+        response,
+        context: knowledgeWorkflowContext(authSession),
+        errorMessage: "读取知识蒸馏工作台产物信息失败。"
       });
     },
     async handleKnowledgeDistillationWorkbenchRunPackageExport({ operation, runId, response, authSession }) {

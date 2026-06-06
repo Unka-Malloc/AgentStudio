@@ -101,6 +101,7 @@ async function withTreeLock(treeId, action) {
       treeLocks.delete(treeId);
     }
   });
+  cleanup.catch(() => null);
   treeLocks.set(treeId, cleanup);
   return run;
 }

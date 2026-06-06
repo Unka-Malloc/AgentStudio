@@ -48,6 +48,10 @@ function normalizePort(value, fallback) {
   return parsed;
 }
 
+function enabledFlag(value) {
+  return value === true || ["1", "true", "yes"].includes(String(value || "").trim().toLowerCase());
+}
+
 function printUsageAndExit(code = 0) {
   console.log(`Pact Server
 
@@ -112,7 +116,7 @@ const runtimeOptions = {
   featureProfile: String(
     args["feature-profile"] || process.env.PACT_FEATURE_PROFILE || ""
   ).trim(),
-  allowPublicConsole: args["allow-public-console"] === true,
+  allowPublicConsole: args["allow-public-console"] === true || enabledFlag(process.env.PACT_ALLOW_PUBLIC_CONSOLE),
   cwd: projectRoot,
   mountModules: {
     analysis: String(

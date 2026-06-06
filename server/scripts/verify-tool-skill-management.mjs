@@ -1,13 +1,30 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  capabilityPackageDigest,
+  createCapabilityPackageRegistry,
+  normalizeCapabilityPackageManifest
+} from "../platform/specialized/capabilities/package-lifecycle/index.mjs";
 import {
   TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION,
   createToolSkillManagementProvider
 } from "../platform/specialized/capabilities/skills/tool-skill-management-provider.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+
+function signedManifest(input) {
+  const normalized = normalizeCapabilityPackageManifest(input);
+  return normalizeCapabilityPackageManifest({
+    ...input,
+    signature: {
+      algorithm: "sha256",
+      digestSha256: capabilityPackageDigest(normalized)
+    }
+  });
+}
 
 async function read(relativePath) {
   return fs.readFile(path.join(repoRoot, relativePath), "utf8");
@@ -45,7 +62,7 @@ for (const required of [
 
 const grants = [];
 const updatedGrants = [];
-const fakePlatform = {
+const fixturePlatform = {
   securityPermissions: {
     decisions: [],
     appendDecision(decision) {
@@ -173,7 +190,9 @@ const fakePlatform = {
   }
 };
 
-const provider = createToolSkillManagementProvider({ toolManagementPlatform: fakePlatform });
+const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-tool-skill-provider-"));
+const skillPackageRegistry = createCapabilityPackageRegistry({ userDataPath });
+const provider = createToolSkillManagementProvider({ toolManagementPlatform: fixturePlatform, userDataPath });
 assert.equal(provider.describe().protocolVersion, TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION);
 
 const request = {
@@ -189,6 +208,43 @@ assert.deepEqual(
   provider.listVisibleTools({ authorization }).map((tool) => tool.id),
   ["pact.knowledge.health"]
 );
+
+const skillManifest = signedManifest({
+  kind: "skill",
+  name: "mcp-visible-contract-skill",
+  version: "1.0.0",
+  title: "MCP Visible Contract Skill",
+  description: "Visible to read grants after activation.",
+  owner: "verification",
+  source: "capability-package-upload",
+  capabilities: ["skill.contract.visible"],
+  risk: "read_only",
+  inputSchema: { type: "object" },
+  outputSchema: { type: "object" },
+  sandbox: { policy: "knowledge-only" },
+  license: "MIT"
+});
+const skillSubmission = await skillPackageRegistry.submit({
+  manifest: skillManifest,
+  files: [{ path: "SKILL.md", content: "# MCP Visible Contract Skill\n" }]
+}, { submittedBy: "verify" });
+await skillPackageRegistry.lifecycle(skillSubmission.record.manifest.packageId, { action: "approve", actor: "verify" });
+await skillPackageRegistry.lifecycle(skillSubmission.record.manifest.packageId, { action: "install", actor: "verify" });
+await skillPackageRegistry.lifecycle(skillSubmission.record.manifest.packageId, { action: "activate", actor: "verify" });
+
+const visibleSkills = await provider.listVisibleSkills({ authorization });
+assert.equal(visibleSkills.summary.activeSkillCount, 1);
+assert.equal(visibleSkills.summary.visibleSkillCount, 1);
+assert.equal(visibleSkills.skills[0].name, "mcp-visible-contract-skill");
+assert.equal(visibleSkills.skills[0].mcpOutlet, "pact.skillHub");
+assert.equal(visibleSkills.skills[0].library.storage, "server-skill-library");
+assert.equal(Object.prototype.hasOwnProperty.call(visibleSkills.skills[0].library, "absolutePath"), false);
+assert.equal(JSON.stringify(visibleSkills).includes("MCP Visible Contract Skill\\n"), false);
+
+await skillPackageRegistry.lifecycle(skillSubmission.record.manifest.packageId, { action: "deprecate", actor: "verify" });
+const hiddenSkills = await provider.listVisibleSkills({ authorization });
+assert.equal(hiddenSkills.summary.activeSkillCount, 0);
+assert.equal(hiddenSkills.summary.visibleSkillCount, 0);
 
 const execution = await provider.executeTool({
   toolId: "pact.knowledge.health",
@@ -211,7 +267,35 @@ const publicPayload = await provider.publicMcpToolPayload({
     workspaces: [{ workspaceId: "workspace_a", title: "Alpha" }],
     selected: {
       workspaceId: "workspace_a",
-      absolutePath: "/Users/unka/private.txt"
+      absolutePath: "/home/private-user/private.txt"
+    },
+    cacheReceipt: {
+      cacheKey: "workspace:workspace_a:notes",
+      indexRoots: {
+        "workspace:workspace_a": "cid:sha256:abc"
+      }
+    },
+    metadata: {
+      defaultAdminUserId: "grant_internal_admin",
+      adminUserIds: ["grant_internal_admin"],
+      token: "sat_private_token",
+      tokenPrefix: "sat_private",
+      secretRef: "secret://pact/drive/google-oauth",
+      endpointRef: "config://pact/drive/google-endpoint"
+    },
+    error: {
+      message: "Failed at /home/private-user/private.txt for workspace_a with Authorization: Bearer sat_private_token, token=sat_private_token, and --token sat_private_token",
+      details: {
+        sourcePath: "/home/private-user/private.txt",
+        workspaceId: "workspace_a",
+        headers: {
+          Authorization: "Bearer sat_private_token",
+          "X-Pact-Api-Key": "sat_private_token",
+          Accept: "application/json"
+        },
+        apiKey: "sat_private_token",
+        password: "sat_private_password"
+      }
     }
   },
   request,
@@ -219,6 +303,29 @@ const publicPayload = await provider.publicMcpToolPayload({
 });
 assert.equal(publicPayload.selected.workspaceRef, "workspace-1");
 assert.equal(Object.prototype.hasOwnProperty.call(publicPayload.selected, "absolutePath"), false);
+assert.equal(publicPayload.cacheReceipt.cacheKey, "workspace:workspace-1:notes");
+assert.equal(publicPayload.cacheReceipt.indexRoots["workspace:workspace-1"], "cid:sha256:abc");
+assert.equal(Object.prototype.hasOwnProperty.call(publicPayload.metadata, "defaultAdminUserId"), false);
+assert.equal(Object.prototype.hasOwnProperty.call(publicPayload.metadata, "token"), false);
+assert.equal(Object.prototype.hasOwnProperty.call(publicPayload.metadata, "tokenPrefix"), false);
+assert.equal(publicPayload.metadata.secretRef, "secret://pact/drive/google-oauth");
+assert.equal(publicPayload.metadata.endpointRef, "config://pact/drive/google-endpoint");
+assert.equal(
+  publicPayload.error.message,
+  "Failed at [server-internal-path] for workspace-1 with Authorization: Bearer <redacted-token>, token=<redacted-secret>, and --token <redacted-token>"
+);
+assert.equal(publicPayload.error.details.workspaceRef, "workspace-1");
+assert.equal(Object.prototype.hasOwnProperty.call(publicPayload.error.details, "sourcePath"), false);
+assert.equal(Object.prototype.hasOwnProperty.call(publicPayload.error.details.headers, "Authorization"), false);
+assert.equal(Object.prototype.hasOwnProperty.call(publicPayload.error.details.headers, "X-Pact-Api-Key"), false);
+assert.equal(publicPayload.error.details.headers.Accept, "application/json");
+assert.equal(Object.prototype.hasOwnProperty.call(publicPayload.error.details, "apiKey"), false);
+assert.equal(Object.prototype.hasOwnProperty.call(publicPayload.error.details, "password"), false);
+assert.equal(JSON.stringify(publicPayload).includes("workspace_a"), false);
+assert.equal(JSON.stringify(publicPayload).includes("grant_internal_admin"), false);
+assert.equal(JSON.stringify(publicPayload).includes("/home/private-user"), false);
+assert.equal(JSON.stringify(publicPayload).includes("sat_private_token"), false);
+assert.equal(JSON.stringify(publicPayload).includes("sat_private_password"), false);
 
 const localGrant = await provider.createLocalMcpGrant({
   request,
@@ -239,5 +346,7 @@ assert.equal(uninstall.body.updatedCount, 1);
 assert.equal(updatedGrants[0].metadata.currentDeviceVisible, false);
 
 assert.equal(provider.listMcpClientConnections({ offlineAfterSeconds: 300 }).length, 0);
+
+await fs.rm(userDataPath, { recursive: true, force: true });
 
 console.log("tool-skill-management verification passed");

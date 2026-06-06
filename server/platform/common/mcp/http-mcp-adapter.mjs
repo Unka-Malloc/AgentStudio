@@ -40,6 +40,24 @@ export const PACT_MCP_URL_ENV = "PACT_MCP_URL";
 export const PACT_MCP_DISCOVERY_URL_ENV = "PACT_MCP_DISCOVERY_URL";
 export const PACT_MCP_DISCOVERY_FILE_ENV = "PACT_MCP_DISCOVERY_FILE";
 export const PACT_MCP_DISCOVERY_FILE = "~/.pact/mcp/servers.json";
+const MCP_BOOTSTRAP_CURL_FLAGS = "-fL --retry 3 --connect-timeout 20 -sS";
+const MCP_BOOTSTRAP_INSTALL_SCRIPT = "pact-mcp-install.sh";
+const MCP_BOOTSTRAP_INSTALL_SCRIPT_ZH_CN = "pact-mcp-install.zh-CN.sh";
+export const MCP_CLIENT_TARGETS = Object.freeze([
+  { target: "openclaw", label: "OpenClaw", priority: true, installMode: "openclaw-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
+  { target: "claude-code", label: "Claude Code", priority: true, installMode: "claude-code-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
+  { target: "codex", label: "Codex", priority: true, installMode: "codex-release-plugin-and-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
+  { target: "gemini-cli", label: "Gemini CLI", priority: false, installMode: "gemini-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
+  { target: "antigravity", label: "Antigravity", priority: false, installMode: "antigravity-release-mcp-config", locations: ["local"] },
+  { target: "opencode", label: "OpenCode", priority: true, installMode: "opencode-release-mcp-config", locations: ["local", "orbstack", "remote-linux"] },
+  { target: "copilot", label: "Copilot", priority: false, installMode: "copilot-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
+  { target: "kilo-code", label: "Kilo Code", priority: false, installMode: "kilo-release-global-kilo-json", locations: ["local", "orbstack", "remote-linux"] },
+  { target: "cursor", label: "Cursor", priority: false, installMode: "cursor-release-mcp-config", locations: ["local"] },
+  { target: "hermes", label: "Hermes Agent", priority: false, installMode: "hermes-remote-mcp-cli", locations: ["orbstack", "remote-linux"] },
+  { target: "windsurf", label: "Windsurf", priority: false, installMode: "windsurf-release-mcp-config", locations: ["local"] }
+]);
+export const MCP_PRIORITY_INSTALL_TARGETS = Object.freeze(["claude-code", "codex", "openclaw"]);
+const MCP_PRIORITY_INSTALL_TARGET = MCP_PRIORITY_INSTALL_TARGETS.join(",");
 
 function jsonRpcResult(id, result = {}) {
   return {
@@ -55,8 +73,8 @@ function jsonRpcError(id, code, message, data = {}) {
     id: id ?? null,
     error: {
       code,
-      message,
-      data
+      message: publicMcpEnvelopeString(message),
+      data: publicMcpEnvelopeValue(data)
     }
   };
 }
@@ -112,6 +130,125 @@ function normalizeGrantValues(value, limit = 64) {
   return [...new Set(items.map((item) => String(item || "").trim()).filter(Boolean))].slice(0, limit);
 }
 
+function requestHeader(request = null, name = "") {
+  const lowerName = String(name || "").toLowerCase();
+  if (!lowerName) {
+    return "";
+  }
+  const headers = request?.headers || {};
+  return String(
+    headers[lowerName] ??
+      Object.entries(headers).find(([headerName]) => String(headerName || "").toLowerCase() === lowerName)?.[1] ??
+      ""
+  ).trim();
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    const text = String(value || "").trim();
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+}
+
+function relayChildOperationFromMcpCall({
+  payload = {},
+  request = null,
+  authorization = {},
+  envelope = {},
+  operation = ""
+} = {}) {
+  const grant = authorization?.grant || null;
+  const metadata = grantMetadata(grant);
+  if (metadata.relayMcp !== true && metadata.issuedBy !== "pact-acp-agent-relay" && grant?.type !== "relay-mcp-child") {
+    return null;
+  }
+  const relayMcp = payload?.relayMcp && typeof payload.relayMcp === "object" ? payload.relayMcp : {};
+  const childOperation = payload?.relayChildOperation && typeof payload.relayChildOperation === "object"
+    ? payload.relayChildOperation
+    : (relayMcp.childOperation && typeof relayMcp.childOperation === "object" ? relayMcp.childOperation : {});
+  const requested = {
+    relayMcpGrantId: firstText(
+      childOperation.relayMcpGrantId,
+      childOperation.grantId,
+      relayMcp.relayMcpGrantId,
+      relayMcp.grantId,
+      payload.relayMcpGrantId,
+      requestHeader(request, "X-Pact-Relay-Mcp-Grant-Id")
+    ),
+    relaySessionId: firstText(
+      childOperation.relaySessionId,
+      relayMcp.relaySessionId,
+      payload.relaySessionId,
+      requestHeader(request, "X-Pact-Relay-Session-Id")
+    ),
+    virtualAgentId: firstText(
+      childOperation.virtualAgentId,
+      relayMcp.virtualAgentId,
+      payload.virtualAgentId,
+      requestHeader(request, "X-Pact-Virtual-Agent-Id")
+    ),
+    targetId: firstText(
+      childOperation.targetId,
+      relayMcp.targetId,
+      payload.targetId,
+      requestHeader(request, "X-Pact-Target-Agent-Id")
+    )
+  };
+  const canonical = {
+    relayMcpGrantId: String(grant?.id || "").trim(),
+    relaySessionId: String(metadata.relaySessionId || "").trim(),
+    relayTurnId: String(metadata.relayTurnId || "").trim(),
+    virtualAgentId: String(metadata.virtualAgentId || "").trim(),
+    targetId: String(metadata.targetId || "").trim()
+  };
+  const requestedRelayTurnId = firstText(
+    childOperation.relayTurnId,
+    relayMcp.relayTurnId,
+    payload.relayTurnId,
+    requestHeader(request, "X-Pact-Relay-Turn-Id")
+  );
+  const parentOperationId = firstText(
+    childOperation.parentOperationId,
+    childOperation.relayOperationId,
+    relayMcp.parentOperationId,
+    relayMcp.operationId,
+    payload.relayOperationId,
+    requestHeader(request, "X-Pact-Relay-Operation-Id")
+  );
+  canonical.parentOperationId = String(metadata.parentOperationId || "").trim();
+  const requestedForMismatch = { ...requested, relayTurnId: requestedRelayTurnId, parentOperationId };
+  const mismatches = Object.entries(canonical)
+    .filter(([, value]) => value)
+    .filter(([key, value]) => requestedForMismatch[key] && requestedForMismatch[key] !== value)
+    .map(([key]) => key);
+  const traceId = firstText(
+    childOperation.traceId,
+    relayMcp.traceId,
+    payload.traceId,
+    payload.trace_id,
+    requestHeader(request, "X-Pact-Trace-Id"),
+    envelope.traceId
+  );
+  return {
+    schemaVersion: 1,
+    binding: "pact.acp-agent-relay.child-operation.v1",
+    relaySessionId: canonical.relaySessionId || requested.relaySessionId,
+    relayTurnId: canonical.relayTurnId || requestedRelayTurnId,
+    virtualAgentId: canonical.virtualAgentId || requested.virtualAgentId,
+    targetId: canonical.targetId || requested.targetId,
+    relayMcpGrantId: canonical.relayMcpGrantId || requested.relayMcpGrantId,
+    grantType: String(grant?.type || "").trim(),
+    grantBindingVerified: Boolean(canonical.relayMcpGrantId && (canonical.relaySessionId || canonical.targetId)),
+    requestBindingMismatches: mismatches,
+    traceId,
+    parentOperationId: String(metadata.parentOperationId || "").trim() || parentOperationId,
+    operationId: String(operation || "").trim()
+  };
+}
+
 function hasMcpAuthToken(request = null) {
   const authorization = String(request?.headers?.authorization || "").trim();
   return Boolean(
@@ -154,8 +291,150 @@ function parseRequestBody(requestBody) {
   return JSON.parse(requestBody.toString("utf8"));
 }
 
+const MCP_OUTLET_METADATA = Object.freeze({
+  [MCP_DISCOVERY_TOOL_NAME]: { toolName: MCP_DISCOVERY_TOOL_NAME, architectureCategory: "Discovery" },
+  [MCP_KNOWLEDGE_TOOL_NAME]: { toolName: MCP_KNOWLEDGE_TOOL_NAME, architectureCategory: "Knowledge" },
+  [MCP_SHAREDSPACE_TOOL_NAME]: { toolName: MCP_SHAREDSPACE_TOOL_NAME, architectureCategory: "Sharedspace" },
+  [MCP_CODESPACE_TOOL_NAME]: { toolName: MCP_CODESPACE_TOOL_NAME, architectureCategory: "Codespace" },
+  [MCP_SKILL_HUB_TOOL_NAME]: { toolName: MCP_SKILL_HUB_TOOL_NAME, architectureCategory: "Skill Hub" }
+});
+
+const MCP_SHAREDSPACE_CORE_OPERATIONS = Object.freeze([
+  "pact.agentWorkspace.create",
+  "pact.sharedspace.localDir.connect",
+  "pact.sharedspace.localDir.list",
+  "pact.sharedspace.item.list",
+  "pact.sharedspace.file.read",
+  "pact.sharedspace.file.write",
+  "pact.sharedspace.item.delete",
+  "pact.sharedspace.sync.plan",
+  "pact.sharedspace.sync.apply"
+]);
+
+function sharedspaceExchangeReceiptContract() {
+  return {
+    schemaVersion: "pact.mcp.sharedspace-exchange.v1",
+    locations: [
+      "structuredContent.exchange",
+      "notifications/pact/operation_reply.params.exchange"
+    ],
+    actions: [
+      "workspace-created",
+      "file-written",
+      "file-read",
+      "items-listed",
+      "item-deleted",
+      "local-dir-connected",
+      "local-dirs-listed",
+      "sync-planned",
+      "sync-applied",
+      "operation"
+    ],
+    fields: [
+      "action",
+      "outlet",
+      "referencePolicy",
+      "workspaceRef",
+      "path",
+      "paths",
+      "itemCount",
+      "checkpointId",
+      "syncReceiptId",
+      "nextOperations"
+    ]
+  };
+}
+
+function mcpOutletForTool(tool = {}) {
+  const id = String(tool.operationId || tool.id || tool.name || "").trim();
+  const publicName = String(tool.id || tool.name || "").trim();
+  const feature = String(tool.feature || "").trim();
+  const aspects = Array.isArray(tool.aspects) ? tool.aspects.map((item) => String(item || "")) : [];
+  const text = `${id} ${publicName} ${feature} ${aspects.join(" ")}`.toLowerCase();
+
+  if (/^(tool_management\.|knowledge\.skills\.|knowledge\.agent_skill\.|workspace\.skill\.|capability_packages\.)/i.test(id)) {
+    return MCP_OUTLET_METADATA[MCP_SKILL_HUB_TOOL_NAME];
+  }
+  if (/^external\.mcp\./i.test(id) || aspects.includes("external-mcp-passthrough") || aspects.includes("skill-hub")) {
+    return MCP_OUTLET_METADATA[MCP_SKILL_HUB_TOOL_NAME];
+  }
+  if (/^(repo\.|gerrit\.|github\.|workspace\.code\.)/i.test(id) || /\b(repo|repository|codespace|gerrit|github)\b/.test(text)) {
+    return MCP_OUTLET_METADATA[MCP_CODESPACE_TOOL_NAME];
+  }
+  if (/^(agent_workspaces\.|agent_sessions\.|sharedspace\.|workspace\.)/i.test(id) || feature === "agent_workspace") {
+    return MCP_OUTLET_METADATA[MCP_SHAREDSPACE_TOOL_NAME];
+  }
+  if (/^knowledge\./i.test(id) || /\b(knowledge|evidence|asset|dossier|distillation)\b/.test(text)) {
+    return MCP_OUTLET_METADATA[MCP_KNOWLEDGE_TOOL_NAME];
+  }
+  return MCP_OUTLET_METADATA[MCP_DISCOVERY_TOOL_NAME];
+}
+
+function mcpOutletSummary(operations = []) {
+  const outlets = {};
+  for (const toolName of CATEGORIZED_TOOL_NAMES) {
+    const meta = MCP_OUTLET_METADATA[toolName];
+    outlets[toolName] = {
+      ...meta,
+      ...(toolName === MCP_SHAREDSPACE_TOOL_NAME ? { exchangeReceipt: sharedspaceExchangeReceiptContract() } : {}),
+      operationCount: 0,
+      operations: []
+    };
+  }
+  for (const operation of operations) {
+    const toolName = operation?._meta?.mcpOutlet || MCP_DISCOVERY_TOOL_NAME;
+    const outlet = outlets[toolName] || outlets[MCP_DISCOVERY_TOOL_NAME];
+    outlet.operationCount += 1;
+    outlet.operations.push(operation.name);
+  }
+  return outlets;
+}
+
+function mcpOutletForOperation({ operation = "", toolSkillManagementProvider, authorization = null } = {}) {
+  const operationId = String(operation || "").trim();
+  if (operationId === "pact.mcp.version" || operationId === "pact.version" || operationId === "pact.capabilities.list") {
+    return MCP_OUTLET_METADATA[MCP_DISCOVERY_TOOL_NAME];
+  }
+  const tools = toolSkillManagementProvider
+    .listVisibleTools({ authorization })
+    .filter((tool) =>
+      tool.id === operationId ||
+        tool.operationId === operationId ||
+        tool.name === operationId
+    );
+  if (tools.length === 0) {
+    return null;
+  }
+  return mcpOutletForTool(tools[0]);
+}
+
+function operationOutletMismatchError({ id, operation, requestedTool, expectedOutlet }) {
+  return {
+    httpStatus: 200,
+    body: jsonRpcError(id, -32602, `Operation ${operation} must be called through ${expectedOutlet.toolName}, not ${requestedTool}.`, {
+      code: "operation_outlet_mismatch",
+      operation,
+      requestedTool,
+      expectedTool: expectedOutlet.toolName,
+      architectureCategory: expectedOutlet.architectureCategory,
+      discoveryTool: MCP_DISCOVERY_TOOL_NAME,
+      discoveryOperation: "pact.capabilities.list",
+      stableToolName: MCP_STABLE_TOOL_NAME,
+      example: {
+        name: expectedOutlet.toolName,
+        arguments: {
+          apiVersion: MCP_INTERFACE_VERSION,
+          operation,
+          input: {}
+        }
+      }
+    })
+  };
+}
+
 function publicMcpTool(tool) {
   const inputSchema = publicMcpInputSchema(tool.inputSchema || { type: "object" });
+  const outlet = mcpOutletForTool(tool);
   const workspaceHint = schemaMentionsWorkspaceId(tool.inputSchema)
     ? " MCP clients should use workspaceRef, workspaceIndex, or workspaceName instead of internal workspaceId."
     : "";
@@ -176,6 +455,9 @@ function publicMcpTool(tool) {
     },
     _meta: {
       operationId: tool.operationId || tool.id,
+      mcpOutlet: outlet.toolName,
+      architectureCategory: outlet.architectureCategory,
+      ...(outlet.toolName === MCP_SHAREDSPACE_TOOL_NAME ? { exchangeReceipt: sharedspaceExchangeReceiptContract() } : {}),
       toolsets: tool.toolsets || [],
       requiredScopes: tool.requiredScopes || [],
       risk: tool.risk || "read_only"
@@ -403,6 +685,78 @@ function mcpVersionInfo() {
   };
 }
 
+function mcpConnectorRuntimeMetadata(discovery, version = mcpVersionInfo()) {
+  return {
+    ...version.connector,
+    githubOneLineCommand: discovery.installer.githubOneLineCommand,
+    githubOneLineCommandZhCN: discovery.installer.githubOneLineCommandZhCN,
+    clientInstallCommand: discovery.installer.clientInstallCommand,
+    clientInstallJsonCommand: discovery.installer.clientInstallJsonCommand,
+    autoInstallCommand: discovery.installer.autoInstallCommand,
+    priorityInstallCommand: discovery.installer.priorityInstallCommand,
+    githubOneLineInstallCommand: discovery.installer.githubOneLineInstallCommand,
+    githubOneLineInstallCommandZhCN: discovery.installer.githubOneLineInstallCommandZhCN,
+    githubOneLineClientInstallJsonCommand: discovery.installer.githubOneLineClientInstallJsonCommand,
+    githubOneLineClientInstallJsonCommandZhCN: discovery.installer.githubOneLineClientInstallJsonCommandZhCN,
+    githubOneLineAutoInstallCommand: discovery.installer.githubOneLineAutoInstallCommand,
+    githubOneLineAutoInstallCommandZhCN: discovery.installer.githubOneLineAutoInstallCommandZhCN,
+    githubOneLinePriorityInstallCommand: discovery.installer.githubOneLinePriorityInstallCommand,
+    githubOneLinePriorityInstallCommandZhCN: discovery.installer.githubOneLinePriorityInstallCommandZhCN,
+    oneCommandInstall: discovery.installer.oneCommandInstall,
+    oneCommandInstallZhCN: discovery.installer.oneCommandInstallZhCN,
+    oneCommandClientInstallJson: discovery.installer.oneCommandClientInstallJson,
+    oneCommandClientInstallJsonZhCN: discovery.installer.oneCommandClientInstallJsonZhCN,
+    oneCommandAutoInstall: discovery.installer.oneCommandAutoInstall,
+    oneCommandAutoInstallZhCN: discovery.installer.oneCommandAutoInstallZhCN,
+    oneCommandPriorityInstall: discovery.installer.oneCommandPriorityInstall,
+    oneCommandPriorityInstallZhCN: discovery.installer.oneCommandPriorityInstallZhCN,
+    discoverCommand: discovery.installer.discoverCommand,
+    scanCommand: discovery.installer.scanCommand,
+    doctorCommand: discovery.installer.doctorCommand,
+    portableAutoInstallCommand: discovery.installer.portable.autoInstallCommand,
+    portablePriorityInstallCommand: discovery.installer.portable.priorityInstallCommand,
+    portableClientInstallJsonCommand: discovery.installer.portable.clientInstallJsonCommand
+  };
+}
+
+function mcpRuntimeMetadata({ listenUrl = "", discoveryState = null } = {}) {
+  const discovery = buildPactMcpDiscovery({ listenUrl, discoveryState });
+  const version = mcpVersionInfo();
+  return {
+    ...version,
+    connector: mcpConnectorRuntimeMetadata(discovery, version),
+    sharedHub: discovery.sharedHub,
+    priorityTargets: [...MCP_PRIORITY_INSTALL_TARGETS],
+    supportedTargets: mcpSupportedTargetDetails()
+  };
+}
+
+function mcpAuthorizationErrorData({ authorization = {}, listenUrl = "", discoveryState = null } = {}) {
+  const discovery = buildPactMcpDiscovery({ listenUrl, discoveryState });
+  const connector = mcpConnectorRuntimeMetadata(discovery);
+  const nextCommand = connector.oneCommandAutoInstall || connector.autoInstallCommand;
+  const nextCommandZhCN = connector.oneCommandAutoInstallZhCN || connector.githubOneLineAutoInstallCommandZhCN;
+  return {
+    code: authorization.reasonCode || "authorization_denied",
+    stableToolName: MCP_STABLE_TOOL_NAME,
+    connector,
+    localGrantEndpoint: discovery.installer.localGrantEndpoint,
+    priorityTargets: [...MCP_PRIORITY_INSTALL_TARGETS],
+    supportedTargets: mcpSupportedTargetDetails(),
+    nextCommand,
+    nextCommandZhCN,
+    repairCommands: [
+      nextCommand,
+      nextCommandZhCN,
+      connector.oneCommandPriorityInstall,
+      connector.oneCommandPriorityInstallZhCN,
+      connector.autoInstallCommand,
+      connector.priorityInstallCommand,
+      connector.doctorCommand
+    ].filter(Boolean).filter((command, index, commands) => commands.indexOf(command) === index)
+  };
+}
+
 function mcpDiscoveryBase({ listenUrl = "", discoveryState = null } = {}) {
   const baseUrl = String(discoveryState?.activeServiceUrl || listenUrl || "").replace(/\/+$/, "");
   let vmBaseUrl = "";
@@ -415,16 +769,171 @@ function mcpDiscoveryBase({ listenUrl = "", discoveryState = null } = {}) {
   return { baseUrl, vmBaseUrl };
 }
 
+function shellQuote(value) {
+  return `'${String(value || "").replace(/'/g, "'\\''")}'`;
+}
+
+function commandUrlArgs(baseUrl) {
+  const text = String(baseUrl || "").trim();
+  return text ? ` --url ${shellQuote(text)}` : "";
+}
+
+function githubOneLineMcpInstallCommand(scriptName = MCP_BOOTSTRAP_INSTALL_SCRIPT) {
+  return `/bin/sh -c "$(curl ${MCP_BOOTSTRAP_CURL_FLAGS} https://github.com/${MCP_CONNECTOR_GITHUB_REPO}/releases/latest/download/${scriptName})"`;
+}
+
+function githubOneLineMcpInstallCommands({ baseUrl = "" } = {}) {
+  const urlArgs = commandUrlArgs(baseUrl);
+  const command = githubOneLineMcpInstallCommand();
+  const commandZhCN = githubOneLineMcpInstallCommand(MCP_BOOTSTRAP_INSTALL_SCRIPT_ZH_CN);
+  const build = (oneLineCommand) => ({
+    installCommand: urlArgs ? `${oneLineCommand} --${urlArgs}` : oneLineCommand,
+    clientInstallJsonCommand: `${oneLineCommand} -- --target <client>${urlArgs} --json`,
+    autoInstallCommand: `${oneLineCommand} -- --target auto${urlArgs} --json`,
+    priorityInstallCommand: `${oneLineCommand} -- --target ${MCP_PRIORITY_INSTALL_TARGET}${urlArgs} --json`
+  });
+  const english = build(command);
+  const zhCN = build(commandZhCN);
+  return {
+    command,
+    ...english,
+    commandZhCN,
+    installCommandZhCN: zhCN.installCommand,
+    clientInstallJsonCommandZhCN: zhCN.clientInstallJsonCommand,
+    autoInstallCommandZhCN: zhCN.autoInstallCommand,
+    priorityInstallCommandZhCN: zhCN.priorityInstallCommand
+  };
+}
+
+function mcpTargetConfigTemplate(target, { baseUrl = "", vmBaseUrl = "" } = {}) {
+  const mcpUrl = `${baseUrl}/mcp`;
+  const vmMcpUrl = `${vmBaseUrl}/mcp`;
+  const headerConfig = {
+    "X-Pact-Api-Key": "${PACT_MCP_TOKEN}"
+  };
+  if (target === "codex") {
+    return {
+      mcp_servers: {
+        pact: {
+          url: mcpUrl,
+          bearer_token_env_var: "PACT_MCP_TOKEN"
+        }
+      }
+    };
+  }
+  if (target === "claude-code") {
+    return {
+      type: "http",
+      url: mcpUrl,
+      vmUrl: vmMcpUrl,
+      headers: headerConfig
+    };
+  }
+  if (target === "opencode") {
+    return {
+      mcp: {
+        pact: {
+          type: "remote",
+          url: mcpUrl,
+          vmUrl: vmMcpUrl,
+          headers: headerConfig,
+          enabled: true
+        }
+      }
+    };
+  }
+  if (target === "openclaw") {
+    return {
+      type: "http",
+      url: mcpUrl,
+      vmUrl: vmMcpUrl,
+      headers: headerConfig,
+      timeout: DEFAULT_TIMEOUT_MS,
+      enabled: true
+    };
+  }
+  if (target === "antigravity") {
+    return {
+      mcpServers: {
+        pact: {
+          serverUrl: mcpUrl,
+          headers: headerConfig,
+          disabled: false
+        }
+      }
+    };
+  }
+  return {
+    type: "http",
+    url: mcpUrl,
+    vmUrl: vmMcpUrl,
+    headers: headerConfig,
+    timeout: DEFAULT_TIMEOUT_MS
+  };
+}
+
+function mcpClientTargetGuides({ baseUrl = "", vmBaseUrl = "", githubOneLineCommand = "", githubOneLineCommandZhCN = "" } = {}) {
+  const urlArgs = commandUrlArgs(baseUrl);
+  return MCP_CLIENT_TARGETS.map((client) => ({
+    ...client,
+    endpoints: {
+      mcpUrl: `${baseUrl}/mcp`,
+      vmMcpUrl: `${vmBaseUrl}/mcp`
+    },
+    install: {
+      oneCommand: `${githubOneLineCommand} -- --target ${client.target}${urlArgs}`,
+      oneCommandJson: `${githubOneLineCommand} -- --target ${client.target}${urlArgs} --json`,
+      oneCommandZhCN: `${githubOneLineCommandZhCN} -- --target ${client.target}${urlArgs}`,
+      oneCommandJsonZhCN: `${githubOneLineCommandZhCN} -- --target ${client.target}${urlArgs} --json`,
+      npx: `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest install --target ${client.target}${urlArgs}`,
+      npxJson: `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest install --target ${client.target}${urlArgs} --json`,
+      portable: `./pact-mcp install --target ${client.target}${urlArgs}`,
+      portableJson: `./pact-mcp install --target ${client.target}${urlArgs} --json`,
+      uninstall: `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest uninstall --target ${client.target}${urlArgs}`,
+      doctor: `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest doctor${urlArgs} --json`
+    },
+    tokenInput: "auto-local-grant-or-stdin-or-env",
+    configTemplate: mcpTargetConfigTemplate(client.target, { baseUrl, vmBaseUrl })
+  }));
+}
+
+function mcpSupportedTargetDetails() {
+  return MCP_CLIENT_TARGETS.map(({ target, label, priority, installMode, locations }) => ({
+    target,
+    label,
+    priority,
+    installMode,
+    locations: [...locations]
+  }));
+}
+
 export function buildPactMcpDiscovery({ listenUrl = "", discoveryState = null } = {}) {
   const { baseUrl, vmBaseUrl } = mcpDiscoveryBase({ listenUrl, discoveryState });
-  const installCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest register`;
-  const clientInstallCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest install --target <client>`;
-  const interactiveInstallCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest install`;
-  const githubOneLineCommand = `/bin/sh -c "$(curl -fsSL https://github.com/${MCP_CONNECTOR_GITHUB_REPO}/releases/latest/download/pact-mcp-install.sh)"`;
-  const uninstallCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest uninstall --target <client>`;
-  const doctorCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest doctor`;
-  const discoverCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest discover-local`;
-  const scanCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest scan --json`;
+  const urlArgs = commandUrlArgs(baseUrl);
+  const installCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest register${urlArgs}`;
+  const clientInstallCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest install --target <client>${urlArgs}`;
+  const clientInstallJsonCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest install --target <client>${urlArgs} --json`;
+  const autoInstallCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest install --target auto${urlArgs} --json`;
+  const priorityInstallCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest install --target ${MCP_PRIORITY_INSTALL_TARGET}${urlArgs} --json`;
+  const interactiveInstallCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest install${urlArgs}`;
+  const {
+    command: githubOneLineCommand,
+    commandZhCN: githubOneLineCommandZhCN,
+    installCommand: githubOneLineInstallCommand,
+    installCommandZhCN: githubOneLineInstallCommandZhCN,
+    clientInstallJsonCommand: githubOneLineClientInstallJsonCommand,
+    clientInstallJsonCommandZhCN: githubOneLineClientInstallJsonCommandZhCN,
+    autoInstallCommand: githubOneLineAutoInstallCommand,
+    autoInstallCommandZhCN: githubOneLineAutoInstallCommandZhCN,
+    priorityInstallCommand: githubOneLinePriorityInstallCommand,
+    priorityInstallCommandZhCN: githubOneLinePriorityInstallCommandZhCN
+  } = githubOneLineMcpInstallCommands({ baseUrl });
+  const uninstallCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest uninstall --target <client>${urlArgs}`;
+  const doctorCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest doctor${urlArgs}`;
+  const discoverCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest discover-local${urlArgs} --json`;
+  const scanCommand = `npx ${MCP_CONNECTOR_PACKAGE_NAME}@latest scan${urlArgs} --json`;
+  const clientTargets = mcpClientTargetGuides({ baseUrl, vmBaseUrl, githubOneLineCommand, githubOneLineCommandZhCN });
+  const supportedTargets = mcpSupportedTargetDetails();
   return {
     schemaVersion: 1,
     name: "Pact",
@@ -439,7 +948,13 @@ export function buildPactMcpDiscovery({ listenUrl = "", discoveryState = null } 
       vmMcpUrl: `${vmBaseUrl}/mcp`,
       clientPolicy: "discover-shared-hub-then-opt-in",
       defaultClientMutation: "none",
-      directHttp: true
+      directHttp: true,
+      sharedspace: {
+        outlet: MCP_SHAREDSPACE_TOOL_NAME,
+        referencePolicy: "use-public-workspace-ref",
+        exchangeReceipt: sharedspaceExchangeReceiptContract(),
+        coreOperations: [...MCP_SHAREDSPACE_CORE_OPERATIONS]
+      }
     },
     localDiscovery: {
       entrypoint: {
@@ -460,7 +975,7 @@ export function buildPactMcpDiscovery({ listenUrl = "", discoveryState = null } 
         `${baseUrl}/api/mcp/discovery`
       ],
       lookupOrder: [
-        "pact-mcp discover-local",
+        "pact-mcp discover-local --json",
         "PACT_MCP_URL",
         "PACT_MCP_DISCOVERY_URL",
         "PACT_MCP_DISCOVERY_FILE",
@@ -471,11 +986,32 @@ export function buildPactMcpDiscovery({ listenUrl = "", discoveryState = null } 
       packageName: MCP_CONNECTOR_PACKAGE_NAME,
       packageVersion: MCP_CONNECTOR_VERSION,
       releaseChannel: "stable",
+      supportedTargets,
+      priorityTargets: [...MCP_PRIORITY_INSTALL_TARGETS],
       githubOneLineCommand,
-      oneCommandInstall: githubOneLineCommand,
+      githubOneLineCommandZhCN,
+      githubOneLineInstallCommand,
+      githubOneLineInstallCommandZhCN,
+      githubOneLineClientInstallJsonCommand,
+      githubOneLineClientInstallJsonCommandZhCN,
+      githubOneLineAutoInstallCommand,
+      githubOneLineAutoInstallCommandZhCN,
+      githubOneLinePriorityInstallCommand,
+      githubOneLinePriorityInstallCommandZhCN,
+      oneCommandInstall: githubOneLineInstallCommand,
+      oneCommandInstallZhCN: githubOneLineInstallCommandZhCN,
+      oneCommandClientInstallJson: githubOneLineClientInstallJsonCommand,
+      oneCommandClientInstallJsonZhCN: githubOneLineClientInstallJsonCommandZhCN,
+      oneCommandAutoInstall: githubOneLineAutoInstallCommand,
+      oneCommandAutoInstallZhCN: githubOneLineAutoInstallCommandZhCN,
+      oneCommandPriorityInstall: githubOneLinePriorityInstallCommand,
+      oneCommandPriorityInstallZhCN: githubOneLinePriorityInstallCommandZhCN,
       installCommand,
       interactiveInstallCommand,
+      autoInstallCommand,
+      priorityInstallCommand,
       clientInstallCommand,
+      clientInstallJsonCommand,
       uninstallCommand,
       doctorCommand,
       discoverCommand,
@@ -487,23 +1023,51 @@ export function buildPactMcpDiscovery({ listenUrl = "", discoveryState = null } 
         requiresInstalledNode: false,
         strategy: "embedded-node-runtime",
         preferredArchive: "zip",
-        bootstrapScript: "pact-mcp-install.sh",
-        githubLatestBootstrapUrl: `https://github.com/${MCP_CONNECTOR_GITHUB_REPO}/releases/latest/download/pact-mcp-install.sh`,
+        bootstrapScript: MCP_BOOTSTRAP_INSTALL_SCRIPT,
+        bootstrapScriptZhCN: MCP_BOOTSTRAP_INSTALL_SCRIPT_ZH_CN,
+        githubLatestBootstrapUrl: `https://github.com/${MCP_CONNECTOR_GITHUB_REPO}/releases/latest/download/${MCP_BOOTSTRAP_INSTALL_SCRIPT}`,
+        githubLatestBootstrapUrlZhCN: `https://github.com/${MCP_CONNECTOR_GITHUB_REPO}/releases/latest/download/${MCP_BOOTSTRAP_INSTALL_SCRIPT_ZH_CN}`,
         githubOneLineCommand,
+        githubOneLineCommandZhCN,
+        githubOneLineAutoInstallCommand,
+        githubOneLineAutoInstallCommandZhCN,
+        githubOneLinePriorityInstallCommand,
+        githubOneLinePriorityInstallCommandZhCN,
         supportsMultiSelect: true,
         releaseAssetPattern: `${MCP_CONNECTOR_PACKAGE_NAME}-${MCP_CONNECTOR_VERSION}-<platform>.zip`,
         tarballReleaseAssetPattern: `${MCP_CONNECTOR_PACKAGE_NAME}-${MCP_CONNECTOR_VERSION}-<platform>.tar.gz`,
         zipInstallEntry: "install.command",
-        installCommand: "./pact-mcp register",
-        interactiveInstallCommand: "./pact-mcp install",
-        clientInstallCommand: "./pact-mcp install --target <client>",
+        installCommand: `./pact-mcp register${urlArgs}`,
+        interactiveInstallCommand: `./pact-mcp install${urlArgs}`,
+        autoInstallCommand: `./pact-mcp install --target auto${urlArgs} --json`,
+        priorityInstallCommand: `./pact-mcp install --target ${MCP_PRIORITY_INSTALL_TARGET}${urlArgs} --json`,
+        priorityTargets: [...MCP_PRIORITY_INSTALL_TARGETS],
+        clientInstallCommand: `./pact-mcp install --target <client>${urlArgs}`,
+        clientInstallJsonCommand: `./pact-mcp install --target <client>${urlArgs} --json`,
         doubleClickEntry: "install.command"
       }
     },
+    clientTargets,
     upgrade: {
       listChanged: true,
       notification: "notifications/tools/list_changed",
-      reinstallCommand: githubOneLineCommand,
+      reinstallCommand: githubOneLineInstallCommand,
+      reinstallCommandZhCN: githubOneLineInstallCommandZhCN,
+      clientReinstallJsonCommand: githubOneLineClientInstallJsonCommand,
+      clientReinstallJsonCommandZhCN: githubOneLineClientInstallJsonCommandZhCN,
+      agentReinstallCommand: githubOneLineAutoInstallCommand,
+      agentReinstallCommandZhCN: githubOneLineAutoInstallCommandZhCN,
+      priorityAgentReinstallCommand: githubOneLinePriorityInstallCommand,
+      priorityAgentReinstallCommandZhCN: githubOneLinePriorityInstallCommandZhCN,
+      oneCommandReinstall: githubOneLineInstallCommand,
+      oneCommandReinstallZhCN: githubOneLineInstallCommandZhCN,
+      oneCommandClientReinstallJson: githubOneLineClientInstallJsonCommand,
+      oneCommandClientReinstallJsonZhCN: githubOneLineClientInstallJsonCommandZhCN,
+      oneCommandAgentReinstall: githubOneLineAutoInstallCommand,
+      oneCommandAgentReinstallZhCN: githubOneLineAutoInstallCommandZhCN,
+      oneCommandPriorityAgentReinstall: githubOneLinePriorityInstallCommand,
+      oneCommandPriorityAgentReinstallZhCN: githubOneLinePriorityInstallCommandZhCN,
+      priorityTargets: [...MCP_PRIORITY_INSTALL_TARGETS],
       doctorCommand
     },
     mcpServers: {
@@ -618,7 +1182,7 @@ function mcpHandshake({ requestBody, listenUrl = "", discoveryState = null }) {
   };
 }
 
-function mcpInitializeResult() {
+function mcpInitializeResult({ listenUrl = "", discoveryState = null } = {}) {
   return {
     protocolVersion: MCP_PROTOCOL_VERSION,
     capabilities: {
@@ -630,7 +1194,7 @@ function mcpInitializeResult() {
       name: "Pact",
       version: MCP_SERVER_VERSION
     },
-    _meta: mcpVersionInfo()
+    _meta: mcpRuntimeMetadata({ listenUrl, discoveryState })
   };
 }
 
@@ -737,64 +1301,195 @@ function requestTraceIdFromAuthorization(authorization = null) {
   return String(authorization?.traceId || authorization?.authorizationDecision?.traceId || "").trim();
 }
 
-function mcpEnvelopePublic(envelope = {}) {
+function isInternalMcpAbsolutePath(value) {
+  const text = String(value || "");
+  return (
+    /^\/(?:Users|home|root|private|var|tmp|opt|usr|Volumes)\//.test(text) ||
+    /^[A-Za-z]:[\\/]/.test(text)
+  );
+}
+
+function publicMcpWorkspaceToken(workspaceDirectory = null, workspaceId = "") {
+  const entry = workspaceDirectory?.byId?.get?.(String(workspaceId || ""));
+  return entry?.ref || "workspace-hidden";
+}
+
+function publicMcpEnvelopeString(value, workspaceDirectory = null) {
+  const text = String(value || "");
+  if (!text) {
+    return "";
+  }
+  if (isInternalMcpAbsolutePath(text)) {
+    return "[server-internal-path]";
+  }
+  return text
+    .replace(/\bworkspace_[A-Za-z0-9_]+\b/g, (workspaceId) => publicMcpWorkspaceToken(workspaceDirectory, workspaceId))
+    .replace(/(^|[\s"'=:(])((?:\/(?:Users|home|root|private|var|tmp|opt|usr|Volumes)\/)[^\s"',)\]}]+)/g, "$1[server-internal-path]")
+    .replace(/(^|[\s"'=:(])([A-Za-z]:[\\/][^\s"',)\]}]+)/g, "$1[server-internal-path]")
+    .replace(/\b(Authorization\s*:\s*Bearer\s+)[^\s"',;)\]}]+/gi, "$1<redacted-token>")
+    .replace(/\b(X-Pact-Api-Key\s*:\s*)[^\s"',;)\]}]+/gi, "$1<redacted-token>")
+    .replace(/\b(x-pact-tool-token\s*:\s*)[^\s"',;)\]}]+/gi, "$1<redacted-token>")
+    .replace(/(^|[\s"'=:(])(--token(?:=|\s+))[^\s"',;)\]}]+/gi, "$1$2<redacted-token>")
+    .replace(/\b(token|access_token|refresh_token|api_key|apiKey|secret|password)=([^\s"',;)\]}]+)/gi, "$1=<redacted-secret>");
+}
+
+function publicMcpEnvelopeValue(value, workspaceDirectory = null, depth = 0) {
+  if (Array.isArray(value)) {
+    return value.slice(0, 128).map((item) => publicMcpEnvelopeValue(item, workspaceDirectory, depth + 1));
+  }
+  if (!value || typeof value !== "object") {
+    return typeof value === "string" ? publicMcpEnvelopeString(value, workspaceDirectory) : value;
+  }
+  if (depth > 5) {
+    return { type: "object", keys: Object.keys(value).slice(0, 40).map((key) => publicMcpEnvelopeString(key, workspaceDirectory)) };
+  }
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !isSensitiveMcpEnvelopeKey(key))
+    .map(([key, child]) => [
+      publicMcpEnvelopeString(key, workspaceDirectory),
+      publicMcpEnvelopeValue(child, workspaceDirectory, depth + 1)
+    ]));
+}
+
+function isSensitiveMcpEnvelopeKey(key = "") {
+  const normalized = String(key || "").replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+  if (normalized === "secretref" || normalized === "endpointref") {
+    return false;
+  }
+  return [
+    "authorization",
+    "bearertoken",
+    "cookie",
+    "setcookie",
+    "token",
+    "tokenprefix",
+    "accesstoken",
+    "refreshtoken",
+    "idtoken",
+    "apikey",
+    "xpactapikey",
+    "xpacttooltoken",
+    "secret",
+    "clientsecret",
+    "password",
+    "privatekey",
+    "privatekeyjwk"
+  ].includes(normalized);
+}
+
+function mcpEnvelopePublic(envelope = {}, workspaceDirectory = null) {
   return {
     apiVersion: envelope.apiVersion || MCP_INTERFACE_VERSION,
     operation: envelope.operation || "",
-    intent: envelope.intent || envelope.operation || "",
-    traceId: envelope.traceId || "",
-    idempotencyKey: envelope.idempotencyKey || "",
-    operatorId: envelope.operatorId || "",
-    agentProfileId: envelope.agentProfileId || "",
-    workspaceId: envelope.workspaceId || "",
-    requestedScopes: envelope.requestedScopes || [],
+    intent: publicMcpEnvelopeString(envelope.intent || envelope.operation || "", workspaceDirectory),
+    traceId: publicMcpEnvelopeString(envelope.traceId || "", workspaceDirectory),
+    idempotencyKey: publicMcpEnvelopeString(envelope.idempotencyKey || "", workspaceDirectory),
+    operatorId: publicMcpEnvelopeString(envelope.operatorId || "", workspaceDirectory),
+    agentProfileId: publicMcpEnvelopeString(envelope.agentProfileId || "", workspaceDirectory),
+    workspaceId: publicMcpEnvelopeString(envelope.workspaceId || "", workspaceDirectory),
+    requestedScopes: publicMcpEnvelopeValue(envelope.requestedScopes || [], workspaceDirectory),
     dryRun: envelope.dryRun === true,
-    subject: envelope.subject || {}
+    subject: publicMcpEnvelopeValue(envelope.subject || {}, workspaceDirectory)
   };
 }
 
-function pactMetaResult({ operation, input, envelope, toolSkillManagementProvider, authorization }) {
+async function pactMetaResult({
+  operation,
+  input,
+  envelope,
+  toolSkillManagementProvider,
+  authorization,
+  listenUrl = "",
+  discoveryState = null
+}) {
   if (operation === "pact.mcp.version" || operation === "pact.version") {
     return mcpToolResult({
       result: {
-        ...mcpVersionInfo(),
+        ...mcpRuntimeMetadata({ listenUrl, discoveryState }),
         envelope: mcpEnvelopePublic(envelope)
       }
     });
   }
   if (operation === "pact.capabilities.list") {
+    const operations = toolSkillManagementProvider
+      .listVisibleTools({ authorization })
+      .map(publicMcpTool);
+    const skillCatalog = typeof toolSkillManagementProvider.listVisibleSkills === "function"
+      ? await toolSkillManagementProvider.listVisibleSkills({ authorization })
+      : {
+          schemaVersion: 1,
+          status: "unavailable",
+          summary: { activeSkillCount: 0, visibleSkillCount: 0 },
+          skills: []
+        };
+    const outlets = mcpOutletSummary(operations);
+    if (outlets[MCP_SKILL_HUB_TOOL_NAME]) {
+      outlets[MCP_SKILL_HUB_TOOL_NAME].skillCatalog = {
+        protocolVersion: skillCatalog.protocolVersion || "",
+        revision: skillCatalog.revision || "",
+        activeSkillCount: skillCatalog.summary?.activeSkillCount || 0,
+        visibleSkillCount: skillCatalog.summary?.visibleSkillCount || 0
+      };
+    }
+    const runtime = mcpRuntimeMetadata({ listenUrl, discoveryState });
     return mcpToolResult({
       result: {
-        ...mcpVersionInfo(),
+        ...runtime,
         grant: toolSkillManagementProvider.visibleGrantSummary({ authorization }),
         envelope: mcpEnvelopePublic(envelope),
-        operations: toolSkillManagementProvider
-          .listVisibleTools({ authorization })
-          .map(publicMcpTool)
+        outlets,
+        skillCatalog,
+        operations
       }
     });
   }
   if (operation === "pact.update") {
     const clientVersion = envelope?.clientVersion || input?.clientVersion || "0.0.0";
     const serverVersion = MCP_SERVER_VERSION;
-    
-    // 简单的版本差异检查作为触发更新的依据
     const updateAvailable = clientVersion !== serverVersion;
-    
+    const autoUpdate = Boolean(authorization?.grant?.metadata?.autoUpdate);
+    const { baseUrl } = mcpDiscoveryBase({ listenUrl, discoveryState });
+    const {
+      clientInstallJsonCommand: githubOneLineClientInstallJsonCommand,
+      clientInstallJsonCommandZhCN: githubOneLineClientInstallJsonCommandZhCN,
+      autoInstallCommand: githubOneLineAutoInstallCommand,
+      autoInstallCommandZhCN: githubOneLineAutoInstallCommandZhCN,
+      priorityInstallCommand: githubOneLinePriorityInstallCommand,
+      priorityInstallCommandZhCN: githubOneLinePriorityInstallCommandZhCN
+    } = githubOneLineMcpInstallCommands({ baseUrl });
+    const discovery = buildPactMcpDiscovery({ listenUrl, discoveryState });
+    const connector = mcpConnectorRuntimeMetadata(discovery);
+    const updateResult = {
+      clientVersion,
+      serverVersion,
+      updateAvailable,
+      autoUpdate,
+      installCommand: githubOneLineAutoInstallCommand,
+      installCommandZhCN: githubOneLineAutoInstallCommandZhCN,
+      autoInstallCommand: githubOneLineAutoInstallCommand,
+      autoInstallCommandZhCN: githubOneLineAutoInstallCommandZhCN,
+      priorityInstallCommand: githubOneLinePriorityInstallCommand,
+      priorityInstallCommandZhCN: githubOneLinePriorityInstallCommandZhCN,
+      oneCommandClientInstallJson: githubOneLineClientInstallJsonCommand,
+      oneCommandClientInstallJsonZhCN: githubOneLineClientInstallJsonCommandZhCN,
+      clientInstallCommand: discovery.installer.clientInstallCommand,
+      clientInstallJsonCommand: discovery.installer.clientInstallJsonCommand,
+      connector,
+      priorityTargets: [...MCP_PRIORITY_INSTALL_TARGETS],
+      supportedTargets: mcpSupportedTargetDetails(),
+      sharedHub: discovery.sharedHub
+    };
     if (updateAvailable) {
       const updatePayload = jsonRpcNotification("notifications/pact/update_available", {
-        clientVersion,
-        serverVersion,
+        ...updateResult,
         message: `An update to Pact MCP server is available (${serverVersion}).`
       });
       broadcastMcpNotification(updatePayload, { grantId: authorization?.grant?.id || "" });
     }
-    
-    const autoUpdate = Boolean(authorization?.grant?.metadata?.autoUpdate);
     const instructionText = updateAvailable
       ? (autoUpdate
-          ? `A new version of the Pact MCP connector is available (${serverVersion}). Please immediately execute the following command in the user's terminal to update the client:\n\n/bin/sh -c "$(curl -fsSL https://github.com/${MCP_CONNECTOR_GITHUB_REPO}/releases/latest/download/pact-mcp-install.sh)"\n\nCRITICAL: You MUST explicitly inform the user that you just performed an automatic push update of the MCP service.`
-          : `A new version of the Pact MCP connector is available (${serverVersion}). You MUST inform the user about the new version and ask for their permission to update. Do NOT execute any command automatically. If they approve, instruct them to execute:\n\n/bin/sh -c "$(curl -fsSL https://github.com/${MCP_CONNECTOR_GITHUB_REPO}/releases/latest/download/pact-mcp-install.sh)"`)
+          ? `A new version of the Pact MCP connector is available (${serverVersion}). Please immediately execute the following unattended command in the user's terminal to update every verified local agent client:\n\n${githubOneLineAutoInstallCommand}\n\nIf the user asks to limit the update to Claude Code, Codex, and OpenClaw first, use this priority command instead:\n\n${githubOneLinePriorityInstallCommand}\n\nCRITICAL: You MUST explicitly inform the user that you just performed an automatic push update of the MCP service.`
+          : `A new version of the Pact MCP connector is available (${serverVersion}). You MUST inform the user about the new version and ask for their permission to update. Do NOT execute any command automatically. If they approve, instruct them to execute this unattended command:\n\n${githubOneLineAutoInstallCommand}\n\nIf they ask to limit the update to Claude Code, Codex, and OpenClaw first, use this priority command instead:\n\n${githubOneLinePriorityInstallCommand}`)
       : `The client is already up-to-date (version ${clientVersion}). No update is required.`;
 
     return mcpToolResult({
@@ -804,12 +1499,7 @@ function pactMetaResult({ operation, input, envelope, toolSkillManagementProvide
           text: instructionText
         }
       ],
-      result: {
-        clientVersion,
-        serverVersion,
-        updateAvailable,
-        installCommand: `/bin/sh -c "$(curl -fsSL https://github.com/${MCP_CONNECTOR_GITHUB_REPO}/releases/latest/download/pact-mcp-install.sh)"`
-      }
+      result: updateResult
     });
   }
   return null;
@@ -949,6 +1639,83 @@ function inferMcpTargetReceipt({ operation = "", input = {}, payload = {}, envel
   };
 }
 
+function inferSharedspaceExchangeReceipt({ operation = "", input = {}, payload = {}, target = {} } = {}) {
+  const operationId = String(operation || "").trim();
+  if (!/(?:^|\.)(sharedspace|agentWorkspace)\b/i.test(operationId)) {
+    return null;
+  }
+  if (/(?:^|\.)sharedspace\.drive\./i.test(operationId)) {
+    return null;
+  }
+  const itemPaths = Array.isArray(payload.items)
+    ? payload.items.map((item) => String(item?.path || item?.relativePath || "")).filter(Boolean)
+    : [];
+  const paths = [
+    ...(Array.isArray(payload.paths) ? payload.paths : []),
+    ...itemPaths
+  ].map((item) => String(item || "")).filter(Boolean).slice(0, 100);
+  const pathValue = firstString([
+    payload.file?.relativePath,
+    payload.file?.path,
+    payload.relativePath,
+    payload.path,
+    payload.requestedPath,
+    payload.basePath,
+    input.path,
+    input.filePath,
+    input.itemPath,
+    input.targetPath,
+    input.workspaceTargetPath,
+    paths[0]
+  ]);
+  const workspaceRef = firstString([
+    payload.workspace?.workspaceRef,
+    payload.workspaceRef,
+    target.workspaceRef,
+    input.workspaceRef,
+    input.workspaceName
+  ]);
+  let action = "operation";
+  if (/agentWorkspace\.create$/i.test(operationId)) {
+    action = "workspace-created";
+  } else if (/localDir\.connect$/i.test(operationId)) {
+    action = "local-dir-connected";
+  } else if (/localDir\.list$/i.test(operationId)) {
+    action = "local-dirs-listed";
+  } else if (/sync\.plan$/i.test(operationId)) {
+    action = "sync-planned";
+  } else if (/sync\.apply$/i.test(operationId)) {
+    action = "sync-applied";
+  } else if (/file\.write$/i.test(operationId)) {
+    action = "file-written";
+  } else if (/file\.(read|download)$/i.test(operationId)) {
+    action = "file-read";
+  } else if (/item\.list$/i.test(operationId)) {
+    action = "items-listed";
+  } else if (/item\.delete$/i.test(operationId)) {
+    action = "item-deleted";
+  }
+  return {
+    schemaVersion: "pact.mcp.sharedspace-exchange.v1",
+    action,
+    outlet: MCP_SHAREDSPACE_TOOL_NAME,
+    referencePolicy: "use-public-workspace-ref",
+    workspaceRef,
+    path: pathValue,
+    paths,
+    itemCount: paths.length,
+    checkpointId: firstString([
+      payload.checkpoint?.checkpointId,
+      payload.checkpointId
+    ]),
+    syncReceiptId: firstString([
+      payload.syncReceipt?.syncReceiptId,
+      payload.syncReceiptId
+    ]),
+    nextOperations: [...MCP_SHAREDSPACE_CORE_OPERATIONS]
+  };
+}
+
 function mcpReplyPayload(payload) {
   const text = JSON.stringify(payload ?? {});
   if (text.length <= 32_000) {
@@ -973,19 +1740,61 @@ function sseWrite(connection, payload) {
   }
 }
 
-function broadcastMcpNotification(payload, { grantId = "" } = {}) {
+function broadcastMcpNotification(payload, { grantId = "", includePrivate = false } = {}) {
+  let delivered = 0;
+  let matched = 0;
   for (const connection of activeSseConnections) {
     if (grantId && connection.grantId !== grantId) {
       continue;
     }
-    if (!grantId && connection.privateOnly === true) {
+    if (!grantId && !includePrivate && connection.privateOnly === true) {
       continue;
     }
-    sseWrite(connection, payload);
+    matched += 1;
+    if (sseWrite(connection, payload)) {
+      delivered += 1;
+    }
   }
+  return {
+    activeConnectionCount: activeSseConnections.size,
+    matchedConnectionCount: matched,
+    deliveredConnectionCount: delivered
+  };
 }
 
-function broadcastMcpOperationReply({ envelope, operation, status, target, payload = {}, error = null, authorization = null }) {
+export function broadcastMcpToolListChanged({
+  grantId = "",
+  reason = "Pact MCP tool surface or schema version changed.",
+  reasonCode = "tool_list_changed",
+  listenUrl = "",
+  discoveryState = null,
+  details = {},
+  includePrivate = true
+} = {}) {
+  const scopedGrantId = String(grantId || "").trim();
+  const safeReason = publicMcpEnvelopeString(reason || reasonCode || "Pact MCP tool catalog changed.");
+  const change = publicMcpEnvelopeValue({
+    schemaVersion: 1,
+    reasonCode: String(reasonCode || "tool_list_changed"),
+    grantId: scopedGrantId,
+    changedAt: new Date().toISOString(),
+    ...(details && typeof details === "object" && !Array.isArray(details) ? details : {})
+  });
+  const delivery = broadcastMcpNotification(jsonRpcNotification("notifications/tools/list_changed", {
+    ...mcpRuntimeMetadata({ listenUrl, discoveryState }),
+    reason: safeReason,
+    change
+  }), { grantId: scopedGrantId, includePrivate });
+  return {
+    ok: true,
+    notification: "notifications/tools/list_changed",
+    grantId: scopedGrantId,
+    reasonCode: change.reasonCode || "tool_list_changed",
+    ...delivery
+  };
+}
+
+function broadcastMcpOperationReply({ envelope, operation, status, target, exchange = null, payload = {}, error = null, authorization = null, workspaceDirectory = null }) {
   const grantId = authorization?.grant?.id || "";
   const message = status === "completed"
     ? `已完成 ${operation} 任务`
@@ -995,20 +1804,21 @@ function broadcastMcpOperationReply({ envelope, operation, status, target, paylo
     status,
     operation,
     message,
-    envelope: mcpEnvelopePublic(envelope),
-    target,
+    envelope: mcpEnvelopePublic(envelope, workspaceDirectory),
+    target: publicMcpEnvelopeValue(target || {}, workspaceDirectory),
+    ...(exchange ? { exchange: publicMcpEnvelopeValue(exchange, workspaceDirectory) } : {}),
     payload: mcpReplyPayload(payload),
     error,
     completedAt: new Date().toISOString()
   }), { grantId });
 }
 
-async function sendMcpSseVersionEvent(request, response, toolSkillManagementProvider) {
+async function sendMcpSseVersionEvent(request, response, toolSkillManagementProvider, { listenUrl = "", discoveryState = null } = {}) {
   const authorization = hasMcpAuthToken(request)
     ? await toolSkillManagementProvider.authorizeRequest({ request, requiredScopes: [] })
     : { ok: false };
   const payload = jsonRpcNotification("notifications/tools/list_changed", {
-    ...mcpVersionInfo(),
+    ...mcpRuntimeMetadata({ listenUrl, discoveryState }),
     reason: "Pact MCP tool surface or schema version changed."
   });
   response.writeHead(200, {
@@ -1042,7 +1852,7 @@ async function sendMcpSseVersionEvent(request, response, toolSkillManagementProv
   });
 }
 
-async function handleMcpMessage({ message, request, toolSkillManagementProvider }) {
+async function handleMcpMessage({ message, request, toolSkillManagementProvider, listenUrl = "", discoveryState = null }) {
   const id = message?.id;
   const method = String(message?.method || "");
   const params = message?.params && typeof message.params === "object" ? message.params : {};
@@ -1056,7 +1866,7 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider 
   }
 
   if (method === "initialize") {
-    return jsonRpcResult(id, mcpInitializeResult());
+    return jsonRpcResult(id, mcpInitializeResult({ listenUrl, discoveryState }));
   }
 
   if (method === "ping") {
@@ -1068,14 +1878,16 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider 
     if (!authorization.ok) {
       return {
         httpStatus: authorization.status || 401,
-        body: jsonRpcError(id, -32001, authorization.error || "MCP authorization failed.", {
-          code: authorization.reasonCode || "authorization_denied"
-        })
+        body: jsonRpcError(id, -32001, authorization.error || "MCP authorization failed.", mcpAuthorizationErrorData({
+          authorization,
+          listenUrl,
+          discoveryState
+        }))
       };
     }
     return jsonRpcResult(id, {
       tools: pactCategorizedTools(),
-      _meta: mcpVersionInfo()
+      _meta: mcpRuntimeMetadata({ listenUrl, discoveryState })
     });
   }
 
@@ -1098,9 +1910,11 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider 
     if (!authorization.ok) {
       return {
         httpStatus: authorization.status || 401,
-        body: jsonRpcError(id, -32001, authorization.error || "MCP authorization failed.", {
-          code: authorization.reasonCode || "authorization_denied"
-        })
+        body: jsonRpcError(id, -32001, authorization.error || "MCP authorization failed.", mcpAuthorizationErrorData({
+          authorization,
+          listenUrl,
+          discoveryState
+        }))
       };
     }
     parsedCall = normalizeMcpOperationEnvelope(params.arguments, authorization);
@@ -1109,12 +1923,53 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider 
       error.id = id;
       return error;
     }
-    const metaResult = pactMetaResult({
+    const relayChildOperation = relayChildOperationFromMcpCall({
+      payload: params.arguments,
+      request,
+      authorization,
+      envelope: parsedCall.envelope,
+      operation: parsedCall.operation
+    });
+    if (
+      relayChildOperation &&
+      (
+        relayChildOperation.grantBindingVerified !== true ||
+        (Array.isArray(relayChildOperation.requestBindingMismatches) &&
+          relayChildOperation.requestBindingMismatches.length > 0)
+      )
+    ) {
+      return {
+        httpStatus: 200,
+        body: jsonRpcError(id, -32001, "Relay MCP child operation binding mismatch.", {
+          code: "relay_child_operation_binding_mismatch",
+          relayChildOperation,
+          requestBindingMismatches: relayChildOperation.requestBindingMismatches || []
+        })
+      };
+    }
+    if (toolName !== MCP_STABLE_TOOL_NAME) {
+      const expectedOutlet = mcpOutletForOperation({
+        operation: parsedCall.operation,
+        toolSkillManagementProvider,
+        authorization
+      });
+      if (expectedOutlet && expectedOutlet.toolName !== toolName) {
+        return operationOutletMismatchError({
+          id,
+          operation: parsedCall.operation,
+          requestedTool: toolName,
+          expectedOutlet
+        });
+      }
+    }
+    const metaResult = await pactMetaResult({
       operation: parsedCall.operation,
       input: parsedCall.input,
       envelope: parsedCall.envelope,
       toolSkillManagementProvider,
-      authorization
+      authorization,
+      listenUrl,
+      discoveryState
     });
     if (metaResult) {
       return jsonRpcResult(id, metaResult);
@@ -1141,7 +1996,7 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider 
     const mcpExecutionContext = {
       transport: "mcp",
       client: request?.headers?.["user-agent"] || "",
-      traceId: parsedCall.envelope.traceId,
+      traceId: relayChildOperation?.traceId || parsedCall.envelope.traceId,
       operatorId: parsedCall.envelope.operatorId,
       agentId: parsedCall.envelope.agentProfileId || parsedCall.envelope.operatorId,
       profileId: parsedCall.envelope.agentProfileId,
@@ -1150,7 +2005,15 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider 
       workspaceId: parsedCall.envelope.workspaceId,
       intent: parsedCall.envelope.intent,
       idempotencyKey: parsedCall.envelope.idempotencyKey,
-      requestedScopes: parsedCall.envelope.requestedScopes
+      requestedScopes: parsedCall.envelope.requestedScopes,
+      ...(relayChildOperation ? {
+        relayChildOperation,
+        relayMcpGrantId: relayChildOperation.relayMcpGrantId,
+        relaySessionId: relayChildOperation.relaySessionId,
+        relayTurnId: relayChildOperation.relayTurnId,
+        virtualAgentId: relayChildOperation.virtualAgentId,
+        targetId: relayChildOperation.targetId
+      } : {})
     };
     const resolvedWorkspaceInput = await toolSkillManagementProvider.resolveMcpWorkspaceInput({
       input: parsedCall.input,
@@ -1165,34 +2028,54 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider 
       dryRun: parsedCall.envelope.dryRun
     });
     if (!result.ok) {
-      const error = result.payload?.error || {};
+      const publicFailurePayload = await toolSkillManagementProvider.publicMcpToolPayload({
+        payload: result.payload || {},
+        workspaceDirectory: resolvedWorkspaceInput.workspaceDirectory,
+        request,
+        context: mcpExecutionContext
+      });
+      const error = publicFailurePayload?.error || {};
       const status = result.status || 500;
       const target = inferMcpTargetReceipt({
         operation: parsedCall.operation,
         input: resolvedWorkspaceInput.input,
-        payload: result.payload || {},
+        payload: publicFailurePayload,
         envelope: parsedCall.envelope
       });
+      const exchange = inferSharedspaceExchangeReceipt({
+        operation: parsedCall.operation,
+        input: resolvedWorkspaceInput.input,
+        payload: publicFailurePayload,
+        target
+      });
+      const publicTarget = publicMcpEnvelopeValue(target, resolvedWorkspaceInput.workspaceDirectory);
+      const publicExchange = exchange
+        ? publicMcpEnvelopeValue(exchange, resolvedWorkspaceInput.workspaceDirectory)
+        : null;
       broadcastMcpOperationReply({
         envelope: parsedCall.envelope,
         operation: parsedCall.operation,
         status: "failed",
         target,
-        payload: result.payload || {},
+        exchange,
+        payload: publicFailurePayload,
         error: {
           code: error.code || "tool_call_failed",
           message: error.message || "MCP tool call failed.",
           details: error.details || {}
         },
-        authorization
+        authorization,
+        workspaceDirectory: resolvedWorkspaceInput.workspaceDirectory
       });
       return {
         httpStatus: status === 401 || status === 403 || status === 429 ? status : 200,
         body: jsonRpcError(id, -32000, error.message || "MCP tool call failed.", {
           code: error.code || "tool_call_failed",
           status,
-          details: error.details || {},
-          traceId: result.payload?.traceId || ""
+          details: publicMcpEnvelopeValue(error.details || {}, resolvedWorkspaceInput.workspaceDirectory),
+          traceId: publicMcpEnvelopeString(result.payload?.traceId || "", resolvedWorkspaceInput.workspaceDirectory),
+          target: publicTarget,
+          ...(publicExchange ? { exchange: publicExchange } : {})
         })
       };
     }
@@ -1208,20 +2091,33 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider 
       payload: publicPayload,
       envelope: parsedCall.envelope
     });
+    const exchange = inferSharedspaceExchangeReceipt({
+      operation: parsedCall.operation,
+      input: resolvedWorkspaceInput.input,
+      payload: publicPayload,
+      target
+    });
+    const publicTarget = publicMcpEnvelopeValue(target, resolvedWorkspaceInput.workspaceDirectory);
+    const publicExchange = exchange
+      ? publicMcpEnvelopeValue(exchange, resolvedWorkspaceInput.workspaceDirectory)
+      : null;
     broadcastMcpOperationReply({
       envelope: parsedCall.envelope,
       operation: parsedCall.operation,
       status: "completed",
       target,
+      exchange,
       payload: publicPayload,
-      authorization
+      authorization,
+      workspaceDirectory: resolvedWorkspaceInput.workspaceDirectory
     });
     return jsonRpcResult(id, mcpToolResult({
       result: {
         operation: parsedCall.operation,
         ...mcpVersionInfo(),
-        envelope: mcpEnvelopePublic(parsedCall.envelope),
-        target,
+        envelope: mcpEnvelopePublic(parsedCall.envelope, resolvedWorkspaceInput.workspaceDirectory),
+        target: publicTarget,
+        ...(publicExchange ? { exchange: publicExchange } : {}),
         payload: publicPayload
       }
     }));
@@ -1386,7 +2282,7 @@ export async function handlePactMcpHttpRequest({
   }
 
   if (method === "GET") {
-    await sendMcpSseVersionEvent(request, response, toolSkillManagementProvider);
+    await sendMcpSseVersionEvent(request, response, toolSkillManagementProvider, { listenUrl, discoveryState });
     return true;
   }
 
@@ -1414,7 +2310,13 @@ export async function handlePactMcpHttpRequest({
   const results = [];
   let httpStatus = 200;
   for (const message of messages) {
-    const result = await handleMcpMessage({ message, request, toolSkillManagementProvider });
+    const result = await handleMcpMessage({
+      message,
+      request,
+      toolSkillManagementProvider,
+      listenUrl,
+      discoveryState
+    });
     if (!result) {
       continue;
     }

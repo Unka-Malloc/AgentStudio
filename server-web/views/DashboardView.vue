@@ -1,51 +1,67 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
-import { useConsole } from '../composables/useConsole';
-import StatusPill from '../components/StatusPill.vue';
+import { computed } from 'vue';
+import { useServerConsoleShellContext } from '../composables/serverConsoleShellContext';
+import ApprovalFlowCardList from '../components/approval/ApprovalFlowCardList.vue';
 import SegmentedToggle from '../components/SegmentedToggle.vue';
-import { watch } from 'vue';
+import StatusPill from '../components/StatusPill.vue';
+import { provideApprovalFlowView } from '../composables/approvalFlowViewContext';
+import { useApprovalFlowViewController } from '../composables/console-approval-flow-view-controller';
+import type { DashboardAlert } from '../types/app';
 
 const {
   busyKey,
   consoleState,
+  dashboardAlertCounts,
   dashboardAlertInboxId,
   dashboardAlertSummary,
   dashboardAlerts,
+  dashboardConfigurationQueue,
   dismissDashboardAlert,
+  dashboardMonitorQueue,
+  dashboardPrimaryAlert,
+  dashboardSecondaryAlerts,
   knowledgeConsole,
   openDashboardAlert,
-  mcpAuthorizationRequests,
-  mcpAuthorizationStatus,
+} = useServerConsoleShellContext();
+
+const approvalFlow = useApprovalFlowViewController();
+provideApprovalFlowView(approvalFlow);
+const {
+  approvalFlowCards,
+  approvalFlowStatus,
   mcpAuthorizationStatusOptionBarOptions,
-  fuseKnowledgeReview,
-  knowledgeReviewCanResolveWithDocument,
-  knowledgeReviewItems,
-  knowledgeReviewReasonLabel,
-  knowledgeReviewSimilarity,
-  knowledgeReviewStatus,
-  knowledgeReviewStatusLabel,
-  knowledgeReviewStatusOptionBarOptions,
-  knowledgeReviewTitle,
-  knowledgeReviewTone,
-  refreshMcpAuthorizationRequests,
-  refreshKnowledgeConflicts,
-  resolveKnowledgeReview,
-  resolveMcpAuthorizationRequest,
-  selectedKnowledgeReviewFusionModel,
-} = useConsole();
+} = approvalFlow;
 
-watch(mcpAuthorizationStatus, () => {
-  refreshMcpAuthorizationRequests();
-});
+const clientTotalCount = computed(() => consoleState.value?.clients?.summary?.totalCount || 0);
+const clientOfflineCount = computed(() => consoleState.value?.clients?.summary?.offlineCount || 0);
+const clientOnlineCount = computed(() => Math.max(0, clientTotalCount.value - clientOfflineCount.value));
+const approvalFlowCount = computed(() => approvalFlowCards.value.length);
 
-watch(knowledgeReviewStatus, () => {
-  refreshKnowledgeConflicts();
-});
+function alertBusyKey(alertItem: DashboardAlert) {
+  if (alertItem.actionKind === "recover-supervisor") {
+    return "background-supervisor:recover";
+  }
+  return `monitor-alert:ack:${alertItem.alertId}`;
+}
 
-onMounted(() => {
-  refreshMcpAuthorizationRequests();
-  refreshKnowledgeConflicts();
-});
+function isAlertBusy(alertItem: DashboardAlert) {
+  return busyKey.value === alertBusyKey(alertItem);
+}
+
+function isDismissBusy(alertItem: DashboardAlert) {
+  return busyKey.value === `monitor-alert:ack:${alertItem.alertId}`;
+}
+
+function dashboardAlertActionLabel(alertItem: DashboardAlert) {
+  if (isAlertBusy(alertItem) && alertItem.actionKind === "recover-supervisor") {
+    return "拉起中";
+  }
+  return alertItem.actionLabel || (alertItem.source === "configuration"
+    ? "处理配置"
+    : alertItem.tone === "success"
+      ? "确认恢复"
+      : "查看巡检");
+}
 </script>
 
 <template>
@@ -72,19 +88,19 @@ onMounted(() => {
       </article>
       <article class="metric-card">
         <div class="metric-card-header">
-          <span>客户端设备</span>
+          <span>客户端</span>
           <StatusPill
-            :tone="(consoleState?.clients?.summary?.totalCount || 0) > 0 ? 'success' : 'neutral'"
-            :label="(consoleState?.clients?.summary?.totalCount || 0) > 0 ? '在线' : '无设备'"
+            :tone="clientOnlineCount > 0 ? 'success' : 'neutral'"
+            :label="clientTotalCount > 0 ? `${clientOnlineCount} 在线` : '无客户端'"
             :show-dot="false"
           />
         </div>
-        <h3>{{ consoleState?.clients?.summary?.totalCount || 0 }}</h3>
-        <p>{{ consoleState?.discovery?.value?.mode || "active" }} 模式</p>
+        <h3>{{ clientTotalCount }}</h3>
+        <p>离线 {{ clientOfflineCount }}</p>
       </article>
       <article class="metric-card">
         <div class="metric-card-header">
-          <span>工作队列</span>
+          <span>任务队列</span>
           <StatusPill
             :tone="(consoleState?.jobs?.summary?.runningCount || 0) > 0 ? 'running' : 'neutral'"
             :label="(consoleState?.jobs?.summary?.runningCount || 0) > 0 ? `${consoleState?.jobs?.summary?.runningCount || 0} 运行中` : '空闲'"
@@ -102,210 +118,166 @@ onMounted(() => {
           <p>{{ dashboardAlertSummary }}</p>
         </div>
         <StatusPill
-          :tone="dashboardAlerts.length ? 'warning' : 'success'"
-          :label="dashboardAlerts.length ? `${dashboardAlerts.length} 项` : '已就绪'"
+          :tone="dashboardAlertCounts.total ? 'warning' : 'success'"
+          :label="dashboardAlertCounts.total ? `${dashboardAlertCounts.total} 项` : '已就绪'"
         />
       </div>
-      <div v-if="dashboardAlerts.length" class="configuration-alert-list">
+      <div class="dashboard-alert-counts" role="list" aria-label="报警分类">
+        <span class="dashboard-alert-count" data-tone="danger" role="listitem">
+          <strong>{{ dashboardAlertCounts.danger }}</strong>
+          <span>严重</span>
+        </span>
+        <span class="dashboard-alert-count" data-tone="warning" role="listitem">
+          <strong>{{ dashboardAlertCounts.warning }}</strong>
+          <span>警告</span>
+        </span>
+        <span class="dashboard-alert-count" data-tone="configuration" role="listitem">
+          <strong>{{ dashboardAlertCounts.configuration }}</strong>
+          <span>配置</span>
+        </span>
+        <span class="dashboard-alert-count" data-tone="success" role="listitem">
+          <strong>{{ dashboardAlertCounts.recovered }}</strong>
+          <span>已恢复</span>
+        </span>
+      </div>
+      <div v-if="dashboardAlerts.length" class="dashboard-alert-triage">
         <article
-          v-for="alertItem in dashboardAlerts"
-          :key="dashboardAlertInboxId(alertItem)"
-          class="configuration-alert-item"
-          :data-tone="alertItem.tone"
-          :data-live="alertItem.live === false ? 'false' : 'true'"
+          v-if="dashboardPrimaryAlert"
+          class="dashboard-alert-primary"
+          :data-tone="dashboardPrimaryAlert.tone"
+          :data-live="dashboardPrimaryAlert.live === false ? 'false' : 'true'"
         >
-          <span class="configuration-alert-category">{{ alertItem.category }}</span>
-          <strong>{{ alertItem.title }}</strong>
-          <span>{{ alertItem.detail }}</span>
-          <em>{{ alertItem.status }}</em>
-          <div class="configuration-alert-actions">
+          <div class="dashboard-alert-primary-copy">
+            <span class="configuration-alert-category">{{ dashboardPrimaryAlert.category }}</span>
+            <strong>{{ dashboardPrimaryAlert.title }}</strong>
+            <span>{{ dashboardPrimaryAlert.detail }}</span>
+          </div>
+          <em>{{ dashboardPrimaryAlert.status }}</em>
+          <div class="dashboard-alert-primary-actions">
             <button
               class="configuration-alert-action"
               type="button"
-              :disabled="busyKey === `monitor-alert:ack:${alertItem.alertId}`"
-              @click="openDashboardAlert(alertItem)"
+              :disabled="isAlertBusy(dashboardPrimaryAlert)"
+              @click="openDashboardAlert(dashboardPrimaryAlert)"
             >
-              {{ alertItem.source === "configuration" ? "去配置" : "查看报警" }}
+              {{ dashboardAlertActionLabel(dashboardPrimaryAlert) }}
             </button>
             <button
               class="configuration-alert-action danger-action"
               type="button"
-              :disabled="busyKey === `monitor-alert:ack:${alertItem.alertId}`"
-              @click="dismissDashboardAlert(alertItem)"
+              :disabled="isDismissBusy(dashboardPrimaryAlert)"
+              @click="dismissDashboardAlert(dashboardPrimaryAlert)"
             >
-              {{ busyKey === `monitor-alert:ack:${alertItem.alertId}` ? "确认中" : "确认关闭" }}
+              {{ isDismissBusy(dashboardPrimaryAlert) ? "确认中" : "确认关闭" }}
             </button>
           </div>
         </article>
+        <div class="dashboard-alert-queues">
+          <section v-if="dashboardAlertCounts.configuration" class="dashboard-alert-queue">
+            <header>
+              <strong>配置队列</strong>
+              <span>{{ dashboardAlertCounts.configuration }} 项</span>
+            </header>
+            <ul v-if="dashboardConfigurationQueue.length">
+              <li
+                v-for="alertItem in dashboardConfigurationQueue.slice(0, 3)"
+                :key="dashboardAlertInboxId(alertItem)"
+              >
+                <span>{{ alertItem.title }}</span>
+                <button
+                  class="configuration-alert-action"
+                  type="button"
+                  @click="openDashboardAlert(alertItem)"
+                >
+                  处理
+                </button>
+              </li>
+            </ul>
+            <p v-else>首要配置项已置顶。</p>
+          </section>
+          <section v-if="dashboardAlertCounts.monitor" class="dashboard-alert-queue">
+            <header>
+              <strong>巡检队列</strong>
+              <span>{{ dashboardAlertCounts.monitor }} 项</span>
+            </header>
+            <ul v-if="dashboardMonitorQueue.length">
+              <li
+                v-for="alertItem in dashboardMonitorQueue.slice(0, 3)"
+                :key="dashboardAlertInboxId(alertItem)"
+              >
+                <span>{{ alertItem.title }}</span>
+                <button
+                  class="configuration-alert-action"
+                  type="button"
+                  :disabled="isAlertBusy(alertItem)"
+                  @click="openDashboardAlert(alertItem)"
+                >
+                  {{ dashboardAlertActionLabel(alertItem) }}
+                </button>
+              </li>
+            </ul>
+            <p v-else>首要巡检项已置顶。</p>
+          </section>
+        </div>
+        <div v-if="dashboardSecondaryAlerts.length" class="dashboard-alert-secondary-list">
+          <article
+            v-for="alertItem in dashboardSecondaryAlerts"
+            :key="dashboardAlertInboxId(alertItem)"
+            class="configuration-alert-item"
+            :data-tone="alertItem.tone"
+            :data-live="alertItem.live === false ? 'false' : 'true'"
+          >
+            <span class="configuration-alert-category">{{ alertItem.category }}</span>
+            <strong>{{ alertItem.title }}</strong>
+            <span>{{ alertItem.detail }}</span>
+            <em>{{ alertItem.status }}</em>
+            <div class="configuration-alert-actions">
+              <button
+                class="configuration-alert-action"
+                type="button"
+                :disabled="isAlertBusy(alertItem)"
+                @click="openDashboardAlert(alertItem)"
+              >
+                {{ dashboardAlertActionLabel(alertItem) }}
+              </button>
+              <button
+                class="configuration-alert-action danger-action"
+                type="button"
+                :disabled="isDismissBusy(alertItem)"
+                @click="dismissDashboardAlert(alertItem)"
+              >
+                {{ isDismissBusy(alertItem) ? "确认中" : "确认关闭" }}
+              </button>
+            </div>
+          </article>
+        </div>
       </div>
       <div v-else class="configuration-alert-empty">
         <strong>没有报警</strong>
         <span>空配置、中断和后台巡检当前都没有需要处理的事项。</span>
       </div>
     </article>
-    <article class="surface-card">
+    <article class="surface-card configuration-alert-card dashboard-approval-card">
       <div class="section-header">
         <div>
-          <h3>全平台审批流</h3>
+          <h3>审批流</h3>
           <p>统一处理 MCP 授权、知识入库冲突等需要人工决策的事项。</p>
         </div>
-        <div class="source-actions">
+        <div class="dashboard-approval-actions">
+          <StatusPill
+            :tone="approvalFlowCount ? 'warning' : 'success'"
+            :label="approvalFlowCount ? `${approvalFlowCount} 项` : '已清空'"
+          />
           <SegmentedToggle
-            v-model="mcpAuthorizationStatus"
+            v-model="approvalFlowStatus"
             :options="mcpAuthorizationStatusOptionBarOptions"
-            aria-label="MCP 授权请求状态"
+            aria-label="审批流状态"
             size="small"
           />
-          <button
-            class="tool-button"
-            type="button"
-            :disabled="busyKey === 'mcp-authorization-requests:refresh'"
-            @click="refreshMcpAuthorizationRequests"
-          >
-            {{ busyKey === "mcp-authorization-requests:refresh" ? "刷新中" : "刷新授权" }}
-          </button>
         </div>
       </div>
 
-      <section class="approval-flow-section">
-        <div class="section-header compact-section-header">
-          <div>
-            <h4>MCP 客户端授权</h4>
-            <p>外部 MCP 客户端请求工具授权时，在这里统一批准或拒绝。</p>
-          </div>
-        </div>
-      <div v-if="mcpAuthorizationRequests.length" class="configuration-alert-list">
-        <article
-          v-for="req in mcpAuthorizationRequests"
-          :key="req.requestId"
-          class="configuration-alert-item"
-          data-tone="warning"
-        >
-          <span class="configuration-alert-category">MCP Request</span>
-          <strong>{{ req.clientName || 'Unknown Client' }}</strong>
-          <span>用途说明: {{ req.reason || '无' }}</span>
-          <em>状态: {{ req.status === 'pending' ? '待审批' : req.status === 'approved' ? '已批准' : '已拒绝' }}</em>
-          <em v-if="req.requestedTools?.length || req.requestedScopes?.length">
-            请求 {{ req.requestedTools?.length || 0 }} 个工具, {{ req.requestedScopes?.length || 0 }} 个权限域
-          </em>
-
-          <div v-if="req.status === 'pending'" class="configuration-alert-actions">
-            <button
-              class="configuration-alert-action"
-              type="button"
-              :disabled="busyKey === `mcp-authorization-requests:resolve:${req.requestId}`"
-              @click="resolveMcpAuthorizationRequest(req.requestId, 'approved')"
-            >
-              Approve (批准)
-            </button>
-            <button
-              class="configuration-alert-action danger-action"
-              type="button"
-              :disabled="busyKey === `mcp-authorization-requests:resolve:${req.requestId}`"
-              @click="resolveMcpAuthorizationRequest(req.requestId, 'rejected')"
-            >
-              Reject (拒绝)
-            </button>
-          </div>
-        </article>
-      </div>
-      <div v-else class="configuration-alert-empty">
-        <strong>没有待处理的授权请求</strong>
-        <span>目前没有客户端发起新的 MCP 授权请求。</span>
-      </div>
-      </section>
-
-      <section class="approval-flow-section">
-        <div class="section-header compact-section-header">
-          <div>
-            <h4>知识入库冲突</h4>
-            <p>知识录入发现重复来源、路径内容冲突或结构化版本冲突时，在工作台统一决策。</p>
-          </div>
-          <div class="source-actions">
-            <SegmentedToggle
-              v-model="knowledgeReviewStatus"
-              :options="knowledgeReviewStatusOptionBarOptions"
-              aria-label="知识冲突审批状态"
-              size="small"
-            />
-            <button
-              class="tool-button"
-              type="button"
-              :disabled="busyKey === 'knowledge:review-items'"
-              @click="() => refreshKnowledgeConflicts()"
-            >
-              {{ busyKey === "knowledge:review-items" ? "刷新中" : "刷新冲突" }}
-            </button>
-          </div>
-        </div>
-        <div v-if="knowledgeReviewItems.length" class="configuration-alert-list">
-          <article
-            v-for="item in knowledgeReviewItems"
-            :key="item.reviewId"
-            class="configuration-alert-item"
-            :data-tone="knowledgeReviewTone(item)"
-          >
-            <span class="configuration-alert-category">Knowledge Review</span>
-            <strong>{{ knowledgeReviewTitle(item) }}</strong>
-            <span>{{ item.summary || "系统检测到该知识录入需要人工确认。" }}</span>
-            <em>
-              {{ knowledgeReviewStatusLabel(item.status) }}
-              · {{ knowledgeReviewReasonLabel(item.reason) }}
-              · {{ knowledgeReviewSimilarity(item).label }}
-            </em>
-            <div v-if="item.status === 'pending'" class="configuration-alert-actions">
-              <template v-if="knowledgeReviewCanResolveWithDocument(item)">
-                <button
-                  v-if="item.reason === 'source_path_content_conflict'"
-                  class="configuration-alert-action"
-                  type="button"
-                  :disabled="busyKey.startsWith(`knowledge:review:${item.reviewId}:`)"
-                  @click="resolveKnowledgeReview(item, 'replace')"
-                >
-                  覆盖旧知识
-                </button>
-                <button
-                  class="configuration-alert-action"
-                  type="button"
-                  :disabled="knowledgeReviewSimilarity(item).disableKeepBoth || busyKey.startsWith(`knowledge:review:${item.reviewId}:`)"
-                  @click="resolveKnowledgeReview(item, 'keep_both')"
-                >
-                  保留两者
-                </button>
-                <button
-                  class="configuration-alert-action"
-                  type="button"
-                  :disabled="busyKey.startsWith(`knowledge:review:${item.reviewId}:`) || !selectedKnowledgeReviewFusionModel.enabled"
-                  @click="fuseKnowledgeReview(item)"
-                >
-                  知识融合
-                </button>
-              </template>
-              <button
-                v-else
-                class="configuration-alert-action"
-                type="button"
-                :disabled="busyKey.startsWith(`knowledge:review:${item.reviewId}:`)"
-                @click="resolveKnowledgeReview(item, 'accept')"
-              >
-                接受
-              </button>
-              <button
-                class="configuration-alert-action danger-action"
-                type="button"
-                :disabled="busyKey.startsWith(`knowledge:review:${item.reviewId}:`)"
-                @click="resolveKnowledgeReview(item, 'reject')"
-              >
-                放弃
-              </button>
-            </div>
-          </article>
-        </div>
-        <div v-else class="configuration-alert-empty">
-          <strong>没有待处理的知识冲突</strong>
-          <span>知识入库当前没有等待人工决策的记录。</span>
-        </div>
-      </section>
+      <ApprovalFlowCardList />
     </article>
   </section>
 </template>

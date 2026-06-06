@@ -29,6 +29,7 @@ crash-*
 /build/*
 !/build/
 !/build/README.md
+/outputs/
 /reports/production-readiness/
 /.cache/
 
@@ -73,3 +74,8 @@ server/platform/modules/knowledge/ocr/runtime/**
 .playwright-cli/
 output/
 test-results/
+
+# Local AI assistant skill/runtime artifacts
+.gemini/
+.impeccable/
+.github/skills/

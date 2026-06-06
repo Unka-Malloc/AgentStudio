@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "public-documents-format-smoke",
+  "storageRoot": "~/.pact-server-data/evaluation-corpora/public-documents",
+  "description": "Public smoke manifest for PDF/DOCX/XLSX/PPTX evaluation samples. Replace placeholder hashes and byte sizes with real external corpus metadata.",
+  "items": [
+    {
+      "id": "pdf-smoke-001",
+      "relativePath": "apache-tika/pdf/test-documents/sample-layout.pdf",
+      "source": "apache-tika",
+      "sourceUrl": "https://github.com/apache/tika/tree/main/tika-parsers/tika-parsers-standard/tika-parsers-standard-package/src/test/resources/test-documents",
+      "licenseOrTerms": "Apache-2.0",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "byteSize": 0,
+      "format": "pdf",
+      "openability": {
+        "expectedStatus": "opens",
+        "verificationHints": [
+          "macos-quick-look",
+          "libreoffice-draw"
+        ]
+      },
+      "structureAnchors": [
+        {
+          "anchorType": "page",
+          "description": "At least one page boundary and a heading block remain traceable."
+        },
+        {
+          "anchorType": "image",
+          "description": "Embedded image region remains attributable in parser output."
+        }
+      ],
+      "exportExpectations": [
+        {
+          "targetFormat": "docx",
+          "expectedStatus": "opens",
+          "checks": [
+            "docx-export-opens",
+            "page-order-preserved"
+          ]
+        }
+      ],
+      "riskLabels": [
+        "public",
+        "untrusted-parser-input"
+      ],
+      "expectedChecks": [
+        "openability-pdf",
+        "metadata-extracts",
+        "failure-reason-if-unsupported"
+      ],
+      "notes": "Use an external PDF sample with visible headings and at least one embedded image."
+    },
+    {
+      "id": "docx-smoke-001",
+      "relativePath": "docx-corpus/subset/sample-table.docx",
+      "source": "docx-corpus",
+      "sourceUrl": "https://github.com/moalhaddar/docx-corpus",
+      "licenseOrTerms": "source-defined",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "byteSize": 0,
+      "format": "docx",
+      "openability": {
+        "expectedStatus": "opens",
+        "verificationHints": [
+          "macos-quick-look",
+          "libreoffice-writer"
+        ]
+      },
+      "structureAnchors": [
+        {
+          "anchorType": "heading",
+          "description": "Top-level heading and subsection hierarchy remain traceable."
+        },
+        {
+          "anchorType": "table",
+          "description": "Table rows and columns remain attributable in normalized output."
+        }
+      ],
+      "exportExpectations": [
+        {
+          "targetFormat": "markdown",
+          "expectedStatus": "same-structure-expected",
+          "checks": [
+            "structure-headings-preserved",
+            "table-structure-preserved"
+          ]
+        },
+        {
+          "targetFormat": "docx",
+          "expectedStatus": "opens",
+          "checks": [
+            "docx-export-opens"
+          ]
+        }
+      ],
+      "riskLabels": [
+        "public",
+        "untrusted-parser-input"
+      ],
+      "expectedChecks": [
+        "openability-docx",
+        "structure-headings-preserved",
+        "docx-export-opens"
+      ],
+      "notes": "Use a DOCX sample containing headings plus at least one non-trivial table."
+    },
+    {
+      "id": "xlsx-smoke-001",
+      "relativePath": "apache-poi/spreadsheet/sample-multi-sheet.xlsx",
+      "source": "apache-poi",
+      "sourceUrl": "https://github.com/apache/poi/tree/trunk/test-data/spreadsheet",
+      "licenseOrTerms": "Apache-2.0",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "byteSize": 0,
+      "format": "xlsx",
+      "openability": {
+        "expectedStatus": "opens",
+        "verificationHints": [
+          "macos-quick-look",
+          "libreoffice-calc"
+        ]
+      },
+      "structureAnchors": [
+        {
+          "anchorType": "sheet",
+          "description": "Multiple sheet names remain traceable in parser output."
+        },
+        {
+          "anchorType": "table-range",
+          "description": "A bounded cell range remains attributable in normalized output."
+        }
+      ],
+      "exportExpectations": [
+        {
+          "targetFormat": "markdown",
+          "expectedStatus": "same-structure-expected",
+          "checks": [
+            "sheet-order-preserved",
+            "tabular-structure-preserved"
+          ]
+        }
+      ],
+      "riskLabels": [
+        "public",
+        "untrusted-parser-input"
+      ],
+      "expectedChecks": [
+        "openability-xlsx",
+        "metadata-extracts",
+        "failure-reason-if-unsupported"
+      ],
+      "notes": "Use a workbook with multiple sheets and a clearly bounded table region."
+    },
+    {
+      "id": "pptx-smoke-001",
+      "relativePath": "apache-poi/slideshow/sample-deck.pptx",
+      "source": "apache-poi",
+      "sourceUrl": "https://github.com/apache/poi/tree/trunk/test-data/slideshow",
+      "licenseOrTerms": "Apache-2.0",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "byteSize": 0,
+      "format": "pptx",
+      "openability": {
+        "expectedStatus": "opens",
+        "verificationHints": [
+          "macos-quick-look",
+          "libreoffice-impress"
+        ]
+      },
+      "structureAnchors": [
+        {
+          "anchorType": "slide",
+          "description": "Slide order and title placeholders remain traceable."
+        },
+        {
+          "anchorType": "image",
+          "description": "Image-bearing slide remains attributable in parser output."
+        }
+      ],
+      "exportExpectations": [
+        {
+          "targetFormat": "markdown",
+          "expectedStatus": "same-structure-expected",
+          "checks": [
+            "slide-order-preserved",
+            "title-text-preserved"
+          ]
+        },
+        {
+          "targetFormat": "docx",
+          "expectedStatus": "opens",
+          "checks": [
+            "docx-export-opens"
+          ]
+        }
+      ],
+      "riskLabels": [
+        "public",
+        "untrusted-parser-input"
+      ],
+      "expectedChecks": [
+        "openability-pptx",
+        "metadata-extracts",
+        "failure-reason-if-unsupported"
+      ],
+      "notes": "Use a slide deck with at least one title slide and one image-heavy slide."
+    }
+  ]
+}

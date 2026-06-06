@@ -51,7 +51,7 @@ Choose an explicit archive directory:
 python3 /Users/unka/DevSpace/Unka-Malloc/Pact/skills/project-history/pact-history-miner/scripts/find_project_history.py \
   --project-root /Users/unka/DevSpace/Unka-Malloc/Pact \
   --archive-conversations \
-  --output-dir /Users/unka/DevSpace/Unka-Malloc/Pact/.pact-agent-history
+  --output-dir /Users/unka/.pact-agent-history/<timestamp>
 ```
 
 Exclude the current investigation thread when it dominates results:
@@ -74,7 +74,7 @@ python3 /Users/unka/DevSpace/Unka-Malloc/Pact/skills/project-history/pact-histor
 
 ## Output Contract
 
-With `--archive-conversations`, the scanner writes into `<project-root>/.pact-agent-history` by default. Expected files:
+With `--archive-conversations` and no explicit `--output-dir`, the scanner writes into `~/.pact-agent-history`. Expected files:
 
 - `summary.md`: source inventory, counts, and top snippets.
 - `matches.jsonl`: one JSON record per matched transcript line, SQLite row, or text record.

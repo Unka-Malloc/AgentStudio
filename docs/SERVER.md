@@ -1,5 +1,12 @@
 # Pact Server
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Pact Server.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 `server` 是当前唯一受维护的服务端实现。本文档记录服务端的启动方式、配置文件、接口、存储结构、挂载机制与运维能力。
 
 ## 目录 / Table of Contents
@@ -152,7 +159,7 @@ node server/scripts/start-server.mjs
 
 默认数据目录由 `ServerConfig.getDataDir()` 统一解析：优先读取 `PACT_SERVER_DATA_DIR`；未设置时读取 `PACT_CONFIG_FILE` 指向的配置文件，否则读取 `~/.pact-server.json`，其中的 `dataDir` 生效；仍未配置时使用 `~/.pact-server-data`。开发者不得把管理脚本的默认数据目录写回项目自身目录，临时目录只能通过显式 `--data-dir` 传入。
 
-服务端运行期日志、后台服务状态、SQLite、对象存储、任务产物和维护报告都应落在该数据目录下；仓库内 `build/` 只用于构建产物，不作为服务端运行数据默认目录。
+服务端运行期设置、provider manifest、mount config、密钥状态、日志、后台服务状态、SQLite、对象存储、任务产物和维护报告都应落在该数据目录下；仓库内 `build/` 只用于构建产物，不作为服务端运行数据或配置默认目录。
 
 当前主要配置文件：
 
@@ -739,9 +746,11 @@ Tool Management v1 也暴露同一热插拔面：`pact.runtime.info`、`pact.run
 - `POST /api/knowledge/document-parser/parse`
 
 任务完成后还会生成归一化知识文档包，落盘在 `<userDataPath>/jobs/<jobId>/normalized-documents/`。PPT/PDF/HTML 会同时输出允许入库的原始材料副本；EML/MSG 只输出 message/thread/transaction DOCX，原始邮件继续走 raw object 审计存储。
-归一化 DOCX 是面向人类阅读和外部知识库导入的第一层 `raw-corpus-construction` 语料包：默认只保持标题、章节顺序、段落、列表和简单表格，不把 chunk id、sourceRange、evidence locator 等机器字段放进正文。机器解析中间态使用 YAML：`manifest.yaml` 和每个 DOCX 的 `machineReadableRelativePath` sidecar 保存 `sectionId`、`sourceRange`、chunk 定位和解析证据。已收纳到第二层 `knowledge-index-construction` 的 canonical knowledge 还可以通过 `GET /api/knowledge/export/docx` 或 CLI `knowledge export-docx --output knowledge.docx` 导出为标准 DOCX；如需机器附录，显式传入 `includeMachineReadable=true`，附录格式为 YAML。第三层 `knowledge-distillation` 优先从第一层原始语料全文蒸馏，必要时分批、多轮覆盖全文，并用 `knowledge.search` / evidence pack 做校验、引用和补证；知识蒸馏必须调用模型闭环，模型不可用时任务失败，不降级成规则整理。智能体在线上下文可以消费蒸馏出的独立文档或背景摘要。
+归一化 DOCX 是面向人类阅读和外部知识库导入的第一层 `raw-corpus-construction` 语料包：默认只保持标题、章节顺序、段落、列表和简单表格，不把 chunk id、sourceRange、evidence locator 等机器字段放进正文。机器解析中间态使用 YAML：`manifest.yaml` 和每个 DOCX 的 `machineReadableRelativePath` sidecar 保存 `sectionId`、`sourceRange`、chunk 定位和解析证据。已收纳到第二层 `knowledge-index-construction` 的 canonical knowledge 还可以通过 `GET /api/knowledge/export/docx` 或 CLI `knowledge export-docx --output knowledge.docx` 导出为标准 DOCX；如需机器附录，显式传入 `includeMachineReadable=true`，附录格式为 YAML。第三层 `knowledge-distillation` 优先从第一层原始语料全文蒸馏，必要时分批、多轮覆盖全文，并用 `knowledge.search` / evidence pack 做校验、引用和补证；知识蒸馏必须调用模型闭环，模型不可用时任务失败，不降级成规则整理。长语料会先通过 `knowledge_raw_batch_extractor` 对每个 raw corpus batch 做核心提炼，运行结果记录 `batchExtraction`、`batchExtracts`、跳过批次数和模型截断状态，最终 distiller 消费全部批次提炼结果，而不是只读取前几个批次。智能体在线上下文可以消费蒸馏出的独立文档或背景摘要。
 
-工业级知识蒸馏基准使用 `pact.knowledge-distillation-industrial.v1`：项目目录先用 `buildMarkdownProjectDigest()` 扫描所有 Markdown 文件并保留目录树、路径、标题树和全文；邮件目录先用 `buildEmailThreadDigest()` 按 RFC 5322 `Message-ID / In-Reply-To / References` 与 RFC 5256 `REFERENCES` 线程语义合并同一事项并按时间从旧到新排列；框架默认模型别名为 `deepseek-v4-flash`，模型闭环为强制路径。真实目录入口是 `npm run server:knowledge:industrial-distill-plan -- --project-dir <project> --email-dir <emails> --output <report.json>`，回归门禁是 `npm run server:verify:knowledge-industrial-distillation`，差距评估指标为 coverage、same-matter merge、timeline order、source trace 和 unsupported claims。
+工业级知识蒸馏基准使用 `pact.external-knowledge-distillation.industrial-benchmark.v1`：唯一维护服务是 `external.knowledge.distillation`，验收重点是本地参考框架清单、route-first、windowing、分类蒸馏、项目收敛、Graph evidence、人类/智能体响应分离和 Office 专业适配。真实入口是 `npm run server:knowledge:industrial-distill-plan -- --output <report.json>`，回归门禁是 `npm run server:verify:knowledge-industrial-distillation`。
+
+外部知识蒸馏服务的部署门禁先于功能验收：`npm run server:verify:external-knowledge-distillation-service-gates` 检查 required-auth、业务 API bearer gate、公开健康检查、Docker 非 root、Tika checksum 和 healthcheck。远程容器态必须从外部运行配置或 secret store 注入 `PACT_EXTERNAL_KD_API_TOKEN`，不得把 token 或其它密钥写入项目目录；门禁未通过时，不继续增加新解析器、格式路由、导出或模型蒸馏能力。
 
 统一文档解析入口遵守结构吸附切分原则和动态参数文档解析策略（`dynamic-parameter-document-parsing-policy`）。文档切分无关粗细，只关乎保留文档的结构和信息；服务端默认先吸附标题树、页/幻灯片顺序、段落、列表、表格、图片、附件、邮件线程和事务时间线等原文档边界，不能把固定 token/字符大小作为第一切分边界。面对超长段落、表格、列表或代码块时，服务端先保留完整 `structureArtifacts`，再派生 `granularityFragments` 用于检索；`knowledge.search` / `knowledge.get.evidence` 调用方必须显式传入 `contextBudget.knowledgeTokens`，第二层按该动态预算决定返回完整结构还是局部颗粒度片段。策略实现拆成 `dispatchDynamicDocumentParsingAlgorithm(input)` 和 `bindDynamicDocumentParsingInvocation(request, runtimeState)`：调度器负责把参数选择映射成独立算法函数，绑定器负责单次接口调用级参数、热重载注册表和策略默认值绑定。调用方显式传入 `granularity.secondaryParse.enabled=true` 时，可以触发较慢的二次解析，backendTrace 必须记录算法、目标颗粒度、父结构和耗时。长段落、长表格或多图片 evidence 回传还必须检查 `payloadBudget.maxResponseBytes` / `payloadBudget.maxEvidenceBytes`；空间不足时返回 `payload.truncated=true` 与 `payload.nextContinuationToken`，由后续 search/evidence continuation 断点续传。
 
@@ -750,7 +759,7 @@ Tool Management v1 也暴露同一热插拔面：`pact.runtime.info`、`pact.run
 服务端现在按两层拆分：
 
 - 功能层：控制器和服务只实现功能，并通过注册表暴露 `feature`、`target`、`http`、`rpc`、`cli` 元数据。注册表位置：`server/platform/common/operation-dispatcher/operation-registry.mjs`。
-- 接口层：HTTP、JSON-RPC 和 CLI 只按注册表做路由、参数映射和返回，不关心功能内部怎么实现。JSON-RPC 使用自己的 `rpc.params`、`rpc.query`、`rpc.body` 映射，不从 HTTP 路由反推参数。分发器位置：`server/platform/common/operation-dispatcher/operation-dispatcher.mjs`。
+- 接口层：HTTP、JSON-RPC 和 CLI 只按注册表做路由、参数映射和返回，不关心功能内部怎么实现。JSON-RPC 使用自己的 `rpc.params`、`rpc.query`、`rpc.body` 映射，不从 HTTP 路由反推参数。分发器位置：`server/platform/common/operation-dispatcher/operation-dispatcher.mjs`。该分发器是 Operation Scheduling Kernel；只有它 accepted、分配 `operationId` 并写入 started / pending 账本的请求，才是真实操作，其它路径必须拒绝为 unmanaged / not scheduled。高危请求必须由该内核挂起为 `pending_operation` 并进入独立 `/approval`；批准后恢复原 operation，拒绝或过期不执行。
 
 RPC 统一走：
 
@@ -840,7 +849,7 @@ node server/scripts/verify-knowledge-license-manifest.mjs --temp-manifest
 ```bash
 tar -xzf pact-server-linux-x64.tar.gz
 cd pact-server-linux-x64
-./bin/start-server --host 0.0.0.0 --port 7228 --data-dir ./data
+./bin/start-server --host 0.0.0.0 --port 7228 --data-dir "$HOME/.pact-server-data"
 ```
 
 包内脚本默认开启控制台 UI，并默认使用包内 `server/platform/modules/knowledge/runtime/jre` 和 `server/platform/modules/knowledge/tika`。目标机仍需要 Linux 内核和兼容 glibc，这是原生 Linux 程序的系统边界；但不需要预装 Node.js、npm、Java、Tika、Python 或通过 apt 安装任何应用运行时。

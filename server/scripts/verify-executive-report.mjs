@@ -16,7 +16,7 @@ function productionHealth() {
     status: "blocked",
     latestReport: {
       runId: "20260522T000000Z",
-      reportPath: "reports/production-readiness/20260522T000000Z/report.json"
+      reportPath: "docs/reports/history/production-readiness/20260522T000000Z/report.json"
     },
     summary: { pass: 2, fail: 1, timeout: 0, blockedP0: 1 },
     coverage: { required: ["architecture", "trace-observability"], missing: ["trace-observability"] },

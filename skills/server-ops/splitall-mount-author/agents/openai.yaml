@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Mount Author"
-  short_description: "Help with SplitAll Mount Author tasks"
-  default_prompt: "Use $splitall-mount-author to handle this SplitAll platform task."

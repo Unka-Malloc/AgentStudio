@@ -1,0 +1,235 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   FORCED THEME OVERRIDES (class-based, overrides @media preference)
+   html.theme-dark  → always dark regardless of system setting
+   html.theme-light → always light regardless of system setting
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Force dark ──────────────────────────────────────────────────────────── */
+
+html.theme-dark {
+  color-scheme: dark;
+  --bg-base:    #0d1117;
+  --bg-surface: #161b22;
+  --bg-subtle:  #1c2128;
+  --bg-inset:   #0d1117;
+  --border-subtle: #30363d;
+  --border-strong: #484f58;
+  --text-primary:   #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted:     #6e7681;
+  --text-disabled:  #484f58;
+  --brand:        #58a6ff;
+  --brand-strong: #388bfd;
+  --brand-subtle: #0d1f33;
+  --brand-muted:  #112d4e;
+  --info:         #58a6ff;
+  --info-surface: #0d1f33;
+  --info-border:  #112d4e;
+  --success:         #3fb950;
+  --success-surface: #0d2619;
+  --success-border:  #14532d;
+  --warning:         #d29922;
+  --warning-text:    #e3b341;
+  --warning-surface: #272115;
+  --warning-border:  #3d2f0e;
+  --danger:         #f85149;
+  --danger-surface: #2d1013;
+  --danger-border:  #6b1a1e;
+  --shadow-xs:   0 1px 2px rgba(0,0,0,.40);
+  --shadow-sm:   0 1px 3px rgba(0,0,0,.48), 0 1px 2px rgba(0,0,0,.32);
+  --shadow-md:   0 4px 12px rgba(0,0,0,.56), 0 2px 4px rgba(0,0,0,.32);
+  --shadow-lg:   0 8px 24px rgba(0,0,0,.64), 0 4px 8px rgba(0,0,0,.32);
+  --shadow-xl:   0 20px 48px rgba(0,0,0,.72), 0 8px 16px rgba(0,0,0,.40);
+  --shadow-soft: var(--shadow-md);
+  --skeleton-base:      #1e2633;
+  --skeleton-highlight: #242d3d;
+}
+
+html.theme-dark,
+html.theme-dark .el-select,
+html.theme-dark .el-select-dropdown,
+html.theme-dark .el-dropdown,
+html.theme-dark .el-dropdown-menu,
+html.theme-dark .el-popper,
+html.theme-dark .el-popover,
+html.theme-dark .el-tooltip__trigger,
+html.theme-dark .el-table,
+html.theme-dark .el-input,
+html.theme-dark .el-input__wrapper,
+html.theme-dark .el-textarea {
+  --el-bg-color:            #161b22;
+  --el-bg-color-page:       #0d1117;
+  --el-bg-color-overlay:    #1c2128;
+  --el-text-color-primary:      #e6edf3;
+  --el-text-color-regular:      #e6edf3;
+  --el-text-color-secondary:    #8b949e;
+  --el-text-color-placeholder:  #6e7681;
+  --el-text-color-disabled:     #484f58;
+  --el-border-color:            #30363d;
+  --el-border-color-light:      #30363d;
+  --el-border-color-lighter:    #21262d;
+  --el-border-color-extra-light:#21262d;
+  --el-border-color-dark:       #484f58;
+  --el-border-color-darker:     #6e7681;
+  --el-border-color-hover:      #58a6ff;
+  --el-fill-color:              #1c2128;
+  --el-fill-color-blank:        #161b22;
+  --el-fill-color-light:        #1c2128;
+  --el-fill-color-lighter:      #161b22;
+  --el-fill-color-lightest:     #0d1117;
+  --el-fill-color-dark:         #21262d;
+  --el-fill-color-darker:       #30363d;
+  --el-fill-color-extra-dark:   #484f58;
+  --el-mask-color:              rgba(0,0,0,0.72);
+  --el-mask-color-extra-light:  rgba(0,0,0,0.30);
+  --el-overlay-color:           rgba(0,0,0,0.80);
+  --el-overlay-color-light:     rgba(0,0,0,0.56);
+  --el-overlay-color-lighter:   rgba(0,0,0,0.40);
+  --el-color-white:  #161b22;
+  --el-color-black:  #e6edf3;
+  --el-disabled-bg-color:     #1c2128;
+  --el-disabled-text-color:   #484f58;
+  --el-disabled-border-color: #30363d;
+  --el-color-primary:           #58a6ff;
+  --el-color-primary-dark-2:    #388bfd;
+  --el-color-primary-light-3:   rgba(88,166,255,0.40);
+  --el-color-primary-light-5:   rgba(88,166,255,0.24);
+  --el-color-primary-light-7:   rgba(88,166,255,0.14);
+  --el-color-primary-light-8:   rgba(88,166,255,0.10);
+  --el-color-primary-light-9:   #0d1f33;
+  --el-table-bg-color:            #161b22;
+  --el-table-tr-bg-color:         #161b22;
+  --el-table-border-color:        #30363d;
+  --el-table-header-bg-color:     #1c2128;
+  --el-table-header-text-color:   #8b949e;
+  --el-table-row-hover-bg-color:  #1c2128;
+  --el-table-text-color:          #e6edf3;
+  --el-table-fixed-box-shadow:    none;
+  --el-select-dropdown-bg-color:  #1c2128;
+  --el-select-input-color:        #e6edf3;
+  --el-input-bg-color:            #161b22;
+  --el-input-text-color:          #e6edf3;
+  --el-input-placeholder-color:   #6e7681;
+  --el-input-border-color:        #30363d;
+  --el-input-hover-border-color:  #484f58;
+  --el-input-focus-border-color:  #58a6ff;
+  --el-popover-bg-color:          #1c2128;
+  --el-dropdown-menuItem-hover-fill: #0d1f33;
+}
+
+html.theme-dark .el-select .el-select__wrapper {
+  background: var(--bg-surface) !important;
+  box-shadow: 0 0 0 1px var(--border-subtle) inset !important;
+  color: var(--text-primary) !important;
+}
+html.theme-dark .el-select .el-select__wrapper:hover {
+  box-shadow: 0 0 0 1px var(--border-strong) inset !important;
+}
+html.theme-dark .el-select .el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px var(--brand) inset, 0 0 0 3px rgba(88,166,255,0.20) !important;
+}
+html.theme-dark .el-select-dropdown,
+html.theme-dark .el-select__popper,
+html.theme-dark .el-popper.is-pure {
+  background: var(--bg-subtle) !important;
+  border-color: var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+html.theme-dark .el-select-dropdown__item { color: var(--text-primary) !important; background: transparent !important; }
+html.theme-dark .el-select-dropdown__item.is-hovering,
+html.theme-dark .el-select-dropdown__item:hover { background: var(--bg-inset) !important; color: var(--text-primary) !important; }
+html.theme-dark .el-select-dropdown__item.is-selected { background: var(--brand-subtle) !important; color: var(--brand) !important; }
+html.theme-dark .el-select-dropdown__item.is-disabled { color: var(--text-disabled) !important; }
+html.theme-dark .el-select .el-select__placeholder,
+html.theme-dark .el-select .el-select__selected-item,
+html.theme-dark .el-select .el-select__input,
+html.theme-dark .el-select .el-select__caret { color: var(--text-primary) !important; }
+html.theme-dark .el-select .el-select__placeholder.is-transparent { color: var(--text-muted) !important; }
+html.theme-dark select { background: var(--bg-surface); color: var(--text-primary); border-color: var(--border-subtle); }
+html.theme-dark select option { background: var(--bg-subtle); color: var(--text-primary); }
+html.theme-dark .el-input__wrapper { background: var(--bg-surface) !important; box-shadow: 0 0 0 1px var(--border-subtle) inset !important; }
+html.theme-dark .el-input__inner { color: var(--text-primary) !important; background: transparent !important; }
+html.theme-dark .el-table { background: var(--bg-surface) !important; color: var(--text-primary) !important; }
+html.theme-dark .el-table th.el-table__cell { background: var(--bg-subtle) !important; color: var(--text-secondary) !important; border-bottom-color: var(--border-subtle) !important; }
+html.theme-dark .el-table td.el-table__cell { border-bottom-color: var(--border-subtle) !important; }
+html.theme-dark .el-table__row:hover > td,
+html.theme-dark .el-table__row.hover-row > td { background: var(--bg-subtle) !important; }
+html.theme-dark .el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell { background: var(--bg-subtle) !important; }
+html.theme-dark .el-table__empty-block { background: var(--bg-surface) !important; }
+html.theme-dark .el-table__empty-text { color: var(--text-muted) !important; }
+html.theme-dark .el-dropdown-menu { background: var(--bg-subtle) !important; border-color: var(--border-subtle) !important; }
+html.theme-dark .el-dropdown-menu__item { color: var(--text-primary) !important; }
+html.theme-dark .el-dropdown-menu__item:hover,
+html.theme-dark .el-dropdown-menu__item:focus { background: var(--bg-inset) !important; color: var(--text-primary) !important; }
+html.theme-dark .el-popper__arrow::before { background: var(--bg-subtle) !important; border-color: var(--border-subtle) !important; }
+
+html.theme-dark .info-feed-input-dock,
+html.theme-dark .info-feed-clarification-dock {
+  background: rgba(22, 27, 34, 0.90);
+  border-color: var(--border-subtle);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.36);
+}
+html.theme-dark .info-feed-input-dock textarea {
+  background: rgba(13, 17, 23, 0.72);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+html.theme-dark .word-cloud-architecture {
+  background:
+    linear-gradient(180deg, rgba(22,27,34,0.9), rgba(28,33,40,0.96)),
+    radial-gradient(circle at 18% 18%, rgba(88,166,255,0.08), transparent 28%),
+    radial-gradient(circle at 78% 20%, rgba(63,185,80,0.08), transparent 30%);
+}
+html.theme-dark .word-cloud-class-card {
+  background: color-mix(in srgb, var(--word-cloud-fill) 40%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--word-cloud-accent) 48%, transparent);
+}
+html.theme-dark .surface-card {
+  box-shadow: var(--shadow-xs), inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+html.theme-dark .topbar {
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+}
+html.theme-dark .metric-card:hover {
+  box-shadow: var(--shadow-md), inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+html.theme-dark body,
+html.theme-dark #app {
+  background: var(--bg-base);
+}
+html.theme-dark .auth-gate {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(88, 166, 255, 0.10), transparent 34%),
+    linear-gradient(135deg, var(--bg-base) 0%, var(--bg-subtle) 52%, var(--bg-base) 100%);
+}
+html.theme-dark .auth-card {
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  border-color: var(--border-strong);
+}
+html.theme-dark .auth-brand {
+  border-bottom-color: var(--border-subtle);
+}
+html.theme-dark .auth-form label {
+  color: var(--text-secondary);
+}
+html.theme-dark .auth-form input {
+  background: var(--bg-inset);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+html.theme-dark .auth-form input:hover {
+  border-color: var(--border-strong);
+}
+html.theme-dark .auth-form input:focus {
+  border-color: var(--brand);
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(88,166,255,0.18),
+    inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+html.theme-dark .auth-language-button {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}

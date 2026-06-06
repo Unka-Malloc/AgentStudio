@@ -65,6 +65,15 @@ export function createSystemControllerOpsObservationHandlers({
         context: { devopsProvider, queueMonitor },
         errorMessage: "确认监控报警失败。"
       });
+    },
+    async handleRecoverBackgroundSupervisor({ operation, response }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "system.background_supervisor.recover",
+        input: {},
+        response,
+        context: { devopsProvider, queueMonitor },
+        errorMessage: "拉起后台 Worker 管理进程失败。"
+      });
     }
   };
 }

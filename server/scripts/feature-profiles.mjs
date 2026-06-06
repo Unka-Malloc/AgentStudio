@@ -211,9 +211,19 @@ async function verifySourceLayout(plan) {
 }
 
 async function createVerificationReport(plan) {
+  const clientModulesForValidation = {
+    ...(plan.baseClientConfig.modules || {})
+  };
+  for (const moduleId of LEGACY_CLIENT_MODULE_IDS) {
+    clientModulesForValidation[moduleId] ||= {
+      label: `Legacy compatibility module: ${moduleId}`,
+      enabled: false,
+      legacyCompatibility: true
+    };
+  }
   const validation = validateFeatureManifest({
     operations: SERVER_API_OPERATIONS,
-    clientModules: plan.baseClientConfig.modules
+    clientModules: clientModulesForValidation
   });
   const businessChecks = runBusinessChecks(plan);
   const sourceLayout = await verifySourceLayout(plan);

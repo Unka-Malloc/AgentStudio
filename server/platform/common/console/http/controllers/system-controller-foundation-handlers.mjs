@@ -261,10 +261,13 @@ export function createSystemControllerFoundationHandlers({
         errorMessage: "MCP Authorization API resolve failed."
       });
     },
-    async handleToolManagementPassthrough({ operation, request, requestBody, url, response }) {
+    async handleToolManagementPassthrough({ operation, request, requestBody, url, response, params = {} }) {
       await sendConsoleDomainOperation({
         operationId: operation?.id || "tool_management.http.passthrough",
-        input: {},
+        input: {
+          ...protocolPayload(requestBody, url),
+          ...(params && typeof params === "object" ? params : {})
+        },
         response,
         context: {
           toolSkillManagementProvider: getToolSkillManagementProvider(),

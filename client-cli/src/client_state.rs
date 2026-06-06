@@ -1,6 +1,6 @@
 use crate::paths::portable_data_dir;
-use anyhow::{anyhow, Result};
-use serde_json::{json, Value};
+use anyhow::{Result, anyhow};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -155,7 +155,12 @@ impl SnapshotStore {
         Ok(ClientStateStore::portable()?.snapshot_store())
     }
 
-    pub fn capture(&self, target: &str, source_path: &Path, metadata: Value) -> Result<SnapshotRecord> {
+    pub fn capture(
+        &self,
+        target: &str,
+        source_path: &Path,
+        metadata: Value,
+    ) -> Result<SnapshotRecord> {
         fs::create_dir_all(&self.root)?;
         let existed = source_path.exists();
         let content = fs::read_to_string(source_path).unwrap_or_default();
@@ -202,7 +207,8 @@ impl SnapshotStore {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .cmp(
-                    right.get("capturedAt")
+                    right
+                        .get("capturedAt")
                         .and_then(Value::as_str)
                         .unwrap_or_default(),
                 )
@@ -319,7 +325,10 @@ fn validate_collection(collection: &str) -> Result<()> {
     if COLLECTIONS.contains(&collection) {
         Ok(())
     } else {
-        Err(anyhow!("unsupported client state collection: {}", collection))
+        Err(anyhow!(
+            "unsupported client state collection: {}",
+            collection
+        ))
     }
 }
 
@@ -482,11 +491,20 @@ mod tests {
             .write_collection("skills", json!({"items": [{"skill": "review"}]}))
             .unwrap();
         store
-            .write_collection("pins", json!({"items": [{"skill": "review", "version": "1"}]}))
+            .write_collection(
+                "pins",
+                json!({"items": [{"skill": "review", "version": "1"}]}),
+            )
             .unwrap();
 
-        assert_eq!(store.read_collection("targets").unwrap()["items"][0]["target"], "opencode");
-        assert_eq!(store.read_collection("pins").unwrap()["items"][0]["version"], "1");
+        assert_eq!(
+            store.read_collection("targets").unwrap()["items"][0]["target"],
+            "opencode"
+        );
+        assert_eq!(
+            store.read_collection("pins").unwrap()["items"][0]["version"],
+            "1"
+        );
     }
 
     #[test]
@@ -503,10 +521,12 @@ mod tests {
         let events = listed["events"].as_array().unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0]["type"], "target.config.applied");
-        assert!(fs::read_to_string(listed["path"].as_str().unwrap())
-            .unwrap()
-            .lines()
-            .all(|line| serde_json::from_str::<Value>(line).is_ok()));
+        assert!(
+            fs::read_to_string(listed["path"].as_str().unwrap())
+                .unwrap()
+                .lines()
+                .all(|line| serde_json::from_str::<Value>(line).is_ok())
+        );
     }
 
     #[test]
@@ -527,7 +547,10 @@ mod tests {
             .unwrap();
         assert_eq!(listed["snapshots"].as_array().unwrap().len(), 1);
 
-        let restored = store.snapshot_store().restore(&snapshot.snapshot_id).unwrap();
+        let restored = store
+            .snapshot_store()
+            .restore(&snapshot.snapshot_id)
+            .unwrap();
         assert_eq!(restored["status"], "restored");
         assert_eq!(fs::read_to_string(&source).unwrap(), r#"{"before":true}"#);
     }

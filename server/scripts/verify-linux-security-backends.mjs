@@ -11,7 +11,7 @@ async function writeExecutable(filePath, source) {
   await fs.chmod(filePath, 0o755);
 }
 
-function fakeKeyctlSource() {
+function fixtureKeyctlSource() {
   return `#!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
@@ -76,7 +76,7 @@ process.exit(2);
 `;
 }
 
-function fakeSecretToolSource() {
+function fixtureSecretToolSource() {
   return `#!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
@@ -124,7 +124,7 @@ process.exit(2);
 `;
 }
 
-function fakePassSource() {
+function fixturePassSource() {
   return `#!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
@@ -162,12 +162,12 @@ process.exit(2);
 `;
 }
 
-async function installFakeCommands(root) {
+async function installFixtureCommands(root) {
   const binDir = path.join(root, "bin");
   await fs.mkdir(binDir, { recursive: true });
-  await writeExecutable(path.join(binDir, "keyctl"), fakeKeyctlSource());
-  await writeExecutable(path.join(binDir, "secret-tool"), fakeSecretToolSource());
-  await writeExecutable(path.join(binDir, "pass"), fakePassSource());
+  await writeExecutable(path.join(binDir, "keyctl"), fixtureKeyctlSource());
+  await writeExecutable(path.join(binDir, "secret-tool"), fixtureSecretToolSource());
+  await writeExecutable(path.join(binDir, "pass"), fixturePassSource());
   process.env.PACT_FAKE_SECURITY_BACKEND_DIR = root;
   process.env.PATH = `${binDir}${path.delimiter}${process.env.PATH || ""}`;
 }
@@ -321,7 +321,7 @@ async function verifyAutoFallsThroughToSecretService({ alias }) {
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "pact-linux-security-backends-"));
 try {
-  await installFakeCommands(root);
+  await installFixtureCommands(root);
   for (const backend of ["linux-kernel-keyring", "secret-service", "pass-gpg"]) {
     await verifyOpaqueBackend({ backend, alias: `verify-${backend}` });
     await verifyBindingBackend({ backend, alias: `verify-${backend}` });

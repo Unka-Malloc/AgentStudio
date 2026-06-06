@@ -22,8 +22,8 @@ const JRE_DOWNLOADS = {
 };
 
 const TIKA_DOWNLOAD = {
-  fileName: `tika-app-${TIKA_VERSION}.jar`,
-  url: `https://repo.maven.apache.org/maven2/org/apache/tika/tika-app/${TIKA_VERSION}/tika-app-${TIKA_VERSION}.jar`
+  fileName: process.env.PACT_TIKA_DOWNLOAD_FILE || `tika-app-${TIKA_VERSION}.jar`,
+  url: process.env.PACT_TIKA_DOWNLOAD_URL || `https://repo.maven.apache.org/maven2/org/apache/tika/tika-app/${TIKA_VERSION}/tika-app-${TIKA_VERSION}.jar`
 };
 
 function getJreCacheDirectory() {
@@ -130,10 +130,19 @@ function getExpectedJavaPath(runtimeRoot) {
     : path.join(runtimeRoot, "bin", executable);
 }
 
+function configuredJreDownload() {
+  const fallback = JRE_DOWNLOADS[platformKey] || {};
+  const url = String(process.env.PACT_JRE_DOWNLOAD_URL || fallback.url || "").trim();
+  return {
+    fileName: String(process.env.PACT_JRE_DOWNLOAD_FILE || fallback.fileName || `jre-${platformKey}.tar.gz`).trim(),
+    url
+  };
+}
+
 async function setupModuleJre() {
-  const jreDownload = JRE_DOWNLOADS[platformKey];
-  if (!jreDownload) {
-    throw new Error(`当前平台 ${platformKey} 没有预设的本地 JRE 下载源。`);
+  const jreDownload = configuredJreDownload();
+  if (!jreDownload.url) {
+    throw new Error(`当前平台 ${platformKey} 的内置 JRE 源不可用，请在本地源配置中配置镜像源后重试。`);
   }
 
   const runtimeRoot = path.join(jreRoot, platformKey);

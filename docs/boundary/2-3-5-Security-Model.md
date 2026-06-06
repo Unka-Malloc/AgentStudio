@@ -1,5 +1,12 @@
 # 2-3-5 Security Model
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current boundary reference
+- Scope: 2-3-5 Security Model.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 本文定义 Pact 的安全治理总模型：两条边界、三个环境、五个对象。
 
 该模型用于统一后续权限、连接器、客户端运行时、应用服务器接入、审计和生产门禁设计。任何新能力只要跨过客户端 MCP 入口或服务端 API 出口，都必须能说明它属于哪个环境、穿过哪条边界、命中哪些对象，以及最终由哪些平台运行时内部事实源裁决。
@@ -146,7 +153,7 @@ Security Model 只覆盖安全领域，不承载 API 对接、数据链路或业
 
 典型组件：
 
-- Codex、OpenClaw、Gemini CLI、Kilo Code、Copilot、Hermes、Antigravity、OpenCode 等本地智能体或 agent client。
+- OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf 等本地智能体或 agent client。
 - MCP connector、stdio/HTTP MCP client、本机 discovery 和 local grant installer。
 - `pact-client-cli`、client runtime、clientd、upload queue、checkpoint upload adapter。
 - 本机文件系统、本机命令、本机缓存、本机 bridge、本机 runtime module。

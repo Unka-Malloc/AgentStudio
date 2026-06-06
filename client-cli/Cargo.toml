@@ -2,7 +2,7 @@
 name = "pact-client-native"
 version = "0.0.1"
 edition = "2024"
-license = "GPL-3.0-only"
+license = "GPL-3.0-or-later"
 
 [dependencies]
 anyhow = "1.0"
@@ -19,7 +19,6 @@ icu_segmenter = { version = "2", features = ["compiled_data", "lstm"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 log = "0.4"
 env_logger = "0.11"
-libc = "0.2"
 time = { version = "0.3", features = ["formatting"] }
 ureq = { version = "2.10", features = ["json"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }

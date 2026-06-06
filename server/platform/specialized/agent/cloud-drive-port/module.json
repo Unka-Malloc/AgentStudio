@@ -1,7 +1,7 @@
 {
   "name": "CloudDrivePort",
   "version": 1,
-  "description": "v0.0.1 CloudDrivePort for iCloud local adapter and OneDrive, Google Drive, Dropbox contract-mode adapters through Pact operations, secretRef policy, receipts, and checkpoints.",
+  "description": "Internal backing adapter for the upstream Cloud Drive service gateway; iCloud and OneDrive local directory projections plus Google Drive and Dropbox contract-mode adapters are exposed through external.cloudDrive.* operations.",
   "defaultLoaded": false,
   "protocol": "pact.cloud-drive-port.v1",
   "components": {
@@ -15,14 +15,14 @@
     }
   },
   "operations": [
-    "sharedspace.drive.connect",
-    "sharedspace.drive.status",
-    "sharedspace.drive.item.list",
-    "sharedspace.drive.file.download",
-    "sharedspace.drive.file.upload",
-    "sharedspace.drive.sync.plan",
-    "sharedspace.drive.sync.apply",
-    "sharedspace.drive.permission.list"
+    "external.cloudDrive.connect",
+    "external.cloudDrive.status",
+    "external.cloudDrive.item.list",
+    "external.cloudDrive.file.download",
+    "external.cloudDrive.file.upload",
+    "external.cloudDrive.sync.plan",
+    "external.cloudDrive.sync.apply",
+    "external.cloudDrive.permission.list"
   ],
   "verification": {
     "targeted": "npm run server:verify:v001-cloud-drive-e2e --silent",

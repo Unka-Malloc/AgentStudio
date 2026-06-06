@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pact Console Operator Guide"
+  short_description: "Help with Pact Console Operator Guide tasks"
+  default_prompt: "Use $pact-console-operator-guide to handle this Pact platform task."

@@ -117,7 +117,8 @@ export function buildMcpHandshakePayload({
       discoveryUrl: `${baseUrl}/api/mcp/discovery`,
       wellKnownUrl: `${baseUrl}/.well-known/pact/mcp.json`,
       vmMcpUrl: `${vmBaseUrl}/mcp`
-    }
+    },
+    sharedHub: discovery?.sharedHub || null
   };
 }
 

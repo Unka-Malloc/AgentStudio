@@ -1,80 +1,113 @@
 # Pact Client Design System
 
-This document outlines the design language, layout principles, and component behavior for the Pact Flutter desktop client. Unlike the web operations console (`server-web/Design.md`), which focuses on dense enterprise administration, the local desktop client acts as a **Local Agent Hub**. It should feel lightweight, native, and deeply integrated into the user's personal development environment.
+This document describes the visual and interaction direction for the Pact
+Flutter desktop client. Product scope is controlled by
+[`docs/CLIENT_ARCHITECTURE.md`](../docs/CLIENT_ARCHITECTURE.md).
 
 ## Product Identity
 
-The Pact Client is the command center for the developer's machine. It orchestrates local AI agents (Cursor, VSCode, Windsurf) and bridges them to the Pact server's capabilities.
-The UI must be:
-1. **Responsive and Snappy**: It runs locally; interactions should feel instantaneous.
-2. **Native-App Feel**: It should not feel like a wrapped website. Use subtle desktop idioms (frosted glass, platform-appropriate shadows).
-3. **Visually Engaging**: The state of agents (connected, syncing, authorizing) should be obvious at a glance.
+Pact Client is a lightweight local environment manager for a developer's
+machine. It makes target-native MCP configuration, local Skill Hub state, thin
+model forwarding, and configuration recovery understandable without becoming a
+new agent framework.
 
-## Color Palette (Aligned with Server)
+The UI must feel:
 
-The client uses the same primitive palette as the server (`#2563eb` for brand blue, etc.) to ensure brand consistency. However, the client applies these colors with more generous whitespace and less dense data grids.
+1. **Local**: actions should map to visible local targets, config files,
+   snapshots, and CLI-backed operations.
+2. **Precise**: every write path should show what target, path, field, token
+   reference, or snapshot is affected.
+3. **Quiet**: the app is an operational tool, not a marketing surface or a
+   server console clone.
 
-| Role | Token (Server Equiv) | Light Value | Dark Value | Usage |
-| --- | --- | --- | --- | --- |
-| App Background | `--bg-subtle` | `#F9FAFB` (gray-50) | `#111827` (gray-900) | Main window background |
-| Surface | `--bg-surface` | `#FFFFFF` (gray-0) | `#1F2937` (gray-800) | Cards, dialogs, sidebars |
-| Accent/Brand | `--brand` | `#2563EB` (blue-600) | `#3B82F6` (blue-500) | Primary buttons, active states, focus rings |
-| Brand Subtle | `--brand-subtle` | `#EFF6FF` (blue-50) | `#1E3A8A` (blue-900) | Selected list items, highlighted backgrounds |
-| Success | `--success` | `#16A34A` (green-600) | `#22C55E` (green-500) | Installed agents, approved auths, connected |
-| Warning | `--warning` | `#D97706` (amber-600) | `#F59E0B` (amber-500) | Pending authorizations, warnings |
-| Danger | `--danger` | `#DC2626` (red-600) | `#EF4444` (red-500) | Uninstalled/failed states, rejected auths, destructive |
-| Text Primary | `--text-primary` | `#111827` (gray-900) | `#F9FAFB` (gray-50) | Headings, main text |
-| Text Secondary | `--text-secondary`| `#4B5563` (gray-600) | `#9CA3AF` (gray-400) | Subtitles, metadata |
-| Line/Border | `--border-subtle` | `#E5E7EB` (gray-200) | `#374151` (gray-700) | Dividers, card borders |
+The client must not present removed Console, Mail, DataConnector, upload queue,
+Knowledge Graph, or server API panels as first-class product surfaces.
+
+## Navigation
+
+The app uses a desktop split view with a stable first-level sidebar. The only
+default sections are:
+
+- Agents
+- MCP Plugins
+- Skill Hub
+- Model Forwarding
+- Activity And Snapshots
+- Settings
+
+Each section should expose concrete target state and actions. Avoid generic
+dashboard pages that summarize the product instead of helping the user inspect
+or change local configuration.
+
+## Visual Language
+
+The client can share primitive brand colors with the server console, but it
+should be less dense and more file/config oriented. Use restrained surfaces,
+clear list rows, compact status chips, path previews, and diff/snapshot details.
+
+| Role | Light Value | Dark Value | Usage |
+| --- | --- | --- | --- |
+| App background | `#F9FAFB` | `#111827` | Window background |
+| Surface | `#FFFFFF` | `#1F2937` | Panels, dialogs, repeated cards |
+| Accent | `#2563EB` | `#3B82F6` | Primary actions, active navigation |
+| Success | `#16A34A` | `#22C55E` | Configured, paired, verified |
+| Warning | `#D97706` | `#F59E0B` | Pending, deferred, conflict |
+| Danger | `#DC2626` | `#EF4444` | Failed, revoked, destructive |
+| Text primary | `#111827` | `#F9FAFB` | Headings and primary values |
+| Text secondary | `#4B5563` | `#9CA3AF` | Metadata and descriptions |
+| Border | `#E5E7EB` | `#374151` | Dividers and panel borders |
 
 ## Typography
 
-Use standard system fonts where appropriate to maintain a native feel, or `Inter` for consistent cross-platform rendering.
-- **Headings**: Semi-bold to Bold.
-- **Body**: Regular weight, 14px size for readability on desktop monitors.
-- **Monospace**: `JetBrains Mono` or `Fira Code` for any path names, JSON previews, or terminal output.
+Use system fonts for a native desktop feel. Use monospace text only for paths,
+commands, JSON snippets, token environment variable names, and target-native
+configuration fields.
 
-## Layout Structure
+## Module Guidance
 
-The app uses a classic Desktop Split View:
+### Agents
 
-1. **Sidebar (Navigation)**:
-   - Width: 240px.
-   - Contains major sections: Dashboard, Agents, Capabilities, Authorization, Settings.
-   - Distinct highlight for the active section.
+Show supported targets, detection confidence, binary/config paths, manual add
+entries, and pairing state. Scanning is conservative and must not imply that
+the client launched or authorized an agent.
 
-2. **Main Canvas**:
-   - Scrollable area for content.
-   - Uses constrained width for readable content (max ~900px wide for text-heavy areas, fluid for grids).
-   - Padding: 24px or 32px around the perimeter.
+The supported target list is OpenClaw, Claude Code, Codex, Gemini CLI,
+Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, and Windsurf.
 
-3. **Window Controls**:
-   - (macOS) Traffic lights integrated into the sidebar or top bar.
-   - (Windows) Standard window controls at the top right.
+### MCP Plugins
 
-## Component Guidelines
+Treat Pact MCP as a peer plugin. Show target-native MCP fields, version/status
+when available, update/repair triggers, and rollback actions backed by local
+snapshots.
 
-### Agent Cards
-- Display the agent icon prominently.
-- Show clear status indicators (e.g., green dot for "Connected", grey for "Not Installed").
-- Actions ("Install", "Uninstall") should be easily accessible but not distracting.
+### Skill Hub
 
-### Authorization Board
-- Treat pending authorization requests as high-priority tasks.
-- Use a split layout or distinct borders (warning colors) to highlight pending requests.
-- "Approve" and "Reject" buttons must be unambiguous.
+Present the Hub as passive local storage. Pairing, visibility, pinning, and
+integrity state are product concepts; executing Skills, installing dependencies,
+or copying Skills into workspaces are outside the client boundary.
 
-### Capabilities Viewer
-- Use a grid or a structured list.
-- Group tools logically (e.g., File System, Terminal, API).
-- Provide a search bar to easily filter through available tools.
+### Model Forwarding
 
-## Animation and Motion
-- **Micro-interactions**: Subtle scale or opacity changes on hover (especially for agent cards and buttons).
-- **Transitions**: Smooth cross-fades when navigating between sidebar sections (duration ~200ms).
-- Avoid bouncy or overly playful animations; keep it professional.
+Forwarding controls should make the selected profile and target explicit. The
+UI should not suggest that Pact Client owns a planner, hidden tool loop, or
+long-running autonomous session.
+
+### Activity And Snapshots
+
+Activity should read like an audit trail for local client actions. Snapshot
+views must show enough target/path/hash context for rollback decisions without
+turning into a full filesystem backup interface.
+
+### Settings
+
+Settings covers known paths, manual binaries, portable data root, server
+profile, and client preferences. It should not become a registry for server
+business modules or removed local runtime services.
 
 ## Accessibility
-- Ensure high contrast for text (WCAG AA).
-- All actions must be keyboard navigable.
-- Provide tooltips for icon-only buttons.
+
+- Text contrast must meet WCAG AA.
+- All command buttons, lists, and dialogs must be keyboard navigable.
+- Icon-only controls require tooltips.
+- Long paths, command output, and config previews must wrap or scroll without
+  obscuring adjacent controls.

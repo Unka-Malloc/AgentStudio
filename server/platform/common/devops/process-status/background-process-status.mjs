@@ -5,12 +5,22 @@ import {
   queueStateMutation,
   stateFileKey
 } from "../../platform-core/state-coordinator.mjs";
+import { loadSettings } from "../../platform-core/settings.mjs";
 import {
   composeUnifiedSystemStatus,
   unifiedRegistrationForProcess
 } from "../unified-registration-core/unified-registration.mjs";
 
 export const BACKGROUND_PROCESS_SCHEMA_VERSION = 1;
+const IMPORT_PARSE_ACTIVE_STATUSES = new Set(["queued", "running"]);
+const MAINTENANCE_ACTIVE_STATUSES = new Set(["queued", "running"]);
+const AGENT_WORKER_SUPPORTED_PROVIDERS = new Set([
+  "deepseek",
+  "openrouter",
+  "copilot",
+  "custom-http",
+  "local-model"
+]);
 
 export const BACKGROUND_PROCESS_DEFINITIONS = [
   {
@@ -20,7 +30,7 @@ export const BACKGROUND_PROCESS_DEFINITIONS = [
     processType: "service",
     responsibility: "运行导入解析队列服务。",
     services: ["导入解析队列", "断点续传恢复", "知识入库"],
-    features: ["工作队列", "知识库入库", "checkpoint 恢复"],
+    features: ["任务队列", "知识库入库", "checkpoint 恢复"],
     monitors: ["import_parse_job 队列心跳", "checkpoint tree 更新"],
     alerts: ["queueInterrupted", "processNotRunning", "processStale", "processRestarted"]
   },
@@ -31,19 +41,19 @@ export const BACKGROUND_PROCESS_DEFINITIONS = [
     processType: "service",
     responsibility: "运行数据源目录同步服务。",
     services: ["目录同步", "数据源变更扫描", "导入任务提交"],
-    features: ["数据源", "知识库入库", "工作队列"],
+    features: ["数据源", "知识库入库", "任务队列"],
     monitors: ["source watcher tick", "导入任务提交状态"],
     alerts: ["processNotRunning", "processStale", "processRestarted"]
   },
   {
     role: "maintenance-worker",
-    label: "维护任务 Worker",
-    description: "执行重建索引、清理、去重和进化学习等维护任务。",
+    label: "智能巡检 Worker",
+    description: "调度智能巡检 runbook，恢复排队中的巡检运行，并写入审批和审计链路。",
     processType: "service",
-    responsibility: "运行维护任务和智能巡检调度服务。",
-    services: ["智能巡检调度", "索引重建", "清理去重", "进化学习"],
-    features: ["智能巡检", "知识库维护", "工作队列"],
-    monitors: ["maintenance-agent runs", "维护任务队列"],
+    responsibility: "运行智能巡检调度服务。",
+    services: ["智能巡检调度", "巡检 runbook", "审批与审计"],
+    features: ["智能巡检", "任务队列"],
+    monitors: ["maintenance-agent runs", "智能巡检队列"],
     alerts: ["processNotRunning", "processStale", "processRestarted"]
   },
   {
@@ -91,18 +101,18 @@ const SERVER_PROCESS_DEFINITIONS = [
     processType: "service",
     responsibility: "运行服务端主调用面和控制台 API。",
     services: ["HTTP API", "JSON-RPC", "CLI 转发", "Server Console"],
-    features: ["系统配置", "工作队列", "知识库", "智能体", "运维监控"],
+    features: ["系统配置", "任务队列", "知识库", "智能体", "运维监控"],
     monitors: ["进程存活", "请求入口"],
     alerts: ["processNotRunning", "processStale"]
   },
   {
     role: "background-supervisor",
-    label: "后台进程守护器",
-    description: "守护并重启后台 Worker 进程，持续写入后台进程状态。",
+    label: "后台 Worker 管理进程",
+    description: "管理并按需拉起导入解析、目录同步、智能巡检和智能体 Worker，持续写入后台进程状态。",
     processType: "daemon",
-    responsibility: "守护后台 Worker 进程。",
+    responsibility: "管理后台 Worker 进程。",
     services: [],
-    features: ["运维监控", "工作队列"],
+    features: ["运维监控", "任务队列"],
     monitors: ["import-worker", "source-watcher", "maintenance-worker", "agent-worker"],
     alerts: ["supervisorStopped", "processNotRunning", "processRestarted"]
   },
@@ -111,9 +121,9 @@ const SERVER_PROCESS_DEFINITIONS = [
     label: "系统巡检",
     description: "由 Node.js 执行的系统巡检守护进程，负责写入后台告警状态。",
     processType: "daemon",
-    responsibility: "巡检服务端进程和工作队列，生成运维报警。",
+    responsibility: "巡检服务端进程和任务队列，生成运维报警。",
     services: [],
-    features: ["运维监控", "报警", "工作队列恢复"],
+    features: ["运维监控", "报警", "任务队列恢复"],
     monitors: ["后台进程状态", "queue-monitor 队列闭环", "checkpoint/log 证据"],
     alerts: ["processNotRunning", "processStale", "queueInterrupted"]
   }
@@ -121,6 +131,10 @@ const SERVER_PROCESS_DEFINITIONS = [
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function stringValue(value) {
+  return String(value || "").trim();
 }
 
 export function backgroundStateDirectory(userDataPath) {
@@ -133,6 +147,313 @@ export function backgroundStatePath(userDataPath) {
 
 function systemInspectionStatePath(userDataPath) {
   return path.join(backgroundStateDirectory(userDataPath), "monitor-alerts-state.json");
+}
+
+function importJobsRootPath(userDataPath) {
+  return path.join(userDataPath, "jobs");
+}
+
+function knowledgeSourcesPath(userDataPath) {
+  return path.join(userDataPath, "knowledge-sources", "sources.json");
+}
+
+function maintenanceAgentConfigPath(userDataPath) {
+  return path.join(userDataPath, "maintenance-agent.json");
+}
+
+function maintenanceAgentRunsPath(userDataPath) {
+  return path.join(userDataPath, "maintenance-agent-runs.jsonl");
+}
+
+function importJobMetaPath(userDataPath, jobId) {
+  return path.join(importJobsRootPath(userDataPath), jobId, "meta.json");
+}
+
+export async function inspectImportParseWorkerDemand(userDataPath) {
+  const jobsRootPath = importJobsRootPath(userDataPath);
+  const demand = {
+    kind: "import_parse_job",
+    active: false,
+    activeCount: 0,
+    queuedCount: 0,
+    runningCount: 0,
+    activeJobIds: [],
+    jobsRootPath,
+    checkedAt: nowIso()
+  };
+  try {
+    await fs.mkdir(jobsRootPath, { recursive: true });
+    const entries = await fs.readdir(jobsRootPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      try {
+        const meta = JSON.parse(await fs.readFile(importJobMetaPath(userDataPath, entry.name), "utf8"));
+        const status = String(meta.status || "").trim();
+        if (!IMPORT_PARSE_ACTIVE_STATUSES.has(status)) {
+          continue;
+        }
+        const jobId = String(meta.id || entry.name || "").trim();
+        demand.activeJobIds.push(jobId);
+        if (status === "queued") {
+          demand.queuedCount += 1;
+        } else if (status === "running") {
+          demand.runningCount += 1;
+        }
+      } catch {
+        // Ignore malformed historical job entries.
+      }
+    }
+  } catch (error) {
+    demand.error = error instanceof Error ? error.message : String(error);
+  }
+  demand.activeCount = demand.queuedCount + demand.runningCount;
+  demand.active = demand.activeCount > 0;
+  demand.activeJobIds = demand.activeJobIds.filter(Boolean).sort();
+  return demand;
+}
+
+export async function inspectSourceWatcherDemand(userDataPath) {
+  const sourceConfigPath = knowledgeSourcesPath(userDataPath);
+  const demand = {
+    kind: "knowledge_sources",
+    active: false,
+    sourceConfigPath,
+    totalCount: 0,
+    enabledCount: 0,
+    autoSyncCount: 0,
+    watchableCount: 0,
+    watchableSourceIds: [],
+    checkedAt: nowIso()
+  };
+  try {
+    const parsed = JSON.parse(await fs.readFile(sourceConfigPath, "utf8"));
+    const sources = Array.isArray(parsed.sources) ? parsed.sources : [];
+    demand.totalCount = sources.length;
+    for (const source of sources) {
+      const directoryPath = String(source?.directoryPath || "").trim();
+      const enabled = source?.enabled !== false;
+      const autoSync = source?.autoSync !== false;
+      if (enabled) {
+        demand.enabledCount += 1;
+      }
+      if (autoSync) {
+        demand.autoSyncCount += 1;
+      }
+      if (!directoryPath || !enabled || !autoSync) {
+        continue;
+      }
+      demand.watchableCount += 1;
+      demand.watchableSourceIds.push(String(source.sourceId || directoryPath).trim());
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      demand.error = error instanceof Error ? error.message : String(error);
+    }
+  }
+  demand.active = demand.watchableCount > 0;
+  demand.watchableSourceIds = demand.watchableSourceIds.filter(Boolean).sort();
+  return demand;
+}
+
+async function readLatestMaintenanceRuns(userDataPath) {
+  let content = "";
+  try {
+    content = await fs.readFile(maintenanceAgentRunsPath(userDataPath), "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+  const latest = new Map();
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      const run = parsed?.run;
+      if (run?.runId) {
+        latest.set(run.runId, run);
+      }
+    } catch {
+      // Ignore malformed historical run snapshots.
+    }
+  }
+  return [...latest.values()];
+}
+
+export async function inspectMaintenanceWorkerDemand(userDataPath) {
+  const configPath = maintenanceAgentConfigPath(userDataPath);
+  const runsPath = maintenanceAgentRunsPath(userDataPath);
+  const demand = {
+    kind: "maintenance_agent",
+    active: false,
+    configPath,
+    runsPath,
+    enabled: false,
+    enabledScheduleCount: 0,
+    activeRunCount: 0,
+    queuedRunCount: 0,
+    runningRunCount: 0,
+    activeRunIds: [],
+    checkedAt: nowIso()
+  };
+  try {
+    const parsed = JSON.parse(await fs.readFile(configPath, "utf8"));
+    demand.enabled = parsed?.enabled === true;
+    const schedules = Array.isArray(parsed?.schedules) ? parsed.schedules : [];
+    demand.enabledScheduleCount = schedules.filter((schedule) => schedule?.enabled === true).length;
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      demand.error = error instanceof Error ? error.message : String(error);
+    }
+  }
+  try {
+    for (const run of await readLatestMaintenanceRuns(userDataPath)) {
+      const status = String(run.status || "").trim();
+      if (!MAINTENANCE_ACTIVE_STATUSES.has(status)) {
+        continue;
+      }
+      demand.activeRunIds.push(String(run.runId || "").trim());
+      if (status === "queued") {
+        demand.queuedRunCount += 1;
+      } else if (status === "running") {
+        demand.runningRunCount += 1;
+      }
+    }
+  } catch (error) {
+    demand.error = demand.error || (error instanceof Error ? error.message : String(error));
+  }
+  demand.activeRunCount = demand.queuedRunCount + demand.runningRunCount;
+  demand.activeRunIds = demand.activeRunIds.filter(Boolean).sort();
+  demand.active = (demand.enabled && demand.enabledScheduleCount > 0) || demand.activeRunCount > 0;
+  return demand;
+}
+
+function agentEntryUid(entry = {}) {
+  return stringValue(entry.uid || entry.instanceId || entry.alias);
+}
+
+function inspectAgentEntryAvailability(settings = {}, entry = {}) {
+  const provider = stringValue(entry.provider);
+  const model = stringValue(entry.model || entry.engine);
+  const hasModel = Boolean(model);
+  if (!AGENT_WORKER_SUPPORTED_PROVIDERS.has(provider)) {
+    return {
+      status: "unsupported",
+      selectable: false,
+      reason: "该智能体来源尚未接入服务端调用链路。"
+    };
+  }
+  if (provider === "custom-http") {
+    const hasUrl = Boolean(stringValue(entry.url || entry.baseUrl || settings.customHttpAdapter?.url));
+    const hasToken = Boolean(
+      entry.tokenConfigured ||
+        entry.apiKeyConfigured ||
+        stringValue(entry.token || entry.apiKey)
+    );
+    if (!hasUrl || !hasToken) {
+      return {
+        status: "unconfigured",
+        selectable: false,
+        reason: "缺少调用地址或凭据。"
+      };
+    }
+    return { status: "available", selectable: true, reason: "" };
+  }
+  if (provider === "local-model") {
+    const hasUrl = Boolean(stringValue(entry.url || entry.baseUrl || settings.localModelEndpoint));
+    if (!hasModel || !hasUrl) {
+      return {
+        status: "unconfigured",
+        selectable: false,
+        reason: "缺少本地模型名称或调用地址。"
+      };
+    }
+    return { status: "available", selectable: true, reason: "" };
+  }
+  const providerCredentialConfigured =
+    provider === "deepseek"
+      ? Boolean(settings.deepSeekApiKeyConfigured || stringValue(settings.deepSeekApiKey) || entry.apiKeyConfigured || stringValue(entry.apiKey))
+      : provider === "openrouter"
+        ? Boolean(settings.openRouterApiKeyConfigured || stringValue(settings.openRouterApiKey) || entry.apiKeyConfigured || stringValue(entry.apiKey))
+        : provider === "copilot"
+          ? Boolean(settings.copilotApiKeyConfigured || stringValue(settings.copilotApiKey) || entry.apiKeyConfigured || stringValue(entry.apiKey))
+          : Boolean(entry.apiKeyConfigured || stringValue(entry.apiKey || entry.token));
+  if (!hasModel || !providerCredentialConfigured) {
+    return {
+      status: "unconfigured",
+      selectable: false,
+      reason: "缺少模型或凭据。"
+    };
+  }
+  return { status: "available", selectable: true, reason: "" };
+}
+
+export async function inspectAgentWorkerDemand(userDataPath) {
+  const demand = {
+    kind: "agent_runtime",
+    active: false,
+    reason: "not_configured",
+    configured: false,
+    connected: false,
+    modelCount: 0,
+    availableModelCount: 0,
+    unavailableModelCount: 0,
+    unsupportedModelCount: 0,
+    activeTaskCount: 0,
+    availableAgentIds: [],
+    unavailableAgentIds: [],
+    unsupportedAgentIds: [],
+    checkedAt: nowIso()
+  };
+  try {
+    const settings = await loadSettings(userDataPath, { redactSecrets: false });
+    const entries = Array.isArray(settings.modelLibraryAgents) ? settings.modelLibraryAgents : [];
+    demand.modelCount = entries.length;
+    demand.configured = entries.length > 0;
+    for (const entry of entries) {
+      const uid = agentEntryUid(entry);
+      const availability = inspectAgentEntryAvailability(settings, entry);
+      if (availability.status === "available") {
+        demand.availableModelCount += 1;
+        demand.availableAgentIds.push(uid);
+        continue;
+      }
+      if (availability.status === "unsupported") {
+        demand.unsupportedModelCount += 1;
+        demand.unsupportedAgentIds.push(uid);
+      } else {
+        demand.unavailableModelCount += 1;
+        demand.unavailableAgentIds.push(uid);
+      }
+    }
+    demand.connected = demand.availableModelCount > 0;
+    demand.reason = !demand.configured
+      ? "not_configured"
+      : demand.connected
+        ? "idle"
+        : "not_connected";
+  } catch (error) {
+    demand.reason = "inspection_failed";
+    demand.error = error instanceof Error ? error.message : String(error);
+  }
+  demand.availableAgentIds = demand.availableAgentIds.filter(Boolean).sort();
+  demand.unavailableAgentIds = demand.unavailableAgentIds.filter(Boolean).sort();
+  demand.unsupportedAgentIds = demand.unsupportedAgentIds.filter(Boolean).sort();
+  return demand;
+}
+
+export function statusForInactiveDemand(demand = {}) {
+  const reason = stringValue(demand.reason);
+  if (reason === "not_configured" || reason === "not_connected" || reason === "inspection_failed") {
+    return reason;
+  }
+  return "standby";
 }
 
 export function normalizeBackgroundRoleList(value) {
@@ -223,6 +544,66 @@ function withRuntimeStatus(processRecord, nowMs) {
   };
 }
 
+function demandForRole(role, demandByRole = {}) {
+  if (role === "import-worker") {
+    return demandByRole.importWorker || null;
+  }
+  if (role === "source-watcher") {
+    return demandByRole.sourceWatcher || null;
+  }
+  if (role === "maintenance-worker") {
+    return demandByRole.maintenanceWorker || null;
+  }
+  if (role === "agent-worker") {
+    return demandByRole.agentWorker || null;
+  }
+  return null;
+}
+
+function desiredForRole(role, demandByRole = {}) {
+  const demand = demandForRole(role, demandByRole);
+  return demand ? demand.active : true;
+}
+
+function attachDemandDetails(processRecord, role, demandByRole = {}) {
+  const demand = demandForRole(role, demandByRole);
+  if (!demand) {
+    return processRecord;
+  }
+  return {
+    ...processRecord,
+    details: {
+      ...(processRecord.details || {}),
+      demand
+    }
+  };
+}
+
+function processRecordForDefinition(definition, existing = {}, demandByRole = {}) {
+  const desired = desiredForRole(definition.role, demandByRole);
+  const alive = isPidAlive(existing.pid);
+  const inactiveStatus = statusForInactiveDemand(demandForRole(definition.role, demandByRole) || {});
+  const status = desired
+    ? String(existing.status || "missing")
+    : alive
+      ? String(existing.status || inactiveStatus)
+      : inactiveStatus;
+  return attachDemandDetails(
+    {
+      ...definition,
+      pid: 0,
+      restartCount: 0,
+      ...existing,
+      desired,
+      status,
+      pid: desired || alive ? Number(existing.pid || 0) : 0,
+      stale: desired ? existing.stale : false
+    },
+    definition.role,
+    demandByRole
+  );
+}
+
 function serverMainProcess(nowMs) {
   const definition = backgroundDefinitionForRole("server-main");
   return withRuntimeStatus(
@@ -297,6 +678,12 @@ export async function getBackgroundProcessStatus(userDataPath) {
   const state = await readStateFile(userDataPath);
   const nowMs = Date.now();
   const definitions = BACKGROUND_PROCESS_DEFINITIONS;
+  const demandByRole = {
+    importWorker: await inspectImportParseWorkerDemand(userDataPath),
+    sourceWatcher: await inspectSourceWatcherDemand(userDataPath),
+    maintenanceWorker: await inspectMaintenanceWorkerDemand(userDataPath),
+    agentWorker: await inspectAgentWorkerDemand(userDataPath)
+  };
   if (!state) {
     const supervisor = {
       pid: 0,
@@ -306,16 +693,18 @@ export async function getBackgroundProcessStatus(userDataPath) {
     const processes = [
       serverMainProcess(nowMs),
       backgroundSupervisorProcess(supervisor, nowMs),
-      ...definitions.map((definition) => ({
+      ...definitions.map((definition) => attachDemandDetails({
         ...definition,
-        desired: true,
+        desired: desiredForRole(definition.role, demandByRole),
         pid: 0,
         alive: false,
-        stale: true,
-        status: "missing",
+        stale: desiredForRole(definition.role, demandByRole),
+        status: desiredForRole(definition.role, demandByRole)
+          ? "missing"
+          : statusForInactiveDemand(demandForRole(definition.role, demandByRole) || {}),
         restartCount: 0,
         heartbeatAgeMs: null
-      })),
+      }, definition.role, demandByRole)),
       await getSystemInspectionProcess(userDataPath, nowMs)
     ].map(attachProcessRegistration);
     return {
@@ -338,14 +727,7 @@ export async function getBackgroundProcessStatus(userDataPath) {
   const byRole = new Map((state.processes || []).map((item) => [item.role, item]));
   const processes = definitions.map((definition) =>
     withRuntimeStatus(
-      {
-        ...definition,
-        desired: true,
-        pid: 0,
-        status: "missing",
-        restartCount: 0,
-        ...(byRole.get(definition.role) || {})
-      },
+      processRecordForDefinition(definition, byRole.get(definition.role) || {}, demandByRole),
       nowMs
     )
   );

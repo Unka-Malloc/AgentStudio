@@ -1,0 +1,933 @@
+{
+  "schemaVersion": 1,
+  "reportType": "pact.production-readiness.v1",
+  "runId": "20260531T140152Z",
+  "generatedAt": "2026-05-31T14:04:12.048Z",
+  "mode": "full",
+  "repoRoot": "/Users/unka/DevSpace/Unka-Malloc/Pact",
+  "git": {
+    "branch": "codex/knowledge-distillation-v2",
+    "commit": "f68adfaee260aba9112250a5e66dc5b055aaeae4",
+    "dirtyFileCount": 56
+  },
+  "overallStatus": "pass",
+  "summary": {
+    "pass": 30,
+    "fail": 0,
+    "timeout": 0,
+    "blockedP0": 0
+  },
+  "coverage": {
+    "required": [
+      "architecture",
+      "agent-library-access",
+      "capability-kernel-security",
+      "workspace-contribution-governance",
+      "document-parsing-real-sample",
+      "external-knowledge-base-consistency",
+      "external-service-api-registration",
+      "capability-kernel-api-capability",
+      "key-management-storage-distribution",
+      "permission-management-auth-config",
+      "mcp-gateway-client-push",
+      "rag-evaluation",
+      "distillation-evaluation",
+      "session-thread",
+      "tool-permission",
+      "trace-observability",
+      "durable-workflow",
+      "backup-restore",
+      "upgrade-migration",
+      "ui-smoke",
+      "offline-license"
+    ],
+    "byRequirement": {
+      "architecture": [
+        "architecture"
+      ],
+      "agent-library-access": [
+        "agent-library-access"
+      ],
+      "capability-kernel-security": [
+        "capability-kernel-security"
+      ],
+      "workspace-contribution-governance": [
+        "workspace-contribution-governance"
+      ],
+      "document-parsing-real-sample": [
+        "document-parsing-real-sample"
+      ],
+      "external-knowledge-base-consistency": [
+        "external-knowledge-base-consistency"
+      ],
+      "external-service-api-registration": [
+        "external-service-api-registration"
+      ],
+      "capability-kernel-api-capability": [
+        "capability-kernel-security"
+      ],
+      "key-management-storage-distribution": [
+        "key-management-storage-distribution"
+      ],
+      "permission-management-auth-config": [
+        "tool-permission"
+      ],
+      "mcp-gateway-client-push": [
+        "mcp-gateway-client-push"
+      ],
+      "rag-evaluation": [
+        "rag-evaluation"
+      ],
+      "distillation-evaluation": [
+        "distillation-evaluation"
+      ],
+      "session-thread": [
+        "session-thread"
+      ],
+      "tool-permission": [
+        "tool-permission"
+      ],
+      "trace-observability": [
+        "trace-observability"
+      ],
+      "durable-workflow": [
+        "durable-workflow"
+      ],
+      "backup-restore": [
+        "backup-restore"
+      ],
+      "upgrade-migration": [
+        "upgrade-migration"
+      ],
+      "ui-smoke": [
+        "ui-smoke"
+      ],
+      "offline-license": [
+        "offline-license"
+      ]
+    },
+    "missing": []
+  },
+  "gates": [
+    {
+      "id": "architecture",
+      "title": "架构门禁",
+      "blockerLevel": "P0",
+      "owner": "platform-architecture",
+      "coverage": [
+        "architecture"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/architecture.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:architecture-patterns",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 147
+        },
+        {
+          "command": "npm run server:verify:knowledge-architecture-governance",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 148
+        },
+        {
+          "command": "npm run server:verify:platform-layout",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 214
+        }
+      ],
+      "nextStep": "修复架构治理、平台分层或核心文档与实现偏差。"
+    },
+    {
+      "id": "agent-library-access",
+      "title": "AgentLibrary 源头权限",
+      "blockerLevel": "P0",
+      "owner": "knowledge-security",
+      "coverage": [
+        "agent-library-access"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/agent-library-access.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:agent-library-access",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 123
+        }
+      ],
+      "nextStep": "补齐 knowledgeAccessReceipt、loanRecord、authorizationOverlay 和所有知识出口的统一裁决。"
+    },
+    {
+      "id": "workspace-contribution-governance",
+      "title": "终端贡献资产治理",
+      "blockerLevel": "P0",
+      "owner": "workspace-governance",
+      "coverage": [
+        "workspace-contribution-governance"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/workspace-contribution-governance.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:workspace-contribution-governance",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 131
+        }
+      ],
+      "nextStep": "补齐贡献状态机、贡献授权、usage event、排行榜和资产贡献统计报表。"
+    },
+    {
+      "id": "document-parsing-real-sample",
+      "title": "文档解析真实样例",
+      "blockerLevel": "P0",
+      "owner": "knowledge-ingestion",
+      "coverage": [
+        "document-parsing-real-sample"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/document-parsing-real-sample.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:dynamic-document-parsing",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 137
+        },
+        {
+          "command": "npm run server:verify:document-preview-consistency",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 129
+        },
+        {
+          "command": "npm run server:verify:document-parser-dry-run",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 552
+        },
+        {
+          "command": "npm run server:verify:knowledge-docx-export",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 194
+        }
+      ],
+      "nextStep": "补齐真实文档解析 fixture、结构锚点、动态切分和 DOCX 导出基准。"
+    },
+    {
+      "id": "external-knowledge-base-consistency",
+      "title": "外部知识库一致性",
+      "blockerLevel": "P0",
+      "owner": "knowledge-storage",
+      "coverage": [
+        "external-knowledge-base-consistency"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/external-knowledge-base-consistency.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:external-knowledge-base",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 218
+        }
+      ],
+      "nextStep": "补齐外部知识库 conformance：权限预过滤、删除/tombstone、回读和重建语义。"
+    },
+    {
+      "id": "external-service-api-registration",
+      "title": "外部服务 API 注册治理",
+      "blockerLevel": "P0",
+      "owner": "external-service-governance",
+      "coverage": [
+        "external-service-api-registration"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/external-service-api-registration.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:external-service-api-registration",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 139
+        },
+        {
+          "command": "npm run server:verify:external-knowledge-distillation",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 2758
+        }
+      ],
+      "nextStep": "所有服务必须通过 external.* operation 和 /api/external/* 中介 API 注册；Tool Management 不得暴露平台内部算法能力。"
+    },
+    {
+      "id": "rag-evaluation",
+      "title": "RAG 检索评估",
+      "blockerLevel": "P0",
+      "owner": "knowledge-quality",
+      "coverage": [
+        "rag-evaluation"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/rag-evaluation.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:knowledge-retrieval-quality",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 189
+        },
+        {
+          "command": "npm run server:verify:source-evidence",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 269
+        }
+      ],
+      "nextStep": "补齐检索质量、证据忠实度、权限过滤和 evidence pack 的持续评估。"
+    },
+    {
+      "id": "distillation-evaluation",
+      "title": "知识蒸馏评估",
+      "blockerLevel": "P0",
+      "owner": "knowledge-distillation",
+      "coverage": [
+        "distillation-evaluation"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/distillation-evaluation.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:knowledge-distillation-workbench",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 421
+        },
+        {
+          "command": "npm run server:verify:knowledge-industrial-distillation",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 140
+        },
+        {
+          "command": "npm run server:verify:knowledge-distillation-optimization",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 128
+        }
+      ],
+      "nextStep": "补齐蒸馏覆盖率、同一事项合并、时间线顺序、unsupported claims、优化趋势和人工审核闭环。"
+    },
+    {
+      "id": "session-thread",
+      "title": "会话线程与上下文",
+      "blockerLevel": "P0",
+      "owner": "agent-runtime",
+      "coverage": [
+        "session-thread"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/session-thread.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:agent-workspace",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 980
+        },
+        {
+          "command": "npm run server:verify:agent-session-governance",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 153
+        },
+        {
+          "command": "npm run server:verify:context-runtime",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 549
+        },
+        {
+          "command": "npm run server:verify:agent-sync",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 771
+        }
+      ],
+      "nextStep": "补齐 session fork/compare/merge proposal/archive、context bundle、workspace 状态和 agent sync 的端到端验收。"
+    },
+    {
+      "id": "tool-permission",
+      "title": "工具权限和安全策略",
+      "blockerLevel": "P0",
+      "owner": "security-tooling",
+      "coverage": [
+        "tool-permission",
+        "permission-management-auth-config"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/tool-permission.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:2-3-5-security-model",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 130
+        },
+        {
+          "command": "npm run server:verify:tool-management",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 2171
+        },
+        {
+          "command": "npm run server:verify:operation-policy",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 685
+        },
+        {
+          "command": "npm run server:verify:console-auth",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 3890
+        },
+        {
+          "command": "npm run server:verify:organization-model",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 324
+        },
+        {
+          "command": "npm run server:verify:authorization-governance",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 255
+        }
+      ],
+      "nextStep": "补齐 2-3-5 安全治理架构、tool grant、risk policy、scope、CSRF/safety-confirm、组织模型和授权治理边界。"
+    },
+    {
+      "id": "capability-kernel-security",
+      "title": "Capability Kernel 与密钥边界",
+      "blockerLevel": "P0",
+      "owner": "security-kernel",
+      "coverage": [
+        "capability-kernel-security",
+        "capability-kernel-api-capability"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/capability-kernel-security.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:authorization-capabilities",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 150
+        },
+        {
+          "command": "npm run server:verify:opaque-capability-key",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 976
+        },
+        {
+          "command": "npm run server:verify:capability-binding-guard",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 835
+        },
+        {
+          "command": "npm run server:verify:capability-security-helper",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1129
+        },
+        {
+          "command": "npm run server:verify:linux-security-backends",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1213
+        },
+        {
+          "command": "npm run server:verify:windows-security-backends",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 365
+        }
+      ],
+      "nextStep": "补齐 Capability Kernel、opaque key、Binding Guard、helper、recovery 和 OS backend 的生产验收。"
+    },
+    {
+      "id": "key-management-storage-distribution",
+      "title": "密钥存储和下发",
+      "blockerLevel": "P0",
+      "owner": "security-kernel",
+      "coverage": [
+        "key-management-storage-distribution"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/key-management-storage-distribution.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:secret-init",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 393
+        },
+        {
+          "command": "npm run server:verify:opaque-capability-key",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 954
+        },
+        {
+          "command": "npm run server:verify:tool-management",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1491
+        },
+        {
+          "command": "npm run server:verify:mcp-http",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1423
+        }
+      ],
+      "nextStep": "补齐密钥初始化、opaque capability key、grant 存储/轮换/撤销，以及 MCP local-grant 下发链路。"
+    },
+    {
+      "id": "mcp-gateway-client-push",
+      "title": "MCP 网关下游推送",
+      "blockerLevel": "P0",
+      "owner": "mcp-gateway",
+      "coverage": [
+        "mcp-gateway-client-push"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/mcp-gateway-client-push.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:mcp-http",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1541
+        },
+        {
+          "command": "npm run server:verify:mcp-release",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 76906
+        },
+        {
+          "command": "npm run client:verify:mcp-plugins",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 365
+        },
+        {
+          "command": "npm run server:verify:client-runtime-bootstrap",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 640
+        }
+      ],
+      "nextStep": "补齐 MCP discovery、tools/list_changed、connector 版本发布、客户端 MCP 配置更新和密钥授权下发验收。"
+    },
+    {
+      "id": "model-routing",
+      "title": "模型路由成本和降级",
+      "blockerLevel": "P1",
+      "owner": "agent-runtime",
+      "coverage": [],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/model-routing.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:model-routing",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 175
+        }
+      ],
+      "nextStep": "补齐 pact.model-routing.v1、预算、fallback chain、熔断、prompt version 和成本台账。"
+    },
+    {
+      "id": "capability-package-lifecycle",
+      "title": "工具与技能包生命周期",
+      "blockerLevel": "P1",
+      "owner": "tooling-governance",
+      "coverage": [],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/capability-package-lifecycle.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:capability-package-lifecycle",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 146
+        }
+      ],
+      "nextStep": "补齐 pact.tool-package.v1、pact.skill-registry.v1、签名、依赖、审批、回滚和废弃策略。"
+    },
+    {
+      "id": "data-connector-governance",
+      "title": "数据连接器治理与本地镜像一致性",
+      "blockerLevel": "P1",
+      "owner": "knowledge-connectors",
+      "coverage": [],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/data-connector-governance.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:data-connector-governance",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 150
+        }
+      ],
+      "nextStep": "补齐 pact.data-connector-governance.v1、OAuth refresh 策略、增量 cursor、mirror 冲突/清理、localQuery 禁远程和卸载策略。"
+    },
+    {
+      "id": "performance-capacity",
+      "title": "性能和容量基准",
+      "blockerLevel": "P1",
+      "owner": "production-readiness",
+      "coverage": [],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/performance-capacity.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:performance-capacity",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 236
+        }
+      ],
+      "nextStep": "补齐 pact.performance-capacity.v1、容量目标、benchmark runner、失败注入和报告阈值。"
+    },
+    {
+      "id": "module-ecosystem",
+      "title": "模块 SDK 与模板",
+      "blockerLevel": "P2",
+      "owner": "module-management",
+      "coverage": [],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/module-ecosystem.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:module-ecosystem",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 244
+        }
+      ],
+      "nextStep": "补齐 pact.module-ecosystem.v1、create-module、contract test、示例模块、CI 模板和 schema docs。"
+    },
+    {
+      "id": "workspace-governance",
+      "title": "组织级工作空间治理",
+      "blockerLevel": "P2",
+      "owner": "workspace-governance",
+      "coverage": [],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/workspace-governance.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:workspace-governance",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 160
+        }
+      ],
+      "nextStep": "补齐 organization/project/dataClass/retention/legalHold、外部协作者、跨空间复制和共享授权治理。"
+    },
+    {
+      "id": "asset-lineage",
+      "title": "多模态资产血缘",
+      "blockerLevel": "P2",
+      "owner": "knowledge-ingestion",
+      "coverage": [],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/asset-lineage.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:asset-lineage",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 157
+        }
+      ],
+      "nextStep": "补齐 raw object、page/slide、bbox、parser/model/version、OCR、视觉模型和重解析计划。"
+    },
+    {
+      "id": "executive-report",
+      "title": "资产价值管理报告",
+      "blockerLevel": "P3",
+      "owner": "product-quality",
+      "coverage": [],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/executive-report.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:executive-report",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 156
+        }
+      ],
+      "nextStep": "补齐 asset contribution、production readiness、eval、trace、benchmark 的管理层报告汇总。"
+    },
+    {
+      "id": "architecture-live-map",
+      "title": "架构图运行状态联动",
+      "blockerLevel": "P3",
+      "owner": "platform-architecture",
+      "coverage": [],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/architecture-live-map.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:architecture-live-map",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 148
+        }
+      ],
+      "nextStep": "补齐核心架构节点到文档、实现路径和生产门禁状态的联动映射。"
+    },
+    {
+      "id": "sample-business-pack",
+      "title": "样例业务包",
+      "blockerLevel": "P3",
+      "owner": "product-quality",
+      "coverage": [],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/sample-business-pack.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:sample-business-pack",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 176
+        }
+      ],
+      "nextStep": "补齐邮件、PDF、PPT、Markdown 项目和外部知识库 compose 的可物化样例包。"
+    },
+    {
+      "id": "trace-observability",
+      "title": "内部 Trace 与日志脱敏",
+      "blockerLevel": "P0",
+      "owner": "observability",
+      "coverage": [
+        "trace-observability"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/trace-observability.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:trace-context",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 986
+        },
+        {
+          "command": "npm run server:verify:runtime-logging",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1320
+        }
+      ],
+      "nextStep": "补齐 pact.trace.v1、span 关联、权限裁决引用、成本字段和 OpenTelemetry 导出映射。"
+    },
+    {
+      "id": "durable-workflow",
+      "title": "长任务 Durable Workflow",
+      "blockerLevel": "P0",
+      "owner": "workflow-runtime",
+      "coverage": [
+        "durable-workflow"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/durable-workflow.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:durable-workflow",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 136
+        },
+        {
+          "command": "npm run server:verify:continuity",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 331
+        },
+        {
+          "command": "npm run server:verify:checkpoints",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 8432
+        },
+        {
+          "command": "npm run server:verify:state-coordination",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 624
+        }
+      ],
+      "nextStep": "继续把更多高风险长任务接入 pact.workflow.v1，并用真实外部服务演练 partial write 补偿。"
+    },
+    {
+      "id": "backup-restore",
+      "title": "备份恢复和 Checkpoint",
+      "blockerLevel": "P0",
+      "owner": "ops-runtime",
+      "coverage": [
+        "backup-restore"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/backup-restore.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:checkpoints",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 8473
+        },
+        {
+          "command": "npm run server:verify:backup-restore",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 165
+        },
+        {
+          "command": "npm run server:verify:rebuild",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1522
+        },
+        {
+          "command": "npm run server:verify:ops",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 975
+        }
+      ],
+      "nextStep": "补齐 backup manifest、restore drill、checkpoint tree 和恢复审计演示。"
+    },
+    {
+      "id": "upgrade-migration",
+      "title": "升级迁移和配置兼容",
+      "blockerLevel": "P0",
+      "owner": "release-engineering",
+      "coverage": [
+        "upgrade-migration"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/upgrade-migration.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:feature-profiles",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1929
+        },
+        {
+          "command": "npm run server:verify:unified-registration",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 185
+        },
+        {
+          "command": "npm run server:verify:multi-source-connectors",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 309
+        }
+      ],
+      "nextStep": "补齐 schema migration report、feature profile 构建和连接器迁移门禁。"
+    },
+    {
+      "id": "ui-smoke",
+      "title": "端到端 UI smoke",
+      "blockerLevel": "P0",
+      "owner": "console-frontend",
+      "coverage": [
+        "ui-smoke"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/ui-smoke.log",
+      "commands": [
+        {
+          "command": "npm run build:renderer:raw",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 2021
+        },
+        {
+          "command": "npm run server:verify:frontend-feature-registry",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 138
+        },
+        {
+          "command": "npm run server:verify:knowledge-console",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 1676
+        }
+      ],
+      "nextStep": "补齐控制台生产健康页、关键路由 smoke、前端 feature registry 和页面验收。"
+    },
+    {
+      "id": "offline-license",
+      "title": "离线包和 License",
+      "blockerLevel": "P0",
+      "owner": "release-engineering",
+      "coverage": [
+        "offline-license"
+      ],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/offline-license.log",
+      "commands": [
+        {
+          "command": "node server/scripts/verify-knowledge-license-manifest.mjs",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 75
+        },
+        {
+          "command": "node server/scripts/pack-offline-server.mjs --dry-run --target linux-x64",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 48
+        }
+      ],
+      "nextStep": "补齐离线包许可清单、第三方运行时声明和可复制打包报告。"
+    },
+    {
+      "id": "business-scenarios",
+      "title": "业务场景回归",
+      "blockerLevel": "P1",
+      "owner": "product-quality",
+      "coverage": [],
+      "status": "pass",
+      "evidencePath": "reports/production-readiness/20260531T140152Z/business-scenarios.log",
+      "commands": [
+        {
+          "command": "npm run server:verify:business-scenarios",
+          "exitCode": 0,
+          "timedOut": false,
+          "elapsedMs": 3706
+        }
+      ],
+      "nextStep": "补齐真实业务场景覆盖，避免只验证单点功能。"
+    }
+  ]
+}

@@ -1,4 +1,0 @@
-interface:
-  display_name: "SplitAll Document Parser Mount"
-  short_description: "Help with SplitAll Document Parser Mount tasks"
-  default_prompt: "Use $splitall-document-parser-mount to handle this SplitAll platform task."

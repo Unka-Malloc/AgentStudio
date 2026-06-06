@@ -304,8 +304,7 @@ function accessDecisionFor({ input = {}, documents = [], requestedEgress = "expo
 
 export function createKnowledgeTransformationProvider({
   knowledgeCore = null,
-  metadataStore = null,
-  knowledgeDistillationRuntime = null
+  metadataStore = null
 } = {}) {
   async function convertRawCorpus(input = {}, context = {}) {
     let documents = documentsFromInput(input);
@@ -405,10 +404,7 @@ export function createKnowledgeTransformationProvider({
 
   async function exportDistillation(input = {}, context = {}) {
     const runId = text(input.runId || input.id || "");
-    const run = runId && typeof knowledgeDistillationRuntime?.getRun === "function"
-      ? await knowledgeDistillationRuntime.getRun({ runId })
-      : null;
-    const documents = distillationDocuments(input, run);
+    const documents = distillationDocuments(input, null);
     const generatedAt = nowIso();
     const format = normalizeFormat(input, "markdown");
     const accessDecision = accessDecisionFor({
@@ -430,7 +426,7 @@ export function createKnowledgeTransformationProvider({
     const rendered = await renderDocuments({
       documents,
       format,
-      title: input.title || run?.query || "Knowledge distillation export",
+      title: input.title || "Knowledge distillation export",
       generatedAt,
       filters: { runId }
     });
@@ -443,8 +439,8 @@ export function createKnowledgeTransformationProvider({
         generatedAt,
         accessDecision
       }),
-      runId: run?.runId || runId,
-      runStatus: run?.status || ""
+      runId,
+      runStatus: ""
     };
   }
 

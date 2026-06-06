@@ -62,6 +62,14 @@ export function cleanMarkdownInline(value = "") {
     .trim();
 }
 
+function flushParagraphSummary(lines, paragraphs) {
+  const text = normalizeDocumentText(lines.join("\n"));
+  if (text) {
+    paragraphs.push(cleanMarkdownInline(text.replace(/\n/g, " ")));
+  }
+  lines.length = 0;
+}
+
 function isMarkdownTableSeparator(line = "") {
   const cells = splitMarkdownTableLine(line);
   return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
@@ -116,6 +124,87 @@ function flushParagraphLines(children, lines) {
     children.push(humanParagraph(cleanMarkdownInline(text.replace(/\n/g, " ")), 140));
   }
   lines.length = 0;
+}
+
+export function summarizeMarkdownStructure(text, {
+  maxHeadingSamples = 8,
+  maxListSamples = 8,
+  maxParagraphSamples = 6,
+  maxTableSamples = 4
+} = {}) {
+  const normalized = normalizeDocumentText(text);
+  if (!normalized) {
+    return {
+      headingCount: 0,
+      headingTexts: [],
+      bulletCount: 0,
+      bulletTexts: [],
+      tableCount: 0,
+      tableShapes: [],
+      paragraphCount: 0,
+      paragraphSamples: []
+    };
+  }
+
+  const headingTexts = [];
+  const bulletTexts = [];
+  const tableShapes = [];
+  const paragraphSamples = [];
+  const paragraphLines = [];
+  const lines = normalized.split("\n");
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraphSummary(paragraphLines, paragraphSamples);
+      continue;
+    }
+
+    const headingMatch = /^(#{1,6})\s+(.+)$/.exec(line);
+    if (headingMatch) {
+      flushParagraphSummary(paragraphLines, paragraphSamples);
+      headingTexts.push({
+        level: headingMatch[1].length,
+        text: cleanMarkdownInline(headingMatch[2])
+      });
+      continue;
+    }
+
+    const table = markdownTableAt(lines, index);
+    if (table) {
+      flushParagraphSummary(paragraphLines, paragraphSamples);
+      tableShapes.push({
+        rows: table.rows.length,
+        columns: Math.max(0, ...table.rows.map((row) => row.length)),
+        header: table.rows[0]?.slice(0, 4) || []
+      });
+      index = table.nextIndex - 1;
+      continue;
+    }
+
+    const listMatch = /^[-*+]\s+(.+)$/.exec(line);
+    if (listMatch) {
+      flushParagraphSummary(paragraphLines, paragraphSamples);
+      bulletTexts.push(cleanMarkdownInline(listMatch[1]));
+      continue;
+    }
+
+    paragraphLines.push(line);
+  }
+
+  flushParagraphSummary(paragraphLines, paragraphSamples);
+
+  return {
+    headingCount: headingTexts.length,
+    headingTexts: headingTexts.slice(0, maxHeadingSamples),
+    bulletCount: bulletTexts.length,
+    bulletTexts: bulletTexts.slice(0, maxListSamples),
+    tableCount: tableShapes.length,
+    tableShapes: tableShapes.slice(0, maxTableSamples),
+    paragraphCount: paragraphSamples.length,
+    paragraphSamples: paragraphSamples.slice(0, maxParagraphSamples)
+  };
 }
 
 export function renderHumanDocxBodyBlocks(text, {

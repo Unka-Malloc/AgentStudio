@@ -590,6 +590,18 @@ export function createAuthorizationGovernanceStore({
     `).run(randomId("authz_gov_event"), entityType, entityId, eventType, stringifyJson(payload, {}), nowIso());
   }
 
+  function getPolicyRevision() {
+    const row = db.prepare(`
+      SELECT count(*) AS revision, max(created_at) AS updated_at
+      FROM authorization_governance_events
+    `).get();
+    return {
+      protocolVersion: "pact.authorization.governance.policy-revision.v1",
+      revision: Number(row?.revision || 0),
+      updatedAt: row?.updated_at || ""
+    };
+  }
+
   function seedBuiltins() {
     for (const role of Object.values(builtinRoles || DEFAULT_ROLES)) {
       const existing = getRole(role.roleId || role.id);
@@ -843,6 +855,7 @@ export function createAuthorizationGovernanceStore({
 
     const snapshot = {
       protocolVersion: "pact.authorization.governance.v1",
+      policyRevision: getPolicyRevision(),
       request,
       team: {
         teamIds,
@@ -972,6 +985,7 @@ export function createAuthorizationGovernanceStore({
     getApproval,
     upsertApproval,
     revokeApproval,
+    getPolicyRevision,
     hasGovernancePolicies,
     evaluateGovernance
   };

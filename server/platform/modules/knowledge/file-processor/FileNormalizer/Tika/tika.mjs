@@ -16,6 +16,10 @@ const projectRoot = path.resolve(__dirname, "../../../../../../..");
 export const TIKA_VERSION = "3.2.3";
 export const TIKA_IMPORT_EXTENSIONS = getTikaImportExtensions();
 const TIKA_JAR_FILE_NAMES = [`tika-app-${TIKA_VERSION}.jar`, "tika-app.jar"];
+const DEFAULT_TIKA_TIMEOUT_MS = 30 * 60 * 1000;
+const MIN_TIKA_TIMEOUT_MS = 1000;
+const MAX_TIKA_TIMEOUT_MS = 6 * 60 * 60 * 1000;
+const TIKA_FORCE_KILL_GRACE_MS = 5000;
 
 function createTikaError(message, code = "TIKA_FAILED") {
   const error = new Error(message);
@@ -113,39 +117,127 @@ function collectStream(stream) {
   });
 }
 
-async function spawnCommand(command, args) {
+function clampTikaTimeoutMs(value) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return 0;
+  }
+  return Math.max(MIN_TIKA_TIMEOUT_MS, Math.min(numeric, MAX_TIKA_TIMEOUT_MS));
+}
+
+function resolveTikaTimeoutMs(settings = {}) {
+  return clampTikaTimeoutMs(settings.tikaTimeoutMs) ||
+    clampTikaTimeoutMs(process.env.PACT_TIKA_TIMEOUT_MS) ||
+    DEFAULT_TIKA_TIMEOUT_MS;
+}
+
+function formatTimeoutDuration(timeoutMs) {
+  const seconds = Math.max(1, Math.ceil(Number(timeoutMs || 0) / 1000));
+  if (seconds < 60) {
+    return `${seconds} 秒`;
+  }
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  return `${minutes} 分钟`;
+}
+
+async function spawnCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true
     });
     let exitCode = 1;
+    let settled = false;
+    let timedOut = false;
+    let timeoutHandle = null;
+    let killHandle = null;
 
-    child.once("error", reject);
+    const clearTimers = () => {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = null;
+      }
+      if (killHandle) {
+        clearTimeout(killHandle);
+        killHandle = null;
+      }
+    };
+
+    const settle = (callback) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimers();
+      callback();
+    };
+
+    const timeoutMs = clampTikaTimeoutMs(options.timeoutMs);
+    if (timeoutMs > 0) {
+      timeoutHandle = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        timedOut = true;
+        settled = true;
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = null;
+        }
+        const error = createTikaError(
+          options.timeoutMessage || `Tika 解析超时（${formatTimeoutDuration(timeoutMs)}）。`,
+          options.timeoutCode || "TIKA_TIMEOUT"
+        );
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // Ignore process kill failures; the promise is already failing with a timeout.
+        }
+        killHandle = setTimeout(() => {
+          try {
+            if (child.exitCode === null) {
+              child.kill("SIGKILL");
+            }
+          } catch {
+            // Ignore best-effort hard kill failures.
+          }
+        }, TIKA_FORCE_KILL_GRACE_MS);
+        reject(error);
+      }, timeoutMs);
+    }
+
+    child.once("error", (error) => settle(() => reject(error)));
     child.once("close", (code) => {
       exitCode = typeof code === "number" ? code : 1;
+      if (timedOut && killHandle) {
+        clearTimeout(killHandle);
+        killHandle = null;
+      }
     });
 
     Promise.all([collectStream(child.stdout), collectStream(child.stderr)])
       .then(([stdout, stderr]) => {
+        if (timedOut) {
+          return;
+        }
         if (child.exitCode === null) {
           child.once("close", () => {
-            resolve({
+            settle(() => resolve({
               code: exitCode,
               stdout,
               stderr
-            });
+            }));
           });
           return;
         }
 
-        resolve({
+        settle(() => resolve({
           code: typeof child.exitCode === "number" ? child.exitCode : exitCode,
           stdout,
           stderr
-        });
+        }));
       })
-      .catch(reject);
+      .catch((error) => settle(() => reject(error)));
   });
 }
 
@@ -275,7 +367,12 @@ async function runTikaCommand({
       mode === "rmeta"
         ? ["-jar", tikaJarPath, "-J", targetPath]
         : ["-jar", tikaJarPath, "--text", "--encoding=UTF-8", targetPath];
-    const result = await spawnCommand(javaCommand, args);
+    const timeoutMs = resolveTikaTimeoutMs(settings);
+    const result = await spawnCommand(javaCommand, args, {
+      timeoutMs,
+      timeoutCode: "TIKA_TIMEOUT",
+      timeoutMessage: `Tika 解析超时（${formatTimeoutDuration(timeoutMs)}）。可通过 PACT_TIKA_TIMEOUT_MS 或设置 tikaTimeoutMs 提高上限。`
+    });
 
     if (result.code !== 0) {
       const details = (result.stderr || result.stdout || "").trim();

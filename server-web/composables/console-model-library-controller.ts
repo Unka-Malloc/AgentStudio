@@ -1,0 +1,356 @@
+import { computed, type Ref } from "vue";
+import type {
+  AgentModelConfig,
+  AgentSettings,
+  CodexOAuthStatus,
+  ModelProbeResponse,
+} from "../lib/types";
+import type { CloudProvider } from "../types/app";
+import { downloadTextFile } from "./console-browser-effects";
+import { modelLibraryProviderDefinitions } from "./console-defaults";
+import { formatMachineDate, safeDownloadName } from "./console-format-utils";
+import { createConsoleModelEntryBindingController } from "./console-model-entry-binding-controller";
+import { createConsoleModelModuleAssignmentController } from "./console-model-module-assignment-controller";
+import { createConsoleModelProbeController } from "./console-model-probe-controller";
+import { createConsoleModelRepositoryController } from "./console-model-repository-controller";
+import {
+  modelEntryParameters,
+  modelProviderLabel,
+  normalizeModelLibraryEntries,
+  redactAgentModelEntryForExport,
+  redactedProviderSettingsForAgentExport,
+} from "./console-model-utils";
+
+type ConsoleModelLibraryControllerOptions = {
+  agentExploreModelAlias: () => string;
+  codexOAuthStatus: Ref<CodexOAuthStatus | null>;
+  clearAllBusy: () => void;
+  currentAgentModelOptionLabel: (value?: string) => string;
+  ensureCodexOAuthReady: (startLogin?: boolean) => Promise<boolean>;
+  error: Ref<string>;
+  infoFeedModelAlias: () => string;
+  infoFeedRunningSummary: () => { modelAlias?: string; runId?: string; status?: string };
+  modelLibraryExpandedCards: Ref<Record<string, boolean>>;
+  modelProbeResults: Ref<Record<string, ModelProbeResponse>>;
+  moduleAgentCandidateDrafts: Ref<Record<string, string>>;
+  normalizeModelEntry: (entry: Partial<AgentModelConfig>, index?: number) => AgentModelConfig;
+  replaceSettingsDraftFromServer: (settings: AgentSettings, options?: { markClean?: boolean }) => void;
+  ruleAuthoringModelAlias: () => string;
+  selectedModelProvider: Ref<CloudProvider>;
+  setBusy: (key: string) => void;
+  settingsDraft: Ref<AgentSettings>;
+  settingsPayloadForSave: () => AgentSettings;
+};
+
+export function createConsoleModelLibraryController(options: ConsoleModelLibraryControllerOptions) {
+  const providerLabel = modelProviderLabel;
+
+  function modelRef(provider: string, model: string) {
+    return `${provider}:${model || ""}`;
+  }
+
+  function parseModelRef(refValue: string) {
+    const [provider, ...modelParts] = String(refValue || "").split(":");
+    return {
+      provider: (provider || "") as CloudProvider,
+      model: modelParts.join(":") || "",
+    };
+  }
+
+  function customHttpAdapterAlias() {
+    return String(
+      options.settingsDraft.value.customModelAlias ||
+        options.settingsDraft.value.customHttpAdapter?.alias ||
+        options.settingsDraft.value.customModelLabel ||
+        "external-agent",
+    ).trim();
+  }
+
+  function customHttpAdapterLabel() {
+    return String(
+      options.settingsDraft.value.customModelLabel ||
+        options.settingsDraft.value.customHttpAdapter?.label ||
+        "自定义 HTTP 模型",
+    ).trim();
+  }
+
+  function modelProviderDefinition(provider: CloudProvider | string) {
+    return modelLibraryProviderDefinitions.find((item) => item.id === provider);
+  }
+
+  const visibleModelProviders = computed(() =>
+    normalizeModelLibraryEntries(options.settingsDraft.value.modelLibraryEntries),
+  );
+
+  const visibleModelEntries = computed(() => options.settingsDraft.value.modelLibraryAgents || []);
+  const addableModelProviders = computed(() => modelLibraryProviderDefinitions);
+
+  function providerConfigured(provider: CloudProvider) {
+    switch (provider) {
+      case "google-gemini":
+        return options.settingsDraft.value.googleApiKeyConfigured || Boolean(options.settingsDraft.value.googleApiKey);
+      case "openai-chatgpt":
+        return Boolean(options.codexOAuthStatus.value?.valid);
+      case "deepseek":
+        return options.settingsDraft.value.deepSeekApiKeyConfigured || Boolean(options.settingsDraft.value.deepSeekApiKey);
+      case "openrouter":
+        return options.settingsDraft.value.openRouterApiKeyConfigured || Boolean(options.settingsDraft.value.openRouterApiKey);
+      case "copilot":
+        return Boolean(options.settingsDraft.value.copilotEndpoint || options.settingsDraft.value.copilotApiKeyConfigured || options.settingsDraft.value.copilotApiKey);
+      case "custom-http":
+        return Boolean(options.settingsDraft.value.customHttpAdapter?.url || options.settingsDraft.value.customHttpAdapter?.tokenConfigured || options.settingsDraft.value.customHttpAdapter?.token);
+      case "local-model":
+        return Boolean(options.settingsDraft.value.localModelEndpoint);
+      default:
+        return false;
+    }
+  }
+
+  function modelEntryConfigured(entry: AgentModelConfig) {
+    const hasModel = Boolean(String(entry.model ?? entry.engine ?? "").trim());
+    if (entry.provider === "deepseek") {
+      return hasModel && Boolean(entry.apiKey || entry.apiKeyConfigured || options.settingsDraft.value.deepSeekApiKey || options.settingsDraft.value.deepSeekApiKeyConfigured);
+    }
+    if (entry.provider === "custom-http") {
+      return hasModel && Boolean((entry.url || options.settingsDraft.value.customHttpAdapter?.url) && (entry.token || entry.tokenConfigured || options.settingsDraft.value.customHttpAdapter?.tokenConfigured));
+    }
+    return hasModel && providerConfigured(entry.provider as CloudProvider);
+  }
+
+  function modelEntryStatusKey(entry: AgentModelConfig) {
+    return entry.uid || entry.instanceId || entry.alias;
+  }
+
+  function agentExploreModelOptionLabel(entry: AgentModelConfig) {
+    const modelName = String(
+      entry.label || entry.agentName || entry.alias || modelEntryStatusKey(entry),
+    ).trim();
+    const modelId = String(entry.model || entry.engine || modelEntryStatusKey(entry)).trim();
+    return modelId && modelId !== modelName ? `${modelName} · ${modelId}` : modelName;
+  }
+
+  function modelEntryUidSet(entry: AgentModelConfig) {
+    return new Set(
+      [
+        entry.uid,
+        entry.instanceId,
+        entry.alias,
+      ]
+        .map((item) => String(item || "").trim())
+        .filter(Boolean),
+    );
+  }
+
+  function modelEntryMatchesUid(entry: AgentModelConfig, value?: string) {
+    const normalized = String(value || "").trim();
+    return Boolean(normalized && modelEntryUidSet(entry).has(normalized));
+  }
+
+  function modelEntryMatchesAssignment(
+    entry: AgentModelConfig,
+    provider?: string,
+    modelUid?: string,
+  ) {
+    const normalizedProvider = String(provider || "").trim();
+    const normalizedModelUid = String(modelUid || "").trim();
+    if (!normalizedProvider || !normalizedModelUid || normalizedProvider !== entry.provider) {
+      return false;
+    }
+    return modelEntryUidSet(entry).has(normalizedModelUid);
+  }
+
+  const {
+    addModuleAgentProfileFromDraft,
+    agentModelAssignmentOptions,
+    ensureModuleAgentGroup,
+    ensureModuleAgentProfile,
+    hasOpenAiModelUsage,
+    modelEntryAllowsModule,
+    modelEntryModuleAccess,
+    modelProviderFromRef,
+    moduleAgentProfileRows,
+    moduleModelAssignmentOptions,
+    moduleModelAssignmentStats,
+    moduleModelRef,
+    moduleNeedsIntelligence,
+    removeModuleAgentProfile,
+    setModelEntryModuleAccessMode,
+    setModuleAgentProfileEnabled,
+    setModuleModelRef,
+    setModuleNeedsIntelligence,
+    toggleModelEntryModuleAccess,
+  } = createConsoleModelModuleAssignmentController({
+    agentExploreModelOptionLabel,
+    currentAgentModelOptionLabel: options.currentAgentModelOptionLabel,
+    ensureCodexOAuthReady: options.ensureCodexOAuthReady,
+    modelEntryConfigured,
+    modelEntryStatusKey,
+    modelRef,
+    moduleAgentCandidateDrafts: options.moduleAgentCandidateDrafts,
+    parseModelRef,
+    settingsDraft: options.settingsDraft,
+    visibleModelEntries,
+  });
+
+  const {
+    addModelEntryBinding,
+    collectModelEntryBindings,
+    modelEntryBindingSummary,
+    modelEntryBindings,
+    modelEntryBindingsByKey,
+    modelEntryIsBound,
+  } = createConsoleModelEntryBindingController({
+    agentExploreModelAlias: options.agentExploreModelAlias,
+    infoFeedModelAlias: options.infoFeedModelAlias,
+    infoFeedRunningSummary: options.infoFeedRunningSummary,
+    modelEntryMatchesAssignment,
+    modelEntryMatchesUid,
+    modelEntryStatusKey,
+    moduleNeedsIntelligence,
+    ruleAuthoringModelAlias: options.ruleAuthoringModelAlias,
+    settingsDraft: options.settingsDraft,
+    visibleModelEntries,
+  });
+
+  function exportAgentModelEntryConfig(entry: AgentModelConfig) {
+    const payload = options.settingsPayloadForSave();
+    const entryIndex = visibleModelEntries.value.findIndex(
+      (item) => modelEntryStatusKey(item) === modelEntryStatusKey(entry),
+    );
+    const normalizedEntry = {
+      ...options.normalizeModelEntry(entry, entryIndex >= 0 ? entryIndex : 0),
+      parameters: modelEntryParameters(entry),
+    };
+    const timestamp = formatMachineDate(new Date().toISOString(), "full").replace(/[: ]/g, "-");
+    const exportPayload = {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      type: "pact.agent-model-config.v1",
+      source: "server-console-model-library",
+      note: "导出的是当前大模型配置；密钥和 Token 字段已脱敏，未包含其它大模型配置。",
+      model: redactAgentModelEntryForExport(normalizedEntry),
+      providerSettings: redactedProviderSettingsForAgentExport(normalizedEntry, payload, {
+        codexOAuthConfigured: Boolean(options.codexOAuthStatus.value?.valid),
+      }),
+    };
+    downloadTextFile(
+      `pact-agent-${safeDownloadName(normalizedEntry.label || modelEntryStatusKey(normalizedEntry), "model")}-${timestamp}.json`,
+      `${JSON.stringify(exportPayload, null, 2)}\n`,
+      "application/json;charset=utf-8",
+    );
+    options.error.value = "";
+  }
+
+  const {
+    modelEntryProbeResult,
+    modelEntryProbeStatusLabel,
+    modelEntryProbeStatusTone,
+    modelEntryStatusLabel,
+    modelEntryStatusTone,
+    modelProbeFailureResult,
+    modelProbeSettingsForEntry,
+    probeModel,
+    probeModelEntry,
+    probeModelLibraryBeforeSave,
+    providerStatusLabel,
+    providerStatusTone,
+    runModelEntryProbe,
+  } = createConsoleModelProbeController({
+    clearAllBusy: options.clearAllBusy,
+    error: options.error,
+    modelEntryConfigured,
+    modelEntryStatusKey,
+    modelProbeResults: options.modelProbeResults,
+    providerConfigured,
+    setBusy: options.setBusy,
+    settingsPayloadForSave: options.settingsPayloadForSave,
+    visibleModelEntries,
+  });
+
+  const {
+    addModelProvider,
+    duplicateModelEntry,
+    isModelLibraryCardExpanded,
+    removeModelProvider,
+    toggleModelLibraryCard,
+  } = createConsoleModelRepositoryController({
+    clearAllBusy: options.clearAllBusy,
+    error: options.error,
+    modelEntryBindingSummary,
+    modelEntryIsBound,
+    modelEntryStatusKey,
+    modelLibraryExpandedCards: options.modelLibraryExpandedCards,
+    normalizeModelEntry: options.normalizeModelEntry,
+    providerLabel,
+    replaceSettingsDraftFromServer: options.replaceSettingsDraftFromServer,
+    selectedModelProvider: options.selectedModelProvider,
+    setBusy: options.setBusy,
+    settingsDraft: options.settingsDraft,
+    settingsPayloadForSave: options.settingsPayloadForSave,
+    visibleModelEntries,
+    visibleModelProviders,
+  });
+
+  return {
+    addModelEntryBinding,
+    addModelProvider,
+    addModuleAgentProfileFromDraft,
+    addableModelProviders,
+    agentExploreModelOptionLabel,
+    agentModelAssignmentOptions,
+    collectModelEntryBindings,
+    customHttpAdapterAlias,
+    customHttpAdapterLabel,
+    duplicateModelEntry,
+    ensureModuleAgentGroup,
+    ensureModuleAgentProfile,
+    exportAgentModelEntryConfig,
+    hasOpenAiModelUsage,
+    isModelLibraryCardExpanded,
+    modelEntryBindingSummary,
+    modelEntryBindings,
+    modelEntryBindingsByKey,
+    modelEntryAllowsModule,
+    modelEntryConfigured,
+    modelEntryIsBound,
+    modelEntryMatchesAssignment,
+    modelEntryMatchesUid,
+    modelEntryModuleAccess,
+    modelEntryProbeResult,
+    modelEntryProbeStatusLabel,
+    modelEntryProbeStatusTone,
+    modelEntryStatusKey,
+    modelEntryStatusLabel,
+    modelEntryStatusTone,
+    modelEntryUidSet,
+    modelProbeFailureResult,
+    modelProbeSettingsForEntry,
+    modelProviderDefinition,
+    modelProviderFromRef,
+    modelRef,
+    moduleAgentProfileRows,
+    moduleModelAssignmentOptions,
+    moduleModelAssignmentStats,
+    moduleModelRef,
+    moduleNeedsIntelligence,
+    parseModelRef,
+    probeModel,
+    probeModelEntry,
+    probeModelLibraryBeforeSave,
+    providerConfigured,
+    providerLabel,
+    providerStatusLabel,
+    providerStatusTone,
+    removeModelProvider,
+    removeModuleAgentProfile,
+    runModelEntryProbe,
+    setModelEntryModuleAccessMode,
+    setModuleAgentProfileEnabled,
+    setModuleModelRef,
+    setModuleNeedsIntelligence,
+    toggleModelEntryModuleAccess,
+    toggleModelLibraryCard,
+    visibleModelEntries,
+    visibleModelProviders,
+  };
+}

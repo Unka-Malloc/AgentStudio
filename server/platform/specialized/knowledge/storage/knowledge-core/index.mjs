@@ -73,9 +73,146 @@ export const EMBEDDING_PROTOCOL_VERSION = "pact.embedding.v1";
 export const ASSET_STORE_PROTOCOL_VERSION = "pact.assetStore.v1";
 export const RETRIEVAL_PROTOCOL_VERSION = "pact.retrieval.v1";
 export const LEARNING_RUNTIME_PROTOCOL_VERSION = LEARNING_PROTOCOL_VERSION;
+export const KNOWLEDGE_SEARCH_AGENT_MESSAGE_PROTOCOL_VERSION = "pact.knowledge-search.agent-message.v1";
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function objectOrEmpty(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function normalizeSearchResponseProfile(value = "") {
+  const normalized = normalizeText(value).toLowerCase().replace(/[_\s]+/g, "-");
+  if (["agent", "mcp", "tool", "tool-grant", "machine", "machine-readable"].includes(normalized)) {
+    return "agent";
+  }
+  if (["api", "http", "rpc", "cli", "integration", "service"].includes(normalized)) {
+    return "api";
+  }
+  if (["console", "ui", "human", "control-plane", "management-console"].includes(normalized)) {
+    return "console";
+  }
+  return "";
+}
+
+function parseSearchBooleanFlag(value, fallback = false) {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  if (typeof value === "boolean") {
+    return value;
+  }
+  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
+function shouldAttachAgentSearchMessage(input = {}) {
+  const profile = normalizeSearchResponseProfile(input.responseProfile || input.requestSurface || input.surface || "");
+  if (profile === "agent") {
+    return input.agentMessage !== false && input.machineReadable !== false;
+  }
+  return parseSearchBooleanFlag(input.agentMessage ?? input.machineReadable, false);
+}
+
+function normalizeSearchTimeRange(input = {}) {
+  const source = objectOrEmpty(input.timeRange || input.dateRange || input.temporalRange);
+  const from = normalizeText(source.from || source.start || source.startDate || input.from || input.startDate || "");
+  const to = normalizeText(source.to || source.end || source.endDate || input.to || input.endDate || "");
+  const mode = normalizeText(source.mode || input.timeRangeMode || "");
+  return compactObject({
+    from,
+    to,
+    mode
+  });
+}
+
+function compactSearchReason(reason) {
+  if (!reason || typeof reason !== "object" || Array.isArray(reason)) {
+    return { kind: normalizeText(reason) };
+  }
+  return compactObject({
+    kind: normalizeText(reason.kind || reason.reason || ""),
+    score: Number(reason.score || 0),
+    weight: reason.weight === undefined ? undefined : Number(reason.weight || 0),
+    timestamp: normalizeText(reason.timestamp || ""),
+    intentId: normalizeText(reason.intentId || ""),
+    path: Array.isArray(reason.path) ? reason.path : undefined
+  });
+}
+
+function temporalHintForSearchItem(item = {}) {
+  const timeDecayReason = asArray(item.reasons).find((reason) =>
+    reason && typeof reason === "object" && normalizeText(reason.kind).toLowerCase() === "time-decay"
+  );
+  const source = objectOrEmpty(item.source || item.sourceLocator);
+  return compactObject({
+    timestamp: normalizeText(
+      timeDecayReason?.timestamp ||
+        source.latestActivityAt ||
+        source.sentAt ||
+        source.timestamp ||
+        source.updatedAt ||
+        source.createdAt ||
+        ""
+    ),
+    source: timeDecayReason?.timestamp ? "ranking-time-decay" : ""
+  });
+}
+
+function buildKnowledgeSearchAgentMessage(result = {}, input = {}) {
+  const explain = objectOrEmpty(result.explain);
+  const timeRange = normalizeSearchTimeRange(input);
+  return {
+    protocolVersion: KNOWLEDGE_SEARCH_AGENT_MESSAGE_PROTOCOL_VERSION,
+    machineReadable: true,
+    responseProfile: "agent",
+    query: normalizeText(result.query || input.query || input.q || ""),
+    constraints: compactObject({
+      batchId: normalizeText(result.batchId || input.batchId || ""),
+      sourceIds: uniqueStrings([
+        ...asArray(input.scopeSourceIds),
+        ...asArray(input.sourceIds)
+      ]),
+      timeRange: Object.keys(timeRange).length ? timeRange : undefined,
+      temporalFilter: Object.keys(timeRange).length
+        ? {
+            requested: true,
+            applied: false,
+            reason: "time_range_filter_not_yet_supported_by_knowledge_search"
+          }
+        : undefined,
+      retrievalMode: normalizeText(result.retrievalMode || input.retrievalMode || input.mode || ""),
+      keywordOnly: input.keywordOnly === true
+    }),
+    routing: compactObject({
+      retrievalProfileId: normalizeText(result.retrievalProfileId || ""),
+      retrievalProfileKey: normalizeText(result.retrievalProfileKey || ""),
+      profileRoute: result.profileRoute,
+      queryIntent: result.queryIntent,
+      hierarchy: result.hierarchy
+    }),
+    diagnostics: compactObject({
+      candidateCount: explain.candidateCount,
+      generatedCandidateCount: explain.generatedCandidateCount,
+      dedupedCandidateCount: explain.dedupedCandidateCount,
+      hierarchyCandidateCount: explain.hierarchyCandidateCount,
+      hierarchyBackoffCount: explain.hierarchyBackoffCount,
+      fusion: result.fusion
+    }),
+    items: asArray(result.items || result.results).map((item, index) => compactObject({
+      rank: index + 1,
+      evidenceId: normalizeText(item.evidenceId || ""),
+      documentId: normalizeText(item.documentId || ""),
+      itemId: normalizeText(item.itemId || ""),
+      title: normalizeText(item.title || ""),
+      score: Number(item.score || item.finalScore || item.relevanceScore || 0),
+      modalities: asArray(item.modalities),
+      source: item.source || item.sourceLocator || null,
+      temporal: temporalHintForSearchItem(item),
+      reasons: asArray(item.reasons).slice(0, 8).map(compactSearchReason)
+    }))
+  };
 }
 
 function decodeHtmlEntities(value = "") {
@@ -4870,8 +5007,10 @@ function createKnowledgeStore({ db, rootPath, taxonomyRuntime = null, outlineRun
     });
     items = localFusion.items;
 
-    return {
+    const responseProfile = normalizeSearchResponseProfile(input.responseProfile || input.requestSurface || input.surface || "") || "api";
+    const result = {
       protocolVersion: KNOWLEDGE_PROTOCOL_VERSION,
+      responseProfile,
       query,
       batchId,
       limit: safeLimit,
@@ -4929,6 +5068,11 @@ function createKnowledgeStore({ db, rootPath, taxonomyRuntime = null, outlineRun
         : undefined,
       items
     };
+    if (shouldAttachAgentSearchMessage(input)) {
+      result.responseProfile = "agent";
+      result.agentMessage = buildKnowledgeSearchAgentMessage(result, input);
+    }
+    return result;
   }
 
   function recordFeedback(input = {}) {

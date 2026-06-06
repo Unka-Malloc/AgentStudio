@@ -1,5 +1,6 @@
 <script setup lang="ts">
 type OptionBarValue = string | number | boolean;
+type OptionBarModelValue = OptionBarValue | OptionBarValue[];
 
 type OptionBarOption = {
   value: OptionBarValue;
@@ -8,10 +9,13 @@ type OptionBarOption = {
 };
 
 withDefaults(defineProps<{
-  modelValue: OptionBarValue;
+  modelValue: OptionBarModelValue;
   options: OptionBarOption[];
   label?: string;
   placeholder?: string;
+  multiple?: boolean;
+  collapseTags?: boolean;
+  collapseTagsTooltip?: boolean;
   filterable?: boolean;
   teleported?: boolean;
   persistent?: boolean;
@@ -22,6 +26,9 @@ withDefaults(defineProps<{
 }>(), {
   label: "",
   placeholder: "",
+  multiple: false,
+  collapseTags: false,
+  collapseTagsTooltip: true,
   filterable: false,
   teleported: true,
   persistent: false,
@@ -32,15 +39,15 @@ withDefaults(defineProps<{
 });
 
 const emit = defineEmits<{
-  "update:modelValue": [value: OptionBarValue];
-  change: [value: OptionBarValue];
+  "update:modelValue": [value: OptionBarModelValue];
+  change: [value: OptionBarModelValue];
 }>();
 
-function updateValue(value: OptionBarValue) {
+function updateValue(value: OptionBarModelValue) {
   emit("update:modelValue", value);
 }
 
-function changeValue(value: OptionBarValue) {
+function changeValue(value: OptionBarModelValue) {
   emit("change", value);
 }
 </script>
@@ -51,6 +58,9 @@ function changeValue(value: OptionBarValue) {
     <el-select
       class="option-bar-select"
       :model-value="modelValue"
+      :multiple="multiple"
+      :collapse-tags="collapseTags"
+      :collapse-tags-tooltip="collapseTagsTooltip"
       :teleported="teleported"
       :filterable="filterable"
       :placeholder="placeholder"

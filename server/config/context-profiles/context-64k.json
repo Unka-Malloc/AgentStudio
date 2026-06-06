@@ -1,0 +1,20 @@
+{
+  "profileId": "context-64k",
+  "label": "64K Context",
+  "modelAlias": "default",
+  "contextWindowTokens": 65536,
+  "outputReserveTokens": 8192,
+  "toolReserveTokens": 4096,
+  "fixedMemoryBudget": 2048,
+  "knowledgeBudget": 22000,
+  "historyBudget": 18000,
+  "recentTurnBudget": 11200,
+  "compression": {
+    "enabled": true,
+    "threshold": 0.6,
+    "targetRatio": 0.3,
+    "protectLastNTurns": 8,
+    "summaryMaxTokens": 6000,
+    "strategy": "deterministic-extractive"
+  }
+}

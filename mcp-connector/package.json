@@ -26,7 +26,13 @@
     "gemini",
     "copilot",
     "openclaw",
-    "hermes"
+    "hermes",
+    "claude-code",
+    "opencode",
+    "kilo-code",
+    "cursor",
+    "windsurf",
+    "antigravity"
   ],
   "engines": {
     "node": ">=20"

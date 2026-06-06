@@ -113,6 +113,12 @@ function usage() {
     "  pact security recovery export --output recovery.json --passphrase-stdin",
     "  pact security recovery import --input recovery.json --passphrase-stdin",
     "  pact tools catalog|toolsets|toolsets resolve|execute|dry-run|audit|metrics ...",
+    "  pact tools metrics [--tool-id ID] [--grant-id ID] [--profile-id ID] [--route PATH] [--transport mcp|http|tool-management] [--bucket-seconds N]",
+    "  pact tools metrics export [--kind all|tool|request] [--grant-id ID] [--profile-id ID] [--output metrics.json]",
+    "  pact tools metrics health [--window-seconds 300]",
+    "  pact tools metrics prometheus [--window-seconds 300]",
+    "  pact tools metrics storage",
+    "  pact tools metrics prune --confirm --body prune.json",
     "  pact tools grants list|create|rotate|revoke ...",
     "  pact tools policy preview --body preview.json",
     "",
@@ -1363,6 +1369,152 @@ async function runToolsCommand(args) {
     return;
   }
   if (command === "metrics") {
+    if (subcommand === "export") {
+      const query = new URLSearchParams();
+      if (args.limit) {
+        query.set("limit", String(args.limit));
+      }
+      if (args.since) {
+        query.set("since", String(args.since));
+      }
+      if (args.until) {
+        query.set("until", String(args.until));
+      }
+      if (args.kind) {
+        query.set("kind", String(args.kind));
+      }
+      if (args["tool-id"] || args.toolId) {
+        query.set("toolId", String(args["tool-id"] || args.toolId));
+      }
+      if (args["grant-id"] || args.grantId) {
+        query.set("grantId", String(args["grant-id"] || args.grantId));
+      }
+      if (args["profile-id"] || args.profileId) {
+        query.set("profileId", String(args["profile-id"] || args.profileId));
+      }
+      if (args.route) {
+        query.set("route", String(args.route));
+      }
+      if (args.transport) {
+        query.set("transport", String(args.transport));
+      }
+      if (args.status) {
+        query.set("status", String(args.status));
+      }
+      if (args["status-code"] || args.statusCode) {
+        query.set("statusCode", String(args["status-code"] || args.statusCode));
+      }
+      if (args["completion-status"] || args.completionStatus) {
+        query.set("completionStatus", String(args["completion-status"] || args.completionStatus));
+      }
+      await writeResponse({
+        args,
+        result: await requestJson({
+          serverUrl: args["server-url"],
+          method: "GET",
+          apiPath: `/api/tool-management/v1/metrics/export${query.toString() ? `?${query}` : ""}`,
+          headers: readHeaders(args)
+        })
+      });
+      return;
+    }
+    if (subcommand === "health") {
+      const query = new URLSearchParams();
+      if (args["window-seconds"] || args.windowSeconds) {
+        query.set("windowSeconds", String(args["window-seconds"] || args.windowSeconds));
+      }
+      if (args["max-request-error-rate"] || args.maxRequestErrorRate) {
+        query.set("maxRequestErrorRate", String(args["max-request-error-rate"] || args.maxRequestErrorRate));
+      }
+      if (args["max-tool-failure-rate"] || args.maxToolFailureRate) {
+        query.set("maxToolFailureRate", String(args["max-tool-failure-rate"] || args.maxToolFailureRate));
+      }
+      if (args["max-denied-rate"] || args.maxDeniedRate) {
+        query.set("maxDeniedRate", String(args["max-denied-rate"] || args.maxDeniedRate));
+      }
+      if (args["max-request-p95-ms"] || args.maxRequestP95Ms) {
+        query.set("maxRequestP95Ms", String(args["max-request-p95-ms"] || args.maxRequestP95Ms));
+      }
+      if (args["max-tool-p95-ms"] || args.maxToolP95Ms) {
+        query.set("maxToolP95Ms", String(args["max-tool-p95-ms"] || args.maxToolP95Ms));
+      }
+      if (args["min-requests"] || args.minRequests) {
+        query.set("minRequests", String(args["min-requests"] || args.minRequests));
+      }
+      await writeResponse({
+        args,
+        result: await requestJson({
+          serverUrl: args["server-url"],
+          method: "GET",
+          apiPath: `/api/tool-management/v1/metrics/health${query.toString() ? `?${query}` : ""}`,
+          headers: readHeaders(args)
+        })
+      });
+      return;
+    }
+    if (subcommand === "prometheus") {
+      const query = new URLSearchParams();
+      if (args["window-seconds"] || args.windowSeconds) {
+        query.set("windowSeconds", String(args["window-seconds"] || args.windowSeconds));
+      }
+      if (args["max-request-error-rate"] || args.maxRequestErrorRate) {
+        query.set("maxRequestErrorRate", String(args["max-request-error-rate"] || args.maxRequestErrorRate));
+      }
+      if (args["max-tool-failure-rate"] || args.maxToolFailureRate) {
+        query.set("maxToolFailureRate", String(args["max-tool-failure-rate"] || args.maxToolFailureRate));
+      }
+      if (args["max-denied-rate"] || args.maxDeniedRate) {
+        query.set("maxDeniedRate", String(args["max-denied-rate"] || args.maxDeniedRate));
+      }
+      if (args["max-request-p95-ms"] || args.maxRequestP95Ms) {
+        query.set("maxRequestP95Ms", String(args["max-request-p95-ms"] || args.maxRequestP95Ms));
+      }
+      if (args["max-tool-p95-ms"] || args.maxToolP95Ms) {
+        query.set("maxToolP95Ms", String(args["max-tool-p95-ms"] || args.maxToolP95Ms));
+      }
+      if (args["min-requests"] || args.minRequests) {
+        query.set("minRequests", String(args["min-requests"] || args.minRequests));
+      }
+      const { response, buffer } = await requestRaw({
+        serverUrl: args["server-url"],
+        method: "GET",
+        apiPath: `/api/tool-management/v1/metrics/prometheus${query.toString() ? `?${query}` : ""}`,
+        headers: readHeaders(args),
+        binary: true
+      });
+      await writeResponse({
+        args,
+        result: {},
+        rawBuffer: buffer,
+        contentType: response.headers.get("content-type") || ""
+      });
+      return;
+    }
+    if (subcommand === "storage") {
+      await writeResponse({
+        args,
+        result: await requestJson({
+          serverUrl: args["server-url"],
+          method: "GET",
+          apiPath: "/api/tool-management/v1/metrics/storage",
+          headers: readHeaders(args)
+        })
+      });
+      return;
+    }
+    if (subcommand === "prune") {
+      await writeResponse({
+        args,
+        result: await requestJson({
+          serverUrl: args["server-url"],
+          method: "POST",
+          apiPath: "/api/tool-management/v1/metrics/prune",
+          headers: applyCommonSafetyHeaders(args, readHeaders(args)),
+          body: await readBody(args)
+        })
+      });
+      return;
+    }
     const query = new URLSearchParams();
     if (args.limit) {
       query.set("limit", String(args.limit));
@@ -1372,6 +1524,33 @@ async function runToolsCommand(args) {
     }
     if (args.until) {
       query.set("until", String(args.until));
+    }
+    if (args["tool-id"] || args.toolId) {
+      query.set("toolId", String(args["tool-id"] || args.toolId));
+    }
+    if (args["grant-id"] || args.grantId) {
+      query.set("grantId", String(args["grant-id"] || args.grantId));
+    }
+    if (args["profile-id"] || args.profileId) {
+      query.set("profileId", String(args["profile-id"] || args.profileId));
+    }
+    if (args.route) {
+      query.set("route", String(args.route));
+    }
+    if (args.transport) {
+      query.set("transport", String(args.transport));
+    }
+    if (args.status) {
+      query.set("status", String(args.status));
+    }
+    if (args["status-code"] || args.statusCode) {
+      query.set("statusCode", String(args["status-code"] || args.statusCode));
+    }
+    if (args["completion-status"] || args.completionStatus) {
+      query.set("completionStatus", String(args["completion-status"] || args.completionStatus));
+    }
+    if (args["bucket-seconds"] || args.bucketSeconds) {
+      query.set("bucketSeconds", String(args["bucket-seconds"] || args.bucketSeconds));
     }
     await writeResponse({
       args,

@@ -5,13 +5,18 @@
   "heartbeatStaleMs": 15000,
   "queueHeartbeatStaleMs": 60000,
   "recoverInterruptedQueues": true,
+  "supervisorRecovery": {
+    "enabled": true,
+    "cooldownMs": 30000,
+    "startupWaitMs": 1200
+  },
   "historyLimit": 200,
   "rules": {
     "supervisorStopped": {
       "enabled": true,
       "severity": "critical",
-      "titleTemplate": "后台守护进程离线",
-      "messageTemplate": "后台守护进程未运行，PID {{pid}}。请检查 launchd 服务 {{serviceLabel}}。"
+      "titleTemplate": "后台 Worker 管理进程离线",
+      "messageTemplate": "后台 Worker 管理进程未运行，PID {{pid}}。它负责拉起和管理导入解析、目录同步、智能巡检和智能体 Worker；请检查 launchd 服务 {{serviceLabel}}。"
     },
     "processNotRunning": {
       "enabled": true,
@@ -31,7 +36,7 @@
       "enabled": true,
       "severity": "warning",
       "restartCountThreshold": 1,
-      "titleTemplate": "{{label}} 已被守护进程重启",
+      "titleTemplate": "{{label}} 已由后台 Worker 管理进程重启",
       "messageTemplate": "{{label}} 当前重启次数 {{restartCount}}，PID {{pid}}。"
     },
     "queueInterrupted": {

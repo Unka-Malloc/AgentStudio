@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "Future Pact desktop client packaging. The default package is the destructive refactor target and does not carry legacy daemon, connector, mail, graph, upload, or embedded-server runtimes.",
+  "description": "Pact desktop client packaging. The only supported package is the current future-client runtime.",
   "packageProfile": "future-client",
   "bundle": {
     "moduleResourceDirectory": "modules",
@@ -12,7 +12,11 @@
       "category": "core",
       "enabled": true,
       "required": true,
-      "platforms": ["macos", "linux", "windows"],
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
       "packaging": "flutter-app"
     },
     "client-cli": {
@@ -20,7 +24,11 @@
       "category": "core",
       "enabled": true,
       "required": true,
-      "platforms": ["macos", "linux", "windows"],
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
       "packaging": "sidecar-binary",
       "cargoBin": "pact-client"
     },
@@ -29,7 +37,11 @@
       "category": "storage",
       "enabled": true,
       "required": true,
-      "platforms": ["macos", "linux", "windows"],
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
       "packaging": "portable-data",
       "portableDirectories": [
         "future-client",
@@ -44,376 +56,111 @@
       ]
     },
     "target-adapters": {
-      "label": "Target adapters for Codex, OpenCode, OpenClaw, Antigravity, Cursor, Windsurf, and Gemini CLI",
+      "label": "Target adapters for OpenClaw, Claude Code, Codex, Gemini CLI, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, and Windsurf",
       "category": "agents",
       "enabled": true,
       "required": true,
-      "platforms": ["macos", "linux", "windows"],
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
       "packaging": "runtime-capability",
-      "requires": ["client-cli", "portable-data"],
-      "targetAdapters": ["codex", "opencode", "openclaw", "antigravity", "cursor", "windsurf", "gemini-cli"]
+      "requires": [
+        "client-cli",
+        "portable-data"
+      ],
+      "targetAdapters": [
+        "openclaw",
+        "claude-code",
+        "codex",
+        "gemini-cli",
+        "antigravity",
+        "opencode",
+        "copilot",
+        "kilo-code",
+        "cursor",
+        "hermes",
+        "windsurf"
+      ]
     },
     "mcp-plugins": {
       "label": "Peer MCP plugin lifecycle",
       "category": "mcp-plugins",
       "enabled": true,
       "required": true,
-      "platforms": ["macos", "linux", "windows"],
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
       "packaging": "runtime-capability",
-      "requires": ["target-adapters", "portable-data"]
+      "requires": [
+        "target-adapters",
+        "portable-data"
+      ]
     },
     "skill-hub": {
       "label": "Passive Skill Hub boundary",
       "category": "skill-hub",
       "enabled": true,
       "required": true,
-      "platforms": ["macos", "linux", "windows"],
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
       "packaging": "runtime-capability",
-      "requires": ["client-cli", "portable-data"]
+      "requires": [
+        "client-cli",
+        "portable-data"
+      ]
     },
     "model-forwarding": {
       "label": "Thin model forwarding profiles and command routing",
       "category": "model-forwarding",
       "enabled": true,
       "required": true,
-      "platforms": ["macos", "linux", "windows"],
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
       "packaging": "runtime-capability",
-      "requires": ["client-cli", "portable-data"]
+      "requires": [
+        "client-cli",
+        "portable-data"
+      ]
     },
     "activity-snapshots": {
       "label": "Activity log and independent snapshot store",
       "category": "activity",
       "enabled": true,
       "required": true,
-      "platforms": ["macos", "linux", "windows"],
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
       "packaging": "runtime-capability",
-      "requires": ["portable-data"]
+      "requires": [
+        "portable-data"
+      ]
     },
     "settings": {
       "label": "Future client settings store",
       "category": "settings",
       "enabled": true,
       "required": true,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["portable-data"]
-    },
-    "client-daemon": {
-      "label": "Legacy Rust local daemon",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "reference-only"
-    },
-    "local-rpc": {
-      "label": "Legacy GUI to daemon command/RPC bridge",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["client-daemon"]
-    },
-    "file-system-adapter": {
-      "label": "Legacy local file collection and opening adapter",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability"
-    },
-    "server-bridge": {
-      "label": "Legacy bootstrap, jobs, upload session, and server API bridge",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability"
-    },
-    "upload-queue": {
-      "label": "Legacy event-sourced upload queue",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["server-bridge"]
-    },
-    "checkpoint-upload": {
-      "label": "Legacy chunked upload checkpoint/resume protocol client",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["upload-queue"]
-    },
-    "knowledge-mirror": {
-      "label": "Legacy KnowledgeCore downstream mirror and offline Markdown cache",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "portableDirectories": ["knowledge/documents", "knowledge/assets", "knowledge/normalized-documents"]
-    },
-    "data-connectors": {
-      "label": "Legacy DataConnector runtime, local mirrors, OAuth state, and chat index",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["client-daemon", "local-rpc", "portable-data", "upload-queue"],
-      "portableDirectories": [
-        "connectors/modules",
-        "connectors/state",
-        "connectors/cache",
-        "chat-index"
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
       ],
-      "connectorManifestFields": [
-        "id",
-        "providerId",
-        "sourceType",
-        "displayName",
-        "version",
-        "runtime",
-        "entrypoint",
-        "capabilities",
-        "permissions",
-        "oauth",
-        "syncPolicy",
-        "uninstallPolicy"
+      "packaging": "runtime-capability",
+      "requires": [
+        "portable-data"
       ]
-    },
-    "gmail-connector": {
-      "label": "Legacy Gmail OAuth connector manifest",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["data-connectors"]
-    },
-    "outlook-mail-connector": {
-      "label": "Legacy Outlook Mail OAuth connector manifest",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["data-connectors"]
-    },
-    "google-drive-connector": {
-      "label": "Legacy Google Drive OAuth connector manifest",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["data-connectors"]
-    },
-    "onedrive-connector": {
-      "label": "Legacy OneDrive OAuth connector manifest",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["data-connectors"]
-    },
-    "slack-connector": {
-      "label": "Legacy Slack chat connector manifest",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["data-connectors"]
-    },
-    "teams-connector": {
-      "label": "Legacy Microsoft Teams chat connector manifest",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["data-connectors"]
-    },
-    "knowledge-agent": {
-      "label": "Legacy offline knowledge context and cloud agent answer interface",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["knowledge-mirror"]
-    },
-    "agent-registry": {
-      "label": "Legacy server agent registry sync plus local custom agent aliases",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["server-bridge"]
-    },
-    "expert-vocabulary": {
-      "label": "Legacy expert vocabulary pull and local hot index update",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["server-bridge"]
-    },
-    "mail-index": {
-      "label": "Legacy local mail knowledge index, search, and evidence opening",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["expert-vocabulary"],
-      "portableDirectories": ["mail-imports/index"]
-    },
-    "macos-mail-import": {
-      "label": "Legacy macOS Mail.app import adapter",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos"],
-      "packaging": "swift-sidecar",
-      "swiftSource": "client-gui/macos/Runner/MacOSMailImporter.swift",
-      "artifactName": "pact-macos-mail-tool",
-      "requires": ["mail-index"]
-    },
-    "knowledge-graph-ui": {
-      "label": "Legacy knowledge graph projection and UI",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "runtime-capability",
-      "requires": ["knowledge-mirror"]
-    },
-    "server.FileProcessor": {
-      "label": "Legacy optional server FileProcessor module resources",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "module-resources",
-      "includePaths": ["server/platform/specialized/knowledge/preprocessing/file-processor"]
-    },
-    "server.KnowledgeCore": {
-      "label": "Legacy optional server KnowledgeCore module resources",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "module-resources",
-      "includePaths": ["server/platform/specialized/knowledge/storage/knowledge-core"]
-    },
-    "server.EmbeddingRuntime": {
-      "label": "Legacy optional server EmbeddingRuntime module resources",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "module-resources",
-      "includePaths": ["server/platform/specialized/knowledge/retrieval/embedding-runtime"]
-    },
-    "server.VectorStore": {
-      "label": "Legacy optional server VectorStore module resources",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "module-resources",
-      "includePaths": ["server/platform/specialized/knowledge/retrieval/vector-store"]
-    },
-    "server.AgentGateway": {
-      "label": "Legacy optional server AgentGateway module resources",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "module-resources",
-      "includePaths": ["server/platform/specialized/agent/agent-gateway"]
-    },
-    "server.LearningRuntime": {
-      "label": "Legacy optional server LearningRuntime module resources",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "module-resources",
-      "includePaths": ["server/platform/specialized/knowledge/retrieval/learning-runtime"]
-    },
-    "server.MaintenanceAgent": {
-      "label": "Legacy optional server MaintenanceAgent application resources",
-      "category": "legacy",
-      "profile": "legacy/dev-only",
-      "legacyDevOnly": true,
-      "enabled": false,
-      "required": false,
-      "platforms": ["macos", "linux", "windows"],
-      "packaging": "module-resources",
-      "includePaths": ["server/services/agent/maintenance-agent"]
     }
   }
 }

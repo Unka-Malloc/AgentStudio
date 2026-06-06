@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { unzipSync } from "fflate";
 import { hashClientString, serverToken } from "../../../security/client-strings.mjs";
-import { contentDispositionFileName, sendJson } from "../http-utils.mjs";
+import { contentDispositionHeader, sendJson } from "../http-utils.mjs";
 
 async function publishProtocolEvent(protocolEventBus, topic, payload, options = {}) {
   if (!protocolEventBus || typeof protocolEventBus.publish !== "function") {
@@ -954,9 +954,10 @@ export function createJobsController({
         const buffer = await fs.readFile(filePath);
         response.writeHead(200, {
           "Content-Type": normalizedContentType(filePath),
-          "Content-Disposition": `attachment; filename="${contentDispositionFileName(
+          "Content-Disposition": contentDispositionHeader(
+            "attachment",
             path.basename(entry.relativePath || entry.title || "normalized-document")
-          )}"`,
+          ),
           "Cache-Control": "no-store"
         });
         response.end(buffer);
@@ -995,9 +996,7 @@ export function createJobsController({
 
       response.writeHead(200, {
         "Content-Type": rawObjectEntry.contentType || "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${contentDispositionFileName(
-          rawObjectEntry.fileName
-        )}"`,
+        "Content-Disposition": contentDispositionHeader("attachment", rawObjectEntry.fileName),
         "Cache-Control": "no-store"
       });
       response.end(rawObjectEntry.buffer);

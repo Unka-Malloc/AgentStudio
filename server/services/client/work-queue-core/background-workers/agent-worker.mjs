@@ -6,7 +6,7 @@ export async function createAgentWorkerRuntime() {
         status: "standby",
         details: {
           mode: "supervised_process_ready",
-          note: "该后台角色已由守护进程托管；执行队列将在后续迁移到该进程。"
+          note: "该后台角色由守护进程按需托管；智能体是否可用以模型库配置和探测状态为准。"
         }
       };
     },

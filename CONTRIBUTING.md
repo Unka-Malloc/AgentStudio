@@ -232,11 +232,11 @@ refactor(modules): extract knowledge slicing into standalone pipeline
 
 ## License / 许可证
 
-By contributing to Pact, you agree that your contributions will be licensed under the **[GPL-3.0-only](LICENSE)** license.
+By contributing to Pact, you agree that your contributions will be licensed under the **[GPL-3.0-or-later](LICENSE)** license.
 
-This means all contributed code must be compatible with GPL-3.0-only. If your contribution includes third-party code, please ensure its license is GPL-3.0 compatible and clearly attribute it.
+This means all contributed code must be compatible with GPL-3.0-or-later. If your contribution includes third-party code, please ensure its license is GPL-3.0 compatible and clearly attribute it.
 
-参与贡献即表示您同意您的贡献将按照 **GPL-3.0-only** 许可证进行授权。
+参与贡献即表示您同意您的贡献将按照 **GPL-3.0-or-later** 许可证进行授权。
 
 ---
 

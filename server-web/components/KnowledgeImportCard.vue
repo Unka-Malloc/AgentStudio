@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import BridgeDownloadButton from "./BridgeDownloadButton.vue";
 import BrowseSelectButton from "./BrowseSelectButton.vue";
 import StatusPill from "./StatusPill.vue";
-import { bridge } from "../lib/bridge";
+import { knowledgeExportUrl, normalizedKnowledgeDocumentUrl, type KnowledgeDocumentExportFormat } from "../lib/knowledge-documents";
 import type { NormalizedDocumentsManifest, SplitJob } from "../lib/types";
 
 const props = withDefaults(defineProps<{
@@ -25,17 +26,12 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   select: [files: File[]];
   upload: [];
-  refresh: [];
 }>();
 
 const dropActive = ref(false);
 const isBusy = computed(() => props.busyKey === "knowledge:ingest");
-const exportFormat = ref<"docx" | "markdown" | "html">("docx");
-const exportUrl = computed(() => {
-  if (exportFormat.value === "markdown") return bridge.knowledgeMarkdownExportUrl();
-  if (exportFormat.value === "html") return bridge.knowledgeHtmlExportUrl();
-  return bridge.knowledgeDocxExportUrl();
-});
+const exportFormat = ref<KnowledgeDocumentExportFormat>("docx");
+const exportUrl = computed(() => knowledgeExportUrl(exportFormat.value));
 
 function hasDraggedFiles(event: DragEvent) {
   return Array.from(event.dataTransfer?.types || []).includes("Files");
@@ -139,9 +135,6 @@ function onDrop(event: DragEvent) {
             :tone="jobStatusTone(String(ingestJob.status))"
             :label="jobStatusLabels[String(ingestJob.status)] || String(ingestJob.status)"
           />
-          <button class="tool-button tool-button-ghost" type="button" @click="emit('refresh')">
-            刷新
-          </button>
         </div>
       </div>
       <div class="ingest-queue-progress">
@@ -161,13 +154,11 @@ function onDrop(event: DragEvent) {
         :key="doc.documentId"
         class="job-row"
       >
-        <a
-          :href="bridge.normalizedDocumentUrl(normalizedManifest.batchId, doc.documentId)"
-          target="_blank"
-          rel="noreferrer"
-        >
-          {{ doc.title }}
-        </a>
+        <BridgeDownloadButton
+          :href="normalizedKnowledgeDocumentUrl(normalizedManifest.batchId, doc.documentId)"
+          :label="doc.title"
+          button-class="bridge-download-link"
+        />
         <span>{{ doc.granularity }}</span>
         <span>{{ formatBytes(doc.byteSize) }}</span>
       </div>
@@ -179,15 +170,12 @@ function onDrop(event: DragEvent) {
         <option value="markdown">Markdown</option>
         <option value="html">HTML</option>
       </select>
-      <a
+      <BridgeDownloadButton
         v-if="canReadKnowledge"
-        class="tool-button tool-button-ghost"
         :href="exportUrl"
-        target="_blank"
-        rel="noreferrer"
-      >
-        导出知识库
-      </a>
+        label="导出知识库"
+        button-class="tool-button tool-button-ghost"
+      />
       <button v-else class="tool-button tool-button-ghost" type="button" disabled>
         导出知识库
       </button>

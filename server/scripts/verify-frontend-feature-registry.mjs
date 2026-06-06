@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const routerFile = path.join(repoRoot, "server-web", "router", "index.ts");
+const routerRoutesFile = path.join(repoRoot, "server-web", "router", "routes.ts");
 const registryFile = path.join(repoRoot, "server", "config", "frontend-feature-registry.yaml");
 const architectureFile = path.join(repoRoot, "docs", "Architecture.md");
 const commonComponentsFile = path.join(repoRoot, "server-web", "components", "common.ts");
@@ -164,6 +165,27 @@ function parseSystemConfigDrawerTabs(text) {
   return tabIds;
 }
 
+async function readVueFileWithLocalImports(relativeFile, seen = new Set()) {
+  const normalizedFile = normalizePosix(relativeFile);
+  if (seen.has(normalizedFile)) {
+    return "";
+  }
+  seen.add(normalizedFile);
+
+  const absoluteFile = path.join(repoRoot, normalizedFile);
+  const text = await fs.readFile(absoluteFile, "utf8");
+  const importedTexts = [];
+  const importRegex = /^import\s+[^;]+?\s+from\s+["'](\.{1,2}\/[^"']+\.vue)["'];?/gm;
+  for (const match of text.matchAll(importRegex)) {
+    const importedRelative = normalizePosix(
+      path.posix.normalize(path.posix.join(path.posix.dirname(normalizedFile), match[1]))
+    );
+    importedTexts.push(await readVueFileWithLocalImports(importedRelative, seen));
+  }
+
+  return [text, ...importedTexts].join("\n");
+}
+
 async function listFiles(rootDir, predicate) {
   const entries = await fs.readdir(rootDir, { withFileTypes: true });
   const files = [];
@@ -258,12 +280,24 @@ function validateFeatureTree(entry, {
 }
 
 function parseRouterMap(text) {
-  const importMap = new Map();
+  assert.ok(
+    !/^import\s+[A-Za-z_$][A-Za-z0-9_$]*\s+from\s+"(\.\.\/views\/[^"]+\.vue)";$/m.test(text),
+    "router views must be lazy-loaded instead of statically imported"
+  );
+
+  const componentMap = new Map();
   const importRegex = /^import\s+([A-Za-z_$][A-Za-z0-9_$]*)\s+from\s+"(\.\.\/views\/[^"]+\.vue)";$/gm;
   for (const match of text.matchAll(importRegex)) {
     const symbol = match[1];
     const relativeImport = match[2].replace(/^\.\.\//, "");
-    importMap.set(symbol, normalizePosix(path.join("server-web", relativeImport)));
+    componentMap.set(symbol, normalizePosix(path.join("server-web", relativeImport)));
+  }
+
+  const lazyConstRegex = /^const\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*\(\)\s*=>\s*import\("(\.\.\/views\/[^"]+\.vue)"\);$/gm;
+  for (const match of text.matchAll(lazyConstRegex)) {
+    const symbol = match[1];
+    const relativeImport = match[2].replace(/^\.\.\//, "");
+    componentMap.set(symbol, normalizePosix(path.join("server-web", relativeImport)));
   }
 
   const routeComponentMap = new Map();
@@ -296,13 +330,17 @@ function parseRouterMap(text) {
       continue;
     }
     const pathMatch = block.match(/\bpath\s*:\s*"([^"]+)"/);
-    const componentMatch = block.match(/\bcomponent\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)/);
-    if (!pathMatch || !componentMatch) {
+    if (!pathMatch) {
       continue;
     }
     const routePath = pathMatch[1];
-    const componentSymbol = componentMatch[1];
-    const viewFile = importMap.get(componentSymbol);
+    const inlineLazyMatch = block.match(/\bcomponent\s*:\s*\(\)\s*=>\s*import\("(\.\.\/views\/[^"]+\.vue)"\)/);
+    const componentMatch = block.match(/\bcomponent\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)/);
+    const viewFile = inlineLazyMatch
+      ? normalizePosix(path.join("server-web", inlineLazyMatch[1].replace(/^\.\.\//, "")))
+      : componentMatch
+        ? componentMap.get(componentMatch[1])
+        : null;
     if (viewFile) {
       routeComponentMap.set(routePath, viewFile);
     }
@@ -311,9 +349,37 @@ function parseRouterMap(text) {
   return routeComponentMap;
 }
 
+function assertKnowledgeTabRegistryMatchesRouter(registry, routerRoutesText) {
+  const knowledgeRoute = registry.routes.find((entry) => entry.routePath === "/knowledge/:tab");
+  assert.ok(knowledgeRoute, "registry must keep /knowledge/:tab route");
+  const tabFeature = knowledgeRoute.features.find((feature) => feature.featureId === "knowledge.tab-navigation");
+  assert.ok(tabFeature, "knowledge route must keep knowledge.tab-navigation feature");
+  const actionTabs = tabFeature.actions
+    .filter((actionId) => actionId.startsWith("knowledge.tab."))
+    .map((actionId) => actionId.slice("knowledge.tab.".length))
+    .map((tab) => tab === "word-cloud" ? "wordCloud" : tab)
+    .sort();
+  const routeTabs = [...routerRoutesText.matchAll(/"([A-Za-z][A-Za-z0-9-]*)"/g)]
+    .map((match) => match[1])
+    .filter((value) => ["management", "wordCloud", "maintenance", "chunking", "distillation"].includes(value))
+    .sort();
+  assert.deepEqual(
+    [...new Set(actionTabs)],
+    [...new Set(routeTabs)],
+    "knowledge.tab.* registry actions must match supported knowledge route tabs"
+  );
+  assert.ok(
+    routerRoutesText.includes("knowledgeRouteTabToViewTab") &&
+      routerRoutesText.includes('value === "chunking"') &&
+      routerRoutesText.includes('value === "distillation"'),
+    "knowledge route aliases must map chunking and distillation back to a concrete view tab"
+  );
+}
+
 async function main() {
-  const [routerText, registryText, architectureText, commonText] = await Promise.all([
+  const [routerText, routerRoutesText, registryText, architectureText, commonText] = await Promise.all([
     fs.readFile(routerFile, "utf8"),
+    fs.readFile(routerRoutesFile, "utf8"),
     fs.readFile(registryFile, "utf8"),
     fs.readFile(architectureFile, "utf8"),
     fs.readFile(commonComponentsFile, "utf8")
@@ -324,6 +390,7 @@ async function main() {
 
   const routerMap = parseRouterMap(routerText);
   const registry = parseRegistryYaml(registryText);
+  assertKnowledgeTabRegistryMatchesRouter(registry, routerRoutesText);
 
   assert.equal(registry.version, 1, "frontend feature registry version must be 1");
   assert.equal(registry.owner, "server-web", "frontend feature registry owner must be server-web");
@@ -360,7 +427,7 @@ async function main() {
   }
 
   assert.ok(Array.isArray(registry.systemConfigTabs) && registry.systemConfigTabs.length > 0, "systemConfigTabs must not be empty");
-  const drawerHostText = await fs.readFile(path.join(repoRoot, drawerHostDefaultFile), "utf8");
+  const drawerHostText = await readVueFileWithLocalImports(drawerHostDefaultFile);
   const drawerTabIds = parseSystemConfigDrawerTabs(drawerHostText);
 
   for (const entry of registry.systemConfigTabs) {

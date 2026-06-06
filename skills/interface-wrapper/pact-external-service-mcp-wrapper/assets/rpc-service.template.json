@@ -1,0 +1,29 @@
+{
+  "serviceId": "example-rpc-service",
+  "serviceName": "external.rpc.example",
+  "kind": "rpc",
+  "baseUrl": "http://127.0.0.1:8788",
+  "endpoints": {
+    "primary": {
+      "path": "/gateway/invoke"
+    },
+    "v2": {
+      "path": "/gateway/v2/invoke",
+      "protocol": "json-rpc-2.0"
+    }
+  },
+  "tools": [
+    {
+      "operationId": "lookup",
+      "rpc": {
+        "endpointRef": "primary",
+        "method": "lookup",
+        "params": "$input",
+        "resultPath": "result"
+      },
+      "inputSchema": {
+        "type": "object"
+      }
+    }
+  ]
+}

@@ -12,6 +12,7 @@ const execFileAsync = promisify(execFile);
 const DEFAULT_BASE_URL = "";
 const DEFAULT_TOKEN_ENV = "PACT_MCP_TOKEN";
 const DEFAULT_CODEX_BIN = "codex";
+const DEFAULT_CLAUDE_BIN = "claude";
 const DEFAULT_GEMINI_BIN = "gemini";
 const DEFAULT_KILO_BIN = "kilo";
 const DEFAULT_COPILOT_BIN = "copilot";
@@ -25,18 +26,24 @@ const MCP_CONNECTOR_PACKAGE_NAME = "pact-mcp-connector";
 const MCP_CONNECTOR_VERSION = "0.0.1";
 const HTTP_TIMEOUT_MS = 300000;
 const SUPPORTED_TARGETS = [
+  "openclaw",
+  "claude-code",
   "codex",
   "gemini-cli",
-  "kilo-code",
-  "copilot",
-  "openclaw",
-  "hermes",
   "antigravity",
-  "opencode"
+  "opencode",
+  "copilot",
+  "kilo-code",
+  "cursor",
+  "hermes",
+  "windsurf"
 ];
 const TARGET_ALIASES = new Map([
   ["gemini", "gemini-cli"],
   ["gemini_cli", "gemini-cli"],
+  ["claude", "claude-code"],
+  ["claude_code", "claude-code"],
+  ["claudecode", "claude-code"],
   ["kilo", "kilo-code"],
   ["kilocode", "kilo-code"],
   ["kilo_code", "kilo-code"],
@@ -44,6 +51,7 @@ const TARGET_ALIASES = new Map([
   ["openclaw-kate", "openclaw"],
   ["hermes-agent", "hermes"],
   ["hermes-serena", "hermes"],
+  ["cursor-agent", "cursor"],
   ["open-code", "opencode"]
 ]);
 
@@ -431,6 +439,23 @@ async function installCodex({ baseUrl, token, tokenEnv, codexBin, marketplaceRoo
   };
 }
 
+async function installClaudeCode({ baseUrl, token, claudeBin }) {
+  const serverJson = JSON.stringify({
+    type: "http",
+    url: `${baseUrl}/mcp`,
+    headers: {
+      "X-Pact-Api-Key": token
+    }
+  });
+  await run(claudeBin, ["mcp", "remove", MCP_SERVER_NAME], { allowFailure: true });
+  await run(claudeBin, ["mcp", "add-json", "--scope", "user", MCP_SERVER_NAME, serverJson]);
+  const get = await run(claudeBin, ["mcp", "get", MCP_SERVER_NAME]);
+  return {
+    installMode: "claude-code-mcp-cli",
+    mcpGetHasPact: get.stdout.includes(MCP_SERVER_NAME) || get.stdout.includes(`${baseUrl}/mcp`)
+  };
+}
+
 async function createGeminiExtension({ extensionRoot, baseUrl, token }) {
   await writeJson(path.join(extensionRoot, "gemini-extension.json"), {
     name: GEMINI_EXTENSION_NAME,
@@ -532,12 +557,22 @@ async function installCopilot({ baseUrl, token, copilotBin }) {
 }
 
 async function installAntigravity({ baseUrl, token, configPath }) {
+  return installMcpServersJsonConfig({
+    baseUrl,
+    token,
+    configPath,
+    installMode: "antigravity-mcp-config",
+    urlKey: "serverUrl"
+  });
+}
+
+async function installMcpServersJsonConfig({ baseUrl, token, configPath, installMode, urlKey = "url" }) {
   const config = await readJson(configPath, { mcpServers: {} });
   const backupPath = await backupIfExists(configPath);
   config.mcpServers = {
     ...(config.mcpServers || {}),
     [MCP_SERVER_NAME]: {
-      serverUrl: `${baseUrl}/mcp`,
+      [urlKey]: `${baseUrl}/mcp`,
       headers: {
         "X-Pact-Api-Key": token
       },
@@ -546,7 +581,7 @@ async function installAntigravity({ baseUrl, token, configPath }) {
   };
   await writeJson(configPath, config);
   return {
-    installMode: "antigravity-mcp-config",
+    installMode,
     configPath,
     backupPath
   };
@@ -723,6 +758,7 @@ if (!baseUrl) {
 }
 const dataDir = path.resolve(argValue("--data-dir", ServerConfig.getDataDir()));
 const codexBin = argValue("--codex-bin", process.env.CODEX_CLI_PATH || DEFAULT_CODEX_BIN);
+const claudeBin = argValue("--claude-bin", process.env.CLAUDE_CODE_CLI_PATH || DEFAULT_CLAUDE_BIN);
 const geminiBin = argValue("--gemini-bin", process.env.GEMINI_CLI_PATH || DEFAULT_GEMINI_BIN);
 const kiloBin = argValue("--kilo-bin", process.env.KILO_CLI_PATH || DEFAULT_KILO_BIN);
 const copilotBin = argValue("--copilot-bin", process.env.COPILOT_CLI_PATH || DEFAULT_COPILOT_BIN);
@@ -749,6 +785,14 @@ const opencodeConfigPath = path.resolve(argValue(
   "--opencode-config",
   path.join(os.homedir(), ".config", "opencode", "opencode.jsonc")
 ));
+const cursorConfigPath = path.resolve(argValue(
+  "--cursor-config",
+  path.join(os.homedir(), "Library", "Application Support", "Cursor", "User", "globalStorage", "saoudrizwan.claude-dev", "settings", "cline_mcp_settings.json")
+));
+const windsurfConfigPath = path.resolve(argValue(
+  "--windsurf-config",
+  path.join(os.homedir(), ".codeium", "windsurf", "mcp_config.json")
+));
 const sharedVmName = argValue("--vm", "");
 const sharedVmUser = argValue("--vm-user", "");
 const openclawVm = argValue("--openclaw-vm", sharedVmName);
@@ -767,6 +811,8 @@ for (const target of targets) {
   let clientResult = null;
   if (target === "codex") {
     clientResult = await installCodex({ baseUrl, token: grantResult.token, tokenEnv, codexBin, marketplaceRoot });
+  } else if (target === "claude-code") {
+    clientResult = await installClaudeCode({ baseUrl, token: grantResult.token, claudeBin });
   } else if (target === "gemini-cli") {
     clientResult = await installGemini({ baseUrl, token: grantResult.token, geminiBin, extensionRoot: geminiExtensionRoot });
   } else if (target === "kilo-code") {
@@ -795,6 +841,20 @@ for (const target of targets) {
     clientResult = await installAntigravity({ baseUrl, token: grantResult.token, configPath: antigravityConfigPath });
   } else if (target === "opencode") {
     clientResult = await installOpenCode({ baseUrl, token: grantResult.token, configPath: opencodeConfigPath });
+  } else if (target === "cursor") {
+    clientResult = await installMcpServersJsonConfig({
+      baseUrl,
+      token: grantResult.token,
+      configPath: cursorConfigPath,
+      installMode: "cursor-mcp-config"
+    });
+  } else if (target === "windsurf") {
+    clientResult = await installMcpServersJsonConfig({
+      baseUrl,
+      token: grantResult.token,
+      configPath: windsurfConfigPath,
+      installMode: "windsurf-mcp-config"
+    });
   }
   const httpVerification = verify
     ? await verifyMcpTools({ baseUrl, token: grantResult.token })

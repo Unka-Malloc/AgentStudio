@@ -32,24 +32,8 @@ function mcpRequest(method, params = {}, id = 1) {
   return { jsonrpc: "2.0", id, method, params };
 }
 
-const operationsById = new Map(SERVER_API_OPERATIONS.map((operation) => [operation.id, operation]));
-const controllerDir = path.join(repoRoot, "server/platform/common/console/http/controllers");
-const controllerSource = (
-  await Promise.all(
-    (await fs.readdir(controllerDir))
-      .filter((fileName) => fileName.endsWith(".mjs"))
-      .map((fileName) => fs.readFile(path.join(controllerDir, fileName), "utf8"))
-  )
-).join("\n");
-const catalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
-const toolsByOperationId = new Map(
-  catalog.tools
-    .filter((tool) => tool.operationId)
-    .map((tool) => [tool.operationId, tool])
-);
-
-for (const operationId of PROTOCOL_OPERATION_IDS) {
-  const operation = operationsById.get(operationId);
+function assertProtocolOperationSurface(operation, toolsByOperationId) {
+  const operationId = operation.id;
   assert.ok(operation, `${operationId} must be registered in SERVER_API_OPERATIONS`);
   assert.equal(operation.target?.controller, "system", `${operationId} must target system controller`);
   assert.ok(operation.target?.method, `${operationId} must declare target method`);
@@ -66,11 +50,71 @@ for (const operationId of PROTOCOL_OPERATION_IDS) {
   assert.equal(typeof operation.readOnly, "boolean", `${operationId} must declare readOnly`);
 
   const tool = toolsByOperationId.get(operationId);
+  if (!requiresToolCatalogExposure(operationId)) {
+    assert.equal(tool, undefined, `${operationId} must remain an internal API operation, not a Tool Management tool`);
+    return;
+  }
   assert.ok(tool, `${operationId} must be discoverable through Tool Management catalog`);
   assert.equal(tool.status, "active", `${operationId} tool must be active`);
   assert.ok(tool.id.startsWith("pact."), `${operationId} tool id must be in pact namespace`);
   assert.ok(tool.requiredScopes.length > 0, `${operationId} tool must carry grant scopes`);
   assert.ok(tool.toolsets.length > 0, `${operationId} tool must belong to at least one toolset`);
+}
+
+const operationsById = new Map(SERVER_API_OPERATIONS.map((operation) => [operation.id, operation]));
+const controllerDir = path.join(repoRoot, "server/platform/common/console/http/controllers");
+const controllerSource = (
+  await Promise.all(
+    (await fs.readdir(controllerDir))
+      .filter((fileName) => fileName.endsWith(".mjs"))
+      .map((fileName) => fs.readFile(path.join(controllerDir, fileName), "utf8"))
+  )
+).join("\n");
+const catalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
+const toolsByOperationId = new Map(
+  catalog.tools
+    .filter((tool) => tool.operationId)
+    .map((tool) => [tool.operationId, tool])
+);
+
+function requiresToolCatalogExposure(operationId) {
+  if (String(operationId || "").startsWith("knowledge.distillation.")) {
+    return false;
+  }
+  if (String(operationId || "").startsWith("sharedspace.drive.") && String(operationId) !== "sharedspace.drive.connect") {
+    return false;
+  }
+  return true;
+}
+
+for (const operationId of PROTOCOL_OPERATION_IDS) {
+  const operation = operationsById.get(operationId);
+  assertProtocolOperationSurface(operation, toolsByOperationId);
+}
+
+const baseWorkspaceSkillListOperation = operationsById.get("workspace.skill.list");
+const baseSharedspaceConnectOperation = operationsById.get("sharedspace.drive.connect");
+if (baseWorkspaceSkillListOperation && baseSharedspaceConnectOperation) {
+  assert.throws(
+    () => assertProtocolOperationSurface({
+      ...baseWorkspaceSkillListOperation,
+      requiredScopes: []
+    }, new Map()),
+    /must (declare required scopes|not be implicitly public)/,
+    "protocol verifier must reject catalog operations that drop requiredScopes"
+  );
+  assert.throws(
+    () => assertProtocolOperationSurface({
+      ...baseSharedspaceConnectOperation,
+      id: "workspace.skill.canary.missing.catalog",
+      rpc: {
+        ...baseSharedspaceConnectOperation.rpc,
+        method: "workspace.skill.canary.missing.catalog"
+      }
+    }, toolsByOperationId),
+    /must be discoverable through Tool Management catalog/,
+    "protocol verifier must reject protocol operations that are not discoverable in Tool Management catalog"
+  );
 }
 
 const concreteMcpNames = new Set(catalog.tools.map((tool) => tool.id));

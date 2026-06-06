@@ -1,0 +1,100 @@
+{
+  "protocolVersion": "pact.external-knowledge-distillation.model-distillation-profiles.v1",
+  "strategy": "singleton-model-distillation-profile-registry.v1",
+  "profileCount": 1,
+  "defaultProfileId": "real-model-grounded-distillation.v1",
+  "validation": "startup-fail-fast",
+  "profiles": [
+    {
+      "id": "real-model-grounded-distillation.v1",
+      "label": "Real model grounded knowledge distillation",
+      "moduleBoundary": "external-kd.model-distillation.module.v1",
+      "gatewayStrategy": "required-agent-gateway-real-model-call.v1",
+      "taskType": "knowledge_distillation",
+      "task": "Knowledge distillation over parsed Pact documents. Preserve source chronology, structure, contradictions, and evidence references.",
+      "requiredRealModelCall": true,
+      "noBuiltinFallback": true,
+      "dependency": "agent-gateway",
+      "requestFields": [
+        "moduleId",
+        "taskType",
+        "modelAlias",
+        "question",
+        "systemPrompt",
+        "parameters"
+      ],
+      "systemPromptLines": [
+        "You are the Pact external knowledge distillation model worker.",
+        "Return grounded distillation analysis only from the supplied parsed document evidence.",
+        "Preserve chronology, document structure, and uncertainty markers.",
+        "Return one strict JSON object that matches the supplied machineReadableContract and contains no Markdown fences or surrounding prose."
+      ],
+      "parameters": {
+        "responseProfile": "machine-readable",
+        "temperature": 0.1,
+        "maxOutputTokens": 1800
+      },
+      "promptLimits": {
+        "documents": 24,
+        "groups": 12,
+        "domains": 8
+      },
+      "transportPolicy": {
+        "maxAttempts": 2,
+        "retryBackoffMs": 120,
+        "retryOn": [
+          "ECONNRESET",
+          "UND_ERR_SOCKET",
+          "ETIMEDOUT",
+          "AbortError"
+        ]
+      },
+      "outputRepairPolicy": {
+        "enabled": true,
+        "strategy": "model-distillation-contract-repair-retry.v1",
+        "maxAttempts": 1,
+        "systemPromptSuffixLines": [
+          "Repair invalid machine-readable distillation output by returning only a corrected JSON object.",
+          "Use the validation failure list as hard constraints and do not change evidence identifiers."
+        ]
+      },
+      "classificationDistillation": {
+        "enabled": true,
+        "strategy": "profile-guided-group-distillation-map.v1",
+        "maxGroups": 32,
+        "maxEvidencePerGroup": 6,
+        "includeGarbageGroups": true,
+        "groupGatewayCalls": {
+          "enabled": true,
+          "strategy": "classification-group-real-model-call.v1",
+          "maxGroupCalls": 32,
+          "includeGarbageGroups": false,
+          "maxEvidencePerGroup": 8,
+          "systemPromptSuffixLines": [
+            "For classification-group calls, only distill the supplied group evidence.",
+            "Do not merge unrelated groups or infer facts from the global project response."
+          ]
+        },
+        "outputs": [
+          "groupDistillationUnits",
+          "groupModelGatewayCalls",
+          "evidenceRefs",
+          "promotionGate",
+          "topicHierarchy",
+          "lowCouplingHighCohesion"
+        ]
+      },
+      "requiredOutput": {
+        "language": "zh-CN",
+        "format": "strict JSON object matching pact.external-knowledge-distillation.model-output.v1",
+        "machineReadableContract": "pact.external-knowledge-distillation.model-output.v1",
+        "constraints": [
+          "Do not invent source facts.",
+          "Flag weak chronology or context loss.",
+          "Prefer evidence-backed distilled decisions and risks.",
+          "Every finding must include sourceIds and evidenceRefs copied from the prompt."
+        ]
+      }
+    }
+  ]
+}

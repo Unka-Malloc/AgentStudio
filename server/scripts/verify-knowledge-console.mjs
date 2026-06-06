@@ -366,6 +366,7 @@ try {
     })
   );
   assert.ok(search.items.length > 0);
+  assert.equal(search.agentMessage, undefined);
   const evidenceId = search.items[0].evidenceId;
   assert.ok(evidenceId);
 

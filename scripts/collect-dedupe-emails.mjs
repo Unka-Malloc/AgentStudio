@@ -2,10 +2,11 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
-const DEFAULT_OUT_DIR = "tests/email-corpus";
-const DEFAULT_REPORT_PATH = "tests/email-corpus/dedupe-report.json";
+const DEFAULT_OUT_DIR = "~/.pact-server-data/evaluation-corpora/mail/messages";
+const DEFAULT_REPORT_PATH = "~/.pact-server-data/evaluation-corpora/mail/reports/dedupe-report.json";
 const SKIP_DIR_NAMES = new Set([".git", "node_modules"]);
 const EMAIL_EXTENSIONS = new Set([".eml"]);
 
@@ -48,10 +49,21 @@ function parseArgs(argv) {
     }
   }
 
-  options.root = path.resolve(options.root);
-  options.outDir = path.resolve(options.root, options.outDir);
-  options.reportPath = path.resolve(options.root, options.reportPath);
+  options.root = resolveInputPath(options.root, process.cwd());
+  options.outDir = resolveInputPath(options.outDir, options.root);
+  options.reportPath = resolveInputPath(options.reportPath, options.root);
   return options;
+}
+
+function resolveInputPath(inputPath, baseDir) {
+  const value = String(inputPath || "").trim();
+  if (value === "~") {
+    return os.homedir();
+  }
+  if (value.startsWith("~/")) {
+    return path.join(os.homedir(), value.slice(2));
+  }
+  return path.resolve(baseDir, value);
 }
 
 function isInside(child, parent) {
