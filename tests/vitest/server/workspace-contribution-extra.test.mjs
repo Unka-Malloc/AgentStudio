@@ -483,6 +483,52 @@ describe("workspace contribution error paths and terminal states", () => {
     expect(() => registry.adoptContribution(revokable.contributionId, {
       actorId: "agent-z",
       targetWorkspaceId: "workspace-z"
-    })).toThrow(/Invalid contribution state transition: revoked -> adopted/);
+    })).toThrow(/Transition not allowed: revoked -> \[contribution.adopt\]/);
+  });
+
+  it("enforces state machine rules for adopt and revoke transitions through the transition engine", () => {
+    const registry = createContributionRegistry({ workspaceId: "workspace-sm-integration" });
+    
+    // Submit a contribution
+    const submitted = registry.submitContribution({
+      contributorId: "agent-sm",
+      contributionType: "knowledge",
+      title: "SM Test Knowledge"
+    }).contribution;
+
+    expect(submitted.status).toBe("submitted");
+
+    // Attempting to adopt directly from 'submitted' should fail fast via state machine
+    expect(() => {
+      registry.adoptContribution(submitted.contributionId, {
+        actorId: "agent-sm"
+      });
+    }).toThrow(/Transition not allowed: submitted -> \[contribution.adopt\]/);
+
+    // Verify structural error properties (code, details)
+    try {
+      registry.adoptContribution(submitted.contributionId, {
+        actorId: "agent-sm"
+      });
+    } catch (err) {
+      expect(err.code).toBe("CONTRIBUTION_NOT_PUBLISHED");
+      expect(err.details).toBeDefined();
+      expect(err.details.ok).toBe(false);
+      expect(err.details.errorCode).toBe("CONTRIBUTION_NOT_PUBLISHED");
+      expect(err.details.entityId).toBe(submitted.contributionId);
+    }
+
+    // Attempting to revoke directly from 'submitted' should fail fast via state machine
+    try {
+      registry.revokeContribution(submitted.contributionId, {
+        actorId: "agent-sm"
+      });
+    } catch (err) {
+      expect(err.code).toBe("CONTRIBUTION_NOT_PUBLISHED");
+      expect(err.details).toBeDefined();
+      expect(err.details.ok).toBe(false);
+      expect(err.details.errorCode).toBe("CONTRIBUTION_NOT_PUBLISHED");
+      expect(err.details.entityId).toBe(submitted.contributionId);
+    }
   });
 });

@@ -83,9 +83,9 @@ graph TB
 
 ## ✨ Core Features
 
-- 🛡️ **Zero Trust Agent Governance**: Agents are merely external operators. Every single state change (writes, exports) must pass through a strict Policy Engine and an immutable Operation Ledger.
-- 📚 **AgentLibrary (Governed Knowledge)**: Disrupting traditional "knowledge base proxies." Upstream knowledge is dynamically sliced and re-authorized upon entering the system. We support hyper-granular egress controls like `controlledView`, `copyToContext`, and `checkoutAllowed`.
-- 🌳 **Unified Checkpoint Tree (100% Auditability)**: Every file modification, permission request, and even **every single knowledge retrieval or denied access** generates an immutable Checkpoint Node. This ensures an append-only, Git-like safe restore capability.
+- 🛡️ **Agent Governance**: Agents are external operators. Every state change (writes, exports) must pass through a Policy Engine and an Operation Ledger.
+- 📚 **AgentLibrary (Governed Knowledge)**: Managing the gap between knowledge source and agent. Upstream knowledge is dynamically sliced and re-authorized upon entering the system. We support hyper-granular egress controls like `controlledView`, `copyToContext`, and `checkoutAllowed`.
+- 🌳 **Unified Checkpoint Tree (Auditability)**: Every file modification, permission request, and even knowledge retrieval or denied access generates a Checkpoint Node. This ensures an append-only, Git-like safe restore capability.
 - 🔌 **Ecosystem Protocol Compatibility (MCP Native)**: First-class targets are OpenClaw, Claude Code, Codex, Gemini CLI, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, and Windsurf. We fully embrace the Model Context Protocol (MCP) to expose workspace capabilities securely.
 - 📊 **Asset Contribution Leaderboard**: Agents don't just burn compute; they accumulate digital assets. The built-in leaderboard quantifies and ranks which agent (or human) contributed the most reusable knowledge, rules, and skills to the team workspace.
 
@@ -103,35 +103,54 @@ This project follows the "Modular Monolith" principle, strictly separating conce
 | **Tests** | Unit, component, integration, and E2E verification standard | Vitest + `@vitest/coverage-v8` + Vue Test Utils + Playwright |
 | **`docs`** | Source of truth for architectural principles and design decisions | Markdown |
 
-## 🚀 Quick Start
+## 🚀 Deployment & Quick Start
 
-### ⚡ Minimal Start — Docker (Recommended)
+Pact can be launched in multiple environments depending on your use case. Below we detail the differences between local development, local Docker startup, dev integration, LAN/WAN listening, and enterprise production deployment.
 
-No local toolchain required. Spin up the full server + Web Console in seconds:
-
+### 1. Local Development (本机开发)
+For local development, install dependencies and start the backend service (Minimum Node.js 22+, Recommended Node.js 24):
 ```bash
-docker compose up -d
-# Access the management console at http://127.0.0.1:7228
-```
-
-### 🛠️ Full Development Setup
-
-For contributors or those who need the complete stack including CLI (Rust) and GUI (Flutter) clients:
-
-```bash
-# 1. Install server dependencies
+# Install dependencies
 npm install
 
-# 2. Install client dependencies (requires Flutter & Rust toolchains)
-npm run client:get
+# Pull JRE and Tika locally (will not modify system directories)
+npm run server:setup-runtime
 
-# 3. Start the complete backend API + Web Console
+# Start the complete backend API + Web Console
 npm run start:all
 ```
+Once started, access the Web Console at `http://127.0.0.1:7228`.
 
-*(For development with Vite HMR, append the `-- --dev` flag)*
+### 2. Local Docker Startup (Docker 本机启动)
+To quickly run the server and Web Console in a local container environment without installing a local toolchain:
+```bash
+docker compose up -d
+```
+Access the management console at `http://127.0.0.1:7228`.
 
-Once running, access the management console at `http://127.0.0.1:7228`.
+### 3. Dev Integration & HMR (开发联调)
+If you need hot module replacement (HMR) for frontend development while communicating with the backend:
+```bash
+npm run start:all -- --dev
+```
+This starts the backend API on port `7228` and runs the Vite development server on port `5173` with proxy routing to the API.
+
+### 4. LAN/WAN Listening (局域网/公网监听)
+To expose the server to the local network or listen on all interfaces for testing:
+```bash
+npm run server:start:public
+```
+*Note: This starts the server on port `7228` listening on host `0.0.0.0`. Do not use this in untrusted networks without external transport security.*
+
+### 5. Enterprise Production Deployment (企业生产部署)
+Pact supports enterprise-grade integration. However, **before the production gates are closed, it is not recommended to claim production readiness (生产门禁未关闭前不建议对外宣称生产可用)**. 
+
+When deploying in production, the default HTTP configurations MUST NOT be reused directly. You must configure the following hardening measures:
+*   **HTTPS Reverse Proxy**: Run behind a secure reverse proxy (e.g., Caddy, Nginx, or Kubernetes Ingress) to terminate HTTPS and handle SSL certificates.
+*   **Controlled Network Segment**: Restrict server exposure. Keep the service isolated within private subnets/VPCs, and expose it only to authorized clients.
+*   **Secret Key Management**: Real API credentials, OAuth tokens, and system secrets must be injected dynamically via environment variables or external secure key managers (such as Vault/KMS), rather than being stored in configuration files.
+*   **Audit Archiving**: Ensure the immutable Operation Ledger is enabled, and establish periodic archival processes for compliance logs.
+*   **Backup & Recovery**: Implement robust, regular backup strategies for the SQLite database files and object storage volumes to enable point-in-time recovery.
 
 ### MCP Client Connector
 
@@ -188,6 +207,12 @@ For development guidelines and coding conventions, see [Developer Guidelines](do
 ## 📄 License
 
 This project is licensed under the [GNU General Public License v3.0 or later](LICENSE) — see the LICENSE file for details.
+
+---
+
+> *"In Pact, agents are not trusted. We only trust verifiable asset states and a replayable operation ledger."*
+layable operation ledger."*
+icense v3.0 or later](LICENSE) — see the LICENSE file for details.
 
 ---
 

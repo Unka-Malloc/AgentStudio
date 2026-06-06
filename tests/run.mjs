@@ -23,6 +23,12 @@ const suites = [
     "regression",
     "security"
   ]),
+  suite("docs.consistency", "Document and startup port consistency verifier", npm("run", "server:verify:docs-governance"), [
+    "docs",
+    "consistency",
+    "gate",
+    "regression"
+  ]),
   suite("security.secret-hygiene", "Static secret hygiene", node("tests/verify-secret-hygiene.mjs"), [
     "security",
     "hygiene",
@@ -394,6 +400,7 @@ const profileSuites = {
   fast: [
     "coverage.unit-threshold",
     "repo.hygiene.pre",
+    "docs.consistency",
     "security.secret-hygiene",
     "server.external-service-api-registration",
     "server.frontend-feature-registry",
@@ -412,6 +419,7 @@ const profileSuites = {
   standard: [
     "coverage.unit-threshold",
     "repo.hygiene.pre",
+    "docs.consistency",
     "security.secret-hygiene",
     "security.npm-audit",
     "server.web.build",

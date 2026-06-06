@@ -1,3 +1,14 @@
+// ==============================================================================
+// Vite 配置文件 / Vite Configuration
+//
+// 启动端口及开发联调 (Startup Port and Dev Integration):
+//   - 本地前端开发服务器监听端口: 5173
+//   - 后端 API 默认代理目标端口: 7228 (DEFAULT_SERVER_PORT)
+//
+// 生产部署警告 (Production Deployment Warning):
+//   - 生产门禁未关闭前不建议对外宣称生产可用。
+//   - 生产部署时，前端静态资源应通过 Web 服务器 (如 Nginx) 进行托管，并通过 HTTPS 反向代理与后端通信。
+// ==============================================================================
 import { DEFAULT_SERVER_PORT } from "./server/config/ServerEnv.mjs";
 
 import path from "node:path";

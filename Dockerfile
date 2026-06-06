@@ -1,3 +1,19 @@
+# ==============================================================================
+# Pact Dockerfile
+#
+# Node 版本口径 (Node.js Version Specification):
+#   - 最低支持版本 (Minimum supported): Node.js 22+
+#   - 推荐/Docker 运行环境 (Recommended / Docker runtime): Node.js 24 (本镜像基于 node:24-bookworm-slim)
+#
+# 生产部署安全警告 (Production Deployment Warning):
+#   - 生产门禁未关闭前不建议对外宣称生产可用。
+#   - 生产环境不得直接复用本机 HTTP 配置，必须采取以下加固策略：
+#     1) HTTPS 反向代理 (Caddy/Nginx/Ingress 终止并启用 HTTPS)
+#     2) 受控网段 (隔离直接端口访问)
+#     3) 密钥管理 (外部环境变量或安全 Key 注入)
+#     4) 审计归档 (Operation Ledger 日志审计与导出)
+#     5) 备份恢复策略 (元数据库与存储灾备)
+# ==============================================================================
 FROM node:24-bookworm-slim AS build
 
 WORKDIR /app
@@ -42,7 +58,7 @@ FROM node:24-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
     PACT_SERVER_HOST=0.0.0.0 \
-    PACT_SERVER_PORT=8787 \
+    PACT_SERVER_PORT=7228 \
     PACT_SERVER_DATA_DIR=/data \
     PACT_SERVER_WITH_UI=1 \
     CODEX_HOME=/codex-home \
@@ -64,6 +80,6 @@ RUN mkdir -p /data /codex-home \
 
 USER pact
 
-EXPOSE 8787
+EXPOSE 7228
 
-CMD ["node", "server/scripts/start-server.mjs", "--with-ui", "--host", "0.0.0.0", "--port", "8787", "--data-dir", "/data"]
+CMD ["node", "server/scripts/start-server.mjs", "--with-ui", "--host", "0.0.0.0", "--port", "7228", "--data-dir", "/data"]

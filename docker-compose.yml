@@ -1,9 +1,27 @@
-# 说明：本文件是开发环境快捷启动，默认仅用于本机开发与本机回环 HTTPS 明确由反向代理提供。
-# 生产 / enterprise 场景禁止直接复用本文件的 HTTP 地址；请改用反代（Caddy/Nginx/Ingress）终止 HTTPS，
-# 并保持服务仅在受控网段内暴露。下方以 HTTPS 为生产示例：
-#   - PACT_BOOTSTRAP_URL: https://pact.example.com
-#   - PACT_ADVERTISED_BASE_URL: https://pact.example.com
-#   - PACT_ACTIVE_SERVICE_URL: https://pact.example.com
+# ==============================================================================
+# 部署说明 / Deployment Guidelines:
+#
+# 1. 本地/本机开发 (Local Development):
+#    本文件用于本机快速启动。默认仅在本地回环地址/安全可信网段内以 HTTP 协议运行。
+#
+# 2. 本机 Docker 启动 (Local Docker Startup):
+#    使用 `docker compose up -d` 快速在本地 Docker 中拉起实例。默认映射端口 7228。
+#
+# 3. 开发联调 (Dev Integration & HMR):
+#    前端开发热更新（5173）与后端 API（7228）联调交互。
+#
+# 4. 局域网/公网监听 (LAN/WAN Listening):
+#    通过绑定 0.0.0.0 实现跨设备测试，但在非安全网段下存在越权风险。
+#
+# 5. 企业生产部署警告 (Enterprise Production Deployment Warning):
+#    ★ 生产环境不得直接复用本文件的纯 HTTP 配置，必须采取以下安全加固策略：
+#    - HTTPS 反向代理：必须使用 Caddy、Nginx 或 Ingress 等反向代理终止并启用 HTTPS，确保传输层加密。
+#    - 受控网段：限制服务仅在受控的安全网络网段内暴露，禁止直接暴露给公网。
+#    - 密钥管理：真实凭据/Secret Token 必须通过系统运行态安全密钥库或外部 KMS/Vault 注入，严禁硬编码。
+#    - 审计归档：启用不可篡改的操作审计日志 (Operation Ledger) 并定期导出归一化审计记录归档。
+#    - 备份恢复：配置定期的 SQLite 数据库及对象存储的备份与恢复机制。
+#    ★ 生产可用性声明限制：“生产门禁未关闭前不建议对外宣称生产可用”。
+# ==============================================================================
 services:
   pact-server:
     build:
@@ -13,15 +31,15 @@ services:
     container_name: pact-server
     restart: unless-stopped
     ports:
-      - "8787:8787"
+      - "7228:7228"
     environment:
       PACT_SERVER_HOST: 0.0.0.0
-      PACT_SERVER_PORT: 8787
+      PACT_SERVER_PORT: 7228
       PACT_SERVER_DATA_DIR: /data
       PACT_SERVER_WITH_UI: "1"
-      PACT_BOOTSTRAP_URL: http://127.0.0.1:8787
-      PACT_ADVERTISED_BASE_URL: http://127.0.0.1:8787
-      PACT_ACTIVE_SERVICE_URL: http://127.0.0.1:8787
+      PACT_BOOTSTRAP_URL: http://127.0.0.1:7228
+      PACT_ADVERTISED_BASE_URL: http://127.0.0.1:7228
+      PACT_ACTIVE_SERVICE_URL: http://127.0.0.1:7228
       CODEX_HOME: /codex-home
     volumes:
       - ${HOME}/.pact-server-data:/data
