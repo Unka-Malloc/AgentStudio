@@ -7,7 +7,19 @@ on:
   pull_request:
     branches: ["main", "develop", "release/**"]
   workflow_dispatch:
-
+    inputs:
+      run_acp_agent_relay_real:
+        description: "Run the Codex-orchestrated Pact source harness to real Antigravity ACP relay gate"
+        type: boolean
+        default: false
+      run_acp_agent_relay_real_connect:
+        description: "Also require Antigravity Connect trajectory evidence for the real ACP relay gate"
+        type: boolean
+        default: false
+      run_acp_agent_relay_codex_cli:
+        description: "Also require Codex CLI participation plus Codex downstream target gates"
+        type: boolean
+        default: false
 permissions:
   contents: read
 
@@ -240,6 +252,36 @@ jobs:
           tags: pact-server:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # ── Real local-agent relay gate ───────────────────────────────────────────
+  acp-agent-relay-real:
+    name: ACP Agent Relay real Antigravity gate
+    runs-on: [self-hosted, macOS, antigravity]
+    needs: [hygiene]
+    timeout-minutes: 30
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_acp_agent_relay_real }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      - name: Run top-level real ACP relay gate
+        env:
+          RUN_CONNECT: ${{ inputs.run_acp_agent_relay_real_connect }}
+          RUN_CODEX_CLI: ${{ inputs.run_acp_agent_relay_codex_cli }}
+        run: |
+          if [ "$RUN_CONNECT" = "true" ] && [ "$RUN_CODEX_CLI" = "true" ]; then
+            npm run server:verify:acp-agent-relay-real:connect:codex-cli
+          elif [ "$RUN_CODEX_CLI" = "true" ]; then
+            npm run server:verify:acp-agent-relay-real:codex-cli
+          elif [ "$RUN_CONNECT" = "true" ]; then
+            npm run server:verify:acp-agent-relay-real:connect
+          else
+            npm run server:verify:acp-agent-relay-real
+          fi
 
   # ── Release readiness gate ─────────────────────────────────────────────────
   release-readiness:
