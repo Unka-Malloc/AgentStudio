@@ -1,5 +1,12 @@
 # Pact 使用说明
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Pact 使用说明.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 当前交付形态只有两部分：
 
 - 服务端：`server`

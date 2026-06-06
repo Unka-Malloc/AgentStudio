@@ -1,5 +1,12 @@
 # Workspace Asset Governance
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Workspace Asset Governance.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 本文定义 Pact 的核心产品边界：公共工作空间资产治理。
 
 Pact 不关心智能体之间如何互相协作，也不把智能体当作可信主体。系统只关心公共工作空间里的资产状态是否可治理。

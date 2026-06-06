@@ -1,5 +1,12 @@
 # Security Hardening Backlog
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Active security backlog with residual-risk tracking
+- Scope: Security Hardening Backlog.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 记录日期：2026-06-03
 
 本文记录 `docs/SECURITY-VULNERABILITY-AUDIT.md` 中已批准但尚未实现的安全硬化项。H-1 和 H-2 已作为 P0 阻塞项修复；本文件只跟踪后续批次，不表示这些问题已经关闭。

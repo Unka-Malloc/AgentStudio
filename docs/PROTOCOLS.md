@@ -1,5 +1,12 @@
 # Pact Protocol Boundaries
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Pact Protocol Boundaries.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 本文定义 Pact 的协议边界。协议层只描述请求、响应、事件、版本、权限、错误语义和兼容策略；业务实现、算法实现和存储细节不写进协议层。
 
 ## 目录 / Table of Contents

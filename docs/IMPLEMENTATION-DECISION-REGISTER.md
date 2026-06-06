@@ -1,5 +1,12 @@
 # Implementation Decision Register
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Implementation Decision Register.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 审计日期：2026-05-21。本文是实现前的设计决策登记表，用于接下来集中做设计和拍板。
 
 本文不是第六份核心架构文档。它只记录“还需要决策什么、优先级是什么、决策完成后要回写到哪里”。任何被拍板的长期设计结论，必须同步回写到：

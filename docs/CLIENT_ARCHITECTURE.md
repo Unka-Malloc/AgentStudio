@@ -1,8 +1,14 @@
 # Pact Client Architecture
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Pact Client Architecture.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 **Status:** Design baseline
 **Scope:** Pact Desktop Client
-**Updated:** 2026-05-26
 
 This document is the product and engineering contract for the next Pact desktop
 client. The new architecture takes precedence over the current Flutter client

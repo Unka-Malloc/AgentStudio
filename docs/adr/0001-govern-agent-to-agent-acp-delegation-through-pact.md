@@ -5,6 +5,13 @@ date: 2026-06-04
 
 # Govern Agent-to-Agent ACP Delegation Through Pact
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Accepted ADR
+- Scope: Govern Agent-to-Agent ACP Delegation Through Pact.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 Pact will mediate agent-to-agent delegation by acting as an inbound ACP agent to the source agent and as an outbound ACP client to the concrete target agent. Pact will not be a raw ACP socket proxy: every relay turn remains governed by the Operation Scheduling Kernel, Capability Kernel, Tool Management, `/approval`, trace, audit, workspace governance, and global artifact lifecycle.
 
 All downstream client-facing protocol adaptation belongs to the downstream client aspect. MCP and ACP framework adapter layers are part of that aspect, not a separate downstream agent gateway. The aspect owns client discovery/configuration, capability catalog projection, bootstrap manifest inputs, secretRef projection metadata, framework-specific adapter assembly, and protocol-to-platform route translation. MCP traffic is translated to MCP Server Side / Tool Management; ACP traffic is translated to ACP Agent Relay. The aspect does not execute either path directly.

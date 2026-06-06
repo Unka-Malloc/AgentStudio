@@ -1,5 +1,12 @@
 # Scenario 08: 操作审核
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Scenario draft with machine-readable status tracking
+- Scope: Scenario 08: 操作审核.
+- Staleness check: Scanned on 2026-06-06; scenario live/contract/local status must match docs/scenarios/scenario-implementation-status.json and the latest readiness reports.
+
 状态：已确认场景草案
 
 ## 元数据

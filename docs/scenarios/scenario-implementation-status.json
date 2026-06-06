@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-06-04",
+  "updatedAt": "2026-06-06",
   "factSource": "docs/scenarios/scenario-implementation-status.json",
   "scenarios": [
     {
@@ -140,8 +140,8 @@
     },
     {
       "id": "cloud-drive-sharing",
-      "status": "contract",
-      "providerMode": "contract",
+      "status": "partial",
+      "providerMode": "local-live",
       "operationIds": [
         "external.cloudDrive.connect",
         "external.cloudDrive.file.upload",
@@ -164,7 +164,7 @@
         "server/scripts/verify-external-service-api-registration.mjs"
       ],
       "blockers": [
-        "OneDrive OAuth / Microsoft Graph remote-live adapter remains a future target after v0.0.1 local projection"
+        "iCloud and OneDrive local directory projection is verified for v0.0.1; OneDrive OAuth / Microsoft Graph remote-live adapter remains a future target"
       ]
     },
     {

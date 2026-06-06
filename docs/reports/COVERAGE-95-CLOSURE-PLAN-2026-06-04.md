@@ -1,5 +1,12 @@
 # Coverage 95% 闭环计划与本轮进展（2026-06-04）
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Active coverage backlog
+- Scope: Coverage 95% 闭环计划与本轮进展（2026-06-04）.
+- Staleness check: Scanned on 2026-06-06; the 95% coverage closure backlog remains open unless a newer coverage scan supersedes this file.
+
 ## 一、结论
 
 本轮已并行拉起多组 `gpt-5.3-codex-spark` worker，按 `client-gui`、`client-cli`、`server-web` 纯函数、`server` 大模块分别补测试。当前结果是：

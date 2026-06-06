@@ -1,11 +1,18 @@
 # Current Implementation Assessment
 
-日期：2026-06-04  
-范围：按 `docs/reports/ORDERED-IMPLEMENTATION-TASKS-2026-06-03.md` 的 T00-T23 核对当前工作树。  
-最新复评：`docs/reports/TASK-COMPLETION-REASSESSMENT-2026-06-04.md` 重新读取当前工作树并记录了 20260604T031739Z 生产准入结果；后续判断优先参考该复评。  
-结论：当前代码不能宣称已完成规划中的任务目标。已有大量 verifier、场景状态、前端门禁、客户端目标、调度内核和部分治理能力，但仍存在 P0 阻塞、验收门禁缺口和若干门禁自身不合适的问题。
+## Metadata / 元数据
 
-本报告评估的是当前工作树，不是干净 commit。生产准入报告显示当前 dirty files 为 211，整体状态为 `blocked`。
+- Last updated: 2026-06-06
+- Status: Superseded assessment retained for planning context
+- Scope: Current Implementation Assessment.
+- Staleness check: Scanned on 2026-06-06; older blocked/readiness statements are historical context and are superseded by docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
+日期：2026-06-04  
+范围：按 `docs/reports/ORDERED-IMPLEMENTATION-TASKS-2026-06-03.md` 的 T00-T23 核对 2026-06-04 当时工作树。
+当时复评：`docs/reports/TASK-COMPLETION-REASSESSMENT-2026-06-04.md` 重新读取 2026-06-04 当时工作树并记录了 20260604T031739Z 生产准入结果；2026-06-06 后续判断优先参考最新 readiness 报告和当前核心文档。
+2026-06-04 原始结论：当时工作树尚不能宣称已完成规划中的任务目标。已有大量 verifier、场景状态、前端门禁、客户端目标、调度内核和部分治理能力，但仍存在 P0 阻塞、验收门禁缺口和若干门禁自身不合适的问题。
+
+本报告评估的是 2026-06-04 当时工作树，不是干净 commit。生产准入报告显示当时 dirty files 为 211，整体状态为 `blocked`。
 
 ## 运行证据
 
@@ -94,7 +101,7 @@
 
 | 任务 | 状态 | 客观判断 | 下一步 |
 | --- | --- | --- | --- |
-| T00 场景状态和门禁基线 | partial | `server:verify:scenario-implementation-status`、`scenario-catalog`、`business-scenarios` 通过，但 8 个场景状态为 7 个 `partial`、1 个 `contract`，没有 `verified`。 | 保留基线，逐个把场景 blocker 归入对应任务；不要把场景标完成。 |
+| T00 场景状态和门禁基线 | partial | 2026-06-04 原始状态为 7 个 `partial`、1 个 `contract`，没有 `verified`；2026-06-06 已更新为云盘场景 `local-live` 本地投影、整体仍按 blocker 保持非完全完成。 | 保留基线，逐个把场景 blocker 归入对应任务；不要把场景标完成。 |
 | T01 脚本、版本和依赖治理 | partial | 脚本和 verifier 很多，但根 `package.json` 仍是大型单层入口；依赖 owner 和责任域拆分未被门禁完全证明。 | 先拆脚本责任域和依赖 owner 清单，再调整聚合命令。 |
 | T02 前端门禁优先扩展 | complete-gated | `frontend-architecture`、`frontend-typecheck`、`frontend-feature-registry`、`frontend-cache-storage` 通过。 | 继续维护 allowlist，新增公共组件时补 focused test。 |
 | T03 配置、密钥、数据目录和 runtime 资产边界 | complete-gated | `repo:hygiene`、`security:hygiene` 与 `server:verify:runtime-dependency-downloads` 均通过，`.pact-agent-history` 与 `.pact-server-data` 运行痕迹已迁出仓库。 | 维持外部目录策略不回退；新数据路径变更需补门禁与迁移证据。 |
@@ -102,18 +109,18 @@
 | T05 CSP 和 HTML 渲染安全批次 | blocked | 代码仍包含 `script-src 'self' 'unsafe-inline'`；`SafeHtmlBlock` 仍直接 `v-html`；S-01/S-07/S-09 在 backlog 中待实现。 | 单独做 CSP nonce/hash，合并做 SafeHtmlBlock 防御深度和邮件 HTML allowlist。 |
 | T06 Operation Scheduling Kernel 和统一账本 | partial | `dispatcher-unified`、`operation-policy`、`trace-context`、`state-mutations`、`runtime-logging` 通过。 | 继续把所有真实 provider side effect 接入内核；用 T10/T12/T13 失败链路做负向补强。 |
 | T07 统一审批和独立 `/approval` | partial | 审批语义已进入代码提交链路，`v001-codespace-e2e` 返回 `pending_approval`，但旧断言仍期待成功，导致失败。 | 更新 codespace verifier 的审批恢复路径，补 approve/reject/expire E2E。 |
-| T08 权限变更实时生效 | complete-gated | `authorization-governance`、`authorization-capabilities`、`opaque-capability-key`、`tool-management`、`mcp-http`、`gateway-ingress` 在当前工作树通过；已覆盖 policy revision、MCP discovery/SSE、gateway cache 失效和 local-file key 持久化/恢复。 | 维持这组 focused regression；后续改动授权链路时重跑整组 T08 门禁。 |
+| T08 权限变更实时生效 | complete-gated | `authorization-governance`、`authorization-capabilities`、`opaque-capability-key`、`tool-management`、`mcp-http`、`gateway-ingress` 在 2026-06-04 当时工作树通过；已覆盖 policy revision、MCP discovery/SSE、gateway cache 失效和 local-file key 持久化/恢复。 | 维持这组 focused regression；后续改动授权链路时重跑整组 T08 门禁。 |
 | T09 11 个智能体安装、配对和客户端清理 | complete-gated | `agent-client-support-targets`、`mcp-agent-target-install`、`client:verify:targets`、`config-writes`、`pairing-skill-cli` 通过；11 个目标包含 Hermes Agent 和 Windsurf。 | 维持 registry 单一事实源；后续只做增量目标时同步 verifier。 |
 | T10 代码提交 durable workflow | blocked | `durable-workflow` 和 `scenario-agent-code-submission` 通过；`v001-codespace-e2e` 因 `pending_approval` 未恢复而失败。 | 接上 T07 审批恢复，确认 dry-run/live receipt 字段。 |
 | T11 Skill Hub 独立库和 lifecycle | partial | `tool-skill-management`、`capability-package-lifecycle`、`knowledge-skillization` 通过。 | T08 的 capability 基础 blocker 已解除；继续补独立 Skill Hub 存储和 workspace contribution 引用的负向证明。 |
 | T12 provider mode、receipt 和 iCloud/OneDrive local projection | partial | `v001-cloud-drive-e2e` 和 `external-service-api-registration` 单独通过；v0.0.1 当前范围是 iCloud / OneDrive 本机目录投影，不证明真实 OneDrive OAuth remote-live。 | 保持 local projection 与 remote-live 文案隔离；后续单独补 OneDrive OAuth / Microsoft Graph live smoke。 |
 | T13 共享空间产品化 | blocked | `workspace-file-ops`、`workspace-checkpoints`、`workspace-governance` 通过；`v001-local-dir-e2e` 在 `workspace-local-dir-sync` 失败。 | 修 local-dir sync 断言和实现；补大文件流式和 ACL 恢复门禁。 |
-| T14 真实办公文档解析基准 | partial | `dynamic-document-parsing` 在当前工作树通过；前端 `dynamic-parameter-v1` 绑定与 bridge/type 暴露已闭环；仓库已补 `docs/examples/document-evaluation-corpus-manifest.schema.json`、template、`docs/examples/document-evaluation-corpus-public-smoke.json`，以及 `docs/examples/document-evaluation-corpus-mail-local.template.json`；文档解析运行时现已保留 direct `sources` 入口的 `contentHash/sourceMetadata/rawObject` 追溯字段，并在 `preprocessResult.sourceTrace` 与 `structureArtifacts.metadata` 中输出 `sourceMetadataHash`、`parserTrace`/`parserTraceRef` 与 source locator；输入读取和解析失败现在返回结构化 `failureReasons`，全失败时以 `reasonCode + failureReasons` 拒绝而不是空成功结果；`server:verify:knowledge-docx-export` 现覆盖 Markdown 输入语义、machine sidecar 结构基准与 DOCX OpenXML 输出的一致性校验；`server:verify:document-evaluation-corpus` 现覆盖 Mail 模板隐私边界与 `collect-dedupe-emails` 真实统计链路。 | 继续推进 T15 外部知识蒸馏全链路与真实办公文档导出，避免 T14 验证能力与 T15 生产门禁脱节。 |
+| T14 真实办公文档解析基准 | partial | `dynamic-document-parsing` 在 2026-06-04 当时工作树通过；前端 `dynamic-parameter-v1` 绑定与 bridge/type 暴露已闭环；仓库已补 `docs/examples/document-evaluation-corpus-manifest.schema.json`、template、`docs/examples/document-evaluation-corpus-public-smoke.json`，以及 `docs/examples/document-evaluation-corpus-mail-local.template.json`；文档解析运行时现已保留 direct `sources` 入口的 `contentHash/sourceMetadata/rawObject` 追溯字段，并在 `preprocessResult.sourceTrace` 与 `structureArtifacts.metadata` 中输出 `sourceMetadataHash`、`parserTrace`/`parserTraceRef` 与 source locator；输入读取和解析失败现在返回结构化 `failureReasons`，全失败时以 `reasonCode + failureReasons` 拒绝而不是空成功结果；`server:verify:knowledge-docx-export` 现覆盖 Markdown 输入语义、machine sidecar 结构基准与 DOCX OpenXML 输出的一致性校验；`server:verify:document-evaluation-corpus` 现覆盖 Mail 模板隐私边界与 `collect-dedupe-emails` 真实统计链路。 | 继续推进 T15 外部知识蒸馏全链路与真实办公文档导出，避免 T14 验证能力与 T15 生产门禁脱节。 |
 | T15 知识蒸馏算法和办公文档质量升级 | partial | `knowledge-distillation-workbench`、`external-service-gates`、`optimization`、`knowledge-industrial-distillation` 通过；`external-knowledge-distillation` 仍失败。工业蒸馏门禁已改为 8 项能力覆盖（不再被 clean workspace 下缺失本地 reference checkout 固定卡死在 0）。 | 修 external KD 全链路和真实办公文档导出，补齐 `external.knowledge.distillation.*` 生产门禁闭环。 |
 | T16 前端剩余页面接口收敛 | partial | 前端架构和 typecheck 通过，architecture verifier 报告仍有 1 个 `useConsole` compatibility caller。 | 把剩余兼容调用迁出；补 Dashboard/Knowledge/External Services/Approval/Runtime browser smoke。 |
 | T17 个人/企业两套可脱水预设构建线 | partial | `feature:plan/verify`、`composition:list/verify/dehydrate`、`composition-presets` 通过；但 dehydrate 输出里 `uiLayout.ok=false`，且当前不是明确 personal/enterprise 两条线。 | 建立 personal/enterprise 两套 preset；让 UI layout failure 成为真实门禁或记录为 warning。 |
 | T18 模块和外部服务接入生态 | partial | `module-ecosystem`、`unified-registration` 通过；`server:module:contract-test` 直接运行只输出 usage 并非有效验收；生产准入外部服务链路仍失败。 | 提供可运行样例模块 contract test；补 external KD service 治理失败项。 |
-| T19 管理报告、架构 live map 和样例业务包 | partial | `executive-report`、`architecture-live-map`、`sample-business-pack` 通过；`production-readiness` 整体 blocked。 | 继续作为 P3 维护项；报告不得掩盖 P0 阻塞。 |
+| T19 管理报告、架构 live map 和样例业务包 | partial | `executive-report`、`architecture-live-map`、`sample-business-pack` 在 2026-06-04 当时通过；当时 `production-readiness` 整体 blocked。 | 继续作为 P3 维护项；报告不得掩盖 P0 阻塞。 |
 | T20 完整贡献者生态、市场和统计面板 | partial | `workspace-contribution-governance` 通过，但完整市场、贡献者主页、授权安装、评分推荐和统计面板没有当前验收证据。 | 等 T11/T18 稳定后拆市场条目、授权、统计和 UI 子任务。 |
 | T21 P3-C 大包拆分决策 | complete-gated | 文档已明确 P3-C 搁置拆分；无代码实现要求。 | 后续新增 P3-C 子方向时必须单独决策。 |
 | T22 手机端降级保护 | complete-gated | `client:package:plan` 和 `client:verify:architecture` 通过，当前 package plan 不包含 mobile 默认构建。 | 持续阻断 mobile 默认 CI/release。 |
@@ -172,9 +179,9 @@
 10. docs/FEATURE-PROFILES.md
 11. docs/TEST-FRAMEWORK.md
 
-当前客观状态：
-- 当前代码不能宣称完成全部规划任务。
-- 生产准入报告为 blocked：
+2026-06-04 原始客观状态：
+- 当时工作树不能宣称完成全部规划任务。
+- 2026-06-04 生产准入报告为 blocked：
   docs/reports/history/production-readiness/20260604T011942Z/report.md
 - P0 阻塞包括：
   1. architecture gate 缺 workspace.skill.list 资产治理 evidence。

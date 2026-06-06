@@ -96,15 +96,15 @@
       "id": "cloud-drive-sharing",
       "title": "云盘共享",
       "entry": "智能体 MCP",
-      "endpoint": "外部云盘上传 / 下载",
+      "endpoint": "iCloud / OneDrive 本机目录投影上传 / 下载；远端 OAuth 云盘后续适配",
       "document": "06-cloud-drive-sharing.md",
       "chain": [
         "智能体 MCP",
         "cloud drive operation",
         "身份、workspace 与云盘授权裁决",
-        "外部云盘 adapter",
-        "上传文件到外部云盘",
-        "从外部云盘下载文件",
+        "iCloud / OneDrive 本机目录投影 adapter",
+        "上传文件到受控本机同步目录投影",
+        "从受控本机同步目录投影下载文件",
         "provider receipt / audit / trace"
       ]
     },

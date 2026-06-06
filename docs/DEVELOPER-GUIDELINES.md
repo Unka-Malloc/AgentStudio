@@ -1,5 +1,12 @@
 # Developer Guidelines
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Developer Guidelines.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 本文档汇总了 Pact 项目的核心开发守则。作为架构说明的补充，它指导所有参与开发的工程师在进行代码编写、重构或设计时应遵循的最高原则。
 
 这些守则是为了防止“过早优化”带来的运维负担，并在保证系统安全、可审计的前提下，让系统能够从早期的小型实验环境平滑扩展到企业级生产环境。

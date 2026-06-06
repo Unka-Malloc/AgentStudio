@@ -1,10 +1,17 @@
 # Ordered Implementation Tasks
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current implementation ordering and acceptance index
+- Scope: Ordered Implementation Tasks.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 日期：2026-06-03
 
 用途：把已拍板的 P0/P1/P2/P3/S 系列事项整理成一份执行顺序清单。本文是当前任务排序和验收口径；早期讨论、Checklist 和解释文档已归档到 `docs/reports/history/`。
 
-当前代码完成度评估见 `docs/reports/CURRENT-IMPLEMENTATION-ASSESSMENT-2026-06-04.md`。截至 2026-06-04，当前代码不能宣称已完成全部规划任务，生产准入状态为 `blocked`。
+2026-06-06 复核：`docs/reports/history/v001-readiness/20260606T121950Z/report.md` 和 `docs/reports/history/production-readiness/20260606T122049Z/report.md` 均为 `pass`。当前可声明的是 v0.0.1 单机可交付基线、iCloud / OneDrive 本机目录投影 verified，以及缺真实凭据 provider 的 contractVerified；不能声明 OneDrive OAuth / Microsoft Graph remote-live 已完成，也不能声明 95% 全局覆盖率已闭环。2026-06-04 的 blocked 评估见 `docs/reports/CURRENT-IMPLEMENTATION-ASSESSMENT-2026-06-04.md`，只作为历史上下文。
 
 全量子任务的正式软件设计说明书见 `docs/reports/DETAILED-SUBTASK-SPECS-2026-06-04.md`。该文档按 SDS 结构维护功能改造点、验收目标、接口设计、数据设计、安全设计、验证设计和变更控制。本文中的“单功能子任务切片”只作为索引，不再作为可直接派发的完整规格。
 

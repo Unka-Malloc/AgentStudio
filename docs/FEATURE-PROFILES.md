@@ -1,5 +1,12 @@
 # Feature Profiles
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Feature Profiles.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 Feature profiles are defined in `server/platform/interactive/features/feature-manifest.mjs`.
 
 ## Product Preset Lines

@@ -1,5 +1,12 @@
 # Pact MCP 发布版安装
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Pact MCP 发布版安装.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 Pact MCP 以 GitHub Release connector 包分发。普通用户不需要克隆 Pact 仓库。如果机器已经安装 Node.js 20+，一行安装脚本会使用体积较小的源码包；如果没有 Node.js，则回退到自带运行时的便携包。
 
 ## 一行命令

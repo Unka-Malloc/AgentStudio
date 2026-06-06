@@ -1,7 +1,13 @@
 # ACP Agent Relay Design
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: ACP Agent Relay Design.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 **Status:** Phase 1 governed relay implementation under verification  
-**Updated:** 2026-06-06  
 **Scope:** Design plus governed source-facing ACP stdio, outbound ACP stdio, downstream MCP/ACP agent framework adapter assembly, and Antigravity Agent API/Connect verification paths. Native third-party ACP transports beyond stdio remain contract-mode until verified.  
 **Decision record:** [ADR 0001 - Govern Agent-to-Agent ACP Delegation Through Pact](./adr/0001-govern-agent-to-agent-acp-delegation-through-pact.md)
 

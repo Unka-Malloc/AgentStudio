@@ -1,5 +1,12 @@
 # Pact Architecture / Software Design Specification
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Pact Architecture / Software Design Specification.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 审计日期：2026-05-21。本文是 Pact 的总架构基线和软件设计说明书。
 
 ## 目录 / Table of Contents

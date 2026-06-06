@@ -1,7 +1,13 @@
 # Agent Client Support Targets
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Agent Client Support Targets.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 **Status:** Decided  
-**Updated:** 2026-06-03
 
 Pact's first-class agent client support targets are fixed:
 

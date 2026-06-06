@@ -1,5 +1,12 @@
 # Pact Server
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Pact Server.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 `server` 是当前唯一受维护的服务端实现。本文档记录服务端的启动方式、配置文件、接口、存储结构、挂载机制与运维能力。
 
 ## 目录 / Table of Contents

@@ -1,5 +1,12 @@
 # Pact Unified Test Framework
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Pact Unified Test Framework.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 Pact has server runtime code, a Vue server console, a Flutter desktop client,
 Rust native client binaries, platform adapters, and external document/mail
 evaluation corpora. The test framework is intentionally layered instead of tied

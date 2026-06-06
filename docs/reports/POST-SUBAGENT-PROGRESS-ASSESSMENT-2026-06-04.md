@@ -1,5 +1,12 @@
 # Post Subagent Progress Assessment
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Superseded assessment retained for planning context
+- Scope: Post Subagent Progress Assessment.
+- Staleness check: Scanned on 2026-06-06; older blocked/readiness statements are historical context and are superseded by docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 评估日期：2026-06-04  
 评估范围：本轮主线程与子智能体批次后的任务闭环状态  
 结论级别：事实复核，不作超出门禁证据的完成承诺

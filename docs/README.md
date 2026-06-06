@@ -1,5 +1,12 @@
 # Pact Docs
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: Pact Docs.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 > Documentation index for Pact — a controllable agent collaboration space.
 >
 > Pact 文档索引 — 可控的智能体协作空间。
@@ -121,5 +128,9 @@ graph LR
   *Legacy design documents with remaining value must be merged as a section of a core document, then deleted.*
 - 操作说明、命令说明、配置说明可以保留为运行支持文档，但不得承载新的架构决策。
   *Operational docs may contain instructions and configurations, but must not carry new architectural decisions.*
+- 非历史 Markdown 文档的标题后第一个二级章节必须是 `## Metadata / 元数据`，并包含提交日的 `Last updated`、状态、范围和 stale scan 说明；提交前运行 `npm run server:verify:docs-governance`。
+  *Every non-history Markdown file must put `## Metadata / 元数据` immediately after the title with commit-day `Last updated`, status, scope, and stale-scan notes; run `npm run server:verify:docs-governance` before committing.*
 - 生成物不进入 `docs/`。需要长期维护的图必须放在 `docs/architecture/` 作为可审阅源文件；历史进度、总结、审计、缺口、缺陷和阶段计划统一放在 `docs/reports/history/`，长期结论必须回写到核心设计文档或运行支持文档。
   *Generated artifacts do not belong in `docs/`. Long-lived diagrams must live under `docs/architecture/` as reviewable source files; historical progress, summary, audit, gap, defect, and phase-plan documents live under `docs/reports/history/`, and long-lived conclusions must be merged back into core or operational docs.*
+- 历史目录不强制刷新逐篇元数据；但每次提交前必须生成当日 `docs/reports/history/Summary-YYYY-MM-DD.md`，并列出全部历史 Markdown 来源。
+  *History files are exempt from per-file metadata refresh; each commit must generate `docs/reports/history/Summary-YYYY-MM-DD.md` for the day and list every historical Markdown source.*

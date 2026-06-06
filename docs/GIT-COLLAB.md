@@ -1,5 +1,12 @@
 # GitHub 协作约定
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-06
+- Status: Current maintained document
+- Scope: GitHub 协作约定.
+- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+
 这个仓库现在按“源码仓”管理，只允许这些内容进入 Git：
 
 - 源代码
