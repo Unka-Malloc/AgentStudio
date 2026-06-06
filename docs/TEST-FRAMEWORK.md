@@ -200,7 +200,8 @@ node tests/run.mjs --tag security
 - `client:verify:architecture` checks the destructive desktop-client boundary:
   only six product modules, future package profile, first target adapters, no
   default legacy daemon/connector/mail/graph/upload package, no old CLI main
-  command set, and legacy code outside the default Rust source path.
+  command set, legacy code outside the default Rust source path, and zero
+  `unsafe` occurrences anywhere under the Rust CLI source tree.
 - `client:verify:plan` checks that docs, package scripts, and `tests/run.mjs`
   agree on the client verifier set, and that deferred Skill Hub protocol work is
   not marked complete.

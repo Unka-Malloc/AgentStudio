@@ -138,6 +138,7 @@ const defaultGuiSurfacePaths = [
   "client-gui/lib/src/ui/target_card.dart"
 ];
 const defaultGuiMaxLines = 260;
+const rustCliRoot = "client-cli";
 
 const failures = [];
 
@@ -200,6 +201,32 @@ function collectEnumValues(source, enumName) {
     .map((item) => item.trim())
     .filter(Boolean)
     .map((item) => item.split(/\s|\(/)[0]);
+}
+
+async function collectRustUnsafeFiles(relativeRoot) {
+  const absoluteRoot = path.join(repoRoot, relativeRoot);
+  const unsafeFiles = [];
+
+  async function walk(relativeDir = "") {
+    const items = await fs.readdir(path.join(absoluteRoot, relativeDir), { withFileTypes: true });
+    for (const item of items) {
+      if (item.name === "target") {
+        continue;
+      }
+      const child = relativeDir ? `${relativeDir}/${item.name}` : item.name;
+      if (item.isDirectory()) {
+        await walk(child);
+      } else if (item.isFile() && child.endsWith(".rs")) {
+        const content = await fs.readFile(path.join(absoluteRoot, child), "utf8");
+        if (/(^|[^A-Za-z0-9_])unsafe([^A-Za-z0-9_]|$)/.test(content)) {
+          unsafeFiles.push(`${relativeRoot}/${child}`);
+        }
+      }
+    }
+  }
+
+  await walk();
+  return unsafeFiles.sort();
 }
 
 const packaging = await readJson("client-gui/packaging.modules.json");
@@ -267,6 +294,12 @@ for (const token of forbiddenCliScopes) {
 for (const token of ["targets scan", "mcp config plan", "mcp plugin status", "forward --profile", "agents pair"]) {
   assert(cliSource.includes(token), `pact-client usage must expose future command: ${token}`);
 }
+
+const rustCliUnsafeFiles = await collectRustUnsafeFiles(rustCliRoot);
+assert(
+  rustCliUnsafeFiles.length === 0,
+  `Rust CLI source path must not contain unsafe: ${rustCliUnsafeFiles.join(", ")}`
+);
 
 for (const relativePath of legacyGuiSourcePaths) {
   assert(!(await exists(relativePath)), `${relativePath} must not remain in the default GUI source path`);

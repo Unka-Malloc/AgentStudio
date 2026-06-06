@@ -841,7 +841,6 @@ dependencies = [
  "fs2",
  "icu_segmenter",
  "interprocess",
- "libc",
  "log",
  "mime_guess",
  "notify",

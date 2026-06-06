@@ -5625,7 +5625,12 @@ fn process_is_running(pid: u32) -> bool {
     }
     #[cfg(unix)]
     {
-        unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
+        Command::new("kill")
+            .arg("-0")
+            .arg(pid.to_string())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
     }
     #[cfg(not(unix))]
     {
@@ -5639,9 +5644,7 @@ fn terminate_process(pid: u32) {
     }
     #[cfg(unix)]
     {
-        unsafe {
-            libc::kill(pid as libc::pid_t, libc::SIGTERM);
-        }
+        let _ = Command::new("kill").arg("-TERM").arg(pid.to_string()).status();
     }
 }
 
@@ -8727,14 +8730,14 @@ mod tests {
     fn task_cancel_command_creates_cancel_marker() {
         let (dir, backend) = make_backend("task-cancel");
         let value = backend
-            .execute_method("task.cancel", json!({ "taskId": "unsafe/../task" }), None)
+            .execute_method("task.cancel", json!({ "taskId": "blocked/../task" }), None)
             .unwrap();
 
         assert_eq!(value["cancelled"], true);
-        assert!(backend.is_task_cancelled("unsafe/../task"));
+        assert!(backend.is_task_cancelled("blocked/../task"));
         assert!(backend
             .cancelled_tasks_dir()
-            .join("unsafe..task.cancel")
+            .join("blocked..task.cancel")
             .exists());
         cleanup(&dir);
     }
