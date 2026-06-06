@@ -17,7 +17,7 @@ import {
   CONTEXT_RUNTIME_PROTOCOL_VERSION,
   createContextRuntime,
   estimateTokens,
-} from "../../../server/platform/specialized/agent/agent-context/context-core/index.mjs";
+} from "../../../server/platform/specialized/agent/agent-context/interface/index.mjs";
 
 const tempRoots = [];
 let activeCompactionRuntime = null;

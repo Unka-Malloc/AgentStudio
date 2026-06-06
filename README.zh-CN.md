@@ -24,8 +24,10 @@
 已有本地 AI 智能体？一行命令即可将其接入 Pact：
 
 ```bash
-npx pact-mcp-connector@latest register
+npm run mcp:register
 ```
+
+连接器发布到 npm 或 GitHub Releases 后，可使用 [mcp-connector/README.md](mcp-connector/README.md) 中记录的发布通道命令。
 
 > 通过 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 支持：OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf。
 
@@ -136,10 +138,10 @@ npm run start:all
 一行命令将任意兼容的本地 AI 智能体接入 Pact：
 
 ```bash
-npx pact-mcp-connector@latest register
+npm run mcp:register
 ```
 
-*(更多配置选项请参考 [mcp-connector/README.md](mcp-connector/README.md))*
+*(源码 checkout、npm 和 GitHub Release 安装选项请参考 [mcp-connector/README.md](mcp-connector/README.md)。)*
 
 ### CLI 快速交互
 

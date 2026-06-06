@@ -25,7 +25,7 @@ For normal local installs, it also requests a Tool Management grant token from
 the verified Pact service. Users do not need to manually copy
 `PACT_MCP_TOKEN`.
 
-For npm-based installs:
+For npm-based installs after the package is published:
 
 ```bash
 npx pact-mcp-connector@latest register

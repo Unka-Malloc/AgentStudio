@@ -2,10 +2,10 @@ name: CI
 
 on:
   push:
-    branches: ["main", "develop", "release/**"]
+    branches: ["main", "develop", "nightly", "release/**"]
     tags: ["v*"]
   pull_request:
-    branches: ["main", "develop", "release/**"]
+    branches: ["main", "develop", "nightly", "release/**"]
   workflow_dispatch:
     inputs:
       run_acp_agent_relay_real:
@@ -290,7 +290,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs: [ci-required]
-    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/nightly' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx

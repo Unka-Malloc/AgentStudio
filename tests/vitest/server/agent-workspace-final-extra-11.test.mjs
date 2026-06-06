@@ -21,7 +21,7 @@ import {
 import {
   CONTEXT_RUNTIME_PROTOCOL_VERSION,
   createContextRuntime
-} from "../../../server/platform/specialized/agent/agent-context/context-core/index.mjs";
+} from "../../../server/platform/specialized/agent/agent-context/interface/index.mjs";
 
 function sha256(value = "") {
   return crypto.createHash("sha256").update(value).digest("hex");

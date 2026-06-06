@@ -24,8 +24,10 @@ English | [简体中文](README.zh-CN.md)
 Already have a local AI agent? Connect it to Pact instantly:
 
 ```bash
-npx pact-mcp-connector@latest register
+npm run mcp:register
 ```
+
+After the connector package is published to npm or GitHub Releases, use the release channel documented in [mcp-connector/README.md](mcp-connector/README.md).
 
 > Supports OpenClaw, Claude Code, Codex, Gemini CLI, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, and Windsurf via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
@@ -136,10 +138,10 @@ Once running, access the management console at `http://127.0.0.1:7228`.
 Connect any compatible local AI agent to Pact with a single command:
 
 ```bash
-npx pact-mcp-connector@latest register
+npm run mcp:register
 ```
 
-*(See [mcp-connector/README.md](mcp-connector/README.md) for detailed configuration options)*
+*(See [mcp-connector/README.md](mcp-connector/README.md) for source checkout, npm, and GitHub Release installation options.)*
 
 ### CLI Interactions
 

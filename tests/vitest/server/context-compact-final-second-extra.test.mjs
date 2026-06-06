@@ -8,7 +8,7 @@ import {
   createContextCompactionRuntime,
   estimateContextTokens,
   redactCompactionValue
-} from "../../../server/platform/specialized/agent/agent-context/context-compact/index.mjs";
+} from "../../../server/platform/specialized/agent/agent-context/interface/index.mjs";
 
 const tempRoots = [];
 

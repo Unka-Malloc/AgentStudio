@@ -10,7 +10,7 @@ import {
 import {
   CONTEXT_COMPACTION_PROTOCOL_VERSION,
   createContextCompactionRuntime
-} from "../../../server/platform/specialized/agent/agent-context/context-compact/index.mjs";
+} from "../../../server/platform/specialized/agent/agent-context/interface/index.mjs";
 
 const tempRoots = [];
 

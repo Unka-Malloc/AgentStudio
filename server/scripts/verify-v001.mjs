@@ -379,6 +379,18 @@ async function main() {
       commands: [["npm", "run", "server:verify:v001-cloud-drive-e2e", "--silent"]]
     },
     {
+      id: "release-governance",
+      title: "Phase 5 recent release governance gates",
+      verificationMode: "verified",
+      commands: [
+        ["npm", "run", "server:verify:context-runtime", "--silent"],
+        ["npm", "run", "server:verify:authorization-capabilities", "--silent"],
+        ["npm", "run", "server:verify:feature-profiles", "--silent"],
+        ["npm", "run", "server:verify:agent-client-support-targets", "--silent"],
+        ["npm", "run", "server:verify:frontend-feature-registry", "--silent"]
+      ]
+    },
+    {
       id: "release-crosscutting",
       title: "Phase 5 crosscutting registry and UI build",
       verificationMode: "verified",
