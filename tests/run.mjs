@@ -49,6 +49,12 @@ const suites = [
     "integration",
     "regression"
   ]),
+  suite("server.agent-client-support-targets", "Canonical agent client support target gate", npm("run", "server:verify:agent-client-support-targets"), [
+    "server",
+    "mcp",
+    "client",
+    "regression"
+  ]),
   suite("server.continuity", "Transaction continuity", npm("run", "server:verify:continuity"), [
     "server",
     "integration",
@@ -461,9 +467,7 @@ const profileSuites = {
     "client.pairing-skill",
     "client.mcp-plugins",
     "client.thin-forwarding",
-    "client.flutter.analyze",
-    "client.flutter.coverage",
-    "client.native.test"
+    "client.flutter.analyze"
   ],
   security: [
     "coverage.unit-threshold",

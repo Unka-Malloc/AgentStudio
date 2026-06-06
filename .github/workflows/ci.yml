@@ -20,6 +20,7 @@ on:
         description: "Also require Codex CLI participation plus Codex downstream target gates"
         type: boolean
         default: false
+
 permissions:
   contents: read
 
@@ -363,9 +364,19 @@ jobs:
       - name: Fail if any required job failed
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
         run: |
-          cat <<'JSON'
-          ${{ toJson(needs) }}
-          JSON
+          echo "Required CI gate failed."
+          echo "${{ toJson(needs) }}" | jq -r '
+            to_entries
+            | map(
+              select(
+                .value.result == "failure"
+                or .value.result == "cancelled"
+                or .value.result == "skipped"
+              )
+              | "\(.key): \(.value.result)"
+            )
+            | .[]
+          '
           exit 1
       - name: Required CI passed
         run: echo "All required CI gates passed."

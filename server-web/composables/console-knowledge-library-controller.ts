@@ -31,7 +31,7 @@ type KnowledgeLibraryControllerOptions = {
 
 export function createConsoleKnowledgeLibraryController(options: KnowledgeLibraryControllerOptions) {
   const knowledgeBackendSpacesResult = ref<Record<string, unknown> | null>(null);
-  const knowledgeLibraryBusy = ref("");
+  const knowledgeLibraryBusy = ref("spaces");
   const knowledgeLibraryError = ref("");
   const knowledgeBackendProviderOptions = [
     { value: "dify", label: "Dify" },
@@ -124,6 +124,7 @@ export function createConsoleKnowledgeLibraryController(options: KnowledgeLibrar
     } catch (caught) {
       knowledgeLibraryError.value = caught instanceof Error ? caught.message : String(caught);
     } finally {
+      setKnowledgeIngestTargetValues(knowledgeIngestTargetValues.value);
       knowledgeLibraryBusy.value = "";
     }
   }

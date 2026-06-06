@@ -26,4 +26,4 @@ HOST_PORT="${HOST_PORT:-8788}"
   -p "127.0.0.1:${HOST_PORT}:8788" \
   "$IMAGE_TAG"
 
-printf 'External HTTP fake service: http://127.0.0.1:%s\n' "$HOST_PORT"
+printf 'External HTTP fixture service: http://127.0.0.1:%s\n' "$HOST_PORT"

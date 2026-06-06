@@ -183,6 +183,39 @@ mod tests {
         assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
     }
 
+    #[test]
+    fn mcp_plugins_target_positionals_and_dry_run_supports_config_plan() {
+        let result = plugin_update(&json!({
+            "positionals": ["opencode", "plan"],
+            "dryRun": true,
+            "stateRoot": temp_test_dir("positionals").join("future-client").to_string_lossy(),
+        }))
+        .unwrap();
+        assert_eq!(result["status"], "planned");
+        assert_eq!(result["plan"]["status"], "planned");
+    }
+
+    #[test]
+    fn mcp_plugins_respects_plan_string_toggle() {
+        let result = plugin_update(&json!({
+            "target": "opencode",
+            "plan": "on",
+            "stateRoot": temp_test_dir("plan-string").join("future-client").to_string_lossy(),
+        }))
+        .unwrap();
+        assert_eq!(result["status"], "planned");
+        assert_eq!(result["plan"]["plan"]["operation"], "mcp.config.apply");
+    }
+
+    #[test]
+    fn mcp_plugins_status_accepts_positionals_target() {
+        let status = plugin_status(&json!({
+            "positionals": ["opencode"]
+        }))
+        .unwrap();
+        assert!(status["status"] == "configured" || status["status"] == "not-configured");
+    }
+
     fn temp_test_dir(name: &str) -> PathBuf {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)

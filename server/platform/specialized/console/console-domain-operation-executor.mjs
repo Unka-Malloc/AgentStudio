@@ -19,7 +19,8 @@ import {
 import { executeRepoOperation } from "../capabilities/code-repository/repo-operations/index.mjs";
 import {
   downloadRuntimeDependency,
-  listRuntimeDependencies
+  listRuntimeDependencies,
+  updateRuntimeDependencyConfiguration
 } from "../capabilities/runtime-dependencies/index.mjs";
 import { getCodexOAuthStatus, startCodexDeviceLogin } from "../../common/security/auth/codex-oauth-service.mjs";
 import { buildProductionHealthReport } from "../../common/production-readiness/report-reader.mjs";
@@ -4572,6 +4573,7 @@ async function executeStrategyManagementOperation({ operationId, input = {}, con
     "strategy.describe",
     "strategy.workflow_policy.evaluate",
     "strategy.agent_policy.evaluate",
+    "strategy.route_policy.evaluate",
     "strategy.tool_policy.preview"
   ]);
   if (!handledOperations.has(id)) {
@@ -4589,6 +4591,9 @@ async function executeStrategyManagementOperation({ operationId, input = {}, con
   }
   if (id === "strategy.agent_policy.evaluate") {
     return result(200, strategyManagementProvider.evaluateAgentPolicy(input));
+  }
+  if (id === "strategy.route_policy.evaluate") {
+    return result(200, strategyManagementProvider.evaluateRoutePolicy(input));
   }
   if (id === "strategy.tool_policy.preview") {
     return result(200, {
@@ -5623,6 +5628,7 @@ async function executeKnowledgeDistillationWorkflowOperation({ operationId, inpu
   const handledOperations = new Set([
     "knowledge.distillation.runs.create",
     "knowledge.distillation.runs.get",
+    "knowledge.distillation.export",
     "knowledge.distillation.workbench.runs.list",
     "knowledge.distillation.workbench.runs.create",
     "knowledge.distillation.workbench.runs.get",
@@ -5633,6 +5639,7 @@ async function executeKnowledgeDistillationWorkflowOperation({ operationId, inpu
     "knowledge.distillation.workbench.stage.rerun",
     "knowledge.distillation.workbench.stage.export",
     "knowledge.distillation.workbench.runs.package",
+    "knowledge.distillation.workbench.runs.artifacts",
     "knowledge.distillation.workbench.runs.compare"
   ]);
   if (!handledOperations.has(id)) {
@@ -7118,6 +7125,17 @@ async function executeRuntimeDependencyOperation({ operationId, input, context }
       return result(400, errorPayload(error, "Runtime dependency download failed."));
     }
   }
+  if (operationId === "runtime.dependencies.configure") {
+    try {
+      const operationResult = await updateRuntimeDependencyConfiguration({
+        ...input,
+        userDataPath: context.userDataPath
+      });
+      return result(200, operationResult);
+    } catch (error) {
+      return result(400, errorPayload(error, "Runtime dependency configuration update failed."));
+    }
+  }
   return null;
 }
 
@@ -7148,8 +7166,8 @@ export async function executeConsoleDomainOperation({ operationId, input = {}, c
     executeWorkspaceAuditOperation,
     executeAgentSyncOperation,
     executeToolManagementAuthorizationOperation,
-    executeStrategyManagementOperation,
     executeAcpAgentRelayRuntimeOperation,
+    executeStrategyManagementOperation,
     executeToolManagementPassthroughOperation,
     executeRuntimeMountOperation,
     executeDiscoveryOperation,

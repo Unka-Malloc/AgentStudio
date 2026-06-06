@@ -49,7 +49,7 @@ TUI 操作：
 
 安装完成后，connector 会输出精简安装报告，包括已验证 MCP URL、所选客户端、每个客户端的成功或失败状态、token 来源和验证状态。它不会把客户端配置文件完整打印出来。只有脚本需要机器可读详情时才使用 `--json`。
 
-支持的 target 是 `codex`、`claude-code`、`gemini-cli`、`kilo-code`、`copilot`、`openclaw`、`hermes`、`antigravity` 和 `opencode`。OpenClaw 兼容的 OrbStack 智能体，例如 IronClaw 或 ZeroClaw，会通过同一套 Claw-compatible 扫描发现。
+支持的 target 是 OpenClaw（`openclaw`）、Claude Code（`claude-code`）、Codex（`codex`）、Gemini CLI（`gemini-cli`）、Antigravity（`antigravity`）、OpenCode（`opencode`）、Copilot（`copilot`）、Kilo Code（`kilo-code`）、Cursor（`cursor`）、Hermes Agent（`hermes`）和 Windsurf（`windsurf`）。OpenClaw 兼容的 OrbStack 智能体，例如 IronClaw 或 ZeroClaw，会通过同一套 Claw-compatible 扫描发现。
 
 ## 选项
 
@@ -81,19 +81,20 @@ PACT_MCP_INSTALL_DIR="$HOME/.local/share/pact-mcp" \
 
 `auto` 会安装 connector 能验证到的所有受支持客户端。没有 TTY 且未传
 `--target` 的 `pact-mcp install` 也会走同一条自动检测路径，避免智能体脚本
-因为缺少交互菜单而直接失败。需要先限制到重点智能体客户端时，使用
+因为缺少交互菜单而直接失败。确实需要先限制到重点智能体客户端时，使用
 `--target claude-code,codex,openclaw --json`。
 
 如果智能体需要一条可直接复制执行的 GitHub Release 命令，使用无人值守
-auto target 形态。它会覆盖 Codex、Claude Code、OpenClaw 以及 connector
-能验证到的所有其它受支持客户端：
+auto target 形态。它会覆盖 OpenClaw、Claude Code、Codex、Gemini CLI、
+Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf
+以及 connector 能验证到的所有其它受支持客户端：
 
 ```bash
 /bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)" -- --target auto --json
 ```
 
 如果已知要安装的单一客户端，把 `<client>` 替换成任意受支持 target，例如
-`claude-code`、`codex`、`openclaw`、`opencode`、`gemini-cli` 或 `hermes`：
+`openclaw`、`claude-code`、`codex`、`gemini-cli`、`antigravity`、`opencode`、`copilot`、`kilo-code`、`cursor`、`hermes` 或 `windsurf`：
 
 ```bash
 /bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.zh-CN.sh)" -- --target <client> --json

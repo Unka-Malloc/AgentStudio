@@ -63,13 +63,21 @@ export const EXTERNAL_SERVICE_MCP_TRANSPORT = Object.freeze({
   STDIO: "stdio"
 });
 export const EXTERNAL_SERVICE_MCP_TRANSPORT_VALUES = Object.freeze(Object.values(EXTERNAL_SERVICE_MCP_TRANSPORT));
+export const EXTERNAL_SERVICE_ACP_TRANSPORT = Object.freeze({
+  STDIO: "stdio",
+  HTTP: "http",
+  STREAMABLE_HTTP: "streamable-http",
+  WEBSOCKET: "websocket"
+});
+export const EXTERNAL_SERVICE_ACP_TRANSPORT_VALUES = Object.freeze(Object.values(EXTERNAL_SERVICE_ACP_TRANSPORT));
 export const EXTERNAL_SERVICE_BINDING_MODE = Object.freeze({
   PASSTHROUGH: "passthrough",
   COMPILE: "compile"
 });
 export const EXTERNAL_SERVICE_BINDING_MODE_VALUES = Object.freeze(Object.values(EXTERNAL_SERVICE_BINDING_MODE));
 export const EXTERNAL_SERVICE_BINDING_OUTLET = Object.freeze({
-  SKILL_HUB: "pact.skillHub"
+  SKILL_HUB: "pact.skillHub",
+  AGENT_RELAY: "pact.agentRelay"
 });
 export const EXTERNAL_SERVICE_BINDING_OUTLET_VALUES = Object.freeze(Object.values(EXTERNAL_SERVICE_BINDING_OUTLET));
 export const EXTERNAL_SERVICE_RISK = Object.freeze({
@@ -458,11 +466,17 @@ function normalizeUpstream(raw) {
     };
   }
   if (type === EXTERNAL_SERVICE_UPSTREAM_TYPE.ACP) {
+    const transport = enumValue(
+      input.transport,
+      EXTERNAL_SERVICE_ACP_TRANSPORT_VALUES,
+      EXTERNAL_SERVICE_ACP_TRANSPORT.STDIO
+    );
     return {
       ...input,
       type,
       url: String(input.url || "").trim(),
-      transport: String(input.transport || "http").trim(),
+      transport,
+      command: normalizeCommand(input.command),
       timeoutMs: input.timeoutMs === undefined ? null : Number(input.timeoutMs),
       metadata: asObject(input.metadata)
     };
@@ -634,6 +648,27 @@ export async function validateExternalServiceConfig({
       }
       if (transport === EXTERNAL_SERVICE_MCP_TRANSPORT.STDIO && !config.upstream.command?.executable) {
         errors.push("External MCP stdio upstream requires upstream.command.executable.");
+      }
+    } else if (config.upstream.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.ACP) {
+      const transport = String(config.upstream.transport || "").trim();
+      if (!EXTERNAL_SERVICE_ACP_TRANSPORT_VALUES.includes(transport)) {
+        errors.push(`External ACP upstream transport is not supported: ${transport}.`);
+      }
+      if (transport === EXTERNAL_SERVICE_ACP_TRANSPORT.STDIO) {
+        if (!config.upstream.command?.executable) {
+          errors.push("External ACP stdio upstream requires upstream.command.executable.");
+        }
+      } else {
+        const upstreamUrl = String(config.upstream.url || "").trim();
+        if (!upstreamUrl) {
+          errors.push(`External ACP ${transport || "remote"} upstream requires upstream.url.`);
+        } else if (isHttpUrlText(upstreamUrl)) {
+          try {
+            parseExplicitHttpUrl(upstreamUrl, "upstream.url");
+          } catch (error) {
+            errors.push(error instanceof Error ? error.message : String(error));
+          }
+        }
       }
     } else if (config.upstream.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.CLOUD_DRIVE) {
       const providers = uniqueStrings([

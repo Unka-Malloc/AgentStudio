@@ -176,7 +176,10 @@ def parse_args() -> argparse.Namespace:
         description="Find local AI-agent conversation history records related to Pact, splitall, and Agent Studio."
     )
     parser.add_argument("--project-root", default=os.getcwd(), help="Current Pact checkout path.")
-    parser.add_argument("--output-dir", help="Output directory. Defaults to ~/pact-history-miner/<timestamp>.")
+    parser.add_argument(
+        "--output-dir",
+        help="Output directory. Defaults to ~/.pact-agent-history/<timestamp>.",
+    )
     parser.add_argument("--root", action="append", default=[], help="Extra history root to scan. Can be repeated.")
     parser.add_argument("--term", action="append", default=[], help="Extra search term. Can be repeated.")
     parser.add_argument("--max-file-mb", type=float, default=256.0, help="Skip text files larger than this size.")
@@ -691,7 +694,8 @@ def ensure_output_dir(args: argparse.Namespace) -> Path:
     if args.output_dir:
         out_dir = normalize_path(args.output_dir)
     else:
-        out_dir = Path.home() / "pact-history-miner" / now_stamp()
+        # 默认落在工作区外，避免把 agent 历史放回项目目录；与外部数据目录约束保持一致。
+        out_dir = Path.home() / ".pact-agent-history" / now_stamp()
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
 
@@ -1194,8 +1198,6 @@ def main() -> int:
     project_root = normalize_path(args.project_root)
     args.after_ts = parse_local_time(args.after, "after")
     args.before_ts = parse_local_time(args.before, "before")
-    if args.archive_conversations and not args.output_dir:
-        args.output_dir = str(project_root / ".pact-agent-history")
     terms = unique_preserve_order(default_terms(project_root) + args.term)
     roots = discover_roots(project_root, args.root)
     stats = ScanStats()

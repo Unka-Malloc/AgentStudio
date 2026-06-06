@@ -49,7 +49,7 @@
       "gerritVersion": "3.14.0",
       "httpUrl": "http://localhost:18080/",
       "sshUrl": "ssh://localhost:29418",
-      "stateRoot": "build/local-data/gerrit",
+      "stateRoot": "ServerConfig.getDataDir()/runtime/runtime-dependencies/gerrit",
       "runner": "war-or-docker",
       "preferredRunner": "war",
       "jreRuntimeRoot": "server/platform/modules/knowledge/runtime/jre"

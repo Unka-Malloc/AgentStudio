@@ -21,13 +21,17 @@ class ManualTargetDialog extends StatefulWidget {
 
 class _ManualTargetDialogState extends State<ManualTargetDialog> {
   static const _targets = [
-    ('codex', 'Codex'),
-    ('opencode', 'OpenCode'),
     ('openclaw', 'OpenClaw'),
-    ('antigravity', 'Antigravity'),
-    ('cursor', 'Cursor'),
-    ('windsurf', 'Windsurf'),
+    ('claude-code', 'Claude Code'),
+    ('codex', 'Codex'),
     ('gemini-cli', 'Gemini CLI'),
+    ('antigravity', 'Antigravity'),
+    ('opencode', 'OpenCode'),
+    ('copilot', 'Copilot'),
+    ('kilo-code', 'Kilo Code'),
+    ('cursor', 'Cursor'),
+    ('hermes', 'Hermes Agent'),
+    ('windsurf', 'Windsurf'),
   ];
 
   final _configPathController = TextEditingController();
@@ -45,6 +49,7 @@ class _ManualTargetDialogState extends State<ManualTargetDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Add target'),
+      key: const Key('manual-target-dialog'),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -81,10 +86,15 @@ class _ManualTargetDialogState extends State<ManualTargetDialog> {
       ),
       actions: [
         TextButton(
+          key: const Key('manual-target-cancel'),
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Add target')),
+        FilledButton(
+          key: const Key('manual-target-submit'),
+          onPressed: _submit,
+          child: const Text('Add target'),
+        ),
       ],
     );
   }

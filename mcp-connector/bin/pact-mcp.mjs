@@ -135,15 +135,17 @@ const BOOTSTRAP_INSTALL_SCRIPT = "pact-mcp-install.sh";
 const BOOTSTRAP_INSTALL_SCRIPT_ZH_CN = "pact-mcp-install.zh-CN.sh";
 const HTTP_TIMEOUT_MS = 300000;
 const SUPPORTED_TARGETS = [
-  "codex",
-  "claude-code",
-  "gemini-cli",
-  "kilo-code",
-  "copilot",
   "openclaw",
-  "hermes",
+  "claude-code",
+  "codex",
+  "gemini-cli",
   "antigravity",
-  "opencode"
+  "opencode",
+  "copilot",
+  "kilo-code",
+  "cursor",
+  "hermes",
+  "windsurf"
 ];
 const PRIORITY_INSTALL_TARGETS = Object.freeze(["claude-code", "codex", "openclaw"]);
 const PRIORITY_INSTALL_TARGET = PRIORITY_INSTALL_TARGETS.join(",");
@@ -164,40 +166,47 @@ const TARGET_ALIASES = new Map([
   ["kilo_code", "kilo-code"],
   ["github-copilot", "copilot"],
   ["hermes-agent", "hermes"],
+  ["cursor-agent", "cursor"],
   ["open-code", "opencode"]
 ]);
 const TARGET_LABELS = {
-  codex: "Codex",
-  "claude-code": "Claude Code",
-  "gemini-cli": "Gemini CLI",
-  "kilo-code": "Kilo Code",
-  copilot: "Copilot",
   openclaw: "OpenClaw",
-  hermes: "Hermes Agent",
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  "gemini-cli": "Gemini CLI",
   antigravity: "Antigravity",
-  opencode: "OpenCode"
+  opencode: "OpenCode",
+  copilot: "Copilot",
+  "kilo-code": "Kilo Code",
+  cursor: "Cursor",
+  hermes: "Hermes Agent",
+  windsurf: "Windsurf"
 };
 const TARGET_INSTALL_MODES = {
-  codex: "codex-release-plugin-and-mcp-cli",
-  "claude-code": "claude-code-release-mcp-cli",
-  "gemini-cli": "gemini-release-mcp-cli",
-  "kilo-code": "kilo-release-global-kilo-json",
-  copilot: "copilot-release-mcp-cli",
   openclaw: "openclaw-release-mcp-cli",
-  hermes: "hermes-remote-mcp-cli",
+  "claude-code": "claude-code-release-mcp-cli",
+  codex: "codex-release-plugin-and-mcp-cli",
+  "gemini-cli": "gemini-release-mcp-cli",
   antigravity: "antigravity-release-mcp-config",
-  opencode: "opencode-release-mcp-config"
+  opencode: "opencode-release-mcp-config",
+  copilot: "copilot-release-mcp-cli",
+  "kilo-code": "kilo-release-global-kilo-json",
+  cursor: "cursor-release-mcp-config",
+  hermes: "hermes-remote-mcp-cli",
+  windsurf: "windsurf-release-mcp-config"
 };
 const TARGET_LOCATIONS = Object.freeze({
-  codex: ["local", "orbstack", "remote-linux"],
-  "claude-code": ["local", "orbstack", "remote-linux"],
-  "gemini-cli": ["local", "orbstack", "remote-linux"],
-  "kilo-code": ["local", "orbstack", "remote-linux"],
-  copilot: ["local", "orbstack", "remote-linux"],
   openclaw: ["local", "orbstack", "remote-linux"],
-  hermes: ["orbstack", "remote-linux"],
+  "claude-code": ["local", "orbstack", "remote-linux"],
+  codex: ["local", "orbstack", "remote-linux"],
+  "gemini-cli": ["local", "orbstack", "remote-linux"],
   antigravity: ["local"],
-  opencode: ["local", "orbstack", "remote-linux"]
+  opencode: ["local", "orbstack", "remote-linux"],
+  copilot: ["local", "orbstack", "remote-linux"],
+  "kilo-code": ["local", "orbstack", "remote-linux"],
+  cursor: ["local"],
+  hermes: ["orbstack", "remote-linux"],
+  windsurf: ["local"]
 });
 const SCAN_COMMAND_TIMEOUT_MS = 3000;
 const REMOTE_SCAN_COMMAND_TIMEOUT_MS = 8000;
@@ -371,6 +380,8 @@ function usage() {
     "  --kilo-bin COMMAND            Kilo Code CLI command or explicit path. Default: kilo.",
     "  --copilot-bin COMMAND         Copilot CLI command or explicit path. Default: copilot.",
     "  --opencode-bin COMMAND         OpenCode CLI command or explicit path. Default: opencode.",
+    "  --cursor-config PATH           Cursor MCP settings path.",
+    "  --windsurf-config PATH         Windsurf MCP settings path.",
     "  --orb-bin COMMAND             OrbStack CLI command or explicit path. Default: orb.",
     "  --docker-bin COMMAND          Docker CLI command or explicit path. Default: docker.",
     "  --podman-bin COMMAND          Podman CLI command or explicit path. Default: podman.",
@@ -489,6 +500,12 @@ function notDetectedTargetDetail(target) {
   }
   if (target === "antigravity") {
     return "Antigravity config path not found yet.";
+  }
+  if (target === "cursor") {
+    return "Cursor MCP config path not found yet. Pass --cursor-config with an explicit path.";
+  }
+  if (target === "windsurf") {
+    return "Windsurf MCP config path not found yet. Pass --windsurf-config with an explicit path.";
   }
   const descriptor = AGENT_CLI_TARGETS.find((item) => item.target === target);
   if (descriptor) {
@@ -2152,12 +2169,22 @@ async function installCopilotRemote({ baseUrl, token, context, copilotBin }) {
 }
 
 async function installAntigravity({ baseUrl, token, configPath }) {
+  return installMcpServersJsonConfig({
+    baseUrl,
+    token,
+    configPath,
+    installMode: "antigravity-release-mcp-config",
+    urlKey: "serverUrl"
+  });
+}
+
+async function installMcpServersJsonConfig({ baseUrl, token, configPath, installMode, urlKey = "url" }) {
   const config = await readJson(configPath, { mcpServers: {} });
   const backupPath = await backupIfExists(configPath);
   config.mcpServers = {
     ...(config.mcpServers || {}),
     [MCP_SERVER_NAME]: {
-      serverUrl: `${baseUrl}/mcp`,
+      [urlKey]: `${baseUrl}/mcp`,
       headers: {
         "X-Pact-Api-Key": token
       },
@@ -2166,7 +2193,7 @@ async function installAntigravity({ baseUrl, token, configPath }) {
   };
   await writeJson(configPath, config);
   return {
-    installMode: "antigravity-release-mcp-config",
+    installMode,
     configPath,
     backupPath
   };
@@ -2887,9 +2914,16 @@ async function uninstallCopilotRemote({ context, copilotBin }) {
 }
 
 async function uninstallAntigravity({ configPath }) {
+  return uninstallMcpServersJsonConfig({
+    configPath,
+    uninstallMode: "antigravity-release-mcp-config"
+  });
+}
+
+async function uninstallMcpServersJsonConfig({ configPath, uninstallMode }) {
   const removed = await removeNamedMcpEntry({ filePath: configPath, rootKey: "mcpServers" });
   return {
-    uninstallMode: "antigravity-release-mcp-config",
+    uninstallMode,
     configPath,
     backupPath: removed.backupPath,
     removedConfigEntry: removed.removed
@@ -4614,6 +4648,12 @@ async function candidateHasInstalledPactMcp(settings, candidate) {
   if (candidate.target === "antigravity") {
     return localJsonConfigHasPact(settings.antigravityConfigPath);
   }
+  if (candidate.target === "cursor") {
+    return localJsonConfigHasPact(settings.cursorConfigPath);
+  }
+  if (candidate.target === "windsurf") {
+    return localJsonConfigHasPact(settings.windsurfConfigPath);
+  }
   if (candidate.target === "opencode") {
     return candidateLocation(candidate) === "local"
       ? localJsonConfigHasPact(settings.opencodeConfigPath)
@@ -5141,13 +5181,24 @@ async function scanInstallTargets(options = {}) {
   }
   const antigravityConfigDir = path.dirname(settings.antigravityConfigPath);
   const antigravityDetected = await pathExists(settings.antigravityConfigPath) || await directoryExists(antigravityConfigDir);
-  candidates.push({
-    id: "antigravity",
-    target: "antigravity",
-    label: targetLabel("antigravity"),
-    status: antigravityDetected ? "detected" : "not-detected",
-    detail: antigravityDetected ? `config: ${settings.antigravityConfigPath}` : notDetectedTargetDetail("antigravity")
-  });
+  const cursorConfigDir = path.dirname(settings.cursorConfigPath);
+  const cursorDetected = await pathExists(settings.cursorConfigPath) || await directoryExists(cursorConfigDir);
+  const windsurfConfigDir = path.dirname(settings.windsurfConfigPath);
+  const windsurfDetected = await pathExists(settings.windsurfConfigPath) || await directoryExists(windsurfConfigDir);
+  for (const configTarget of [
+    ["antigravity", settings.antigravityConfigPath, antigravityDetected],
+    ["cursor", settings.cursorConfigPath, cursorDetected],
+    ["windsurf", settings.windsurfConfigPath, windsurfDetected]
+  ]) {
+    const [target, configPath, detected] = configTarget;
+    candidates.push({
+      id: target,
+      target,
+      label: targetLabel(target),
+      status: detected ? "detected" : "not-detected",
+      detail: detected ? `config: ${configPath}` : notDetectedTargetDetail(target)
+    });
+  }
   for (const target of SUPPORTED_TARGETS) {
     if (candidates.some((candidate) => candidate.target === target)) {
       continue;
@@ -5220,6 +5271,8 @@ function installerOptions(options) {
     kiloConfigPath: path.resolve(String(option(options, "kilo-config", path.join(os.homedir(), ".config", "kilo", "kilo.json")))),
     antigravityConfigPath: path.resolve(String(option(options, "antigravity-config", path.join(os.homedir(), ".gemini", "antigravity", "mcp_config.json")))),
     opencodeConfigPath: path.resolve(String(option(options, "opencode-config", path.join(os.homedir(), ".config", "opencode", "opencode.jsonc")))),
+    cursorConfigPath: path.resolve(String(option(options, "cursor-config", path.join(os.homedir(), "Library", "Application Support", "Cursor", "User", "globalStorage", "saoudrizwan.claude-dev", "settings", "cline_mcp_settings.json")))),
+    windsurfConfigPath: path.resolve(String(option(options, "windsurf-config", path.join(os.homedir(), ".codeium", "windsurf", "mcp_config.json")))),
     openclawVm: String(option(options, "openclaw-vm", sharedVmName)),
     openclawVmUser: String(option(options, "openclaw-user", sharedVmUser)),
     openclawBin: String(option(options, "openclaw-bin", "")),
@@ -5902,6 +5955,20 @@ async function installTargets({ options, targets, token, tokenInfo = null, optio
           token,
           configPath: settings.antigravityConfigPath
         });
+      } else if (target === "cursor") {
+        clientResult = await installMcpServersJsonConfig({
+          baseUrl: settings.baseUrl,
+          token,
+          configPath: settings.cursorConfigPath,
+          installMode: "cursor-release-mcp-config"
+        });
+      } else if (target === "windsurf") {
+        clientResult = await installMcpServersJsonConfig({
+          baseUrl: settings.baseUrl,
+          token,
+          configPath: settings.windsurfConfigPath,
+          installMode: "windsurf-release-mcp-config"
+        });
       } else if (target === "opencode") {
         clientResult = remoteContext
           ? await installOpenCodeRemote({
@@ -6283,6 +6350,16 @@ async function uninstallTargets({ options, targets, optionOverrides = {} }) {
       } else if (target === "antigravity") {
         uninstalled[target] = await uninstallAntigravity({
           configPath: settings.antigravityConfigPath
+        });
+      } else if (target === "cursor") {
+        uninstalled[target] = await uninstallMcpServersJsonConfig({
+          configPath: settings.cursorConfigPath,
+          uninstallMode: "cursor-release-mcp-config"
+        });
+      } else if (target === "windsurf") {
+        uninstalled[target] = await uninstallMcpServersJsonConfig({
+          configPath: settings.windsurfConfigPath,
+          uninstallMode: "windsurf-release-mcp-config"
         });
       } else if (target === "opencode") {
         uninstalled[target] = remoteContext

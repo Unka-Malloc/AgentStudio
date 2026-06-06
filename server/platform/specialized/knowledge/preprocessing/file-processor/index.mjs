@@ -469,6 +469,55 @@ function buildRouteExtractionWarning(name, fileType, route, error) {
   return `${name} 通过 ${routeLabel} 解析未完成：${message}`;
 }
 
+function createFailureReason({
+  reasonCode,
+  message,
+  sourceName = "",
+  sourcePath = "",
+  sourceKind = "",
+  parserId = "",
+  route = null,
+  details = {}
+} = {}) {
+  return {
+    reasonCode: String(reasonCode || "document_parse_failed").trim() || "document_parse_failed",
+    message: String(message || "文档解析失败。"),
+    sourceName: String(sourceName || ""),
+    sourcePath: String(sourcePath || ""),
+    sourceKind: String(sourceKind || ""),
+    parserId: String(parserId || ""),
+    route: route && typeof route === "object" && !Array.isArray(route)
+      ? {
+          mountName: String(route.mountName || ""),
+          action: String(route.action || ""),
+          matchedBy: String(route.matchedBy || "")
+        }
+      : null,
+    details: details && typeof details === "object" && !Array.isArray(details) ? details : {}
+  };
+}
+
+function createFailureError(message, reasonCode, failureReasons = []) {
+  const error = new Error(String(message || "文档解析失败。"));
+  error.reasonCode = String(reasonCode || "document_parse_failed");
+  error.failureReasons = Array.isArray(failureReasons) ? failureReasons : [];
+  return error;
+}
+
+function buildRouteExtractionFailureReason(name, fileType, route, error) {
+  return createFailureReason({
+    reasonCode: fileType === "image" ? "image_parse_failed" : "document_route_extraction_failed",
+    message: buildRouteExtractionWarning(name, fileType, route, error),
+    sourceName: name,
+    sourcePath: name,
+    sourceKind: fileType,
+    route,
+    details: {
+      error: error instanceof Error ? error.message : "未知错误"
+    }
+  });
+}
+
 function getMountedHandler(runtime, mountName = "") {
   return runtime?.mounts?.[mountName] || null;
 }
@@ -555,7 +604,11 @@ function normalizeDocumentParseResult(result, parserId = "") {
     embeddedDocuments,
     visualElements: asArray(result?.visualElements),
     warnings: asArray(result?.warnings).map((entry) => String(entry || "").trim()).filter(Boolean),
-    mediaType: String(result?.mediaType || metadata["Content-Type"] || "")
+    mediaType: String(result?.mediaType || metadata["Content-Type"] || ""),
+    failureReason:
+      result?.failureReason && typeof result.failureReason === "object" && !Array.isArray(result.failureReason)
+        ? result.failureReason
+        : null
   };
 }
 
@@ -733,6 +786,7 @@ async function tryExtractWithOcr({
       metadata: result.metadata || {},
       embeddedDocuments: result.embeddedDocuments || [],
       warnings: [],
+      failureReason: result.failureReason || null,
       attempted: true
     };
   } catch (error) {
@@ -742,6 +796,7 @@ async function tryExtractWithOcr({
       metadata: {},
       embeddedDocuments: [],
       warnings: [buildRouteExtractionWarning(name || filePath || "未命名文件", fileType, route, error)],
+      failureReason: buildRouteExtractionFailureReason(name || filePath || "未命名文件", fileType, route, error),
       attempted: true
     };
   }
@@ -1120,6 +1175,7 @@ async function parseStructuredInput({
     embeddedDocuments: document.embeddedDocuments || [],
     visualElements: document.visualElements || [],
     warnings,
+    failureReason: document.failureReason || null,
     ocrAttempted,
     ...normalizeConnectorSourceMetadata({
       providerId,
@@ -1438,6 +1494,34 @@ function buildEmptyContentWarning(parsed) {
   return `${parsed.name} 没有提取到可用内容，已跳过。`;
 }
 
+function buildEmptyContentFailureReason(parsed) {
+  const kind = String(parsed?.kind || "document").trim();
+  const looksLikePdf =
+    kind === "pdf" ||
+    String(parsed?.mediaType || "").toLowerCase() === "application/pdf" ||
+    String(parsed?.name || parsed?.path || "").toLowerCase().endsWith(".pdf");
+  const reasonCodeByKind = {
+    email: "email_body_not_extracted",
+    docx: "docx_no_text_extracted",
+    document: "document_no_text_extracted",
+    pdf: parsed?.ocrAttempted ? "pdf_ocr_no_text_extracted" : "pdf_no_text_extracted"
+  };
+  return createFailureReason({
+    reasonCode: looksLikePdf
+      ? (parsed?.ocrAttempted ? "pdf_ocr_no_text_extracted" : "pdf_no_text_extracted")
+      : (reasonCodeByKind[kind] || "no_usable_content_extracted"),
+    message: buildEmptyContentWarning(parsed),
+    sourceName: parsed?.name || "",
+    sourcePath: parsed?.path || "",
+    sourceKind: kind,
+    parserId: parsed?.documentParserId || parsed?.parserId || "",
+    details: {
+      ocrAttempted: parsed?.ocrAttempted === true,
+      mediaType: parsed?.mediaType || ""
+    }
+  });
+}
+
 async function collectSupportedFilesFromDirectory(
   directoryPath,
   collector,
@@ -1556,16 +1640,26 @@ async function loadInputFileManifest({ userDataPath, fileManifestPath }) {
   const files = Array.isArray(parsed.files) ? parsed.files : [];
   const fileEntries = [];
   const warnings = [];
+  const failureReasons = [];
   for (const file of files) {
     const rawAbsolutePath = String(file.absolutePath || "").trim();
     if (!rawAbsolutePath) {
-      warnings.push("知识源文件清单包含空路径，已跳过。");
+      const message = "知识源文件清单包含空路径，已跳过。";
+      warnings.push(message);
+      failureReasons.push(createFailureReason({ reasonCode: "manifest_empty_path", message, sourceKind: "manifest" }));
       continue;
     }
     const absolutePath = path.resolve(rawAbsolutePath);
     const relativePath = String(file.relativePath || path.basename(absolutePath)).replace(/\\/g, "/");
     if (!relativePath || relativePath.includes("../") || path.isAbsolute(relativePath)) {
-      warnings.push("知识源文件清单包含不安全路径，已跳过。");
+      const message = "知识源文件清单包含不安全路径，已跳过。";
+      warnings.push(message);
+      failureReasons.push(createFailureReason({
+        reasonCode: "manifest_unsafe_path",
+        message,
+        sourcePath: absolutePath,
+        sourceKind: "manifest"
+      }));
       continue;
     }
     fileEntries.push({
@@ -1577,6 +1671,7 @@ async function loadInputFileManifest({ userDataPath, fileManifestPath }) {
   return {
     fileEntries,
     warnings,
+    failureReasons,
     manifest: parsed
   };
 }
@@ -1663,29 +1758,38 @@ async function restoreSourcesFromImportCheckpoint({
       userDataPath,
       sources: entry.sources || []
     }),
-    warnings: Array.isArray(entry.warnings) ? entry.warnings : []
+    warnings: Array.isArray(entry.warnings) ? entry.warnings : [],
+    failureReasons: Array.isArray(entry.failureReasons) ? entry.failureReasons : []
   };
 }
 
-function appendUsableParsedEntries({ parsedEntries, sources, warnings }) {
+function appendUsableParsedEntries({ parsedEntries, sources, warnings, failureReasons }) {
   const acceptedSources = [];
   const entryWarnings = [];
+  const entryFailureReasons = [];
 
   for (const parsed of parsedEntries || []) {
     entryWarnings.push(...(parsed.warnings || []));
+    if (parsed.failureReason && typeof parsed.failureReason === "object") {
+      entryFailureReasons.push(parsed.failureReason);
+    }
 
     if (parsed.kind === "image" || parsed.text) {
       acceptedSources.push(parsed);
     } else {
-      entryWarnings.push(buildEmptyContentWarning(parsed));
+      const failureReason = buildEmptyContentFailureReason(parsed);
+      entryFailureReasons.push(failureReason);
+      entryWarnings.push(failureReason.message);
     }
   }
 
   warnings.push(...entryWarnings);
+  failureReasons.push(...entryFailureReasons);
   sources.push(...acceptedSources);
   return {
     acceptedSources,
-    entryWarnings
+    entryWarnings,
+    entryFailureReasons
   };
 }
 
@@ -1696,6 +1800,7 @@ async function appendCheckpointedInputSources({
   workItem,
   sources,
   warnings,
+  failureReasons,
   runtime,
   generatedAt,
   parse
@@ -1724,16 +1829,18 @@ async function appendCheckpointedInputSources({
   });
   if (restored) {
     warnings.push(...restored.warnings);
+    failureReasons.push(...(restored.failureReasons || []));
     sources.push(...restored.sources);
     await publishIncrementalSearchIndex(restored.sources);
     return rawObjectPathsFromSources(restored.sources);
   }
 
   const parsedEntries = await parse();
-  const { acceptedSources, entryWarnings } = appendUsableParsedEntries({
+  const { acceptedSources, entryWarnings, entryFailureReasons } = appendUsableParsedEntries({
     parsedEntries,
     sources,
-    warnings
+    warnings,
+    failureReasons
   });
 
   if (batchId && acceptedSources.length > 0) {
@@ -1744,7 +1851,8 @@ async function appendCheckpointedInputSources({
       inputKind: workItem.inputKind,
       signature: workItem.signature,
       sources: acceptedSources,
-      warnings: entryWarnings
+      warnings: entryWarnings,
+      failureReasons: entryFailureReasons
     });
     await publishIncrementalSearchIndex(acceptedSources);
   }
@@ -1774,6 +1882,7 @@ export async function readInputSources({
 }) {
   const sources = [];
   const warnings = [];
+  const failureReasons = [];
   const reportImportProgress = createThrottledImportProgressReporter(reportProgress);
   reportImportProgress({
     stage: "展开输入目录",
@@ -1784,6 +1893,7 @@ export async function readInputSources({
   const manifestInput = await loadInputFileManifest({ userDataPath, fileManifestPath });
   const expanded = manifestInput || await expandInputFilePaths(filePaths, runtime);
   warnings.push(...expanded.warnings);
+  failureReasons.push(...(expanded.failureReasons || []));
   const fileWorkItems = [];
   const uploadWorkItems = uploadedFiles.map((uploadedFile, index) =>
     createUploadedImportWorkItem(uploadedFile, index)
@@ -1858,6 +1968,7 @@ export async function readInputSources({
         workItem,
         sources,
         warnings,
+        failureReasons,
         runtime,
         generatedAt,
         parse: () =>
@@ -1882,7 +1993,18 @@ export async function readInputSources({
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "未知错误";
-      warnings.push(`${path.basename(workItem.fileEntry.absolutePath)} 读取失败：${message}`);
+      const fullMessage = `${path.basename(workItem.fileEntry.absolutePath)} 读取失败：${message}`;
+      warnings.push(fullMessage);
+      failureReasons.push(...(Array.isArray(error?.failureReasons)
+        ? error.failureReasons
+        : [createFailureReason({
+            reasonCode: error?.reasonCode || "filesystem_input_parse_failed",
+            message: fullMessage,
+            sourceName: path.basename(workItem.fileEntry.absolutePath),
+            sourcePath: workItem.fileEntry.absolutePath,
+            sourceKind: "filesystem",
+            details: { error: message }
+          })]));
     }
     processedWorkItems += 1;
     reportImportProgress({
@@ -1903,6 +2025,7 @@ export async function readInputSources({
         workItem,
         sources,
         warnings,
+        failureReasons,
         runtime,
         generatedAt,
         parse: () =>
@@ -1928,7 +2051,18 @@ export async function readInputSources({
     } catch (error) {
       const message = error instanceof Error ? error.message : "未知错误";
       const fallbackName = `upload-${workItem.signature.index + 1}`;
-      warnings.push(`${workItem.uploadedFile.name || fallbackName} 读取失败：${message}`);
+      const fullMessage = `${workItem.uploadedFile.name || fallbackName} 读取失败：${message}`;
+      warnings.push(fullMessage);
+      failureReasons.push(...(Array.isArray(error?.failureReasons)
+        ? error.failureReasons
+        : [createFailureReason({
+            reasonCode: error?.reasonCode || "upload_input_parse_failed",
+            message: fullMessage,
+            sourceName: workItem.uploadedFile.name || fallbackName,
+            sourcePath: workItem.uploadedFile.relativePath || "",
+            sourceKind: "upload",
+            details: { error: message }
+          })]));
     }
     processedWorkItems += 1;
     reportImportProgress({
@@ -1952,21 +2086,34 @@ export async function readInputSources({
 
   if (sources.length === 0) {
     if (warnings.length > 0) {
-      throw new Error(`没有可处理的内容。${warnings.join("；")}`);
+      throw createFailureError(
+        `没有可处理的内容。${warnings.join("；")}`,
+        "document_parse_no_usable_content",
+        failureReasons
+      );
     }
 
-    throw new Error("没有可处理的内容。请粘贴文本或选择可解析的文件。");
+    throw createFailureError(
+      "没有可处理的内容。请粘贴文本或选择可解析的文件。",
+      "document_parse_input_missing",
+      failureReasons
+    );
   }
 
   const usableText = sources.some((source) => source.text);
   const usableImage = sources.some((source) => source.kind === "image");
 
   if (!usableText && !usableImage) {
-    throw new Error("输入中没有可供智能体处理的文本或图片。");
+    throw createFailureError(
+      "输入中没有可供智能体处理的文本或图片。",
+      "document_parse_no_text_or_image",
+      failureReasons
+    );
   }
 
   return {
     sources,
-    warnings
+    warnings,
+    failureReasons
   };
 }

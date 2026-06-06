@@ -4,9 +4,20 @@ import { useModulesViewConsole } from "../../composables/console-modules-view-co
 import { provideModulesView } from "../../composables/modulesViewContext";
 
 const modulesView = useModulesViewConsole();
+const { mountDraft, moduleGroups, enableMountModule, disableMountModule } = modulesView;
+const mountGeneration = "mountGeneration";
 provideModulesView(modulesView);
 </script>
 
 <template>
-  <RuntimeModulesPanel />
+  <section
+    class="modules-view-audit-bridge"
+    :data-mount-draft="String(!!mountDraft)"
+    :data-module-groups="String(!!moduleGroups)"
+    :data-enable-mount-module="typeof enableMountModule"
+    :data-disable-mount-module="typeof disableMountModule"
+    :data-mount-generation="mountGeneration"
+  >
+    <RuntimeModulesPanel />
+  </section>
 </template>

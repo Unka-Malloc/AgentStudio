@@ -47,6 +47,7 @@ import {
 import {
   downloadRuntimeDependency,
   listRuntimeDependencies,
+  saveRuntimeDependencyConfiguration,
 } from "./runtime-dependencies-client";
 import {
   reloadRuntimeMounts,
@@ -197,6 +198,26 @@ import {
 export type { BridgeDownloadOptions, BridgeDownloadResult } from "./bridge-http";
 export type { McpAuthorizationRequest } from "./authorization-governance-client";
 
+function parseDocumentWithBridgeConfig(payload: Parameters<Bridge["parseDocument"]>[0]) {
+  const {
+    chunking,
+    contextBudget,
+    payloadBudget,
+    granularity,
+    dynamicParsing,
+    ...rest
+  } = payload;
+
+  return parseDocument({
+    ...rest,
+    chunking,
+    contextBudget,
+    payloadBudget,
+    granularity,
+    dynamicParsing,
+  });
+}
+
 const browserBridge: Bridge = {
   getAuthSession,
   loginAuth,
@@ -237,6 +258,7 @@ const browserBridge: Bridge = {
   reloadRuntimeMounts,
   listRuntimeDependencies,
   downloadRuntimeDependency,
+  saveRuntimeDependencyConfiguration,
   getServerConsoleState,
   getMaintenanceAgentConfig,
   saveMaintenanceAgentConfig,
@@ -277,7 +299,7 @@ const browserBridge: Bridge = {
   pickFolders: async () => [],
   createJob,
   reparseJob,
-  parseDocument,
+  parseDocument: parseDocumentWithBridgeConfig,
   listJobs,
   deleteJob,
   getJob,

@@ -244,44 +244,52 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-5) var(--space-5) var(--space-3);
   flex-shrink: 0;
 }
 
 .drawer-header h3 { margin: 0; font-size: var(--text-xl); }
 
 .drawer-tabs {
-  display: flex;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-4) 0;
-  border-bottom: 1px solid var(--border-subtle);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: var(--space-2);
+  padding: 0 var(--space-5) var(--space-3);
   flex-shrink: 0;
 }
 
 .drawer-tab {
-  padding: var(--space-1-5) var(--space-3);
+  min-height: 38px;
+  padding: var(--space-2) var(--space-3);
   font-size: var(--text-base);
-  font-weight: var(--font-medium);
+  font-weight: var(--font-semibold);
   color: var(--text-secondary);
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  border-bottom: 2px solid transparent;
-  transition: color var(--dur-fast) var(--ease-std),
-              border-color var(--dur-fast) var(--ease-std);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    border-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std);
 }
 
-.drawer-tab:hover { color: var(--text-primary); }
+.drawer-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
 
 .drawer-tab.active {
+  background: var(--brand-subtle);
   color: var(--brand);
-  border-bottom-color: var(--brand);
+  border-color: var(--brand);
   font-weight: var(--font-semibold);
 }
 
 .drawer-content {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-5);
+  padding: var(--space-2) var(--space-5) var(--space-5);
 }
 
 /* ─── Path picker & evidence preview (modals) ────────────────────────────── */

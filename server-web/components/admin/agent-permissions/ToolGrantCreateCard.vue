@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { useAgentPermissionsViewContext } from "../../../composables/agentPermissionsViewContext";
 import { toolRiskLabel } from "../../../composables/console-tool-display-utils";
 import ScopeSelector from "../../ScopeSelector.vue";
@@ -15,44 +16,68 @@ const {
   toolManagementToolsets,
   toolScopes,
 } = useAgentPermissionsViewContext();
+
+const grantableToolsets = computed(() =>
+  toolManagementToolsets.value.filter((item) => item.grantable !== false),
+);
+const selectedScopeCount = computed(() => newGrantScopes.value.length);
+const selectedToolsetCount = computed(() => newGrantToolsets.value.length);
 </script>
 
 <template>
-  <article class="surface-card permission-create-card">
+  <article class="surface-card permission-create-card permission-token-create-card">
     <div class="section-header">
       <div>
-        <h3>网关工具授权</h3>
-        <p>所有工具令牌、授权范围和撤销操作都在权限组页集中维护。</p>
+        <h3>创建工具令牌</h3>
+        <p>给外部智能体或网关客户端创建一条可轮换、可撤销的工具授权。</p>
+      </div>
+      <div class="section-tags">
+        <span>范围 {{ selectedScopeCount }}</span>
+        <span>工具集 {{ selectedToolsetCount }}</span>
       </div>
     </div>
 
-    <form class="permission-form" @submit.prevent="createGrant">
+    <form class="permission-form permission-token-create-form" @submit.prevent="createGrant">
       <label class="module-field">
         <span>授权名称</span>
-        <input v-model="newGrantLabel" autocomplete="off" />
+        <input v-model="newGrantLabel" autocomplete="off" placeholder="例如：Codex 本地维护令牌" />
       </label>
-
-      <ScopeSelector
-        v-model="newGrantScopes"
-        :scopes="toolScopes"
-      />
-      <div class="scope-grid">
-        <button
-          v-for="toolset in toolManagementToolsets.filter((item) => item.grantable !== false)"
-          :key="toolset.id"
-          class="scope-chip"
-          :class="{ active: newGrantToolsets.includes(toolset.id) }"
-          type="button"
-          @click="toggleNewGrantToolset(toolset.id)"
-        >
-          <strong>{{ toolset.label }}</strong>
-          <span>{{ toolRiskLabel(toolset.maxRisk) }}</span>
-        </button>
-      </div>
 
       <button class="tool-button" type="submit" :disabled="busyKey === 'grant:create'">
         {{ busyKey === "grant:create" ? "创建中" : "创建授权" }}
       </button>
+
+      <details class="permission-token-config-panel" open>
+        <summary>
+          <span>授权范围</span>
+          <small>已选 {{ selectedScopeCount }}</small>
+        </summary>
+        <ScopeSelector
+          v-model="newGrantScopes"
+          :scopes="toolScopes"
+          compact
+        />
+      </details>
+
+      <details class="permission-token-config-panel" open>
+        <summary>
+          <span>工具集</span>
+          <small>已选 {{ selectedToolsetCount }}</small>
+        </summary>
+        <div class="scope-grid compact-scope-grid">
+          <button
+            v-for="toolset in grantableToolsets"
+            :key="toolset.id"
+            class="scope-chip"
+            :class="{ active: newGrantToolsets.includes(toolset.id) }"
+            type="button"
+            @click="toggleNewGrantToolset(toolset.id)"
+          >
+            <strong>{{ toolset.label }}</strong>
+            <span>{{ toolRiskLabel(toolset.maxRisk) }}</span>
+          </button>
+        </div>
+      </details>
     </form>
 
     <div v-if="issuedToolToken" class="token-panel">

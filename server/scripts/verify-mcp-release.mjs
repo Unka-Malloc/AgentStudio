@@ -11,15 +11,17 @@ const projectRoot = path.resolve(new URL("../..", import.meta.url).pathname);
 const pkgStr = await fs.readFile(path.join(projectRoot, "mcp-connector", "package.json"), "utf8");
 const expectedVersion = JSON.parse(pkgStr).version;
 const EXPECTED_SUPPORTED_TARGETS = Object.freeze([
-  "codex",
-  "claude-code",
-  "gemini-cli",
-  "kilo-code",
-  "copilot",
   "openclaw",
-  "hermes",
+  "claude-code",
+  "codex",
+  "gemini-cli",
   "antigravity",
-  "opencode"
+  "opencode",
+  "copilot",
+  "kilo-code",
+  "cursor",
+  "hermes",
+  "windsurf"
 ]);
 
 async function run(command, args = [], options = {}) {
@@ -41,6 +43,25 @@ async function sha256(filePath) {
   const hash = createHash("sha256");
   hash.update(await fs.readFile(filePath));
   return hash.digest("hex");
+}
+
+async function writeUnavailableToolBinaries(rootDir) {
+  const binDir = path.join(rootDir, "unavailable-tools");
+  const names = ["orb", "docker", "podman", "wsl"];
+  await fs.mkdir(binDir, { recursive: true });
+  const content = process.platform === "win32"
+    ? "@echo off\r\nexit /b 127\r\n"
+    : "#!/bin/sh\nexit 127\n";
+  const tools = {};
+  for (const name of names) {
+    const filePath = path.join(binDir, process.platform === "win32" ? `${name}.cmd` : name);
+    await fs.writeFile(filePath, content, "utf8");
+    if (process.platform !== "win32") {
+      await fs.chmod(filePath, 0o755);
+    }
+    tools[name] = filePath;
+  }
+  return Object.freeze(tools);
 }
 
 function assertResilientOneLineCommand(command) {
@@ -166,6 +187,7 @@ async function checkPortableArchiveContents(archivePath, type, portableName, ext
 
 const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-mcp-release-"));
 try {
+  const unavailableTools = await writeUnavailableToolBinaries(tempDir);
   const verifyTargetPlatform = resolveVerifyTargetPlatform();
   const release = await run("node", [
     "server/scripts/mcp-release.mjs",
@@ -306,6 +328,8 @@ try {
   assert.equal(installTargetDetails.get("codex").installMode, "codex-release-plugin-and-mcp-cli");
   assert.equal(installTargetDetails.get("codex").priority, true);
   assert.equal(installTargetDetails.get("opencode").priority, true);
+  assert.equal(installTargetDetails.get("cursor").installMode, "cursor-release-mcp-config");
+  assert.equal(installTargetDetails.get("windsurf").installMode, "windsurf-release-mcp-config");
   assert.deepEqual(installTargetDetails.get("hermes").locations, ["orbstack", "remote-linux"]);
   assert.deepEqual(manifest.portable.supportedTargetDetails, manifest.install.supportedTargetDetails);
   assert.equal(manifest.upgrade.listChanged, true);
@@ -483,7 +507,7 @@ try {
     "--url",
     "http://127.0.0.1:9",
     "--orb-bin",
-    "/nonexistent/orb",
+    unavailableTools.orb,
     "--json"
   ], {
     env: {
@@ -505,8 +529,8 @@ try {
       other: { type: "remote", url: "http://other.invalid/mcp" }
     }
   }, null, 2));
-  const fakeKilo = path.join(tempDir, "fake-kilo");
-  await fs.writeFile(fakeKilo, [
+  const fixtureKilo = path.join(tempDir, "fixture-kilo");
+  await fs.writeFile(fixtureKilo, [
     "#!/bin/sh",
     "if [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"list\" ]; then",
     "  printf 'other\\n'",
@@ -523,7 +547,7 @@ try {
     "--kilo-config",
     kiloConfigPath,
     "--kilo-bin",
-    fakeKilo,
+    fixtureKilo,
     "--json"
   ], {
     env: {
@@ -538,11 +562,11 @@ try {
   assert.equal(Object.hasOwn(kiloConfig.mcp, "other"), true);
 
   const layeredHome = path.join(tempDir, "layered-home");
-  const fakeNvmBin = path.join(layeredHome, ".nvm", "versions", "node", "v99.0.0", "bin");
-  await fs.mkdir(fakeNvmBin, { recursive: true });
-  const fakeGemini = path.join(fakeNvmBin, "gemini");
-  const fakeClaude = path.join(fakeNvmBin, "claude");
-  await fs.writeFile(fakeGemini, [
+  const fixtureNvmBin = path.join(layeredHome, ".nvm", "versions", "node", "v99.0.0", "bin");
+  await fs.mkdir(fixtureNvmBin, { recursive: true });
+  const fixtureGemini = path.join(fixtureNvmBin, "gemini");
+  const fixtureClaude = path.join(fixtureNvmBin, "claude");
+  await fs.writeFile(fixtureGemini, [
     "#!/bin/sh",
     "if [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"--help\" ]; then",
     "  printf 'Usage: gemini mcp add list remove\\n'",
@@ -551,7 +575,7 @@ try {
     "exit 1",
     ""
   ].join("\n"), { mode: 0o755 });
-  await fs.writeFile(fakeClaude, [
+  await fs.writeFile(fixtureClaude, [
     "#!/bin/sh",
     "if [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"--help\" ]; then",
     "  printf 'Usage: claude mcp add add-json get list remove\\n'",
@@ -560,18 +584,18 @@ try {
     "exit 1",
     ""
   ].join("\n"), { mode: 0o755 });
-  const fakeVoltaBin = path.join(layeredHome, ".volta", "bin");
-  const fakeVoltaCopilot = path.join(fakeVoltaBin, process.platform === "win32" ? "copilot.cmd" : "copilot");
-  await fs.mkdir(fakeVoltaBin, { recursive: true });
+  const fixtureVoltaBin = path.join(layeredHome, ".volta", "bin");
+  const fixtureVoltaCopilot = path.join(fixtureVoltaBin, process.platform === "win32" ? "copilot.cmd" : "copilot");
+  await fs.mkdir(fixtureVoltaBin, { recursive: true });
   if (process.platform === "win32") {
-    await fs.writeFile(fakeVoltaCopilot, [
+    await fs.writeFile(fixtureVoltaCopilot, [
       "@echo off",
       "echo Usage: copilot mcp add list remove",
       "exit /b 0",
       ""
     ].join("\r\n"));
   } else {
-    await fs.writeFile(fakeVoltaCopilot, [
+    await fs.writeFile(fixtureVoltaCopilot, [
       "#!/bin/sh",
       "if [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"--help\" ]; then",
       "  printf 'Usage: copilot mcp add list remove\\n'",
@@ -581,20 +605,20 @@ try {
       ""
     ].join("\n"), { mode: 0o755 });
   }
-  const fakeWorkspace = path.join(layeredHome, "workspace");
-  const fakeWorkspaceBin = path.join(fakeWorkspace, "node_modules", ".bin");
-  const fakeLocalCodex = path.join(fakeWorkspaceBin, process.platform === "win32" ? "codex.cmd" : "codex");
-  await fs.mkdir(fakeWorkspaceBin, { recursive: true });
-  await fs.writeFile(path.join(fakeWorkspace, "package.json"), JSON.stringify({ private: true }, null, 2));
+  const fixtureWorkspace = path.join(layeredHome, "workspace");
+  const fixtureWorkspaceBin = path.join(fixtureWorkspace, "node_modules", ".bin");
+  const fixtureLocalCodex = path.join(fixtureWorkspaceBin, process.platform === "win32" ? "codex.cmd" : "codex");
+  await fs.mkdir(fixtureWorkspaceBin, { recursive: true });
+  await fs.writeFile(path.join(fixtureWorkspace, "package.json"), JSON.stringify({ private: true }, null, 2));
   if (process.platform === "win32") {
-    await fs.writeFile(fakeLocalCodex, [
+    await fs.writeFile(fixtureLocalCodex, [
       "@echo off",
       "echo Usage: codex mcp add list remove",
       "exit /b 0",
       ""
     ].join("\r\n"));
   } else {
-    await fs.writeFile(fakeLocalCodex, [
+    await fs.writeFile(fixtureLocalCodex, [
       "#!/bin/sh",
       "if [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"--help\" ]; then",
       "  printf 'Usage: codex mcp add list remove\\n'",
@@ -612,7 +636,7 @@ try {
       "#!/bin/sh",
       "printf '%s|%s|%s|%s\\n' \"${HOMEBREW_NO_AUTO_UPDATE:-}\" \"${HOMEBREW_NO_ANALYTICS:-}\" \"${HOMEBREW_NO_ENV_HINTS:-}\" \"$*\" >> \"$PACT_MCP_BREW_ENV_PROBE\"",
       "if [ \"$1\" = \"--prefix\" ] && [ -z \"${2:-}\" ]; then",
-      "  printf '%s\\n' \"$HOME/fake-homebrew\"",
+      "  printf '%s\\n' \"$HOME/fixture-homebrew\"",
       "  exit 0",
       "fi",
       "exit 1",
@@ -621,9 +645,9 @@ try {
   }
   const plainAppGemini = path.join(layeredHome, "Applications", "Plain.app", "Contents", "Resources", "gemini");
   const agentAppGemini = path.join(layeredHome, "Applications", "Gemini Agent.app", "Contents", "Resources", "gemini");
-  const fakeAppGeminiHelper = path.join(layeredHome, "app-helper-bin", "gemini");
-  await fs.mkdir(path.dirname(fakeAppGeminiHelper), { recursive: true });
-  await fs.writeFile(fakeAppGeminiHelper, [
+  const fixtureAppGeminiHelper = path.join(layeredHome, "app-helper-bin", "gemini");
+  await fs.mkdir(path.dirname(fixtureAppGeminiHelper), { recursive: true });
+  await fs.writeFile(fixtureAppGeminiHelper, [
     "#!/bin/sh",
     "if [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"--help\" ]; then",
     "  printf 'Usage: gemini mcp add list remove\\n'",
@@ -634,7 +658,7 @@ try {
   ].join("\n"), { mode: 0o755 });
   for (const appGemini of [plainAppGemini, agentAppGemini]) {
     await fs.mkdir(path.dirname(appGemini), { recursive: true });
-    await fs.symlink(fakeAppGeminiHelper, appGemini);
+    await fs.symlink(fixtureAppGeminiHelper, appGemini);
   }
   const layeredScan = await run(process.execPath, [
     path.join(extractDir, "package", "bin", "pact-mcp.mjs"),
@@ -642,13 +666,13 @@ try {
     "--url",
     "http://127.0.0.1:9",
     "--orb-bin",
-    "/nonexistent/orb",
+    unavailableTools.orb,
     "--docker-bin",
-    "/nonexistent/docker",
+    unavailableTools.docker,
     "--podman-bin",
-    "/nonexistent/podman",
+    unavailableTools.podman,
     "--wsl-bin",
-    "/nonexistent/wsl",
+    unavailableTools.wsl,
     "--json"
   ], {
     env: {
@@ -656,7 +680,7 @@ try {
       NVM_DIR: path.join(layeredHome, ".nvm"),
       VOLTA_HOME: path.join(layeredHome, ".volta"),
       PACT_MCP_BREW_ENV_PROBE: packageManagerEnvProbe,
-      PATH: [fakeWorkspaceBin, packageManagerProbeBin, "/usr/bin", "/bin"].filter(Boolean).join(path.delimiter)
+      PATH: [fixtureWorkspaceBin, packageManagerProbeBin, "/usr/bin", "/bin"].filter(Boolean).join(path.delimiter)
     }
   });
   const layeredScanPayload = JSON.parse(layeredScan.stdout);
@@ -673,11 +697,11 @@ try {
   const layeredCopilotBins = layeredScanPayload.candidates
     .filter((candidate) => candidate.target === "copilot")
     .map((candidate) => candidate.optionOverrides?.["copilot-bin"] || "");
-  assert.equal(layeredGeminiBins.includes(fakeGemini), true);
-  assert.equal(layeredClaudeBins.includes(fakeClaude), true);
+  assert.equal(layeredGeminiBins.includes(fixtureGemini), true);
+  assert.equal(layeredClaudeBins.includes(fixtureClaude), true);
   assert.equal(layeredGeminiBins.includes(plainAppGemini), false);
-  assert.equal(layeredCodexBins.includes(fakeLocalCodex), false);
-  assert.equal(layeredCopilotBins.includes(fakeVoltaCopilot), true);
+  assert.equal(layeredCodexBins.includes(fixtureLocalCodex), false);
+  assert.equal(layeredCopilotBins.includes(fixtureVoltaCopilot), true);
   if (process.platform === "darwin") {
     assert.equal(layeredGeminiBins.includes(agentAppGemini), true);
   }
@@ -695,8 +719,8 @@ try {
     );
   }
 
-  const fakeOrb = path.join(tempDir, "fake-orb");
-  await fs.writeFile(fakeOrb, [
+  const fixtureOrb = path.join(tempDir, "fixture-orb");
+  await fs.writeFile(fixtureOrb, [
     "#!/bin/sh",
     "if [ \"$1\" = \"list\" ]; then",
     "  printf 'NAME STATE\\n'",
@@ -755,13 +779,13 @@ try {
     "--url",
     "http://127.0.0.1:9",
     "--orb-bin",
-    fakeOrb,
+    fixtureOrb,
     "--docker-bin",
-    "/nonexistent/docker",
+    unavailableTools.docker,
     "--podman-bin",
-    "/nonexistent/podman",
+    unavailableTools.podman,
     "--wsl-bin",
-    "/nonexistent/wsl",
+    unavailableTools.wsl,
     "--json"
   ], {
     env: {
@@ -796,8 +820,8 @@ try {
   assert.equal(vmCopilot?.optionOverrides?.["orb-vm"], "kate");
   assert.equal(vmCopilot?.optionOverrides?.["orb-user"], "kate");
 
-  const fakeDocker = path.join(tempDir, "fake-docker");
-  await fs.writeFile(fakeDocker, [
+  const fixtureDocker = path.join(tempDir, "fixture-docker");
+  await fs.writeFile(fixtureDocker, [
     "#!/bin/sh",
     "if [ \"$1\" = \"ps\" ]; then",
     "  printf 'box123\\tagentbox\\n'",
@@ -828,13 +852,13 @@ try {
     "--url",
     "http://127.0.0.1:9",
     "--orb-bin",
-    "/nonexistent/orb",
+    unavailableTools.orb,
     "--docker-bin",
-    fakeDocker,
+    fixtureDocker,
     "--podman-bin",
-    "/nonexistent/podman",
+    unavailableTools.podman,
     "--wsl-bin",
-    "/nonexistent/wsl",
+    unavailableTools.wsl,
     "--json"
   ], {
     env: {
@@ -848,7 +872,7 @@ try {
   assert.equal(dockerCopilot?.optionOverrides?.["copilot-bin"], "/usr/local/bin/copilot");
   assert.equal(dockerCopilot?.optionOverrides?.["remote-id"], "box123");
   assert.equal(dockerCopilot?.optionOverrides?.["remote-name"], "agentbox");
-  assert.equal(dockerCopilot?.optionOverrides?.["remote-bin"], fakeDocker);
+  assert.equal(dockerCopilot?.optionOverrides?.["remote-bin"], fixtureDocker);
 
   for (const portableArchive of portableArchivesForPlatform) {
     await checkPortableArchiveContents(

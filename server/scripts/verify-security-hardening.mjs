@@ -22,6 +22,224 @@ async function requestJson(url, options = {}) {
   };
 }
 
+async function requestText(url, options = {}) {
+  const response = await fetch(url, options);
+  return {
+    status: response.status,
+    headers: response.headers,
+    body: await response.text()
+  };
+}
+
+function cookieFromResponse(response) {
+  const setCookies =
+    typeof response.headers.getSetCookie === "function"
+      ? response.headers.getSetCookie()
+      : String(response.headers.get("set-cookie") || "").split(/,(?=\s*pact_)/).filter(Boolean);
+  return setCookies.map((cookie) => cookie.split(";")[0]).join("; ");
+}
+
+function parseOwnerCredentials(content = "") {
+  const username = content.match(/^Username\s*:\s*(.+)$/m)?.[1]?.trim() || "owner";
+  const password = content.match(/^Password\s*:\s*(.+)$/m)?.[1]?.trim() || "";
+  return { username, password };
+}
+
+async function verifyStaticSecurityHardeningCode() {
+  const [httpServerSource, safeHtmlSource, evidenceRendererSource, viteConfigSource, dockerIgnoreSource, composeSource] = await Promise.all([
+    fs.readFile(path.join(repoRoot, "server/services/server-runtime/http-server.mjs"), "utf8"),
+    fs.readFile(path.join(repoRoot, "server-web/components/SafeHtmlBlock.vue"), "utf8"),
+    fs.readFile(path.join(repoRoot, "server-web/composables/console-evidence-rendering.ts"), "utf8"),
+    fs.readFile(path.join(repoRoot, "vite.config.ts"), "utf8"),
+    fs.readFile(path.join(repoRoot, ".dockerignore"), "utf8"),
+    fs.readFile(path.join(repoRoot, "docker-compose.yml"), "utf8")
+  ]);
+
+  assert.match(httpServerSource, /script-src 'self' 'nonce-/, "console CSP must use script nonce");
+  assert.doesNotMatch(httpServerSource, /script-src 'self' 'unsafe-inline'/, "console CSP must not include unsafe-inline");
+  assert.match(httpServerSource, /injectCspNonceIntoInlineScripts/, "console CSP runtime must inject nonce into inline scripts");
+
+  assert.doesNotMatch(httpServerSource, /console initial owner username/i, "initial owner should not log usernames to stdout");
+  assert.match(httpServerSource, /server\.initialOwner\.credentials_file/, "initial owner should log credentials path only to server logger");
+  assert.match(httpServerSource, /createFixedWindowRateLimiter/, "HTTP layer should enforce fixed-window rate limits");
+  assert.match(httpServerSource, /resolveHttpRateLimits/, "HTTP layer should resolve rate-limit policy from runtime options");
+  assert.match(httpServerSource, /httpRateLimitPerIpPerMinute/, "HTTP layer should support IP rate limits");
+  assert.match(httpServerSource, /httpRateLimitPerSubjectPerMinute/, "HTTP layer should support subject rate limits");
+  assert.match(httpServerSource, /httpRateLimitLoginPerIpPerMinute/, "HTTP layer should support login rate limit");
+
+  assert.doesNotMatch(viteConfigSource, /secure:\s*false/, "vite proxy must not force TLS verification off");
+  assert.match(viteConfigSource, /proxySecure/, "vite proxy secure flag should be calculated explicitly");
+  assert.match(viteConfigSource, /isExplicitLocalInsecureCertBypass/, "vite proxy TLS bypass must be explicit-flag gated");
+  assert.match(viteConfigSource, /parseProxyApiOrigin/, "vite proxy helper must parse configured API origin");
+
+  assert.match(dockerIgnoreSource, /^\.pact-server-data$/m, "runtime data should be excluded from Docker build context");
+  assert.match(dockerIgnoreSource, /^\.pact-agent-history$/m, "agent history should be excluded from Docker build context");
+  assert.match(dockerIgnoreSource, /^reports\/$/m, ".dockerignore should exclude runtime reports directory");
+  assert.match(dockerIgnoreSource, /server\/platform\/modules\/knowledge\/runtime\/jre\/downloads/, "runtime JRE downloads should stay out of image");
+
+  assert.match(
+    composeSource,
+    /开发环境|开发模式|development|local.*dev/i,
+    "docker-compose should declare development scope"
+  );
+  assert.match(composeSource, /HTTPS|TLS|reverse proxy/i, "compose/TLS guidance should be present for production");
+
+  assert.match(evidenceRendererSource, /if \(!ALLOWED_EMAIL_FRAME_TAGS\.has\(tagName\)/, "email frame sanitizer should use allowlist");
+  assert.doesNotMatch(
+    evidenceRendererSource,
+    /script, iframe, object, embed, form, input, button, textarea, select/,
+    "email sanitizer should not use removed blocklist pattern"
+  );
+  assert.doesNotMatch(
+    evidenceRendererSource,
+    /sandbox="[^"]*allow-same-origin[^"]*"/,
+    "email frame sandbox must remove allow-same-origin"
+  );
+  assert.doesNotMatch(
+    evidenceRendererSource,
+    /sandbox="[^"]*allow-popups-to-escape-sandbox[^"]*"/,
+    "email frame sandbox must remove popups escape"
+  );
+  assert.match(
+    evidenceRendererSource,
+    /rendered-email-frame\".*sandbox=\"allow-popups\"/,
+    "rendered email frame should use allow-popups sandbox profile"
+  );
+
+  assert.match(safeHtmlSource, /const sanitizedHtml = computed\(/, "SafeHtmlBlock should expose sanitization output");
+  assert.match(safeHtmlSource, /sanitizeEvidenceHtml\(/, "SafeHtmlBlock must sanitize renderEvidenceReadableHtml branch");
+  assert.doesNotMatch(safeHtmlSource, /v-html=\"props\\.html\"/, "SafeHtmlBlock should not render source html without sanitizer");
+}
+
+async function verifyStaticSecurityBlockers() {
+  const consoleAuthSource = await fs.readFile(
+    path.join(repoRoot, "server/platform/common/security/auth/console-auth.mjs"),
+    "utf8"
+  );
+  assert.match(
+    consoleAuthSource,
+    /function\s+timingSafeStringEqual[\s\S]*crypto\.timingSafeEqual/,
+    "console auth must provide a timing-safe string comparison helper"
+  );
+  assert.match(
+    consoleAuthSource,
+    /timingSafeStringEqual\(csrf,\s*session\.csrfToken\)/,
+    "CSRF verification must use timing-safe comparison"
+  );
+  assert.doesNotMatch(
+    consoleAuthSource,
+    /csrf\s*!==\s*session\.csrfToken/,
+    "CSRF verification must not use direct string inequality"
+  );
+
+  const dockerfile = await fs.readFile(path.join(repoRoot, "Dockerfile"), "utf8");
+  const runtimeStage = dockerfile.split(/FROM\s+node:24-bookworm-slim\s+AS\s+runtime\b/)[1] || "";
+  assert.match(runtimeStage, /groupadd\s+--system[\s\S]*\bpact\b/, "runtime Docker stage must create a dedicated pact group");
+  assert.match(runtimeStage, /useradd\s+--system[\s\S]*\bpact\b/, "runtime Docker stage must create a dedicated pact user");
+  assert.match(runtimeStage, /COPY\s+--chown=pact:pact\s+--from=build/, "runtime Docker stage must copy app files for the pact user");
+  assert.match(runtimeStage, /COPY\s+--chown=pact:pact\s+--from=runtime-deps/, "runtime Docker stage must copy runtime modules for the pact user");
+  assert.match(runtimeStage, /chown\s+-R\s+pact:pact\s+\/data\s+\/codex-home/, "runtime data directories must be owned by the pact user");
+  assert.match(runtimeStage, /^USER pact$/m, "runtime Docker stage must run as the pact user");
+  assert.equal(/^USER root$/m.test(runtimeStage), false, "runtime Docker stage must not switch back to root");
+}
+
+async function verifyHttpRateLimiting() {
+  const baseUserDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-security-hardening-rate-limit-ip-"));
+  const ipLimitedServer = await startHttpServer({
+    userDataPath: baseUserDataPath,
+    runtimeOptions: {
+      profile: "minimal",
+      httpRateLimitPerIpPerMinute: 2,
+      httpRateLimitPerSubjectPerMinute: 100,
+      httpRateLimitLoginPerIpPerMinute: 100,
+      httpRateLimitWindowMs: 60_000
+    }
+  });
+  try {
+    const first = await requestText(`${ipLimitedServer.url}/api/healthz`);
+    const second = await requestText(`${ipLimitedServer.url}/api/healthz`);
+    const third = await requestText(`${ipLimitedServer.url}/api/healthz`);
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200);
+    assert.equal(third.status, 429);
+  } finally {
+    await ipLimitedServer.close();
+    await fs.rm(baseUserDataPath, { recursive: true, force: true });
+  }
+
+  const subjectUserDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-security-hardening-rate-limit-subject-"));
+  const subjectServer = await startHttpServer({
+    userDataPath: subjectUserDataPath,
+    runtimeOptions: {
+      profile: "minimal",
+      httpRateLimitPerIpPerMinute: 100,
+      httpRateLimitPerSubjectPerMinute: 2,
+      httpRateLimitLoginPerIpPerMinute: 100,
+      httpRateLimitWindowMs: 60_000
+    }
+  });
+  try {
+    const credentials = parseOwnerCredentials(
+      await fs.readFile(subjectServer.initialOwner?.credentialsPath || "", "utf8")
+    );
+    const loginResponse = await requestJson(`${subjectServer.url}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: credentials.username,
+        password: credentials.password
+      })
+    });
+    assert.equal(loginResponse.status, 200);
+    const cookie = cookieFromResponse(loginResponse);
+
+    const firstSession = await requestText(`${subjectServer.url}/api/auth/session`, {
+      headers: { Cookie: cookie }
+    });
+    const secondSession = await requestText(`${subjectServer.url}/api/auth/session`, {
+      headers: { Cookie: cookie }
+    });
+    const thirdSession = await requestText(`${subjectServer.url}/api/auth/session`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(firstSession.status, 200);
+    assert.equal(secondSession.status, 200);
+    assert.equal(thirdSession.status, 429);
+  } finally {
+    await subjectServer.close();
+    await fs.rm(subjectUserDataPath, { recursive: true, force: true });
+  }
+
+  const loginUserDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-security-hardening-rate-limit-login-"));
+  const loginServer = await startHttpServer({
+    userDataPath: loginUserDataPath,
+    runtimeOptions: {
+      profile: "minimal",
+      httpRateLimitPerIpPerMinute: 100,
+      httpRateLimitPerSubjectPerMinute: 100,
+      httpRateLimitLoginPerIpPerMinute: 1,
+      httpRateLimitWindowMs: 60_000
+    }
+  });
+  try {
+    const loginFirst = await requestJson(`${loginServer.url}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "owner", password: "wrong-pass-" + Date.now() })
+    });
+    assert.equal(loginFirst.status, 401);
+    const loginSecond = await requestJson(`${loginServer.url}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "owner", password: "wrong-pass-" + Date.now() })
+    });
+    assert.equal(loginSecond.status, 429);
+  } finally {
+    await loginServer.close();
+    await fs.rm(loginUserDataPath, { recursive: true, force: true });
+  }
+}
+
 async function verifyAuthorizationTenantAbac(userDataPath) {
   const authorizationStore = createAuthorizationStore({ userDataPath });
   const authorizationEngine = createAuthorizationEngine({ store: authorizationStore });
@@ -268,12 +486,46 @@ async function verifyHttpTraceDrilldown() {
   }
 }
 
+async function verifyCspAndHtmlSandboxRuntime(userDataPath) {
+  const distRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-security-hardening-dist-"));
+  const distPath = path.join(distRoot, "dist");
+  await fs.mkdir(distPath, { recursive: true });
+  await fs.writeFile(
+    path.join(distPath, "index.html"),
+    `<!doctype html><html><head><script>var t = localStorage.getItem('pact-theme');</script></head><body><div id=\"root\"></div></body></html>`
+  );
+  const server = await startHttpServer({
+    userDataPath,
+    distPath,
+    runtimeOptions: {
+      profile: "minimal",
+      cwd: repoRoot
+    }
+  });
+  try {
+    const response = await requestText(`${server.url}/`);
+    assert.equal(response.status, 200);
+    const csp = response.headers.get("content-security-policy") || "";
+    assert.match(csp, /script-src 'self' 'nonce-[A-Za-z0-9+\/=]+'/);
+    assert.doesNotMatch(csp, /script-src [^;]*'unsafe-inline'/);
+    assert.match(response.body, /<script[^>]*nonce=\"[^\"]+\"/);
+    assert.match(response.body, /var t = localStorage\.getItem\('pact-theme'\);/);
+  } finally {
+    await server.close();
+    await fs.rm(distRoot, { recursive: true, force: true });
+  }
+}
+
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-security-hardening-"));
 try {
+  await verifyStaticSecurityBlockers();
+  await verifyStaticSecurityHardeningCode();
+  await verifyHttpRateLimiting();
   await verifyAuthorizationTenantAbac(userDataPath);
   await verifyConsoleTenantCli(userDataPath);
   verifyAuditRetentionExport(userDataPath);
   await verifyHttpTraceDrilldown();
+  await verifyCspAndHtmlSandboxRuntime(userDataPath);
 } finally {
   await fs.rm(userDataPath, { recursive: true, force: true });
 }

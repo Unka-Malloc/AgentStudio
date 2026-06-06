@@ -60,12 +60,7 @@ export function createConsoleKnowledgeIngestTargetController(
   }
 
   const knowledgeIngestTargetOptions = computed<KnowledgeIngestTargetOption[]>(() => {
-    const values: KnowledgeIngestTargetOption[] = [
-      {
-        value: "global",
-        label: "Pact Native 知识库",
-      },
-    ];
+    const values: KnowledgeIngestTargetOption[] = [];
     const seen = new Set(values.map((option) => option.value));
     for (const space of options.realKnowledgeBackendSpaces.value) {
       const provider = String(space.provider || "").trim().toLowerCase();
@@ -116,7 +111,7 @@ export function createConsoleKnowledgeIngestTargetController(
       const externalRefs = externalTargets.map((target) => `${target.provider}:${target.spaceId}`);
       const optionLabels = new Map(knowledgeIngestTargetOptions.value.map((option) => [option.value, option.label]));
       options.knowledgeIngestTargets.value = {
-        global: selectedValues.includes("global"),
+        global: false,
         external: externalRefs.length > 0,
         team: false,
         user: false,

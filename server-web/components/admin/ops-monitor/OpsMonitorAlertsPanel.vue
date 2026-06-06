@@ -33,16 +33,6 @@ const {
         <span>严重 {{ monitorAlertSummary.criticalCount }}</span>
       </div>
     </div>
-    <div class="source-actions">
-      <button
-        class="primary-action"
-        type="button"
-        :disabled="!canAdminMaintenanceAgent || busyKey === 'monitor-alerts:save'"
-        @click="saveMonitorAlertConfig"
-      >
-        {{ busyKey === "monitor-alerts:save" ? "保存中" : "保存报警配置" }}
-      </button>
-    </div>
     <div class="job-table compact-job-table monitor-alert-table">
       <div class="job-table-header">
         <span>级别</span>
@@ -89,9 +79,24 @@ const {
       <strong>暂无报警</strong>
     </div>
     <ConfigFoldCard title="报警报文配置 JSON" open>
-      <label class="json-editor">
-        <textarea v-model="monitorAlertConfigText" rows="14" spellcheck="false" />
-      </label>
+      <div class="monitor-alert-config-editor json-editor">
+        <textarea
+          v-model="monitorAlertConfigText"
+          rows="14"
+          spellcheck="false"
+          aria-label="报警报文配置 JSON"
+        />
+        <div class="monitor-alert-config-actions">
+          <button
+            class="primary-action"
+            type="button"
+            :disabled="!canAdminMaintenanceAgent || busyKey === 'monitor-alerts:save'"
+            @click="saveMonitorAlertConfig"
+          >
+            {{ busyKey === "monitor-alerts:save" ? "保存中" : "保存报警配置" }}
+          </button>
+        </div>
+      </div>
     </ConfigFoldCard>
   </article>
 </template>

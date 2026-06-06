@@ -6,11 +6,52 @@ import { strFromU8, unzipSync } from "fflate";
 import { generateNormalizedDocuments } from "../platform/specialized/knowledge/preprocessing/file-processor/FileNormalizer/NormalizedDocuments/index.mjs";
 import { createKnowledgeCoreMount } from "../platform/specialized/knowledge/storage/knowledge-core/index.mjs";
 
+function docxFiles(buffer) {
+  return unzipSync(new Uint8Array(buffer));
+}
+
 function docxXml(buffer) {
-  const files = unzipSync(new Uint8Array(buffer));
+  const files = docxFiles(buffer);
   const documentXml = files["word/document.xml"];
   assert.ok(documentXml, "DOCX must contain word/document.xml");
   return strFromU8(documentXml);
+}
+
+function docxParagraphs(buffer) {
+  const xml = docxXml(buffer);
+  return {
+    xml,
+    paragraphs: [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((match) => {
+      const paragraphXml = match[0];
+      const styleMatch = /<w:pStyle\b[^>]*w:val="([^"]+)"/.exec(paragraphXml);
+      const text = [...paragraphXml.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)]
+        .map((entry) => entry[1])
+        .join("");
+      return {
+        xml: paragraphXml,
+        style: styleMatch?.[1] || "",
+        text
+      };
+    })
+  };
+}
+
+function assertParagraphWithStyle(buffer, style, text, message) {
+  const { paragraphs } = docxParagraphs(buffer);
+  assert.ok(
+    paragraphs.some((paragraph) => paragraph.style === style && paragraph.text.includes(text)),
+    message || `DOCX must include ${text} with style ${style}`
+  );
+}
+
+function assertBulletParagraph(buffer, text, message) {
+  const { paragraphs } = docxParagraphs(buffer);
+  assert.ok(
+    paragraphs.some((paragraph) => paragraph.text.includes(text) && (
+      paragraph.style === "ListParagraph" || /<w:numPr\b/.test(paragraph.xml)
+    )),
+    message || `DOCX must include list semantics for ${text}`
+  );
 }
 
 function assertDocxIncludes(buffer, needle, message) {
@@ -26,6 +67,20 @@ function assertDocxNotIncludes(buffer, needle, message) {
 async function assertNormalizedHumanDocxAndYamlMachineState() {
   const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-normalized-docx-"));
   const jobId = "normalized-docx-export";
+  const markdownText = [
+    "# 客户续费",
+    "",
+    "## 背景",
+    "背景证据正文。",
+    "",
+    "- 法务确认合同条款",
+    "- 补齐预算审批记录",
+    "",
+    "| 项目 | 状态 |",
+    "| --- | --- |",
+    "| 合同 | 待确认 |",
+    "| 预算 | 已提交 |"
+  ].join("\n");
   const manifest = await generateNormalizedDocuments({
     userDataPath,
     jobId,
@@ -37,7 +92,7 @@ async function assertNormalizedHumanDocxAndYamlMachineState() {
         path: "fixtures/renewal.md",
         kind: "document",
         mediaType: "text/markdown",
-        text: "# 客户续费\n\n## 背景\n背景证据正文。",
+        text: markdownText,
         documentParserId: "verify"
       }
     ],
@@ -100,9 +155,43 @@ async function assertNormalizedHumanDocxAndYamlMachineState() {
   assertDocxIncludes(buffer, "客户续费", "human DOCX must keep Markdown title text");
   assertDocxIncludes(buffer, "背景", "human DOCX must keep Markdown section text");
   assertDocxIncludes(buffer, "背景证据正文", "human DOCX must keep body text");
-  assertDocxIncludes(buffer, "Heading1", "human DOCX must render Markdown heading as Word heading");
+  assertParagraphWithStyle(buffer, "Heading1", "客户续费", "human DOCX must render Markdown heading as Word heading");
+  assertParagraphWithStyle(buffer, "Heading2", "背景", "human DOCX must render nested Markdown heading as Word heading");
+  assertBulletParagraph(buffer, "法务确认合同条款", "human DOCX must preserve Markdown bullets");
+  assertBulletParagraph(buffer, "补齐预算审批记录", "human DOCX must preserve multiple Markdown bullets");
+  assert.equal((docxXml(buffer).match(/<w:tbl\b/g) || []).length >= 1, true, "human DOCX must render Markdown tables as Word tables");
   assertDocxNotIncludes(buffer, "chunk-background", "human DOCX must not expose chunk ids");
   assertDocxNotIncludes(buffer, "startLine", "human DOCX must not expose source range internals");
+
+  assert.deepEqual(firstDocx.exportConsistencyBaseline, {
+    schemaVersion: 1,
+    sourceFormat: "markdown",
+    targetFormat: "docx",
+    sectionCount: 1,
+    sections: [{
+      index: 1,
+      title: "",
+      markdownStructure: {
+        headingCount: 2,
+        headingTexts: [
+          { level: 1, text: "客户续费" },
+          { level: 2, text: "背景" }
+        ],
+        bulletCount: 2,
+        bulletTexts: ["法务确认合同条款", "补齐预算审批记录"],
+        tableCount: 1,
+        tableShapes: [{ rows: 3, columns: 2, header: ["项目", "状态"] }],
+        paragraphCount: 1,
+        paragraphSamples: ["背景证据正文。"]
+      }
+    }],
+    totals: {
+      headingCount: 2,
+      bulletCount: 2,
+      tableCount: 1,
+      paragraphCount: 1
+    }
+  }, "normalized manifest should carry a machine-readable Markdown to DOCX consistency baseline");
 
   assert.equal(firstDocx.machineReadableFormat, "yaml");
   assert.ok(firstDocx.machineReadableRelativePath.endsWith(".yaml"));
@@ -113,6 +202,11 @@ async function assertNormalizedHumanDocxAndYamlMachineState() {
   assert.ok(machineYaml.includes("pact.normalized-document.machine.v1"));
   assert.ok(machineYaml.includes("chunk-background"));
   assert.ok(machineYaml.includes("section-background"));
+  assert.ok(machineYaml.includes("exportConsistencyBaseline:"));
+  assert.ok(machineYaml.includes("sourceFormat: \"markdown\""));
+  assert.ok(machineYaml.includes("bulletTexts:"));
+  assert.ok(machineYaml.includes("法务确认合同条款"));
+  assert.ok(machineYaml.includes("tableShapes:"));
   await fs.access(path.join(userDataPath, "jobs", jobId, "normalized-documents", "manifest.yaml"));
 }
 

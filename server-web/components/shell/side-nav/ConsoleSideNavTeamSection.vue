@@ -5,10 +5,8 @@ import ConsoleSideNavLink from "./ConsoleSideNavLink.vue";
 defineOptions({ name: "ConsoleSideNavTeamSection" });
 
 const {
-  activeRouteAdminView,
   activeRouteView,
   msg,
-  openAdmin,
   switchView,
 } = useConsoleSideNavContext();
 </script>
@@ -21,12 +19,6 @@ const {
       :label="msg.nav.workspaces"
       subtle
       @activate="switchView('workspaces')"
-    />
-    <ConsoleSideNavLink
-      :active="activeRouteView === 'admin' && activeRouteAdminView === 'clients'"
-      :label="msg.nav.devices"
-      subtle
-      @activate="openAdmin('clients')"
     />
   </section>
 </template>

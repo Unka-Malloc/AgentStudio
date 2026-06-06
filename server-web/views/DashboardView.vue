@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useServerConsoleShellContext } from '../composables/serverConsoleShellContext';
+import ApprovalFlowCardList from '../components/approval/ApprovalFlowCardList.vue';
+import SegmentedToggle from '../components/SegmentedToggle.vue';
 import StatusPill from '../components/StatusPill.vue';
+import { provideApprovalFlowView } from '../composables/approvalFlowViewContext';
+import { useApprovalFlowViewController } from '../composables/console-approval-flow-view-controller';
 import type { DashboardAlert } from '../types/app';
 
 const {
@@ -20,9 +24,18 @@ const {
   openDashboardAlert,
 } = useServerConsoleShellContext();
 
+const approvalFlow = useApprovalFlowViewController();
+provideApprovalFlowView(approvalFlow);
+const {
+  approvalFlowCards,
+  approvalFlowStatus,
+  mcpAuthorizationStatusOptionBarOptions,
+} = approvalFlow;
+
 const clientTotalCount = computed(() => consoleState.value?.clients?.summary?.totalCount || 0);
 const clientOfflineCount = computed(() => consoleState.value?.clients?.summary?.offlineCount || 0);
 const clientOnlineCount = computed(() => Math.max(0, clientTotalCount.value - clientOfflineCount.value));
+const approvalFlowCount = computed(() => approvalFlowCards.value.length);
 
 function alertBusyKey(alertItem: DashboardAlert) {
   if (alertItem.actionKind === "recover-supervisor") {
@@ -243,6 +256,28 @@ function dashboardAlertActionLabel(alertItem: DashboardAlert) {
         <strong>没有报警</strong>
         <span>空配置、中断和后台巡检当前都没有需要处理的事项。</span>
       </div>
+    </article>
+    <article class="surface-card configuration-alert-card dashboard-approval-card">
+      <div class="section-header">
+        <div>
+          <h3>审批流</h3>
+          <p>统一处理 MCP 授权、知识入库冲突等需要人工决策的事项。</p>
+        </div>
+        <div class="dashboard-approval-actions">
+          <StatusPill
+            :tone="approvalFlowCount ? 'warning' : 'success'"
+            :label="approvalFlowCount ? `${approvalFlowCount} 项` : '已清空'"
+          />
+          <SegmentedToggle
+            v-model="approvalFlowStatus"
+            :options="mcpAuthorizationStatusOptionBarOptions"
+            aria-label="审批流状态"
+            size="small"
+          />
+        </div>
+      </div>
+
+      <ApprovalFlowCardList />
     </article>
   </section>
 </template>

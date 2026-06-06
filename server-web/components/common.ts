@@ -1,7 +1,9 @@
 import BinaryCheckbox from "./BinaryCheckbox.vue";
 import AgentModelOptionBar from "./AgentModelOptionBar.vue";
 import BrowseSelectButton from "./BrowseSelectButton.vue";
+import ConfigFloatingPanel from "./ConfigFloatingPanel.vue";
 import ConfigFoldCard from "./ConfigFoldCard.vue";
+import ConfigListSummaryBubble from "./ConfigListSummaryBubble.vue";
 import FeatureToggle from "./FeatureToggle.vue";
 import HistorySessionPanel from "./HistorySessionPanel.vue";
 import InfoFeedResultRow from "./InfoFeedResultRow.vue";
@@ -12,7 +14,7 @@ import SegmentedProgressBar from "./SegmentedProgressBar.vue";
 import SegmentedToggle from "./SegmentedToggle.vue";
 import StatusPill from "./StatusPill.vue";
 
-export { AgentModelOptionBar, BinaryCheckbox, BrowseSelectButton, ConfigFoldCard, FeatureToggle, HistorySessionPanel, InfoFeedResultRow, JsonConfigFileEditor, OptionBar, SafeHtmlBlock, SegmentedProgressBar, SegmentedToggle, StatusPill };
+export { AgentModelOptionBar, BinaryCheckbox, BrowseSelectButton, ConfigFloatingPanel, ConfigFoldCard, ConfigListSummaryBubble, FeatureToggle, HistorySessionPanel, InfoFeedResultRow, JsonConfigFileEditor, OptionBar, SafeHtmlBlock, SegmentedProgressBar, SegmentedToggle, StatusPill };
 
 export type CommonComponentRegistration = {
   name: string;
@@ -70,6 +72,20 @@ export const commonComponentRegistry: CommonComponentRegistration[] = [
     category: "picker",
     description: "文件、文件夹、本地路径选择入口。",
     usageRule: "页面需要触发浏览文件、文件夹或本地路径选择时使用，按钮文案和选择类型由调用方传入。",
+  },
+  {
+    name: "配置悬浮框",
+    file: "server-web/components/ConfigFloatingPanel.vue",
+    category: "config",
+    description: "可编辑配置弹层的标准外壳，统一标题、副标题、状态、校验按钮、关闭行为和滚动容器。",
+    usageRule: "页面需要新增或修改配置时使用；业务页面通过 slot 传入输入框、选择框、校验结果和保存按钮，不重复手写弹层外壳。",
+  },
+  {
+    name: "配置列表简化展示气泡",
+    file: "server-web/components/ConfigListSummaryBubble.vue",
+    category: "config",
+    description: "配置项只读概览气泡，统一锚点定位、关闭行为、分组列表和值状态展示。",
+    usageRule: "页面只需要快速查看配置来源和值时使用；需要修改配置时使用配置悬浮框。",
   },
   {
     name: "ConfigFoldCard",

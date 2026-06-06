@@ -99,11 +99,11 @@ export function createConsoleShellRouteController(options: ConsoleShellRouteCont
   function localizedKnowledgeTabLabel(tab: LabeledTab) {
     switch (tab.id) {
       case "management":
-        return options.msg.value.nav.knowledgeManagement;
+        return options.msg.value.nav.knowledgeArchive;
       case "wordCloud":
-        return options.msg.value.nav.wordCloud;
+        return options.msg.value.nav.corpusAnalysis;
       case "maintenance":
-        return options.msg.value.nav.knowledgeConfig;
+        return options.msg.value.nav.parameterConfig;
       default:
         return tab.label;
     }

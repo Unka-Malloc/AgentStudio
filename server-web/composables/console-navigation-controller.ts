@@ -282,6 +282,21 @@ export function createConsoleNavigationController(options: ConsoleNavigationCont
     }
   }
 
+  function openKnowledgeManagementPanel(panel: KnowledgeManagementPanel) {
+    if (panel !== "knowledge" && panel !== "rules") {
+      return;
+    }
+    knowledgeTab.value = "management";
+    knowledgeManagementPanel.value = panel;
+    currentView.value = "knowledge";
+    void appRouter?.push("/knowledge/management");
+    closeSideNavOverlay();
+    void options.refreshKnowledgeConsole();
+    if (panel === "rules") {
+      void options.refreshExpertRules();
+    }
+  }
+
   function openExternalServiceTab(tab: ExternalServiceTab) {
     externalServiceTab.value = tab;
     currentView.value = "externalServices";
@@ -329,9 +344,6 @@ export function createConsoleNavigationController(options: ConsoleNavigationCont
 
   function openDrawer(tab: DrawerTab) {
     let nextTab = tab;
-    if (nextTab === "modules" && !options.hasFeature("analysis-runtime")) {
-      nextTab = "discovery";
-    }
     if (nextTab === "syncDirectories" && !options.hasFeature("knowledge-core")) {
       nextTab = "discovery";
     }
@@ -366,6 +378,7 @@ export function createConsoleNavigationController(options: ConsoleNavigationCont
     openDebugTab,
     openDrawer,
     openExternalServiceTab,
+    openKnowledgeManagementPanel,
     openKnowledgeTab,
     refreshSystemStatusLogs,
     sideNavOpen,

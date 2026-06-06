@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { ServerConfig } from "../config/ServerConfig.mjs";
 import {
   loadCompositionPresets
 } from "./index.mjs";
@@ -38,7 +39,7 @@ function nowIso() {
 }
 
 function registryRoot(userDataPath = "") {
-  return path.resolve(userDataPath || process.cwd(), "external-services");
+  return path.resolve(userDataPath || ServerConfig.getDataDir(), "external-services");
 }
 
 export function externalServiceRegistryPath(userDataPath = "") {

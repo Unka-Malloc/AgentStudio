@@ -50,8 +50,15 @@
 }
 
 .permission-tool-rule-table .job-table-header,
-.permission-tool-rule-table .job-row,
+.permission-tool-rule-table .job-row {
+  grid-template-columns: minmax(180px, 1fr) minmax(92px, 0.35fr) minmax(220px, 0.9fr);
+}
+
 .grant-tool-rule-table .job-table-header,
 .grant-tool-rule-table .job-row {
-  grid-template-columns: minmax(180px, 1fr) minmax(92px, 0.35fr) minmax(220px, 0.9fr);
+  grid-template-columns:
+    minmax(150px, 0.75fr)
+    minmax(180px, 1fr)
+    minmax(92px, 0.35fr)
+    minmax(220px, 0.9fr);
 }

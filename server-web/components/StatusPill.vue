@@ -87,6 +87,8 @@ const accessibleLabel = computed(() => props.ariaLabel || displayLabel.value);
 }
 
 .standard-status-pill[data-tone="completed"],
+.standard-status-pill[data-tone="aligned"],
+.standard-status-pill[data-tone="online"],
 .standard-status-pill[data-tone="success"] {
   --_border: var(--success-border);
   --_bg:     var(--success-surface);
@@ -103,6 +105,7 @@ const accessibleLabel = computed(() => props.ariaLabel || displayLabel.value);
 
 .standard-status-pill[data-tone="muted"],
 .standard-status-pill[data-tone="neutral"],
+.standard-status-pill[data-tone="offline"],
 .standard-status-pill[data-tone="medium"],
 .standard-status-pill[data-tone="low"] {
   --_border: var(--border-subtle);

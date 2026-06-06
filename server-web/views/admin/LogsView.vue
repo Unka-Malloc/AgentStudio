@@ -84,16 +84,18 @@ function handleHeaderDragend(newWidth: number, oldWidth: number, column: any) {
                     </div>
                   </template>
                 </el-table-column>
+                <el-table-column prop="time" label="时间" :min-width="knowledgeLogColumnWidths.time">
+                  <template #default="{ row }">
+                    <span class="knowledge-log-time" :title="formatMachineDate(row.occurredAt, 'full')">
+                      {{ formatMachineDate(row.occurredAt, 'compact') }}
+                    </span>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="status" label="状态" :min-width="knowledgeLogColumnWidths.status">
                   <template #default="{ row }">
                     <span class="knowledge-log-status">
                       <StatusPill :tone="row.tone" :label="row.statusLabel" />
                     </span>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="stage" label="阶段" :min-width="knowledgeLogColumnWidths.stage">
-                  <template #default="{ row }">
-                    <span class="knowledge-log-stage">{{ row.stage }}</span>
                   </template>
                 </el-table-column>
                 <el-table-column prop="progress" label="进度" :min-width="knowledgeLogColumnWidths.progress">
@@ -103,11 +105,9 @@ function handleHeaderDragend(newWidth: number, oldWidth: number, column: any) {
                     </span>
                   </template>
                 </el-table-column>
-                <el-table-column prop="time" label="时间" :min-width="knowledgeLogColumnWidths.time">
+                <el-table-column prop="stage" label="阶段" :min-width="knowledgeLogColumnWidths.stage">
                   <template #default="{ row }">
-                    <span class="knowledge-log-time" :title="formatMachineDate(row.occurredAt, 'full')">
-                      {{ formatMachineDate(row.occurredAt, 'compact') }}
-                    </span>
+                    <span class="knowledge-log-stage">{{ row.stage }}</span>
                   </template>
                 </el-table-column>
                 <el-table-column prop="detail" label="详情" :min-width="knowledgeLogColumnWidths.detail">

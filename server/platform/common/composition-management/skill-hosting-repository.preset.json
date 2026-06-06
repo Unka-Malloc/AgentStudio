@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "kind": "pact.composition.preset",
   "presetId": "skill-hosting-repository",
-  "displayName": "Skill Hosting Repository",
+  "displayName": "Pact Skill Hub",
   "status": "active",
   "compositionClass": "deployment-dependency-package",
   "deploymentTarget": {

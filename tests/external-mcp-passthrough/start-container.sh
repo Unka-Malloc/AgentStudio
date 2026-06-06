@@ -13,8 +13,8 @@ if [ -z "$CONTAINER_ENGINE" ]; then
     exit 1
   fi
 fi
-IMAGE_TAG="${IMAGE_TAG:-pact-external-mcp-fake-fastmcp:verify}"
-CONTAINER_NAME="${CONTAINER_NAME:-pact-external-mcp-fake-fastmcp}"
+IMAGE_TAG="${IMAGE_TAG:-pact-external-mcp-fixture-fastmcp:verify}"
+CONTAINER_NAME="${CONTAINER_NAME:-pact-external-mcp-fixture-fastmcp}"
 HOST_PORT="${HOST_PORT:-8787}"
 
 "$CONTAINER_ENGINE" build -t "$IMAGE_TAG" "$SCRIPT_DIR"
@@ -26,4 +26,4 @@ HOST_PORT="${HOST_PORT:-8787}"
   -p "127.0.0.1:${HOST_PORT}:8787" \
   "$IMAGE_TAG"
 
-printf 'External MCP fake service: http://127.0.0.1:%s/mcp/\n' "$HOST_PORT"
+printf 'External MCP fixture service: http://127.0.0.1:%s/mcp/\n' "$HOST_PORT"

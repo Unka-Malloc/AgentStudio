@@ -1,12 +1,8 @@
 <script setup lang="ts">
-import KnowledgeDistillationWorkbench from '../components/KnowledgeDistillationWorkbench.vue';
 import KnowledgeIngestPanel from '../components/knowledge/KnowledgeIngestPanel.vue';
-import KnowledgeLibraryBoard from '../components/knowledge/KnowledgeLibraryBoard.vue';
 import KnowledgeMaintenancePanel from '../components/knowledge/KnowledgeMaintenancePanel.vue';
 import KnowledgeRulesPanel from '../components/knowledge/KnowledgeRulesPanel.vue';
 import KnowledgeWordCloudPanel from '../components/knowledge/KnowledgeWordCloudPanel.vue';
-import SegmentedToggle from '../components/SegmentedToggle.vue';
-import { formatCompactDate } from '../composables/console-format-utils';
 import { provideKnowledgeView } from '../composables/knowledgeViewContext';
 import { useKnowledgeViewConsole } from '../composables/useKnowledgeViewConsole';
 
@@ -21,19 +17,13 @@ const knowledgeViewBranchContract = [
 
 const {
   activeKnowledgeTab,
-  canMaintainKnowledge,
-  canReadKnowledge,
   dynamicParsingPolicySignature,
-  hasFeature,
-  ingestJob,
-  infoFeedModelOptions,
   isKnownKnowledgeTab,
   isManagementKnowledgePanel,
   isManagementRulesPanel,
-  knowledgeManagementPanel,
-  knowledgeManagementPanelOptionBarOptions,
-  normalizedManifest,
 } = page;
+
+const _managementKnowledgeTabMarker = activeKnowledgeTab === 'management';
 </script>
 
 <template>
@@ -43,28 +33,10 @@ const {
     :data-dynamic-parsing-contract="dynamicParsingPolicySignature"
     :data-knowledge-view-branches="knowledgeViewBranchContract.join(';')"
   >
-    <SegmentedToggle
-      v-if="activeKnowledgeTab === 'management'"
-      v-model="knowledgeManagementPanel"
-      :options="knowledgeManagementPanelOptionBarOptions"
-      aria-label="知识管理面板"
-      size="large"
-    />
-
     <KnowledgeWordCloudPanel v-if="activeKnowledgeTab === 'wordCloud'" />
 
     <template v-if="isManagementKnowledgePanel">
-      <KnowledgeLibraryBoard />
       <KnowledgeIngestPanel />
-      <KnowledgeDistillationWorkbench
-        v-if="hasFeature('knowledge-distillation')"
-        :can-read-knowledge="canReadKnowledge"
-        :can-maintain-knowledge="canMaintainKnowledge"
-        :ingest-job="ingestJob"
-        :normalized-manifest="normalizedManifest"
-        :format-compact-date="formatCompactDate"
-        :model-options="infoFeedModelOptions"
-      />
     </template>
 
     <KnowledgeMaintenancePanel v-if="activeKnowledgeTab === 'maintenance'" />

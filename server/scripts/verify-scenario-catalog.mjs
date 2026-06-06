@@ -10,7 +10,13 @@ const repoRoot = path.resolve(__dirname, "../..");
 const scenarioRoot = path.join(repoRoot, "docs", "scenarios");
 const catalogPath = path.join(scenarioRoot, "scenario-catalog.json");
 const readmePath = path.join(scenarioRoot, "README.md");
-const implementationGapsPath = path.join(scenarioRoot, "SCENARIO-IMPLEMENTATION-GAPS.md");
+const implementationGapsPath = path.join(
+  repoRoot,
+  "docs",
+  "reports",
+  "history",
+  "SCENARIO-IMPLEMENTATION-GAPS.md"
+);
 
 const catalog = JSON.parse(await fs.readFile(catalogPath, "utf8"));
 const readme = await fs.readFile(readmePath, "utf8");

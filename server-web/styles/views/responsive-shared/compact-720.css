@@ -82,6 +82,12 @@
     max-width: none;
   }
 
+  .clients-card .filter-select {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+  }
+
   .jobs-table th:nth-child(4),
   .jobs-table td:nth-child(4) {
     display: none;

@@ -41,33 +41,21 @@ const LOCAL_GRANT_WRITE_TOOLSETS = Object.freeze([
 ]);
 
 const LOCAL_GRANT_TARGET_MATCH = Object.freeze({
-  codex: {
+  openclaw: {
     toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
-    agentProfileId: "pact.mcp.codex"
+    agentProfileId: "pact.mcp.openclaw"
   },
   "claude-code": {
     toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
     agentProfileId: "pact.mcp.claude-code"
   },
+  codex: {
+    toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
+    agentProfileId: "pact.mcp.codex"
+  },
   "gemini-cli": {
     toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
     agentProfileId: "pact.mcp.gemini-cli"
-  },
-  "kilo-code": {
-    toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
-    agentProfileId: "pact.mcp.kilo-code"
-  },
-  copilot: {
-    toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
-    agentProfileId: "pact.mcp.copilot"
-  },
-  openclaw: {
-    toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
-    agentProfileId: "pact.mcp.openclaw"
-  },
-  hermes: {
-    toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
-    agentProfileId: "pact.mcp.hermes"
   },
   antigravity: {
     toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
@@ -76,6 +64,26 @@ const LOCAL_GRANT_TARGET_MATCH = Object.freeze({
   opencode: {
     toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
     agentProfileId: "pact.mcp.opencode"
+  },
+  copilot: {
+    toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
+    agentProfileId: "pact.mcp.copilot"
+  },
+  "kilo-code": {
+    toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
+    agentProfileId: "pact.mcp.kilo-code"
+  },
+  cursor: {
+    toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
+    agentProfileId: "pact.mcp.cursor"
+  },
+  hermes: {
+    toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
+    agentProfileId: "pact.mcp.hermes"
+  },
+  windsurf: {
+    toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
+    agentProfileId: "pact.mcp.windsurf"
   }
 });
 
@@ -85,6 +93,8 @@ const LOCAL_GRANT_RISK_RANK = Object.freeze({
   repair_write: 2,
   destructive: 3
 });
+const DEFAULT_RELAY_MCP_GRANT_TTL_MS = 15 * 60 * 1000;
+const MAX_RELAY_MCP_GRANT_TTL_MS = 60 * 60 * 1000;
 
 function nowIso() {
   return new Date().toISOString();
@@ -122,6 +132,16 @@ function normalizeGrantTargets(value) {
 function normalizeGrantValues(value, limit = 64) {
   const items = Array.isArray(value) ? value : String(value || "").split(",");
   return [...new Set(items.map((item) => String(item || "").trim()).filter(Boolean))].slice(0, limit);
+}
+
+function intersectGrantValues(requestedValue, allowedValue, limit = 64) {
+  const allowed = normalizeGrantValues(allowedValue, limit);
+  const requested = normalizeGrantValues(requestedValue, limit);
+  if (requested.length === 0) {
+    return allowed;
+  }
+  const allowedSet = new Set(allowed);
+  return requested.filter((item) => allowedSet.has(item));
 }
 
 function grantMetadata(grant) {
@@ -876,6 +896,105 @@ function compactText(value) {
   return String(value || "").trim();
 }
 
+function positiveInteger(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function parseTime(value = "") {
+  const parsed = Date.parse(compactText(value));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function resolveRelayMcpGrantExpiry({
+  input = {},
+  sourceGrant = {},
+  nowMs = Date.now()
+} = {}) {
+  const defaultTtlMs = positiveInteger(
+    input.defaultTtlMs ?? input.relayMcpDefaultTtlMs ?? process.env.PACT_ACP_RELAY_MCP_GRANT_TTL_MS,
+    DEFAULT_RELAY_MCP_GRANT_TTL_MS
+  );
+  const maxTtlMs = positiveInteger(
+    input.maxTtlMs ?? input.relayMcpMaxTtlMs ?? process.env.PACT_ACP_RELAY_MCP_GRANT_MAX_TTL_MS,
+    MAX_RELAY_MCP_GRANT_TTL_MS
+  );
+  const requestedTtlMs = positiveInteger(input.ttlMs ?? input.relayMcpTtlMs, 0);
+  const requestedExpiresAtMs = parseTime(input.expiresAt ?? input.relayMcpExpiresAt);
+  const sourceExpiresAtMs = parseTime(sourceGrant.expiresAt);
+  const baseExpiryMs = requestedExpiresAtMs ||
+    nowMs + Math.min(requestedTtlMs || defaultTtlMs, maxTtlMs);
+  const caps = [
+    baseExpiryMs,
+    nowMs + maxTtlMs,
+    ...(sourceExpiresAtMs ? [sourceExpiresAtMs] : [])
+  ].filter((value) => Number.isFinite(value) && value > 0);
+  const expiresAtMs = Math.min(...caps);
+  return {
+    ok: expiresAtMs > nowMs,
+    expiresAt: new Date(expiresAtMs).toISOString(),
+    ttlMs: Math.max(0, expiresAtMs - nowMs),
+    requestedExpiresAt: requestedExpiresAtMs ? new Date(requestedExpiresAtMs).toISOString() : "",
+    sourceExpiresAt: sourceExpiresAtMs ? new Date(sourceExpiresAtMs).toISOString() : "",
+    maxTtlMs
+  };
+}
+
+function relayMcpGrantReuseAllowed(existingGrant, {
+  relaySessionId = "",
+  sourceGrantId = "",
+  virtualAgentId = "",
+  targetId = ""
+} = {}) {
+  if (!existingGrant) {
+    return true;
+  }
+  const metadata = grantMetadata(existingGrant);
+  if (compactText(existingGrant.type) !== "relay-mcp-child") {
+    return false;
+  }
+  if (compactText(metadata.issuedBy) !== "pact-acp-agent-relay") {
+    return false;
+  }
+  if (compactText(metadata.relaySessionId) !== compactText(relaySessionId)) {
+    return false;
+  }
+  if (compactText(metadata.sourceGrantId) !== compactText(sourceGrantId)) {
+    return false;
+  }
+  const existingVirtualAgentId = compactText(metadata.virtualAgentId);
+  const existingTargetId = compactText(metadata.targetId);
+  return !(
+    (existingVirtualAgentId && compactText(virtualAgentId) && existingVirtualAgentId !== compactText(virtualAgentId)) ||
+    (existingTargetId && compactText(targetId) && existingTargetId !== compactText(targetId))
+  );
+}
+
+function relayMcpGrantCollisionError(existingGrant, {
+  requestedGrantId = "",
+  relaySessionId = "",
+  sourceGrantId = ""
+} = {}) {
+  const metadata = grantMetadata(existingGrant);
+  return {
+    ok: false,
+    status: 409,
+    error: {
+      code: "relay_mcp_grant_id_collision",
+      message: "Relay MCP child grant id is already bound to another owner.",
+      details: {
+        requestedGrantId: compactText(requestedGrantId),
+        requestedRelaySessionId: compactText(relaySessionId),
+        requestedSourceGrantId: compactText(sourceGrantId),
+        existingType: compactText(existingGrant?.type),
+        existingIssuedBy: compactText(metadata.issuedBy),
+        existingRelaySessionId: compactText(metadata.relaySessionId),
+        existingSourceGrantId: compactText(metadata.sourceGrantId)
+      }
+    }
+  };
+}
+
 function slugText(value, fallback = "target") {
   const normalized = compactText(value)
     .toLowerCase()
@@ -1322,6 +1441,141 @@ export function createToolSkillManagementProvider({
     return current.store.revokeGrant(input.grantId || input["grant-id"] || input.id || "", input.reason || "");
   }
 
+  async function createRelayMcpGrant(input = {}) {
+    const current = requirePlatform();
+    const sourceAuthorization = input.sourceAuthorization && typeof input.sourceAuthorization === "object"
+      ? input.sourceAuthorization
+      : {};
+    const sourceGrant = sourceAuthorization.grant && typeof sourceAuthorization.grant === "object"
+      ? sourceAuthorization.grant
+      : null;
+    if (!sourceGrant?.id) {
+      return {
+        ok: false,
+        status: 403,
+        error: {
+          code: "relay_mcp_source_grant_required",
+          message: "A verified source Tool Management grant is required before issuing a relay MCP grant."
+        }
+      };
+    }
+
+    const session = input.session && typeof input.session === "object" ? input.session : {};
+    const route = input.route && typeof input.route === "object" ? input.route : {};
+    const target = route.target && typeof route.target === "object" ? route.target : {};
+    const virtualAgent = route.virtualAgent && typeof route.virtualAgent === "object" ? route.virtualAgent : {};
+    const sourceAuthContext = input.sourceAuthContext && typeof input.sourceAuthContext === "object"
+      ? input.sourceAuthContext
+      : {};
+    const requestedScopes = input.scopes ?? input.relayMcpScopes;
+    const requestedToolsets = input.toolsets ?? input.relayMcpToolsets;
+    const scopes = intersectGrantValues(requestedScopes, sourceGrant.scopes || sourceAuthContext.sourceScopes);
+    const toolsets = intersectGrantValues(requestedToolsets, sourceGrant.toolsets || sourceAuthContext.sourceToolsets);
+    const toolAllow = intersectGrantValues(input.toolAllow ?? input.relayMcpToolAllow, sourceGrant.toolAllow || [], 256);
+    const capabilities = intersectGrantValues(
+      input.capabilities ?? input.capabilityIds ?? input.relayMcpCapabilities,
+      sourceGrant.capabilities || sourceAuthContext.sourceCapabilities || [],
+      256
+    );
+
+    const relaySessionId = compactText(session.relaySessionId || input.relaySessionId);
+    const relayTurnId = compactText(input.relayTurnId || input.turn?.relayTurnId);
+    const targetId = compactText(target.targetId || input.targetId);
+    const virtualAgentId = compactText(virtualAgent.virtualAgentId || input.virtualAgentId);
+    const parentOperationId = compactText(input.parentOperationId || input.relayOperationId || input.operationId);
+    const requestedGrantId = compactText(input.grantId || input.relayMcpGrantId || session.relayMcpGrantId);
+    const traceContext = input.traceContext && typeof input.traceContext === "object" ? input.traceContext : {};
+    const existingGrant = requestedGrantId && typeof current.store.getGrant === "function"
+      ? current.store.getGrant(requestedGrantId)
+      : null;
+    if (existingGrant && !relayMcpGrantReuseAllowed(existingGrant, {
+      relaySessionId,
+      sourceGrantId: sourceGrant.id,
+      virtualAgentId,
+      targetId
+    })) {
+      return relayMcpGrantCollisionError(existingGrant, {
+        requestedGrantId,
+        relaySessionId,
+        sourceGrantId: sourceGrant.id
+      });
+    }
+    const expiry = resolveRelayMcpGrantExpiry({ input, sourceGrant });
+    if (!expiry.ok) {
+      return {
+        ok: false,
+        status: 403,
+        error: {
+          code: "relay_mcp_grant_expired",
+          message: "Relay MCP child grant expiry is already elapsed or outside the source grant validity window.",
+          details: {
+            sourceGrantId: compactText(sourceGrant.id),
+            sourceExpiresAt: expiry.sourceExpiresAt,
+            requestedExpiresAt: expiry.requestedExpiresAt
+          }
+        }
+      };
+    }
+    const grantResult = await current.store.createGrant({
+      ...(requestedGrantId ? { id: requestedGrantId } : {}),
+      label: compactText(input.label) || `ACP Relay MCP ${virtualAgentId || "agent"} -> ${targetId || "target"}`,
+      type: "relay-mcp-child",
+      enabled: true,
+      scopes,
+      toolsets,
+      ...(toolAllow.length ? { toolAllow } : {}),
+      ...(capabilities.length ? { capabilities } : {}),
+      expiresAt: expiry.expiresAt,
+      metadata: {
+        issuedBy: "pact-acp-agent-relay",
+        mcpServer: "pact-mcp-server",
+        relayMcp: true,
+        relayMcpGrantTtlMs: expiry.ttlMs,
+        relayMcpGrantMaxTtlMs: expiry.maxTtlMs,
+        relayMcpGrantExpiresAt: expiry.expiresAt,
+        relaySessionId,
+        relayTurnId,
+        virtualAgentId,
+        targetId,
+        parentOperationId,
+        workspaceId: compactText(session.workspaceId || route.workspaceId || input.workspaceId),
+        sourceId: compactText(session.sourceId || input.sourceId),
+        sourceSessionId: compactText(session.sourceSessionId || input.sourceSessionId),
+        sourceSubjectId: compactText(session.sourceSubjectId || input.sourceSubjectId),
+        sourceGrantId: compactText(sourceGrant.id),
+        sourceGrantType: compactText(sourceGrant.type),
+        sourceAuthSessionId: compactText(sourceAuthContext.authSessionId),
+        sourceCredentialRef: compactText(sourceAuthContext.credentialRef),
+        traceId: compactText(traceContext.traceId || input.traceId),
+        requestId: compactText(traceContext.requestId || input.requestId),
+        createdBy: "acp-agent-relay"
+      },
+      reason: compactText(input.reason) || `Delegated MCP grant for ACP relay session ${relaySessionId || "(pending)"}`
+    });
+    return {
+      ok: true,
+      status: 201,
+      grant: grantResult.grant,
+      token: grantResult.token
+    };
+  }
+
+  async function revokeRelayMcpGrant(input = {}) {
+    const current = requirePlatform();
+    const grantId = compactText(input.grantId || input.relayMcpGrantId || input.id);
+    if (!grantId) {
+      return null;
+    }
+    const grant = typeof current.store.getGrant === "function" ? current.store.getGrant(grantId) : null;
+    if (grant) {
+      const metadata = grantMetadata(grant);
+      if (compactText(metadata.issuedBy) !== "pact-acp-agent-relay") {
+        return null;
+      }
+    }
+    return current.store.revokeGrant(grantId, input.reason || "ACP relay MCP child grant revoked.");
+  }
+
   function createMcpAuthorizationRequest(input = {}, { request = null } = {}) {
     const current = requirePlatform();
     return current.store.createMcpAuthorizationRequest({
@@ -1403,6 +1657,7 @@ export function createToolSkillManagementProvider({
           "tool_grants",
           "tool_execution",
           "mcp_local_grant",
+          "mcp_relay_child_grant",
           "mcp_workspace_reference_projection",
           "skill_registry_surface",
           "active_skill_catalog"
@@ -1420,6 +1675,8 @@ export function createToolSkillManagementProvider({
     markLocalMcpGrantUninstalled,
     createAuthorizationGrant,
     revokeAuthorizationGrant,
+    createRelayMcpGrant,
+    revokeRelayMcpGrant,
     createMcpAuthorizationRequest,
     listMcpAuthorizationRequests,
     resolveMcpAuthorizationRequest,

@@ -11,6 +11,8 @@ export function useModulesViewConsole() {
     moduleGroups,
     mountDraft,
     openMountPathPicker,
+    reloadModules,
+    saveMountModules,
     totalMountCount,
   } = useServerConsoleShellContext();
 
@@ -24,6 +26,8 @@ export function useModulesViewConsole() {
     moduleGroups,
     mountDraft,
     openMountPathPicker,
+    reloadModules,
+    saveMountModules,
     totalMountCount,
   };
 }

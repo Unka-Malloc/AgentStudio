@@ -6,6 +6,47 @@ import 'package:flutter_client/src/services/portable_data_root.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('returns empty snapshot state when history files are missing', () async {
+    final directory = await Directory.systemTemp.createTemp('pact-activity-missing-');
+    addTearDown(() async {
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+    });
+    final portableData = PortableDataRoot(dataDirectoryOverride: directory);
+
+    final state = await const ActivitySnapshotService().load(portableData);
+
+    expect(state.activityPath, contains('activity.jsonl'));
+    expect(state.events, isEmpty);
+    expect(state.snapshots, isEmpty);
+    expect(ActivitySnapshotState.empty(), isNotNull);
+  });
+
+  test('sorts snapshots by capturedAt descending', () async {
+    final directory = await Directory.systemTemp.createTemp('pact-activity-sort-');
+    addTearDown(() async {
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+    });
+    final portableData = PortableDataRoot(dataDirectoryOverride: directory);
+    final snapshotDir = await portableData.snapshotDirectory();
+    await snapshotDir.create(recursive: true);
+
+    await File('${snapshotDir.path}/one.json').writeAsString(
+      jsonEncode({'snapshotId': 'older', 'capturedAt': '2026-01-01T00:00:00Z'}),
+    );
+    await File('${snapshotDir.path}/two.json').writeAsString(
+      jsonEncode({'snapshotId': 'newest', 'capturedAt': '2026-05-31T00:00:00Z'}),
+    );
+
+    final state = await const ActivitySnapshotService().load(portableData);
+
+    expect(state.snapshots, hasLength(2));
+    expect(state.snapshots.first['snapshotId'], 'newest');
+  });
+
   test('loads activity and snapshots from the future client state root', () async {
     final directory = await Directory.systemTemp.createTemp('pact-activity-');
     addTearDown(() async {

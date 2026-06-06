@@ -19,7 +19,8 @@ import {
 import { importFileDescriptorForPath } from "../../import-file-types.mjs";
 import {
   buildMachineYamlDocument,
-  renderHumanDocxBodyBlocks
+  renderHumanDocxBodyBlocks,
+  summarizeMarkdownStructure
 } from "../../../../document-export/docx-human-renderer.mjs";
 
 const MAX_CHILD_DOCUMENTS_PER_SOURCE = 80;
@@ -252,6 +253,38 @@ function normalizeDocSpec(spec) {
   };
 }
 
+function buildExportConsistencyBaseline(spec, source) {
+  const normalizedSections = asArray(spec?.sections).map((section, index) => {
+    const body = normalizeText(section?.body || section?.text || "");
+    return {
+      index: index + 1,
+      title: scalar(section?.title),
+      markdownStructure: summarizeMarkdownStructure(body)
+    };
+  });
+
+  return {
+    schemaVersion: 1,
+    sourceFormat: source?.mediaType === "text/markdown" ? "markdown" : scalar(source?.mediaType || "plain-text"),
+    targetFormat: "docx",
+    sectionCount: normalizedSections.length,
+    sections: normalizedSections,
+    totals: normalizedSections.reduce((summary, section) => {
+      const structure = section.markdownStructure || {};
+      summary.headingCount += Number(structure.headingCount || 0);
+      summary.bulletCount += Number(structure.bulletCount || 0);
+      summary.tableCount += Number(structure.tableCount || 0);
+      summary.paragraphCount += Number(structure.paragraphCount || 0);
+      return summary;
+    }, {
+      headingCount: 0,
+      bulletCount: 0,
+      tableCount: 0,
+      paragraphCount: 0
+    })
+  };
+}
+
 async function writeDocxSpec({
   rootPath,
   sourceFolder,
@@ -263,6 +296,7 @@ async function writeDocxSpec({
   sourceMaterialRelativePath = ""
 }) {
   const normalized = normalizeDocSpec(spec);
+  const exportConsistencyBaseline = buildExportConsistencyBaseline(normalized, source);
   const relativePath = path.posix.join("sources", sourceFolder, fileName);
   const absolutePath = path.join(rootPath, ...relativePath.split("/"));
   await fs.mkdir(path.dirname(absolutePath), { recursive: true });
@@ -286,6 +320,7 @@ async function writeDocxSpec({
     granularity,
     metadata: normalized.metadata || {},
     evidence: normalized.evidence || {},
+    exportConsistencyBaseline,
     sections: asArray(normalized.sections).map((section, index) => ({
       index: index + 1,
       title: scalar(section.title) || `section-${index + 1}`,
@@ -306,6 +341,7 @@ async function writeDocxSpec({
     relativePath,
     sha256: sha256(buffer),
     byteSize: stats.size,
+    exportConsistencyBaseline,
     machineReadableFormat: "yaml",
     machineReadableRelativePath,
     machineReadableSha256: sha256(Buffer.from(machineYaml, "utf8")),

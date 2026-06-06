@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pact.local/docs/examples/document-evaluation-corpus-manifest.schema.json",
+  "title": "Pact Document Evaluation Corpus Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "corpusId",
+    "storageRoot",
+    "items"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "corpusId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "storageRoot": {
+      "type": "string",
+      "minLength": 1,
+      "description": "External corpus root, typically under ~/.pact-server-data/evaluation-corpora/."
+    },
+    "description": {
+      "type": "string"
+    },
+    "privacyBoundary": {
+      "$ref": "#/$defs/privacyBoundary"
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/corpusItem"
+      }
+    }
+  },
+  "$defs": {
+    "corpusItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "relativePath",
+        "source",
+        "sourceUrl",
+        "licenseOrTerms",
+        "sha256",
+        "byteSize",
+        "format",
+        "openability",
+        "structureAnchors",
+        "exportExpectations",
+        "riskLabels",
+        "expectedChecks"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "relativePath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceUrl": {
+          "type": "string",
+          "minLength": 1
+        },
+        "licenseOrTerms": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "byteSize": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "format": {
+          "type": "string",
+          "minLength": 1
+        },
+        "openability": {
+          "$ref": "#/$defs/openability"
+        },
+        "structureAnchors": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/structureAnchor"
+          }
+        },
+        "exportExpectations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/exportExpectation"
+          }
+        },
+        "riskLabels": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "expectedChecks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "type": "string"
+        },
+        "messageCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "threadCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "attachmentCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "errorCodes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "privacyBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rawContentInRepo",
+        "allowedRepositoryMetadata",
+        "reviewPathPolicy"
+      ],
+      "properties": {
+        "rawContentInRepo": {
+          "type": "boolean"
+        },
+        "allowedRepositoryMetadata": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "reviewPathPolicy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "openability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedStatus",
+        "verificationHints"
+      ],
+      "properties": {
+        "expectedStatus": {
+          "type": "string",
+          "enum": [
+            "opens",
+            "blocked",
+            "unknown"
+          ]
+        },
+        "verificationHints": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "structureAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "anchorType",
+        "description"
+      ],
+      "properties": {
+        "anchorType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "exportExpectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetFormat",
+        "expectedStatus",
+        "checks"
+      ],
+      "properties": {
+        "targetFormat": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expectedStatus": {
+          "type": "string",
+          "enum": [
+            "opens",
+            "blocked",
+            "same-structure-expected"
+          ]
+        },
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -43,6 +43,11 @@ The interactive installer scans local clients and lets you choose one or more ta
 The default output is a human install report with per-client success or failure,
 not a raw configuration dump. Use `--json` for scripts.
 
+Supported targets are OpenClaw (`openclaw`), Claude Code (`claude-code`),
+Codex (`codex`), Gemini CLI (`gemini-cli`), Antigravity (`antigravity`),
+OpenCode (`opencode`), Copilot (`copilot`), Kilo Code (`kilo-code`),
+Cursor (`cursor`), Hermes Agent (`hermes`), and Windsurf (`windsurf`).
+
 For scripts and unattended agent shells:
 
 ```bash
@@ -150,5 +155,7 @@ npx pact-mcp-connector@latest uninstall --target claude-code,codex,openclaw
 
 Non-interactive uninstall requires an explicit target list.
 
-Supported targets: `codex`, `claude-code`, `gemini-cli`, `kilo-code`,
-`copilot`, `openclaw`, `hermes`, `antigravity`, `opencode`.
+Supported targets: OpenClaw (`openclaw`), Claude Code (`claude-code`),
+Codex (`codex`), Gemini CLI (`gemini-cli`), Antigravity (`antigravity`),
+OpenCode (`opencode`), Copilot (`copilot`), Kilo Code (`kilo-code`),
+Cursor (`cursor`), Hermes Agent (`hermes`), and Windsurf (`windsurf`).

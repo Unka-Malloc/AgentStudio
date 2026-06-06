@@ -6,10 +6,12 @@ import ConsoleSideNavLink from "./ConsoleSideNavLink.vue";
 defineOptions({ name: "ConsoleSideNavExternalServiceSection" });
 
 const {
+  activeRouteAdminView,
   activeRouteExternalServiceTab,
   activeRouteView,
   localizedExternalServiceTabLabel,
   msg,
+  openAdmin,
   openExternalServiceTab,
 } = useConsoleSideNavContext();
 </script>
@@ -24,6 +26,12 @@ const {
       :label="localizedExternalServiceTabLabel(tab)"
       subtle
       @activate="openExternalServiceTab(tab.id)"
+    />
+    <ConsoleSideNavLink
+      :active="activeRouteView === 'admin' && activeRouteAdminView === 'clients'"
+      :label="msg.nav.devices"
+      subtle
+      @activate="openAdmin('clients')"
     />
   </section>
 </template>

@@ -152,6 +152,19 @@ async function main() {
   assertAllowedOnly({
     files: viewAndComponentFiles,
     allowedFiles: allowedBridgeFiles,
+    predicate: (text) => /from\s+["'][^"']*\/lib\/bridge["']/.test(text),
+    message: "view/component files must not import the global bridge facade outside the allowlisted download boundary",
+  });
+  assertNoMissingAllowlistEntries({
+    files: viewAndComponentFiles,
+    allowedFiles: allowedBridgeFiles,
+    predicate: (text) => /from\s+["'][^"']*\/lib\/bridge["']/.test(text),
+    message: "bridge import allowlist contains stale entries",
+  });
+
+  assertAllowedOnly({
+    files: viewAndComponentFiles,
+    allowedFiles: allowedBridgeFiles,
     predicate: (text) => /\bbridge\s*\./.test(text),
     message: "view/component files must not call bridge.* directly outside the allowlisted download boundary",
   });
@@ -160,6 +173,20 @@ async function main() {
     allowedFiles: allowedBridgeFiles,
     predicate: (text) => /\bbridge\s*\./.test(text),
     message: "bridge boundary allowlist contains stale entries",
+  });
+
+  assertAllowedOnly({
+    files: viewAndComponentFiles,
+    allowedFiles: new Set(),
+    predicate: (text) => /\bfetch\s*\(/.test(text),
+    message: "view/component files must not call fetch() directly; use a domain client and controller",
+  });
+
+  assertAllowedOnly({
+    files: viewAndComponentFiles,
+    allowedFiles: new Set(),
+    predicate: (text) => /["'`]\/api(?:\/|\?|["'`])/.test(text),
+    message: "view/component files must not hard-code backend /api URLs; keep endpoint paths in server-web/lib/*-client.ts",
   });
 
   assertAllowedOnly({
@@ -1132,6 +1159,9 @@ async function main() {
   const consoleSideNavSkillHubSectionText = await readRequiredFile(
     "server-web/components/shell/side-nav/ConsoleSideNavSkillHubSection.vue",
   );
+  const consoleSideNavExternalServiceSectionText = await readRequiredFile(
+    "server-web/components/shell/side-nav/ConsoleSideNavExternalServiceSection.vue",
+  );
   const consoleSideNavSystemSectionText = await readRequiredFile(
     "server-web/components/shell/side-nav/ConsoleSideNavSystemSection.vue",
   );
@@ -1292,7 +1322,7 @@ async function main() {
   );
   assert.match(
     consoleSideNavText,
-    /createConsoleSideNavContext[\s\S]*provideConsoleSideNavContext[\s\S]*ConsoleSideNavBrand[\s\S]*ConsoleSideNavPrimaryLinks[\s\S]*ConsoleSideNavTeamSection[\s\S]*ConsoleSideNavKnowledgeSection[\s\S]*ConsoleSideNavAgentSection[\s\S]*ConsoleSideNavSkillHubSection[\s\S]*ConsoleSideNavSystemSection[\s\S]*ConsoleSideNavDebugSection[\s\S]*ConsoleSideNavFooter[\s\S]*ConsoleSideNavBackdrop/,
+    /createConsoleSideNavContext[\s\S]*provideConsoleSideNavContext[\s\S]*ConsoleSideNavBrand[\s\S]*ConsoleSideNavPrimaryLinks[\s\S]*ConsoleSideNavTeamSection[\s\S]*ConsoleSideNavKnowledgeSection[\s\S]*ConsoleSideNavAgentSection[\s\S]*ConsoleSideNavSkillHubSection[\s\S]*ConsoleSideNavExternalServiceSection[\s\S]*ConsoleSideNavSystemSection[\s\S]*ConsoleSideNavDebugSection[\s\S]*ConsoleSideNavFooter[\s\S]*ConsoleSideNavBackdrop/,
     "ConsoleSideNav.vue must compose the focused side-nav sections through a local context",
   );
   assert.doesNotMatch(
@@ -1322,6 +1352,7 @@ async function main() {
     consoleSideNavKnowledgeSectionText,
     consoleSideNavAgentSectionText,
     consoleSideNavSkillHubSectionText,
+    consoleSideNavExternalServiceSectionText,
     consoleSideNavSystemSectionText,
     consoleSideNavDebugSectionText,
     consoleSideNavFooterText,
@@ -1336,11 +1367,12 @@ async function main() {
     ["ConsoleSideNavLink.vue", consoleSideNavLinkText, 35, /class="side-link"[\s\S]*side-link-label/],
     ["ConsoleSideNavBrand.vue", consoleSideNavBrandText, 40, /brand-block[\s\S]*brand-loading-label[\s\S]*brand-progress-bar/],
     ["ConsoleSideNavPrimaryLinks.vue", consoleSideNavPrimaryLinksText, 75, /switchView\('dashboard'\)[\s\S]*switchView\('feed'\)[\s\S]*switchView\('approval'\)[\s\S]*openAdmin\('agentPermissions'\)[\s\S]*switchView\('sources'\)/],
-    ["ConsoleSideNavTeamSection.vue", consoleSideNavTeamSectionText, 40, /switchView\('workspaces'\)[\s\S]*openAdmin\('clients'\)/],
-    ["ConsoleSideNavKnowledgeSection.vue", consoleSideNavKnowledgeSectionText, 40, /hasFeature\('knowledge-core'\)[\s\S]*v-for="tab[\s\S]*openKnowledgeTab\(tab\.id\)/],
+    ["ConsoleSideNavTeamSection.vue", consoleSideNavTeamSectionText, 40, /switchView\('workspaces'\)/],
+    ["ConsoleSideNavKnowledgeSection.vue", consoleSideNavKnowledgeSectionText, 60, /hasFeature\('knowledge-core'\)[\s\S]*jumpToKnowledgeFileImport[\s\S]*openDebugTab\('knowledgeDistillation'\)[\s\S]*openKnowledgeManagementPanel\('rules'\)[\s\S]*openKnowledgeTab\('wordCloud'\)[\s\S]*openKnowledgeTab\('maintenance'\)/],
     ["ConsoleSideNavAgentSection.vue", consoleSideNavAgentSectionText, 45, /hasAnyFeature\(\['agent-gateway', 'agent-exploration'\]\)[\s\S]*openAdmin\('agentConfig'\)[\s\S]*openAdmin\('contextManagement'\)/],
     ["ConsoleSideNavSkillHubSection.vue", consoleSideNavSkillHubSectionText, 45, /hasFeature\('agent-gateway'\)[\s\S]*openAdmin\('toolList'\)[\s\S]*openAdmin\('toolStats'\)/],
-    ["ConsoleSideNavSystemSection.vue", consoleSideNavSystemSectionText, 75, /openAdmin\('storage'\)[\s\S]*openAdmin\('jobs'\)[\s\S]*openAdmin\('opsMonitor'\)[\s\S]*openAdmin\('runtimeDownloads'\)[\s\S]*openAdmin\('maintenanceAgent'\)[\s\S]*openAdmin\('productionHealth'\)[\s\S]*openAdmin\('logs'\)/],
+    ["ConsoleSideNavExternalServiceSection.vue", consoleSideNavExternalServiceSectionText, 45, /v-for="tab[\s\S]*openExternalServiceTab\(tab\.id\)[\s\S]*openAdmin\('clients'\)/],
+    ["ConsoleSideNavSystemSection.vue", consoleSideNavSystemSectionText, 75, /openAdmin\('storage'\)[\s\S]*openAdmin\('modules'\)[\s\S]*openAdmin\('runtimeDownloads'\)[\s\S]*openAdmin\('productionHealth'\)[\s\S]*openAdmin\('logs'\)[\s\S]*openAdmin\('jobs'\)[\s\S]*openAdmin\('opsMonitor'\)[\s\S]*openAdmin\('maintenanceAgent'\)/],
     ["ConsoleSideNavDebugSection.vue", consoleSideNavDebugSectionText, 40, /v-for="tab[\s\S]*localizedDebugTabLabel\(tab\)[\s\S]*openDebugTab\(tab\.id\)/],
     ["ConsoleSideNavFooter.vue", consoleSideNavFooterText, 30, /sideNavOpen\.value\s*=\s*false[\s\S]*openDrawer\("preferences"\)[\s\S]*msg\.nav\.systemConfig/],
     ["ConsoleSideNavBackdrop.vue", consoleSideNavBackdropText, 20, /sideNavOpen\.value\s*=\s*false[\s\S]*side-nav-backdrop/],
@@ -2135,7 +2167,7 @@ async function main() {
     "modulesViewContext.ts must provide the route-local modules context",
   );
   [
-    ["RuntimeModulesPanel.vue", runtimeModulesPanelText, 40, /RuntimeModuleGroup[\s\S]*moduleGroups/],
+    ["RuntimeModulesPanel.vue", runtimeModulesPanelText, 60, /RuntimeModuleGroup[\s\S]*moduleGroups/],
     ["RuntimeModuleGroup.vue", runtimeModuleGroupText, 35, /RuntimeModuleConfigItem[\s\S]*group\.rows/],
     ["RuntimeModuleConfigItem.vue", runtimeModuleConfigItemText, 100, /FeatureToggle[\s\S]*openMountPathPicker[\s\S]*enableMountModule[\s\S]*disableMountModule/],
   ].forEach(([fileName, text, maxLines, sentinel]) => {
@@ -5474,6 +5506,21 @@ async function main() {
     /const\s+\{\s*page\s*\}\s*=\s*knowledgeView[\s\S]*\}\s*=\s*page;/,
     "KnowledgeView.vue must consume only the page context group directly",
   );
+  assert.doesNotMatch(
+    knowledgeViewText,
+    /KnowledgeLibraryBoard/,
+    "KnowledgeView.vue must not render the redundant knowledge-library summary above knowledge ingest",
+  );
+  assert.doesNotMatch(
+    knowledgeIngestControllerText,
+    /global:\s*true|Pact Native 知识库/,
+    "console-knowledge-ingest-controller.ts must not default to a synthetic Pact Native ingest target",
+  );
+  assert.doesNotMatch(
+    knowledgeIngestTargetControllerText,
+    /value:\s*["']global["']|Pact Native 知识库/,
+    "console-knowledge-ingest-target-controller.ts must only expose detected real knowledge spaces",
+  );
   [
     ["KnowledgeIngestPanel.vue", knowledgeIngestPanelText, "useKnowledgeIngestContext"],
     ["KnowledgeLibraryBoard.vue", knowledgeLibraryBoardText, "useKnowledgeLibraryContext"],
@@ -5954,6 +6001,7 @@ async function main() {
     `${allowedBridgeFiles.size} bridge boundary,`,
     `${allowedHtmlRenderFiles.size} safe-html boundary,`,
     `${allowedUseConsoleFiles.size} useConsole compatibility callers,`,
+    "view/component API calls blocked,",
     "1 bridge-http boundary,",
     "30 domain API clients",
   ].join(" "));

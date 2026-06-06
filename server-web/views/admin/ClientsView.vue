@@ -2,6 +2,8 @@
 import { useServerConsoleShellContext } from '../../composables/serverConsoleShellContext';
 import { formatCompactDate } from '../../composables/console-format-utils';
 import {
+  clientConfigReportLabel,
+  clientConfigReportTone,
   clientConnectionDetail,
   clientConnectionMethodLabel,
   clientStatusLabel,
@@ -24,7 +26,7 @@ const {
           <section id="clients-list" class="surface-card clients-card">
               <div class="section-header">
                 <div>
-                  <h3>客户端</h3>
+                  <h3>客户端列表</h3>
               </div>
               <div class="section-tags">
                 <span
@@ -74,14 +76,22 @@ const {
 
             <div class="table-shell">
               <table class="jobs-table clients-table">
+                <colgroup>
+                  <col class="clients-table-client-col" />
+                  <col class="clients-table-version-col" />
+                  <col class="clients-table-status-col" />
+                  <col class="clients-table-config-col" />
+                  <col class="clients-table-connection-col" />
+                  <col class="clients-table-seen-col" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>客户端信息</th>
                     <th>版本</th>
+                    <th>状态</th>
+                    <th>配置上报</th>
                     <th>连接方式</th>
                     <th>最近活跃</th>
-                    <th>服务 UID</th>
-                    <th>状态</th>
                   </tr>
                 </thead>
                 <tbody v-if="filteredClientList.length > 0">
@@ -101,33 +111,28 @@ const {
                       </div>
                     </td>
                     <td>
-                      <div class="primary-cell">
-                        <strong>{{ clientConnectionMethodLabel(item) }}</strong>
-                        <span>{{ clientConnectionDetail(item) }}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div class="time-cell">
-                        <strong>{{ formatCompactDate(item.lastSeenAt) }}</strong>
-                      </div>
-                    </td>
-                    <td>
-                      <span class="url-badge">{{ item.lastSeenServerId || "N/A" }}</span>
-                    </td>
-                    <td>
                       <div class="client-status-stack">
                         <StatusPill
                           :tone="clientStatusTone(item)"
                           :label="clientStatusLabel(item)"
                         />
-                        <span class="client-status-detail">
-                          <span>配置</span>
-                          <strong>{{ item.configVersion || "未上报" }}</strong>
-                        </span>
-                        <span class="client-status-detail">
-                          <span>服务</span>
-                          <strong>{{ item.currentServiceUrl || "未接入" }}</strong>
-                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <StatusPill
+                        :tone="clientConfigReportTone(item)"
+                        :label="clientConfigReportLabel(item)"
+                      />
+                    </td>
+                    <td>
+                      <div class="primary-cell">
+                        <strong>{{ clientConnectionMethodLabel(item) }}</strong>
+                        <span v-if="clientConnectionDetail(item)">{{ clientConnectionDetail(item) }}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="time-cell">
+                        <strong>{{ formatCompactDate(item.lastSeenAt) }}</strong>
                       </div>
                     </td>
                   </tr>

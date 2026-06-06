@@ -101,7 +101,14 @@ export function createConsoleInfoFeedModelController(
     const selected = options.agentExploreContextWindowOptions.find(
       (item) => item.value === configured,
     );
-    return selected || options.agentExploreContextWindowOptions[0];
+    return (
+      selected ||
+      options.agentExploreContextWindowOptions[0] ||
+      {
+        value: configured || "context-32k",
+        label: "未配置上下文",
+      }
+    );
   });
 
   function normalizedThinkingMode(value?: string) {
@@ -160,7 +167,7 @@ export function createConsoleInfoFeedModelController(
 
   function infoFeedFallbackContextProfileId() {
     return String(
-      selectedInfoFeedContextProfile.value.value ||
+      selectedInfoFeedContextProfile.value?.value ||
         infoFeedForm.value.contextProfileId ||
         "context-128k",
     );

@@ -241,15 +241,17 @@ try {
   assert.equal(discovery.payload.installer.portable.clientInstallJsonCommand, `./pact-mcp install --target <client> --url '${server.url}' --json`);
   const targetIds = discovery.payload.installer.supportedTargets.map((target) => target.target);
   const expectedInstallTargets = [
-    "codex",
-    "claude-code",
-    "gemini-cli",
-    "kilo-code",
-    "copilot",
     "openclaw",
-    "hermes",
+    "claude-code",
+    "codex",
+    "gemini-cli",
     "antigravity",
-    "opencode"
+    "opencode",
+    "copilot",
+    "kilo-code",
+    "cursor",
+    "hermes",
+    "windsurf"
   ];
   assert.deepEqual(targetIds, expectedInstallTargets);
   const clientTargetsById = new Map(discovery.payload.clientTargets.map((target) => [target.target, target]));
@@ -356,7 +358,7 @@ try {
   assert.match(getMcpText, /"sharedHub":\{/);
   assert.match(getMcpText, /"outlet":"pact\.sharedspace"/);
   assert.match(getMcpText, /"priorityTargets":\["claude-code","codex","openclaw"\]/);
-  assert.match(getMcpText, /"supportedTargets":\[\{"target":"codex"/);
+  assert.match(getMcpText, /"supportedTargets":\[\{"target":"openclaw"/);
 
   const initialize = await fetchJson(`${server.url}/mcp`, {
     method: "POST",

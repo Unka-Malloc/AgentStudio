@@ -9,12 +9,14 @@ export type KnowledgeRulesContext = KnowledgeViewContext["rules"];
 export type KnowledgeWordCloudContext = KnowledgeViewContext["wordCloud"];
 
 const knowledgeIngestKey = Symbol("knowledge-ingest") as InjectionKey<KnowledgeIngestContext>;
+const knowledgeViewKey = Symbol("knowledge-view") as InjectionKey<KnowledgeViewContext>;
 const knowledgeLibraryKey = Symbol("knowledge-library") as InjectionKey<KnowledgeLibraryContext>;
 const knowledgeMaintenanceKey = Symbol("knowledge-maintenance") as InjectionKey<KnowledgeMaintenanceContext>;
 const knowledgeRulesKey = Symbol("knowledge-rules") as InjectionKey<KnowledgeRulesContext>;
 const knowledgeWordCloudKey = Symbol("knowledge-word-cloud") as InjectionKey<KnowledgeWordCloudContext>;
 
 export function provideKnowledgeView(context: KnowledgeViewContext) {
+  provide(knowledgeViewKey, context);
   provide(knowledgeIngestKey, context.ingest);
   provide(knowledgeLibraryKey, context.library);
   provide(knowledgeMaintenanceKey, context.maintenance);
@@ -28,6 +30,10 @@ function useRequiredKnowledgeContext<T>(key: InjectionKey<T>, label: string) {
     throw new Error(`${label} context is not available`);
   }
   return context;
+}
+
+export function useKnowledgeViewContext() {
+  return useRequiredKnowledgeContext(knowledgeViewKey, "Knowledge view");
 }
 
 export function useKnowledgeIngestContext() {

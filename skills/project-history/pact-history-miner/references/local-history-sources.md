@@ -46,7 +46,8 @@ With `--archive-conversations`, each matched text transcript is written as a Mar
 
 SQLite matches are written as Markdown files containing the matched rows. They are reference artifacts, not distilled summaries.
 
-When `--output-dir` is omitted in archive mode, output defaults to `<project-root>/.pact-agent-history`.
+When `--output-dir` is omitted in archive mode, output defaults to
+`~/.pact-agent-history/<timestamp>`.
 
 ## Privacy defaults
 

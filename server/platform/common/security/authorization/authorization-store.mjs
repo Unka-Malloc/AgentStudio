@@ -327,8 +327,8 @@ export function createAuthorizationStore({ userDataPath = "", rootPath = "" } = 
       appendDeniedRequest({
         decisionId,
         subjectId: subject.subjectId || "",
-        operationId: decision.operationId || "",
-        toolId: decision.toolId || "",
+        operationId: String(decision.operationId || decision.operation?.id || ""),
+        toolId: String(decision.toolId || decision.tool?.id || ""),
         tenantId: firstString(decision.tenantId, decision.tenant?.resourceTenantId, decision.resource?.tenantId),
         workspaceId: firstString(decision.workspaceId, decision.abac?.workspaceId, decision.resource?.workspaceId),
         reasonCode: decision.reasonCode || "denied",

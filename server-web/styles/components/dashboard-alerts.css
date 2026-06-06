@@ -9,6 +9,19 @@
   gap: var(--space-3-5);
 }
 
+.dashboard-approval-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: min(100%, 420px);
+}
+
+.dashboard-approval-actions .pact-segmented-toggle {
+  margin: 0;
+}
+
 .dashboard-alert-counts {
   display: flex;
   flex-wrap: wrap;
@@ -434,6 +447,16 @@ html.theme-light {
 }
 
 @media (max-width: 900px) {
+  .dashboard-approval-actions {
+    justify-content: flex-start;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .dashboard-approval-actions .pact-segmented-toggle {
+    flex: 1 1 280px;
+  }
+
   .dashboard-alert-triage {
     grid-template-columns: minmax(0, 1fr);
   }

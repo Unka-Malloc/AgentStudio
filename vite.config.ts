@@ -6,6 +6,31 @@ import { defineConfig } from "vite";
 
 const webRoot = path.resolve(__dirname, "server-web");
 
+const apiOrigin =
+  process.env.VITE_API_ORIGIN || `http://127.0.0.1:${process.env.VITE_API_PORT || DEFAULT_SERVER_PORT}`;
+
+function parseProxyApiOrigin(value) {
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
+}
+
+const parsedApiOrigin = parseProxyApiOrigin(apiOrigin);
+const isLoopbackApiHost = parsedApiOrigin
+  ? ["localhost", "127.0.0.1", "::1", "[::1]"].includes(String(parsedApiOrigin.hostname).toLowerCase())
+  : false;
+
+// 远端 HTTPS 默认开启证书校验。
+// 仅在 loopback 目标并显式设置 VITE_API_PROXY_ALLOW_INSECURE_HTTPS=1 时，才允许跳过。
+const isExplicitLocalInsecureCertBypass =
+  String(process.env.VITE_API_PROXY_ALLOW_INSECURE_HTTPS || "").trim() === "1" && isLoopbackApiHost;
+const proxySecure =
+  !parsedApiOrigin ||
+  parsedApiOrigin.protocol !== "https:" ||
+  !isExplicitLocalInsecureCertBypass;
+
 export default defineConfig({
   root: webRoot,
   plugins: [vue()],
@@ -50,13 +75,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: process.env.VITE_API_ORIGIN || `http://127.0.0.1:${process.env.VITE_API_PORT || DEFAULT_SERVER_PORT}`,
+        target: apiOrigin,
         changeOrigin: true,
-        secure: false,
+        secure: proxySecure,
         configure: (proxy) => {
-          const targetOrigin =
-            process.env.VITE_API_ORIGIN ||
-            `http://127.0.0.1:${process.env.VITE_API_PORT || DEFAULT_SERVER_PORT}`;
+          const targetOrigin = apiOrigin;
           proxy.on("proxyReq", (proxyReq) => {
             proxyReq.setHeader("origin", targetOrigin);
           });

@@ -78,9 +78,12 @@ verified MCP URL, selected clients, per-client success or failure, token source,
 and verification status. It does not dump client configuration files. Use
 `--json` only when a script needs machine-readable details.
 
-Supported targets are `codex`, `claude-code`, `gemini-cli`, `kilo-code`,
-`copilot`, `openclaw`, `hermes`, `antigravity`, and `opencode`. OpenClaw-compatible OrbStack agents such
-as IronClaw or ZeroClaw are discovered through the same Claw-compatible scan.
+Supported targets are OpenClaw (`openclaw`), Claude Code (`claude-code`),
+Codex (`codex`), Gemini CLI (`gemini-cli`), Antigravity (`antigravity`),
+OpenCode (`opencode`), Copilot (`copilot`), Kilo Code (`kilo-code`),
+Cursor (`cursor`), Hermes Agent (`hermes`), and Windsurf (`windsurf`).
+OpenClaw-compatible OrbStack agents such as IronClaw or ZeroClaw are discovered
+through the same Claw-compatible scan.
 
 ## Options
 
@@ -114,20 +117,21 @@ Unattended agent shells can use automatic detection directly:
 
 `auto` installs every supported client the connector can verify. A
 non-interactive `pact-mcp install` without `--target` uses the same
-auto-detected path. Use `--target claude-code,codex,openclaw --json` when a
-script must limit the install scope to the priority agent clients first.
+auto-detected path. Use `--target claude-code,codex,openclaw --json` only when a
+script must intentionally limit the install scope to the priority agent clients first.
 
 For an agent that needs one copyable GitHub Release command, use the unattended
-auto target form. This covers Codex, Claude Code, OpenClaw, and every other
-supported client that the connector can verify:
+auto target form. This covers OpenClaw, Claude Code, Codex, Gemini CLI,
+Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, Windsurf, and
+every other supported client that the connector can verify:
 
 ```bash
 /bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)" -- --target auto --json
 ```
 
 For a known single client, replace `<client>` with any supported target, for
-example `claude-code`, `codex`, `openclaw`, `opencode`, `gemini-cli`, or
-`hermes`:
+example `openclaw`, `claude-code`, `codex`, `gemini-cli`, `antigravity`,
+`opencode`, `copilot`, `kilo-code`, `cursor`, `hermes`, or `windsurf`:
 
 ```bash
 /bin/sh -c "$(curl -fL --retry 3 --connect-timeout 20 -sS https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)" -- --target <client> --json

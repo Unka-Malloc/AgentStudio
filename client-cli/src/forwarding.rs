@@ -334,6 +334,11 @@ fn display_path(path: PathBuf) -> String {
 mod tests {
     use super::*;
     use std::env;
+    use std::fs;
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc::channel;
+    use std::time::Duration;
 
     #[test]
     fn thin_forwarding_requires_profile() {
@@ -390,6 +395,200 @@ mod tests {
         assert!(!raw.contains("agent.invoke"));
         assert!(!raw.contains("customHttpAdapter"));
         assert!(!raw.contains("knowledge.agent.answer"));
+    }
+
+    #[test]
+    fn thin_forwarding_rejects_missing_or_unknown_provider() {
+        let dir = temp_test_dir("bad-provider");
+        let missing_provider =
+            save_model_profile_in(&dir, &json!({"profile": "missing"})).unwrap_err();
+        assert!(missing_provider.to_string().contains("--command or --url"));
+
+        let invalid_provider = save_model_profile_in(
+            &dir,
+            &json!({
+                "profile": "invalid",
+                "provider": "ftp"
+            }),
+        )
+        .unwrap_err();
+        assert!(
+            invalid_provider
+                .to_string()
+                .contains("unsupported forwarding provider")
+        );
+    }
+
+    #[test]
+    fn thin_forwarding_inputs_fallback_to_positionals_and_prompt() {
+        let mut args = json!({"positionals": ["position", "input"]});
+        assert_eq!(forward_input(&args).unwrap(), "position input");
+        args = json!({"prompt": "from-prompt"});
+        assert_eq!(forward_input(&args).unwrap(), "from-prompt");
+        args = json!({"input": "from-input"});
+        assert_eq!(forward_input(&args).unwrap(), "from-input");
+    }
+
+    #[test]
+    fn thin_forwarding_command_profile_requires_command_field() {
+        let dir = temp_test_dir("missing-command");
+        let profile = json!({
+            "profiles": [
+                {"id":"bad-command","provider":"command"}
+            ]
+        });
+        fs::create_dir_all(dir.join("model-forwarding")).unwrap();
+        fs::write(profiles_path(&dir), format!("{}\n", profile.to_string())).unwrap();
+        let error =
+            forward_in(&dir, &json!({"profile": "bad-command", "text": "oops"})).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("command profile is missing command")
+        );
+    }
+
+    #[test]
+    fn thin_forwarding_prefers_model_profile_alias() {
+        let dir = temp_test_dir("model-profile-alias");
+        save_model_profile_in(
+            &dir,
+            &json!({
+                "profile": "cat",
+                "command": "/bin/cat"
+            }),
+        )
+        .unwrap();
+
+        let result = forward_in(
+            &dir,
+            &json!({
+                "modelProfile": "cat",
+                "text": "aliased profile",
+            }),
+        )
+        .unwrap();
+        assert_eq!(result["profile"], "cat");
+        assert_eq!(result["provider"], "command");
+        assert_eq!(result["output"], "aliased profile");
+    }
+
+    #[test]
+    fn thin_forwarding_profile_id_from_positionals_and_args_parsing() {
+        assert_eq!(
+            profile_id(&json!({"positionals": ["from-pos"]})).unwrap(),
+            "from-pos"
+        );
+        assert_eq!(
+            profile_args(&json!({"args": "[\"--flag\",\"value\"]"}))
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert!(profile_args(&json!({"args": "not-json"})).is_none());
+    }
+
+    #[test]
+    fn thin_forwarding_reads_and_normalizes_profile_documents() {
+        let dir = temp_test_dir("normalized-document");
+        let path = profiles_path(&dir);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "true").unwrap();
+
+        let document = read_profiles_document(&dir).unwrap();
+        assert_eq!(
+            document,
+            json!({"schemaVersion": PROFILE_SCHEMA_VERSION, "profiles": []})
+        );
+    }
+
+    #[test]
+    fn thin_forwarding_http_profile_forwards_request_and_applies_headers() {
+        let dir = temp_test_dir("http-forward");
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let server = listener.local_addr().unwrap();
+        let (sender, receiver) = channel::<Vec<String>>();
+        let server_thread = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut request_line = String::new();
+            assert!(reader.read_line(&mut request_line).is_ok());
+            assert!(request_line.starts_with("POST"));
+
+            let mut headers = Vec::new();
+            let mut content_length = 0usize;
+            loop {
+                let mut line = String::new();
+                let bytes = reader.read_line(&mut line).unwrap();
+                if bytes == 0 || line == "\r\n" {
+                    break;
+                }
+                if let Some((key, value)) = line.split_once(':') {
+                    headers.push(format!(
+                        "{}:{}",
+                        key.trim().to_ascii_lowercase(),
+                        value.trim().to_ascii_lowercase()
+                    ));
+                    if key.eq_ignore_ascii_case("content-length") {
+                        content_length = value.trim().parse::<usize>().unwrap_or(0);
+                    }
+                }
+            }
+            let mut body = vec![0u8; content_length];
+            reader.read_exact(&mut body).unwrap();
+            let body = String::from_utf8(body).unwrap_or_else(|_| String::new());
+            let request: Value = serde_json::from_str(&body).unwrap_or_else(|_| json!({}));
+            assert_eq!(request["input"], "hello");
+            assert_eq!(request["profile"], "remote");
+
+            sender.send(headers).unwrap();
+            let body = b"{\"ok\":true,\"mode\":\"thin\"}";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                body.len(),
+                String::from_utf8_lossy(body)
+            );
+            let stream = reader.get_mut();
+            stream.write_all(response.as_bytes()).unwrap();
+            stream.flush().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_millis(100)))
+                .unwrap();
+        });
+
+        save_model_profile_in(
+            &dir,
+            &json!({
+                "profile": "remote",
+                "url": format!("http://{}", server),
+                "apiKey": "k-1",
+                "headers": {"X-Extra-Header": "enabled", "count": 1},
+            }),
+        )
+        .unwrap();
+        let result = forward_in(&dir, &json!({"profile": "remote", "text": "hello"})).unwrap();
+        server_thread.join().unwrap();
+        let headers = receiver.recv().unwrap_or_default();
+        assert_eq!(result["provider"], "http");
+        assert_eq!(result["response"]["ok"], true);
+        assert!(
+            headers
+                .iter()
+                .any(|header| header == "accept:application/json")
+        );
+        assert!(
+            headers
+                .iter()
+                .any(|header| header == "content-type:application/json")
+        );
+        assert!(headers.iter().any(|header| header == "x-pact-api-key:k-1"));
+        assert!(
+            headers
+                .iter()
+                .any(|header| header == "x-extra-header:enabled")
+        );
     }
 
     fn temp_test_dir(name: &str) -> PathBuf {

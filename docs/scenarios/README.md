@@ -24,7 +24,9 @@
 
 原始设计目标为 16 个完整链路场景；当前已确认 8 个。未确认的 9-16 保留编号，不在本目录中臆造。
 
-机器可读目录见 [scenario-catalog.json](scenario-catalog.json)。当前实现差距见 [SCENARIO-IMPLEMENTATION-GAPS.md](SCENARIO-IMPLEMENTATION-GAPS.md)。
+机器可读目录见 [scenario-catalog.json](scenario-catalog.json)。
+机器可读状态事实源见 [scenario-implementation-status.json](scenario-implementation-status.json)。
+历史实现差距归档见 [SCENARIO-IMPLEMENTATION-GAPS.md](../reports/history/SCENARIO-IMPLEMENTATION-GAPS.md)。
 
 | 编号 | 场景 | 主入口 | 完整链路终点 | 文档 |
 | --- | --- | --- | --- | --- |

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { QuestionFilled } from "@element-plus/icons-vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import BinaryCheckbox from "../components/BinaryCheckbox.vue";
+import ConfigFloatingPanel from "../components/ConfigFloatingPanel.vue";
+import HelpTooltip from "../components/HelpTooltip.vue";
 import StatusPill from "../components/StatusPill.vue";
 import { copyConsoleTextWithFeedback } from "../composables/console-browser-effects";
 import { useExternalServicesViewController } from "../composables/external-services-view-controller";
@@ -261,7 +262,9 @@ watch(
   () => void nextTick(updateServiceTableScrollState),
 );
 
-const selectHelp = {
+type SelectHelpItems = Array<readonly [string, string]>;
+
+const selectHelp: Record<string, SelectHelpItems> = {
   mode: [
     ["managed", "由 Pact 负责启动、停止和健康检查，适合平台托管的服务。"],
     ["connected", "服务已经在外部运行，Pact 只保存连接配置并调用它。"],
@@ -347,49 +350,16 @@ const selectHelp = {
       </article>
     </div>
 
-    <div
-      v-if="externalServicesView.configEditorOpen"
-      class="external-service-modal-backdrop"
-      @click.self="externalServicesView.closeConfigEditor"
+    <ConfigFloatingPanel
+      :open="externalServicesView.configEditorOpen"
+      :title="externalServicesView.configEditorTitle"
+      :subtitle="externalServicesView.configEditorSubtitle"
+      :status-tone="externalServicesView.configStatusTone"
+      :status-label="externalServicesView.configStatusLabel"
+      :verifying="externalServicesView.verifying"
+      @close="externalServicesView.closeConfigEditor"
+      @verify="externalServicesView.verifyConfig"
     >
-      <article
-        class="external-service-config-dialog"
-        role="dialog"
-        aria-modal="true"
-        :aria-label="externalServicesView.configEditorTitle"
-        @keydown.esc="externalServicesView.closeConfigEditor"
-      >
-        <header class="external-service-config-header">
-          <div class="external-service-config-title">
-            <h3>{{ externalServicesView.configEditorTitle }}</h3>
-            <p>{{ externalServicesView.configEditorSubtitle }}</p>
-          </div>
-          <div class="external-service-config-toolbar">
-            <StatusPill
-              :tone="externalServicesView.configStatusTone"
-              :label="externalServicesView.configStatusLabel"
-            />
-            <button
-              class="tool-button tool-button-ghost"
-              type="button"
-              :disabled="externalServicesView.verifying"
-              @click="externalServicesView.verifyConfig"
-            >
-              {{ externalServicesView.verifying ? "校验中" : "校验配置" }}
-            </button>
-            <button
-              class="dialog-close-button external-service-dialog-close"
-              type="button"
-              aria-label="关闭配置"
-              title="关闭"
-              @click="externalServicesView.closeConfigEditor"
-            >
-              ×
-            </button>
-          </div>
-        </header>
-
-        <div class="external-service-config-scroll">
           <div v-if="externalServicesView.loadError" class="external-service-alert is-danger">
             {{ externalServicesView.loadError }}
           </div>
@@ -427,15 +397,7 @@ const selectHelp = {
                 <label>
                   <span class="external-service-field-label">
                     <span>运行模式</span>
-                    <span class="external-service-field-help" tabindex="0" aria-label="运行模式选项说明">
-                      <QuestionFilled aria-hidden="true" />
-                      <span class="external-service-field-tooltip" role="tooltip">
-                        <span v-for="item in selectHelp.mode" :key="item[0]">
-                          <strong>{{ item[0] }}</strong>
-                          <span>{{ item[1] }}</span>
-                        </span>
-                      </span>
-                    </span>
+                    <HelpTooltip aria-label="运行模式选项说明" :items="selectHelp.mode" />
                   </span>
                   <select
                     aria-label="运行模式"
@@ -450,15 +412,7 @@ const selectHelp = {
                 <label>
                   <span class="external-service-field-label">
                     <span>启动策略</span>
-                    <span class="external-service-field-help" tabindex="0" aria-label="启动策略选项说明">
-                      <QuestionFilled aria-hidden="true" />
-                      <span class="external-service-field-tooltip" role="tooltip">
-                        <span v-for="item in selectHelp.startupPolicy" :key="item[0]">
-                          <strong>{{ item[0] }}</strong>
-                          <span>{{ item[1] }}</span>
-                        </span>
-                      </span>
-                    </span>
+                    <HelpTooltip aria-label="启动策略选项说明" :items="selectHelp.startupPolicy" />
                   </span>
                   <select
                     aria-label="启动策略"
@@ -490,15 +444,7 @@ const selectHelp = {
             <label>
               <span class="external-service-field-label">
                 <span>上游类型</span>
-                <span class="external-service-field-help" tabindex="0" aria-label="上游类型选项说明">
-                  <QuestionFilled aria-hidden="true" />
-                  <span class="external-service-field-tooltip" role="tooltip">
-                    <span v-for="item in selectHelp.upstreamType" :key="item[0]">
-                      <strong>{{ item[0] }}</strong>
-                      <span>{{ item[1] }}</span>
-                    </span>
-                  </span>
-                </span>
+                <HelpTooltip aria-label="上游类型选项说明" :items="selectHelp.upstreamType" />
               </span>
               <select
                 aria-label="上游类型"
@@ -522,15 +468,7 @@ const selectHelp = {
             <label v-if="externalServicesView.isLlmServiceDraft">
               <span class="external-service-field-label">
                 <span>模型协议</span>
-                <span class="external-service-field-help" tabindex="0" aria-label="模型协议选项说明">
-                  <QuestionFilled aria-hidden="true" />
-                  <span class="external-service-field-tooltip" role="tooltip">
-                    <span v-for="item in selectHelp.modelProtocol" :key="item[0]">
-                      <strong>{{ item[0] }}</strong>
-                      <span>{{ item[1] }}</span>
-                    </span>
-                  </span>
-                </span>
+                <HelpTooltip aria-label="模型协议选项说明" :items="selectHelp.modelProtocol" />
               </span>
               <select
                 aria-label="模型协议"
@@ -554,15 +492,7 @@ const selectHelp = {
             <label v-if="externalServicesView.isCloudDriveServiceDraft">
               <span class="external-service-field-label">
                 <span>网盘 Provider</span>
-                <span class="external-service-field-help" tabindex="0" aria-label="网盘 Provider 选项说明">
-                  <QuestionFilled aria-hidden="true" />
-                  <span class="external-service-field-tooltip" role="tooltip">
-                    <span v-for="item in selectHelp.cloudDriveProvider" :key="item[0]">
-                      <strong>{{ item[0] }}</strong>
-                      <span>{{ item[1] }}</span>
-                    </span>
-                  </span>
-                </span>
+                <HelpTooltip aria-label="网盘 Provider 选项说明" :items="selectHelp.cloudDriveProvider" />
               </span>
               <select
                 aria-label="网盘 Provider"
@@ -577,15 +507,7 @@ const selectHelp = {
             <label v-if="externalServicesView.isCloudDriveServiceDraft">
               <span class="external-service-field-label">
                 <span>适配模式</span>
-                <span class="external-service-field-help" tabindex="0" aria-label="网盘适配模式选项说明">
-                  <QuestionFilled aria-hidden="true" />
-                  <span class="external-service-field-tooltip" role="tooltip">
-                    <span v-for="item in selectHelp.cloudDriveMode" :key="item[0]">
-                      <strong>{{ item[0] }}</strong>
-                      <span>{{ item[1] }}</span>
-                    </span>
-                  </span>
-                </span>
+                <HelpTooltip aria-label="网盘适配模式选项说明" :items="selectHelp.cloudDriveMode" />
               </span>
               <select
                 aria-label="网盘适配模式"
@@ -600,15 +522,7 @@ const selectHelp = {
 	            <label v-if="!externalServicesView.isCloudDriveServiceDraft">
 	              <span class="external-service-field-label">
 	                <span>协议 / 传输</span>
-                <span class="external-service-field-help" tabindex="0" aria-label="协议和传输选项说明">
-                  <QuestionFilled aria-hidden="true" />
-                  <span class="external-service-field-tooltip" role="tooltip">
-                    <span v-for="item in selectHelp.transport" :key="item[0]">
-                      <strong>{{ item[0] }}</strong>
-                      <span>{{ item[1] }}</span>
-                    </span>
-                  </span>
-                </span>
+                <HelpTooltip aria-label="协议和传输选项说明" :items="selectHelp.transport" />
               </span>
               <select
                 aria-label="协议 / 传输"
@@ -687,15 +601,7 @@ const selectHelp = {
             <label>
               <span class="external-service-field-label">
                 <span>绑定模式</span>
-                <span class="external-service-field-help" tabindex="0" aria-label="绑定模式选项说明">
-                  <QuestionFilled aria-hidden="true" />
-                  <span class="external-service-field-tooltip" role="tooltip">
-                    <span v-for="item in selectHelp.bindingMode" :key="item[0]">
-                      <strong>{{ item[0] }}</strong>
-                      <span>{{ item[1] }}</span>
-                    </span>
-                  </span>
-                </span>
+                <HelpTooltip aria-label="绑定模式选项说明" :items="selectHelp.bindingMode" />
               </span>
               <select
                 aria-label="绑定模式"
@@ -710,15 +616,7 @@ const selectHelp = {
             <label>
               <span class="external-service-field-label">
                 <span>Outlet</span>
-                <span class="external-service-field-help" tabindex="0" aria-label="Outlet 选项说明">
-                  <QuestionFilled aria-hidden="true" />
-                  <span class="external-service-field-tooltip" role="tooltip">
-                    <span v-for="item in selectHelp.outlet" :key="item[0]">
-                      <strong>{{ item[0] }}</strong>
-                      <span>{{ item[1] }}</span>
-                    </span>
-                  </span>
-                </span>
+                <HelpTooltip aria-label="Outlet 选项说明" :items="selectHelp.outlet" />
               </span>
               <select
                 aria-label="Outlet"
@@ -733,15 +631,7 @@ const selectHelp = {
             <label>
               <span class="external-service-field-label">
                 <span>风险</span>
-                <span class="external-service-field-help" tabindex="0" aria-label="风险选项说明">
-                  <QuestionFilled aria-hidden="true" />
-                  <span class="external-service-field-tooltip" role="tooltip">
-                    <span v-for="item in selectHelp.risk" :key="item[0]">
-                      <strong>{{ item[0] }}</strong>
-                      <span>{{ item[1] }}</span>
-                    </span>
-                  </span>
-                </span>
+                <HelpTooltip aria-label="风险选项说明" :items="selectHelp.risk" />
               </span>
               <select
                 aria-label="风险"
@@ -773,15 +663,7 @@ const selectHelp = {
             <label>
               <span class="external-service-field-label">
                 <span>类型</span>
-                <span class="external-service-field-help" tabindex="0" aria-label="健康检查类型选项说明">
-                  <QuestionFilled aria-hidden="true" />
-                  <span class="external-service-field-tooltip" role="tooltip">
-                    <span v-for="item in selectHelp.healthCheckType" :key="item[0]">
-                      <strong>{{ item[0] }}</strong>
-                      <span>{{ item[1] }}</span>
-                    </span>
-                  </span>
-                </span>
+                <HelpTooltip aria-label="健康检查类型选项说明" :items="selectHelp.healthCheckType" />
               </span>
               <select
                 aria-label="健康检查类型"
@@ -882,9 +764,7 @@ const selectHelp = {
               </button>
             </footer>
           </form>
-        </div>
-      </article>
-    </div>
+    </ConfigFloatingPanel>
 
     <article class="surface-card external-service-list-card">
       <div class="section-header external-service-list-header">
@@ -960,12 +840,18 @@ const selectHelp = {
             class="external-service-table-row"
           >
             <div class="external-service-name-cell" data-label="服务">
-              <strong :title="service.displayName">{{ service.displayName }}</strong>
+              <div class="external-service-title-line">
+                <strong :title="service.displayName">{{ service.displayName }}</strong>
+                <HelpTooltip
+                  v-if="service.description"
+                  :aria-label="`${service.displayName} 服务说明`"
+                  :text="service.description"
+                />
+              </div>
               <small :title="externalServicesView.serviceSourceDetail(service)">
                 {{ externalServicesView.serviceSourceDetail(service) }}
               </small>
               <small class="external-service-code-value" :title="service.serviceName">{{ service.serviceName }}</small>
-              <small v-if="service.description" :title="service.description">{{ service.description }}</small>
             </div>
             <div class="external-service-stack-cell" data-label="上游">
               <button
@@ -1129,84 +1015,6 @@ const selectHelp = {
   font-size: var(--text-5xl);
 }
 
-.external-service-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: grid;
-  place-items: center;
-  padding: var(--space-6);
-  background: rgb(17 24 39 / 46%);
-}
-
-.external-service-config-dialog {
-  width: min(1040px, calc(100vw - 48px));
-  max-height: min(860px, calc(100vh - 48px));
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-xl);
-}
-
-.external-service-config-header {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-4);
-  align-items: flex-start;
-  padding: var(--space-4);
-  padding-right: 64px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-}
-
-.external-service-config-title {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.external-service-config-title h3 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--text-2xl);
-  line-height: 1.25;
-}
-
-.external-service-config-title p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-base);
-  line-height: 1.5;
-}
-
-.external-service-config-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.external-service-dialog-close {
-  top: var(--space-3);
-  right: var(--space-3);
-  border-radius: var(--radius-md);
-}
-
-.external-service-config-scroll {
-  min-height: 0;
-  display: grid;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  overflow-y: auto;
-  background: var(--bg-surface);
-}
-
 .external-service-list-card,
 .external-service-config-form {
   display: grid;
@@ -1344,76 +1152,6 @@ const selectHelp = {
   gap: var(--space-1);
   width: fit-content;
   min-width: 0;
-}
-
-.external-service-field-help {
-  position: relative;
-  width: 16px;
-  height: 16px;
-  display: inline-grid;
-  place-items: center;
-  color: var(--text-muted);
-  cursor: help;
-}
-
-.external-service-field-help svg {
-  width: 14px;
-  height: 14px;
-}
-
-.external-service-field-help:focus-visible {
-  color: var(--brand);
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-  border-radius: var(--radius-pill);
-}
-
-.external-service-field-tooltip {
-  position: absolute;
-  top: calc(100% + var(--space-2));
-  left: 0;
-  z-index: var(--z-dropdown);
-  width: min(340px, calc(100vw - 64px));
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  box-shadow: var(--shadow-lg);
-  font-size: var(--text-md);
-  font-weight: var(--font-normal);
-  line-height: 1.45;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-2px);
-  transition: opacity var(--transition-default), transform var(--transition-default);
-  visibility: hidden;
-}
-
-.external-service-field-tooltip > span {
-  display: grid;
-  gap: var(--space-0-5);
-}
-
-.external-service-field-tooltip strong {
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-}
-
-.external-service-field-help:hover,
-.external-service-field-help:focus-visible {
-  color: var(--brand);
-}
-
-.external-service-field-help:hover .external-service-field-tooltip,
-.external-service-field-help:focus-visible .external-service-field-tooltip {
-  opacity: 1;
-  transform: translateY(0);
-  visibility: visible;
 }
 
 .external-service-form-grid input,
@@ -1653,6 +1391,18 @@ const selectHelp = {
   justify-items: start;
 }
 
+.external-service-title-line {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.external-service-title-line strong {
+  flex: 0 1 auto;
+}
+
 .external-service-pill-stack :deep(.standard-status-pill) {
   width: var(--external-service-pill-width);
   height: 24px;
@@ -1865,20 +1615,6 @@ const selectHelp = {
 }
 
 @media (max-width: 1080px) {
-  .external-service-config-dialog {
-    width: min(920px, calc(100vw - 32px));
-    max-height: calc(100vh - 32px);
-  }
-
-  .external-service-config-header {
-    grid-template-columns: 1fr;
-  }
-
-  .external-service-config-toolbar {
-    justify-content: flex-start;
-    padding-right: 44px;
-  }
-
   .external-service-table-scroll {
     overflow-x: visible;
     box-shadow: none;
@@ -1946,21 +1682,6 @@ const selectHelp = {
 }
 
 @media (max-width: 760px) {
-  .external-service-modal-backdrop {
-    padding: 0;
-  }
-
-  .external-service-config-dialog {
-    width: 100vw;
-    max-height: 100vh;
-    border-radius: 0;
-  }
-
-  .external-service-config-header,
-  .external-service-config-scroll {
-    padding: var(--space-3);
-  }
-
   .external-service-form-grid,
   .external-service-validation-grid {
     grid-template-columns: 1fr;

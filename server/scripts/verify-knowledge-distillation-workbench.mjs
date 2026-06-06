@@ -48,6 +48,11 @@ for (const operationId of EXTERNAL_OPERATION_IDS) {
   assert.ok(operation, `${operationId} must stay registered as the maintained external distillation surface`);
   assert.equal(operation.feature, "external", `${operationId} must use the external feature namespace`);
   assert.equal(operation.aspects?.includes("external-service"), true, `${operationId} must be an external service operation`);
+  assert.equal(operation.aspects?.includes("external-upstream-gateway"), true, `${operationId} must go through the external upstream gateway aspect`);
+  assert.equal(operation.aspects?.includes("knowledge-distillation"), true, `${operationId} must keep the knowledge-distillation aspect`);
+  assert.equal(operation.public === true || operation.externalAuth === true, false, `${operationId} must not bypass console authorization as public/externalAuth`);
+  assert.ok(Array.isArray(operation.requiredScopes) && operation.requiredScopes.length > 0, `${operationId} must declare required scopes`);
+  assert.equal(String(operation.http?.path || "").startsWith("/api/external/knowledge/distillation/"), true, `${operationId} must stay behind the mediated external knowledge distillation API`);
   assert.equal(toolOperationIds.has(operationId), true, `${operationId} must be exposed to Tool Management`);
 }
 
@@ -57,18 +62,23 @@ for (const operationId of INTERNAL_OPERATION_IDS) {
   assert.equal(operation.deprecated, true, `${operationId} must be explicitly deprecated`);
   assert.equal(operation.replacementService, "external.knowledge.distillation", `${operationId} must point to the external service`);
   assert.equal(operation.lifecycle?.maintenancePolicy, "compatibility-shim-only", `${operationId} must not be maintained as an algorithm surface`);
+  assert.equal(operation.aspects?.includes("internal-deprecated"), true, `${operationId} must expose the internal-deprecated aspect`);
+  assert.equal(operation.aspects?.includes("external-replaced"), true, `${operationId} must expose the external-replaced aspect`);
+  assert.ok(Array.isArray(operation.requiredScopes) && operation.requiredScopes.length > 0, `${operationId} must still require console authorization before returning migration metadata`);
   assert.equal(toolOperationIds.has(operationId), false, `${operationId} must not be exposed to agents`);
 }
 
-const migrationResult = await executeConsoleDomainOperation({
-  operationId: "knowledge.distillation.workbench.runs.create",
-  input: { jobId: "deprecated-internal-workbench" },
-  context: {}
-});
-assert.equal(migrationResult.status, 410);
-assert.equal(migrationResult.payload.code, "INTERNAL_KNOWLEDGE_DISTILLATION_REMOVED");
-assert.equal(migrationResult.payload.replacementService, "external.knowledge.distillation");
-assert.equal(migrationResult.payload.migration.createRun, "external.knowledge.distillation.runs.create");
+for (const operationId of INTERNAL_OPERATION_IDS) {
+  const migrationResult = await executeConsoleDomainOperation({
+    operationId,
+    input: { jobId: "deprecated-internal-workbench", runId: "deprecated-run", artifactId: "deprecated-artifact" },
+    context: {}
+  });
+  assert.equal(migrationResult.status, 410, `${operationId} must return migration metadata instead of running the old internal surface`);
+  assert.equal(migrationResult.payload.code, "INTERNAL_KNOWLEDGE_DISTILLATION_REMOVED");
+  assert.equal(migrationResult.payload.replacementService, "external.knowledge.distillation");
+  assert.equal(migrationResult.payload.migration.createRun, "external.knowledge.distillation.runs.create");
+}
 
 const runtimeProvidersText = await fs.readFile(
   path.join(repoRoot, "server/platform/interactive/server-runtime-providers.mjs"),

@@ -27,6 +27,14 @@
   margin-bottom: 16px;
 }
 
+.module-card-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
 .module-card-title {
   margin: 0;
   color: var(--brand);

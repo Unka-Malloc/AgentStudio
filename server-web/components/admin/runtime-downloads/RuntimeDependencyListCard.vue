@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import StatusPill from "../../StatusPill.vue";
 import { useRuntimeDownloadsViewContext } from "../../../composables/runtimeDownloadsViewContext";
+import RuntimeDependencyConfigButton from "./RuntimeDependencyConfigButton.vue";
 import {
   canTrigger,
   isRuntimeDependencyRunActive,
   runtimeVersionHint,
-  sourceHint,
+  sourceParts,
   statusLabel,
   statusTone,
+  type RuntimeDependency,
 } from "../../../lib/runtime-dependencies";
 
 const {
@@ -17,6 +19,14 @@ const {
   loading,
   prepareDependency,
 } = useRuntimeDownloadsViewContext();
+
+function dependencyActionLabel(item: RuntimeDependency) {
+  const status = dependencyStatusForRow(item);
+  if (isRuntimeDependencyRunActive(status)) return statusLabel(status);
+  if (item.present) return "已存在";
+  if (!canTrigger(item)) return "不可用";
+  return "安装";
+}
 </script>
 
 <template>
@@ -25,7 +35,8 @@ const {
       <div class="runtime-dependency-header">
         <span>依赖</span>
         <span>状态</span>
-        <span>检测来源</span>
+        <span>来源</span>
+        <span>路径</span>
         <span>操作</span>
       </div>
       <div
@@ -41,16 +52,20 @@ const {
           <StatusPill :tone="statusTone(dependencyStatusForRow(item))" :label="statusLabel(dependencyStatusForRow(item))" />
         </div>
         <div class="runtime-dependency-source">
-          <span>{{ sourceHint(item) }}</span>
+          <strong>{{ sourceParts(item).source }}</strong>
         </div>
-        <div>
+        <div class="runtime-dependency-path">
+          <span>{{ sourceParts(item).path }}</span>
+        </div>
+        <div class="runtime-dependency-action">
+          <RuntimeDependencyConfigButton :item="item" />
           <button
             class="tool-button"
             type="button"
             :disabled="dependencyActionBusy(item.id) || isRuntimeDependencyRunActive(dependencyStatusForRow(item)) || !canTrigger(item)"
             @click="prepareDependency(item)"
           >
-            {{ isRuntimeDependencyRunActive(dependencyStatusForRow(item)) ? statusLabel(dependencyStatusForRow(item)) : item.present ? "已存在" : "安装" }}
+            {{ dependencyActionLabel(item) }}
           </button>
         </div>
       </div>
@@ -61,55 +76,3 @@ const {
     </div>
   </article>
 </template>
-
-<style scoped>
-.runtime-dependency-list {
-  display: grid;
-  gap: 8px;
-}
-
-.runtime-dependency-header,
-.runtime-dependency-row {
-  display: grid;
-  grid-template-columns: minmax(190px, 1.2fr) minmax(96px, 0.5fr) minmax(260px, 1.4fr) minmax(92px, 0.4fr);
-  gap: 12px;
-  align-items: center;
-}
-
-.runtime-dependency-header {
-  color: var(--muted-text);
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.runtime-dependency-row {
-  min-height: 72px;
-  padding: 12px 0;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.runtime-dependency-name,
-.runtime-dependency-source {
-  display: grid;
-  gap: 4px;
-}
-
-.runtime-dependency-name small,
-.runtime-dependency-source span {
-  color: var(--muted-text);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-@media (max-width: 980px) {
-  .runtime-dependency-header {
-    display: none;
-  }
-
-  .runtime-dependency-row {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-}
-</style>

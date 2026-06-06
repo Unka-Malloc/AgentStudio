@@ -52,7 +52,7 @@
 | `pact.context-bundle.v1` | 面向本地智能体和短上下文模型的 context compiler / context compression。 |
 | `pact.client-runtime-bootstrap.v1` | 最小 MCP connector 或客户端主动声明平台、命令、模块需求和上传规模，服务端返回裁剪后的 Pact client runtime 计划、可拉取 artifact refs 与 transport 降级顺序。 |
 | `pact.agent-runtime.v1` | Agent config registry、Agent Gateway config/registry/call、Model Probe、model routing health 和带 settings/model-library 投影的 gateway call provider。 |
-| `pact.strategy-management.v1` | 处理流程策略、智能体调用策略、模型路由策略包装和工具调用策略预览；安全授权仍委托 `pact.security-permissions.v1`。 |
+| `pact.strategy-management.v1` | 处理流程策略、智能体调用策略、切面路由策略、模型路由策略包装和工具调用策略预览；安全授权仍委托 `pact.security-permissions.v1`。 |
 | `pact.tool-management.v1` | Tool Management v1 catalog、grant、policy preview、execute、audit、metrics。 |
 | `pact.tool-skill-management.v1` | Tool/Skill Management provider，统一封装 Tool catalog/grant/runtime、MCP local grant、workspace ref 解析、MCP 可见 operation 和输出脱敏。 |
 | `pact.security.v1` | subject、workspace、scope、grant、data class、secret ref、redaction、audit policy。 |
@@ -106,7 +106,7 @@ Pact 的协议不追求覆盖所有智能体协作场景，也不替代上游知
 三个兼容层不是“支持很多插件”，而是协议层的稳定承诺。任何 adapter、connector、mount、compatibility component 或 runtime bridge 都必须归入以下三层之一：
 
 1. `agent-client-mcp-compatibility`
-   - 面向智能体客户端和本机 MCP 插件，例如 Codex、OpenClaw、Claude Code、Cursor Agent、Gemini CLI、脚本型 agent 和人工 CLI。
+   - 面向智能体客户端和本机 MCP 插件，例如 OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf、脚本型 agent 和人工 CLI。
    - 责任是客户端发现、MCP HTTP / stdio 兼容、可选 agent traffic/load gateway、grant pairing、local bridge、client runtime bootstrap、transport fallback、版本协商和工具列表稳定性。
    - 这一层只处理“客户端如何安全调用 Pact”，不直接实现外部业务服务、不直接读写 workspace 内部状态。
 2. `external-service-compatibility`
@@ -124,7 +124,7 @@ Pact 的协议不追求覆盖所有智能体协作场景，也不替代上游知
 
 ## Workspace API
 
-Workspace API 是本地智能体接入 Pact 的首选方式。OpenClaw、Codex、Claude Code、Cursor Agent、脚本型 agent 或人工工具都只需要遵守这个协议。
+Workspace API 是本地智能体接入 Pact 的首选方式。OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf、脚本型 agent 或人工工具都只需要遵守这个协议。
 
 当前公开面分为两类。资源型 Workspace API 使用当前服务端事实路径 `/api/agent-workspaces`；协议 façade 使用 operation id 对应的 `/api/workspace/*` 路径，供 MCP / Tool Management / RPC 统一路由。旧的 `/api/workspaces/:workspaceId/...` 前缀不再作为新架构口径。
 
@@ -250,22 +250,32 @@ event 必须 append-only。撤销、归档、合并和恢复都用新事件表�
 
 ## Operation Protocol
 
-所有进入公共空间边界的行为都必须走 `pact.operation.v1` 或对应领域协议，并最终落到同一套 Operation Ledger。这里不只包括改变 canonical workspace state 的写操作，也包括访问请求、权限拒绝、文件读出、列表、发现、权限检查、receipt 查询、审计查询、历史查询、checkpoint tree 查询、技能调用和上下文暴露，因为它们会改变审计、receipt、loan record、usage event、贡献统计或风险状态。
+所有受管 operation 都必须走 `pact.operation.v1` 或对应领域协议，并先进入 Operation Scheduling Kernel。只有调度内核受理、分配 `operationId`、写入 `started` / `pending` 账本、完成策略裁决并返回执行许可的 operation，才是 Pact 的真实操作。这里不只包括改变 canonical workspace state 的写操作，也包括 API / RPC / MCP / CLI / 控制台入口、后台任务、workflow activity、队列状态变更、provider adapter 调用、webhook 处理、模型调用、工具执行、访问请求、权限拒绝、文件读出、列表、发现、权限检查、receipt 查询、审计查询、历史查询、checkpoint tree 查询、技能调用和上下文暴露，因为它们会改变审计、receipt、loan record、usage event、贡献统计、风险状态或外部事实。
+
+Operation Registry 是目录和合同，不是执行许可。HTTP handler、RPC method、CLI command、MCP tool、控制台 handler、worker 和 provider adapter 都只能提交 intent envelope 给调度内核，不能直接调用业务 executor。未带内核准入印记的业务函数、provider side effect、状态写入或工具执行必须拒绝为 `operation_unmanaged` / `operation_not_scheduled`，只允许留下拒绝记录，不允许产生真实副作用。
+
+Operation Ledger 是事实源。console log、tool audit、provider ledger、queue event、runtime log、trace span 和 readiness report 只能作为投影、回执、索引或报告，不能替代统一账本。写操作和外部副作用必须由调度内核先追加 `started` / `pending` ledger entry，再执行副作用；账本不可写时必须失败在副作用之前。读请求可以在任务会话内做高频聚合，但聚合结果仍必须可按 `operationId`、`traceId`、`subject`、`targetRef` 和 `reasonCode` 查询。
+
+高危 operation 的统一审批也属于调度内核职责。`requiresConfirmation` 或 `confirm=true` 只能作为风险输入，不能直接等同于审批完成。需要人工确认或高风险审批时，调度内核必须把原 intent envelope 挂起为 `pending_operation`，写入 `pending_approval` 状态并暴露到独立 `/approval` 页面。`pending_operation` 至少保存原始 `operationId`、`traceId`、`idempotencyKey`、subject、operator、agentProfile、workspace、grant / token 摘要、requestedScopes、risk reason、policy decision、approvalScope、expiresAt、payload hash、redacted input summary 和 resume pointer。审批通过后只能恢复原 operation，沿用原 `operationId` / `traceId`；拒绝、过期、撤销或上层 hard deny 时不得执行副作用。
 
 ```text
-intent
-  -> validate
-  -> policy preview
-  -> dry-run / diff
-  -> snapshot
-  -> apply
-  -> audit
-  -> recovery metadata
+intent envelope
+  -> Operation Scheduling Kernel
+  -> registry contract resolve
+  -> identity / policy / risk decision
+  -> ledger started / pending
+  -> pending_operation / approval wait when required
+  -> queue / concurrency / retry scheduling
+  -> dry-run / diff / snapshot boundary
+  -> executor invocation
+  -> receipt / audit / checkpoint / trace
+  -> operation reply
 ```
 
 操作必须支持：
 
 - 幂等：`idempotencyKey`
+- 内核准入：`operationId`、`kernelDecision`、`scheduledAt`
 - 可预览：`dryRun=true`
 - 可解释：`policyDecision.reason`
 - 可恢复：`preSnapshot`、`postSnapshot`
@@ -333,7 +343,7 @@ Proposal 最小协议入口：
 
 读请求也必须形成 checkpoint node。它可能不改变文件树，但会产生 `knowledgeAccessReceipt`、`loanRecord`、`asset.download.requested`、`asset.downloaded`、`skill.used`、`denied request audit`、贡献统计或模型上下文暴露记录。这些都是公共空间安全状态的一部分。第一版读请求全量入树，不能把 list、discover、metadata、permission check、receipt list、audit query、operation history 或 checkpoint tree list 降级为普通接口日志。`asset.downloaded` 只能在真实内容传输完成并校验成功后产生；策略通过和返回下载状态响应只能记录 requested/started。
 
-全量入树的边界是外部可见请求。为了避免查询 Checkpoint Tree 自身时递归生成无限节点，同一次请求内部读取 Ledger、AuditStore、CheckpointTree 或 projection 的系统内部读不再生成新的 checkpoint node。
+全量入树的边界是外部可见请求、后台任务 activity 和 provider side effect。为了避免查询 Checkpoint Tree 自身时递归生成无限节点，同一次请求内部读取 Ledger、AuditStore、CheckpointTree 或 projection 的系统内部读不再生成新的 checkpoint node，但必须继承父 `operationId` / `traceId`，重要子步骤作为 span、receipt 或 child event 关联回统一账本。
 
 Checkpoint Tree 安全恢复演示：
 
@@ -524,7 +534,7 @@ rankScoreV0 =
 
 历史文档里的 MCP Demo Flows 现在收敛为本节的设备级 MCP Hub，并按 Stitch MCP 的 HTTP 接入方案落地。
 
-Pact MCP service 是 Workspace API 的设备级协议适配器，不是 agent-to-agent gateway。它必须让同一台设备上的 Codex、Gemini CLI、Kilo Code、Copilot、OpenClaw（OrbStack Kate）、Hermes Agent（OrbStack Serena）和 Antigravity 都能通过同一套发现、授权和工具边界访问 Pact，而不是为某一个 agent 单独硬编码。
+Pact MCP service 是 Workspace API 的设备级协议适配器，不是 agent-to-agent gateway。它必须让同一台设备上的 OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf 都能通过同一套发现、授权和工具边界访问 Pact，而不是为某一个 agent 单独硬编码。
 
 Pact MCP service 可以位于 agent traffic/load gateway 后面，但 gateway 只能作为可拆卸流量入口。拆除 gateway 后，HTTP MCP endpoint、stdio proxy 到 HTTP MCP 的转发、grant pairing、discovery manifest、client runtime bootstrap 和 upload session 必须继续使用 direct Pact endpoint 正常工作。gateway 注入的 request id、route id、边缘认证结果和限流结果只能进入审计上下文，不能替代 Pact grant 或 workspace policy。
 
@@ -682,7 +692,7 @@ npx pact-mcp-connector@latest register
 npx pact-mcp-connector@latest install
 ```
 
-无 `--target` 且运行在 TTY 中时，`install` 必须启动多选交互式菜单，扫描 Codex、Gemini CLI、Kilo Code、Copilot、Antigravity、OpenClaw、Hermes Agent 和 claw-compatible 衍生体，允许用户用上下键移动、Space 多选、`a` 切换所有已检测客户端。菜单只在用户确认选择后写入对应客户端配置。
+无 `--target` 且运行在 TTY 中时，`install` 必须启动多选交互式菜单，扫描 OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf 和 claw-compatible 衍生体，允许用户用上下键移动、Space 多选、`a` 切换所有已检测客户端。菜单只在用户确认选择后写入对应客户端配置。
 
 客户端扫描必须是真正分层扫描：先检测宿主 OS（`darwin` / `linux` / `win32`），再按本系统特点依次执行 PATH scanner、package-manager scanners（brew、npm/pnpm/yarn/bun global、nvm/asdf/mise shims、pipx、cargo bin、winget/scoop/choco、snap/flatpak 等）、App/desktop scanners（macOS `.app`、Linux `.desktop`、Windows Start Menu / App Paths），最后扫描 Container/VM（OrbStack、Docker、Podman、WSL）并在目标环境内重复 Linux 分层扫描。所有 CLI 候选必须统一 normalize + realpath 去重，并实际执行 `mcp --help` capability probe；只有确实暴露 MCP 子命令的 CLI 才能显示为可安装 MCP 客户端。同一个 VM / container 内同类客户端只显示一个归一化候选，本机不同 realpath 的 claw-compatible 客户端可以分别显示。App/desktop 层不做全量泛探测，只针对常见智能体/开发平台名单和名称模式（例如 `*Bot`、`*Claw`、`*Agent`、`*Code`）过滤候选。macOS `.app` scanner 只允许探测 bundle 内的 CLI helper 目录（例如 `Contents/Resources` / `Contents/Resources/bin`），不得执行 `Contents/MacOS/CFBundleExecutable` 这类 GUI 主程序，避免触发登录、钥匙串或授权弹窗。
 
@@ -770,13 +780,17 @@ MCP 不复用控制台 cookie / CSRF。每个 agent 使用独立 grant/token：
 正常安装不要求用户手动复制 token。connector 在扫描到本机 Pact 并完成 `/api/mcp/handshake` 签名验证后，调用本机限定的 `/api/mcp/local-grant` 申请默认 agent grant。该 grant 使用 Tool Management 默认 agent toolsets，默认不授予 admin/repair 权限。`PACT_MCP_TOKEN` 只是 Codex 等只支持 bearer-token-env-var 客户端需要引用的环境变量名，变量值由 connector 写入；不是要求用户手工配置的前置条件。
 
 ```text
+pact.mcp.openclaw
+pact.mcp.claude-code
 pact.mcp.codex
 pact.mcp.gemini-cli
-pact.mcp.kilo-code
-pact.mcp.copilot
-pact.mcp.openclaw.kate
-pact.mcp.hermes.serena
 pact.mcp.antigravity
+pact.mcp.opencode
+pact.mcp.copilot
+pact.mcp.kilo-code
+pact.mcp.cursor
+pact.mcp.hermes
+pact.mcp.windsurf
 ```
 
 每个 grant 必须记录：
@@ -797,13 +811,17 @@ grant 只授予 curated MCP toolset。不得把完整 Operation Registry 默认�
 
 | Target | 推荐接入 | endpoint |
 | --- | --- | --- |
+| OpenClaw | VM / remote 环境内 `openclaw mcp set pact <json>`，HTTP endpoint 指向宿主机或已发现远端 | signed discovery `vmHttpUrl` / `httpUrl` |
+| Claude Code | `claude mcp add-json pact <server-json>` 或等价 CLI 配置写入 | signed discovery `httpUrl` |
 | Codex | `codex mcp add --url --bearer-token-env-var`（若需兼容旧版本再尝试 `codex plugin marketplace add` + `codex plugin add`） | signed discovery `httpUrl` |
 | Gemini CLI | `gemini mcp add --transport http --header X-Pact-Api-Key`；同时生成并校验 Stitch 形态 extension manifest | signed discovery `httpUrl` |
-| Kilo Code | 按 Kilo CLI 标准 `~/.config/kilo/kilo.json` 的 `mcp.<name>.type=remote` 写入 HTTP server | signed discovery `httpUrl` |
-| Copilot | `copilot mcp add --transport http --header X-Pact-Api-Key` | signed discovery `httpUrl` |
-| OpenClaw / OrbStack Kate | VM 内 `openclaw mcp set pact <json>`，HTTP endpoint 指向宿主机 | signed discovery `vmHttpUrl` |
-| Hermes Agent / OrbStack Serena | VM 内 `hermes mcp add --url --auth header`，并用 Hermes config helper 启用后 `hermes mcp test` | signed discovery `vmHttpUrl` |
 | Antigravity | 按官方 `~/.gemini/antigravity/mcp_config.json` 的 `serverUrl` + `headers` 写入 HTTP server | signed discovery `httpUrl` |
+| OpenCode | 按 `~/.config/opencode/opencode.jsonc` 的 `mcp.pact.type=remote`、`url`、`headers.X-Pact-Api-Key` 和 `enabled` 写入 HTTP server | signed discovery `httpUrl` |
+| Copilot | `copilot mcp add --transport http --header X-Pact-Api-Key` | signed discovery `httpUrl` |
+| Kilo Code | 按 Kilo CLI 标准 `~/.config/kilo/kilo.json` 的 `mcp.<name>.type=remote` 写入 HTTP server | signed discovery `httpUrl` |
+| Cursor | 按 Cursor MCP settings 的 `mcpServers.pact` 写入 HTTP server | signed discovery `httpUrl` |
+| Hermes Agent | VM / remote 环境内 `hermes mcp add --url --auth header`，并用 Hermes config helper 启用后 `hermes mcp test` | signed discovery `vmHttpUrl` / `httpUrl` |
+| Windsurf | 按 `~/.codeium/windsurf/mcp_config.json` 的 `mcpServers.pact` 写入 HTTP server | signed discovery `httpUrl` |
 
 installer 只追加或替换 `pact` 这一项，必须先生成会被结构化写入目标配置的回滚副本。不得覆盖、清空或重排用户已有 MCP server、API key、bot token 或 agent 配置。能用客户端标准 CLI 的目标必须调用标准 CLI；没有可脚本化标准 CLI 的目标由 `server:mcp:install` 按目标官方配置格式做结构化写入并生成回滚副本。
 
@@ -990,7 +1008,7 @@ MCP handler 不能直接读写文件夹、知识库内部实现或 Tool Manageme
 pact.sharedspace({ "apiVersion": "pact.mcp.v1", "operation": "workspace.file.upload", "input": {...} })
 pact.sharedspace({ "apiVersion": "pact.mcp.v1", "operation": "workspace.file.list", "input": {...} })
 pact.knowledge({ "apiVersion": "pact.mcp.v1", "operation": "knowledge.search", "input": {...} })
-pact.skillHub({ "apiVersion": "pact.mcp.v1", "operation": "workspace.skill.list", "input": {...} })
+pact.skillHub({ "apiVersion": "pact.mcp.v1", "operation": "pact.skillHub.list", "input": {...} })
 pact.skillHub({ "apiVersion": "pact.mcp.v1", "operation": "workspace.audit.query", "input": {...} })
 pact.discovery({ "apiVersion": "pact.mcp.v1", "operation": "pact.capabilities.list", "input": {} })
 ```
@@ -1007,13 +1025,21 @@ OpenClaw 文档互通演示：
 4. OpenClaw B 调用 `workspace.file.list` 或带 `workspaceId` 的 `knowledge.search` 查找目标 workspace 中可见的文档。
 5. B 调用 `workspace.file.download`；策略通过后返回下载状态报文、`loanRecord`、`knowledgeAccessReceipt` 和 transfer id。只有内容真实传完并完成校验后，才记录 `asset.downloaded`。
 
-Skill 贡献排行榜演示：
+Skill 贡献排行榜演示（Skill Hub 采用排行榜）：
 
-1. OpenClaw A 调用 `workspace.contribution.submit`，上传 `skill` 类型资产，并设置默认公开权限。
-2. Pact 在 Skill manifest 和必要文件到达服务器后先进入 `preview`，权限、风险、许可和审核通过后才发布到 `workspace/skills/`、SkillLibrary、贡献面板和 MCP skill list。
-3. OpenClaw B 通过面板或 `workspace.skill.list` 看到该 Skill。
-4. B 调用 `workspace.skill.download` 或安装后上报 `workspace.skill.usage.report`。
-5. Pact 只在 Skill 文件真实传完并校验成功后记录 `skill.downloaded`；安装完成后记录 `skill.installed`；实际调用完成后记录 `skill.used` 并执行 `usageCount += 1`。成功使用会提高 `successRate`，跨 workspace 采用会提高 `uniqueWorkspaceAdoptions`，随后刷新 `rankScoreV0`。
+1. OpenClaw A 调用 `pact.skillHub.upload`，上传 Skill manifest、说明、执行约束和必要文件，并设置默认可见策略。
+2. Pact 在 Skill manifest 和必要文件到达服务器后进入 capability package lifecycle，权限、风险、许可和审核通过后才发布到独立 Skill Hub / SkillLibrary，并刷新 MCP `pact.skillHub` discovery。
+3. Workspace contribution 只能记录来源、审核、采用、排行榜和引用关系，不能作为技能包文件、版本、发布状态或启用状态的事实源。
+4. OpenClaw B 通过面板或 `pact.skillHub.list` 看到该 Skill。
+5. B 调用 `pact.skillHub.download` 或安装后上报 `pact.skillHub.usage.report`。
+6. Pact 只在 Skill 文件真实传完并校验成功后记录 `skill.downloaded`；安装完成后记录 `skill.installed`；实际调用完成后记录 `skill.used` 并执行 `usageCount += 1`。成功使用会提高 `successRate`，跨 workspace 采用会提高 `uniqueWorkspaceAdoptions`，随后刷新 `rankScoreV0`。
+
+`workspace.skill.upload/list/download/usage.report` 只能作为兼容 operation 保留；如果存在，必须路由到 Skill Hub / capability package lifecycle，不能直接写 workspace contribution registry，并要求使用 `workspace.skill.usage.report` 上报使用结果。
+
+兼容 operation 映射要求：
+
+- `workspace.skill.list` 在统一入口中可见，但其输出必须是基于 SkillHub 可见技能引用的资产面投影；技能包事实（版本、生命周期、发布状态、撤销状态）由 `pact.skillHub` 与 capability package registry 持有。
+- `sharedspace.drive.connect` 属于 v0.0.1 Cloud Drive 语义入口，按协议应通过 Tool Management catalog 暴露为 `pact.sharedspace.drive.connect`，并由统一策略与审计路径治理。
 
 ## Tool/Skill Management Provider Protocol
 
@@ -1092,14 +1118,14 @@ v0.0.1 Cloud Drive 语义入口：
 
 - `sharedspace.drive.connect`：创建云盘连接或本机 iCloud 受控目录 mount；基础模式固定暴露 `default/` 和 `public/` 两个 agent 视图，分别映射到 `.pact-data/<client>` 可写默认空间和 `.pact-data/public` 只读公共空间；高级模式只能额外暴露用户显式选择的既有目录，默认只读。OAuth provider 只保存 `secretRef`，不保存 token value。
 - `sharedspace.drive.status`、`sharedspace.drive.item.list`、`sharedspace.drive.permission.list`：只返回安全元数据、连接状态、目录映射、读写语义、ACL 摘要和 provider contract 标记，不返回私有本机路径、上游裸 ID、下载 URL 或 secret value。
-- `sharedspace.drive.file.download`、`sharedspace.drive.file.upload`：所有传输都必须生成 `transferReceipt`；iCloud local adapter 只能在 `default/` 可写空间实写，`public/` 和高级暴露目录默认只读；OneDrive/Google Drive/Dropbox 缺少真实 OAuth 凭据时只能返回 `contractVerified`，不能说成真实上传或真实下载。
+- `sharedspace.drive.file.download`、`sharedspace.drive.file.upload`：所有传输都必须生成 `transferReceipt`；iCloud local adapter 只能在 `default/` 可写空间实写，`public/` 和高级暴露目录默认只读；P0 第一批真实 provider 是 iCloud + OneDrive，OneDrive 必须返回真实远端 upload/download receipt 并标记 `remoteLiveVerified` 或 `realE2EVerified`；Google Drive/Dropbox 缺少真实 OAuth 凭据时只能返回 `contractVerified`，不能说成真实上传或真实下载。
 - `sharedspace.drive.sync.plan`、`sharedspace.drive.sync.apply`：同步以 Sharedspace 为 Pact 权威状态，云盘只是外部 adapter/projection；apply 必须写 sync receipt 和 checkpoint，contract-mode 只能证明操作合同，不声明 remote sync completed。
 
 v0.0.1 release readiness 语义：
 
 - `server:migrate:v001` 只在 `ServerConfig.getDataDir()` 对应运行目录生成迁移/保留报告、恢复点 manifest 和 rollback preview，不移动运行配置回 repo，也不清空旧 runtime 状态。
-- `server:verify:v001` 聚合 Phase 0-4 verifier、迁移报告、Tool/Policy/MCP 注册和 renderer raw build，输出 `reports/v001-readiness/<run-id>/report.{json,md}`。
-- readiness report 的结论只能声明 v0.0.1 单机可交付；缺少真实外部凭据的 GitHub、Gerrit、Dify、RAGFlow、OneDrive、Google Drive 和 Dropbox 必须保留 `contractVerified`，不能被文案提升为真实外部 E2E、真实上传、真实同步或 production ready。
+- `server:verify:v001` 聚合 Phase 0-4 verifier、迁移报告、Tool/Policy/MCP 注册和 renderer raw build，输出 `docs/reports/history/v001-readiness/<run-id>/report.{json,md}`。
+- readiness report 的结论只能声明 v0.0.1 单机可交付；缺少真实外部凭据的 GitHub、Gerrit、Dify、RAGFlow、Google Drive 和 Dropbox 必须保留 `contractVerified`，不能被文案提升为真实外部 E2E、真实上传、真实同步或 production ready。P0 云盘 live scope 是 iCloud + OneDrive，OneDrive 只有通过专用 live verifier 或真实 adapter receipt 后才能从 contract-mode 提升为真实云盘接通。
 
 v0.0.1 本地 secret 初始化入口：
 
@@ -1210,6 +1236,10 @@ Legal hold 必须阻断 delete/purge/expire/retention.dispose 等破坏性动作
 3. `knowledge-distillation`：从原始语料全文生成自包含知识文档，只作为背景和交付物，不替代 evidence；第二层 evidence 只负责校验、引用、补证。
 
 工业级蒸馏验收使用 `pact.external-knowledge-distillation.industrial-benchmark.v1`。唯一维护面是 `external.knowledge.distillation`，通过本地 RAGFlow、MinerU、Docling、LlamaIndex、Marker、GraphRAG、Haystack 和 Unstructured 参考框架对比 route-first、windowing、分类蒸馏、Graph evidence、human/agent 响应分离和 Office 专业适配；内部 `knowledge.distillation.*` 只返回迁移报文。
+
+外部知识蒸馏服务按远程容器默认部署时，`pact.external-knowledge-distillation.service-gates.v1` 是前置门禁。容器态默认要求 `PACT_EXTERNAL_KD_API_TOKEN`，只有 `/health` 和 `/v1/runtime/health` 作为编排健康检查公开；capabilities、runs、evidence、artifacts 和 cancel 等业务 API 必须通过 bearer gate。镜像还必须固定 Tika checksum、运行非 root 用户并声明 healthcheck。`npm run server:verify:external-knowledge-distillation-service-gates` 必须先于外部知识蒸馏功能回归执行。
+
+Pact 侧访问 `external.knowledge.distillation` 时必须先进入外部服务上游网关切面。`runs.list/get/create/cancel`、`evidence.query`、`projects.evidence.query`、`artifacts.export`、产物下载、package export、stage export、compare、delete 和 archive 都不能绕过 operation authorization、Tool Management grant、egress policy、audit receipt 和 denied decision。兼容期 `knowledge.distillation.workbench.*` 只返回迁移报文，不对智能体暴露，也不能继续承载真实算法或下载能力。
 
 蒸馏持续优化使用 `pact.knowledge-distillation-optimization.v1`。每次 `knowledgeSkillSet` evolution run 必须记录 `promptVersion`、baseline skill/model/framework、candidate skill IDs、evaluation dataset version/case IDs、error attribution、metric trend、human review 状态和 canary deployment；失败评估进入人工审核队列，通过评估后才能发布 canary，后续仍必须保留 promote/rollback 审计链。
 
@@ -1451,18 +1481,20 @@ native transport 不能仅凭 Linux 平台推断可用。`rsync-over-ssh`、`sft
 
 ## Strategy Management Protocol
 
-`pact.strategy-management.v1` 是应用层策略管理协议。它收敛处理流程选择、人工确认门禁、智能体调用策略、模型路由策略包装和工具调用策略预览，不承载真实认证、授权、scope、grant 或 denied audit。安全权限裁决只能通过 `pact.security-permissions.v1` provider 执行，策略管理只能把安全裁决结果纳入策略输出和审计语义。
+`pact.strategy-management.v1` 是应用层策略管理协议。它收敛处理流程选择、人工确认门禁、智能体调用策略、切面路由策略、模型路由策略包装和工具调用策略预览，不承载真实认证、授权、scope、grant 或 denied audit。安全权限裁决只能通过 `pact.security-permissions.v1` provider 执行，策略管理只能把安全裁决结果纳入策略输出和审计语义。
 
 公开操作：
 
 - `strategy.describe`：读取策略管理协议版本、能力和委托协议。
 - `strategy.workflow_policy.evaluate`：评估处理流程策略，返回 `allow`、`require_confirmation` 或 `deny`。
 - `strategy.agent_policy.evaluate`：评估智能体调用策略，作为模型决策和模型路由的统一策略包装。
+- `strategy.route_policy.evaluate`：评估上下游切面和网关入口到平台内部能力或外部服务 endpointRef 的路由策略，返回路由裁决和路由目标摘要，不执行真实路由。
 - `strategy.tool_policy.preview`：预览工具调用策略，委托 Tool Management catalog/grant/profile 与安全权限 provider 后返回策略化 decision。
 
 运行时边界：
 
 - Agent Gateway 的模型路由必须通过 Strategy Management provider 包装，返回 `strategyPolicyDecision`，不能在 gateway 内部散落流程策略。
+- 上游服务切面和下游客户端切面到内部能力或外部服务地址的路由必须通过 route policy 表达，不能在切面 adapter、MCP/ACP 翻译层或外部服务 adapter 中硬编码绕过策略管理的路由分支。
 - Knowledge model decision runtime 对上暴露的 `describe/decide` 端口必须经 Strategy Management provider 包装，调用方不直接持有底层模型决策 runtime。
 - Tool Management policy engine 可以保留本地执行能力，但被 Strategy Management provider 注入时，HTTP / RPC / CLI 的 policy preview 都必须带 `strategyProtocolVersion` 和 `strategy_management` 评估层。
 - Workflow policy 只表达流程门禁；真正阻止未授权访问仍以 Security Permissions provider 的 authorization decision 为准。

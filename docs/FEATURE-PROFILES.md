@@ -2,6 +2,17 @@
 
 Feature profiles are defined in `server/platform/interactive/features/feature-manifest.mjs`.
 
+## Product Preset Lines
+
+Pact maintains two preset build lines:
+
+| Preset line | Purpose | Default shape |
+| --- | --- | --- |
+| Personal computer lightweight | Single-user local or personal-cloud-oriented use. | Modular monolith, SQLite, local file/object storage, local directory integration, optional gateway. No cluster middleware by default. |
+| Enterprise private deployment | Enterprise-controlled deployment where infrastructure may already exist. | Dehydrated modules selected by profile; middleware is accessed through ports/adapters so Postgres, Redis, S3-compatible storage, KMS, gateways and audit export can be replaced with enterprise-owned services. |
+
+All additional features must be dehydrated modules: they must declare profile membership, required ports, runtime assets, secret refs, audit behavior and verification commands. Enterprise-only modules must not leak into the personal computer default path.
+
 ## Layout
 
 | Boundary | Server directory |

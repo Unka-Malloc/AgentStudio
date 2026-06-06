@@ -141,5 +141,5 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(port, host, () => {
-  process.stdout.write(`pact external HTTP fake service listening on ${host}:${port}\n`);
+  process.stdout.write(`pact external HTTP fixture service listening on ${host}:${port}\n`);
 });

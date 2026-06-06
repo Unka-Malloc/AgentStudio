@@ -36,7 +36,7 @@ class TargetCard extends StatelessWidget {
                 Expanded(child: _TargetTitle(target: target)),
               ],
             ),
-            const Spacer(),
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

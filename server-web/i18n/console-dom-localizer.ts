@@ -28,7 +28,7 @@ function shouldSkipConsoleLocalizeElement(element: Element | null) {
 }
 
 function localizeConsoleElementAttributes(element: Element, locale: ConsoleLocale) {
-  for (const attr of ["placeholder", "title", "aria-label", "alt"]) {
+  for (const attr of ["placeholder", "title", "aria-label", "alt", "data-tooltip"]) {
     const current = element.getAttribute(attr);
     if (!current) {
       continue;
@@ -141,7 +141,7 @@ export function installConsoleDomLocalizer(getLocale: () => ConsoleLocale): Cons
     subtree: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ["placeholder", "title", "aria-label", "alt"],
+    attributeFilter: ["placeholder", "title", "aria-label", "alt", "data-tooltip"],
   });
   refresh();
 

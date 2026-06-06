@@ -111,7 +111,7 @@ function sendJson(response, status, payload) {
   response.end(`${JSON.stringify(payload)}\n`);
 }
 
-async function startFakeCloudDriveProvider() {
+async function startFixtureCloudDriveProvider() {
   const files = new Map();
   const requests = [];
 
@@ -122,7 +122,7 @@ async function startFakeCloudDriveProvider() {
       name: path.posix.basename(filePath),
       content: buffer,
       contentSha256: sha256(buffer),
-      providerFileId: `fake-file-${sha256(Buffer.from(filePath)).slice(0, 12)}`,
+      providerFileId: `fixture-file-${sha256(Buffer.from(filePath)).slice(0, 12)}`,
       revision,
       etag: `"${sha256(Buffer.concat([Buffer.from(filePath), buffer])).slice(0, 16)}"`
     });
@@ -152,10 +152,10 @@ async function startFakeCloudDriveProvider() {
         sendJson(response, 200, {
           ok: true,
           connection: {
-            rootId: "fake-root-01",
-            rootName: "Fake Drive Root",
+            rootId: "fixture-root-01",
+            rootName: "Fixture Drive Root",
             revision: "root-rev-1",
-            accountId: "fake-account-01"
+            accountId: "fixture-account-01"
           }
         });
         return;
@@ -208,7 +208,7 @@ async function startFakeCloudDriveProvider() {
         const expectedSha256 = String(payload.contentSha256 || "");
         assert.equal(sha256(content), expectedSha256, "remote upload content hash must match provider payload");
         const revision = `rev-upload-${requests.length}`;
-        const providerFileId = `fake-file-${sha256(Buffer.from(filePath)).slice(0, 12)}`;
+        const providerFileId = `fixture-file-${sha256(Buffer.from(filePath)).slice(0, 12)}`;
         const record = {
           path: filePath,
           name: path.posix.basename(filePath),
@@ -233,7 +233,7 @@ async function startFakeCloudDriveProvider() {
         return;
       }
 
-      sendJson(response, 404, { ok: false, error: "unknown fake provider route" });
+      sendJson(response, 404, { ok: false, error: "unknown fixture provider route" });
     } catch (error) {
       sendJson(response, 500, { ok: false, error: error?.message || String(error) });
     }
@@ -286,7 +286,7 @@ for (const operationId of REQUIRED_OPERATIONS) {
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-v001-cloud-drive-"));
 const icloudRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-icloud-drive-"));
 let server = null;
-let fakeProvider = null;
+let fixtureProvider = null;
 
 try {
   await fs.mkdir(path.join(icloudRoot, ".pact-data", "owner"), { recursive: true });
@@ -305,7 +305,7 @@ try {
     }
   });
   const auth = await installAuthenticatedFetch(server, { safetyConfirm: true });
-  fakeProvider = await startFakeCloudDriveProvider();
+  fixtureProvider = await startFixtureCloudDriveProvider();
 
   const workspace = await fetchJson(`${server.url}/api/agent-workspaces`, {
     method: "POST",
@@ -595,8 +595,8 @@ try {
       provider: "google-drive",
       secretRef: "secret://pact/drive/google-drive-oauth",
       mode: "remote-live",
-      endpointRef: "config://pact/drive/google-drive-fake-provider",
-      endpointUrl: fakeProvider.url,
+      endpointRef: "config://pact/drive/google-drive-fixture-provider",
+      endpointUrl: fixtureProvider.url,
       managedFolder: true,
       managedFolderRoot: ".pact-data",
       publicFolder: "public",
@@ -611,7 +611,7 @@ try {
   assert.equal(remoteLiveConnect.payload.drive.remoteLiveVerified, true);
   assert.ok(remoteLiveConnect.payload.telemetry.transferBytes > 0, "remote-live connect must expose transfer size telemetry");
   assert.ok(remoteLiveConnect.payload.telemetry.bytesPerSecond > 0, "remote-live connect must expose transfer rate telemetry");
-  assert.equal(JSON.stringify(remoteLiveConnect.payload).includes(fakeProvider.url), false, "public remote-live connect payload must not expose endpointUrl");
+  assert.equal(JSON.stringify(remoteLiveConnect.payload).includes(fixtureProvider.url), false, "public remote-live connect payload must not expose endpointUrl");
   const remoteLiveDriveRef = remoteLiveConnect.payload.drive.driveRef;
 
   const remoteLiveList = await fetchJson(`${server.url}/api/external/cloud-drive/items?${new URLSearchParams({
@@ -676,7 +676,7 @@ try {
   assert.ok(remoteLiveUpload.payload.transferReceipt.provider.webUrl, "remote-live upload receipt must include provider webUrl");
   assert.ok(remoteLiveUpload.payload.transferReceipt.provider.etag, "remote-live upload receipt must include provider etag");
   assert.ok(remoteLiveUpload.payload.transferReceipt.telemetry.transferBytes > 0, "remote-live upload receipt must include transfer bytes");
-  assert.equal(fakeProvider.readFile(".pact-data/codex/remote-upload.txt").content.toString("utf8"), "uploaded through remote live provider\n");
+  assert.equal(fixtureProvider.readFile(".pact-data/codex/remote-upload.txt").content.toString("utf8"), "uploaded through remote live provider\n");
 
   const dropboxPermissions = await fetchJson(`${server.url}/api/external/cloud-drive/permissions?${new URLSearchParams({
     workspaceId,
@@ -790,7 +790,7 @@ try {
   assert.ok(mcpRemoteUpload.providerReceipt.fileId, "MCP payload must carry provider file id for remote-live upload");
   assert.ok(mcpRemoteUpload.telemetry.transferBytes > 0, "MCP payload must carry remote-live transfer bytes");
   assert.ok(mcpRemoteUpload.telemetry.bytesPerSecond > 0, "MCP payload must carry remote-live transfer rate");
-  assert.equal(fakeProvider.readFile(".pact-data/codex/mcp-remote-live-upload.txt").content.toString("utf8"), "mcp remote live upload");
+  assert.equal(fixtureProvider.readFile(".pact-data/codex/mcp-remote-live-upload.txt").content.toString("utf8"), "mcp remote live upload");
 
   const mcpSyncStructured = await callMcpStructured({
     serverUrl: server.url,
@@ -826,8 +826,8 @@ try {
   });
   assert.ok(audit.items.some((item) => item.operationId === "external.cloudDrive.file.upload"), "drive upload must be queryable from operation audit");
 } finally {
-  if (fakeProvider?.close) {
-    await fakeProvider.close().catch(() => {});
+  if (fixtureProvider?.close) {
+    await fixtureProvider.close().catch(() => {});
   }
   if (server?.close) {
     await server.close();

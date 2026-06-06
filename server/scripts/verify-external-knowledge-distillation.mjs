@@ -311,7 +311,10 @@ function startExternalService({ port, dataDir, modelGatewayUrl = "" }) {
       PACT_EXTERNAL_KD_STRUCTURED_ZIP_ENTRY_MAX_BYTES: "25000",
       PACT_EXTERNAL_KD_STREAM_TEXT_CHUNK_BYTES: "4096",
       PACT_EXTERNAL_KD_MODEL_GATEWAY_URL: modelGatewayUrl,
-      PACT_EXTERNAL_KD_MODEL_ALIAS: "verify-real-model-gateway"
+      PACT_EXTERNAL_KD_MODEL_ALIAS: "verify-real-model-gateway",
+      PACT_EXTERNAL_KD_API_TOKEN: "",
+      PACT_EXTERNAL_KD_REQUIRE_API_TOKEN: "0",
+      PACT_EXTERNAL_KD_ALLOW_UNAUTHENTICATED_DEV: "1"
     },
     stdio: ["ignore", "pipe", "pipe"]
   });

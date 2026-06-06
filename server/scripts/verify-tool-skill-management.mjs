@@ -62,7 +62,7 @@ for (const required of [
 
 const grants = [];
 const updatedGrants = [];
-const fakePlatform = {
+const fixturePlatform = {
   securityPermissions: {
     decisions: [],
     appendDecision(decision) {
@@ -192,7 +192,7 @@ const fakePlatform = {
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-tool-skill-provider-"));
 const skillPackageRegistry = createCapabilityPackageRegistry({ userDataPath });
-const provider = createToolSkillManagementProvider({ toolManagementPlatform: fakePlatform, userDataPath });
+const provider = createToolSkillManagementProvider({ toolManagementPlatform: fixturePlatform, userDataPath });
 assert.equal(provider.describe().protocolVersion, TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION);
 
 const request = {

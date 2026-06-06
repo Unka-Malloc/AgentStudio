@@ -876,7 +876,6 @@ const INTERNAL_OPERATION_IDS_HIDDEN_FROM_TOOL_CATALOG = Object.freeze(new Set([
   "knowledge.distillation.workbench.runs.package",
   "knowledge.distillation.workbench.runs.artifacts",
   "knowledge.distillation.workbench.runs.compare",
-  "sharedspace.drive.connect",
   "sharedspace.drive.status",
   "sharedspace.drive.item.list",
   "sharedspace.drive.file.download",

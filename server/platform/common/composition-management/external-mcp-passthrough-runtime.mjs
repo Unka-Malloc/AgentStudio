@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { ServerConfig } from "../config/ServerConfig.mjs";
 
 export const EXTERNAL_MCP_CACHE_KIND = "pact.external-mcp.tool-cache";
 export const EXTERNAL_MCP_VIRTUAL_OPERATION_ASPECT = "external-mcp-passthrough";
@@ -33,7 +34,7 @@ function uniqueStrings(values = []) {
 }
 
 function registryRoot(userDataPath = "") {
-  return path.resolve(userDataPath || process.cwd(), "external-services");
+  return path.resolve(userDataPath || ServerConfig.getDataDir(), "external-services");
 }
 
 export function externalMcpToolCachePath(userDataPath = "") {

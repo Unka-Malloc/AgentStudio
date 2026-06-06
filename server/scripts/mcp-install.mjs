@@ -26,15 +26,17 @@ const MCP_CONNECTOR_PACKAGE_NAME = "pact-mcp-connector";
 const MCP_CONNECTOR_VERSION = "0.0.1";
 const HTTP_TIMEOUT_MS = 300000;
 const SUPPORTED_TARGETS = [
-  "codex",
-  "claude-code",
-  "gemini-cli",
-  "kilo-code",
-  "copilot",
   "openclaw",
-  "hermes",
+  "claude-code",
+  "codex",
+  "gemini-cli",
   "antigravity",
-  "opencode"
+  "opencode",
+  "copilot",
+  "kilo-code",
+  "cursor",
+  "hermes",
+  "windsurf"
 ];
 const TARGET_ALIASES = new Map([
   ["gemini", "gemini-cli"],
@@ -49,6 +51,7 @@ const TARGET_ALIASES = new Map([
   ["openclaw-kate", "openclaw"],
   ["hermes-agent", "hermes"],
   ["hermes-serena", "hermes"],
+  ["cursor-agent", "cursor"],
   ["open-code", "opencode"]
 ]);
 
@@ -554,12 +557,22 @@ async function installCopilot({ baseUrl, token, copilotBin }) {
 }
 
 async function installAntigravity({ baseUrl, token, configPath }) {
+  return installMcpServersJsonConfig({
+    baseUrl,
+    token,
+    configPath,
+    installMode: "antigravity-mcp-config",
+    urlKey: "serverUrl"
+  });
+}
+
+async function installMcpServersJsonConfig({ baseUrl, token, configPath, installMode, urlKey = "url" }) {
   const config = await readJson(configPath, { mcpServers: {} });
   const backupPath = await backupIfExists(configPath);
   config.mcpServers = {
     ...(config.mcpServers || {}),
     [MCP_SERVER_NAME]: {
-      serverUrl: `${baseUrl}/mcp`,
+      [urlKey]: `${baseUrl}/mcp`,
       headers: {
         "X-Pact-Api-Key": token
       },
@@ -568,7 +581,7 @@ async function installAntigravity({ baseUrl, token, configPath }) {
   };
   await writeJson(configPath, config);
   return {
-    installMode: "antigravity-mcp-config",
+    installMode,
     configPath,
     backupPath
   };
@@ -772,6 +785,14 @@ const opencodeConfigPath = path.resolve(argValue(
   "--opencode-config",
   path.join(os.homedir(), ".config", "opencode", "opencode.jsonc")
 ));
+const cursorConfigPath = path.resolve(argValue(
+  "--cursor-config",
+  path.join(os.homedir(), "Library", "Application Support", "Cursor", "User", "globalStorage", "saoudrizwan.claude-dev", "settings", "cline_mcp_settings.json")
+));
+const windsurfConfigPath = path.resolve(argValue(
+  "--windsurf-config",
+  path.join(os.homedir(), ".codeium", "windsurf", "mcp_config.json")
+));
 const sharedVmName = argValue("--vm", "");
 const sharedVmUser = argValue("--vm-user", "");
 const openclawVm = argValue("--openclaw-vm", sharedVmName);
@@ -820,6 +841,20 @@ for (const target of targets) {
     clientResult = await installAntigravity({ baseUrl, token: grantResult.token, configPath: antigravityConfigPath });
   } else if (target === "opencode") {
     clientResult = await installOpenCode({ baseUrl, token: grantResult.token, configPath: opencodeConfigPath });
+  } else if (target === "cursor") {
+    clientResult = await installMcpServersJsonConfig({
+      baseUrl,
+      token: grantResult.token,
+      configPath: cursorConfigPath,
+      installMode: "cursor-mcp-config"
+    });
+  } else if (target === "windsurf") {
+    clientResult = await installMcpServersJsonConfig({
+      baseUrl,
+      token: grantResult.token,
+      configPath: windsurfConfigPath,
+      installMode: "windsurf-mcp-config"
+    });
   }
   const httpVerification = verify
     ? await verifyMcpTools({ baseUrl, token: grantResult.token })

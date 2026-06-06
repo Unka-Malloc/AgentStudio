@@ -1,7 +1,7 @@
 {
   "protocolVersion": "pact.external-knowledge-distillation.references.v1",
   "generatedAt": "2026-05-31T09:20:00Z",
-  "localRoot": "build/reference-frameworks/knowledge-distillation",
+  "localRoot": "/Users/unka/.pact-server-data/reference-frameworks/knowledge-distillation",
   "selectionPolicy": {
     "purpose": "Continuously compare Pact external knowledge distillation against leading document parsing, RAG, graph summarization, and document-agent frameworks.",
     "criteria": [
@@ -16,88 +16,120 @@
       "name": "RAGFlow",
       "repo": "infiniflow/ragflow",
       "url": "https://github.com/infiniflow/ragflow",
-      "localPath": "build/reference-frameworks/knowledge-distillation/ragflow",
+      "localPath": "/Users/unka/.pact-server-data/reference-frameworks/knowledge-distillation/ragflow",
       "commit": "cd18cfa",
       "license": "Apache-2.0",
       "starsAtSelection": 81580,
-      "learnFrom": ["deep document understanding", "RAG engine architecture", "agent-facing knowledge base flows"]
+      "learnFrom": [
+        "deep document understanding",
+        "RAG engine architecture",
+        "agent-facing knowledge base flows"
+      ]
     },
     {
       "id": "mineru",
       "name": "MinerU",
       "repo": "opendatalab/MinerU",
       "url": "https://github.com/opendatalab/MinerU",
-      "localPath": "build/reference-frameworks/knowledge-distillation/MinerU",
+      "localPath": "/Users/unka/.pact-server-data/reference-frameworks/knowledge-distillation/mineru",
       "commit": "06b5ff1",
       "license": "NOASSERTION",
       "starsAtSelection": 65773,
-      "learnFrom": ["complex PDF parsing", "office document conversion", "LLM-ready markdown/json outputs"]
+      "learnFrom": [
+        "complex PDF parsing",
+        "office document conversion",
+        "LLM-ready markdown/json outputs"
+      ]
     },
     {
       "id": "docling",
       "name": "Docling",
       "repo": "docling-project/docling",
       "url": "https://github.com/docling-project/docling",
-      "localPath": "build/reference-frameworks/knowledge-distillation/docling",
+      "localPath": "/Users/unka/.pact-server-data/reference-frameworks/knowledge-distillation/docling",
       "commit": "11a1bb5",
       "license": "MIT",
       "starsAtSelection": 60672,
-      "learnFrom": ["unified document model", "advanced PDF understanding", "layout/table/formula extraction"]
+      "learnFrom": [
+        "unified document model",
+        "advanced PDF understanding",
+        "layout/table/formula extraction"
+      ]
     },
     {
       "id": "llama-index",
       "name": "LlamaIndex",
       "repo": "run-llama/llama_index",
       "url": "https://github.com/run-llama/llama_index",
-      "localPath": "build/reference-frameworks/knowledge-distillation/llama_index",
+      "localPath": "/Users/unka/.pact-server-data/reference-frameworks/knowledge-distillation/llama-index",
       "commit": "9aa5ee5",
       "license": "MIT",
       "starsAtSelection": 49788,
-      "learnFrom": ["document agents", "ingestion pipeline abstractions", "retrieval/evaluation patterns"]
+      "learnFrom": [
+        "document agents",
+        "ingestion pipeline abstractions",
+        "retrieval/evaluation patterns"
+      ]
     },
     {
       "id": "marker",
       "name": "Marker",
       "repo": "datalab-to/marker",
       "url": "https://github.com/datalab-to/marker",
-      "localPath": "build/reference-frameworks/knowledge-distillation/marker",
+      "localPath": "/Users/unka/.pact-server-data/reference-frameworks/knowledge-distillation/marker",
       "commit": "6ae3889",
       "license": "GPL-3.0",
       "starsAtSelection": 35576,
-      "learnFrom": ["PDF to markdown/json", "fast layout-aware conversion", "table/equation output shaping"]
+      "learnFrom": [
+        "PDF to markdown/json",
+        "fast layout-aware conversion",
+        "table/equation output shaping"
+      ]
     },
     {
       "id": "graphrag",
       "name": "GraphRAG",
       "repo": "microsoft/graphrag",
       "url": "https://github.com/microsoft/graphrag",
-      "localPath": "build/reference-frameworks/knowledge-distillation/graphrag",
+      "localPath": "/Users/unka/.pact-server-data/reference-frameworks/knowledge-distillation/graphrag",
       "commit": "6d02c23",
       "license": "MIT",
       "starsAtSelection": 33339,
-      "learnFrom": ["global/local graph summarization", "community reports", "large corpus convergence"]
+      "learnFrom": [
+        "global/local graph summarization",
+        "community reports",
+        "large corpus convergence"
+      ]
     },
     {
       "id": "haystack",
       "name": "Haystack",
       "repo": "deepset-ai/haystack",
       "url": "https://github.com/deepset-ai/haystack",
-      "localPath": "build/reference-frameworks/knowledge-distillation/haystack",
+      "localPath": "/Users/unka/.pact-server-data/reference-frameworks/knowledge-distillation/haystack",
       "commit": "c4a5a71",
       "license": "Apache-2.0",
       "starsAtSelection": 25417,
-      "learnFrom": ["production pipelines", "explicit routing", "component orchestration and evaluation"]
+      "learnFrom": [
+        "production pipelines",
+        "explicit routing",
+        "component orchestration and evaluation"
+      ]
     },
     {
       "id": "unstructured",
       "name": "Unstructured",
       "repo": "Unstructured-IO/unstructured",
       "url": "https://github.com/Unstructured-IO/unstructured",
-      "localPath": "build/reference-frameworks/knowledge-distillation/unstructured",
+      "localPath": "/Users/unka/.pact-server-data/reference-frameworks/knowledge-distillation/unstructured",
       "commit": "7c8f675",
       "license": "Apache-2.0",
       "starsAtSelection": 14814,
-      "learnFrom": ["document partitioning", "strategy-based parsing", "chunking and enrichment for LLMs"]
+      "learnFrom": [
+        "document partitioning",
+        "strategy-based parsing",
+        "chunking and enrichment for LLMs"
+      ]
     }
   ]
 }

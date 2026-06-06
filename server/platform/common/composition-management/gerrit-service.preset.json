@@ -92,7 +92,7 @@
         "required": true,
         "artifactKind": "gerrit-war",
         "defaultVersion": "3.14.0",
-        "cacheRoot": "build/local-data/gerrit/downloads",
+        "cacheRoot": "ServerConfig.getDataDir()/runtime/runtime-dependencies/gerrit/downloads",
         "sourceConfig": "runtime/runtime-dependency-sources.json",
         "downloadOperation": {
           "operationId": "runtime.dependencies.download",
@@ -140,7 +140,7 @@
       "http": 18080,
       "ssh": 29418
     },
-    "stateRoot": "build/local-data/gerrit",
+    "stateRoot": "ServerConfig.getDataDir()/runtime/runtime-dependencies/gerrit",
     "startCommand": "npm run server:gerrit:start -- --runner auto",
     "stopCommand": "npm run server:gerrit:stop",
     "doctorCommand": "npm run server:gerrit:doctor",

@@ -1,3 +1,5 @@
+import type { DocumentParsingConfig } from "./types/split/documents";
+
 export type {
   ConsoleAuditItem,
   ConsoleAuthSession,
@@ -6,6 +8,11 @@ export type {
   ConsoleRole,
   ConsoleUser,
 } from "./auth-types";
+
+export type DynamicDocumentParsingBridgeConfig = Pick<
+  DocumentParsingConfig,
+  "pipelineId" | "expectedOutput" | "expectedOutputs" | "contextBudget" | "payloadBudget" | "granularity" | "dynamicParsing"
+>;
 
 export type * from "./types/agent";
 export type * from "./types/runtime";

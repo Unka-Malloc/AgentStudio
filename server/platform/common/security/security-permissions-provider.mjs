@@ -309,7 +309,7 @@ export function createSecurityPermissionsProvider({
     },
     setWorkspaceAssetPolicy(input = {}) {
       const workspaceId = String(input.workspaceId || input.workspace || "default").trim() || "default";
-      const policyId = String(input.policyId || input["policy-id"] || `workspace_asset_policy_${crypto.randomUUID()}`).trim();
+      const policyId = String(input.policyId || input["policy-id"] || "").trim() || `workspace_asset_policy_${crypto.randomUUID()}`;
       const policy = {
         ...input,
         policyId,

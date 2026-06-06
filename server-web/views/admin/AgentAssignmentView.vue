@@ -6,6 +6,7 @@ import BinaryCheckbox from "../../components/BinaryCheckbox.vue";
 import OptionBar from "../../components/OptionBar.vue";
 import StatusPill from "../../components/StatusPill.vue";
 import { useServerConsoleShellContext } from "../../composables/serverConsoleShellContext";
+import type { AgentModelConfig, ModelProbeResponse } from "../../lib/types";
 
 type DefaultAgentKey =
   | "infoFeedSummaryModelAlias"
@@ -13,29 +14,65 @@ type DefaultAgentKey =
   | "ruleAuthoringModelAlias"
   | "reviewFusionModelAlias";
 
+const BATCH_PLACEHOLDER_VALUE = "__pact_agent_assignment_batch_placeholder__";
+
+type AssignmentProbeFailure = {
+  key: string;
+  label: string;
+  message: string;
+};
+
+type AssignmentProbeTarget = {
+  key: string;
+  label: string;
+  entry: AgentModelConfig | null;
+  usageLabels: string[];
+};
+
 const {
   agentExploreAgentOptions,
   agentExploreForm,
   agentSelectorOptions,
   busyKey,
+  error,
   highlightedConfigTarget,
   infoFeedForm,
   infoFeedModelOptions,
   intelligentModuleDefinitions,
+  modelEntryStatusKey,
   moduleModelAssignmentSelectOptions,
   moduleModelAssignmentStats,
   moduleModelRef,
   moduleNeedsIntelligence,
+  parseModelRef,
   ruleAuthoringForm,
   ruleAuthoringModelOptions,
+  runModelEntryProbe,
   saveSettings,
   setModuleModelRef,
   setModuleNeedsIntelligence,
   settingsDraft,
+  visibleModelEntries,
 } = useServerConsoleShellContext();
 const route = useRoute();
 const routeHighlightedConfigTarget = ref("");
 let routeHighlightTimer: ReturnType<typeof window.setTimeout> | null = null;
+const activeProbeScope = ref<"" | "business" | "module">("");
+const businessProbeFailures = ref<AssignmentProbeFailure[]>([]);
+const moduleProbeFailures = ref<AssignmentProbeFailure[]>([]);
+const agentAssignmentSaving = computed(() => busyKey.value === "settings" || Boolean(activeProbeScope.value));
+const businessSaveButtonText = computed(() => {
+  if (activeProbeScope.value === "business") {
+    return "检测中";
+  }
+  return busyKey.value === "settings" ? "保存中" : "保存";
+});
+const moduleSaveButtonText = computed(() => {
+  if (activeProbeScope.value === "module") {
+    return "检测中";
+  }
+  return busyKey.value === "settings" ? "保存中" : "保存";
+});
 
 const routeConfigTarget = computed(() => {
   const rawTarget = route.query.configTarget;
@@ -111,6 +148,7 @@ function defaultAgentValue(key: DefaultAgentKey, fallback = "") {
 }
 
 function setDefaultAgentValue(key: DefaultAgentKey, value: string) {
+  businessProbeFailures.value = [];
   const modelAlias = String(value || "").trim();
   settingsDraft.value.agentExploreDefaults = {
     ...settingsDraft.value.agentExploreDefaults,
@@ -135,6 +173,18 @@ function selectedOptionStatus(options: Array<{ value?: unknown; enabled?: boolea
     return { label: "不可用", tone: "danger" };
   }
   return { label: "已分配", tone: "success" };
+}
+
+function optionValue(option: { value?: unknown }) {
+  return String(option.value || "").trim();
+}
+
+function optionLabel(option: { value?: unknown; label?: string }) {
+  return String(option.label || optionValue(option)).trim();
+}
+
+function optionIsEnabled(option: { enabled?: boolean; disabled?: boolean }) {
+  return option.enabled !== false && option.disabled !== true;
 }
 
 const businessAssignments = computed(() => [
@@ -176,6 +226,54 @@ const assignedBusinessCount = computed(() =>
   businessAssignments.value.filter((item) => String(item.value || "").trim()).length,
 );
 
+const businessBatchValue = computed(() => {
+  const values = businessAssignments.value.map((item) => String(item.value || "").trim());
+  const firstValue = values[0] || "";
+  return firstValue && values.every((value) => value === firstValue) ? firstValue : "";
+});
+
+const businessBatchOptions = computed(() => {
+  const assignments = businessAssignments.value;
+  if (!assignments.length) {
+    return [];
+  }
+  const optionMaps = assignments.map((assignment) =>
+    new Map(
+      assignment.options
+        .filter((option) => optionValue(option) && optionIsEnabled(option))
+        .map((option) => [optionValue(option), option]),
+    ),
+  );
+  const firstOptions = assignments[0]?.options || [];
+  return firstOptions
+    .filter((option) => {
+      const value = optionValue(option);
+      return Boolean(value && optionMaps.every((optionMap) => optionMap.has(value)));
+    })
+    .map((option) => ({
+      value: optionValue(option),
+      label: optionLabel(option),
+    }));
+});
+
+const businessBatchSelectValue = computed(() => businessBatchValue.value || BATCH_PLACEHOLDER_VALUE);
+const businessBatchSelectOptions = computed(() => [
+  { value: BATCH_PLACEHOLDER_VALUE, label: "选择智能体", disabled: true },
+  { value: "", label: "清空分配" },
+  ...businessBatchOptions.value,
+]);
+
+function applyBusinessBatch(value: string | number | boolean | Array<string | number | boolean>) {
+  const nextValue = Array.isArray(value) ? value[0] : value;
+  const modelAlias = String(nextValue || "").trim();
+  if (modelAlias === BATCH_PLACEHOLDER_VALUE) {
+    return;
+  }
+  for (const assignment of businessAssignments.value) {
+    assignment.update(modelAlias);
+  }
+}
+
 function moduleAssignmentOptions(moduleId: string) {
   return [
     { value: "", label: "未分配" },
@@ -187,11 +285,65 @@ function moduleAssignmentOptions(moduleId: string) {
   ];
 }
 
+const moduleBatchValue = computed(() => {
+  const values = intelligentModuleDefinitions.map((moduleDefinition) => moduleModelRef(moduleDefinition.id));
+  const firstValue = values[0] || "";
+  return firstValue && values.every((value) => value === firstValue) ? firstValue : "";
+});
+
+const moduleBatchOptions = computed(() => {
+  const moduleIds = intelligentModuleDefinitions.map((moduleDefinition) => moduleDefinition.id);
+  if (!moduleIds.length) {
+    return [];
+  }
+  const optionMaps = moduleIds.map((moduleId) =>
+    new Map(
+      moduleModelAssignmentSelectOptions(moduleId)
+        .filter((option) => option.value && option.enabled)
+        .map((option) => [String(option.value || "").trim(), option]),
+    ),
+  );
+  return moduleModelAssignmentSelectOptions(moduleIds[0] || "")
+    .filter((option) => {
+      const value = String(option.value || "").trim();
+      return Boolean(value && option.enabled && optionMaps.every((optionMap) => optionMap.has(value)));
+    })
+    .map((option) => ({
+      value: String(option.value || "").trim(),
+      label: option.label,
+    }));
+});
+
+const moduleBatchSelectValue = computed(() => moduleBatchValue.value || BATCH_PLACEHOLDER_VALUE);
+const moduleBatchSelectOptions = computed(() => [
+  { value: BATCH_PLACEHOLDER_VALUE, label: "选择智能体", disabled: true },
+  { value: "", label: "清空分配" },
+  ...moduleBatchOptions.value,
+]);
+
+function applyModuleBatch(value: string | number | boolean | Array<string | number | boolean>) {
+  moduleProbeFailures.value = [];
+  const nextValue = Array.isArray(value) ? value[0] : value;
+  const refValue = String(nextValue || "").trim();
+  if (refValue === BATCH_PLACEHOLDER_VALUE) {
+    return;
+  }
+  for (const moduleDefinition of intelligentModuleDefinitions) {
+    setModuleModelRef(moduleDefinition.id, refValue);
+  }
+}
+
 function updateModuleEnabled(moduleId: string, enabled: boolean) {
+  moduleProbeFailures.value = [];
   setModuleNeedsIntelligence(moduleId, enabled);
   if (!enabled) {
     setModuleModelRef(moduleId, "");
   }
+}
+
+function updateModuleModelRef(moduleId: string, value: string) {
+  moduleProbeFailures.value = [];
+  setModuleModelRef(moduleId, value);
 }
 
 function moduleStatus(moduleId: string) {
@@ -206,6 +358,164 @@ function moduleStatus(moduleId: string) {
 function moduleRequirementLabel(alertRequired?: boolean) {
   return alertRequired === false ? "可选" : "建议分配";
 }
+
+function modelEntryIdentityValues(entry: AgentModelConfig) {
+  return [
+    modelEntryStatusKey(entry),
+    entry.uid,
+    entry.instanceId,
+    entry.alias,
+  ]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+}
+
+function modelEntryDisplayLabel(entry: AgentModelConfig) {
+  const name = String(entry.label || entry.agentName || entry.alias || modelEntryStatusKey(entry)).trim();
+  const modelName = String(entry.model || entry.engine || "").trim();
+  return modelName && modelName !== name ? `${name} · ${modelName}` : name;
+}
+
+function resolveModelEntry(value: string) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return null;
+  }
+  const directMatch = visibleModelEntries.value.find((entry) =>
+    modelEntryIdentityValues(entry).includes(normalized),
+  );
+  if (directMatch) {
+    return directMatch;
+  }
+  const parsed = parseModelRef(normalized);
+  if (!parsed.provider && !parsed.model) {
+    return null;
+  }
+  return visibleModelEntries.value.find((entry) =>
+    String(entry.provider || "").trim() === parsed.provider &&
+      modelEntryIdentityValues(entry).includes(parsed.model),
+  ) || null;
+}
+
+function addProbeTarget(
+  targets: Map<string, AssignmentProbeTarget>,
+  value: string,
+  usageLabel: string,
+  fallbackLabel: string,
+) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return;
+  }
+  const entry = resolveModelEntry(normalized);
+  const key = entry ? modelEntryStatusKey(entry) : normalized;
+  const current = targets.get(key);
+  if (current) {
+    if (!current.usageLabels.includes(usageLabel)) {
+      current.usageLabels.push(usageLabel);
+    }
+    return;
+  }
+  targets.set(key, {
+    key,
+    label: entry ? modelEntryDisplayLabel(entry) : fallbackLabel || normalized,
+    entry,
+    usageLabels: [usageLabel],
+  });
+}
+
+function formatProbeFailure(target: AssignmentProbeTarget, result?: ModelProbeResponse | null, fallback = "") {
+  const usageText = target.usageLabels.length ? `（用于：${target.usageLabels.join("、")}）` : "";
+  return {
+    key: target.key,
+    label: `${target.label}${usageText}`,
+    message: String(result?.message || fallback || "模型连通性检测失败。").trim(),
+  };
+}
+
+async function probeAssignmentTargets(targets: AssignmentProbeTarget[]) {
+  const failures: AssignmentProbeFailure[] = [];
+  await Promise.all(targets.map(async (target) => {
+    if (!target.entry) {
+      failures.push(formatProbeFailure(target, null, "未找到对应的大模型配置。"));
+      return;
+    }
+    try {
+      const result = await runModelEntryProbe(target.entry);
+      if (!result.ok) {
+        failures.push(formatProbeFailure(target, result));
+      }
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "模型连通性检测失败。";
+      failures.push(formatProbeFailure(target, null, message));
+    }
+  }));
+  return failures.sort((left, right) => left.label.localeCompare(right.label, "zh-CN"));
+}
+
+async function saveAssignmentsAfterProbe(
+  scope: "business" | "module",
+  targets: AssignmentProbeTarget[],
+  failureRef: typeof businessProbeFailures,
+) {
+  if (activeProbeScope.value || busyKey.value === "settings") {
+    return;
+  }
+  activeProbeScope.value = scope;
+  failureRef.value = [];
+  error.value = "";
+  try {
+    const failures = await probeAssignmentTargets(targets);
+    if (failures.length) {
+      failureRef.value = failures;
+      error.value = `智能体分配保存前连通性检测失败：${failures.map((item) => item.label).join("、")}`;
+      return;
+    }
+    activeProbeScope.value = "";
+    await saveSettings();
+  } finally {
+    if (activeProbeScope.value === scope) {
+      activeProbeScope.value = "";
+    }
+  }
+}
+
+function businessProbeTargets() {
+  const targets = new Map<string, AssignmentProbeTarget>();
+  for (const assignment of businessAssignments.value) {
+    const value = String(assignment.value || "").trim();
+    if (!value) {
+      continue;
+    }
+    const label = optionLabel(assignment.options.find((option) => optionValue(option) === value) || { value });
+    addProbeTarget(targets, value, assignment.title, label);
+  }
+  return [...targets.values()];
+}
+
+function moduleProbeTargets() {
+  const targets = new Map<string, AssignmentProbeTarget>();
+  for (const moduleDefinition of intelligentModuleDefinitions) {
+    if (!moduleNeedsIntelligence(moduleDefinition.id)) {
+      continue;
+    }
+    const value = moduleModelRef(moduleDefinition.id);
+    if (!value) {
+      continue;
+    }
+    const option = moduleAssignmentOptions(moduleDefinition.id).find((item) => String(item.value || "").trim() === value);
+    addProbeTarget(targets, value, moduleDefinition.label, String(option?.label || value).trim());
+  }
+  return [...targets.values()];
+}
+
+async function saveBusinessAssignments() {
+  await saveAssignmentsAfterProbe("business", businessProbeTargets(), businessProbeFailures);
+}
+
+async function saveModuleAssignments() {
+  await saveAssignmentsAfterProbe("module", moduleProbeTargets(), moduleProbeFailures);
+}
 </script>
 
 <template>
@@ -213,16 +523,51 @@ function moduleRequirementLabel(alertRequired?: boolean) {
     <article class="surface-card agent-assignment-panel">
       <div class="section-header agent-assignment-header">
         <div>
-          <h3>智能体分配</h3>
-          <p>集中维护业务功能和智能能力模块使用的默认智能体。</p>
+          <h3>智能体业务</h3>
+          <p>集中维护业务功能使用的默认智能体。</p>
         </div>
-        <div class="agent-assignment-summary" aria-label="智能体分配摘要">
-          <span><strong>{{ assignedBusinessCount }}</strong> / {{ businessAssignments.length }} 业务功能</span>
-          <span><strong>{{ moduleModelAssignmentStats.assigned }}</strong> / {{ moduleModelAssignmentStats.enabled }} 模块</span>
+        <div class="agent-assignment-header-actions">
+          <div class="agent-assignment-summary" aria-label="智能体分配摘要">
+            <span><strong>{{ assignedBusinessCount }}</strong> / {{ businessAssignments.length }} 业务功能</span>
+          </div>
+          <button
+            class="tool-button agent-assignment-save-button"
+            type="button"
+            :disabled="agentAssignmentSaving"
+            aria-label="保存智能体业务配置"
+            @click="saveBusinessAssignments"
+          >
+            {{ businessSaveButtonText }}
+          </button>
         </div>
       </div>
 
-      <div class="agent-assignment-list" role="list" aria-label="业务功能默认智能体">
+      <div v-if="businessProbeFailures.length" class="agent-assignment-probe-alert" role="alert">
+        <strong>连通性检测失败，未保存</strong>
+        <ul>
+          <li v-for="failure in businessProbeFailures" :key="failure.key">
+            <span>{{ failure.label }}</span>
+            <small>{{ failure.message }}</small>
+          </li>
+        </ul>
+      </div>
+
+      <div class="agent-assignment-list" role="list" aria-label="智能体业务默认智能体">
+        <section class="agent-assignment-row agent-assignment-batch-row" role="listitem">
+          <div class="agent-assignment-main">
+            <div class="agent-assignment-title-row">
+              <h4>默认</h4>
+            </div>
+          </div>
+          <div class="agent-assignment-batch-control">
+            <span>一键分配到</span>
+            <OptionBar
+              :model-value="businessBatchSelectValue"
+              :options="businessBatchSelectOptions"
+              @update:model-value="applyBusinessBatch"
+            />
+          </div>
+        </section>
         <section
           v-for="assignment in businessAssignments"
           :key="assignment.id"
@@ -257,12 +602,51 @@ function moduleRequirementLabel(alertRequired?: boolean) {
     <article class="surface-card agent-assignment-panel">
       <div class="section-header agent-assignment-header">
         <div>
-          <h3>智能能力模块</h3>
+          <h3>智能体辅助模块</h3>
           <p>为需要大模型参与的后台模块指定主智能体，保存后写入服务端配置。</p>
+        </div>
+        <div class="agent-assignment-header-actions">
+          <div class="agent-assignment-summary" aria-label="智能体辅助模块摘要">
+            <span><strong>{{ moduleModelAssignmentStats.assigned }}</strong> / {{ moduleModelAssignmentStats.enabled }} 模块</span>
+          </div>
+          <button
+            class="tool-button agent-assignment-save-button"
+            type="button"
+            :disabled="agentAssignmentSaving"
+            aria-label="保存智能体辅助模块配置"
+            @click="saveModuleAssignments"
+          >
+            {{ moduleSaveButtonText }}
+          </button>
         </div>
       </div>
 
-      <div class="agent-assignment-list" role="list" aria-label="智能能力模块分配">
+      <div v-if="moduleProbeFailures.length" class="agent-assignment-probe-alert" role="alert">
+        <strong>连通性检测失败，未保存</strong>
+        <ul>
+          <li v-for="failure in moduleProbeFailures" :key="failure.key">
+            <span>{{ failure.label }}</span>
+            <small>{{ failure.message }}</small>
+          </li>
+        </ul>
+      </div>
+
+      <div class="agent-assignment-list" role="list" aria-label="智能体辅助模块分配">
+        <section class="agent-assignment-row agent-assignment-batch-row" role="listitem">
+          <div class="agent-assignment-main">
+            <div class="agent-assignment-title-row">
+              <h4>默认</h4>
+            </div>
+          </div>
+          <div class="agent-assignment-batch-control">
+            <span>一键分配到</span>
+            <OptionBar
+              :model-value="moduleBatchSelectValue"
+              :options="moduleBatchSelectOptions"
+              @update:model-value="applyModuleBatch"
+            />
+          </div>
+        </section>
         <section
           v-for="moduleDefinition in intelligentModuleDefinitions"
           :key="moduleDefinition.id"
@@ -274,13 +658,18 @@ function moduleRequirementLabel(alertRequired?: boolean) {
           <div class="agent-assignment-main">
             <div class="agent-assignment-title-row">
               <h4>{{ moduleDefinition.label }}</h4>
+            </div>
+            <p>{{ moduleDefinition.description }}</p>
+            <div class="agent-assignment-card-tags" aria-label="模块标签">
               <StatusPill
                 :label="moduleStatus(moduleDefinition.id).label"
                 :tone="moduleStatus(moduleDefinition.id).tone"
               />
-              <span class="agent-assignment-requirement">{{ moduleRequirementLabel(moduleDefinition.alertRequired) }}</span>
+              <span class="agent-assignment-card-tag">{{ moduleRequirementLabel(moduleDefinition.alertRequired) }}</span>
+              <span class="agent-assignment-card-tag">
+                设计模块：{{ moduleDefinition.designedModule || moduleDefinition.id }}
+              </span>
             </div>
-            <p>{{ moduleDefinition.description }}</p>
           </div>
           <div class="module-assignment-controls">
             <BinaryCheckbox
@@ -293,18 +682,13 @@ function moduleRequirementLabel(alertRequired?: boolean) {
               :options="moduleAssignmentOptions(moduleDefinition.id)"
               label="主智能体"
               :disabled="!moduleNeedsIntelligence(moduleDefinition.id)"
-              @update:model-value="setModuleModelRef(moduleDefinition.id, String($event))"
+              @update:model-value="updateModuleModelRef(moduleDefinition.id, String($event))"
             />
           </div>
         </section>
       </div>
     </article>
 
-    <div class="agent-assignment-actions">
-      <button class="tool-button" type="button" :disabled="busyKey === 'settings'" @click="saveSettings">
-        {{ busyKey === "settings" ? "保存中" : "保存智能体分配" }}
-      </button>
-    </div>
   </section>
 </template>
 
@@ -327,12 +711,20 @@ function moduleRequirementLabel(alertRequired?: boolean) {
   max-width: 68ch;
 }
 
+.agent-assignment-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .agent-assignment-summary {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  margin-left: auto;
   color: var(--text-secondary);
   font-size: var(--text-sm);
 }
@@ -350,6 +742,52 @@ function moduleRequirementLabel(alertRequired?: boolean) {
 
 .agent-assignment-summary strong {
   color: var(--text-primary);
+}
+
+.agent-assignment-save-button {
+  min-width: 72px;
+}
+
+.agent-assignment-probe-alert {
+  display: grid;
+  gap: 8px;
+  margin: -2px 0 14px;
+  padding: 12px;
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+  background: var(--danger-surface);
+  color: var(--danger);
+}
+
+.agent-assignment-probe-alert strong {
+  color: var(--danger);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+}
+
+.agent-assignment-probe-alert ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-assignment-probe-alert li {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.agent-assignment-probe-alert span {
+  color: var(--text-primary);
+  font-weight: var(--font-semibold);
+}
+
+.agent-assignment-probe-alert small {
+  color: var(--danger);
+  font-size: var(--text-xs);
+  line-height: 1.45;
 }
 
 .agent-assignment-list {
@@ -376,6 +814,10 @@ function moduleRequirementLabel(alertRequired?: boolean) {
   border-color: var(--brand);
   background: color-mix(in srgb, var(--brand) 8%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 24%, transparent);
+}
+
+.agent-assignment-batch-row {
+  background: var(--bg-subtle);
 }
 
 .agent-assignment-main {
@@ -405,13 +847,48 @@ function moduleRequirementLabel(alertRequired?: boolean) {
   line-height: 1.55;
 }
 
-.agent-assignment-requirement {
-  color: var(--text-muted);
+.agent-assignment-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 4px;
+}
+
+.agent-assignment-card-tag {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
   font-size: var(--text-xs);
+  line-height: 1.2;
+  white-space: normal;
 }
 
 .agent-assignment-control {
   min-width: 0;
+}
+
+.agent-assignment-batch-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.agent-assignment-batch-control > span {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  white-space: nowrap;
 }
 
 .module-assignment-controls {
@@ -422,20 +899,21 @@ function moduleRequirementLabel(alertRequired?: boolean) {
   min-width: 0;
 }
 
-.agent-assignment-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
 @media (max-width: 860px) {
   .agent-assignment-row,
+  .agent-assignment-batch-control,
   .module-assignment-controls {
     grid-template-columns: 1fr;
   }
 
-  .agent-assignment-summary {
+  .agent-assignment-header-actions {
     justify-content: flex-start;
     width: 100%;
+    margin-left: 0;
+  }
+
+  .agent-assignment-summary {
+    justify-content: flex-start;
     margin-left: 0;
   }
 }

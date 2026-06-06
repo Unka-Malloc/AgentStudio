@@ -14,7 +14,6 @@ export type DrawerTab =
   | "preferences"
   | "discovery"
   | "users"
-  | "modules"
   | "syncDirectories";
 export type AppView =
   | "dashboard"

@@ -1,29 +1,150 @@
 <script setup lang="ts">
+import { computed, ref, watch } from "vue";
 import { useAgentPermissionsViewContext } from "../../../composables/agentPermissionsViewContext";
 
 const {
   busyKey,
-  grantToolRuleState,
-  handleSelectedToolChange,
-  selectedToolManagementTool,
   setGrantToolRule,
   toolGrants,
   toolManagementTools,
 } = useAgentPermissionsViewContext();
+
+type GrantToolRule = "allow" | "deny";
+type GrantToolRuleRow = {
+  grantId: string;
+  grantLabel: string;
+  toolId: string;
+  toolLabel: string;
+  toolDescription: string;
+  rule: GrantToolRule;
+};
+
+const selectedGrantId = ref("");
+const selectedToolId = ref("");
+const selectedRule = ref<GrantToolRule>("deny");
+
+const selectedGrant = computed(() =>
+  toolGrants.value.find((grant) => grant.id === selectedGrantId.value) || toolGrants.value[0],
+);
+
+const exceptionRows = computed(() => {
+  const rows: GrantToolRuleRow[] = [];
+
+  for (const grant of toolGrants.value) {
+    for (const toolId of grant.toolAllow || []) {
+      const tool = toolManagementTools.value.find((item) => item.id === toolId);
+      rows.push({
+        grantId: grant.id,
+        grantLabel: grant.label || grant.id,
+        toolId,
+        toolLabel: tool?.label || toolId,
+        toolDescription: tool?.description || toolId,
+        rule: "allow",
+      });
+    }
+    for (const toolId of grant.toolDeny || []) {
+      const tool = toolManagementTools.value.find((item) => item.id === toolId);
+      rows.push({
+        grantId: grant.id,
+        grantLabel: grant.label || grant.id,
+        toolId,
+        toolLabel: tool?.label || toolId,
+        toolDescription: tool?.description || toolId,
+        rule: "deny",
+      });
+    }
+  }
+
+  return rows.sort((a, b) => a.grantLabel.localeCompare(b.grantLabel) || a.toolLabel.localeCompare(b.toolLabel));
+});
+
+const availableToolsForSelectedGrant = computed(() => {
+  const grant = selectedGrant.value;
+  if (!grant) {
+    return [];
+  }
+  const configured = new Set([...(grant.toolAllow || []), ...(grant.toolDeny || [])]);
+  return toolManagementTools.value.filter((tool) => !configured.has(tool.id));
+});
+
+watch(
+  toolGrants,
+  (grants) => {
+    if (grants.length === 0) {
+      selectedGrantId.value = "";
+      return;
+    }
+    if (!grants.some((grant) => grant.id === selectedGrantId.value)) {
+      selectedGrantId.value = grants[0]?.id || "";
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  availableToolsForSelectedGrant,
+  (tools) => {
+    if (!tools.some((tool) => tool.id === selectedToolId.value)) {
+      selectedToolId.value = tools[0]?.id || "";
+    }
+  },
+  { immediate: true },
+);
+
+function addGrantToolRule() {
+  if (!selectedGrant.value || !selectedToolId.value) {
+    return;
+  }
+  setGrantToolRule(selectedGrant.value, selectedToolId.value, selectedRule.value);
+}
+
+function findGrant(grantId: string) {
+  return toolGrants.value.find((grant) => grant.id === grantId);
+}
+
+function ruleLabel(rule: GrantToolRule) {
+  return rule === "allow" ? "允许" : "未启用";
+}
+
+function setRowRule(row: GrantToolRuleRow, rule: "inherit" | "allow" | "deny") {
+  const grant = findGrant(row.grantId);
+  if (!grant) {
+    return;
+  }
+  setGrantToolRule(grant, row.toolId, rule);
+}
 </script>
 
 <template>
-  <article class="surface-card permission-list-card">
+  <article class="surface-card permission-list-card grant-exception-card">
     <div class="section-header">
       <div>
-        <h3>授权工具例外</h3>
-        <p>按工具调整网关授权的允许或未启用规则。</p>
+        <h3>令牌工具例外</h3>
+        <p>只为需要覆盖工具集规则的工具添加例外；没有例外时，令牌完全继承所选工具集。</p>
       </div>
-      <label class="module-field compact-select-field">
-        <span>工具</span>
-        <select :value="selectedToolManagementTool?.id || ''" @change="handleSelectedToolChange">
+      <div class="section-tags">
+        <span>例外 {{ exceptionRows.length }}</span>
+      </div>
+    </div>
+
+    <div v-if="toolGrants.length > 0 && toolManagementTools.length > 0" class="permission-exception-toolbar">
+      <label class="module-field">
+        <span>令牌</span>
+        <select v-model="selectedGrantId">
           <option
-            v-for="tool in toolManagementTools"
+            v-for="grant in toolGrants"
+            :key="grant.id"
+            :value="grant.id"
+          >
+            {{ grant.label || grant.id }}
+          </option>
+        </select>
+      </label>
+      <label class="module-field">
+        <span>工具</span>
+        <select v-model="selectedToolId" :disabled="availableToolsForSelectedGrant.length === 0">
+          <option
+            v-for="tool in availableToolsForSelectedGrant"
             :key="tool.id"
             :value="tool.id"
           >
@@ -31,53 +152,78 @@ const {
           </option>
         </select>
       </label>
+      <label class="module-field compact-select-field">
+        <span>规则</span>
+        <select v-model="selectedRule">
+          <option value="deny">未启用</option>
+          <option value="allow">允许</option>
+        </select>
+      </label>
+      <button
+        class="tool-button"
+        type="button"
+        :disabled="!selectedGrant || !selectedToolId"
+        @click="addGrantToolRule"
+      >
+        添加例外
+      </button>
     </div>
-    <div v-if="selectedToolManagementTool" class="job-table compact-job-table grant-tool-rule-table">
+
+    <div v-if="exceptionRows.length > 0" class="job-table compact-job-table grant-tool-rule-table">
       <div class="job-table-header">
         <span>授权</span>
+        <span>工具</span>
         <span>当前规则</span>
         <span>操作</span>
       </div>
       <div
-        v-for="grant in toolGrants"
-        :key="`${grant.id}:${selectedToolManagementTool.id}`"
+        v-for="row in exceptionRows"
+        :key="`${row.grantId}:${row.toolId}`"
         class="job-row"
       >
         <span>
-          <strong>{{ grant.label }}</strong>
-          <small>{{ grant.id }}</small>
+          <strong>{{ row.grantLabel }}</strong>
+          <small>{{ row.grantId }}</small>
         </span>
-        <span>{{ grantToolRuleState(grant, selectedToolManagementTool.id) }}</span>
+        <span>
+          <strong>{{ row.toolLabel }}</strong>
+          <small>{{ row.toolDescription }}</small>
+        </span>
+        <span>{{ ruleLabel(row.rule) }}</span>
         <span class="permission-actions">
           <button
             class="table-action"
             type="button"
-            :disabled="busyKey === `grant:${grant.id}`"
-            @click="setGrantToolRule(grant, selectedToolManagementTool.id, 'inherit')"
+            :disabled="busyKey === `grant:${row.grantId}`"
+            @click="setRowRule(row, 'inherit')"
           >
             继承
           </button>
           <button
             class="table-action"
             type="button"
-            :disabled="busyKey === `grant:${grant.id}`"
-            @click="setGrantToolRule(grant, selectedToolManagementTool.id, 'allow')"
+            :disabled="busyKey === `grant:${row.grantId}`"
+            @click="setRowRule(row, 'allow')"
           >
             允许
           </button>
           <button
             class="table-action danger-action"
             type="button"
-            :disabled="busyKey === `grant:${grant.id}`"
-            @click="setGrantToolRule(grant, selectedToolManagementTool.id, 'deny')"
+            :disabled="busyKey === `grant:${row.grantId}`"
+            @click="setRowRule(row, 'deny')"
           >
             未启用
           </button>
         </span>
       </div>
     </div>
-    <div v-if="toolGrants.length === 0" class="empty-state">
+    <div v-else-if="toolGrants.length === 0" class="empty-state compact-empty-state">
       <strong>暂无授权</strong>
+    </div>
+    <div v-else class="empty-state compact-empty-state">
+      <strong>暂无工具例外</strong>
+      <span>未覆盖的工具不会逐条列出，它们会继承各自令牌的工具集规则。</span>
     </div>
   </article>
 </template>

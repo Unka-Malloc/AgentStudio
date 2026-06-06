@@ -434,6 +434,8 @@ ingest
 
 知识蒸馏唯一维护面是 `external.knowledge.distillation`。内部 `knowledge.distillation.*` 模块只保留迁移报文，不再承接算法、解析或导出增强。
 
+`external.knowledge.distillation` 的所有 run、evidence、artifact、下载、导出、compare、delete 和 archive 操作都必须先进入外部服务上游网关切面。网关切面统一裁决 subject、tenant、workspace、source scope、artifact export、egress 和 audit receipt；兼容工作台 `knowledge.distillation.workbench.*` 只能返回迁移报文，不能绕过网关继续访问旧内部产物或旧下载路径。
+
 参考框架：
 
 - RAGFlow
@@ -447,6 +449,7 @@ ingest
 
 验收重点：
 
+- 外部知识蒸馏服务部署门禁：required-auth、业务 API bearer gate、非 root 容器、Tika checksum、healthcheck 和密钥外置。
 - route-first 文件分流。
 - 大文件 streaming/windowing。
 - 分类蒸馏与 project convergence。
@@ -459,10 +462,21 @@ ingest
 ```bash
 npm run server:verify:knowledge-architecture-governance
 npm run server:verify:knowledge-industrial-distillation
+npm run server:verify:external-knowledge-distillation-service-gates
 npm run server:verify:external-knowledge-distillation
 npm run server:verify:external-knowledge-distillation-container
 npm run server:verify:external-knowledge-distillation-references
 ```
+
+`server:verify:external-knowledge-distillation-service-gates` 是前置门禁。未通过时，不继续推进外部知识蒸馏的新解析器、格式路由、导出或模型蒸馏能力。
+
+### 外部知识蒸馏当前状态（2026-06-04）
+
+- `npm run server:verify:external-knowledge-distillation-service-gates` 通过。
+- `npm run server:verify:external-knowledge-distillation` 通过。
+- `npm run server:verify:external-service-api-registration` 通过。
+- `npm run server:verify:knowledge-industrial-distillation` 通过。
+- `sharedspace.drive.*` 兼容 shim 仍保留 `deprecated` + `compatibility-shim-only` 生命周期，但不再以平台核心方式出现在 Tool Management 中；相关能力已收敛到上游网关和外部服务切面。
 
 ## 与工作空间的关系
 

@@ -158,7 +158,7 @@ function openApiConfig(baseUrl) {
       spec: {
         openapi: "3.0.0",
         info: {
-          title: "Fake OpenAPI service",
+          title: "Fixture OpenAPI service",
           version: "1.0.0"
         },
         paths: {

@@ -52,6 +52,7 @@ export const modelLibraryProviderDefinitions: Array<{
 export type IntelligentModuleDefinition = {
   id: string;
   label: string;
+  designedModule: string;
   description: string;
   alertRequired?: boolean;
 };
@@ -60,28 +61,33 @@ export const intelligentModuleDefinitions: IntelligentModuleDefinition[] = [
   {
     id: "knowledgeTaxonomy",
     label: "文档分类智能体",
+    designedModule: "知识分类管线",
     description: "邮件和文档进入图谱前的领域、关键词和意图分类。",
     alertRequired: false,
   },
   {
     id: "graphInsight",
     label: "知识图谱智能体",
+    designedModule: "图谱洞察管线",
     description: "节点聚合、关系解释和高频实体抽象。",
   },
   {
     id: "timelineDistillation",
     label: "时序提炼智能体",
+    designedModule: "时间线提炼管线",
     description: "围绕具体事务提炼阶段、事件和关键节点。",
   },
   {
     id: "agentTools",
     label: "智能体工具调用",
+    designedModule: "工具调用权限模块",
     description: "智能体可使用服务端工具的权限范围，不需要单独绑定智能体。",
     alertRequired: false,
   },
   {
     id: "localOcr",
     label: "本地 OCR",
+    designedModule: "OCR 多模态解释模块",
     description: "默认不需要大模型，只有开启多模态解释时才分配模型。",
   },
 ];
@@ -364,9 +370,9 @@ export const debugTabs: Array<{ id: DebugTab; label: string }> = [
 ];
 
 export const knowledgeTabs: Array<{ id: KnowledgeTab; label: string }> = [
-  { id: "management", label: "知识管理" },
-  { id: "wordCloud", label: "词汇库" },
-  { id: "maintenance", label: "知识库配置" },
+  { id: "management", label: "知识归档" },
+  { id: "wordCloud", label: "语料分析" },
+  { id: "maintenance", label: "参数配置" },
 ];
 
 export const externalServiceTabs: Array<{ id: ExternalServiceTab; label: string }> = [
@@ -385,8 +391,8 @@ export const adminViewTitleMap: Partial<Record<AdminView, string>> = {
   contextManagement: "上下文管理",
   maintenanceAgent: "智能巡检",
   opsMonitor: "运维监控",
-  runtimeDownloads: "运行时下载",
-  clients: "客户端",
+  runtimeDownloads: "运行时配置",
+  clients: "客户端列表",
   storage: "系统概览",
   modules: "接入模块",
 };
@@ -396,9 +402,9 @@ export const viewTitleMap: Record<AppView, string> = {
   feed: "信息流",
   approval: "审批流",
   sources: "数据源",
-  externalServices: "外部服务",
-  knowledge: "团队资产",
+  externalServices: "服务",
+  knowledge: "知识库",
   workspaces: "协作空间",
-  debug: "调试面板",
+  debug: "调试",
   admin: "管理",
 };

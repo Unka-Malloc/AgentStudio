@@ -37,7 +37,9 @@
 | Contract Test / Readiness | 区分运行路径、contract-mode、scaffold/template、realE2EVerified 和 production ready。 | 外部服务 |
 | Detachable Traffic Gateway | 允许 Caddy / Nginx 等边缘网关代理 MCP、HTTP API、upload 和 bootstrap，同时保持 direct mode 可用。 | 下游客户端 |
 
-边界能力的输出必须能被安全领域和数据链路消费：每次调用都应产生 subject、operation、target、state、receipt/audit/checkpoint 或明确的 contract-mode 标记。
+边界能力的输出必须能被安全领域和数据链路消费：每次调用都必须先进入 Operation Scheduling Kernel，产生 accepted / rejected decision 和统一 Operation Ledger 记录，并关联 subject、operation、target、state、receipt/audit/checkpoint 或明确的 contract-mode 标记。模块本地 audit、provider ledger、queue event 和 runtime log 只能作为投影或回执，不能替代统一账本。
+
+需要人工确认或高风险审批的边界调用必须由调度内核转为 `pending_operation`，统一进入 `/approval`。审批只能满足人工确认门槛，不能覆盖 Capability Kernel、Binding Guard、tenant、workspace、dataClass、egress 或 provider scope 的硬拒绝。
 
 ## Pact 与外部服务的分界线
 
@@ -46,6 +48,8 @@
 线内属于 Pact：adapter、mount、port、connector governance、secretRef、policy、Operation Ledger、Checkpoint 和 audit。线外属于外部系统：模型服务、知识库、代码平台、云盘、邮箱、协作系统、向量库、图数据库和 operator-provided module。
 
 外部服务适配不能裸转发上游权限，也不能绕过 Tool Management、policy、Operation Ledger、Checkpoint Tree 和 audit。下游客户端也不直接调用这些外部服务；下游只通过 Pact 的 MCP / Workspace / Operation 入口访问受控能力。
+
+`external.knowledge.distillation` 是线外远程容器服务，不是线内共享库。它的接口先由 Pact 上游网关和 Operation Scheduling Kernel 管控，再由服务自身执行 `pact.external-knowledge-distillation.service-gates.v1`：除 `/health` 和 `/v1/runtime/health` 外，业务 API 必须 bearer 鉴权；容器必须非 root、固定 Tika checksum、声明 healthcheck，且所有 token/key 来自外部配置或 secret store。
 
 ### 线内适配器
 
@@ -57,7 +61,7 @@
 | `graphStore` mount | 将实体和边同步到外部图索引 | 当前主要是 mount/template 能力，不应宣称已有完整内置 provider |
 | Agent Gateway / Model Probe | 统一探测和调用模型 provider、企业代理或自定义 HTTP 模型端点 | 多 provider 运行路径，具体可用性取决于模型配置和凭据 |
 | Codespace / repo operations / code review | 抽象仓库读写、diff、提交、push、review、merge、submit 等代码协作操作 | GitHub、Gerrit 为配置化 provider；GitLab 在 repo operation provider 集合中 |
-| Cloud Drive Port | 管理云盘连接、列表、权限、下载、上传和同步计划 | iCloud 为本地路径；OneDrive、Google Drive、Dropbox 为 OAuth / contract-mode |
+| Cloud Drive Port | 管理云盘连接、列表、权限、下载、上传和同步计划 | P0 live scope 为 iCloud + OneDrive；iCloud 是受控本机路径 / projection，OneDrive 必须走真实 OAuth / live adapter；Google Drive、Dropbox 暂为 OAuth / contract-mode |
 | Data Connector Governance | 规范外部数据源 connector 的 auth、sync、cursor、mirror、本地查询和卸载策略 | Gmail、Outlook、Google Drive、OneDrive、Slack、Teams、macOS Mail 等通过 feature/client module 暴露 |
 | Module Ecosystem | 给外部团队生成 parser、analysis、knowledgeBase、vectorStore、graphStore、customMount、Tool Package、Skill Package 的模板和 contract test | scaffold/template |
 | Agent Exploration Runtime | 通过 allowlist 约束的 HTTP request 和 local command 接入特定外部端点或本地命令 | 运行路径，受 allowlist 和权限控制 |
@@ -101,15 +105,18 @@ Pact MCP service 是 Workspace API 的设备级协议适配器，不是 agent-to
 
 | 下游客户端 | 支持口径 |
 | --- | --- |
+| OpenClaw | connector install target；支持 VM / remote 环境中的目标原生 MCP 配置 |
+| Claude Code | connector install target；CLI-backed MCP 配置 |
 | Codex | connector install target；Codex 使用 bearer token env var 路径 |
 | Gemini CLI | connector install target |
-| Kilo Code | connector install target |
-| Copilot | connector install target |
-| OpenClaw | connector supported target |
-| Hermes | connector supported target |
-| Antigravity | connector supported target |
+| Antigravity | connector install target |
 | OpenCode | connector install target |
-| Claude Code、Cursor Agent、脚本型 agent、人工 CLI | 架构文档列入 agent-client 兼容对象；是否等同 install target 需看 connector 目标实现 |
+| Copilot | connector install target |
+| Kilo Code | connector install target |
+| Cursor | connector install target |
+| Hermes Agent | connector install target；支持 VM / remote 环境中的目标原生 MCP 配置 |
+| Windsurf | connector install target |
+| 脚本型 agent、人工 CLI | 通过 Workspace API / MCP 协议入口接入；不等同于 connector install target |
 
 ## 统一 API 注册切面设计稿
 

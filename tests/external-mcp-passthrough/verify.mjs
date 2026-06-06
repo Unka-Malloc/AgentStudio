@@ -26,7 +26,7 @@ import {
 } from "../external-service-env-probe.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const IMAGE_TAG = "pact-external-mcp-fake-fastmcp:verify";
+const IMAGE_TAG = "pact-external-mcp-fixture-fastmcp:verify";
 
 function quietLogger() {
   return {
@@ -169,9 +169,9 @@ async function main() {
     const config = {
       schemaVersion: 2,
       kind: "pact.external-service.config",
-      serviceId: "fake-upstream",
-      serviceName: "external.fake.upstream",
-      displayName: "Fake Upstream MCP",
+      serviceId: "fixture-upstream",
+      serviceName: "external.fixture.upstream",
+      displayName: "Fixture Upstream MCP",
       mode: "connected",
       startupPolicy: "external-only",
       upstream: {
@@ -195,7 +195,7 @@ async function main() {
       payload: {
         config: {
           ...config,
-          serviceId: "fake-upstream-missing-port",
+          serviceId: "fixture-upstream-missing-port",
           upstream: {
             ...config.upstream,
             url: "http://127.0.0.1/mcp/"
@@ -216,7 +216,7 @@ async function main() {
       payload: {
         config: {
           ...config,
-          serviceId: "fake-upstream-bad-endpoint",
+          serviceId: "fixture-upstream-bad-endpoint",
           upstream: {
             ...config.upstream,
             url: `http://127.0.0.1:${deadPort}/mcp/`,
@@ -259,8 +259,8 @@ async function main() {
     assert.equal(refresh.externalMcpOperationCount >= 2, true);
 
     const catalog = platform.catalog();
-    const echoTool = catalog.tools.find((tool) => tool.id === "pact.externalMcp.fake_upstream.echo");
-    const addTool = catalog.tools.find((tool) => tool.id === "pact.externalMcp.fake_upstream.add");
+    const echoTool = catalog.tools.find((tool) => tool.id === "pact.externalMcp.fixture_upstream.echo");
+    const addTool = catalog.tools.find((tool) => tool.id === "pact.externalMcp.fixture_upstream.add");
     assert.ok(echoTool, "echo tool must be compiled into Tool Management catalog");
     assert.ok(addTool, "add tool must be compiled into Tool Management catalog");
     assert.deepEqual(echoTool.requiredScopes, ["knowledge:read"]);
@@ -293,7 +293,7 @@ async function main() {
     assert.equal(echo.ok, true, JSON.stringify(echo.payload?.error || echo.payload));
     const echoText = JSON.stringify(echo.payload);
     assert.match(echoText, /hello pact external mcp/);
-    assert.match(echoText, /pact-fake-upstream-mcp/);
+    assert.match(echoText, /pact-fixture-upstream-mcp/);
 
     const add = await platform.runtime.executeTool({
       toolId: addTool.id,

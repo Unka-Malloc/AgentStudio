@@ -45,37 +45,20 @@
 
 .clients-table {
   table-layout: fixed;
-  min-width: 960px;
+  min-width: 860px;
 }
+
+.clients-table-client-col { width: 320px; }
+.clients-table-version-col { width: 92px; }
+.clients-table-status-col { width: 108px; }
+.clients-table-config-col { width: 116px; }
+.clients-table-connection-col { width: auto; }
+.clients-table-seen-col { width: 128px; }
 
 .clients-table th:nth-child(1),
 .clients-table td:nth-child(1) {
-  width: 22%;
-}
-
-.clients-table th:nth-child(2),
-.clients-table td:nth-child(2) {
-  width: 9%;
-}
-
-.clients-table th:nth-child(3),
-.clients-table td:nth-child(3) {
-  width: 18%;
-}
-
-.clients-table th:nth-child(4),
-.clients-table td:nth-child(4) {
-  width: 11%;
-}
-
-.clients-table th:nth-child(5),
-.clients-table td:nth-child(5) {
-  width: 18%;
-}
-
-.clients-table th:nth-child(6),
-.clients-table td:nth-child(6) {
-  width: 22%;
+  width: 320px;
+  max-width: 320px;
 }
 
 .clients-table .primary-cell strong,

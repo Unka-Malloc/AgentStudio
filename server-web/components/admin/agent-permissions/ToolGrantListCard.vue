@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { useAgentPermissionsViewContext } from "../../../composables/agentPermissionsViewContext";
 import { toolsetLabel } from "../../../composables/console-tool-display-utils";
 import FeatureToggle from "../../FeatureToggle.vue";
@@ -18,8 +19,24 @@ const {
   updateGrant,
 } = useAgentPermissionsViewContext();
 
+const grantableToolsets = computed(() =>
+  toolManagementToolsets.value.filter((item) => item.grantable !== false),
+);
+
 function grantToolsetLabel(toolsetId: string) {
   return toolsetLabel(toolsetId, toolManagementToolsets.value);
+}
+
+function grantToolsetSummary(toolsetIds?: string[]) {
+  const values = (toolsetIds || []).map(grantToolsetLabel);
+  if (values.length === 0) {
+    return "未声明";
+  }
+  return values.slice(0, 3).join(" / ") + (values.length > 3 ? ` +${values.length - 3}` : "");
+}
+
+function grantExceptionCount(grant: { toolAllow?: string[]; toolDeny?: string[] }) {
+  return (grant.toolAllow?.length || 0) + (grant.toolDeny?.length || 0);
 }
 </script>
 
@@ -27,7 +44,8 @@ function grantToolsetLabel(toolsetId: string) {
   <article class="surface-card permission-list-card">
     <div class="section-header">
       <div>
-        <h3>授权列表</h3>
+        <h3>工具令牌</h3>
+        <p>先看令牌状态和最近使用；需要修改范围时再展开单条授权。</p>
       </div>
       <div class="section-tags">
         <span>启用 {{ enabledToolGrantCount }}</span>
@@ -42,48 +60,11 @@ function grantToolsetLabel(toolsetId: string) {
         class="permission-card"
         :data-enabled="grant.enabled"
       >
-        <div class="permission-card-main">
+        <div class="permission-token-card-header">
           <label class="module-field">
             <span>名称</span>
             <input v-model="grant.label" autocomplete="off" @change="updateGrant(grant, { label: grant.label })" />
           </label>
-          <dl class="module-status-list">
-            <div>
-              <dt>令牌</dt>
-              <dd>{{ grant.tokenPrefix || "未生成" }}</dd>
-            </div>
-            <div>
-              <dt>最近使用</dt>
-              <dd>{{ grant.lastUsedAt ? formatCompactDate(grant.lastUsedAt) : "未使用" }}</dd>
-            </div>
-            <div>
-              <dt>工具集</dt>
-              <dd>{{ (grant.toolsets || []).map(grantToolsetLabel).join(" / ") || "未声明" }}</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div class="permission-card-controls">
-          <ScopeSelector
-            :model-value="grant.scopes"
-            :scopes="toolScopes"
-            :disabled="busyKey === `grant:${grant.id}`"
-            @update:model-value="(v) => updateGrant(grant, { scopes: v })"
-            compact
-          />
-          <div class="scope-grid compact-scope-grid">
-            <button
-              v-for="toolset in toolManagementToolsets.filter((item) => item.grantable !== false)"
-              :key="toolset.id"
-              class="scope-chip"
-              :class="{ active: grantHasToolset(grant, toolset.id) }"
-              type="button"
-              :disabled="busyKey === `grant:${grant.id}`"
-              @click="toggleGrantToolset(grant, toolset.id)"
-            >
-              <strong>{{ toolset.label }}</strong>
-            </button>
-          </div>
           <div class="permission-actions">
             <FeatureToggle
               :model-value="grant.enabled"
@@ -101,12 +82,69 @@ function grantToolsetLabel(toolsetId: string) {
             </button>
           </div>
         </div>
+
+        <dl class="permission-token-summary">
+          <div>
+            <dt>令牌</dt>
+            <dd>{{ grant.tokenPrefix || "未生成" }}</dd>
+          </div>
+          <div>
+            <dt>最近使用</dt>
+            <dd>{{ grant.lastUsedAt ? formatCompactDate(grant.lastUsedAt) : "未使用" }}</dd>
+          </div>
+          <div>
+            <dt>权限范围</dt>
+            <dd>{{ grant.scopes.length }}</dd>
+          </div>
+          <div>
+            <dt>工具集</dt>
+            <dd>{{ grantToolsetSummary(grant.toolsets) }}</dd>
+          </div>
+          <div>
+            <dt>例外</dt>
+            <dd>{{ grantExceptionCount(grant) }}</dd>
+          </div>
+        </dl>
+
+        <details class="permission-token-config-panel">
+          <summary>
+            <span>编辑授权范围</span>
+            <small>已选 {{ grant.scopes.length }}</small>
+          </summary>
+          <ScopeSelector
+            :model-value="grant.scopes"
+            :scopes="toolScopes"
+            :disabled="busyKey === `grant:${grant.id}`"
+            @update:model-value="(v) => updateGrant(grant, { scopes: v })"
+            compact
+          />
+        </details>
+
+        <details class="permission-token-config-panel">
+          <summary>
+            <span>编辑工具集</span>
+            <small>已选 {{ (grant.toolsets || []).length }}</small>
+          </summary>
+          <div class="scope-grid compact-scope-grid">
+            <button
+              v-for="toolset in grantableToolsets"
+              :key="toolset.id"
+              class="scope-chip"
+              :class="{ active: grantHasToolset(grant, toolset.id) }"
+              type="button"
+              :disabled="busyKey === `grant:${grant.id}`"
+              @click="toggleGrantToolset(grant, toolset.id)"
+            >
+              <strong>{{ toolset.label }}</strong>
+            </button>
+          </div>
+        </details>
       </article>
     </div>
 
     <div v-else class="empty-state">
       <strong>暂无工具授权</strong>
-      <span>创建授权后，智能体才能调用受限工具入口。</span>
+      <span>当前后端返回 0 条工具令牌；已有令牌会显示在这里，不会藏在创建表单里。</span>
     </div>
   </article>
 </template>

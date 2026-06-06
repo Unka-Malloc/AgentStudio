@@ -4,11 +4,16 @@
 .env.*
 .gemini
 .playwright-cli
+/.pact-server-data
+/.pact-agent-history
+.pact-server-data
+.pact-agent-history
 build
 node_modules
 output
 test-results
 *.log
+reports/
 
 client-cli/target
 client-gui

@@ -60,6 +60,18 @@ export type WorkspaceCloudDriveQuery = {
   [key: string]: unknown;
 };
 
+export const workspaceKnowledgeContextContract = Object.freeze({
+  workspaceEndpoint: "/api/agent-workspaces",
+  contextEndpoint: "/context",
+  sessionsEndpoint: "/api/agent-sessions",
+  profileScopeField: "knowledgeScope",
+  sourceIdsField: "knowledgeSourceIds",
+  sessionLinkField: "agentSessionId",
+  forkActionLabel: "分叉",
+});
+
+export const workspaceKnowledgeContextSignature = JSON.stringify(workspaceKnowledgeContextContract);
+
 function encoded(value: string) {
   return encodeURIComponent(value);
 }

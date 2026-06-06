@@ -5,25 +5,25 @@ import process from "node:process";
 
 const root = process.cwd();
 
-const scanRoots = [
-  "server",
-  "server-web",
-  "client-cli",
-  "client-gui",
-  "docs",
-  "tests"
-];
+const scanRoots = [""];
 
 const excludedPathPrefixes = [
-  "build/",
+  ".git/",
+  ".kilo/node_modules/",
+  "build/release/",
   "node_modules/",
   "client-cli/target/",
   "client-gui/.dart_tool/",
+  "client-gui/.plugin_symlinks/",
+  "client-gui/coverage/",
   "client-gui/build/",
   "client-gui/linux/flutter/ephemeral/",
   "client-gui/macos/Flutter/ephemeral/",
   "client-gui/macos/Pods/",
   "client-gui/windows/flutter/ephemeral/",
+  "server/platform/modules/knowledge/runtime/jre/",
+  "server/platform/modules/knowledge/ocr/runtime/",
+  "server/platform/modules/knowledge/tika/",
   "tests/fixtures/"
 ];
 
@@ -94,6 +94,9 @@ function shouldSkip(relativePath) {
 }
 
 function shouldScanFile(relativePath) {
+  if (path.basename(relativePath).startsWith(".env")) {
+    return true;
+  }
   return scannedExtensions.has(path.extname(relativePath));
 }
 

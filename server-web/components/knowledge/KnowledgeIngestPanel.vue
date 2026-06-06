@@ -5,7 +5,7 @@ import OptionBar from "../OptionBar.vue";
 import UploadFileListCard from "../UploadFileListCard.vue";
 import { jobStatusLabels } from "../../composables/console-defaults";
 import { formatBytes, jobStatusTone, jsonPreview } from "../../composables/console-format-utils";
-import { useKnowledgeIngestContext } from "../../composables/knowledgeViewContext";
+import { useKnowledgeIngestContext, useKnowledgeViewContext } from "../../composables/knowledgeViewContext";
 import { normalizedKnowledgeDocumentUrl, previewKnowledgeDocuments } from "../../lib/knowledge-documents";
 
 const {
@@ -13,7 +13,6 @@ const {
   canSubmitKnowledgeIngest,
   canWriteJobs,
   documentPreviewResult,
-  dynamicParsingPreviewConfig,
   ingestFiles,
   ingestJob,
   ingestProgress,
@@ -21,18 +20,49 @@ const {
   knowledgeIngestTargetOptions,
   knowledgeIngestTargetValidationMessage,
   knowledgeIngestTargetValues,
+  knowledgeLibraryBusy,
   normalizedManifest,
   onIngestFilesSelected,
   setKnowledgeIngestTargetValues,
   uploadFilesToKnowledge,
 } = useKnowledgeIngestContext();
+const knowledgeViewContext = useKnowledgeViewContext();
 
+const knowledgeIngestTargetLoading = computed(() => knowledgeLibraryBusy.value === "spaces");
+const knowledgeIngestTargetSelectDisabled = computed(() =>
+  knowledgeIngestTargetLoading.value || knowledgeIngestTargetOptions.value.length === 0,
+);
+const knowledgeIngestTargetPlaceholder = computed(() =>
+  knowledgeIngestTargetLoading.value
+    ? "正在检测知识库"
+    : knowledgeIngestTargetOptions.value.length === 0
+      ? "暂无可选知识库"
+      : "请选择入库目标",
+);
+const knowledgeIngestTargetWarning = computed(() =>
+  knowledgeIngestTargetLoading.value
+    ? ""
+    : knowledgeIngestTargetOptions.value.length === 0
+      ? "未检测到可用知识库。"
+      : knowledgeIngestTargetValidationMessage.value,
+);
+const knowledgeIngestTargetReadiness = computed(() => {
+  if (knowledgeIngestTargetLoading.value) {
+    return { value: "检测中", tone: "neutral" };
+  }
+  return knowledgeIngestTargetWarning.value
+    ? { value: "待选择", tone: "warning" }
+    : { value: "已选择", tone: "success" };
+});
+const canSubmitKnowledgeIngestWithTarget = computed(() =>
+  canSubmitKnowledgeIngest.value && !knowledgeIngestTargetSelectDisabled.value,
+);
 const knowledgeIngestReadinessItems = computed(() => [
   {
     key: "target",
     label: "目标",
-    value: knowledgeIngestTargetValidationMessage.value ? "待选择" : "已选择",
-    tone: knowledgeIngestTargetValidationMessage.value ? "warning" : "success",
+    value: knowledgeIngestTargetReadiness.value.value,
+    tone: knowledgeIngestTargetReadiness.value.tone,
   },
   {
     key: "files",
@@ -49,6 +79,7 @@ const knowledgeIngestReadinessItems = computed(() => [
 ]);
 
 async function previewKnowledgeDocumentParsing() {
+  const dynamicParsingPreviewConfig = knowledgeViewContext.ingest.dynamicParsingPreviewConfig;
   documentPreviewResult.value = await previewKnowledgeDocuments(ingestFiles.value, {
     pipelineId: dynamicParsingPreviewConfig.pipelineId,
     expectedOutputs: ["preprocessResult", "chunks", "structureArtifacts", "granularityFragments"],
@@ -64,24 +95,25 @@ async function previewKnowledgeDocumentParsing() {
   <article id="knowledge-file-import" class="surface-card ingest-upload-card">
     <div class="section-header">
       <div>
-        <h3>知识入库</h3>
+        <h3>知识归档</h3>
       </div>
     </div>
     <div class="knowledge-ingest-target-select-panel">
       <OptionBar
         label="入库目标"
-        placeholder="请选择入库目标"
+        :placeholder="knowledgeIngestTargetPlaceholder"
         :model-value="knowledgeIngestTargetValues"
         :options="knowledgeIngestTargetOptions"
         multiple
         collapse-tags
         clearable
+        :disabled="knowledgeIngestTargetSelectDisabled"
         @update:model-value="setKnowledgeIngestTargetValues"
       />
       <span>{{ knowledgeIngestTargetDisplaySummary }}</span>
     </div>
-    <p v-if="knowledgeIngestTargetValidationMessage" class="module-note warning-note">
-      {{ knowledgeIngestTargetValidationMessage }}
+    <p v-if="knowledgeIngestTargetWarning" class="module-note warning-note">
+      {{ knowledgeIngestTargetWarning }}
     </p>
     <div class="knowledge-ingest-readiness" aria-label="入库准备状态">
       <span
@@ -97,7 +129,7 @@ async function previewKnowledgeDocumentParsing() {
     <div class="knowledge-ingest-section-spacer" aria-hidden="true"></div>
     <UploadFileListCard
       :files="ingestFiles"
-      :can-submit="canSubmitKnowledgeIngest"
+      :can-submit="canSubmitKnowledgeIngestWithTarget"
       :can-write-jobs="canWriteJobs"
       :busy-key="busyKey"
       :ingest-job="ingestJob"

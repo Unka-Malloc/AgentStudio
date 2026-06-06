@@ -102,6 +102,8 @@ import type {
 } from "./agent-explore-client";
 import type {
   RuntimeDependencyActionResult,
+  RuntimeDependencyConfigurationUpdateEntry,
+  RuntimeDependencyConfigurationUpdateResult,
   RuntimeDependencyListResponse,
 } from "./runtime-dependencies-client";
 
@@ -168,6 +170,10 @@ export type Bridge = {
   reloadRuntimeMounts: (settings?: AgentSettings) => Promise<RuntimeMountReloadResponse>;
   listRuntimeDependencies: () => Promise<RuntimeDependencyListResponse>;
   downloadRuntimeDependency: (payload: Record<string, unknown>) => Promise<RuntimeDependencyActionResult>;
+  saveRuntimeDependencyConfiguration: (payload: {
+    targetId?: string;
+    entries: RuntimeDependencyConfigurationUpdateEntry[];
+  }) => Promise<RuntimeDependencyConfigurationUpdateResult>;
   getServerConsoleState: () => Promise<ServerConsoleState>;
   getMaintenanceAgentConfig: () => Promise<{ path: string; config: MaintenanceAgentConfig }>;
   saveMaintenanceAgentConfig: (config: Partial<MaintenanceAgentConfig>) => Promise<{ config: MaintenanceAgentConfig }>;

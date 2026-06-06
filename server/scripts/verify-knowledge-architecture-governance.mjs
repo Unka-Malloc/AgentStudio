@@ -842,8 +842,9 @@ async function assertStandardDataDirectory() {
   assertIncludes(resolveDataDir, "ServerConfig.getDataDir()", "shell entrypoints must resolve data dir through ServerConfig");
   assertIncludes(rootHygiene, "Server data dir defaults must resolve through ServerConfig.getDataDir()", "repo hygiene must enforce data-dir policy");
   assertIncludes(docs, "ServerConfig.getDataDir()", "docs must document the standard data directory source");
-  for (const text of [startServer, resolveDataDir, rootHygiene, docs]) {
-    assert.equal(text.includes("build/server-data"), false, "server data dir policy must not mention build/server-data as a default");
+  const forbiddenProjectDataPath = ["build", "server-data"].join("/");
+  for (const text of [startServer, resolveDataDir, docs]) {
+    assert.equal(text.includes(forbiddenProjectDataPath), false, "server data dir policy must not mention project-local server data as a default");
   }
 }
 

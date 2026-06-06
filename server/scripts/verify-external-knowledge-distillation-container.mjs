@@ -10,6 +10,32 @@ const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const serviceDir = path.join(repoRoot, "external-services/knowledge-distillation-service");
 const imageTag = process.env.PACT_EXTERNAL_KD_IMAGE || "pact-external-knowledge-distillation:local";
 const containerName = `pact-external-kd-verify-${process.pid}-${Date.now()}`;
+const serviceApiToken = "test-only-external-kd-container";
+let serviceUrl = "";
+const nativeFetch = globalThis.fetch.bind(globalThis);
+
+function shouldAttachServiceAuth(input) {
+  const value = typeof input === "string"
+    ? input
+    : input instanceof URL
+      ? input.href
+      : input?.url || "";
+  return Boolean(serviceUrl && value.startsWith(serviceUrl));
+}
+
+function withServiceAuth(init = {}) {
+  const headers = new Headers(init.headers || {});
+  if (!headers.has("authorization")) {
+    headers.set("Authorization", `Bearer ${serviceApiToken}`);
+  }
+  return { ...init, headers };
+}
+
+globalThis.fetch = (input, init = {}) => (
+  shouldAttachServiceAuth(input)
+    ? nativeFetch(input, withServiceAuth(init))
+    : nativeFetch(input, init)
+);
 
 const FONT_5X7 = Object.freeze({
   A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
@@ -501,7 +527,7 @@ if (process.env.PACT_EXTERNAL_KD_SKIP_DOCKER_BUILD !== "1") {
 }
 
 const port = await freePort();
-const serviceUrl = `http://127.0.0.1:${port}`;
+serviceUrl = `http://127.0.0.1:${port}`;
 let started = false;
 const mockModelGateway = await startMockModelGateway();
 
@@ -514,6 +540,8 @@ try {
     containerName,
     "-p",
     `127.0.0.1:${port}:8799`,
+    "-e",
+    `PACT_EXTERNAL_KD_API_TOKEN=${serviceApiToken}`,
     "-e",
     `PACT_EXTERNAL_KD_MODEL_GATEWAY_URL=${mockModelGateway.hostUrl}`,
     "-e",

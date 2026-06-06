@@ -2,7 +2,7 @@
 name = "pact-client-native"
 version = "0.0.1"
 edition = "2024"
-license = "GPL-3.0-only"
+license = "GPL-3.0-or-later"
 
 [dependencies]
 anyhow = "1.0"

@@ -20,6 +20,9 @@ const RUNS_PATH = path.join(DATA_DIR, "runs.json");
 const SERVICE_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SERVICE_ROOT, "../..");
 const REFERENCE_FRAMEWORKS_PATH = path.join(SERVICE_ROOT, "reference-frameworks.json");
+const API_TOKEN = String(process.env.PACT_EXTERNAL_KD_API_TOKEN || process.env.SERVICE_API_TOKEN || "").trim();
+const REQUIRE_API_TOKEN = envFlag("PACT_EXTERNAL_KD_REQUIRE_API_TOKEN", process.env.NODE_ENV === "production");
+const ALLOW_UNAUTHENTICATED_DEV = envFlag("PACT_EXTERNAL_KD_ALLOW_UNAUTHENTICATED_DEV", false);
 const INPUT_ROOTS = Array.from(new Set([
   DATA_DIR,
   ...String(process.env.PACT_EXTERNAL_KD_INPUT_ROOTS || "")
@@ -899,6 +902,14 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function envFlag(name, defaultValue = false) {
+  const value = process.env[name];
+  if (value === undefined || value === null || value === "") {
+    return Boolean(defaultValue);
+  }
+  return /^(1|true|yes|on)$/i.test(String(value).trim());
+}
+
 function sha(value = "") {
   return crypto.createHash("sha256").update(String(value)).digest("hex");
 }
@@ -936,6 +947,63 @@ function binaryResponse(response, statusCode, body, headers = {}) {
     ...headers
   });
   response.end(Buffer.isBuffer(body) ? body : Buffer.from(body || []));
+}
+
+function isPublicHealthPath(method, pathname) {
+  return method === "GET" && (
+    pathname === "/" ||
+    pathname === "/health" ||
+    pathname === "/v1/runtime/health"
+  );
+}
+
+function bearerTokenFromRequest(request) {
+  const authorization = String(request.headers.authorization || "");
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : "";
+}
+
+function constantTimeEqual(left = "", right = "") {
+  const leftBuffer = Buffer.from(String(left));
+  const rightBuffer = Buffer.from(String(right));
+  if (leftBuffer.length !== rightBuffer.length) {
+    const length = Math.max(leftBuffer.length, rightBuffer.length, 1);
+    crypto.timingSafeEqual(Buffer.alloc(length), Buffer.alloc(length));
+    return false;
+  }
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function requireAuthenticatedRequest(request, pathname) {
+  if (!REQUIRE_API_TOKEN || ALLOW_UNAUTHENTICATED_DEV || isPublicHealthPath(request.method, pathname)) {
+    return { ok: true };
+  }
+  if (!API_TOKEN) {
+    return {
+      ok: false,
+      statusCode: 503,
+      headers: {},
+      payload: {
+        error: "external knowledge distillation API token is not configured",
+        code: "EXTERNAL_KD_AUTH_NOT_CONFIGURED"
+      }
+    };
+  }
+  const candidate = bearerTokenFromRequest(request);
+  if (candidate && constantTimeEqual(candidate, API_TOKEN)) {
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    statusCode: 401,
+    headers: {
+      "www-authenticate": 'Bearer realm="pact-external-knowledge-distillation"'
+    },
+    payload: {
+      error: "external knowledge distillation API token required",
+      code: "EXTERNAL_KD_AUTH_REQUIRED"
+    }
+  };
 }
 
 function requestTooLargeError(bytes = 0, maxBytes = REQUEST_BODY_MAX_BYTES) {
@@ -24213,6 +24281,12 @@ async function handleRequest(request, response) {
   const url = new URL(request.url || "/", `http://${request.headers.host || "127.0.0.1"}`);
   const pathname = url.pathname.replace(/\/+$/, "") || "/";
   try {
+    const authResult = requireAuthenticatedRequest(request, pathname);
+    if (!authResult.ok) {
+      jsonResponse(response, authResult.statusCode, authResult.payload, authResult.headers);
+      return;
+    }
+
     if (request.method === "GET" && (pathname === "/" || pathname === "/health")) {
       jsonResponse(response, 200, {
         ok: true,
@@ -24448,6 +24522,10 @@ async function handleRequest(request, response) {
       details: error?.details || null
     });
   }
+}
+
+if (REQUIRE_API_TOKEN && !API_TOKEN && !ALLOW_UNAUTHENTICATED_DEV) {
+  throw new Error("PACT_EXTERNAL_KD_API_TOKEN must be set when external knowledge distillation API auth is required");
 }
 
 await fs.mkdir(DATA_DIR, { recursive: true });

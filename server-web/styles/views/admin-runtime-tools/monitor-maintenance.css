@@ -61,8 +61,30 @@
   font-weight: var(--font-semibold);
 }
 
+.monitor-alert-config-editor {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.monitor-alert-config-actions {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .maintenance-agent-policy-actions {
   margin-top: 16px;
+}
+
+@media (max-width: 720px) {
+  .monitor-alert-config-actions {
+    justify-content: stretch;
+  }
+
+  .monitor-alert-config-actions .primary-action {
+    width: 100%;
+  }
 }
 
 .maintenance-agent-quick-actions {

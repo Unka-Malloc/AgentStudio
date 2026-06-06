@@ -3,6 +3,7 @@ import { getNormalizedDocuments } from "../lib/knowledge-documents-client";
 import { createKnowledgeUploadSession } from "../lib/knowledge-upload-session";
 import { createJob, getJob } from "../lib/jobs-client";
 import type {
+  DocumentParsingConfig,
   AgentSettings,
   KnowledgeIngestTarget,
   KnowledgeIngestTargetKind,
@@ -44,7 +45,7 @@ export function createConsoleKnowledgeIngestController(
   const ingestProgress = ref("");
   const ingestJob = ref<SplitJob | null>(null);
   const knowledgeIngestTargets = ref<Record<KnowledgeIngestTargetKind, boolean>>({
-    global: true,
+    global: false,
     external: false,
     team: false,
     user: false,
@@ -79,12 +80,6 @@ export function createConsoleKnowledgeIngestController(
 
   const selectedKnowledgeIngestTargets = computed<KnowledgeIngestTarget[]>(() => {
     const targets: KnowledgeIngestTarget[] = [];
-    if (knowledgeIngestTargets.value.global) {
-      targets.push({
-        kind: "global",
-        label: "Pact Native 知识库",
-      });
-    }
     if (knowledgeIngestTargets.value.external) {
       const refsByProvider = new Map<string, string[]>();
       const labelsByProvider = new Map<string, string[]>();
@@ -155,7 +150,8 @@ export function createConsoleKnowledgeIngestController(
     return `将入库到：${selectedKnowledgeIngestTargets.value.map((target) => target.label).join("、")}`;
   });
 
-  async function uploadFilesToKnowledge() {
+  async function uploadFilesToKnowledge(overrides: { documentParsing?: DocumentParsingConfig } = {}) {
+    const documentParsing = overrides.documentParsing;
     if (ingestFiles.value.length === 0) {
       options.error.value = "请先选择需要入库的文件。";
       return;
@@ -186,6 +182,7 @@ export function createConsoleKnowledgeIngestController(
           ...options.settingsDraft.value,
           knowledgeIngestTargets: selectedKnowledgeIngestTargets.value,
         },
+        ...(documentParsing ? { documentParsing } : {}),
       });
       ingestJob.value = job;
       ingestProgress.value = `已进入处理队列，${knowledgeIngestTargetSummary.value}。`;

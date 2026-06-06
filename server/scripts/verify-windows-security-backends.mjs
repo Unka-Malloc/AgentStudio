@@ -11,7 +11,7 @@ async function writeExecutable(filePath, source) {
   await fs.chmod(filePath, 0o755);
 }
 
-function fakePowerShellModuleSource() {
+function fixturePowerShellModuleSource() {
   return `
 import fs from "node:fs";
 const script = process.argv.slice(2).join(" ");
@@ -29,19 +29,19 @@ process.exit(2);
 `;
 }
 
-function fakePowerShellWrapperSource(modulePath) {
+function fixturePowerShellWrapperSource(modulePath) {
   return `#!/bin/sh
 exec node ${JSON.stringify(modulePath)} "$@"
 `;
 }
 
-async function installFakePowerShell(root) {
+async function installFixturePowerShell(root) {
   const binDir = path.join(root, "bin");
   await fs.mkdir(binDir, { recursive: true });
-  const modulePath = path.join(binDir, "fake-powershell.mjs");
-  await fs.writeFile(modulePath, fakePowerShellModuleSource(), "utf8");
+  const modulePath = path.join(binDir, "fixture-powershell.mjs");
+  await fs.writeFile(modulePath, fixturePowerShellModuleSource(), "utf8");
   const executable = path.join(binDir, "powershell.exe");
-  await writeExecutable(executable, fakePowerShellWrapperSource(modulePath));
+  await writeExecutable(executable, fixturePowerShellWrapperSource(modulePath));
   process.env.PACT_WINDOWS_DPAPI_COMMAND = executable;
 }
 
@@ -133,7 +133,7 @@ async function verifyBindingDpapi(dataDir) {
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "pact-windows-security-backends-"));
 const dataDir = path.join(root, "data");
 try {
-  await installFakePowerShell(root);
+  await installFixturePowerShell(root);
   await verifyOpaqueDpapi(dataDir);
   await verifyBindingDpapi(dataDir);
 } finally {

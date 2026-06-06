@@ -1,0 +1,20 @@
+{
+  "profileId": "context-32k",
+  "label": "32K Context",
+  "modelAlias": "default",
+  "contextWindowTokens": 32768,
+  "outputReserveTokens": 4096,
+  "toolReserveTokens": 3072,
+  "fixedMemoryBudget": 1024,
+  "knowledgeBudget": 10000,
+  "historyBudget": 8000,
+  "recentTurnBudget": 6576,
+  "compression": {
+    "enabled": true,
+    "threshold": 0.55,
+    "targetRatio": 0.3,
+    "protectLastNTurns": 5,
+    "summaryMaxTokens": 4096,
+    "strategy": "deterministic-extractive"
+  }
+}

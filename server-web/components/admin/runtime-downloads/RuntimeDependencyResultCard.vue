@@ -19,7 +19,7 @@ function latestStatus() {
   <article v-if="actionError || actionResult || actionRunCards.length" class="surface-card">
     <div class="section-header">
       <div>
-        <h3>下载进展</h3>
+        <h3>安装进展</h3>
       </div>
       <div v-if="actionRunCards.length" class="section-tags">
         <span>{{ actionRunCards.length }} 个任务</span>

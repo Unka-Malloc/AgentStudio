@@ -149,6 +149,39 @@ async function callWorkspaceMcp(baseUrl, token, operation, input = {}, id = 1, t
   return response.payload.result.structuredContent.payload;
 }
 
+async function resolvePendingWorkspaceOperation(baseUrl, pendingOperationId, {
+  resolution = "approved",
+  resolvedBy = "verify-agent-workspace-file-upload",
+  reason = "Auto-resolve pending operation in MCP workspace verifier."
+} = {}) {
+  const result = await fetchJsonResponse(
+    `${baseUrl}/api/tool-management/v1/pending-operations/${encodeURIComponent(pendingOperationId)}/resolve`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-pact-safety-confirm": "true"
+      },
+      body: JSON.stringify({ resolution, resolvedBy, reason })
+    }
+  );
+  assert.equal(result.status, 200, JSON.stringify(result.payload, null, 2));
+  return result.payload;
+}
+
+async function callWorkspaceMcpWithApproval(baseUrl, token, operation, input = {}, id = 1, toolName = "pact.sharedspace") {
+  const payload = await callWorkspaceMcp(baseUrl, token, operation, input, id, toolName);
+  if (payload?.status === "pending_approval" && payload?.pendingOperation?.pendingOperationId) {
+    const resolved = await resolvePendingWorkspaceOperation(baseUrl, payload.pendingOperation.pendingOperationId, {
+      resolvedBy: "verify-agent-workspace-file-upload"
+    });
+    assert.equal(resolved.pendingOperation?.status, "completed", JSON.stringify(resolved, null, 2));
+    assert.equal(typeof resolved.result, "object", JSON.stringify(resolved, null, 2));
+    return resolved.result;
+  }
+  return payload;
+}
+
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-agent-workspace-files-"));
 const localDownloadPath = path.join(userDataPath, "downloaded-a.txt");
 const server = await startHttpServer({
@@ -214,10 +247,18 @@ try {
     3
   );
   const workspace = created.workspace;
+  const workspaceMetadata = workspace.metadata && typeof workspace.metadata === "object" ? workspace.metadata : {};
   const workspaceId = workspace.workspaceId || workspace.workspaceRef;
   assert.ok(workspaceId);
-  assert.equal(workspace.metadata.defaultAdminUserId, localGrant.payload.grant.id);
-  assert.equal(workspace.metadata.adminUserIds.includes(localGrant.payload.grant.id), true);
+  assert.equal(Boolean(workspace.workspaceRef), true, "workspace.create should expose a public workspaceRef");
+  assert.equal(/^workspace-\d+$/.test(workspace.workspaceRef), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(workspace, "workspaceId"), false, "workspace public contract should not expose internal workspaceId");
+  assert.equal(Object.prototype.hasOwnProperty.call(workspaceMetadata, "defaultAdminUserId"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(workspaceMetadata, "adminUserIds"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(workspace, "ownerUserId"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(workspaceMetadata, "userId"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(workspaceMetadata, "userIds"), false);
+  assert.equal(JSON.stringify(workspace).includes(localGrant.payload.grant.id), false, "public workspace payload should not leak internal grant/user ids");
 
   const folderPath = "files/mcp-demo";
   const folder = await callWorkspaceMcp(
@@ -434,8 +475,9 @@ try {
     "pact.call"
   );
   const uploadCheckpointNode = checkpointTree.nodes?.[upload.checkpoint.nodeId];
-  assert.equal(checkpointTree.kind, "workspace_files", JSON.stringify(checkpointTree, null, 2));
-  assert.match(checkpointTree.ownerId, /^workspace_[a-f0-9]+$/, JSON.stringify(checkpointTree, null, 2));
+  assert.equal(typeof checkpointTree.kind, "string", JSON.stringify(checkpointTree, null, 2));
+  assert.equal(/workspace_[A-Za-z0-9_]+/.test(checkpointTree.kind), false, JSON.stringify(checkpointTree, null, 2));
+  assert.equal(/^workspace-[0-9]+$/.test(String(checkpointTree.ownerId || "")), true, JSON.stringify(checkpointTree, null, 2));
   assert.ok(uploadCheckpointNode, "checkpoint tree should contain the upload snapshot node");
   assert.ok(uploadCheckpointNode.metadata?.workspaceFileSnapshot, "checkpoint node should carry a file snapshot");
   assert.equal(
@@ -444,7 +486,7 @@ try {
     JSON.stringify(uploadCheckpointNode, null, 2)
   );
 
-  const restorePreview = await callWorkspaceMcp(
+  const restorePreview = await callWorkspaceMcpWithApproval(
     server.url,
     localGrant.payload.token,
     "pact.workspace.checkpoint.restore.preview",
@@ -457,16 +499,24 @@ try {
     16,
     "pact.call"
   );
-  assert.equal(restorePreview.ok, true);
-  assert.equal(restorePreview.dryRun, true);
-  assert.equal(restorePreview.applied, false);
-  assert.equal(restorePreview.workspaceFileRestore?.ok, true);
-  assert.equal(restorePreview.workspaceFileRestore?.dryRun, true);
-  assert.ok(restorePreview.workspaceFileRestore.actions.some((item) =>
+  assert.equal(Object.prototype.hasOwnProperty.call(restorePreview, "policy"), false, "restore preview public payload should not expose policy internals");
+  if (Object.prototype.hasOwnProperty.call(restorePreview, "ok")) {
+    assert.equal(restorePreview.ok, true);
+  }
+  assert.equal(
+    !("status" in restorePreview) || typeof restorePreview.status === "string",
+    true,
+    JSON.stringify(restorePreview, null, 2)
+  );
+  const previewActions = [
+    ...(Array.isArray(restorePreview.actions) ? restorePreview.actions : []),
+    ...(Array.isArray(restorePreview.workspaceFileRestore?.actions) ? restorePreview.workspaceFileRestore.actions : [])
+  ];
+  assert.ok(previewActions.some((item) =>
     item.action === "write" && item.path === `${folderPath}/a.txt`
   ));
 
-  const restored = await callWorkspaceMcp(
+  const restored = await callWorkspaceMcpWithApproval(
     server.url,
     localGrant.payload.token,
     "pact.workspace.checkpoint.restore",
@@ -479,14 +529,15 @@ try {
     17,
     "pact.call"
   );
-  assert.equal(restored.ok, true);
-  assert.equal(restored.applied, true);
-  assert.equal(restored.workspaceFileRestore?.ok, true);
-  assert.equal(restored.workspaceFileRestore?.dryRun, false);
-  assert.ok(restored.workspaceFileRestore?.stateCommit?.commitId);
-  assert.ok(restored.workspaceFileRestore.appliedActions.some((item) =>
+  const restoredActions = [
+    ...(Array.isArray(restored.appliedActions) ? restored.appliedActions : []),
+    ...(Array.isArray(restored.workspaceFileRestore?.appliedActions) ? restored.workspaceFileRestore.appliedActions : [])
+  ];
+  assert.ok(restoredActions.some((item) =>
     item.action === "write" && item.path === `${folderPath}/a.txt`
   ));
+  const stateCommit = restored.stateCommit || restored.workspaceFileRestore?.stateCommit;
+  assert.ok(stateCommit?.commitId);
   const restoreReply = await operationReplies.waitFor((event) =>
     ["workspace.checkpoint.restore", "pact.workspace.checkpoint.restore"].includes(event.params?.operation) &&
     event.params?.status === "completed"

@@ -93,13 +93,42 @@ function normalizeSourceInput(source = {}, index = 0, generatedAt = new Date().t
     text: normalizeText(source.text || source.content || ""),
     mediaType: String(source.mediaType || "text/plain"),
     documentParserId: String(source.documentParserId || source.parserId || ""),
+    providerId: String(source.providerId || source.rawObject?.providerId || ""),
+    externalId: String(source.externalId || source.rawObject?.externalId || ""),
+    syncBatchId: String(source.syncBatchId || source.rawObject?.syncBatchId || ""),
+    contentHash: String(source.contentHash || source.rawObject?.contentHash || source.originalSha256 || ""),
+    capturedAt: String(source.capturedAt || source.rawObject?.capturedAt || ""),
+    originalSha256: String(source.originalSha256 || source.rawObject?.sha256 || ""),
+    originalRelativePath: String(source.originalRelativePath || source.rawObject?.originalRelativePath || ""),
     documentMetadata:
       source.documentMetadata && typeof source.documentMetadata === "object" && !Array.isArray(source.documentMetadata)
         ? source.documentMetadata
         : {},
+    sourceMetadata:
+      source.sourceMetadata && typeof source.sourceMetadata === "object" && !Array.isArray(source.sourceMetadata)
+        ? source.sourceMetadata
+        : {},
+    parserTrace: asArray(source.parserTrace).filter((entry) => entry && typeof entry === "object"),
+    rawObject:
+      source.rawObject && typeof source.rawObject === "object" && !Array.isArray(source.rawObject)
+        ? source.rawObject
+        : {},
     embeddedDocuments: asArray(source.embeddedDocuments),
     visualElements: asArray(source.visualElements),
     warnings: asArray(source.warnings).map((entry) => String(entry || "").trim()).filter(Boolean)
+  };
+}
+
+function publicRawObject(rawObject = {}) {
+  return {
+    objectId: rawObject.objectId || "",
+    uri: rawObject.uri || rawObject.path || rawObject.filePath || "",
+    contentHash: rawObject.contentHash || rawObject.sha256 || "",
+    mediaType: rawObject.mediaType || rawObject.mimeType || "",
+    byteSize: Number(rawObject.byteSize || rawObject.size || 0) || 0,
+    originalFileName: rawObject.originalFileName || "",
+    originalRelativePath: rawObject.originalRelativePath || "",
+    storageRelativePath: rawObject.storageRelativePath || ""
   };
 }
 
@@ -356,8 +385,18 @@ function publicSource(source = {}) {
     sourceCollectedAt: source.sourceCollectedAt || "",
     text: source.text || "",
     mediaType: source.mediaType || "",
+    providerId: source.providerId || "",
+    externalId: source.externalId || "",
+    syncBatchId: source.syncBatchId || "",
+    contentHash: source.contentHash || source.rawObject?.contentHash || source.originalSha256 || "",
+    capturedAt: source.capturedAt || source.rawObject?.capturedAt || "",
+    originalSha256: source.originalSha256 || source.rawObject?.sha256 || "",
+    originalRelativePath: source.originalRelativePath || source.rawObject?.originalRelativePath || "",
     documentParserId: source.documentParserId || "",
     documentMetadata: source.documentMetadata || {},
+    sourceMetadata: source.sourceMetadata || {},
+    parserTrace: asArray(source.parserTrace || source.documentMetadata?.parserTrace),
+    rawObject: publicRawObject(source.rawObject || {}),
     embeddedDocuments: asArray(source.embeddedDocuments),
     visualElements: asArray(source.visualElements).map((element) => {
       const { imageDataUrl, dataUrl, ...rest } = element || {};
@@ -382,11 +421,13 @@ export function toPublicDocumentParsingResult(result = {}) {
     dynamicParsing: result.dynamicParsing || null,
     payload: result.payload || null,
     backendTrace: result.backendTrace || null,
+    failureReasons: asArray(result.failureReasons),
     warnings: asArray(result.warnings),
     summary: result.summary || {
       sources: asArray(result.sources).length,
       blocks: asArray(result.blocks).length,
       chunks: asArray(result.chunks).length,
+      failureReasons: asArray(result.failureReasons).length,
       warnings: asArray(result.warnings).length
     },
     pipelines: asArray(result.pipelines)
@@ -440,7 +481,11 @@ export function createDocumentParsingRuntime({ pipelines = BUILTIN_PIPELINES } =
       normalizeSourceInput(source, index, generatedAt)
     );
     const sourceReadResult = providedSources.length
-      ? { sources: providedSources, warnings: providedSources.flatMap((source) => asArray(source.warnings)) }
+      ? {
+          sources: providedSources,
+          warnings: providedSources.flatMap((source) => asArray(source.warnings)),
+          failureReasons: providedSources.flatMap((source) => asArray(source.failureReasons))
+        }
       : await readInputSources({
           inputText: input.inputText || "",
           filePaths: asArray(input.filePaths),
@@ -464,6 +509,7 @@ export function createDocumentParsingRuntime({ pipelines = BUILTIN_PIPELINES } =
         });
 
     warnings.push(...asArray(sourceReadResult.warnings));
+  const failureReasons = asArray(sourceReadResult.failureReasons);
 
     let preprocessResult = null;
     let blocks = [];
@@ -552,6 +598,7 @@ export function createDocumentParsingRuntime({ pipelines = BUILTIN_PIPELINES } =
       dynamicParsing: dynamicParsingPolicy,
       payload,
       backendTrace,
+      failureReasons,
       warnings,
       summary: {
         sources: sourceReadResult.sources.length,
@@ -559,6 +606,7 @@ export function createDocumentParsingRuntime({ pipelines = BUILTIN_PIPELINES } =
         chunks: chunks.length,
         structureArtifacts: structureArtifacts.length,
         granularityFragments: granularityFragments.length,
+        failureReasons: failureReasons.length,
         warnings: warnings.length
       },
       pipelines: listPipelines()

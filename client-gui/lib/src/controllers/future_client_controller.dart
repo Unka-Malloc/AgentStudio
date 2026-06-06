@@ -130,6 +130,8 @@ class FutureClientController extends ChangeNotifier {
     if (trimmed.isEmpty || isAddingTarget) {
       return;
     }
+    final trimmedConfigPath = configPath.trim();
+    final trimmedBinaryPath = binaryPath.trim();
     isAddingTarget = true;
     lastError = '';
     statusMessage = '正在添加手动目标。';
@@ -138,8 +140,8 @@ class FutureClientController extends ChangeNotifier {
     try {
       await agentService.addTarget(
         target: trimmed,
-        configPath: configPath,
-        binaryPath: binaryPath,
+        configPath: trimmedConfigPath,
+        binaryPath: trimmedBinaryPath,
       );
       scannedTargets = await agentService.scanTargets();
       statusMessage = '已添加 $trimmed 手动目标。';

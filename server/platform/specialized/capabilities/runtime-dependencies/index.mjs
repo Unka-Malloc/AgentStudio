@@ -18,6 +18,7 @@ const repoRoot = path.resolve(moduleDir, "../../../../..");
 const platformKey = `${process.platform}-${process.arch}`;
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const GERRIT_VERSION = process.env.PACT_GERRIT_VERSION || "3.14.0";
+const PATH_ENV_SOURCE_LABEL = "环境变量: PATH";
 const KNOWLEDGE_MODULE_ROOT = path.join(repoRoot, "server", "platform", "modules", "knowledge");
 const KNOWLEDGE_BACKEND_TARGETS = Object.freeze([
   Object.freeze({
@@ -486,6 +487,55 @@ function commandVersion(command, args = ["--version"]) {
   return text([result.stdout, result.stderr].filter(Boolean).join("\n")).split(/\r?\n/)[0] || "";
 }
 
+function macosVersionInfo() {
+  if (process.platform !== "darwin") {
+    return {
+      productName: "",
+      productVersion: "",
+      buildVersion: "",
+      label: ""
+    };
+  }
+  const swVersPath = pathExists("/usr/bin/sw_vers") ? "/usr/bin/sw_vers" : commandPath("sw_vers");
+  if (!swVersPath) {
+    return {
+      productName: "macOS",
+      productVersion: "",
+      buildVersion: "",
+      label: "macOS"
+    };
+  }
+  const result = runCommand(swVersPath, [], { timeoutMs: 3000 });
+  if (result.status !== 0) {
+    return {
+      productName: "macOS",
+      productVersion: "",
+      buildVersion: "",
+      label: "macOS"
+    };
+  }
+  const fields = new Map(
+    text(result.stdout)
+      .split(/\r?\n/)
+      .map((line) => {
+        const separator = line.indexOf(":");
+        return separator >= 0
+          ? [text(line.slice(0, separator)), text(line.slice(separator + 1))]
+          : ["", ""];
+      })
+      .filter(([key]) => key),
+  );
+  const productName = fields.get("ProductName") || "macOS";
+  const productVersion = fields.get("ProductVersion") || "";
+  const buildVersion = fields.get("BuildVersion") || "";
+  return {
+    productName,
+    productVersion,
+    buildVersion,
+    label: [productName, productVersion].filter(Boolean).join(" ") || "macOS"
+  };
+}
+
 function executableVersion(executablePath = "", args = ["--version"]) {
   const candidate = text(executablePath);
   if (!candidate || !executableExists(candidate)) return "";
@@ -759,6 +809,128 @@ function dependencyStatus({ present = false, cached = false }) {
   return INSTALL_STATUS.FAILED;
 }
 
+function configValue(value, fallback = "未配置") {
+  if (Array.isArray(value)) {
+    return value.length ? value.map(text).filter(Boolean).join(", ") : fallback;
+  }
+  if (typeof value === "boolean") return value ? "是" : "否";
+  const normalized = text(value);
+  return normalized || fallback;
+}
+
+function configEntry(kind, key, label, value, options = {}) {
+  const normalizedValue = configValue(value, options.fallback || "未配置");
+  const entry = {
+    kind,
+    key,
+    label,
+    value: normalizedValue,
+    configured: options.configured ?? normalizedValue !== "未配置",
+    required: options.required === true,
+    source: text(options.source || ""),
+    description: text(options.description || "")
+  };
+  if (options.editable === true) {
+    entry.editable = true;
+  }
+  if (options.inputType) {
+    entry.inputType = text(options.inputType);
+  }
+  if (Array.isArray(options.options)) {
+    entry.options = options.options
+      .map((option) => ({
+        label: text(option?.label ?? option?.value ?? option),
+        value: text(option?.value ?? option?.label ?? option)
+      }))
+      .filter((option) => option.value || option.label);
+  }
+  return entry;
+}
+
+function configGroup(kind, title, entries = []) {
+  return {
+    kind,
+    title,
+    entries: entries.filter(Boolean)
+  };
+}
+
+function runtimeConfiguration(...groups) {
+  return groups.filter((group) => group?.entries?.length);
+}
+
+function envConfigEntry(name, description = "") {
+  const configured = Object.prototype.hasOwnProperty.call(process.env, name);
+  return configEntry("env", name, name, configured ? process.env[name] : "", {
+    configured,
+    description
+  });
+}
+
+function platformConfigurationGroup(context = {}) {
+  return configGroup("path", "平台目录", [
+    configEntry("path", "PACT_SERVER_DATA_DIR", "服务数据目录", dataRoot(context), {
+      source: "PACT_SERVER_DATA_DIR / 默认用户数据目录"
+    }),
+    configEntry("path", "PACT_RUNTIME_DEPENDENCY_CACHE_DIR", "运行时缓存目录", runtimeCacheRoot(context), {
+      source: "PACT_RUNTIME_DEPENDENCY_CACHE_DIR / 服务数据目录"
+    }),
+    configEntry("path", "runtimeDependencySourceConfig", "运行时源配置", context.sourceConfigPath || runtimeDependencySourceConfigPath(context), {
+      source: "runtime/runtime-dependency-sources.json"
+    })
+  ]);
+}
+
+function sourceConfigurationGroup(context = {}, targetId = "", fields = [], title = "下载源配置") {
+  const root = context.sourceConfig?.sources?.[targetId] || {};
+  const entry = sourceEntry(context.sourceConfig, targetId);
+  const entries = fields.map((field) => configEntry(
+    "source",
+    `sources.${targetId}.${field.key}`,
+    field.label,
+    entry?.[field.key],
+    {
+      editable: true,
+      inputType: field.inputType || (String(field.key || "").toLowerCase().includes("url") ? "url" : "text"),
+      required: field.required === true,
+      source: context.sourceConfigPath || runtimeDependencySourceConfigPath(context),
+      description: field.description || ""
+    }
+  ));
+  if (Array.isArray(root.mirrors)) {
+    entries.push(configEntry("source", `sources.${targetId}.mirrors`, "镜像源", root.mirrors, {
+      editable: true,
+      inputType: "textarea",
+      configured: root.mirrors.length > 0,
+      source: context.sourceConfigPath || runtimeDependencySourceConfigPath(context)
+    }));
+  }
+  if (Array.isArray(root.images)) {
+    entries.push(configEntry("source", `sources.${targetId}.images`, "Docker 镜像", root.images, {
+      editable: true,
+      inputType: "textarea",
+      configured: root.images.length > 0,
+      source: context.sourceConfigPath || runtimeDependencySourceConfigPath(context)
+    }));
+  }
+  if (Object.prototype.hasOwnProperty.call(root, "mirrorPrefix")) {
+    entries.push(configEntry("source", `sources.${targetId}.mirrorPrefix`, "镜像前缀", root.mirrorPrefix, {
+      editable: true,
+      inputType: "text",
+      configured: Boolean(text(root.mirrorPrefix)),
+      source: context.sourceConfigPath || runtimeDependencySourceConfigPath(context)
+    }));
+  }
+  if (Object.prototype.hasOwnProperty.call(root, "version")) {
+    entries.push(configEntry("source", `sources.${targetId}.version`, "版本", root.version, {
+      editable: true,
+      inputType: "text",
+      source: context.sourceConfigPath || runtimeDependencySourceConfigPath(context)
+    }));
+  }
+  return configGroup("source", title, entries);
+}
+
 function asDependency({
   id,
   label,
@@ -771,7 +943,8 @@ function asDependency({
   children = [],
   detection = {},
   actions = {},
-  accepts = {}
+  accepts = {},
+  configuration = []
 }) {
   return {
     id,
@@ -785,7 +958,8 @@ function asDependency({
     children,
     detection,
     actions,
-    accepts
+    accepts,
+    configuration
   };
 }
 
@@ -805,6 +979,22 @@ function knowledgeBackendConfiguredImages(context = {}, targetId = "") {
   return Array.isArray(configuredImages) ? configuredImages.map(text).filter(Boolean) : [];
 }
 
+function knowledgeBackendProviderHasEndpoint(provider = {}) {
+  return Boolean(text(
+    provider.endpoint ||
+    provider.endpointUrl ||
+    provider.baseUrl ||
+    provider.url
+  ));
+}
+
+function knowledgeBackendProviderIsReady(provider = null) {
+  if (!provider || provider.enabled === false) return false;
+  const mode = text(provider.mode || "contract").toLowerCase();
+  if (mode === "contract") return false;
+  return Boolean(provider.credentialConfigured) && knowledgeBackendProviderHasEndpoint(provider);
+}
+
 async function detectKnowledgeBackendProvider(target, context = {}) {
   const userDataPath = text(context.userDataPath);
   const configPath = knowledgeBackendConfigPath(userDataPath);
@@ -822,10 +1012,20 @@ async function detectKnowledgeBackendProvider(target, context = {}) {
     : configuredImages.map((image) => ({ image, present: false }));
   const imageCount = images.filter((item) => item.present).length;
   const configured = pathExists(configPath) && Boolean(provider);
-  const present = configured || (images.length > 0 && imageCount === images.length);
+  const providerReady = knowledgeBackendProviderIsReady(provider);
+  const present = providerReady || (images.length > 0 && imageCount === images.length);
   const presentImages = images.filter((item) => item.present).map((item) => item.image);
-  const source = configured
-    ? detectionSource("platform-config", "平台配置", configPath, `${target.label} provider: ${target.providerId}`)
+  const availabilityLabel = providerReady
+    ? "已配置真实后端"
+    : configured
+      ? "配置占位，未接入真实后端"
+      : presentImages.length
+        ? "Docker 镜像已存在"
+        : "未安装";
+  const source = providerReady
+    ? detectionSource("platform-config", "平台配置", configPath, `${target.label} provider ready: ${target.providerId}`)
+    : configured
+      ? detectionSource("platform-config-placeholder", "平台配置占位", configPath, `${target.label} 未配置真实 endpoint 或凭据`)
     : presentImages.length
       ? detectionSource("docker-image", "Docker 镜像", "", presentImages.join(", "))
       : missingDetectionSource(configPath, `${target.label} provider 未配置`);
@@ -841,6 +1041,9 @@ async function detectKnowledgeBackendProvider(target, context = {}) {
       configPath,
       provider: target.providerId,
       configured,
+      providerReady,
+      availabilityLabel,
+      endpointConfigured: knowledgeBackendProviderHasEndpoint(provider || {}),
       credentialConfigured: Boolean(provider?.credentialConfigured),
       mode: text(provider?.mode || ""),
       dockerReady: docker.ready,
@@ -849,14 +1052,29 @@ async function detectKnowledgeBackendProvider(target, context = {}) {
       sourcePolicy: `${target.label} config first; optional Docker images only when configured in local source config`
     },
     actions: {
-      download: configured
+      download: providerReady
         ? "already-configured"
         : images.length === 0
           ? "configure-provider-or-images"
           : docker.ready
             ? "docker-pull"
             : "install-docker-first"
-    }
+    },
+    configuration: runtimeConfiguration(
+      platformConfigurationGroup(context),
+      configGroup("file", "配置文件", [
+        configEntry("file", "knowledgeBackendConfigPath", "知识后端配置", configPath, {
+          configured: pathExists(configPath),
+          description: "providers 配置从这里读取"
+        }),
+        configEntry("setting", "provider", "Provider", target.providerId),
+        configEntry("setting", "configured", "Provider 已配置", configured),
+        configEntry("setting", "credentialConfigured", "凭据已配置", Boolean(provider?.credentialConfigured)),
+        configEntry("setting", "mode", "运行模式", provider?.mode || "", { configured: Boolean(text(provider?.mode || "")) }),
+        configEntry("setting", "dockerReady", "Docker 可用", docker.ready)
+      ]),
+      sourceConfigurationGroup(context, target.targetId)
+    )
   });
 }
 
@@ -895,10 +1113,18 @@ async function detectCloudDrives(context = {}) {
   const present = connections.length > 0 || pathExists(icloudRoot) || pathExists(cloudStorageRoot);
   const icloudAvailable = pathExists(icloudRoot);
   const cloudStorageAvailable = pathExists(cloudStorageRoot);
+  const macos = macosVersionInfo();
+  const icloudVersionLabel = icloudAvailable
+    ? `iCloud Drive · ${macos.label || "macOS 系统服务"}`
+    : "";
+  const availabilityLabel = connections.length
+    ? `已配置：${connections.join(", ")}`
+    : icloudVersionLabel ||
+      (cloudStorageAvailable ? "系统云盘目录" : "");
   const source = connections.length
     ? detectionSource("platform-config", "平台配置", configPath, `已配置：${connections.join(", ")}`)
     : icloudAvailable
-      ? detectionSource("system-folder", "系统 iCloud", icloudRoot)
+      ? detectionSource("system-folder", "系统 iCloud", icloudRoot, icloudVersionLabel)
       : cloudStorageAvailable
         ? detectionSource("system-folder", "系统云盘目录", cloudStorageRoot)
         : missingDetectionSource(configPath, "未发现云盘配置或系统云盘目录");
@@ -913,8 +1139,12 @@ async function detectCloudDrives(context = {}) {
     detection: {
       configPath,
       configuredConnections: connections,
+      availabilityLabel,
+      version: icloudVersionLabel || availabilityLabel,
+      macos,
       icloudRoot,
       icloudAvailable,
+      icloudVersionLabel,
       cloudStorageRoot,
       cloudStorageAvailable,
       source,
@@ -922,7 +1152,27 @@ async function detectCloudDrives(context = {}) {
     },
     actions: {
       download: "local-provider-auth"
-    }
+    },
+    configuration: runtimeConfiguration(
+      platformConfigurationGroup(context),
+      configGroup("file", "配置文件", [
+        configEntry("file", "cloudDriveConfigPath", "云盘连接配置", configPath, {
+          configured: pathExists(configPath),
+          description: "OAuth 或 secret-ref 连接清单"
+        }),
+        configEntry("setting", "configuredConnections", "已配置连接", connections, {
+          configured: connections.length > 0
+        })
+      ]),
+      configGroup("path", "系统目录", [
+        configEntry("path", "icloudRoot", "iCloud 本地目录", icloudRoot, { configured: icloudAvailable }),
+        configEntry("setting", "icloudVersion", "iCloud 版本来源", icloudVersionLabel, {
+          configured: icloudAvailable,
+          description: "iCloud Drive 是 macOS 系统服务，版本随 macOS 发布。"
+        }),
+        configEntry("path", "cloudStorageRoot", "CloudStorage 目录", cloudStorageRoot, { configured: cloudStorageAvailable })
+      ])
+    )
   });
 }
 
@@ -956,7 +1206,7 @@ function detectDockerSync(context = {}) {
 async function detectDocker(context = {}) {
   const docker = detectDockerSync(context);
   const source = docker.dockerPath
-    ? detectionSource("system-path", "系统 PATH", docker.dockerPath)
+    ? detectionSource("system-path", PATH_ENV_SOURCE_LABEL, docker.dockerPath)
     : docker.appPresent
       ? detectionSource("system-app", "系统应用", docker.appPath)
       : docker.cached
@@ -983,7 +1233,25 @@ async function detectDocker(context = {}) {
     },
     actions: {
       download: docker.present ? "already-present" : docker.cached ? "already-installed" : "download-installer"
-    }
+    },
+    configuration: runtimeConfiguration(
+      platformConfigurationGroup(context),
+      configGroup("env", "环境变量", [
+        envConfigEntry("PACT_DOCKER_RUNTIME_URL", "Docker Desktop 安装包下载源覆盖")
+      ]),
+      sourceConfigurationGroup(context, "docker", [
+        { key: "url", label: "安装包 URL", required: true },
+        { key: "fileName", label: "缓存文件名" }
+      ]),
+      configGroup("path", "本地路径", [
+        configEntry("path", "dockerPath", "Docker CLI", docker.dockerPath, { configured: Boolean(docker.dockerPath) }),
+        configEntry("path", "appPath", "Docker Desktop", docker.appPath, { configured: docker.appPresent }),
+        configEntry("path", "installerPath", "安装包缓存", docker.installerPath, { configured: docker.cached })
+      ]),
+      configGroup("argument", "命令行参数", [
+        configEntry("command", "docker --version", "版本探测命令", "docker --version")
+      ])
+    )
   });
 }
 
@@ -1026,7 +1294,7 @@ async function detectJre(context = {}) {
           ? "自定义配置"
           : platformJavaCandidates.includes(javaPath)
             ? "平台本地运行时"
-            : "系统 PATH",
+            : PATH_ENV_SOURCE_LABEL,
         javaPath,
         tikaJarPath ? `Tika：${tikaJarPath}` : ""
       )
@@ -1049,7 +1317,42 @@ async function detectJre(context = {}) {
     },
     actions: {
       download: javaPath ? "already-present" : "download-temurin-jre"
-    }
+    },
+    configuration: runtimeConfiguration(
+      platformConfigurationGroup(context),
+      configGroup("env", "环境变量", [
+        envConfigEntry("PACT_JAVA_BIN_PATH", "覆盖 Java 可执行文件路径"),
+        envConfigEntry("PACT_TIKA_JAR_PATH", "覆盖 Tika app jar 路径"),
+        envConfigEntry("PACT_JRE_DOWNLOAD_URL", "setup-local-runtime 脚本使用的 JRE 下载 URL"),
+        envConfigEntry("PACT_JRE_DOWNLOAD_FILE", "setup-local-runtime 脚本使用的 JRE 文件名"),
+        envConfigEntry("PACT_TIKA_DOWNLOAD_URL", "setup-local-runtime 脚本使用的 Tika 下载 URL"),
+        envConfigEntry("PACT_TIKA_DOWNLOAD_FILE", "setup-local-runtime 脚本使用的 Tika 文件名")
+      ]),
+      configGroup("file", "平台设置", [
+        configEntry("setting", "settings.javaBinPath", "settings.javaBinPath", settings.javaBinPath || "", {
+          configured: Boolean(text(settings.javaBinPath || ""))
+        }),
+        configEntry("setting", "settings.tikaJarPath", "settings.tikaJarPath", settings.tikaJarPath || "", {
+          configured: Boolean(text(settings.tikaJarPath || ""))
+        }),
+        configEntry("setting", "settings.tikaTimeoutMs", "settings.tikaTimeoutMs", settings.tikaTimeoutMs || "")
+      ]),
+      sourceConfigurationGroup(context, "jre", [
+        { key: "url", label: "JRE 下载 URL", required: true },
+        { key: "fileName", label: "JRE 文件名" }
+      ], "JRE 下载源"),
+      sourceConfigurationGroup(context, "tika", [
+        { key: "url", label: "Tika 下载 URL", required: true },
+        { key: "fileName", label: "Tika 文件名" }
+      ], "Tika 下载源"),
+      configGroup("path", "本地路径", [
+        configEntry("path", "javaPath", "Java 可执行文件", javaPath, { configured: Boolean(javaPath) }),
+        configEntry("path", "tikaJarPath", "Tika app jar", tikaJarPath, { configured: Boolean(tikaJarPath) })
+      ]),
+      configGroup("argument", "命令行参数", [
+        configEntry("command", "setup-local-runtime", "安装命令", `${process.execPath} server/scripts/setup-local-runtime.mjs`)
+      ])
+    )
   });
 }
 
@@ -1070,6 +1373,7 @@ async function detectPython(context = {}) {
     .find((candidate) => executableExists(candidate) || pathExists(candidate)) || "";
   const artifactFileName = sourceField(context.sourceConfig, "python", "fileName") || `python-${platformKey}`;
   const artifactPath = path.join(runtimeCacheRoot(context), "python", artifactFileName);
+  const pythonDownloadUrl = sourceField(context.sourceConfig, "python", "url") || text(process.env.PACT_PYTHON_RUNTIME_URL || defaultPythonPackageUrl());
   const source = pythonPath
     ? detectionSource(
         explicitPaths.includes(pythonPath)
@@ -1081,7 +1385,7 @@ async function detectPython(context = {}) {
           ? "自定义配置"
           : moduleCandidates.includes(pythonPath)
             ? "平台本地运行时"
-            : "系统 PATH",
+            : PATH_ENV_SOURCE_LABEL,
         pythonPath
       )
     : pathExists(artifactPath)
@@ -1106,7 +1410,30 @@ async function detectPython(context = {}) {
     },
     actions: {
       download: pythonPath ? "already-present" : pathExists(artifactPath) ? "already-installed" : "download-runtime"
-    }
+    },
+    configuration: runtimeConfiguration(
+      platformConfigurationGroup(context),
+      configGroup("env", "环境变量", [
+        envConfigEntry("PACT_OCR_PYTHON_PATH", "覆盖 OCR 侧车 Python 路径"),
+        envConfigEntry("PACT_PDF_VISUAL_PYTHON_PATH", "覆盖 PDF 视觉侧车 Python 路径"),
+        envConfigEntry("PACT_PYTHON_BIN_PATH", "覆盖通用 Python 路径"),
+        envConfigEntry("PACT_PYTHON_RUNTIME_URL", "Python 安装包下载源覆盖"),
+        envConfigEntry("PACT_PYTHON_RUNTIME_VERSION", "默认 Python 版本覆盖")
+      ]),
+      sourceConfigurationGroup(context, "python", [
+        { key: "url", label: "安装包 URL", required: true },
+        { key: "fileName", label: "缓存文件名" }
+      ]),
+      configGroup("path", "本地路径", [
+        configEntry("path", "pythonPath", "Python 可执行文件", pythonPath, { configured: Boolean(pythonPath) }),
+        configEntry("path", "artifactPath", "安装包缓存", artifactPath, { configured: pathExists(artifactPath) })
+      ]),
+      configGroup("argument", "命令行参数", [
+        configEntry("command", "curl", "下载命令", "curl -L --fail --retry 3 --connect-timeout 20"),
+        configEntry("argument", "-o", "输出文件", artifactPath),
+        configEntry("argument", "url", "下载 URL", pythonDownloadUrl)
+      ])
+    )
   });
 }
 
@@ -1128,12 +1455,22 @@ async function detectNode(context = {}) {
       nodePath,
       version,
       source: nodePathCandidate
-        ? detectionSource("system-path", "系统 PATH", nodePathCandidate)
+        ? detectionSource("system-path", PATH_ENV_SOURCE_LABEL, nodePathCandidate)
         : detectionSource("current-process", "当前服务进程", process.execPath)
     },
     actions: {
       download: "skip-current-runtime"
-    }
+    },
+    configuration: runtimeConfiguration(
+      platformConfigurationGroup(context),
+      configGroup("path", "本地路径", [
+        configEntry("path", "nodePath", "Node.js 可执行文件", nodePath, { configured: Boolean(nodePath) }),
+        configEntry("path", "process.execPath", "当前服务进程 Node", process.execPath)
+      ]),
+      configGroup("argument", "命令行参数", [
+        configEntry("command", "node --version", "版本探测命令", "node --version")
+      ])
+    )
   });
 }
 
@@ -1186,7 +1523,7 @@ async function detectGateway(adapterId, context = {}) {
     : cachedPresent
       ? detectionSource("platform-runtime", "平台本地安装", plan.cachedExecutablePath)
       : pathBinary
-        ? detectionSource("system-path", "系统 PATH", pathBinary)
+        ? detectionSource("system-path", PATH_ENV_SOURCE_LABEL, pathBinary)
         : missingDetectionSource(plan.cachedExecutablePath, "平台网关运行时未安装");
   return asDependency({
     id: adapterId,
@@ -1211,16 +1548,37 @@ async function detectGateway(adapterId, context = {}) {
     },
     actions: {
       download: present ? "already-present" : "download-runtime"
-    }
+    },
+    configuration: runtimeConfiguration(
+      platformConfigurationGroup(context),
+      configGroup("env", "环境变量", [
+        envConfigEntry("PACT_GATEWAY_RUNTIME_CACHE_DIR", "覆盖网关运行时缓存目录")
+      ]),
+      sourceConfigurationGroup(context, adapterId, [
+        { key: "url", label: "运行时 URL", required: true },
+        { key: "fileName", label: "缓存文件名" }
+      ]),
+      configGroup("path", "本地路径", [
+        configEntry("path", "configuredBinary", "自定义二进制", plan.configuredBinary, { configured: configuredPresent }),
+        configEntry("path", "cachedExecutablePath", "平台本地安装", plan.cachedExecutablePath, { configured: cachedPresent }),
+        configEntry("path", "pathBinary", PATH_ENV_SOURCE_LABEL, pathBinary, { configured: Boolean(pathBinary) })
+      ]),
+      configGroup("argument", "命令行参数", [
+        configEntry("command", "gateway-ingress", "安装命令", `${process.execPath} server/scripts/gateway-ingress.mjs runtime-pull`),
+        configEntry("argument", "--gateway", "--gateway", adapterId),
+        configEntry("argument", "--runtime-cache-dir", "--runtime-cache-dir", gatewayRuntimeCacheRoot(context)),
+        configEntry("argument", "--runtime-url", "--runtime-url", plan.runtimeUrl)
+      ])
+    )
   });
 }
 
 async function detectGerrit(context = {}) {
   const version = text(context.version || process.env.PACT_GERRIT_VERSION || GERRIT_VERSION);
-  const root = path.resolve(text(context.root || process.env.PACT_GERRIT_ROOT) || path.join(repoRoot, "build", "local-data", "gerrit"));
+  const customRoot = text(context.root || process.env.PACT_GERRIT_ROOT);
+  const root = path.resolve(customRoot || path.join(runtimeCacheRoot(context), "gerrit"));
   const warPath = path.join(root, "downloads", `gerrit-${version}.war`);
   const present = pathExists(warPath);
-  const customRoot = text(context.root || process.env.PACT_GERRIT_ROOT);
   const source = present
     ? detectionSource(customRoot ? "configured-cache" : "platform-cache", customRoot ? "自定义缓存" : "平台缓存", warPath)
     : missingDetectionSource(warPath, "Gerrit WAR 未缓存");
@@ -1241,7 +1599,27 @@ async function detectGerrit(context = {}) {
     },
     actions: {
       download: present ? "already-present" : "download-war"
-    }
+    },
+    configuration: runtimeConfiguration(
+      platformConfigurationGroup(context),
+      configGroup("env", "环境变量", [
+        envConfigEntry("PACT_GERRIT_VERSION", "覆盖 Gerrit WAR 版本"),
+        envConfigEntry("PACT_GERRIT_ROOT", "覆盖 Gerrit 本地根目录")
+      ]),
+      sourceConfigurationGroup(context, "gerrit", [
+        { key: "warUrl", label: "WAR 下载 URL", required: true }
+      ]),
+      configGroup("path", "本地路径", [
+        configEntry("path", "root", "Gerrit 根目录", root),
+        configEntry("path", "warPath", "WAR 缓存", warPath, { configured: present })
+      ]),
+      configGroup("argument", "命令行参数", [
+        configEntry("command", "gerrit-local", "下载命令", `${process.execPath} server/scripts/gerrit-local.mjs download`),
+        configEntry("argument", "--version", "--version", version),
+        configEntry("argument", "--root", "--root", root),
+        configEntry("argument", "--war-url", "--war-url", sourceField(context.sourceConfig, "gerrit", "warUrl"))
+      ])
+    )
   });
 }
 
@@ -1304,6 +1682,75 @@ export async function listRuntimeDependencies(context = {}) {
     dependencies,
     downloads: listPublicDownloadRuns(),
     summary
+  };
+}
+
+function parseConfigListValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(text).filter(Boolean);
+  }
+  return String(value ?? "")
+    .split(/\r?\n|,/)
+    .map(text)
+    .filter(Boolean);
+}
+
+function assignRuntimeSourceConfigField(config = {}, key = "", value = "") {
+  const parts = text(key).split(".").map(text).filter(Boolean);
+  if (parts.length < 3 || parts[0] !== "sources") {
+    throw new Error(`Unsupported runtime dependency configuration key: ${key}`);
+  }
+  const targetId = normalizeTargetId(parts[1]);
+  const fieldName = parts.slice(2).join(".");
+  const defaults = defaultSourceConfig();
+  if (!Object.prototype.hasOwnProperty.call(defaults.sources, targetId)) {
+    throw new Error(`Unsupported runtime dependency source target: ${targetId}`);
+  }
+  config.sources = config.sources && typeof config.sources === "object" && !Array.isArray(config.sources)
+    ? config.sources
+    : {};
+  const root = config.sources[targetId] && typeof config.sources[targetId] === "object" && !Array.isArray(config.sources[targetId])
+    ? config.sources[targetId]
+    : {};
+  config.sources[targetId] = root;
+  if (fieldName === "mirrors" || fieldName === "images") {
+    root[fieldName] = parseConfigListValue(value);
+    return;
+  }
+  if (fieldName === "mirrorPrefix" || fieldName === "version") {
+    root[fieldName] = text(value);
+    return;
+  }
+  root.default = root.default && typeof root.default === "object" && !Array.isArray(root.default)
+    ? root.default
+    : {};
+  root.default[fieldName] = text(value);
+}
+
+export async function updateRuntimeDependencyConfiguration(input = {}) {
+  const entries = Array.isArray(input.entries) ? input.entries : [];
+  if (entries.length === 0) {
+    throw new Error("Runtime dependency configuration update requires entries.");
+  }
+  const sourceState = await ensureRuntimeDependencySourceConfig(input);
+  const nextConfig = JSON.parse(JSON.stringify(sourceState.config));
+  let updated = 0;
+  for (const entry of entries) {
+    const key = text(entry?.key);
+    if (!key) continue;
+    assignRuntimeSourceConfigField(nextConfig, key, entry?.value ?? "");
+    updated += 1;
+  }
+  nextConfig.updatedAt = nowIso();
+  await fs.mkdir(path.dirname(sourceState.configPath), { recursive: true });
+  await fs.writeFile(sourceState.configPath, `${JSON.stringify(nextConfig, null, 2)}\n`, "utf8");
+  return {
+    ok: true,
+    schemaVersion: 1,
+    protocolVersion: RUNTIME_DEPENDENCIES_PROTOCOL_VERSION,
+    generatedAt: nowIso(),
+    sourceConfigPath: sourceState.configPath,
+    updated
   };
 }
 
@@ -1465,7 +1912,8 @@ async function downloadPython(context = {}) {
   if (detection.present) {
     return downloadResult("python", INSTALL_STATUS.PRESENT, { detection, reason: "present" });
   }
-  const url = sourceField(context.sourceConfig, "python", "url") || text(process.env.PACT_PYTHON_RUNTIME_URL);
+  const url = sourceField(context.sourceConfig, "python", "url") ||
+    text(process.env.PACT_PYTHON_RUNTIME_URL || defaultPythonPackageUrl());
   const fileName = sourceField(context.sourceConfig, "python", "fileName") || fileNameFromUrl(url, `python-${platformKey}`);
   const artifactPath = path.join(runtimeCacheRoot(context), "python", fileName);
   const artifactResult = await downloadRemoteArtifact({
@@ -1586,7 +2034,10 @@ async function downloadGerrit(context = {}) {
   }
   emitStepProgress(context, "download", DOWNLOAD_STEP_STATUS.RUNNING, "开始下载 Gerrit WAR。");
   const result = await runCommandAsync(process.execPath, args, {
-    env: context.userDataPath ? { PACT_SERVER_DATA_DIR: path.resolve(context.userDataPath) } : {},
+    env: {
+      ...(context.userDataPath ? { PACT_SERVER_DATA_DIR: path.resolve(context.userDataPath) } : {}),
+      PACT_RUNTIME_DEPENDENCY_CACHE_DIR: runtimeCacheRoot(context)
+    },
     timeoutMs: Number(context.timeoutMs || 900000),
     stepKey: "download",
     onProgress: context.onProgress

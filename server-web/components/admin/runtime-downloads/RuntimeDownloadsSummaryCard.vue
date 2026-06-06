@@ -16,13 +16,13 @@ const {
   <article class="surface-card">
     <div class="section-header">
       <div>
-        <h3>运行时下载</h3>
-        <p>按需检测本机能力，只有点击安装时才下载或缓存缺失依赖。</p>
+        <h3>运行时配置</h3>
+        <p>集中查看本机运行时、来源路径、安装进展和关联配置。</p>
       </div>
       <div class="section-tags">
         <span>已存在 {{ readyCount }}</span>
         <span>安装成功 {{ installedCount }}</span>
-        <span>安装失败 {{ failedCount }}</span>
+        <span>不可用 {{ failedCount }}</span>
         <span>{{ generatedAtLabel }}</span>
       </div>
     </div>
@@ -33,14 +33,6 @@ const {
     </div>
 
     <dl class="module-status-list">
-      <div>
-        <dt>触发方式</dt>
-        <dd>用户请求</dd>
-      </div>
-      <div>
-        <dt>启动下载</dt>
-        <dd>关闭</dd>
-      </div>
       <div>
         <dt>缓存目录</dt>
         <dd>{{ cacheRoot || "未读取" }}</dd>

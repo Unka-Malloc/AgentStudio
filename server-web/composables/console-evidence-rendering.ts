@@ -28,6 +28,79 @@ export interface EvidenceRenderContext {
   assetUrlForAssetId: (assetId: string) => string;
 }
 
+const ALLOWED_EMAIL_FRAME_TAGS = new Set([
+  "a",
+  "article",
+  "blockquote",
+  "b",
+  "body",
+  "center",
+  "div",
+  "em",
+  "figure",
+  "iframe",
+  "figcaption",
+  "font",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "hr",
+  "i",
+  "img",
+  "code",
+  "li",
+  "main",
+  "ol",
+  "p",
+  "pre",
+  "span",
+  "strong",
+  "sub",
+  "sup",
+  "style",
+  "table",
+  "tbody",
+  "td",
+  "tfoot",
+  "th",
+  "thead",
+  "tr",
+  "ul",
+  "br",
+  "html",
+]);
+
+const ALLOWED_EMAIL_FRAME_ATTRIBUTES = new Set([
+  "align",
+  "alt",
+  "bgcolor",
+  "class",
+  "colspan",
+  "href",
+  "id",
+  "loading",
+  "rowspan",
+  "src",
+  "srcdoc",
+  "sandbox",
+  "referrerpolicy",
+  "style",
+  "target",
+  "media",
+  "text",
+  "title",
+  "rel",
+  "vlink",
+  "link",
+  "alink",
+  "allowfullscreen",
+  "width",
+  "height",
+]);
+
 function contextOrigin(context: EvidenceRenderContext) {
   return context.origin() || browserLocationOrigin();
 }
@@ -52,22 +125,36 @@ export function sanitizeEmailFrameDocument(rawHtml: string, context: EvidenceRen
       : `<!doctype html><html><body>${source}</body></html>`,
     "text/html",
   );
-  for (const element of Array.from(doc.querySelectorAll("script, iframe, object, embed, form, input, button, textarea, select"))) {
-    element.remove();
-  }
-  for (const element of Array.from(doc.querySelectorAll("style"))) {
-    element.textContent = sanitizeEmailCssUrls(element.textContent || "", context);
-  }
   for (const element of Array.from(doc.querySelectorAll("*"))) {
+    const tagName = element.tagName.toLowerCase();
+    if (!ALLOWED_EMAIL_FRAME_TAGS.has(tagName)) {
+      element.remove();
+      continue;
+    }
+
+    if (tagName === "style") {
+      element.textContent = sanitizeEmailCssUrls(element.textContent || "", context);
+      continue;
+    }
+
     for (const attribute of Array.from(element.attributes)) {
       const name = attribute.name.toLowerCase();
       const value = attribute.value || "";
+      if (!ALLOWED_EMAIL_FRAME_ATTRIBUTES.has(name)) {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
       if (name.startsWith("on")) {
         element.removeAttribute(attribute.name);
         continue;
       }
       if (name === "style") {
-        element.setAttribute(attribute.name, sanitizeEmailCssUrls(value, context));
+        const sanitizedStyle = sanitizeEmailCssUrls(value, context);
+        if (sanitizedStyle) {
+          element.setAttribute(attribute.name, sanitizedStyle);
+        } else {
+          element.removeAttribute(attribute.name);
+        }
         continue;
       }
       if (name === "href") {
@@ -84,8 +171,37 @@ export function sanitizeEmailFrameDocument(rawHtml: string, context: EvidenceRen
         safe ? element.setAttribute(attribute.name, safe) : element.removeAttribute(attribute.name);
         continue;
       }
+      if (name === "media") {
+        if (!value.trim()) {
+          element.removeAttribute(attribute.name);
+        }
+        continue;
+      }
       if (name === "srcset") {
         element.removeAttribute(attribute.name);
+        continue;
+      }
+      if (name === "sandbox") {
+        const requested = value
+          .split(/\s+/)
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+          .filter((entry) => !["allow-same-origin", "allow-popups-to-escape-sandbox"].includes(entry));
+        const keepTopNavigationByActivation = requested.includes("allow-top-navigation-by-user-activation");
+        const normalized = [
+          ...requested.filter((entry) => entry !== "allow-top-navigation-by-user-activation"),
+          ...(keepTopNavigationByActivation ? ["allow-top-navigation-by-user-activation"] : []),
+          "allow-popups"
+        ];
+        const unique = [...new Set(normalized)];
+        element.setAttribute("sandbox", unique.join(" "));
+        continue;
+      }
+      if (name === "referrerpolicy") {
+        if (!value.trim()) {
+          element.setAttribute(attribute.name, "no-referrer");
+        }
+        continue;
       }
     }
     if (element.tagName.toLowerCase() === "img") {
@@ -94,6 +210,9 @@ export function sanitizeEmailFrameDocument(rawHtml: string, context: EvidenceRen
       if (!element.getAttribute("alt")) {
         element.setAttribute("alt", "");
       }
+    }
+    if (tagName === "iframe" && !element.getAttribute("sandbox")) {
+      element.setAttribute("sandbox", "allow-popups");
     }
   }
   const headStyles = Array.from(doc.head?.querySelectorAll("style") || [])
@@ -138,7 +257,7 @@ ${headStyles}
 
 export function renderEmailFrame(rawHtml: string, context: EvidenceRenderContext) {
   const srcdoc = sanitizeEmailFrameDocument(rawHtml, context);
-  return `<div class="rendered-email-frame-shell"><iframe class="rendered-email-frame" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" srcdoc="${escapeHtmlText(srcdoc)}"></iframe></div>`;
+  return `<div class="rendered-email-frame-shell"><iframe class="rendered-email-frame" sandbox="allow-popups" referrerpolicy="no-referrer" srcdoc="${escapeHtmlText(srcdoc)}"></iframe></div>`;
 }
 
 export function rewriteInlineAssetRefs(html: string, context: EvidenceRenderContext) {

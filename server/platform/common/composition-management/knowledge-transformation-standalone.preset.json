@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "kind": "pact.composition.preset",
   "presetId": "knowledge-transformation-standalone",
-  "displayName": "Knowledge Transformation Standalone Application",
+  "displayName": "Pact Agent Library",
   "status": "active",
   "compositionClass": "deployment-dependency-package",
   "deploymentTarget": {

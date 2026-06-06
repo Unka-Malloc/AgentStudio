@@ -145,6 +145,11 @@ events.subscribe
 executive_report.generate
 executive_report.list
 executive_report.preview
+external_services.config.get
+external_services.config.save
+external_services.config.verify
+external_services.list
+external_services.runtime.refresh
 external.cloudDrive.connect
 external.cloudDrive.file.download
 external.cloudDrive.file.upload
@@ -332,6 +337,7 @@ repo.webhook.set
 runtime.info
 runtime.dependencies.list
 runtime.dependencies.download
+runtime.dependencies.configure
 runtime.mounts
 runtime.path_browse
 runtime.reload_mounts
@@ -361,6 +367,7 @@ storage.source_vocabulary.rebuild
 storage.summary
 strategy.agent_policy.evaluate
 strategy.describe
+strategy.route_policy.evaluate
 strategy.tool_policy.preview
 strategy.workflow_policy.evaluate
 system.background_processes
@@ -370,6 +377,7 @@ system.checkpoint_trees.list
 system.console_state
 system.health
 system.interfaces
+system.background_supervisor.recover
 system.monitor_alerts.ack
 system.monitor_alerts.get
 system.monitor_alerts.set
@@ -726,6 +734,14 @@ pact.runtime.mounts.set
 pact.sampleBusinessPack.get
 pact.sampleBusinessPack.list
 pact.sampleBusinessPack.materialize
+pact.sharedspace.drive.connect
+pact.sharedspace.drive.file.download
+pact.sharedspace.drive.file.upload
+pact.sharedspace.drive.item.list
+pact.sharedspace.drive.permission.list
+pact.sharedspace.drive.status
+pact.sharedspace.drive.sync.apply
+pact.sharedspace.drive.sync.plan
 pact.sharedspace.file.read
 pact.sharedspace.file.write
 pact.sharedspace.item.delete

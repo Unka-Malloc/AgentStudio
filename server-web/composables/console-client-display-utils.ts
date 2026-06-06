@@ -12,11 +12,11 @@ export function clientConnectionMethodLabel(client: ClientConnectionRow) {
 }
 
 export function clientConnectionDetail(client: ClientConnectionRow) {
+  if (client.connectionKind === "mcp-plugin") {
+    return "";
+  }
   if (client.connectionDetail) {
     return String(client.connectionDetail);
-  }
-  if (client.connectionKind === "mcp-plugin") {
-    return client.sourceGrantId ? `授权 ${client.sourceGrantId}` : "Tool Management 授权";
   }
   return "Discovery Check-in";
 }
@@ -43,5 +43,13 @@ export function clientStatusTone(client: ClientConnectionRow) {
   if (client.connectionState === "pending") {
     return "attention";
   }
-  return "aligned";
+  return "online";
+}
+
+export function clientConfigReportLabel(client: ClientConnectionRow) {
+  return String(client.configVersion || "").trim() ? "已上报" : "未上报";
+}
+
+export function clientConfigReportTone(client: ClientConnectionRow) {
+  return String(client.configVersion || "").trim() ? "success" : "warning";
 }

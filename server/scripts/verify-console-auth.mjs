@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { default as createConsoleAuth } from "../platform/common/security/auth/console-auth.mjs";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
 import { readInitialOwnerCredentials } from "./test-auth-helper.mjs";
 
@@ -50,9 +51,12 @@ async function postJson(baseUrl, pathName, payload, { cookie = "", csrf = "", sa
   });
 }
 
-async function getJson(baseUrl, pathName, { cookie = "" } = {}) {
+async function getJson(baseUrl, pathName, { cookie = "", headers = {} } = {}) {
   return requestJson(`${baseUrl}${pathName}`, {
-    headers: cookie ? { Cookie: cookie } : {}
+    headers: {
+      ...(cookie ? { Cookie: cookie } : {}),
+      ...headers
+    }
   });
 }
 
@@ -188,6 +192,24 @@ try {
     cookie: ownerCookie
   });
   assert.equal(ownerSession.status, 200);
+  const ownerSessionWithMismatchedUserAgent = await getJson(server.url, "/api/auth/session", {
+    cookie: ownerCookie,
+    headers: {
+      "User-Agent": "pact-ua-mismatch-test/1.0"
+    }
+  });
+  assert.equal(ownerSessionWithMismatchedUserAgent.status, 200);
+  assert.equal(ownerSessionWithMismatchedUserAgent.payload.session.authenticated, true);
+  const authStore = createConsoleAuth({ userDataPath: userDataPath });
+  const uaMismatchAudit = authStore.listAudit({ status: "warning" });
+  try {
+    assert.ok(
+      uaMismatchAudit.some((item) => item.action === "user-agent-mismatch"),
+      "user-agent mismatch should be visible in auth audit"
+    );
+  } finally {
+    authStore.close();
+  }
   for (const scope of ["workspace:read", "workspace:write", "workspace:maintain", "storage:read", "storage:write"]) {
     assert.ok(
       ownerSession.payload.session.user.scopes.includes(scope),

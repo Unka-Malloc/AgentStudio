@@ -67,7 +67,7 @@ const {
               <span
                 class="field-label-with-tooltip"
                 :class="{ 'has-tooltip': field.description }"
-                :title="field.description || undefined"
+                :data-tooltip="field.description || undefined"
               >
                 {{ field.label }}
               </span>

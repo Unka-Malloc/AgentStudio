@@ -117,8 +117,9 @@
       "document": "07-operation-logging.md",
       "chain": [
         "HTTP / RPC / CLI / MCP / 管控台入口",
-        "operation dispatcher",
+        "Operation Scheduling Kernel",
         "身份与权限上下文",
+        "账本 started / pending",
         "业务执行",
         "ledger / audit / trace / report 写入",
         "查询与导出"
@@ -128,16 +129,17 @@
       "number": 8,
       "id": "risk-approval-flow",
       "title": "操作审核",
-      "entry": "智能体 MCP -> Pact MCP 网关",
-      "endpoint": "高危行为主页审批流拦截 / 审批后放行",
+      "entry": "全系统受管入口 -> Operation Scheduling Kernel",
+      "endpoint": "/approval 统一审批拦截 / 审批后恢复原 operation",
       "document": "08-risk-approval-flow.md",
       "chain": [
-        "智能体 MCP 请求",
-        "Pact MCP 网关",
+        "API / RPC / CLI / MCP / 管控台 / worker 请求",
+        "Operation Scheduling Kernel",
         "高危行为识别",
-        "主页审批流挂起",
+        "pending_operation",
+        "/approval 统一审批",
         "用户 / 管理员审批",
-        "审批通过后放行智能体操作",
+        "审批通过后恢复原 operation",
         "拒绝 / 超时 / 放行审计"
       ]
     }

@@ -34,6 +34,12 @@
   font-size: var(--text-md);
 }
 
+.clients-card .filter-select {
+  flex: 0 0 220px;
+  width: 220px;
+  min-width: 220px;
+}
+
 .filter-select .el-select__wrapper {
   min-height: 32px;
   padding: 0 10px;
@@ -122,7 +128,7 @@
 }
 
 .form-grid label .field-label-with-tooltip.has-tooltip::after {
-  content: attr(title);
+  content: attr(data-tooltip);
   position: absolute;
   top: calc(100% + 8px);
   left: 0;

@@ -6,6 +6,10 @@ export function getContextProfiles() {
   return getJson<ContextCompilerResponse>("/api/context/profiles");
 }
 
+export function saveContextProfiles(payload: Record<string, unknown>) {
+  return postJson<ContextCompilerResponse>("/api/context/profiles", payload);
+}
+
 export function previewContextPack(payload: Record<string, unknown>) {
   return postJson<ContextCompilerResponse>("/api/context/preview", payload);
 }

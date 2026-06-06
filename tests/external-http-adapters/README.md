@@ -32,8 +32,8 @@ One RPC service can also declare multiple endpoints and let each tool choose one
 
 Files:
 
-- `Dockerfile`: builds the fake HTTP upstream service.
-- `server.mjs`: fake HTTP upstream with OpenAPI, REST, JSON endpoint, and JSON-RPC routes.
+- `Dockerfile`: builds the fixture HTTP upstream service.
+- `server.mjs`: fixture HTTP upstream with OpenAPI, REST, JSON endpoint, and JSON-RPC routes.
 - `start.sh`: container entrypoint.
 - `start-container.sh`: manual container build and run script.
 - `start-docker.sh`: Docker compatibility wrapper for `start-container.sh`.
@@ -48,10 +48,10 @@ npm run server:verify:external-http-adapters
 
 By default the verification uses `PACT_EXTERNAL_SERVICE_VERIFY_MODE=auto`: container runtime first, local runtime second. Use `PACT_EXTERNAL_SERVICE_VERIFY_MODE=container` to require a container runtime, or `PACT_EXTERNAL_SERVICE_VERIFY_MODE=local` to force local Node execution. `docker` is accepted as a compatibility alias for `container`.
 
-Start the fake service manually:
+Start the fixture service manually:
 
 ```bash
 tests/external-http-adapters/start-container.sh
 ```
 
-The manual script accepts `CONTAINER_ENGINE`, `IMAGE_TAG`, `CONTAINER_NAME`, and `HOST_PORT` environment overrides. By default it uses Docker and exposes the fake service at `http://127.0.0.1:8788`.
+The manual script accepts `CONTAINER_ENGINE`, `IMAGE_TAG`, `CONTAINER_NAME`, and `HOST_PORT` environment overrides. By default it uses Docker and exposes the fixture service at `http://127.0.0.1:8788`.

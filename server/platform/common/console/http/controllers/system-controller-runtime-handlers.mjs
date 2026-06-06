@@ -259,6 +259,15 @@ export function createSystemControllerRuntimeHandlers({
         errorMessage: "准备运行时依赖失败。"
       });
     },
+    async handleConfigureRuntimeDependency({ operation, requestBody, response }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "runtime.dependencies.configure",
+        input: parseJsonBody(requestBody),
+        response,
+        context: {},
+        errorMessage: "保存运行时依赖配置失败。"
+      });
+    },
     async handleGetConsoleState({ operation, request, response }) {
       await sendConsoleDomainOperation({
         operationId: operation?.id || "system.console_state",

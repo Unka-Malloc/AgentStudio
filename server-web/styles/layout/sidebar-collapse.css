@@ -12,27 +12,6 @@
   display: none;
 }
 
-.side-nav.is-collapsed .side-nav-disclosure {
-  padding: var(--space-1);
-}
-
-.side-nav.is-collapsed .side-nav-disclosure-summary {
-  justify-content: center;
-  min-height: 28px;
-}
-
-.side-nav.is-collapsed .side-nav-disclosure-summary > span {
-  display: none;
-}
-
-.side-nav.is-collapsed .side-nav-disclosure-summary::after {
-  margin: 0;
-}
-
-.side-nav.is-collapsed .side-nav-disclosure-content {
-  padding-top: var(--space-1);
-}
-
 .side-nav.is-collapsed .side-link {
   justify-content: center;
   padding: 0;

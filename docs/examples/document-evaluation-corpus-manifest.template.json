@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "public-documents-smoke",
+  "storageRoot": "~/.pact-server-data/evaluation-corpora/public-documents",
+  "description": "Template manifest for external document evaluation corpora. Replace placeholder hashes, sizes, and paths with real external corpus metadata.",
+  "items": [
+    {
+      "id": "sample-001",
+      "relativePath": "govdocs1/subset0/0000001.pdf",
+      "source": "govdocs1",
+      "sourceUrl": "https://downloads.digitalcorpora.org/corpora/files/govdocs1/",
+      "licenseOrTerms": "source-defined",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "byteSize": 0,
+      "format": "pdf",
+      "openability": {
+        "expectedStatus": "opens",
+        "verificationHints": [
+          "macos-quick-look",
+          "libreoffice"
+        ]
+      },
+      "structureAnchors": [
+        {
+          "anchorType": "page",
+          "description": "At least one page boundary and title block should remain traceable."
+        }
+      ],
+      "exportExpectations": [
+        {
+          "targetFormat": "docx",
+          "expectedStatus": "opens",
+          "checks": [
+            "docx-export-opens",
+            "structure-headings-preserved"
+          ]
+        }
+      ],
+      "riskLabels": [
+        "public",
+        "untrusted-parser-input"
+      ],
+      "expectedChecks": [
+        "text-extracts",
+        "metadata-extracts",
+        "docx-export-opens"
+      ],
+      "notes": "Store the real sample outside the repository and keep only metadata here."
+    }
+  ]
+}

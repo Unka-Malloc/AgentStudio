@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import ConsoleAuthUsersPanel from "./ConsoleAuthUsersPanel.vue";
 import ConsolePreferencesPanel from "./ConsolePreferencesPanel.vue";
-import ConsoleRuntimeModulesPanel from "./ConsoleRuntimeModulesPanel.vue";
 import ConsoleServiceDiscoveryPanel from "./ConsoleServiceDiscoveryPanel.vue";
 import ConsoleSyncDirectoriesPanel from "./ConsoleSyncDirectoriesPanel.vue";
 import { useServerConsoleShellContext } from "../../composables/serverConsoleShellContext";
@@ -61,14 +60,6 @@ const {
         {{ msg.drawer.users }}
       </button>
       <button
-        class="drawer-tab"
-        :class="{ active: drawerTab === 'modules' }"
-        type="button"
-        @click="openDrawer('modules')"
-      >
-        {{ msg.drawer.modules }}
-      </button>
-      <button
         v-if="hasFeature('knowledge-core')"
         class="drawer-tab"
         :class="{ active: drawerTab === 'syncDirectories' }"
@@ -83,7 +74,6 @@ const {
       <ConsolePreferencesPanel v-if="drawerTab === 'preferences'" />
       <ConsoleServiceDiscoveryPanel v-else-if="drawerTab === 'discovery'" />
       <ConsoleAuthUsersPanel v-else-if="drawerTab === 'users'" />
-      <ConsoleRuntimeModulesPanel v-else-if="drawerTab === 'modules' && hasFeature('analysis-runtime')" />
       <ConsoleSyncDirectoriesPanel v-else-if="drawerTab === 'syncDirectories' && hasFeature('knowledge-core')" />
     </div>
   </aside>

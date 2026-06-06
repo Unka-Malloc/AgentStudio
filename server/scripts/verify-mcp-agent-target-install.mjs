@@ -11,15 +11,17 @@ import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const connectorScript = path.join(repoRoot, "mcp-connector", "bin", "pact-mcp.mjs");
 const DECLARED_AGENT_TARGETS = Object.freeze([
-  "codex",
-  "claude-code",
-  "gemini-cli",
-  "kilo-code",
-  "copilot",
   "openclaw",
-  "hermes",
+  "claude-code",
+  "codex",
+  "gemini-cli",
   "antigravity",
-  "opencode"
+  "opencode",
+  "copilot",
+  "kilo-code",
+  "cursor",
+  "hermes",
+  "windsurf"
 ]);
 const PRIORITY_AGENT_TARGETS = Object.freeze(["codex", "claude-code", "openclaw"]);
 const EXPECTED_AGENT_PROFILES = Object.freeze(Object.fromEntries(
@@ -124,45 +126,72 @@ const autoTokenEnv = `PACT_VERIFY_AUTO_MCP_TOKEN_${randomBytes(4).toString("hex"
 const missingDoctorTokenEnv = `PACT_VERIFY_DOCTOR_TOKEN_${randomBytes(4).toString("hex").toUpperCase()}`;
 const missingInstallTokenEnv = `PACT_VERIFY_INSTALL_TOKEN_${randomBytes(4).toString("hex").toUpperCase()}`;
 const remoteCodexTokenEnv = `PACT_VERIFY_REMOTE_CODEX_TOKEN_${randomBytes(4).toString("hex").toUpperCase()}`;
-const fakeAgentCommandLog = path.join(opencodeConfigDir, "fake-agent-commands.log");
-const fakeBinDir = path.join(opencodeConfigDir, "bin");
-const fakeCodexPath = path.join(fakeBinDir, process.platform === "win32" ? "codex.cmd" : "codex");
-const fakeClaudePath = path.join(fakeBinDir, process.platform === "win32" ? "claude.cmd" : "claude");
-const fakeClaudeHangPath = path.join(fakeBinDir, process.platform === "win32" ? "claude-hang.cmd" : "claude-hang");
-const fakeGeminiPath = path.join(fakeBinDir, process.platform === "win32" ? "gemini.cmd" : "gemini");
-const fakeGeminiHangPath = path.join(fakeBinDir, process.platform === "win32" ? "gemini-hang.cmd" : "gemini-hang");
-const fakeGeminiFailPath = path.join(fakeBinDir, process.platform === "win32" ? "gemini-fail.cmd" : "gemini-fail");
-const fakeKiloPath = path.join(fakeBinDir, process.platform === "win32" ? "kilo.cmd" : "kilo");
-const fakeKiloHangPath = path.join(fakeBinDir, process.platform === "win32" ? "kilo-hang.cmd" : "kilo-hang");
-const fakeCopilotPath = path.join(fakeBinDir, process.platform === "win32" ? "copilot.cmd" : "copilot");
-const fakeCopilotHangPath = path.join(fakeBinDir, process.platform === "win32" ? "copilot-hang.cmd" : "copilot-hang");
-const fakeOpenClawPath = path.join(fakeBinDir, process.platform === "win32" ? "openclaw.cmd" : "openclaw");
-const fakeOpenClawHangPath = path.join(fakeBinDir, process.platform === "win32" ? "openclaw-hang.cmd" : "openclaw-hang");
-const fakeOpencodePath = path.join(fakeBinDir, process.platform === "win32" ? "opencode.cmd" : "opencode");
-const fakeDockerPath = path.join(fakeBinDir, process.platform === "win32" ? "docker.cmd" : "docker");
+const fixtureAgentCommandLog = path.join(opencodeConfigDir, "fixture-agent-commands.log");
+const fixtureBinDir = path.join(opencodeConfigDir, "bin");
+const fixtureCodexPath = path.join(fixtureBinDir, process.platform === "win32" ? "codex.cmd" : "codex");
+const fixtureClaudePath = path.join(fixtureBinDir, process.platform === "win32" ? "claude.cmd" : "claude");
+const fixtureClaudeHangPath = path.join(fixtureBinDir, process.platform === "win32" ? "claude-hang.cmd" : "claude-hang");
+const fixtureGeminiPath = path.join(fixtureBinDir, process.platform === "win32" ? "gemini.cmd" : "gemini");
+const fixtureGeminiHangPath = path.join(fixtureBinDir, process.platform === "win32" ? "gemini-hang.cmd" : "gemini-hang");
+const fixtureGeminiFailPath = path.join(fixtureBinDir, process.platform === "win32" ? "gemini-fail.cmd" : "gemini-fail");
+const fixtureKiloPath = path.join(fixtureBinDir, process.platform === "win32" ? "kilo.cmd" : "kilo");
+const fixtureKiloHangPath = path.join(fixtureBinDir, process.platform === "win32" ? "kilo-hang.cmd" : "kilo-hang");
+const fixtureCopilotPath = path.join(fixtureBinDir, process.platform === "win32" ? "copilot.cmd" : "copilot");
+const fixtureCopilotHangPath = path.join(fixtureBinDir, process.platform === "win32" ? "copilot-hang.cmd" : "copilot-hang");
+const fixtureOpenClawPath = path.join(fixtureBinDir, process.platform === "win32" ? "openclaw.cmd" : "openclaw");
+const fixtureOpenClawHangPath = path.join(fixtureBinDir, process.platform === "win32" ? "openclaw-hang.cmd" : "openclaw-hang");
+const fixtureOpencodePath = path.join(fixtureBinDir, process.platform === "win32" ? "opencode.cmd" : "opencode");
+const fixtureDockerPath = path.join(fixtureBinDir, process.platform === "win32" ? "docker.cmd" : "docker");
+const unavailableToolBinDir = path.join(opencodeConfigDir, "unavailable-tools");
+const unavailableToolPaths = Object.freeze({
+  orb: path.join(unavailableToolBinDir, process.platform === "win32" ? "orb.cmd" : "orb"),
+  podman: path.join(unavailableToolBinDir, process.platform === "win32" ? "podman.cmd" : "podman"),
+  nerdctl: path.join(unavailableToolBinDir, process.platform === "win32" ? "nerdctl.cmd" : "nerdctl"),
+  wsl: path.join(unavailableToolBinDir, process.platform === "win32" ? "wsl.cmd" : "wsl"),
+  lima: path.join(unavailableToolBinDir, process.platform === "win32" ? "limactl.cmd" : "limactl"),
+  colima: path.join(unavailableToolBinDir, process.platform === "win32" ? "colima.cmd" : "colima"),
+  multipass: path.join(unavailableToolBinDir, process.platform === "win32" ? "multipass.cmd" : "multipass"),
+  lxc: path.join(unavailableToolBinDir, process.platform === "win32" ? "lxc.cmd" : "lxc"),
+  incus: path.join(unavailableToolBinDir, process.platform === "win32" ? "incus.cmd" : "incus"),
+  vagrant: path.join(unavailableToolBinDir, process.platform === "win32" ? "vagrant.cmd" : "vagrant"),
+  parallels: path.join(unavailableToolBinDir, process.platform === "win32" ? "prlctl.cmd" : "prlctl")
+});
 
-async function installFakeAgentCli(filePath) {
-  await fs.mkdir(fakeBinDir, { recursive: true });
+async function installUnavailableToolBinaries() {
+  await fs.mkdir(unavailableToolBinDir, { recursive: true });
+  const content = process.platform === "win32"
+    ? "@echo off\r\nexit /b 127\r\n"
+    : "#!/bin/sh\nexit 127\n";
+  for (const filePath of Object.values(unavailableToolPaths)) {
+    await fs.writeFile(filePath, content, "utf8");
+    if (process.platform !== "win32") {
+      await fs.chmod(filePath, 0o755);
+    }
+  }
+}
+
+async function installFixtureAgentCli(filePath) {
+  await fs.mkdir(fixtureBinDir, { recursive: true });
   if (process.platform === "win32") {
     await fs.writeFile(filePath, [
       "@echo off",
       "set command_name=%~n0",
-      "if \"%PACT_FAKE_AGENT_HANG_MCP%\"==\"%command_name%\" if \"%1\"==\"mcp\" (",
+      "if \"%PACT_FIXTURE_AGENT_HANG_MCP%\"==\"%command_name%\" if \"%1\"==\"mcp\" (",
       "  ping -n 3600 127.0.0.1 >nul",
       "  exit /b 124",
       ")",
-      "if not \"%PACT_FAKE_AGENT_FAIL_WITH_ARGS%\"==\"\" if \"%1\"==\"mcp\" (",
-      "  echo fake failure args: %* 1>&2",
+      "if not \"%PACT_FIXTURE_AGENT_FAIL_WITH_ARGS%\"==\"\" if \"%1\"==\"mcp\" (",
+      "  echo fixture failure args: %* 1>&2",
       "  exit /b 42",
       ")",
-      "if not \"%PACT_FAKE_AGENT_LOG%\"==\"\" (",
-      "  if \"%1\"==\"mcp\" if \"%2\"==\"add-json\" echo %~n0^|mcp add-json^|%3^|%4^|%5>>\"%PACT_FAKE_AGENT_LOG%\"",
-      "  if \"%1\"==\"mcp\" if \"%2\"==\"set\" echo %~n0^|mcp set^|%3>>\"%PACT_FAKE_AGENT_LOG%\"",
-      "  if \"%1\"==\"mcp\" if \"%2\"==\"show\" echo %~n0^|mcp show^|%3>>\"%PACT_FAKE_AGENT_LOG%\"",
-      "  if \"%1\"==\"mcp\" if \"%2\"==\"add\" if \"%~n0\"==\"codex\" echo %~n0^|mcp add^|%3^|%4^|%5^|%6^|%7>>\"%PACT_FAKE_AGENT_LOG%\"",
+      "if not \"%PACT_FIXTURE_AGENT_LOG%\"==\"\" (",
+      "  if \"%1\"==\"mcp\" if \"%2\"==\"add-json\" echo %~n0^|mcp add-json^|%3^|%4^|%5>>\"%PACT_FIXTURE_AGENT_LOG%\"",
+      "  if \"%1\"==\"mcp\" if \"%2\"==\"set\" echo %~n0^|mcp set^|%3>>\"%PACT_FIXTURE_AGENT_LOG%\"",
+      "  if \"%1\"==\"mcp\" if \"%2\"==\"show\" echo %~n0^|mcp show^|%3>>\"%PACT_FIXTURE_AGENT_LOG%\"",
+      "  if \"%1\"==\"mcp\" if \"%2\"==\"add\" if \"%~n0\"==\"codex\" echo %~n0^|mcp add^|%3^|%4^|%5^|%6^|%7>>\"%PACT_FIXTURE_AGENT_LOG%\"",
       ")",
       "if \"%1\"==\"mcp\" if \"%2\"==\"--help\" (",
-      "  echo Usage: fake-agent mcp add add-json get list remove set show",
+      "  echo Usage: fixture-agent mcp add add-json get list remove set show",
       "  exit /b 0",
       ")",
       "if \"%1\"==\"plugin\" (",
@@ -192,28 +221,28 @@ async function installFakeAgentCli(filePath) {
   await fs.writeFile(filePath, [
     "#!/bin/sh",
     "command_name=$(basename \"$0\")",
-    "if [ \"${PACT_FAKE_AGENT_HANG_MCP:-}\" = \"$command_name\" ] && [ \"$1\" = \"mcp\" ]; then",
+    "if [ \"${PACT_FIXTURE_AGENT_HANG_MCP:-}\" = \"$command_name\" ] && [ \"$1\" = \"mcp\" ]; then",
     "  while :; do sleep 1; done",
     "fi",
-    "if [ -n \"${PACT_FAKE_AGENT_FAIL_WITH_ARGS:-}\" ] && [ \"$1\" = \"mcp\" ]; then",
-    "  printf 'fake failure args:' >&2",
+    "if [ -n \"${PACT_FIXTURE_AGENT_FAIL_WITH_ARGS:-}\" ] && [ \"$1\" = \"mcp\" ]; then",
+    "  printf 'fixture failure args:' >&2",
     "  for arg in \"$@\"; do printf ' <%s>' \"$arg\" >&2; done",
     "  printf '\\n' >&2",
     "  exit 42",
     "fi",
-    "if [ -n \"$PACT_FAKE_AGENT_LOG\" ]; then",
+    "if [ -n \"$PACT_FIXTURE_AGENT_LOG\" ]; then",
     "  if [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"add-json\" ]; then",
-    "    printf '%s|mcp add-json|%s|%s|%s\\n' \"$command_name\" \"$3\" \"$4\" \"$5\" >> \"$PACT_FAKE_AGENT_LOG\"",
+    "    printf '%s|mcp add-json|%s|%s|%s\\n' \"$command_name\" \"$3\" \"$4\" \"$5\" >> \"$PACT_FIXTURE_AGENT_LOG\"",
     "  elif [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"set\" ]; then",
-    "    printf '%s|mcp set|%s\\n' \"$command_name\" \"$3\" >> \"$PACT_FAKE_AGENT_LOG\"",
+    "    printf '%s|mcp set|%s\\n' \"$command_name\" \"$3\" >> \"$PACT_FIXTURE_AGENT_LOG\"",
     "  elif [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"show\" ]; then",
-    "    printf '%s|mcp show|%s\\n' \"$command_name\" \"$3\" >> \"$PACT_FAKE_AGENT_LOG\"",
+    "    printf '%s|mcp show|%s\\n' \"$command_name\" \"$3\" >> \"$PACT_FIXTURE_AGENT_LOG\"",
     "  elif [ \"$command_name\" = \"codex\" ] && [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"add\" ]; then",
-    "    printf '%s|mcp add|%s|%s|%s|%s|%s\\n' \"$command_name\" \"$3\" \"$4\" \"$5\" \"$6\" \"$7\" >> \"$PACT_FAKE_AGENT_LOG\"",
+    "    printf '%s|mcp add|%s|%s|%s|%s|%s\\n' \"$command_name\" \"$3\" \"$4\" \"$5\" \"$6\" \"$7\" >> \"$PACT_FIXTURE_AGENT_LOG\"",
     "  fi",
     "fi",
     "if [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"--help\" ]; then",
-    "  echo 'Usage: fake-agent mcp add add-json get list remove set show'",
+    "  echo 'Usage: fixture-agent mcp add add-json get list remove set show'",
     "  exit 0",
     "fi",
     "if [ \"$1\" = \"plugin\" ]; then exit 0; fi",
@@ -231,32 +260,33 @@ async function installFakeAgentCli(filePath) {
   await fs.chmod(filePath, 0o755);
 }
 
-async function installFakePriorityAgentClis() {
+async function installFixturePriorityAgentClis() {
   for (const filePath of [
-    fakeCodexPath,
-    fakeClaudePath,
-    fakeGeminiPath,
-    fakeKiloPath,
-    fakeCopilotPath,
-    fakeOpenClawPath,
-    fakeOpencodePath
+    fixtureCodexPath,
+    fixtureClaudePath,
+    fixtureGeminiPath,
+    fixtureKiloPath,
+    fixtureCopilotPath,
+    fixtureOpenClawPath,
+    fixtureOpencodePath
   ]) {
-    await installFakeAgentCli(filePath);
+    await installFixtureAgentCli(filePath);
   }
 }
 
-async function installFakeDockerRuntime() {
+async function installFixtureDockerRuntime() {
   if (process.platform === "win32") {
     return false;
   }
-  await fs.mkdir(fakeBinDir, { recursive: true });
+  await fs.mkdir(fixtureBinDir, { recursive: true });
+  await installUnavailableToolBinaries();
   await fs.mkdir(remoteOpenCodeHome, { recursive: true });
-  const fakeDockerScriptPath = `${fakeDockerPath}.sh`;
-  const fakeDockerSourcePath = `${fakeDockerPath}.c`;
-  await fs.writeFile(fakeDockerScriptPath, [
+  const fixtureDockerScriptPath = `${fixtureDockerPath}.sh`;
+  const fixtureDockerSourcePath = `${fixtureDockerPath}.c`;
+  await fs.writeFile(fixtureDockerScriptPath, [
     "#!/bin/sh",
-    "remote_home=\"${PACT_FAKE_REMOTE_HOME:-$PWD}\"",
-    "log_path=\"${PACT_FAKE_AGENT_LOG:-}\"",
+    "remote_home=\"${PACT_FIXTURE_REMOTE_HOME:-$PWD}\"",
+    "log_path=\"${PACT_FIXTURE_AGENT_LOG:-}\"",
     "write_log() { [ -n \"$log_path\" ] && printf '%s\\n' \"$1\" >> \"$log_path\"; }",
     "write_opencode() {",
     "  mkdir -p \"$remote_home/.config/opencode\"",
@@ -266,7 +296,7 @@ async function installFakeDockerRuntime() {
     "    printf '    \"pact\": {\\n'",
     "    printf '      \"type\": \"remote\",\\n'",
     "    printf '      \"url\": \"%s\",\\n' \"${PACT_URL:-}\"",
-    "    printf '      \"headers\": { \"X-Pact-Api-Key\": \"fake-token\" },\\n'",
+    "    printf '      \"headers\": { \"X-Pact-Api-Key\": \"fixture-token\" },\\n'",
     "    printf '      \"enabled\": true\\n'",
     "    printf '    }\\n'",
     "    printf '  }\\n'",
@@ -280,12 +310,12 @@ async function installFakeDockerRuntime() {
     "write_codex_env() {",
     "  env_name=\"$1\"",
     "  mkdir -p \"$remote_home/.pact/mcp\"",
-    "  printf \"export %s='fake-token-for-remote-codex-verifier'\\n\" \"$env_name\" > \"$remote_home/.pact/mcp/env\"",
+    "  printf \"export %s='fixture-token-for-remote-codex-verifier'\\n\" \"$env_name\" > \"$remote_home/.pact/mcp/env\"",
     "  if ! grep -q 'Pact MCP token env' \"$remote_home/.profile\" 2>/dev/null; then",
     "    printf '\\n# Pact MCP token env\\n[ -f \"$HOME/.pact/mcp/env\" ] && . \"$HOME/.pact/mcp/env\"\\n' >> \"$remote_home/.profile\"",
     "  fi",
     "}",
-    "[ \"${PACT_FAKE_DOCKER_HANG:-}\" = \"1\" ] && while :; do :; done",
+    "[ \"${PACT_FIXTURE_DOCKER_HANG:-}\" = \"1\" ] && while :; do :; done",
     "[ \"$1\" = \"ps\" ] && { printf 'box123\\tagentbox\\n'; exit 0; }",
     "[ \"$1\" = \"inspect\" ] && { printf '172.17.0.1\\n'; exit 0; }",
     "[ \"$1\" = \"exec\" ] || exit 1",
@@ -300,6 +330,7 @@ async function installFakeDockerRuntime() {
     "  case \"$script\" in *\"command_name=\"*\"codex\"*) printf '/usr/local/bin/codex\\n'; exit 0 ;; esac",
     "  case \"$script\" in *\"command_name=\"*\"openclaw\"*) printf '/usr/bin/openclaw\\n'; exit 0 ;; esac",
     "  case \"$script\" in *\"command_name=\"*\"ironclaw\"*) printf '/opt/bin/ironclaw\\n'; exit 0 ;; esac",
+    "  case \"$script\" in *\"command_name=\"*) exit 0 ;; esac",
     "  [ -n \"${PACT_TOKEN_ENV:-}\" ] && { write_codex_env \"$PACT_TOKEN_ENV\"; exit 0; }",
     "  case \"$script\" in *\"delete config.mcp.pact\"*) remove_opencode; printf 'removed\\n'; exit 0 ;; esac",
     "  case \"$script\" in *\".config', 'opencode'\"*) write_opencode; exit 0 ;; esac",
@@ -315,7 +346,7 @@ async function installFakeDockerRuntime() {
     "  [ \"$3\" = \"--help\" ] && { printf 'Usage: claw mcp set show unset\\n'; exit 0; }",
     "fi",
     "if [ \"$1\" = \"/usr/local/bin/codex\" ] && [ \"$2\" = \"mcp\" ]; then",
-    "  [ \"${PACT_FAKE_DOCKER_HANG_MCP:-}\" = \"1\" ] && while :; do :; done",
+    "  [ \"${PACT_FIXTURE_DOCKER_HANG_MCP:-}\" = \"1\" ] && while :; do :; done",
     "  marker=\"$remote_home/.codex-pact-mcp-installed\"",
     "  case \"$3\" in",
     "    --help) printf 'Usage: codex mcp add get list remove\\n'; exit 0 ;;",
@@ -327,11 +358,11 @@ async function installFakeDockerRuntime() {
     "exit 1",
     ""
   ].join("\n"));
-  await fs.writeFile(fakeDockerSourcePath, [
+  await fs.writeFile(fixtureDockerSourcePath, [
     "#include <stdlib.h>",
     "#include <unistd.h>",
     "int main(int argc, char **argv) {",
-    `  const char *script = ${JSON.stringify(fakeDockerScriptPath)};`,
+    `  const char *script = ${JSON.stringify(fixtureDockerScriptPath)};`,
     "  char **next = calloc((size_t)argc + 2, sizeof(char *));",
     "  if (!next) return 127;",
     "  next[0] = \"/bin/sh\";",
@@ -343,7 +374,7 @@ async function installFakeDockerRuntime() {
     "}",
     ""
   ].join("\n"));
-  const compile = await runProcess("cc", [fakeDockerSourcePath, "-o", fakeDockerPath], 10000);
+  const compile = await runProcess("cc", [fixtureDockerSourcePath, "-o", fixtureDockerPath], 10000);
   return compile.code === 0;
 }
 
@@ -544,7 +575,7 @@ try {
   });
 
   await testAsync("cli remote opencode install writes remote config", async () => {
-    const canRun = await installFakeDockerRuntime();
+    const canRun = await installFixtureDockerRuntime();
     if (!canRun) {
       return;
     }
@@ -557,12 +588,12 @@ try {
       "--remote-kind", "docker",
       "--remote-id", "box123",
       "--remote-name", "agentbox",
-      "--remote-bin", fakeDockerPath,
+      "--remote-bin", fixtureDockerPath,
       "--discovery-file", remoteOpenCodeRegistryPath,
       "--no-verify",
       "--json"
     ], 60000, {
-      PACT_FAKE_REMOTE_HOME: remoteOpenCodeHome
+      PACT_FIXTURE_REMOTE_HOME: remoteOpenCodeHome
     });
     if (result.code !== 0) {
       console.log(`\n      stdout: ${result.stdout.slice(0, 300)}`);
@@ -582,7 +613,7 @@ try {
   });
 
   await testAsync("scan detects remote codex in container", async () => {
-    const canRun = await installFakeDockerRuntime();
+    const canRun = await installFixtureDockerRuntime();
     if (!canRun) {
       return;
     }
@@ -590,22 +621,26 @@ try {
       "scan",
       "--json",
       "--url", serverUrl,
-      "--orb-bin", "/nonexistent/orb",
-      "--docker-bin", fakeDockerPath,
-      "--podman-bin", "/nonexistent/podman",
-      "--nerdctl-bin", "/nonexistent/nerdctl",
-      "--wsl-bin", "/nonexistent/wsl",
-      "--lima-bin", "/nonexistent/limactl",
-      "--colima-bin", "/nonexistent/colima",
-      "--multipass-bin", "/nonexistent/multipass",
-      "--lxc-bin", "/nonexistent/lxc",
-      "--incus-bin", "/nonexistent/incus",
-      "--vagrant-bin", "/nonexistent/vagrant",
-      "--parallels-bin", "/nonexistent/prlctl"
+      "--orb-bin", unavailableToolPaths.orb,
+      "--docker-bin", fixtureDockerPath,
+      "--podman-bin", unavailableToolPaths.podman,
+      "--nerdctl-bin", unavailableToolPaths.nerdctl,
+      "--wsl-bin", unavailableToolPaths.wsl,
+      "--lima-bin", unavailableToolPaths.lima,
+      "--colima-bin", unavailableToolPaths.colima,
+      "--multipass-bin", unavailableToolPaths.multipass,
+      "--lxc-bin", unavailableToolPaths.lxc,
+      "--incus-bin", unavailableToolPaths.incus,
+      "--vagrant-bin", unavailableToolPaths.vagrant,
+      "--parallels-bin", unavailableToolPaths.parallels
     ], 60000, {
-      PACT_FAKE_REMOTE_HOME: remoteOpenCodeHome,
-      PACT_FAKE_AGENT_LOG: fakeAgentCommandLog
+      PACT_FIXTURE_REMOTE_HOME: remoteOpenCodeHome,
+      PACT_FIXTURE_AGENT_LOG: fixtureAgentCommandLog
     });
+    if (result.code !== 0) {
+      console.log(`\n      stdout: ${result.stdout.slice(0, 600)}`);
+      console.log(`      stderr: ${result.stderr.slice(0, 600)}`);
+    }
     assert.equal(result.code, 0, result.stderr || result.stdout);
     const payload = JSON.parse(result.stdout);
     const remoteCodex = payload.candidates?.find((candidate) =>
@@ -619,7 +654,7 @@ try {
   });
 
   await testAsync("scan preserves remote openclaw-compatible alternatives", async () => {
-    const canRun = await installFakeDockerRuntime();
+    const canRun = await installFixtureDockerRuntime();
     if (!canRun) {
       return;
     }
@@ -627,22 +662,26 @@ try {
       "scan",
       "--json",
       "--url", serverUrl,
-      "--orb-bin", "/nonexistent/orb",
-      "--docker-bin", fakeDockerPath,
-      "--podman-bin", "/nonexistent/podman",
-      "--nerdctl-bin", "/nonexistent/nerdctl",
-      "--wsl-bin", "/nonexistent/wsl",
-      "--lima-bin", "/nonexistent/limactl",
-      "--colima-bin", "/nonexistent/colima",
-      "--multipass-bin", "/nonexistent/multipass",
-      "--lxc-bin", "/nonexistent/lxc",
-      "--incus-bin", "/nonexistent/incus",
-      "--vagrant-bin", "/nonexistent/vagrant",
-      "--parallels-bin", "/nonexistent/prlctl"
+      "--orb-bin", unavailableToolPaths.orb,
+      "--docker-bin", fixtureDockerPath,
+      "--podman-bin", unavailableToolPaths.podman,
+      "--nerdctl-bin", unavailableToolPaths.nerdctl,
+      "--wsl-bin", unavailableToolPaths.wsl,
+      "--lima-bin", unavailableToolPaths.lima,
+      "--colima-bin", unavailableToolPaths.colima,
+      "--multipass-bin", unavailableToolPaths.multipass,
+      "--lxc-bin", unavailableToolPaths.lxc,
+      "--incus-bin", unavailableToolPaths.incus,
+      "--vagrant-bin", unavailableToolPaths.vagrant,
+      "--parallels-bin", unavailableToolPaths.parallels
     ], 60000, {
-      PACT_FAKE_REMOTE_HOME: remoteOpenCodeHome,
-      PACT_FAKE_AGENT_LOG: fakeAgentCommandLog
+      PACT_FIXTURE_REMOTE_HOME: remoteOpenCodeHome,
+      PACT_FIXTURE_AGENT_LOG: fixtureAgentCommandLog
     });
+    if (result.code !== 0) {
+      console.log(`\n      stdout: ${result.stdout.slice(0, 600)}`);
+      console.log(`      stderr: ${result.stderr.slice(0, 600)}`);
+    }
     assert.equal(result.code, 0, result.stderr || result.stdout);
     const payload = JSON.parse(result.stdout);
     const remoteOpenClawCandidates = (payload.candidates || []).filter((candidate) =>
@@ -660,7 +699,7 @@ try {
   });
 
   await testAsync("cli remote codex install and uninstall use remote context", async () => {
-    const canRun = await installFakeDockerRuntime();
+    const canRun = await installFixtureDockerRuntime();
     if (!canRun) {
       return;
     }
@@ -674,14 +713,14 @@ try {
       "--remote-kind", "docker",
       "--remote-id", "box123",
       "--remote-name", "agentbox",
-      "--remote-bin", fakeDockerPath,
+      "--remote-bin", fixtureDockerPath,
       "--codex-bin", "/usr/local/bin/codex",
       "--discovery-file", remoteCodexRegistryPath,
       "--no-verify",
       "--json"
     ], 60000, {
-      PACT_FAKE_REMOTE_HOME: remoteOpenCodeHome,
-      PACT_FAKE_AGENT_LOG: fakeAgentCommandLog
+      PACT_FIXTURE_REMOTE_HOME: remoteOpenCodeHome,
+      PACT_FIXTURE_AGENT_LOG: fixtureAgentCommandLog
     });
     if (install.code !== 0) {
       console.log(`\n      stdout: ${install.stdout.slice(0, 300)}`);
@@ -695,7 +734,7 @@ try {
     assert.equal(installPayload.installed?.codex?.installMode, "codex-docker-mcp-cli");
     const remoteEnv = await fs.readFile(path.join(remoteOpenCodeHome, ".pact", "mcp", "env"), "utf8");
     assert.match(remoteEnv, new RegExp(`export ${remoteCodexTokenEnv}=`));
-    const commandLog = await fs.readFile(fakeAgentCommandLog, "utf8");
+    const commandLog = await fs.readFile(fixtureAgentCommandLog, "utf8");
     assert.match(commandLog, /codex\|mcp add\|pact\|--url/);
     assert.equal(commandLog.includes(token), false, "remote Codex command log must not expose token values");
 
@@ -706,12 +745,12 @@ try {
       "--remote-kind", "docker",
       "--remote-id", "box123",
       "--remote-name", "agentbox",
-      "--remote-bin", fakeDockerPath,
+      "--remote-bin", fixtureDockerPath,
       "--codex-bin", "/usr/local/bin/codex",
       "--discovery-file", remoteCodexRegistryPath,
       "--json"
     ], 60000, {
-      PACT_FAKE_REMOTE_HOME: remoteOpenCodeHome
+      PACT_FIXTURE_REMOTE_HOME: remoteOpenCodeHome
     });
     assert.equal(uninstall.code, 0, uninstall.stderr || uninstall.stdout);
     const uninstallPayload = JSON.parse(uninstall.stdout);
@@ -721,7 +760,7 @@ try {
   });
 
   await testAsync("cli remote codex install times out stalled remote context", async () => {
-    const canRun = await installFakeDockerRuntime();
+    const canRun = await installFixtureDockerRuntime();
     if (!canRun) {
       return;
     }
@@ -735,14 +774,14 @@ try {
       "--remote-kind", "docker",
       "--remote-id", "box123",
       "--remote-name", "agentbox",
-      "--remote-bin", fakeDockerPath,
+      "--remote-bin", fixtureDockerPath,
       "--codex-bin", "/usr/local/bin/codex",
       "--discovery-file", remoteCodexRegistryPath,
       "--no-verify",
       "--json"
     ], 15000, {
-      PACT_FAKE_REMOTE_HOME: remoteOpenCodeHome,
-      PACT_FAKE_DOCKER_HANG: "1",
+      PACT_FIXTURE_REMOTE_HOME: remoteOpenCodeHome,
+      PACT_FIXTURE_DOCKER_HANG: "1",
       PACT_MCP_INSTALL_COMMAND_TIMEOUT_MS: "1000"
     });
     assert.equal(result.code, 1);
@@ -754,7 +793,7 @@ try {
   });
 
   await testAsync("cli remote codex install times out stalled mcp command", async () => {
-    const canRun = await installFakeDockerRuntime();
+    const canRun = await installFixtureDockerRuntime();
     if (!canRun) {
       return;
     }
@@ -768,14 +807,14 @@ try {
       "--remote-kind", "docker",
       "--remote-id", "box123",
       "--remote-name", "agentbox",
-      "--remote-bin", fakeDockerPath,
+      "--remote-bin", fixtureDockerPath,
       "--codex-bin", "/usr/local/bin/codex",
       "--discovery-file", remoteCodexRegistryPath,
       "--no-verify",
       "--json"
     ], 15000, {
-      PACT_FAKE_REMOTE_HOME: remoteOpenCodeHome,
-      PACT_FAKE_DOCKER_HANG_MCP: "1",
+      PACT_FIXTURE_REMOTE_HOME: remoteOpenCodeHome,
+      PACT_FIXTURE_DOCKER_HANG_MCP: "1",
       PACT_MCP_INSTALL_COMMAND_TIMEOUT_MS: "1000"
     });
     assert.equal(result.code, 1);
@@ -787,18 +826,18 @@ try {
   });
 
   await testAsync("cli local claude install times out stalled mcp command", async () => {
-    await installFakeAgentCli(fakeClaudeHangPath);
+    await installFixtureAgentCli(fixtureClaudeHangPath);
     const result = await spawnConnector([
       "install",
       "--target", "claude-code",
       "--url", serverUrl,
       "--token", token,
-      "--claude-bin", fakeClaudeHangPath,
+      "--claude-bin", fixtureClaudeHangPath,
       "--discovery-file", tempRegistryPath,
       "--no-verify",
       "--json"
     ], 10000, {
-      PACT_FAKE_AGENT_HANG_MCP: path.basename(fakeClaudeHangPath, path.extname(fakeClaudeHangPath)),
+      PACT_FIXTURE_AGENT_HANG_MCP: path.basename(fixtureClaudeHangPath, path.extname(fixtureClaudeHangPath)),
       PACT_MCP_INSTALL_COMMAND_TIMEOUT_MS: "1000"
     });
     assert.equal(result.code, 1);
@@ -808,23 +847,23 @@ try {
     assert.equal(payload.installed?.["claude-code"]?.status, "failed");
     assert.match(payload.installed?.["claude-code"]?.error, /timed out/);
     assert.match(payload.installed?.["claude-code"]?.error, /<local-path>/);
-    assert.equal(result.stdout.includes(fakeClaudeHangPath), false, "local Claude timeout output must not expose the agent binary path");
-    assert.equal(result.stdout.includes(path.dirname(fakeClaudeHangPath)), false, "local Claude timeout output must not expose the agent binary directory");
+    assert.equal(result.stdout.includes(fixtureClaudeHangPath), false, "local Claude timeout output must not expose the agent binary path");
+    assert.equal(result.stdout.includes(path.dirname(fixtureClaudeHangPath)), false, "local Claude timeout output must not expose the agent binary directory");
   });
 
   await testAsync("cli local openclaw install times out stalled mcp command", async () => {
-    await installFakeAgentCli(fakeOpenClawHangPath);
+    await installFixtureAgentCli(fixtureOpenClawHangPath);
     const result = await spawnConnector([
       "install",
       "--target", "openclaw",
       "--url", serverUrl,
       "--token", token,
-      "--openclaw-bin", fakeOpenClawHangPath,
+      "--openclaw-bin", fixtureOpenClawHangPath,
       "--discovery-file", tempRegistryPath,
       "--no-verify",
       "--json"
     ], 10000, {
-      PACT_FAKE_AGENT_HANG_MCP: path.basename(fakeOpenClawHangPath, path.extname(fakeOpenClawHangPath)),
+      PACT_FIXTURE_AGENT_HANG_MCP: path.basename(fixtureOpenClawHangPath, path.extname(fixtureOpenClawHangPath)),
       PACT_MCP_INSTALL_COMMAND_TIMEOUT_MS: "1000"
     });
     assert.equal(result.code, 1);
@@ -834,23 +873,23 @@ try {
     assert.equal(payload.installed?.openclaw?.status, "failed");
     assert.match(payload.installed?.openclaw?.error, /timed out/);
     assert.match(payload.installed?.openclaw?.error, /<local-path>/);
-    assert.equal(result.stdout.includes(fakeOpenClawHangPath), false, "local OpenClaw timeout output must not expose the agent binary path");
-    assert.equal(result.stdout.includes(path.dirname(fakeOpenClawHangPath)), false, "local OpenClaw timeout output must not expose the agent binary directory");
+    assert.equal(result.stdout.includes(fixtureOpenClawHangPath), false, "local OpenClaw timeout output must not expose the agent binary path");
+    assert.equal(result.stdout.includes(path.dirname(fixtureOpenClawHangPath)), false, "local OpenClaw timeout output must not expose the agent binary directory");
   });
 
   await testAsync("cli local gemini install times out stalled mcp command", async () => {
-    await installFakeAgentCli(fakeGeminiHangPath);
+    await installFixtureAgentCli(fixtureGeminiHangPath);
     const result = await spawnConnector([
       "install",
       "--target", "gemini-cli",
       "--url", serverUrl,
       "--token", token,
-      "--gemini-bin", fakeGeminiHangPath,
+      "--gemini-bin", fixtureGeminiHangPath,
       "--discovery-file", tempRegistryPath,
       "--no-verify",
       "--json"
     ], 10000, {
-      PACT_FAKE_AGENT_HANG_MCP: path.basename(fakeGeminiHangPath, path.extname(fakeGeminiHangPath)),
+      PACT_FIXTURE_AGENT_HANG_MCP: path.basename(fixtureGeminiHangPath, path.extname(fixtureGeminiHangPath)),
       PACT_MCP_INSTALL_COMMAND_TIMEOUT_MS: "1000"
     });
     assert.equal(result.code, 1);
@@ -862,18 +901,18 @@ try {
   });
 
   await testAsync("cli local copilot install times out stalled mcp command", async () => {
-    await installFakeAgentCli(fakeCopilotHangPath);
+    await installFixtureAgentCli(fixtureCopilotHangPath);
     const result = await spawnConnector([
       "install",
       "--target", "copilot",
       "--url", serverUrl,
       "--token", token,
-      "--copilot-bin", fakeCopilotHangPath,
+      "--copilot-bin", fixtureCopilotHangPath,
       "--discovery-file", tempRegistryPath,
       "--no-verify",
       "--json"
     ], 10000, {
-      PACT_FAKE_AGENT_HANG_MCP: path.basename(fakeCopilotHangPath, path.extname(fakeCopilotHangPath)),
+      PACT_FIXTURE_AGENT_HANG_MCP: path.basename(fixtureCopilotHangPath, path.extname(fixtureCopilotHangPath)),
       PACT_MCP_INSTALL_COMMAND_TIMEOUT_MS: "1000"
     });
     assert.equal(result.code, 1);
@@ -885,19 +924,19 @@ try {
   });
 
   await testAsync("cli local kilo install ignores stalled optional list command", async () => {
-    await installFakeAgentCli(fakeKiloHangPath);
+    await installFixtureAgentCli(fixtureKiloHangPath);
     const result = await spawnConnector([
       "install",
       "--target", "kilo-code",
       "--url", serverUrl,
       "--token", token,
-      "--kilo-bin", fakeKiloHangPath,
+      "--kilo-bin", fixtureKiloHangPath,
       "--kilo-config", hangKiloConfigPath,
       "--discovery-file", tempRegistryPath,
       "--no-verify",
       "--json"
     ], 10000, {
-      PACT_FAKE_AGENT_HANG_MCP: path.basename(fakeKiloHangPath, path.extname(fakeKiloHangPath)),
+      PACT_FIXTURE_AGENT_HANG_MCP: path.basename(fixtureKiloHangPath, path.extname(fixtureKiloHangPath)),
       PACT_MCP_INSTALL_COMMAND_TIMEOUT_MS: "1000"
     });
     assert.equal(result.code, 0);
@@ -910,18 +949,18 @@ try {
   });
 
   await testAsync("cli local gemini failure redacts echoed token arguments", async () => {
-    await installFakeAgentCli(fakeGeminiFailPath);
+    await installFixtureAgentCli(fixtureGeminiFailPath);
     const result = await spawnConnector([
       "install",
       "--target", "gemini-cli",
       "--url", serverUrl,
       "--token", token,
-      "--gemini-bin", fakeGeminiFailPath,
+      "--gemini-bin", fixtureGeminiFailPath,
       "--discovery-file", tempRegistryPath,
       "--no-verify",
       "--json"
     ], 10000, {
-      PACT_FAKE_AGENT_FAIL_WITH_ARGS: "1"
+      PACT_FIXTURE_AGENT_FAIL_WITH_ARGS: "1"
     });
     assert.equal(result.code, 1);
     assert.equal(result.stdout.includes(token), false, "local Gemini failure output must not expose echoed token arguments");
@@ -930,14 +969,14 @@ try {
     assert.equal(payload.installed?.["gemini-cli"]?.status, "failed");
     assert.match(payload.installed?.["gemini-cli"]?.error, /<redacted-token>/);
     assert.match(payload.installed?.["gemini-cli"]?.error, /<local-path>/);
-    assert.equal(result.stdout.includes(fakeGeminiFailPath), false, "local Gemini failure output must not expose the agent binary path");
-    assert.equal(result.stdout.includes(path.dirname(fakeGeminiFailPath)), false, "local Gemini failure output must not expose the agent binary directory");
+    assert.equal(result.stdout.includes(fixtureGeminiFailPath), false, "local Gemini failure output must not expose the agent binary path");
+    assert.equal(result.stdout.includes(path.dirname(fixtureGeminiFailPath)), false, "local Gemini failure output must not expose the agent binary directory");
   });
 
   // ── SECTION 5: Non-interactive auto install ──
   console.log("\n[5] Non-interactive auto install");
   await testAsync("--target auto installs explicitly detected supported agents", async () => {
-    await installFakePriorityAgentClis();
+    await installFixturePriorityAgentClis();
     await fs.mkdir(path.dirname(autoAntigravityConfigPath), { recursive: true });
     const result = await spawnConnector([
       "install",
@@ -945,13 +984,13 @@ try {
       "--url", serverUrl,
       "--token", token,
       "--token-env", autoTokenEnv,
-      "--codex-bin", fakeCodexPath,
-      "--claude-bin", fakeClaudePath,
-      "--gemini-bin", fakeGeminiPath,
-      "--kilo-bin", fakeKiloPath,
-      "--copilot-bin", fakeCopilotPath,
-      "--openclaw-bin", fakeOpenClawPath,
-      "--opencode-bin", fakeOpencodePath,
+      "--codex-bin", fixtureCodexPath,
+      "--claude-bin", fixtureClaudePath,
+      "--gemini-bin", fixtureGeminiPath,
+      "--kilo-bin", fixtureKiloPath,
+      "--copilot-bin", fixtureCopilotPath,
+      "--openclaw-bin", fixtureOpenClawPath,
+      "--opencode-bin", fixtureOpencodePath,
       "--marketplace-root", autoMarketplaceRoot,
       "--kilo-config", autoKiloConfigPath,
       "--opencode-config", autoOpencodeConfigPath,
@@ -961,9 +1000,9 @@ try {
       "--no-verify",
       "--json"
     ], 60000, {
-      PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH || ""}`,
-      PACT_FAKE_AGENT_LOG: fakeAgentCommandLog,
-      PACT_FAKE_AGENT_HANG_MCP: ""
+      PATH: `${fixtureBinDir}${path.delimiter}${process.env.PATH || ""}`,
+      PACT_FIXTURE_AGENT_LOG: fixtureAgentCommandLog,
+      PACT_FIXTURE_AGENT_HANG_MCP: ""
     });
     if (result.code !== 0) {
       console.log(`\n      stdout: ${result.stdout.slice(0, 300)}`);
@@ -1063,7 +1102,7 @@ try {
       "uninstall",
       "--target", "openclaw",
       "--url", serverUrl,
-      "--openclaw-bin", fakeOpenClawPath,
+      "--openclaw-bin", fixtureOpenClawPath,
       "--discovery-file", autoRegistryPath,
       "--json"
     ]);
@@ -1077,12 +1116,12 @@ try {
     const antigravityConfig = JSON.parse(await fs.readFile(autoAntigravityConfigPath, "utf8"));
     assert.equal(antigravityConfig.mcpServers?.pact?.serverUrl, `${serverUrl}/mcp`);
 
-    const commandLog = await fs.readFile(fakeAgentCommandLog, "utf8");
+    const commandLog = await fs.readFile(fixtureAgentCommandLog, "utf8");
     assert.match(commandLog, new RegExp(`codex\\|mcp add\\|pact\\|--url\\|${serverUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\/mcp\\|--bearer-token-env-var\\|${autoTokenEnv}`));
     assert.match(commandLog, /claude\|mcp add-json\|--scope\|user\|pact/);
     assert.match(commandLog, /openclaw\|mcp set\|pact/);
     assert.match(commandLog, /openclaw\|mcp show\|pact/);
-    assert.equal(commandLog.includes(token), false, "fake agent command log must not persist grant token values");
+    assert.equal(commandLog.includes(token), false, "fixture agent command log must not persist grant token values");
   });
 
   // ── SECTION 6: Verify installed config works ──
@@ -1267,11 +1306,11 @@ try {
       "--remote-kind", "docker",
       "--remote-id", "box123",
       "--remote-name", "agentbox",
-      "--remote-bin", fakeDockerPath,
+      "--remote-bin", fixtureDockerPath,
       "--discovery-file", remoteOpenCodeRegistryPath,
       "--json"
     ], 60000, {
-      PACT_FAKE_REMOTE_HOME: remoteOpenCodeHome,
+      PACT_FIXTURE_REMOTE_HOME: remoteOpenCodeHome,
       PACT_MCP_URL: ""
     });
     if (result.code !== 0) {

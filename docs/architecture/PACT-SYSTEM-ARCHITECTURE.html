@@ -9,8 +9,9 @@
       --bg: #f6f8fb;
       --card: #ffffff;
       --ink: #17212f;
-      --muted: #66758a;
+      --muted: #5b6d82;
       --line: #d4deea;
+      --line-soft: #dfe7f0;
       --blue: #276d9d;
       --green: #3d7a47;
       --purple: #7656a8;
@@ -26,7 +27,7 @@
       margin: 0;
       background: var(--bg);
       color: var(--ink);
-      font: 14px/1.58 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 14px/1.58 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
     }
 
     main {
@@ -46,15 +47,19 @@
       font-size: 32px;
       line-height: 1.18;
       letter-spacing: 0;
+      text-wrap: balance;
     }
 
     code {
+      display: inline-block;
+      max-width: 100%;
       padding: 1px 5px;
       border-radius: 4px;
       background: #eef3f8;
       color: #26364a;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 12px;
+      overflow-wrap: anywhere;
     }
 
     header {
@@ -88,7 +93,7 @@
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 8px;
-      box-shadow: 0 10px 24px rgb(23 33 47 / 8%);
+      box-shadow: 0 1px 3px rgb(23 33 47 / 7%);
     }
 
     .architecture-board {
@@ -96,12 +101,12 @@
       grid-template-columns: minmax(0, 1fr);
       grid-template-areas:
         "management"
-        "aspect-label"
-        "aspect"
-        "service-label"
-        "service"
         "app-label"
         "app"
+        "aspect-label"
+        "aspect"
+        "capability-label"
+        "capability"
         "foundation-label"
         "foundation";
       align-items: stretch;
@@ -110,6 +115,7 @@
     }
 
     .console-row,
+    .capability-row,
     .specialized-row,
     .platform-foundation-row {
       display: grid;
@@ -119,12 +125,12 @@
       grid-area: management;
     }
 
-    .service-connector {
-      grid-area: service-label;
+    .capability-connector {
+      grid-area: capability-label;
     }
 
-    .service-row {
-      grid-area: service;
+    .capability-row {
+      grid-area: capability;
     }
 
     .app-connector {
@@ -152,12 +158,6 @@
       grid-area: foundation;
     }
 
-    .service-row {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 12px;
-    }
-
     .node {
       overflow: hidden;
       background: #fff;
@@ -170,8 +170,8 @@
       border-top-color: var(--purple);
     }
 
-    .node.interface {
-      border-top-color: var(--blue);
+    .node.capability {
+      border-top-color: var(--purple);
     }
 
     .node.composition {
@@ -199,6 +199,8 @@
 
     .node-heading h3 {
       font-size: 16px;
+      line-height: 1.3;
+      text-wrap: balance;
     }
 
     .base-label {
@@ -251,46 +253,62 @@
 
     .application-column {
       display: grid;
-      grid-template-rows: repeat(3, minmax(0, auto));
+      grid-auto-rows: minmax(0, auto);
       gap: 10px;
     }
 
     .subnode {
+      --subnode-accent: var(--blue);
       display: grid;
       align-content: start;
       padding: 12px;
       background: #fbfdff;
-      border: 1px solid #dfe7f0;
+      border: 1px solid var(--line-soft);
       border-radius: 7px;
     }
 
     .subnode h3 {
       margin-bottom: 8px;
+      color: var(--subnode-accent);
       font-size: 15px;
+      line-height: 1.3;
+      text-wrap: balance;
     }
 
     .subnode.knowledge {
-      border-left: 5px solid var(--green);
+      --subnode-accent: var(--green);
+      background: #f8fcfa;
+      border-color: #cfe3d5;
     }
 
     .subnode.agent {
-      border-left: 5px solid var(--purple);
+      --subnode-accent: var(--purple);
+      background: #fbf9ff;
+      border-color: #ded5ed;
     }
 
     .subnode.sharedspace {
-      border-left: 5px solid var(--brown);
+      --subnode-accent: var(--brown);
+      background: #fffdf8;
+      border-color: #e7d9c4;
     }
 
     .subnode.codespace {
-      border-left: 5px solid var(--blue);
+      --subnode-accent: var(--blue);
+      background: #f8fbff;
+      border-color: #cfe0ed;
     }
 
     .subnode.policy {
-      border-left: 5px solid var(--red);
+      --subnode-accent: var(--red);
+      background: #fffafb;
+      border-color: #ead3da;
     }
 
     .subnode.tools {
-      border-left: 5px solid var(--brown);
+      --subnode-accent: var(--brown);
+      background: #fffdf8;
+      border-color: #e7d9c4;
     }
 
     .knowledge-grid,
@@ -307,7 +325,7 @@
     .module-subtile {
       padding: 9px;
       background: #fff;
-      border: 1px solid #dfe7f0;
+      border: 1px solid var(--line-soft);
       border-radius: 6px;
     }
 
@@ -318,6 +336,8 @@
       display: block;
       margin-bottom: 4px;
       font-size: 13px;
+      line-height: 1.3;
+      text-wrap: balance;
     }
 
     .tier ul,
@@ -347,7 +367,6 @@
       padding: 8px;
       background: #f0f5fa;
       border-color: #d9e6f5;
-      border-left: 2px solid var(--blue);
       border-radius: 4px;
     }
 
@@ -382,13 +401,19 @@
       border: 1px solid var(--line);
       border-radius: 6px;
       cursor: pointer;
+      transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
     }
 
     .diagram-action:hover,
     .diagram-action:focus-visible {
+      background: #f8fbff;
       border-color: var(--blue);
       outline: none;
       box-shadow: 0 0 0 3px rgb(39 109 157 / 14%);
+    }
+
+    .diagram-action:active {
+      background: #eef4fb;
     }
 
     .collapsible-card {
@@ -447,6 +472,7 @@
       background: #fff;
       border: 1px solid #c7d4e2;
       border-radius: 999px;
+      transition: background-color 160ms ease, border-color 160ms ease;
     }
 
     .collapsible-icon::before,
@@ -467,6 +493,11 @@
     .collapsible-head[aria-expanded="true"] .collapsible-icon::after {
       opacity: 0;
       transform: rotate(0deg);
+    }
+
+    .collapsible-head:hover .collapsible-icon {
+      background: #eef4fb;
+      border-color: var(--blue);
     }
 
     .collapsible-body {
@@ -515,15 +546,21 @@
     }
 
     .tier.distill {
-      border-left: 4px solid var(--red);
+      background: #fffafb;
+      border-color: #ead3da;
+      color: #70384a;
     }
 
     .tier.index {
-      border-left: 4px solid var(--blue);
+      background: #f8fbff;
+      border-color: #cfe0ed;
+      color: #245f8a;
     }
 
     .tier.raw {
-      border-left: 4px solid var(--green);
+      background: #f8fcfa;
+      border-color: #cfe3d5;
+      color: #356d3f;
     }
 
     .knowledge-grid {
@@ -538,7 +575,8 @@
     .knowledge-base-strip {
       min-height: 100%;
       background: #fffdf8;
-      border-left: 4px solid var(--brown);
+      border-color: #e7d9c4;
+      color: #735123;
     }
 
     .agent-layer {
@@ -573,6 +611,44 @@
       grid-template-columns: 1fr;
     }
 
+    .sharedspace-stack {
+      display: grid;
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .sharedspace-band {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 8px;
+      padding: 9px;
+      background: #fff;
+      border: 1px solid #dfe7f0;
+      border-radius: 6px;
+    }
+
+    .sharedspace-band > .module-tile,
+    .sharedspace-band > .workspace-grid {
+      min-height: 0;
+      height: 100%;
+    }
+
+    .sharedspace-band > .workspace-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .sharedspace-band .module-tile {
+      display: grid;
+      align-content: start;
+    }
+
+    .sharedspace-band-title {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
     .caption {
       margin-top: 8px;
       color: var(--muted);
@@ -585,7 +661,7 @@
       border: 1px solid var(--line);
       border-top: 5px solid var(--blue);
       border-radius: 8px;
-      box-shadow: 0 10px 22px rgb(23 33 47 / 7%);
+      box-shadow: 0 1px 3px rgb(23 33 47 / 7%);
     }
 
     .aspect-layer-heading {
@@ -653,6 +729,17 @@
       padding-top: 2px;
     }
 
+    .aspect-tile .module-subgrid {
+      grid-template-columns: 1fr;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .aspect-tile .module-subtile {
+      background: #fff;
+      border-color: #d7e2ef;
+    }
+
     .platform-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -660,11 +747,57 @@
       padding: 14px;
     }
 
-    .service-capability-grid {
+    .capability-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
-      padding: 0 14px 14px;
+      padding: 14px;
+    }
+
+    .capability-grid > .module-tile {
+      --capability-accent: var(--blue);
+      --capability-surface: #f8fbff;
+      --capability-border: #cfe0ed;
+      background: var(--capability-surface);
+      border-color: var(--capability-border);
+    }
+
+    .capability-grid > .module-tile.capability-character {
+      --capability-accent: var(--purple);
+      --capability-surface: #fbf9ff;
+      --capability-border: #ded5ed;
+    }
+
+    .capability-grid > .module-tile.capability-authentication {
+      --capability-accent: var(--red);
+      --capability-surface: #fffafb;
+      --capability-border: #ead3da;
+    }
+
+    .capability-grid > .module-tile.capability-communication {
+      --capability-accent: var(--blue);
+      --capability-surface: #f7fbff;
+      --capability-border: #cfdeef;
+      grid-column: 1 / -1;
+    }
+
+    .capability-grid > .module-tile.capability-governance {
+      --capability-accent: var(--brown);
+      --capability-surface: #fffdf8;
+      --capability-border: #e7d9c4;
+    }
+
+    .capability-grid > .module-tile > strong,
+    .capability-grid > .module-tile > .collapsible-head .collapsible-title strong {
+      color: var(--capability-accent);
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.3;
+      text-wrap: balance;
+    }
+
+    .capability-grid > .subnode.agent {
+      grid-column: 1 / -1;
     }
 
     @media (max-width: 860px) {
@@ -673,8 +806,8 @@
       }
 
       header,
-      .service-row,
-      .service-capability-grid,
+      .capability-row,
+      .capability-grid,
       .aspect-grid,
       .specialized-grid,
       .application-column,
@@ -692,12 +825,12 @@
         grid-template-columns: 1fr;
         grid-template-areas:
           "management"
-          "aspect-label"
-          "aspect"
-          "service-label"
-          "service"
           "app-label"
           "app"
+          "aspect-label"
+          "aspect"
+          "capability-label"
+          "capability"
           "foundation-label"
           "foundation";
         min-width: 0;
@@ -719,6 +852,55 @@
         text-align: left;
       }
     }
+
+    @media (max-width: 640px) {
+      main {
+        padding-inline: 10px;
+      }
+
+      .diagram {
+        padding: 10px;
+      }
+
+      .diagram-toolbar,
+      .diagram-actions {
+        align-items: stretch;
+      }
+
+      .diagram-actions {
+        width: 100%;
+        margin-left: 0;
+      }
+
+      .diagram-action {
+        flex: 1 1 0;
+      }
+
+      .knowledge-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (pointer: coarse) {
+      .diagram-action {
+        min-height: 44px;
+      }
+
+      .collapsible-head {
+        min-height: 44px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -726,11 +908,11 @@
     <header>
       <div>
         <h1>Pact 系统架构图</h1>
-        <p class="lead">从外观层到基建层展示 Pact 内部系统结构，重点表达控制面板、切面对接、服务能力、应用能力、公共基础设施和启动装配边界之间的关系。</p>
+        <p class="lead">从外观层到基建层展示 Pact 内部系统结构，重点表达控制面板、应用能力、切面对接、能力层、公共基础设施和启动装配边界之间的关系。</p>
       </div>
       <div class="meta">
         <span>历史基线：2026-05-19</span>
-        <span>状态：应用层 2 x 3 口径已固化</span>
+        <span>状态：外观层 / 应用层 / 切面层 / 能力层口径已调整</span>
         <span>范围：Pact 内部结构</span>
       </div>
     </header>
@@ -756,28 +938,30 @@
             </div>
             <ul>
               <li>控制面板面向个人用户展示知识库、工作空间、调试和系统管理界面。</li>
-              <li>只通过切面层或服务层入口调用能力，不直接访问应用层运行时或基建层存储。</li>
+              <li>只通过应用层或切面层入口调用能力，不直接访问能力层运行时或基建层存储。</li>
             </ul>
           </article>
         </div>
 
-        <div class="connector service-connector"><span>服务层</span></div>
+        <div class="connector capability-connector"><span>能力层</span></div>
 
-        <div class="service-row">
-          <article class="node interface">
+        <div class="capability-row">
+          <article class="node capability">
             <div class="node-heading">
-              <h3>接口封装层 <span class="status-pill is-fixed">Essential</span></h3>
-              <span class="base-label">Interface Wrapper</span>
+              <h3>平台能力 <span class="status-pill is-fixed">Essential</span></h3>
+              <span class="base-label">Platform Capabilities</span>
             </div>
             <ul>
-              <li>执行协议适配与请求归一化。</li>
-              <li>认证、权限和接口合同来自基建与切面层。</li>
+              <li>汇聚平台能力、通信服务、协作治理、智能体运行能力和策略管理。</li>
               <li>角色配置以 Tag 为基础语义，组织、小组和角色都继承自标签。</li>
-              <li>认证管理作为服务能力，经切面合同装配。</li>
-              <li>对上承接外观层，对下只调用装配后的能力。</li>
+              <li>认证管理作为能力层能力，经切面合同装配。</li>
+              <li>通信服务承载 ACP Relay 和 MCP Server Side，由切面层通过路由策略调用。</li>
+              <li>协作治理把跨空间提案、锁、继承、共享授权和保留策略沉淀为可审计决策。</li>
+              <li>智能体 runtime、上下文、记忆、模型网关和基础配置归入能力层。</li>
+              <li>策略管理负责流程、调用、路由和门禁策略，不回流到应用层硬编码。</li>
             </ul>
-            <div class="service-capability-grid">
-              <div class="module-tile">
+            <div class="capability-grid">
+              <div class="module-tile capability-character">
                 <strong>角色配置</strong>
                 <span class="status-pill is-fixed">Essential</span>
                 <code>character-configuration</code>
@@ -821,7 +1005,7 @@
                   </div>
                 </div>
               </div>
-              <div class="module-tile">
+              <div class="module-tile capability-authentication">
                 <strong>认证管理</strong>
                 <span class="status-pill is-fixed">Essential</span>
                 <code>authentication-management</code>
@@ -878,6 +1062,241 @@
                   </div>
                 </div>
               </div>
+              <div class="module-tile capability-communication">
+                <strong>通信服务</strong>
+                <span class="status-pill is-removable">Optional</span>
+                <code>communication-service</code>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>ACP Relay</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>acp-agent-relay</code>
+                    <ul>
+                      <li>ACP source-facing relay</li>
+                      <li>virtual inbound agent</li>
+                      <li>target session bridge</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>MCP Server</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>mcp-server-side</code>
+                    <ul>
+                      <li>tools/list and tools/call</li>
+                      <li>Tool Management projection</li>
+                      <li>agent client invocation boundary</li>
+                    </ul>
+                  </div>
+                </div>
+                <p class="caption">通信服务是平台侧能力；下游客户端切面只做 MCP/ACP 适配、翻译和 route intent。</p>
+              </div>
+              <div class="module-tile capability-governance">
+                <strong>协作治理</strong>
+                <span class="status-pill is-removable">Optional</span>
+                <code>workspace-governance</code>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>Issue &amp; Proposal</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>workspace-proposals</code>
+                    <ul>
+                      <li>create / review / apply decision</li>
+                      <li>不直接改写 canonical state</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Lock &amp; Inheritance</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>workspace-lock-inheritance</code>
+                    <ul>
+                      <li>workspace lock</li>
+                      <li>policy / profile / source inheritance</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Policy &amp; Share Grant</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>workspace-policy-share</code>
+                    <ul>
+                      <li>dataClass / clearance</li>
+                      <li>external collaborator / share grant</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Retention &amp; Audit</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>workspace-retention-audit</code>
+                    <ul>
+                      <li>retention / legalHold</li>
+                      <li>cross-project copy approval</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="subnode policy">
+                <h3>策略管理 <span class="status-pill is-removable">Optional</span></h3>
+                <div class="policy-grid">
+                  <div class="module-tile">
+                    <strong>流程策略</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>workflow-policy</code>
+                    <ul>
+                      <li>处理流程选择</li>
+                      <li>人工确认门禁</li>
+                    </ul>
+                  </div>
+                  <div class="module-tile">
+                    <strong>调用策略</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>agent-policy</code>
+                    <ul>
+                      <li>模型路由</li>
+                      <li>工具调用约束</li>
+                    </ul>
+                  </div>
+                  <div class="module-tile">
+                    <strong>路由策略</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>route-policy</code>
+                    <ul>
+                      <li>上游服务切面路由</li>
+                      <li>下游客户端切面路由</li>
+                      <li>内部能力 / endpointRef</li>
+                    </ul>
+                  </div>
+                </div>
+                <p class="caption">策略管理负责处理流程、智能体调用和切面路由策略；安全权限仍由基建层安全权限裁决。</p>
+              </div>
+              <div class="subnode agent">
+                <h3>智能体 <span class="status-pill is-removable">Optional</span></h3>
+                <div class="agent-stack" aria-label="智能体上下文、记忆与基座">
+                  <div class="agent-layer">
+                    <div class="agent-layer-name">核心组件</div>
+                    <div class="agent-runtime-rows">
+                      <div class="agent-runtime-row">
+                        <div class="module-tile">
+                          <strong>上下文（临时）</strong>
+                          <span class="status-pill is-removable">Optional</span>
+                          <code>agent-context</code>
+                          <ul>
+                            <li>临时上下文</li>
+                            <li>会话压缩</li>
+                          </ul>
+                        </div>
+                        <div class="module-tile">
+                          <strong>记忆（长期）</strong>
+                          <span class="status-pill is-removable">Optional</span>
+                          <code>agent-memory</code>
+                          <ul>
+                            <li>长期上下文</li>
+                            <li>contentRefs</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="agent-layer">
+                    <div class="agent-layer-name">智能体基座</div>
+                    <div class="agent-module-grid">
+                      <div class="module-tile">
+                        <strong>模型网关</strong>
+                        <span class="status-pill is-removable">Optional</span>
+                        <code>agent-gateway</code>
+                        <div class="module-subgrid">
+                          <div class="module-subtile">
+                            <strong>Model Routing</strong>
+                            <span class="status-pill is-removable">Optional</span>
+                            <code>model-routing</code>
+                            <ul>
+                              <li>fallback chain / rate limit</li>
+                              <li>budget / circuit breaker / ledger</li>
+                            </ul>
+                          </div>
+                          <div class="module-subtile">
+                            <strong>Model Probe</strong>
+                            <span class="status-pill is-removable">Optional</span>
+                            <code>model-probe</code>
+                            <ul>
+                              <li>connectivity probe</li>
+                              <li>latency / status / configured check</li>
+                            </ul>
+                          </div>
+                          <div class="module-subtile">
+                            <strong>Provider Registry &amp; Call</strong>
+                            <span class="status-pill is-removable">Optional</span>
+                            <code>agent-gateway-call</code>
+                            <ul>
+                              <li>alias / provider / model resolution</li>
+                              <li>DeepSeek / OpenAI-compatible adapter</li>
+                            </ul>
+                          </div>
+                          <div class="module-subtile">
+                            <strong>Model Decision Runtime</strong>
+                            <span class="status-pill is-removable">Optional</span>
+                            <code>model-decision-runtime</code>
+                            <ul>
+                              <li>role profile policy</li>
+                              <li>deterministic fallback</li>
+                            </ul>
+                          </div>
+                          <div class="module-subtile">
+                            <strong>Multi-Agent Coordinator</strong>
+                            <span class="status-pill is-removable">Optional</span>
+                            <code>multi-agent-coordinator</code>
+                            <ul>
+                              <li>role graph / workflow edges</li>
+                              <li>bounded write policy</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="module-tile">
+                        <strong>基础配置</strong>
+                        <span class="status-pill is-removable">Optional</span>
+                        <code>agent-configs</code>
+                        <div class="module-subgrid">
+                          <div class="module-subtile">
+                            <strong>Config Registry</strong>
+                            <span class="status-pill is-removable">Optional</span>
+                            <code>config-registry</code>
+                            <ul>
+                              <li>manifest load / normalize / persist</li>
+                              <li>redacted public projection</li>
+                            </ul>
+                          </div>
+                          <div class="module-subtile">
+                            <strong>Model Library</strong>
+                            <span class="status-pill is-removable">Optional</span>
+                            <code>model-list</code>
+                            <ul>
+                              <li>provider / model / endpoint config</li>
+                              <li>secret configured flags only</li>
+                            </ul>
+                          </div>
+                          <div class="module-subtile">
+                            <strong>Agent Library</strong>
+                            <span class="status-pill is-removable">Optional</span>
+                            <code>agent-list</code>
+                            <ul>
+                              <li>agent alias / prompt / plugin list</li>
+                              <li>module access / permission group</li>
+                            </ul>
+                          </div>
+                          <div class="module-subtile">
+                            <strong>Defaults &amp; Profiles</strong>
+                            <span class="status-pill is-removable">Optional</span>
+                            <code>agent-defaults</code>
+                            <ul>
+                              <li>timeout / parameters / system prompt</li>
+                              <li>context profile binding</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </article>
         </div>
@@ -890,8 +1309,8 @@
               <h3>应用层 <span class="status-pill is-removable">Optional</span></h3>
               <span class="base-label">Specialized</span>
             </div>
-            <div class="specialized-grid" aria-label="应用层左右两列各三个子系统">
-              <div class="application-column left" aria-label="应用层左列：知识转化、共享空间、策略管理">
+            <div class="specialized-grid" aria-label="应用层左右分组">
+              <div class="application-column left" aria-label="应用层左列：知识转化、共享空间">
                 <div class="subnode knowledge">
                   <h3>知识转化 <span class="status-pill is-removable">Optional</span></h3>
                   <div class="knowledge-grid" aria-label="知识转化核心能力：左侧三层，右侧图书馆">
@@ -934,119 +1353,40 @@
 
                 <div class="subnode sharedspace">
                   <h3>共享空间 <span class="status-pill is-removable">Optional</span></h3>
-                  <div class="workspace-grid">
-                    <div class="module-tile">
-                      <strong>Sharedspace</strong>
-                      <span class="status-pill is-removable">Optional</span>
-                      <code>agent-workspace</code>
-                      <ul>
-                        <li>受控文件空间</li>
-                        <li>StateCommit</li>
-                      </ul>
+                  <div class="sharedspace-stack" aria-label="共享空间上下两类：云盘共享和本地共享">
+                    <div class="sharedspace-band">
+                      <div class="sharedspace-band-title">云盘共享</div>
+                      <div class="module-tile">
+                        <strong>Cloud Drive Port</strong>
+                        <span class="status-pill is-removable">Optional</span>
+                        <code>cloud-drive-port</code>
+                        <ul>
+                          <li>iCloud local projection</li>
+                          <li>OAuth contractVerified</li>
+                        </ul>
+                      </div>
                     </div>
-                    <div class="module-tile">
-                      <strong>协作治理</strong>
-                      <span class="status-pill is-removable">Optional</span>
-                      <code>workspace-governance</code>
-                      <ul>
-                        <li>issue / proposal</li>
-                        <li>锁与继承</li>
-                      </ul>
-                    </div>
-                    <div class="module-tile">
-                      <strong>Cloud Drive Port</strong>
-                      <span class="status-pill is-removable">Optional</span>
-                      <code>cloud-drive-port</code>
-                      <ul>
-                        <li>iCloud local projection</li>
-                        <li>OAuth contractVerified</li>
-                      </ul>
+                    <div class="sharedspace-band">
+                      <div class="sharedspace-band-title">本地共享</div>
+                      <div class="workspace-grid">
+                        <div class="module-tile">
+                          <strong>Sharedspace</strong>
+                          <span class="status-pill is-removable">Optional</span>
+                          <code>agent-workspace</code>
+                          <ul>
+                            <li>受控文件空间</li>
+                            <li>StateCommit</li>
+                          </ul>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <p class="caption">共享空间是公共资产和协作状态，不属于单个智能体私有状态。</p>
+                  <p class="caption">共享空间分为云盘共享和本地共享，承载公共资产与文件状态；跨空间协作治理归入能力层。</p>
                 </div>
 
-                <div class="subnode policy">
-                  <h3>策略管理 <span class="status-pill is-removable">Optional</span></h3>
-                  <div class="policy-grid">
-                    <div class="module-tile">
-                      <strong>流程策略</strong>
-                      <span class="status-pill is-removable">Optional</span>
-                      <code>workflow-policy</code>
-                      <ul>
-                        <li>处理流程选择</li>
-                        <li>人工确认门禁</li>
-                      </ul>
-                    </div>
-                    <div class="module-tile">
-                      <strong>调用策略</strong>
-                      <span class="status-pill is-removable">Optional</span>
-                      <code>agent-policy</code>
-                      <ul>
-                        <li>模型路由</li>
-                        <li>工具调用约束</li>
-                      </ul>
-                    </div>
-                  </div>
-                  <p class="caption">策略管理负责处理流程和智能体调用策略；安全权限仍由基建层安全权限裁决。</p>
-                </div>
               </div>
 
-              <div class="application-column right" aria-label="应用层右列：智能体、代码管理、通用工具与技能">
-                <div class="subnode agent">
-                  <h3>智能体 <span class="status-pill is-removable">Optional</span></h3>
-                  <div class="agent-stack" aria-label="智能体上下文、记忆与基座">
-                    <div class="agent-layer">
-                      <div class="agent-layer-name">核心组件</div>
-                      <div class="agent-runtime-rows">
-                        <div class="agent-runtime-row">
-                          <div class="module-tile">
-                            <strong>上下文（临时）</strong>
-                            <span class="status-pill is-removable">Optional</span>
-                            <code>agent-context</code>
-                            <ul>
-                              <li>临时上下文</li>
-                              <li>会话压缩</li>
-                            </ul>
-                          </div>
-                          <div class="module-tile">
-                            <strong>记忆（长期）</strong>
-                            <span class="status-pill is-removable">Optional</span>
-                            <code>agent-memory</code>
-                            <ul>
-                              <li>长期上下文</li>
-                              <li>contentRefs</li>
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="agent-layer">
-                      <div class="agent-layer-name">智能体基座</div>
-                      <div class="agent-module-grid">
-                        <div class="module-tile">
-                          <strong>模型网关</strong>
-                          <span class="status-pill is-removable">Optional</span>
-                          <code>agent-gateway</code>
-                          <ul>
-                            <li>model route</li>
-                            <li>provider adapter</li>
-                          </ul>
-                        </div>
-                        <div class="module-tile">
-                          <strong>基础配置</strong>
-                          <span class="status-pill is-removable">Optional</span>
-                          <code>agent-configs</code>
-                          <ul>
-                            <li>profile registry</li>
-                            <li>agent defaults</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
+              <div class="application-column right" aria-label="应用层右列：代码管理、通用工具与技能">
                 <div class="subnode codespace">
                   <h3>代码管理 <span class="status-pill is-removable">Optional</span></h3>
                   <div class="codespace-grid">
@@ -1115,36 +1455,121 @@
                 <strong>上游服务切面</strong>
                 <span class="status-pill is-removable">Optional</span>
                 <code>upstream-service-aspect</code>
-                <ul>
-                  <li>外部服务发现</li>
-                  <li>服务接口契约</li>
-                  <li>上游 endpointRef</li>
-                  <li>上游 secretRef 投影</li>
-                </ul>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>服务发现</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>upstream-service-discovery</code>
+                    <ul>
+                      <li>外部服务注册表</li>
+                      <li>服务快照投影</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>接口契约</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>upstream-provider-contract</code>
+                    <ul>
+                      <li>provider contract</li>
+                      <li>协议能力描述</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>端点与密钥投影</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>upstream-endpoint-secretref</code>
+                    <ul>
+                      <li>上游 endpointRef</li>
+                      <li>secretRef only</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
               <div class="aspect-tile">
                 <strong>下游客户端切面</strong>
                 <span class="status-pill is-removable">Optional</span>
                 <code>downstream-client-aspect</code>
-                <ul>
-                  <li>客户端发现配置</li>
-                  <li>能力目录投影</li>
-                  <li>bootstrap manifest</li>
-                  <li>客户端 secretRef 投影</li>
-                </ul>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>客户端交互</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>client-interaction-surface</code>
+                    <ul>
+                      <li>Pact Client 双向交互</li>
+                      <li>MCP / ACP request intake</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>MCP Adapter Layer</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>mcp-adapter-layer</code>
+                    <ul>
+                      <li>framework MCP catalog</li>
+                      <li>route: mcp-server-side</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>ACP Adapter Layer</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>acp-adapter-layer</code>
+                    <ul>
+                      <li>source / target descriptors</li>
+                      <li>route: acp-agent-relay</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>路由与能力投影</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>downstream-route-intent</code>
+                    <ul>
+                      <li>协议请求翻译</li>
+                      <li>能力目录 / secretRef 投影</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
               <div class="aspect-tile">
                 <strong>平台应用服务切面</strong>
                 <span class="status-pill is-removable">Optional</span>
                 <code>platform-application-service-aspect</code>
-                <ul>
-                  <li>operation manifest</li>
-                  <li>interface catalog</li>
-                  <li>HTTP / RPC / CLI 映射</li>
-                  <li>character tag projection contract</li>
-                  <li>authentication aspect contract</li>
-                  <li>secret distribution contract</li>
-                </ul>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>入口与请求合同</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>application-entry-contract</code>
+                    <ul>
+                      <li>服务入口收口</li>
+                      <li>请求归一化</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>Operation Surface</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>operation-surface</code>
+                    <ul>
+                      <li>operation manifest</li>
+                      <li>Operation Registry</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>协议映射</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>protocol-interface-binding</code>
+                    <ul>
+                      <li>interface catalog</li>
+                      <li>HTTP / RPC / CLI 映射</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>投影合同</strong>
+                    <span class="status-pill is-removable">Optional</span>
+                    <code>platform-projection-contracts</code>
+                    <ul>
+                      <li>character tag projection</li>
+                      <li>auth aspect / secret distribution</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
             </div>
           </aside>
@@ -1620,11 +2045,21 @@
     (() => {
       const cards = [];
 
+      document.querySelectorAll("code").forEach((code) => {
+        const value = code.textContent.trim();
+        if (value && !code.hasAttribute("title")) {
+          code.setAttribute("title", value);
+        }
+      });
+
       function setExpanded(card, expanded) {
         const button = card.querySelector(":scope > .collapsible-head");
         card.classList.toggle("is-expanded", expanded);
         if (button) {
           button.setAttribute("aria-expanded", String(expanded));
+          if (button.dataset.labelBase) {
+            button.setAttribute("aria-label", `${button.dataset.labelBase}，${expanded ? "收起详情" : "展开详情"}`);
+          }
         }
       }
 
@@ -1666,6 +2101,11 @@
         button.type = "button";
         button.className = "collapsible-head";
         button.setAttribute("aria-expanded", "false");
+        button.dataset.labelBase = [title, status, code]
+          .filter(Boolean)
+          .map((node) => node.textContent.trim())
+          .filter(Boolean)
+          .join("，");
 
         const titleWrap = document.createElement("span");
         titleWrap.className = "collapsible-title";

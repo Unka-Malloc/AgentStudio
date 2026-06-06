@@ -3,6 +3,8 @@ import { useRoute } from "vue-router";
 import type { KnowledgeTab } from "./useConsole";
 import { knowledgeRouteTabToViewTab } from "../router/routes";
 import { scrollDataAttributeElementIntoView } from "./console-browser-effects";
+import type { KnowledgeDocumentPreviewContract } from "../lib/knowledge-documents";
+import type { DocumentParsingConfig } from "../lib/types/split/documents";
 
 type ReadonlyRef<T> = {
   readonly value: T;
@@ -13,6 +15,43 @@ export type ConsoleKnowledgeViewStateControllerOptions = {
   knowledgeManagementPanel: ReadonlyRef<string>;
   knowledgeTab: ReadonlyRef<KnowledgeTab>;
   toggleWordCloudCollapsed: (wordBagId: string) => void;
+};
+
+const dynamicParsingPreviewConfig: KnowledgeDocumentPreviewContract = {
+  pipelineId: "dynamic-parameter-v1",
+  expectedOutputs: ["preprocessResult", "chunks", "structureArtifacts", "granularityFragments"],
+  contextBudget: { knowledgeTokens: 12000 },
+  payloadBudget: { maxResponseBytes: 1048576 },
+  granularity: {
+    secondaryParse: { enabled: false },
+  },
+  dynamicParsing: {
+    preserveStructureArtifacts: true,
+  },
+};
+
+const dynamicParsingProfile = {
+  contextBudget: dynamicParsingPreviewConfig.contextBudget,
+  payloadBudget: dynamicParsingPreviewConfig.payloadBudget,
+  granularity: dynamicParsingPreviewConfig.granularity,
+  secondaryParse: dynamicParsingPreviewConfig.granularity?.secondaryParse,
+  dynamicParsing: dynamicParsingPreviewConfig.dynamicParsing,
+  structureArtifacts: "structureArtifacts",
+  granularityFragments: "granularityFragments",
+  parentArtifactId: "structureArtifacts[].metadata.parentArtifactId",
+};
+
+export const unifiedKnowledgeIngestPipelineConfig: DocumentParsingConfig = {
+  pipelineId: "unified-knowledge-ingest-v1",
+  expectedOutputs: ["preprocessResult", "chunks", "structureArtifacts", "granularityFragments"],
+  contextBudget: { knowledgeTokens: 12000 },
+  payloadBudget: { maxResponseBytes: 1048576 },
+  granularity: {
+    secondaryParse: { enabled: false },
+  },
+  dynamicParsing: {
+    preserveStructureArtifacts: true,
+  },
 };
 
 export function createConsoleKnowledgeViewStateController(
@@ -70,21 +109,6 @@ export function createConsoleKnowledgeViewStateController(
       activeKnowledgeTab.value === "maintenance",
   );
 
-  const dynamicParsingPreviewConfig = {
-    pipelineId: "dynamic-parameter-v1",
-    ingestPipelineId: "unified-knowledge-ingest-v1",
-    contextBudget: { knowledgeTokens: 12000 },
-    payloadBudget: { maxResponseBytes: 1048576 },
-    granularity: {
-      secondaryParse: { enabled: false },
-    },
-    dynamicParsing: {
-      preserveStructureArtifacts: true,
-    },
-    structureArtifacts: true,
-    granularityFragments: true,
-    parentArtifactId: "",
-  };
   const dynamicParsingPolicySignature = JSON.stringify(dynamicParsingPreviewConfig);
   const documentPreviewResult = ref<Record<string, unknown> | null>(null);
 
@@ -92,6 +116,8 @@ export function createConsoleKnowledgeViewStateController(
     activeKnowledgeTab,
     documentPreviewResult,
     dynamicParsingPolicySignature,
+    dynamicParsingProfile,
+    unifiedKnowledgeIngestPipelineConfig,
     dynamicParsingPreviewConfig,
     expandedAdvancedIds,
     expandedSummaryIds,

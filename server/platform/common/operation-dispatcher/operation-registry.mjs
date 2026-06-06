@@ -23,6 +23,12 @@ const INTERNAL_KNOWLEDGE_DISTILLATION_DEPRECATED_ASPECTS = Object.freeze([
   "external-replaced"
 ]);
 
+const EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS = Object.freeze([
+  "external-service",
+  "external-upstream-gateway",
+  "knowledge-distillation"
+]);
+
 function internalKnowledgeDistillationOperation(operation = {}) {
   return {
     ...operation,
@@ -1322,6 +1328,35 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
   },
   {
+    id: "runtime.dependencies.configure",
+    feature: "runtime",
+    label: "保存运行时依赖配置",
+    target: { controller: "system", method: "handleConfigureRuntimeDependency" },
+    http: { method: "POST", path: "/api/runtime/dependencies/configuration" },
+    rpc: { method: "runtime.dependencies.configure", body: "params" },
+    cli: { command: ["runtime", "dependencies", "configuration"], usage: "runtime dependencies configuration --body request.json" },
+    requiredScopes: ["runtime:admin"],
+    inputSchema: {
+      type: "object",
+      required: ["entries"],
+      properties: {
+        targetId: { type: "string" },
+        entries: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["key"],
+            properties: {
+              key: { type: "string" },
+              value: { type: "string" }
+            }
+          }
+        }
+      }
+    },
+    safety: { risk: "safe_write", requiresConfirmation: false, approvalScope: "runtime:admin" }
+  },
+  {
     id: "runtime.path_browse",
     feature: "runtime",
     label: "服务端路径浏览",
@@ -1512,6 +1547,20 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     concurrencySafe: true,
     safety: { risk: "read_only", requiresConfirmation: false },
     aspects: ["strategy-management", "agent-policy", "model-routing"]
+  },
+  {
+    id: "strategy.route_policy.evaluate",
+    feature: "strategy_management",
+    label: "评估切面路由策略",
+    target: { controller: "system", method: "handleStrategyManagement" },
+    http: { method: "POST", path: "/api/strategy/route-policy/evaluate" },
+    rpc: { method: "strategy.route_policy.evaluate", body: "params" },
+    cli: { command: ["strategy", "route-policy", "evaluate"], usage: "strategy route-policy evaluate --body payload.json" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["strategy-management", "route-policy", "upstream-service-aspect", "downstream-client-aspect"]
   },
   {
     id: "strategy.tool_policy.preview",
@@ -3850,7 +3899,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: ["external-service", "knowledge-distillation"]
+    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
   },
   {
     id: "external.knowledge.distillation.service.capabilities",
@@ -3876,7 +3925,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: ["external-service", "knowledge-distillation"]
+    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
   },
   {
     id: "external.knowledge.distillation.service.runtime_health",
@@ -3902,7 +3951,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: ["external-service", "knowledge-distillation", "runtime-doctor"]
+    aspects: [...EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS, "runtime-doctor"]
   },
   {
     id: "external.knowledge.distillation.runs.list",
@@ -3932,7 +3981,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: ["external-service", "knowledge-distillation"]
+    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
   },
   {
     id: "external.knowledge.distillation.runs.create",
@@ -3992,7 +4041,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     },
     requiredScopes: ["knowledge:maintain"],
     safety: { risk: "safe_write" },
-    aspects: ["external-service", "knowledge-distillation"]
+    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
   },
   {
     id: "external.knowledge.distillation.runs.get",
@@ -4019,7 +4068,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: ["external-service", "knowledge-distillation"]
+    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
   },
   {
     id: "external.knowledge.distillation.runs.cancel",
@@ -4035,7 +4084,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     },
     requiredScopes: ["knowledge:maintain"],
     safety: { risk: "safe_write" },
-    aspects: ["external-service", "knowledge-distillation"]
+    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
   },
   {
     id: "external.knowledge.distillation.evidence.query",
@@ -4084,7 +4133,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: ["external-service", "knowledge-distillation", "evidence-query"]
+    aspects: [...EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS, "evidence-query"]
   },
   {
     id: "external.knowledge.distillation.projects.evidence.query",
@@ -4137,7 +4186,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: ["external-service", "knowledge-distillation", "evidence-query", "project-convergence"]
+    aspects: [...EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS, "evidence-query", "project-convergence"]
   },
   {
     id: "external.knowledge.distillation.artifacts.export",
@@ -4168,7 +4217,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     readOnly: true,
     concurrencySafe: true,
     binary: true,
-    aspects: ["external-service", "knowledge-distillation", "result-export"]
+    aspects: [...EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS, "result-export"]
   },
   internalKnowledgeDistillationOperation({
     id: "knowledge.distillation.workbench.runs.list",

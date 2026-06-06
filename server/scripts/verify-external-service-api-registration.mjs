@@ -10,6 +10,10 @@ import {
   validateExternalServiceConfig
 } from "../platform/common/composition-management/external-service-adapter.mjs";
 import {
+  loadCompositionPresets,
+  validateCompositionPreset
+} from "../platform/common/composition-management/index.mjs";
+import {
   callExternalLlmService,
   describeExternalLlmServiceAdapters,
   isExternalLlmServiceConfig
@@ -41,6 +45,9 @@ const CLOUD_DRIVE_LEGACY_OPERATION_IDS = Object.freeze([
   "sharedspace.drive.sync.plan",
   "sharedspace.drive.sync.apply",
   "sharedspace.drive.permission.list"
+]);
+const CLOUD_DRIVE_LEGACY_TOOLING_EXEMPTIONS = Object.freeze([
+  "sharedspace.drive.connect"
 ]);
 
 const SERVICE_REGISTRATION_REQUIREMENTS = Object.freeze({
@@ -124,7 +131,17 @@ async function assertExternalServiceTypeValidation() {
     healthCheck: { type: "none" }
   };
   const acceptedUpstreams = [
-    { type: "acp", url: "http://127.0.0.1:8788/acp" },
+    {
+      type: "acp",
+      transport: "stdio",
+      command: {
+        executable: process.execPath,
+        args: ["--version"]
+      },
+      metadata: {
+        agentProfileId: "verify.acp.agent"
+      }
+    },
     { type: "llm", modelProtocol: "openai-compatible", provider: "openai", url: "https://api.openai.com:443/v1/chat/completions" },
     { type: "llm", modelProtocol: "anthropic-messages", provider: "anthropic", url: "https://api.anthropic.com:443/v1/messages" },
     { type: "llm", modelProtocol: "gemini-generate-content", provider: "google", url: "https://generativelanguage.googleapis.com:443/v1beta/models/gemini:generateContent" },
@@ -190,6 +207,71 @@ async function assertExternalServiceTypeValidation() {
     /explicit port/,
     "HTTP external service explicit-port validation must be reported"
   );
+  const missingAcpCommandConfig = normalizeExternalServiceConfig({
+    ...baseConfig,
+    serviceId: `${baseConfig.serviceId}-acp-missing-command`,
+    upstream: {
+      type: "acp",
+      transport: "stdio"
+    },
+    binding: {
+      mode: "passthrough",
+      outlet: "pact.agentRelay",
+      requiredScopes: ["agent_relay:prompt"],
+      risk: "repair_write"
+    }
+  });
+  const missingAcpCommandValidation = await validateExternalServiceConfig({
+    config: missingAcpCommandConfig,
+    requireKnownPaths: false
+  });
+  assert.equal(missingAcpCommandValidation.ok, false, "ACP stdio external service without command must be rejected");
+  assert.match(
+    JSON.stringify(missingAcpCommandValidation.errors || []),
+    /ACP stdio upstream requires upstream\.command\.executable/,
+    "ACP stdio command validation must be reported"
+  );
+}
+
+async function assertAcpAgentRelaySourceStdioPreset() {
+  const presets = await loadCompositionPresets({ cwd: repoRoot });
+  const record = presets.find(({ preset }) => preset?.presetId === "acp-agent-relay-source-stdio");
+  assert.ok(record, "ACP Agent Relay source stdio composition preset must be registered");
+
+  const validation = await validateCompositionPreset({
+    preset: record.preset,
+    filePath: record.filePath,
+    cwd: repoRoot
+  });
+  assert.equal(
+    validation.ok,
+    true,
+    `ACP Agent Relay source stdio preset must validate: ${JSON.stringify(validation.errors || [])}`
+  );
+
+  const config = validation.externalService;
+  assert.equal(config.serviceId, "acp-agent-relay-source-stdio");
+  assert.equal(config.upstream.type, "acp");
+  assert.equal(config.upstream.transport, "stdio");
+  assert.equal(config.upstream.command.executable, "node");
+  assert.deepEqual(config.upstream.command.args, ["server/scripts/acp-agent-relay-source-stdio.mjs"]);
+  assert.equal(config.binding.outlet, "pact.agentRelay");
+  assert.equal(config.binding.risk, "repair_write");
+  assert.equal(config.binding.requiredScopes.includes("agent_relay:view"), true);
+  assert.equal(config.binding.requiredScopes.includes("agent_relay:operate"), true);
+  assert.equal(config.upstream.metadata.protocol, "pact.acp-agent-relay.v1");
+  assert.equal(config.upstream.metadata.stdout, "json-rpc-only");
+  assert.equal(config.upstream.metadata.diagnostics, "stderr");
+  assert.equal(record.preset.serviceContracts?.auditRequired, true);
+  assert.equal(record.preset.serviceContracts?.stdioContract?.stdout, "newline-delimited-json-rpc");
+  assert.equal(record.preset.serviceContracts?.stdioContract?.stderr, "diagnostics-only");
+  assert.equal(config.metadata.sourceContextEnv.includes("PACT_ACP_SOURCE_STDIO_STORE_PATH"), true);
+  assert.equal(config.metadata.sourceContextEnv.includes("PACT_ACP_SOURCE_STDIO_USER_DATA_PATH"), true);
+  assert.equal(config.metadata.sourceContextEnv.includes("PACT_ACP_RELAY_STORE_PATH"), true);
+  assert.equal(config.metadata.sourceContextEnv.includes("PACT_ACP_RELAY_USER_DATA_PATH"), true);
+  assert.equal(validation.pathRefs.includes("server/scripts/acp-agent-relay-source-stdio.mjs"), true);
+  assert.equal(validation.operationIds.includes("acp_agent_relay.prompt.send"), true);
+  assert.equal(validation.operationIds.includes("acp_agent_relay.session.resume"), true);
 }
 
 function assertExternalLlmServiceAdapterScaffold() {
@@ -235,6 +317,7 @@ const kernelApiOperationIds = new Set(KERNEL_API_OPERATION_IDS);
 const kernelToolIds = new Set(KERNEL_TOOL_IDS);
 
 await assertExternalServiceTypeValidation();
+await assertAcpAgentRelaySourceStdioPreset();
 assertExternalLlmServiceAdapterScaffold();
 
 for (const operationId of CLOUD_DRIVE_EXTERNAL_OPERATION_IDS) {
@@ -261,11 +344,13 @@ for (const operationId of CLOUD_DRIVE_LEGACY_OPERATION_IDS) {
     "compatibility-shim-only",
     `${operationId} must be compatibility-shim-only`
   );
-  assert.equal(
-    toolsByOperationId.has(operationId),
-    false,
-    `${operationId} must not be exposed through Tool Management as a platform core tool`
-  );
+  if (!CLOUD_DRIVE_LEGACY_TOOLING_EXEMPTIONS.includes(operationId)) {
+    assert.equal(
+      toolsByOperationId.has(operationId),
+      false,
+      `${operationId} must not be exposed through Tool Management as a platform core tool`
+    );
+  }
   assert.equal(
     kernelApiOperationIds.has(operationId),
     false,
@@ -308,6 +393,9 @@ for (const serviceName of externalServiceNames) {
     const operation = operationsById.get(operationId);
     assert.ok(operation, `${serviceName} must register ${operationId}`);
     assert.equal(operation.aspects?.includes("external-service"), true, `${operationId} must use the external-service aspect`);
+    if (requirement.namespace === "external.knowledge.distillation") {
+      assert.equal(operation.aspects?.includes("external-upstream-gateway"), true, `${operationId} must use the external upstream gateway aspect`);
+    }
     assert.equal(operation.feature, "external", `${operationId} must use the external feature namespace`);
     assert.equal(operation.id.startsWith(`${requirement.namespace}.`), true, `${operationId} must stay under ${requirement.namespace}`);
     assert.equal(

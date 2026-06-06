@@ -13,6 +13,27 @@ export type RuntimeDependency = {
   detection?: Record<string, unknown>;
   actions?: Record<string, unknown>;
   accepts?: Record<string, boolean>;
+  configuration?: RuntimeDependencyConfigurationGroup[];
+};
+
+export type RuntimeDependencyConfigurationEntry = {
+  editable?: boolean;
+  kind?: string;
+  key: string;
+  label: string;
+  inputType?: string;
+  options?: Array<{ label: string; value: string }>;
+  value?: string;
+  configured?: boolean;
+  required?: boolean;
+  source?: string;
+  description?: string;
+};
+
+export type RuntimeDependencyConfigurationGroup = {
+  kind?: string;
+  title: string;
+  entries?: RuntimeDependencyConfigurationEntry[];
 };
 
 export type RuntimeDependencyDetectionSource = {
@@ -83,6 +104,20 @@ export type RuntimeDependencyActionResult = {
   results?: RuntimeDependencyActionResult[];
 };
 
+export type RuntimeDependencyConfigurationUpdateEntry = {
+  key: string;
+  value?: string;
+};
+
+export type RuntimeDependencyConfigurationUpdateResult = {
+  ok: boolean;
+  generatedAt?: string;
+  protocolVersion?: string;
+  schemaVersion?: number;
+  sourceConfigPath?: string;
+  updated?: number;
+};
+
 export function listRuntimeDependencies() {
   return getJson<RuntimeDependencyListResponse>("/api/runtime/dependencies");
 }
@@ -95,5 +130,15 @@ export function downloadRuntimeDependency(payload: Record<string, unknown>) {
       confirm: true,
     },
     { safetyConfirm: true },
+  );
+}
+
+export function saveRuntimeDependencyConfiguration(payload: {
+  targetId?: string;
+  entries: RuntimeDependencyConfigurationUpdateEntry[];
+}) {
+  return postJson<RuntimeDependencyConfigurationUpdateResult>(
+    "/api/runtime/dependencies/configuration",
+    payload,
   );
 }

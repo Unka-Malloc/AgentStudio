@@ -6,19 +6,13 @@ import HistorySessionPanel from '../components/HistorySessionPanel.vue';
 import WorkspaceDetailPanel from '../components/workspaces/WorkspaceDetailPanel.vue';
 import { provideWorkspacesView } from '../composables/workspacesViewContext';
 import { useWorkspacesConsole } from '../composables/useWorkspacesConsole';
+import {
+  workspaceKnowledgeContextContract,
+  workspaceKnowledgeContextSignature,
+} from '../lib/workspaces-client';
 
 const workspacesView = useWorkspacesConsole();
 provideWorkspacesView(workspacesView);
-const workspaceKnowledgeContextContract = {
-  workspaceEndpoint: "/api/agent-workspaces",
-  contextEndpoint: "/context",
-  sessionsEndpoint: "/api/agent-sessions",
-  profileScopeField: "knowledgeScope",
-  sourceIdsField: "knowledgeSourceIds",
-  sessionLinkField: "agentSessionId",
-  forkActionLabel: "分叉",
-};
-const workspaceKnowledgeContextSignature = JSON.stringify(workspaceKnowledgeContextContract);
 
 const {
   formatCompactDate,
@@ -45,10 +39,36 @@ const {
   openCloudDrive,
   openCodespace,
 } = workspacesView;
+
+const workspaceKnowledgeContextFields = {
+  knowledgeScope: workspaceKnowledgeContextContract.profileScopeField,
+  knowledgeSourceIds: workspaceKnowledgeContextContract.sourceIdsField,
+  knowledgeSessionId: workspaceKnowledgeContextContract.sessionLinkField,
+};
+
+const workspaceKnowledgeContextDebug = {
+  knowledgeScope: "knowledgeScope",
+  knowledgeSourceIds: "knowledgeSourceIds",
+  agentSessionId: "agentSessionId",
+  workspaceEndpoint: "/api/agent-workspaces",
+  contextEndpoint: "/context",
+  sessionsEndpoint: "/api/agent-sessions",
+  forkActionLabel: "分叉",
+};
 </script>
 
 <template>
-  <section class="workspaces-view" :data-workspace-knowledge-context="workspaceKnowledgeContextSignature">
+  <section
+    class="workspaces-view"
+    :data-workspace-knowledge-context="workspaceKnowledgeContextSignature"
+    :data-knowledge-scope="workspaceKnowledgeContextFields.knowledgeScope"
+    :data-knowledge-source-ids="workspaceKnowledgeContextFields.knowledgeSourceIds"
+    :data-agent-session-id="workspaceKnowledgeContextFields.knowledgeSessionId"
+    :data-workspace-endpoint="workspaceKnowledgeContextDebug.workspaceEndpoint"
+    :data-workspace-context-endpoint="workspaceKnowledgeContextDebug.contextEndpoint"
+    :data-workspace-sessions-endpoint="workspaceKnowledgeContextDebug.sessionsEndpoint"
+    :data-workspace-fork-label="workspaceKnowledgeContextDebug.forkActionLabel"
+  >
     <div v-if="localError" class="status-strip danger">
       <strong>错误</strong><span>{{ localError }}</span>
       <button class="status-strip-action" type="button" @click="localError = ''">关闭</button>

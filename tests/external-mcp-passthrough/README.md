@@ -4,9 +4,9 @@ This bundle verifies that Pact can register an external MCP service through `pac
 
 Files:
 
-- `Dockerfile`: builds a fake Python FastMCP HTTP service.
-- `requirements.txt`: Python dependencies for the fake service.
-- `server.py`: fake FastMCP server with test tools.
+- `Dockerfile`: builds a fixture Python FastMCP HTTP service.
+- `requirements.txt`: Python dependencies for the fixture service.
+- `server.py`: fixture FastMCP server with test tools.
 - `start.sh`: container entrypoint.
 - `start-container.sh`: manual container build and run script.
 - `start-docker.sh`: Docker compatibility wrapper for `start-container.sh`.
@@ -21,7 +21,7 @@ node tests/external-mcp-passthrough/verify.mjs
 
 By default the verification uses `PACT_EXTERNAL_SERVICE_VERIFY_MODE=auto`: container runtime first, local Python venv second. Use `PACT_EXTERNAL_SERVICE_VERIFY_MODE=container` to require a container runtime, or `PACT_EXTERNAL_SERVICE_VERIFY_MODE=local` to force local FastMCP execution. `docker` is accepted as a compatibility alias for `container`.
 
-Start the fake service manually:
+Start the fixture service manually:
 
 ```bash
 tests/external-mcp-passthrough/start-container.sh

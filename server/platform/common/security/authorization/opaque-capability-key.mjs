@@ -359,6 +359,117 @@ function normalizeKernelState(input = {}) {
   return normalized;
 }
 
+function isoTime(value = "") {
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function earlierIso(a = "", b = "") {
+  const aTime = isoTime(a);
+  const bTime = isoTime(b);
+  if (!aTime) {
+    return b || "";
+  }
+  if (!bTime) {
+    return a || "";
+  }
+  return aTime <= bTime ? a : b;
+}
+
+function laterIso(a = "", b = "") {
+  const aTime = isoTime(a);
+  const bTime = isoTime(b);
+  if (!aTime) {
+    return b || "";
+  }
+  if (!bTime) {
+    return a || "";
+  }
+  return aTime >= bTime ? a : b;
+}
+
+function mergeKeyRecord(existing = null, candidate = null) {
+  const current = publicKeyRecord(existing);
+  const next = publicKeyRecord(candidate);
+  if (!current) {
+    return next;
+  }
+  if (!next) {
+    return current;
+  }
+  if (current.status !== "valid" || next.status !== "valid") {
+    const invalid = current.status !== "valid" ? current : next;
+    const other = current.status !== "valid" ? next : current;
+    return publicKeyRecord({
+      ...other,
+      ...invalid,
+      status: "invalid",
+      invalidatedAt: laterIso(current.invalidatedAt, next.invalidatedAt),
+      invalidationReason: invalid.invalidationReason || other.invalidationReason,
+      createdAt: earlierIso(current.createdAt, next.createdAt),
+      updatedAt: laterIso(current.updatedAt, next.updatedAt)
+    });
+  }
+  return isoTime(next.updatedAt || next.createdAt) >= isoTime(current.updatedAt || current.createdAt)
+    ? next
+    : current;
+}
+
+function mergePermissionRecord(existing = null, candidate = null) {
+  if (!existing) {
+    return candidate;
+  }
+  if (!candidate) {
+    return existing;
+  }
+  const status = existing.status !== "valid" || candidate.status !== "valid" ? "invalid" : "valid";
+  return {
+    ...existing,
+    ...candidate,
+    status,
+    createdAt: earlierIso(existing.createdAt, candidate.createdAt)
+  };
+}
+
+function mergeKernelStates(persistedInput = {}, hotInput = {}) {
+  const persisted = normalizeKernelState(persistedInput);
+  const hot = normalizeKernelState(hotInput);
+  if (persisted.runtimeLookupKeyBase64 !== hot.runtimeLookupKeyBase64) {
+    return persisted;
+  }
+  const records = new Map();
+  for (const record of persisted.records) {
+    records.set(record.keyHash, mergeKeyRecord(records.get(record.keyHash), record));
+  }
+  for (const record of hot.records) {
+    records.set(record.keyHash, mergeKeyRecord(records.get(record.keyHash), record));
+  }
+  const permissions = new Map();
+  for (const permission of persisted.permissions) {
+    const key = `${permission.keyHash}:${permission.capabilityHash}`;
+    permissions.set(key, mergePermissionRecord(permissions.get(key), permission));
+  }
+  for (const permission of hot.permissions) {
+    const key = `${permission.keyHash}:${permission.capabilityHash}`;
+    permissions.set(key, mergePermissionRecord(permissions.get(key), permission));
+  }
+  const eventsById = new Map();
+  for (const event of [...persisted.events, ...hot.events]) {
+    const normalized = asObject(event);
+    const key = text(normalized.eventId) || opaqueCapabilityHash([stableJson(normalized)]);
+    eventsById.set(key, normalized);
+  }
+  return normalizeKernelState({
+    ...persisted,
+    epoch: Math.max(Number(persisted.epoch || 1), Number(hot.epoch || 1)),
+    records: [...records.values()],
+    permissions: [...permissions.values()],
+    events: [...eventsById.values()].slice(-2048),
+    createdAt: earlierIso(persisted.createdAt, hot.createdAt),
+    updatedAt: laterIso(persisted.updatedAt, hot.updatedAt)
+  });
+}
+
 function kernelStateRoot(state = {}) {
   const normalized = {
     stateVersion: Number(state.stateVersion || KERNEL_STATE_VERSION),
@@ -1111,12 +1222,24 @@ export function createSealedCapabilityKernelStore({
     const run = mutationQueue.catch(() => {}).then(async () => withPrivateFileLock(
       capabilityKernelLockPath({ dataDir, alias }),
       async () => {
+        const hotState = loaded && state ? state : null;
         if (loadPromise) {
           await loadPromise.catch(() => {});
         }
         loaded = false;
         state = null;
         loadPromise = null;
+        if (hotState) {
+          await load();
+          state = mergeKernelStates(state, hotState);
+          record = {
+            ...record,
+            generation: Number(state.epoch || record?.generation || 1),
+            stateRoot: state.stateRoot,
+            updatedAt: laterIso(record?.updatedAt, state.updatedAt)
+          };
+          loaded = true;
+        }
         return action();
       }
     ));

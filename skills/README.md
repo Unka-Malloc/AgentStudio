@@ -12,9 +12,9 @@ Pact 仓库内置维护 Skills 按系统架构图中的主要责任模块存放�
 | --- | --- | --- |
 | `appearance` | 外观层 | 控制台、Web UI 组件、操作员文档和可视化维护入口。 |
 | `downstream-client-aspect` | 下游客户端切面 | Pact Client、便携数据布局、客户端发现、bootstrap 和服务发现契约。 |
-| `interface-wrapper` | 接口封装层 | MCP/API 入口、外部 HTTP/RPC 服务封装、请求归一化、上传事实审计和服务层边界证据。 |
+| `interface-wrapper` | 切面层 / 协议入口 | MCP/API 入口、外部 HTTP/RPC 服务封装、请求归一化、上传事实审计和切面层边界证据。 |
 | `knowledge-transformation` | 应用层 / 知识转化 | 原始语料、解析、OCR、邮件、索引、证据、AgentLibrary、外部向量库和图库适配。 |
-| `sharedspace` | 应用层 / 共享空间 | 上传会话、checkpoint、断点续传和受控工作空间写入链路。 |
+| `sharedspace` | 应用层 / 共享空间 | 云盘共享、本地共享、上传会话、checkpoint、断点续传和受控工作空间写入链路。 |
 | `codespace` | 应用层 / 代码管理 | 源码资料、Codespace、Gerrit code review route 和代码评审兼容。 |
 | `tools-skills` | 应用层 / 通用工具与技能 | Tool Management、SkillLibrary、grant、toolset、skill registry 和技能沉淀。 |
 | `module-management` | 基建层 / 模块管理 | mount 合同、模块脚手架、路由实验、contract test 和 postcommit hook。 |

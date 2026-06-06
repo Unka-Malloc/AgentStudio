@@ -124,7 +124,7 @@ assertControlMapCoversEveryObject(PLATFORM_SELF_GOVERNANCE_CONTROLS, "platform s
 const securityModelDoc = await readProjectFile("docs/boundary/2-3-5-Security-Model.md");
 const architectureDoc = await readProjectFile("docs/Architecture.md");
 const decisionDoc = await readProjectFile("docs/IMPLEMENTATION-DECISION-REGISTER.md");
-const planDoc = await readProjectFile("docs/V0.0.1-IMPLEMENTATION-PLAN.md");
+const planDoc = await readProjectFile("docs/reports/history/V0.0.1-IMPLEMENTATION-PLAN.md");
 
 for (const phrase of [
   "两条边界",

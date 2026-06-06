@@ -77,6 +77,7 @@ export function useRuntimeDownloadsViewController() {
     loading,
     prepareDependency: runtimeAction.prepareDependency,
     readyCount,
+    refreshRuntimeDependencies,
     sourceConfigPath,
   };
 }

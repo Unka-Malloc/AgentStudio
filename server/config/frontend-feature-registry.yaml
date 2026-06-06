@@ -220,6 +220,15 @@ routes:
           - admin.agent-config.view
           - admin.agent-config.update
 
+  - routePath: /admin/agent-assignment
+    viewFile: server-web/views/admin/AgentAssignmentView.vue
+    features:
+      - featureId: admin.agent-assignment
+        actions:
+          - admin.agent-assignment.view
+          - admin.agent-assignment.update
+          - admin.agent-assignment.probe
+
   - routePath: /admin/context-management
     viewFile: server-web/views/admin/ContextManagementView.vue
     features:

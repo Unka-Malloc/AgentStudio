@@ -2,10 +2,11 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
-const DEFAULT_CORPUS_DIR = "tests/email-corpus";
-const DEFAULT_REPORT_PATH = "tests/email-corpus/split-mbox-report.json";
+const DEFAULT_CORPUS_DIR = "~/.pact-server-data/evaluation-corpora/mail/messages";
+const DEFAULT_REPORT_PATH = "~/.pact-server-data/evaluation-corpora/mail/reports/split-mbox-report.json";
 
 function parseArgs(argv) {
   const options = {
@@ -31,10 +32,21 @@ function parseArgs(argv) {
     }
   }
 
-  options.root = path.resolve(options.root);
-  options.corpusDir = path.resolve(options.root, options.corpusDir);
-  options.reportPath = path.resolve(options.root, options.reportPath);
+  options.root = resolveInputPath(options.root, process.cwd());
+  options.corpusDir = resolveInputPath(options.corpusDir, options.root);
+  options.reportPath = resolveInputPath(options.reportPath, options.root);
   return options;
+}
+
+function resolveInputPath(inputPath, baseDir) {
+  const value = String(inputPath || "").trim();
+  if (value === "~") {
+    return os.homedir();
+  }
+  if (value.startsWith("~/")) {
+    return path.join(os.homedir(), value.slice(2));
+  }
+  return path.resolve(baseDir, value);
 }
 
 async function pathExists(filePath) {

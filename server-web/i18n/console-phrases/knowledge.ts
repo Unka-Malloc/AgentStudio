@@ -1,6 +1,7 @@
 import type { ConsolePhrasePair } from '../console-phrase-types';
 
 export const knowledgePhrasePairs: ConsolePhrasePair[] = [
+  ["知识归档", "Knowledge Archive"],
   ["知识入库", "Knowledge Ingest"],
   ["入库目标", "Ingest Targets"],
   ["全局知识空间", "Global Knowledge Space"],
