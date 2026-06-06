@@ -77,7 +77,7 @@ function splitList(value) {
 
 function normalizeProfile(value) {
   const normalized = String(value || "").trim();
-  if (["future-client", "legacy/dev-only"].includes(normalized)) {
+  if (normalized === "future-client") {
     return normalized;
   }
   throw new Error(`Unsupported client package profile: ${value}`);
@@ -136,7 +136,9 @@ function platformSupported(moduleConfig, platform) {
 
 function selectModules(config, options) {
   const activeProfile = options.profile || config.packageProfile || "future-client";
-  const legacyProfile = activeProfile === "legacy/dev-only";
+  if (activeProfile !== "future-client") {
+    throw new Error(`Unsupported client package profile: ${activeProfile}`);
+  }
   const modules = Object.entries(config.modules).map(([id, moduleConfig]) => ({
     id,
     ...moduleConfig
@@ -163,19 +165,8 @@ function selectModules(config, options) {
     const enabled = overrides.has(moduleConfig.id)
       ? overrides.get(moduleConfig.id)
       : moduleConfig.enabled !== false;
-    const legacyDevOnly =
-      moduleConfig.legacyDevOnly === true || moduleConfig.profile === "legacy/dev-only";
     if (!supported) {
       skipped.push({ ...moduleConfig, status: "skipped-platform" });
-      continue;
-    }
-    if (legacyDevOnly && enabled && !legacyProfile) {
-      throw new Error(
-        `Legacy/dev-only client packaging module cannot be enabled in profile ${activeProfile}: ${moduleConfig.id}`
-      );
-    }
-    if (legacyDevOnly && !legacyProfile) {
-      skipped.push({ ...moduleConfig, status: "legacy-dev-only" });
       continue;
     }
     if (moduleConfig.required && !enabled) {
@@ -445,7 +436,6 @@ function publicModuleRecord(moduleConfig) {
     category: moduleConfig.category || "",
     packaging: moduleConfig.packaging || "",
     profile: moduleConfig.profile || "",
-    legacyDevOnly: moduleConfig.legacyDevOnly === true,
     required: moduleConfig.required === true,
     status: moduleConfig.status || ""
   };

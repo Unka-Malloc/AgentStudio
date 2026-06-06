@@ -44,24 +44,51 @@ graph LR
 | --- | --- | --- | --- |
 | [SERVER.md](SERVER.md) | 服务端指南 | Server startup, runtime, protocols, packaging, and operations | 57 KB |
 | [USAGE.md](USAGE.md) | 使用说明 | Console, client, and CLI usage guide | 7 KB |
+| [PRODUCT.md](PRODUCT.md) | 产品定义 | Product purpose, users, brand personality, design principles, and accessibility expectations | 4 KB |
 | [FEATURE-PROFILES.md](FEATURE-PROFILES.md) | Feature Profile | Feature profile planning, trimming, and build commands | 2 KB |
 | [IMPLEMENTATION-DECISION-REGISTER.md](IMPLEMENTATION-DECISION-REGISTER.md) | 设计决策登记表 | Pre-implementation design decisions; finalized conclusions must be merged back into core docs | 33 KB |
 | [CLIENT_ARCHITECTURE.md](CLIENT_ARCHITECTURE.md) | 客户端架构 | Destructive desktop-client architecture target and six-module product boundary | 13 KB |
-| [V0.0.1-IMPLEMENTATION-PLAN.md](V0.0.1-IMPLEMENTATION-PLAN.md) | v0.0.1 实施计划 | Single-node v0.0.1 delivery phases, checkpoints, interfaces, compatibility targets, and acceptance gates | 28 KB |
-| [CLIENT-IMPLEMENTATION-PLAN.md](CLIENT-IMPLEMENTATION-PLAN.md) | 客户端实施路线 | Lightweight Pact Client refactor phases, checkpoints, interfaces, compatibility targets, and acceptance gates | 28 KB |
-| [CLIENT-DESIGN-CONFORMANCE.md](CLIENT-DESIGN-CONFORMANCE.md) | 客户端设计符合性矩阵 | Destructive keep/replace/delete/legacy-dev-only decisions for old client modules | 9 KB |
-| [CLIENT-HISTORY.md](CLIENT-HISTORY.md) | 客户端历史说明 | Previous desktop-client direction, why it changed, and how old capabilities map to the future client | 5 KB |
-| [CHECKPOINT-ALGORITHM-EVOLUTION-PLAN.md](CHECKPOINT-ALGORITHM-EVOLUTION-PLAN.md) | Checkpoint 算法演进方案 | Step-by-step LSM/Merkle/CAS/checkpoint algorithm evolution path from single-node contracts to distributed lossless migration | 25 KB |
-| [KNOWLEDGE-DISTILLATION-EVOLUTION-PLAN.md](KNOWLEDGE-DISTILLATION-EVOLUTION-PLAN.md) | 知识蒸馏演进方案 | Chaptered full-chain knowledge distillation plan covering routing, runtime, parsing, raw corpus, large files, grounding, timeline filtering, exports, and single-node deployment | 32 KB |
-| [KNOWLEDGE-DISTILLATION-PROGRESS.md](KNOWLEDGE-DISTILLATION-PROGRESS.md) | 知识蒸馏进展台账 | Current completed, partially completed, and unfinished knowledge distillation work items with gates and TODOs | 20 KB |
-| [KNOWLEDGE-DISTILLATION-AUDIT.md](KNOWLEDGE-DISTILLATION-AUDIT.md) | 知识蒸馏审计 | Current implementation audit, gaps, and quality risks for the distillation runtime and workbench | 7 KB |
-| [KNOWLEDGE-DISTILLATION-IMPLEMENTATION-BASELINE.md](KNOWLEDGE-DISTILLATION-IMPLEMENTATION-BASELINE.md) | 知识蒸馏实现基线 | Baseline implementation notes for current distillation behavior and artifacts | 4 KB |
 | [ENTITY-CONFIG-LAYOUT.md](ENTITY-CONFIG-LAYOUT.md) | 实体配置目录 | Human-maintainable entity config directory, lightweight skill packs, and validation | 2 KB |
+| [DOCUMENT-EVALUATION-CORPUS.md](DOCUMENT-EVALUATION-CORPUS.md) | 文档测评集治理 | External corpus layout and rules for public document samples, local Mail samples, manifests, and parser verifiers | 4 KB |
+| [EXTERNAL-SERVICE-MCP-DSL-EBNF.md](EXTERNAL-SERVICE-MCP-DSL-EBNF.md) | 外部服务 MCP DSL | EBNF grammar reference for external service MCP DSL | 15 KB |
+| [MCP_INSTALL.md](MCP_INSTALL.md) | MCP 安装说明 | MCP installation and local setup notes | 7 KB |
+| [MCP_INSTALL.zh-CN.md](MCP_INSTALL.zh-CN.md) | MCP 安装说明中文 | Chinese MCP installation and local setup notes | 7 KB |
 | [TEST-FRAMEWORK.md](TEST-FRAMEWORK.md) | 测试框架 | Unified test framework contract | 6 KB |
 | [DEVELOPER-GUIDELINES.md](DEVELOPER-GUIDELINES.md) | 开发者核心守则 | Coding conventions, architecture principles, and design philosophy | 5 KB |
 | [GIT-COLLAB.md](GIT-COLLAB.md) | Git 协作约定 | Local collaboration conventions | 2 KB |
 | [scenarios/README.md](scenarios/README.md) | 场景链路草案 | Client-to-backend scenario drafts; finalized decisions must be merged back into core docs | < 1 KB |
 | [testing/memory-and-smoke-framework.md](testing/memory-and-smoke-framework.md) | 记忆与 Smoke 测试 | Memory and smoke test framework guide | < 1 KB |
+
+---
+
+## 历史报告 / Historical Reports
+
+历史进度、总结、审计、缺口、缺陷和阶段计划类文档统一放在 `docs/reports/history/`。这些文档用于记录某个时间点的状态、问题和整理路径；长期结论需要回写到核心设计文档或运行支持文档。
+
+当前任务执行顺序和验收口径见 [reports/ORDERED-IMPLEMENTATION-TASKS-2026-06-03.md](reports/ORDERED-IMPLEMENTATION-TASKS-2026-06-03.md)。之前的综合决策队列、Checklist 和批量决策说明已归档到 [reports/history/](reports/history/)。
+
+| Report | 报告 | Description | Size |
+| --- | --- | --- | --- |
+| [reports/history/PROJECT-HYGIENE-BASELINE-2026-06-03.md](reports/history/PROJECT-HYGIENE-BASELINE-2026-06-03.md) | 项目卫生基线 | Repository hygiene baseline, red gates, cleanup priorities, and confirmed maintainer decisions | 21 KB |
+| [reports/history/PROJECT-PROGRESS-ASSESSMENT-2026-06-03.md](reports/history/PROJECT-PROGRESS-ASSESSMENT-2026-06-03.md) | 项目进度综合评估 | Project progress assessment across product goals, scenarios, service layers, clients, and delivery gaps | 21 KB |
+| [reports/history/PROJECT-AUDIT-REPORT.md](reports/history/PROJECT-AUDIT-REPORT.md) | 历史深度巡检报告 | Historical code and document report; some findings may have drifted after later worktree changes | 22 KB |
+| [reports/history/design-audit-2026-05-23.md](reports/history/design-audit-2026-05-23.md) | 设计文档审计 | Historical design-document audit against server implementation | 6 KB |
+| [reports/history/platform-foundation-coupling-audit-2026-05-25.md](reports/history/platform-foundation-coupling-audit-2026-05-25.md) | 平台基础能力审计 | Historical coupling and cohesion audit for platform foundation modules | 13 KB |
+| [reports/history/protocol-operation-registry-gap-2026-05-25.md](reports/history/protocol-operation-registry-gap-2026-05-25.md) | 协议操作缺口报告 | Historical protocol operation registry gap report | 7 KB |
+| [reports/history/client-design-review-2026-05-26.md](reports/history/client-design-review-2026-05-26.md) | 客户端设计审查 | Historical client design review and gap report | 9 KB |
+| [reports/history/COMMERCIALIZATION-IMPROVEMENT-PLAN.zh-CN.md](reports/history/COMMERCIALIZATION-IMPROVEMENT-PLAN.zh-CN.md) | 商业化改进计划 | Historical commercialization goals, constraints, and improvement path | 19 KB |
+| [reports/history/V0.0.1-IMPLEMENTATION-PLAN.md](reports/history/V0.0.1-IMPLEMENTATION-PLAN.md) | v0.0.1 实施计划 | Historical single-node v0.0.1 delivery phases, checkpoints, and gates | 62 KB |
+| [reports/history/CHECKPOINT-ALGORITHM-EVOLUTION-PLAN.md](reports/history/CHECKPOINT-ALGORITHM-EVOLUTION-PLAN.md) | Checkpoint 算法演进方案 | Historical LSM/Merkle/CAS/checkpoint algorithm evolution plan | 29 KB |
+| [reports/history/KNOWLEDGE-DISTILLATION-EVOLUTION-PLAN.md](reports/history/KNOWLEDGE-DISTILLATION-EVOLUTION-PLAN.md) | 知识蒸馏演进方案 | Historical full-chain knowledge distillation plan | 58 KB |
+| [reports/history/KNOWLEDGE-DISTILLATION-PROGRESS.md](reports/history/KNOWLEDGE-DISTILLATION-PROGRESS.md) | 知识蒸馏进展台账 | Historical completed, partially completed, and unfinished distillation work items | 20 KB |
+| [reports/history/KNOWLEDGE-DISTILLATION-AUDIT.md](reports/history/KNOWLEDGE-DISTILLATION-AUDIT.md) | 知识蒸馏审计 | Historical implementation audit, gaps, and quality risks | 6 KB |
+| [reports/history/KNOWLEDGE-DISTILLATION-IMPLEMENTATION-BASELINE.md](reports/history/KNOWLEDGE-DISTILLATION-IMPLEMENTATION-BASELINE.md) | 知识蒸馏实现基线 | Historical baseline notes for distillation behavior and artifacts | 4 KB |
+| [reports/history/RESOURCE-OPERATION-INTERFACE-DRAFT.md](reports/history/RESOURCE-OPERATION-INTERFACE-DRAFT.md) | Resource Operation 接口草案 | Historical resource operation interface draft | 17 KB |
+| [reports/history/SUBSYSTEM-REFACTOR-CHECKLIST.md](reports/history/SUBSYSTEM-REFACTOR-CHECKLIST.md) | 子系统重构检查表 | Historical subsystem refactor checklist and verifier status | 25 KB |
+| [reports/history/SCENARIO-IMPLEMENTATION-GAPS.md](reports/history/SCENARIO-IMPLEMENTATION-GAPS.md) | 场景实现差距 | Historical scenario implementation gap list | 21 KB |
+| [reports/history/SERVER-WEB-FRONTEND-AUDIT-2026-06-01.md](reports/history/SERVER-WEB-FRONTEND-AUDIT-2026-06-01.md) | Server Web 前端审计 | Historical server-web frontend audit | 109 KB |
+| [reports/history/production-readiness/](reports/history/production-readiness/) | 生产准入运行报告 | Archived production readiness run reports, JSON summaries, and logs | directory |
+| [reports/history/v001-readiness/](reports/history/v001-readiness/) | v0.0.1 准入运行报告 | Archived v0.0.1 readiness run reports, migration summaries, and logs | directory |
 
 ---
 
@@ -82,7 +109,7 @@ graph LR
 | Diagram | 图 | Description |
 | --- | --- | --- |
 | [architecture/PACT-SYSTEM-ARCHITECTURE.html](architecture/PACT-SYSTEM-ARCHITECTURE.html) | Pact 系统架构图 | Pact internal system structure, application layer, runtime assembly, and foundation boundaries |
-| [architecture/PACT-SERVICE-CAPABILITY-ARCHITECTURE.html](architecture/PACT-SERVICE-CAPABILITY-ARCHITECTURE.html) | Pact 服务能力架构图 | Agent Harness / Pact Client to MCP Plugin, routing, algorithm substrate, gateway, and external services |
+| [architecture/PACT-SERVICE-CAPABILITY-ARCHITECTURE.html](architecture/PACT-SERVICE-CAPABILITY-ARCHITECTURE.html) | Pact 平台能力架构图 | Agent Harness / Pact Client to MCP Plugin, routing, algorithm substrate, gateway, and external services |
 
 ---
 
@@ -94,5 +121,5 @@ graph LR
   *Legacy design documents with remaining value must be merged as a section of a core document, then deleted.*
 - 操作说明、命令说明、配置说明可以保留为运行支持文档，但不得承载新的架构决策。
   *Operational docs may contain instructions and configurations, but must not carry new architectural decisions.*
-- 生成物不进入 `docs/`。需要长期维护的图必须放在 `docs/architecture/` 作为可审阅源文件；报告或导出必须转成可审阅的 Markdown 设计或运行文档。
-  *Generated artifacts do not belong in `docs/`. Long-lived diagrams must live under `docs/architecture/` as reviewable source files; reports and exports must be converted to reviewable Markdown.*
+- 生成物不进入 `docs/`。需要长期维护的图必须放在 `docs/architecture/` 作为可审阅源文件；历史进度、总结、审计、缺口、缺陷和阶段计划统一放在 `docs/reports/history/`，长期结论必须回写到核心设计文档或运行支持文档。
+  *Generated artifacts do not belong in `docs/`. Long-lived diagrams must live under `docs/architecture/` as reviewable source files; historical progress, summary, audit, gap, defect, and phase-plan documents live under `docs/reports/history/`, and long-lived conclusions must be merged back into core or operational docs.*

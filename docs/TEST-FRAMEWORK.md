@@ -199,8 +199,8 @@ node tests/run.mjs --tag security
 
 - `client:verify:architecture` checks the destructive desktop-client boundary:
   only six product modules, future package profile, first target adapters, no
-  default legacy daemon/connector/mail/graph/upload package, no old CLI main
-  command set, legacy code outside the default Rust source path, and zero
+  removed daemon/connector/mail/graph/upload package, no old CLI main command
+  set, no retained `client-cli/legacy` or `client-gui/legacy` tree, and zero
   `unsafe` occurrences anywhere under the Rust CLI source tree.
 - `client:verify:plan` checks that docs, package scripts, and `tests/run.mjs`
   agree on the client verifier set, and that deferred Skill Hub protocol work is
@@ -216,9 +216,9 @@ node tests/run.mjs --tag security
 - `client:verify:mcp-plugins` covers peer MCP plugin status/update/rollback.
 - `client:verify:thin-forwarding` covers model profiles and thin forwarding
   without a planner, session harness, or tool loop.
-- `client.native.test` covers Rust future client unit and contract tests. Legacy
-  daemon, connector, mail, upload queue, and server bridge tests live under
-  `client-cli/legacy/dev-only/` and are not part of the default product gate.
+- `client.native.test` covers Rust client unit and contract tests. Removed
+  daemon, connector, mail, upload queue, and server bridge tests are not part of
+  the product gate.
 - `server.headless` validates the server runtime without the GUI.
 - `server.continuity`, `server.checkpoints`, `server.rebuild`, `server.ops`,
   and `server.knowledge` validate storage, upload, rebuild, and knowledge
@@ -244,7 +244,7 @@ tests for:
 - atomic write and partial-write recovery;
 - untrusted file parsing failures;
 - upload checkpoint replay and mismatch behavior;
-- daemon lifecycle and stale state cleanup.
+- stale runtime state cleanup.
 
 Use OWASP ASVS as the external vocabulary for security control requirements, but
 map those requirements to Pact-owned suites instead of adding disconnected

@@ -1,10 +1,8 @@
 # Pact Client Design System
 
-This document describes the visual and interaction direction for the future
-Pact Flutter desktop client. Product scope is controlled by
-[`docs/CLIENT_ARCHITECTURE.md`](../docs/CLIENT_ARCHITECTURE.md); the history of
-the previous desktop client direction is consolidated in
-[`docs/CLIENT-HISTORY.md`](../docs/CLIENT-HISTORY.md).
+This document describes the visual and interaction direction for the Pact
+Flutter desktop client. Product scope is controlled by
+[`docs/CLIENT_ARCHITECTURE.md`](../docs/CLIENT_ARCHITECTURE.md).
 
 ## Product Identity
 
@@ -22,7 +20,7 @@ The UI must feel:
 3. **Quiet**: the app is an operational tool, not a marketing surface or a
    server console clone.
 
-The client must not present old Console, Mail, DataConnector, upload queue,
+The client must not present removed Console, Mail, DataConnector, upload queue,
 Knowledge Graph, or server API panels as first-class product surfaces.
 
 ## Navigation
@@ -73,6 +71,9 @@ Show supported targets, detection confidence, binary/config paths, manual add
 entries, and pairing state. Scanning is conservative and must not imply that
 the client launched or authorized an agent.
 
+The supported target list is OpenClaw, Claude Code, Codex, Gemini CLI,
+Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, and Windsurf.
+
 ### MCP Plugins
 
 Treat Pact MCP as a peer plugin. Show target-native MCP fields, version/status
@@ -101,7 +102,7 @@ turning into a full filesystem backup interface.
 
 Settings covers known paths, manual binaries, portable data root, server
 profile, and client preferences. It should not become a registry for server
-business modules or old local daemon services.
+business modules or removed local runtime services.
 
 ## Accessibility
 

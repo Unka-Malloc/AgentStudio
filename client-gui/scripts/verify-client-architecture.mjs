@@ -17,28 +17,18 @@ const futureModules = [
   "activity-snapshots",
   "settings"
 ];
-const firstTargets = ["codex", "opencode", "openclaw", "antigravity", "cursor", "windsurf", "gemini-cli"];
-const legacyModules = [
-  "client-daemon",
-  "local-rpc",
-  "file-system-adapter",
-  "server-bridge",
-  "upload-queue",
-  "checkpoint-upload",
-  "knowledge-mirror",
-  "data-connectors",
-  "gmail-connector",
-  "outlook-mail-connector",
-  "google-drive-connector",
-  "onedrive-connector",
-  "slack-connector",
-  "teams-connector",
-  "knowledge-agent",
-  "agent-registry",
-  "expert-vocabulary",
-  "mail-index",
-  "macos-mail-import",
-  "knowledge-graph-ui"
+const firstTargets = [
+  "openclaw",
+  "claude-code",
+  "codex",
+  "gemini-cli",
+  "antigravity",
+  "opencode",
+  "copilot",
+  "kilo-code",
+  "cursor",
+  "hermes",
+  "windsurf"
 ];
 const forbiddenCliScopes = [
   'scope == "daemon"',
@@ -66,7 +56,7 @@ const forbiddenShellLabels = [
   "Export",
   "Logs"
 ];
-const legacyGuiSourcePaths = [
+const removedGuiSourcePaths = [
   "client-gui/lib/src/controllers/app_controller.dart",
   "client-gui/lib/src/models/app_models.dart",
   "client-gui/lib/src/models/knowledge_graph_models.dart",
@@ -76,17 +66,7 @@ const legacyGuiSourcePaths = [
   "client-gui/lib/src/services/macos_mail_importer.dart",
   "client-gui/lib/src/services/runtime_services.dart"
 ];
-const legacyGuiReferencePaths = [
-  "client-gui/legacy/dev-only/lib/src/controllers/app_controller.dart",
-  "client-gui/legacy/dev-only/lib/src/models/app_models.dart",
-  "client-gui/legacy/dev-only/lib/src/models/knowledge_graph_models.dart",
-  "client-gui/legacy/dev-only/lib/src/models/transfer_models.dart",
-  "client-gui/legacy/dev-only/lib/src/services/daemon_services.dart",
-  "client-gui/legacy/dev-only/lib/src/services/knowledge_graph_service.dart",
-  "client-gui/legacy/dev-only/lib/src/services/macos_mail_importer.dart",
-  "client-gui/legacy/dev-only/lib/src/services/runtime_services.dart"
-];
-const legacyGuiTestPaths = [
+const removedGuiTestPaths = [
   "client-gui/test/app_controller_backend_test.dart",
   "client-gui/test/checkpoint_store_test.dart",
   "client-gui/test/daemon_services_test.dart",
@@ -94,6 +74,18 @@ const legacyGuiTestPaths = [
   "client-gui/test/macos_mail_importer_test.dart",
   "client-gui/test/runtime_services_test.dart",
   "client-gui/test/transfer_models_test.dart"
+];
+const removedClientVersionPaths = [
+  "client-cli/legacy",
+  "client-gui/legacy",
+  "client-cli/src/local_agents.rs",
+  "client-cli/src/agent_client.rs",
+  "client-cli/src/backend_core.rs",
+  "client-cli/src/connectors.rs",
+  "client-cli/src/upload_queue.rs",
+  "client-cli/src/bin/pact-clientd.rs",
+  ...removedGuiSourcePaths,
+  ...removedGuiTestPaths
 ];
 const forbiddenDefaultGuiTokens = [
   "app_controller.dart",
@@ -233,18 +225,17 @@ const packaging = await readJson("client-gui/packaging.modules.json");
 assert(packaging.packageProfile === "future-client", "default package profile must be future-client");
 const modules = packaging.modules || {};
 const enabledConfigModules = Object.entries(modules)
-  .filter(([, module]) => module.enabled !== false && module.legacyDevOnly !== true)
+  .filter(([, module]) => module.enabled !== false)
   .map(([id]) => id)
   .sort();
 assert(sameSet(enabledConfigModules, [...futureModules].sort()), `enabled config modules must be exactly ${futureModules.join(", ")}`);
 for (const moduleId of futureModules) {
   assert(modules[moduleId]?.required === true, `future module must be required: ${moduleId}`);
 }
-for (const moduleId of legacyModules) {
-  assert(modules[moduleId]?.enabled === false, `legacy module must be disabled: ${moduleId}`);
-  assert(modules[moduleId]?.legacyDevOnly === true, `legacy module must be marked legacyDevOnly: ${moduleId}`);
-  assert(modules[moduleId]?.profile === "legacy/dev-only", `legacy module must declare legacy/dev-only profile: ${moduleId}`);
-}
+assert(
+  !JSON.stringify(packaging).toLowerCase().includes("legacy"),
+  "packaging config must not contain legacy module definitions"
+);
 const packagedTargets = modules["target-adapters"]?.targetAdapters || [];
 assert(sameSet([...packagedTargets].sort(), [...firstTargets].sort()), "target-adapters module must list every first-batch target");
 const portableDirs = modules["portable-data"]?.portableDirectories || [];
@@ -257,28 +248,11 @@ const packagePlan = runJson(process.execPath, ["client-gui/scripts/package-clien
 if (packagePlan) {
   const enabledPlanModules = packagePlan.enabledModules.map((item) => item.id).sort();
   assert(sameSet(enabledPlanModules, [...futureModules].sort()), "package dry-run must enable only future modules");
-  assert(packagePlan.skippedModules.every((item) => item.legacyDevOnly !== true || item.status === "legacy-dev-only"), "legacy modules must be skipped as legacy-dev-only");
+  assert(!JSON.stringify(packagePlan).toLowerCase().includes("legacy"), "package dry-run must not emit legacy metadata");
 }
 
-for (const relativePath of [
-  "client-cli/src/local_agents.rs",
-  "client-cli/src/agent_client.rs",
-  "client-cli/src/backend_core.rs",
-  "client-cli/src/connectors.rs",
-  "client-cli/src/upload_queue.rs",
-  "client-cli/src/bin/pact-clientd.rs"
-]) {
-  assert(!(await exists(relativePath)), `${relativePath} must not remain in the main client source path`);
-}
-for (const relativePath of [
-  "client-cli/legacy/dev-only/src/backend_core.rs",
-  "client-cli/legacy/dev-only/src/connectors.rs",
-  "client-cli/legacy/dev-only/src/upload_queue.rs",
-  "client-cli/legacy/dev-only/bin/pact-clientd.rs",
-  "client-cli/legacy/dev-only/tests/client_backend_integration.rs",
-  "client-cli/legacy/dev-only/tests/client_cli_functional.rs"
-]) {
-  assert(await exists(relativePath), `${relativePath} must retain reference-only legacy material outside the default build`);
+for (const relativePath of removedClientVersionPaths) {
+  assert(!(await exists(relativePath)), `${relativePath} must not exist in the single-version client`);
 }
 
 const cargoToml = await readText("client-cli/Cargo.toml");
@@ -301,15 +275,6 @@ assert(
   `Rust CLI source path must not contain unsafe: ${rustCliUnsafeFiles.join(", ")}`
 );
 
-for (const relativePath of legacyGuiSourcePaths) {
-  assert(!(await exists(relativePath)), `${relativePath} must not remain in the default GUI source path`);
-}
-for (const relativePath of legacyGuiReferencePaths) {
-  assert(await exists(relativePath), `${relativePath} must retain reference-only legacy material outside the default GUI build`);
-}
-for (const relativePath of legacyGuiTestPaths) {
-  assert(!(await exists(relativePath)), `${relativePath} must not run in default flutter test`);
-}
 const futureClientModels = await readText("client-gui/lib/src/models/future_client_models.dart");
 const appSections = collectEnumValues(futureClientModels, "FutureClientSection");
 assert(sameSet(appSections, ["agents", "mcpPlugins", "skillHub", "modelForwarding", "activity", "settings"]), "FutureClientSection enum must contain only the six future modules");
@@ -340,6 +305,6 @@ console.log(JSON.stringify({
   ok: true,
   futureModules,
   firstTargets,
-  legacyModulesChecked: legacyModules.length,
+  removedClientVersionPathsChecked: removedClientVersionPaths.length,
   packagePlanChecked: Boolean(packagePlan)
 }, null, 2));
