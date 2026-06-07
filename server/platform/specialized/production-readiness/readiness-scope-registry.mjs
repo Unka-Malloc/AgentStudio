@@ -172,7 +172,7 @@ export const READINESS_SCOPES = Object.freeze({
         "Session fork/compare/merge proposal, context bundles, agent sync.",
       baselineV0_1Required: false,
       productionRequired: true,
-      backlogRef: "P0-01",
+      backlogRef: "P1-01",
       statusWhenOutOfBaseline: "not_in_baseline_v0_1"
     },
     {
@@ -181,7 +181,7 @@ export const READINESS_SCOPES = Object.freeze({
       description: "LSM-style ingest, chunking, CAS for upload sessions.",
       baselineV0_1Required: false,
       productionRequired: true,
-      backlogRef: "P0-01",
+      backlogRef: "P0-03",
       statusWhenOutOfBaseline: "not_in_baseline_v0_1"
     },
     {
@@ -200,7 +200,7 @@ export const READINESS_SCOPES = Object.freeze({
       description: "Skill Hub lifecycle, signing, scanning, pinning, rollback.",
       baselineV0_1Required: false,
       productionRequired: true,
-      backlogRef: "P1-13",
+      backlogRef: "P1-04",
       statusWhenOutOfBaseline: "not_in_baseline_v0_1"
     },
     {
@@ -240,7 +240,7 @@ export const READINESS_SCOPES = Object.freeze({
         "Audit export with redaction, retention policies, compliance reporting.",
       baselineV0_1Required: false,
       productionRequired: true,
-      backlogRef: "P2-02",
+      backlogRef: "P0-07",
       statusWhenOutOfBaseline: "not_in_baseline_v0_1"
     },
     {
