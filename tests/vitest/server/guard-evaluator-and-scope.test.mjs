@@ -231,6 +231,141 @@ describe("Readiness Guard Evaluator", () => {
   });
 });
 
+describe("Real Guard Predicates", () => {
+  it("policyAllowed should reject when decision is false", () => {
+    const result = evaluateGuard("policyAllowed", {
+      policyDecision: { allowed: false }
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("policy_not_allowed");
+  });
+
+  it("policyAllowed should accept when decision is allow", () => {
+    const result = evaluateGuard("policyAllowed", {
+      policyDecision: { decision: "allow" }
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("approvalApproved should reject when approval missing", () => {
+    const result = evaluateGuard("approvalApproved", {
+      approvalRecord: { status: "pending" }
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("approval_not_approved");
+  });
+
+  it("approvalApproved should accept when approval approved", () => {
+    const result = evaluateGuard("approvalApproved", {
+      approvalRecord: { status: "approved" }
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("approvalApproved should reject when approval missing", () => {
+    const result = evaluateGuard("approvalApproved", {});
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("missing_context");
+  });
+
+  it("require_architect_approval should reject when approval not architect", () => {
+    const result = evaluateGuard("require_architect_approval", {
+      approvalRecord: { status: "approved" }
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("not_architect_approval");
+  });
+
+  it("require_architect_approval should accept with architect role", () => {
+    const result = evaluateGuard("require_architect_approval", {
+      approvalRecord: { status: "approved", role: "architect" }
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("require_admin should reject without admin permissions", () => {
+    const result = evaluateGuard("require_admin", {
+      subjectPermissions: { admin: false, roles: ["viewer"] }
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("not_admin");
+  });
+
+  it("require_admin should accept with admin flag", () => {
+    const result = evaluateGuard("require_admin", {
+      subjectPermissions: { admin: true }
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("require_admin should accept with admin role", () => {
+    const result = evaluateGuard("require_admin", {
+      subjectPermissions: { roles: ["admin", "viewer"] }
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("appendOnly should reject for delete operation", () => {
+    const result = evaluateGuard("appendOnly", {
+      existingState: { id: "x" },
+      operationType: "delete"
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("not_append_only");
+  });
+
+  it("appendOnly should accept for append operation", () => {
+    const result = evaluateGuard("appendOnly", {
+      existingState: { id: "x" },
+      operationType: "read"
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("treeExists should reject when tree is non-existent", () => {
+    const result = evaluateGuard("treeExists", {
+      treeState: { status: "non-existent" }
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("tree_not_found");
+  });
+
+  it("treeExists should accept when tree exists", () => {
+    const result = evaluateGuard("treeExists", {
+      treeState: { id: "tree1", status: "active" }
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("require_ledger should reject when ledger missing", () => {
+    const result = evaluateGuard("require_ledger", {});
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("missing_context");
+  });
+
+  it("require_ledger should accept when ledger is started", () => {
+    const result = evaluateGuard("require_ledger", {
+      operationRecord: { status: "started" }
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("require_policy should reject when policyDecision.allowed is false", () => {
+    const result = evaluateGuard("require_policy", {
+      policyDecision: { allowed: false }
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("policy_not_allowed");
+  });
+
+  it("require_policy should accept when allowed via decision field", () => {
+    const result = evaluateGuard("require_policy", {
+      policyDecision: { decision: "allow" }
+    });
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe("Readiness Report Builder", () => {
   it("should build report with baseline pass and production blocked", () => {
     const scopeResults = {};

@@ -2,6 +2,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, beforeAll } from "vitest";
+import {
+  transitionState,
+  ERROR_CODES
+} from "../../../server/platform/common/state-machine/state-machine-core.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,5 +39,103 @@ describe("Production Readiness Lifecycle State Machine", () => {
   it("PO-READY-004: Contract-only not counted as live evidence", () => {
     const mapping = definition.proofMappings.find(m => m.obligationId === "PO-READY-004");
     expect(mapping).toBeDefined();
+  });
+
+  it("should allow normal transition from not_started to collecting_evidence", () => {
+    const res = transitionState(definition, {
+      entityId: "gate-1",
+      currentStatus: "not_started",
+      eventType: "gate.start"
+    });
+    expect(res.ok).toBe(true);
+    expect(res.toStatus).toBe("collecting_evidence");
+  });
+
+  it("should allow transition from running_checks to passed", () => {
+    const res = transitionState(definition, {
+      entityId: "gate-1",
+      currentStatus: "running_checks",
+      eventType: "gate.pass"
+    });
+    expect(res.ok).toBe(true);
+    expect(res.toStatus).toBe("passed");
+  });
+
+  it("should reject gate.release_candidate from running_checks when require_p0_passed_or_waived guard fails", () => {
+    const res = transitionState(definition, {
+      entityId: "gate-2",
+      currentStatus: "running_checks",
+      eventType: "gate.release_candidate",
+      guardContext: {
+        readinessReport: {
+          scopes: [
+            { scopeId: "p0-1", productionRequired: true, status: "failed" }
+          ]
+        }
+      }
+    });
+    expect(res.ok).toBe(false);
+    expect(res.blockedBy).toBe("guard");
+    expect(res.errorCode).toBe("STATE_MACHINE_GUARD_BLOCKED");
+  });
+
+  it("should allow gate.release_candidate from running_checks when guard passes", () => {
+    const res = transitionState(definition, {
+      entityId: "gate-3",
+      currentStatus: "running_checks",
+      eventType: "gate.release_candidate",
+      guardContext: {
+        readinessReport: {
+          scopes: [
+            { scopeId: "p0-1", productionRequired: true, status: "passed" }
+          ]
+        }
+      }
+    });
+    expect(res.ok).toBe(true);
+    expect(res.toStatus).toBe("release_candidate");
+  });
+
+  it("should reject gate.waiver_approve from waiver_requested when architect approval guard fails", () => {
+    const res = transitionState(definition, {
+      entityId: "gate-4",
+      currentStatus: "waiver_requested",
+      eventType: "gate.waiver_approve",
+      guardContext: {
+        approvalRecord: { status: "pending" }
+      }
+    });
+    expect(res.ok).toBe(false);
+    expect(res.blockedBy).toBe("guard");
+  });
+
+  it("should allow gate.waiver_approve from waiver_requested when architect approval passes", () => {
+    const res = transitionState(definition, {
+      entityId: "gate-5",
+      currentStatus: "waiver_requested",
+      eventType: "gate.waiver_approve",
+      guardContext: {
+        approvalRecord: { status: "approved", role: "architect" }
+      }
+    });
+    expect(res.ok).toBe(true);
+    expect(res.toStatus).toBe("waiver_approved");
+  });
+
+  it("should allow gate.release_candidate from waiver_approved when p0 guard passes", () => {
+    const res = transitionState(definition, {
+      entityId: "gate-6",
+      currentStatus: "waiver_approved",
+      eventType: "gate.release_candidate",
+      guardContext: {
+        readinessReport: {
+          scopes: [
+            { scopeId: "p0-1", productionRequired: true, status: "waived", waiver: { waiverId: "w1" } }
+          ]
+        }
+      }
+    });
+    expect(res.ok).toBe(true);
+    expect(res.toStatus).toBe("release_candidate");
   });
 });
