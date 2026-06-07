@@ -167,13 +167,18 @@ export function verifyMachineDefinition(def, options = {}) {
     }
   });
 
-  // 8b. Guard registry validation
+  // 8b. Guard registry validation (guards AND requiredGuards)
   addCheck("C3-guard-registry", () => {
     const allGuardIds = new Set(listAllGuardIds());
     for (const cell of totalMatrix) {
       for (const guardId of (cell.guards || [])) {
         if (!allGuardIds.has(guardId)) {
           throw new Error(`Guard '${guardId}' in transition from '${cell.from}' on '${cell.event}' is not registered. Known guards: ${listAllGuardIds().join(', ')}`);
+        }
+      }
+      for (const guardId of (cell.requiredGuards || [])) {
+        if (!allGuardIds.has(guardId)) {
+          throw new Error(`requiredGuard '${guardId}' in transition from '${cell.from}' on '${cell.event}' is not registered. Known guards: ${listAllGuardIds().join(', ')}`);
         }
       }
     }
@@ -189,6 +194,78 @@ export function verifyMachineDefinition(def, options = {}) {
       );
       if (!hasMapping) {
         throw new Error(`Guard '${guardId}' referenced in guardRegistryRefs has no proof obligation mapping in 'proofMappings'.`);
+      }
+    }
+  });
+
+  // 8d. Cell reference validity: from/to must reference known states, event must reference known events
+  addCheck("C3-cell-reference-validity", () => {
+    for (const cell of totalMatrix) {
+      if (!stateIds.includes(cell.from)) {
+        throw new Error(`Matrix cell references unknown state '${cell.from}' (from field)`);
+      }
+      if (!eventIds.includes(cell.event)) {
+        throw new Error(`Matrix cell references unknown event '${cell.event}'`);
+      }
+      if (cell.to !== undefined && cell.to !== "" && !stateIds.includes(cell.to)) {
+        throw new Error(`Matrix cell references unknown state '${cell.to}' (to field)`);
+      }
+    }
+  });
+
+  // 8e. Duplicate cell guard disambiguation check
+  addCheck("C3-cell-disambiguation", () => {
+    const cellGroups = new Map();
+    for (const cell of totalMatrix) {
+      const key = `${cell.from}::${cell.event}`;
+      if (!cellGroups.has(key)) cellGroups.set(key, []);
+      cellGroups.get(key).push(cell);
+    }
+    for (const [key, cells] of cellGroups) {
+      const nonIllegal = cells.filter(c => c.result !== "illegal_transition");
+      if (nonIllegal.length > 1) {
+        const unguarded = nonIllegal.filter(c =>
+          (!c.guards || c.guards.length === 0) && (!c.requiredGuards || c.requiredGuards.length === 0)
+        );
+        if (unguarded.length > 1) {
+          throw new Error(`Duplicate unguarded cells for ${key}. Multiple cells with the same from+event must use guards for disambiguation.`);
+        }
+        if (unguarded.length === 1 && nonIllegal.length > 1) {
+          throw new Error(`Mixed guarded/unguarded cells for ${key}. All non-illegal cells must have guards for disambiguation, or only one unguarded cell is allowed.`);
+        }
+      }
+    }
+  });
+
+  // 8f. requires_external_receipt must have sideEffects or proofObligations referencing receipt
+  addCheck("C3-external-receipt-evidence", () => {
+    for (const cell of totalMatrix) {
+      if (cell.result === "requires_external_receipt") {
+        const hasReceiptSideEffect = (cell.sideEffects || []).some(se =>
+          se.includes("receipt") || se.includes("external") || se.includes("proof")
+        );
+        const hasReceiptProof = (cell.proofObligations || []).some(po =>
+          po.includes("receipt") || po.includes("external") || po.includes("proof")
+        );
+        if (!hasReceiptSideEffect && !hasReceiptProof) {
+          throw new Error(`Cell with 'requires_external_receipt' from '${cell.from}' on '${cell.event}' must define receipt-related sideEffects or proofObligations.`);
+        }
+      }
+    }
+  });
+
+  // 8g. deferred_async_transition must have sideEffects referencing async or resume
+  addCheck("C3-deferred-async-evidence", () => {
+    for (const cell of totalMatrix) {
+      if (cell.result === "deferred_async_transition") {
+        const hasAsyncEvidence = (cell.sideEffects || []).some(se =>
+          se.includes("async") || se.includes("resume") || se.includes("deferred")
+        ) || (cell.proofObligations || []).some(po =>
+          po.includes("async") || po.includes("resume") || po.includes("deferred")
+        );
+        if (!hasAsyncEvidence) {
+          throw new Error(`Cell with 'deferred_async_transition' from '${cell.from}' on '${cell.event}' must define async/resume-related sideEffects or proofObligations.`);
+        }
       }
     }
   });

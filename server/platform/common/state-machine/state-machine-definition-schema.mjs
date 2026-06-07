@@ -89,8 +89,15 @@ export function checkDefinitionSchema(def) {
     if (cell.allowedReopenTransition !== undefined && typeof cell.allowedReopenTransition !== "boolean") {
       throw new Error("matrix cell 'allowedReopenTransition' must be a boolean");
     }
-    if (cell.guards !== undefined && !Array.isArray(cell.guards)) {
-      throw new Error("matrix cell 'guards' must be an array of strings");
+    if (cell.guards !== undefined) {
+      if (!Array.isArray(cell.guards)) {
+        throw new Error("matrix cell 'guards' must be an array of strings");
+      }
+      for (const g of cell.guards) {
+        if (typeof g !== "string" || !g.trim()) {
+          throw new Error("guards list items must be non-empty strings");
+        }
+      }
     }
     if (cell.requiredGuards !== undefined) {
       if (!Array.isArray(cell.requiredGuards)) {
