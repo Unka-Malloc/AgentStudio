@@ -37,8 +37,10 @@ FROM debian:bookworm-slim AS runtime-deps
 ARG JRE_VERSION=21.0.10+7
 ARG JRE_FILENAME=OpenJDK21U-jre_x64_linux_hotspot_21.0.10_7.tar.gz
 ARG JRE_URL=https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.10%2B7/${JRE_FILENAME}
+ARG JRE_SHA256=
 ARG TIKA_VERSION=3.2.3
 ARG TIKA_URL=https://repo.maven.apache.org/maven2/org/apache/tika/tika-app/${TIKA_VERSION}/tika-app-${TIKA_VERSION}.jar
+ARG TIKA_SHA256=
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
@@ -47,11 +49,13 @@ RUN apt-get update \
 # Download and unpack JRE
 RUN mkdir -p /modules/jre /modules/tika \
     && curl -fsSL --retry 3 "${JRE_URL}" -o /tmp/jre.tar.gz \
+    && if [ -n "${JRE_SHA256}" ]; then echo "${JRE_SHA256}  /tmp/jre.tar.gz" | sha256sum -c; fi \
     && tar -xzf /tmp/jre.tar.gz -C /modules/jre --strip-components=1 \
     && rm /tmp/jre.tar.gz
 
 # Download Tika jar
-RUN curl -fsSL --retry 3 "${TIKA_URL}" -o /modules/tika/tika-app-${TIKA_VERSION}.jar
+RUN curl -fsSL --retry 3 "${TIKA_URL}" -o /modules/tika/tika-app-${TIKA_VERSION}.jar \
+    && if [ -n "${TIKA_SHA256}" ]; then echo "${TIKA_SHA256}  /modules/tika/tika-app-${TIKA_VERSION}.jar" | sha256sum -c; fi
 
 # ── runtime stage ─────────────────────────────────────────────────────────────
 FROM node:24-bookworm-slim AS runtime

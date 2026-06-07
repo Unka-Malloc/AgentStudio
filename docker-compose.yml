@@ -31,7 +31,7 @@ services:
     container_name: pact-server
     restart: unless-stopped
     ports:
-      - "7228:7228"
+      - "127.0.0.1:7228:7228"
     environment:
       PACT_SERVER_HOST: 0.0.0.0
       PACT_SERVER_PORT: 7228
@@ -40,7 +40,7 @@ services:
       PACT_BOOTSTRAP_URL: http://127.0.0.1:7228
       PACT_ADVERTISED_BASE_URL: http://127.0.0.1:7228
       PACT_ACTIVE_SERVICE_URL: http://127.0.0.1:7228
-      CODEX_HOME: /codex-home
     volumes:
       - ${HOME}/.pact-server-data:/data
-      - ${HOME}/.codex:/codex-home
+      # Uncomment the line below to mount host Codex configuration (optional, read-only recommended):
+      # - ${HOME}/.codex:/codex-home:ro
