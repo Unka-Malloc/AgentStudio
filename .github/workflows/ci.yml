@@ -341,6 +341,9 @@ jobs:
           path: |
             build/test-reports/
             build/artifacts/
+            build/reports/
+            docs/reports/history/production-readiness/
+            docs/reports/history/v001-readiness/
             reports/v001-readiness/
             reports/production-readiness/
           if-no-files-found: ignore

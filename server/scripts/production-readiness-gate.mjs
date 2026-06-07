@@ -612,6 +612,8 @@ async function main() {
   const runDir = path.join(outputRoot, runId);
   await ensureDir(runDir);
 
+const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smoke"];
+
   const selectedGates = options.quick
     ? GATES.filter((gate) => ["architecture", "document-parsing-real-sample", "ui-smoke"].includes(gate.id))
     : GATES;
@@ -621,7 +623,8 @@ async function main() {
     gateResults.push(await runGate(gate, options, runDir));
   }
 
-  const byRequirement = Object.fromEntries(REQUIRED_COVERAGE.map((item) => [item, []]));
+  const applicableCoverage = options.quick ? QUICK_COVERAGE : REQUIRED_COVERAGE;
+  const byRequirement = Object.fromEntries(applicableCoverage.map((item) => [item, []]));
   for (const gate of gateResults) {
     if (gate.status !== "pass") continue;
     for (const requirement of gate.coverage) {
@@ -630,21 +633,27 @@ async function main() {
       }
     }
   }
-  const missing = REQUIRED_COVERAGE.filter((item) => byRequirement[item].length === 0);
+  const missing = applicableCoverage.filter((item) => byRequirement[item].length === 0);
   const summary = {
     pass: gateResults.filter((gate) => gate.status === "pass").length,
     fail: gateResults.filter((gate) => gate.status === "fail").length,
     timeout: gateResults.filter((gate) => gate.status === "timeout").length,
     blockedP0: gateResults.filter((gate) => gate.blockerLevel === "P0" && gate.status !== "pass").length
   };
-  const overallStatus = summary.blockedP0 || missing.length ? "blocked" : "pass";
+  let overallStatus;
+  if (options.quick) {
+    overallStatus = summary.blockedP0 || missing.length ? "quick_blocked" : "quick_pass";
+  } else {
+    overallStatus = summary.blockedP0 || missing.length ? "blocked" : "pass";
+  }
   const report = {
     schemaVersion: 1,
     reportType: "pact.production-readiness.v1",
     runId,
     generatedAt: new Date().toISOString(),
     mode: options.quick ? "quick" : "full",
-    repoRoot,
+    repository: "Unka-Malloc/Pact",
+    repoRoot: { redacted: true, reason: "local_path" },
     git: {
       branch: await gitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
       commit: await gitValue(["rev-parse", "HEAD"]),
