@@ -61,7 +61,10 @@ export function buildReadinessReport(
       productionRequired: def.productionRequired,
       backlogRef: def.backlogRef || null,
       status: result.status || "not_in_baseline_v0_1",
-      evidence: result.evidence || [],
+      verificationMode: result.verificationMode || "notRun",
+      evidenceMode: result.evidenceMode || result.verificationMode || "notRun",
+      requiredEvidence: result.requiredEvidence || [],
+      actualEvidence: result.actualEvidence || result.evidence || [],
       waiver: result.waiver || null
     };
   });
@@ -86,6 +89,11 @@ export function buildReadinessReport(
   const productionClaimAllowed = productionRequiredScopes.every((s) =>
     ["passed", "waived"].includes(s.status)
   );
+
+  const verifiedCount = scopes.filter(s => s.verificationMode === "verified").length;
+  const contractVerifiedCount = scopes.filter(s => s.verificationMode === "contractVerified").length;
+  const mockedCount = scopes.filter(s => s.verificationMode === "mocked").length;
+  const notRunCount = scopes.filter(s => s.verificationMode === "notRun").length;
 
   const productionGuardResult = evaluateReadinessGuard(
     "require_p0_passed_or_waived",
@@ -120,7 +128,13 @@ export function buildReadinessReport(
       productionRequiredTotal: productionRequiredScopes.length,
       productionPassed,
       productionMissingOrDeferred:
-        productionRequiredScopes.length - productionPassed
+        productionRequiredScopes.length - productionPassed,
+      verificationModes: {
+        verifiedCount,
+        contractVerifiedCount,
+        mockedCount,
+        notRunCount
+      }
     },
     guardResults: {
       require_p0_passed_or_waived: productionGuardResult,
