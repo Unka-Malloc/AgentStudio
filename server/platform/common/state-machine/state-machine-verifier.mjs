@@ -1,6 +1,6 @@
 import { validateStateMachineDefinition } from "./state-machine-core.mjs";
 import { checkDefinitionSchema } from "./state-machine-definition-schema.mjs";
-import { guardExists, listAllGuardIds } from "./guards/guard-registry.mjs";
+import { guardExists, listAllGuardIds, isStaticOnlyGuard, isGuardRuntimeSafe } from "./guards/guard-registry.mjs";
 
 /**
  * Pure function to verify a state machine definition against complete C3 level specifications.
@@ -162,6 +162,16 @@ export function verifyMachineDefinition(def, options = {}) {
           (cell.requiredGuards && cell.requiredGuards.length > 0);
         if (!hasGuard) {
           throw new Error(`High-risk event '${cell.event}' in transition from '${cell.from}' must define a guard (guards/requiredGuards) or policy/approval result`);
+        }
+        // Verify no staticOnly guards on high-risk transitions
+        const allGuards = [...(cell.guards || []), ...(cell.requiredGuards || [])];
+        for (const g of allGuards) {
+          if (isStaticOnlyGuard(g)) {
+            throw new Error(`High-risk event '${cell.event}' cannot use staticOnly guard '${g}'. staticOnly guards may not gate high-risk runtime transitions.`);
+          }
+          if (!isGuardRuntimeSafe(g) && guardExists(g)) {
+            throw new Error(`Guard '${g}' on high-risk event '${cell.event}' has no runtime predicate. Ensure guards have runtime implementations or use riskLevel=low/medium.`);
+          }
         }
       }
     }

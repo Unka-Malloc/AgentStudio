@@ -1,7 +1,10 @@
 import { ERROR_CODES, StateMachineError } from './state-machine-errors.mjs';
-import { evaluateGuardSet } from './guards/guard-evaluator.mjs';
+import { selectTransitionCell } from './transition-selector.mjs';
+import { guardExists, listAllGuardIds } from './guards/guard-registry.mjs';
+import { checkDefinitionSchema } from './state-machine-definition-schema.mjs';
 
 export { ERROR_CODES, StateMachineError } from './state-machine-errors.mjs';
+export { selectTransitionCell } from './transition-selector.mjs';
 
 /**
  * Validates the definition format. Returns structured result.
@@ -34,10 +37,97 @@ export function validateStateMachineDefinition(definition) {
 }
 
 /**
+ * Runtime-grade executable validation. Ensures the definition is safe to
+ * execute with transitionState(), covering schema, cross-references, and
+ * guard registration. Stricter than validateStateMachineDefinition().
+ */
+export function validateExecutableStateMachineDefinition(definition) {
+  const errors = [];
+
+  // Delegate to schema checker
+  try {
+    checkDefinitionSchema(definition);
+  } catch (e) {
+    errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `Schema check failed: ${e.message}` });
+  }
+
+  // Run basic structural validation
+  const basic = validateStateMachineDefinition(definition);
+  if (!basic.ok) {
+    errors.push(...basic.errors);
+  }
+  if (errors.length > 0) return { ok: false, errors };
+
+  const stateIds = new Set(definition.states.map(s => s.id));
+  const eventIds = new Set(definition.events.map(e => e.id));
+  const registeredGuards = new Set(listAllGuardIds());
+
+  // Check event ID uniqueness
+  if (definition.events.length !== eventIds.size) {
+    errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: 'Duplicate event IDs found' });
+  }
+
+  for (const cell of definition.totalMatrix) {
+    // from reference validity
+    if (!stateIds.has(cell.from)) {
+      errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `Matrix cell references unknown state '${cell.from}' (from field)` });
+    }
+    // event reference validity
+    if (!eventIds.has(cell.event)) {
+      errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `Matrix cell references unknown event '${cell.event}'` });
+    }
+    // to reference validity
+    if (cell.to !== undefined && cell.to !== "" && !stateIds.has(cell.to)) {
+      errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `Matrix cell references unknown state '${cell.to}' (to field)` });
+    }
+    // guards must be non-empty strings
+    for (const g of (cell.guards || [])) {
+      if (typeof g !== 'string' || !g.trim()) {
+        errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `Matrix cell guards contain empty or non-string item` });
+      } else if (!registeredGuards.has(g)) {
+        errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `Guard '${g}' is not registered in guard registry` });
+      }
+    }
+    // requiredGuards must be non-empty strings
+    for (const g of (cell.requiredGuards || [])) {
+      if (typeof g !== 'string' || !g.trim()) {
+        errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `Matrix cell requiredGuards contain empty or non-string item` });
+      } else if (!registeredGuards.has(g)) {
+        errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `requiredGuard '${g}' is not registered in guard registry` });
+      }
+    }
+  }
+
+  // Check for duplicate unguarded cells
+  const cellGroups = new Map();
+  for (const cell of definition.totalMatrix) {
+    const key = `${cell.from}::${cell.event}`;
+    if (!cellGroups.has(key)) cellGroups.set(key, []);
+    cellGroups.get(key).push(cell);
+  }
+  for (const [key, cells] of cellGroups) {
+    const nonIllegal = cells.filter(c => c.result !== "illegal_transition");
+    if (nonIllegal.length > 1) {
+      const unguarded = nonIllegal.filter(c =>
+        (!c.guards || c.guards.length === 0) && (!c.requiredGuards || c.requiredGuards.length === 0)
+      );
+      if (unguarded.length > 1) {
+        errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `Duplicate unguarded cells for ${key}` });
+      }
+      if (unguarded.length === 1 && nonIllegal.length > 1) {
+        errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `Mixed guarded/unguarded cells for ${key}` });
+      }
+    }
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+/**
  * Assert-style wrapper that throws on invalid definition.
  */
 export function assertStateMachineDefinition(definition) {
-  const result = validateStateMachineDefinition(definition);
+  const result = validateExecutableStateMachineDefinition(definition);
   if (!result.ok) {
     throw new StateMachineError(
       ERROR_CODES.STATE_MACHINE_INVALID_DEFINITION,
@@ -58,24 +148,37 @@ export function listAllowedEvents(definition, currentStatus) {
     .map(cell => cell.event);
 }
 
-/**
- * Recursive redaction helper to prevent sensitive data from entering transition metadata.
- * Supports nested objects, arrays, and string pattern detection for paths, tokens, etc.
- */
-const SENSITIVE_KEYS_LOWER = new Set([
-  'token', 'secret', 'password', 'cookie', 'authorization', 'apikey',
-  'refreshtoken', 'accesstoken', 'privatepath', 'absolutepath',
-  'bearer', 'keyhash', 'opaqueKey', 'capabilitysethash', 'lookupkey',
-  'capabilitylist', 'credential', 'signature', 'signingkey'
+// ── Recursive metadata redaction ──────────────────────────────────────────
+
+function normalizeKey(key) {
+  return String(key).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+const SAFE_KEYS_NORMALIZED = new Set([
+  "reasoncode", "operationid", "traceid", "scopeid", "status",
+  "machineid", "entityid", "eventtype", "fromstatus", "tostatus",
+  "guardid", "ok", "reason", "branch", "commit", "runid",
+  "verificationmode", "mode", "labels", "type", "id", "name",
+  "count", "total", "version", "schemaversion"
 ]);
 
-const SENSITIVE_VALUE_PATTERNS_LOWER = new Set([
-  'authorization', 'bearer', 'basic', 'api-key', 'x-api-key',
-  'access_token', 'refresh_token', 'apikey', 'token', 'secret'
-]);
+const REDACT_KEY_PATTERNS = [
+  "token", "secret", "password", "cookie", "authorization",
+  "apikey", "accesskey", "refreshtoken", "accesstoken",
+  "privatepath", "absolutepath", "opaque", "capability",
+  "keyhash", "lookupkey", "credential", "signature", "signingkey"
+];
 
 const REDACT_VALUE_KEY = { redacted: true, reason: "sensitive_key" };
 const REDACT_VALUE_PATH = { redacted: true, reason: "absolute_path" };
+
+function isSensitiveKeyNormalized(key) {
+  if (SAFE_KEYS_NORMALIZED.has(key)) return false;
+  for (const pattern of REDACT_KEY_PATTERNS) {
+    if (key.includes(pattern)) return true;
+  }
+  return false;
+}
 
 function isAbsPath(value) {
   return typeof value === 'string' && (
@@ -92,16 +195,16 @@ function containsToken(value) {
   const lower = value.toLowerCase();
   return lower.startsWith('bearer ') || lower.startsWith('basic ') ||
     lower.includes('?token=') || lower.includes('&access_token=') ||
-    lower.includes('?access_token=') || lower.includes('authorization:') ||
-    lower.includes('x-api-key:');
+    lower.includes('?access_token=') || lower.includes('?refresh_token=') ||
+    lower.includes('?api_key=') || lower.includes('&api_key=') ||
+    lower.includes('authorization:') || lower.includes('x-api-key:');
 }
 
-function isSensitiveValue(value) {
+function isSensitiveStringValue(value) {
   if (typeof value !== 'string') return false;
   const lower = value.toLowerCase().trim();
-  for (const pattern of SENSITIVE_VALUE_PATTERNS_LOWER) {
-    if (lower === pattern || lower.startsWith(pattern + ' ') || lower.startsWith(pattern + ':')) return true;
-  }
+  if (lower.startsWith('bearer ') || lower.startsWith('basic ')) return true;
+  if (lower.startsWith('sk-') || lower.startsWith('ock_')) return true;
   return false;
 }
 
@@ -112,7 +215,7 @@ function redactMetadata(metadata, depth = 0) {
     if (typeof metadata === 'string') {
       if (isAbsPath(metadata)) return REDACT_VALUE_PATH;
       if (containsToken(metadata)) return REDACT_VALUE_KEY;
-      if (isSensitiveValue(metadata)) return REDACT_VALUE_KEY;
+      if (isSensitiveStringValue(metadata)) return REDACT_VALUE_KEY;
     }
     return metadata;
   }
@@ -126,18 +229,28 @@ function redactMetadata(metadata, depth = 0) {
 
   const result = {};
   for (const key of Object.keys(metadata)) {
-    const lowerKey = key.toLowerCase();
-    if (SENSITIVE_KEYS_LOWER.has(lowerKey)) {
-      result[key] = REDACT_VALUE_KEY;
+    const normalized = normalizeKey(key);
+    const value = metadata[key];
+
+    if (isSensitiveKeyNormalized(normalized)) {
+      // Only blanket-redact if the value is a primitive; recurse into objects
+      if (typeof value === 'object' && value !== null) {
+        result[key] = redactMetadata(value, depth + 1);
+      } else {
+        result[key] = REDACT_VALUE_KEY;
+      }
       continue;
     }
-    const value = metadata[key];
+
     if (typeof value === 'string') {
       if (isAbsPath(value)) {
         result[key] = REDACT_VALUE_PATH;
       } else if (containsToken(value)) {
         result[key] = REDACT_VALUE_KEY;
-      } else if (isSensitiveValue(value)) {
+      } else if (isSensitiveStringValue(value)) {
+        result[key] = REDACT_VALUE_KEY;
+      } else if (isSensitiveKeyNormalized(normalizeKey(value))) {
+        // Detect sensitive-key-like string values (e.g., "Authorization", "api_key")
         result[key] = REDACT_VALUE_KEY;
       } else {
         result[key] = value;
@@ -152,34 +265,7 @@ function redactMetadata(metadata, depth = 0) {
 }
 
 /**
- * Execute guards for a cell. Returns { ok, guardResults, failedGuards, blockedBy }.
- */
-function executeCellGuards(cell, definition, input, guardEvaluator) {
-  const guardIds = [...(cell.guards || []), ...(cell.requiredGuards || [])];
-  if (guardIds.length === 0) {
-    return { ok: true, guardResults: [], failedGuards: [], blockedBy: undefined };
-  }
-
-  const context = input.guardContext || {};
-  let guardResults;
-  if (guardEvaluator) {
-    guardResults = guardEvaluator(guardIds, context);
-  } else {
-    guardResults = evaluateGuardSet(guardIds, context);
-  }
-
-  const failed = guardResults.filter(r => !r.ok);
-
-  return {
-    ok: failed.length === 0,
-    guardResults,
-    failedGuards: failed.map(r => r.guardId),
-    blockedBy: failed.length > 0 ? "guard" : undefined
-  };
-}
-
-/**
- * Map guard results to a safe guard summary safe for transition records.
+ * Map guard results to a safe guard summary for transition records.
  */
 function guardSummary(guardResults) {
   if (!guardResults || guardResults.length === 0) return undefined;
@@ -190,49 +276,27 @@ function guardSummary(guardResults) {
   }));
 }
 
-function classifyFailedGuards(failedGuardIds, guardResults) {
-  const result = { unknown: [], missingContext: [], blocked: [] };
-  for (const g of guardResults || []) {
-    if (g.ok) continue;
-    if (g.reason === 'unknown_guard') result.unknown.push(g.guardId);
-    else if (g.reason === 'missing_context') result.missingContext.push(g.guardId);
-    else result.blocked.push(g.guardId);
-  }
-  return result;
-}
+// ── Main transition function ──────────────────────────────────────────────
 
 /**
  * Execute a state transition on the definition.
  *
  * @param {object} definition - state machine definition
  * @param {object} input - transition input
- * @param {string} input.entityId
- * @param {string} input.currentStatus
- * @param {string} input.eventType
- * @param {string} [input.actor]
- * @param {string} [input.reason]
- * @param {object} [input.metadata]
- * @param {string} [input.operationId]
- * @param {string} [input.traceId]
- * @param {string} [input.auditId]
- * @param {string} [input.checkpointNodeId]
- * @param {string} [input.policyDecisionId]
- * @param {string} [input.approvalId]
- * @param {string} [input.now]
- * @param {object} [input.guardContext] - context passed to guard evaluators
- * @param {Function} [input.guardEvaluator] - custom guard evaluator (guardIds, context) => results[]
- * @param {object} [options] - additional options (future use)
+ * @param {object} [options] - { skipExecutableValidation: boolean }
  * @returns {object} transition result
  */
 export function transitionState(definition, input, options = {}) {
-  const validationResult = validateStateMachineDefinition(definition);
-  if (!validationResult.ok) {
-    return {
-      ok: false,
-      errorCode: ERROR_CODES.STATE_MACHINE_INVALID_DEFINITION,
-      message: 'Invalid state machine definition.',
-      details: validationResult.errors
-    };
+  if (!options.skipExecutableValidation) {
+    const execResult = validateExecutableStateMachineDefinition(definition);
+    if (!execResult.ok) {
+      return {
+        ok: false,
+        errorCode: ERROR_CODES.STATE_MACHINE_INVALID_DEFINITION,
+        message: 'Definition is not executable.',
+        details: execResult.errors
+      };
+    }
   }
 
   const { entityId, currentStatus, eventType, actor, reason, metadata, operationId, traceId, auditId, checkpointNodeId, policyDecisionId, approvalId, now, guardEvaluator } = input;
@@ -255,112 +319,14 @@ export function transitionState(definition, input, options = {}) {
     };
   }
 
-  let matchingCells = definition.totalMatrix.filter(cell => cell.from === currentStatus && cell.event === eventType);
-
-  if (matchingCells.length === 0) {
-    return {
-      ok: false,
-      errorCode: ERROR_CODES.STATE_MACHINE_TRANSITION_NOT_ALLOWED,
-      message: `Transition not defined for ${currentStatus} -> ${eventType}`,
-      allowedEvents: listAllowedEvents(definition, currentStatus)
-    };
+  // Use the shared cell selection helper (no definition mutation)
+  const selection = selectTransitionCell(definition, input);
+  if (!selection.ok) {
+    return selection;
   }
 
-  // Multi-cell disambiguation via guard evaluation
-  if (matchingCells.length > 1) {
-    const eligibleCells = matchingCells.filter(cell => cell.result !== 'illegal_transition');
-
-    if (eligibleCells.length === 0) {
-      return {
-        ok: false,
-        errorCode: ERROR_CODES.STATE_MACHINE_TRANSITION_NOT_ALLOWED,
-        message: `All transitions for ${currentStatus} -> ${eventType} are illegal.`,
-        allowedEvents: listAllowedEvents(definition, currentStatus)
-      };
-    }
-
-    const guardedCells = eligibleCells.filter(cell =>
-      (cell.guards && cell.guards.length > 0) || (cell.requiredGuards && cell.requiredGuards.length > 0)
-    );
-    const unguardedCells = eligibleCells.filter(cell =>
-      (!cell.guards || cell.guards.length === 0) && (!cell.requiredGuards || cell.requiredGuards.length === 0)
-    );
-
-    if (unguardedCells.length > 1) {
-      return {
-        ok: false,
-        errorCode: ERROR_CODES.STATE_MACHINE_AMBIGUOUS_TRANSITION,
-        message: `Ambiguous transition: ${unguardedCells.length} unguarded cells match ${currentStatus} -> ${eventType}.`
-      };
-    }
-
-    if (unguardedCells.length === 1 && guardedCells.length === 0) {
-      matchingCells = unguardedCells;
-    } else {
-      let passedCells = [];
-      const allGuardResults = [];
-
-      for (const cell of eligibleCells) {
-        const guardResult = executeCellGuards(cell, definition, input, guardEvaluator);
-        allGuardResults.push({ cellId: `${cell.from}-${cell.event}-${cell.to || 'self'}`, guards: cell.guards, requiredGuards: cell.requiredGuards, result: guardResult });
-        if (guardResult.ok) {
-          passedCells.push(cell);
-        }
-      }
-
-      if (passedCells.length === 0) {
-        const allFailedGuards = [];
-        for (const gr of allGuardResults) {
-          allFailedGuards.push(...(gr.result.failedGuards || []));
-        }
-        const classification = classifyFailedGuards(allFailedGuards, allGuardResults.flatMap(g => g.result.guardResults || []));
-        if (classification.unknown.length > 0) {
-          return {
-            ok: false,
-            errorCode: ERROR_CODES.STATE_MACHINE_GUARD_UNKNOWN,
-            message: `Unknown guard(s): ${classification.unknown.join(', ')}.`,
-            blockedBy: "guard",
-            failedGuards: classification.unknown,
-            allowedEvents: listAllowedEvents(definition, currentStatus),
-            guardResults: guardSummary(allGuardResults.flatMap(g => g.result.guardResults || []))
-          };
-        }
-        if (classification.missingContext.length > 0) {
-          return {
-            ok: false,
-            errorCode: ERROR_CODES.STATE_MACHINE_GUARD_CONTEXT_MISSING,
-            message: `Missing guard context for: ${classification.missingContext.join(', ')}.`,
-            blockedBy: "guard",
-            failedGuards: classification.missingContext,
-            allowedEvents: listAllowedEvents(definition, currentStatus),
-            guardResults: guardSummary(allGuardResults.flatMap(g => g.result.guardResults || []))
-          };
-        }
-        return {
-          ok: false,
-          errorCode: ERROR_CODES.STATE_MACHINE_GUARD_BLOCKED,
-          message: `All matching cells for ${currentStatus} -> ${eventType} blocked by guards: ${allFailedGuards.join(', ')}.`,
-          blockedBy: "guard",
-          failedGuards: allFailedGuards,
-          allowedEvents: listAllowedEvents(definition, currentStatus),
-          guardResults: guardSummary(allGuardResults.flatMap(g => g.result.guardResults || []))
-        };
-      }
-
-      if (passedCells.length > 1) {
-        return {
-          ok: false,
-          errorCode: ERROR_CODES.STATE_MACHINE_AMBIGUOUS_TRANSITION,
-          message: `Ambiguous transition: ${passedCells.length} guarded cells pass for ${currentStatus} -> ${eventType}.`,
-          ambiguousCells: passedCells.map(c => `${c.from}-${c.event}-${c.to || 'self'}`)
-        };
-      }
-
-      matchingCells = passedCells;
-    }
-  }
-
-  const cell = matchingCells[0];
+  const cell = selection.cell;
+  const selectedGuardResults = selection.guardResults || [];
 
   if (cell.result === 'illegal_transition') {
     return {
@@ -371,63 +337,22 @@ export function transitionState(definition, input, options = {}) {
     };
   }
 
-  // Evaluate guards for single-cell transitions too
-  if ((cell.guards && cell.guards.length > 0) || (cell.requiredGuards && cell.requiredGuards.length > 0)) {
-    const guardResult = executeCellGuards(cell, definition, input, guardEvaluator);
-    if (!guardResult.ok) {
-      const classification = classifyFailedGuards(guardResult.failedGuards, guardResult.guardResults);
-      if (classification.unknown.length > 0) {
-        return {
-          ok: false,
-          errorCode: ERROR_CODES.STATE_MACHINE_GUARD_UNKNOWN,
-          message: `Unknown guard(s): ${classification.unknown.join(', ')}.`,
-          blockedBy: "guard",
-          failedGuards: classification.unknown,
-          allowedEvents: listAllowedEvents(definition, currentStatus),
-          guardResults: guardSummary(guardResult.guardResults)
-        };
-      }
-      if (classification.missingContext.length > 0) {
-        return {
-          ok: false,
-          errorCode: ERROR_CODES.STATE_MACHINE_GUARD_CONTEXT_MISSING,
-          message: `Missing guard context for: ${classification.missingContext.join(', ')}.`,
-          blockedBy: "guard",
-          failedGuards: classification.missingContext,
-          allowedEvents: listAllowedEvents(definition, currentStatus),
-          guardResults: guardSummary(guardResult.guardResults)
-        };
-      }
-      return {
-        ok: false,
-        errorCode: ERROR_CODES.STATE_MACHINE_GUARD_BLOCKED,
-        message: `Transition from ${currentStatus} -> ${eventType} blocked by guard(s): ${guardResult.failedGuards.join(', ')}.`,
-        blockedBy: "guard",
-        failedGuards: guardResult.failedGuards,
-        allowedEvents: listAllowedEvents(definition, currentStatus),
-        guardResults: guardSummary(guardResult.guardResults)
-      };
-    }
-    // Cache guard results for the transition record
-    cell._guardResults = guardResult.guardResults;
-  }
-
   if (cell.result === 'ignored_idempotent_event') {
-     return {
-        ok: true,
-        machineId: definition.machineId,
-        entityId,
-        entityType: definition.entityType,
-        fromStatus: currentStatus,
-        toStatus: currentStatus,
-        eventType,
-        idempotent: true,
-        transitionRecord: {
-           entityId, entityType: definition.entityType, fromStatus: currentStatus, toStatus: currentStatus, eventType, operationId, timestamp: now, actor, reason, metadata: redactMetadata(metadata),
-           guardResults: guardSummary(cell._guardResults)
-        },
-        requiredEffects: { policy: false, approval: false, externalReceipt: false, async: false, ledger: false, checkpoint: false, audit: false }
-     };
+    return {
+      ok: true,
+      machineId: definition.machineId,
+      entityId,
+      entityType: definition.entityType,
+      fromStatus: currentStatus,
+      toStatus: currentStatus,
+      eventType,
+      idempotent: true,
+      transitionRecord: {
+        entityId, entityType: definition.entityType, fromStatus: currentStatus, toStatus: currentStatus, eventType, operationId, timestamp: now, actor, reason, metadata: redactMetadata(metadata),
+        guardResults: guardSummary(selectedGuardResults)
+      },
+      requiredEffects: { policy: false, approval: false, externalReceipt: false, async: false, ledger: false, checkpoint: false, audit: false }
+    };
   }
 
   const requiresPolicy = cell.result === 'requires_policy';
@@ -437,32 +362,60 @@ export function transitionState(definition, input, options = {}) {
 
   const toStatus = cell.to || currentStatus;
 
-  // For requires_policy, if no allow evidence, return blocked instead of success
+  const guardContext = input.guardContext || {};
+
+  // requires_policy: verify allow evidence
   if (requiresPolicy) {
-    const guardContext = input.guardContext || {};
     const pd = guardContext.policyDecision;
     const decision = pd?.decision || pd?.status;
     if (!(pd?.allowed === true || decision === 'allow')) {
       return {
         ok: false,
         errorCode: ERROR_CODES.STATE_MACHINE_GUARD_BLOCKED,
-        message: `Transition requires policy approval but no allow evidence found.`,
+        message: 'Transition requires policy approval but no allow evidence found.',
         blockedBy: "policy",
         allowedEvents: listAllowedEvents(definition, currentStatus)
       };
     }
   }
 
-  // For requires_approval, if no approved evidence, return blocked
+  // requires_approval: verify approved evidence
   if (requiresApproval) {
-    const guardContext = input.guardContext || {};
     const ar = guardContext.approvalRecord;
     if (!ar || ar.status !== 'approved') {
       return {
         ok: false,
         errorCode: ERROR_CODES.STATE_MACHINE_GUARD_BLOCKED,
-        message: `Transition requires approval but no approved evidence found.`,
+        message: 'Transition requires approval but no approved evidence found.',
         blockedBy: "approval",
+        allowedEvents: listAllowedEvents(definition, currentStatus)
+      };
+    }
+  }
+
+  // requires_external_receipt: verify receipt evidence at runtime
+  if (requiresExternalReceipt) {
+    const er = guardContext.externalReceipt;
+    if (!er || er.status !== 'recorded') {
+      return {
+        ok: false,
+        errorCode: ERROR_CODES.STATE_MACHINE_GUARD_BLOCKED,
+        message: 'Transition requires external receipt but no recorded evidence found.',
+        blockedBy: "externalReceipt",
+        allowedEvents: listAllowedEvents(definition, currentStatus)
+      };
+    }
+  }
+
+  // deferred_async_transition: verify async infrastructure exists
+  if (deferredAsync) {
+    const hasResumePointer = input.resumePointer || input.operationId;
+    if (!hasResumePointer) {
+      return {
+        ok: false,
+        errorCode: ERROR_CODES.STATE_MACHINE_GUARD_BLOCKED,
+        message: 'Deferred async transition requires resumePointer or operationId.',
+        blockedBy: "async",
         allowedEvents: listAllowedEvents(definition, currentStatus)
       };
     }
@@ -484,7 +437,7 @@ export function transitionState(definition, input, options = {}) {
     checkpointNodeId,
     policyDecisionId,
     approvalId,
-    guardResults: guardSummary(cell._guardResults)
+    guardResults: guardSummary(selectedGuardResults)
   };
 
   return {
