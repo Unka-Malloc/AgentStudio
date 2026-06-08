@@ -646,6 +646,9 @@ const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smok
   } else {
     overallStatus = summary.blockedP0 || missing.length ? "blocked" : "pass";
   }
+  const productionClaimAllowed = !options.quick && overallStatus === "pass";
+  const quickCheckPassed = options.quick && summary.blockedP0 === 0 && missing.length === 0;
+
   const report = {
     schemaVersion: 1,
     reportType: "pact.production-readiness.v1",
@@ -660,9 +663,12 @@ const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smok
       dirtyFileCount: Number((await gitValue(["status", "--short"])).split("\n").filter(Boolean).length)
     },
     overallStatus,
+    productionClaimAllowed,
+    quickCheckPassed,
     summary,
     coverage: {
-      required: REQUIRED_COVERAGE,
+      modeRequired: applicableCoverage,
+      fullRequired: REQUIRED_COVERAGE,
       byRequirement,
       missing
     },
@@ -678,7 +684,9 @@ const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smok
   console.log(`Production readiness JSON written: ${relativePath(jsonPath)}`);
   console.log(`Production readiness status: ${overallStatus}`);
 
-  if (overallStatus !== "pass" && !options.noFailOnBlocker) {
+const successStatuses = new Set(["pass", "quick_pass"]);
+
+  if (!successStatuses.has(overallStatus) && !options.noFailOnBlocker) {
     process.exitCode = 1;
   }
 }

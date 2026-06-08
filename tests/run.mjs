@@ -554,6 +554,7 @@ const profileSuites = {
     "server.feature-profiles",
     "server.frontend-feature-registry",
     "server.state-machines",
+    "server.production-readiness-baseline",
     "server.business-scenarios",
     "server.dispatcher-unified",
     "server.trace-context",
