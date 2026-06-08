@@ -214,6 +214,22 @@ export function verifyMachineDefinition(def, options = {}) {
     }
   });
 
+  // 8b2. staticOnly guards must not appear in runtime guard fields
+  addCheck("C3-guard-staticOnly-isolation", () => {
+    for (const cell of totalMatrix) {
+      for (const guardId of (cell.guards || [])) {
+        if (isStaticOnlyGuard(guardId)) {
+          throw new Error(`staticOnly guard '${guardId}' is not allowed in cell.guards for transition from '${cell.from}' on '${cell.event}'. staticOnly guards must only be used in staticAnnotations/proofAnnotations.`);
+        }
+      }
+      for (const guardId of (cell.requiredGuards || [])) {
+        if (isStaticOnlyGuard(guardId)) {
+          throw new Error(`staticOnly guard '${guardId}' is not allowed in cell.requiredGuards for transition from '${cell.from}' on '${cell.event}'. staticOnly guards must only be used in staticAnnotations/proofAnnotations.`);
+        }
+      }
+    }
+  });
+
   // 8c. Guard proof obligation coverage for high-risk events
   addCheck("C3-guard-proof-obligation", () => {
     const guardObligations = (def.proofObligations || []).filter(po => po.startsWith("PO-READY-"));

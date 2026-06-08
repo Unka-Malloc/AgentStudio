@@ -1,6 +1,6 @@
 import { ERROR_CODES, StateMachineError } from './state-machine-errors.mjs';
 import { selectTransitionCell } from './transition-selector.mjs';
-import { guardExists, listAllGuardIds } from './guards/guard-registry.mjs';
+import { guardExists, listAllGuardIds, isStaticOnlyGuard } from './guards/guard-registry.mjs';
 import { checkDefinitionSchema } from './state-machine-definition-schema.mjs';
 import crypto from 'node:crypto';
 
@@ -117,6 +117,20 @@ export function validateExecutableStateMachineDefinition(definition) {
       }
       if (unguarded.length === 1 && nonIllegal.length > 1) {
         errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `Mixed guarded/unguarded cells for ${key}` });
+      }
+    }
+  }
+
+  // staticOnly guards must not appear in runtime guard fields
+  for (const cell of definition.totalMatrix) {
+    for (const guardId of (cell.guards || [])) {
+      if (isStaticOnlyGuard(guardId)) {
+        errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `staticOnly guard '${guardId}' in cell.guards for ${cell.from}->${cell.event} is not allowed. staticOnly guards cannot gate runtime transitions.` });
+      }
+    }
+    for (const guardId of (cell.requiredGuards || [])) {
+      if (isStaticOnlyGuard(guardId)) {
+        errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `staticOnly guard '${guardId}' in cell.requiredGuards for ${cell.from}->${cell.event} is not allowed. staticOnly guards cannot gate runtime transitions.` });
       }
     }
   }
@@ -518,6 +532,52 @@ export function compileStateMachineDefinition(definition) {
 }
 
 function computeDefinitionHash(definition) {
-  const stable = JSON.stringify(definition, Object.keys(definition).sort());
+  const stable = canonicalJson(definition);
   return `sha256:${crypto.createHash("sha256").update(stable).digest("hex")}`;
+}
+
+/**
+ * Recursive canonical JSON serializer.
+ * - primitives pass through
+ * - arrays preserve order and recurse
+ * - objects sort keys and recurse
+ * - undefined values are omitted
+ * - functions / symbols / circular refs cause an error
+ */
+function canonicalJson(value, seen = new WeakSet()) {
+  if (value === null || typeof value === "undefined") return "null";
+  if (typeof value === "function") {
+    throw new Error("canonicalJson: functions are not supported in hash computation");
+  }
+  if (typeof value === "symbol") {
+    throw new Error("canonicalJson: symbols are not supported in hash computation");
+  }
+  if (typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  // Detect circular references
+  if (seen.has(value)) {
+    throw new Error("canonicalJson: circular reference detected");
+  }
+
+  if (Array.isArray(value)) {
+    seen.add(value);
+    const items = value.map(item => canonicalJson(item, seen));
+    seen.delete(value);
+    return `[${items.join(",")}]`;
+  }
+
+  seen.add(value);
+  const keys = Object.keys(value).sort();
+  const pairs = [];
+  for (const key of keys) {
+    const v = value[key];
+    if (v === undefined) continue;
+    const encodedKey = JSON.stringify(key);
+    const encodedValue = canonicalJson(v, seen);
+    pairs.push(`${encodedKey}:${encodedValue}`);
+  }
+  seen.delete(value);
+  return `{${pairs.join(",")}}`;
 }

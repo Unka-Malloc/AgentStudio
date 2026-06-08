@@ -1033,3 +1033,79 @@ describe("State Machine Core - Compile/Cache Validation (P1-D)", () => {
     expect(res.errorCode).toBe("STATE_MACHINE_INVALID_DEFINITION");
   });
 });
+
+describe("State Machine Core - Recursive Canonical Hash (P0-A)", () => {
+  it("hash changes when totalMatrix[0].to is modified", () => {
+    const compiled = compileStateMachineDefinition(mockDefinition);
+    const modifiedDef = JSON.parse(JSON.stringify(mockDefinition));
+    modifiedDef.totalMatrix[1].to = "archived"; // was "approved"
+
+    const compiled2 = compileStateMachineDefinition(modifiedDef);
+    expect(compiled2.definitionHash).not.toBe(compiled.definitionHash);
+  });
+
+  it("hash changes when totalMatrix[0].guards is modified", () => {
+    const compiled = compileStateMachineDefinition(mockDefinition);
+    const modifiedDef = JSON.parse(JSON.stringify(mockDefinition));
+    modifiedDef.totalMatrix[5].guards = ["approvalApproved"]; // was ["policyAllowed"]
+
+    const compiled2 = compileStateMachineDefinition(modifiedDef);
+    expect(compiled2.definitionHash).not.toBe(compiled.definitionHash);
+  });
+
+  it("hash changes when states[0].id is modified", () => {
+    const compiled = compileStateMachineDefinition(mockDefinition);
+    const modifiedDef = JSON.parse(JSON.stringify(mockDefinition));
+    modifiedDef.states[0].id = "different_start";
+
+    const compiled2 = compileStateMachineDefinition(modifiedDef);
+    expect(compiled2.definitionHash).not.toBe(compiled.definitionHash);
+  });
+
+  it("nested modification with old validatedDefinitionHash triggers re-validation", () => {
+    const compiled = compileStateMachineDefinition(mockDefinition);
+    const modifiedDef = JSON.parse(JSON.stringify(mockDefinition));
+    // Change a guards value deeply nested in totalMatrix
+    modifiedDef.totalMatrix[5].guards = ["approvalApproved"];
+
+    const res = transitionState(modifiedDef, {
+      entityId: "n1",
+      currentStatus: "approved",
+      eventType: "test.archive",
+      guardContext: { approvalRecord: { status: "approved" }, policyDecision: { allowed: true } }
+    }, { validatedDefinitionHash: compiled.definitionHash });
+    // Hash mismatch -> re-validates. The definition is still structurally valid
+    // (approvalApproved is a known guard), so the transition should proceed.
+    expect(res.ok).toBe(true);
+    expect(res.toStatus).toBe("archived");
+  });
+});
+
+describe("State Machine Core - staticOnly Guard Isolation (P1-C)", () => {
+  it("executable validation fails when low-risk transition uses staticOnly guard", () => {
+    const def = JSON.parse(JSON.stringify(mockDefinition));
+    // Add noApprovalRequired (staticOnly) to a low-risk transition
+    def.totalMatrix = def.totalMatrix.map(cell =>
+      cell.from === "submitted" && cell.event === "test.approve"
+        ? { ...cell, guards: ["noApprovalRequired"] }
+        : cell
+    );
+
+    const result = validateExecutableStateMachineDefinition(def);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some(e => e.message.includes("staticOnly"))).toBe(true);
+  });
+
+  it("executable validation fails when staticOnly guard used in requiredGuards", () => {
+    const def = JSON.parse(JSON.stringify(mockDefinition));
+    def.totalMatrix = def.totalMatrix.map(cell =>
+      cell.from === "submitted" && cell.event === "test.approve"
+        ? { ...cell, requiredGuards: ["noApprovalRequired"] }
+        : cell
+    );
+
+    const result = validateExecutableStateMachineDefinition(def);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some(e => e.message.includes("staticOnly"))).toBe(true);
+  });
+});
