@@ -7,10 +7,14 @@ export { ERROR_CODES } from "./state-machine-errors.mjs";
  * and multi-cell disambiguation. Used by both transitionState() and
  * evaluateTransitionGuards().
  *
+ * @param {object} definition - state machine definition
+ * @param {object} input - transition input
+ * @param {object} [options] - { guardEvaluator? }
  * @returns {{ ok, cell, guardResults, failedGuards, blockedBy, errorCode, message, allowedEvents, ambiguousCells }}
  */
-export function selectTransitionCell(definition, input) {
-  const { entityId, currentStatus, eventType, actor, reason, metadata, operationId, traceId, auditId, checkpointNodeId, policyDecisionId, approvalId, now, guardEvaluator } = input;
+export function selectTransitionCell(definition, input, options = {}) {
+  const { entityId, currentStatus, eventType, actor, reason, metadata, operationId, traceId, auditId, checkpointNodeId, policyDecisionId, approvalId, now } = input;
+  const guardEvaluator = options.guardEvaluator;
 
   const matchingCells = definition.totalMatrix.filter(
     cell => cell.from === currentStatus && cell.event === eventType
@@ -200,4 +204,38 @@ function listAllowedEventsInner(definition, currentStatus) {
   return definition.totalMatrix
     .filter(cell => cell.from === currentStatus && cell.result !== 'illegal_transition')
     .map(cell => cell.event);
+}
+
+/**
+ * Evaluate guards for a specific transition without executing it.
+ * Uses selectTransitionCell() for consistent selection behaviour.
+ *
+ * @returns {{ ok, guardResults, failedGuards, blockedBy, reason, message }}
+ */
+export function evaluateTransitionGuards(definition, fromStatus, eventType, context = {}) {
+  const input = {
+    currentStatus: fromStatus,
+    eventType,
+    guardContext: context
+  };
+
+  const result = selectTransitionCell(definition, input);
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      guardResults: result.guardResults,
+      failedGuards: result.failedGuards,
+      blockedBy: result.blockedBy,
+      reason: result.errorCode
+        ? result.errorCode.replace(/^STATE_MACHINE_/, '').toLowerCase()
+        : "select_failed",
+      message: result.message
+    };
+  }
+
+  return {
+    ok: true,
+    guardResults: result.guardResults || []
+  };
 }

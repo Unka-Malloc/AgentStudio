@@ -2,6 +2,7 @@ import { ERROR_CODES, StateMachineError } from './state-machine-errors.mjs';
 import { selectTransitionCell } from './transition-selector.mjs';
 import { guardExists, listAllGuardIds } from './guards/guard-registry.mjs';
 import { checkDefinitionSchema } from './state-machine-definition-schema.mjs';
+import crypto from 'node:crypto';
 
 export { ERROR_CODES, StateMachineError } from './state-machine-errors.mjs';
 export { selectTransitionCell } from './transition-selector.mjs';
@@ -166,7 +167,8 @@ const REDACT_KEY_PATTERNS = [
   "token", "secret", "password", "cookie", "authorization",
   "apikey", "accesskey", "refreshtoken", "accesstoken",
   "privatepath", "absolutepath", "opaque", "capability",
-  "keyhash", "lookupkey", "credential", "signature", "signingkey"
+  "keyhash", "lookupkey", "credential", "signature", "signingkey",
+  "clientsecret", "credentialbundle"
 ];
 
 const REDACT_VALUE_KEY = { redacted: true, reason: "sensitive_key" };
@@ -194,10 +196,13 @@ function containsToken(value) {
   if (typeof value !== 'string') return false;
   const lower = value.toLowerCase();
   return lower.startsWith('bearer ') || lower.startsWith('basic ') ||
-    lower.includes('?token=') || lower.includes('&access_token=') ||
-    lower.includes('?access_token=') || lower.includes('?refresh_token=') ||
+    lower.includes('?token=') || lower.includes('&token=') ||
+    lower.includes('&access_token=') || lower.includes('?access_token=') ||
+    lower.includes('&refresh_token=') || lower.includes('?refresh_token=') ||
     lower.includes('?api_key=') || lower.includes('&api_key=') ||
-    lower.includes('authorization:') || lower.includes('x-api-key:');
+    lower.includes('authorization:') || lower.includes('x-api-key:') ||
+    lower.includes('client_secret=') || lower.includes('&client_secret=') ||
+    lower.includes('authorization = bearer') || lower.includes('authorization=bearer');
 }
 
 function isSensitiveStringValue(value) {
@@ -283,11 +288,14 @@ function guardSummary(guardResults) {
  *
  * @param {object} definition - state machine definition
  * @param {object} input - transition input
- * @param {object} [options] - { skipExecutableValidation: boolean }
+ * @param {object} [options] - { skipExecutableValidation?: boolean, guardEvaluator?: function, validatedDefinitionHash?: string }
  * @returns {object} transition result
  */
 export function transitionState(definition, input, options = {}) {
-  if (!options.skipExecutableValidation) {
+  const skipValidation = options.skipExecutableValidation ||
+    (options.validatedDefinitionHash && options.validatedDefinitionHash === computeDefinitionHash(definition));
+
+  if (!skipValidation) {
     const execResult = validateExecutableStateMachineDefinition(definition);
     if (!execResult.ok) {
       return {
@@ -299,7 +307,16 @@ export function transitionState(definition, input, options = {}) {
     }
   }
 
-  const { entityId, currentStatus, eventType, actor, reason, metadata, operationId, traceId, auditId, checkpointNodeId, policyDecisionId, approvalId, now, guardEvaluator } = input;
+  const { entityId, currentStatus, eventType, actor, reason, metadata, operationId, traceId, auditId, checkpointNodeId, policyDecisionId, approvalId, now } = input;
+
+  // Reject external guard evaluator injection via input envelope
+  if (input.guardEvaluator !== undefined) {
+    return {
+      ok: false,
+      errorCode: ERROR_CODES.STATE_MACHINE_GUARD_INJECTION_REJECTED,
+      message: 'Guard evaluator injection via input is not allowed. Use internal options path only.'
+    };
+  }
 
   const stateExists = definition.states.some(s => s.id === currentStatus);
   if (!stateExists) {
@@ -320,7 +337,7 @@ export function transitionState(definition, input, options = {}) {
   }
 
   // Use the shared cell selection helper (no definition mutation)
-  const selection = selectTransitionCell(definition, input);
+  const selection = selectTransitionCell(definition, input, { guardEvaluator: options.guardEvaluator });
   if (!selection.ok) {
     return selection;
   }
@@ -484,4 +501,23 @@ export function assertTransitionAllowed(definition, input) {
     });
   }
   return result;
+}
+
+/**
+ * Pre-validate and cache a state machine definition for repeated use.
+ * Validation is performed once; subsequent transitionState() calls can use
+ * the returned definitionHash to skip re-validation.
+ *
+ * @param {object} definition - state machine definition
+ * @returns {{ definition, definitionHash, validationResult }}
+ */
+export function compileStateMachineDefinition(definition) {
+  const validationResult = validateExecutableStateMachineDefinition(definition);
+  const definitionHash = computeDefinitionHash(definition);
+  return { definition, definitionHash, validationResult, compiled: validationResult.ok };
+}
+
+function computeDefinitionHash(definition) {
+  const stable = JSON.stringify(definition, Object.keys(definition).sort());
+  return `sha256:${crypto.createHash("sha256").update(stable).digest("hex")}`;
 }

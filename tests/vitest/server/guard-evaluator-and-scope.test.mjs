@@ -7,9 +7,11 @@ import {
 } from "../../../server/platform/common/state-machine/guards/guard-registry.mjs";
 import {
   evaluateGuard,
-  evaluateGuardSet,
-  evaluateTransitionGuards
+  evaluateGuardSet
 } from "../../../server/platform/common/state-machine/guards/guard-evaluator.mjs";
+import {
+  evaluateTransitionGuards
+} from "../../../server/platform/common/state-machine/transition-selector.mjs";
 import {
   READINESS_SCOPES
 } from "../../../server/platform/specialized/production-readiness/readiness-scope-registry.mjs";

@@ -7,9 +7,11 @@ import {
   isTerminalStatus,
   assertTransitionAllowed,
   validateExecutableStateMachineDefinition,
+  compileStateMachineDefinition,
   ERROR_CODES,
   StateMachineError
 } from "../../../server/platform/common/state-machine/state-machine-core.mjs";
+import { evaluateTransitionGuards } from "../../../server/platform/common/state-machine/transition-selector.mjs";
 
 const mockDefinition = {
   machineId: "test.lifecycle.v1",
@@ -739,5 +741,295 @@ describe("State Machine Core - Deep Metadata Redaction", () => {
     expect(res.transitionRecord.metadata.label).toBe("production-deployment");
     expect(res.transitionRecord.metadata.count).toBe(42);
     expect(res.transitionRecord.metadata.tags).toEqual(["approved", "verified"]);
+  });
+
+  it("should redact &token= in URL query strings", () => {
+    const res = transitionState(mockDefinition, {
+      entityId: "r8",
+      currentStatus: "submitted",
+      eventType: "test.approve",
+      metadata: {
+        url: "https://api.example.com/callback?mode=test&token=secret456"
+      }
+    });
+    expect(res.ok).toBe(true);
+    expect(res.transitionRecord.metadata.url).toEqual({ redacted: true, reason: "sensitive_key" });
+  });
+
+  it("should redact &refresh_token= in URL strings", () => {
+    const res = transitionState(mockDefinition, {
+      entityId: "r9",
+      currentStatus: "submitted",
+      eventType: "test.approve",
+      metadata: {
+        oauthUrl: "https://auth.example.com/refresh?refresh_token=rt_abc123&scope=read"
+      }
+    });
+    expect(res.ok).toBe(true);
+    expect(res.transitionRecord.metadata.oauthUrl).toEqual({ redacted: true, reason: "sensitive_key" });
+  });
+
+  it("should redact client_secret= in strings", () => {
+    const res = transitionState(mockDefinition, {
+      entityId: "r10",
+      currentStatus: "submitted",
+      eventType: "test.approve",
+      metadata: {
+        configString: "client_id=app1&client_secret=cs_deadbeef&grant_type=authorization_code"
+      }
+    });
+    expect(res.ok).toBe(true);
+    expect(res.transitionRecord.metadata.configString).toEqual({ redacted: true, reason: "sensitive_key" });
+  });
+
+  it("should redact Authorization = Bearer with spaces", () => {
+    const res = transitionState(mockDefinition, {
+      entityId: "r11",
+      currentStatus: "submitted",
+      eventType: "test.approve",
+      metadata: {
+        rawHeader: "Authorization = Bearer some-token-value"
+      }
+    });
+    expect(res.ok).toBe(true);
+    expect(res.transitionRecord.metadata.rawHeader).toEqual({ redacted: true, reason: "sensitive_key" });
+  });
+
+  it("should redact credentialBundle key", () => {
+    const res = transitionState(mockDefinition, {
+      entityId: "r12",
+      currentStatus: "submitted",
+      eventType: "test.approve",
+      metadata: {
+        credentialBundle: { id: "cred-1", name: "main-cred", value: "actual-secret" }
+      }
+    });
+    expect(res.ok).toBe(true);
+    // credentialBundle key matches REDACT_KEY_PATTERNS; recurses into the object
+    expect(res.transitionRecord.metadata.credentialBundle.id).toBe("cred-1");
+    expect(res.transitionRecord.metadata.credentialBundle.name).toBe("main-cred");
+    expect(res.transitionRecord.metadata.credentialBundle.value).toEqual({ redacted: true, reason: "sensitive_key" });
+  });
+
+  it("should not redact operationId, traceId, reasonCode, or guardId", () => {
+    const res = transitionState(mockDefinition, {
+      entityId: "r13",
+      currentStatus: "submitted",
+      eventType: "test.approve",
+      operationId: "op-123",
+      traceId: "trace-456",
+      reasonCode: "RC-001",
+      metadata: {
+        guardId: "policyAllowed",
+        reasonCode: "RC-002",
+        operationId: "op-789",
+        traceId: "trace-012"
+      }
+    });
+    expect(res.ok).toBe(true);
+    expect(res.transitionRecord.operationId).toBe("op-123");
+    expect(res.transitionRecord.traceId).toBe("trace-456");
+  });
+});
+
+describe("State Machine Core - Guard Evaluator Injection Rejection (P0-B)", () => {
+  it("should reject guardEvaluator injected via input object", () => {
+    const res = transitionState(mockDefinition, {
+      entityId: "ib1",
+      currentStatus: "approved",
+      eventType: "test.archive",
+      guardContext: { policyDecision: { allowed: false } },
+      guardEvaluator: () => [{ ok: true }]
+    });
+    expect(res.ok).toBe(false);
+    expect(res.errorCode).toBe("STATE_MACHINE_GUARD_INJECTION_REJECTED");
+  });
+
+  it("should NOT bypass guard via input.guardEvaluator when real guard would fail", () => {
+    const defWithGuard = {
+      ...mockDefinition,
+      totalMatrix: mockDefinition.totalMatrix.map(cell =>
+        cell.from === "approved" && cell.event === "test.archive"
+          ? { ...cell, guards: ["policyAllowed"] }
+          : cell
+      )
+    };
+    const res = transitionState(defWithGuard, {
+      entityId: "ib2",
+      currentStatus: "approved",
+      eventType: "test.archive",
+      guardContext: { policyDecision: { allowed: false } },
+      guardEvaluator: () => [{ ok: true, guardId: "policyAllowed" }]
+    });
+    expect(res.ok).toBe(false);
+    expect(res.errorCode).toBe("STATE_MACHINE_GUARD_INJECTION_REJECTED");
+  });
+});
+
+describe("State Machine Core - EvaluateTransitionGuards Consistency (P0-C)", () => {
+  it("evaluateTransitionGuards and transitionState agree on single-cell guard pass", () => {
+    const def = {
+      machineId: "consistency.v1",
+      entityType: "test",
+      version: "1.0.0",
+      description: "Consistency test definition.",
+      initialState: "start",
+      states: [{ id: "start" }, { id: "end" }],
+      events: [{ id: "go" }],
+      totalMatrix: [
+        { from: "start", event: "go", result: "legal_transition", to: "end", guards: ["policyAllowed"] }
+      ],
+      invariants: [],
+      proofObligations: []
+    };
+    const context = { policyDecision: { allowed: true } };
+
+    const transResult = transitionState(def, {
+      entityId: "c1",
+      currentStatus: "start",
+      eventType: "go",
+      guardContext: context
+    });
+    const evalResult = evaluateTransitionGuards(def, "start", "go", context);
+
+    expect(transResult.ok).toBe(true);
+    expect(evalResult.ok).toBe(true);
+  });
+
+  it("evaluateTransitionGuards and transitionState agree on single-cell guard fail", () => {
+    const def = {
+      machineId: "consistency.v2",
+      entityType: "test",
+      version: "1.0.0",
+      description: "Consistency test v2.",
+      initialState: "start",
+      states: [{ id: "start" }, { id: "end" }],
+      events: [{ id: "go" }],
+      totalMatrix: [
+        { from: "start", event: "go", result: "legal_transition", to: "end", guards: ["policyAllowed"] }
+      ],
+      invariants: [],
+      proofObligations: []
+    };
+    const context = { policyDecision: { allowed: false } };
+
+    const transResult = transitionState(def, {
+      entityId: "c2",
+      currentStatus: "start",
+      eventType: "go",
+      guardContext: context
+    });
+    const evalResult = evaluateTransitionGuards(def, "start", "go", context);
+
+    expect(transResult.ok).toBe(false);
+    expect(evalResult.ok).toBe(false);
+  });
+
+  it("evaluateTransitionGuards and transitionState agree on missing guard context", () => {
+    const def = {
+      machineId: "consistency.v3",
+      entityType: "test",
+      version: "1.0.0",
+      description: "Consistency test v3.",
+      initialState: "start",
+      states: [{ id: "start" }, { id: "end" }],
+      events: [{ id: "go" }],
+      totalMatrix: [
+        { from: "start", event: "go", result: "legal_transition", to: "end", guards: ["policyAllowed"] }
+      ],
+      invariants: [],
+      proofObligations: []
+    };
+
+    const transResult = transitionState(def, {
+      entityId: "c3",
+      currentStatus: "start",
+      eventType: "go",
+      guardContext: {}
+    });
+    const evalResult = evaluateTransitionGuards(def, "start", "go", {});
+
+    expect(transResult.ok).toBe(false);
+    expect(evalResult.ok).toBe(false);
+  });
+});
+
+describe("State Machine Core - Compile/Cache Validation (P1-D)", () => {
+  it("compileStateMachineDefinition returns compiled result with definitionHash", () => {
+    const compiled = compileStateMachineDefinition(mockDefinition);
+    expect(compiled.compiled).toBe(true);
+    expect(compiled.validationResult.ok).toBe(true);
+    expect(compiled.definitionHash).toBeDefined();
+    expect(compiled.definitionHash.startsWith("sha256:")).toBe(true);
+  });
+
+  it("compiled definition produces same transition result as direct transitionState", () => {
+    const compiled = compileStateMachineDefinition(mockDefinition);
+
+    const directResult = transitionState(mockDefinition, {
+      entityId: "h1",
+      currentStatus: "submitted",
+      eventType: "test.approve"
+    });
+    const compiledResult = transitionState(compiled.definition, {
+      entityId: "h2",
+      currentStatus: "submitted",
+      eventType: "test.approve"
+    }, { validatedDefinitionHash: compiled.definitionHash });
+
+    expect(compiledResult.ok).toBe(true);
+    expect(compiledResult.toStatus).toBe(directResult.toStatus);
+    expect(compiledResult.transitionRecord.fromStatus).toBe(directResult.transitionRecord.fromStatus);
+  });
+
+  it("validatedDefinitionHash rejects when definition is modified after compilation", () => {
+    const compiled = compileStateMachineDefinition(mockDefinition);
+    // Create a structurally invalid definition by adding a duplicate unguarded cell
+    const modifiedDef = JSON.parse(JSON.stringify(mockDefinition));
+    modifiedDef.totalMatrix.push({
+      from: "submitted",
+      event: "test.approve",
+      result: "legal_transition",
+      to: "approved"
+    });
+
+    const res = transitionState(modifiedDef, {
+      entityId: "h3",
+      currentStatus: "submitted",
+      eventType: "test.approve"
+    }, { validatedDefinitionHash: compiled.definitionHash });
+    // Hash mismatch triggers re-validation, which catches the duplicate unguarded cells
+    expect(res.ok).toBe(false);
+    expect(res.errorCode).toBe("STATE_MACHINE_INVALID_DEFINITION");
+  });
+
+  it("validatedDefinitionHash skips validation for identical definition", () => {
+    const compiled = compileStateMachineDefinition(mockDefinition);
+
+    const res = transitionState(mockDefinition, {
+      entityId: "h4",
+      currentStatus: "submitted",
+      eventType: "test.approve"
+    }, { validatedDefinitionHash: compiled.definitionHash });
+
+    expect(res.ok).toBe(true);
+  });
+
+  it("default path still rejects unexecutable definition", () => {
+    const invalidDef = JSON.parse(JSON.stringify(mockDefinition));
+    invalidDef.totalMatrix.push({
+      from: "submitted",
+      event: "test.approve",
+      result: "legal_transition",
+      to: "approved"
+    });
+
+    const res = transitionState(invalidDef, {
+      entityId: "h5",
+      currentStatus: "submitted",
+      eventType: "test.approve"
+    });
+    expect(res.ok).toBe(false);
+    expect(res.errorCode).toBe("STATE_MACHINE_INVALID_DEFINITION");
   });
 });
