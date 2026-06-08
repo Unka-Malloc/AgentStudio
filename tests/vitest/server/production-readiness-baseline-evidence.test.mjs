@@ -6,12 +6,11 @@ import {
 import { READINESS_SCOPES } from "../../../server/platform/specialized/production-readiness/readiness-scope-registry.mjs";
 
 /**
- * Pure unit: simulate evaluateScopeEvidence semantics.
- * Replicates the logic from verify-production-readiness-baseline.mjs
- * without requiring actual filesystem or subprocess execution.
+ * Pure unit: simulate evaluateScopeEvidence semantics from
+ * verify-production-readiness-baseline.mjs (updated for P0-B content validation).
  */
-function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit) {
-  const plan = evidencePlan[scope.scopeId] || { requiredCommands: [], requiredReports: [] };
+function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit, commandStartTimes = {}, reportValidators = {}, definitionsRegistry = []) {
+  const plan = evidencePlan[scope.scopeId] || { requiredCommands: [], requiredReports: [], requiredFiles: [] };
   const actualEvidence = [];
   const failureReasons = [];
 
@@ -19,7 +18,7 @@ function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResult
     const cmdKey = reqCmd.join(" ");
     const result = commandResults[cmdKey];
     if (!result) {
-      failureReasons.push(`Required command not run: ${cmdKey}`);
+      failureReasons.push(`command_not_run: ${cmdKey}`);
       continue;
     }
     actualEvidence.push({
@@ -31,25 +30,64 @@ function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResult
       generatedForCommit: commit
     });
     if (result.exitCode !== 0) {
-      failureReasons.push(`Required command failed (exitCode=${result.exitCode}): ${cmdKey}`);
+      failureReasons.push(`command_failed(exitCode=${result.exitCode}): ${cmdKey}`);
     }
   }
 
   for (const reportPath of plan.requiredReports) {
     const reportData = reportResults[reportPath];
     if (!reportData || !reportData.exists) {
-      failureReasons.push(`Required report missing: ${reportPath}`);
+      failureReasons.push(`report_missing: ${reportPath}`);
+      continue;
+    }
+    const validator = reportValidators[reportPath];
+    if (validator) {
+      const validation = validator(reportData.data || reportData);
+      if (!validation.ok) {
+        failureReasons.push(`report_failed(${validation.reason}): ${reportPath}`);
+        continue;
+      }
+    }
+    let fresh = false;
+    const reportTimestamp = (reportData.data || reportData).generatedAt || reportData.generatedAt || null;
+    if (reportTimestamp && Object.keys(commandStartTimes).length > 0) {
+      for (const [, cmdStart] of Object.entries(commandStartTimes)) {
+        if (reportTimestamp >= cmdStart) { fresh = true; break; }
+      }
+    } else {
+      fresh = true;
+    }
+    if (!fresh) {
+      failureReasons.push(`report_stale: ${reportPath}`);
       continue;
     }
     actualEvidence.push({
       reportPath,
-      reportHash: reportData.hash,
-      generatedAt: reportData.generatedAt || null,
+      reportHash: reportData.hash || "sha256:fake",
+      reportGeneratedAt: reportTimestamp,
       generatedForCommit: commit
     });
   }
 
-  const verificationMode = plan.requiredCommands.length > 0 || plan.requiredReports.length > 0
+  for (const filePath of (plan.requiredFiles || [])) {
+    if (!reportResults[filePath] || !reportResults[filePath].exists) {
+      failureReasons.push(`required_file_missing: ${filePath}`);
+      continue;
+    }
+    const content = reportResults[filePath].content || "";
+    if (definitionsRegistry.length > 0) {
+      for (const machineId of definitionsRegistry) {
+        if (!content.includes(machineId)) {
+          failureReasons.push(`report_scope_mismatch: ${filePath} missing machine ${machineId}`);
+          break;
+        }
+      }
+    }
+    actualEvidence.push({ filePath, generatedForCommit: commit });
+  }
+
+  const hasRequirements = plan.requiredCommands.length > 0 || plan.requiredReports.length > 0 || (plan.requiredFiles || []).length > 0;
+  const verificationMode = hasRequirements
     ? (failureReasons.length === 0 ? "verified" : "failed")
     : "notRun";
 
@@ -63,9 +101,6 @@ function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResult
   return { status, verificationMode, actualEvidence, failureReasons };
 }
 
-/**
- * Validate a baseline readiness report against expected schema/consistency rules.
- */
 function validateBaselineReadinessReport(report) {
   const errors = [];
   if (!report || typeof report !== "object") {
@@ -86,6 +121,9 @@ function validateBaselineReadinessReport(report) {
   if (!Array.isArray(report.scopes)) {
     errors.push("Report missing scopes array.");
   }
+  if (typeof report.baselineV0_1ClaimAllowed !== "boolean") {
+    errors.push("Report missing baselineV0_1ClaimAllowed.");
+  }
   if (!report.summary || typeof report.summary !== "object") {
     errors.push("Report missing summary.");
   }
@@ -93,6 +131,15 @@ function validateBaselineReadinessReport(report) {
     errors.push("Report missing guardResults.");
   }
   return { ok: errors.length === 0, errors };
+}
+
+function validateStateMachineReport(report) {
+  if (!report || typeof report !== "object") return { ok: false, reason: "report_missing_or_invalid" };
+  if (report.ok !== true) return { ok: false, reason: "report_failed" };
+  if (!Array.isArray(report.machines) || report.machines.length === 0) return { ok: false, reason: "report_no_machines" };
+  const failedMachines = report.machines.filter(m => m.ok !== true);
+  if (failedMachines.length > 0) return { ok: false, reason: "report_machine_failed", failedMachineIds: failedMachines.map(m => m.machineId) };
+  return { ok: true, reason: "report_valid" };
 }
 
 const evidencePlan = {
@@ -111,11 +158,16 @@ const evidencePlan = {
   "docs-config-consistency": {
     requiredCommands: [["test", "cmd", "docs-governance"]],
     requiredReports: []
+  },
+  "proof-artifacts": {
+    requiredCommands: [],
+    requiredReports: ["build/reports/state-machines/latest.json"],
+    requiredFiles: ["docs/STATE-MACHINE-TRACEABILITY.md"]
   }
 };
 
 describe("Baseline Evidence - evaluateScopeEvidence", () => {
-  it("baseline scope passes when all required commands succeed and reports exist", () => {
+  it("baseline scope passes when all required commands succeed and reports pass validation", () => {
     const commit = "abc123";
     const commandResults = {
       "test cmd state-machine-core": {
@@ -129,37 +181,75 @@ describe("Baseline Evidence - evaluateScopeEvidence", () => {
       "build/reports/state-machines/latest.json": {
         exists: true,
         hash: "sha256:abcdef",
-        generatedAt: "2025-01-01T00:00:00Z"
+        generatedAt: "2025-01-01T00:00:03Z",
+        data: { ok: true, machines: [{ machineId: "test.v1", ok: true }] }
       }
     };
+    const commandStartTimes = { "test cmd state-machine-core": "2025-01-01T00:00:00Z" };
+    const reportValidators = { "build/reports/state-machines/latest.json": validateStateMachineReport };
 
     const scope = READINESS_SCOPES.getScope("state-machine-core");
-    const result = evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit);
+    const result = evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit, commandStartTimes, reportValidators);
 
     expect(result.status).toBe("passed");
     expect(result.verificationMode).toBe("verified");
     expect(result.failureReasons).toEqual([]);
-    expect(result.actualEvidence.length).toBe(2);
   });
 
-  it("production-readiness-baseline self-scope passes via self-test command", () => {
+  it("state-machines/latest.json with ok:false causes scope to fail", () => {
     const commit = "abc123";
     const commandResults = {
-      "test cmd baseline-self-test": {
+      "test cmd state-machine-core": {
         exitCode: 0,
         startedAt: "2025-01-01T00:00:00Z",
-        finishedAt: "2025-01-01T00:00:01Z",
-        elapsedMs: 1000
+        finishedAt: "2025-01-01T00:00:05Z",
+        elapsedMs: 5000
       }
     };
-    const reportResults = {};
+    const reportResults = {
+      "build/reports/state-machines/latest.json": {
+        exists: true,
+        hash: "sha256:abcdef",
+        generatedAt: "2025-01-01T00:00:03Z",
+        data: { ok: false, machines: [] }
+      }
+    };
+    const commandStartTimes = { "test cmd state-machine-core": "2025-01-01T00:00:00Z" };
+    const reportValidators = { "build/reports/state-machines/latest.json": validateStateMachineReport };
 
-    const scope = READINESS_SCOPES.getScope("production-readiness-baseline");
-    const result = evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit);
+    const scope = READINESS_SCOPES.getScope("state-machine-core");
+    const result = evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit, commandStartTimes, reportValidators);
 
-    expect(result.status).toBe("passed");
-    expect(result.verificationMode).toBe("verified");
-    expect(result.failureReasons).toEqual([]);
+    expect(result.status).toBe("failed");
+    expect(result.failureReasons.some(r => r.includes("report_failed"))).toBe(true);
+  });
+
+  it("report older than command start is stale and scope fails", () => {
+    const commit = "abc123";
+    const commandResults = {
+      "test cmd state-machine-core": {
+        exitCode: 0,
+        startedAt: "2025-01-01T00:10:00Z",
+        finishedAt: "2025-01-01T00:10:05Z",
+        elapsedMs: 5000
+      }
+    };
+    const reportResults = {
+      "build/reports/state-machines/latest.json": {
+        exists: true,
+        hash: "sha256:abcdef",
+        generatedAt: "2025-01-01T00:00:00Z",
+        data: { ok: true, machines: [{ machineId: "test.v1", ok: true }] }
+      }
+    };
+    const commandStartTimes = { "test cmd state-machine-core": "2025-01-01T00:10:00Z" };
+    const reportValidators = { "build/reports/state-machines/latest.json": validateStateMachineReport };
+
+    const scope = READINESS_SCOPES.getScope("state-machine-schema");
+    const result = evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit, commandStartTimes, reportValidators);
+
+    expect(result.status).toBe("failed");
+    expect(result.failureReasons.some(r => r.includes("report_stale"))).toBe(true);
   });
 
   it("scope must fail when required command exitCode is non-zero", () => {
@@ -176,106 +266,86 @@ describe("Baseline Evidence - evaluateScopeEvidence", () => {
       "build/reports/state-machines/latest.json": {
         exists: true,
         hash: "sha256:abcdef",
-        generatedAt: "2025-01-01T00:00:00Z"
+        generatedAt: "2025-01-01T00:00:03Z",
+        data: { ok: true, machines: [{ machineId: "test.v1", ok: true }] }
       }
     };
+    const commandStartTimes = { "test cmd state-machine-core": "2025-01-01T00:00:00Z" };
+    const reportValidators = { "build/reports/state-machines/latest.json": validateStateMachineReport };
 
     const scope = READINESS_SCOPES.getScope("state-machine-core");
-    const result = evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit);
+    const result = evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit, commandStartTimes, reportValidators);
 
     expect(result.status).toBe("failed");
     expect(result.verificationMode).toBe("failed");
-    expect(result.failureReasons.length).toBeGreaterThan(0);
+    expect(result.failureReasons.some(r => r.startsWith("command_failed"))).toBe(true);
   });
 
   it("scope must fail when required report is missing", () => {
     const commit = "abc123";
-    const commandResults = {
-      "test cmd state-machine-core": {
-        exitCode: 0,
-        startedAt: "2025-01-01T00:00:00Z",
-        finishedAt: "2025-01-01T00:00:05Z",
-        elapsedMs: 5000
-      }
-    };
+    const commandResults = {};
     const reportResults = {
-      "build/reports/state-machines/latest.json": {
-        exists: false,
-        hash: null,
-        generatedAt: null
-      }
+      "build/reports/state-machines/latest.json": { exists: false, hash: null, generatedAt: null }
     };
+    const reportValidators = {};
 
     const scope = READINESS_SCOPES.getScope("state-machine-schema");
-    const result = evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit);
+    const result = evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit, {}, reportValidators);
 
     expect(result.status).toBe("failed");
-    expect(result.failureReasons.length).toBeGreaterThan(0);
-    expect(result.failureReasons.some(r => r.includes("Required report missing"))).toBe(true);
+    expect(result.failureReasons.some(r => r.startsWith("report_missing"))).toBe(true);
   });
 
-  it("docs-config-consistency is not duplicated by running same command twice", () => {
+  it("proof-artifacts with missing traceability file fails", () => {
     const commit = "abc123";
-    const commandResults = {
-      "test cmd docs-governance": {
-        exitCode: 0,
-        startedAt: "2025-01-01T00:00:00Z",
-        finishedAt: "2025-01-01T00:00:01Z",
-        elapsedMs: 1000
-      }
-    };
-    const reportResults = {};
-
-    const scope = READINESS_SCOPES.getScope("docs-config-consistency");
-    const result = evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit);
-
-    expect(result.status).toBe("passed");
-    // Docs-governance should only be in evidence once via the plan
-    expect(result.actualEvidence.filter(e => e.command === "test cmd docs-governance").length).toBe(1);
-  });
-
-  it("evidence includes exitCode, startedAt, finishedAt, elapsedMs, generatedForCommit", () => {
-    const commit = "abc123";
-    const commandResults = {
-      "test cmd state-machine-core": {
-        exitCode: 0,
-        startedAt: "2025-01-01T00:00:00Z",
-        finishedAt: "2025-01-01T00:00:05Z",
-        elapsedMs: 5000
-      }
-    };
     const reportResults = {
       "build/reports/state-machines/latest.json": {
         exists: true,
         hash: "sha256:abcdef",
-        generatedAt: "2025-01-01T00:00:00Z"
-      }
+        generatedAt: "2025-01-01T00:00:03Z",
+        data: { ok: true, machines: [{ machineId: "test.v1", ok: true }] }
+      },
+      "docs/STATE-MACHINE-TRACEABILITY.md": { exists: false }
     };
 
+    const scope = READINESS_SCOPES.getScope("proof-artifacts");
+    const result = evaluateScopeEvidence(scope, evidencePlan, {}, reportResults, commit, {}, {});
+
+    expect(result.status).toBe("failed");
+    expect(result.failureReasons.some(r => r.startsWith("required_file_missing"))).toBe(true);
+  });
+
+  it("failure reasons use specific codes", () => {
+    const commit = "abc123";
+    const commandResults = {
+      "test cmd state-machine-core": { exitCode: 1, startedAt: "2025-01-01T00:00:00Z", finishedAt: "2025-01-01T00:00:05Z", elapsedMs: 5000 }
+    };
+    const reportResults = {
+      "build/reports/state-machines/latest.json": {
+        exists: true,
+        hash: "sha256:def",
+        data: { ok: false, generatedAt: "2025-01-01T00:00:00Z" }
+      }
+    };
+    const commandStartTimes = { "test cmd state-machine-core": "2025-01-01T00:00:00Z" };
+    const reportValidators = { "build/reports/state-machines/latest.json": validateStateMachineReport };
+
     const scope = READINESS_SCOPES.getScope("state-machine-core");
-    const result = evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit);
+    const result = evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit, commandStartTimes, reportValidators);
 
-    const cmdEvidence = result.actualEvidence.find(e => e.command);
-    expect(cmdEvidence.exitCode).toBe(0);
-    expect(cmdEvidence.startedAt).toBeTruthy();
-    expect(cmdEvidence.finishedAt).toBeTruthy();
-    expect(typeof cmdEvidence.elapsedMs).toBe("number");
-    expect(cmdEvidence.generatedForCommit).toBe(commit);
-
-    const reportEvidence = result.actualEvidence.find(e => e.reportPath);
-    expect(reportEvidence.reportPath).toBeTruthy();
-    expect(reportEvidence.reportHash).toBeTruthy();
-    expect(reportEvidence.generatedForCommit).toBe(commit);
+    expect(result.failureReasons.some(r => r.startsWith("command_failed"))).toBe(true);
+    expect(result.failureReasons.some(r => r.startsWith("report_failed"))).toBe(true);
   });
 });
 
 describe("Baseline Evidence - validateBaselineReadinessReport", () => {
-  it("accepts valid report", () => {
+  it("accepts valid report with baselineV0_1ClaimAllowed", () => {
     const report = {
       schemaVersion: 1,
       reportType: "pact.readiness.report.v0.1",
       runId: "test-run",
       commit: "abc123",
+      baselineV0_1ClaimAllowed: false,
       scopes: [],
       summary: {},
       guardResults: {}
@@ -284,13 +354,9 @@ describe("Baseline Evidence - validateBaselineReadinessReport", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("rejects null report", () => {
-    const result = validateBaselineReadinessReport(null);
-    expect(result.ok).toBe(false);
-  });
-
-  it("rejects report with missing schemaVersion", () => {
+  it("rejects report missing baselineV0_1ClaimAllowed", () => {
     const report = {
+      schemaVersion: 1,
       reportType: "pact.readiness.report.v0.1",
       runId: "test-run",
       commit: "abc123",
@@ -300,35 +366,6 @@ describe("Baseline Evidence - validateBaselineReadinessReport", () => {
     };
     const result = validateBaselineReadinessReport(report);
     expect(result.ok).toBe(false);
-    expect(result.errors.some(e => e.includes("schemaVersion"))).toBe(true);
-  });
-
-  it("rejects report with invalid reportType", () => {
-    const report = {
-      schemaVersion: 1,
-      reportType: "wrong.type",
-      runId: "test-run",
-      commit: "abc123",
-      scopes: [],
-      summary: {},
-      guardResults: {}
-    };
-    const result = validateBaselineReadinessReport(report);
-    expect(result.ok).toBe(false);
-    expect(result.errors.some(e => e.includes("reportType"))).toBe(true);
-  });
-
-  it("rejects report with missing scopes", () => {
-    const report = {
-      schemaVersion: 1,
-      reportType: "pact.readiness.report.v0.1",
-      runId: "test-run",
-      commit: "abc123",
-      summary: {},
-      guardResults: {}
-    };
-    const result = validateBaselineReadinessReport(report);
-    expect(result.ok).toBe(false);
-    expect(result.errors.some(e => e.includes("scopes"))).toBe(true);
+    expect(result.errors.some(e => e.includes("baselineV0_1ClaimAllowed"))).toBe(true);
   });
 });

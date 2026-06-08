@@ -98,6 +98,9 @@ function validateBaselineReadinessReport(report) {
   if (!Array.isArray(report.scopes)) {
     errors.push("Report missing scopes array.");
   }
+  if (typeof report.baselineV0_1ClaimAllowed !== "boolean") {
+    errors.push("Report missing baselineV0_1ClaimAllowed.");
+  }
   if (!report.summary || typeof report.summary !== "object") {
     errors.push("Report missing summary.");
   }
@@ -108,7 +111,53 @@ function validateBaselineReadinessReport(report) {
 }
 
 /**
+ * Validate a state-machine verifier report.
+ * Requires ok === true, machines array, and each machine ok === true.
+ */
+function validateStateMachineReport(report) {
+  if (!report || typeof report !== "object") {
+    return { ok: false, reason: "report_missing_or_invalid" };
+  }
+  if (report.ok !== true) {
+    return { ok: false, reason: "report_failed" };
+  }
+  if (!Array.isArray(report.machines) || report.machines.length === 0) {
+    return { ok: false, reason: "report_no_machines" };
+  }
+  const failedMachines = report.machines.filter(m => m.ok !== true);
+  if (failedMachines.length > 0) {
+    return {
+      ok: false,
+      reason: "report_machine_failed",
+      failedMachines: failedMachines.map(m => m.machineId)
+    };
+  }
+  return { ok: true, reason: "report_valid" };
+}
+
+/**
+ * Get the timestamp from a report (checkedAt or generatedAt).
+ */
+function getReportTimestamp(report) {
+  if (!report) return null;
+  return report.checkedAt || report.generatedAt || report.timestamp || null;
+}
+
+/**
+ * Check if a file exists and read its content synchronously.
+ */
+function fileExistsAndReadable(filePath) {
+  try {
+    fs.accessSync(filePath, fs.constants.R_OK);
+    return fs.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Evidence plan: defines required commands and required reports per scope.
+ * Aligned with READINESS_SCOPES.requiredEvidence.
  */
 const scopeEvidencePlan = {
   "state-machine-core": {
@@ -140,28 +189,37 @@ const scopeEvidencePlan = {
     requiredReports: []
   },
   "production-readiness-baseline": {
-    requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/guard-evaluator-and-scope.test.mjs"]],
-    requiredReports: []
+    requiredCommands: [
+      ["npx", "vitest", "run", "tests/vitest/server/guard-evaluator-and-scope.test.mjs"],
+      ["npx", "vitest", "run", "tests/vitest/server/production-readiness-lifecycle-state-machine.test.mjs"],
+      ["npx", "vitest", "run", "tests/vitest/server/production-readiness-baseline-evidence.test.mjs"]
+    ],
+    requiredReports: ["build/reports/state-machines/latest.json"]
   },
   "proof-artifacts": {
     requiredCommands: [],
-    requiredReports: ["build/reports/state-machines/latest.json"]
+    requiredReports: ["build/reports/state-machines/latest.json"],
+    requiredFiles: ["docs/STATE-MACHINE-TRACEABILITY.md"]
   },
   "docs-config-consistency": {
-    requiredCommands: [["npm", "run", "server:verify:docs-governance"]],
+    requiredCommands: [
+      ["npm", "run", "server:verify:docs-governance"],
+      ["npm", "run", "server:verify:language-policy"]
+    ],
     requiredReports: []
   }
 };
 
 /**
  * Evaluate evidence for a single scope.
- * A scope passes only when ALL requiredCommands have exitCode 0
- * AND ALL requiredReports exist and pass basic freshness validation.
+ * A scope passes only when ALL requiredCommands have exitCode 0,
+ * ALL requiredReports pass content validation and freshness,
+ * AND ALL requiredFiles exist.
  *
  * @returns {{ status, verificationMode, actualEvidence, failureReasons }}
  */
-function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit) {
-  const plan = evidencePlan[scope.scopeId] || { requiredCommands: [], requiredReports: [] };
+function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit, commandStartTimes, reportValidators, definitionsRegistry) {
+  const plan = evidencePlan[scope.scopeId] || { requiredCommands: [], requiredReports: [], requiredFiles: [] };
   const actualEvidence = [];
   const failureReasons = [];
 
@@ -170,7 +228,7 @@ function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResult
     const cmdKey = reqCmd.join(" ");
     const result = commandResults[cmdKey];
     if (!result) {
-      failureReasons.push(`Required command not run: ${cmdKey}`);
+      failureReasons.push(`command_not_run: ${cmdKey}`);
       continue;
     }
     actualEvidence.push({
@@ -182,26 +240,74 @@ function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResult
       generatedForCommit: commit
     });
     if (result.exitCode !== 0) {
-      failureReasons.push(`Required command failed (exitCode=${result.exitCode}): ${cmdKey}`);
+      failureReasons.push(`command_failed(exitCode=${result.exitCode}): ${cmdKey}`);
     }
   }
 
-  // Evaluate required reports
+  // Evaluate required reports with content validation
   for (const reportPath of plan.requiredReports) {
     const reportData = reportResults[reportPath];
     if (!reportData || !reportData.exists) {
-      failureReasons.push(`Required report missing: ${reportPath}`);
+      failureReasons.push(`report_missing: ${reportPath}`);
+      continue;
+    }
+    // Content validation
+    const validator = reportValidators[reportPath];
+    if (validator) {
+      const validation = validator(reportData.data);
+      if (!validation.ok) {
+        failureReasons.push(`report_failed(${validation.reason}): ${reportPath}`);
+        continue;
+      }
+    }
+    // Freshness check: report must be generated by a command run in this session
+    let fresh = false;
+    const reportTimestamp = reportData.data ? getReportTimestamp(reportData.data) : null;
+    if (reportTimestamp && commandStartTimes) {
+      for (const [cmdKey, cmdStart] of Object.entries(commandStartTimes)) {
+        if (reportTimestamp >= cmdStart) {
+          fresh = true;
+          break;
+        }
+      }
+    }
+    if (!fresh) {
+      failureReasons.push(`report_stale: ${reportPath} (timestamp ${reportTimestamp || 'unknown'} does not follow any command start)`);
       continue;
     }
     actualEvidence.push({
       reportPath,
       reportHash: reportData.hash,
-      generatedAt: reportData.generatedAt || null,
+      reportGeneratedAt: reportTimestamp,
       generatedForCommit: commit
     });
   }
 
-  const verificationMode = plan.requiredCommands.length > 0 || plan.requiredReports.length > 0
+  // Evaluate required files
+  for (const filePath of (plan.requiredFiles || [])) {
+    const fullPath = path.join(repoRoot, filePath);
+    const content = fileExistsAndReadable(fullPath);
+    if (!content) {
+      failureReasons.push(`required_file_missing: ${filePath}`);
+      continue;
+    }
+    // For traceability file, check it contains machine IDs from definitions
+    if (filePath === "docs/STATE-MACHINE-TRACEABILITY.md" && definitionsRegistry) {
+      for (const machineId of definitionsRegistry) {
+        if (!content.includes(machineId)) {
+          failureReasons.push(`report_scope_mismatch: ${filePath} missing machine ${machineId}`);
+          break;
+        }
+      }
+    }
+    actualEvidence.push({
+      filePath,
+      generatedForCommit: commit
+    });
+  }
+
+  const hasRequirements = plan.requiredCommands.length > 0 || plan.requiredReports.length > 0 || (plan.requiredFiles || []).length > 0;
+  const verificationMode = hasRequirements
     ? (failureReasons.length === 0 ? "verified" : "failed")
     : "notRun";
 
@@ -242,12 +348,15 @@ async function main() {
 
   console.log(`[baseline] Running ${allRequiredCommands.size} unique required commands...`);
   const commandResults = {};
+  const commandStartTimes = {};
   for (const [key, cmd] of allRequiredCommands) {
     console.log(`[baseline]   ${key}`);
+    const startTime = new Date().toISOString();
+    commandStartTimes[key] = startTime;
     commandResults[key] = runVerifier(cmd);
   }
 
-  // Phase 2: Collect required report freshness
+  // Phase 2: Collect required report freshness and content
   const reportResults = {};
   const allRequiredReports = new Set();
   for (const scope of READINESS_SCOPES.allScopes()) {
@@ -262,10 +371,29 @@ async function main() {
     const reportData = readJsonFile(fullPath);
     reportResults[rp] = {
       exists: reportData !== null,
+      data: reportData,
       hash: sha256File(fullPath),
       generatedAt: reportData?.generatedAt || reportData?.checkedAt || null
     };
   }
+
+  // Report content validators
+  const reportValidators = {
+    "build/reports/state-machines/latest.json": validateStateMachineReport
+  };
+
+  // Discover machine IDs from definitions directory for traceability check
+  const definitionsDir = path.join(repoRoot, "server/platform/common/state-machine/definitions");
+  const definitionsRegistry = [];
+  try {
+    const defFiles = fs.readdirSync(definitionsDir).filter(f => f.endsWith(".json"));
+    for (const file of defFiles) {
+      try {
+        const def = JSON.parse(fs.readFileSync(path.join(definitionsDir, file), "utf8"));
+        if (def.machineId) definitionsRegistry.push(def.machineId);
+      } catch {}
+    }
+  } catch {}
 
   // Phase 3: Evaluate each scope
   const scopeResults = {};
@@ -275,7 +403,10 @@ async function main() {
       scopeEvidencePlan,
       commandResults,
       reportResults,
-      commit
+      commit,
+      commandStartTimes,
+      reportValidators,
+      definitionsRegistry
     );
     scopeResults[scope.scopeId] = {
       status: evalResult.status,
