@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { verifyMachineDefinition } from '../platform/common/state-machine/state-machine-verifier.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(scriptDir, '..');
+const repoRoot = path.resolve(scriptDir, '../..');
 const dir = path.join(repoRoot, 'server/platform/common/state-machine/definitions');
 
 if (!fs.existsSync(dir)) {

@@ -85,7 +85,8 @@ export const STATE_MACHINE_GUARDS = Object.freeze({
     description:
       "Explicitly signals no approval is needed for this transition path.",
     riskLevel: "low",
-    contextRequired: []
+    contextRequired: [],
+    runtimeMode: "staticOnly"
   },
 
   approvalApproved: {
@@ -128,4 +129,21 @@ export function getGuard(guardId) {
 
 export function listAllGuardIds() {
   return Object.keys(STATE_MACHINE_GUARDS);
+}
+
+export function isGuardRuntimeSafe(guardId) {
+  const guard = STATE_MACHINE_GUARDS[guardId];
+  if (!guard) return false;
+  return guard.runtimeMode !== "staticOnly" && guard.runtimeMode !== "declaredOnly";
+}
+
+export function listAllRuntimeGuardIds() {
+  return Object.entries(STATE_MACHINE_GUARDS)
+    .filter(([, g]) => g.runtimeMode !== "staticOnly" && g.runtimeMode !== "declaredOnly")
+    .map(([id]) => id);
+}
+
+export function isStaticOnlyGuard(guardId) {
+  const guard = STATE_MACHINE_GUARDS[guardId];
+  return guard?.runtimeMode === "staticOnly";
 }

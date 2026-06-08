@@ -43,7 +43,7 @@
     { "from": "restore_preview_generated", "event": "restore.approve", "result": "illegal_transition", "errorCode": "RESTORE_APPROVAL_NOT_PENDING" },
     { "from": "restore_preview_generated", "event": "restore.reject", "result": "illegal_transition", "errorCode": "RESTORE_APPROVAL_NOT_PENDING" },
     { "from": "restore_preview_generated", "event": "restore.expire", "result": "illegal_transition", "errorCode": "RESTORE_APPROVAL_NOT_PENDING" },
-    { "from": "restore_preview_generated", "event": "restore.record_marker", "result": "legal_transition", "to": "restore_marker_recording", "guards": ["treeExists", "nodeExists", "previewGenerated", "policyAllowed", "noApprovalRequired", "appendOnly"] },
+    { "from": "restore_preview_generated", "event": "restore.record_marker", "result": "legal_transition", "to": "restore_marker_recording", "guards": ["treeExists", "nodeExists", "previewGenerated", "policyAllowed", "appendOnly"] },
     { "from": "restore_preview_generated", "event": "restore.complete", "result": "illegal_transition", "errorCode": "RESTORE_NOT_RECORDED" },
     { "from": "restore_preview_generated", "event": "restore.fail", "result": "legal_transition", "to": "failed" },
 

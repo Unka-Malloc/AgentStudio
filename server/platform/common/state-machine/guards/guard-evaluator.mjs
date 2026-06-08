@@ -1,4 +1,4 @@
-import { STATE_MACHINE_GUARDS } from "./guard-registry.mjs";
+import { STATE_MACHINE_GUARDS, isGuardRuntimeSafe, isStaticOnlyGuard } from "./guard-registry.mjs";
 
 export function evaluateGuard(guardId, context = {}) {
   const guardDef = STATE_MACHINE_GUARDS[guardId];
@@ -20,6 +20,15 @@ export function evaluateGuard(guardId, context = {}) {
         message: `Guard '${guardId}' requires context field '${required}'.`
       };
     }
+  }
+
+  if (!isGuardRuntimeSafe(guardId)) {
+    return {
+      ok: false,
+      guardId,
+      reason: guardDef.runtimeMode === "staticOnly" ? "static_only_guard" : "no_runtime_predicate",
+      message: `Guard '${guardId}' is marked ${guardDef.runtimeMode || 'without runtime predicate'} and cannot be used for runtime enforcement.`
+    };
   }
 
   return evaluateGuardPredicate(guardId, guardDef, context);
@@ -289,10 +298,10 @@ function evaluateGuardPredicate(guardId, guardDef, context) {
 
     default: {
       return {
-        ok: true,
+        ok: false,
         guardId,
-        reason: "declared_only",
-        message: `Guard '${guardId}' is registered but has no runtime predicate implementation.`
+        reason: "no_runtime_predicate",
+        message: `Guard '${guardId}' has no runtime predicate implementation and is not marked staticOnly.`
       };
     }
   }
@@ -307,26 +316,72 @@ export function evaluateGuardSet(guardIds, context = {}) {
 }
 
 export function evaluateTransitionGuards(definition, fromStatus, eventType, context = {}) {
-  const cells = definition.totalMatrix.filter(
+  const matchingCells = definition.totalMatrix.filter(
     (cell) => cell.from === fromStatus && cell.event === eventType
   );
-  if (cells.length === 0) {
+  if (matchingCells.length === 0) {
     return { ok: false, reason: "no_matching_cell" };
   }
 
-  const cell = cells[0];
-  const guardIds = [...(cell.guards || []), ...(cell.requiredGuards || [])];
-  if (guardIds.length === 0) {
-    return { ok: true, guardResults: [] };
+  if (matchingCells.length === 1) {
+    const cell = matchingCells[0];
+    if (cell.result === "illegal_transition") {
+      return { ok: false, reason: "illegal_transition" };
+    }
+    const guardIds = [...(cell.guards || []), ...(cell.requiredGuards || [])];
+    if (guardIds.length === 0) {
+      return { ok: true, guardResults: [] };
+    }
+    const guardResults = evaluateGuardSet(guardIds, context);
+    const failed = guardResults.filter((r) => !r.ok);
+    return {
+      ok: failed.length === 0,
+      guardResults,
+      failedGuards: failed.map((r) => r.guardId),
+      blockedBy: failed.length > 0 ? "guard" : undefined
+    };
   }
 
-  const guardResults = evaluateGuardSet(guardIds, context);
-  const failed = guardResults.filter((r) => !r.ok);
+  // Multi-cell disambiguation
+  const eligible = matchingCells.filter(c => c.result !== "illegal_transition");
+  let passedCells = [];
+  let allGuardResults = [];
+
+  for (const cell of eligible) {
+    const guardIds = [...(cell.guards || []), ...(cell.requiredGuards || [])];
+    if (guardIds.length === 0) {
+      passedCells.push(cell);
+      continue;
+    }
+    const guardResults = evaluateGuardSet(guardIds, context);
+    allGuardResults.push(...guardResults);
+    if (guardResults.every(r => r.ok)) {
+      passedCells.push(cell);
+    }
+  }
+
+  if (passedCells.length === 0) {
+    const failed = allGuardResults.filter(r => !r.ok);
+    return {
+      ok: false,
+      guardResults: allGuardResults,
+      failedGuards: failed.map(r => r.guardId),
+      blockedBy: "guard",
+      reason: "all_cells_blocked"
+    };
+  }
+
+  if (passedCells.length > 1) {
+    return {
+      ok: false,
+      guardResults: allGuardResults,
+      reason: "ambiguous_transition",
+      message: `${passedCells.length} cells pass for ${fromStatus} -> ${eventType}`
+    };
+  }
 
   return {
-    ok: failed.length === 0,
-    guardResults,
-    failedGuards: failed.map((r) => r.guardId),
-    blockedBy: failed.length > 0 ? "guard" : undefined
+    ok: true,
+    guardResults: allGuardResults.filter(r => r.ok)
   };
 }
