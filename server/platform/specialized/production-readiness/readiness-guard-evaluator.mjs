@@ -76,7 +76,9 @@ export function buildReadinessReport(
   const baselineFailed = baselineRequiredScopes.filter(
     (s) => s.status === "failed"
   ).length;
+  const dirty = (dirtyFileCount || 0) > 0;
   const baselineV0_1ClaimAllowed =
+    !dirty &&
     baselineFailed === 0 &&
     baselineRequiredScopes.every((s) =>
       ["passed", "waived"].includes(s.status)
@@ -86,9 +88,15 @@ export function buildReadinessReport(
   const productionPassed = productionRequiredScopes.filter(
     (s) => s.status === "passed"
   ).length;
-  const productionClaimAllowed = productionRequiredScopes.every((s) =>
-    ["passed", "waived"].includes(s.status)
+
+  const productionVoidEvidenceScopes = productionRequiredScopes.filter(s =>
+    ["contractVerified", "mocked"].includes(s.verificationMode)
   );
+  const productionClaimAllowed = !dirty &&
+    productionVoidEvidenceScopes.length === 0 &&
+    productionRequiredScopes.every((s) =>
+      ["passed", "waived"].includes(s.status)
+    );
 
   const verifiedCount = scopes.filter(s => s.verificationMode === "verified").length;
   const contractVerifiedCount = scopes.filter(s => s.verificationMode === "contractVerified").length;
@@ -105,6 +113,11 @@ export function buildReadinessReport(
     { readinessReport: { scopes } }
   );
 
+  const productionVoidEvidence = productionVoidEvidenceScopes.map(s => ({
+    scopeId: s.scopeId,
+    verificationMode: s.verificationMode
+  }));
+
   return {
     schemaVersion: 1,
     reportType: "pact.readiness.report.v0.1",
@@ -113,6 +126,7 @@ export function buildReadinessReport(
     branch: branch || "",
     commit: commit || "",
     dirtyFileCount: dirtyFileCount || 0,
+    generatedFromDirtyWorktree: dirty,
     overallStatus: baselineV0_1ClaimAllowed
       ? productionClaimAllowed
         ? "pass"
@@ -140,6 +154,7 @@ export function buildReadinessReport(
       require_p0_passed_or_waived: productionGuardResult,
       require_baseline_v0_1_scopes_resolved: baselineGuardResult
     },
+    productionVoidEvidence,
     scopes
   };
 }

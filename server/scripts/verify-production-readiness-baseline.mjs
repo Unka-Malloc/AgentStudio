@@ -112,9 +112,10 @@ function validateBaselineReadinessReport(report) {
 
 /**
  * Validate a state-machine verifier report.
- * Requires ok === true, machines array, and each machine ok === true.
+ * Requires ok === true, machines array covering all definitions,
+ * each machine ok === true, and each check status === "passed".
  */
-function validateStateMachineReport(report) {
+function validateStateMachineReport(report, context = {}) {
   if (!report || typeof report !== "object") {
     return { ok: false, reason: "report_missing_or_invalid" };
   }
@@ -124,14 +125,47 @@ function validateStateMachineReport(report) {
   if (!Array.isArray(report.machines) || report.machines.length === 0) {
     return { ok: false, reason: "report_no_machines" };
   }
-  const failedMachines = report.machines.filter(m => m.ok !== true);
-  if (failedMachines.length > 0) {
-    return {
-      ok: false,
-      reason: "report_machine_failed",
-      failedMachines: failedMachines.map(m => m.machineId)
-    };
+
+  // Check machine coverage against definitions directory
+  if (context.definitionMachineIds && context.definitionMachineIds.length > 0) {
+    const reportMachineIds = new Set(report.machines.map(m => m.machineId));
+    const missing = context.definitionMachineIds.filter(id => !reportMachineIds.has(id));
+    if (missing.length > 0) {
+      return { ok: false, reason: "report_scope_mismatch", missingMachineIds: missing };
+    }
   }
+
+  // Each machine must have ok === true and pass all checks
+  for (const machine of report.machines) {
+    if (!machine.machineId || !machine.version) {
+      return { ok: false, reason: "report_machine_missing_fields", machineId: machine.machineId || "unknown" };
+    }
+    if (machine.ok !== true) {
+      return { ok: false, reason: "report_machine_failed", failedMachineId: machine.machineId };
+    }
+    if (Array.isArray(machine.checks)) {
+      const failedChecks = machine.checks.filter(c => c.status !== "passed");
+      if (failedChecks.length > 0) {
+        return {
+          ok: false,
+          reason: "report_check_failed",
+          machineId: machine.machineId,
+          failedChecks: failedChecks.map(c => c.id)
+        };
+      }
+    }
+  }
+
+  // If report has commit field, verify it matches current commit
+  if (typeof report.commit === "string" && context.currentCommit && report.commit !== context.currentCommit) {
+    return { ok: false, reason: "report_commit_mismatch", reportCommit: report.commit, currentCommit: context.currentCommit };
+  }
+
+  // Dirty file count: reject if present
+  if (typeof report.dirtyFileCount === "number" && report.dirtyFileCount > 0) {
+    return { ok: false, reason: "report_dirty_worktree", dirtyFileCount: report.dirtyFileCount };
+  }
+
   return { ok: true, reason: "report_valid" };
 }
 
@@ -174,30 +208,40 @@ const scopeEvidencePlan = {
   },
   "contribution.lifecycle": {
     requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/contribution-lifecycle-state-machine.test.mjs"]],
-    requiredReports: []
+    requiredReports: [],
+    requiredFiles: ["server/platform/common/state-machine/definitions/contribution.lifecycle.v1.json"]
   },
   "agentlibrary.loan": {
     requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/knowledge-loan-lifecycle-state-machine.test.mjs"]],
-    requiredReports: []
+    requiredReports: [],
+    requiredFiles: ["server/platform/common/state-machine/definitions/agentlibrary.loan.v1.json"]
   },
   "checkpoint.restore": {
     requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/checkpoint-restore-lifecycle-state-machine.test.mjs"]],
-    requiredReports: []
+    requiredReports: [],
+    requiredFiles: ["server/platform/common/state-machine/definitions/checkpoint.restore.v1.json"]
   },
   "operation.narrow": {
     requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/operation-state-machine-integration.test.mjs"]],
-    requiredReports: []
+    requiredReports: [],
+    requiredFiles: ["server/platform/common/state-machine/definitions/operation.narrow.v1.json"]
   },
   "production-readiness-baseline": {
     requiredCommands: [
+      ["npm", "run", "server:verify:state-machines"],
       ["npx", "vitest", "run", "tests/vitest/server/guard-evaluator-and-scope.test.mjs"],
       ["npx", "vitest", "run", "tests/vitest/server/production-readiness-lifecycle-state-machine.test.mjs"],
       ["npx", "vitest", "run", "tests/vitest/server/production-readiness-baseline-evidence.test.mjs"]
     ],
-    requiredReports: ["build/reports/state-machines/latest.json"]
+    requiredReports: ["build/reports/state-machines/latest.json"],
+    requiredFiles: [
+      "server/platform/common/state-machine/definitions/production.readiness.lifecycle.v1.json",
+      "server/platform/specialized/production-readiness/readiness-scope-registry.mjs",
+      "server/platform/common/state-machine/guards/guard-evaluator.mjs"
+    ]
   },
   "proof-artifacts": {
-    requiredCommands: [],
+    requiredCommands: [["npm", "run", "server:verify:state-machines"]],
     requiredReports: ["build/reports/state-machines/latest.json"],
     requiredFiles: ["docs/STATE-MACHINE-TRACEABILITY.md"]
   },
@@ -253,32 +297,44 @@ function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResult
     }
     // Content validation
     const validator = reportValidators[reportPath];
+    const validationContext = {
+      definitionMachineIds: definitionsRegistry,
+      currentCommit: commit
+    };
+    let reportValidation = null;
     if (validator) {
-      const validation = validator(reportData.data);
-      if (!validation.ok) {
-        failureReasons.push(`report_failed(${validation.reason}): ${reportPath}`);
+      reportValidation = validator(reportData.data, validationContext);
+      if (!reportValidation.ok) {
+        failureReasons.push(`report_failed(${reportValidation.reason}): ${reportPath}`);
         continue;
       }
     }
-    // Freshness check: report must be generated by a command run in this session
+    // Freshness check
     let fresh = false;
+    let freshnessDetail = "stale";
     const reportTimestamp = reportData.data ? getReportTimestamp(reportData.data) : null;
     if (reportTimestamp && commandStartTimes) {
       for (const [cmdKey, cmdStart] of Object.entries(commandStartTimes)) {
         if (reportTimestamp >= cmdStart) {
           fresh = true;
+          freshnessDetail = "same-run";
           break;
         }
       }
     }
     if (!fresh) {
-      failureReasons.push(`report_stale: ${reportPath} (timestamp ${reportTimestamp || 'unknown'} does not follow any command start)`);
+      failureReasons.push(`report_stale(${freshnessDetail}): ${reportPath} (timestamp ${reportTimestamp || 'unknown'})`);
       continue;
     }
     actualEvidence.push({
       reportPath,
       reportHash: reportData.hash,
       reportGeneratedAt: reportTimestamp,
+      reportValidation: reportValidation ? {
+        ok: reportValidation.ok,
+        reason: reportValidation.reason
+      } : null,
+      freshness: freshnessDetail,
       generatedForCommit: commit
     });
   }
@@ -321,6 +377,85 @@ function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResult
   return { status, verificationMode, actualEvidence, failureReasons };
 }
 
+/**
+ * Self-discovery: verify every baseline scope has an evidence plan
+ * covering all requiredEvidence entries.
+ */
+function verifyEvidencePlanCoversRegistry() {
+  const gaps = [];
+  for (const scope of READINESS_SCOPES.baselineScopes()) {
+    const plan = scopeEvidencePlan[scope.scopeId];
+    if (!plan) {
+      gaps.push(`${scope.scopeId}: no evidence plan found`);
+      continue;
+    }
+    const allRequired = scope.requiredEvidence || [];
+    let covered = 0;
+    for (const evidenceItem of allRequired) {
+      const mapped = isEvidenceMapped(evidenceItem, plan);
+      if (mapped) covered++;
+    }
+    if (covered < allRequired.length) {
+      const uncovered = allRequired.filter(e => !isEvidenceMapped(e, plan));
+      gaps.push(`${scope.scopeId}: ${covered}/${allRequired.length} evidence items covered (missing: ${uncovered.join(", ")})`);
+    }
+  }
+  return { ok: gaps.length === 0, gaps };
+}
+
+/**
+ * Check if a requiredEvidence item maps to something in the evidence plan.
+ * Matches against command strings, report paths, and file paths using
+ * normalized keyword matching.
+ */
+function isEvidenceMapped(evidenceItem, plan) {
+  const normalized = evidenceItem.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  // Match against commands
+  for (const cmd of (plan.requiredCommands || [])) {
+    const cmdStr = cmd.join(" ").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (cmdStr.includes(normalized) || normalized.includes(cmdStr)) return true;
+  }
+
+  // Match against reports
+  for (const rp of (plan.requiredReports || [])) {
+    const rpNorm = rp.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (rpNorm.includes(normalized) || normalized.includes(rpNorm)) return true;
+  }
+
+  // Match against files
+  for (const fp of (plan.requiredFiles || [])) {
+    const fpNorm = fp.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (fpNorm.includes(normalized) || normalized.includes(fpNorm)) return true;
+  }
+
+  // Keyword expansions for abstract evidence names
+  const keywordExpansions = {
+    "c1schemavalidation": ["state-machines", "verifystatemachines", "verifier", "statemachinecore", "statemachine"],
+    "statemachinedefinitionschematest": ["state-machine-core", "statemachinecore", "statemachine", "state-machines"],
+    "statemachineverifier": ["state-machine-verifier", "verifystatemachines", "state-machines", "statemachinecore"],
+    "verifierunittests": ["verifystatemachines", "state-machines", "state-machine-verifier"],
+    "readinessscoperegistry": ["readinessscoperegistry", "productionreadiness", "guard-evaluator", "guardevaluator"],
+    "guardevaluator": ["guardevaluator", "guard-evaluator", "guard"],
+  };
+
+  if (keywordExpansions[normalized]) {
+    for (const kw of keywordExpansions[normalized]) {
+      for (const cmd of (plan.requiredCommands || [])) {
+        if (cmd.join(" ").toLowerCase().includes(kw)) return true;
+      }
+      for (const fp of (plan.requiredFiles || [])) {
+        if (fp.toLowerCase().includes(kw)) return true;
+      }
+      for (const rp of (plan.requiredReports || [])) {
+        if (rp.toLowerCase().includes(kw)) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 async function main() {
   const runId = new Date()
     .toISOString()
@@ -332,6 +467,18 @@ async function main() {
   const dirtyCount = gitValueSync(["status", "--short"])
     .split("\n")
     .filter(Boolean).length;
+
+  // Phase 0: Self-discovery check (gaps in evidence plan are fatal)
+  const registryCheck = verifyEvidencePlanCoversRegistry();
+  if (!registryCheck.ok) {
+    console.error("[baseline] Evidence plan gaps detected:");
+    for (const gap of registryCheck.gaps) {
+      console.error(`  - ${gap}`);
+    }
+    console.error("[baseline] Fix these gaps for evidence plan to fully cover registry.");
+    process.exitCode = 1;
+    return;
+  }
 
   // Phase 1: Run all unique required commands (deduplicated by command string)
   const allRequiredCommands = new Map();
