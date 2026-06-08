@@ -685,6 +685,11 @@ const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smok
 
   const generatedFromDirtyWorktree = gitInfo.dirtyFileCount > 0;
 
+  // Dirty worktree overrides overall status and exit code
+  if (generatedFromDirtyWorktree) {
+    overallStatus = options.quick ? "dirty_quick_report" : "dirty_full_report";
+  }
+
   const report = {
     schemaVersion: 1,
     reportType: "pact.production-readiness.v1",
@@ -742,7 +747,10 @@ const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smok
   console.log(`Production readiness JSON written: ${relativePath(jsonPath)}`);
   console.log(`Production readiness status: ${overallStatus}`);
 
-const successStatuses = new Set(["pass", "quick_pass"]);
+const successStatuses = new Set(["pass"]);
+if (options.quick) successStatuses.add("quick_pass");
+// dirty worktree is never a success status
+// dirty_full_report and dirty_quick_report are intentionally excluded
 
   if (!successStatuses.has(overallStatus) && !options.noFailOnBlocker) {
     process.exitCode = 1;

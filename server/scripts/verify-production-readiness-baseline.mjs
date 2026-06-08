@@ -77,6 +77,9 @@ function runVerifier(commandLine) {
 
 /**
  * Validate a baseline readiness report against expected schema/consistency rules.
+ * NOT registered as a reportValidator for the current run's own report
+ * (to avoid self-certification). Used for validating external/historical
+ * baseline reports only.
  */
 function validateBaselineReadinessReport(report) {
   const errors = [];
@@ -143,16 +146,17 @@ function validateStateMachineReport(report, context = {}) {
     if (machine.ok !== true) {
       return { ok: false, reason: "report_machine_failed", failedMachineId: machine.machineId };
     }
-    if (Array.isArray(machine.checks)) {
-      const failedChecks = machine.checks.filter(c => c.status !== "passed");
-      if (failedChecks.length > 0) {
-        return {
-          ok: false,
-          reason: "report_check_failed",
-          machineId: machine.machineId,
-          failedChecks: failedChecks.map(c => c.id)
-        };
-      }
+    if (!Array.isArray(machine.checks) || machine.checks.length === 0) {
+      return { ok: false, reason: "report_machine_missing_checks", machineId: machine.machineId };
+    }
+    const failedChecks = machine.checks.filter(c => c.status !== "passed");
+    if (failedChecks.length > 0) {
+      return {
+        ok: false,
+        reason: "report_check_failed",
+        machineId: machine.machineId,
+        failedChecks: failedChecks.map(c => c.id)
+      };
     }
   }
 
@@ -196,15 +200,15 @@ function fileExistsAndReadable(filePath) {
 const scopeEvidencePlan = {
   "state-machine-core": {
     requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/state-machine-core.test.mjs"]],
-    requiredReports: ["build/reports/state-machines/latest.json"]
+    requiredReports: [{ path: "build/reports/state-machines/latest.json", producedBy: "npm run server:verify:state-machines" }]
   },
   "state-machine-schema": {
     requiredCommands: [],
-    requiredReports: ["build/reports/state-machines/latest.json"]
+    requiredReports: [{ path: "build/reports/state-machines/latest.json", producedBy: "npm run server:verify:state-machines" }]
   },
   "state-machine-verifier": {
     requiredCommands: [["npm", "run", "server:verify:state-machines"]],
-    requiredReports: ["build/reports/state-machines/latest.json"]
+    requiredReports: [{ path: "build/reports/state-machines/latest.json", producedBy: "npm run server:verify:state-machines" }]
   },
   "contribution.lifecycle": {
     requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/contribution-lifecycle-state-machine.test.mjs"]],
@@ -233,7 +237,7 @@ const scopeEvidencePlan = {
       ["npx", "vitest", "run", "tests/vitest/server/production-readiness-lifecycle-state-machine.test.mjs"],
       ["npx", "vitest", "run", "tests/vitest/server/production-readiness-baseline-evidence.test.mjs"]
     ],
-    requiredReports: ["build/reports/state-machines/latest.json"],
+    requiredReports: [{ path: "build/reports/state-machines/latest.json", producedBy: "npm run server:verify:state-machines" }],
     requiredFiles: [
       "server/platform/common/state-machine/definitions/production.readiness.lifecycle.v1.json",
       "server/platform/specialized/production-readiness/readiness-scope-registry.mjs",
@@ -242,7 +246,7 @@ const scopeEvidencePlan = {
   },
   "proof-artifacts": {
     requiredCommands: [["npm", "run", "server:verify:state-machines"]],
-    requiredReports: ["build/reports/state-machines/latest.json"],
+    requiredReports: [{ path: "build/reports/state-machines/latest.json", producedBy: "npm run server:verify:state-machines" }],
     requiredFiles: ["docs/STATE-MACHINE-TRACEABILITY.md"]
   },
   "docs-config-consistency": {
@@ -289,7 +293,10 @@ function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResult
   }
 
   // Evaluate required reports with content validation
-  for (const reportPath of plan.requiredReports) {
+  for (const reportEntry of plan.requiredReports) {
+    // Support both string (path only) and object { path, producedBy }
+    const reportPath = typeof reportEntry === "string" ? reportEntry : reportEntry.path;
+    const producedBy = typeof reportEntry === "string" ? undefined : reportEntry.producedBy;
     const reportData = reportResults[reportPath];
     if (!reportData || !reportData.exists) {
       failureReasons.push(`report_missing: ${reportPath}`);
@@ -309,21 +316,30 @@ function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResult
         continue;
       }
     }
-    // Freshness check
+    // Freshness check: if producedBy is specified, only compare against that command
     let fresh = false;
     let freshnessDetail = "stale";
     const reportTimestamp = reportData.data ? getReportTimestamp(reportData.data) : null;
     if (reportTimestamp && commandStartTimes) {
-      for (const [cmdKey, cmdStart] of Object.entries(commandStartTimes)) {
-        if (reportTimestamp >= cmdStart) {
+      if (producedBy) {
+        const cmdStart = commandStartTimes[producedBy];
+        if (cmdStart && reportTimestamp >= cmdStart) {
           fresh = true;
           freshnessDetail = "same-run";
-          break;
+        }
+      } else {
+        for (const [, cmdStart] of Object.entries(commandStartTimes)) {
+          if (reportTimestamp >= cmdStart) {
+            fresh = true;
+            freshnessDetail = "same-run";
+            break;
+          }
         }
       }
     }
     if (!fresh) {
-      failureReasons.push(`report_stale(${freshnessDetail}): ${reportPath} (timestamp ${reportTimestamp || 'unknown'})`);
+      const detail = producedBy ? `report not fresher than producer command ${producedBy}` : `no command start before report timestamp`;
+      failureReasons.push(`report_stale(${freshnessDetail}): ${reportPath} (${detail})`);
       continue;
     }
     actualEvidence.push({
@@ -510,7 +526,8 @@ async function main() {
     const plan = scopeEvidencePlan[scope.scopeId];
     if (!plan) continue;
     for (const rp of plan.requiredReports) {
-      allRequiredReports.add(rp);
+      const path = typeof rp === "string" ? rp : rp.path;
+      allRequiredReports.add(path);
     }
   }
   for (const rp of allRequiredReports) {

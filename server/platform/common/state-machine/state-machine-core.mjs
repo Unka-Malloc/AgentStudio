@@ -565,15 +565,19 @@ function computeDefinitionHash(definition) {
 }
 
 /**
- * Recursive canonical JSON serializer.
- * - primitives pass through
- * - arrays preserve order and recurse
- * - objects sort keys and recurse
- * - undefined values are omitted
- * - functions / symbols / circular refs cause an error
+ * Recursive canonical JSON serializer for state machine definition hashing.
+ * - Primitives (string, number, boolean, null) are JSON-stringified.
+ * - Arrays preserve order and recurse.
+ * - Objects sort keys and recurse.
+ * - undefined, functions, symbols, and bigint values cause an error
+ *   (state machine definitions should be pure JSON).
+ * - Circular references cause an error.
  */
 function canonicalJson(value, seen = new WeakSet()) {
-  if (value === null || typeof value === "undefined") return "null";
+  if (value === null) return "null";
+  if (typeof value === "undefined") {
+    throw new Error("canonicalJson: undefined values are not supported in state machine definitions");
+  }
   if (typeof value === "function") {
     throw new Error("canonicalJson: functions are not supported in hash computation");
   }
@@ -604,7 +608,6 @@ function canonicalJson(value, seen = new WeakSet()) {
   const pairs = [];
   for (const key of keys) {
     const v = value[key];
-    if (v === undefined) continue;
     const encodedKey = JSON.stringify(key);
     const encodedValue = canonicalJson(v, seen);
     pairs.push(`${encodedKey}:${encodedValue}`);

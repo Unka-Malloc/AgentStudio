@@ -98,8 +98,8 @@ export function checkDefinitionSchema(def) {
         throw new Error("matrix cell 'requiredGuards' must be an array of strings");
       }
       for (const rg of cell.requiredGuards) {
-        if (typeof rg !== "string") {
-          throw new Error("requiredGuards list items must be strings");
+        if (typeof rg !== "string" || !rg.trim()) {
+          throw new Error("requiredGuards list items must be non-empty strings");
         }
       }
     }
