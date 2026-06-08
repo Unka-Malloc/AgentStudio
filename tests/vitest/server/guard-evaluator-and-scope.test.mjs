@@ -10,7 +10,7 @@ import {
   evaluateGuardSet
 } from "../../../server/platform/common/state-machine/guards/guard-evaluator.mjs";
 import {
-  evaluateTransitionGuards
+  evaluateTransitionGuardsForValidatedDefinition as evaluateTransitionGuards
 } from "../../../server/platform/common/state-machine/transition-selector.mjs";
 import {
   READINESS_SCOPES

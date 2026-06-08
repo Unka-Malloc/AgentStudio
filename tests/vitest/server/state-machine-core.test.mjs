@@ -8,10 +8,10 @@ import {
   assertTransitionAllowed,
   validateExecutableStateMachineDefinition,
   compileStateMachineDefinition,
+  evaluateTransitionGuards,
   ERROR_CODES,
   StateMachineError
 } from "../../../server/platform/common/state-machine/state-machine-core.mjs";
-import { evaluateTransitionGuards } from "../../../server/platform/common/state-machine/transition-selector.mjs";
 
 const mockDefinition = {
   machineId: "test.lifecycle.v1",

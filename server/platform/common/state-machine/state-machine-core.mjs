@@ -1,11 +1,10 @@
 import { ERROR_CODES, StateMachineError } from './state-machine-errors.mjs';
-import { selectTransitionCell } from './transition-selector.mjs';
-import { guardExists, listAllGuardIds, isStaticOnlyGuard } from './guards/guard-registry.mjs';
+import { selectTransitionCell, evaluateTransitionGuardsForValidatedDefinition } from './transition-selector.mjs';
+import { guardExists, listAllGuardIds, isStaticOnlyGuard, isGuardRuntimeSafe } from './guards/guard-registry.mjs';
 import { checkDefinitionSchema } from './state-machine-definition-schema.mjs';
 import crypto from 'node:crypto';
 
 export { ERROR_CODES, StateMachineError } from './state-machine-errors.mjs';
-export { selectTransitionCell } from './transition-selector.mjs';
 
 /**
  * Validates the definition format. Returns structured result.
@@ -121,16 +120,21 @@ export function validateExecutableStateMachineDefinition(definition) {
     }
   }
 
-  // staticOnly guards must not appear in runtime guard fields
+  // staticOnly and non-runtime-safe guards must not appear in runtime guard fields
+  // This rule applies to ALL risk levels, not just high-risk.
   for (const cell of definition.totalMatrix) {
     for (const guardId of (cell.guards || [])) {
       if (isStaticOnlyGuard(guardId)) {
         errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `staticOnly guard '${guardId}' in cell.guards for ${cell.from}->${cell.event} is not allowed. staticOnly guards cannot gate runtime transitions.` });
+      } else if (!isGuardRuntimeSafe(guardId) && guardExists(guardId)) {
+        errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `Guard '${guardId}' in cell.guards for ${cell.from}->${cell.event} is not runtime-safe and cannot gate runtime transitions.` });
       }
     }
     for (const guardId of (cell.requiredGuards || [])) {
       if (isStaticOnlyGuard(guardId)) {
         errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `staticOnly guard '${guardId}' in cell.requiredGuards for ${cell.from}->${cell.event} is not allowed. staticOnly guards cannot gate runtime transitions.` });
+      } else if (!isGuardRuntimeSafe(guardId) && guardExists(guardId)) {
+        errors.push({ errorCode: 'STATE_MACHINE_INVALID_DEFINITION', message: `Guard '${guardId}' in cell.requiredGuards for ${cell.from}->${cell.event} is not runtime-safe and cannot gate runtime transitions.` });
       }
     }
   }
@@ -531,6 +535,30 @@ export function compileStateMachineDefinition(definition) {
   return { definition, definitionHash, validationResult, compiled: validationResult.ok };
 }
 
+/**
+ * Evaluate transition guards with executable validation.
+ * Mirrors transitionState() behavior for guard-only evaluation.
+ * Import from transition-selector.mjs for the raw (unvalidated) version.
+ */
+export function evaluateTransitionGuards(definition, fromStatus, eventType, context = {}, options = {}) {
+  const skipValidation = options.skipExecutableValidation ||
+    (options.validatedDefinitionHash && options.validatedDefinitionHash === computeDefinitionHash(definition));
+
+  if (!skipValidation) {
+    const execResult = validateExecutableStateMachineDefinition(definition);
+    if (!execResult.ok) {
+      return {
+        ok: false,
+        reason: "invalid_definition",
+        errorCode: ERROR_CODES.STATE_MACHINE_INVALID_DEFINITION,
+        message: "Definition is not executable.",
+        details: execResult.errors
+      };
+    }
+  }
+  return evaluateTransitionGuardsForValidatedDefinition(definition, fromStatus, eventType, context);
+}
+
 function computeDefinitionHash(definition) {
   const stable = canonicalJson(definition);
   return `sha256:${crypto.createHash("sha256").update(stable).digest("hex")}`;
@@ -551,6 +579,9 @@ function canonicalJson(value, seen = new WeakSet()) {
   }
   if (typeof value === "symbol") {
     throw new Error("canonicalJson: symbols are not supported in hash computation");
+  }
+  if (typeof value === "bigint") {
+    throw new Error("canonicalJson: bigint values are not supported in hash computation");
   }
   if (typeof value !== "object") {
     return JSON.stringify(value);

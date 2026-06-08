@@ -1,6 +1,7 @@
 import { validateStateMachineDefinition } from "./state-machine-core.mjs";
 import { checkDefinitionSchema } from "./state-machine-definition-schema.mjs";
 import { guardExists, listAllGuardIds, isStaticOnlyGuard, isGuardRuntimeSafe } from "./guards/guard-registry.mjs";
+import { REACHABLE_TRANSITION_RESULTS, HIGH_RISK_PROTECTION_RESULTS } from "./state-machine-result-types.mjs";
 
 /**
  * Pure function to verify a state machine definition against complete C3 level specifications.
@@ -79,7 +80,7 @@ export function verifyMachineDefinition(def, options = {}) {
       const current = queue.shift();
       const allowedCells = totalMatrix.filter(cell => 
         cell.from === current && 
-        ["legal_transition", "requires_policy", "requires_approval", "deferred_async_transition"].includes(cell.result)
+        REACHABLE_TRANSITION_RESULTS.includes(cell.result)
       );
       
       for (const cell of allowedCells) {
@@ -156,10 +157,7 @@ export function verifyMachineDefinition(def, options = {}) {
       const eventDef = events.find(e => e.id === cell.event);
       if (eventDef?.riskLevel === "high" && cell.result !== "illegal_transition" && cell.result !== "ignored_idempotent_event") {
         const hasGuard = 
-          cell.result === "requires_policy" || 
-          cell.result === "requires_approval" || 
-          cell.result === "requires_external_receipt" ||
-          cell.result === "deferred_async_transition" ||
+          HIGH_RISK_PROTECTION_RESULTS.includes(cell.result) ||
           (cell.guards && cell.guards.length > 0) ||
           (cell.requiredGuards && cell.requiredGuards.length > 0);
         if (!hasGuard) {

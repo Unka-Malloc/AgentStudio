@@ -212,7 +212,7 @@ function listAllowedEventsInner(definition, currentStatus) {
  *
  * @returns {{ ok, guardResults, failedGuards, blockedBy, reason, message }}
  */
-export function evaluateTransitionGuards(definition, fromStatus, eventType, context = {}) {
+export function evaluateTransitionGuardsForValidatedDefinition(definition, fromStatus, eventType, context = {}) {
   const input = {
     currentStatus: fromStatus,
     eventType,

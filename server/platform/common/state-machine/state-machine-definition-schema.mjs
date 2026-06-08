@@ -1,3 +1,5 @@
+import { VALID_TRANSITION_RESULTS } from "./state-machine-result-types.mjs";
+
 export function checkDefinitionSchema(def) {
   if (!def || typeof def !== "object" || Array.isArray(def)) {
     throw new Error("definition must be a JSON object");
@@ -58,15 +60,7 @@ export function checkDefinitionSchema(def) {
   if (!Array.isArray(def.totalMatrix)) {
     throw new Error("definition field 'totalMatrix' must be an array");
   }
-  const validResults = [
-    "legal_transition",
-    "illegal_transition",
-    "ignored_idempotent_event",
-    "requires_policy",
-    "requires_approval",
-    "requires_external_receipt",
-    "deferred_async_transition"
-  ];
+  const validResults = VALID_TRANSITION_RESULTS;
   for (const cell of def.totalMatrix) {
     if (typeof cell !== "object" || Array.isArray(cell) || !cell) {
       throw new Error("matrix cell must be a JSON object");
