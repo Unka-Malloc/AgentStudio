@@ -1415,26 +1415,6 @@ export const PROTOCOL_OPERATION_DEFINITIONS = Object.freeze([
     path: "/api/knowledge/dossier/export",
     scopes: ["knowledge:read"]
   }),
-  protocolOperation({
-    id: "knowledge.distillation.export",
-    feature: "knowledge",
-    label: "导出知识蒸馏结果",
-    description: "Deprecated internal knowledge distillation export compatibility endpoint. Use external.knowledge.distillation.artifacts.export instead.",
-    targetMethod: "handleKnowledgeDistillationExport",
-    path: "/api/knowledge/distillation/export",
-    scopes: ["knowledge:read"],
-    deprecated: true,
-    replacementService: "external.knowledge.distillation",
-    replacementOperationPrefix: "external.knowledge.distillation.",
-    lifecycle: {
-      status: "deprecated",
-      reason: "Internal knowledge distillation exports are being removed with the embedded algorithm runtime.",
-      maintenancePolicy: "compatibility-shim-only",
-      replacementService: "external.knowledge.distillation",
-      replacementOperation: "external.knowledge.distillation.artifacts.export"
-    },
-    aspects: ["knowledge-distillation", "internal-deprecated", "external-replaced"]
-  })
 ]);
 
 export const PROTOCOL_OPERATION_IDS = Object.freeze(

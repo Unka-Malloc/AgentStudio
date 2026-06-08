@@ -4,49 +4,7 @@ import {
 } from "./operation-decorators.mjs";
 import { PROTOCOL_OPERATION_DEFINITIONS } from "./protocol-operation-definitions.mjs";
 
-const INTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_DEPRECATION = Object.freeze({
-  deprecated: true,
-  replacementService: "external.knowledge.distillation",
-  replacementOperationPrefix: "external.knowledge.distillation.",
-  lifecycle: Object.freeze({
-    status: "deprecated",
-    reason: "Internal knowledge distillation is being removed; the independently deployed external service is the only maintained algorithm surface.",
-    maintenancePolicy: "compatibility-shim-only",
-    removalTarget: "remove internal knowledge distillation modules after console callers migrate",
-    replacementService: "external.knowledge.distillation"
-  })
-});
-
-const INTERNAL_KNOWLEDGE_DISTILLATION_DEPRECATED_ASPECTS = Object.freeze([
-  "knowledge-distillation",
-  "internal-deprecated",
-  "external-replaced"
-]);
-
-const EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS = Object.freeze([
-  "external-service",
-  "external-upstream-gateway",
-  "knowledge-distillation"
-]);
-
-function internalKnowledgeDistillationOperation(operation = {}) {
-  return {
-    ...operation,
-    ...INTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_DEPRECATION,
-    description: operation.description ||
-      "Deprecated internal knowledge distillation compatibility endpoint. Use external.knowledge.distillation instead.",
-    lifecycle: {
-      ...INTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_DEPRECATION.lifecycle,
-      ...(operation.lifecycle || {})
-    },
-    aspects: [
-      ...new Set([
-        ...INTERNAL_KNOWLEDGE_DISTILLATION_DEPRECATED_ASPECTS,
-        ...(operation.aspects || [])
-      ])
-    ]
-  };
-}
+const EXTERNAL_KD_ASPECTS = Object.freeze(["external-service", "external-upstream-gateway", "knowledge-distillation"]);
 
 const REPO_OPERATION_SPECS = Object.freeze([
   ["repo.status", "repo:read", "查看代码库对象状态", ["repoId", "targetType"], "read_only", true],
@@ -3841,40 +3799,6 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     cli: { command: ["knowledge", "gold-cases", "save"], usage: "knowledge gold-cases save --body gold-case.json" },
     requiredScopes: ["knowledge:maintain"]
   },
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.runs.create",
-    feature: "knowledge",
-    label: "创建知识蒸馏任务",
-    target: { controller: "system", method: "handleKnowledgeDistillationRuns" },
-    http: { method: "POST", path: "/api/knowledge/distillation/runs" },
-    rpc: { method: "knowledge.distillation.runs.create", body: "params" },
-    cli: {
-      command: ["knowledge", "distillation", "run"],
-      usage: "knowledge distillation run --query QUERY [--limit 30]",
-      bodyParams: [
-        { name: "query", aliases: ["query", "q"], required: true },
-        { name: "limit", aliases: ["limit"], type: "number" }
-      ]
-    },
-    requiredScopes: ["knowledge:maintain"]
-  }),
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.runs.get",
-    feature: "knowledge",
-    label: "读取知识蒸馏任务",
-    target: { controller: "system", method: "handleKnowledgeDistillationRunGet" },
-    http: { method: "GET", path: "/api/knowledge/distillation/runs/:runId" },
-    rpc: {
-      method: "knowledge.distillation.runs.get",
-      params: [{ name: "runId", aliases: ["run-id", "id"], required: true }]
-    },
-    cli: {
-      command: ["knowledge", "distillation", "get"],
-      usage: "knowledge distillation get --id RUN_ID",
-      pathParams: { runId: ["run-id", "id"] }
-    },
-    requiredScopes: ["knowledge:read"]
-  }),
   {
     id: "external.knowledge.distillation.service.health",
     feature: "external",
@@ -3899,7 +3823,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
+    aspects: EXTERNAL_KD_ASPECTS
   },
   {
     id: "external.knowledge.distillation.service.capabilities",
@@ -3925,7 +3849,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
+    aspects: EXTERNAL_KD_ASPECTS
   },
   {
     id: "external.knowledge.distillation.service.runtime_health",
@@ -3951,7 +3875,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: [...EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS, "runtime-doctor"]
+    aspects: [...EXTERNAL_KD_ASPECTS, "runtime-doctor"]
   },
   {
     id: "external.knowledge.distillation.runs.list",
@@ -3981,7 +3905,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
+    aspects: EXTERNAL_KD_ASPECTS
   },
   {
     id: "external.knowledge.distillation.runs.create",
@@ -4041,7 +3965,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     },
     requiredScopes: ["knowledge:maintain"],
     safety: { risk: "safe_write" },
-    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
+    aspects: EXTERNAL_KD_ASPECTS
   },
   {
     id: "external.knowledge.distillation.runs.get",
@@ -4068,7 +3992,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
+    aspects: EXTERNAL_KD_ASPECTS
   },
   {
     id: "external.knowledge.distillation.runs.cancel",
@@ -4084,7 +4008,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     },
     requiredScopes: ["knowledge:maintain"],
     safety: { risk: "safe_write" },
-    aspects: EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS
+    aspects: EXTERNAL_KD_ASPECTS
   },
   {
     id: "external.knowledge.distillation.evidence.query",
@@ -4133,7 +4057,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: [...EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS, "evidence-query"]
+    aspects: [...EXTERNAL_KD_ASPECTS, "evidence-query"]
   },
   {
     id: "external.knowledge.distillation.projects.evidence.query",
@@ -4186,7 +4110,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: [...EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS, "evidence-query", "project-convergence"]
+    aspects: [...EXTERNAL_KD_ASPECTS, "evidence-query", "project-convergence"]
   },
   {
     id: "external.knowledge.distillation.artifacts.export",
@@ -4217,224 +4141,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     readOnly: true,
     concurrencySafe: true,
     binary: true,
-    aspects: [...EXTERNAL_KNOWLEDGE_DISTILLATION_ASPECTS, "result-export"]
+    aspects: [...EXTERNAL_KD_ASPECTS, "result-export"]
   },
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.workbench.runs.list",
-    feature: "knowledge",
-    label: "列出知识蒸馏工作台任务",
-    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchRunsList" },
-    http: { method: "GET", path: "/api/knowledge/distillation/workbench/runs" },
-    rpc: {
-      method: "knowledge.distillation.workbench.runs.list",
-      params: [{ name: "limit", aliases: ["limit"], type: "number" }]
-    },
-    cli: {
-      command: ["knowledge", "distillation", "workbench", "list"],
-      usage: "knowledge distillation workbench list [--limit 50]"
-    },
-    requiredScopes: ["knowledge:read"]
-  }),
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.workbench.runs.create",
-    feature: "knowledge",
-    label: "创建知识蒸馏工作台任务",
-    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchRunsCreate" },
-    http: { method: "POST", path: "/api/knowledge/distillation/workbench/runs" },
-    rpc: { method: "knowledge.distillation.workbench.runs.create", body: "params" },
-    cli: {
-      command: ["knowledge", "distillation", "workbench", "run"],
-      usage: "knowledge distillation workbench run --job-id JOB_ID [--query QUERY]",
-      bodyParams: [
-        { name: "jobId", aliases: ["job-id", "job"], required: true },
-        { name: "query", aliases: ["query", "q"] },
-        { name: "title", aliases: ["title"] },
-        { name: "modelAlias", aliases: ["model", "model-alias"] }
-      ]
-    },
-    requiredScopes: ["knowledge:maintain"]
-  }),
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.workbench.runs.get",
-    feature: "knowledge",
-    label: "读取知识蒸馏工作台任务",
-    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchRunGet" },
-    http: { method: "GET", path: "/api/knowledge/distillation/workbench/runs/:runId" },
-    rpc: {
-      method: "knowledge.distillation.workbench.runs.get",
-      params: [{ name: "runId", aliases: ["run-id", "id"], required: true }]
-    },
-    cli: {
-      command: ["knowledge", "distillation", "workbench", "get"],
-      usage: "knowledge distillation workbench get --id RUN_ID",
-      pathParams: { runId: ["run-id", "id"] }
-    },
-    requiredScopes: ["knowledge:read"]
-  }),
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.workbench.runs.resume",
-    feature: "knowledge",
-    label: "恢复知识蒸馏工作台任务",
-    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchRunResume" },
-    http: { method: "POST", path: "/api/knowledge/distillation/workbench/runs/:runId/resume" },
-    rpc: {
-      method: "knowledge.distillation.workbench.runs.resume",
-      params: [{ name: "runId", aliases: ["run-id", "id"], required: true }]
-    },
-    cli: {
-      command: ["knowledge", "distillation", "workbench", "resume"],
-      usage: "knowledge distillation workbench resume --id RUN_ID",
-      pathParams: { runId: ["run-id", "id"] }
-    },
-    requiredScopes: ["knowledge:maintain"]
-  }),
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.workbench.runs.cancel",
-    feature: "knowledge",
-    label: "取消知识蒸馏工作台任务",
-    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchRunCancel" },
-    http: { method: "POST", path: "/api/knowledge/distillation/workbench/runs/:runId/cancel" },
-    rpc: { method: "knowledge.distillation.workbench.runs.cancel", body: "params" },
-    cli: {
-      command: ["knowledge", "distillation", "workbench", "cancel"],
-      usage: "knowledge distillation workbench cancel --id RUN_ID",
-      pathParams: { runId: ["run-id", "id"] }
-    },
-    requiredScopes: ["knowledge:maintain"]
-  }),
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.workbench.runs.archive",
-    feature: "knowledge",
-    label: "归档知识蒸馏工作台任务",
-    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchRunArchive" },
-    http: { method: "POST", path: "/api/knowledge/distillation/workbench/runs/:runId/archive" },
-    rpc: {
-      method: "knowledge.distillation.workbench.runs.archive",
-      params: [{ name: "runId", aliases: ["run-id", "id"], required: true }]
-    },
-    cli: {
-      command: ["knowledge", "distillation", "workbench", "archive"],
-      usage: "knowledge distillation workbench archive --id RUN_ID",
-      pathParams: { runId: ["run-id", "id"] }
-    },
-    requiredScopes: ["knowledge:maintain"]
-  }),
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.workbench.runs.delete",
-    feature: "knowledge",
-    label: "删除知识蒸馏工作台任务",
-    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchRunDelete" },
-    http: { method: "DELETE", path: "/api/knowledge/distillation/workbench/runs/:runId" },
-    rpc: {
-      method: "knowledge.distillation.workbench.runs.delete",
-      params: [{ name: "runId", aliases: ["run-id", "id"], required: true }]
-    },
-    cli: {
-      command: ["knowledge", "distillation", "workbench", "delete"],
-      usage: "knowledge distillation workbench delete --id RUN_ID",
-      pathParams: { runId: ["run-id", "id"] }
-    },
-    requiredScopes: ["knowledge:maintain"]
-  }),
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.workbench.stage.rerun",
-    feature: "knowledge",
-    label: "重跑知识蒸馏工作台阶段",
-    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchStageRerun" },
-    http: { method: "POST", path: "/api/knowledge/distillation/workbench/runs/:runId/stages/:stageId/rerun" },
-    rpc: {
-      method: "knowledge.distillation.workbench.stage.rerun",
-      params: [
-        { name: "runId", aliases: ["run-id", "id"], required: true },
-        { name: "stageId", aliases: ["stage-id", "stage"], required: true }
-      ]
-    },
-    cli: {
-      command: ["knowledge", "distillation", "workbench", "rerun-stage"],
-      usage: "knowledge distillation workbench rerun-stage --id RUN_ID --stage-id STAGE_ID",
-      pathParams: { runId: ["run-id", "id"], stageId: ["stage-id", "stage"] }
-    },
-    requiredScopes: ["knowledge:maintain"]
-  }),
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.workbench.stage.export",
-    feature: "knowledge",
-    label: "导出知识蒸馏工作台阶段结果",
-    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchStageExport" },
-    http: { method: "GET", path: "/api/knowledge/distillation/workbench/runs/:runId/exports/:stageId" },
-    rpc: {
-      method: "knowledge.distillation.workbench.stage.export",
-      params: [
-        { name: "runId", aliases: ["run-id", "id"], required: true },
-        { name: "stageId", aliases: ["stage-id", "stage"], required: true },
-        { name: "format", aliases: ["format", "to"] }
-      ]
-    },
-    cli: {
-      command: ["knowledge", "distillation", "workbench", "export"],
-      usage: "knowledge distillation workbench export --id RUN_ID --stage-id STAGE_ID --format markdown",
-      pathParams: { runId: ["run-id", "id"], stageId: ["stage-id", "stage"] },
-      queryParams: [
-        { name: "format", aliases: ["format", "to"] }
-      ]
-    },
-    requiredScopes: ["knowledge:read"]
-  }),
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.workbench.runs.package",
-    feature: "knowledge",
-    label: "导出知识蒸馏工作台整包",
-    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchRunPackageExport" },
-    http: { method: "GET", path: "/api/knowledge/distillation/workbench/runs/:runId/package" },
-    rpc: {
-      method: "knowledge.distillation.workbench.runs.package",
-      params: [{ name: "runId", aliases: ["run-id", "id"], required: true }]
-    },
-    cli: {
-      command: ["knowledge", "distillation", "workbench", "package"],
-      usage: "knowledge distillation workbench package --id RUN_ID",
-      pathParams: { runId: ["run-id", "id"] }
-    },
-    requiredScopes: ["knowledge:read"]
-  }),
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.workbench.runs.artifacts",
-    feature: "knowledge",
-    label: "读取知识蒸馏工作台产物信息",
-    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchRunArtifacts" },
-    http: { method: "GET", path: "/api/knowledge/distillation/workbench/runs/:runId/artifacts" },
-    rpc: {
-      method: "knowledge.distillation.workbench.runs.artifacts",
-      params: [{ name: "runId", aliases: ["run-id", "id"], required: true }]
-    },
-    cli: {
-      command: ["knowledge", "distillation", "workbench", "artifacts"],
-      usage: "knowledge distillation workbench artifacts --id RUN_ID",
-      pathParams: { runId: ["run-id", "id"] }
-    },
-    requiredScopes: ["knowledge:read"]
-  }),
-  internalKnowledgeDistillationOperation({
-    id: "knowledge.distillation.workbench.runs.compare",
-    feature: "knowledge",
-    label: "比较知识蒸馏工作台版本",
-    target: { controller: "system", method: "handleKnowledgeDistillationWorkbenchRunCompare" },
-    http: { method: "GET", path: "/api/knowledge/distillation/workbench/runs/:runId/compare" },
-    rpc: {
-      method: "knowledge.distillation.workbench.runs.compare",
-      params: [
-        { name: "runId", aliases: ["run-id", "id"], required: true },
-        { name: "rightRunId", aliases: ["right-run-id", "right"], required: true }
-      ]
-    },
-    cli: {
-      command: ["knowledge", "distillation", "workbench", "compare"],
-      usage: "knowledge distillation workbench compare --id LEFT_RUN_ID --right-run-id RIGHT_RUN_ID",
-      pathParams: { runId: ["run-id", "id"] },
-      queryParams: [{ name: "rightRunId", aliases: ["right-run-id", "right"] }]
-    },
-    requiredScopes: ["knowledge:read"]
-  }),
   {
     id: "knowledge.skills.evaluation.runs.create",
     feature: "knowledge",

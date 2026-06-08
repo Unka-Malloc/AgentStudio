@@ -112,30 +112,6 @@ function result(status, payload) {
   return { status, payload };
 }
 
-function internalKnowledgeDistillationRemovedPayload(operationId = "") {
-  return {
-    ok: false,
-    status: 410,
-    error: "内部知识蒸馏实现已废弃并停止维护，请改用独立部署的 external.knowledge.distillation 服务。",
-    code: "INTERNAL_KNOWLEDGE_DISTILLATION_REMOVED",
-    deprecated: true,
-    removedFromMaintenance: true,
-    operationId,
-    replacementService: EXTERNAL_KNOWLEDGE_DISTILLATION_SERVICE_ID,
-    replacementOperationPrefix: EXTERNAL_KNOWLEDGE_DISTILLATION_OPERATION_PREFIX,
-    migration: {
-      health: "external.knowledge.distillation.service.health",
-      capabilities: "external.knowledge.distillation.service.capabilities",
-      createRun: "external.knowledge.distillation.runs.create",
-      getRun: "external.knowledge.distillation.runs.get",
-      listRuns: "external.knowledge.distillation.runs.list",
-      evidenceQuery: "external.knowledge.distillation.evidence.query",
-      projectEvidenceQuery: "external.knowledge.distillation.projects.evidence.query",
-      artifactExport: "external.knowledge.distillation.artifacts.export"
-    },
-    maintenancePolicy: "external-service-only"
-  };
-}
 
 function requireStorageProvider(context = {}) {
   if (!context.storageProvider) {
@@ -5623,31 +5599,6 @@ async function executeExternalKnowledgeDistillationOperation({ operationId, inpu
   return null;
 }
 
-async function executeKnowledgeDistillationWorkflowOperation({ operationId, input, context }) {
-  const id = String(operationId || "");
-  const handledOperations = new Set([
-    "knowledge.distillation.runs.create",
-    "knowledge.distillation.runs.get",
-    "knowledge.distillation.export",
-    "knowledge.distillation.workbench.runs.list",
-    "knowledge.distillation.workbench.runs.create",
-    "knowledge.distillation.workbench.runs.get",
-    "knowledge.distillation.workbench.runs.resume",
-    "knowledge.distillation.workbench.runs.cancel",
-    "knowledge.distillation.workbench.runs.archive",
-    "knowledge.distillation.workbench.runs.delete",
-    "knowledge.distillation.workbench.stage.rerun",
-    "knowledge.distillation.workbench.stage.export",
-    "knowledge.distillation.workbench.runs.package",
-    "knowledge.distillation.workbench.runs.artifacts",
-    "knowledge.distillation.workbench.runs.compare"
-  ]);
-  if (!handledOperations.has(id)) {
-    return null;
-  }
-
-  return result(410, internalKnowledgeDistillationRemovedPayload(id));
-}
 
 async function executeAgentExplorationOperation({ operationId, input, context }) {
   const id = String(operationId || "");
@@ -6928,13 +6879,9 @@ async function executeKnowledgeTransformationOperation({ operationId, input = {}
   const handledOperations = new Set([
     "raw-corpus.format.convert",
     "knowledge.dossier.export",
-    "knowledge.distillation.export"
   ]);
   if (!handledOperations.has(id)) {
     return null;
-  }
-  if (id === "knowledge.distillation.export") {
-    return result(410, internalKnowledgeDistillationRemovedPayload(id));
   }
   const { createKnowledgeTransformationProvider } = await loadKnowledgeTransformationModule();
   const provider = createKnowledgeTransformationProvider({
@@ -7180,7 +7127,6 @@ export async function executeConsoleDomainOperation({ operationId, input = {}, c
     executeKnowledgeEvolutionOperation,
     executeKnowledgeSummarizationOperation,
     executeExternalKnowledgeDistillationOperation,
-    executeKnowledgeDistillationWorkflowOperation,
     executeAgentExplorationOperation,
     executeKnowledgeBackendOperation,
     executeCloudDriveOperation,
