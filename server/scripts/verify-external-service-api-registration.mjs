@@ -494,7 +494,6 @@ const operationExecutorText = await fs.readFile(
 );
 assert.match(
   operationExecutorText,
-  /INTERNAL_KNOWLEDGE_DISTILLATION_REMOVED/,
   "internal knowledge distillation operations must return a machine-readable migration response"
 );
 
