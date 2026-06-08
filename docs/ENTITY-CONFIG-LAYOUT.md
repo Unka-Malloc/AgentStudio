@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-07
+- Last updated: 2026-06-08
 - Status: Current maintained document
 - Scope: Pact Entity Config Layout.
-- Staleness check: Scanned on 2026-06-07; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-08; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 Pact uses folder-managed entity configs for human-maintainable runtime
 entities. Single JSON files remain acceptable only for singleton snapshots such

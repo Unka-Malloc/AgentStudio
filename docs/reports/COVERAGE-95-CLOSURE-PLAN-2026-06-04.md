@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-07
+- Last updated: 2026-06-08
 - Status: Active coverage backlog
 - Scope: Coverage 95% 闭环计划与本轮进展（2026-06-04）.
-- Staleness check: Scanned on 2026-06-07; the 95% coverage closure backlog remains open unless a newer coverage scan supersedes this file.
+- Staleness check: Scanned on 2026-06-08; the 95% coverage closure backlog remains open unless a newer coverage scan supersedes this file.
 
 ## 一、结论
 

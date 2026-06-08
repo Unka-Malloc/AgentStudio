@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-07
+- Last updated: 2026-06-08
 - Status: Current maintained document
 - Scope: Developer Guidelines.
-- Staleness check: Scanned on 2026-06-07; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-08; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 本文档汇总了 Pact 项目的核心开发守则。作为架构说明的补充，它指导所有参与开发的工程师在进行代码编写、重构或设计时应遵循的最高原则。
 

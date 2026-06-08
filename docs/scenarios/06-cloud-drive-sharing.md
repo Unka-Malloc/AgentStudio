@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-07
+- Last updated: 2026-06-08
 - Status: Scenario draft with machine-readable status tracking
 - Scope: Scenario 06: 云盘共享.
-- Staleness check: Scanned on 2026-06-07; scenario live/contract/local status must match docs/scenarios/scenario-implementation-status.json and the latest readiness reports.
+- Staleness check: Scanned on 2026-06-08; scenario live/contract/local status must match docs/scenarios/scenario-implementation-status.json and the latest readiness reports.
 
 状态：已确认场景草案
 
