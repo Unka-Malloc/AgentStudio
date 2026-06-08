@@ -527,21 +527,29 @@ function buildMarkdownReport(report) {
     `- Generated At: \`${report.generatedAt}\``,
     `- Branch: \`${report.git.branch || "unknown"}\``,
     `- Commit: \`${report.git.commit || "unknown"}\``,
+    `- Evidence For Commit: \`${report.evidenceForCommit || report.git.commit || "unknown"}\``,
     `- Dirty Files: \`${report.git.dirtyFileCount}\``,
+    `- Generated From Dirty Worktree: \`${report.generatedFromDirtyWorktree || false}\``,
+    `- Claim Scope: \`${report.claimScope || "unknown"}\``,
     `- Mode: \`${report.mode || "unknown"}\``,
     `- Production Claim Allowed: \`${report.productionClaimAllowed}\``,
     `- Quick Check Passed: \`${report.quickCheckPassed}\``,
     `- Overall Status: \`${report.overallStatus}\``,
     "",
-    "## Summary",
-    "",
-    `- Passed: ${report.summary.pass}`,
-    `- Failed: ${report.summary.fail}`,
-    `- Timed Out: ${report.summary.timeout}`,
-    `- Blocked P0: ${report.summary.blockedP0}`,
-    `- Missing Coverage: ${report.coverage.missing.length ? report.coverage.missing.join(", ") : "none"}`,
-    "",
   ];
+
+  if (report.generatedFromDirtyWorktree) {
+    lines.push("> :warning: **DIRTY WORKTREE**: This report was generated from a dirty repository. It is marked as `claimScope: historical` and cannot be used as current-head production evidence.", "");
+  }
+
+  lines.push("## Summary");
+  lines.push("");
+  lines.push(`- Passed: ${report.summary.pass}`);
+  lines.push(`- Failed: ${report.summary.fail}`);
+  lines.push(`- Timed Out: ${report.summary.timeout}`);
+  lines.push(`- Blocked P0: ${report.summary.blockedP0}`);
+  lines.push(`- Missing Coverage: ${report.coverage.missing.length ? report.coverage.missing.join(", ") : "none"}`);
+  lines.push("");
 
   if (report.mode === "quick") {
     lines.push("> Quick mode: the checklist below reflects quick coverage only.", "");
@@ -669,6 +677,14 @@ const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smok
   const productionClaimAllowed = !options.quick && overallStatus === "pass";
   const quickCheckPassed = options.quick && summary.blockedP0 === 0 && missing.length === 0;
 
+  const gitInfo = {
+    branch: await gitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
+    commit: await gitValue(["rev-parse", "HEAD"]),
+    dirtyFileCount: Number((await gitValue(["status", "--short"])).split("\n").filter(Boolean).length)
+  };
+
+  const generatedFromDirtyWorktree = gitInfo.dirtyFileCount > 0;
+
   const report = {
     schemaVersion: 1,
     reportType: "pact.production-readiness.v1",
@@ -677,14 +693,13 @@ const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smok
     mode: options.quick ? "quick" : "full",
     repository: "Unka-Malloc/Pact",
     repoRoot: { redacted: true, reason: "local_path" },
-    git: {
-      branch: await gitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
-      commit: await gitValue(["rev-parse", "HEAD"]),
-      dirtyFileCount: Number((await gitValue(["status", "--short"])).split("\n").filter(Boolean).length)
-    },
+    git: gitInfo,
+    evidenceForCommit: gitInfo.commit,
+    generatedFromDirtyWorktree,
+    claimScope: generatedFromDirtyWorktree ? "historical" : (options.quick ? "quick" : "full"),
     overallStatus,
-    productionClaimAllowed,
-    quickCheckPassed,
+    productionClaimAllowed: generatedFromDirtyWorktree ? false : productionClaimAllowed,
+    quickCheckPassed: generatedFromDirtyWorktree ? false : quickCheckPassed,
     summary,
     coverage: {
       modeRequired: applicableCoverage,
@@ -692,7 +707,10 @@ const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smok
       byRequirement,
       missing
     },
-    gates: gateResults
+    gates: gateResults,
+    notes: generatedFromDirtyWorktree
+      ? ["Report generated from dirty worktree. Cannot be used as current-head production evidence."]
+      : []
   };
 
   const jsonPath = path.join(runDir, "report.json");

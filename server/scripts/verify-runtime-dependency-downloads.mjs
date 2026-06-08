@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 import {
   downloadRuntimeDependency,
   listRuntimeDependencyDownloadRuns,
@@ -304,5 +305,49 @@ assert.ok(
 );
 
 console.log("[verify-runtime-dependency-downloads] Docker strict checksum checks passed.");
+
+// ── Docker strict negative build test ─────────────────────────────────
+
+console.log("\n[verify-runtime-dependency-downloads] Docker strict negative build test...");
+
+// Check if docker is available
+const dockerCheck = spawnSync("docker", ["--version"], {
+  stdio: ["ignore", "pipe", "ignore"],
+  timeout: 10_000
+});
+
+if (dockerCheck.status !== 0) {
+  console.log("[verify-runtime-dependency-downloads] Docker not available — strict negative build skipped (not a failure).");
+} else {
+  const dockerResult = spawnSync("docker", [
+    "build",
+    "--target", "runtime-deps",
+    "--build-arg", "REQUIRE_RUNTIME_CHECKSUMS=1",
+    "-t", "pact-runtime-deps-strict-negative",
+    "."
+  ], {
+    cwd: fileURLToPath(new URL("../..", import.meta.url)),
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 120_000
+  });
+
+  const stderr = dockerResult.stderr?.toString() || "";
+  const stdout = dockerResult.stdout?.toString() || "";
+  const combined = `${stdout}\n${stderr}`;
+
+  if (dockerResult.status !== 0) {
+    // Expected failure: build must fail when JRE_SHA256 or TIKA_SHA256 is empty
+    const hasExpectedError = combined.includes("JRE_SHA256 is empty") || combined.includes("TIKA_SHA256 is empty");
+    assert.ok(
+      hasExpectedError,
+      `Docker strict negative build failed as expected but missing expected error message. Output: ${combined.slice(0, 500)}`
+    );
+    console.log("[verify-runtime-dependency-downloads] Docker strict negative build failed as expected (strict check working).");
+    console.log("[verify-runtime-dependency-downloads] Docker strict negative build test passed.");
+  } else {
+    // Unexpected success: strict mode should have failed without checksums
+    assert.fail("Docker strict negative build succeeded unexpectedly. REQUIRE_RUNTIME_CHECKSUMS=1 should fail when checksums are not provided.");
+  }
+}
 
 console.log("[verify-runtime-dependency-downloads] ok");
