@@ -39,9 +39,6 @@ function readJsonFile(filePath) {
   }
 }
 
-/**
- * Run a verifier command and collect rich evidence.
- */
 function runVerifier(commandLine) {
   const startedAt = new Date();
   try {
@@ -78,49 +75,145 @@ function runVerifier(commandLine) {
   }
 }
 
-// scopeEvidenceMap: maps each scope to verifier commands and expected report paths
-const scopeEvidenceMap = {
+/**
+ * Validate a baseline readiness report against expected schema/consistency rules.
+ */
+function validateBaselineReadinessReport(report) {
+  const errors = [];
+  if (!report || typeof report !== "object") {
+    return { ok: false, errors: ["Report is not a valid object."] };
+  }
+  if (!report.schemaVersion || report.schemaVersion !== 1) {
+    errors.push("Report missing or invalid schemaVersion.");
+  }
+  if (!report.reportType || report.reportType !== "pact.readiness.report.v0.1") {
+    errors.push("Report missing or invalid reportType.");
+  }
+  if (!report.runId || typeof report.runId !== "string") {
+    errors.push("Report missing runId.");
+  }
+  if (!report.commit || typeof report.commit !== "string") {
+    errors.push("Report missing commit.");
+  }
+  if (!Array.isArray(report.scopes)) {
+    errors.push("Report missing scopes array.");
+  }
+  if (!report.summary || typeof report.summary !== "object") {
+    errors.push("Report missing summary.");
+  }
+  if (!report.guardResults || typeof report.guardResults !== "object") {
+    errors.push("Report missing guardResults.");
+  }
+  return { ok: errors.length === 0, errors };
+}
+
+/**
+ * Evidence plan: defines required commands and required reports per scope.
+ */
+const scopeEvidencePlan = {
   "state-machine-core": {
-    commands: [["npx", "vitest", "run", "tests/vitest/server/state-machine-core.test.mjs"]],
-    reports: ["build/reports/state-machines/latest.json"]
+    requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/state-machine-core.test.mjs"]],
+    requiredReports: ["build/reports/state-machines/latest.json"]
   },
   "state-machine-schema": {
-    commands: [],
-    reports: ["build/reports/state-machines/latest.json"]
+    requiredCommands: [],
+    requiredReports: ["build/reports/state-machines/latest.json"]
   },
   "state-machine-verifier": {
-    commands: [["npm", "run", "server:verify:state-machines"]],
-    reports: ["build/reports/state-machines/latest.json"]
+    requiredCommands: [["npm", "run", "server:verify:state-machines"]],
+    requiredReports: ["build/reports/state-machines/latest.json"]
   },
   "contribution.lifecycle": {
-    commands: [["npx", "vitest", "run", "tests/vitest/server/contribution-lifecycle-state-machine.test.mjs"]],
-    reports: []
+    requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/contribution-lifecycle-state-machine.test.mjs"]],
+    requiredReports: []
   },
   "agentlibrary.loan": {
-    commands: [["npx", "vitest", "run", "tests/vitest/server/knowledge-loan-lifecycle-state-machine.test.mjs"]],
-    reports: []
+    requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/knowledge-loan-lifecycle-state-machine.test.mjs"]],
+    requiredReports: []
   },
   "checkpoint.restore": {
-    commands: [["npx", "vitest", "run", "tests/vitest/server/checkpoint-restore-lifecycle-state-machine.test.mjs"]],
-    reports: []
+    requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/checkpoint-restore-lifecycle-state-machine.test.mjs"]],
+    requiredReports: []
   },
   "operation.narrow": {
-    commands: [["npx", "vitest", "run", "tests/vitest/server/operation-state-machine-integration.test.mjs"]],
-    reports: []
+    requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/operation-state-machine-integration.test.mjs"]],
+    requiredReports: []
   },
   "production-readiness-baseline": {
-    commands: [],
-    reports: ["build/reports/production-readiness-baseline/latest.json"]
+    requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/guard-evaluator-and-scope.test.mjs"]],
+    requiredReports: []
   },
   "proof-artifacts": {
-    commands: [],
-    reports: ["build/reports/state-machines/latest.json"]
+    requiredCommands: [],
+    requiredReports: ["build/reports/state-machines/latest.json"]
   },
   "docs-config-consistency": {
-    commands: [["npm", "run", "server:verify:docs-governance"]],
-    reports: []
+    requiredCommands: [["npm", "run", "server:verify:docs-governance"]],
+    requiredReports: []
   }
 };
+
+/**
+ * Evaluate evidence for a single scope.
+ * A scope passes only when ALL requiredCommands have exitCode 0
+ * AND ALL requiredReports exist and pass basic freshness validation.
+ *
+ * @returns {{ status, verificationMode, actualEvidence, failureReasons }}
+ */
+function evaluateScopeEvidence(scope, evidencePlan, commandResults, reportResults, commit) {
+  const plan = evidencePlan[scope.scopeId] || { requiredCommands: [], requiredReports: [] };
+  const actualEvidence = [];
+  const failureReasons = [];
+
+  // Evaluate required commands
+  for (const reqCmd of plan.requiredCommands) {
+    const cmdKey = reqCmd.join(" ");
+    const result = commandResults[cmdKey];
+    if (!result) {
+      failureReasons.push(`Required command not run: ${cmdKey}`);
+      continue;
+    }
+    actualEvidence.push({
+      command: cmdKey,
+      exitCode: result.exitCode,
+      startedAt: result.startedAt,
+      finishedAt: result.finishedAt,
+      elapsedMs: result.elapsedMs,
+      generatedForCommit: commit
+    });
+    if (result.exitCode !== 0) {
+      failureReasons.push(`Required command failed (exitCode=${result.exitCode}): ${cmdKey}`);
+    }
+  }
+
+  // Evaluate required reports
+  for (const reportPath of plan.requiredReports) {
+    const reportData = reportResults[reportPath];
+    if (!reportData || !reportData.exists) {
+      failureReasons.push(`Required report missing: ${reportPath}`);
+      continue;
+    }
+    actualEvidence.push({
+      reportPath,
+      reportHash: reportData.hash,
+      generatedAt: reportData.generatedAt || null,
+      generatedForCommit: commit
+    });
+  }
+
+  const verificationMode = plan.requiredCommands.length > 0 || plan.requiredReports.length > 0
+    ? (failureReasons.length === 0 ? "verified" : "failed")
+    : "notRun";
+
+  let status;
+  if (scope.baselineV0_1Required) {
+    status = failureReasons.length === 0 ? "passed" : "failed";
+  } else {
+    status = "not_in_baseline_v0_1";
+  }
+
+  return { status, verificationMode, actualEvidence, failureReasons };
+}
 
 async function main() {
   const runId = new Date()
@@ -134,85 +227,63 @@ async function main() {
     .split("\n")
     .filter(Boolean).length;
 
-  // Run state-machine verifier first to produce fresh evidence
-  console.log("[baseline] Running state machine verifier...");
-  const smVerifierResult = runVerifier(["npm", "run", "server:verify:state-machines"]);
-  const smReport = smVerifierResult.exitCode === 0
-    ? readJsonFile(path.join(repoRoot, "build/reports/state-machines/latest.json"))
-    : null;
-
-  const scopeResults = {};
-
+  // Phase 1: Run all unique required commands (deduplicated by command string)
+  const allRequiredCommands = new Map();
   for (const scope of READINESS_SCOPES.allScopes()) {
-    const evidence = [];
-    const mapping = scopeEvidenceMap[scope.scopeId];
-    let verificationMode = "notRun";
-    let status = scope.baselineV0_1Required ? "failed" : "not_in_baseline_v0_1";
-
-    // Collect evidence from state machine verifier report (fresh)
-    if (smReport?.ok === true && mapping?.reports?.includes("build/reports/state-machines/latest.json")) {
-      const reportHash = sha256File(path.join(repoRoot, "build/reports/state-machines/latest.json"));
-      evidence.push({
-        command: "npm run server:verify:state-machines",
-        exitCode: smVerifierResult.exitCode,
-        startedAt: smVerifierResult.startedAt,
-        finishedAt: smVerifierResult.finishedAt,
-        elapsedMs: smVerifierResult.elapsedMs,
-        reportPath: "build/reports/state-machines/latest.json",
-        reportHash,
-        generatedAt: smReport.checkedAt || null,
-        generatedForCommit: commit
-      });
-      verificationMode = "verified";
-    }
-
-    // Run scope-specific commands
-    if (mapping?.commands?.length > 0) {
-      for (const cmd of mapping.commands) {
-        const r = runVerifier(cmd);
-        evidence.push({
-          command: cmd.join(" "),
-          exitCode: r.exitCode,
-          startedAt: r.startedAt,
-          finishedAt: r.finishedAt,
-          elapsedMs: r.elapsedMs,
-          generatedForCommit: commit
-        });
-        if (r.exitCode === 0 && verificationMode === "notRun") {
-          verificationMode = "verified";
-        }
+    const plan = scopeEvidencePlan[scope.scopeId];
+    if (!plan) continue;
+    for (const cmd of plan.requiredCommands) {
+      const key = cmd.join(" ");
+      if (!allRequiredCommands.has(key)) {
+        allRequiredCommands.set(key, cmd);
       }
     }
+  }
 
-    // Run docs-governance for docs-config-consistency
-    if (scope.scopeId === "docs-config-consistency") {
-      const r = runVerifier(["npm", "run", "server:verify:docs-governance"]);
-      evidence.push({
-        command: "npm run server:verify:docs-governance",
-        exitCode: r.exitCode,
-        startedAt: r.startedAt,
-        finishedAt: r.finishedAt,
-        elapsedMs: r.elapsedMs,
-        generatedForCommit: commit
-      });
-      if (r.exitCode === 0) verificationMode = "verified";
+  console.log(`[baseline] Running ${allRequiredCommands.size} unique required commands...`);
+  const commandResults = {};
+  for (const [key, cmd] of allRequiredCommands) {
+    console.log(`[baseline]   ${key}`);
+    commandResults[key] = runVerifier(cmd);
+  }
+
+  // Phase 2: Collect required report freshness
+  const reportResults = {};
+  const allRequiredReports = new Set();
+  for (const scope of READINESS_SCOPES.allScopes()) {
+    const plan = scopeEvidencePlan[scope.scopeId];
+    if (!plan) continue;
+    for (const rp of plan.requiredReports) {
+      allRequiredReports.add(rp);
     }
+  }
+  for (const rp of allRequiredReports) {
+    const fullPath = path.join(repoRoot, rp);
+    const reportData = readJsonFile(fullPath);
+    reportResults[rp] = {
+      exists: reportData !== null,
+      hash: sha256File(fullPath),
+      generatedAt: reportData?.generatedAt || reportData?.checkedAt || null
+    };
+  }
 
-    // For baseline-required scopes: only accept verified evidence as passed
-    if (scope.baselineV0_1Required) {
-      if (verificationMode === "verified") {
-        status = "passed";
-      } else {
-        status = "failed";
-      }
-    }
-
+  // Phase 3: Evaluate each scope
+  const scopeResults = {};
+  for (const scope of READINESS_SCOPES.allScopes()) {
+    const evalResult = evaluateScopeEvidence(
+      scope,
+      scopeEvidencePlan,
+      commandResults,
+      reportResults,
+      commit
+    );
     scopeResults[scope.scopeId] = {
-      status,
-      verificationMode,
-      evidenceMode: verificationMode,
+      status: evalResult.status,
+      verificationMode: evalResult.verificationMode,
+      evidenceMode: evalResult.verificationMode,
       requiredEvidence: scope.requiredEvidence || [],
-      actualEvidence: evidence,
+      actualEvidence: evalResult.actualEvidence,
+      failureReasons: evalResult.failureReasons,
       waiver: null
     };
   }
