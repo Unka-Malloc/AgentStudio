@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   downloadRuntimeDependency,
   listRuntimeDependencyDownloadRuns,
@@ -259,5 +261,48 @@ for (let attempt = 0; attempt < 20; attempt += 1) {
     assert.fail("background runtime dependency dry run did not complete");
   }
 }
+
+// ── Dockerfile strict checksum verification ────────────────────────────
+
+console.log("\n[verify-runtime-dependency-downloads] Docker strict checksum checks...");
+
+const dockerfilePath = path.join(
+  fileURLToPath(new URL("../..", import.meta.url)),
+  "Dockerfile"
+);
+const dockerfileContent = readFileSync(dockerfilePath, "utf8");
+
+assert.ok(
+  dockerfileContent.includes("REQUIRE_RUNTIME_CHECKSUMS"),
+  "Dockerfile must contain REQUIRE_RUNTIME_CHECKSUMS ARG"
+);
+assert.ok(
+  dockerfileContent.includes("JRE_SHA256"),
+  "Dockerfile must contain JRE_SHA256 ARG"
+);
+assert.ok(
+  dockerfileContent.includes("TIKA_SHA256"),
+  "Dockerfile must contain TIKA_SHA256 ARG"
+);
+
+// Negative: strict mode without JRE_SHA256 must fail (exit 1)
+const hasJreFailPath = dockerfileContent.includes(
+  'REQUIRE_RUNTIME_CHECKSUMS=1 but JRE_SHA256 is empty'
+);
+assert.ok(hasJreFailPath, "Dockerfile must fail with empty JRE_SHA256 in strict mode");
+
+// Negative: strict mode without TIKA_SHA256 must fail (exit 1)
+const hasTikaFailPath = dockerfileContent.includes(
+  'REQUIRE_RUNTIME_CHECKSUMS=1 but TIKA_SHA256 is empty'
+);
+assert.ok(hasTikaFailPath, "Dockerfile must fail with empty TIKA_SHA256 in strict mode");
+
+// Assert sha256sum verification path exists
+assert.ok(
+  dockerfileContent.includes("sha256sum -c"),
+  "Dockerfile must include sha256sum verification for checksum-verified downloads"
+);
+
+console.log("[verify-runtime-dependency-downloads] Docker strict checksum checks passed.");
 
 console.log("[verify-runtime-dependency-downloads] ok");

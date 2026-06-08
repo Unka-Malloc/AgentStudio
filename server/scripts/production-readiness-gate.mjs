@@ -528,6 +528,9 @@ function buildMarkdownReport(report) {
     `- Branch: \`${report.git.branch || "unknown"}\``,
     `- Commit: \`${report.git.commit || "unknown"}\``,
     `- Dirty Files: \`${report.git.dirtyFileCount}\``,
+    `- Mode: \`${report.mode || "unknown"}\``,
+    `- Production Claim Allowed: \`${report.productionClaimAllowed}\``,
+    `- Quick Check Passed: \`${report.quickCheckPassed}\``,
     `- Overall Status: \`${report.overallStatus}\``,
     "",
     "## Summary",
@@ -538,11 +541,17 @@ function buildMarkdownReport(report) {
     `- Blocked P0: ${report.summary.blockedP0}`,
     `- Missing Coverage: ${report.coverage.missing.length ? report.coverage.missing.join(", ") : "none"}`,
     "",
-    "## Gates",
-    "",
-    "| Gate | Status | Blocker | Owner | Evidence | Next Step |",
-    "| --- | --- | --- | --- | --- | --- |"
   ];
+
+  if (report.mode === "quick") {
+    lines.push("> Quick mode: the checklist below reflects quick coverage only.", "");
+  }
+
+  lines.push("## Gates");
+  lines.push("");
+  lines.push("| Gate | Status | Blocker | Owner | Evidence | Next Step |");
+  lines.push("| --- | --- | --- | --- | --- | --- |");
+
   for (const gate of report.gates) {
     lines.push([
       markdownEscape(gate.title),
@@ -556,11 +565,22 @@ function buildMarkdownReport(report) {
   lines.push("");
   lines.push("## Coverage Checklist");
   lines.push("");
-  for (const item of REQUIRED_COVERAGE) {
+  const checklistCoverage = report.coverage.modeRequired || REQUIRED_COVERAGE;
+  for (const item of checklistCoverage) {
     const coveredBy = report.coverage.byRequirement[item] || [];
     lines.push(`- ${coveredBy.length ? "[x]" : "[ ]"} \`${item}\`${coveredBy.length ? `: ${coveredBy.join(", ")}` : ""}`);
   }
   lines.push("");
+  if (report.mode === "quick") {
+    lines.push("> Quick pass does not imply production pass. Full coverage checklist is below as reference.", "");
+    lines.push("## Full Coverage Reference (not required for quick pass)");
+    lines.push("");
+    for (const item of REQUIRED_COVERAGE) {
+      const coveredBy = report.coverage.byRequirement[item] || [];
+      lines.push(`- ${coveredBy.length ? "[x]" : "[ ]"} \`${item}\`${coveredBy.length ? `: ${coveredBy.join(", ")}` : ""}`);
+    }
+    lines.push("");
+  }
   lines.push("## Notes");
   lines.push("");
   lines.push("- Passing this gate is required before claiming production readiness.");

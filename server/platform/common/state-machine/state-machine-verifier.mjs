@@ -158,10 +158,30 @@ export function verifyMachineDefinition(def, options = {}) {
         const hasGuard = 
           cell.result === "requires_policy" || 
           cell.result === "requires_approval" || 
+          cell.result === "requires_external_receipt" ||
+          cell.result === "deferred_async_transition" ||
           (cell.guards && cell.guards.length > 0) ||
           (cell.requiredGuards && cell.requiredGuards.length > 0);
         if (!hasGuard) {
-          throw new Error(`High-risk event '${cell.event}' in transition from '${cell.from}' must define a guard (guards/requiredGuards) or policy/approval result`);
+          throw new Error(`High-risk event '${cell.event}' in transition from '${cell.from}' must define a guard (guards/requiredGuards), policy/approval/external_receipt/deferred_async result`);
+        }
+        // requires_external_receipt must have receipt-related sideEffects or proofObligations
+        if (cell.result === "requires_external_receipt") {
+          const hasReceiptEvidence =
+            (cell.sideEffects || []).some(se => se.includes("receipt") || se.includes("external") || se.includes("proof")) ||
+            (cell.proofObligations || []).some(po => po.includes("receipt") || po.includes("external") || po.includes("proof"));
+          if (!hasReceiptEvidence) {
+            throw new Error(`High-risk event '${cell.event}' with requires_external_receipt must define receipt-related sideEffects or proofObligations`);
+          }
+        }
+        // deferred_async_transition must have async-related sideEffects or proofObligations
+        if (cell.result === "deferred_async_transition") {
+          const hasAsyncEvidence =
+            (cell.sideEffects || []).some(se => se.includes("async") || se.includes("resume") || se.includes("deferred")) ||
+            (cell.proofObligations || []).some(po => po.includes("async") || po.includes("resume") || po.includes("deferred"));
+          if (!hasAsyncEvidence) {
+            throw new Error(`High-risk event '${cell.event}' with deferred_async_transition must define async/resume-related sideEffects or proofObligations`);
+          }
         }
         // Verify no staticOnly guards on high-risk transitions
         const allGuards = [...(cell.guards || []), ...(cell.requiredGuards || [])];
