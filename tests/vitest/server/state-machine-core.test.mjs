@@ -6,6 +6,7 @@ import {
   listAllowedEvents,
   isTerminalStatus,
   assertTransitionAllowed,
+  validateExecutableStateMachineDefinition,
   ERROR_CODES,
   StateMachineError
 } from "../../../server/platform/common/state-machine/state-machine-core.mjs";
@@ -14,6 +15,7 @@ const mockDefinition = {
   machineId: "test.lifecycle.v1",
   entityType: "test_entity",
   version: "1.0.0",
+  description: "Test lifecycle state machine for unit tests.",
   initialState: "submitted",
   states: [
     { "id": "submitted" },
@@ -25,7 +27,7 @@ const mockDefinition = {
     { "id": "test.approve" },
     { "id":     "test.archive", "riskLevel": "high" }
   ],
-  totalMatrix: [
+    totalMatrix: [
     { "from": "submitted", "event": "test.submit", "result": "ignored_idempotent_event" },
     { "from": "submitted", "event": "test.approve", "result": "legal_transition", "to": "approved" },
     { "from": "submitted", "event": "test.archive", "result": "illegal_transition", "errorCode": "ARCHIVE_BEFORE_APPROVAL" },
@@ -37,13 +39,17 @@ const mockDefinition = {
     { "from": "archived", "event": "test.submit", "result": "illegal_transition", "errorCode": "ALREADY_ARCHIVED" },
     { "from": "archived", "event": "test.approve", "result": "illegal_transition", "errorCode": "ALREADY_ARCHIVED" },
     { "from": "archived", "event": "test.archive", "result": "ignored_idempotent_event" }
-  ]
+  ],
+  invariants: ["SM-GOV-001"],
+  proofObligations: [],
+  proofMappings: []
 };
 
 const multiCellDefinition = {
   machineId: "multi.cell.v1",
   entityType: "test_entity",
   version: "1.0.0",
+  description: "Multi-cell test state machine for disambiguation tests.",
   initialState: "start",
   states: [
     { "id": "start" },
@@ -58,7 +64,9 @@ const multiCellDefinition = {
     { "from": "start", "event": "go", "result": "illegal_transition", "errorCode": "ILLEGAL_GO" },
     { "from": "start", "event": "go", "result": "legal_transition", "to": "end_a", "guards": ["policyAllowed"] },
     { "from": "start", "event": "go", "result": "legal_transition", "to": "end_b", "guards": ["approvalApproved"] }
-  ]
+  ],
+  invariants: [],
+  proofObligations: []
 };
 
 describe("State Machine Core - Definition Validation", () => {
@@ -246,6 +254,73 @@ describe("State Machine Core - Exception Throwing Wrapper", () => {
   });
 });
 
+describe("State Machine Core - Executable Definition Validation", () => {
+  it("should reject definitions with unknown guard", () => {
+    const defWithUnknownGuard = { ...mockDefinition };
+    defWithUnknownGuard.totalMatrix = defWithUnknownGuard.totalMatrix.map(cell =>
+      cell.from === "approved" && cell.event === "test.archive"
+        ? { ...cell, guards: ["nonexistent_guard"] }
+        : cell
+    );
+    const result = validateExecutableStateMachineDefinition(defWithUnknownGuard);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some(e => e.message.includes("nonexistent_guard"))).toBe(true);
+  });
+
+  it("should reject definitions with unknown to state", () => {
+    const def = JSON.parse(JSON.stringify(mockDefinition));
+    def.totalMatrix.push({ from: "submitted", event: "test.approve", result: "legal_transition", to: "unknown_state" });
+    const result = validateExecutableStateMachineDefinition(def);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some(e => e.message.includes("unknown state"))).toBe(true);
+  });
+
+  it("should reject definitions with duplicate unguarded cells", () => {
+    const def = JSON.parse(JSON.stringify(mockDefinition));
+    def.totalMatrix.push({ from: "submitted", event: "test.approve", result: "legal_transition", to: "approved" });
+    const result = validateExecutableStateMachineDefinition(def);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some(e => e.message.includes("Duplicate unguarded"))).toBe(true);
+  });
+
+  it("should accept valid executable definitions", () => {
+    const result = validateExecutableStateMachineDefinition(mockDefinition);
+    expect(result.ok).toBe(true);
+  });
+
+  it("should not mutate definition during validation", () => {
+    const def = JSON.parse(JSON.stringify(mockDefinition));
+    const pre = JSON.stringify(def);
+    validateExecutableStateMachineDefinition(def);
+    expect(JSON.stringify(def)).toBe(pre);
+  });
+});
+
+describe("State Machine Core - Definition Immutability", () => {
+  it("should not mutate definition during transitionState", () => {
+    const def = JSON.parse(JSON.stringify(mockDefinition));
+    const pre = JSON.stringify(def);
+    transitionState(def, {
+      entityId: "imm1",
+      currentStatus: "submitted",
+      eventType: "test.approve"
+    });
+    expect(JSON.stringify(def)).toBe(pre);
+  });
+
+  it("should not mutate definition after guard evaluation", () => {
+    const def = JSON.parse(JSON.stringify(mockDefinition));
+    const pre = JSON.stringify(def);
+    transitionState(def, {
+      entityId: "imm2",
+      currentStatus: "approved",
+      eventType: "test.archive",
+      guardContext: { policyDecision: { allowed: true } }
+    });
+    expect(JSON.stringify(def)).toBe(pre);
+  });
+});
+
 describe("State Machine Core - ERROR_CODES", () => {
   it("should export ERROR_CODES from core module", () => {
     expect(ERROR_CODES).toBeDefined();
@@ -308,7 +383,7 @@ describe("State Machine Core - Guard Execution", () => {
       entityId: "g3",
       currentStatus: "approved",
       eventType: "test.archive"
-    });
+    }, { skipExecutableValidation: true });
     expect(res.ok).toBe(false);
     expect(res.errorCode).toBe("STATE_MACHINE_GUARD_UNKNOWN");
     expect(res.blockedBy).toBe("guard");
@@ -405,12 +480,15 @@ describe("State Machine Core - requires_policy Evidence Check", () => {
       machineId: "policy.evidence.v1",
       entityType: "test",
       version: "1.0.0",
+      description: "Policy evidence test definition.",
       initialState: "start",
       states: [{ id: "start" }, { id: "end" }],
       events: [{ id: "go" }],
       totalMatrix: [
         { from: "start", event: "go", result: "requires_policy", to: "end" }
-      ]
+      ],
+      invariants: [],
+      proofObligations: []
     };
     const res = transitionState(def, {
       entityId: "p1",
@@ -427,12 +505,15 @@ describe("State Machine Core - requires_policy Evidence Check", () => {
       machineId: "policy.evidence.v2",
       entityType: "test",
       version: "1.0.0",
+      description: "Policy evidence v2 test definition.",
       initialState: "start",
       states: [{ id: "start" }, { id: "end" }],
       events: [{ id: "go" }],
       totalMatrix: [
         { from: "start", event: "go", result: "requires_policy", to: "end" }
-      ]
+      ],
+      invariants: [],
+      proofObligations: []
     };
     const res = transitionState(def, {
       entityId: "p2",
@@ -451,12 +532,15 @@ describe("State Machine Core - requires_approval Evidence Check", () => {
       machineId: "approval.evidence.v1",
       entityType: "test",
       version: "1.0.0",
+      description: "Approval evidence test definition.",
       initialState: "start",
       states: [{ id: "start" }, { id: "end" }],
       events: [{ id: "go" }],
       totalMatrix: [
         { from: "start", event: "go", result: "requires_approval", to: "end" }
-      ]
+      ],
+      invariants: [],
+      proofObligations: []
     };
     const res = transitionState(def, {
       entityId: "a1",
@@ -473,12 +557,15 @@ describe("State Machine Core - requires_approval Evidence Check", () => {
       machineId: "approval.evidence.v2",
       entityType: "test",
       version: "1.0.0",
+      description: "Approval evidence v2 test definition.",
       initialState: "start",
       states: [{ id: "start" }, { id: "end" }],
       events: [{ id: "go" }],
       totalMatrix: [
         { from: "start", event: "go", result: "requires_approval", to: "end" }
-      ]
+      ],
+      invariants: [],
+      proofObligations: []
     };
     const res = transitionState(def, {
       entityId: "a2",
@@ -497,17 +584,21 @@ describe("State Machine Core - requires_external_receipt", () => {
       machineId: "receipt.v1",
       entityType: "test",
       version: "1.0.0",
+      description: "Receipt evidence test definition.",
       initialState: "start",
       states: [{ id: "start" }, { id: "end" }],
       events: [{ id: "go" }],
       totalMatrix: [
         { from: "start", event: "go", result: "requires_external_receipt", to: "end", sideEffects: ["receipt_required"] }
-      ]
+      ],
+      invariants: [],
+      proofObligations: []
     };
     const res = transitionState(def, {
       entityId: "r1",
       currentStatus: "start",
-      eventType: "go"
+      eventType: "go",
+      guardContext: { externalReceipt: { status: "recorded" } }
     });
     expect(res.ok).toBe(true);
     expect(res.requiredEffects.externalReceipt).toBe(true);
@@ -521,12 +612,15 @@ describe("State Machine Core - deferred_async_transition", () => {
       machineId: "async.v1",
       entityType: "test",
       version: "1.0.0",
+      description: "Async transition test definition.",
       initialState: "start",
       states: [{ id: "start" }, { id: "end" }],
       events: [{ id: "go" }],
       totalMatrix: [
         { from: "start", event: "go", result: "deferred_async_transition", to: "end", sideEffects: ["async_resume"] }
-      ]
+      ],
+      invariants: [],
+      proofObligations: []
     };
     const res = transitionState(def, {
       entityId: "d1",
