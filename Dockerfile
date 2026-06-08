@@ -48,16 +48,18 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and unpack JRE
+# Strict checksum check runs BEFORE download to avoid wasting time.
 RUN mkdir -p /modules/jre /modules/tika \
-    && curl -fsSL --retry 3 "${JRE_URL}" -o /tmp/jre.tar.gz \
     && if [ "${REQUIRE_RUNTIME_CHECKSUMS}" = "1" ] && [ -z "${JRE_SHA256}" ]; then echo "ERROR: REQUIRE_RUNTIME_CHECKSUMS=1 but JRE_SHA256 is empty" && exit 1; fi \
+    && curl -fsSL --retry 3 "${JRE_URL}" -o /tmp/jre.tar.gz \
     && if [ -n "${JRE_SHA256}" ]; then echo "${JRE_SHA256}  /tmp/jre.tar.gz" | sha256sum -c || exit 1; fi \
     && tar -xzf /tmp/jre.tar.gz -C /modules/jre --strip-components=1 \
     && rm /tmp/jre.tar.gz
 
 # Download Tika jar
-RUN curl -fsSL --retry 3 "${TIKA_URL}" -o /modules/tika/tika-app-${TIKA_VERSION}.jar \
-    && if [ "${REQUIRE_RUNTIME_CHECKSUMS}" = "1" ] && [ -z "${TIKA_SHA256}" ]; then echo "ERROR: REQUIRE_RUNTIME_CHECKSUMS=1 but TIKA_SHA256 is empty" && exit 1; fi \
+# Strict checksum check runs BEFORE download to avoid wasting time.
+RUN if [ "${REQUIRE_RUNTIME_CHECKSUMS}" = "1" ] && [ -z "${TIKA_SHA256}" ]; then echo "ERROR: REQUIRE_RUNTIME_CHECKSUMS=1 but TIKA_SHA256 is empty" && exit 1; fi \
+    && curl -fsSL --retry 3 "${TIKA_URL}" -o /modules/tika/tika-app-${TIKA_VERSION}.jar \
     && if [ -n "${TIKA_SHA256}" ]; then echo "${TIKA_SHA256}  /modules/tika/tika-app-${TIKA_VERSION}.jar" | sha256sum -c || exit 1; fi
 
 # ── runtime stage ─────────────────────────────────────────────────────────────

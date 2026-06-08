@@ -713,6 +713,26 @@ const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smok
       : []
   };
 
+  // Phase 4: Verify all evidencePath files exist
+  const missingEvidencePaths = [];
+  for (const gate of gateResults) {
+    if (gate.evidencePath) {
+      const absPath = path.resolve(repoRoot, gate.evidencePath);
+      try {
+        await fs.access(absPath);
+      } catch {
+        missingEvidencePaths.push(gate.evidencePath);
+      }
+    }
+  }
+  if (missingEvidencePaths.length > 0) {
+    console.warn("[production-readiness] Evidence paths missing from disk:");
+    for (const p of missingEvidencePaths) console.warn(`  - ${p}`);
+    console.warn("[production-readiness] Report may reference evidence files that do not exist.");
+  }
+  report.evidenceStorageNote = missingEvidencePaths.length > 0
+    ? "ci-artifact-only" : "local";
+
   const jsonPath = path.join(runDir, "report.json");
   const mdPath = path.join(runDir, "report.md");
   await fs.writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
