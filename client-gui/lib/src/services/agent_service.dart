@@ -7,6 +7,7 @@ part 'agent_service_actions.dart';
 typedef _RunCliExecutable = Future<ProcessResult> Function(
   String executable,
   List<String> args,
+  Map<String, String>? environment,
 );
 typedef _ResolveCliBinary = Future<File?> Function();
 
@@ -56,20 +57,24 @@ class TargetCandidate {
 
 class AgentService with AgentServiceActions {
   AgentService({
+    Future<String> Function()? dataDirectory,
     Future<File?> Function()? resolveCliBinary,
-    Future<ProcessResult> Function(String executable, List<String> args)?
+    Future<ProcessResult> Function(String executable, List<String> args, Map<String, String>? environment)?
         runCliExecutable,
-  }) : _resolveCliBinaryOverride = resolveCliBinary,
+  }) : _dataDirectory = dataDirectory,
+       _resolveCliBinaryOverride = resolveCliBinary,
        _runCliExecutable = runCliExecutable ?? _defaultRunCliExecutable;
 
+  final Future<String> Function()? _dataDirectory;
   final _ResolveCliBinary? _resolveCliBinaryOverride;
   final _RunCliExecutable _runCliExecutable;
 
   static Future<ProcessResult> _defaultRunCliExecutable(
     String executable,
     List<String> args,
+    Map<String, String>? environment,
   ) {
-    return Process.run(executable, args);
+    return Process.run(executable, args, environment: environment);
   }
 
   Future<File?> _resolveCliBinary() async {
@@ -113,10 +118,17 @@ class AgentService with AgentServiceActions {
 
   Future<Map<String, dynamic>> _runCli(List<String> args) async {
     final cli = await _resolveCliBinary();
+    
+    Map<String, String>? env;
+    if (_dataDirectory != null) {
+      final dir = await _dataDirectory();
+      env = {'PACT_PORTABLE_DIR': dir};
+    }
+    
     if (cli == null) {
       // Fallback to expecting pact-client in PATH
       try {
-        final result = await _runCliExecutable('pact-client', args);
+        final result = await _runCliExecutable('pact-client', args, env);
         if (result.exitCode != 0) {
           throw Exception('pact-client failed: ${result.stderr}');
         }
@@ -126,7 +138,7 @@ class AgentService with AgentServiceActions {
       }
     }
 
-    final result = await _runCliExecutable(cli.path, args);
+    final result = await _runCliExecutable(cli.path, args, env);
     if (result.exitCode != 0) {
       throw Exception('pact-client failed: ${result.stderr}');
     }

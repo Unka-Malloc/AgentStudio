@@ -365,7 +365,7 @@ class _FakeAgentService extends AgentService {
   ];
   Map<String, dynamic> pairingResult = {'ok': true, 'status': 'requested'};
   String pairingStatus = 'requested';
-  List<Map<String, dynamic>> snapshots = const [
+  List<Map<String, dynamic>> snapshots = [
     {'snapshotId': 'snapshot-codex-1', 'target': 'codex'},
   ];
   List<Map<String, dynamic>> pairings = [

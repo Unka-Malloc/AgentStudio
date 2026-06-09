@@ -45,8 +45,8 @@ mixin AgentServiceActions {
   }
 
   Future<List<Map<String, dynamic>>> listPairings({String agent = ''}) async {
-    final args = ['pair', 'list'];
-    _appendOptionalArg(args, '--agent', agent);
+    final args = ['agents', 'pair', 'list'];
+    if (agent.isNotEmpty) args.addAll(['--agent', agent]);
     final output = await (this as AgentService)._runCli(args);
     return _listFromOutput(output, 'pairings');
   }
@@ -55,17 +55,17 @@ mixin AgentServiceActions {
     required String agent,
     String target = '',
   }) async {
-    final args = ['pair', 'request', '--agent', agent];
-    _appendOptionalArg(args, '--target', target);
+    final args = ['agents', 'pair', 'request', '--agent', agent];
+    if (target.isNotEmpty) args.addAll(['--target', target]);
     return (this as AgentService)._runCli(args);
   }
 
   Future<Map<String, dynamic>> approvePairing({required String agent}) async {
-    return (this as AgentService)._runCli(['pair', 'approve', '--agent', agent]);
+    return (this as AgentService)._runCli(['agents', 'pair', 'approve', '--agent', agent]);
   }
 
   Future<Map<String, dynamic>> revokePairing({required String agent}) async {
-    return (this as AgentService)._runCli(['pair', 'revoke', '--agent', agent]);
+    return (this as AgentService)._runCli(['agents', 'pair', 'revoke', '--agent', agent]);
   }
 
   Future<List<Map<String, dynamic>>> listSkills({required String agent}) async {

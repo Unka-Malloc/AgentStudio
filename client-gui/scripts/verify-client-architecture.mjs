@@ -278,6 +278,11 @@ assert(
 const futureClientModels = await readText("client-gui/lib/src/models/future_client_models.dart");
 const appSections = collectEnumValues(futureClientModels, "FutureClientSection");
 assert(sameSet(appSections, ["agents", "mcpPlugins", "skillHub", "modelForwarding", "activity", "settings"]), "FutureClientSection enum must contain only the six future modules");
+
+const agentServiceActionsSource = await readText("client-gui/lib/src/services/agent_service_actions.dart");
+assert(agentServiceActionsSource.includes("'agents'") && agentServiceActionsSource.includes("'pair'"), "agent_service_actions.dart must contain 'agents' and 'pair' tokens for CLI execution");
+assert(!agentServiceActionsSource.match(/\[\s*'pair'/), "GUI service layer must not use top-level 'pair' command");
+
 for (const relativePath of defaultGuiSurfacePaths) {
   const source = await readText(relativePath);
   const lineCount = source.split(/\r?\n/).length;
