@@ -80,20 +80,6 @@ import {
   reparseJob,
 } from "./jobs-client";
 import {
-  archiveKnowledgeDistillationWorkbenchRun,
-  cancelKnowledgeDistillationWorkbenchRun,
-  compareKnowledgeDistillationWorkbenchRuns,
-  createKnowledgeDistillationWorkbenchRun,
-  deleteKnowledgeDistillationWorkbenchRun,
-  getKnowledgeDistillationWorkbenchRun,
-  getKnowledgeDistillationWorkbenchRunArtifacts,
-  knowledgeDistillationWorkbenchExportUrl,
-  knowledgeDistillationWorkbenchPackageUrl,
-  listKnowledgeDistillationWorkbenchRuns,
-  rerunKnowledgeDistillationWorkbenchStage,
-  resumeKnowledgeDistillationWorkbenchRun,
-} from "./knowledge-distillation-workbench-client";
-import {
   getProductionHealth,
   getV001BaselineStatus,
 } from "./production-health-client";
@@ -352,18 +338,6 @@ const browserBridge: Bridge = {
   getUploadSession,
   getNormalizedDocuments,
   normalizedDocumentUrl,
-  listKnowledgeDistillationWorkbenchRuns,
-  createKnowledgeDistillationWorkbenchRun,
-  getKnowledgeDistillationWorkbenchRun,
-  resumeKnowledgeDistillationWorkbenchRun,
-  cancelKnowledgeDistillationWorkbenchRun,
-  archiveKnowledgeDistillationWorkbenchRun,
-  deleteKnowledgeDistillationWorkbenchRun,
-  rerunKnowledgeDistillationWorkbenchStage,
-  getKnowledgeDistillationWorkbenchRunArtifacts,
-  compareKnowledgeDistillationWorkbenchRuns,
-  knowledgeDistillationWorkbenchExportUrl,
-  knowledgeDistillationWorkbenchPackageUrl,
 };
 
 export const bridge = browserBridge;
