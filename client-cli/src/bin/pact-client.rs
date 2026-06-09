@@ -478,6 +478,9 @@ mod tests {
                 Some("configured") | Some("not-configured")
             ));
 
+            let discovery_file = dir.join("mcp-discovery.json");
+            fs::write(&discovery_file, r#"{"url":"http://127.0.0.1:7228", "handshakeVerified": true}"#).unwrap();
+
             let config_path = dir.join("opencode.jsonc");
             fs::write(&config_path, "{}\n").unwrap();
             let plugin_update = execute_cli(vec![
@@ -492,9 +495,18 @@ mod tests {
                 dir.join("future-client").display().to_string(),
                 "--token".into(),
                 "plugin-token".into(),
+                "--discovery-file".into(),
+                discovery_file.display().to_string()
             ])
             .unwrap();
             assert_eq!(json_payload(&&plugin_update)["status"], "updated");
+
+            let snapshot_id = json_payload(&&plugin_update)
+                .get("apply")
+                .and_then(|a| a.get("snapshotId"))
+                .and_then(|s| s.as_str())
+                .unwrap_or("snapshot-missing")
+                .to_string();
 
             let plugin_rollback = execute_cli(vec![
                 "mcp".into(),
@@ -503,10 +515,7 @@ mod tests {
                 "--target".into(),
                 "opencode".into(),
                 "--snapshot-id".into(),
-                json_payload(&&plugin_update)["apply"]["snapshotId"]
-                    .as_str()
-                    .unwrap_or("snapshot-missing")
-                    .to_string(),
+                snapshot_id,
             ])
             .unwrap();
             assert_eq!(json_payload(&&plugin_rollback)["status"], "rolled_back");
@@ -524,14 +533,17 @@ mod tests {
             let _portable = set_portable_dir(&dir);
             let state_root = dir.join("future-client");
 
+            let discovery_file = dir.join("mcp-discovery.json");
+            fs::write(&discovery_file, r#"{"url":"http://127.0.0.1:7228", "handshakeVerified": true}"#).unwrap();
+
             let plan = execute_cli(vec![
                 "mcp".into(),
                 "config".into(),
                 "plan".into(),
                 "--target".into(),
                 "opencode".into(),
-                "--base-url".into(),
-                "http://127.0.0.1:7228".into(),
+                "--discovery-file".into(),
+                discovery_file.display().to_string(),
             ])
             .unwrap();
             assert_eq!(json_payload(&&plan)["status"], "planned");
@@ -548,6 +560,8 @@ mod tests {
                 state_root.display().to_string(),
                 "--token".into(),
                 "x-token".into(),
+                "--discovery-file".into(),
+                discovery_file.display().to_string()
             ])
             .unwrap();
             let apply = json_payload(&&apply);
@@ -576,6 +590,8 @@ mod tests {
                 config_path.display().to_string(),
                 "--expected-hash".into(),
                 "bad-hash".into(),
+                "--discovery-file".into(),
+                discovery_file.display().to_string()
             ])
             .unwrap();
             assert_eq!(json_payload(&&conflict)["status"], "field_conflict");
@@ -678,9 +694,9 @@ mod tests {
         dir
     }
 
-    fn cli_env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
+    fn cli_env_lock() -> &'static std::sync::Mutex<()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
     }
 
     struct PortableDirGuard {

@@ -30,6 +30,17 @@ struct TargetDef {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AdapterCapabilities {
+    pub detection: String,
+    pub config_read: String,
+    pub config_plan: String,
+    pub config_apply: String,
+    pub rollback: String,
+    pub official_cli: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TargetCandidate {
     pub target: String,
     pub label: String,
@@ -44,6 +55,7 @@ pub struct TargetCandidate {
     pub binary_path: Option<String>,
     pub manual: bool,
     pub adapter_status: String,
+    pub adapter_capabilities: AdapterCapabilities,
     pub supported_actions: Vec<String>,
 }
 
@@ -213,32 +225,69 @@ pub fn mcp_config_plan(params: &Value) -> Result<Value> {
     let target = target_param(params)?;
     let def = target_def(&target)?;
     let config_path = resolve_config_path(&def, params).ok();
-    let base_url = normalize_base_url(params);
-    let token_ref = token_ref(params);
-    Ok(json!({
-        "ok": true,
-        "status": "planned",
-        "target": def.id,
-        "label": def.label,
-        "plan": {
-            "operation": "mcp.config.apply",
-            "configPath": config_path.map(display_path),
-            "baseUrl": base_url,
-            "tokenRef": token_ref,
-            "fields": target_fields_with_values(def.id, &base_url, &token_ref),
-            "requiresSnapshot": true,
-            "requiresStructuredPatch": true,
-            "requiresAtomicWrite": true,
-            "rollbackCommand": "pact-client mcp config rollback --target <target> --snapshot-id <snapshotId>"
-        }
-    }))
+    
+    let verification = crate::mcp_trust::resolve_and_verify_endpoint(params)?;
+        let apply_allowed = verification.status == crate::mcp_trust::VerificationStatus::Verified || 
+                            verification.status == crate::mcp_trust::VerificationStatus::DevUnverifiedOverride;
+        
+        let base_url = verification.endpoint;
+        let token_ref = token_ref(params);
+        Ok(json!({
+            "ok": true,
+            "status": "planned",
+            "target": def.id,
+            "label": def.label,
+            "endpointSource": verification.source,
+            "verificationStatus": verification.status.as_str(),
+            "applyAllowed": apply_allowed,
+            "requiredAction": if apply_allowed { "none" } else { "verify_endpoint" },
+            "plan": {
+                "operation": "mcp.config.apply",
+                "configPath": config_path.map(display_path),
+                "baseUrl": base_url.clone(),
+                "tokenRef": token_ref.clone(),
+                "fields": target_fields_with_values(def.id, &base_url, &token_ref),
+                "requiresSnapshot": true,
+                "requiresStructuredPatch": true,
+                "requiresAtomicWrite": true,
+                "rollbackCommand": "pact-client mcp config rollback --target <target> --snapshot-id <snapshotId>"
+            }
+        }))
 }
 
 pub fn mcp_config_apply(params: &Value) -> Result<Value> {
     let target = target_param(params)?;
     let def = target_def(&target)?;
+
+    let supports_apply = matches!(
+        def.id,
+        "openclaw" | "gemini-cli" | "antigravity" | "opencode" | "windsurf" | "cursor"
+    );
+    if !supports_apply {
+        return Ok(json!({
+            "ok": false,
+            "status": "unsupported_adapter_action",
+            "target": target,
+            "action": "mcp.config.apply",
+            "message": format!("Target '{}' does not support mcp.config.apply", target)
+        }));
+    }
+
     let config_path = resolve_config_path(&def, params)?;
-    let base_url = normalize_base_url(params);
+    
+    let verification = crate::mcp_trust::resolve_and_verify_endpoint(params)?;
+    if verification.status != crate::mcp_trust::VerificationStatus::Verified && 
+       verification.status != crate::mcp_trust::VerificationStatus::DevUnverifiedOverride {
+        return Ok(json!({
+            "ok": false,
+            "status": "verification_required",
+            "target": target,
+            "endpoint": verification.endpoint,
+            "message": "MCP endpoint must be verified before applying target config."
+        }));
+    }
+    
+    let base_url = verification.endpoint;
     let token_ref = token_ref(params);
     let current = fs::read_to_string(&config_path).unwrap_or_default();
     let before_hash = hash_text(&current);
@@ -439,6 +488,52 @@ fn scan_target_with_manual(
     } else {
         base_detail
     };
+    let mut capabilities = AdapterCapabilities {
+        detection: "implemented".to_string(),
+        config_read: "unsupported".to_string(),
+        config_plan: "unsupported".to_string(),
+        config_apply: "unsupported".to_string(),
+        rollback: "unsupported".to_string(),
+        official_cli: "unknown".to_string(),
+    };
+
+    let supports_apply = matches!(
+        def.id,
+        "openclaw" | "gemini-cli" | "antigravity" | "opencode" | "windsurf" | "cursor"
+    );
+
+    if supports_apply {
+        capabilities.config_read = "implemented".to_string();
+        capabilities.config_plan = "implemented".to_string();
+        capabilities.config_apply = "implemented".to_string();
+        capabilities.rollback = "implemented".to_string();
+    } else {
+        capabilities.config_read = "partial".to_string();
+        capabilities.config_plan = "partial".to_string();
+    }
+
+    let adapter_status = if capabilities.config_apply == "implemented" {
+        "implemented"
+    } else if capabilities.config_apply == "partial" || capabilities.config_read == "partial" {
+        "partial"
+    } else {
+        "unsupported"
+    };
+
+    let mut supported_actions = Vec::new();
+    supported_actions.push("mcp.plugin.status".to_string());
+    if capabilities.config_plan == "implemented" || capabilities.config_plan == "partial" {
+        supported_actions.push("mcp.config.plan".to_string());
+    }
+    if capabilities.config_apply == "implemented" {
+        supported_actions.push("mcp.config.apply".to_string());
+        supported_actions.push("mcp.plugin.update".to_string());
+    }
+    if capabilities.rollback == "implemented" {
+        supported_actions.push("mcp.config.rollback".to_string());
+        supported_actions.push("mcp.plugin.rollback".to_string());
+    }
+
     Ok(TargetCandidate {
         target: def.id.to_string(),
         label: manual
@@ -454,11 +549,9 @@ fn scan_target_with_manual(
         config_path: config_path.map(display_path),
         binary_path: binary_path.map(display_path),
         manual: manual_entry,
-        adapter_status: "implemented".to_string(),
-        supported_actions: SUPPORTED_ACTIONS
-            .iter()
-            .map(|item| item.to_string())
-            .collect(),
+        adapter_status: adapter_status.to_string(),
+        adapter_capabilities: capabilities,
+        supported_actions,
     })
 }
 
@@ -1368,11 +1461,14 @@ mod tests {
         )
         .unwrap();
 
+        let discovery_file = dir.join("mcp-discovery.json");
+        fs::write(&discovery_file, r#"{"url":"http://127.0.0.1:7228", "handshakeVerified": true}"#).unwrap();
+
         let result = mcp_config_apply(&json!({
             "target": "opencode",
             "configPath": display_path(config_path.clone()),
             "stateRoot": display_path(state_root.clone()),
-            "baseUrl": "http://127.0.0.1:7228",
+            "discoveryFile": display_path(discovery_file),
             "token": "test-token"
         }))
         .unwrap();
@@ -1415,11 +1511,15 @@ mod tests {
         let state_root = dir.join("future-client");
         let original = r#"{"mcp":{"other":{"enabled":true}}}"#;
         fs::write(&config_path, original).unwrap();
+        
+        let discovery_file = dir.join("mcp-discovery.json");
+        fs::write(&discovery_file, r#"{"url":"http://localhost:7228", "handshakeVerified": true}"#).unwrap();
+
         let apply = mcp_config_apply(&json!({
             "target": "opencode",
             "configPath": display_path(config_path.clone()),
             "stateRoot": display_path(state_root.clone()),
-            "baseUrl": "http://localhost:7228",
+            "discoveryFile": display_path(discovery_file),
             "token": "rollback-token"
         }))
         .unwrap();
@@ -1445,11 +1545,15 @@ mod tests {
         let config_path = dir.join("opencode.jsonc");
         fs::write(&config_path, r#"{"mcp":{}}"#).unwrap();
 
+        let discovery_file = dir.join("mcp-discovery.json");
+        fs::write(&discovery_file, r#"{"url":"http://127.0.0.1:7228", "handshakeVerified": true}"#).unwrap();
+
         let result = mcp_config_apply(&json!({
             "target": "opencode",
             "configPath": display_path(config_path.clone()),
             "expectedHash": "stale",
-            "token": "blocked"
+            "token": "blocked",
+            "discoveryFile": display_path(discovery_file)
         }))
         .unwrap();
 
@@ -1812,12 +1916,15 @@ mod tests {
         let config_path = dir.join("opencode.jsonc");
         fs::write(&config_path, "{}").unwrap();
         let state_root = dir.join("future-client");
+        
+        let discovery_file = dir.join("mcp-discovery.json");
+        fs::write(&discovery_file, r#"{"url":"http://127.0.0.1:7228", "handshakeVerified": true}"#).unwrap();
 
         let applied = mcp_config_apply(&json!({
             "target": "opencode",
             "configPath": display_path(config_path.clone()),
             "stateRoot": display_path(state_root.clone()),
-            "baseUrl": "http://127.0.0.1:7228",
+            "discoveryFile": display_path(discovery_file),
             "token": "snapshot-id-token",
         }))
         .unwrap();

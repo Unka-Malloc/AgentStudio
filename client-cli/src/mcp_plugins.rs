@@ -131,11 +131,14 @@ mod tests {
         let state_root = dir.join("future-client");
         fs::write(&config_path, r#"{"mcp":{"other":{"enabled":true}}}"#).unwrap();
 
+        let discovery_file = dir.join("mcp-discovery.json");
+        fs::write(&discovery_file, r#"{"url":"http://127.0.0.1:7228", "handshakeVerified": true}"#).unwrap();
+
         let update = plugin_update(&json!({
             "target": "opencode",
             "configPath": config_path.to_string_lossy(),
             "stateRoot": state_root.to_string_lossy(),
-            "baseUrl": "http://127.0.0.1:7228",
+            "discoveryFile": discovery_file.to_string_lossy(),
             "token": "peer-token"
         }))
         .unwrap();
@@ -161,10 +164,14 @@ mod tests {
         let original = r#"{"mcp":{"other":{"enabled":true}}}"#;
         fs::write(&config_path, original).unwrap();
 
+        let discovery_file = dir.join("mcp-discovery.json");
+        fs::write(&discovery_file, r#"{"url":"http://127.0.0.1:7228", "handshakeVerified": true}"#).unwrap();
+
         let update = plugin_update(&json!({
             "target": "opencode",
             "configPath": config_path.to_string_lossy(),
             "stateRoot": state_root.to_string_lossy(),
+            "discoveryFile": discovery_file.to_string_lossy(),
             "token": "rollback-token"
         }))
         .unwrap();
