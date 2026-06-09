@@ -36,7 +36,7 @@ void main() {
     final captured = <String>[];
     final agentService = AgentService(
       resolveCliBinary: () async => cliPath,
-      runCliExecutable: (executable, args) {
+      runCliExecutable: (executable, args, env) {
         captured.add('$executable:${args.join(' ')}');
         return Future.value(
           ProcessResult(
@@ -66,7 +66,7 @@ void main() {
     final captured = <String>[];
     final agentService = AgentService(
       resolveCliBinary: () async => null,
-      runCliExecutable: (executable, args) {
+      runCliExecutable: (executable, args, env) {
         captured.add(executable);
         return Future.value(ProcessResult(1, 0, '{"ok":true}', ''));
       },
@@ -79,7 +79,7 @@ void main() {
 
   test('wraps pact-client execution failure as an exception', () async {
     final agentService = AgentService(
-      runCliExecutable: (executable, args) {
+      runCliExecutable: (executable, args, env) {
         return Future.value(ProcessResult(1, 1, '', 'cli failed'));
       },
     );
@@ -99,7 +99,7 @@ void main() {
   test('builds action command arguments and trims optional parameters', () async {
     final captured = <List<String>>[];
     final agentService = AgentService(
-      runCliExecutable: (executable, args) {
+      runCliExecutable: (executable, args, env) {
         captured.add(List<String>.from(args));
         return Future.value(
           ProcessResult(
@@ -129,10 +129,10 @@ void main() {
     expect(captured[1], ['mcp', 'plugin', 'update', '--target', 'codex']);
     expect(captured[2], ['mcp', 'plugin', 'rollback', '--target', 'codex', '--snapshot-id', 'snapshot-1', '--config-path', '/tmp/code']);
     expect(captured[3], ['snapshots', 'list', '--target', 'codex']);
-    expect(captured[4], ['pair', 'list', '--agent', 'codex']);
-    expect(captured[5], ['pair', 'request', '--agent', 'codex', '--target', 'manual']);
-    expect(captured[6], ['pair', 'approve', '--agent', 'codex']);
-    expect(captured[7], ['pair', 'revoke', '--agent', 'codex']);
+    expect(captured[4], ['agents', 'pair', 'list', '--agent', 'codex']);
+    expect(captured[5], ['agents', 'pair', 'request', '--agent', 'codex', '--target', 'manual']);
+    expect(captured[6], ['agents', 'pair', 'approve', '--agent', 'codex']);
+    expect(captured[7], ['agents', 'pair', 'revoke', '--agent', 'codex']);
     expect(captured[8], ['skill', 'list', '--agent', 'codex']);
     expect(captured[9], ['model', 'profiles', 'list']);
     expect(captured[10], ['model', 'profiles', 'set', 'local-echo', '--command', 'cat']);
@@ -141,7 +141,7 @@ void main() {
 
   test('returns empty list when list output is invalid', () async {
     final agentService = AgentService(
-      runCliExecutable: (executable, args) {
+      runCliExecutable: (executable, args, env) {
         return Future.value(
           ProcessResult(0, 0, jsonEncode({'ok': true, 'pairings': 'broken'}), ''),
         );
