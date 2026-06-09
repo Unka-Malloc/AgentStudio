@@ -2,6 +2,7 @@ use crate::client_state::ClientStateStore;
 use anyhow::{Result, anyhow};
 use serde_json::{Value, json};
 use std::time::{SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 const STATUS_REQUESTED: &str = "requested";
 const STATUS_APPROVED: &str = "approved";
@@ -42,21 +43,37 @@ pub fn skill_pin(params: &Value) -> Result<Value> {
 fn pair_request_in(store: &ClientStateStore, params: &Value) -> Result<Value> {
     let agent_id = agent_id(params)?;
     let target = target_id(params).unwrap_or_else(|| "manual".to_string());
+    let target_kind = params.get("targetKind").and_then(Value::as_str).unwrap_or("unknown");
+    let label = params.get("label").and_then(Value::as_str).unwrap_or(&agent_id);
+    let config_path = params.get("configPath").and_then(Value::as_str).unwrap_or("");
+    let binary_path = params.get("binaryPath").and_then(Value::as_str).unwrap_or("");
+    let pairing_id = format!("pair-{}", uuid_v4());
+    let local_identity = format!("local-{}", uuid_v4());
+    let visibility_policy = params.get("defaultVisibilityPolicy").and_then(Value::as_str).unwrap_or("deny-by-default");
+
     let mut document = store.read_collection("pairings")?;
     let items = collection_items_mut(&mut document)?;
     items.retain(|item| item.get("agentId").and_then(Value::as_str) != Some(&agent_id));
     let record = json!({
+        "pairingId": pairing_id,
         "agentId": agent_id,
         "target": target,
+        "targetKind": target_kind,
+        "label": label,
+        "configPath": config_path,
+        "binaryPath": binary_path,
+        "localIdentity": local_identity,
         "status": STATUS_REQUESTED,
         "requestedAt": timestamp(),
+        "defaultVisibilityPolicy": visibility_policy,
+        "scopes": [],
     });
     items.push(record.clone());
     store.write_collection("pairings", document)?;
     append_activity(
         store,
         "pairing.requested",
-        json!({"target": target, "agentId": agent_id}),
+        json!({"target": target, "agentId": agent_id, "pairingId": pairing_id}),
     )?;
     Ok(json!({
         "ok": true,
@@ -425,6 +442,10 @@ fn timestamp() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     format!("{}-{}", now.as_secs(), now.subsec_nanos())
+}
+
+fn uuid_v4() -> String {
+    Uuid::new_v4().to_string()
 }
 
 #[cfg(test)]
