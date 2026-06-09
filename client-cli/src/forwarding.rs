@@ -5,7 +5,8 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::thread;
 
 const PROFILE_SCHEMA_VERSION: u32 = 1;
 const FORWARDING_DIR: &str = "model-forwarding";
@@ -79,6 +80,18 @@ fn save_model_profile_in(data_dir: &Path, params: &Value) -> Result<Value> {
         profile.insert("headers".to_string(), Value::Object(headers));
     }
 
+    // Safety guardrails - stored in profile, enforced at forward time
+    let timeout_ms = params.get("timeoutMs").and_then(Value::as_u64).unwrap_or(30_000);
+    let max_stdout_bytes = params.get("maxStdoutBytes").and_then(Value::as_u64).unwrap_or(1_048_576);
+    let max_stderr_bytes = params.get("maxStderrBytes").and_then(Value::as_u64).unwrap_or(262_144);
+    let explicit_user_approved = params.get("explicitUserApproved").and_then(Value::as_bool).unwrap_or(false);
+    profile.insert("timeoutMs".to_string(), json!(timeout_ms));
+    profile.insert("maxStdoutBytes".to_string(), json!(max_stdout_bytes));
+    profile.insert("maxStderrBytes".to_string(), json!(max_stderr_bytes));
+    profile.insert("explicitUserApproved".to_string(), json!(explicit_user_approved));
+    profile.insert("createdAt".to_string(), json!(timestamp()));
+    profile.insert("updatedAt".to_string(), json!(timestamp()));
+
     let mut document = read_profiles_document(data_dir)?;
     let profiles = document
         .get_mut("profiles")
@@ -137,6 +150,10 @@ fn forward_command(profile_id: &str, profile: &Value, input: &str) -> Result<Val
         .into_iter()
         .filter_map(|value| value.as_str().map(str::to_string))
         .collect::<Vec<_>>();
+    let timeout_ms = profile.get("timeoutMs").and_then(Value::as_u64).unwrap_or(30_000);
+    let max_stdout = profile.get("maxStdoutBytes").and_then(Value::as_u64).unwrap_or(1_048_576) as usize;
+    let max_stderr = profile.get("maxStderrBytes").and_then(Value::as_u64).unwrap_or(262_144) as usize;
+
     let mut child = Command::new(command)
         .args(args)
         .stdin(Stdio::piped())
@@ -146,19 +163,57 @@ fn forward_command(profile_id: &str, profile: &Value, input: &str) -> Result<Val
     if let Some(mut stdin) = child.stdin.take() {
         stdin.write_all(input.as_bytes())?;
     }
-    let output = child.wait_with_output()?;
-    Ok(json!({
-        "ok": output.status.success(),
-        "profile": profile_id,
-        "mode": "thin-forward",
-        "provider": "command",
-        "statusCode": output.status.code(),
-        "output": String::from_utf8_lossy(&output.stdout).to_string(),
-        "stderr": String::from_utf8_lossy(&output.stderr).to_string(),
-        "planner": false,
-        "toolLoop": false,
-        "sessionHarness": false
-    }))
+
+    let pid = child.id();
+    let start = SystemTime::now();
+    let mut timed_out = false;
+    // Poll-based timeout
+    let deadline = start + Duration::from_millis(timeout_ms);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let output = child.wait_with_output()?;
+                let stdout_bytes = output.stdout.len().min(max_stdout);
+                let stderr_bytes = output.stderr.len().min(max_stderr);
+                let stdout_truncated = output.stdout.len() > max_stdout;
+                let stderr_truncated = output.stderr.len() > max_stderr;
+                return Ok(json!({
+                    "ok": status.success(),
+                    "profile": profile_id,
+                    "mode": "thin-forward",
+                    "provider": "command",
+                    "statusCode": status.code(),
+                    "output": String::from_utf8_lossy(&output.stdout[..stdout_bytes]).to_string(),
+                    "stderr": String::from_utf8_lossy(&output.stderr[..stderr_bytes]).to_string(),
+                    "stdoutTruncated": stdout_truncated,
+                    "stderrTruncated": stderr_truncated,
+                    "pid": pid,
+                    "planner": false,
+                    "toolLoop": false,
+                    "sessionHarness": false
+                }));
+            }
+            Ok(None) => {
+                if SystemTime::now() >= deadline {
+                    let _ = child.kill();
+                    timed_out = true;
+                    let _ = child.wait();
+                    return Ok(json!({
+                        "ok": false,
+                        "profile": profile_id,
+                        "mode": "thin-forward",
+                        "provider": "command",
+                        "status": "timeout",
+                        "timeoutMs": timeout_ms,
+                        "pid": pid,
+                        "message": format!("Command timed out after {}ms", timeout_ms)
+                    }));
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+            Err(e) => return Err(anyhow!("failed to wait on child process: {}", e)),
+        }
+    }
 }
 
 fn forward_http(profile_id: &str, profile: &Value, input: &str) -> Result<Value> {
@@ -167,6 +222,18 @@ fn forward_http(profile_id: &str, profile: &Value, input: &str) -> Result<Value>
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| anyhow!("http profile is missing url"))?;
+
+    let lower_url = url.to_lowercase();
+    if !lower_url.starts_with("https://") && !lower_url.starts_with("http://127.0.0.1") && !lower_url.starts_with("http://localhost") {
+        return Ok(json!({
+            "ok": false,
+            "status": "invalid_profile",
+            "profile": profile_id,
+            "url": url,
+            "message": "URL scheme must be https://, http://127.0.0.1, or http://localhost for thin forwarding"
+        }));
+    }
+
     let mut request = ureq::post(url)
         .set("accept", "application/json")
         .set("content-type", "application/json");
