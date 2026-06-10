@@ -215,7 +215,6 @@ fn forward_command(profile_id: &str, profile: &Value, input: &str) -> Result<Val
 
     let pid = child.id();
     let start = SystemTime::now();
-    let mut timed_out = false;
     // Poll-based timeout
     let deadline = start + Duration::from_millis(timeout_ms);
     loop {
@@ -245,7 +244,6 @@ fn forward_command(profile_id: &str, profile: &Value, input: &str) -> Result<Val
             Ok(None) => {
                 if SystemTime::now() >= deadline {
                     let _ = child.kill();
-                    timed_out = true;
                     let _ = child.wait();
                     return Ok(json!({
                         "ok": false,

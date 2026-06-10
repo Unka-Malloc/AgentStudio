@@ -187,6 +187,10 @@ fn skill_get_in(store: &ClientStateStore, params: &Value) -> Result<Value> {
         return Ok(pairing_required(&agent_id));
     }
     let skill_id = skill_id(params)?;
+    let skill = find_skill(store, &skill_id)?;
+    let Some(skill) = skill else {
+        return Ok(protocol_deferred(&agent_id, &skill_id));
+    };
     if is_hidden(store, &agent_id, &skill_id)? {
         return Ok(json!({
             "ok": false,
@@ -195,10 +199,15 @@ fn skill_get_in(store: &ClientStateStore, params: &Value) -> Result<Value> {
             "skillId": skill_id
         }));
     }
-    let skill = find_skill(store, &skill_id)?;
-    let Some(skill) = skill else {
-        return Ok(protocol_deferred(&agent_id, &skill_id));
-    };
+    if !is_skill_visible_by_policy(store, &agent_id, &skill_id)? {
+        return Ok(json!({
+            "ok": false,
+            "error": "visibility_denied",
+            "agentId": agent_id,
+            "skillId": skill_id,
+            "message": "Skill visibility denied by pairing defaultVisibilityPolicy"
+        }));
+    }
     Ok(json!({
         "ok": true,
         "agentId": agent_id,
@@ -208,6 +217,22 @@ fn skill_get_in(store: &ClientStateStore, params: &Value) -> Result<Value> {
         "dependencyInstall": "not_supported",
         "copyToWorkspace": "not_supported"
     }))
+}
+
+fn is_skill_visible_by_policy(
+    store: &ClientStateStore,
+    agent_id: &str,
+    skill_id: &str,
+) -> Result<bool> {
+    let pairing = get_approved_pairing(store, agent_id)?;
+    let policy = pairing
+        .as_ref()
+        .and_then(|p| p.get("defaultVisibilityPolicy").and_then(Value::as_str))
+        .unwrap_or("allow-all");
+    match policy {
+        "deny-by-default" => Ok(is_explicitly_revealed(store, agent_id, skill_id)),
+        _ => Ok(true),
+    }
 }
 
 fn skill_visibility_in(store: &ClientStateStore, params: &Value) -> Result<Value> {
@@ -559,7 +584,11 @@ mod tests {
     #[test]
     fn pairing_skill_cli_missing_skill_is_protocol_deferred() {
         let store = test_store("deferred");
-        pair_request_in(&store, &json!({"agent": "codex", "target": "codex"})).unwrap();
+        pair_request_in(
+            &store,
+            &json!({"agent": "codex", "target": "codex", "defaultVisibilityPolicy": "allow-all"}),
+        )
+        .unwrap();
         pair_approve_in(&store, &json!({"agent": "codex"})).unwrap();
 
         let result = skill_get_in(&store, &json!({"agent": "codex", "skill": "future"})).unwrap();
@@ -577,7 +606,11 @@ mod tests {
     #[test]
     fn pairing_skill_cli_pin_and_get_are_passive() {
         let store = test_store("pin");
-        pair_request_in(&store, &json!({"agent": "codex", "target": "codex"})).unwrap();
+        pair_request_in(
+            &store,
+            &json!({"agent": "codex", "target": "codex", "defaultVisibilityPolicy": "allow-all"}),
+        )
+        .unwrap();
         pair_approve_in(&store, &json!({"agent": "codex"})).unwrap();
         seed_skill(&store, "review", "1.0.0");
 

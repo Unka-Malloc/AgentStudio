@@ -134,7 +134,7 @@ mod tests {
         rand::thread_rng().fill_bytes(&mut bytes);
         let secret_bytes = bytes;
         let mcp_url = format!("{}/mcp", endpoint.trim_end_matches('/'));
-        let receipt = crate::mcp_trust::test_signed_receipt(
+        let (receipt, public_key) = crate::mcp_trust::test_signed_receipt(
             endpoint,
             &mcp_url,
             "test-key",
@@ -144,7 +144,8 @@ mod tests {
         );
         let doc = serde_json::json!({
             "url": endpoint,
-            "trustReceipt": receipt
+            "trustReceipt": receipt,
+            "pinnedPublicKey": public_key
         });
         fs::write(path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
     }
@@ -315,10 +316,11 @@ mod tests {
             "stateRoot": state_root.to_string_lossy(),
             "discoveryFile": discovery_file.to_string_lossy(),
             "token": "test-token"
-        }));
+        }))
+        .unwrap();
 
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("field_conflict"));
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["status"], "field_conflict");
         assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
     }
 

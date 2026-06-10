@@ -349,7 +349,24 @@ pub fn mcp_config_apply(params: &Value) -> Result<Value> {
         }));
     }
 
-    let config_path = resolve_config_path(&def, params)?;
+    let config_path = match resolve_config_path(&def, params) {
+        Ok(path) => path,
+        Err(err) => {
+            let msg = err.to_string();
+            if msg.contains("missing_config_path") {
+                let label = msg
+                    .strip_prefix("missing_config_path: ")
+                    .unwrap_or("target");
+                return Ok(json!({
+                    "ok": false,
+                    "status": "missing_config_path",
+                    "target": target,
+                    "message": format!("{} requires --config-path for config writes", label)
+                }));
+            }
+            return Err(err);
+        }
+    };
 
     let verification = mcp_trust::resolve_and_verify_endpoint(params)?;
     let status = verification.status;
@@ -397,7 +414,21 @@ pub fn mcp_config_apply(params: &Value) -> Result<Value> {
     }
 
     let fields = target_fields_with_values(def.id, &base_url, &token_ref);
-    let new_content = apply_structured_patch(def.id, &current, &base_url, &token_ref)?;
+    let new_content = match apply_structured_patch(def.id, &current, &base_url, &token_ref) {
+        Ok(content) => content,
+        Err(err) => {
+            let msg = err.to_string();
+            if msg.contains("field_conflict") {
+                return Ok(build_field_conflict_error(
+                    def.id,
+                    &config_path,
+                    &msg,
+                    &current,
+                ));
+            }
+            return Err(err);
+        }
+    };
     let store = client_state_store(params)?;
     let snapshot = store.snapshot_store().capture(
         def.id,
@@ -1071,7 +1102,7 @@ fn resolve_config_path(def: &TargetDef, params: &Value) -> Result<PathBuf> {
         .map(PathBuf::from)
         .or_else(|| stored_config_path(def, params).ok().flatten())
         .or_else(|| default_config_path(def.id))
-        .ok_or_else(|| anyhow!("{} requires --config-path for config writes", def.label))
+        .ok_or_else(|| anyhow!("missing_config_path: {}", def.label))
 }
 
 fn stored_config_path(def: &TargetDef, params: &Value) -> Result<Option<PathBuf>> {
@@ -1178,6 +1209,56 @@ fn extract_first_collection_base_url(value: &Value) -> Option<String> {
     value
         .as_object()
         .and_then(|items| items.values().find_map(extract_discovery_base_url))
+}
+
+fn build_field_conflict_error(
+    target: &str,
+    config_path: &Path,
+    error_msg: &str,
+    current: &str,
+) -> Value {
+    let conflicts = parse_field_conflicts(error_msg, current);
+    json!({
+        "ok": false,
+        "status": "field_conflict",
+        "target": target,
+        "configPath": display_path(config_path.to_path_buf()),
+        "conflicts": conflicts
+    })
+}
+
+fn parse_field_conflicts(error_msg: &str, _current: &str) -> Vec<Value> {
+    let mut conflicts = Vec::new();
+    if let Some(rest) = error_msg.strip_prefix("field_conflict: ") {
+        let parts: Vec<&str> = rest.splitn(2, " is a ").collect();
+        if parts.len() == 2 {
+            let _path_segment = parts[0].trim().trim_matches('\'');
+            let rest = parts[1];
+            let type_parts: Vec<&str> = rest
+                .splitn(2, " but expected an object for path ")
+                .collect();
+            if type_parts.len() == 2 {
+                let current_type = type_parts[0].trim().trim_matches('\'');
+                let full_path = type_parts[1].trim().trim_matches('\'');
+                conflicts.push(json!({
+                    "path": full_path,
+                    "reason": "expected_object",
+                    "currentType": current_type,
+                    "proposedType": "object"
+                }));
+            }
+        }
+    }
+    if conflicts.is_empty() {
+        conflicts.push(json!({
+            "path": "",
+            "reason": "unknown",
+            "currentType": "unknown",
+            "proposedType": "unknown",
+            "rawError": error_msg
+        }));
+    }
+    conflicts
 }
 
 fn snapshot_id_from_params(params: &Value) -> Result<String> {
@@ -1342,13 +1423,13 @@ mod tests {
     use super::*;
     use crate::mcp_trust;
 
-    fn signed_receipt_discovery(endpoint: &str, path: &Path) {
+    fn signed_receipt_discovery(endpoint: &str, path: &Path) -> String {
         use rand::RngCore;
         let mut bytes = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut bytes);
         let secret_bytes = bytes;
         let mcp_url = format!("{}/mcp", endpoint.trim_end_matches('/'));
-        let receipt = mcp_trust::test_signed_receipt(
+        let (receipt, public_key) = mcp_trust::test_signed_receipt(
             endpoint,
             &mcp_url,
             "test-key",
@@ -1358,9 +1439,11 @@ mod tests {
         );
         let doc = json!({
             "url": endpoint,
-            "trustReceipt": receipt
+            "trustReceipt": receipt,
+            "pinnedPublicKey": public_key
         });
         fs::write(path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+        public_key
     }
 
     fn forged_discovery(endpoint: &str, path: &Path) {
@@ -1681,8 +1764,9 @@ mod tests {
 
     #[test]
     fn targets_config_apply_raises_missing_path_for_target_without_default_path() {
-        let err = mcp_config_apply(&json!({"target": "openclaw"})).unwrap_err();
-        assert!(err.to_string().contains("requires --config-path"));
+        let result = mcp_config_apply(&json!({"target": "openclaw"})).unwrap();
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["status"], "missing_config_path");
     }
 
     #[test]
@@ -2150,10 +2234,12 @@ mod tests {
             "stateRoot": display_path(state_root),
             "discoveryFile": display_path(discovery_file.clone()),
             "token": "test-token"
-        }));
+        }))
+        .unwrap();
 
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("field_conflict"));
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["status"], "field_conflict");
+        assert!(!result["conflicts"].as_array().unwrap().is_empty());
         assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
     }
 

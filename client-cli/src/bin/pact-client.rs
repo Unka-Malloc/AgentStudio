@@ -269,7 +269,7 @@ mod tests {
         rand::thread_rng().fill_bytes(&mut bytes);
         let secret_bytes = bytes;
         let mcp_url = format!("{}/mcp", endpoint.trim_end_matches('/'));
-        let receipt = pact_client_native::mcp_trust::test_signed_receipt(
+        let (receipt, public_key) = pact_client_native::mcp_trust::test_signed_receipt(
             endpoint,
             &mcp_url,
             "test-key",
@@ -277,9 +277,10 @@ mod tests {
             "2099-01-01T00:00:00Z",
             &secret_bytes,
         );
-        let doc = json!({
+        let doc = serde_json::json!({
             "url": endpoint,
-            "trustReceipt": receipt
+            "trustReceipt": receipt,
+            "pinnedPublicKey": public_key
         });
         fs::write(path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
     }

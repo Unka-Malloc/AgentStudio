@@ -17,6 +17,7 @@ pub enum VerificationStatus {
     InvalidReceipt,
     ExpiredReceipt,
     EndpointMismatch,
+    UntrustedPublicKey,
 }
 
 impl VerificationStatus {
@@ -29,6 +30,7 @@ impl VerificationStatus {
             VerificationStatus::InvalidReceipt => "invalid_receipt",
             VerificationStatus::ExpiredReceipt => "expired_receipt",
             VerificationStatus::EndpointMismatch => "endpoint_mismatch",
+            VerificationStatus::UntrustedPublicKey => "untrusted_public_key",
         }
     }
 }
@@ -72,18 +74,28 @@ pub struct EndpointVerification {
 #[derive(Clone)]
 pub struct VerifyEnv {
     pub dev_allow_unverified_mcp: Option<String>,
+    pub pinned_public_key: Option<String>,
 }
 
 impl VerifyEnv {
     pub fn from_real_env() -> Self {
         Self {
             dev_allow_unverified_mcp: std::env::var("PACT_CLIENT_DEV_ALLOW_UNVERIFIED_MCP").ok(),
+            pinned_public_key: None,
         }
     }
 
     pub fn empty() -> Self {
         Self {
             dev_allow_unverified_mcp: None,
+            pinned_public_key: None,
+        }
+    }
+
+    pub fn with_pinned_key(key: String) -> Self {
+        Self {
+            dev_allow_unverified_mcp: None,
+            pinned_public_key: Some(key),
         }
     }
 
@@ -132,21 +144,27 @@ pub fn verify_endpoint_trust_with_env(
         return VerificationStatus::Unverified;
     }
 
-    if let Some(status) = verify_endpoint_via_receipt(endpoint, params) {
+    if let Some(status) = verify_endpoint_via_receipt(endpoint, params, env) {
         return status;
     }
 
     VerificationStatus::VerificationRequired
 }
 
-fn verify_endpoint_via_receipt(endpoint: &str, params: &Value) -> Option<VerificationStatus> {
+fn verify_endpoint_via_receipt(
+    endpoint: &str,
+    params: &Value,
+    env: &VerifyEnv,
+) -> Option<VerificationStatus> {
+    let pinned_key = resolve_pinned_key(params, env);
+
     let check_file = |path_key: &str| -> Option<VerificationStatus> {
         let file_path = params.get(path_key).and_then(Value::as_str)?;
         let json_str = fs::read_to_string(file_path).ok()?;
         let json: Value = serde_json::from_str(&json_str).ok()?;
 
         let receipt = extract_receipt_from_json(&json)?;
-        verify_trust_receipt(endpoint, &receipt)
+        verify_trust_receipt(endpoint, &receipt, pinned_key.as_deref())
     };
 
     if let Some(status) = check_file("discoveryFile") {
@@ -160,6 +178,37 @@ fn verify_endpoint_via_receipt(endpoint: &str, params: &Value) -> Option<Verific
     None
 }
 
+fn resolve_pinned_key(params: &Value, env: &VerifyEnv) -> Option<String> {
+    if let Some(key) = &env.pinned_public_key {
+        let trimmed = key.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Some(key) = params.get("pinnedKey").and_then(Value::as_str) {
+        let trimmed = key.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    let read_pinned_from_file = |path_key: &str| -> Option<String> {
+        let file_path = params.get(path_key).and_then(Value::as_str)?;
+        let json_str = fs::read_to_string(file_path).ok()?;
+        let json: Value = serde_json::from_str(&json_str).ok()?;
+        json.get("pinnedPublicKey")
+            .and_then(Value::as_str)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+    if let Some(key) = read_pinned_from_file("discoveryFile") {
+        return Some(key);
+    }
+    if let Some(key) = read_pinned_from_file("registryFile") {
+        return Some(key);
+    }
+    None
+}
+
 fn extract_receipt_from_json(json: &Value) -> Option<TrustReceipt> {
     if let Some(receipt) = json.get("trustReceipt") {
         if let Ok(receipt) = serde_json::from_value::<TrustReceipt>(receipt.clone()) {
@@ -169,8 +218,16 @@ fn extract_receipt_from_json(json: &Value) -> Option<TrustReceipt> {
     serde_json::from_value::<TrustReceipt>(json.clone()).ok()
 }
 
-fn verify_trust_receipt(endpoint: &str, receipt: &TrustReceipt) -> Option<VerificationStatus> {
+fn verify_trust_receipt(
+    endpoint: &str,
+    receipt: &TrustReceipt,
+    pinned_key: Option<&str>,
+) -> Option<VerificationStatus> {
     if receipt.kind != RECEIPT_KIND {
+        return Some(VerificationStatus::InvalidReceipt);
+    }
+
+    if receipt.schema_version != 1 {
         return Some(VerificationStatus::InvalidReceipt);
     }
 
@@ -190,6 +247,14 @@ fn verify_trust_receipt(endpoint: &str, receipt: &TrustReceipt) -> Option<Verifi
         Ok(bytes) if bytes.len() == 32 => bytes,
         _ => return Some(VerificationStatus::InvalidReceipt),
     };
+
+    if let Some(pinned) = pinned_key {
+        if pinned != receipt.server_identity.public_key_ed25519.trim() {
+            return Some(VerificationStatus::UntrustedPublicKey);
+        }
+    } else {
+        return Some(VerificationStatus::UntrustedPublicKey);
+    }
 
     let verifying_key = VerifyingKey::from_bytes(&public_key_bytes[..32].try_into().ok()?).ok()?;
 
@@ -344,7 +409,7 @@ pub fn test_signed_receipt(
     issued_at: &str,
     expires_at: &str,
     secret_bytes: &[u8; 32],
-) -> Value {
+) -> (Value, String) {
     use ed25519_dalek::Signer;
 
     let secret = ed25519_dalek::SecretKey::from(*secret_bytes);
@@ -366,7 +431,7 @@ pub fn test_signed_receipt(
     let signature = signing_key.sign(canonical.as_bytes());
     let signature_b64 = BASE64.encode(signature.to_bytes());
 
-    json!({
+    let receipt = json!({
         "schemaVersion": 1,
         "kind": "pact.mcp.trust-receipt.v1",
         "endpoint": endpoint,
@@ -379,7 +444,8 @@ pub fn test_signed_receipt(
         "expiresAt": expires_at,
         "handshake": handshake,
         "signature": signature_b64
-    })
+    });
+    (receipt, public_key_b64)
 }
 
 #[cfg(test)]
@@ -474,7 +540,42 @@ mod tests {
         let signing_key = test_signing_key();
         let secret_bytes = signing_key.to_bytes();
 
-        let receipt = test_signed_receipt(
+        let (receipt, public_key_b64) = test_signed_receipt(
+            "http://127.0.0.1:7228",
+            "http://127.0.0.1:7228/mcp",
+            "pact-server-key-1",
+            "2026-06-09T00:00:00Z",
+            "2099-01-01T00:00:00Z",
+            &secret_bytes,
+        );
+
+        let doc = json!({
+            "url": "http://127.0.0.1:7228",
+            "trustReceipt": receipt
+        });
+        fs::write(&discovery_path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+
+        let env = VerifyEnv::with_pinned_key(public_key_b64);
+        let result = resolve_and_verify_endpoint_with_env(
+            &json!({"discoveryFile": discovery_path.to_string_lossy().to_string()}),
+            &env,
+        )
+        .unwrap();
+
+        assert_eq!(result.status, VerificationStatus::Verified);
+        assert_eq!(result.endpoint, "http://127.0.0.1:7228");
+        assert_eq!(result.source, "discovery-file");
+    }
+
+    #[test]
+    fn receipt_without_pinned_key_returns_untrusted_public_key() {
+        let dir = temp_test_dir("no-pinned-key");
+        let discovery_path = dir.join("discovery.json");
+
+        let signing_key = test_signing_key();
+        let secret_bytes = signing_key.to_bytes();
+
+        let (receipt, _public_key) = test_signed_receipt(
             "http://127.0.0.1:7228",
             "http://127.0.0.1:7228/mcp",
             "pact-server-key-1",
@@ -496,9 +597,76 @@ mod tests {
         )
         .unwrap();
 
+        assert_eq!(result.status, VerificationStatus::UntrustedPublicKey);
+    }
+
+    #[test]
+    fn receipt_with_wrong_pinned_key_returns_untrusted() {
+        let dir = temp_test_dir("wrong-pinned");
+        let discovery_path = dir.join("discovery.json");
+
+        let signing_key = test_signing_key();
+        let secret_bytes = signing_key.to_bytes();
+
+        let (receipt, _public_key) = test_signed_receipt(
+            "http://127.0.0.1:7228",
+            "http://127.0.0.1:7228/mcp",
+            "pact-server-key-1",
+            "2026-06-09T00:00:00Z",
+            "2099-01-01T00:00:00Z",
+            &secret_bytes,
+        );
+
+        let doc = json!({
+            "url": "http://127.0.0.1:7228",
+            "trustReceipt": receipt
+        });
+        fs::write(&discovery_path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+
+        let env = VerifyEnv::with_pinned_key("not-the-real-key-base64-encoded".to_string());
+        let result = resolve_and_verify_endpoint_with_env(
+            &json!({"discoveryFile": discovery_path.to_string_lossy().to_string()}),
+            &env,
+        )
+        .unwrap();
+
+        assert_eq!(result.status, VerificationStatus::UntrustedPublicKey);
+    }
+
+    #[test]
+    fn receipt_with_pinned_key_from_params_is_verified() {
+        let dir = temp_test_dir("pinned-key-params");
+        let discovery_path = dir.join("discovery.json");
+
+        let signing_key = test_signing_key();
+        let secret_bytes = signing_key.to_bytes();
+
+        let (receipt, public_key_b64) = test_signed_receipt(
+            "http://127.0.0.1:7228",
+            "http://127.0.0.1:7228/mcp",
+            "pact-server-key-1",
+            "2026-06-09T00:00:00Z",
+            "2099-01-01T00:00:00Z",
+            &secret_bytes,
+        );
+
+        let doc = json!({
+            "url": "http://127.0.0.1:7228",
+            "trustReceipt": receipt
+        });
+        fs::write(&discovery_path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+
+        let env = VerifyEnv::empty();
+        let result = resolve_and_verify_endpoint_with_env(
+            &json!({
+                "discoveryFile": discovery_path.to_string_lossy().to_string(),
+                "pinnedKey": public_key_b64
+            }),
+            &env,
+        )
+        .unwrap();
+
         assert_eq!(result.status, VerificationStatus::Verified);
-        assert_eq!(result.endpoint, "http://127.0.0.1:7228");
-        assert_eq!(result.source, "discovery-file");
     }
 
     #[test]
@@ -509,7 +677,7 @@ mod tests {
         let signing_key = test_signing_key();
         let secret_bytes = signing_key.to_bytes();
 
-        let receipt = test_signed_receipt(
+        let (receipt, public_key) = test_signed_receipt(
             "http://other.local:7228",
             "http://other.local:7228/mcp",
             "pact-server-key-1",
@@ -524,7 +692,7 @@ mod tests {
         });
         fs::write(&discovery_path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
 
-        let env = VerifyEnv::empty();
+        let env = VerifyEnv::with_pinned_key(public_key);
         let result = resolve_and_verify_endpoint_with_env(
             &json!({"discoveryFile": discovery_path.to_string_lossy().to_string()}),
             &env,
@@ -542,7 +710,7 @@ mod tests {
         let signing_key = test_signing_key();
         let secret_bytes = signing_key.to_bytes();
 
-        let receipt = test_signed_receipt(
+        let (receipt, public_key) = test_signed_receipt(
             "http://127.0.0.1:7228",
             "http://127.0.0.1:7228/mcp",
             "pact-server-key-1",
@@ -557,7 +725,7 @@ mod tests {
         });
         fs::write(&discovery_path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
 
-        let env = VerifyEnv::empty();
+        let env = VerifyEnv::with_pinned_key(public_key);
         let result = resolve_and_verify_endpoint_with_env(
             &json!({"discoveryFile": discovery_path.to_string_lossy().to_string()}),
             &env,
@@ -575,7 +743,7 @@ mod tests {
         let signing_key = test_signing_key();
         let secret_bytes = signing_key.to_bytes();
 
-        let mut receipt = test_signed_receipt(
+        let (mut receipt, public_key) = test_signed_receipt(
             "http://127.0.0.1:7228",
             "http://127.0.0.1:7228/mcp",
             "pact-server-key-1",
@@ -592,7 +760,7 @@ mod tests {
         });
         fs::write(&discovery_path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
 
-        let env = VerifyEnv::empty();
+        let env = VerifyEnv::with_pinned_key(public_key);
         let result = resolve_and_verify_endpoint_with_env(
             &json!({"discoveryFile": discovery_path.to_string_lossy().to_string()}),
             &env,
@@ -606,6 +774,7 @@ mod tests {
     fn dev_override_returns_unverified_but_never_verified() {
         let env = VerifyEnv {
             dev_allow_unverified_mcp: Some("1".to_string()),
+            pinned_public_key: None,
         };
         let result = verify_endpoint_trust_with_env("http://127.0.0.1:7228", &json!({}), &env);
         assert_eq!(result, VerificationStatus::Unverified);
