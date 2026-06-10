@@ -428,23 +428,7 @@ for (const serviceName of externalServiceNames) {
   }
   for (const operationId of requirement.deprecatedInternalOperationIds || []) {
     const operation = operationsById.get(operationId);
-    assert.ok(operation, `${operationId} must remain registered only as a migration shim until callers move`);
-    assert.equal(operation.deprecated, true, `${operationId} must be marked deprecated`);
-    assert.equal(
-      operation.replacementService,
-      requirement.namespace,
-      `${operationId} must point to ${requirement.namespace}`
-    );
-    assert.equal(
-      operation.lifecycle?.maintenancePolicy,
-      "compatibility-shim-only",
-      `${operationId} must not be treated as a maintained algorithm surface`
-    );
-    assert.equal(
-      operation.aspects?.includes("internal-deprecated"),
-      true,
-      `${operationId} must expose an internal-deprecated aspect`
-    );
+    assert.equal(operation, undefined, `${operationId} legacy internal operation must not remain registered after migration to ${requirement.namespace}`);
     assert.equal(
       toolsByOperationId.has(operationId),
       false,
@@ -492,9 +476,10 @@ const operationExecutorText = await fs.readFile(
   path.join(repoRoot, "server/platform/specialized/console/console-domain-operation-executor.mjs"),
   "utf8"
 );
-assert.match(
-  operationExecutorText,
-  "internal knowledge distillation operations must return a machine-readable migration response"
+assert.equal(
+  operationExecutorText.replace(/external\.knowledge\.distillation\./g, "").includes("knowledge.distillation."),
+  false,
+  "console domain operation executor must not reference internal knowledge distillation operation ids"
 );
 
 console.log("external service API registration gate passed");

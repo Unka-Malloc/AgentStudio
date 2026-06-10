@@ -78,8 +78,7 @@ vi.mock("../../../server/platform/specialized/knowledge/transformation/knowledge
         filteredReason: "test_reason"
       }
     })),
-    exportDossier: vi.fn(async () => ({ ok: true, dossierId: "dossier-1" })),
-    exportDistillation: vi.fn(async () => ({ ok: true }))
+    exportDossier: vi.fn(async () => ({ ok: true, dossierId: "dossier-1" }))
   }))
 }));
 
@@ -260,7 +259,7 @@ describe("console-domain executor additional dispatch coverage", () => {
       const calls = [
         ["raw-corpus.format.convert", {}, 200],
         ["knowledge.dossier.export", {}, 200],
-        ["knowledge.distillation.export", {}, 410],
+        ["knowledge.distillation.export", {}, 501],
         ["asset_lineage.describe", {}, 200],
         ["asset_lineage.record", { record: { sourceId: "s-1" } }, 200],
         ["asset_lineage.record", { record: { fail: true } }, 400],

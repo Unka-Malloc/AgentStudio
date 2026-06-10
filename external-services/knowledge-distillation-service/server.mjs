@@ -18971,11 +18971,16 @@ function classifyDocuments(documents = []) {
       supportDocuments.push(document);
       continue;
     }
-    const windowPreview = (document.windowPlan?.windows || [])
-      .slice(0, 8)
+    const allWindows = document.windowPlan?.windows || [];
+    const headExcerpts = allWindows.slice(0, 4);
+    const midStart = Math.max(0, Math.floor(allWindows.length / 2) - 2);
+    const middleExcerpts = allWindows.slice(midStart, midStart + 4);
+    const tailExcerpts = allWindows.slice(-4);
+    const sampledExcerpts = [...headExcerpts, ...middleExcerpts, ...tailExcerpts]
+      .filter((w, i, arr) => w && arr.findIndex((o) => o?.excerpt === w.excerpt) === i)
       .map((window) => window.excerpt)
       .join("\n");
-    const tokens = textTokens(`${document.title}\n${document.text.slice(0, 12_000)}\n${windowPreview}`);
+    const tokens = textTokens(`${document.title}\n${document.text.slice(0, 12_000)}\n${sampledExcerpts}`);
     const expandedTokens = expandedSemanticTokens(tokens);
     const vector = vectorForTokens(expandedTokens);
     const signal = signalStrength({ text: document.text, tokens });
@@ -22530,7 +22535,6 @@ async function callClassificationGroupModelGatewayCalls({
   const maxGroupCalls = Math.max(1, Number(policy.maxGroupCalls || 32));
   let completedCalls = 0;
   for (const group of selectedGroups) {
-    if (group.excludedFromCore && policy.includeGarbageGroups !== true) {
       results.set(group.groupId, classificationGroupModelCallSkippedRecord(group, policy, "garbage-group-excluded-from-model-call"));
       continue;
     }
@@ -22594,6 +22598,44 @@ async function callModelDistillationGateway({ distillationWorkflow = {}, config 
     profile,
     selectedGroups
   });
+  const garbageGroups = (distillationWorkflow.classification?.groups || []).filter((g) => g.kind === "garbage");
+  const garbageDocumentTotal = garbageGroups.reduce((sum, g) => sum + (g.sourceIds || []).length, 0);
+  const garbagePossibleSignalCount = garbageGroups.filter((group) =>
+    (group.sourceIds || []).some((sourceId) => {
+      const doc = (distillationWorkflow.documents || []).find((d) => d.sourceId === sourceId);
+      return doc && ((doc.byteSize || 0) > 500 || (doc.text || "").length > 200);
+    })
+  ).length;
+  const garbageGroupSummary = {
+    garbageGroupCount: garbageGroups.length,
+    garbageDocumentCount: garbageDocumentTotal,
+    garbageModelReviewSkippedCount: garbageGroups.length,
+    skippedReason: "garbage-group-excluded-from-model-call",
+    warning: garbagePossibleSignalCount > 0 ? "POSSIBLE_SIGNAL_FALSE_NEGATIVE_IN_GARBAGE_GROUP" : null
+  };
+  const allGroups = distillationWorkflow.classification?.groups || [];
+  const docOrderHash = crypto.createHash("sha256").update(
+    JSON.stringify((distillationWorkflow.documents || []).map((d) => d.sourceId || d.documentId || ""))
+  ).digest("hex").slice(0, 16);
+  const leaderClusteringAudit = {
+    inputOrderSensitive: true,
+    strategy: "leader-clustering-semantic-concept-rationale.v1",
+    documentOrderHash: docOrderHash,
+    recommendedStableSortKey: "sourceId"
+  };
+  const totalDocuments = (distillationWorkflow.documents || []).length;
+  const promptedDocuments = Math.min(totalDocuments, profile.promptLimits.documents);
+  const omittedDocuments = totalDocuments - promptedDocuments;
+  const totalGroups = (distillationWorkflow.classification?.groups || []).length;
+  const promptedGroups = Math.min(totalGroups, profile.promptLimits.groups);
+  const omittedGroups = totalGroups - promptedGroups;
+  const totalDomains = (distillationWorkflow.convergence?.domains || []).length;
+  const promptedDomains = Math.min(totalDomains, profile.promptLimits.domains);
+  const omittedDomains = totalDomains - promptedDomains;
+  const promptTruncationWarning = (omittedDocuments > 0 || omittedGroups > 0 || omittedDomains > 0)
+    ? "MODEL_DISTILLATION_PROMPT_TRUNCATED"
+    : null;
+
   const classificationDistillation = buildClassificationDistillationMap(
     distillationWorkflow,
     projectCall.response.text,
@@ -22616,7 +22658,21 @@ async function callModelDistillationGateway({ distillationWorkflow = {}, config 
     outputValidation,
     machineReadablePayload: outputValidation.machineReadablePayload || null,
     groupGatewayCalls: classificationDistillation.groupGatewayCalls,
-    classificationDistillation
+    classificationDistillation,
+    garbageGroupSummary,
+    leaderClusteringAudit,
+    promptTruncation: {
+      warning: promptTruncationWarning,
+      totalDocumentCount: totalDocuments,
+      promptedDocumentCount: promptedDocuments,
+      omittedDocumentCount: omittedDocuments,
+      totalGroupCount: totalGroups,
+      promptedGroupCount: promptedGroups,
+      omittedGroupCount: omittedGroups,
+      totalDomainCount: totalDomains,
+      promptedDomainCount: promptedDomains,
+      omittedDomainCount: omittedDomains
+    }
   };
 }
 
@@ -22866,6 +22922,7 @@ function buildDocumentClassification(documents = []) {
     strategy: CLASSIFICATION_STRATEGY,
     taxonomyStrategy: "semantic-concept-topic-hierarchy.v1",
     assignmentRationaleStrategy: "leader-clustering-semantic-concept-rationale.v1",
+    classificationSamplingStrategy: "multi-window-head-middle-tail.v1",
     referencePatterns: [
       "graphrag.community-reports",
       "llama-index.nodes-with-metadata",
@@ -23911,6 +23968,16 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       outputRepairMaxAttempts: MODEL_DISTILLATION_OUTPUT_REPAIR_MAX_ATTEMPTS,
       noBuiltinFallback: true,
       dependency: "agent-gateway"
+    },
+    thresholds: {
+      calibration: "static-v1",
+      leaderClusterThreshold: LEADER_CLUSTER_THRESHOLD,
+      windowCommunityClusterThreshold: WINDOW_COMMUNITY_CLUSTER_THRESHOLD,
+      crossTopicLinkThreshold: CROSS_TOPIC_LINK_THRESHOLD,
+      classificationSeparationThreshold: CLASSIFICATION_SEPARATION_THRESHOLD,
+      garbageSignalThreshold: GARBAGE_SIGNAL_THRESHOLD,
+      groundingSupportThreshold: GROUNDING_SUPPORT_THRESHOLD,
+      groundingConflictThreshold: GROUNDING_CONFLICT_THRESHOLD
     },
     algorithms: [
       "external-service.route-window-embedding-grounded-distillation.v1",

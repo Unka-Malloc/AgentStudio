@@ -23,6 +23,8 @@ class TargetCandidate {
   final String? binaryPath;
   final bool manual;
   final String adapterStatus;
+  final Map<String, dynamic> adapterCapabilities;
+  final List<String> supportedActions;
 
   TargetCandidate({
     required this.target,
@@ -36,7 +38,17 @@ class TargetCandidate {
     this.binaryPath,
     this.manual = false,
     required this.adapterStatus,
-  });
+    Map<String, dynamic>? adapterCapabilities,
+    List<String>? supportedActions,
+  })  : adapterCapabilities = adapterCapabilities ?? const {},
+        supportedActions = supportedActions ?? const [];
+
+  bool supportsAction(String action) {
+    return supportedActions.contains(action);
+  }
+
+  bool get canUpdateMcpPlugin => supportsAction('mcp.plugin.update');
+  bool get canRollbackMcpPlugin => supportsAction('mcp.plugin.rollback');
 
   factory TargetCandidate.fromJson(Map<String, dynamic> json) {
     return TargetCandidate(
@@ -51,6 +63,12 @@ class TargetCandidate {
       binaryPath: json['binaryPath']?.toString(),
       manual: json['manual'] == true,
       adapterStatus: (json['adapterStatus'] ?? '').toString(),
+      adapterCapabilities: json['adapterCapabilities'] is Map<String, dynamic>
+          ? Map<String, dynamic>.from(json['adapterCapabilities'] as Map)
+          : null,
+      supportedActions: json['supportedActions'] is List
+          ? (json['supportedActions'] as List).whereType<String>().toList()
+          : null,
     );
   }
 }
@@ -126,7 +144,6 @@ class AgentService with AgentServiceActions {
     }
     
     if (cli == null) {
-      // Fallback to expecting pact-client in PATH
       try {
         final result = await _runCliExecutable('pact-client', args, env);
         if (result.exitCode != 0) {

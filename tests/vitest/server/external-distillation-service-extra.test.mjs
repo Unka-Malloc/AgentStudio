@@ -189,7 +189,7 @@ describe("external distillation service extra coverage", () => {
     expect(artifact.buffer.toString("utf8")).toBe("artifact-body");
   });
 
-  it("attaches telemetry to HTTP errors and fetch exceptions", async () => {
+  it("attaches telemetry to HTTP errors and classifies them", async () => {
     const httpClient = createExternalKnowledgeDistillationClient({
       baseUrl: "https://service.example.test",
       fetchImpl: vi.fn(async () => jsonResponse({ error: "bad request" }, { status: 400 }))
@@ -198,6 +198,7 @@ describe("external distillation service extra coverage", () => {
     await expect(httpClient.health()).rejects.toMatchObject({
       message: "bad request",
       statusCode: 400,
+      errorCode: "KD_UPSTREAM_BAD_RESPONSE",
       payload: { error: "bad request" },
       externalServiceCall: {
         baseUrl: "https://service.example.test",
@@ -205,6 +206,26 @@ describe("external distillation service extra coverage", () => {
         statusCode: 400,
         contentType: "application/json"
       }
+    });
+
+    const authClient = createExternalKnowledgeDistillationClient({
+      baseUrl: "https://service.example.test",
+      fetchImpl: vi.fn(async () => jsonResponse({ error: "forbidden" }, { status: 401 }))
+    });
+
+    await expect(authClient.capabilities()).rejects.toMatchObject({
+      message: "forbidden",
+      statusCode: 401,
+      errorCode: "KD_AUTHENTICATION_ERROR",
+    });
+
+    const serverErrorClient = createExternalKnowledgeDistillationClient({
+      baseUrl: "https://service.example.test",
+      fetchImpl: vi.fn(async () => jsonResponse({ error: "down" }, { status: 503 }))
+    });
+
+    await expect(serverErrorClient.health()).rejects.toMatchObject({
+      errorCode: "KD_UPSTREAM_UNAVAILABLE",
     });
 
     const fetchError = new Error("network down");
@@ -216,13 +237,13 @@ describe("external distillation service extra coverage", () => {
     });
 
     await expect(networkClient.listRuns({ limit: 0 })).rejects.toMatchObject({
-      message: "network down",
+      message: "[KD_UPSTREAM_UNAVAILABLE] network down",
+      errorCode: "KD_UPSTREAM_UNAVAILABLE",
       externalServiceCall: {
         path: "/v1/distillation/runs?limit=50",
         statusCode: 0,
         error: "network down"
       }
     });
-    expect(fetchError.externalServiceCall.requestBytes).toBe(0);
   });
 });

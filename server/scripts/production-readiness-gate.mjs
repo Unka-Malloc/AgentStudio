@@ -118,7 +118,6 @@ const GATES = [
     owner: "knowledge-distillation",
     coverage: ["distillation-evaluation"],
     commands: [
-      ["npm", "run", "server:verify:knowledge-distillation-workbench"],
       ["npm", "run", "server:verify:knowledge-industrial-distillation"],
       ["npm", "run", "server:verify:knowledge-distillation-optimization"]
     ],

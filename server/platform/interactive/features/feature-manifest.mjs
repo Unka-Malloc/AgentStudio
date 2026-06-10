@@ -590,6 +590,19 @@ export const FEATURE_MANIFEST = Object.freeze({
       tests: { suites: ["server:verify:knowledge-distillation-standalone-service"] }
     },
     {
+      featureId: "knowledge-distillation",
+      label: "Knowledge distillation (migrated to external service)",
+      group: "knowledge",
+      dependsOn: ["knowledge-core"],
+      defaultEnabled: true,
+      lifecycle: {
+        status: "must-migrate",
+        replacementFeature: "external-knowledge-distillation",
+        note: "Legacy feature marker; all distillation operations are now handled by external.knowledge.distillation"
+      },
+      package: { includePaths: [], removePaths: [] }
+    },
+    {
       featureId: "knowledge-evolution",
       label: "Knowledge evolution, learning jobs, evaluation deployments",
       group: "knowledge",
@@ -1185,7 +1198,6 @@ export function operationFeatureId(operation = {}) {
     operationId.startsWith("knowledge.golden_rules.") ||
     operationId.startsWith("knowledge.rule_authoring.") ||
     operationId.startsWith("knowledge.gold_cases.") ||
-    operationId.startsWith("knowledge.distillation.") ||
     operationId.startsWith("knowledge.summarization.") ||
     operationId.startsWith("knowledge.training_sets.") ||
     operationId.startsWith("knowledge.evaluation.") ||

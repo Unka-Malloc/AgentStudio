@@ -151,20 +151,18 @@ describe("system controller workspace protocol handlers", () => {
 
     await fixture.handlers.handleRawCorpusFormatConvert({ operation: null, requestBody, response, authSession });
     await fixture.handlers.handleKnowledgeDossierExport({ operation: null, requestBody, response, authSession });
-    await fixture.handlers.handleKnowledgeDistillationExport({ operation: { id: "custom.distill.export" }, requestBody, response, authSession });
 
-    const calls = fixture.sendConsoleDomainOperation.mock.calls.slice(-3).map((call) => call[0]);
+    const calls = fixture.sendConsoleDomainOperation.mock.calls.slice(-2).map((call) => call[0]);
     expect(calls.map((call) => call.operationId)).toEqual([
       "raw-corpus.format.convert",
-      "knowledge.dossier.export",
-      "custom.distill.export"
+      "knowledge.dossier.export"
     ]);
     expect(calls.every((call) => call.context.workflow === true && call.context.access === true)).toBe(true);
     expect(calls[0].context).toMatchObject({
       authFromWorkflow: "distiller",
       authFromAccess: "distiller"
     });
-    expect(fixture.knowledgeWorkflowContext).toHaveBeenCalledTimes(3);
-    expect(fixture.accessControlContext).toHaveBeenCalledTimes(3);
+    expect(fixture.knowledgeWorkflowContext).toHaveBeenCalledTimes(2);
+    expect(fixture.accessControlContext).toHaveBeenCalledTimes(2);
   });
 });

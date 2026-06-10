@@ -1,4 +1,5 @@
 use crate::client_state::ClientStateStore;
+use crate::mcp_trust;
 use anyhow::{Result, anyhow};
 use directories::UserDirs;
 use serde::{Deserialize, Serialize};
@@ -9,15 +10,6 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-
-const SUPPORTED_ACTIONS: &[&str] = &[
-    "scan",
-    "add",
-    "inspect",
-    "mcp.config.plan",
-    "mcp.config.apply",
-    "mcp.config.rollback",
-];
 
 #[derive(Clone, Debug)]
 struct TargetDef {
@@ -66,6 +58,58 @@ struct ManualTarget {
     kind: String,
     config_path: Option<PathBuf>,
     binary_path: Option<PathBuf>,
+}
+
+fn adapter_supports_action(target: &str, action: &str) -> bool {
+    let caps = adapter_capabilities_for(target);
+    match action {
+        "mcp.config.plan" => caps.config_plan == "implemented" || caps.config_plan == "partial",
+        "mcp.config.apply" | "mcp.plugin.update" => caps.config_apply == "implemented",
+        "mcp.config.rollback" | "mcp.plugin.rollback" => caps.rollback == "implemented",
+        "mcp.plugin.status" => true,
+        _ => false,
+    }
+}
+
+fn adapter_capabilities_for(target: &str) -> AdapterCapabilities {
+    let apply_targets: &[&str] = &[
+        "openclaw",
+        "gemini-cli",
+        "antigravity",
+        "opencode",
+        "windsurf",
+        "cursor",
+    ];
+    let plan_only_targets: &[&str] = &["codex", "kilo-code", "claude-code", "copilot", "hermes"];
+
+    if apply_targets.contains(&target) {
+        AdapterCapabilities {
+            detection: "implemented".to_string(),
+            config_read: "implemented".to_string(),
+            config_plan: "implemented".to_string(),
+            config_apply: "implemented".to_string(),
+            rollback: "implemented".to_string(),
+            official_cli: "unknown".to_string(),
+        }
+    } else if plan_only_targets.contains(&target) {
+        AdapterCapabilities {
+            detection: "implemented".to_string(),
+            config_read: "partial".to_string(),
+            config_plan: "partial".to_string(),
+            config_apply: "unsupported".to_string(),
+            rollback: "unsupported".to_string(),
+            official_cli: "unknown".to_string(),
+        }
+    } else {
+        AdapterCapabilities {
+            detection: "implemented".to_string(),
+            config_read: "unsupported".to_string(),
+            config_plan: "unsupported".to_string(),
+            config_apply: "unsupported".to_string(),
+            rollback: "unsupported".to_string(),
+            official_cli: "unknown".to_string(),
+        }
+    }
 }
 
 fn target_defs() -> Vec<TargetDef> {
@@ -225,45 +269,77 @@ pub fn mcp_config_plan(params: &Value) -> Result<Value> {
     let target = target_param(params)?;
     let def = target_def(&target)?;
     let config_path = resolve_config_path(&def, params).ok();
-    
-    let verification = crate::mcp_trust::resolve_and_verify_endpoint(params)?;
-        let apply_allowed = verification.status == crate::mcp_trust::VerificationStatus::Verified || 
-                            verification.status == crate::mcp_trust::VerificationStatus::DevUnverifiedOverride;
-        
-        let base_url = verification.endpoint;
-        let token_ref = token_ref(params);
-        Ok(json!({
-            "ok": true,
-            "status": "planned",
-            "target": def.id,
-            "label": def.label,
-            "endpointSource": verification.source,
-            "verificationStatus": verification.status.as_str(),
-            "applyAllowed": apply_allowed,
-            "requiredAction": if apply_allowed { "none" } else { "verify_endpoint" },
-            "plan": {
-                "operation": "mcp.config.apply",
-                "configPath": config_path.map(display_path),
-                "baseUrl": base_url.clone(),
-                "tokenRef": token_ref.clone(),
-                "fields": target_fields_with_values(def.id, &base_url, &token_ref),
-                "requiresSnapshot": true,
-                "requiresStructuredPatch": true,
-                "requiresAtomicWrite": true,
-                "rollbackCommand": "pact-client mcp config rollback --target <target> --snapshot-id <snapshotId>"
-            }
-        }))
+
+    let verification = mcp_trust::resolve_and_verify_endpoint(params)?;
+    let caps = adapter_capabilities_for(def.id);
+    let adapter_supports_apply = adapter_supports_action(def.id, "mcp.config.apply");
+
+    let endpoint_verified = verification.status == mcp_trust::VerificationStatus::Verified;
+    let has_config_path = config_path.is_some();
+    let apply_allowed = endpoint_verified && adapter_supports_apply && has_config_path;
+
+    let apply_blocked_reason = if !adapter_supports_apply {
+        "adapter_unsupported"
+    } else if !endpoint_verified {
+        "verification_required"
+    } else if !has_config_path {
+        "missing_config_path"
+    } else {
+        "none"
+    };
+
+    let required_action = if adapter_supports_apply {
+        if !endpoint_verified {
+            "verify_endpoint"
+        } else {
+            "none"
+        }
+    } else if caps.config_plan == "partial" {
+        "manual_config"
+    } else {
+        "unsupported_adapter"
+    };
+
+    let base_url = verification.endpoint;
+    let token_ref = token_ref(params);
+
+    let format_loss_risk = config_path
+        .as_ref()
+        .map(|p| config_has_jsonc_comments(p))
+        .unwrap_or(false);
+
+    Ok(json!({
+        "ok": true,
+        "status": "planned",
+        "target": def.id,
+        "label": def.label,
+        "endpointSource": verification.source,
+        "verificationStatus": verification.status.as_str(),
+        "adapterCapabilities": caps,
+        "adapterApplyStatus": caps.config_apply,
+        "applyAllowed": apply_allowed,
+        "applyBlockedReason": apply_blocked_reason,
+        "formatLossRisk": format_loss_risk,
+        "requiredAction": required_action,
+        "plan": {
+            "operation": "mcp.config.apply",
+            "configPath": config_path.map(display_path),
+            "baseUrl": base_url.clone(),
+            "tokenRef": token_ref.clone(),
+            "fields": target_fields_with_values(def.id, &base_url, &token_ref),
+            "requiresSnapshot": true,
+            "requiresStructuredPatch": true,
+            "requiresAtomicWrite": true,
+            "rollbackCommand": "pact-client mcp config rollback --target <target> --snapshot-id <snapshotId>"
+        }
+    }))
 }
 
 pub fn mcp_config_apply(params: &Value) -> Result<Value> {
     let target = target_param(params)?;
     let def = target_def(&target)?;
 
-    let supports_apply = matches!(
-        def.id,
-        "openclaw" | "gemini-cli" | "antigravity" | "opencode" | "windsurf" | "cursor"
-    );
-    if !supports_apply {
+    if !adapter_supports_action(def.id, "mcp.config.apply") {
         return Ok(json!({
             "ok": false,
             "status": "unsupported_adapter_action",
@@ -274,36 +350,52 @@ pub fn mcp_config_apply(params: &Value) -> Result<Value> {
     }
 
     let config_path = resolve_config_path(&def, params)?;
-    
-    let verification = crate::mcp_trust::resolve_and_verify_endpoint(params)?;
-    if verification.status != crate::mcp_trust::VerificationStatus::Verified && 
-       verification.status != crate::mcp_trust::VerificationStatus::DevUnverifiedOverride {
+
+    let verification = mcp_trust::resolve_and_verify_endpoint(params)?;
+    let status = verification.status;
+    if status != mcp_trust::VerificationStatus::Verified {
         return Ok(json!({
             "ok": false,
-            "status": "verification_required",
+            "status": status.as_str(),
             "target": target,
             "endpoint": verification.endpoint,
             "message": "MCP endpoint must be verified before applying target config."
         }));
     }
-    
+
     let base_url = verification.endpoint;
     let token_ref = token_ref(params);
     let current = fs::read_to_string(&config_path).unwrap_or_default();
     let before_hash = hash_text(&current);
+
     if let Some(expected_hash) = params.get("expectedHash").and_then(Value::as_str) {
         if expected_hash != before_hash {
             return Ok(json!({
                 "ok": false,
                 "status": "field_conflict",
                 "target": def.id,
-                "configPath": display_path(config_path),
+                "configPath": display_path(config_path.clone()),
                 "expectedHash": expected_hash,
                 "actualHash": before_hash,
                 "message": "Target config changed after plan; refusing to overwrite without a new plan."
             }));
         }
     }
+
+    let explicit_format_rewrite = params
+        .get("explicitFormatRewrite")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if config_has_jsonc_comments(&config_path) && !explicit_format_rewrite {
+        return Ok(json!({
+            "ok": false,
+            "status": "format_loss_confirmation_required",
+            "target": def.id,
+            "configPath": display_path(config_path.clone()),
+            "message": "Target config contains comments that would be lost. Set explicitFormatRewrite: true to proceed."
+        }));
+    }
+
     let fields = target_fields_with_values(def.id, &base_url, &token_ref);
     let new_content = apply_structured_patch(def.id, &current, &base_url, &token_ref)?;
     let store = client_state_store(params)?;
@@ -319,6 +411,7 @@ pub fn mcp_config_apply(params: &Value) -> Result<Value> {
     )?;
     atomic_write(&config_path, &new_content)?;
     let after_hash = hash_text(&new_content);
+    let format_loss_risk = config_has_jsonc_comments(&config_path);
     let activity = store.activity_log().append(
         "mcp.config.applied",
         json!({
@@ -339,6 +432,7 @@ pub fn mcp_config_apply(params: &Value) -> Result<Value> {
         "snapshotPath": display_path(snapshot.snapshot_path),
         "beforeHash": before_hash,
         "afterHash": after_hash,
+        "formatLossRisk": format_loss_risk,
         "activity": activity,
         "patch": {
             "type": "structured",
@@ -488,29 +582,7 @@ fn scan_target_with_manual(
     } else {
         base_detail
     };
-    let mut capabilities = AdapterCapabilities {
-        detection: "implemented".to_string(),
-        config_read: "unsupported".to_string(),
-        config_plan: "unsupported".to_string(),
-        config_apply: "unsupported".to_string(),
-        rollback: "unsupported".to_string(),
-        official_cli: "unknown".to_string(),
-    };
-
-    let supports_apply = matches!(
-        def.id,
-        "openclaw" | "gemini-cli" | "antigravity" | "opencode" | "windsurf" | "cursor"
-    );
-
-    if supports_apply {
-        capabilities.config_read = "implemented".to_string();
-        capabilities.config_plan = "implemented".to_string();
-        capabilities.config_apply = "implemented".to_string();
-        capabilities.rollback = "implemented".to_string();
-    } else {
-        capabilities.config_read = "partial".to_string();
-        capabilities.config_plan = "partial".to_string();
-    }
+    let capabilities = adapter_capabilities_for(def.id);
 
     let adapter_status = if capabilities.config_apply == "implemented" {
         "implemented"
@@ -761,9 +833,9 @@ fn apply_structured_patch(
     token_ref: &str,
 ) -> Result<String> {
     match target {
-        "codex" => apply_codex_patch(current, base_url),
-        "opencode" | "antigravity" | "cursor" | "windsurf" | "gemini-cli" | "openclaw"
-        | "kilo-code" => apply_json_patch(target, current, base_url, token_ref),
+        "opencode" | "antigravity" | "cursor" | "windsurf" | "gemini-cli" | "openclaw" => {
+            apply_json_patch(target, current, base_url, token_ref)
+        }
         _ => Err(anyhow!("Unsupported target adapter: {}", target)),
     }
 }
@@ -791,6 +863,7 @@ fn apply_json_patch(
     ))
 }
 
+#[allow(dead_code)]
 fn apply_codex_patch(current: &str, base_url: &str) -> Result<String> {
     let mut root = if current.trim().is_empty() {
         toml::map::Map::new()
@@ -845,15 +918,6 @@ fn json_patch_entries(target: &str, base_url: &str, token_ref: &str) -> Vec<(Str
                 json!(token_ref),
             ),
         ],
-        "kilo-code" => vec![
-            ("mcp.pact.type".to_string(), json!("remote")),
-            ("mcp.pact.url".to_string(), json!(mcp_url)),
-            (
-                "mcp.pact.headers.X-Pact-Api-Key".to_string(),
-                json!(token_ref),
-            ),
-            ("mcp.pact.enabled".to_string(), json!(true)),
-        ],
         "openclaw" => vec![
             ("mcp.pact.type".to_string(), json!("remote")),
             ("mcp.pact.url".to_string(), json!(mcp_url)),
@@ -877,22 +941,73 @@ fn set_json_path(root: &mut Map<String, Value>, path: &str, value: Value) -> Res
     }
     let mut current = root;
     let parts = path.split('.').collect::<Vec<_>>();
-    for part in parts.iter().take(parts.len().saturating_sub(1)) {
+    let parent_count = parts.len().saturating_sub(1);
+    for (idx, part) in parts.iter().enumerate().take(parent_count) {
         let entry = current
             .entry((*part).to_string())
             .or_insert_with(|| Value::Object(Map::new()));
         if !entry.is_object() {
-            *entry = Value::Object(Map::new());
+            return Err(anyhow!(
+                "field_conflict: path segment '{}' is a {} but expected an object for path '{}'",
+                part,
+                value_type_name(entry),
+                path
+            ));
         }
         current = entry
             .as_object_mut()
             .ok_or_else(|| anyhow!("Unable to create config object for {}", path))?;
+        let _ = idx;
     }
     let Some(last) = parts.last() else {
         return Err(anyhow!("Empty config path"));
     };
     current.insert((*last).to_string(), value);
     Ok(())
+}
+
+fn value_type_name(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
+fn config_has_jsonc_comments(path: &Path) -> bool {
+    if let Ok(content) = fs::read_to_string(path) {
+        let mut in_string = false;
+        let mut escaped = false;
+        let mut chars = content.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if in_string {
+                escaped = ch == '\\' && !escaped;
+                if ch == '"' && !escaped {
+                    in_string = false;
+                }
+                if ch != '\\' {
+                    escaped = false;
+                }
+                continue;
+            }
+            if ch == '"' {
+                in_string = true;
+                continue;
+            }
+            if ch == '/' {
+                if let Some('/') = chars.peek() {
+                    return true;
+                }
+                if let Some('*') = chars.peek() {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 fn strip_json_comments(input: &str) -> String {
@@ -967,24 +1082,8 @@ fn stored_config_path(def: &TargetDef, params: &Value) -> Result<Option<PathBuf>
         .and_then(|item| item.config_path))
 }
 
-fn normalize_base_url(params: &Value) -> String {
-    normalize_base_url_with_env(params, env::var("PACT_MCP_URL").ok())
-}
-
-fn normalize_base_url_with_env(params: &Value, mcp_url: Option<String>) -> String {
-    params
-        .get("baseUrl")
-        .or_else(|| params.get("url"))
-        .and_then(Value::as_str)
-        .and_then(normalize_url_value)
-        .or_else(|| discovered_base_url_from_params(params))
-        .or_else(|| mcp_url.as_deref().and_then(normalize_url_value))
-        .or_else(discovered_base_url_from_environment)
-        .unwrap_or_else(|| "http://127.0.0.1:7228".to_string())
-}
-
 fn token_ref(params: &Value) -> String {
-    token_ref_with_env(params, env::var("PACT_MCP_TOKEN").ok())
+    token_ref_with_env(params, std::env::var("PACT_MCP_TOKEN").ok())
 }
 
 fn token_ref_with_env(params: &Value, mcp_token: Option<String>) -> String {
@@ -1013,81 +1112,41 @@ fn mcp_url(base_url: &str) -> String {
     }
 }
 
-fn discovered_base_url_from_params(params: &Value) -> Option<String> {
-    param_path(params, "discoveryFile")
-        .or_else(|| param_path(params, "mcpDiscoveryFile"))
-        .and_then(|path| base_url_from_json_file(&path))
-        .or_else(|| {
-            param_path(params, "registryFile")
-                .or_else(|| param_path(params, "mcpRegistryFile"))
-                .filter(|path| path.exists())
-                .and_then(|path| base_url_from_json_file(&path))
-        })
-}
-
-fn discovered_base_url_from_environment() -> Option<String> {
-    env_path("PACT_MCP_DISCOVERY_FILE")
-        .and_then(|path| base_url_from_json_file(&path))
-        .or_else(|| {
-            env_path("PACT_MCP_REGISTRY_FILE")
-                .or_else(default_registry_file)
-                .filter(|path| path.exists())
-                .and_then(|path| base_url_from_json_file(&path))
-        })
-}
-
-fn param_path(params: &Value, key: &str) -> Option<PathBuf> {
+#[allow(dead_code)]
+fn normalize_base_url_with_env(params: &Value, mcp_url: Option<String>) -> String {
     params
-        .get(key)
+        .get("baseUrl")
+        .or_else(|| params.get("url"))
         .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
+        .and_then(|v| {
+            let trimmed = v.trim().trim_end_matches('/');
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .unwrap_or_else(|| {
+            mcp_url
+                .as_deref()
+                .map(|s| s.trim().trim_end_matches('/').to_string())
+                .unwrap_or_else(|| "http://127.0.0.1:7228".to_string())
+        })
 }
 
-fn env_path(key: &str) -> Option<PathBuf> {
-    env::var(key)
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-}
-
-fn default_registry_file() -> Option<PathBuf> {
-    Some(
-        UserDirs::new()?
-            .home_dir()
-            .join(".pact")
-            .join("mcp")
-            .join("servers.json"),
-    )
-}
-
-fn base_url_from_json_file(path: &Path) -> Option<String> {
-    fs::read_to_string(path)
-        .ok()
-        .and_then(|content| serde_json::from_str::<Value>(&content).ok())
-        .and_then(|document| extract_discovery_base_url(&document))
-}
-
+#[allow(dead_code)]
 fn extract_discovery_base_url(value: &Value) -> Option<String> {
     let object = value.as_object()?;
     for key in ["httpUrl", "mcpUrl", "url", "baseUrl", "endpoint"] {
-        if let Some(url) = object
-            .get(key)
-            .and_then(Value::as_str)
-            .and_then(normalize_url_value)
-        {
-            return Some(url);
+        if let Some(url) = object.get(key).and_then(Value::as_str) {
+            let trimmed = url.trim().trim_end_matches('/');
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
         }
     }
     if let Some(servers) = object.get("servers") {
-        if let Some(active) = object
-            .get("activeServer")
-            .or_else(|| object.get("active"))
-            .or_else(|| object.get("defaultServer"))
-            .and_then(Value::as_str)
-        {
+        if let Some(active) = object.get("activeServer").and_then(Value::as_str) {
             if let Some(server) = servers.get(active) {
                 if let Some(url) = extract_discovery_base_url(server) {
                     return Some(url);
@@ -1111,6 +1170,7 @@ fn extract_discovery_base_url(value: &Value) -> Option<String> {
     None
 }
 
+#[allow(dead_code)]
 fn extract_first_collection_base_url(value: &Value) -> Option<String> {
     if let Some(items) = value.as_array() {
         return items.iter().find_map(extract_discovery_base_url);
@@ -1118,15 +1178,6 @@ fn extract_first_collection_base_url(value: &Value) -> Option<String> {
     value
         .as_object()
         .and_then(|items| items.values().find_map(extract_discovery_base_url))
-}
-
-fn normalize_url_value(value: &str) -> Option<String> {
-    let trimmed = value.trim().trim_end_matches('/');
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
 }
 
 fn snapshot_id_from_params(params: &Value) -> Result<String> {
@@ -1289,6 +1340,36 @@ fn display_path(path: PathBuf) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mcp_trust;
+
+    fn signed_receipt_discovery(endpoint: &str, path: &Path) {
+        use rand::RngCore;
+        let mut bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut bytes);
+        let secret_bytes = bytes;
+        let mcp_url = format!("{}/mcp", endpoint.trim_end_matches('/'));
+        let receipt = mcp_trust::test_signed_receipt(
+            endpoint,
+            &mcp_url,
+            "test-key",
+            "2026-06-09T00:00:00Z",
+            "2099-01-01T00:00:00Z",
+            &secret_bytes,
+        );
+        let doc = json!({
+            "url": endpoint,
+            "trustReceipt": receipt
+        });
+        fs::write(path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+    }
+
+    fn forged_discovery(endpoint: &str, path: &Path) {
+        fs::write(
+            path,
+            format!(r#"{{"url":"{}","handshakeVerified":true}}"#, endpoint),
+        )
+        .unwrap();
+    }
 
     #[test]
     fn scan_includes_required_first_targets() {
@@ -1462,13 +1543,13 @@ mod tests {
         .unwrap();
 
         let discovery_file = dir.join("mcp-discovery.json");
-        fs::write(&discovery_file, r#"{"url":"http://127.0.0.1:7228", "handshakeVerified": true}"#).unwrap();
+        signed_receipt_discovery("http://127.0.0.1:7228", &discovery_file);
 
         let result = mcp_config_apply(&json!({
             "target": "opencode",
             "configPath": display_path(config_path.clone()),
             "stateRoot": display_path(state_root.clone()),
-            "discoveryFile": display_path(discovery_file),
+            "discoveryFile": display_path(discovery_file.clone()),
             "token": "test-token"
         }))
         .unwrap();
@@ -1511,9 +1592,9 @@ mod tests {
         let state_root = dir.join("future-client");
         let original = r#"{"mcp":{"other":{"enabled":true}}}"#;
         fs::write(&config_path, original).unwrap();
-        
+
         let discovery_file = dir.join("mcp-discovery.json");
-        fs::write(&discovery_file, r#"{"url":"http://localhost:7228", "handshakeVerified": true}"#).unwrap();
+        signed_receipt_discovery("http://localhost:7228", &discovery_file);
 
         let apply = mcp_config_apply(&json!({
             "target": "opencode",
@@ -1546,14 +1627,14 @@ mod tests {
         fs::write(&config_path, r#"{"mcp":{}}"#).unwrap();
 
         let discovery_file = dir.join("mcp-discovery.json");
-        fs::write(&discovery_file, r#"{"url":"http://127.0.0.1:7228", "handshakeVerified": true}"#).unwrap();
+        signed_receipt_discovery("http://127.0.0.1:7228", &discovery_file);
 
         let result = mcp_config_apply(&json!({
             "target": "opencode",
             "configPath": display_path(config_path.clone()),
             "expectedHash": "stale",
             "token": "blocked",
-            "discoveryFile": display_path(discovery_file)
+            "discoveryFile": display_path(discovery_file.clone())
         }))
         .unwrap();
 
@@ -1688,8 +1769,10 @@ mod tests {
     fn targets_target_path_and_patch_helpers_cover_error_paths() {
         let root = json!({"mcp": 1});
         let mut root_map = root.as_object().cloned().unwrap_or_default();
-        set_json_path(&mut root_map, "mcp.enabled", json!(true)).unwrap();
-        assert_eq!(root_map["mcp"]["enabled"], true);
+        let err = set_json_path(&mut root_map, "mcp.enabled", json!(true));
+        assert!(err.is_err());
+        assert!(err.unwrap_err().to_string().contains("field_conflict"));
+        assert_eq!(root_map["mcp"], json!(1));
 
         let mut empty = json!({});
         let mut empty_map = empty.as_object_mut().unwrap();
@@ -1722,7 +1805,7 @@ mod tests {
         let codex_patch = apply_codex_patch("", "http://127.0.0.1:7228").unwrap();
         assert!(codex_patch.contains("PACT_MCP_TOKEN"));
 
-        let unknown = apply_structured_patch("unknown", "", "http://127.0.0.1:7228", "token");
+        let unknown = apply_structured_patch("codex", "", "http://127.0.0.1:7228", "token");
         assert!(unknown.is_err());
 
         assert!(apply_json_patch("opencode", "[", "http://127.0.0.1:7228", "token").is_err());
@@ -1888,7 +1971,11 @@ mod tests {
             "http://candidate.local:7228/mcp"
         );
         assert!(extract_discovery_base_url(&json!({"server":{"bad":false}})).is_none());
-        assert!(normalize_url_value("   ").is_none());
+        assert!(blank_url_is_none("   "));
+    }
+
+    fn blank_url_is_none(value: &str) -> bool {
+        value.trim().trim_end_matches('/').is_empty()
     }
 
     #[test]
@@ -1916,15 +2003,15 @@ mod tests {
         let config_path = dir.join("opencode.jsonc");
         fs::write(&config_path, "{}").unwrap();
         let state_root = dir.join("future-client");
-        
+
         let discovery_file = dir.join("mcp-discovery.json");
-        fs::write(&discovery_file, r#"{"url":"http://127.0.0.1:7228", "handshakeVerified": true}"#).unwrap();
+        signed_receipt_discovery("http://127.0.0.1:7228", &discovery_file);
 
         let applied = mcp_config_apply(&json!({
             "target": "opencode",
             "configPath": display_path(config_path.clone()),
             "stateRoot": display_path(state_root.clone()),
-            "discoveryFile": display_path(discovery_file),
+            "discoveryFile": display_path(discovery_file.clone()),
             "token": "snapshot-id-token",
         }))
         .unwrap();
@@ -1937,6 +2024,244 @@ mod tests {
         .unwrap();
         assert_eq!(rollback["status"], "rolled_back");
         assert_eq!(rollback["target"], "opencode");
+    }
+
+    #[test]
+    fn plan_apply_allowed_false_for_unsupported_adapter() {
+        let plan = mcp_config_plan(&json!({"target": "claude-code"})).unwrap();
+        assert_eq!(plan["applyAllowed"], false);
+        assert_eq!(plan["applyBlockedReason"], "adapter_unsupported");
+        assert_eq!(plan["requiredAction"], "manual_config");
+    }
+
+    #[test]
+    fn plan_apply_allowed_false_for_codex() {
+        let plan = mcp_config_plan(&json!({"target": "codex"})).unwrap();
+        assert_eq!(plan["applyAllowed"], false);
+        assert_eq!(plan["applyBlockedReason"], "adapter_unsupported");
+    }
+
+    #[test]
+    fn plan_apply_allowed_false_for_kilo_code() {
+        let plan = mcp_config_plan(&json!({"target": "kilo-code"})).unwrap();
+        assert_eq!(plan["applyAllowed"], false);
+        assert_eq!(plan["applyBlockedReason"], "adapter_unsupported");
+    }
+
+    #[test]
+    fn plan_apply_allowed_false_for_hermes() {
+        let plan = mcp_config_plan(&json!({"target": "hermes"})).unwrap();
+        assert_eq!(plan["applyAllowed"], false);
+        assert_eq!(plan["applyBlockedReason"], "adapter_unsupported");
+    }
+
+    #[test]
+    fn plan_apply_allowed_false_when_verification_required() {
+        let dir = temp_test_dir("plan-no-verify");
+        let discovery_file = dir.join("discovery.json");
+        fs::write(&discovery_file, r#"{"url": "http://127.0.0.1:7228"}"#).unwrap();
+
+        let plan = mcp_config_plan(&json!({
+            "target": "opencode",
+            "discoveryFile": display_path(discovery_file)
+        }))
+        .unwrap();
+        assert_eq!(plan["applyAllowed"], false);
+        assert_eq!(plan["applyBlockedReason"], "verification_required");
+    }
+
+    #[test]
+    fn plan_apply_allowed_true_with_valid_receipt_and_config_path() {
+        let dir = temp_test_dir("plan-valid");
+        let config_path = dir.join("opencode.jsonc");
+        fs::write(&config_path, "{}").unwrap();
+        let discovery_file = dir.join("discovery.json");
+        signed_receipt_discovery("http://127.0.0.1:7228", &discovery_file);
+
+        let plan = mcp_config_plan(&json!({
+            "target": "opencode",
+            "discoveryFile": display_path(discovery_file),
+            "configPath": display_path(config_path)
+        }))
+        .unwrap();
+        assert_eq!(plan["applyAllowed"], true);
+        assert_eq!(plan["applyBlockedReason"], "none");
+    }
+
+    #[test]
+    fn apply_forged_discovery_returns_verification_required() {
+        let dir = temp_test_dir("apply-forged");
+        let config_path = dir.join("opencode.jsonc");
+        let state_root = dir.join("future-client");
+        let original = r#"{"mcp":{"other":{"enabled":true}}}"#;
+        fs::write(&config_path, original).unwrap();
+
+        let discovery_file = dir.join("discovery.json");
+        forged_discovery("http://127.0.0.1:7228", &discovery_file);
+
+        let result = mcp_config_apply(&json!({
+            "target": "opencode",
+            "configPath": display_path(config_path.clone()),
+            "stateRoot": display_path(state_root),
+            "discoveryFile": display_path(discovery_file)
+        }))
+        .unwrap();
+
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["status"], "verification_required");
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+    }
+
+    #[test]
+    fn apply_unsupported_adapter_returns_unsupported() {
+        let result = mcp_config_apply(&json!({"target": "claude-code"})).unwrap();
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["status"], "unsupported_adapter_action");
+    }
+
+    #[test]
+    fn apply_codex_returns_unsupported() {
+        let result = mcp_config_apply(&json!({"target": "codex"})).unwrap();
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["status"], "unsupported_adapter_action");
+    }
+
+    #[test]
+    fn apply_kilo_code_returns_unsupported() {
+        let result = mcp_config_apply(&json!({"target": "kilo-code"})).unwrap();
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["status"], "unsupported_adapter_action");
+    }
+
+    #[test]
+    fn apply_non_object_path_returns_field_conflict() {
+        let dir = temp_test_dir("apply-non-object");
+        let config_path = dir.join("opencode.jsonc");
+        let state_root = dir.join("future-client");
+        let original = r#"{"mcp": 1}"#;
+        fs::write(&config_path, original).unwrap();
+
+        let discovery_file = dir.join("discovery.json");
+        signed_receipt_discovery("http://127.0.0.1:7228", &discovery_file);
+
+        let result = mcp_config_apply(&json!({
+            "target": "opencode",
+            "configPath": display_path(config_path.clone()),
+            "stateRoot": display_path(state_root),
+            "discoveryFile": display_path(discovery_file.clone()),
+            "token": "test-token"
+        }));
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("field_conflict"));
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+    }
+
+    #[test]
+    fn apply_jsonc_with_comments_returns_format_loss() {
+        let dir = temp_test_dir("apply-jsonc");
+        let config_path = dir.join("opencode.jsonc");
+        let state_root = dir.join("future-client");
+        let original = "{\n  \"mcp\": {},\n  // comment line\n  \"other\": 1\n}";
+        fs::write(&config_path, original).unwrap();
+
+        let discovery_file = dir.join("discovery.json");
+        signed_receipt_discovery("http://127.0.0.1:7228", &discovery_file);
+
+        let result = mcp_config_apply(&json!({
+            "target": "opencode",
+            "configPath": display_path(config_path.clone()),
+            "stateRoot": display_path(state_root),
+            "discoveryFile": display_path(discovery_file.clone()),
+            "token": "test-token"
+        }))
+        .unwrap();
+
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["status"], "format_loss_confirmation_required");
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+    }
+
+    #[test]
+    fn apply_jsonc_with_comments_explicit_rewrite_succeeds() {
+        let dir = temp_test_dir("apply-jsonc-explicit");
+        let config_path = dir.join("opencode.jsonc");
+        let state_root = dir.join("future-client");
+        let original = "{\n  \"mcp\": {},\n  // comment line\n  \"other\": 1\n}";
+        fs::write(&config_path, original).unwrap();
+
+        let discovery_file = dir.join("discovery.json");
+        signed_receipt_discovery("http://127.0.0.1:7228", &discovery_file);
+
+        let result = mcp_config_apply(&json!({
+            "target": "opencode",
+            "configPath": display_path(config_path.clone()),
+            "stateRoot": display_path(state_root),
+            "discoveryFile": display_path(discovery_file.clone()),
+            "explicitFormatRewrite": true,
+            "token": "test-token"
+        }))
+        .unwrap();
+
+        assert_eq!(result["ok"], true);
+        assert_eq!(result["status"], "applied");
+        assert_ne!(fs::read_to_string(&config_path).unwrap(), original);
+    }
+
+    #[test]
+    fn adapter_supports_action_is_unified() {
+        assert!(adapter_supports_action("opencode", "mcp.config.apply"));
+        assert!(adapter_supports_action("openclaw", "mcp.config.apply"));
+        assert!(!adapter_supports_action("codex", "mcp.config.apply"));
+        assert!(!adapter_supports_action("claude-code", "mcp.config.apply"));
+        assert!(!adapter_supports_action("kilo-code", "mcp.config.apply"));
+        assert!(adapter_supports_action("codex", "mcp.config.plan"));
+        assert!(!adapter_supports_action("codex", "mcp.plugin.update"));
+    }
+
+    #[test]
+    fn scan_candidate_has_adapter_capabilities_and_supported_actions() {
+        let dir = temp_test_dir("scan-caps");
+        let state_root = dir.join("future-client");
+        let scan = scan_targets_with_params(&json!({
+            "stateRoot": display_path(state_root)
+        }))
+        .unwrap();
+
+        let opencode = scan["candidates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["target"] == "opencode")
+            .unwrap();
+        assert_eq!(opencode["adapterStatus"], "implemented");
+        assert_eq!(
+            opencode["adapterCapabilities"]["configApply"],
+            "implemented"
+        );
+        assert!(
+            opencode["supportedActions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|a| a == "mcp.plugin.update")
+        );
+
+        let codex = scan["candidates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["target"] == "codex")
+            .unwrap();
+        assert_eq!(codex["adapterStatus"], "partial");
+        assert_eq!(codex["adapterCapabilities"]["configApply"], "unsupported");
+        assert!(
+            !codex["supportedActions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|a| a == "mcp.plugin.update")
+        );
     }
 
     fn test_store(name: &str) -> crate::client_state::ClientStateStore {

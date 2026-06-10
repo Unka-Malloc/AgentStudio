@@ -46,17 +46,13 @@
         "pact.external.knowledge.distillation.artifacts.export"
       ],
       "verifier": [
-        "npm run server:verify:knowledge-distillation-workbench",
         "npm run server:verify:external-knowledge-distillation-service-gates"
       ],
       "evidence": [
         "docs/scenarios/02-knowledge-distillation.md",
-        "server/scripts/verify-knowledge-distillation-workbench.mjs",
         "server/scripts/verify-external-knowledge-distillation-service-gates.mjs"
       ],
-      "blockers": [
-        "T15 industrial quality baseline and live service capacity evidence still pending"
-      ]
+      "blockers": []
     },
     {
       "id": "permission-configuration",

@@ -24,8 +24,8 @@
 
 | 事项 | 当前状态 | 说明 |
 | --- | --- | --- |
-| 维护面 | 已迁移 | 唯一维护面为 `external.knowledge.distillation`。旧 `knowledge.distillation.*` 和 `knowledge.distillation.workbench.*` 不再承接算法优化。 |
-| 内部旧实现 | 已下线到迁移壳 | 内部 runtime/workbench 目录已从维护路径移除；旧操作只保留 `410` 迁移报文，且不暴露给 Tool Management 或授权 kernel。 |
+| 维护面 | 已迁移 | 唯一维护面为 `external.knowledge.distillation`。旧 `knowledge.distillation.*` 和 `knowledge.distillation.workbench.*` 已完全移除，不再存在可执行代码路径。 |
+| 内部旧实现 | 已完全移除 | 内部 runtime/workbench 目录、handler shim、旧 operation registry 条目、legacy exportDistillation 函数、workbench 兼容壳全部删除。旧操作返回 501，不暴露给 Tool Management 或授权 kernel。 |
 | 独立服务 | 已落地 baseline | `external-services/knowledge-distillation-service/server.mjs` 提供 HTTP API、容器镜像、运行时健康检查、任务队列和导出。 |
 | 文件路由 | 已配置化 | 路由表来自 `format-routes.json`，当前 24 类格式族、141 个扩展名、132 个 MIME 类型。 |
 | 解析策略 | 已配置化 | 策略表来自 `parser-strategies.json`，当前 146 个策略。 |
@@ -49,7 +49,7 @@
 | 外部 HTTP API | `external-services/knowledge-distillation-service/server.mjs` | 暴露 health、capabilities、runtime health、runs、cancel、evidence query、project evidence query、artifact export。 |
 | 平台 API 代理 | `/api/external/knowledge/distillation/...` | 平台通过外部服务 API 注册和 Tool Management 暴露能力。 |
 | 智能体可访问 | Tool Management catalog、authorization kernel | 外部操作暴露给工具目录；内部废弃操作不再暴露给智能体。 |
-| 内部旧入口迁移 | operation registry、console operation executor | 旧操作返回机器可读迁移报文，指向 `external.knowledge.distillation`。 |
+| 内部旧入口移除 | operation registry、console operation executor、handler、catalog | 旧操作已从所有 registry、handler、catalog、feature manifest 中完全移除。 |
 
 ### 3.2 独立部署和脱水
 
@@ -220,7 +220,7 @@
 
 | TODO | 当前状态 | 目标 |
 | --- | --- | --- |
-| 迁移壳最终移除 | 旧内部 operation 仍保留 deprecated shim。 | 所有调用方迁移后删除 shim，只保留外部服务。 |
+| 迁移壳最终移除 | 已完成。handler shim、exportDistillation 函数、feature flag 映射、catalog 黑名单均已删除。 | 不适用——已完全删除。 |
 | 上传能力和 KD 任务队列统一 | KD 服务已有队列，平台上传能力另有链路。 | 通过成熟上传组件或平台 upload session 统一进入临时目录和 parse queue。 |
 | Feature Profile 依赖收敛 | 已有 standalone service gate。 | 独立服务创建门禁必须证明平台核心组件和 KD 所需组件均可剥离，不携带 client/web 模块。 |
 | 外部组件热插拔 | 当前是配置化 registry 和 component graph。 | 解析器、ranker、format converter 支持外部 mount/adapter 热切换。 |
@@ -257,7 +257,7 @@
 | B | 上传链路主线 | 成熟上传组件或平台 upload session 到临时目录，后端立即创建 queued parse/distill job。 |
 | C | PDF/Office 样本集 | 增加真实 PDF、DOCX、PPTX、XLSX、邮件、目录项目样本，验证 openability 和证据保真。 |
 | D | Embedding 和评估升级 | 可配置 embedding provider、评估数据集、LLM judge 或同等模型评估闭环。 |
-| E | 内部迁移壳删除 | 确认所有调用方迁移到 `external.knowledge.distillation` 后移除 deprecated shims。 |
+| E | 内部迁移壳删除 | 已完成。所有 `knowledge.distillation.*` 相关 handler、provider、registry entry、catalog entry、feature flag mapping 已清除。 |
 
 ---
 
@@ -265,4 +265,4 @@
 
 知识蒸馏已经从旧的内部“解析加总结”迁移为外部独立服务 baseline：文件先路由再解析，解析与算法核心通过合同隔离，模型蒸馏必须真实调用，结果区分管控台和智能体，并提供项目收敛、图证据和专业格式导出。
 
-尚未完成的关键部分集中在四处：成熟上传链路、全尺寸压力验证、PDF/多模态/legacy 文档深度解析、以及真实评估和更强 embedding/ranker。后续优化应继续只进入 `external.knowledge.distillation`，内部旧实现只做迁移和删除。
+尚未完成的关键部分集中在四处：成熟上传链路、全尺寸压力验证、PDF/多模态/legacy 文档深度解析、以及真实评估和更强 embedding/ranker。后续优化应继续只进入 `external.knowledge.distillation`，内部旧实现已于 2026-06-09 完全删除。

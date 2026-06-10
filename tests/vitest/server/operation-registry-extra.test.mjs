@@ -160,20 +160,8 @@ describe("operation registry exported helpers", () => {
     });
 
     const internalDistillation = SERVER_API_OPERATIONS.find((operation) =>
-      operation.id.startsWith("knowledge.distillation.") && operation.deprecated === true
+      operation.id.startsWith("knowledge.distillation.")
     );
-    expect(internalDistillation).toMatchObject({
-      replacementService: "external.knowledge.distillation",
-      replacementOperationPrefix: "external.knowledge.distillation.",
-      lifecycle: expect.objectContaining({
-        status: "deprecated",
-        maintenancePolicy: "compatibility-shim-only"
-      })
-    });
-    expect(internalDistillation.aspects).toEqual(expect.arrayContaining([
-      "knowledge-distillation",
-      "internal-deprecated",
-      "external-replaced"
-    ]));
+    expect(internalDistillation).toBeUndefined();
   });
 });

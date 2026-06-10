@@ -361,6 +361,7 @@ class _FakeAgentService extends AgentService {
       manual: false,
       configPath: '/tmp/codex.toml',
       adapterStatus: 'implemented',
+      supportedActions: ['mcp.plugin.status', 'mcp.plugin.update', 'mcp.plugin.rollback'],
     ),
   ];
   Map<String, dynamic> pairingResult = {'ok': true, 'status': 'requested'};

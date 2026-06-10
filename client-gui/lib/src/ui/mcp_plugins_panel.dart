@@ -51,8 +51,12 @@ class McpPluginsPanel extends StatelessWidget {
                   status: status,
                   busy: controller.isMcpPluginBusy(target.target),
                   onStatus: () => controller.refreshMcpPluginStatus(target),
-                  onUpdate: () => controller.updateMcpPlugin(target),
-                  onRollback: () => controller.rollbackLatestMcpPlugin(target),
+                  onUpdate: target.canUpdateMcpPlugin
+                      ? () => controller.updateMcpPlugin(target)
+                      : null,
+                  onRollback: target.canRollbackMcpPlugin
+                      ? () => controller.rollbackLatestMcpPlugin(target)
+                      : null,
                 );
               },
             ),
@@ -77,13 +81,16 @@ class _McpPluginTile extends StatelessWidget {
   final Map<String, dynamic>? status;
   final bool busy;
   final VoidCallback onStatus;
-  final VoidCallback onUpdate;
-  final VoidCallback onRollback;
+  final VoidCallback? onUpdate;
+  final VoidCallback? onRollback;
 
   @override
   Widget build(BuildContext context) {
     final statusLabel = (status?['status'] ?? (target.configured ? 'configured' : target.status)).toString();
     final configPath = target.configPath ?? target.detail ?? 'No config path detected';
+    final isUnsupported = target.adapterStatus == 'unsupported';
+    final isPartial = target.adapterStatus == 'partial';
+
     return ListTile(
       leading: busy
           ? const SizedBox(
@@ -92,7 +99,43 @@ class _McpPluginTile extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.extension_outlined),
-      title: Text('${target.label} / Pact MCP'),
+      title: Row(
+        children: [
+          Expanded(child: Text('${target.label} / Pact MCP')),
+          if (isUnsupported)
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'Unsupported',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                ),
+              ),
+            ),
+          if (isPartial)
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.tertiaryContainer,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'Partial',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onTertiaryContainer,
+                ),
+              ),
+            ),
+        ],
+      ),
       subtitle: Text(configPath, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: Wrap(
         spacing: 8,
@@ -104,16 +147,18 @@ class _McpPluginTile extends StatelessWidget {
             onPressed: busy ? null : onStatus,
             icon: const Icon(Icons.fact_check_outlined),
           ),
-          FilledButton.icon(
-            onPressed: busy ? null : onUpdate,
-            icon: const Icon(Icons.system_update_alt_outlined, size: 18),
-            label: const Text('Update'),
-          ),
-          OutlinedButton.icon(
-            onPressed: busy ? null : onRollback,
-            icon: const Icon(Icons.settings_backup_restore_outlined, size: 18),
-            label: const Text('Rollback'),
-          ),
+          if (onUpdate != null)
+            FilledButton.icon(
+              onPressed: busy ? null : onUpdate,
+              icon: const Icon(Icons.system_update_alt_outlined, size: 18),
+              label: const Text('Update'),
+            ),
+          if (onRollback != null)
+            OutlinedButton.icon(
+              onPressed: busy ? null : onRollback,
+              icon: const Icon(Icons.settings_backup_restore_outlined, size: 18),
+              label: const Text('Rollback'),
+            ),
         ],
       ),
     );

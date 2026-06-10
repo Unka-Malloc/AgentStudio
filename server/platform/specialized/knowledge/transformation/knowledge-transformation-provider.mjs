@@ -185,28 +185,6 @@ function dossierMarkdown({ title, query, documents = [], generatedAt = nowIso() 
   return lines.join("\n");
 }
 
-function distillationDocuments(input = {}, run = null) {
-  const source = run || asObject(input.run || input.distillation || input);
-  const docs = [];
-  for (const [index, doc] of asArray(source.portableDocuments || input.portableDocuments).entries()) {
-    docs.push(documentFromInput({
-      documentId: doc.candidateId || doc.document?.documentId || "",
-      title: doc.title || doc.document?.title || `Distillation document ${index + 1}`,
-      text: doc.document?.markdown || doc.document?.content || doc.document?.summary || stableJson(doc.document || doc)
-    }, index));
-  }
-  for (const [index, candidate] of asArray(source.candidates || input.candidates).entries()) {
-    const portable = candidate.portableDocument || candidate.proposal?.distilledOutputs?.portableDocument || {};
-    docs.push(documentFromInput({
-      documentId: candidate.candidateId || "",
-      title: portable.title || candidate.proposal?.title || candidate.skill?.title || `Distillation candidate ${index + 1}`,
-      text: portable.markdown || portable.content || candidate.proposal?.summary || stableJson(candidate.distilledOutputs || candidate.proposal || candidate)
-    }, docs.length));
-  }
-  if (docs.length) return docs;
-  return documentsFromInput(input);
-}
-
 async function renderDocuments({ documents, format, title, generatedAt = nowIso(), filters = {} }) {
   if (format === "docx") {
     return buildKnowledgeDocxExport({ documents, generatedAt, filters, includeMachineReadable: true });
@@ -402,52 +380,9 @@ export function createKnowledgeTransformationProvider({
     };
   }
 
-  async function exportDistillation(input = {}, context = {}) {
-    const runId = text(input.runId || input.id || "");
-    const documents = distillationDocuments(input, null);
-    const generatedAt = nowIso();
-    const format = normalizeFormat(input, "markdown");
-    const accessDecision = accessDecisionFor({
-      input,
-      documents,
-      requestedEgress: "distillationOutput",
-      subject: context.subject
-    });
-    if (!accessDecision.allowed) {
-      return {
-        ok: false,
-        status: 403,
-        protocolVersion: KNOWLEDGE_TRANSFORMATION_PROTOCOL_VERSION,
-        operationId: "knowledge.distillation.export",
-        error: "AgentLibrary access denied for distillation export.",
-        knowledgeAccessDecision: accessDecision
-      };
-    }
-    const rendered = await renderDocuments({
-      documents,
-      format,
-      title: input.title || "Knowledge distillation export",
-      generatedAt,
-      filters: { runId }
-    });
-    return {
-      ...publicPackage({
-        operationId: "knowledge.distillation.export",
-        format,
-        rendered,
-        documents,
-        generatedAt,
-        accessDecision
-      }),
-      runId,
-      runStatus: ""
-    };
-  }
-
   return {
     protocolVersion: KNOWLEDGE_TRANSFORMATION_PROTOCOL_VERSION,
     convertRawCorpus,
-    exportDossier,
-    exportDistillation
+    exportDossier
   };
 }

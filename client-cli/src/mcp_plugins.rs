@@ -47,12 +47,22 @@ pub fn plugin_update(params: &Value) -> Result<Value> {
         }));
     }
     let applied = targets::mcp_config_apply(params)?;
+    let apply_ok = applied.get("ok").and_then(Value::as_bool).unwrap_or(false);
+    let status = if apply_ok {
+        "updated".to_string()
+    } else {
+        applied
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("failed")
+            .to_string()
+    };
     Ok(json!({
-        "ok": applied.get("ok").and_then(Value::as_bool).unwrap_or(false),
+        "ok": apply_ok,
         "pluginId": PACT_PLUGIN_ID,
         "pluginRole": "peer",
         "target": target,
-        "status": "updated",
+        "status": status,
         "apply": applied
     }))
 }
@@ -60,12 +70,22 @@ pub fn plugin_update(params: &Value) -> Result<Value> {
 pub fn plugin_rollback(params: &Value) -> Result<Value> {
     let target = target_param(params)?;
     let rollback = targets::mcp_config_rollback(params)?;
+    let rollback_ok = rollback.get("ok").and_then(Value::as_bool).unwrap_or(false);
+    let status = if rollback_ok {
+        "rolled_back".to_string()
+    } else {
+        rollback
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("failed")
+            .to_string()
+    };
     Ok(json!({
-        "ok": rollback.get("ok").and_then(Value::as_bool).unwrap_or(false),
+        "ok": rollback_ok,
         "pluginId": PACT_PLUGIN_ID,
         "pluginRole": "peer",
         "target": target,
-        "status": "rolled_back",
+        "status": status,
         "rollback": rollback
     }))
 }
@@ -105,8 +125,29 @@ mod tests {
     use super::*;
     use std::env;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn signed_receipt_discovery(endpoint: &str, path: &Path) {
+        use rand::RngCore;
+        let mut bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut bytes);
+        let secret_bytes = bytes;
+        let mcp_url = format!("{}/mcp", endpoint.trim_end_matches('/'));
+        let receipt = crate::mcp_trust::test_signed_receipt(
+            endpoint,
+            &mcp_url,
+            "test-key",
+            "2026-06-09T00:00:00Z",
+            "2099-01-01T00:00:00Z",
+            &secret_bytes,
+        );
+        let doc = serde_json::json!({
+            "url": endpoint,
+            "trustReceipt": receipt
+        });
+        fs::write(path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+    }
 
     #[test]
     fn mcp_plugins_status_reports_pact_mcp_as_peer_plugin() {
@@ -132,7 +173,7 @@ mod tests {
         fs::write(&config_path, r#"{"mcp":{"other":{"enabled":true}}}"#).unwrap();
 
         let discovery_file = dir.join("mcp-discovery.json");
-        fs::write(&discovery_file, r#"{"url":"http://127.0.0.1:7228", "handshakeVerified": true}"#).unwrap();
+        signed_receipt_discovery("http://127.0.0.1:7228", &discovery_file);
 
         let update = plugin_update(&json!({
             "target": "opencode",
@@ -144,6 +185,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(update["ok"], true);
+        assert_eq!(update["status"], "updated");
         assert_eq!(update["pluginRole"], "peer");
         let updated: Value =
             serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
@@ -165,7 +207,7 @@ mod tests {
         fs::write(&config_path, original).unwrap();
 
         let discovery_file = dir.join("mcp-discovery.json");
-        fs::write(&discovery_file, r#"{"url":"http://127.0.0.1:7228", "handshakeVerified": true}"#).unwrap();
+        signed_receipt_discovery("http://127.0.0.1:7228", &discovery_file);
 
         let update = plugin_update(&json!({
             "target": "opencode",
@@ -187,6 +229,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(rollback["ok"], true);
+        assert_eq!(rollback["status"], "rolled_back");
         assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
     }
 
@@ -221,6 +264,62 @@ mod tests {
         }))
         .unwrap();
         assert!(status["status"] == "configured" || status["status"] == "not-configured");
+    }
+
+    #[test]
+    fn plugin_update_unverified_returns_verification_required() {
+        let dir = temp_test_dir("plugin-no-verify");
+        let config_path = dir.join("opencode.jsonc");
+        let state_root = dir.join("future-client");
+        let original = r#"{"mcp":{"other":{"enabled":true}}}"#;
+        fs::write(&config_path, original).unwrap();
+
+        let result = plugin_update(&json!({
+            "target": "opencode",
+            "configPath": config_path.to_string_lossy(),
+            "stateRoot": state_root.to_string_lossy(),
+            "baseUrl": "http://127.0.0.1:7228"
+        }))
+        .unwrap();
+
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["status"], "verification_required");
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+    }
+
+    #[test]
+    fn plugin_update_unsupported_target_returns_unsupported() {
+        let result = plugin_update(&json!({
+            "target": "codex",
+        }))
+        .unwrap();
+
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["status"], "unsupported_adapter_action");
+    }
+
+    #[test]
+    fn plugin_update_field_conflict_returns_field_conflict() {
+        let dir = temp_test_dir("plugin-field-conflict");
+        let config_path = dir.join("opencode.jsonc");
+        let state_root = dir.join("future-client");
+        let original = r#"{"mcp": 1}"#;
+        fs::write(&config_path, original).unwrap();
+
+        let discovery_file = dir.join("discovery.json");
+        signed_receipt_discovery("http://127.0.0.1:7228", &discovery_file);
+
+        let result = plugin_update(&json!({
+            "target": "opencode",
+            "configPath": config_path.to_string_lossy(),
+            "stateRoot": state_root.to_string_lossy(),
+            "discoveryFile": discovery_file.to_string_lossy(),
+            "token": "test-token"
+        }));
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("field_conflict"));
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
     }
 
     fn temp_test_dir(name: &str) -> PathBuf {

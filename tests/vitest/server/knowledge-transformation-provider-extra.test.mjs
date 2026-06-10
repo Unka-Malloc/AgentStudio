@@ -448,78 +448,7 @@ describe("knowledge transformation provider", () => {
     });
   });
 
-  it("exports distillation runs and falls back to direct input text", async () => {
-    const provider = createKnowledgeTransformationProvider();
-
-    const runResult = await provider.exportDistillation({
-      runId: "run-1",
-      run: {
-        portableDocuments: [{
-          candidateId: "portable-1",
-          title: "Portable Doc",
-          document: {
-            markdown: "Portable body"
-          }
-        }],
-        candidates: [{
-          candidateId: "candidate-1",
-          portableDocument: {
-            title: "Candidate Portable",
-            content: "Candidate body"
-          },
-          proposal: {
-            title: "Candidate proposal",
-            summary: "Candidate proposal summary"
-          }
-        }]
-      },
-      title: "Distillation export"
-    }, { subject: { username: "distill-agent" } });
-
-    expect(harness.markdownExport).toHaveBeenCalledTimes(1);
-    expect(harness.markdownExport.mock.calls[0][0].documents.map((doc) => doc.title)).toEqual([
-      "Portable Doc",
-      "Candidate Portable"
-    ]);
-    expect(runResult).toMatchObject({
-      ok: true,
-      operationId: "knowledge.distillation.export",
-      outputFormat: "markdown",
-      contentType: "text/markdown; charset=utf-8",
-      content: "markdown:2",
-      runId: "run-1",
-      runStatus: ""
-    });
-    expect(runResult.manifest).toMatchObject({
-      documentCount: 2
-    });
-
-    const fallbackResult = await provider.exportDistillation({
-      id: "legacy-run-2",
-      title: "Direct distillation",
-      text: "Direct distillation body"
-    }, { subject: { username: "distill-agent" } });
-
-    expect(harness.markdownExport).toHaveBeenCalledTimes(2);
-    expect(harness.markdownExport.mock.calls[1][0].documents).toHaveLength(1);
-    expect(harness.markdownExport.mock.calls[1][0].documents[0]).toMatchObject({
-      title: "Direct distillation",
-      blocks: [{
-        text: "Direct distillation body"
-      }]
-    });
-    expect(fallbackResult).toMatchObject({
-      ok: true,
-      operationId: "knowledge.distillation.export",
-      outputFormat: "markdown",
-      contentType: "text/markdown; charset=utf-8",
-      content: "markdown:1",
-      runId: "legacy-run-2",
-      runStatus: ""
-    });
-  });
-
-  it("returns 403 for every export operation when access is denied", async () => {
+  it("returns 403 for export operations when access is denied", async () => {
     harness.accessPolicy.mockReturnValue({
       allowed: false
     });
@@ -544,15 +473,6 @@ describe("knowledge transformation provider", () => {
       protocolVersion: KNOWLEDGE_TRANSFORMATION_PROTOCOL_VERSION,
       operationId: "knowledge.dossier.export",
       error: "AgentLibrary access denied for dossier export.",
-      knowledgeAccessDecision: { allowed: false }
-    });
-
-    await expect(provider.exportDistillation({ runId: "blocked-run", run: { portableDocuments: [] } }, { subject: { username: "blocked" } })).resolves.toEqual({
-      ok: false,
-      status: 403,
-      protocolVersion: KNOWLEDGE_TRANSFORMATION_PROTOCOL_VERSION,
-      operationId: "knowledge.distillation.export",
-      error: "AgentLibrary access denied for distillation export.",
       knowledgeAccessDecision: { allowed: false }
     });
   });

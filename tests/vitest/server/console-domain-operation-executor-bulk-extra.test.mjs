@@ -629,7 +629,7 @@ describe("console-domain bulk provider dispatch", () => {
       ["knowledge.summarization.runs.approve", { runId: "sum-1" }, 200],
       ["knowledge.agent_explore.runs.create", {}, 201],
       ["knowledge.agent_explore.runs.get", { runId: "explore-1" }, 200],
-      ["knowledge.distillation.workbench.runs.create", {}, 410]
+      ["knowledge.distillation.workbench.runs.create", {}, 501]
     ];
 
     for (const [operationId, input, status] of calls) {

@@ -6891,11 +6891,12 @@ async function executeKnowledgeTransformationOperation({ operationId, input = {}
   const subject = subjectFromAuthSession(context.authSession);
   try {
     const providerContext = { subject };
-    const operationResult = id === "raw-corpus.format.convert"
-      ? await provider.convertRawCorpus(input, providerContext)
-      : id === "knowledge.dossier.export"
-        ? await provider.exportDossier(input, providerContext)
-        : await provider.exportDistillation(input, providerContext);
+    let operationResult;
+    if (id === "raw-corpus.format.convert") {
+      operationResult = await provider.convertRawCorpus(input, providerContext);
+    } else {
+      operationResult = await provider.exportDossier(input, providerContext);
+    }
     appendKnowledgeAccessDecisionArtifacts(context, operationResult.knowledgeAccessDecision, id);
     return result(operationResult.ok ? 200 : operationResult.status || 400, protocolPayload(operationResult));
   } catch (error) {

@@ -3,6 +3,49 @@ export const EXTERNAL_KNOWLEDGE_DISTILLATION_PROTOCOL_VERSION =
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+const ERROR_CODES = Object.freeze({
+  CONFIGURATION_ERROR: "KD_CONFIGURATION_ERROR",
+  AUTHENTICATION_ERROR: "KD_AUTHENTICATION_ERROR",
+  UPSTREAM_UNAVAILABLE: "KD_UPSTREAM_UNAVAILABLE",
+  UPSTREAM_TIMEOUT: "KD_UPSTREAM_TIMEOUT",
+  UPSTREAM_BAD_RESPONSE: "KD_UPSTREAM_BAD_RESPONSE",
+  UPSTREAM_APPLICATION_ERROR: "KD_UPSTREAM_APPLICATION_ERROR",
+});
+
+export { ERROR_CODES as EXTERNAL_KD_ERROR_CODES };
+
+function classifyError(error, serviceCall = null) {
+  const status = serviceCall?.statusCode || 0;
+  const message = error instanceof Error ? error.message : String(error || "");
+
+  if (error?.code === "ECONNREFUSED" || error?.cause?.code === "ECONNREFUSED" ||
+      error?.code === "ENOTFOUND" || error?.cause?.code === "ENOTFOUND" ||
+      error?.code === "EAI_AGAIN" || error?.cause?.code === "EAI_AGAIN" ||
+      error?.code === "ECONNRESET") {
+    return { code: ERROR_CODES.UPSTREAM_UNAVAILABLE, message, status };
+  }
+  if (error?.name === "AbortError" || error?.name === "TimeoutError" ||
+      message.includes("aborted") || message.includes("timeout")) {
+    return { code: ERROR_CODES.UPSTREAM_TIMEOUT, message, status };
+  }
+  if (status === 401 || status === 403) {
+    return { code: ERROR_CODES.AUTHENTICATION_ERROR, message, status };
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return { code: ERROR_CODES.UPSTREAM_UNAVAILABLE, message, status };
+  }
+  if (status >= 400 && status < 500) {
+    return { code: ERROR_CODES.UPSTREAM_BAD_RESPONSE, message, status };
+  }
+  if (status >= 500) {
+    return { code: ERROR_CODES.UPSTREAM_APPLICATION_ERROR, message, status };
+  }
+  if (!status) {
+    return { code: ERROR_CODES.UPSTREAM_UNAVAILABLE, message, status: 0 };
+  }
+  return { code: ERROR_CODES.UPSTREAM_APPLICATION_ERROR, message, status };
+}
+
 function normalizeText(value = "") {
   return String(value || "").trim();
 }
@@ -229,10 +272,16 @@ export function createExternalKnowledgeDistillationClient({
         contentType: payloadRecord?.contentType || response?.headers?.get("content-type") || "",
         error
       });
+      const classified = classifyError(error, externalServiceCall);
       if (error && typeof error === "object") {
         error.externalServiceCall = externalServiceCall;
+        error.errorCode = classified.code;
       }
-      throw error;
+      const wrapped = new Error(`[${classified.code}] ${classified.message}`);
+      wrapped.statusCode = classified.status;
+      wrapped.externalServiceCall = externalServiceCall;
+      wrapped.errorCode = classified.code;
+      throw wrapped;
     }
     const payload = payloadRecord.body;
     const externalServiceCall = externalServiceCallRecord({
@@ -251,6 +300,8 @@ export function createExternalKnowledgeDistillationClient({
       error.statusCode = response.status;
       error.payload = payload;
       error.externalServiceCall = externalServiceCall;
+      const classified = classifyError(error, externalServiceCall);
+      error.errorCode = classified.code;
       throw error;
     }
     if (binary) {

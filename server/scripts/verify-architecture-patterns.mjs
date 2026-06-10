@@ -878,7 +878,6 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
       "async handleWorkspaceCodeChangeStatusSync",
       "async handleRawCorpusFormatConvert",
       "async handleKnowledgeDossierExport",
-      "async handleKnowledgeDistillationExport",
       "async handleGetRules",
       "async handleSetRules",
       "async handleGetExpertVocabulary",
@@ -974,9 +973,6 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
       "async handleKnowledgeRuleAuthoringRunGet",
       "async handleGoldCases",
       "async handleSaveGoldCase",
-      "async handleKnowledgeDistillationRuns",
-      "async handleKnowledgeDistillationRunGet",
-      "async handleKnowledgeDistillationWorkbench",
       "async handleResolveKnowledgeSuggestion",
       "async handleKnowledgeLearningJob",
       "async handleKnowledgeLearningHealth",
@@ -1272,12 +1268,6 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
     "knowledge.rule_authoring.runs.get",
     "knowledge.gold_cases.list",
     "knowledge.gold_cases.save",
-    "knowledge.distillation.runs.create",
-    "knowledge.distillation.runs.get",
-    "knowledge.distillation.workbench.runs.list",
-    "knowledge.distillation.workbench.runs.create",
-    "knowledge.distillation.workbench.runs.resume",
-    "knowledge.distillation.workbench.stage.export",
     "knowledge.suggestion_resolve",
     "knowledge.learning.jobs",
     "knowledge.learning.health",
@@ -1367,8 +1357,7 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
     "knowledgeWorkflowContext",
     "accessControlContext",
     "raw-corpus.format.convert",
-    "knowledge.dossier.export",
-    "knowledge.distillation.export"
+    "knowledge.dossier.export"
   ]) {
     assertTextIncludes(workspaceProtocolHandlers, needle, `${workspaceProtocolHandlersFile} must own workspace protocol façade handler ${needle}`);
   }
@@ -1653,7 +1642,6 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
       "workspace.code.change.status.sync",
       "raw-corpus.format.convert",
       "knowledge.dossier.export",
-      "knowledge.distillation.export",
       "executeConsoleAuthOperation",
     "auth.login",
     "auth.users.update",
@@ -1715,8 +1703,7 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
     "pact.knowledge-transformation.v1",
     "createKnowledgeTransformationProvider",
     "raw-corpus.format.convert",
-    "knowledge.dossier.export",
-    "knowledge.distillation.export"
+    "knowledge.dossier.export"
   ]) {
     assertTextIncludes(
       knowledgeTransformationModule,

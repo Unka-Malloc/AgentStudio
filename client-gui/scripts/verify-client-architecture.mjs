@@ -301,6 +301,59 @@ for (const label of ["Agents", "MCP Plugins", "Skill Hub", "Model Forwarding", "
   assert(shellSource.includes(label), `future client shell must expose module label: ${label}`);
 }
 
+// New P0 checks
+
+// 3. mcp_trust.rs must not contain handshakeVerified or metadata.signature direct trust
+const mcpTrustSource = await readText("client-cli/src/mcp_trust.rs");
+assert(!mcpTrustSource.includes("handshakeVerified") && !mcpTrustSource.includes("DevUnverifiedOverride"),
+  "mcp_trust.rs must not contain handshakeVerified boolean trust or DevUnverifiedOverride in production code"
+);
+assert(mcpTrustSource.includes("verify_endpoint_trust_with_env") || mcpTrustSource.includes("TrustReceipt"),
+  "mcp_trust.rs must implement receipt-based verification"
+);
+
+// 5. targets.rs must have unified adapter_capabilities function, not multiple hardcoded lists
+const targetsSource = await readText("client-cli/src/targets.rs");
+const supportsApplyMatches = targetsSource.match(/matches!\([\s\S]*?"openclaw".*?"kilo-code"\)/);
+assert(supportsApplyMatches === null,
+  "targets.rs must not contain duplicate supports_apply list; use adapter_capabilities_for or adapter_supports_action"
+);
+assert(targetsSource.includes("adapter_supports_action") || targetsSource.includes("adapter_capabilities_for"),
+  "targets.rs must contain unified adapter capability function"
+);
+
+// 6. mcp_plugins.rs must not unconditionally return status updated
+const mcpPluginsSource = await readText("client-cli/src/mcp_plugins.rs");
+const alwaysUpdatedStatus = mcpPluginsSource.match(/"updated"/);
+assert(mcpPluginsSource.includes("apply_ok") || !mcpPluginsSource.includes('"updated"'),
+  "mcp_plugins.rs must conditionally set status based on apply result"
+);
+
+// 7. mcp_plugins_panel.dart must reference supportedActions or supportsAction
+const mcpPluginsPanelSource = await readText("client-gui/lib/src/ui/mcp_plugins_panel.dart");
+assert(mcpPluginsPanelSource.includes("supportedAction") || mcpPluginsPanelSource.includes("canUpdateMcpPlugin") ||
+  mcpPluginsPanelSource.includes("canRollbackMcpPlugin"),
+  "mcp_plugins_panel.dart must reference target capability methods"
+);
+
+// 8. mcp_plugin_actions.dart must not show success on result['ok'] false
+const mcpPluginActionsSource = await readText("client-gui/lib/src/controllers/mcp_plugin_actions.dart");
+assert(!mcpPluginActionsSource.includes('无条件') && mcpPluginActionsSource.includes("result['ok']"),
+  "mcp_plugin_actions.dart must check result['ok'] before showing success"
+);
+
+// 9. set_json_path must not directly overwrite non-object
+const setJsonPathMatch = targetsSource.match(/\*entry\s*=\s*Value::Object/);
+assert(setJsonPathMatch === null,
+  "set_json_path must not silently overwrite non-object paths with Value::Object"
+);
+
+// 10. list_model_profiles output must use masking
+const forwardingSource = await readText("client-cli/src/forwarding.rs");
+assert(forwardingSource.includes("mask_profile_secrets") || forwardingSource.includes('"***"'),
+  "forwarding.rs list_model_profiles must mask secret values"
+);
+
 if (failures.length > 0) {
   console.error(JSON.stringify({ ok: false, failures }, null, 2));
   process.exit(1);
