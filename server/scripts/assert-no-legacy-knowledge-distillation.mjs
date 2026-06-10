@@ -64,14 +64,26 @@ const allowedPrefixes = [
   "tests/",
   "docs/reports/history/",
   "server/scripts/assert-no-legacy-knowledge-distillation",
-  "server/scripts/verify-",
 ];
+
+// Specific verification scripts that reference legacy operation IDs for
+// checking they no longer exist (rejectedInternal, deprecatedInternal lists).
+// These are migration regression tests, not production implementations.
+const allowedVerifyScripts = new Set([
+  "server/scripts/verify-external-service-api-registration.mjs",
+  "server/scripts/verify-agent-knowledge-tools.mjs",
+  "server/scripts/verify-protocol-operation-registration.mjs",
+  "server/scripts/verify-knowledge-architecture-governance.mjs",
+  "server/scripts/verify-knowledge-golden-distillation.mjs",
+  "server/scripts/verify-knowledge-distillation-optimization.mjs",
+]);
 
 function isAllowed(filePath) {
   const relative = path.relative(repoRoot, filePath);
   for (const prefix of allowedPrefixes) {
     if (relative.startsWith(prefix)) return true;
   }
+  if (allowedVerifyScripts.has(relative)) return true;
   return false;
 }
 
