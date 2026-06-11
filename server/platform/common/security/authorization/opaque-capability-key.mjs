@@ -561,6 +561,10 @@ function createKernelRecord({ alias = DEFAULT_ALIAS, provider = "local-file", se
   };
 }
 
+function isClosedPipeError(error) {
+  return error?.code === "EPIPE" || error?.code === "ECONNRESET";
+}
+
 function markNeedsInitialWrite(record) {
   Object.defineProperty(record, "__needsInitialWrite", {
     value: true,
@@ -583,6 +587,12 @@ async function runText(command, args = [], { input = "" } = {}) {
       stderr += chunk.toString();
     });
     child.on("error", reject);
+    child.stdin.on("error", (error) => {
+      if (isClosedPipeError(error)) {
+        return;
+      }
+      reject(error);
+    });
     child.on("close", (code) => {
       if (code !== 0) {
         reject(new Error(stderr.trim() || `${command} failed with exit code ${code}`));
@@ -590,7 +600,13 @@ async function runText(command, args = [], { input = "" } = {}) {
       }
       resolve(stdout);
     });
-    child.stdin.end(input);
+    try {
+      child.stdin.end(input);
+    } catch (error) {
+      if (!isClosedPipeError(error)) {
+        reject(error);
+      }
+    }
   });
 }
 
@@ -1554,6 +1570,13 @@ function runCommandJson({ command, args = [], env = {}, input = {}, timeoutMs = 
       clearTimeout(timeout);
       reject(error);
     });
+    child.stdin.on("error", (error) => {
+      if (isClosedPipeError(error)) {
+        return;
+      }
+      clearTimeout(timeout);
+      reject(error);
+    });
     child.on("close", (code) => {
       clearTimeout(timeout);
       if (code !== 0) {
@@ -1566,7 +1589,14 @@ function runCommandJson({ command, args = [], env = {}, input = {}, timeoutMs = 
         reject(new Error(`Opaque capability key helper returned invalid JSON: ${error.message}`));
       }
     });
-    child.stdin.end(`${JSON.stringify(input)}\n`);
+    try {
+      child.stdin.end(`${JSON.stringify(input)}\n`);
+    } catch (error) {
+      if (!isClosedPipeError(error)) {
+        clearTimeout(timeout);
+        reject(error);
+      }
+    }
   });
 }
 

@@ -6,6 +6,7 @@ class MockAgentService extends AgentService {
   List<String> lastArgs = [];
   Map<String, dynamic> mockResponse = {'ok': true};
   List<Map<String, dynamic>> mockSnapshots = [];
+  List<TargetCandidate> mockTargets = [];
 
   MockAgentService() : super(
     runCliExecutable: null,
@@ -14,6 +15,11 @@ class MockAgentService extends AgentService {
   @override
   Future<List<Map<String, dynamic>>> listSnapshots({String target = ''}) async {
     return mockSnapshots;
+  }
+
+  @override
+  Future<List<TargetCandidate>> scanTargets() async {
+    return mockTargets;
   }
 
   @override
