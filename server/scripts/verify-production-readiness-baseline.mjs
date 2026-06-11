@@ -640,9 +640,12 @@ async function main() {
   console.log(
     `Production: ${report.summary.productionPassed}/${report.summary.productionRequiredTotal} passed, ${report.summary.productionMissingOrDeferred} missing/deferred`
   );
+  console.log(
+    `Baseline guard passed: ${report.guardResults.require_baseline_v0_1_scopes_resolved.ok}`
+  );
   console.log(`Report: ${path.relative(repoRoot, jsonPath)}`);
 
-  if (!report.baselineV0_1ClaimAllowed) {
+  if (!report.guardResults.require_baseline_v0_1_scopes_resolved.ok) {
     process.exitCode = 1;
   }
 }
