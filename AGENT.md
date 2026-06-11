@@ -2,8 +2,10 @@
 
 ## 智能体入口与上下文范围
 
-- 进入任务时，优先用根目录 `package.json`、`README.md`、`docs/README.md` 和目标子目录最近的 `README.md` 建立上下文；这些入口通常足够定位脚本、架构事实源和运行说明。
-- 代码修改先按根 `README.md` 的目录职责表缩小范围，再在候选目录内搜索；文档修改先看 `docs/README.md` 的索引和维护规则，再打开目标文档。
+- `AGENT.md` 是根目录唯一的智能体工程入口；不要新增并行根入口文件，除非用户明确要求。
+- 根 `README.md` 和 `README.zh-CN.md` 是产品宣传页，默认不作为工程事实源；只有产品定位、对外文案或用户明确要求时才读取或修改。
+- 工程任务优先从本文件、目标子目录最近的 `AGENT.md`、`docs/README.md` 或局部说明建立上下文。
+- 代码修改先按任务路由缩小到一个子系统，再在候选目录内搜索；文档修改先看 `docs/README.md` 的索引和维护规则，再打开目标文档。
 - `build/`、`node_modules/`、`client-cli/target/`、`client-gui/build/` 和 `docs/reports/history/` 默认视为生成物、依赖缓存或历史材料；只有任务明确指向、验证输出指向，或需要核对历史事实时再进入。
 - 扩大到全仓库搜索前，先说明当前入口无法回答的问题，并尽量限定文件类型或目录前缀，减少无关上下文进入会话。
 - 开始修改前先运行 `git status --short`，区分当前任务改动和用户已有改动；无关改动保持原样。
@@ -17,6 +19,21 @@
 - 架构、策略或治理类任务先看 `docs/README.md`，再打开与主题对应的核心文档。
 - 测试任务先从失败测试或 verifier 本身开始；只有测试契约不清楚时再查阅 `docs/TEST-FRAMEWORK.md`。
 - Skill 或知识工具任务从 `skills/README.md` 或目标 skill 目录开始，避免默认展开完整 `docs/reports/history/`。
+- 子系统目录入口已放在 `server/AGENT.md`、`server-web/AGENT.md`、`mcp-connector/AGENT.md`、`client-cli/AGENT.md`、`client-gui/AGENT.md` 和 `docs/AGENT.md`。
+
+## 工作树协作
+
+- 默认把主工作树作为集成和手动产品文案维护区，不在其中混入大范围实验性改动。
+- 子系统工作优先使用独立 worktree：服务端、Web Console、MCP connector、CLI、GUI、文档/智能体规则分别建分支维护。
+- 跨子系统契约变更使用单独集成 worktree 完成，避免服务端接口、前端调用和文档在多个分支中漂移。
+- 具体拆分、目录归属和建树命令见 `docs/GIT-COLLAB.md`。
+
+## 任务启动流程
+
+- 开始工作时先说明当前 worktree、目标子系统和计划写入范围。
+- 读取根 `AGENT.md` 后，继续读取目标子系统的局部 `AGENT.md`；没有局部入口时再读取最近的 README。
+- 如果任务需要跨子系统修改，先切换到集成 worktree 或明确唯一负责人，再开始编辑。
+- 提交或交付前运行覆盖入口规则的 `npm run repo:hygiene`，或说明没有运行的原因。
 
 ## 用户配置真实性
 
