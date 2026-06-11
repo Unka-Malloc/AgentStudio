@@ -5,7 +5,7 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(22, 22, 22, 0.34);
+  background: var(--backdrop);
 }
 
 .path-picker-dialog {
@@ -32,7 +32,7 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(22, 22, 22, 0.38);
+  background: var(--backdrop);
 }
 
 .agent-evidence-preview-dialog {

@@ -176,7 +176,7 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(22, 22, 22, 0.42);
+  background: var(--backdrop);
 }
 
 .info-feed-advanced-dialog {
@@ -250,11 +250,7 @@
   border: 1px solid var(--info-feed-glass-border);
   border-radius: var(--radius-2xl);
   background: var(--bg-surface);
-  box-shadow:
-    inset 0 0 0 1px var(--border-subtle),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.06);
-  backdrop-filter: saturate(180%) blur(24px);
-  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
   overflow-y: auto;
 }
 
@@ -268,14 +264,8 @@
 
 .info-feed-input-dock::before,
 .info-feed-clarification-dock::before {
-  content: "";
-  position: absolute;
-  inset: 1px 1px auto;
-  height: 42%;
-  pointer-events: none;
-  border-radius: 17px 17px 12px 12px;
-  border-top: 1px solid var(--border-subtle);
-  background: linear-gradient(180deg, var(--bg-subtle), transparent);
+  content: none;
+  display: none;
 }
 
 .info-feed-input-dock.word-cloud-dialog::before {
@@ -291,22 +281,20 @@
 
 .info-feed-clarification-dock .info-feed-clarification-option {
   border-color: var(--info-feed-glass-border-soft);
-  background: var(--info-feed-glass-control);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.42);
-  backdrop-filter: blur(10px) saturate(150%);
-  -webkit-backdrop-filter: blur(10px) saturate(150%);
+  background: var(--bg-surface);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
 }
 
 .info-feed-clarification-dock .info-feed-summary-header {
   padding-bottom: 10px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.36);
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .info-feed-clarification-dock .info-feed-clarification-option:hover:not(:disabled),
 .info-feed-clarification-dock .info-feed-clarification-option:focus-visible:not(:disabled),
 .info-feed-clarification-dock .info-feed-clarification-option[data-selected="true"] {
-  border-color: rgba(0, 113, 227, 0.58);
-  background: rgba(239, 246, 255, 0.5);
+  border-color: var(--brand);
+  background: var(--brand-subtle);
   color: var(--brand);
 }
 
@@ -315,22 +303,17 @@
   min-height: 104px;
   resize: vertical;
   padding: 12px;
-  border: 1px solid var(--info-feed-glass-border-soft);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0.56)),
-    var(--info-feed-glass-control);
+  background: var(--bg-surface);
   color: var(--text-primary);
   font: inherit;
   line-height: 1.45;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.38);
-  backdrop-filter: blur(10px) saturate(150%);
-  -webkit-backdrop-filter: blur(10px) saturate(150%);
 }
 
 .info-feed-input-dock textarea:focus {
-  border-color: rgba(0, 113, 227, 0.58);
-  outline: 2px solid rgba(0, 113, 227, 0.18);
+  border-color: var(--brand);
+  outline: 2px solid var(--brand-ring);
   outline-offset: 1px;
 }
 
@@ -351,11 +334,8 @@
 
 .info-feed-input-actions select,
 .info-feed-input-actions .tool-button {
-  border-color: var(--info-feed-glass-border-soft);
-  background: var(--info-feed-glass-control);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.36);
-  backdrop-filter: blur(12px) saturate(150%);
-  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border-color: var(--border-subtle);
+  background: var(--bg-surface);
 }
 
 .info-feed-input-actions .primary-action {
@@ -395,7 +375,7 @@
   background: var(--info-feed-glass-control);
   color: var(--text-primary);
   font-size: var(--text-sm);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
 }
 
 .info-feed-attachment-chip[data-tone="danger"] {

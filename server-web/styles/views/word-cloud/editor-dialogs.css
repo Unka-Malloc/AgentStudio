@@ -20,7 +20,7 @@
   width: min(352px, calc(100% - 36px));
   min-width: 0;
   padding: 16px;
-  border: 1px solid rgba(37, 99, 235, 0.28);
+  border: 1px solid var(--brand-border);
   border-radius: var(--radius-xl);
   background: var(--bg-surface);
   box-shadow:
@@ -58,7 +58,7 @@
   display: grid;
   gap: var(--space-2-5);
   padding-top: 12px;
-  border-top: 1px solid rgba(148, 163, 184, 0.24);
+  border-top: 1px solid var(--border-soft);
 }
 
 .word-cloud-term-source .source-card-header {
@@ -127,7 +127,7 @@
   display: grid;
   gap: var(--space-1);
   padding: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
 }
@@ -146,13 +146,13 @@
 }
 
 .word-cloud-message[data-role="agent"] {
-  border-color: rgba(37, 99, 235, 0.28);
-  background: rgba(239, 246, 255, 0.58);
+  border-color: var(--brand-border);
+  background: var(--brand-subtle);
 }
 
 .word-cloud-message[data-role="user"] {
-  border-color: rgba(5, 150, 105, 0.24);
-  background: rgba(236, 253, 245, 0.48);
+  border-color: var(--success-border);
+  background: var(--success-surface);
 }
 
 .maintenance-run-table .job-table-header,

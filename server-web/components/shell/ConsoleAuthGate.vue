@@ -17,7 +17,22 @@ const {
   <section class="auth-gate">
     <article class="surface-card auth-card">
       <div class="auth-brand">
-        <div class="brand-mark" aria-hidden="true">S</div>
+        <svg class="brand-mark" aria-hidden="true" viewBox="-150 -150 300 300" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="ag-gold" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#c9a96e"/><stop offset="50%" stop-color="#f0d28c"/><stop offset="100%" stop-color="#a8893a"/>
+            </linearGradient>
+            <linearGradient id="ag-silver" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0%" stop-color="#7a8ea8"/><stop offset="100%" stop-color="#b0c0d4"/>
+            </linearGradient>
+          </defs>
+          <polygon fill="none" points="115.5,47.8 47.8,115.5 -47.8,115.5 -115.5,47.8 -115.5,-47.8 -47.8,-115.5 47.8,-115.5 115.5,-47.8" stroke="url(#ag-gold)" stroke-width="6" opacity="0.75"/>
+          <circle r="113" fill="none" stroke="#d4c5a0" stroke-width="4" opacity="0.5"/>
+          <circle cx="-16" cy="16" r="89" fill="none" stroke="url(#ag-silver)" stroke-width="3.5" opacity="0.45"/>
+          <circle cx="13" cy="-10" r="63" fill="none" stroke="#a0b0c4" stroke-width="3.5" opacity="0.5"/>
+          <circle r="36" fill="none" stroke="url(#ag-gold)" stroke-width="4" opacity="0.6"/>
+          <circle r="6" fill="#c9a96e" opacity="0.6"/>
+        </svg>
         <div>
           <h1 class="auth-brand-name">Pact</h1>
           <p class="brand-subtitle">{{ tt('知识管理控制台') }}</p>

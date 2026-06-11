@@ -2,56 +2,71 @@
   color-scheme: light;
 
   /* ── Primitive palette ──────────────────────────────────────────────── */
-  --blue-50: #eff6ff;
-  --blue-100: #dbeafe;
-  --blue-600: #2563eb;
-  --blue-700: #1d4ed8;
-  --blue-800: #1e40af;
-  --green-50: #f0fdf4;
+  /* Brand gold scale (derived from logo #c9a96e gradient) */
+  --gold-50:  #fdf8ef;
+  --gold-100: #f9f0dc;
+  --gold-200: #f0ddb4;
+  --gold-400: #d4a843;
+  --gold-600: #8c6a1e;
+  --gold-700: #6b4f10;
+  --gold-800: #4d3a0c;
+
+  /* Steel-blue scale (derived from logo silver #7a8ea8 → #b0c0d4) */
+  --steel-50:  #f0f4f8;
+  --steel-100: #dce6f0;
+  --steel-600: #4a6580;
+  --steel-700: #3a5068;
+
+  /* Semantic state colors (functional, not brand) */
+  --green-50:  #f0fdf4;
   --green-600: #16a34a;
-  --amber-50: #fffbeb;
+  --amber-50:  #fffbeb;
   --amber-400: #fbbf24;
+  --amber-600: #d97706;
   --amber-800: #92400e;
-  --red-50: #fef2f2;
+  --red-50:  #fef2f2;
   --red-600: #dc2626;
-  --gray-0: #ffffff;
-  --gray-50: #f9fafb;
-  --gray-100: #f3f4f6;
-  --gray-200: #e5e7eb;
-  --gray-300: #d1d5db;
-  --gray-400: #9ca3af;
-  --gray-500: #6b7280;
-  --gray-600: #4b5563;
-  --gray-700: #374151;
-  --gray-800: #1f2937;
-  --gray-900: #111827;
+
+  /* Warm neutral scale (replacing cold Tailwind grays) */
+  --neutral-0:   #ffffff;
+  --neutral-50:  #fafaf8;
+  --neutral-100: #f5f4f1;
+  --neutral-200: #e8e4dc;
+  --neutral-300: #d4cfc5;
+  --neutral-400: #a09a8e;
+  --neutral-500: #7a7060;
+  --neutral-600: #5c5549;
+  --neutral-700: #3d3830;
+  --neutral-800: #262320;
+  --neutral-900: #1a1814;
 
   /* ── Semantic colour tokens ──────────────────────────────────────────── */
-  --bg-base: var(--gray-100);
-  --bg-surface: var(--gray-0);
-  --bg-subtle: var(--gray-50);
-  --bg-inset: var(--gray-100);
-  --border-subtle: var(--gray-200);
-  --border-strong: var(--gray-300);
+  --bg-base:    var(--neutral-100);
+  --bg-surface: var(--neutral-0);
+  --bg-subtle:  var(--neutral-50);
+  --bg-inset:   var(--neutral-100);
+  --border-subtle: var(--neutral-200);
+  --border-strong: var(--neutral-300);
 
-  --text-primary: var(--gray-900);
-  --text-secondary: var(--gray-600);
-  --text-muted: var(--gray-500);
-  --text-disabled: var(--gray-400);
-  --text-on-brand: #ffffff;
+  --text-primary:   var(--neutral-900);
+  --text-secondary: var(--neutral-600);
+  --text-muted:     var(--neutral-500);
+  --text-disabled:  var(--neutral-400);
+  --text-on-brand:  #ffffff;
 
-  /* Brand = action blue */
-  --brand: #2563eb;
-  --brand-strong: #1d4ed8;
-  --brand-subtle: var(--blue-50);
-  --brand-muted: var(--blue-100);
-  --accent: var(--brand);
+  /* Brand = antique gold (logo primary) */
+  --brand:        var(--gold-600);
+  --brand-strong: var(--gold-700);
+  --brand-subtle: var(--gold-50);
+  --brand-muted:  var(--gold-100);
+  --accent:       var(--brand);
+
+  /* Info = steel-blue (logo secondary, differentiated from brand) */
+  --info:         var(--steel-600);
+  --info-surface: var(--steel-50);
+  --info-border:  var(--steel-100);
 
   /* Semantic states */
-  --info: #2563eb;
-  --info-surface: var(--blue-50);
-  --info-border: var(--blue-100);
-
   --success: #16a34a;
   --success-surface: var(--green-50);
   --success-border: #bbf7d0;
@@ -64,6 +79,26 @@
   --danger: #dc2626;
   --danger-surface: var(--red-50);
   --danger-border: #fecaca;
+
+  /* ── Interaction tokens (derived from brand/neutral for opacity states) ── */
+  --brand-ring:    rgba(140, 106, 30, 0.15);
+  --brand-tint:    rgba(140, 106, 30, 0.08);
+  --brand-border:  rgba(140, 106, 30, 0.28);
+  --brand-shadow:  rgba(140, 106, 30, 0.20);
+  --danger-tint:   rgba(220, 38, 38, 0.10);
+  --success-tint:  rgba(22, 163, 74, 0.10);
+
+  /* Overlay / backdrop */
+  --backdrop:        rgba(26, 24, 20, 0.40);
+  --backdrop-strong: rgba(26, 24, 20, 0.50);
+
+  /* Soft borders and scrollbar */
+  --border-soft:          rgba(160, 154, 142, 0.26);
+  --scrollbar-thumb:      rgba(122, 112, 96, 0.42);
+  --scrollbar-thumb-hover: rgba(92, 85, 73, 0.58);
+
+  /* Inverse text (for use on brand/dark backgrounds) */
+  --text-inverse: #ffffff;
 
   /* ── Spacing scale (4 px grid) ──────────────────────────────────────── */
   --space-px:  1px;
@@ -117,11 +152,11 @@
   --leading-relaxed: 1.625;
 
   /* ── Elevation / Shadow ──────────────────────────────────────────── */
-  --shadow-xs: 0 1px 2px rgba(0,0,0,.05);
-  --shadow-sm: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04);
-  --shadow-md: 0 4px 12px rgba(0,0,0,.08), 0 2px 4px rgba(0,0,0,.04);
-  --shadow-lg: 0 8px 24px rgba(0,0,0,.10), 0 4px 8px rgba(0,0,0,.04);
-  --shadow-xl: 0 20px 48px rgba(0,0,0,.14), 0 8px 16px rgba(0,0,0,.06);
+  --shadow-xs: 0 1px 2px rgba(26,24,20,.05);
+  --shadow-sm: 0 1px 3px rgba(26,24,20,.07), 0 1px 2px rgba(26,24,20,.04);
+  --shadow-md: 0 4px 12px rgba(26,24,20,.08), 0 2px 4px rgba(26,24,20,.04);
+  --shadow-lg: 0 8px 24px rgba(26,24,20,.10), 0 4px 8px rgba(26,24,20,.04);
+  --shadow-xl: 0 20px 48px rgba(26,24,20,.14), 0 8px 16px rgba(26,24,20,.06);
   /* backward compat alias */
   --shadow-soft: var(--shadow-md);
 
@@ -151,8 +186,8 @@
   --z-top:     80;
 
   /* ── Skeleton ────────────────────────────────────────────────────── */
-  --skeleton-base:      var(--gray-200);
-  --skeleton-highlight: var(--gray-100);
+  --skeleton-base:      var(--neutral-200);
+  --skeleton-highlight: var(--neutral-100);
 
   /* ── Layout ─────────────────────────────────────────────────────── */
   --sidebar-width: 220px;

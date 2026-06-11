@@ -59,13 +59,13 @@
 
 .document-chunk-block:hover,
 .document-chunk-block.active {
-  border-color: rgba(15, 98, 254, 0.42);
-  box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.12);
+  border-color: var(--brand-border);
+  box-shadow: 0 0 0 3px var(--brand-ring);
 }
 
 .document-chunk-block:focus-within {
-  border-color: rgba(15, 98, 254, 0.42);
-  box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.12);
+  border-color: var(--brand-border);
+  box-shadow: 0 0 0 3px var(--brand-ring);
   outline: 0;
 }
 

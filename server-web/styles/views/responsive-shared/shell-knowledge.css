@@ -53,7 +53,7 @@
     position: fixed;
     inset: 0;
     z-index: var(--z-backdrop);
-    background: rgba(22, 22, 22, 0.36);
+    background: var(--backdrop);
   }
 
   .side-nav {
@@ -64,7 +64,7 @@
     height: 100vh;
     transform: translateX(-110%);
     transition: transform var(--dur-slow) var(--ease-std);
-    box-shadow: 4px 0 24px rgba(22, 22, 22, 0.14);
+    box-shadow: 4px 0 24px var(--border-soft);
   }
 
   .side-nav.is-open {

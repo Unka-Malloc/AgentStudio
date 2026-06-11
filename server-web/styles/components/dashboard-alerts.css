@@ -277,7 +277,7 @@
 .configuration-alert-item:hover,
 .configuration-alert-item:focus-within {
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.14);
+  box-shadow: 0 0 0 3px var(--brand-ring);
 }
 
 .configuration-alert-item strong,
@@ -394,7 +394,7 @@
 [data-config-target][data-config-highlighted="true"] {
   outline: 2px solid var(--warning);
   outline-offset: 3px;
-  box-shadow: 0 0 0 5px rgba(241, 194, 27, 0.18);
+  box-shadow: 0 0 0 5px var(--brand-ring);
   transition:
     outline-color var(--dur-base) var(--ease-std),
     box-shadow var(--dur-base) var(--ease-std);

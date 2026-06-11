@@ -28,7 +28,7 @@
 .el-select .el-select__wrapper.is-focused {
   box-shadow:
     0 0 0 1px var(--brand) inset,
-    0 0 0 3px rgba(15, 98, 254, 0.15);
+    0 0 0 3px var(--brand-ring);
 }
 
 .el-select .el-select__placeholder,
@@ -54,8 +54,8 @@
 .el-button {
   --el-color-primary: var(--brand);
   --el-color-primary-light-3: var(--brand-strong);
-  --el-color-primary-light-5: rgba(15, 98, 254, 0.22);
-  --el-color-primary-light-7: rgba(15, 98, 254, 0.14);
+  --el-color-primary-light-5: var(--brand-shadow);
+  --el-color-primary-light-7: var(--brand-ring);
   --el-color-primary-light-9: var(--info-surface);
   --el-color-primary-dark-2: var(--brand-strong);
   --el-border-color: var(--border-subtle);

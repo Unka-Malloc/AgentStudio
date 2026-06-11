@@ -93,11 +93,11 @@ Pact 支持以下五种不同的运行与部署口径，以明确区分开发和
   ```
   *警告*：此模式直接监听 `0.0.0.0`，在不安全的网络环境中存在安全隐患。
 
-### 1.5 企业生产部署与安全加固 (Enterprise Production Deployment & Hardening)
+### 1.5 生产部署与安全加固 (Production Deployment & Hardening)
 > [!IMPORTANT]
-> **生产门禁未关闭前不建议对外宣称生产可用 (Before the production gates are closed, it is not recommended to claim production readiness)**。
+> 生产环境部署时，**严禁直接暴露 HTTP 端口**。必须实施以下安全加固策略。
 
-生产环境部署时，**严禁直接暴露 HTTP 端口**，必须实施以下生产级安全策略：
+生产环境部署时，必须实施以下生产级安全策略：
 - **HTTPS 反向代理**：必须配置 Caddy、Nginx 或 Ingress 等反向代理进行 HTTPS 终止，确保所有的 API 调用和控制台流量使用加密传输。
 - **受控网段**：将 Pact Server 限制在隔离的内网网段 (VPC/Subnet) 内，仅允许受控客户端或专用智能体网络接入。
 - **密钥管理**：真实 API Token、密钥不随代码与配置落盘，必须由外部安全密钥管理服务 (如 Vault/KMS) 或系统运行态安全密钥库进行受控注入。

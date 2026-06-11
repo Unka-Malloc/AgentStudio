@@ -5,7 +5,7 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(22, 22, 22, 0.42);
+  background: var(--backdrop);
 }
 
 .data-source-dialog {

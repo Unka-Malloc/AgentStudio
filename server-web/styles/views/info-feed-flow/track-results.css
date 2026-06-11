@@ -96,7 +96,7 @@
   min-height: 0;
   overflow-y: auto;
   padding-right: 2px;
-  scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 
@@ -111,12 +111,12 @@
 .info-feed-track-body::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: var(--radius-full);
-  background: rgba(100, 116, 139, 0.42);
+  background: var(--scrollbar-thumb);
   background-clip: padding-box;
 }
 
 .info-feed-track-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(71, 85, 105, 0.58);
+  background: var(--scrollbar-thumb-hover);
   background-clip: padding-box;
 }
 

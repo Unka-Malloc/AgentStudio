@@ -135,6 +135,6 @@
 .status-strip-action:hover,
 .status-strip-action:focus-visible {
   background: var(--danger);
-  color: #fff;
+  color: var(--text-on-brand);
   outline: none;
 }

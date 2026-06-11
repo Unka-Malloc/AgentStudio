@@ -20,7 +20,7 @@
 .info-feed-dialog-divider {
   height: 1px;
   border: 0;
-  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.62), transparent);
+  background: linear-gradient(90deg, transparent, var(--scrollbar-thumb-hover), transparent);
 }
 
 .info-feed-history-panel {
@@ -30,7 +30,7 @@
 .info-feed-history {
   margin-bottom: 14px;
   padding: 8px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--info-border);
   border-radius: var(--radius-md);
   background: var(--info-surface);
 }

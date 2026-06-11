@@ -10,7 +10,7 @@
   display: grid;
   gap: var(--space-1-5);
   padding: 10px 12px;
-  border: 1px solid #bae6fd;
+  border: 1px solid var(--info-border);
   border-radius: var(--radius-lg);
   background: var(--info-surface);
 }

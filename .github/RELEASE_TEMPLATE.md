@@ -1,35 +1,53 @@
 # Pact v<VERSION>
 
-This release brings [brief summary of the primary focus or theme of this release].
+<brief summary of the primary focus or theme of this release>
 
 ## Highlights
+
 - **[Feature/Fix Name]:** [Brief description of the impact or what changed]
 - **[Feature/Fix Name]:** [Brief description of the impact or what changed]
 
-## Assets Included
-- `pact-mcp-connector-<VERSION>.tgz` (Source package)
-- `pact-mcp-connector-<VERSION>-macos-arm64.zip` (Portable runtime for macOS arm64)
-- `pact-mcp-connector-<VERSION>-macos-arm64.tar.gz` (Portable runtime for macOS arm64)
-- `pact-mcp-connector-<VERSION>-linux-x86_64.tar.gz` (Portable runtime for Linux x86_64 / amd64)
-- `pact-mcp-connector-<VERSION>-linux-arm64.tar.gz` (Portable runtime for Linux arm64)
-- `pact-mcp-connector-<VERSION>-linux-x86_64-musl.tar.gz` (Portable runtime for Linux x86_64 / amd64 musl/alpine)
-- `pact-mcp-install.sh` (Bootstrap installer)
-- `pact-mcp-uninstall.sh` (Uninstaller)
-- `pact-mcp-release.json` (Release Manifest)
-- `latest.json`
+## Quick Install
 
-## Installation
+### Docker (Server + Web Console)
 
-Run the following command to automatically detect your environment, download the correct assets, and start the installer:
+```bash
+docker pull ghcr.io/unka-malloc/pact:<VERSION>
+docker compose up -d
+```
+
+### MCP Connector (Agent Integration)
+
+Automatically detects your OS and architecture:
 
 ```bash
 /bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
 ```
 
-## Uninstallation
+## Release Assets
 
-To cleanly remove the connector and its configurations:
+| Asset | Description |
+| --- | --- |
+| `pact-mcp-connector-<VERSION>-macos-arm64.tar.gz` | MCP Connector for macOS Apple Silicon |
+| `pact-mcp-connector-<VERSION>-macos-arm64.zip` | MCP Connector for macOS Apple Silicon (zip) |
+| `pact-mcp-connector-<VERSION>-linux-x86_64.tar.gz` | MCP Connector for Linux x86_64 |
+| `pact-mcp-connector-<VERSION>-linux-arm64.tar.gz` | MCP Connector for Linux ARM64 |
+| `pact-mcp-connector-<VERSION>-linux-x86_64-musl.tar.gz` | MCP Connector for Alpine/musl Linux |
+| `pact-mcp-install.sh` | Bootstrap installer script |
+| `pact-mcp-uninstall.sh` | Uninstaller script |
+| `pact-mcp-release.json` | Release manifest |
+| `latest.json` | Latest version metadata |
+
+## Uninstall
 
 ```bash
 /bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-uninstall.sh)"
 ```
+
+## Supported Agents
+
+OpenClaw, Claude Code, Codex, Gemini CLI, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, Windsurf — and any other MCP-compatible agent.
+
+---
+
+[Full Changelog](https://github.com/Unka-Malloc/Pact/blob/main/CHANGELOG.md)

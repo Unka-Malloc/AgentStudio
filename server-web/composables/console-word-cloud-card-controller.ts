@@ -20,14 +20,14 @@ type ConsoleWordCloudCardControllerOptions = {
 };
 
 const wordCloudPalette = [
-  { accent: "#2563eb", fill: "rgba(37, 99, 235, 0.09)" },
-  { accent: "#059669", fill: "rgba(5, 150, 105, 0.1)" },
-  { accent: "#b45309", fill: "rgba(180, 83, 9, 0.1)" },
-  { accent: "#7c3aed", fill: "rgba(124, 58, 237, 0.09)" },
-  { accent: "#dc2626", fill: "rgba(220, 38, 38, 0.08)" },
-  { accent: "#0891b2", fill: "rgba(8, 145, 178, 0.1)" },
-  { accent: "#4d7c0f", fill: "rgba(77, 124, 15, 0.1)" },
-  { accent: "#be185d", fill: "rgba(190, 24, 93, 0.08)" },
+  { accent: "#8c6a1e", fill: "rgba(140, 106, 30, 0.09)" },   // brand gold
+  { accent: "#4a6580", fill: "rgba(74, 101, 128, 0.10)" },   // steel-blue
+  { accent: "#059669", fill: "rgba(5, 150, 105, 0.10)" },    // emerald
+  { accent: "#7c3aed", fill: "rgba(124, 58, 237, 0.09)" },   // violet
+  { accent: "#b45309", fill: "rgba(180, 83, 9, 0.10)" },     // amber
+  { accent: "#0891b2", fill: "rgba(8, 145, 178, 0.10)" },    // cyan
+  { accent: "#4d7c0f", fill: "rgba(77, 124, 15, 0.10)" },    // olive
+  { accent: "#be185d", fill: "rgba(190, 24, 93, 0.08)" },    // rose
 ];
 
 export function createConsoleWordCloudCardController(
