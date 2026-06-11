@@ -4,18 +4,17 @@
   place-items: center;
   min-height: 100vh;
   padding: var(--space-6);
-  background: linear-gradient(135deg, var(--bg-base) 0%, var(--bg-subtle) 50%, var(--bg-base) 100%);
+  background: var(--bg-base);
 }
 
 .auth-card {
   width: 100%;
   max-width: 420px;
   padding: var(--space-8);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-xl);
+  box-shadow: var(--shadow-lg);
 }
 
 .auth-form {

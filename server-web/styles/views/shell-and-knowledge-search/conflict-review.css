@@ -23,7 +23,7 @@
 }
 
 .knowledge-conflict-table .is-selected-review-row > .el-table__cell {
-  background: rgba(37, 99, 235, 0.08);
+  background: var(--brand-tint);
 }
 
 .knowledge-review-decision-card {

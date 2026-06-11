@@ -229,9 +229,7 @@
   position: fixed;
   inset: 0;
   z-index: var(--z-backdrop);
-  background: rgba(0,0,0,0.40);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: var(--backdrop);
   animation: fade-in var(--dur-base) var(--ease-out);
 }
 
@@ -299,9 +297,7 @@
   position: fixed;
   inset: 0;
   z-index: var(--z-modal);
-  background: rgba(0,0,0,0.5);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: var(--backdrop-strong);
   display: flex;
   align-items: center;
   justify-content: center;

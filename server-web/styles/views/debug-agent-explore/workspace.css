@@ -82,5 +82,5 @@
 .agent-explore-split-resizer:focus-visible span,
 .agent-explore-workspace.is-resizing .agent-explore-split-resizer span {
   background: var(--brand);
-  box-shadow: 0 0 0 4px #dbeafe;
+  box-shadow: 0 0 0 4px var(--info-border);
 }

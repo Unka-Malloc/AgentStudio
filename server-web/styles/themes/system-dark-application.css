@@ -56,14 +56,12 @@
   /* Info-feed input dock */
   .info-feed-input-dock,
   .info-feed-clarification-dock {
-    background: rgba(22, 27, 34, 0.90);
+    background: var(--bg-surface);
     border-color: var(--border-subtle);
-    box-shadow:
-      inset 0 0 0 1px rgba(255,255,255,0.05),
-      inset 0 -1px 0 rgba(0,0,0,0.36);
+    box-shadow: inset 0 0 0 1px var(--border-subtle);
   }
   .info-feed-input-dock textarea {
-    background: rgba(13, 17, 23, 0.72);
+    background: var(--bg-inset);
     border-color: var(--border-subtle);
     color: var(--text-primary);
   }
@@ -115,10 +113,7 @@
 
   /* Word cloud */
   .word-cloud-architecture {
-    background:
-      linear-gradient(180deg, rgba(22,27,34,0.9), rgba(28,33,40,0.96)),
-      radial-gradient(circle at 18% 18%, rgba(88,166,255,0.08), transparent 28%),
-      radial-gradient(circle at 78% 20%, rgba(63,185,80,0.08), transparent 30%);
+    background: var(--bg-surface);
   }
   .word-cloud-class-card {
     background: color-mix(in srgb, var(--word-cloud-fill) 40%, var(--bg-surface));
@@ -227,21 +222,20 @@
     background: var(--brand);
   }
 
-  /* Surface cards in dark mode get a subtle inner border */
+  /* Surface cards in dark mode */
   .surface-card {
-    box-shadow: var(--shadow-xs),
-                inset 0 0 0 1px rgba(255,255,255,0.04);
+    box-shadow: var(--shadow-xs);
+    border: 1px solid var(--border-subtle);
   }
 
-  /* Topbar glass effect adapts to dark */
+  /* Topbar */
   .topbar {
-    background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+    background: var(--bg-surface);
   }
 
   /* Metric card hover in dark */
   .metric-card:hover {
-    box-shadow: var(--shadow-md),
-                inset 0 0 0 1px rgba(255,255,255,0.06);
+    box-shadow: var(--shadow-md);
   }
 
   body,
@@ -251,12 +245,10 @@
 
   /* Auth gate dark background */
   .auth-gate {
-    background:
-      radial-gradient(circle at 50% 0%, rgba(88, 166, 255, 0.10), transparent 34%),
-      linear-gradient(135deg, var(--bg-base) 0%, var(--bg-subtle) 52%, var(--bg-base) 100%);
+    background: var(--bg-base);
   }
   .auth-card {
-    background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+    background: var(--bg-surface);
     border-color: var(--border-strong);
   }
   .auth-brand {
@@ -269,17 +261,15 @@
     background: var(--bg-inset);
     border-color: var(--border-strong);
     color: var(--text-primary);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
   }
   .auth-form input:hover {
     border-color: var(--border-strong);
   }
   .auth-form input:focus {
     border-color: var(--brand);
-    outline: none;
-    box-shadow:
-      0 0 0 3px rgba(88,166,255,0.18),
-      inset 0 0 0 1px rgba(255,255,255,0.05);
+    outline: 2px solid rgba(226,180,76,0.15);
+    outline-offset: 1px;
+    box-shadow: none;
   }
   .auth-language-button {
     background: var(--bg-subtle);

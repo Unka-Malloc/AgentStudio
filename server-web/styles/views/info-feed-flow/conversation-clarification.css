@@ -19,7 +19,7 @@
 
 .info-feed-clarification-inline {
   padding: 14px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--info-border);
   border-radius: var(--radius-lg);
   background: var(--info-surface);
 }

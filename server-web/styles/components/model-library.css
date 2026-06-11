@@ -57,7 +57,7 @@
 }
 
 .module-assignment-row:hover {
-  border-color: rgba(37, 99, 235, 0.22);
+  border-color: var(--brand-shadow);
   background: var(--info-surface);
 }
 
@@ -331,7 +331,7 @@
 }
 
 .model-library-bindings {
-  border-color: rgba(0, 67, 206, 0.22);
+  border-color: var(--brand-shadow);
   background: var(--info-surface);
 }
 
@@ -345,7 +345,7 @@
   padding: 8px 10px;
   display: grid;
   gap: var(--space-1);
-  border: 1px solid rgba(0, 67, 206, 0.18);
+  border: 1px solid var(--brand-ring);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
 }

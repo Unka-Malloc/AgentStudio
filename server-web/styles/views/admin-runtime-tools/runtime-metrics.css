@@ -103,7 +103,7 @@
   border-radius: var(--radius-md);
   padding: 12px;
   background:
-    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px) 0 44px / 25% calc(100% - 44px) no-repeat,
+    linear-gradient(90deg, var(--brand-tint) 1px, transparent 1px) 0 44px / 25% calc(100% - 44px) no-repeat,
     var(--bg-surface);
 }
 
@@ -168,7 +168,7 @@
   overflow: hidden;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
-  background: rgba(148, 163, 184, 0.08);
+  background: var(--brand-tint);
 }
 
 .source-client-chart-track i {
@@ -176,12 +176,12 @@
   inset: 0 auto 0 0;
   width: var(--bar-size, 0%);
   border-radius: inherit;
-  background: linear-gradient(90deg, rgba(76, 158, 255, 0.88), rgba(34, 197, 94, 0.72));
+  background: linear-gradient(90deg, var(--info), var(--success));
 }
 
 .source-client-chart-row[data-empty="true"] .source-client-chart-track i {
   width: 2px;
-  background: rgba(148, 163, 184, 0.55);
+  background: var(--scrollbar-thumb);
 }
 
 .source-client-chart-track strong {

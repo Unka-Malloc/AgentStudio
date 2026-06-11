@@ -44,10 +44,9 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-lg);
-  background: var(--text-primary);
-  color: #fff;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  padding: 4px;
   transition: transform var(--dur-base) var(--ease-emphasized);
 }
 

@@ -1,18 +1,16 @@
 # ==============================================================================
 # Pact Dockerfile
 #
-# Node 版本口径 (Node.js Version Specification):
-#   - 最低支持版本 (Minimum supported): Node.js 22+
-#   - 推荐/Docker 运行环境 (Recommended / Docker runtime): Node.js 24 (本镜像基于 node:24-bookworm-slim)
+# Base image: node:24-bookworm-slim
+# Minimum supported: Node.js 22+  |  Recommended: Node.js 24
 #
-# 生产部署安全警告 (Production Deployment Warning):
-#   - 生产门禁未关闭前不建议对外宣称生产可用。
-#   - 生产环境不得直接复用本机 HTTP 配置，必须采取以下加固策略：
-#     1) HTTPS 反向代理 (Caddy/Nginx/Ingress 终止并启用 HTTPS)
-#     2) 受控网段 (隔离直接端口访问)
-#     3) 密钥管理 (外部环境变量或安全 Key 注入)
-#     4) 审计归档 (Operation Ledger 日志审计与导出)
-#     5) 备份恢复策略 (元数据库与存储灾备)
+# Production Deployment Notes:
+#   This image exposes plain HTTP on port 7228. For production use:
+#   1) Terminate TLS via a reverse proxy (Caddy, Nginx, Traefik, or Ingress)
+#   2) Deploy within an isolated network segment (VPC/private subnet)
+#   3) Inject secrets via environment variables or external KMS/Vault
+#   4) Enable Operation Ledger archival for audit compliance
+#   5) Implement regular backups for /data volume
 # ==============================================================================
 FROM node:24-bookworm-slim AS build
 

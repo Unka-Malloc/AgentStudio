@@ -1,24 +1,24 @@
-/* ─── Force light ─────────────────────────────────────────────────────────── */
+/* ─── Force light (warm neutral + gold brand) ─────────────────────────────── */
 
 html.theme-light {
   color-scheme: light;
-  --bg-base:    #f3f4f6;
+  --bg-base:    #f5f4f1;
   --bg-surface: #ffffff;
-  --bg-subtle:  #f9fafb;
-  --bg-inset:   #f3f4f6;
-  --border-subtle: #e5e7eb;
-  --border-strong: #d1d5db;
-  --text-primary:   #111827;
-  --text-secondary: #4b5563;
-  --text-muted:     #6b7280;
-  --text-disabled:  #9ca3af;
-  --brand:        #2563eb;
-  --brand-strong: #1d4ed8;
-  --brand-subtle: #eff6ff;
-  --brand-muted:  #dbeafe;
-  --info:         #2563eb;
-  --info-surface: #eff6ff;
-  --info-border:  #dbeafe;
+  --bg-subtle:  #fafaf8;
+  --bg-inset:   #f5f4f1;
+  --border-subtle: #e8e4dc;
+  --border-strong: #d4cfc5;
+  --text-primary:   #1a1814;
+  --text-secondary: #5c5549;
+  --text-muted:     #7a7060;
+  --text-disabled:  #a09a8e;
+  --brand:        #8c6a1e;
+  --brand-strong: #6b4f10;
+  --brand-subtle: #fdf8ef;
+  --brand-muted:  #f9f0dc;
+  --info:         #4a6580;
+  --info-surface: #f0f4f8;
+  --info-border:  #dce6f0;
   --success:         #16a34a;
   --success-surface: #f0fdf4;
   --success-border:  #bbf7d0;
@@ -29,14 +29,31 @@ html.theme-light {
   --danger:         #dc2626;
   --danger-surface: #fef2f2;
   --danger-border:  #fecaca;
-  --shadow-xs:   0 1px 2px rgba(0,0,0,.05);
-  --shadow-sm:   0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04);
-  --shadow-md:   0 4px 12px rgba(0,0,0,.08), 0 2px 4px rgba(0,0,0,.04);
-  --shadow-lg:   0 8px 24px rgba(0,0,0,.10), 0 4px 8px rgba(0,0,0,.04);
-  --shadow-xl:   0 20px 48px rgba(0,0,0,.14), 0 8px 16px rgba(0,0,0,.06);
+  --shadow-xs:   0 1px 2px rgba(26,24,20,.05);
+  --shadow-sm:   0 1px 3px rgba(26,24,20,.07), 0 1px 2px rgba(26,24,20,.04);
+  --shadow-md:   0 4px 12px rgba(26,24,20,.08), 0 2px 4px rgba(26,24,20,.04);
+  --shadow-lg:   0 8px 24px rgba(26,24,20,.10), 0 4px 8px rgba(26,24,20,.04);
+  --shadow-xl:   0 20px 48px rgba(26,24,20,.14), 0 8px 16px rgba(26,24,20,.06);
   --shadow-soft: var(--shadow-md);
-  --skeleton-base:      #e5e7eb;
-  --skeleton-highlight: #f3f4f6;
+  --skeleton-base:      #e8e4dc;
+  --skeleton-highlight: #f5f4f1;
+
+  /* Interaction tokens — light */
+  --brand-ring:    rgba(140, 106, 30, 0.15);
+  --brand-tint:    rgba(140, 106, 30, 0.08);
+  --brand-border:  rgba(140, 106, 30, 0.28);
+  --brand-shadow:  rgba(140, 106, 30, 0.20);
+  --danger-tint:   rgba(220, 38, 38, 0.10);
+  --success-tint:  rgba(22, 163, 74, 0.10);
+
+  --backdrop:        rgba(26, 24, 20, 0.40);
+  --backdrop-strong: rgba(26, 24, 20, 0.50);
+
+  --border-soft:          rgba(160, 154, 142, 0.26);
+  --scrollbar-thumb:      rgba(122, 112, 96, 0.42);
+  --scrollbar-thumb-hover: rgba(92, 85, 73, 0.58);
+
+  --text-inverse: #ffffff;
 }
 
 /* Reset El-Plus dark vars when forcing light */
@@ -53,83 +70,80 @@ html.theme-light .el-input,
 html.theme-light .el-input__wrapper,
 html.theme-light .el-textarea {
   --el-bg-color:            #ffffff;
-  --el-bg-color-page:       #f3f4f6;
+  --el-bg-color-page:       #f5f4f1;
   --el-bg-color-overlay:    #ffffff;
-  --el-text-color-primary:      #111827;
-  --el-text-color-regular:      #111827;
-  --el-text-color-secondary:    #4b5563;
-  --el-text-color-placeholder:  #6b7280;
-  --el-text-color-disabled:     #9ca3af;
-  --el-border-color:            #e5e7eb;
-  --el-border-color-light:      #e5e7eb;
-  --el-border-color-lighter:    #f3f4f6;
-  --el-border-color-extra-light:#f9fafb;
-  --el-border-color-dark:       #d1d5db;
-  --el-border-color-darker:     #9ca3af;
-  --el-border-color-hover:      #2563eb;
-  --el-fill-color:              #f9fafb;
+  --el-text-color-primary:      #1a1814;
+  --el-text-color-regular:      #1a1814;
+  --el-text-color-secondary:    #5c5549;
+  --el-text-color-placeholder:  #7a7060;
+  --el-text-color-disabled:     #a09a8e;
+  --el-border-color:            #e8e4dc;
+  --el-border-color-light:      #e8e4dc;
+  --el-border-color-lighter:    #f5f4f1;
+  --el-border-color-extra-light:#fafaf8;
+  --el-border-color-dark:       #d4cfc5;
+  --el-border-color-darker:     #a09a8e;
+  --el-border-color-hover:      #8c6a1e;
+  --el-fill-color:              #fafaf8;
   --el-fill-color-blank:        #ffffff;
-  --el-fill-color-light:        #f9fafb;
+  --el-fill-color-light:        #fafaf8;
   --el-fill-color-lighter:      #ffffff;
-  --el-fill-color-lightest:     #f3f4f6;
-  --el-fill-color-dark:         #f3f4f6;
-  --el-fill-color-darker:       #e5e7eb;
-  --el-fill-color-extra-dark:   #d1d5db;
+  --el-fill-color-lightest:     #f5f4f1;
+  --el-fill-color-dark:         #f5f4f1;
+  --el-fill-color-darker:       #e8e4dc;
+  --el-fill-color-extra-dark:   #d4cfc5;
   --el-mask-color:              rgba(0,0,0,0.30);
   --el-mask-color-extra-light:  rgba(0,0,0,0.10);
   --el-overlay-color:           rgba(0,0,0,0.40);
   --el-overlay-color-light:     rgba(0,0,0,0.20);
   --el-overlay-color-lighter:   rgba(0,0,0,0.12);
   --el-color-white:  #ffffff;
-  --el-color-black:  #111827;
-  --el-disabled-bg-color:     #f9fafb;
-  --el-disabled-text-color:   #9ca3af;
-  --el-disabled-border-color: #e5e7eb;
-  --el-color-primary:           #2563eb;
-  --el-color-primary-dark-2:    #1d4ed8;
-  --el-color-primary-light-3:   rgba(37,99,235,0.40);
-  --el-color-primary-light-5:   rgba(37,99,235,0.24);
-  --el-color-primary-light-7:   rgba(37,99,235,0.14);
-  --el-color-primary-light-8:   rgba(37,99,235,0.10);
-  --el-color-primary-light-9:   #eff6ff;
+  --el-color-black:  #1a1814;
+  --el-disabled-bg-color:     #fafaf8;
+  --el-disabled-text-color:   #a09a8e;
+  --el-disabled-border-color: #e8e4dc;
+  --el-color-primary:           #8c6a1e;
+  --el-color-primary-dark-2:    #6b4f10;
+  --el-color-primary-light-3:   rgba(140,106,30,0.40);
+  --el-color-primary-light-5:   rgba(140,106,30,0.24);
+  --el-color-primary-light-7:   rgba(140,106,30,0.14);
+  --el-color-primary-light-8:   rgba(140,106,30,0.10);
+  --el-color-primary-light-9:   #fdf8ef;
   --el-table-bg-color:            #ffffff;
   --el-table-tr-bg-color:         #ffffff;
-  --el-table-border-color:        #e5e7eb;
-  --el-table-header-bg-color:     #f9fafb;
-  --el-table-header-text-color:   #4b5563;
-  --el-table-row-hover-bg-color:  #f9fafb;
-  --el-table-text-color:          #111827;
+  --el-table-border-color:        #e8e4dc;
+  --el-table-header-bg-color:     #fafaf8;
+  --el-table-header-text-color:   #5c5549;
+  --el-table-row-hover-bg-color:  #fafaf8;
+  --el-table-text-color:          #1a1814;
   --el-table-fixed-box-shadow:    unset;
-  --el-select-dropdown-bg-color:  #f9fafb;
-  --el-select-input-color:        #111827;
+  --el-select-dropdown-bg-color:  #fafaf8;
+  --el-select-input-color:        #1a1814;
   --el-input-bg-color:            #ffffff;
-  --el-input-text-color:          #111827;
-  --el-input-placeholder-color:   #6b7280;
-  --el-input-border-color:        #e5e7eb;
-  --el-input-hover-border-color:  #d1d5db;
-  --el-input-focus-border-color:  #2563eb;
+  --el-input-text-color:          #1a1814;
+  --el-input-placeholder-color:   #7a7060;
+  --el-input-border-color:        #e8e4dc;
+  --el-input-hover-border-color:  #d4cfc5;
+  --el-input-focus-border-color:  #8c6a1e;
   --el-popover-bg-color:          #ffffff;
-  --el-dropdown-menuItem-hover-fill: #eff6ff;
+  --el-dropdown-menuItem-hover-fill: #fdf8ef;
 }
 
 /* Override hardcoded dark colors when forcing light */
 html.theme-light .info-feed-input-dock,
 html.theme-light .info-feed-clarification-dock {
-  background: color-mix(in srgb, var(--bg-surface) 92%, transparent) !important;
-  box-shadow: inset 0 0 0 1px var(--border-subtle), inset 0 -1px 0 rgba(0,0,0,0.04) !important;
+  background: var(--bg-surface) !important;
+  box-shadow: inset 0 0 0 1px var(--border-subtle) !important;
 }
 html.theme-light .info-feed-input-dock textarea {
   background: var(--bg-surface) !important;
 }
 html.theme-light .word-cloud-architecture {
-  background:
-    linear-gradient(180deg, var(--bg-subtle), var(--bg-surface)),
-    radial-gradient(circle at 18% 18%, rgba(37,99,235,0.08), transparent 28%),
-    radial-gradient(circle at 78% 20%, rgba(5,150,105,0.08), transparent 30%) !important;
+  background: var(--bg-subtle) !important;
 }
-html.theme-light .surface-card { box-shadow: var(--shadow-xs) !important; }
-html.theme-light .topbar { background: color-mix(in srgb, var(--bg-surface) 92%, transparent) !important; }
-html.theme-light .metric-card:hover { box-shadow: var(--shadow-sm) !important; }
+html.theme-light .surface-card { box-shadow: var(--shadow-xs) !important; border: 1px solid var(--border-subtle) !important; }
+html.theme-light .topbar { background: var(--bg-surface) !important; }
+html.theme-light .metric-card:hover { box-shadow: var(--shadow-md) !important; }
 html.theme-light .el-select .el-select__wrapper {
   background: var(--bg-surface) !important;
   box-shadow: 0 0 0 1px var(--border-subtle) inset !important;

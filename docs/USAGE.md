@@ -36,10 +36,9 @@ npm run server:start:public
 ```
 服务将监听 `0.0.0.0:7228`。
 
-### 1.3 企业生产部署警告
+### 1.3 生产部署安全要求
 > [!IMPORTANT]
-> **生产门禁未关闭前不建议对外宣称生产可用 (Before the production gates are closed, it is not recommended to claim production readiness)**。
-> 生产环境部署时，必须强制实施以下安全加固策略：
+> 生产环境部署时，必须实施以下安全加固策略：
 > 1. 配置 HTTPS 反向代理（终止 HTTP 并启用 HTTPS 传输）
 > 2. 限制服务仅暴露在受控网段与安全隔离区域中，禁止公网直接暴露后端端口
 > 3. 安全密钥管理（通过外部 KMS/Vault 或运行态密钥库受控注入，严禁明文凭据落盘）

@@ -125,7 +125,7 @@
   display: grid;
   gap: 3px;
   padding: 10px;
-  border: 1px solid rgba(15, 98, 254, 0.16);
+  border: 1px solid var(--brand-ring);
   border-radius: var(--radius-md);
   background: var(--info-surface);
 }

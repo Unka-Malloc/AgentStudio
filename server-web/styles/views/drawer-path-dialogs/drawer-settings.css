@@ -2,7 +2,7 @@
   position: fixed;
   inset: 0;
   z-index: var(--z-sidebar);
-  background: rgba(22, 22, 22, 0.4);
+  background: var(--backdrop);
 }
 
 .config-drawer {

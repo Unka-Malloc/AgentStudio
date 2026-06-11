@@ -9,10 +9,7 @@
   min-height: 520px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  background:
-    linear-gradient(180deg, var(--bg-subtle), var(--bg-surface)),
-    radial-gradient(circle at 18% 18%, rgba(37, 99, 235, 0.08), transparent 28%),
-    radial-gradient(circle at 78% 20%, rgba(5, 150, 105, 0.08), transparent 30%);
+  background: var(--bg-subtle);
 }
 
 .word-cloud-card-list {
@@ -40,16 +37,16 @@
 
 /* ── 语料范围：固定暗色面板，在浅色/深色主题下均保持深色 ─── */
 .word-cloud-corpus-scope {
-  /* 始终深色：不随全局主题变化 */
-  --_scope-bg:        #0d1117;
-  --_scope-surface:   #161b22;
-  --_scope-border:    #30363d;
-  --_scope-text:      #e6edf3;
-  --_scope-muted:     #8b949e;
-  --_scope-brand:     #58a6ff;
-  --_scope-chip-bg:   #1c2128;
-  --_scope-chip-border: #30363d;
-  --_scope-remove:    #6e7681;
+  /* Forced dark panel — uses charcoal from brand palette */
+  --_scope-bg:        #0d0d12;
+  --_scope-surface:   #16161d;
+  --_scope-border:    #2a2a34;
+  --_scope-text:      #ede6d6;
+  --_scope-muted:     #9a9488;
+  --_scope-brand:     #e2b44c;
+  --_scope-chip-bg:   #1c1c24;
+  --_scope-chip-border: #2a2a34;
+  --_scope-remove:    #6b6560;
   --_scope-remove-hv: #f85149;
 
   display: grid;
@@ -110,7 +107,7 @@
 
 .word-cloud-corpus-path:hover {
   border-color: var(--_scope-brand);
-  background: rgba(88, 166, 255, 0.08);
+  background: var(--brand-tint);
 }
 
 /* 路径类型标签（DIR / FILE 等） */
@@ -122,8 +119,8 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--_scope-brand);
-  background: rgba(88, 166, 255, 0.12);
-  border: 1px solid rgba(88, 166, 255, 0.24);
+  background: var(--brand-ring);
+  border: 1px solid var(--brand-border);
   border-radius: var(--radius-xs);
   padding: 0 var(--space-1);
   line-height: 18px;
@@ -160,7 +157,7 @@
 
 .word-cloud-corpus-path button:hover {
   color: var(--_scope-remove-hv);
-  background: rgba(248, 81, 73, 0.12);
+  background: var(--danger-tint);
 }
 
 /* 清空链接 */

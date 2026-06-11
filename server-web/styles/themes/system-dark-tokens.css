@@ -1,37 +1,37 @@
-/* ─── Dark mode ─── */
+/* ─── Dark mode (logo-matched charcoal + gold palette) ─── */
 @media (prefers-color-scheme: dark) {
   /* ── 1. Semantic token overrides ─────────────────────────────────────── */
   :root {
     color-scheme: dark;
 
-    --bg-base:    #0d1117;
-    --bg-surface: #161b22;
-    --bg-subtle:  #1c2128;
-    --bg-inset:   #0d1117;
-    --border-subtle: #30363d;
-    --border-strong: #484f58;
+    --bg-base:    #0d0d12;
+    --bg-surface: #16161d;
+    --bg-subtle:  #1c1c24;
+    --bg-inset:   #0d0d12;
+    --border-subtle: #2a2a34;
+    --border-strong: #3a3a46;
 
-    --text-primary:   #e6edf3;
-    --text-secondary: #8b949e;
-    --text-muted:     #6e7681;
-    --text-disabled:  #484f58;
+    --text-primary:   #ede6d6;
+    --text-secondary: #9a9488;
+    --text-muted:     #6b6560;
+    --text-disabled:  #4a4540;
 
-    --brand:        #58a6ff;
-    --brand-strong: #388bfd;
-    --brand-subtle: #0d1f33;
-    --brand-muted:  #112d4e;
+    --brand:        #e2b44c;
+    --brand-strong: #f0d28c;
+    --brand-subtle: #1a1508;
+    --brand-muted:  #261f0a;
 
-    --info:         #58a6ff;
-    --info-surface: #0d1f33;
-    --info-border:  #112d4e;
+    --info:         #8cb4d4;
+    --info-surface: #0d1520;
+    --info-border:  #1a2a3a;
 
     --success:         #3fb950;
     --success-surface: #0d2619;
     --success-border:  #14532d;
 
-    --warning:         #d29922;
-    --warning-text:    #e3b341;
-    --warning-surface: #272115;
+    --warning:         #d4a020;
+    --warning-text:    #e8c44a;
+    --warning-surface: #1a1508;
     --warning-border:  #3d2f0e;
 
     --danger:         #f85149;
@@ -45,7 +45,24 @@
     --shadow-xl: 0 20px 48px rgba(0,0,0,.72), 0 8px 16px rgba(0,0,0,.40);
     --shadow-soft: var(--shadow-md);
 
-    --skeleton-base:      #1e2633;
-    --skeleton-highlight: #242d3d;
+    --skeleton-base:      #1e1e28;
+    --skeleton-highlight: #24242e;
+
+    /* Interaction tokens — dark */
+    --brand-ring:    rgba(226, 180, 76, 0.18);
+    --brand-tint:    rgba(226, 180, 76, 0.08);
+    --brand-border:  rgba(226, 180, 76, 0.32);
+    --brand-shadow:  rgba(226, 180, 76, 0.24);
+    --danger-tint:   rgba(248, 81, 73, 0.12);
+    --success-tint:  rgba(63, 185, 80, 0.10);
+
+    --backdrop:        rgba(0, 0, 0, 0.55);
+    --backdrop-strong: rgba(0, 0, 0, 0.65);
+
+    --border-soft:          rgba(42, 42, 52, 0.60);
+    --scrollbar-thumb:      rgba(107, 101, 96, 0.42);
+    --scrollbar-thumb-hover: rgba(154, 148, 136, 0.58);
+
+    --text-inverse: #0d0d12;
   }
 }

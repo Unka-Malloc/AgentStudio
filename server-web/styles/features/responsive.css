@@ -27,7 +27,7 @@
     position: fixed;
     inset: 0;
     z-index: var(--z-backdrop);
-    background: rgba(0,0,0,0.40);
+    background: var(--backdrop);
   }
 
   .topbar-hamburger { display: flex; }
@@ -52,5 +52,5 @@
 @media print {
   .side-nav, .topbar, .config-drawer, .drawer-backdrop { display: none !important; }
   .dashboard-shell { grid-template-columns: 1fr; }
-  .surface-card { box-shadow: none; border: 1px solid #ccc; }
+  .surface-card { box-shadow: none; border: 1px solid var(--border-subtle); }
 }

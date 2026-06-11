@@ -1,6 +1,6 @@
 .word-cloud-class-card {
-  --word-cloud-accent: #2563eb;
-  --word-cloud-fill: rgba(37, 99, 235, 0.09);
+  --word-cloud-accent: var(--brand);
+  --word-cloud-fill: var(--brand-tint);
   display: grid;
   gap: var(--space-2-5);
   padding: 14px;
@@ -186,7 +186,7 @@
 .word-cloud-threshold-field input,
 .word-cloud-summary-field textarea {
   width: 100%;
-  border: 1px solid rgba(148, 163, 184, 0.26);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
   color: var(--text-primary);
@@ -314,7 +314,7 @@
   width: 100%;
   min-height: 56px;
   resize: vertical;
-  border: 1px solid rgba(148, 163, 184, 0.26);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
   color: var(--text-primary);
@@ -401,7 +401,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 4px var(--border-soft);
 }
 
 .word-cloud-action-popover button {
@@ -417,6 +417,6 @@
 }
 
 .word-cloud-action-popover button:hover {
-  background: rgba(15, 98, 254, 0.08);
+  background: var(--brand-tint);
   color: var(--brand);
 }

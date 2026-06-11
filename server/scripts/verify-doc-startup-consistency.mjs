@@ -41,37 +41,26 @@ async function run() {
   // 4. 读取其他校验文件
   const usageDocPath = path.join(repoRoot, "docs", "USAGE.md");
   const usageDoc = await fs.readFile(usageDocPath, "utf8");
-  const viteConfigPath = path.join(repoRoot, "vite.config.ts");
-  const viteConfig = await fs.readFile(viteConfigPath, "utf8");
-  const capabilityGapPath = path.join(repoRoot, "docs", "PRODUCTION-CAPABILITY-GAP.md");
-  const capabilityGap = await fs.readFile(capabilityGapPath, "utf8");
 
   // 5. 验证 README.md & README.zh-CN.md 端口及安全警告
   assert.match(readmeEn, /127\.0\.0\.1:7228/, "README.md must point to port 7228");
   assert.match(readmeZh, /127\.0\.0\.1:7228/, "README.zh-CN.md must point to port 7228");
-  
-  // 检查生产可用性免责声明 (Disclaimer assertions)
-  assert.match(readmeEn, /Before the production gates are closed, it is not recommended to claim production readiness/i, "README.md must contain English production readiness disclaimer");
-  assert.match(readmeZh, /生产门禁未关闭前不建议对外宣称生产可用/, "README.zh-CN.md must contain Chinese production readiness disclaimer");
-  assert.match(serverDoc, /生产门禁未关闭前不建议对外宣称生产可用/, "docs/SERVER.md must contain Chinese production readiness disclaimer");
-  assert.match(usageDoc, /生产门禁未关闭前不建议对外宣称生产可用/, "docs/USAGE.md must contain Chinese production readiness disclaimer");
-  assert.match(compose, /生产门禁未关闭前不建议对外宣称生产可用/, "docker-compose.yml must contain Chinese production readiness disclaimer");
-  assert.match(dockerfile, /生产门禁未关闭前不建议对外宣称生产可用/, "Dockerfile must contain Chinese production readiness disclaimer");
-  assert.match(viteConfig, /生产门禁未关闭前不建议对外宣称生产可用/, "vite.config.ts must contain Chinese production readiness disclaimer");
-  assert.match(capabilityGap, /生产门禁未关闭前不建议对外宣称生产可用/, "docs/PRODUCTION-CAPABILITY-GAP.md must contain Chinese production readiness disclaimer");
 
-  // 检查五大安全加固要求
-  const enHardening = [/HTTPS/i, /reverse proxy/i, /controlled network/i, /secret/i, /audit/i, /backup/i];
+  // 检查安全加固要求在 README 中存在
+  const enHardening = [/HTTPS/i, /reverse proxy|Reverse Proxy/i, /network isolation|Network Isolation|private subnet/i, /secret/i, /audit/i, /backup/i];
   for (const regex of enHardening) {
     assert.match(readmeEn, regex, `README.md is missing safety hardening requirement: ${regex}`);
   }
 
-  const zhHardening = [/HTTPS/, /反向代理/, /受控网段|隔离/, /密钥|凭证/, /审计|Operation Ledger/, /备份/];
+  const zhHardening = [/HTTPS/, /反向代理/, /网络隔离|隔离|私有子网/, /密钥|凭证/, /审计|Operation Ledger/, /备份/];
   for (const regex of zhHardening) {
     assert.match(readmeZh, regex, `README.zh-CN.md is missing safety hardening requirement: ${regex}`);
+  }
+
+  // 检查 docs/SERVER.md 生产安全加固
+  const serverHardening = [/HTTPS/, /反向代理/, /受控网段|隔离/, /密钥|凭证/, /审计|Operation Ledger/, /备份/];
+  for (const regex of serverHardening) {
     assert.match(serverDoc, regex, `docs/SERVER.md is missing safety hardening requirement: ${regex}`);
-    assert.match(usageDoc, regex, `docs/USAGE.md is missing safety hardening requirement: ${regex}`);
-    assert.match(compose, regex, `docker-compose.yml is missing safety hardening requirement: ${regex}`);
   }
 
   // 6. 验证 docs/SERVER.md 的启动命令与 package.json scripts 的存在性

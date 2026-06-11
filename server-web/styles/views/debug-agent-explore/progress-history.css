@@ -42,10 +42,10 @@
 .agent-explore-history,
 .agent-explore-trace-card {
   padding: 8px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--info-border);
   border-radius: var(--radius-md);
   background: var(--info-surface);
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.04);
+  box-shadow: inset 0 0 0 1px var(--brand-tint);
   transition:
     background var(--dur-base) var(--ease-std),
     border-color var(--dur-base) var(--ease-std),
@@ -54,18 +54,17 @@
 
 .agent-explore-history:not([open]),
 .agent-explore-trace-card:not([open]) {
-  background: linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%);
-  box-shadow:
-    inset 0 0 0 1px rgba(37, 99, 235, 0.08),
-    0 1px 3px rgba(15, 23, 42, 0.06);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-xs);
 }
 
 .agent-explore-history:hover,
 .agent-explore-trace-card:hover {
   border-color: var(--info-border);
   box-shadow:
-    inset 0 0 0 1px rgba(37, 99, 235, 0.1),
-    0 2px 7px rgba(15, 23, 42, 0.08);
+    inset 0 0 0 1px var(--brand-ring),
+    0 2px 7px var(--border-soft);
 }
 
 .agent-explore-history > summary,
