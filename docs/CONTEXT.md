@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-06
+- Last updated: 2026-06-11
 - Status: Current maintained document
 - Scope: Pact.
-- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 Pact is the governed collaboration context for agents, tools, workspaces, knowledge, and external capabilities. Its language emphasizes policy-mediated access, operation traceability, and auditable delegation.
 

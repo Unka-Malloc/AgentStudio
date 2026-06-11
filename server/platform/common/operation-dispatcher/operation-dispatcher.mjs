@@ -207,6 +207,18 @@ function logOperation(logger, level, event, details = {}) {
   logger[level](event, details);
 }
 
+function notifyNarrowTransition(request, event, toStatus) {
+  if (typeof request?.onNarrowTransition === "function") {
+    request.onNarrowTransition(event, toStatus);
+  }
+}
+
+function notifySideEffectStart(request) {
+  if (typeof request?.onSideEffectStart === "function") {
+    request.onSideEffectStart();
+  }
+}
+
 function auditOperation({
   operationAuditStore,
   operation,
@@ -392,6 +404,7 @@ export async function dispatchOperation({
       applyHttpQuery
     });
     const startedAt = Date.now();
+    notifyNarrowTransition(request, "operation.normalize", "normalized");
 
     logOperation(logger, "debug", operationEventName(transport, "matched"), {
       requestId: requestIdFromRequest(request),
@@ -431,6 +444,7 @@ export async function dispatchOperation({
         operationId: operation.id,
         traceId: traceContext.traceId
       });
+      notifyNarrowTransition(request, "operation.policy_deny", "policy_denied");
       return {
         ok: false,
         handled: true,
@@ -464,6 +478,7 @@ export async function dispatchOperation({
           },
           traceId: traceContext.traceId
         });
+        notifyNarrowTransition(request, "operation.policy_deny", "policy_denied");
         return { ok: false, handled: true, statusCode: 401, operation, input: operationInput, traceContext };
       }
     }
@@ -500,6 +515,7 @@ export async function dispatchOperation({
           bootstrap: authorization.bootstrap,
           traceId: traceContext.traceId
         });
+        notifyNarrowTransition(request, "operation.policy_deny", "policy_denied");
         return {
           ok: false,
           handled: true,
@@ -553,6 +569,7 @@ export async function dispatchOperation({
           missingScopes,
           authorizationDecisionId: authorizationDecision.decisionId
         });
+        notifyNarrowTransition(request, "operation.policy_deny", "policy_denied");
         return {
           ok: false,
           handled: true,
@@ -602,6 +619,7 @@ export async function dispatchOperation({
           requiresConfirmation: safety.safety?.requiresConfirmation
         }
       });
+      notifyNarrowTransition(request, "operation.policy_deny", "policy_denied");
       return {
         ok: false,
         handled: true,
@@ -612,6 +630,9 @@ export async function dispatchOperation({
       };
     }
 
+    notifyNarrowTransition(request, "operation.policy_allow", "policy_checked");
+    notifyNarrowTransition(request, "operation.ledger_start", "ledger_started");
+
     try {
       logOperation(logger, "debug", operationEventName(transport, "started"), {
         requestId: requestIdFromRequest(request),
@@ -621,8 +642,10 @@ export async function dispatchOperation({
       });
       await withOperationConcurrency(
         operation,
-        () =>
-          invokeRegisteredOperation({
+        () => {
+          notifyNarrowTransition(request, "operation.execute_start", "executing");
+          notifySideEffectStart(request);
+          return invokeRegisteredOperation({
             operation,
             controllers,
             request,
@@ -632,7 +655,8 @@ export async function dispatchOperation({
             params,
             applyHttpQuery,
             authSession
-          }),
+          });
+        },
         concurrencyScope
       );
       const statusCode = response?.statusCode || 200;
@@ -653,6 +677,12 @@ export async function dispatchOperation({
         status: statusCode >= 400 ? "failed" : "ok",
         durationMs: Date.now() - startedAt
       });
+      if (statusCode >= 400) {
+        notifyNarrowTransition(request, "operation.fail", "failed");
+      } else {
+        notifyNarrowTransition(request, "operation.audit_record", "audit_recorded");
+        notifyNarrowTransition(request, "operation.complete", "completed");
+      }
       return {
         ok: statusCode < 400,
         handled: true,
@@ -680,6 +710,7 @@ export async function dispatchOperation({
         durationMs: Date.now() - startedAt,
         error: summarizeError(error)
       });
+      notifyNarrowTransition(request, "operation.fail", "failed");
       throw error;
     }
   });

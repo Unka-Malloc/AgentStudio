@@ -20,6 +20,13 @@ extension FutureClientMcpPluginActions on FutureClientController {
   }
 
   Future<void> updateMcpPlugin(TargetCandidate target) async {
+    if (!target.canUpdateMcpPlugin) {
+      lastError = '${target.label} target does not support MCP plugin update.';
+      statusMessage = '${target.label}: $lastError';
+      statusCaption = 'MCP plugin';
+      _notifyStateChanged();
+      return;
+    }
     await _runMcpPluginAction(
       target,
       statusCaptionWhenBusy: 'MCP plugin',
@@ -29,17 +36,32 @@ extension FutureClientMcpPluginActions on FutureClientController {
         configPath: target.configPath ?? '',
       ),
       onResult: (result) async {
-        mcpPluginActionResult = result;
-        mcpPluginStatuses = {...mcpPluginStatuses, target.target: result};
-        scannedTargets = await agentService.scanTargets();
-        statusMessage = '已更新 ${target.label} Pact MCP 插件。';
-        statusCaption = 'MCP plugin';
+        final ok = result['ok'] == true;
+        if (ok) {
+          mcpPluginActionResult = result;
+          mcpPluginStatuses = {...mcpPluginStatuses, target.target: result};
+          scannedTargets = await agentService.scanTargets();
+          statusMessage = '已更新 ${target.label} Pact MCP 插件。';
+          statusCaption = 'MCP plugin';
+        } else {
+          final status = result['status'] ?? 'failed';
+          lastError = '${target.label} plugin update failed: $status';
+          statusMessage = '${target.label} Pact MCP 插件更新失败: $status';
+          statusCaption = 'MCP plugin';
+        }
       },
       onErrorMessage: '${target.label} Pact MCP 插件更新失败。',
     );
   }
 
   Future<void> rollbackLatestMcpPlugin(TargetCandidate target) async {
+    if (!target.canRollbackMcpPlugin) {
+      lastError = '${target.label} target does not support MCP plugin rollback.';
+      statusMessage = '${target.label}: $lastError';
+      statusCaption = 'MCP plugin';
+      _notifyStateChanged();
+      return;
+    }
     await _runMcpPluginAction(
       target,
       statusCaptionWhenBusy: 'MCP plugin',
@@ -48,12 +70,33 @@ extension FutureClientMcpPluginActions on FutureClientController {
         final snapshots = await agentService.listSnapshots(
           target: target.target,
         );
-        final snapshotId = snapshots
-            .map((snapshot) => (snapshot['snapshotId'] ?? '').toString())
-            .firstWhere((value) => value.isNotEmpty, orElse: () => '');
-        if (snapshotId.isEmpty) {
-          throw Exception('No snapshot found for ${target.target}');
+
+        if (snapshots.isEmpty) {
+          throw Exception('No snapshot found for target: ${target.target}');
         }
+
+        snapshots.sort((a, b) {
+          final aCapturedAt = a['capturedAt']?.toString() ?? '';
+          final bCapturedAt = b['capturedAt']?.toString() ?? '';
+          if (aCapturedAt.isEmpty && bCapturedAt.isEmpty) return 0;
+          if (aCapturedAt.isEmpty) return 1;
+          if (bCapturedAt.isEmpty) return -1;
+          
+          DateTime? dateA = DateTime.tryParse(aCapturedAt);
+          DateTime? dateB = DateTime.tryParse(bCapturedAt);
+          
+          if (dateA == null && dateB == null) return aCapturedAt.compareTo(bCapturedAt) * -1;
+          if (dateA == null) return 1;
+          if (dateB == null) return -1;
+          
+          return dateB.compareTo(dateA); // Descending
+        });
+
+        final snapshotId = snapshots.first['snapshotId']?.toString() ?? '';
+        if (snapshotId.isEmpty) {
+          throw Exception('Most recent snapshot has no ID for target: ${target.target}');
+        }
+
         return agentService.rollbackMcpPlugin(
           target: target.target,
           snapshotId: snapshotId,
@@ -61,11 +104,19 @@ extension FutureClientMcpPluginActions on FutureClientController {
         );
       },
       onResult: (result) async {
-        mcpPluginActionResult = result;
-        mcpPluginStatuses = {...mcpPluginStatuses, target.target: result};
-        scannedTargets = await agentService.scanTargets();
-        statusMessage = '已回滚 ${target.label} Pact MCP 插件。';
-        statusCaption = 'MCP plugin';
+        final ok = result['ok'] == true;
+        if (ok) {
+          mcpPluginActionResult = result;
+          mcpPluginStatuses = {...mcpPluginStatuses, target.target: result};
+          scannedTargets = await agentService.scanTargets();
+          statusMessage = '已回滚 ${target.label} Pact MCP 插件。';
+          statusCaption = 'MCP plugin';
+        } else {
+          final status = result['status'] ?? 'failed';
+          lastError = '${target.label} plugin rollback failed: $status';
+          statusMessage = '${target.label} Pact MCP 插件回滚失败: $status';
+          statusCaption = 'MCP plugin';
+        }
       },
       onErrorMessage: '${target.label} Pact MCP 插件回滚失败。',
     );

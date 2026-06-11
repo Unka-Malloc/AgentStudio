@@ -1,15 +1,24 @@
-# Pact 🚀
+<p align="center">
+  <img src="docs/banner.svg" alt="Pact — 可信智能体协作空间" width="100%"/>
+</p>
 
-[English](README.md) | 简体中文
+<p align="center">
+  <strong>让你的 AI 智能体安全协作的统一平台 — 每一步操作都可审计、可回溯。</strong>
+</p>
 
-> 让你的 AI 智能体安全协作的统一平台 — 每一步操作都可审计、可回溯。
+<p align="center">
+  <a href="README.md">English</a> | 简体中文
+</p>
 
-[![CI](https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml/badge.svg)](https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml)
-[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL_3.0--or--later-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Node.js](https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js&logoColor=white)](https://vuejs.org/)
-[![Rust](https://img.shields.io/badge/Rust-CLI-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Flutter](https://img.shields.io/badge/Flutter-GUI-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
+<p align="center">
+  <a href="https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml"><img src="https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPL_3.0--or--later-blue.svg" alt="License: GPL-3.0-or-later"/></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white" alt="Node.js"/></a>
+  <a href="https://vuejs.org/"><img src="https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js&logoColor=white" alt="Vue 3"/></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-CLI-DEA584?logo=rust&logoColor=white" alt="Rust"/></a>
+  <a href="https://flutter.dev/"><img src="https://img.shields.io/badge/Flutter-GUI-02569B?logo=flutter&logoColor=white" alt="Flutter"/></a>
+</p>
+
 
 **Pact** 是一个**可信的智能体协作空间**。我们致力于打破本地孤立的智能体与静态企业知识库之间的壁垒，为您提供一个**安全、受控且 100% 可审计**的协同环境。
 
@@ -83,9 +92,9 @@ graph TB
 
 ## ✨ 核心特性
 
-- 🛡️ **"零信任"智能体治理 (Zero Trust)**：智能体只是外部操作员。系统的每一次状态变更（写入、导出），必须经过严格的 Policy Engine 和 Operation Ledger 裁决。
-- 📚 **AgentLibrary（受控知识库）**：颠覆传统的"知识库代理"。上游知识进入系统后会被重新切分与实时再授权。支持 `controlledView`、`copyToContext`、`checkoutAllowed` 等极细粒度的出库限制。
-- 🌳 **统一 Checkpoint Tree（100% 可审计）**：每一次文件修改、权限请求，甚至是**每一次知识检索和被拒绝的访问**，都会生成不可篡改的 Checkpoint 节点，支持类 Git 的 Append-only 安全恢复。
+- 🛡️ **智能体治理**：智能体只是外部操作员。系统的每一次状态变更（写入、导出），必须经过 Policy Engine 和 Operation Ledger 裁决。
+- 📚 **AgentLibrary（受控知识库）**：管理知识源与智能体之间的鸿沟。上游知识进入系统后会被重新切分与实时再授权。支持 `controlledView`、`copyToContext`、`checkoutAllowed` 等极细粒度的出库限制。
+- 🌳 **统一 Checkpoint Tree（可审计）**：每一次文件修改、权限请求，甚至是知识检索和被拒绝的访问，都会生成 Checkpoint 节点，支持类 Git 的 Append-only 安全恢复。
 - 🔌 **全生态协议兼容（MCP Native）**：首批一等支持目标为 OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf，全面拥抱 Model Context Protocol (MCP) 标准暴露工作空间能力。
 - 📊 **资产贡献量化排行榜**：智能体不仅消耗算力，更在此沉淀数字资产。系统内置贡献排行榜，量化评估哪个智能体或成员贡献了最具复用价值的知识、规则和技能。
 
@@ -103,35 +112,54 @@ graph TB
 | **测试体系** | 单元测试、组件测试、集成测试与 E2E 验证标准 | Vitest + `@vitest/coverage-v8` + Vue Test Utils + Playwright |
 | **`docs`** | 核心架构原则与设计决议记录 | Markdown |
 
-## 🚀 快速开始
+## 🚀 部署与快速开始
 
-### ⚡ 极速启动 — Docker（推荐）
+Pact 提供了多种启动模式以适配不同的环境与场景。请仔细阅读并区分本机开发、Docker 本机启动、开发联调、局域网/公网监听以及企业生产部署的边界与要求。
 
-无需本地工具链，几秒钟内启动完整的服务端与 Web 管控台：
-
+### 1. 本机开发 (Local Development)
+适用于本机源码级开发与调试。首先确保本地具备 Node.js 环境（最低支持 Node.js 22+，推荐使用 Node.js 24）。
 ```bash
-docker compose up -d
-# 通过 http://127.0.0.1:7228 访问管控台
-```
-
-### 🛠️ 完整开发环境
-
-适用于贡献者，或需要完整客户端（CLI Rust、GUI Flutter）的开发者：
-
-```bash
-# 1. 安装服务端依赖
+# 安装服务端依赖
 npm install
 
-# 2. 安装客户端依赖（需要 Flutter 与 Rust 工具链）
-npm run client:get
+# 本地拉取项目内 JRE 和 Tika (仅在项目内写入，不修改系统环境)
+npm run server:setup-runtime
 
-# 3. 一键启动完整的服务端 API 与 Web 管控台
+# 一键启动完整的服务端 API 与 Web 管控台
 npm run start:all
 ```
-
-*(开发模式请附加 `-- --dev` 参数启用 Vite 热更新)*
-
 启动后，通过 `http://127.0.0.1:7228` 访问 Web 管控台。
+
+### 2. Docker 本机启动 (Local Docker Startup)
+适用于无需本地开发工具链，快速拉起容器进行体验与测试的场景：
+```bash
+docker compose up -d
+```
+启动后，通过 `http://127.0.0.1:7228` 访问 Web 管控台。
+
+### 3. 开发联调 (Dev Integration & HMR)
+如果需要对前端控制台进行二次开发，并启用 Vite 热重载（HMR）以及与后端 API 进行联调：
+```bash
+npm run start:all -- --dev
+```
+此命令将启动监听在 `7228` 端口的后端 API，并启动监听在 `5173` 端口的 Vite 前端开发服务器（自动代理 `/api` 流量到后端）。
+
+### 4. 局域网/公网监听 (LAN/WAN Listening)
+用于临时将本地 Pact 服务暴露给局域网内的其他成员或智能体进行联调测试：
+```bash
+npm run server:start:public
+```
+*注意：这会使服务监听在 `0.0.0.0` 地址的 `7228` 端口上。在未配置传输层安全（TLS）的非受信网络中，请勿直接使用此命令。*
+
+### 5. 企业生产部署 (Enterprise Production Deployment)
+Pact 支持企业级的协作与资产治理。但是，**生产门禁未关闭前不建议对外宣称生产可用 (Before the production gates are closed, it is not recommended to claim production readiness)**。
+
+企业上线部署时，**严禁直接复用本机的 HTTP 配置**，必须强制实施以下生产加固策略：
+*   **HTTPS 反向代理**：前端及 API 出口前必须配置反向代理（如 Caddy、Nginx 或 Ingress），以终止并启用 HTTPS，确保全链路传输加密。
+*   **受控网段**：严格限制服务暴露范围，将其部署在受控的私有网络网段内，禁止在公网直接暴露后端端口。
+*   **密钥管理**：真实的 API Key、凭证与 Token 必须通过系统运行态密钥库（Secret Store）或外部 KMS/Vault 工具注入，严禁硬编码。
+*   **审计归档**：开启不可篡改的操作账本 (Operation Ledger) 并配置审计日志的定期归档与归一化备份。
+*   **备份恢复**：配置针对数据目录内 SQLite 数据库、对象存储以及 Checkpoint Tree 的定期热备份与冷备归档，确保灾备恢复能力。
 
 ### MCP 客户端连接器
 

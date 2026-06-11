@@ -2,32 +2,76 @@
   <title>Pact — Trusted Agent Collaboration Space</title>
 
   <defs>
-    <!--
-      Seal icon anatomy (centered at origin, applied via transform="translate(350,200)"):
-        · Outer octagon  — R=125, flat-top orientation (22.5° rotated)
-        · Ring 1         — r=113, concentric
-        · Ring 2         — r=89,  offset (-16, 16)   → creates crossing/depth illusion
-        · Ring 3         — r=63,  offset (+13, -10)  → crosses in opposite direction
-        · Inner ring     — r=36,  concentric
+    <!-- Background gradient: deep charcoal → near-black -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#0d0d12"/>
+      <stop offset="100%" stop-color="#080810"/>
+    </linearGradient>
 
-      Computed octagon vertices (R=125, angles: 22.5° + k×45° for k=0…7):
-        cos(22.5°)=0.92388  sin(22.5°)=0.38268
-        cos(67.5°)=0.38268  sin(67.5°)=0.92388
-        (remaining four are negated pairs)
-        → x = ±(0.92388×125) = ±115.48   |   ±(0.38268×125) = ±47.84
-    -->
+    <!-- Accent gradient for the outermost ring: warm gold fade -->
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#c9a96e"/>
+      <stop offset="50%"  stop-color="#f0d28c"/>
+      <stop offset="100%" stop-color="#a8893a"/>
+    </linearGradient>
+
+    <!-- Inner accent: cooler silver-blue for depth contrast -->
+    <linearGradient id="silver" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#7a8ea8"/>
+      <stop offset="100%" stop-color="#b0c0d4"/>
+    </linearGradient>
+
+    <!-- Subtle radial glow behind the seal -->
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%"   stop-color="#c9a96e" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#c9a96e" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Subtle radial glow for text area -->
+    <radialGradient id="textGlow" cx="0.65" cy="0.5" r="0.4">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+
     <style>
       .ring { fill: none; }
     </style>
   </defs>
 
   <!-- ── Background ─────────────────────────────────────────────────────────── -->
-  <rect width="1200" height="400" fill="#000000"/>
+  <rect width="1200" height="400" fill="url(#bg)"/>
 
-  <!-- ── Seal Icon — centered at (350, 200) ────────────────────────────────── -->
-  <g transform="translate(350,200)" class="ring">
+  <!-- Ambient glow layers -->
+  <circle cx="330" cy="200" r="220" fill="url(#glow)"/>
+  <rect width="1200" height="400" fill="url(#textGlow)"/>
 
-    <!-- Outer octagon (flat-top, R=125) -->
+  <!-- ── Seal Icon — centered at (330, 200) ────────────────────────────────── -->
+  <g transform="translate(330,200)" class="ring">
+
+    <!-- Outermost decorative ring — thin, wide, gold gradient -->
+    <circle r="140" stroke="url(#gold)" stroke-width="0.5" opacity="0.3"/>
+
+    <!-- Tick marks around outer ring — 16 evenly-spaced dashes -->
+    <g opacity="0.2" stroke="#c9a96e" stroke-width="0.8">
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(0)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(22.5)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(45)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(67.5)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(90)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(112.5)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(135)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(157.5)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(180)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(202.5)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(225)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(247.5)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(270)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(292.5)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(315)"/>
+      <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(337.5)"/>
+    </g>
+
+    <!-- Outer octagon (flat-top, R=125) — gold stroke -->
     <polygon
       points="
         115.5, 47.8
@@ -38,49 +82,48 @@
         -47.8,-115.5
          47.8,-115.5
         115.5,-47.8"
-      stroke="#f0f0f0" stroke-width="1.6"/>
+      stroke="url(#gold)" stroke-width="1.8" opacity="0.65"/>
 
     <!-- Ring 1 — concentric, just inside the octagon -->
-    <circle r="113" stroke="#e4e4e4" stroke-width="1.4"/>
+    <circle r="113" stroke="#d4c5a0" stroke-width="1.2" opacity="0.45"/>
 
     <!-- Ring 2 — offset SW, creates the crossing illusion at NE & SW edges -->
-    <circle cx="-16" cy="16" r="89" stroke="#cccccc" stroke-width="1.25"/>
+    <circle cx="-16" cy="16" r="89" stroke="url(#silver)" stroke-width="1.1" opacity="0.40"/>
 
     <!-- Ring 3 — offset NE, crosses in the opposite arcs -->
-    <circle cx="13" cy="-10" r="63" stroke="#b0b0b0" stroke-width="1.1"/>
+    <circle cx="13" cy="-10" r="63" stroke="#a0b0c4" stroke-width="1.0" opacity="0.45"/>
 
     <!-- Inner ring — concentric, anchors the centre -->
-    <circle r="36" stroke="#949494" stroke-width="1.0"/>
+    <circle r="36" stroke="url(#gold)" stroke-width="1.2" opacity="0.55"/>
+
+    <!-- Central dot — the seal's focal anchor -->
+    <circle r="3" fill="#c9a96e" opacity="0.5"/>
 
   </g>
 
+  <!-- ── Decorative separator line ──────────────────────────────────────────── -->
+  <line x1="510" y1="155" x2="510" y2="245" stroke="#c9a96e" stroke-width="0.5" opacity="0.2"/>
+
   <!-- ── Wordmark: "PACT" ───────────────────────────────────────────────────── -->
-  <!--
-    Layout target: visually center the text block at y=200.
-    Georgia 96px: cap-height ≈ 70px, so optical centre ≈ baseline − 35.
-    dominant-baseline="middle" handles vertical centering automatically.
-    x=565 leaves a ~80px gap from the icon's right edge (350+115=465 + 100).
-  -->
   <text
-    x="565" y="200"
+    x="560" y="195"
     dominant-baseline="middle"
-    font-family="Georgia, 'Times New Roman', serif"
-    font-size="96"
+    font-family="Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif"
+    font-size="88"
     font-weight="400"
-    letter-spacing="16"
-    fill="#ffffff">PACT</text>
+    letter-spacing="22"
+    fill="#ede6d6">PACT</text>
 
   <!-- ── Subtitle ───────────────────────────────────────────────────────────── -->
-  <!--
-    Positioned 62px below the PACT baseline (200 + 35 cap-half + 16 gap + 11 cap-half of subtitle).
-    x offset +1 to optically align with the inner white space of "P".
-  -->
   <text
-    x="566" y="270"
+    x="563" y="248"
     font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
-    font-size="15"
+    font-size="13.5"
     font-weight="300"
-    letter-spacing="4.5"
-    fill="#686868">Trusted Agent Collaboration Space</text>
+    letter-spacing="5"
+    fill="#7a7060">TRUSTED AGENT COLLABORATION SPACE</text>
+
+  <!-- ── Bottom decorative line ─────────────────────────────────────────────── -->
+  <line x1="563" y1="272" x2="910" y2="272" stroke="#c9a96e" stroke-width="0.4" opacity="0.15"/>
 
 </svg>

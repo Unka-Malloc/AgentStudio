@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-06
+- Last updated: 2026-06-11
 - Status: Current maintained document
 - Scope: Pact Architecture / Software Design Specification.
-- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 审计日期：2026-05-21。本文是 Pact 的总架构基线和软件设计说明书。
 
@@ -1638,7 +1638,7 @@ npm run server:verify:agent-workspace
 
 ## 核心工程原则与开发守则 (Core Engineering Principles)
 
-Pact 的目标是从少数几个智能体平滑过渡到企业级规模，但这并不意味着我们要在初期堆砌过度复杂的架构。为防止“过早优化（Premature Optimization）”带来沉重的运维负担（DevOps Tax），所有开发必须遵循 **“逻辑隔离先行，物理拆分延后”（Logical Separation over Physical Separation）** 即“模块化单体（Modular Monolith）”的原则。
+Pact 的目标是**在未来**从少数几个智能体平滑过渡到企业级规模，但这并不意味着我们要在初期堆砌过度复杂的架构。为防止“过早优化（Premature Optimization）”带来沉重的运维负担（DevOps Tax），所有开发必须遵循 **“逻辑隔离先行，物理拆分延后”（Logical Separation over Physical Separation）** 即“模块化单体（Modular Monolith）”的原则。
 
 ### 1. 接口与契约先行，把实现藏起来 (Interface First)
 

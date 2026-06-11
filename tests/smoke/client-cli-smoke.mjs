@@ -58,18 +58,23 @@ try {
   assert.equal(empty.code, 0);
   assert.match(empty.stderr, /Usage:/);
 
-  const status = await runJson(["daemon", "status"]);
-  assert.equal(status.ok, true);
-  assert.ok(["offline", "running"].includes(status.status));
+  const settings = await runJson(["state", "get", "settings"]);
+  assert.equal(settings.ok, true);
+  assert.equal(settings.collection, "settings");
+  assert.equal(settings.document?.schemaVersion, 1);
 
-  const config = await runJson(["config", "get"]);
-  assert.equal(config && typeof config === "object" && !Array.isArray(config), true);
+  const targets = await runJson(["targets", "scan"]);
+  assert.equal(targets.ok, true);
+  assert.equal(Array.isArray(targets.candidates), true);
+  assert.ok(targets.candidates.some((candidate) => candidate.target === "codex"));
 
-  const stats = await runJson(["mail", "stats"]);
-  assert.ok(typeof stats.documentCount === "number" || typeof stats.totalDocs === "number" || stats.stats);
+  const profiles = await runJson(["model", "profiles", "list"]);
+  assert.equal(profiles.ok, true);
+  assert.equal(Array.isArray(profiles.profiles), true);
 
-  const logs = await runJson(["logs", "tail"]);
-  assert.equal(logs.ok, true);
+  const activity = await runJson(["activity", "list"]);
+  assert.equal(activity.ok, true);
+  assert.equal(Array.isArray(activity.events), true);
 
   console.log("client CLI smoke passed");
 } finally {

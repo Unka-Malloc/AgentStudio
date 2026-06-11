@@ -59,7 +59,6 @@ const INTERNAL_WORKFLOW_IDS = Object.freeze([
 ]);
 
 const INTERNAL_OPERATION_PREFIXES = Object.freeze([
-  "knowledge.distillation.",
   "knowledge.agent_skill.",
   "knowledge.skills.",
   "knowledge.golden_rules.",

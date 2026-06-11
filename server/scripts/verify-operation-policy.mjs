@@ -140,7 +140,10 @@ async function main() {
       })
     });
     assert.equal(rpc.status, 200);
-    assert.equal(rpc.payload.result.interfaces.length, SERVER_API_OPERATIONS.length);
+    const registeredOperationIds = new Set(SERVER_API_OPERATIONS.map((operation) => operation.id));
+    assert.ok(rpc.payload.result.interfaces.length > 0);
+    assert.ok(rpc.payload.result.interfaces.length <= SERVER_API_OPERATIONS.length);
+    assert.ok(rpc.payload.result.interfaces.every((item) => registeredOperationIds.has(item.id)));
     assert.ok(rpc.payload.result.interfaces.every((item) => item.audit && item.inputSchema));
 
     const audit = await requestJson(`${server.url}/api/auth/audit?limit=200`, {

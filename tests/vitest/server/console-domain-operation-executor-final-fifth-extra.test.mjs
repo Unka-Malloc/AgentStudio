@@ -99,8 +99,7 @@ const sourceFileSearchMock = vi.hoisted(() => ({
 const knowledgeTransformationMock = vi.hoisted(() => ({
   createKnowledgeTransformationProvider: vi.fn(() => ({
     convertRawCorpus: vi.fn(async () => ({ ok: true, converted: true })),
-    exportDossier: vi.fn(async () => ({ ok: true, dossier: true })),
-    exportDistillation: vi.fn(async () => ({ ok: true, distillation: true }))
+    exportDossier: vi.fn(async () => ({ ok: true, dossier: true }))
   }))
 }));
 
@@ -1961,7 +1960,7 @@ describe("console-domain operation edge coverage", () => {
       await expect(runOperation("knowledge.graph", { input: { seed: "root" }, context })).resolves.toMatchObject({ status: 200 });
       await expect(runOperation("raw-corpus.format.convert", { input: { text: "sample" }, context })).resolves.toMatchObject({ status: 200 });
       await expect(runOperation("knowledge.dossier.export", { input: { title: "dossier" }, context })).resolves.toMatchObject({ status: 200 });
-      await expect(runOperation("knowledge.distillation.export", { context })).resolves.toMatchObject({ status: 410 });
+      await expect(runOperation("knowledge.distillation.export", { context })).resolves.toMatchObject({ status: 501 });
 
       await expect(runOperation("external.knowledge.distillation.service.health", { context })).resolves.toMatchObject({ status: 200 });
       await expect(runOperation("external.knowledge.distillation.service.capabilities", { context })).resolves.toMatchObject({ status: 200 });

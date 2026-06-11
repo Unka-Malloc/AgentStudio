@@ -80,7 +80,6 @@ export const FEATURE_MANIFEST = Object.freeze({
         "analysis-runtime",
         "knowledge-core",
         "external-knowledge-distillation",
-        "knowledge-distillation",
         "agent-gateway",
         "agent-management",
         "agent-exploration",
@@ -106,7 +105,6 @@ export const FEATURE_MANIFEST = Object.freeze({
         "analysis-runtime",
         "knowledge-core",
         "external-knowledge-distillation",
-        "knowledge-distillation",
         "knowledge-evolution",
         "knowledge-outline-reasoning",
         "agent-gateway",
@@ -593,77 +591,22 @@ export const FEATURE_MANIFEST = Object.freeze({
     },
     {
       featureId: "knowledge-distillation",
-      label: "Deprecated internal knowledge distillation workflow migration shims",
+      label: "Knowledge distillation (migrated to external service)",
       group: "knowledge",
-      dependsOn: ["external-knowledge-distillation", "knowledge-core", "agent-gateway"],
-      defaultEnabled: false,
-      server: {
-        operationPrefixes: [
-          "knowledge.agent_skill.",
-          "knowledge.skills.",
-          "knowledge.golden_rules.",
-          "knowledge.rule_authoring.",
-          "knowledge.gold_cases.",
-          "knowledge.summarization.",
-          "knowledge.training_sets.",
-          "knowledge.evaluation.",
-          "knowledge.model_roles",
-          "knowledge.model_decision"
-        ],
-        operations: ["knowledge.evidence_gate.evaluate"],
-        modules: ["ExternalKnowledgeDistillationService", "KnowledgeSkillRuntime", "SummarizationRuntime"],
-        webPanels: ["knowledge-distillation", "knowledge-distillation-workbench"]
-      },
+      dependsOn: ["knowledge-core"],
+      defaultEnabled: true,
       lifecycle: {
         status: "must-migrate",
-        internalKnowledgeDistillation: "removed-from-runtime",
-        replacementService: "external.knowledge.distillation",
         replacementFeature: "external-knowledge-distillation",
-        maintenancePolicy: "migration-shim-only",
-        internalWorkflows: [
-          { id: "knowledge.agent_skill", status: "must-migrate", target: "external.knowledge.distillation" },
-          { id: "knowledge.skills", status: "must-migrate", target: "external.knowledge.distillation" },
-          { id: "knowledge.golden_rules", status: "must-migrate", target: "external.knowledge.distillation" },
-          { id: "knowledge.rule_authoring", status: "must-migrate", target: "external.knowledge.distillation" },
-          { id: "knowledge.gold_cases", status: "must-migrate", target: "external.knowledge.distillation" },
-          { id: "knowledge.summarization", status: "must-migrate", target: "external.knowledge.distillation" },
-          { id: "knowledge.training_sets", status: "must-migrate", target: "external.knowledge.distillation" },
-          { id: "knowledge.evaluation", status: "must-migrate", target: "external.knowledge.distillation" },
-          { id: "knowledge.model_roles", status: "must-migrate", target: "external.knowledge.distillation" },
-          { id: "knowledge.model_decision", status: "must-migrate", target: "external.knowledge.distillation" },
-          { id: "knowledge.evidence_gate.evaluate", status: "must-migrate", target: "external.knowledge.distillation" }
-        ]
+        note: "Legacy feature marker; all distillation operations are now handled by external.knowledge.distillation"
       },
-      web: {
-        navItems: ["knowledge.distillation", "debug.knowledgeDistillation"],
-        panels: ["KnowledgeDistillationWorkbench", "KnowledgeDistillationDebugPanel"]
-      },
-      package: {
-        includePaths: ["server/platform/specialized/knowledge/storage/knowledge-core"],
-        removePaths: [
-          "server/platform/specialized/capabilities/tools/agent-evaluation-runtime",
-          "server/platform/specialized/knowledge/retrieval/evidence-sufficiency-gate",
-          "server/platform/specialized/knowledge/invocation/golden-rule-runtime",
-          "server/platform/specialized/knowledge/invocation/knowledge-agent-skill-runtime",
-          "server/platform/specialized/knowledge/invocation/knowledge-rule-authoring-runtime",
-          "server/platform/specialized/knowledge/invocation/knowledge-skill-runtime",
-          "server/platform/specialized/agent/agent-gateway/multi-agent-coordinator",
-          "server/platform/specialized/knowledge/invocation/knowledge-summarization-runtime",
-          "server/scripts/distill-existing-knowledge-skills.mjs",
-          "server/scripts/verify-knowledge-golden-distillation.mjs",
-          "server/scripts/verify-knowledge-rule-authoring.mjs",
-          "server/scripts/verify-knowledge-skillization.mjs",
-          "server/scripts/verify-multi-agent-summarization.mjs",
-          "server/scripts/verify-multi-source-connectors.mjs"
-        ]
-      },
-      tests: { suites: ["server:verify:knowledge-distillation"] }
+      package: { includePaths: [], removePaths: [] }
     },
     {
       featureId: "knowledge-evolution",
       label: "Knowledge evolution, learning jobs, evaluation deployments",
       group: "knowledge",
-      dependsOn: ["knowledge-core", "knowledge-distillation"],
+      dependsOn: ["knowledge-core"],
       defaultEnabled: false,
       server: {
         operationPrefixes: [
@@ -1255,7 +1198,6 @@ export function operationFeatureId(operation = {}) {
     operationId.startsWith("knowledge.golden_rules.") ||
     operationId.startsWith("knowledge.rule_authoring.") ||
     operationId.startsWith("knowledge.gold_cases.") ||
-    operationId.startsWith("knowledge.distillation.") ||
     operationId.startsWith("knowledge.summarization.") ||
     operationId.startsWith("knowledge.training_sets.") ||
     operationId.startsWith("knowledge.evaluation.") ||

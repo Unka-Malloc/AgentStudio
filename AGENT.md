@@ -1,5 +1,40 @@
 # Pact Agent Rules
 
+## 智能体入口与上下文范围
+
+- `AGENT.md` 是根目录唯一的智能体工程入口；不要新增并行根入口文件，除非用户明确要求。
+- 根 `README.md` 和 `README.zh-CN.md` 是产品宣传页，默认不作为工程事实源；只有产品定位、对外文案或用户明确要求时才读取或修改。
+- 工程任务优先从本文件、目标子目录最近的 `AGENT.md`、`docs/README.md` 或局部说明建立上下文。
+- 代码修改先按任务路由缩小到一个子系统，再在候选目录内搜索；文档修改先看 `docs/README.md` 的索引和维护规则，再打开目标文档。
+- `build/`、`node_modules/`、`client-cli/target/`、`client-gui/build/` 和 `docs/reports/history/` 默认视为生成物、依赖缓存或历史材料；只有任务明确指向、验证输出指向，或需要核对历史事实时再进入。
+- 扩大到全仓库搜索前，先说明当前入口无法回答的问题，并尽量限定文件类型或目录前缀，减少无关上下文进入会话。
+- 开始修改前先运行 `git status --short`，区分当前任务改动和用户已有改动；无关改动保持原样。
+- 搜索优先使用 `rg` 或 `rg --files`，避免把整段生成物、大型历史报告或依赖目录读入上下文。
+
+## 任务路由
+
+- 前端控制台任务从 `server-web/` 开始，只打开相关的 `components/`、`views/`、`lib/` 和样式文件。
+- 服务端或运行时任务从 `server/` 开始；只有涉及启动、挂载、运行行为或运维语义时再查阅 `docs/SERVER.md`。
+- MCP connector 任务从 `mcp-connector/` 开始；安装和注册行为再查阅 `mcp-connector/README.md` 与 `docs/MCP_INSTALL.md`。
+- 架构、策略或治理类任务先看 `docs/README.md`，再打开与主题对应的核心文档。
+- 测试任务先从失败测试或 verifier 本身开始；只有测试契约不清楚时再查阅 `docs/TEST-FRAMEWORK.md`。
+- Skill 或知识工具任务从 `skills/README.md` 或目标 skill 目录开始，避免默认展开完整 `docs/reports/history/`。
+- 子系统目录入口已放在 `server/AGENT.md`、`server-web/AGENT.md`、`mcp-connector/AGENT.md`、`client-cli/AGENT.md`、`client-gui/AGENT.md` 和 `docs/AGENT.md`。
+
+## 工作树协作
+
+- 默认把主工作树作为集成和手动产品文案维护区，不在其中混入大范围实验性改动。
+- 子系统工作优先使用独立 worktree：服务端、Web Console、MCP connector、CLI、GUI、文档/智能体规则分别建分支维护。
+- 跨子系统契约变更使用单独集成 worktree 完成，避免服务端接口、前端调用和文档在多个分支中漂移。
+- 具体拆分、目录归属和建树命令见 `docs/GIT-COLLAB.md`。
+
+## 任务启动流程
+
+- 开始工作时建议说明当前 worktree、目标子系统和计划写入范围。
+- 读取根 `AGENT.md` 后，建议继续读取目标子系统的局部 `AGENT.md`；没有局部入口时再读取最近的 README。
+- 如果任务需要跨子系统修改，建议切换到集成 worktree 或明确唯一负责人，再开始编辑。
+- 涉及入口文件、工作树拆分或文档索引调整时，运行 `npm run repo:hygiene` 或对应的入口健康检查。
+
 ## 用户配置真实性
 
 - 用户配置不允许由代码指定缺省默认值。没有配置的情况下必须保持为空。
@@ -22,6 +57,12 @@
 ## 文档与使用说明风格
 
 - 本项目的所有文档和使用说明，应力图让用户了解本项目所提供的能力，而不是它的限制和审计。
+
+## 验证范围
+
+- 优先运行覆盖当前改动范围的最小 verifier。
+- 除非用户明确要求完整发布或 readiness 检查，否则不运行完整 `npm run server:verify`。
+- `package.json` 脚本较多，优先查询所需脚本名和局部片段，避免把整份文件作为默认上下文。
 
 ## README.md 修改权限
 

@@ -141,35 +141,6 @@ try {
   assert.equal(dossier.sourceDocumentCount, 1);
   assert.match(dossier.content, /Renewal approval/);
 
-  const distillation = assertKnowledgeOk(await callKnowledgeOperation({
-    serverUrl: server.url,
-    token,
-    operation: "pact.knowledge.distillation.export",
-    input: {
-      outputFormat: "json",
-      title: "Distillation export smoke",
-      candidates: [
-        {
-          candidateId: "candidate-1",
-          proposal: {
-            title: "Renewal playbook",
-            summary: "Portable distilled knowledge for renewal analysis."
-          },
-          portableDocument: {
-            title: "Renewal playbook",
-            markdown: "# Renewal playbook\n\nUse renewal evidence before recommendation."
-          }
-        }
-      ]
-    }
-  }), "pact.knowledge.distillation.export");
-  assert.equal(distillation.operationId, "knowledge.distillation.export");
-  assert.equal(distillation.outputFormat, "json");
-  const distillationJson = JSON.parse(distillation.content);
-  assert.equal(distillationJson.protocolVersion, "pact.knowledge-transformation.v1");
-  assert.equal(distillationJson.documents.length, 1);
-  assert.match(JSON.stringify(distillationJson), /Renewal playbook/);
-
   const receipts = await fetchJson(`${server.url}/api/rpc`, {
     method: "POST",
     headers: {

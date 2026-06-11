@@ -118,7 +118,6 @@ const GATES = [
     owner: "knowledge-distillation",
     coverage: ["distillation-evaluation"],
     commands: [
-      ["npm", "run", "server:verify:knowledge-distillation-workbench"],
       ["npm", "run", "server:verify:knowledge-industrial-distillation"],
       ["npm", "run", "server:verify:knowledge-distillation-optimization"]
     ],
@@ -527,22 +526,39 @@ function buildMarkdownReport(report) {
     `- Generated At: \`${report.generatedAt}\``,
     `- Branch: \`${report.git.branch || "unknown"}\``,
     `- Commit: \`${report.git.commit || "unknown"}\``,
+    `- Evidence For Commit: \`${report.evidenceForCommit || report.git.commit || "unknown"}\``,
     `- Dirty Files: \`${report.git.dirtyFileCount}\``,
+    `- Generated From Dirty Worktree: \`${report.generatedFromDirtyWorktree || false}\``,
+    `- Claim Scope: \`${report.claimScope || "unknown"}\``,
+    `- Mode: \`${report.mode || "unknown"}\``,
+    `- Production Claim Allowed: \`${report.productionClaimAllowed}\``,
+    `- Quick Check Passed: \`${report.quickCheckPassed}\``,
     `- Overall Status: \`${report.overallStatus}\``,
     "",
-    "## Summary",
-    "",
-    `- Passed: ${report.summary.pass}`,
-    `- Failed: ${report.summary.fail}`,
-    `- Timed Out: ${report.summary.timeout}`,
-    `- Blocked P0: ${report.summary.blockedP0}`,
-    `- Missing Coverage: ${report.coverage.missing.length ? report.coverage.missing.join(", ") : "none"}`,
-    "",
-    "## Gates",
-    "",
-    "| Gate | Status | Blocker | Owner | Evidence | Next Step |",
-    "| --- | --- | --- | --- | --- | --- |"
   ];
+
+  if (report.generatedFromDirtyWorktree) {
+    lines.push("> :warning: **DIRTY WORKTREE**: This report was generated from a dirty repository. It is marked as `claimScope: historical` and cannot be used as current-head production evidence.", "");
+  }
+
+  lines.push("## Summary");
+  lines.push("");
+  lines.push(`- Passed: ${report.summary.pass}`);
+  lines.push(`- Failed: ${report.summary.fail}`);
+  lines.push(`- Timed Out: ${report.summary.timeout}`);
+  lines.push(`- Blocked P0: ${report.summary.blockedP0}`);
+  lines.push(`- Missing Coverage: ${report.coverage.missing.length ? report.coverage.missing.join(", ") : "none"}`);
+  lines.push("");
+
+  if (report.mode === "quick") {
+    lines.push("> Quick mode: the checklist below reflects quick coverage only.", "");
+  }
+
+  lines.push("## Gates");
+  lines.push("");
+  lines.push("| Gate | Status | Blocker | Owner | Evidence | Next Step |");
+  lines.push("| --- | --- | --- | --- | --- | --- |");
+
   for (const gate of report.gates) {
     lines.push([
       markdownEscape(gate.title),
@@ -556,11 +572,22 @@ function buildMarkdownReport(report) {
   lines.push("");
   lines.push("## Coverage Checklist");
   lines.push("");
-  for (const item of REQUIRED_COVERAGE) {
+  const checklistCoverage = report.coverage.modeRequired || REQUIRED_COVERAGE;
+  for (const item of checklistCoverage) {
     const coveredBy = report.coverage.byRequirement[item] || [];
     lines.push(`- ${coveredBy.length ? "[x]" : "[ ]"} \`${item}\`${coveredBy.length ? `: ${coveredBy.join(", ")}` : ""}`);
   }
   lines.push("");
+  if (report.mode === "quick") {
+    lines.push("> Quick pass does not imply production pass. Full coverage checklist is below as reference.", "");
+    lines.push("## Full Coverage Reference (not required for quick pass)");
+    lines.push("");
+    for (const item of REQUIRED_COVERAGE) {
+      const coveredBy = report.coverage.byRequirement[item] || [];
+      lines.push(`- ${coveredBy.length ? "[x]" : "[ ]"} \`${item}\`${coveredBy.length ? `: ${coveredBy.join(", ")}` : ""}`);
+    }
+    lines.push("");
+  }
   lines.push("## Notes");
   lines.push("");
   lines.push("- Passing this gate is required before claiming production readiness.");
@@ -607,10 +634,18 @@ async function main() {
     return;
   }
 
+  const gitInfo = {
+    branch: await gitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
+    commit: await gitValue(["rev-parse", "HEAD"]),
+    dirtyFileCount: Number((await gitValue(["status", "--short"])).split("\n").filter(Boolean).length)
+  };
+
   const runId = runIdFromDate();
   const outputRoot = path.resolve(repoRoot, options.outputRoot);
   const runDir = path.join(outputRoot, runId);
   await ensureDir(runDir);
+
+const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smoke"];
 
   const selectedGates = options.quick
     ? GATES.filter((gate) => ["architecture", "document-parsing-real-sample", "ui-smoke"].includes(gate.id))
@@ -621,7 +656,8 @@ async function main() {
     gateResults.push(await runGate(gate, options, runDir));
   }
 
-  const byRequirement = Object.fromEntries(REQUIRED_COVERAGE.map((item) => [item, []]));
+  const applicableCoverage = options.quick ? QUICK_COVERAGE : REQUIRED_COVERAGE;
+  const byRequirement = Object.fromEntries(applicableCoverage.map((item) => [item, []]));
   for (const gate of gateResults) {
     if (gate.status !== "pass") continue;
     for (const requirement of gate.coverage) {
@@ -630,35 +666,76 @@ async function main() {
       }
     }
   }
-  const missing = REQUIRED_COVERAGE.filter((item) => byRequirement[item].length === 0);
+  const missing = applicableCoverage.filter((item) => byRequirement[item].length === 0);
   const summary = {
     pass: gateResults.filter((gate) => gate.status === "pass").length,
     fail: gateResults.filter((gate) => gate.status === "fail").length,
     timeout: gateResults.filter((gate) => gate.status === "timeout").length,
     blockedP0: gateResults.filter((gate) => gate.blockerLevel === "P0" && gate.status !== "pass").length
   };
-  const overallStatus = summary.blockedP0 || missing.length ? "blocked" : "pass";
+  let overallStatus;
+  if (options.quick) {
+    overallStatus = summary.blockedP0 || missing.length ? "quick_blocked" : "quick_pass";
+  } else {
+    overallStatus = summary.blockedP0 || missing.length ? "blocked" : "pass";
+  }
+  const productionClaimAllowed = !options.quick && overallStatus === "pass";
+  const quickCheckPassed = options.quick && summary.blockedP0 === 0 && missing.length === 0;
+
+  const generatedFromDirtyWorktree = gitInfo.dirtyFileCount > 0;
+
+  // The initial worktree state controls whether the report can claim current-head evidence.
+  if (generatedFromDirtyWorktree) {
+    overallStatus = options.quick ? "dirty_quick_report" : "dirty_full_report";
+  }
+
   const report = {
     schemaVersion: 1,
     reportType: "pact.production-readiness.v1",
     runId,
     generatedAt: new Date().toISOString(),
     mode: options.quick ? "quick" : "full",
-    repoRoot,
-    git: {
-      branch: await gitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
-      commit: await gitValue(["rev-parse", "HEAD"]),
-      dirtyFileCount: Number((await gitValue(["status", "--short"])).split("\n").filter(Boolean).length)
-    },
+    repository: "Unka-Malloc/Pact",
+    repoRoot: { redacted: true, reason: "local_path" },
+    git: gitInfo,
+    evidenceForCommit: gitInfo.commit,
+    generatedFromDirtyWorktree,
+    claimScope: generatedFromDirtyWorktree ? "historical" : (options.quick ? "quick" : "full"),
     overallStatus,
+    productionClaimAllowed: generatedFromDirtyWorktree ? false : productionClaimAllowed,
+    quickCheckPassed: generatedFromDirtyWorktree ? false : quickCheckPassed,
     summary,
     coverage: {
-      required: REQUIRED_COVERAGE,
+      modeRequired: applicableCoverage,
+      fullRequired: REQUIRED_COVERAGE,
       byRequirement,
       missing
     },
-    gates: gateResults
+    gates: gateResults,
+    notes: generatedFromDirtyWorktree
+      ? ["Report generated from dirty worktree. Cannot be used as current-head production evidence."]
+      : []
   };
+
+  // Phase 4: Verify all evidencePath files exist
+  const missingEvidencePaths = [];
+  for (const gate of gateResults) {
+    if (gate.evidencePath) {
+      const absPath = path.resolve(repoRoot, gate.evidencePath);
+      try {
+        await fs.access(absPath);
+      } catch {
+        missingEvidencePaths.push(gate.evidencePath);
+      }
+    }
+  }
+  if (missingEvidencePaths.length > 0) {
+    console.warn("[production-readiness] Evidence paths missing from disk:");
+    for (const p of missingEvidencePaths) console.warn(`  - ${p}`);
+    console.warn("[production-readiness] Report may reference evidence files that do not exist.");
+  }
+  report.evidenceStorageNote = missingEvidencePaths.length > 0
+    ? "ci-artifact-only" : "local";
 
   const jsonPath = path.join(runDir, "report.json");
   const mdPath = path.join(runDir, "report.md");
@@ -669,7 +746,12 @@ async function main() {
   console.log(`Production readiness JSON written: ${relativePath(jsonPath)}`);
   console.log(`Production readiness status: ${overallStatus}`);
 
-  if (overallStatus !== "pass" && !options.noFailOnBlocker) {
+const successStatuses = new Set(["pass"]);
+if (options.quick) successStatuses.add("quick_pass");
+// dirty worktree is never a success status
+// dirty_full_report and dirty_quick_report are intentionally excluded
+
+  if (!successStatuses.has(overallStatus) && !options.noFailOnBlocker) {
     process.exitCode = 1;
   }
 }

@@ -82,9 +82,6 @@ import type {
   AgentGatewayConfig,
 } from "./agent-gateway-client";
 import type {
-  CreateKnowledgeDistillationWorkbenchRunPayload,
-} from "./knowledge-distillation-workbench-client";
-import type {
   KnowledgeSourceMutationResponse,
   KnowledgeSourceState,
 } from "./knowledge-sources-client";
@@ -393,16 +390,4 @@ export type Bridge = {
   getUploadSession: (sessionId: string) => Promise<UploadSessionResponse>;
   getNormalizedDocuments: (jobId: string) => Promise<SplitResult["normalizedDocuments"]>;
   normalizedDocumentUrl: (jobId: string, documentId: string) => string;
-  listKnowledgeDistillationWorkbenchRuns: (limit?: number) => Promise<Record<string, unknown>>;
-  createKnowledgeDistillationWorkbenchRun: (payload: CreateKnowledgeDistillationWorkbenchRunPayload) => Promise<Record<string, unknown>>;
-  getKnowledgeDistillationWorkbenchRun: (runId: string) => Promise<Record<string, unknown>>;
-  resumeKnowledgeDistillationWorkbenchRun: (runId: string) => Promise<Record<string, unknown>>;
-  cancelKnowledgeDistillationWorkbenchRun: (runId: string, reason?: string) => Promise<Record<string, unknown>>;
-  archiveKnowledgeDistillationWorkbenchRun: (runId: string) => Promise<Record<string, unknown>>;
-  deleteKnowledgeDistillationWorkbenchRun: (runId: string) => Promise<Record<string, unknown>>;
-  rerunKnowledgeDistillationWorkbenchStage: (runId: string, stageId: string) => Promise<Record<string, unknown>>;
-  getKnowledgeDistillationWorkbenchRunArtifacts: (runId: string) => Promise<Record<string, unknown>>;
-  compareKnowledgeDistillationWorkbenchRuns: (leftRunId: string, rightRunId: string) => Promise<Record<string, unknown>>;
-  knowledgeDistillationWorkbenchExportUrl: (runId: string, stageId: string, format?: string) => string;
-  knowledgeDistillationWorkbenchPackageUrl: (runId: string) => string;
 };

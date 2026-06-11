@@ -2,6 +2,7 @@ use crate::client_state::ClientStateStore;
 use anyhow::{Result, anyhow};
 use serde_json::{Value, json};
 use std::time::{SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 const STATUS_REQUESTED: &str = "requested";
 const STATUS_APPROVED: &str = "approved";
@@ -42,21 +43,52 @@ pub fn skill_pin(params: &Value) -> Result<Value> {
 fn pair_request_in(store: &ClientStateStore, params: &Value) -> Result<Value> {
     let agent_id = agent_id(params)?;
     let target = target_id(params).unwrap_or_else(|| "manual".to_string());
+    let target_kind = params
+        .get("targetKind")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let label = params
+        .get("label")
+        .and_then(Value::as_str)
+        .unwrap_or(&agent_id);
+    let config_path = params
+        .get("configPath")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let binary_path = params
+        .get("binaryPath")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let pairing_id = format!("pair-{}", uuid_v4());
+    let local_identity = format!("local-{}", uuid_v4());
+    let visibility_policy = params
+        .get("defaultVisibilityPolicy")
+        .and_then(Value::as_str)
+        .unwrap_or("deny-by-default");
+
     let mut document = store.read_collection("pairings")?;
     let items = collection_items_mut(&mut document)?;
     items.retain(|item| item.get("agentId").and_then(Value::as_str) != Some(&agent_id));
     let record = json!({
+        "pairingId": pairing_id,
         "agentId": agent_id,
         "target": target,
+        "targetKind": target_kind,
+        "label": label,
+        "configPath": config_path,
+        "binaryPath": binary_path,
+        "localIdentity": local_identity,
         "status": STATUS_REQUESTED,
         "requestedAt": timestamp(),
+        "defaultVisibilityPolicy": visibility_policy,
+        "scopes": [],
     });
     items.push(record.clone());
     store.write_collection("pairings", document)?;
     append_activity(
         store,
         "pairing.requested",
-        json!({"target": target, "agentId": agent_id}),
+        json!({"target": target, "agentId": agent_id, "pairingId": pairing_id}),
     )?;
     Ok(json!({
         "ok": true,
@@ -155,6 +187,10 @@ fn skill_get_in(store: &ClientStateStore, params: &Value) -> Result<Value> {
         return Ok(pairing_required(&agent_id));
     }
     let skill_id = skill_id(params)?;
+    let skill = find_skill(store, &skill_id)?;
+    let Some(skill) = skill else {
+        return Ok(protocol_deferred(&agent_id, &skill_id));
+    };
     if is_hidden(store, &agent_id, &skill_id)? {
         return Ok(json!({
             "ok": false,
@@ -163,10 +199,15 @@ fn skill_get_in(store: &ClientStateStore, params: &Value) -> Result<Value> {
             "skillId": skill_id
         }));
     }
-    let skill = find_skill(store, &skill_id)?;
-    let Some(skill) = skill else {
-        return Ok(protocol_deferred(&agent_id, &skill_id));
-    };
+    if !is_skill_visible_by_policy(store, &agent_id, &skill_id)? {
+        return Ok(json!({
+            "ok": false,
+            "error": "visibility_denied",
+            "agentId": agent_id,
+            "skillId": skill_id,
+            "message": "Skill visibility denied by pairing defaultVisibilityPolicy"
+        }));
+    }
     Ok(json!({
         "ok": true,
         "agentId": agent_id,
@@ -176,6 +217,22 @@ fn skill_get_in(store: &ClientStateStore, params: &Value) -> Result<Value> {
         "dependencyInstall": "not_supported",
         "copyToWorkspace": "not_supported"
     }))
+}
+
+fn is_skill_visible_by_policy(
+    store: &ClientStateStore,
+    agent_id: &str,
+    skill_id: &str,
+) -> Result<bool> {
+    let pairing = get_approved_pairing(store, agent_id)?;
+    let policy = pairing
+        .as_ref()
+        .and_then(|p| p.get("defaultVisibilityPolicy").and_then(Value::as_str))
+        .unwrap_or("allow-all");
+    match policy {
+        "deny-by-default" => Ok(is_explicitly_revealed(store, agent_id, skill_id)),
+        _ => Ok(true),
+    }
 }
 
 fn skill_visibility_in(store: &ClientStateStore, params: &Value) -> Result<Value> {
@@ -198,6 +255,7 @@ fn skill_visibility_in(store: &ClientStateStore, params: &Value) -> Result<Value
             "agentId": agent_id,
             "skillId": skill_id,
             "hidden": hidden,
+            "visibility": if hidden { "hidden" } else { "allowed" },
             "updatedAt": timestamp()
         }),
     );
@@ -263,22 +321,73 @@ fn skill_pin_in(store: &ClientStateStore, params: &Value) -> Result<Value> {
 }
 
 fn visible_skills(store: &ClientStateStore, agent_id: &str) -> Result<Vec<Value>> {
+    let pairing = get_approved_pairing(store, agent_id)?;
+    let policy = pairing
+        .as_ref()
+        .and_then(|p| p.get("defaultVisibilityPolicy").and_then(Value::as_str))
+        .unwrap_or("allow-all");
+
     let document = store.read_collection("skills")?;
     let items = document
         .get("items")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
+
     Ok(items
         .into_iter()
         .filter(|item| item.get("kind").and_then(Value::as_str) == Some("skill"))
         .filter(|item| {
-            item.get("skillId")
-                .and_then(Value::as_str)
-                .map(|skill| !is_hidden(store, agent_id, skill).unwrap_or(true))
-                .unwrap_or(false)
+            let skill_id = item.get("skillId").and_then(Value::as_str).unwrap_or("");
+            if is_hidden(store, agent_id, skill_id).unwrap_or(true) {
+                return false;
+            }
+            match policy {
+                "deny-by-default" => is_explicitly_revealed(store, agent_id, skill_id),
+                _ => true,
+            }
         })
         .collect())
+}
+
+fn get_approved_pairing(store: &ClientStateStore, agent_id: &str) -> Result<Option<Value>> {
+    let document = store.read_collection("pairings")?;
+    Ok(document
+        .get("items")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .find(|item| {
+                    item.get("agentId").and_then(Value::as_str) == Some(agent_id)
+                        && item.get("status").and_then(Value::as_str) == Some(STATUS_APPROVED)
+                })
+                .cloned()
+        })
+        .unwrap_or(None))
+}
+
+fn is_explicitly_revealed(store: &ClientStateStore, agent_id: &str, skill_id: &str) -> bool {
+    let document = match store.read_collection("skills") {
+        Ok(doc) => doc,
+        Err(_) => return false,
+    };
+    document
+        .get("items")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items.iter().any(|item| {
+                item.get("kind")
+                    .and_then(Value::as_str)
+                    .unwrap_or("visibility")
+                    != "skill"
+                    && item.get("agentId").and_then(Value::as_str) == Some(agent_id)
+                    && item.get("skillId").and_then(Value::as_str) == Some(skill_id)
+                    && item.get("hidden").and_then(Value::as_bool) == Some(false)
+                    && item.get("visibility").and_then(Value::as_str) == Some("allowed")
+            })
+        })
+        .unwrap_or(false)
 }
 
 fn find_skill(store: &ClientStateStore, skill_id: &str) -> Result<Option<Value>> {
@@ -317,17 +426,7 @@ fn is_hidden(store: &ClientStateStore, agent_id: &str, skill_id: &str) -> Result
 }
 
 fn is_agent_approved(store: &ClientStateStore, agent_id: &str) -> Result<bool> {
-    let document = store.read_collection("pairings")?;
-    Ok(document
-        .get("items")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items.iter().any(|item| {
-                item.get("agentId").and_then(Value::as_str) == Some(agent_id)
-                    && item.get("status").and_then(Value::as_str) == Some(STATUS_APPROVED)
-            })
-        })
-        .unwrap_or(false))
+    Ok(get_approved_pairing(store, agent_id)?.is_some())
 }
 
 fn upsert_policy_item(items: &mut Vec<Value>, agent_id: &str, skill_id: &str, replacement: Value) {
@@ -427,6 +526,10 @@ fn timestamp() -> String {
     format!("{}-{}", now.as_secs(), now.subsec_nanos())
 }
 
+fn uuid_v4() -> String {
+    Uuid::new_v4().to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -481,7 +584,11 @@ mod tests {
     #[test]
     fn pairing_skill_cli_missing_skill_is_protocol_deferred() {
         let store = test_store("deferred");
-        pair_request_in(&store, &json!({"agent": "codex", "target": "codex"})).unwrap();
+        pair_request_in(
+            &store,
+            &json!({"agent": "codex", "target": "codex", "defaultVisibilityPolicy": "allow-all"}),
+        )
+        .unwrap();
         pair_approve_in(&store, &json!({"agent": "codex"})).unwrap();
 
         let result = skill_get_in(&store, &json!({"agent": "codex", "skill": "future"})).unwrap();
@@ -499,7 +606,11 @@ mod tests {
     #[test]
     fn pairing_skill_cli_pin_and_get_are_passive() {
         let store = test_store("pin");
-        pair_request_in(&store, &json!({"agent": "codex", "target": "codex"})).unwrap();
+        pair_request_in(
+            &store,
+            &json!({"agent": "codex", "target": "codex", "defaultVisibilityPolicy": "allow-all"}),
+        )
+        .unwrap();
         pair_approve_in(&store, &json!({"agent": "codex"})).unwrap();
         seed_skill(&store, "review", "1.0.0");
 
@@ -645,6 +756,87 @@ mod tests {
 
         let visible = skill_list_in(&store, &json!({"agent":"codex"})).unwrap();
         assert!(visible["skills"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn deny_by_default_pairing_hides_unrevealed_skills() {
+        let store = test_store("deny-by-default");
+        pair_request_in(
+            &store,
+            &json!({
+                "agent": "codex",
+                "target": "codex",
+                "defaultVisibilityPolicy": "deny-by-default"
+            }),
+        )
+        .unwrap();
+        pair_approve_in(&store, &json!({"agent": "codex"})).unwrap();
+        seed_skill(&store, "review", "1.0.0");
+
+        let visible = skill_list_in(&store, &json!({"agent": "codex"})).unwrap();
+        assert!(visible["skills"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn deny_by_default_revealed_skill_is_visible() {
+        let store = test_store("deny-revealed");
+        pair_request_in(
+            &store,
+            &json!({
+                "agent": "codex",
+                "target": "codex",
+                "defaultVisibilityPolicy": "deny-by-default"
+            }),
+        )
+        .unwrap();
+        pair_approve_in(&store, &json!({"agent": "codex"})).unwrap();
+        seed_skill(&store, "review", "1.0.0");
+        skill_visibility_in(
+            &store,
+            &json!({
+                "agent": "codex",
+                "skill": "review",
+                "hidden": false
+            }),
+        )
+        .unwrap();
+
+        let visible = skill_list_in(&store, &json!({"agent": "codex"})).unwrap();
+        assert_eq!(visible["skills"].as_array().unwrap().len(), 1);
+        assert_eq!(visible["skills"][0]["skillId"], "review");
+    }
+
+    #[test]
+    fn allow_all_pairing_returns_unhidden_skills() {
+        let store = test_store("allow-all");
+        pair_request_in(
+            &store,
+            &json!({
+                "agent": "codex",
+                "target": "codex",
+                "defaultVisibilityPolicy": "allow-all"
+            }),
+        )
+        .unwrap();
+        pair_approve_in(&store, &json!({"agent": "codex"})).unwrap();
+        seed_skill(&store, "review", "1.0.0");
+        seed_skill(&store, "lint", "2.0.0");
+
+        let visible = skill_list_in(&store, &json!({"agent": "codex"})).unwrap();
+        assert_eq!(visible["skills"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn revoked_pairing_blocks_skill_list() {
+        let store = test_store("revoked-blocks");
+        pair_request_in(&store, &json!({"agent": "codex", "target": "codex"})).unwrap();
+        pair_approve_in(&store, &json!({"agent": "codex"})).unwrap();
+        seed_skill(&store, "review", "1.0.0");
+        pair_revoke_in(&store, &json!({"agent": "codex"})).unwrap();
+
+        let result = skill_list_in(&store, &json!({"agent": "codex"})).unwrap();
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["error"], "pairing_required");
     }
 
     fn seed_skill(store: &ClientStateStore, skill_id: &str, version: &str) {

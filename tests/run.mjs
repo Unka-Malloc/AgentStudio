@@ -23,6 +23,12 @@ const suites = [
     "regression",
     "security"
   ]),
+  suite("docs.consistency", "Document and startup port consistency verifier", npm("run", "server:verify:docs-governance"), [
+    "docs",
+    "consistency",
+    "gate",
+    "regression"
+  ]),
   suite("security.secret-hygiene", "Static secret hygiene", node("tests/verify-secret-hygiene.mjs"), [
     "security",
     "hygiene",
@@ -212,6 +218,27 @@ const suites = [
     "integration",
     "regression"
   ]),
+  suite("server.external-knowledge-distillation-service-gates", "External knowledge distillation service gates", npm("run", "server:verify:external-knowledge-distillation-service-gates"), [
+    "server",
+    "external-service",
+    "knowledge",
+    "distillation",
+    "integration"
+  ]),
+  suite("server.external-knowledge-distillation", "External knowledge distillation integration", npm("run", "server:verify:external-knowledge-distillation"), [
+    "server",
+    "external-service",
+    "knowledge",
+    "distillation",
+    "integration"
+  ]),
+  suite("server.external-knowledge-distillation-references", "External knowledge distillation reference compatibility", npm("run", "server:verify:external-knowledge-distillation-references"), [
+    "server",
+    "external-service",
+    "knowledge",
+    "distillation",
+    "references"
+  ]),
   suite("server.maintenance-agent", "Maintenance agent harness", npm("run", "server:verify:maintenance-agent"), [
     "server",
     "integration",
@@ -236,6 +263,21 @@ const suites = [
     "server",
     "web",
     "feature-registry",
+    "gate",
+    "regression"
+  ]),
+  suite("server.state-machines", "State machine verifier over all definitions", npm("run", "server:verify:state-machines"), [
+    "server",
+    "state-machine",
+    "verifier",
+    "gate",
+    "smoke",
+    "regression"
+  ]),
+  suite("server.production-readiness-baseline", "Production readiness baseline report", npm("run", "server:verify:production-readiness-baseline"), [
+    "server",
+    "production-readiness",
+    "baseline",
     "gate",
     "regression"
   ]),
@@ -391,10 +433,52 @@ const suites = [
 const suiteById = new Map(suites.map((entry) => [entry.id, entry]));
 
 const profileSuites = {
+  core: [
+    "repo.hygiene.pre",
+    "security.secret-hygiene",
+    "server.headless",
+    "server.mcp-http",
+    "server.knowledge",
+    "server.dispatcher-unified",
+    "server.state-mutations",
+    "server.console-auth",
+    "server.source-evidence",
+    "client.targets",
+    "client.native.test",
+    "smoke.server.lifecycle",
+    "smoke.client.cli"
+  ],
+  audit: [
+    "repo.hygiene.pre",
+    "docs.consistency",
+    "security.secret-hygiene",
+    "server.operation-policy",
+    "server.entity-config-layout",
+    "server.singleton-boundaries",
+    "server.frontend-feature-registry",
+    "server.state-machines",
+    "client.architecture",
+    "client.plan"
+  ],
+  external: [
+    "security.npm-audit",
+    "server.external-service-api-registration",
+    "server.external-mcp-passthrough",
+    "server.external-http-adapters",
+    "server.external-knowledge-distillation-service-gates",
+    "server.external-knowledge-distillation",
+    "server.external-knowledge-distillation-references",
+    "client.linux.build",
+    "client.linux.smoke",
+    "client.linux.gui-smoke",
+    "client.ubuntu.verify"
+  ],
   fast: [
     "coverage.unit-threshold",
     "repo.hygiene.pre",
+    "docs.consistency",
     "security.secret-hygiene",
+    "server.state-machines",
     "server.external-service-api-registration",
     "server.frontend-feature-registry",
     "client.architecture",
@@ -412,6 +496,7 @@ const profileSuites = {
   standard: [
     "coverage.unit-threshold",
     "repo.hygiene.pre",
+    "docs.consistency",
     "security.secret-hygiene",
     "security.npm-audit",
     "server.web.build",
@@ -441,6 +526,8 @@ const profileSuites = {
     "server.monitor-alerts",
     "server.feature-profiles",
     "server.frontend-feature-registry",
+    "server.state-machines",
+    "server.production-readiness-baseline",
     "server.business-scenarios",
     "client.architecture",
     "client.plan",
@@ -527,6 +614,8 @@ const profileSuites = {
     "server.monitor-alerts",
     "server.feature-profiles",
     "server.frontend-feature-registry",
+    "server.state-machines",
+    "server.production-readiness-baseline",
     "server.business-scenarios",
     "server.dispatcher-unified",
     "server.trace-context",
@@ -586,6 +675,8 @@ const profileSuites = {
     "server.maintenance-agent",
     "server.feature-profiles",
     "server.frontend-feature-registry",
+    "server.state-machines",
+    "server.production-readiness-baseline",
     "server.business-scenarios",
     "client.architecture",
     "client.plan",
@@ -655,7 +746,8 @@ const profileSuites = {
     "server.maintenance-agent",
     "server.feature-profiles",
     "server.frontend-feature-registry",
-    "server.frontend-feature-registry",
+    "server.state-machines",
+    "server.production-readiness-baseline",
     "server.business-scenarios",
     "server.dispatcher-unified",
     "server.trace-context",
@@ -802,7 +894,7 @@ function printHelp() {
   console.log(`Pact unified test runner
 
 Usage:
-  node tests/run.mjs [--profile fast|standard|coverage|security|server|smoke|prebuild|client|linux|ubuntu|release|changed]
+  node tests/run.mjs [--profile core|audit|external|fast|standard|coverage|security|server|smoke|prebuild|client|linux|ubuntu|release|changed]
   node tests/run.mjs --suite client.native.test --suite server.headless
   node tests/run.mjs --tag security --continue-on-failure
 

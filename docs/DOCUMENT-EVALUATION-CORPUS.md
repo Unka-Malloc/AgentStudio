@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-06
+- Last updated: 2026-06-11
 - Status: Current maintained document
 - Scope: Document Evaluation Corpus.
-- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 本文定义 Pact 文档解析、知识蒸馏、邮件导入和 openability 回归使用的测评集位置和治理规则。
 

@@ -275,15 +275,6 @@ export function createSystemControllerWorkspaceProtocolHandlers({
         context: knowledgeTransformationContext(authSession),
         errorMessage: "导出统一事项 dossier 失败。"
       });
-    },
-    async handleKnowledgeDistillationExport({ operation, requestBody, response, authSession }) {
-      await sendConsoleDomainOperation({
-        operationId: operation?.id || "knowledge.distillation.export",
-        input: protocolPayload(requestBody),
-        response,
-        context: knowledgeTransformationContext(authSession),
-        errorMessage: "导出知识蒸馏结果失败。"
-      });
     }
   };
 }

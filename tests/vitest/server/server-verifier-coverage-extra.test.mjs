@@ -240,7 +240,6 @@ describe("server verifier coverage harness", () => {
       "../../../server/scripts/verify-frontend-feature-registry.mjs",
       "../../../server/scripts/verify-document-evaluation-corpus.mjs",
       "../../../server/scripts/verify-knowledge-distillation-standalone-service.mjs",
-      "../../../server/scripts/verify-knowledge-distillation-workbench.mjs",
       "../../../server/scripts/verify-external-knowledge-distillation.mjs",
       "../../../server/scripts/verify-external-knowledge-distillation-references.mjs"
     ]);

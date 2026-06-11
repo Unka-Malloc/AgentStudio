@@ -6,6 +6,7 @@ import process from "node:process";
 const repoRoot = process.cwd();
 const threshold = Number(process.env.PACT_UNIT_COVERAGE_THRESHOLD || 95);
 const gateScopeMode = process.env.PACT_UNIT_COVERAGE_SCOPE || "all";
+const allowMissingReports = process.env.PACT_UNIT_COVERAGE_ALLOW_MISSING === "1";
 
 const scopedGates = [
   {
@@ -147,6 +148,19 @@ function formatPercent(value) {
 }
 
 function main() {
+  const missingReports = Array.from(new Set([
+    reports.nodeVue,
+    reports.clientGui,
+    reports.clientCli,
+  ])).filter((report) => !fs.existsSync(path.join(repoRoot, report)));
+  if (missingReports.length > 0 && allowMissingReports) {
+    console.log("Unit coverage gate skipped because coverage reports are unavailable in this job.");
+    for (const report of missingReports) {
+      console.log(`- Missing coverage report: ${report}`);
+    }
+    return;
+  }
+
   const nodeVueMetrics = parseNodeVueReport(reports.nodeVue);
   const checks = [
     {

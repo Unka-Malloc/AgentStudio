@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-06
+- Last updated: 2026-06-11
 - Status: Current maintained document
 - Scope: Pact 使用说明.
-- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 当前交付形态只有两部分：
 
@@ -14,23 +14,39 @@
 
 浏览器页面只保留服务端控制台，不再提供旧版桌面工作台。
 
-## 1. 服务端控制台
+## 1. 服务端控制台启动与部署边界
 
-先启动服务端（推荐一键命令）：
+Pact 的服务端（最低要求 Node.js 22+，推荐使用 24）支持不同的运行和部署口径：
 
+### 1.1 本机开发、Docker 启动与开发联调
+- **本机开发**：适用于本地源码开发：
+  ```bash
+  npm install
+  npm run server:setup-runtime
+  npm run start:all
+  ```
+  控制台访问地址：`http://127.0.0.1:7228/`。
+- **Docker 启动**：使用 `docker compose up -d` 快速启动，控制台映射端口为 `7228`。
+- **开发联调 (HMR)**：使用 `npm run start:all -- --dev` 同时运行监听 `5173` 的前端服务与监听 `7228` 的后端接口。
+
+### 1.2 局域网/公网监听
+如果需要局域网其他客户端或智能体联调接入：
 ```bash
-npm install
-npm run start:all
+npm run server:start:public
 ```
+服务将监听 `0.0.0.0:7228`。
 
-默认地址：
-
-```text
-http://127.0.0.1:7228/
-```
+### 1.3 企业生产部署警告
+> [!IMPORTANT]
+> **生产门禁未关闭前不建议对外宣称生产可用 (Before the production gates are closed, it is not recommended to claim production readiness)**。
+> 生产环境部署时，必须强制实施以下安全加固策略：
+> 1. 配置 HTTPS 反向代理（终止 HTTP 并启用 HTTPS 传输）
+> 2. 限制服务仅暴露在受控网段与安全隔离区域中，禁止公网直接暴露后端端口
+> 3. 安全密钥管理（通过外部 KMS/Vault 或运行态密钥库受控注入，严禁明文凭据落盘）
+> 4. 开启不可篡改的 Ledger 并定期归档审计日志
+> 5. 制定定期的灾备与备份恢复策略
 
 控制台可以直接操作这些内容：
-
 - 基础设置
 - 服务发现配置
 - 规则库 JSON
@@ -38,12 +54,6 @@ http://127.0.0.1:7228/
 - 存储摘要
 - 任务列表与删除
 - 客户端迁移状态
-
-如果服务端要对局域网开放：
-
-```bash
-npm run server:start:public
-```
 
 ## 2. 薄客户端
 

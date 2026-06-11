@@ -468,9 +468,9 @@ describe("tool-management core final extra 3", () => {
         readOnly: false
       },
       {
-        id: "knowledge.distillation.export",
-        toolId: "pact.knowledge.distillation.export",
-        label: "Hidden export",
+        id: "acp_agent_relay.permission.resolve",
+        toolId: "pact.acpAgentRelay.permission.resolve",
+        label: "Hidden operation",
         http: { method: "post", path: "/hidden" },
         readOnly: false
       }
@@ -479,7 +479,7 @@ describe("tool-management core final extra 3", () => {
     const catalog = createToolCatalog({ operations });
     expect(catalog.tools.map((tool) => tool.id)).toContain("pact.jobs.list");
     expect(catalog.tools.map((tool) => tool.id)).toContain("pact.workspace.create");
-    expect(catalog.tools.map((tool) => tool.id)).not.toContain("pact.knowledge.distillation.export");
+    expect(catalog.tools.map((tool) => tool.id)).not.toContain("pact.acpAgentRelay.permission.resolve");
 
     const registry = createToolCatalogRegistry({ operations });
     expect(registry.getToolByOperationId("jobs.list")).toMatchObject({

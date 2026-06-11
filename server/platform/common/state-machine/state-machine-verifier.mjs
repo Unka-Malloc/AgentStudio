@@ -1,0 +1,396 @@
+import { validateStateMachineDefinition } from "./state-machine-core.mjs";
+import { checkDefinitionSchema } from "./state-machine-definition-schema.mjs";
+import { guardExists, listAllGuardIds, isStaticOnlyGuard, isGuardRuntimeSafe } from "./guards/guard-registry.mjs";
+import { REACHABLE_TRANSITION_RESULTS, HIGH_RISK_PROTECTION_RESULTS } from "./state-machine-result-types.mjs";
+
+/**
+ * Pure function to verify a state machine definition against complete C3 level specifications.
+ * Does not read or write from files or network.
+ * 
+ * @param {Object} def The state machine definition object to verify
+ * @param {Object} options Configuration options
+ * @param {string} options.relativePath Path or identifier to display in error messages
+ * @param {boolean} options.throwOnError If true, throws an Error on first check failure
+ * @returns {Object} Verification report structure
+ */
+export function verifyMachineDefinition(def, options = {}) {
+  const relativePath = options.relativePath || "unknown";
+  const throwOnError = options.throwOnError !== false;
+
+  const checks = [];
+
+  const addCheck = (id, checkFn) => {
+    try {
+      checkFn();
+      checks.push({ id, status: "passed" });
+      return true;
+    } catch (err) {
+      checks.push({ id, status: "failed", error: err.message });
+      if (throwOnError) {
+        throw new Error(`[${relativePath}] Check '${id}' failed: ${err.message}`);
+      }
+      return false;
+    }
+  };
+
+  // 1. Schema check
+  const schemaOk = addCheck("C1-schema-validation", () => {
+    checkDefinitionSchema(def);
+  });
+  if (!schemaOk && throwOnError) return; // Stop if schema fails and throwing
+
+  // 2. Core validation
+  const coreOk = addCheck("C2-core-validation", () => {
+    const result = validateStateMachineDefinition(def);
+    if (!result.ok) {
+      throw new Error(`Core validation failed: ${result.errors.map(e => e.message).join('; ')}`);
+    }
+  });
+  if (!coreOk && throwOnError) return;
+
+  const { machineId, version, initialState, states, events, totalMatrix, invariants, proofObligations } = def;
+  const stateIds = states.map(s => s.id);
+  const eventIds = events.map(e => e.id);
+
+  // 3. Matrix Totality check
+  addCheck("C2-matrix-totality", () => {
+    const matrixKeys = new Set(totalMatrix.map(cell => `${cell.from}::${cell.event}`));
+    const missingCells = [];
+
+    for (const s of stateIds) {
+      for (const e of eventIds) {
+        const key = `${s}::${e}`;
+        if (!matrixKeys.has(key)) {
+          missingCells.push(key);
+        }
+      }
+    }
+
+    if (missingCells.length > 0) {
+      throw new Error(`Matrix Totality check failed. Missing ${missingCells.length} cells: ${missingCells.join(", ")}`);
+    }
+  });
+
+  // 4. Reachability check (BFS)
+  addCheck("C3-reachability", () => {
+    const reachable = new Set([initialState]);
+    const queue = [initialState];
+    
+    while (queue.length > 0) {
+      const current = queue.shift();
+      const allowedCells = totalMatrix.filter(cell => 
+        cell.from === current && 
+        REACHABLE_TRANSITION_RESULTS.includes(cell.result)
+      );
+      
+      for (const cell of allowedCells) {
+        const to = cell.to || current;
+        if (!reachable.has(to)) {
+          reachable.add(to);
+          queue.push(to);
+        }
+      }
+    }
+
+    const unreachableStates = states.filter(s => !s.externalEntryState && !reachable.has(s.id)).map(s => s.id);
+    if (unreachableStates.length > 0) {
+      throw new Error(`Reachability check failed. Unreachable states: ${unreachableStates.join(", ")}`);
+    }
+  });
+
+  // 5. Non-terminal outgoing transition check
+  addCheck("C3-non-terminal-transitions", () => {
+    const terminalStates = new Set(states.filter(s => s.terminal).map(s => s.id));
+    for (const s of states) {
+      if (terminalStates.has(s.id)) continue;
+      if (s.passiveState === true || s.waitingStateWithTimeout === true) continue;
+
+      const hasOutgoing = totalMatrix.some(cell => 
+        cell.from === s.id && 
+        cell.to && 
+        cell.to !== s.id &&
+        cell.result !== "illegal_transition" && 
+        cell.result !== "ignored_idempotent_event"
+      );
+
+      if (!hasOutgoing) {
+        throw new Error(`Non-terminal state '${s.id}' must have at least one outgoing legal/deferred transition, or be marked passiveState.`);
+      }
+    }
+  });
+
+  // 6. Terminal check (outgoing transitions rules)
+  addCheck("C3-terminal-statuses", () => {
+    const terminalStates = states.filter(s => s.terminal).map(s => s.id);
+    for (const t of terminalStates) {
+      const outgoingCells = totalMatrix.filter(cell => cell.from === t);
+      for (const cell of outgoingCells) {
+        const isIdempotent = events.find(e => e.id === cell.event)?.idempotent;
+        const isAllowedTerminal = def.allowedTerminalEvents?.includes(cell.event);
+        const isReopen = cell.allowedReopenTransition === true;
+        
+        if (
+          cell.result !== "illegal_transition" && 
+          cell.result !== "ignored_idempotent_event" && 
+          !isIdempotent && 
+          !isAllowedTerminal && 
+          !isReopen
+        ) {
+          throw new Error(`Terminal state '${t}' has invalid outgoing transition on '${cell.event}'`);
+        }
+      }
+    }
+  });
+
+  // 7. Illegal transition errorCode check
+  addCheck("C2-illegal-transition-error-codes", () => {
+    for (const cell of totalMatrix) {
+      if (cell.result === "illegal_transition" && !cell.errorCode) {
+        throw new Error(`Illegal transition from '${cell.from}' on '${cell.event}' is missing 'errorCode'`);
+      }
+    }
+  });
+
+  // 8. High-risk transition check
+  addCheck("C3-high-risk-guards", () => {
+    for (const cell of totalMatrix) {
+      const eventDef = events.find(e => e.id === cell.event);
+      if (eventDef?.riskLevel === "high" && cell.result !== "illegal_transition" && cell.result !== "ignored_idempotent_event") {
+        const hasGuard = 
+          HIGH_RISK_PROTECTION_RESULTS.includes(cell.result) ||
+          (cell.guards && cell.guards.length > 0) ||
+          (cell.requiredGuards && cell.requiredGuards.length > 0);
+        if (!hasGuard) {
+          throw new Error(`High-risk event '${cell.event}' in transition from '${cell.from}' must define a guard (guards/requiredGuards), policy/approval/external_receipt/deferred_async result`);
+        }
+        // requires_external_receipt must have receipt-related sideEffects or proofObligations
+        if (cell.result === "requires_external_receipt") {
+          const hasReceiptEvidence =
+            (cell.sideEffects || []).some(se => se.includes("receipt") || se.includes("external") || se.includes("proof")) ||
+            (cell.proofObligations || []).some(po => po.includes("receipt") || po.includes("external") || po.includes("proof"));
+          if (!hasReceiptEvidence) {
+            throw new Error(`High-risk event '${cell.event}' with requires_external_receipt must define receipt-related sideEffects or proofObligations`);
+          }
+        }
+        // deferred_async_transition must have async-related sideEffects or proofObligations
+        if (cell.result === "deferred_async_transition") {
+          const hasAsyncEvidence =
+            (cell.sideEffects || []).some(se => se.includes("async") || se.includes("resume") || se.includes("deferred")) ||
+            (cell.proofObligations || []).some(po => po.includes("async") || po.includes("resume") || po.includes("deferred"));
+          if (!hasAsyncEvidence) {
+            throw new Error(`High-risk event '${cell.event}' with deferred_async_transition must define async/resume-related sideEffects or proofObligations`);
+          }
+        }
+        // Verify no staticOnly guards on high-risk transitions
+        const allGuards = [...(cell.guards || []), ...(cell.requiredGuards || [])];
+        for (const g of allGuards) {
+          if (isStaticOnlyGuard(g)) {
+            throw new Error(`High-risk event '${cell.event}' cannot use staticOnly guard '${g}'. staticOnly guards may not gate high-risk runtime transitions.`);
+          }
+          if (!isGuardRuntimeSafe(g) && guardExists(g)) {
+            throw new Error(`Guard '${g}' on high-risk event '${cell.event}' has no runtime predicate. Ensure guards have runtime implementations or use riskLevel=low/medium.`);
+          }
+        }
+      }
+    }
+  });
+
+  // 8b. Guard registry validation (guards AND requiredGuards)
+  addCheck("C3-guard-registry", () => {
+    const allGuardIds = new Set(listAllGuardIds());
+    for (const cell of totalMatrix) {
+      for (const guardId of (cell.guards || [])) {
+        if (!allGuardIds.has(guardId)) {
+          throw new Error(`Guard '${guardId}' in transition from '${cell.from}' on '${cell.event}' is not registered. Known guards: ${listAllGuardIds().join(', ')}`);
+        }
+      }
+      for (const guardId of (cell.requiredGuards || [])) {
+        if (!allGuardIds.has(guardId)) {
+          throw new Error(`requiredGuard '${guardId}' in transition from '${cell.from}' on '${cell.event}' is not registered. Known guards: ${listAllGuardIds().join(', ')}`);
+        }
+      }
+    }
+  });
+
+  // 8b2. staticOnly guards must not appear in runtime guard fields
+  addCheck("C3-guard-staticOnly-isolation", () => {
+    for (const cell of totalMatrix) {
+      for (const guardId of (cell.guards || [])) {
+        if (isStaticOnlyGuard(guardId)) {
+          throw new Error(`staticOnly guard '${guardId}' is not allowed in cell.guards for transition from '${cell.from}' on '${cell.event}'. staticOnly guards must only be used in staticAnnotations/proofAnnotations.`);
+        }
+      }
+      for (const guardId of (cell.requiredGuards || [])) {
+        if (isStaticOnlyGuard(guardId)) {
+          throw new Error(`staticOnly guard '${guardId}' is not allowed in cell.requiredGuards for transition from '${cell.from}' on '${cell.event}'. staticOnly guards must only be used in staticAnnotations/proofAnnotations.`);
+        }
+      }
+    }
+  });
+
+  // 8c. Guard proof obligation coverage for high-risk events
+  addCheck("C3-guard-proof-obligation", () => {
+    const guardObligations = (def.proofObligations || []).filter(po => po.startsWith("PO-READY-"));
+    if (guardObligations.length === 0) return;
+    for (const guardId of (def.guardRegistryRefs || [])) {
+      const hasMapping = (def.proofMappings || []).some(
+        m => m.method === "guard_validation_by_risk" && m.params.guardId === guardId
+      );
+      if (!hasMapping) {
+        throw new Error(`Guard '${guardId}' referenced in guardRegistryRefs has no proof obligation mapping in 'proofMappings'.`);
+      }
+    }
+  });
+
+  // 8d. Cell reference validity: from/to must reference known states, event must reference known events
+  addCheck("C3-cell-reference-validity", () => {
+    for (const cell of totalMatrix) {
+      if (!stateIds.includes(cell.from)) {
+        throw new Error(`Matrix cell references unknown state '${cell.from}' (from field)`);
+      }
+      if (!eventIds.includes(cell.event)) {
+        throw new Error(`Matrix cell references unknown event '${cell.event}'`);
+      }
+      if (cell.to !== undefined && cell.to !== "" && !stateIds.includes(cell.to)) {
+        throw new Error(`Matrix cell references unknown state '${cell.to}' (to field)`);
+      }
+    }
+  });
+
+  // 8e. Duplicate cell guard disambiguation check
+  addCheck("C3-cell-disambiguation", () => {
+    const cellGroups = new Map();
+    for (const cell of totalMatrix) {
+      const key = `${cell.from}::${cell.event}`;
+      if (!cellGroups.has(key)) cellGroups.set(key, []);
+      cellGroups.get(key).push(cell);
+    }
+    for (const [key, cells] of cellGroups) {
+      const nonIllegal = cells.filter(c => c.result !== "illegal_transition");
+      if (nonIllegal.length > 1) {
+        const unguarded = nonIllegal.filter(c =>
+          (!c.guards || c.guards.length === 0) && (!c.requiredGuards || c.requiredGuards.length === 0)
+        );
+        if (unguarded.length > 1) {
+          throw new Error(`Duplicate unguarded cells for ${key}. Multiple cells with the same from+event must use guards for disambiguation.`);
+        }
+        if (unguarded.length === 1 && nonIllegal.length > 1) {
+          throw new Error(`Mixed guarded/unguarded cells for ${key}. All non-illegal cells must have guards for disambiguation, or only one unguarded cell is allowed.`);
+        }
+      }
+    }
+  });
+
+  // 8f. requires_external_receipt must have sideEffects or proofObligations referencing receipt
+  addCheck("C3-external-receipt-evidence", () => {
+    for (const cell of totalMatrix) {
+      if (cell.result === "requires_external_receipt") {
+        const hasReceiptSideEffect = (cell.sideEffects || []).some(se =>
+          se.includes("receipt") || se.includes("external") || se.includes("proof")
+        );
+        const hasReceiptProof = (cell.proofObligations || []).some(po =>
+          po.includes("receipt") || po.includes("external") || po.includes("proof")
+        );
+        if (!hasReceiptSideEffect && !hasReceiptProof) {
+          throw new Error(`Cell with 'requires_external_receipt' from '${cell.from}' on '${cell.event}' must define receipt-related sideEffects or proofObligations.`);
+        }
+      }
+    }
+  });
+
+  // 8g. deferred_async_transition must have sideEffects referencing async or resume
+  addCheck("C3-deferred-async-evidence", () => {
+    for (const cell of totalMatrix) {
+      if (cell.result === "deferred_async_transition") {
+        const hasAsyncEvidence = (cell.sideEffects || []).some(se =>
+          se.includes("async") || se.includes("resume") || se.includes("deferred")
+        ) || (cell.proofObligations || []).some(po =>
+          po.includes("async") || po.includes("resume") || po.includes("deferred")
+        );
+        if (!hasAsyncEvidence) {
+          throw new Error(`Cell with 'deferred_async_transition' from '${cell.from}' on '${cell.event}' must define async/resume-related sideEffects or proofObligations.`);
+        }
+      }
+    }
+  });
+
+  // 9. Invariants check
+  addCheck("C3-invariants-identification", () => {
+    const machinePrefix = machineId.split(".")[0].toUpperCase();
+    for (const inv of invariants) {
+      if (!inv.startsWith("SM-GOV-") && !inv.startsWith(`SM-${machinePrefix}-`)) {
+        throw new Error(`Invariant '${inv}' does not conform to naming specification 'SM-GOV-xxx' or 'SM-${machinePrefix}-xxx'`);
+      }
+    }
+  });
+
+  // 10. Proof obligations and mappings check
+  addCheck("C3-proof-obligations-mapping", () => {
+    const mappings = def.proofMappings || [];
+    for (const po of proofObligations) {
+      const hasMapping = mappings.some(m => m.obligationId === po);
+      if (!hasMapping) {
+        throw new Error(`Proof obligation '${po}' is missing mapping details in 'proofMappings'`);
+      }
+    }
+  });
+
+  // 11. Secret-like scan and absolute path scan
+  addCheck("C3-secret-hygiene-scan", () => {
+    const forbiddenPatterns = [
+      /api_key/i,
+      /secret/i,
+      /token/i,
+      /cookie/i,
+      /Authorization/i,
+      /Bearer/i,
+      /AKIA/i,
+      /-----BEGIN/i
+    ];
+    
+    const absolutePathPatterns = [
+      /\/Users\//i,
+      /\/home\//i,
+      /[a-zA-Z]:\\/i
+    ];
+
+    function scanSensitive(obj, path = "root") {
+      if (typeof obj === "string") {
+        if (obj.startsWith("<redacted-") || obj.startsWith("redacted-") || obj === "UNREVIEWED" || obj === "sensitive_key") {
+          return;
+        }
+        for (const pattern of forbiddenPatterns) {
+          if (pattern.test(obj)) {
+            if (path.includes("description") || path.includes("label")) {
+              continue;
+            }
+            throw new Error(`Sensitive pattern matched: value '${obj}' at '${path}' contains secret-like content.`);
+          }
+        }
+        for (const pattern of absolutePathPatterns) {
+          if (pattern.test(obj)) {
+            throw new Error(`Absolute path matched: value '${obj}' at '${path}' contains absolute local paths.`);
+          }
+        }
+      } else if (obj && typeof obj === "object") {
+        for (const key of Object.keys(obj)) {
+          scanSensitive(obj[key], `${path}.${key}`);
+        }
+      }
+    }
+    scanSensitive(def);
+  });
+
+  const ok = checks.every(c => c.status === "passed");
+
+  return {
+    machineId: def.machineId,
+    version: def.version,
+    ok,
+    completenessLevel: "C3",
+    stateCount: states?.length || 0,
+    eventCount: events?.length || 0,
+    matrixCellCount: totalMatrix?.length || 0,
+    checks
+  };
+}

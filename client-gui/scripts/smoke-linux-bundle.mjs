@@ -42,6 +42,35 @@ function runJson(command, args, env) {
   }
 }
 
+function assertTargetScan(scan) {
+  if (scan.ok !== true || !Array.isArray(scan.candidates)) {
+    throw new Error(`Unexpected target scan result: ${JSON.stringify(scan)}`);
+  }
+
+  const targets = new Set();
+  for (const candidate of scan.candidates) {
+    if (!candidate || typeof candidate.target !== "string" || candidate.target.length === 0) {
+      throw new Error(`Target scan returned an invalid candidate: ${JSON.stringify(candidate)}`);
+    }
+    if (typeof candidate.status !== "string" || candidate.status.length === 0) {
+      throw new Error(`Target scan candidate is missing status: ${JSON.stringify(candidate)}`);
+    }
+    if (
+      !Array.isArray(candidate.supportedActions) ||
+      !candidate.supportedActions.includes("mcp.plugin.status")
+    ) {
+      throw new Error(`Target scan candidate is missing status support: ${JSON.stringify(candidate)}`);
+    }
+    targets.add(candidate.target);
+  }
+
+  for (const target of ["openclaw", "codex", "gemini-cli", "opencode", "windsurf"]) {
+    if (!targets.has(target)) {
+      throw new Error(`Target scan result is missing required target: ${target}`);
+    }
+  }
+}
+
 async function main() {
   if (process.platform !== "linux") {
     throw new Error("Linux bundle smoke tests must run inside Linux.");
@@ -78,9 +107,7 @@ async function main() {
   const env = { ...process.env, PACT_PORTABLE_DIR: dataDir };
   try {
     const scan = runJson(cli, ["targets", "scan"], env);
-    if (scan.ok !== true || !Array.isArray(scan.targets)) {
-      throw new Error(`Unexpected target scan result: ${JSON.stringify(scan)}`);
-    }
+    assertTargetScan(scan);
 
     console.log(JSON.stringify({
       ok: true,

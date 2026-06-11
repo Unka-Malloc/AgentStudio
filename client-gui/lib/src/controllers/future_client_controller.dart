@@ -15,7 +15,7 @@ class FutureClientController extends ChangeNotifier {
     PortableDataRoot? portableData,
     AgentService? agentService,
   }) : portableData = portableData ?? PortableDataRoot(),
-       agentService = agentService ?? AgentService() {
+       agentService = agentService ?? AgentService(dataDirectory: () async => (portableData ?? PortableDataRoot()).dataDirectory().then((d) => d.path)) {
     bootstrapController.addListener(notifyListeners);
   }
 

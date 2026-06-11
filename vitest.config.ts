@@ -18,7 +18,10 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["tests/vitest/**/*.{test,spec}.{js,mjs,cjs,ts,tsx}"],
+    include: [
+      "tests/vitest/**/*.{test,spec}.{js,mjs,cjs,ts,tsx}",
+      "tests/server/**/*.{test,spec}.{js,mjs,cjs,ts,tsx}"
+    ],
     pool: "forks",
     coverage: {
       provider: "v8",

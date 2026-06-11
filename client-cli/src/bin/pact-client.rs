@@ -258,11 +258,32 @@ fn print_usage() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::RngCore;
     use std::env;
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn signed_receipt_discovery(endpoint: &str, path: &Path) {
+        let mut bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut bytes);
+        let secret_bytes = bytes;
+        let mcp_url = format!("{}/mcp", endpoint.trim_end_matches('/'));
+        let (receipt, public_key) = pact_client_native::mcp_trust::test_signed_receipt(
+            endpoint,
+            &mcp_url,
+            "test-key",
+            "2026-06-09T00:00:00Z",
+            "2099-01-01T00:00:00Z",
+            &secret_bytes,
+        );
+        let doc = serde_json::json!({
+            "url": endpoint,
+            "trustReceipt": receipt,
+            "pinnedPublicKey": public_key
+        });
+        fs::write(path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+    }
 
     #[test]
     fn cli_dispatches_state_profiles_targets() {
@@ -478,6 +499,9 @@ mod tests {
                 Some("configured") | Some("not-configured")
             ));
 
+            let discovery_file = dir.join("mcp-discovery.json");
+            signed_receipt_discovery("http://127.0.0.1:7228", &discovery_file);
+
             let config_path = dir.join("opencode.jsonc");
             fs::write(&config_path, "{}\n").unwrap();
             let plugin_update = execute_cli(vec![
@@ -492,9 +516,18 @@ mod tests {
                 dir.join("future-client").display().to_string(),
                 "--token".into(),
                 "plugin-token".into(),
+                "--discovery-file".into(),
+                discovery_file.display().to_string(),
             ])
             .unwrap();
             assert_eq!(json_payload(&&plugin_update)["status"], "updated");
+
+            let snapshot_id = json_payload(&&plugin_update)
+                .get("apply")
+                .and_then(|a| a.get("snapshotId"))
+                .and_then(|s| s.as_str())
+                .unwrap_or("snapshot-missing")
+                .to_string();
 
             let plugin_rollback = execute_cli(vec![
                 "mcp".into(),
@@ -503,10 +536,7 @@ mod tests {
                 "--target".into(),
                 "opencode".into(),
                 "--snapshot-id".into(),
-                json_payload(&&plugin_update)["apply"]["snapshotId"]
-                    .as_str()
-                    .unwrap_or("snapshot-missing")
-                    .to_string(),
+                snapshot_id,
             ])
             .unwrap();
             assert_eq!(json_payload(&&plugin_rollback)["status"], "rolled_back");
@@ -524,14 +554,17 @@ mod tests {
             let _portable = set_portable_dir(&dir);
             let state_root = dir.join("future-client");
 
+            let discovery_file = dir.join("mcp-discovery.json");
+            signed_receipt_discovery("http://127.0.0.1:7228", &discovery_file);
+
             let plan = execute_cli(vec![
                 "mcp".into(),
                 "config".into(),
                 "plan".into(),
                 "--target".into(),
                 "opencode".into(),
-                "--base-url".into(),
-                "http://127.0.0.1:7228".into(),
+                "--discovery-file".into(),
+                discovery_file.display().to_string(),
             ])
             .unwrap();
             assert_eq!(json_payload(&&plan)["status"], "planned");
@@ -548,6 +581,8 @@ mod tests {
                 state_root.display().to_string(),
                 "--token".into(),
                 "x-token".into(),
+                "--discovery-file".into(),
+                discovery_file.display().to_string(),
             ])
             .unwrap();
             let apply = json_payload(&&apply);
@@ -576,6 +611,8 @@ mod tests {
                 config_path.display().to_string(),
                 "--expected-hash".into(),
                 "bad-hash".into(),
+                "--discovery-file".into(),
+                discovery_file.display().to_string(),
             ])
             .unwrap();
             assert_eq!(json_payload(&&conflict)["status"], "field_conflict");
@@ -678,9 +715,9 @@ mod tests {
         dir
     }
 
-    fn cli_env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
+    fn cli_env_lock() -> &'static std::sync::Mutex<()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
     }
 
     struct PortableDirGuard {

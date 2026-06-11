@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-06
+- Last updated: 2026-06-11
 - Status: Maintained example
 - Scope: 外部 MCP 直通接入 Pact.
-- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 这个例子展示一个已经实现 MCP 协议的外部服务如何以最小配置接入 Pact。此场景不需要重新声明上游 tools；Pact 从上游 MCP 的 `tools/list` 发现工具，并通过 Pact 的权限、审计、配额和出口治理包装后暴露给下游智能体。
 

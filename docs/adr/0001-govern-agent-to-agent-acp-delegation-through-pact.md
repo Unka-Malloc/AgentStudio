@@ -7,10 +7,10 @@ date: 2026-06-04
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-06
+- Last updated: 2026-06-11
 - Status: Accepted ADR
 - Scope: Govern Agent-to-Agent ACP Delegation Through Pact.
-- Staleness check: Scanned on 2026-06-06; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 Pact will mediate agent-to-agent delegation by acting as an inbound ACP agent to the source agent and as an outbound ACP client to the concrete target agent. Pact will not be a raw ACP socket proxy: every relay turn remains governed by the Operation Scheduling Kernel, Capability Kernel, Tool Management, `/approval`, trace, audit, workspace governance, and global artifact lifecycle.
 

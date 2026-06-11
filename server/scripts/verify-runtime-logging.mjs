@@ -52,6 +52,15 @@ function assertHasEvents(records, events) {
   }
 }
 
+async function removeTempDir(dirPath) {
+  await fs.rm(dirPath, {
+    recursive: true,
+    force: true,
+    maxRetries: 10,
+    retryDelay: 100
+  });
+}
+
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-runtime-logging-data-"));
 const logDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-runtime-logging-logs-"));
 const staleLogPath = path.join(logDir, "pact-stale-2000-01-01.jsonl");
@@ -235,6 +244,6 @@ try {
   if (server) {
     await server.close();
   }
-  await fs.rm(userDataPath, { recursive: true, force: true });
-  await fs.rm(logDir, { recursive: true, force: true });
+  await removeTempDir(userDataPath);
+  await removeTempDir(logDir);
 }

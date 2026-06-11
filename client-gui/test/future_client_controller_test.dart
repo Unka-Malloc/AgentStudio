@@ -361,11 +361,12 @@ class _FakeAgentService extends AgentService {
       manual: false,
       configPath: '/tmp/codex.toml',
       adapterStatus: 'implemented',
+      supportedActions: ['mcp.plugin.status', 'mcp.plugin.update', 'mcp.plugin.rollback'],
     ),
   ];
   Map<String, dynamic> pairingResult = {'ok': true, 'status': 'requested'};
   String pairingStatus = 'requested';
-  List<Map<String, dynamic>> snapshots = const [
+  List<Map<String, dynamic>> snapshots = [
     {'snapshotId': 'snapshot-codex-1', 'target': 'codex'},
   ];
   List<Map<String, dynamic>> pairings = [
