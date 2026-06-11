@@ -70,42 +70,43 @@
 
 ## 工作树拆分方案
 
-Pact 的服务端、Web Console、CLI、GUI、MCP connector 和文档规则可以分开维护。推荐用 Git worktree 把不同任务放到不同目录，主工作树保留为集成区和手动产品文案维护区。
+Pact 的服务端、Web Console、CLI、GUI、MCP connector 和文档规则可以分开维护。推荐用 Git worktree 把不同任务放到 `Pact-worktrees/` 下，主工作树保留为集成区和手动产品文案维护区。
 
 建议目录布局：
 
 | Worktree | Branch | 主要职责 | 默认写入范围 |
 | --- | --- | --- | --- |
 | `Pact/` | `nightly` | 主集成区、最终合并、手动维护产品宣传页 | 避免直接承接大范围实验改动 |
-| `Pact-server/` | `codex/server-runtime` | 服务端运行时、治理、协议、server verifier | `server/`, `tests/server/`, 服务端脚本和相关服务端文档 |
-| `Pact-web/` | `codex/web-console` | 管理控制台前端 | `server-web/`, 前端样式、前端类型检查相关配置 |
-| `Pact-mcp/` | `codex/mcp-connector` | 本地智能体 MCP 连接器 | `mcp-connector/`, `docs/MCP_INSTALL*.md` |
-| `Pact-cli/` | `codex/client-cli` | Rust CLI | `client-cli/`, CLI smoke 测试 |
-| `Pact-gui/` | `codex/client-gui` | Flutter 桌面端 | `client-gui/` |
-| `Pact-docs-agent/` | `codex/docs-agent-context` | 智能体入口、文档索引、协作规则 | `AGENT.md`, `docs/`, 文档治理和根目录卫生校验 |
+| `Pact-worktrees/server/` | `codex/server-runtime` | 服务端运行时、治理、协议、server verifier | `server/`, `tests/server/`, 服务端脚本和相关服务端文档 |
+| `Pact-worktrees/web/` | `codex/web-console` | 管理控制台前端 | `server-web/`, 前端样式、前端类型检查相关配置 |
+| `Pact-worktrees/mcp/` | `codex/mcp-connector` | 本地智能体 MCP 连接器 | `mcp-connector/`, `docs/MCP_INSTALL*.md` |
+| `Pact-worktrees/cli/` | `codex/client-cli` | Rust CLI | `client-cli/`, CLI smoke 测试 |
+| `Pact-worktrees/gui/` | `codex/client-gui` | Flutter 桌面端 | `client-gui/` |
+| `Pact-worktrees/docs-agent/` | `codex/docs-agent-context` | 智能体入口、文档索引、协作规则 | `AGENT.md`, `docs/`, 文档治理和根目录卫生校验 |
 
 每个子系统目录都有局部入口文件：
 
 | Worktree | 子目录入口 | 用途 |
 | --- | --- | --- |
-| `Pact-server/` | `server/AGENT.md` | 服务端目录、首读文件和验证范围 |
-| `Pact-web/` | `server-web/AGENT.md` | Web Console 目录、组件入口和前端验证 |
-| `Pact-mcp/` | `mcp-connector/AGENT.md` | MCP connector CLI、安装文档和验证 |
-| `Pact-cli/` | `client-cli/AGENT.md` | Rust CLI 模块和 cargo/npm 验证 |
-| `Pact-gui/` | `client-gui/AGENT.md` | Flutter GUI 入口、测试和生成物边界 |
-| `Pact-docs-agent/` | `docs/AGENT.md` | 文档索引、元数据、历史材料和上下文预算 |
+| `Pact-worktrees/server/` | `server/AGENT.md` | 服务端目录、首读文件和验证范围 |
+| `Pact-worktrees/web/` | `server-web/AGENT.md` | Web Console 目录、组件入口和前端验证 |
+| `Pact-worktrees/mcp/` | `mcp-connector/AGENT.md` | MCP connector CLI、安装文档和验证 |
+| `Pact-worktrees/cli/` | `client-cli/AGENT.md` | Rust CLI 模块和 cargo/npm 验证 |
+| `Pact-worktrees/gui/` | `client-gui/AGENT.md` | Flutter GUI 入口、测试和生成物边界 |
+| `Pact-worktrees/docs-agent/` | `docs/AGENT.md` | 文档索引、元数据、历史材料和上下文预算 |
 
 从主工作树创建这些 worktree：
 
 ```bash
 cd /Users/unka/DevSpace/Unka-Malloc/Pact
+mkdir -p ../Pact-worktrees
 
-git worktree add -b codex/server-runtime ../Pact-server nightly
-git worktree add -b codex/web-console ../Pact-web nightly
-git worktree add -b codex/mcp-connector ../Pact-mcp nightly
-git worktree add -b codex/client-cli ../Pact-cli nightly
-git worktree add -b codex/client-gui ../Pact-gui nightly
-git worktree add -b codex/docs-agent-context ../Pact-docs-agent nightly
+git worktree add -b codex/server-runtime ../Pact-worktrees/server nightly
+git worktree add -b codex/web-console ../Pact-worktrees/web nightly
+git worktree add -b codex/mcp-connector ../Pact-worktrees/mcp nightly
+git worktree add -b codex/client-cli ../Pact-worktrees/cli nightly
+git worktree add -b codex/client-gui ../Pact-worktrees/gui nightly
+git worktree add -b codex/docs-agent-context ../Pact-worktrees/docs-agent nightly
 ```
 
 查看和清理工作树：
@@ -113,6 +114,13 @@ git worktree add -b codex/docs-agent-context ../Pact-docs-agent nightly
 ```bash
 git worktree list
 git worktree prune
+```
+
+如果已经有同级 `Pact-server/`、`Pact-web/` 这类旧布局，可以用 `git worktree move` 收拢到 `Pact-worktrees/`：
+
+```bash
+git worktree move ../Pact-server ../Pact-worktrees/server
+git worktree move ../Pact-web ../Pact-worktrees/web
 ```
 
 ### 协作边界
