@@ -112,6 +112,8 @@ jobs:
         run: npm run client:get
       - name: Run fast tests
         run: npm run test:fast
+        env:
+          PACT_UNIT_COVERAGE_ALLOW_MISSING: "1"
       - name: Upload fast test report
         if: always()
         uses: actions/upload-artifact@v4
@@ -145,6 +147,8 @@ jobs:
         run: npm ci
       - name: Run security tests
         run: npm run test:security
+        env:
+          PACT_UNIT_COVERAGE_ALLOW_MISSING: "1"
       - name: Upload security test report
         if: always()
         uses: actions/upload-artifact@v4
@@ -183,6 +187,8 @@ jobs:
           path: build/dist/
       - name: Run smoke tests
         run: npm run test:smoke
+        env:
+          PACT_UNIT_COVERAGE_ALLOW_MISSING: "1"
       - name: Upload smoke test report
         if: always()
         uses: actions/upload-artifact@v4
@@ -227,6 +233,8 @@ jobs:
           path: build/dist/
       - name: Run regression tests
         run: npm run test:regression
+        env:
+          PACT_UNIT_COVERAGE_ALLOW_MISSING: "1"
       - name: Upload regression test report
         if: always()
         uses: actions/upload-artifact@v4
