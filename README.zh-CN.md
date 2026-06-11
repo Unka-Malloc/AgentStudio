@@ -1,15 +1,24 @@
-# Pact 🚀
+<p align="center">
+  <img src="docs/banner.svg" alt="Pact — 可信智能体协作空间" width="100%"/>
+</p>
 
-[English](README.md) | 简体中文
+<p align="center">
+  <strong>让你的 AI 智能体安全协作的统一平台 — 每一步操作都可审计、可回溯。</strong>
+</p>
 
-> 让你的 AI 智能体安全协作的统一平台 — 每一步操作都可审计、可回溯。
+<p align="center">
+  <a href="README.md">English</a> | 简体中文
+</p>
 
-[![CI](https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml/badge.svg)](https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml)
-[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL_3.0--or--later-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Node.js](https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js&logoColor=white)](https://vuejs.org/)
-[![Rust](https://img.shields.io/badge/Rust-CLI-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Flutter](https://img.shields.io/badge/Flutter-GUI-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
+<p align="center">
+  <a href="https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml"><img src="https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPL_3.0--or--later-blue.svg" alt="License: GPL-3.0-or-later"/></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white" alt="Node.js"/></a>
+  <a href="https://vuejs.org/"><img src="https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js&logoColor=white" alt="Vue 3"/></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-CLI-DEA584?logo=rust&logoColor=white" alt="Rust"/></a>
+  <a href="https://flutter.dev/"><img src="https://img.shields.io/badge/Flutter-GUI-02569B?logo=flutter&logoColor=white" alt="Flutter"/></a>
+</p>
+
 
 **Pact** 是一个**可信的智能体协作空间**。我们致力于打破本地孤立的智能体与静态企业知识库之间的壁垒，为您提供一个**安全、受控且 100% 可审计**的协同环境。
 
@@ -207,11 +216,6 @@ npm run cli -- rpc-call jobs.list --params '{"limit":20}'
 ## 📄 许可证
 
 本项目基于 [GNU General Public License v3.0 or later](LICENSE) 发布 — 详见 LICENSE 文件。
-
----
-
-> *"在 Pact 中，智能体不被信任。我们只信任可验证的资产状态与可回放的操作账本。"*
-ublic License v3.0 or later](LICENSE) 发布 — 详见 LICENSE 文件。
 
 ---
 

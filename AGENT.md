@@ -1,5 +1,23 @@
 # Pact Agent Rules
 
+## 智能体入口与上下文范围
+
+- 进入任务时，优先用根目录 `package.json`、`README.md`、`docs/README.md` 和目标子目录最近的 `README.md` 建立上下文；这些入口通常足够定位脚本、架构事实源和运行说明。
+- 代码修改先按根 `README.md` 的目录职责表缩小范围，再在候选目录内搜索；文档修改先看 `docs/README.md` 的索引和维护规则，再打开目标文档。
+- `build/`、`node_modules/`、`client-cli/target/`、`client-gui/build/` 和 `docs/reports/history/` 默认视为生成物、依赖缓存或历史材料；只有任务明确指向、验证输出指向，或需要核对历史事实时再进入。
+- 扩大到全仓库搜索前，先说明当前入口无法回答的问题，并尽量限定文件类型或目录前缀，减少无关上下文进入会话。
+- 开始修改前先运行 `git status --short`，区分当前任务改动和用户已有改动；无关改动保持原样。
+- 搜索优先使用 `rg` 或 `rg --files`，避免把整段生成物、大型历史报告或依赖目录读入上下文。
+
+## 任务路由
+
+- 前端控制台任务从 `server-web/` 开始，只打开相关的 `components/`、`views/`、`lib/` 和样式文件。
+- 服务端或运行时任务从 `server/` 开始；只有涉及启动、挂载、运行行为或运维语义时再查阅 `docs/SERVER.md`。
+- MCP connector 任务从 `mcp-connector/` 开始；安装和注册行为再查阅 `mcp-connector/README.md` 与 `docs/MCP_INSTALL.md`。
+- 架构、策略或治理类任务先看 `docs/README.md`，再打开与主题对应的核心文档。
+- 测试任务先从失败测试或 verifier 本身开始；只有测试契约不清楚时再查阅 `docs/TEST-FRAMEWORK.md`。
+- Skill 或知识工具任务从 `skills/README.md` 或目标 skill 目录开始，避免默认展开完整 `docs/reports/history/`。
+
 ## 用户配置真实性
 
 - 用户配置不允许由代码指定缺省默认值。没有配置的情况下必须保持为空。
@@ -22,6 +40,12 @@
 ## 文档与使用说明风格
 
 - 本项目的所有文档和使用说明，应力图让用户了解本项目所提供的能力，而不是它的限制和审计。
+
+## 验证范围
+
+- 优先运行覆盖当前改动范围的最小 verifier。
+- 除非用户明确要求完整发布或 readiness 检查，否则不运行完整 `npm run server:verify`。
+- `package.json` 脚本较多，优先查询所需脚本名和局部片段，避免把整份文件作为默认上下文。
 
 ## README.md 修改权限
 

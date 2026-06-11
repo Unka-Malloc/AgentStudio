@@ -1,15 +1,24 @@
-# Pact 🚀
+<p align="center">
+  <img src="docs/banner.svg" alt="Pact — Trusted Agent Collaboration Space" width="100%"/>
+</p>
 
-English | [简体中文](README.zh-CN.md)
+<p align="center">
+  <strong>The secure, auditable hub where your AI agents collaborate — without going rogue.</strong>
+</p>
 
-> The secure, auditable hub where your AI agents collaborate — without going rogue.
+<p align="center">
+  English | <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-[![CI](https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml/badge.svg)](https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml)
-[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL_3.0--or--later-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Node.js](https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js&logoColor=white)](https://vuejs.org/)
-[![Rust](https://img.shields.io/badge/Rust-CLI-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Flutter](https://img.shields.io/badge/Flutter-GUI-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
+<p align="center">
+  <a href="https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml"><img src="https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPL_3.0--or--later-blue.svg" alt="License: GPL-3.0-or-later"/></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white" alt="Node.js"/></a>
+  <a href="https://vuejs.org/"><img src="https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js&logoColor=white" alt="Vue 3"/></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-CLI-DEA584?logo=rust&logoColor=white" alt="Rust"/></a>
+  <a href="https://flutter.dev/"><img src="https://img.shields.io/badge/Flutter-GUI-02569B?logo=flutter&logoColor=white" alt="Flutter"/></a>
+</p>
+
 
 **Pact** is a **Trusted Agent Collaboration Space**. We bridge the gap between isolated local AI agents and static enterprise knowledge bases by providing a **secure, controllable, and 100% auditable** collaborative environment.
 
@@ -207,12 +216,6 @@ For development guidelines and coding conventions, see [Developer Guidelines](do
 ## 📄 License
 
 This project is licensed under the [GNU General Public License v3.0 or later](LICENSE) — see the LICENSE file for details.
-
----
-
-> *"In Pact, agents are not trusted. We only trust verifiable asset states and a replayable operation ledger."*
-layable operation ledger."*
-icense v3.0 or later](LICENSE) — see the LICENSE file for details.
 
 ---
 
