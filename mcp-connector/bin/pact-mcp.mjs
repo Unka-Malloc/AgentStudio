@@ -1435,11 +1435,11 @@ async function publishLaunchctlEnv(env) {
     return true;
   }
 
-  console.log("\n[Notice] Please add the following to your ~/.bashrc or ~/.zshrc:");
+  process.stderr.write("\n[Notice] Please add the following to your ~/.bashrc or ~/.zshrc:\n");
   for (const [name, value] of Object.entries(env)) {
-    console.log(`export ${name}="${value}"`);
+    process.stderr.write(`export ${name}="${value}"\n`);
   }
-  console.log("");
+  process.stderr.write("\n");
   return false;
 }
 
