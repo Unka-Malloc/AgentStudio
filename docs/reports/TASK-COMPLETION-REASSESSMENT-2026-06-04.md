@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-08
+- Last updated: 2026-06-11
 - Status: Superseded assessment retained for planning context
 - Scope: Task Completion Reassessment.
-- Staleness check: Scanned on 2026-06-08; older blocked/readiness statements are historical context and are superseded by docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-11; older blocked/readiness statements are historical context and are superseded by docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 > 后续更新：本文件记录的是 2026-06-04 早期 blocked 状态。当前轮次复核请以
 > `docs/reports/POST-SUBAGENT-PROGRESS-ASSESSMENT-2026-06-04.md` 为准；该报告记录

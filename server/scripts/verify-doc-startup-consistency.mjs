@@ -24,7 +24,7 @@ async function run() {
   const serverDoc = await fs.readFile(serverDocPath, "utf8");
 
   // 1. 验证 docker-compose.yml 端口
-  assert.match(compose, /"7228:7228"/, "docker-compose.yml must map port 7228:7228");
+  assert.match(compose, /"(?:127\.0\.0\.1:)?7228:7228"/, "docker-compose.yml must map host port 7228 to container port 7228");
   assert.match(compose, /PACT_SERVER_PORT:\s*7228/, "docker-compose.yml must set PACT_SERVER_PORT: 7228");
   assert.match(compose, /http:\/\/127\.0\.0\.1:7228/, "docker-compose.yml URLs must point to port 7228");
 

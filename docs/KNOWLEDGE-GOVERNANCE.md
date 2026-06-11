@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-08
+- Last updated: 2026-06-11
 - Status: Current maintained document
 - Scope: AgentLibrary Governance.
-- Staleness check: Scanned on 2026-06-08; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 本文定义 Pact 的 `AgentLibrary / 图书馆` 治理边界。图书馆不是资产后台，也不是智能体私有记忆；它是公共工作空间可安全引用、可共享、可借阅、可登记、可管控的 evidence runtime。
 

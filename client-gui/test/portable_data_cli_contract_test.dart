@@ -6,14 +6,23 @@ void main() {
   group('PortableDataCliContract', () {
     late List<String> capturedArgs;
     late Map<String, String>? capturedEnv;
+    late Directory portableDir;
+    late File cliBinary;
     late AgentService service;
 
-    setUp(() {
+    setUp(() async {
       capturedArgs = [];
       capturedEnv = null;
+      portableDir = await Directory.systemTemp.createTemp(
+        'pact-portable-data-',
+      );
+      cliBinary = File(
+        '${portableDir.path}${Platform.pathSeparator}pact-client',
+      );
+      await cliBinary.writeAsString('');
       service = AgentService(
-        dataDirectory: () async => '/fake/portable/data',
-        resolveCliBinary: () async => File('/fake/pact-client'),
+        dataDirectory: () async => portableDir.path,
+        resolveCliBinary: () async => cliBinary,
         runCliExecutable: (executable, args, env) async {
           capturedArgs = args;
           capturedEnv = env;
@@ -22,89 +31,106 @@ void main() {
       );
     });
 
+    tearDown(() async {
+      if (await portableDir.exists()) {
+        await portableDir.delete(recursive: true);
+      }
+    });
+
     test('scanTargets passes PACT_PORTABLE_DIR', () async {
       await service.scanTargets();
       expect(capturedArgs, ['targets', 'scan']);
-      expect(capturedEnv?['PACT_PORTABLE_DIR'], '/fake/portable/data');
+      expect(capturedEnv?['PACT_PORTABLE_DIR'], portableDir.path);
     });
 
     test('addTarget passes PACT_PORTABLE_DIR', () async {
       await service.addTarget(target: 'opencode');
       expect(capturedArgs, ['targets', 'add', '--target', 'opencode']);
-      expect(capturedEnv?['PACT_PORTABLE_DIR'], '/fake/portable/data');
+      expect(capturedEnv?['PACT_PORTABLE_DIR'], portableDir.path);
     });
 
     test('inspectTarget passes PACT_PORTABLE_DIR', () async {
       await service.inspectTarget('opencode');
       expect(capturedArgs, ['targets', 'inspect', 'opencode']);
-      expect(capturedEnv?['PACT_PORTABLE_DIR'], '/fake/portable/data');
+      expect(capturedEnv?['PACT_PORTABLE_DIR'], portableDir.path);
     });
 
     test('planTargetConfig passes PACT_PORTABLE_DIR', () async {
       await service.planTargetConfig('opencode');
       expect(capturedArgs, ['mcp', 'config', 'plan', '--target', 'opencode']);
-      expect(capturedEnv?['PACT_PORTABLE_DIR'], '/fake/portable/data');
+      expect(capturedEnv?['PACT_PORTABLE_DIR'], portableDir.path);
     });
 
     test('restoreSnapshot passes PACT_PORTABLE_DIR', () async {
       await service.restoreSnapshot('snap-1');
       expect(capturedArgs, ['snapshots', 'restore', 'snap-1']);
-      expect(capturedEnv?['PACT_PORTABLE_DIR'], '/fake/portable/data');
+      expect(capturedEnv?['PACT_PORTABLE_DIR'], portableDir.path);
     });
 
     test('mcpPluginStatus passes PACT_PORTABLE_DIR', () async {
       await service.mcpPluginStatus(target: 'opencode');
       expect(capturedArgs, ['mcp', 'plugin', 'status', '--target', 'opencode']);
-      expect(capturedEnv?['PACT_PORTABLE_DIR'], '/fake/portable/data');
+      expect(capturedEnv?['PACT_PORTABLE_DIR'], portableDir.path);
     });
 
     test('updateMcpPlugin passes PACT_PORTABLE_DIR', () async {
       await service.updateMcpPlugin(target: 'opencode');
       expect(capturedArgs, ['mcp', 'plugin', 'update', '--target', 'opencode']);
-      expect(capturedEnv?['PACT_PORTABLE_DIR'], '/fake/portable/data');
+      expect(capturedEnv?['PACT_PORTABLE_DIR'], portableDir.path);
     });
 
     test('rollbackMcpPlugin passes PACT_PORTABLE_DIR', () async {
       await service.rollbackMcpPlugin(target: 'opencode', snapshotId: 'snap-1');
-      expect(capturedArgs, ['mcp', 'plugin', 'rollback', '--target', 'opencode', '--snapshot-id', 'snap-1']);
-      expect(capturedEnv?['PACT_PORTABLE_DIR'], '/fake/portable/data');
+      expect(capturedArgs, [
+        'mcp',
+        'plugin',
+        'rollback',
+        '--target',
+        'opencode',
+        '--snapshot-id',
+        'snap-1',
+      ]);
+      expect(capturedEnv?['PACT_PORTABLE_DIR'], portableDir.path);
     });
 
     test('listSnapshots passes PACT_PORTABLE_DIR', () async {
       await service.listSnapshots(target: 'opencode');
       expect(capturedArgs, ['snapshots', 'list', '--target', 'opencode']);
-      expect(capturedEnv?['PACT_PORTABLE_DIR'], '/fake/portable/data');
+      expect(capturedEnv?['PACT_PORTABLE_DIR'], portableDir.path);
     });
 
     test('listPairings passes PACT_PORTABLE_DIR', () async {
       await service.listPairings(agent: 'codex');
       expect(capturedArgs, ['agents', 'pair', 'list', '--agent', 'codex']);
-      expect(capturedEnv?['PACT_PORTABLE_DIR'], '/fake/portable/data');
+      expect(capturedEnv?['PACT_PORTABLE_DIR'], portableDir.path);
     });
 
     test('listSkills passes PACT_PORTABLE_DIR', () async {
       await service.listSkills(agent: 'codex');
       expect(capturedArgs, ['skill', 'list', '--agent', 'codex']);
-      expect(capturedEnv?['PACT_PORTABLE_DIR'], '/fake/portable/data');
+      expect(capturedEnv?['PACT_PORTABLE_DIR'], portableDir.path);
     });
 
     test('listModelProfiles passes PACT_PORTABLE_DIR', () async {
       await service.listModelProfiles();
       expect(capturedArgs, ['model', 'profiles', 'list']);
-      expect(capturedEnv?['PACT_PORTABLE_DIR'], '/fake/portable/data');
+      expect(capturedEnv?['PACT_PORTABLE_DIR'], portableDir.path);
     });
 
-    test('without dataDirectory, env does not contain PACT_PORTABLE_DIR', () async {
-      final noDataService = AgentService(
-        resolveCliBinary: () async => File('/fake/pact-client'),
-        runCliExecutable: (executable, args, env) async {
-          capturedArgs = args;
-          capturedEnv = env;
-          return ProcessResult(0, 0, '{"ok":true}', '');
-        },
-      );
-      await noDataService.scanTargets();
-      expect(capturedEnv, isNull);
-    });
+    test(
+      'without dataDirectory, env does not contain PACT_PORTABLE_DIR',
+      () async {
+        final noDataService = AgentService(
+          resolveCliBinary: () async => cliBinary,
+          runCliExecutable: (executable, args, env) async {
+            capturedArgs = args;
+            capturedEnv = env;
+            return ProcessResult(0, 0, '{"ok":true}', '');
+          },
+        );
+        await noDataService.scanTargets();
+        expect(capturedEnv, isNull);
+      },
+    );
   });
 }

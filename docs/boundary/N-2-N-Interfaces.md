@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-08
+- Last updated: 2026-06-11
 - Status: Current boundary reference
 - Scope: N-2-N-Interfaces.
-- Staleness check: Scanned on 2026-06-08; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 本文把 Pact 的外接面拆成两个边界、四个清单：
 
