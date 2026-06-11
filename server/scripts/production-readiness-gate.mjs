@@ -634,6 +634,12 @@ async function main() {
     return;
   }
 
+  const gitInfo = {
+    branch: await gitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
+    commit: await gitValue(["rev-parse", "HEAD"]),
+    dirtyFileCount: Number((await gitValue(["status", "--short"])).split("\n").filter(Boolean).length)
+  };
+
   const runId = runIdFromDate();
   const outputRoot = path.resolve(repoRoot, options.outputRoot);
   const runDir = path.join(outputRoot, runId);
@@ -676,15 +682,9 @@ const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smok
   const productionClaimAllowed = !options.quick && overallStatus === "pass";
   const quickCheckPassed = options.quick && summary.blockedP0 === 0 && missing.length === 0;
 
-  const gitInfo = {
-    branch: await gitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
-    commit: await gitValue(["rev-parse", "HEAD"]),
-    dirtyFileCount: Number((await gitValue(["status", "--short"])).split("\n").filter(Boolean).length)
-  };
-
   const generatedFromDirtyWorktree = gitInfo.dirtyFileCount > 0;
 
-  // Dirty worktree overrides overall status and exit code
+  // The initial worktree state controls whether the report can claim current-head evidence.
   if (generatedFromDirtyWorktree) {
     overallStatus = options.quick ? "dirty_quick_report" : "dirty_full_report";
   }
