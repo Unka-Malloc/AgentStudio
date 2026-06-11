@@ -22535,6 +22535,7 @@ async function callClassificationGroupModelGatewayCalls({
   const maxGroupCalls = Math.max(1, Number(policy.maxGroupCalls || 32));
   let completedCalls = 0;
   for (const group of selectedGroups) {
+    if (group.excludedFromCore) {
       results.set(group.groupId, classificationGroupModelCallSkippedRecord(group, policy, "garbage-group-excluded-from-model-call"));
       continue;
     }
