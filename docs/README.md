@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-12
 - Status: Current maintained document
 - Scope: Pact Docs.
-- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-12; this update indexes agent-facing documentation entry points and does not change release/readiness claims.
 
 > Documentation index for Pact — a controllable agent collaboration space.
 >
@@ -63,6 +63,7 @@ graph LR
 | [TEST-FRAMEWORK.md](TEST-FRAMEWORK.md) | 测试框架 | Unified test framework contract | 6 KB |
 | [DEVELOPER-GUIDELINES.md](DEVELOPER-GUIDELINES.md) | 开发者核心守则 | Coding conventions, architecture principles, and design philosophy | 5 KB |
 | [GIT-COLLAB.md](GIT-COLLAB.md) | Git 协作约定 | Local collaboration conventions | 2 KB |
+| [AGENT.md](AGENT.md) | 文档智能体入口 | Documentation task routing, metadata expectations, and context budget | < 1 KB |
 | [scenarios/README.md](scenarios/README.md) | 场景链路草案 | Client-to-backend scenario drafts; finalized decisions must be merged back into core docs | < 1 KB |
 | [testing/memory-and-smoke-framework.md](testing/memory-and-smoke-framework.md) | 记忆与 Smoke 测试 | Memory and smoke test framework guide | < 1 KB |
 

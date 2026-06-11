@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-12
 - Status: Current maintained document
 - Scope: GitHub 协作约定.
-- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-12; this update covers local worktree collaboration only and does not change release/readiness claims.
 
 这个仓库现在按“源码仓”管理，只允许这些内容进入 Git：
 
@@ -67,6 +67,72 @@
 - 忽略所有构建产物和本地运行时
 - 从 Git 索引里移除大目录和二进制
 - 保留说明文件和目录占位
+
+## 工作树拆分方案
+
+Pact 的服务端、Web Console、CLI、GUI、MCP connector 和文档规则可以分开维护。推荐用 Git worktree 把不同任务放到不同目录，主工作树保留为集成区和手动产品文案维护区。
+
+建议目录布局：
+
+| Worktree | Branch | 主要职责 | 默认写入范围 |
+| --- | --- | --- | --- |
+| `Pact/` | `nightly` | 主集成区、最终合并、手动维护产品宣传页 | 避免直接承接大范围实验改动 |
+| `Pact-server/` | `codex/server-runtime` | 服务端运行时、治理、协议、server verifier | `server/`, `tests/server/`, 服务端脚本和相关服务端文档 |
+| `Pact-web/` | `codex/web-console` | 管理控制台前端 | `server-web/`, 前端样式、前端类型检查相关配置 |
+| `Pact-mcp/` | `codex/mcp-connector` | 本地智能体 MCP 连接器 | `mcp-connector/`, `docs/MCP_INSTALL*.md` |
+| `Pact-cli/` | `codex/client-cli` | Rust CLI | `client-cli/`, CLI smoke 测试 |
+| `Pact-gui/` | `codex/client-gui` | Flutter 桌面端 | `client-gui/` |
+| `Pact-docs-agent/` | `codex/docs-agent-context` | 智能体入口、文档索引、协作规则 | `AGENT.md`, `docs/`, 文档治理和根目录卫生校验 |
+
+每个子系统目录都有局部入口文件：
+
+| Worktree | 子目录入口 | 用途 |
+| --- | --- | --- |
+| `Pact-server/` | `server/AGENT.md` | 服务端目录、首读文件和验证范围 |
+| `Pact-web/` | `server-web/AGENT.md` | Web Console 目录、组件入口和前端验证 |
+| `Pact-mcp/` | `mcp-connector/AGENT.md` | MCP connector CLI、安装文档和验证 |
+| `Pact-cli/` | `client-cli/AGENT.md` | Rust CLI 模块和 cargo/npm 验证 |
+| `Pact-gui/` | `client-gui/AGENT.md` | Flutter GUI 入口、测试和生成物边界 |
+| `Pact-docs-agent/` | `docs/AGENT.md` | 文档索引、元数据、历史材料和上下文预算 |
+
+从主工作树创建这些 worktree：
+
+```bash
+cd /Users/unka/DevSpace/Unka-Malloc/Pact
+
+git worktree add -b codex/server-runtime ../Pact-server nightly
+git worktree add -b codex/web-console ../Pact-web nightly
+git worktree add -b codex/mcp-connector ../Pact-mcp nightly
+git worktree add -b codex/client-cli ../Pact-cli nightly
+git worktree add -b codex/client-gui ../Pact-gui nightly
+git worktree add -b codex/docs-agent-context ../Pact-docs-agent nightly
+```
+
+查看和清理工作树：
+
+```bash
+git worktree list
+git worktree prune
+```
+
+### 协作边界
+
+- 根 `README.md` 和 `README.zh-CN.md` 作为产品宣传页，默认只在主工作树中手动维护。
+- `package.json`、`package-lock.json`、`vite.config.ts`、`tsconfig.json`、`docs/README.md` 属于共享文件；一次只让一个 worktree 修改，或放到专门的集成 worktree 中处理。
+- 涉及服务端接口、前端调用和文档说明的变更，使用单独集成 worktree，例如 `Pact-policy/`，不要拆成多个并行分支分别修改。
+- 每个 worktree 提交前运行覆盖本目录的最小验证；只有准备合并或发布时，再回到主集成区运行更宽的 gate。
+
+### 智能体使用方式
+
+智能体进入任一 worktree 后，先读取根 `AGENT.md`，再读取当前任务所属子目录的 `AGENT.md`。如果该目录没有局部入口，再读取最近的 README 或局部说明。不要把主工作树中的脏状态复制到子工作树，也不要用 `git add .` 批量暂存跨子系统文件。
+
+如果需要让多个智能体并行工作，按上述边界分配 worktree 和写入范围；跨边界任务先指定唯一负责人，再由负责人合并其他分支的结果。
+
+### 入口校验
+
+入口文件结构由 `tests/verify-agent-entrypoints.mjs` 维护，并接入 `npm run repo:hygiene`。该校验会确认根目录只使用 `AGENT.md`、关键子系统有局部入口、入口长度保持轻量、协作文档列出局部入口。
+
+调整工作树拆分或新增长期维护子系统时，同步更新局部 `AGENT.md`、`docs/GIT-COLLAB.md` 的入口表和 `tests/verify-agent-entrypoints.mjs`。
 
 ## 重要
 

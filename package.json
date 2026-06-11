@@ -306,7 +306,7 @@
     "client:linux:smoke": "node client-gui/scripts/smoke-linux-bundle.mjs",
     "client:linux:gui-smoke": "node client-gui/scripts/gui-smoke-linux-bundle.mjs",
     "client:ubuntu:verify": "node client-gui/scripts/verify-ubuntu-client.mjs",
-    "repo:hygiene": "node tests/verify-root-hygiene.mjs && node tests/verify-secret-hygiene.mjs",
+    "repo:hygiene": "node tests/verify-root-hygiene.mjs && node tests/verify-agent-entrypoints.mjs && node tests/verify-secret-hygiene.mjs",
     "security:hygiene": "node tests/verify-secret-hygiene.mjs",
     "test": "node tests/run.mjs --profile core",
     "test:list": "node tests/run.mjs --list",
