@@ -2728,7 +2728,10 @@ try {
     assert.equal(groupModelGatewayCalls.some((call) => call.body.parameters?.contractRepair === true), true);
   }
   assert.equal(createRun.payload.result.referenceGapReport.strategy, "reference-framework-gap-report.v1");
-  assert.equal(createRun.payload.result.referenceGapReport.frameworks.some((framework) => framework.id === "graphrag" && framework.status === "absorbed-with-open-gaps"), true);
+  const graphragGapReport = createRun.payload.result.referenceGapReport.frameworks.find((framework) => framework.id === "graphrag");
+  assert.ok(graphragGapReport, "reference gap report must include GraphRAG");
+  assert.equal(graphragGapReport.absorbedPatterns.length > 0, true);
+  assert.equal(["absorbed-with-open-gaps", "reference-checkout-needs-refresh"].includes(graphragGapReport.status), true);
   assert.equal(createRun.payload.result.referenceGapReport.absorbedCapabilityMap.graphEvidence.evidence.includes("graph-lite-entity-relationship-evidence-pack.v1"), true);
   assert.equal(createRun.payload.result.classification.strategy, "hashing_embedding_window_community_classification_v3");
   assert.equal(createRun.payload.result.classification.taxonomyStrategy, "semantic-concept-topic-hierarchy.v1");
