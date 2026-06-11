@@ -1,5 +1,14 @@
 # CI Gate Tiers
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-11
+- Status: Current maintained document
+- Scope: CI gate tiering, PR gate scope, external dependency reports, and release readiness triggers.
+- Staleness check: Created during the 2026-06-11 CI gate split and checked against `.github/workflows/ci.yml`, `tests/run.mjs`, and `package.json`.
+
+## Overview
+
 Pact CI is split by decision type. Pull requests should prove that the current
 code still supports the core product surface. External dependency compatibility
 and release readiness are reported separately because they depend on package,

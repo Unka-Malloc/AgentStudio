@@ -409,7 +409,7 @@ jobs:
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
         run: |
           echo "Required CI gate failed."
-          echo "${{ toJson(needs) }}" | jq -r '
+          jq -r '
             to_entries
             | map(
               select(
@@ -420,7 +420,9 @@ jobs:
               | "\(.key): \(.value.result)"
             )
             | .[]
-          '
+          ' <<'JSON'
+          ${{ toJson(needs) }}
+          JSON
           exit 1
       - name: Required CI passed
         run: echo "All required CI gates passed."
