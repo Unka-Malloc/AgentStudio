@@ -20,6 +20,18 @@ import {
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const defPath = path.resolve(__dirname, "../../../server/platform/common/state-machine/definitions/checkpoint.restore.v1.json");
+const allowPolicyGuardContext = { policyDecision: { allowed: true } };
+const restoreApplyGuardContext = {
+  treeState: { status: "active" },
+  nodeState: { status: "active" },
+  previewState: { generated: true },
+  policyDecision: { allowed: true },
+  existingState: {}
+};
+const approvedRestoreApplyGuardContext = {
+  ...restoreApplyGuardContext,
+  approvalRecord: { status: "approved" }
+};
 
 async function withTempUserData(testCase) {
   const userDataPath = await fs.mkdtemp(path.resolve(os.tmpdir(), "pact-checkpoint-restore-lifecycle-"));
@@ -79,7 +91,8 @@ describe("Checkpoint Restore Lifecycle State Machine", () => {
     res = transitionState(definition, {
       entityId: "restore-1",
       currentStatus: "approval_pending",
-      eventType: "restore.approve"
+      eventType: "restore.approve",
+      guardContext: allowPolicyGuardContext
     });
     expect(res.ok).toBe(true);
     expect(res.toStatus).toBe("approved");
@@ -88,7 +101,8 @@ describe("Checkpoint Restore Lifecycle State Machine", () => {
     res = transitionState(definition, {
       entityId: "restore-1",
       currentStatus: "approved",
-      eventType: "restore.record_marker"
+      eventType: "restore.record_marker",
+      guardContext: approvedRestoreApplyGuardContext
     });
     expect(res.ok).toBe(true);
     expect(res.toStatus).toBe("restore_marker_recording");
@@ -117,7 +131,8 @@ describe("Checkpoint Restore Lifecycle State Machine", () => {
     res = transitionState(definition, {
       entityId: "restore-2",
       currentStatus: "restore_preview_generated",
-      eventType: "restore.record_marker"
+      eventType: "restore.record_marker",
+      guardContext: restoreApplyGuardContext
     });
     expect(res.ok).toBe(true);
     expect(res.toStatus).toBe("restore_marker_recording");

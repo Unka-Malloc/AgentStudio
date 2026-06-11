@@ -13,6 +13,7 @@ import {
 
 const __dirname = path.fileURLToPath(new URL(".", import.meta.url));
 const defPath = path.resolve(__dirname, "../../../server/platform/common/state-machine/definitions/agentlibrary.loan.v1.json");
+const allowPolicyGuardContext = { policyDecision: { allowed: true } };
 
 describe("Knowledge Loan Lifecycle State Machine", () => {
   let definition;
@@ -52,7 +53,8 @@ describe("Knowledge Loan Lifecycle State Machine", () => {
     res = transitionState(definition, {
       entityId: "loan-1",
       currentStatus: "renewal_requested",
-      eventType: "loan.renew"
+      eventType: "loan.renew",
+      guardContext: allowPolicyGuardContext
     });
     expect(res.ok).toBe(true);
     expect(res.toStatus).toBe("renewed");
@@ -90,7 +92,8 @@ describe("Knowledge Loan Lifecycle State Machine", () => {
     let res = transitionState(definition, {
       entityId: "loan-3",
       currentStatus: "loan_active",
-      eventType: "loan.revoke"
+      eventType: "loan.revoke",
+      guardContext: allowPolicyGuardContext
     });
     expect(res.ok).toBe(true);
     expect(res.toStatus).toBe("revoked");
@@ -108,7 +111,8 @@ describe("Knowledge Loan Lifecycle State Machine", () => {
     res = transitionState(definition, {
       entityId: "loan-4",
       currentStatus: "loan_requested",
-      eventType: "loan.revoke"
+      eventType: "loan.revoke",
+      guardContext: allowPolicyGuardContext
     });
     expect(res.ok).toBe(true);
     expect(res.toStatus).toBe("revoked");

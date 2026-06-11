@@ -11,6 +11,9 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const defPath = path.resolve(__dirname, "../../../server/platform/common/state-machine/definitions/contribution.lifecycle.v1.json");
+const approvedGuardContext = { approvalRecord: { status: "approved" } };
+const adoptionGuardContext = { adoptionPolicy: { compliant: true } };
+const adminGuardContext = { subjectPermissions: { roles: ["admin"] } };
 
 describe("Contribution Lifecycle State Machine", () => {
   let definition;
@@ -59,7 +62,8 @@ describe("Contribution Lifecycle State Machine", () => {
     res = transitionState(definition, {
       entityId: "contrib-1",
       currentStatus: "reviewed",
-      eventType: "contribution.publish"
+      eventType: "contribution.publish",
+      guardContext: approvedGuardContext
     });
     expect(res.ok).toBe(true);
     expect(res.toStatus).toBe("published");
@@ -68,7 +72,8 @@ describe("Contribution Lifecycle State Machine", () => {
     res = transitionState(definition, {
       entityId: "contrib-1",
       currentStatus: "published",
-      eventType: "contribution.adopt"
+      eventType: "contribution.adopt",
+      guardContext: adoptionGuardContext
     });
     expect(res.ok).toBe(true);
     expect(res.toStatus).toBe("adopted");
@@ -86,7 +91,8 @@ describe("Contribution Lifecycle State Machine", () => {
     res = transitionState(definition, {
       entityId: "contrib-1",
       currentStatus: "deprecated",
-      eventType: "contribution.revoke"
+      eventType: "contribution.revoke",
+      guardContext: adminGuardContext
     });
     expect(res.ok).toBe(true);
     expect(res.toStatus).toBe("revoked");

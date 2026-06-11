@@ -419,29 +419,52 @@ function verifyEvidencePlanCoversRegistry() {
   return { ok: gaps.length === 0, gaps };
 }
 
+function evidenceText(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => evidenceText(item)).filter(Boolean).join(" ");
+  }
+  if (value && typeof value === "object") {
+    return [
+      value.path,
+      value.producedBy,
+      value.filePath,
+      value.command
+    ].map((item) => evidenceText(item)).filter(Boolean).join(" ");
+  }
+  return String(value || "");
+}
+
+function normalizeEvidenceText(value) {
+  return evidenceText(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function evidenceIncludes(value, keyword) {
+  return evidenceText(value).toLowerCase().includes(keyword);
+}
+
 /**
  * Check if a requiredEvidence item maps to something in the evidence plan.
  * Matches against command strings, report paths, and file paths using
  * normalized keyword matching.
  */
 function isEvidenceMapped(evidenceItem, plan) {
-  const normalized = evidenceItem.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normalized = normalizeEvidenceText(evidenceItem);
 
   // Match against commands
   for (const cmd of (plan.requiredCommands || [])) {
-    const cmdStr = cmd.join(" ").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const cmdStr = normalizeEvidenceText(cmd);
     if (cmdStr.includes(normalized) || normalized.includes(cmdStr)) return true;
   }
 
   // Match against reports
   for (const rp of (plan.requiredReports || [])) {
-    const rpNorm = rp.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const rpNorm = normalizeEvidenceText(rp);
     if (rpNorm.includes(normalized) || normalized.includes(rpNorm)) return true;
   }
 
   // Match against files
   for (const fp of (plan.requiredFiles || [])) {
-    const fpNorm = fp.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const fpNorm = normalizeEvidenceText(fp);
     if (fpNorm.includes(normalized) || normalized.includes(fpNorm)) return true;
   }
 
@@ -458,13 +481,13 @@ function isEvidenceMapped(evidenceItem, plan) {
   if (keywordExpansions[normalized]) {
     for (const kw of keywordExpansions[normalized]) {
       for (const cmd of (plan.requiredCommands || [])) {
-        if (cmd.join(" ").toLowerCase().includes(kw)) return true;
+        if (evidenceIncludes(cmd, kw)) return true;
       }
       for (const fp of (plan.requiredFiles || [])) {
-        if (fp.toLowerCase().includes(kw)) return true;
+        if (evidenceIncludes(fp, kw)) return true;
       }
       for (const rp of (plan.requiredReports || [])) {
-        if (rp.toLowerCase().includes(kw)) return true;
+        if (evidenceIncludes(rp, kw)) return true;
       }
     }
   }

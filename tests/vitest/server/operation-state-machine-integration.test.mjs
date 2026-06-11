@@ -1,6 +1,18 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { dispatchOperation } from "../../../server/platform/common/operation-dispatcher/operation-dispatcher.mjs";
-import { getOperationNarrowDefinition } from "../../../server/platform/common/operation-dispatcher/operation-state-machine-adapter.mjs";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const operationNarrowDefinitionPath = path.resolve(
+  __dirname,
+  "../../../server/platform/common/state-machine/definitions/operation.narrow.v1.json"
+);
+
+function getOperationNarrowDefinition() {
+  return JSON.parse(fs.readFileSync(operationNarrowDefinitionPath, "utf8"));
+}
 
 function createResponse() {
   return {
