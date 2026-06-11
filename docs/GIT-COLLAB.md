@@ -128,9 +128,11 @@ git worktree prune
 
 如果需要让多个智能体并行工作，按上述边界分配 worktree 和写入范围；跨边界任务先指定唯一负责人，再由负责人合并其他分支的结果。
 
-### 入口校验
+### 入口健康检查
 
-入口文件结构由 `tests/verify-agent-entrypoints.mjs` 维护，并接入 `npm run repo:hygiene`。该校验会确认根目录只使用 `AGENT.md`、关键子系统有局部入口、入口长度保持轻量、协作文档列出局部入口。
+入口文件结构由 `tests/verify-agent-entrypoints.mjs` 维护，并接入 `npm run repo:hygiene`。该检查用于维护项目内部引导的完整性：确认根目录以 `AGENT.md` 作为工程入口、关键子系统有局部入口、入口长度保持轻量、协作文档列出局部入口。
+
+这个检查不用于证明或强制任何智能体遵守工作方式；它只保证仓库内有足够清晰、可发现、可渐进读取的引导材料。
 
 调整工作树拆分或新增长期维护子系统时，同步更新局部 `AGENT.md`、`docs/GIT-COLLAB.md` 的入口表和 `tests/verify-agent-entrypoints.mjs`。
 

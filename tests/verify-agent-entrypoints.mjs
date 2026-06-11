@@ -63,7 +63,7 @@ async function assertMissing(relativePath) {
     }
     throw error;
   }
-  assert.fail(`${relativePath} must not exist; AGENT.md is the single root agent entry`);
+  assert.fail(`${relativePath} is unexpected; AGENT.md is the root agent entry`);
 }
 
 function lineCount(text) {
@@ -77,18 +77,18 @@ for (const entry of entrypoints) {
   const lines = lineCount(text);
   assert.ok(lines <= entry.maxLines, `${entry.path} has ${lines} lines; keep <= ${entry.maxLines}`);
   for (const pattern of entry.requiredPatterns) {
-    assert.match(text, pattern, `${entry.path} must include ${pattern}`);
+    assert.match(text, pattern, `${entry.path} is expected to include ${pattern}`);
   }
 }
 
 const docsIndex = await readText("docs/README.md");
-assert.match(docsIndex, /\[AGENT\.md\]\(AGENT\.md\)/u, "docs/README.md must index docs/AGENT.md");
+assert.match(docsIndex, /\[AGENT\.md\]\(AGENT\.md\)/u, "docs/README.md is expected to index docs/AGENT.md");
 
 const collaborationGuide = await readText("docs/GIT-COLLAB.md");
 for (const entry of entrypoints.slice(1)) {
   assert.ok(
     collaborationGuide.includes(`\`${entry.path}\``),
-    `docs/GIT-COLLAB.md must list ${entry.path}`
+    `docs/GIT-COLLAB.md is expected to list ${entry.path}`
   );
 }
 
