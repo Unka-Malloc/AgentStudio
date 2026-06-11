@@ -346,7 +346,7 @@ jobs:
       - name: Verify v0.0.1 readiness
         run: npm run server:verify:v001
       - name: Verify production readiness
-        run: npm run server:verify:production-readiness
+        run: npm run server:verify:production-readiness -- --output-root build/reports/production-readiness
       - name: Upload release readiness artifacts
         if: always()
         uses: actions/upload-artifact@v4
