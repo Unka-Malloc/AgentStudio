@@ -326,10 +326,14 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             clang \
             cmake \
+            dbus-x11 \
+            imagemagick \
             libgtk-3-dev \
             liblzma-dev \
             ninja-build \
             pkg-config \
+            scrot \
+            xdotool \
             xvfb
       - name: Install dependencies
         run: npm ci
