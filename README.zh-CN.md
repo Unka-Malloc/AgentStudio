@@ -39,79 +39,13 @@
 /bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
 ```
 
-> 通过 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 支持：OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf。
+> 通过 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 支持：OpenClaw、Claude Code、Codex、Antigravity、OpenCode、Copilot、Kilo Code、Cursor 和 Hermes Agent。
 
-## 架构概览
+## 产品能力
 
-```mermaid
-graph TB
-    subgraph Agents["智能体生态"]
-        direction LR
-        A1["OpenClaw"]
-        A2["Claude Code"]
-        A3["Codex"]
-        A4["Gemini CLI"]
-        A5["Kilo Code"]
-        A6["Others..."]
-    end
-
-    subgraph Clients["客户端层"]
-        direction LR
-        MCP["MCP Connector"]
-        CLI["CLI (Rust)"]
-        GUI["GUI (Flutter)"]
-        Console["Web 管控台 (Vue 3)"]
-    end
-
-    subgraph Aspect["切面层 — 协议边界"]
-        direction LR
-        MCPService["MCP Service<br/>(HTTP + stdio)"]
-        OpKernel["操作调度内核"]
-        Discovery["发现与目录"]
-    end
-
-    subgraph Core["治理核心"]
-        direction LR
-        Policy["策略引擎"]
-        Ledger["操作账本"]
-        CPT["检查点树"]
-        Contrib["贡献注册表"]
-    end
-
-    subgraph Capabilities["平台能力"]
-        direction LR
-        KnowledgeLib["Agent Library<br/>(知识治理)"]
-        SharedSpace["共享空间"]
-        ToolMgmt["工具管理"]
-        ACPRelay["ACP Relay<br/>(智能体委派)"]
-    end
-
-    subgraph Infra["基础设施"]
-        direction LR
-        SQLite["SQLite"]
-        Objects["对象存储"]
-        ExtKB["外部知识库<br/>(pgvector / Qdrant / OpenSearch)"]
-    end
-
-    Agents --> MCP
-    MCP --> MCPService
-    CLI --> OpKernel
-    GUI --> OpKernel
-    Console --> OpKernel
-    MCPService --> OpKernel
-    OpKernel --> Policy
-    Policy --> Ledger
-    Ledger --> CPT
-    OpKernel --> KnowledgeLib
-    OpKernel --> SharedSpace
-    OpKernel --> ToolMgmt
-    OpKernel --> ACPRelay
-    Ledger --> SQLite
-    CPT --> SQLite
-    KnowledgeLib --> Objects
-    KnowledgeLib --> ExtKB
-    Contrib --> SQLite
-```
+<p align="center">
+  <img src="docs/product-matrix.svg" alt="Pact 产品能力矩阵" width="100%"/>
+</p>
 
 ## 核心特性
 

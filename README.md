@@ -39,79 +39,13 @@ Already have a local AI agent? Connect it to Pact instantly:
 /bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
 ```
 
-> Supports OpenClaw, Claude Code, Codex, Gemini CLI, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, and Windsurf via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
+> Supports OpenClaw, Claude Code, Codex, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, and Hermes Agent via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
-## Architecture Overview
+## Product Capabilities
 
-```mermaid
-graph TB
-    subgraph Agents["Agent Ecosystem"]
-        direction LR
-        A1["OpenClaw"]
-        A2["Claude Code"]
-        A3["Codex"]
-        A4["Gemini CLI"]
-        A5["Kilo Code"]
-        A6["Others..."]
-    end
-
-    subgraph Clients["Client Layer"]
-        direction LR
-        MCP["MCP Connector"]
-        CLI["CLI (Rust)"]
-        GUI["GUI (Flutter)"]
-        Console["Web Console (Vue 3)"]
-    end
-
-    subgraph Aspect["Aspect Layer — Protocol Boundary"]
-        direction LR
-        MCPService["MCP Service<br/>(HTTP + stdio)"]
-        OpKernel["Operation Scheduling Kernel"]
-        Discovery["Discovery & Catalog"]
-    end
-
-    subgraph Core["Governance Core"]
-        direction LR
-        Policy["Policy Engine"]
-        Ledger["Operation Ledger"]
-        CPT["Checkpoint Tree"]
-        Contrib["Contribution Registry"]
-    end
-
-    subgraph Capabilities["Platform Capabilities"]
-        direction LR
-        KnowledgeLib["Agent Library<br/>(Knowledge Governance)"]
-        SharedSpace["Shared Space"]
-        ToolMgmt["Tool Management"]
-        ACPRelay["ACP Relay<br/>(Agent Delegation)"]
-    end
-
-    subgraph Infra["Infrastructure"]
-        direction LR
-        SQLite["SQLite"]
-        Objects["Object Storage"]
-        ExtKB["External KB<br/>(pgvector / Qdrant / OpenSearch)"]
-    end
-
-    Agents --> MCP
-    MCP --> MCPService
-    CLI --> OpKernel
-    GUI --> OpKernel
-    Console --> OpKernel
-    MCPService --> OpKernel
-    OpKernel --> Policy
-    Policy --> Ledger
-    Ledger --> CPT
-    OpKernel --> KnowledgeLib
-    OpKernel --> SharedSpace
-    OpKernel --> ToolMgmt
-    OpKernel --> ACPRelay
-    Ledger --> SQLite
-    CPT --> SQLite
-    KnowledgeLib --> Objects
-    KnowledgeLib --> ExtKB
-    Contrib --> SQLite
-```
+<p align="center">
+  <img src="docs/product-matrix.svg" alt="Pact Product Capabilities" width="100%"/>
+</p>
 
 ## Core Features
 

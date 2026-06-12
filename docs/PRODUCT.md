@@ -21,8 +21,8 @@ real configuration and governance work.
 
 Primary user contexts:
 
-- A developer connecting OpenClaw, Claude Code, Codex, Gemini CLI,
-  Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, Windsurf, or
+- A developer connecting OpenClaw, Claude Code, Codex, Antigravity, OpenCode,
+  Copilot, Kilo Code, Cursor, Hermes Agent, or
   another agent harness to a local Pact workspace.
 - A platform or workspace operator reviewing permission scope, storage state,
   knowledge access, operation history, and external-service connections.
