@@ -83,12 +83,19 @@ npm run client:package:plan
 npm run client:build:macos
 npm run client:build:windows
 npm run client:build:linux
+npm run client:build:android
 ```
+
+桌面 bundle 会输出到 `build/client-gui/bundles/<platform>/<mode>/bundle/`。
+Android APK 会输出到 `build/client-gui/android/<mode>/`。脚本默认会清理
+Flutter 在 `client-gui/build/` 下生成的临时产物；需要保留 Flutter 缓存做本地
+调试时，可设置 `PACT_KEEP_FLUTTER_BUILD_CACHE=1`。
 
 平台说明：
 
 - Windows bundle 需要在 Windows 环境构建。
 - Linux bundle 需要在 Linux 或 Ubuntu 环境构建。
+- Android APK 需要本机 Flutter Android toolchain、Android SDK 和可用 NDK。
 - macOS 主机可用 `npm run client:ubuntu:verify` 通过 Docker 执行 Ubuntu
   验证路径。
 - 默认 package 只包含当前客户端模块和必要 native sidecar。

@@ -6,7 +6,7 @@
 - 根 `README.md` 和 `README.zh-CN.md` 是产品宣传页，默认不作为工程事实源；只有产品定位、对外文案或用户明确要求时才读取或修改。
 - 工程任务优先从本文件、目标子目录最近的 `AGENT.md`、`docs/README.md` 或局部说明建立上下文。
 - 代码修改先按任务路由缩小到一个子系统，再在候选目录内搜索；文档修改先看 `docs/README.md` 的索引和维护规则，再打开目标文档。
-- `build/`、`node_modules/`、`client-cli/target/`、`client-gui/build/` 和 `docs/reports/history/` 默认视为生成物、依赖缓存或历史材料；只有任务明确指向、验证输出指向，或需要核对历史事实时再进入。
+- `build/`、`node_modules/`、`client-cli/target/`、`client-gui/build/`、`client-gui/coverage/` 和 `docs/reports/history/` 默认视为生成物、依赖缓存或历史材料；只有任务明确指向、验证输出指向，或需要核对历史事实时再进入。
 - 扩大到全仓库搜索前，先说明当前入口无法回答的问题，并尽量限定文件类型或目录前缀，减少无关上下文进入会话。
 - 开始修改前先运行 `git status --short`，区分当前任务改动和用户已有改动；无关改动保持原样。
 - 搜索优先使用 `rg` 或 `rg --files`，避免把整段生成物、大型历史报告或依赖目录读入上下文。

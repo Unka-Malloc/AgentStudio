@@ -28,7 +28,8 @@
 
 ## Verification
 
-- Use `cargo test --manifest-path client-cli/Cargo.toml` for broad CLI tests.
+- Use `CARGO_TARGET_DIR=build/client-cli/target cargo test --manifest-path client-cli/Cargo.toml`
+  for broad CLI tests from the repository root.
 - Prefer targeted package scripts such as `npm run client:verify:targets` or
   `npm run client:verify:config-writes` when the task maps to one behavior.
 

@@ -4,6 +4,12 @@
 
 - `build/dist`: Vue server console static bundle.
 - `build/release`: packaged server archives.
+- `build/client-gui`: Pact desktop/mobile client build artifacts, including
+  desktop bundles and Android APK outputs.
+- `build/client-cli/target`: Rust client CLI build cache used by repository
+  npm scripts.
+- `build/coverage`: LCOV reports for Node/Vue, Flutter, and Rust coverage
+  gates.
 - `build/artifacts`: generated reports, screenshots, verification artifacts,
   and document outputs.
 - `build/output`: ad hoc browser and inspection output.
@@ -23,3 +29,6 @@ npm run repo:hygiene
 
 If a command needs to create screenshots, exported documents, local databases,
 archives, logs, or inspection output, its default path must be inside `build/`.
+Use the repository npm scripts for client builds and coverage so Flutter and
+Cargo outputs are staged here instead of under `client-gui/` or
+`client-cli/target/`.

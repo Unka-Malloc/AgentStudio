@@ -26,11 +26,13 @@
 
 - Use `npm run client:analyze` for Flutter static analysis.
 - Use `npm run client:test` for Flutter tests.
+- Use `npm run client:test:coverage` when LCOV output is needed; the report is
+  written to `build/coverage/client-gui/lcov.info`.
 - Use `npm run client:verify:architecture` when architecture rules or module
   boundaries change.
 
 ## Context Budget
 
-- Do not load `client-gui/build/`, `.dart_tool/`, coverage output, or generated
-  platform artifacts.
+- Do not load `build/client-gui/`, `client-gui/build/`, `.dart_tool/`, coverage
+  output, or generated platform artifacts.
 - Avoid reading CLI code unless the GUI task depends on a native CLI contract.

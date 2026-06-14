@@ -77,8 +77,9 @@ Coverage is supported by the standard stack. Vitest can collect V8 coverage via
 `@vitest/coverage-v8` for Node.js server modules, Vue composables, and Vue
 component tests. Playwright remains the E2E runner; it should not be the primary
 source of unit coverage, though E2E suites can still be used as release
-confidence gates. Flutter coverage continues to use `flutter test --coverage`,
-and Rust CLI coverage uses `cargo-llvm-cov`.
+confidence gates. Flutter coverage continues to use `flutter test --coverage`
+with Pact's LCOV path under `build/coverage/client-gui/`, and Rust CLI
+coverage uses `cargo-llvm-cov`.
 
 ## Coverage Baseline
 
@@ -88,7 +89,7 @@ Baseline captured on 2026-06-03:
 | --- | --- | --- | --- | --- |
 | `server` | `npm run test:node-vue:coverage` | 0.91% | 387 / 42,684 | `build/coverage/node-vue/lcov.info` filtered to `server/` |
 | `server-web` | `npm run test:node-vue:coverage` | 0.22% | 26 / 12,024 | `build/coverage/node-vue/lcov.info` filtered to `server-web/` |
-| `client-gui` | `npm run client:test:coverage` | 52.40% | 251 / 479 | `client-gui/coverage/lcov.info` |
+| `client-gui` | `npm run client:test:coverage` | 52.40% | 251 / 479 | `build/coverage/client-gui/lcov.info` |
 | `client-cli` | `npm run client:native:test:coverage` | 73.66% | 2,137 / 2,901 | `build/coverage/client-cli/lcov.info` |
 
 The `server` and `server-web` baselines come from the same Vitest LCOV report
@@ -110,7 +111,7 @@ and communication-service protocol work left for the ACP batch:
 | --- | --- | --- | --- | --- |
 | `server` non-ACP | strict non-ACP `vitest --coverage` + `PACT_UNIT_COVERAGE_NODE_VUE_REPORT=build/coverage/node-vue-non-acp-strict/lcov.info npm run test:unit-coverage:scan` | 95.01% | 40,725 / 42,866 | `build/coverage/node-vue-non-acp-strict/lcov.info` filtered to `server/`, excluding ACP relay/downstream/communication-service paths |
 | `server-web` | strict non-ACP `vitest --coverage` + `PACT_UNIT_COVERAGE_NODE_VUE_REPORT=build/coverage/node-vue-non-acp-strict/lcov.info npm run test:unit-coverage:scan` | 95.44% | 11,963 / 12,535 | `build/coverage/node-vue-non-acp-strict/lcov.info` filtered to `server-web/` |
-| `client-gui` | `npm run client:test:coverage` + `npm run test:unit-coverage:scan` | 95.73% | 561 / 586 | `client-gui/coverage/lcov.info` |
+| `client-gui` | `npm run client:test:coverage` + `npm run test:unit-coverage:scan` | 95.73% | 561 / 586 | `build/coverage/client-gui/lcov.info` |
 | `client-cli` | `npm run client:native:test:coverage` + `npm run test:unit-coverage:scan` | 95.11% | 3,696 / 3,886 | `build/coverage/client-cli/lcov.info` |
 
 ## Coverage Gate

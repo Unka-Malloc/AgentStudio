@@ -86,7 +86,7 @@ function main() {
     "--mount",
     "type=volume,src=pact-ubuntu-cargo-git,dst=/root/.cargo/git",
     "--mount",
-    "type=volume,src=pact-ubuntu-cargo-target,dst=/workspace/client-cli/target",
+    "type=volume,src=pact-ubuntu-cargo-target,dst=/workspace/build/client-cli/target",
     "--mount",
     `type=bind,src=${guiArtifactDir},dst=/artifacts`,
     "-w",

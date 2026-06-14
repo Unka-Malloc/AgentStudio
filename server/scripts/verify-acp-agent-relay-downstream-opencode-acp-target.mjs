@@ -146,7 +146,7 @@ function promptText(value) {
   return String(value || "");
 }
 
-async function writeFakeOpenCodeTargetScript(scriptPath) {
+async function writeStubOpenCodeTargetScript(scriptPath) {
   await fs.writeFile(
     scriptPath,
     `
@@ -154,8 +154,8 @@ import fs from "node:fs";
 import readline from "node:readline";
 
 const argv = process.argv.slice(2);
-const logPath = process.env.PACT_FAKE_OPENCODE_LOG_PATH || "";
-const marker = process.env.PACT_FAKE_OPENCODE_MARKER || "PACT_OPENCODE_ACP";
+const logPath = process.env.PACT_STUB_OPENCODE_LOG_PATH || "";
+const marker = process.env.PACT_STUB_OPENCODE_MARKER || "PACT_OPENCODE_ACP";
 const lines = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 let targetSessionId = "";
 let targetResumeRef = "";
@@ -179,9 +179,9 @@ function textFromPrompt(value) {
   return String(value || "");
 }
 
-log({ event: "fake_opencode_started", argv });
+log({ event: "stub_opencode_started", argv });
 if (argv.length !== 1 || argv[0] !== "acp") {
-  log({ event: "fake_opencode_bad_argv", argv });
+  log({ event: "stub_opencode_bad_argv", argv });
   process.exitCode = 64;
   process.exit();
 }
@@ -189,7 +189,7 @@ if (argv.length !== 1 || argv[0] !== "acp") {
 for await (const line of lines) {
   const message = JSON.parse(line);
   log({
-    event: "fake_opencode_message",
+    event: "stub_opencode_message",
     method: message.method || "",
     id: message.id || "",
     paramsKeys: Object.keys(message.params || {})
@@ -201,7 +201,7 @@ for await (const line of lines) {
       result: {
         protocolVersion: 1,
         agentInfo: {
-          name: "fake-opencode-acp",
+          name: "stub-opencode-acp",
           version: "verify"
         },
         capabilities: {
@@ -211,8 +211,8 @@ for await (const line of lines) {
       }
     });
   } else if (message.method === "session/new" || message.method === "session/resume") {
-    targetSessionId = message.params?.sessionId || \`fake-opencode-session-\${process.pid}\`;
-    targetResumeRef = \`fake-opencode-resume-\${process.pid}\`;
+    targetSessionId = message.params?.sessionId || \`stub-opencode-session-\${process.pid}\`;
+    targetResumeRef = \`stub-opencode-resume-\${process.pid}\`;
     send({
       jsonrpc: "2.0",
       id: message.id,
@@ -225,7 +225,7 @@ for await (const line of lines) {
   } else if (message.method === "session/prompt") {
     const text = textFromPrompt(message.params?.prompt || message.params?.content || message.params?.text);
     log({
-      event: "fake_opencode_prompt",
+      event: "stub_opencode_prompt",
       sessionId: message.params?.sessionId || "",
       markerIncluded: text.includes(marker),
       promptPreview: text.slice(0, 160)
@@ -266,7 +266,7 @@ for await (const line of lines) {
     send({
       jsonrpc: "2.0",
       id: message.id,
-      error: { code: -32601, message: "unsupported fake OpenCode ACP method" }
+      error: { code: -32601, message: "unsupported stub OpenCode ACP method" }
     });
   }
 }
@@ -275,11 +275,11 @@ for await (const line of lines) {
   );
 }
 
-async function writeFakeOpenCodeCommand(commandPath) {
+async function writeStubOpenCodeCommand(commandPath) {
   await fs.writeFile(
     commandPath,
     `#!/bin/sh
-exec "$PACT_FAKE_OPENCODE_NODE" "$PACT_FAKE_OPENCODE_TARGET_SCRIPT" "$@"
+exec "$PACT_STUB_OPENCODE_NODE" "$PACT_STUB_OPENCODE_TARGET_SCRIPT" "$@"
 `,
     "utf8"
   );
@@ -287,10 +287,10 @@ exec "$PACT_FAKE_OPENCODE_NODE" "$PACT_FAKE_OPENCODE_TARGET_SCRIPT" "$@"
 }
 
 const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-acp-downstream-opencode-workspace-"));
-const fakeBin = path.join(workspaceRoot, "bin");
-const fakeOpenCodePath = path.join(fakeBin, "opencode");
-const fakeOpenCodeTargetScriptPath = path.join(workspaceRoot, "fake-opencode-acp-target.mjs");
-const fakeOpenCodeLogPath = path.join(workspaceRoot, "fake-opencode-events.jsonl");
+const stubBin = path.join(workspaceRoot, "bin");
+const stubOpenCodePath = path.join(stubBin, "opencode");
+const stubOpenCodeTargetScriptPath = path.join(workspaceRoot, "stub-opencode-acp-target.mjs");
+const stubOpenCodeLogPath = path.join(workspaceRoot, "stub-opencode-events.jsonl");
 const storePath = path.join(workspaceRoot, "source-stdio-store.json");
 const marker = `PACT_DOWNSTREAM_OPENCODE_ACP_TARGET_VERIFY_${Date.now()}`;
 const virtualAgentId = "opencode.acp-agent";
@@ -299,16 +299,16 @@ const sourceId = "downstream-opencode-acp-target-verifier";
 const sourceSessionId = `downstream-opencode-acp-target-${marker}`;
 const workspaceId = "downstream-opencode-acp-target-workspace";
 
-await fs.mkdir(fakeBin, { recursive: true });
-await writeFakeOpenCodeTargetScript(fakeOpenCodeTargetScriptPath);
-await writeFakeOpenCodeCommand(fakeOpenCodePath);
+await fs.mkdir(stubBin, { recursive: true });
+await writeStubOpenCodeTargetScript(stubOpenCodeTargetScriptPath);
+await writeStubOpenCodeCommand(stubOpenCodePath);
 
 const runtimeOptions = {
   workspaceRoot,
   startDownstreamClientAspect: true,
   downstreamClientEnv: {
     ...process.env,
-    PATH: `${fakeBin}${path.delimiter}${process.env.PATH || ""}`
+    PATH: `${stubBin}${path.delimiter}${process.env.PATH || ""}`
   },
   downstreamClientFrameworkOverrides: [
     {
@@ -318,10 +318,10 @@ const runtimeOptions = {
           cwd: workspaceRoot,
           timeoutMs: targetTimeoutMs,
           env: {
-            PACT_FAKE_OPENCODE_NODE: process.execPath,
-            PACT_FAKE_OPENCODE_TARGET_SCRIPT: fakeOpenCodeTargetScriptPath,
-            PACT_FAKE_OPENCODE_LOG_PATH: fakeOpenCodeLogPath,
-            PACT_FAKE_OPENCODE_MARKER: marker
+            PACT_STUB_OPENCODE_NODE: process.execPath,
+            PACT_STUB_OPENCODE_TARGET_SCRIPT: stubOpenCodeTargetScriptPath,
+            PACT_STUB_OPENCODE_LOG_PATH: stubOpenCodeLogPath,
+            PACT_STUB_OPENCODE_MARKER: marker
           }
         },
         target: {
@@ -442,9 +442,9 @@ try {
   ));
   assert.equal(close.result?.lifecycleState, "closed");
 
-  const fakeOpenCodeEvents = await readJsonlEvents(fakeOpenCodeLogPath);
-  const startEvent = fakeOpenCodeEvents.find((event) => event.event === "fake_opencode_started");
-  const promptEvent = fakeOpenCodeEvents.find((event) => event.event === "fake_opencode_prompt");
+  const stubOpenCodeEvents = await readJsonlEvents(stubOpenCodeLogPath);
+  const startEvent = stubOpenCodeEvents.find((event) => event.event === "stub_opencode_started");
+  const promptEvent = stubOpenCodeEvents.find((event) => event.event === "stub_opencode_prompt");
   assert.deepEqual(startEvent?.argv, ["acp"], "Pact must launch OpenCode ACP as `opencode acp`.");
   assert.equal(promptEvent?.markerIncluded, true, "OpenCode ACP target must receive the delegated prompt text.");
 
