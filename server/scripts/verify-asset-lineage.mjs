@@ -124,7 +124,7 @@ function verifyOperationsAndTools() {
   const catalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
   const recordTool = catalog.tools.find((tool) => tool.id === "pact.assetLineage.record");
   assert.ok(recordTool, "asset lineage record tool must be exposed");
-  assert.ok(recordTool.toolsets.includes("pact.knowledge.maintain"));
+  assert.ok(recordTool.toolsets.includes("pact.agentLibrary.maintain"));
   assert.equal(recordTool.toolsets.includes("pact.document.parse"), false);
 }
 

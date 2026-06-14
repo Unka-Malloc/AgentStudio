@@ -4,8 +4,8 @@ import {
   createCapabilityPackageRegistry
 } from "../package-lifecycle/index.mjs";
 
-export const TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION = "pact.tool-skill-management.v1";
-export const SKILL_HUB_DISCOVERY_PROTOCOL_VERSION = "pact.skill-hub-discovery.v1";
+export const TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION = "v0.0.1:tool:skill-management-1";
+export const SKILL_HUB_DISCOVERY_PROTOCOL_VERSION = "v0.0.1:tool:skill-hub-discovery-1";
 
 const LOCAL_GRANT_MCP_SHAREDSPACE_TOOL_NAME = "pact.sharedspace";
 const LOCAL_GRANT_MCP_CONNECTOR_PACKAGE = "pact-mcp-connector";
@@ -30,14 +30,15 @@ const LOCAL_GRANT_WRITE_TOOLSETS = Object.freeze([
   "pact.runtime.read",
   "pact.storage.read",
   "pact.jobs.read",
-  "pact.knowledge.read",
-  "pact.knowledge.write",
+  "pact.agentLibrary.read",
+  "pact.agentLibrary.write",
   "pact.storage.write",
   "pact.agent.workspace.read",
   "pact.agent.workspace",
   "pact.document.parse",
   "pact.result.export",
-  "pact.repo.read"
+  "pact.repo.read",
+  "pact.agent.relay.read"
 ]);
 
 const LOCAL_GRANT_TARGET_MATCH = Object.freeze({
@@ -52,10 +53,6 @@ const LOCAL_GRANT_TARGET_MATCH = Object.freeze({
   codex: {
     toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
     agentProfileId: "pact.mcp.codex"
-  },
-  "gemini-cli": {
-    toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
-    agentProfileId: "pact.mcp.gemini-cli"
   },
   antigravity: {
     toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
@@ -80,10 +77,6 @@ const LOCAL_GRANT_TARGET_MATCH = Object.freeze({
   hermes: {
     toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
     agentProfileId: "pact.mcp.hermes"
-  },
-  windsurf: {
-    toolsets: LOCAL_GRANT_WRITE_TOOLSETS,
-    agentProfileId: "pact.mcp.windsurf"
   }
 });
 
@@ -114,14 +107,48 @@ function parseRequestBody(requestBody) {
   return JSON.parse(requestBody.toString("utf8"));
 }
 
-function isLocalMcpPairingRequest(request) {
-  const address = String(request?.socket?.remoteAddress || "").toLowerCase();
-  return (
-    address === "127.0.0.1" ||
+function normalizeNetworkAddress(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .replace(/^::ffff:/, "");
+}
+
+function isLoopbackAddress(value = "") {
+  const address = normalizeNetworkAddress(value);
+  return address === "127.0.0.1" ||
     address === "::1" ||
-    address === "::ffff:127.0.0.1" ||
-    address === "localhost"
-  );
+    address === "localhost" ||
+    address.startsWith("127.");
+}
+
+function firstForwardedFor(request) {
+  return String(request?.headers?.["x-forwarded-for"] || "")
+    .split(",")[0]
+    .trim();
+}
+
+function isSameOriginBrowserRequest(request) {
+  const origin = String(request?.headers?.origin || "").trim();
+  if (!origin) {
+    return true;
+  }
+  if (origin === "null") {
+    return false;
+  }
+  const host = String(request?.headers?.host || "").trim();
+  if (!host) {
+    return false;
+  }
+  return origin === `http://${host}` || origin === `https://${host}`;
+}
+
+function isLocalMcpPairingRequest(request) {
+  const forwardedFor = firstForwardedFor(request);
+  return isLoopbackAddress(request?.socket?.remoteAddress) &&
+    (!forwardedFor || isLoopbackAddress(forwardedFor)) &&
+    isSameOriginBrowserRequest(request);
 }
 
 function normalizeGrantTargets(value) {
@@ -234,7 +261,7 @@ function localGrantMatchedTargetDetails(targets = []) {
 
 function localGrantSharedspaceExchangeReceiptContract() {
   return {
-    schemaVersion: "pact.mcp.sharedspace-exchange.v1",
+    schemaVersion: "v0.0.1:mcp:sharedspace-exchange-1",
     locations: [
       "structuredContent.exchange",
       "notifications/pact/operation_reply.params.exchange"
@@ -406,7 +433,7 @@ function skillPackageRequiredScopes(skill = {}) {
 }
 
 function skillPackageToolsets(skill = {}) {
-  return skill.risk === "read_only" ? ["pact.knowledge.read"] : ["pact.knowledge.maintain"];
+  return skill.risk === "read_only" ? ["pact.agentLibrary.read"] : ["pact.agentLibrary.maintain"];
 }
 
 function publicSkillPackage(record = {}) {
@@ -462,7 +489,7 @@ function grantCanSeeSkill(skill, grant = null) {
 
 function emptySkillCatalog({ status = "ok", error = "" } = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: SKILL_HUB_DISCOVERY_PROTOCOL_VERSION,
     lifecycleProtocolVersion: CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION,
     skillRegistryProtocolVersion: SKILL_REGISTRY_PROTOCOL_VERSION,
@@ -1109,7 +1136,7 @@ export function createToolSkillManagementProvider({
     return platform;
   }
 
-  async function authorizeRequest({ request, requiredScopes = [] } = {}) {
+  async function authorizeRequest({ request, requiredScopes = [], recordUse = true } = {}) {
     const current = requirePlatform();
     if (!current.store?.authorizeRequest) {
       return {
@@ -1121,7 +1148,8 @@ export function createToolSkillManagementProvider({
     normalizeApiKeyHeader(request);
     const authorization = await current.store.authorizeRequest({
       request,
-      requiredScopes
+      requiredScopes,
+      recordUse
     });
     if (!authorization.ok && typeof current.securityPermissions?.appendDecision === "function") {
       current.securityPermissions.appendDecision({
@@ -1314,7 +1342,7 @@ export function createToolSkillManagementProvider({
       status: 201,
       body: {
         ok: true,
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         grant: result.grant,
         token: result.token,
         tokenPrefix: result.grant.tokenPrefix,
@@ -1423,7 +1451,7 @@ export function createToolSkillManagementProvider({
       status: 200,
       body: {
         ok: true,
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         targets,
         updatedCount: updated.length,
         updated
@@ -1650,7 +1678,7 @@ export function createToolSkillManagementProvider({
     protocolVersion: TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION,
     describe() {
       return {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION,
         capabilities: [
           "tool_catalog",

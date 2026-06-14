@@ -45,10 +45,10 @@ Primary APIs:
 
 Toolsets:
 
-- `pact.knowledge.read`
-- `pact.knowledge.write`
-- `pact.knowledge.maintain`
-- `pact.knowledge.admin`
+- `pact.agentLibrary.read`
+- `pact.agentLibrary.write`
+- `pact.agentLibrary.maintain`
+- `pact.agentLibrary.admin`
 - `pact.storage.read`
 - `pact.jobs.read`
 - `pact.document.parse`
@@ -67,24 +67,24 @@ Example tools:
 - `pact.storageSummary`
 - `pact.jobs.list`
 - `pact.jobs.get`
-- `pact.knowledge.affairTaxonomy`
-- `pact.knowledge.search`
-- `pact.knowledge.documentStructure`
-- `pact.knowledge.evidence`
-- `pact.knowledge.renderMarkdown`
-- `pact.knowledge.agentSkill`
-- `pact.knowledge.agentSkill.plan`
-- `pact.knowledge.agentSkill.run`
-- `pact.knowledge.skills.list`
-- `pact.knowledge.skills.get`
-- `pact.knowledge.skills.generate`
-- `pact.knowledge.skills.propose`
-- `pact.knowledge.skills.resolve`
-- `pact.knowledge.skillFramework`
-- `pact.knowledge.skills.evaluation.runs.create`
-- `pact.knowledge.skills.deployments.create`
-- `pact.knowledge.skills.deployments.rollback`
-- `pact.knowledge.health`
+- `pact.agentLibrary.affairTaxonomy`
+- `pact.agentLibrary.search`
+- `pact.agentLibrary.documentStructure`
+- `pact.agentLibrary.evidence`
+- `pact.agentLibrary.renderMarkdown`
+- `pact.agentLibrary.agentSkill`
+- `pact.agentLibrary.agentSkill.plan`
+- `pact.agentLibrary.agentSkill.run`
+- `pact.agentLibrary.skills.list`
+- `pact.agentLibrary.skills.get`
+- `pact.agentLibrary.skills.generate`
+- `pact.agentLibrary.skills.propose`
+- `pact.agentLibrary.skills.resolve`
+- `pact.agentLibrary.skillFramework`
+- `pact.agentLibrary.skills.evaluation.runs.create`
+- `pact.agentLibrary.skills.deployments.create`
+- `pact.agentLibrary.skills.deployments.rollback`
+- `pact.agentLibrary.health`
 - `agent-exploration.keyword_search`
 - `agent-exploration.knowledge_skill_search`
 - `agent-exploration.knowledge_skill_propose`

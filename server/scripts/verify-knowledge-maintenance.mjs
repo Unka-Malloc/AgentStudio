@@ -292,7 +292,7 @@ try {
   assert.equal(rendered.contentType, "text/markdown; charset=utf-8");
   assert.match(rendered.markdown, /^---\npact_knowledge:/);
   const markdownMetadata = parseMarkdownJsonBlock(rendered.markdown);
-  assert.equal(markdownMetadata.protocolVersion, "pact.knowledge.v1");
+  assert.equal(markdownMetadata.protocolVersion, "v0.0.1:knowledge:core-1");
   assert.equal(markdownMetadata.evidenceId, evidence.evidenceId);
   assert.ok(markdownMetadata.modalities.includes("image"));
 
@@ -408,7 +408,7 @@ try {
         requiredMetadataKeys: ["protocolVersion", "evidenceId", "modalities"],
         expected: {
           metadata: {
-            protocolVersion: "pact.knowledge.v1",
+            protocolVersion: "v0.0.1:knowledge:core-1",
             evidenceId: evidence.evidenceId
           },
           assetRefs: [`/api/knowledge/assets/${encodeURIComponent(asset.assetId)}`]

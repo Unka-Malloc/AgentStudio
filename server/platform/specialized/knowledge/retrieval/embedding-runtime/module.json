@@ -1,13 +1,13 @@
 {
   "name": "EmbeddingRuntime",
-  "version": 1,
-  "description": "Optional pact.embedding.v1 module with an offline deterministic hashing fallback runtime.",
+  "version": "v0.0.1:knowledge:embedding-runtime-1",
+  "description": "Optional v0.0.1:knowledge:embedding-1 module with an offline deterministic hashing fallback runtime.",
   "defaultLoaded": false,
-  "protocol": "pact.embedding.v1",
+  "protocol": "v0.0.1:knowledge:embedding-1",
   "components": {
     "embeddingRuntime": {
       "path": "./index.mjs",
-      "protocol": "pact.embedding.v1",
+      "protocol": "v0.0.1:knowledge:embedding-1",
       "factory": "createEmbeddingRuntime",
       "providerId": "builtin:hashing-vector-runtime",
       "providerType": "offline-fallback",

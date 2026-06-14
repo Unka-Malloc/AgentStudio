@@ -67,7 +67,7 @@ function createUrl(pathname) {
 
 function createPlatform(overrides = {}) {
   const platform = {
-    catalog: vi.fn(() => ({ schemaVersion: 1, catalog: true })),
+    catalog: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1", catalog: true })),
     registry: {
       getTool: vi.fn((toolId) => ({ id: toolId })),
       getToolByOperationId: vi.fn(() => null),
@@ -87,12 +87,12 @@ function createPlatform(overrides = {}) {
       updateGrant: vi.fn(),
       listAudit: vi.fn(() => []),
       getAudit: vi.fn(() => null),
-      metricsSummary: vi.fn(() => ({ schemaVersion: 1 })),
-      metricsExport: vi.fn(() => ({ schemaVersion: 1 })),
-      metricsHealth: vi.fn(() => ({ schemaVersion: 1 })),
+      metricsSummary: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
+      metricsExport: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
+      metricsHealth: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
       metricsPrometheus: vi.fn(() => "metric"),
-      metricsStorageSummary: vi.fn(() => ({ schemaVersion: 1 })),
-      pruneMetrics: vi.fn(() => ({ schemaVersion: 1 })),
+      metricsStorageSummary: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
+      pruneMetrics: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
       listPendingOperations: vi.fn(() => [])
     },
     policyEngine: {
@@ -142,7 +142,7 @@ function createCapabilityProvider() {
     issue: vi.fn(async ({ credentialId, capabilities, expiresAt }) => ({
       capabilityKey: `ock_${credentialId}`,
       credentialId,
-      protocolVersion: "pact.opaque-capability-key.v1",
+      protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
       capabilitySetHash: `hash_${capabilities.length}`,
       capabilityCount: capabilities.length,
       runtimeLookupGeneration: 1,
@@ -161,7 +161,7 @@ function createBindingGuard() {
   return {
     bindCapabilityKey: vi.fn(async () => ({
       bindingId: "binding-1",
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       bindingStrength: "standard",
       requireUser: true,
       requireAgent: true,
@@ -236,7 +236,7 @@ function createRuntimeFixture(overrides = {}) {
       grantPolicyRevision: 1,
       grantPolicyState: "active",
       governancePolicyRevision: {
-        protocolVersion: "pact.policy.v1",
+        protocolVersion: "v0.0.1:risk-control:policy-1",
         revision: 1,
         updatedAt: "2026-06-05T00:00:00.000Z"
       }
@@ -411,7 +411,7 @@ describe("tool-management core final extra 2 coverage", () => {
     });
     expect(forbidden.handled).toBe(true);
     expect(sendJsonMock).toHaveBeenCalledWith(forbidden.response, 401, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "console_unauthenticated",
         message: "login required",
@@ -442,7 +442,7 @@ describe("tool-management core final extra 2 coverage", () => {
     });
     expect(unknownTool.handled).toBe(true);
     expect(sendJsonMock).toHaveBeenLastCalledWith(unknownTool.response, 404, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
         error: {
         code: "unknown_tool",
         message: "Tool is not registered.",
@@ -480,7 +480,7 @@ describe("tool-management core final extra 2 coverage", () => {
 
     expect(result.handled).toBe(true);
     expect(sendJsonMock).toHaveBeenCalledWith(result.response, 503, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "pending_operation_runtime_unavailable",
         message: "Pending operation runtime is unavailable."

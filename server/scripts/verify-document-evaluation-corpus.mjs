@@ -13,7 +13,7 @@ async function readJson(relativePath) {
 }
 
 function assertBaseManifestShape(manifest, label) {
-  assert.equal(manifest.schemaVersion, 1, `${label} must declare schemaVersion=1`);
+  assert.equal(manifest.schemaVersion, "v0.0.1:schema:definition-1", `${label} must declare schemaVersion=v0.0.1:schema:definition-1`);
   assert.equal(typeof manifest.corpusId, "string");
   assert.ok(manifest.corpusId.length > 0, `${label} corpusId must be non-empty`);
   assert.equal(typeof manifest.storageRoot, "string");

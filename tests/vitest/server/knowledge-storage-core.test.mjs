@@ -196,7 +196,7 @@ describe("knowledge-core store", () => {
       expect(result.deduplicatedIncomingCount).toBe(0);
       expect(result.skippedConflictCount).toBe(0);
       expect(result).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         documentCount: 2,
         receivedDocumentCount: 2,
         skippedConflictCount: 0
@@ -241,7 +241,7 @@ describe("knowledge-core store", () => {
         limit: 2
       });
 
-      expect(result.protocolVersion).toBe("pact.knowledge.v1");
+      expect(result.protocolVersion).toBe("v0.0.1:knowledge:core-1");
       expect(result.learningEnabled).toBe(false);
       expect(result.retrievalMode).toBe("keyword");
       expect(result.profileRoute).toMatchObject({ routedBy: "learning_disabled" });
@@ -261,7 +261,7 @@ describe("knowledge-core store", () => {
       });
       expect(agentResult.responseProfile).toBe("agent");
       expect(agentResult.agentMessage).toMatchObject({
-        protocolVersion: "pact.knowledge-search.agent-message.v1",
+        protocolVersion: "v0.0.1:knowledge:search-agent-message-1",
         query: "alpha",
         constraints: {
           batchId: "batch-filter"

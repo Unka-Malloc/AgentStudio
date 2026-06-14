@@ -1,6 +1,6 @@
 {
-  "id": "pact.knowledge.write",
-  "label": "Knowledge write",
+  "id": "pact.agentLibrary.write",
+  "label": "Agent Library write",
   "requiredScopes": [
     "knowledge:read",
     "knowledge:write"

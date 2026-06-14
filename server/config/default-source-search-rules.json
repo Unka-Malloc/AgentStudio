@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "updatedAt": "",
   "maxFileBytes": 5242880,
   "maxEvidenceBytes": 524288,
@@ -96,18 +96,6 @@
         "payment confirmation",
         "purchase confirmation",
         "transaction statement"
-      ]
-    },
-    {
-      "id": "hsbc",
-      "label": "HSBC/汇丰",
-      "triggers": ["HSBC", "汇丰"],
-      "terms": [
-        "HSBC",
-        "HSBC UK",
-        "HSBC Bank",
-        "Hongkong and Shanghai Banking Corporation",
-        "汇丰"
       ]
     }
   ],

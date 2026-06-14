@@ -79,7 +79,7 @@ try {
       explain: true
     })
   });
-  assert.equal(search.protocolVersion, "pact.knowledge.v1");
+  assert.equal(search.protocolVersion, "v0.0.1:knowledge:core-1");
   assert.equal(search.hierarchy.enabled, true);
   assert.equal(search.hierarchy.policy, "coarse_to_fine");
   assert.equal(search.hierarchy.enforced, true);
@@ -91,7 +91,7 @@ try {
   const structure = await fetchJson(
     `${server.url}/api/knowledge/documents/${encodeURIComponent(search.items[0].documentId)}/structure`
   );
-  assert.equal(structure.protocolVersion, "pact.knowledge.v1");
+  assert.equal(structure.protocolVersion, "v0.0.1:knowledge:core-1");
   assert.equal(structure.document.documentId, search.items[0].documentId);
   assert.ok(structure.tree.length >= 1);
   assert.ok(structure.nodes.every((node) => node.text === undefined));
@@ -111,7 +111,7 @@ try {
       Authorization: `Bearer ${grant.token}`
     },
     body: JSON.stringify({
-      toolId: "pact.knowledge.search",
+      toolId: "pact.agentLibrary.search",
       input: {
         query: "发票抬头 合同盖章",
         limit: 3,
@@ -128,7 +128,7 @@ try {
       Authorization: `Bearer ${grant.token}`
     },
     body: JSON.stringify({
-      toolId: "pact.knowledge.documentStructure",
+      toolId: "pact.agentLibrary.documentStructure",
       input: {
         documentId: search.items[0].documentId,
         maxNodes: 20

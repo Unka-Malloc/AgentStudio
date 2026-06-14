@@ -4,7 +4,7 @@
   "agentType": "operator",
   "toolsets": [
     "pact.admin",
-    "pact.knowledge.admin",
+    "pact.agentLibrary.admin",
     "pact.runtime.maintain",
     "pact.authorization.admin"
   ],

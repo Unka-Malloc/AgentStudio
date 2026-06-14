@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "bundleType": "pact.standard.bundle",
   "standardId": "pact.golden-rules",
-  "protocolVersion": "pact.golden-rule.v1",
+  "protocolVersion": "v0.0.1:knowledge:golden-rule-1",
   "sourceSeed": "server/platform/specialized/knowledge/invocation/golden-rule-runtime/index.mjs:createDefaultPackage",
   "runtimeAuthority": "<userDataPath>/knowledge-golden/packages/<packageId>/manifest.json",
   "files": {

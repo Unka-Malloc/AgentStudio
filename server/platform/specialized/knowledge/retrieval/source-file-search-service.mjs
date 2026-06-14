@@ -752,7 +752,7 @@ export async function searchSourceFiles({ userDataPath, query = "", limit = 20, 
   const highRelevanceCount = sortedItems.filter((item) => item.relevanceTier !== "low").length;
   const lowRelevanceCount = sortedItems.length - highRelevanceCount;
   const result = {
-    protocolVersion: "pact.knowledge.source-search.v1",
+    protocolVersion: "v0.0.1:knowledge:source-search-1",
     query: normalizeText(query),
     limit: returnAll ? "all" : safeLimit,
     retrievalMode: "raw-source-keyword",

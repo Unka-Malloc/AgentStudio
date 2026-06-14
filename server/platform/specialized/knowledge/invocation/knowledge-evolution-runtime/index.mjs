@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-export const KNOWLEDGE_EVOLUTION_PROTOCOL_VERSION = "pact.knowledge-evolution.v1";
-export const KNOWLEDGE_DISTILLATION_OPTIMIZATION_PROTOCOL_VERSION = "pact.knowledge-distillation-optimization.v1";
+export const KNOWLEDGE_EVOLUTION_PROTOCOL_VERSION = "v0.0.1:knowledge:evolution-1";
+export const KNOWLEDGE_DISTILLATION_OPTIMIZATION_PROTOCOL_VERSION = "v0.0.1:knowledge:distillation-optimization-1";
 
 function nowIso() {
   return new Date().toISOString();

@@ -132,7 +132,7 @@ try {
     `${server.url}/api/knowledge/config-schema`,
     authOptions(auth)
   );
-  assert.equal(schema.schemaVersion, 1);
+  assert.equal(schema.schemaVersion, "v0.0.1:schema:definition-1");
   assert.ok(schema.groups.some((group) => group.id === "retrieval"));
   assert.ok(
     schema.groups

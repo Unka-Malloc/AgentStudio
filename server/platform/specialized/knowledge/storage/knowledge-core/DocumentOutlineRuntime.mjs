@@ -328,7 +328,7 @@ export function createDocumentOutlineRuntime({
       });
     }
     return {
-      protocolVersion: "pact.document-outline.v1",
+      protocolVersion: "v0.0.1:knowledge:document-outline-1",
       documentId: document.documentId || "",
       nodeCount: outlineNodes.length,
       syntheticNodeCount: outlineNodes.filter((node) => node.nodeType === "outline").length,
@@ -343,7 +343,7 @@ export function createDocumentOutlineRuntime({
   }
 
   return {
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     build,
     rangeContainsPosition
   };

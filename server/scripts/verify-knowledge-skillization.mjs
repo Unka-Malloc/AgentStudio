@@ -96,7 +96,7 @@ try {
       publish: true
     })
   });
-  assert.equal(generated.protocolVersion, "pact.knowledge-skill.v1");
+  assert.equal(generated.protocolVersion, "v0.0.1:knowledge:skill-1");
   assert.equal(generated.skill.status, "pending_review");
   assert.equal(generated.qualityReport.passed, true);
   assert.ok(generated.skill.evidenceRefs.length >= 1);
@@ -136,7 +136,7 @@ try {
       }
     })
   });
-  assert.equal(proposed.protocolVersion, "pact.knowledge-skill.v1");
+  assert.equal(proposed.protocolVersion, "v0.0.1:knowledge:skill-1");
   assert.equal(proposed.skill.status, "pending_review");
   assert.equal(proposed.qualityReport.creation.passed, true);
   assert.equal(proposed.skill.scope.createdByAgent, true);
@@ -171,7 +171,7 @@ const fixtureKnowledgeCore = {
   enabled: true,
   async search(input = {}) {
     return {
-      protocolVersion: "pact.knowledge.v1",
+      protocolVersion: "v0.0.1:knowledge:core-1",
       query: input.query,
       hierarchy: {
         enforced: true,
@@ -197,7 +197,7 @@ const fixtureKnowledgeCore = {
 const fixtureKnowledgeSkillRuntime = {
   buildContextForQuery() {
     return {
-      protocolVersion: "pact.knowledge-skill.v1",
+      protocolVersion: "v0.0.1:knowledge:skill-1",
       query: "合同预算审批",
       skills: [
         {
@@ -214,7 +214,7 @@ const fixtureKnowledgeSkillRuntime = {
   },
   searchSkills() {
     return {
-      protocolVersion: "pact.knowledge-skill.v1",
+      protocolVersion: "v0.0.1:knowledge:skill-1",
       items: [
         {
           skillId: "knowledge_skill_contract",
@@ -233,7 +233,7 @@ const fixtureKnowledgeSkillRuntime = {
   },
   proposeSkill(input = {}) {
     return {
-      protocolVersion: "pact.knowledge-skill.v1",
+      protocolVersion: "v0.0.1:knowledge:skill-1",
       ok: true,
       skill: {
         skillId: "knowledge_skill_agent_proposed",

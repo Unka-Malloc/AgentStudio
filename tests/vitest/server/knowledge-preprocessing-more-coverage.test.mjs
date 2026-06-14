@@ -366,7 +366,7 @@ describe("email rules and expert vocabulary normalization", () => {
     await withTempRoot("pact-knowledge-preprocessing-rules-", async (userDataPath) => {
       const rulesPath = getEmailRulesPath(userDataPath);
       await writeJson(rulesPath, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-06-05T00:00:00.000Z",
         reportSeries: [
           {
@@ -455,7 +455,7 @@ describe("email rules and expert vocabulary normalization", () => {
     await withTempRoot("pact-knowledge-preprocessing-vocab-", async (userDataPath) => {
       const vocabPath = getExpertVocabularyPath(userDataPath);
       await writeJson(vocabPath, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         version: 3,
         updatedAt: "2026-06-05T00:00:00.000Z",
         publishedAt: "2026-06-05T00:00:00.000Z",
@@ -537,7 +537,7 @@ describe("source-file-search service", () => {
         })
       );
       await writeJson(path.join(userDataPath, "rules", "source-search-rules.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-06-05T00:00:00.000Z",
         maxFileBytes: 256 * 1024,
         maxEvidenceBytes: 16 * 1024,
@@ -556,7 +556,7 @@ describe("source-file-search service", () => {
         snippetWindow: 120
       });
       await writeJson(path.join(userDataPath, "knowledge-sources", "sources.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-06-05T00:00:00.000Z",
         sources: [
           {
@@ -616,7 +616,7 @@ describe("source-file-search service", () => {
         })
       );
       await writeJson(path.join(userDataPath, "rules", "source-search-rules.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-06-05T00:00:00.000Z",
         maxFileBytes: 256 * 1024,
         maxEvidenceBytes: 16 * 1024,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveKnowledgeCapabilityLayer } from "../platform/common/operation-dispatcher/knowledge-capability-layers.mjs";
 import { SERVER_API_OPERATIONS } from "../platform/common/operation-dispatcher/operation-registry.mjs";
 import { createToolCatalog } from "../platform/specialized/capabilities/tools/tool-management-core/catalog.mjs";
 
@@ -62,7 +63,7 @@ async function assertGovernanceDoc() {
     "authorizationOverlay",
     "derivedKnowledgeSpace",
     "knowledgeBase",
-    "pact.knowledge.v1",
+    "v0.0.1:knowledge:core-1",
     "npm run server:verify:knowledge-architecture-governance",
     "npm run server:verify:external-knowledge-distillation",
     "npm run server:verify:external-knowledge-distillation-container",
@@ -111,13 +112,13 @@ async function assertProtocolDocs() {
   const knowledgeProtocol = await read("server/protocols/knowledge/README.md");
 
   assertAllIncludes(protocols, [
-    "pact.knowledge.v1",
-    "pact.workspace.v1",
-    "pact.operation.v1",
-    "pact.context-bundle.v1",
-    "pact.knowledge-access.v1",
-    "pact.agent-library.v1",
-    "pact.workspace-contribution.v1",
+    "v0.0.1:knowledge:core-1",
+    "v0.0.1:workspace:core-1",
+    "v0.0.1:operation:core-1",
+    "v0.0.1:agent:context-bundle-1",
+    "v0.0.1:knowledge:access-1",
+    "v0.0.1:agent:library-1",
+    "v0.0.1:workspace:contribution-1",
     "Middle Layer Strategy",
     "上游资源经过 Pact 后变细",
     "下游本地智能体经过 Pact 后能共享部分资产和能力",
@@ -136,7 +137,7 @@ async function assertProtocolDocs() {
     "bindDynamicDocumentParsingInvocation",
     "payloadBudget.maxResponseBytes",
     "payload.nextContinuationToken",
-    "portable.knowledge-distillation.v1",
+    "v0.0.1:strategy:portable-knowledge-distillation-1",
     "contentBlocks",
     "format-conversion-only",
     "unified dossier",
@@ -160,7 +161,7 @@ async function assertProtocolDocs() {
     "workspaceId/contributions/report",
     "contributionGrant",
     "rankScore",
-    "pact.checkpoint-tree.v1",
+    "v0.0.1:storage:checkpoint-tree-1",
     "Unified Checkpoint Tree Protocol",
     "checkpointNodeId",
     "effectKind",
@@ -204,7 +205,7 @@ async function assertProtocolDocs() {
     "toolGrantId",
     "原始语料全文",
     "校验、引用、补证",
-    "pact.external-knowledge-distillation.industrial-benchmark.v1",
+    "v0.0.1:external-service:knowledge-distillation-industrial-benchmark-1",
     "external.knowledge.distillation",
     "RAGFlow",
     "MinerU",
@@ -225,7 +226,7 @@ async function assertProtocolDocs() {
   assertAllIncludes(server, [
     "knowledgeBase",
     "KnowledgeCore",
-    "pact.knowledge.v1",
+    "v0.0.1:knowledge:core-1",
     "mount-modules.json",
     "热插拔",
     "热切换",
@@ -246,7 +247,7 @@ async function assertProtocolDocs() {
     "bindDynamicDocumentParsingInvocation",
     "payloadBudget.maxResponseBytes",
     "payload.nextContinuationToken",
-    "pact.external-knowledge-distillation.industrial-benchmark.v1",
+    "v0.0.1:external-service:knowledge-distillation-industrial-benchmark-1",
     "external.knowledge.distillation",
     "route-first",
     "Office 专业适配",
@@ -470,7 +471,7 @@ async function assertIndustrialDistillationBenchmark() {
   const docs = await read("docs/KNOWLEDGE-GOVERNANCE.md");
 
   assertAllIncludes(service, [
-    "external-service.route-window-community-claim-gated-graph-incremental-distillation.v5",
+    "v0.0.1:strategy:external-service-route-window-community-claim-gated-graph-incremental-distillation-5",
     "referenceGapReport",
     "hashing_embedding_window_community_classification_v3",
     "hierarchical-domain-topic-project-convergence.v3",
@@ -506,7 +507,7 @@ async function assertIndustrialDistillationBenchmark() {
     "routePlan",
     "graphEvidence",
     "professionalOfficeAdaptation",
-    "pact.external-knowledge-distillation.industrial-benchmark.v1"
+    "v0.0.1:external-service:knowledge-distillation-industrial-benchmark-1"
   ], "server/scripts/verify-knowledge-industrial-distillation.mjs");
 
   assertAllIncludes(docs, [
@@ -578,6 +579,34 @@ function assertOperationRegistry() {
     );
   }
 
+  const expectedCapabilityLayers = {
+    "jobs.list": "corpus-ingestion",
+    "jobs.reparse": "corpus-ingestion",
+    "knowledge.search": "knowledge-runtime",
+    "knowledge.word_clouds.get": "corpus-organization",
+    "knowledge.learning.jobs": "retrieval-learning",
+    "knowledge.evaluation.runs.create": "evaluation-gates",
+    "knowledge.evolution.runs.create": "evolution-governance",
+    "knowledge.summarization.runs.create": "agent-production",
+    "knowledge.agent_explore.runs.create": "agent-production",
+    "external.knowledge.distillation.runs.create": "external-distillation"
+  };
+  for (const [operationId, layerId] of Object.entries(expectedCapabilityLayers)) {
+    const operation = byId.get(operationId);
+    assert.ok(operation, `${operationId} must be registered for knowledge capability layering`);
+    assert.equal(operation.knowledgeLayer, layerId, `${operationId} must be assigned to ${layerId}`);
+    assert.equal(resolveKnowledgeCapabilityLayer(operationId)?.id, layerId, `${operationId} must resolve through the central layer map`);
+    assert.ok(
+      operation.aspects?.includes(`knowledge-layer:${layerId}`),
+      `${operationId} must expose its knowledge-layer aspect`
+    );
+  }
+  assert.equal(byId.get("jobs.list")?.queueLabel, "pact.jobs.import-parse");
+  assert.equal(byId.get("knowledge.word_clouds.get")?.queueStatus, "not-queue-candidate");
+  assert.equal(byId.has("knowledge.word_clouds.propose"), false);
+  assert.equal(resolveKnowledgeCapabilityLayer("knowledge.word_clouds.propose"), null);
+  assert.equal(byId.get("external.knowledge.distillation.runs.create")?.queueStatus, "external-service");
+
   assert.deepEqual(byId.get("runtime.set_mounts")?.requiredScopes, ["runtime:admin"]);
   assert.deepEqual(byId.get("runtime.reload_mounts")?.requiredScopes, ["runtime:admin"]);
   assert.equal(byId.get("knowledge.asset")?.binary, true, "knowledge.asset must keep binary asset semantics");
@@ -593,12 +622,27 @@ function assertOperationRegistry() {
 
 function assertToolManagementCatalog() {
   const catalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
-  const tool = catalog.tools.find((item) => item.id === "pact.knowledge.exportDocx");
-  assert.ok(tool, "Tool Management catalog must include pact.knowledge.exportDocx");
+  const tool = catalog.tools.find((item) => item.id === "pact.agentLibrary.exportDocx");
+  assert.ok(tool, "Tool Management catalog must include pact.agentLibrary.exportDocx");
   assert.equal(tool.operationId, "knowledge.export_docx");
   assert.deepEqual(tool.requiredScopes, ["knowledge:read"]);
   assert.equal(tool.outputSchema?.type, "binary");
   assert.equal(tool.transport?.http?.path, "/api/knowledge/export/docx");
+  assert.equal(tool.knowledgeLayer, "knowledge-runtime");
+  assert.ok(tool.tags.includes("knowledge-layer:knowledge-runtime"), "knowledge runtime tool must carry layer tag");
+  const learningTool = catalog.tools.find((item) => item.id === "pact.agentLibrary.learning.jobs");
+  assert.ok(learningTool, "Tool Management catalog must include pact.agentLibrary.learning.jobs");
+  assert.equal(learningTool.knowledgeLayer, "retrieval-learning");
+  assert.equal(learningTool.queueStatus, "not-connected");
+  assert.ok(learningTool.tags.includes("knowledge-layer:retrieval-learning"), "learning tool must carry layer tag");
+  const externalDistillationTool = catalog.tools.find((item) => item.id === "pact.external.knowledge.distillation.runs.create");
+  assert.ok(externalDistillationTool, "Tool Management catalog must include external distillation create");
+  assert.equal(externalDistillationTool.knowledgeLayer, "external-distillation");
+  assert.equal(externalDistillationTool.queueStatus, "external-service");
+  assert.ok(
+    externalDistillationTool.tags.includes("knowledge-layer:external-distillation"),
+    "external distillation tool must carry layer tag"
+  );
   const sessionForkTool = catalog.tools.find((item) => item.id === "pact.agentSession.fork");
   assert.ok(sessionForkTool, "Tool Management catalog must include pact.agentSession.fork");
   assert.equal(sessionForkTool.operationId, "agent_sessions.fork");
@@ -743,10 +787,8 @@ async function assertFrontendCoverage() {
     "knowledgeSourceIds",
     "/api/agent-workspaces",
     "/context",
-    "HistorySessionPanel",
     "/api/agent-sessions",
-    "agentSessionId",
-    "分叉"
+    "agentSessionId"
   ], "server-web/views/WorkspacesView.vue");
 
   assertAllIncludes(debugView, [

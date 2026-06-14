@@ -1,6 +1,6 @@
 # VectorStore
 
-可分离的 `pact.vector.v1` 向量存储模块。
+可分离的 `v0.0.1:knowledge:vector-1` 向量存储模块。
 
 该模块遵循与 FileProcessor 相同的结构规则：
 
@@ -15,7 +15,7 @@
 
 - 入口：`./LocalVectorStore/index.mjs`
 - 工厂：`createLocalVectorStore({ db, embeddingRuntime, ...options })`
-- 协议：`pact.vector.v1`
+- 协议：`v0.0.1:knowledge:vector-1`
 - provider：`sqlite-vec`
 - 主路径：通过 `sqlite-vec` npm 包加载平台原生 `vec0` SQLite 扩展，创建 `kc_embedding_vec_<dimension>` 虚拟表做 KNN 召回。
 - 元数据：复用 `better-sqlite3` 传入的 `kc_embeddings` 表保存 target、provider、modality、hash、JSON metadata。
@@ -39,7 +39,7 @@ JSON fallback 是协议安全网，不是主索引：
 
 适配边界：
 
-- 保持 `pact.vector.v1` 方法形状不变。
+- 保持 `v0.0.1:knowledge:vector-1` 方法形状不变。
 - 保持 `provider` 字段作为 embedding provider/model 版本边界，允许同一 target 存多套向量。
 - 不让 HTTP controller、job pipeline 或 KnowledgeCore 直接依赖 `sqlite-vec` API。
 - 如果接入 LanceDB、Qdrant 等外部向量库，也应在本目录提供兼容适配器，而不是绕过协议层。
@@ -48,7 +48,7 @@ JSON fallback 是协议安全网，不是主索引：
 
 `./LanceDB/index.mjs` 提供 license-gated 的 `vectorStore` mount/adapter：
 
-- 协议：`pact.vector.v1`
+- 协议：`v0.0.1:knowledge:vector-1`
 - provider：`lancedb`
 - 入口：`createLanceDbVectorStore({ userDataPath, settings })`
 - post-commit：`onBatchCompleted({ batchId, jobId, result, settings })` 按 `batchId + chunkId` 生成稳定外部 id 并幂等 upsert。

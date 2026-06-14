@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "bundleType": "pact.skill-framework.bundle",
   "skillFrameworkId": "pact.default-knowledge-skill-framework",
-  "version": 1,
+  "version": "v0.0.1:knowledge:skill-framework-1",
   "files": {
     "framework": "framework.json",
     "dependencies": "dependencies.json",

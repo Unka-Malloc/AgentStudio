@@ -28,7 +28,7 @@ function createRegistry({ describeImpl } = {}) {
             source: "fixture",
             risk: "read_only",
             capabilities: ["demo.visible"],
-            protocolVersion: "pact.skill-registry.v1"
+            protocolVersion: "v0.0.1:tool:skill-registry-1"
           },
           library: {
             storage: "server-skill-library",
@@ -48,7 +48,7 @@ function createRegistry({ describeImpl } = {}) {
             source: "fixture",
             risk: "repair_write",
             capabilities: ["demo.hidden"],
-            protocolVersion: "pact.skill-registry.v1"
+            protocolVersion: "v0.0.1:tool:skill-registry-1"
           },
           library: {
             storage: "server-skill-library",
@@ -89,13 +89,13 @@ function createPlatform({
       toolAllow: input.toolAllow || [],
       toolDeny: input.toolDeny || [],
       metadata: input.metadata || {},
-      tokenPrefix: "sat_test",
+      tokenPrefix: "ock_test",
       enabled: input.enabled !== false,
       createdAt: "2026-06-04T00:00:00.000Z",
       updatedAt: "2026-06-04T00:00:00.000Z"
     };
     grants.push(grant);
-    return { grant, token: "sat_test_token" };
+    return { grant, token: "ock_test_token" };
   });
 
   const store = {
@@ -106,12 +106,12 @@ function createPlatform({
         id: "grant_auth",
         label: "Grant Auth",
         scopes: ["knowledge:read"],
-        toolsets: ["pact.knowledge.read"],
+        toolsets: ["pact.agentLibrary.read"],
         toolAllow: [],
         toolDeny: [],
         metadata: { maxRisk: "read_only" }
       },
-      sawAlias: request.headers["x-pact-tool-token"] === "sat_test"
+      sawAlias: request.headers["x-pact-tool-token"] === "ock_test"
     })),
     createGrant: createGrant || defaultCreateGrant,
     revokeGrant: revokeGrant || vi.fn(() => true),
@@ -152,8 +152,8 @@ function createPlatform({
         maxRisk: "safe_write"
       })),
       listToolsets: vi.fn(() => [
-        { id: "pact.knowledge.read", grantable: true },
-        { id: "pact.knowledge.write", grantable: true },
+        { id: "pact.agentLibrary.read", grantable: true },
+        { id: "pact.agentLibrary.write", grantable: true },
         { id: "pact.storage.read", grantable: true },
         { id: "pact.storage.write", grantable: true },
         { id: "pact.agent.workspace.read", grantable: true },
@@ -226,21 +226,21 @@ describe("tool skill management provider extra", () => {
           id: "tool.visible",
           status: "active",
           requiredScopes: ["knowledge:read"],
-          toolsets: ["pact.knowledge.read"],
+          toolsets: ["pact.agentLibrary.read"],
           risk: "read_only"
         },
         {
           id: "tool.denied",
           status: "active",
           requiredScopes: ["knowledge:read"],
-          toolsets: ["pact.knowledge.read"],
+          toolsets: ["pact.agentLibrary.read"],
           risk: "read_only"
         },
         {
           id: "tool.missing-scope",
           status: "active",
           requiredScopes: ["knowledge:write"],
-          toolsets: ["pact.knowledge.read"],
+          toolsets: ["pact.agentLibrary.read"],
           risk: "read_only"
         },
         {
@@ -254,14 +254,14 @@ describe("tool skill management provider extra", () => {
           id: "tool.risky",
           status: "active",
           requiredScopes: ["knowledge:read"],
-          toolsets: ["pact.knowledge.read"],
+          toolsets: ["pact.agentLibrary.read"],
           risk: "repair_write"
         },
         {
           id: "tool.inactive",
           status: "deprecated",
           requiredScopes: ["knowledge:read"],
-          toolsets: ["pact.knowledge.read"],
+          toolsets: ["pact.agentLibrary.read"],
           risk: "read_only"
         }
       ]
@@ -278,12 +278,12 @@ describe("tool skill management provider extra", () => {
         id: "grant_auth",
         label: "Grant Auth",
         scopes: ["knowledge:read"],
-        toolsets: ["pact.knowledge.read"],
+        toolsets: ["pact.agentLibrary.read"],
         toolAllow: [],
         toolDeny: [],
         metadata: { maxRisk: "read_only" }
       },
-      sawAlias: request.headers["x-pact-tool-token"] === "sat_test"
+      sawAlias: request.headers["x-pact-tool-token"] === "ock_test"
     }));
 
     const provider = createToolSkillManagementProvider({
@@ -293,7 +293,7 @@ describe("tool skill management provider extra", () => {
 
     const request = createRequest({
       headers: {
-        "x-pact-api-key": "sat_test"
+        "x-pact-api-key": "ock_test"
       }
     });
 
@@ -316,7 +316,7 @@ describe("tool skill management provider extra", () => {
     const visibleGrant = {
       id: "grant_visible",
       scopes: ["knowledge:read"],
-      toolsets: ["pact.knowledge.read"],
+      toolsets: ["pact.agentLibrary.read"],
       toolAllow: [
         "tool.visible",
         "tool.denied",
@@ -347,7 +347,7 @@ describe("tool skill management provider extra", () => {
         grant: {
           id: "grant_string_allow",
           scopes: "knowledge:read",
-          toolsets: "pact.knowledge.read",
+          toolsets: "pact.agentLibrary.read",
           toolAllow: "tool.visible, tool.risky",
           maxRisk: "repair_write"
         }
@@ -370,7 +370,7 @@ describe("tool skill management provider extra", () => {
         grant: {
           id: "skill_grant",
           scopes: ["knowledge:read"],
-          toolsets: ["pact.knowledge.read"],
+          toolsets: ["pact.agentLibrary.read"],
           metadata: { maxRisk: "read_only" }
         }
       }
@@ -384,7 +384,7 @@ describe("tool skill management provider extra", () => {
       packageId: "skill.visible",
       mcpOutlet: "pact.skillHub",
       requiredScopes: ["knowledge:read"],
-      toolsets: ["pact.knowledge.read"]
+      toolsets: ["pact.agentLibrary.read"]
     });
 
     const allSkills = await provider.listVisibleSkills();
@@ -436,8 +436,8 @@ describe("tool skill management provider extra", () => {
     );
 
     expect(provider.describe()).toEqual({
-      schemaVersion: 1,
-      protocolVersion: "pact.tool-skill-management.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:tool:skill-management-1",
       capabilities: [
         "tool_catalog",
         "tool_grants",
@@ -584,25 +584,25 @@ describe("tool skill management provider extra", () => {
           }
         },
         metadata: {
-          token: "sat_private_token",
-          tokenPrefix: "sat_private",
+          token: "ock_private_token",
+          tokenPrefix: "ock_private",
           secret: "shh",
           password: "pw",
           secretRef: "secret://pact/drive/google-oauth",
           endpointRef: "config://pact/drive/google-endpoint"
         },
         error: {
-          message: "Failed at /Users/unka/private.txt for workspace_a with Authorization: Bearer sat_private_token, token=sat_private_token, and --token sat_private_token",
+          message: "Failed at /Users/unka/private.txt for workspace_a with Authorization: Bearer ock_private_token, token=ock_private_token, and --token ock_private_token",
           details: {
             sourcePath: "/Users/unka/private.txt",
             workspaceId: "workspace_a",
             headers: {
-              Authorization: "Bearer sat_private_token",
-              "X-Pact-Api-Key": "sat_private_token",
+              Authorization: "Bearer ock_private_token",
+              "X-Pact-Api-Key": "ock_private_token",
               Accept: "application/json"
             },
-            apiKey: "sat_private_token",
-            password: "sat_private_password"
+            apiKey: "ock_private_token",
+            password: "ock_private_password"
           }
         }
       },
@@ -636,7 +636,7 @@ describe("tool skill management provider extra", () => {
     expect(Object.prototype.hasOwnProperty.call(publicPayload.error.details, "apiKey")).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(publicPayload.error.details, "password")).toBe(false);
     expect(JSON.stringify(publicPayload)).not.toContain("workspace_a");
-    expect(JSON.stringify(publicPayload)).not.toContain("sat_private_token");
+    expect(JSON.stringify(publicPayload)).not.toContain("ock_private_token");
     expect(JSON.stringify(publicPayload)).not.toContain("/Users/unka");
 
     runtimeExecuteTool.mockClear();
@@ -662,7 +662,7 @@ describe("tool skill management provider extra", () => {
         unknown: { workspaceId: "workspace_unknown", title: "Fallback Workspace" },
         data: [{ workspaceId: null }, { workspaceIds: ["workspace_missing"] }],
         note: "C:\\Users\\unit\\secret.txt",
-        secretText: "X-Pact-Api-Key: sat_secret x-pact-tool-token: sat_tool access_token=abc",
+        secretText: "X-Pact-Api-Key: ock_secret x-pact-tool-token: ock_tool access_token=abc",
         "workspace_a-key": "value"
       },
       workspaceDirectory: resolvedComplex.workspaceDirectory,
@@ -804,21 +804,21 @@ describe("tool skill management provider extra", () => {
     const request = createRequest();
 
     const execution = await provider.executeTool({
-      toolId: "pact.knowledge.health",
+      toolId: "pact.agentLibrary.health",
       input: { ok: true },
       request,
       context: { traceId: "exec-1" },
       dryRun: true
     });
     expect(runtimeExecuteTool).toHaveBeenCalledWith({
-      toolId: "pact.knowledge.health",
+      toolId: "pact.agentLibrary.health",
       input: { ok: true },
       request,
       context: { traceId: "exec-1" },
       dryRun: true
     });
     expect(execution.payload.result).toMatchObject({
-      toolId: "pact.knowledge.health",
+      toolId: "pact.agentLibrary.health",
       input: { ok: true },
       requestId: "test-request",
       context: { traceId: "exec-1" },
@@ -833,7 +833,7 @@ describe("tool skill management provider extra", () => {
       capabilityPackageRegistry: createRegistry()
     });
     const unavailableExecution = await runtimeMissingProvider.executeTool({
-      toolId: "pact.knowledge.health",
+      toolId: "pact.agentLibrary.health",
       input: {},
       request,
       context: {}
@@ -913,12 +913,12 @@ describe("tool skill management provider extra", () => {
         toolAllow: input.toolAllow || [],
         toolDeny: input.toolDeny || [],
         metadata: input.metadata || {},
-        tokenPrefix: "sat_test",
+        tokenPrefix: "ock_test",
         enabled: input.enabled !== false,
         createdAt: "2026-06-04T00:00:00.000Z",
         updatedAt: "2026-06-04T00:00:00.000Z"
       },
-      token: "sat_test_token"
+      token: "ock_test_token"
     }));
     const updateGrant = vi.fn((id, patch = {}) => ({
       id,
@@ -940,7 +940,7 @@ describe("tool skill management provider extra", () => {
         };
       }
       return {
-        toolsets: Array.isArray(input.toolsets) ? input.toolsets : ["pact.knowledge.read"],
+        toolsets: Array.isArray(input.toolsets) ? input.toolsets : ["pact.agentLibrary.read"],
         requiredScopes: ["knowledge:read"],
         maxRisk: "safe_write"
       };
@@ -977,7 +977,7 @@ describe("tool skill management provider extra", () => {
     });
     platform.registry.resolveToolset = resolveToolset;
     platform.registry.listToolsets = vi.fn(() => [
-      { id: "pact.knowledge.read", grantable: true },
+      { id: "pact.agentLibrary.read", grantable: true },
       { id: "pact.document.parse", grantable: true },
       { id: "pact.blocked", grantable: false }
     ]);
@@ -1035,7 +1035,7 @@ describe("tool skill management provider extra", () => {
 
     const confirmRequired = await provider.createLocalMcpGrant({
       request: createRequest(),
-      requestBody: Buffer.from(JSON.stringify({ target: "custom-target", toolsets: ["pact.knowledge.read"] }), "utf8"),
+      requestBody: Buffer.from(JSON.stringify({ target: "custom-target", toolsets: ["pact.agentLibrary.read"] }), "utf8"),
       url: new URL("http://127.0.0.1:7228/api/mcp/local-grant")
     });
     expect(confirmRequired.status).toBe(403);
@@ -1107,8 +1107,8 @@ describe("tool skill management provider extra", () => {
           "pact.runtime.read",
           "pact.storage.read",
           "pact.jobs.read",
-          "pact.knowledge.read",
-          "pact.knowledge.write",
+          "pact.agentLibrary.read",
+          "pact.agentLibrary.write",
           "pact.storage.write",
           "pact.agent.workspace.read",
           "pact.agent.workspace",
@@ -1166,7 +1166,7 @@ describe("tool skill management provider extra", () => {
       }),
       requestBody: Buffer.from(JSON.stringify({
         target: "custom-target",
-        toolsets: ["pact.knowledge.read"],
+        toolsets: ["pact.agentLibrary.read"],
         label: "Explicit grant",
         connectorVersion: "1.2.3"
       }), "utf8"),
@@ -1302,7 +1302,7 @@ describe("tool skill management provider extra", () => {
       resolution: "approved",
       clientName: "Codex",
       scopes: ["knowledge:read"],
-      toolsets: ["pact.knowledge.read"],
+      toolsets: ["pact.agentLibrary.read"],
       toolAllow: ["tool.visible"]
     });
     expect(resolvedApproved.success).toBe(true);
@@ -1312,7 +1312,7 @@ describe("tool skill management provider extra", () => {
         label: "Codex (MCP Client)",
         type: "mcp-client",
         scopes: ["knowledge:read"],
-        toolsets: ["pact.knowledge.read"],
+        toolsets: ["pact.agentLibrary.read"],
         toolAllow: ["tool.visible"],
         enabled: true,
         reason: "Approved MCP authorization request mcp_auth_1"

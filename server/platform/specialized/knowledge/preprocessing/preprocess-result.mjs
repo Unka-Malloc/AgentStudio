@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const PREPROCESS_RESULT_SCHEMA_VERSION = 1;
+export const PREPROCESS_RESULT_SCHEMA_VERSION = "v0.0.1:knowledge:preprocess-result-schema-1";
 export const PREPROCESS_RESULT_TYPE = "pact.knowledge.preprocess-result";
 
 function asArray(value) {

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "dependencyType": "pact.agent-skill.dependencies",
   "runtimeModules": [
     "KnowledgeAgentSkillRuntime",
@@ -8,15 +8,15 @@
   ],
   "requiredTools": [
     {
-      "toolId": "pact.knowledge.search",
+      "toolId": "pact.agentLibrary.search",
       "reason": "Coarse-to-fine retrieval"
     },
     {
-      "toolId": "pact.knowledge.evidence",
+      "toolId": "pact.agentLibrary.evidence",
       "reason": "Evidence opening and citation validation"
     },
     {
-      "toolId": "pact.knowledge.renderMarkdown",
+      "toolId": "pact.agentLibrary.renderMarkdown",
       "reason": "Evidence pack rendering"
     }
   ],

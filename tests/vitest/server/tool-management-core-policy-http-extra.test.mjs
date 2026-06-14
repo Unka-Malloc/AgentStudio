@@ -56,7 +56,7 @@ function createUrl(pathname) {
 
 function createPlatform(overrides = {}) {
   const platform = {
-    catalog: vi.fn(() => ({ schemaVersion: 1, catalog: true })),
+    catalog: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1", catalog: true })),
     registry: {
       getTool: vi.fn(() => ({ id: "tool.alpha" })),
       getToolByOperationId: vi.fn(() => ({ id: "tool.alpha" })),
@@ -166,7 +166,7 @@ describe("tool-management core policy and HTTP extra coverage", () => {
       })
     }));
     expect(sendJsonMock).toHaveBeenCalledWith(deniedPreview.response, 403, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "console_forbidden",
         message: "missing console permission",
@@ -199,7 +199,7 @@ describe("tool-management core policy and HTTP extra coverage", () => {
       dryRun: true
     });
     expect(sendJsonMock).toHaveBeenLastCalledWith(preview.response, 200, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       decision: {
         effect: "allow",
         payload: {
@@ -240,7 +240,7 @@ describe("tool-management core policy and HTTP extra coverage", () => {
       bucketSeconds: 30
     });
     expect(sendJsonMock).toHaveBeenLastCalledWith(summary.response, 200, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       metrics: {
         checked: true,
         payload: {
@@ -275,7 +275,7 @@ describe("tool-management core policy and HTTP extra coverage", () => {
         createdAt: "2026-06-05T00:00:00.000Z"
       })),
       getGovernancePolicyRevision: vi.fn(() => ({
-        protocolVersion: "pact.policy.v1",
+        protocolVersion: "v0.0.1:risk-control:policy-1",
         revision: 5,
         updatedAt: "2026-06-05T00:00:00.000Z"
       }))
@@ -308,7 +308,7 @@ describe("tool-management core policy and HTTP extra coverage", () => {
       grantPolicyRevision: 7,
       grantPolicyState: "fresh",
       governancePolicyRevision: {
-        protocolVersion: "pact.policy.v1",
+        protocolVersion: "v0.0.1:risk-control:policy-1",
         revision: 5
       },
       missingScopes: ["scope:a", "scope:b"],
@@ -369,7 +369,7 @@ describe("tool-management core policy and HTTP extra coverage", () => {
         createdAt: "2026-06-05T00:00:00.000Z"
       })),
       getGovernancePolicyRevision: vi.fn(() => ({
-        protocolVersion: "pact.policy.v1",
+        protocolVersion: "v0.0.1:risk-control:policy-1",
         revision: 10,
         updatedAt: "2026-06-05T00:00:00.000Z"
       }))
@@ -454,7 +454,7 @@ describe("tool-management core policy and HTTP extra coverage", () => {
         createdAt: "2026-06-05T00:00:00.000Z"
       })),
       getGovernancePolicyRevision: vi.fn(() => ({
-        protocolVersion: "pact.policy.v1",
+        protocolVersion: "v0.0.1:risk-control:policy-1",
         revision: 11,
         updatedAt: "2026-06-05T00:00:00.000Z"
       }))

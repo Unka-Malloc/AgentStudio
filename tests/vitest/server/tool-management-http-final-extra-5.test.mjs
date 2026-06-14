@@ -52,7 +52,7 @@ function createUrl(pathname) {
 
 function createPlatform(overrides = {}) {
   const platform = {
-    catalog: vi.fn(() => ({ schemaVersion: 1, catalog: true })),
+    catalog: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1", catalog: true })),
     registry: {
       getTool: vi.fn((toolId) => (toolId === "known.tool" ? { id: toolId, label: "Known" } : null)),
       getToolByOperationId: vi.fn(() => null),
@@ -61,8 +61,8 @@ function createPlatform(overrides = {}) {
       listProfiles: vi.fn(() => [{ id: "profile-a" }])
     },
     runtime: {
-      executeTool: vi.fn(async () => ({ status: 207, payload: { schemaVersion: 1, executed: true } })),
-      resumePendingOperation: vi.fn(async (payload) => ({ status: 202, payload: { schemaVersion: 1, resumed: payload } }))
+      executeTool: vi.fn(async () => ({ status: 207, payload: { schemaVersion: "v0.0.1:schema:definition-1", executed: true } })),
+      resumePendingOperation: vi.fn(async (payload) => ({ status: 202, payload: { schemaVersion: "v0.0.1:schema:definition-1", resumed: payload } }))
     },
     store: {
       listGrants: vi.fn(() => [{ id: "grant-a" }]),
@@ -135,13 +135,13 @@ describe("tool management http final extra 5", () => {
 
     await callRouter(router, { path: "/api/tool-management/v1/catalog/known.tool" });
     expect(sendJsonMock).toHaveBeenLastCalledWith(expect.any(Object), 200, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       tool: { id: "known.tool", label: "Known" }
     });
 
     await callRouter(router, { path: "/api/tool-management/v1/catalog/missing.tool" });
     expect(sendJsonMock).toHaveBeenLastCalledWith(expect.any(Object), 404, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: { code: "unknown_tool", message: "Tool is not registered.", details: { toolId: "missing.tool" } }
     });
 
@@ -167,12 +167,12 @@ describe("tool management http final extra 5", () => {
     }));
     await callRouter(router, { path: "/api/tool-management/v1/audit/exec%2F1" });
     expect(sendJsonMock).toHaveBeenLastCalledWith(expect.any(Object), 200, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       audit: { toolExecutionId: "exec/1" }
     });
     await callRouter(router, { path: "/api/tool-management/v1/audit/missing" });
     expect(sendJsonMock).toHaveBeenLastCalledWith(expect.any(Object), 404, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: { code: "audit_not_found", message: "Audit record not found." }
     });
 
@@ -202,7 +202,7 @@ describe("tool management http final extra 5", () => {
 
     await callRouter(router, { method: "POST", path: "/api/tool-management/v1/grants/missing/rotate", headers: confirmed });
     expect(sendJsonMock).toHaveBeenLastCalledWith(expect.any(Object), 404, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: { code: "grant_not_found", message: "Grant not found." }
     });
     await callRouter(router, { method: "POST", path: "/api/tool-management/v1/grants/grant%2F1/rotate", headers: confirmed });
@@ -210,7 +210,7 @@ describe("tool management http final extra 5", () => {
 
     await callRouter(router, { method: "POST", path: "/api/tool-management/v1/grants/missing/revoke", headers: confirmed, body: { reason: "deny" } });
     expect(sendJsonMock).toHaveBeenLastCalledWith(expect.any(Object), 404, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: { code: "grant_not_found", message: "Grant not found." }
     });
     await callRouter(router, { method: "POST", path: "/api/tool-management/v1/grants/grant%2F2/revoke", headers: confirmed, body: { reason: "done" } });
@@ -218,7 +218,7 @@ describe("tool management http final extra 5", () => {
 
     await callRouter(router, { method: "POST", path: "/api/tool-management/v1/grants/missing", headers: confirmed, body: { label: "x" } });
     expect(sendJsonMock).toHaveBeenLastCalledWith(expect.any(Object), 404, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: { code: "grant_not_found", message: "Grant not found." }
     });
     await callRouter(router, { method: "POST", path: "/api/tool-management/v1/grants/grant%2F3", headers: confirmed, body: { label: "ok" } });
@@ -262,12 +262,13 @@ describe("tool management http final extra 5", () => {
       resolution: "approved",
       resolvedBy: "reviewer-a",
       reason: "allowed",
-      context: { source: "unit" }
+      context: expect.objectContaining({ source: "unit", transport: "tool-http-approval" }),
+      request: expect.any(Object)
     }));
 
     await callRouter(router, { path: "/api/tool-management/v1/unknown-route" });
     expect(sendJsonMock).toHaveBeenLastCalledWith(expect.any(Object), 404, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "tool_management_route_not_found",
         message: "Tool management route not found.",
@@ -350,7 +351,7 @@ describe("tool management http final extra 5", () => {
       body: { resolution: "approved" }
     });
     expect(sendJsonMock).toHaveBeenLastCalledWith(expect.any(Object), 503, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "pending_operation_runtime_unavailable",
         message: "Pending operation runtime is unavailable."

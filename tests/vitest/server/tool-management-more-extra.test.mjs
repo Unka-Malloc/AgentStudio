@@ -10,7 +10,7 @@ const sendJsonMock = vi.hoisted(() => vi.fn((response, status, payload) => {
 const dispatchOperationMock = vi.hoisted(() => vi.fn(async ({ response }) => {
   response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     result: { ok: true }
   }));
   return { ok: true };
@@ -159,7 +159,7 @@ function createRuntimeFixture(overrides = {}) {
       grantPolicyRevision: 1,
       grantPolicyState: "active",
       governancePolicyRevision: {
-        protocolVersion: "pact.policy.v1",
+        protocolVersion: "v0.0.1:risk-control:policy-1",
         revision: 1,
         updatedAt: "2026-06-05T00:00:00.000Z"
       }
@@ -199,17 +199,17 @@ function createPlatform(overrides = {}) {
   const runtime = {
     executeTool: vi.fn(async () => ({
       status: 200,
-      payload: { schemaVersion: 1, result: { ok: true } }
+      payload: { schemaVersion: "v0.0.1:schema:definition-1", result: { ok: true } }
     })),
     resumePendingOperation: vi.fn(async () => ({
       status: 200,
-      payload: { schemaVersion: 1, status: "completed" }
+      payload: { schemaVersion: "v0.0.1:schema:definition-1", status: "completed" }
     })),
     ...overrides.runtime
   };
 
   const platform = {
-    catalog: vi.fn(() => ({ schemaVersion: 1, catalog: true })),
+    catalog: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1", catalog: true })),
     registry: {
       getTool: vi.fn(() => ({ id: "tool.alpha" })),
       getToolByOperationId: vi.fn(() => ({ id: "tool.alpha" })),
@@ -356,7 +356,7 @@ describe("tool-management runtime (extra coverage)", () => {
       effect: "deny"
     }));
     expect(fixture.securityPermissions.appendDecision).toHaveBeenCalledWith(expect.objectContaining({
-      protocolVersion: "pact.authorization.v1",
+      protocolVersion: "v0.0.1:risk-control:authorization-1",
       effect: "deny",
       redactedReason: "缺少工具访问令牌。",
       resource: expect.objectContaining({
@@ -388,7 +388,7 @@ describe("tool-management runtime (extra coverage)", () => {
           grantPolicyRevision: 2,
           grantPolicyState: "active",
           governancePolicyRevision: {
-            protocolVersion: "pact.policy.v1",
+            protocolVersion: "v0.0.1:risk-control:policy-1",
             revision: 2,
             updatedAt: "2026-06-05T00:00:00.000Z"
           }
@@ -519,7 +519,7 @@ describe("tool-management http router (extra coverage)", () => {
 
     expect(result.handled).toBe(true);
     expect(sendJsonMock).toHaveBeenCalledWith(result.response, 404, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "tool_management_route_not_found",
         message: "Tool management route not found.",
@@ -543,7 +543,7 @@ describe("tool-management http router (extra coverage)", () => {
 
     expect(result.handled).toBe(true);
     expect(sendJsonMock).toHaveBeenCalledWith(result.response, 404, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "unknown_tool",
         message: "Tool is not registered.",

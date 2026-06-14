@@ -128,7 +128,7 @@ function decorateTaxonomy(value = {}) {
 
 function seedExpertVocabularyForTaxonomy(taxonomy) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     version: 1,
     updatedAt: new Date().toISOString(),
     publishedAt: new Date().toISOString(),
@@ -145,7 +145,7 @@ function ensureJsonFileSync(filePath, seed) {
 
 function normalizeExpertVocabularyForGuidance(value = {}) {
   return {
-    schemaVersion: Number(value.schemaVersion || 1),
+    schemaVersion: String(value.schemaVersion || "v0.0.1:schema:definition-1"),
     version: Number(value.version || 1),
     source: normalizeText(value.source || ""),
     updatedAt: normalizeText(value.updatedAt || ""),
@@ -171,7 +171,7 @@ function normalizeExpertVocabularyForGuidance(value = {}) {
 
 function normalizeEmailRulesForGuidance(value = {}) {
   return {
-    schemaVersion: Number(value.schemaVersion || 1),
+    schemaVersion: String(value.schemaVersion || "v0.0.1:schema:definition-1"),
     updatedAt: normalizeText(value.updatedAt || ""),
     reportSeries: (Array.isArray(value.reportSeries) ? value.reportSeries : [])
       .filter((entry) => entry?.enabled !== false)

@@ -72,7 +72,7 @@ function forbiddenPortablePaths(value, pathParts = []) {
 }
 
 function assertPortableDocument(document) {
-  assert.equal(document?.protocolVersion, "portable.knowledge-distillation.v1");
+  assert.equal(document?.protocolVersion, "v0.0.1:strategy:portable-knowledge-distillation-1");
   assert.equal(document?.selfContained, true);
   assert.deepEqual(document?.runtimeDependencies, []);
   assert.ok(document?.contentBlocks?.length >= 2);
@@ -129,7 +129,7 @@ try {
   );
 
   const rules = await fetchJson(`${server.url}/api/knowledge/golden-rules`);
-  assert.equal(rules.protocolVersion, "pact.golden-rule.v1");
+  assert.equal(rules.protocolVersion, "v0.0.1:knowledge:golden-rule-1");
   assert.ok(rules.items.some((item) => item.packageId === "default-golden-rules"));
 
   const framework = await fetchJson(`${server.url}/api/knowledge/skill-framework`);
@@ -156,7 +156,7 @@ try {
       publish: true
     })
   });
-  assert.equal(generated.protocolVersion, "pact.knowledge-skill.v1");
+  assert.equal(generated.protocolVersion, "v0.0.1:knowledge:skill-1");
   assert.equal(generated.skill.status, "pending_review");
   assert.equal(generated.qualityReport.passed, true);
 
@@ -219,7 +219,7 @@ try {
       semanticSupportRequired: false
     })
   });
-  assert.equal(distillation.protocolVersion, "pact.knowledge-distillation.v1");
+  assert.equal(distillation.protocolVersion, "v0.0.1:knowledge:distillation-1");
   assert.equal(distillation.status, "completed");
   assert.equal(distillation.rawCorpus.primary, true);
   assert.ok(distillation.rawCorpus.documentCount >= 1);

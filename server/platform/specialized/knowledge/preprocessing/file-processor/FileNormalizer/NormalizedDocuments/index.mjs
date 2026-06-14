@@ -264,7 +264,7 @@ function buildExportConsistencyBaseline(spec, source) {
   });
 
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     sourceFormat: source?.mediaType === "text/markdown" ? "markdown" : scalar(source?.mediaType || "plain-text"),
     targetFormat: "docx",
     sectionCount: normalizedSections.length,
@@ -309,8 +309,8 @@ async function writeDocxSpec({
   await fs.mkdir(path.dirname(machineReadablePath), { recursive: true });
   const documentId = docId(adapterId.replace(/[^a-z0-9]+/gi, "-"), source, `${granularity}:${fileName}`);
   const machineYaml = buildMachineYamlDocument({
-    schemaVersion: 1,
-    artifactType: "pact.normalized-document.machine.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    artifactType: "v0.0.1:knowledge:normalized-document-machine-1",
     role: "machine-readable-normalization",
     humanDocumentId: documentId,
     humanDocumentRelativePath: relativePath,
@@ -1181,7 +1181,7 @@ export async function generateNormalizedDocuments({
   }
 
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     packageType: "pact.normalized-documents",
     packageRole: "external-knowledge-corpus",
     batchId: jobId,

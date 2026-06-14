@@ -221,7 +221,7 @@ describe("knowledge-source service focused extra coverage", () => {
   it("hydrates placeholder files with replace-mode rules, reuses staged files, and respects non-recursive scans", async () => {
     await withTempDir(async (root) => {
       await writeJson(path.join(root, "knowledge-sources", "source-hydration.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         placeholderExtensionsMode: "replace",
         placeholderTextSignaturesMode: "replace",
         placeholderExtensions: [".cloud"],

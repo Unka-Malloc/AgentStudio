@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const taxonomyRuntimeMock = {
   loadSync: vi.fn(() => ({
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     version: "mock-rich",
     source: "mock-taxonomy-rich",
     checksum: "taxonomy-checksum",
@@ -42,14 +42,14 @@ const vectorStoreMock = {
 };
 
 const learningRuntimeMock = {
-  protocolVersion: "pact.learning.v1",
+  protocolVersion: "v0.0.1:knowledge:learning-1",
   health: vi.fn(async () => ({
-    protocolVersion: "pact.learning.v1",
+    protocolVersion: "v0.0.1:knowledge:learning-1",
     ok: true,
     degraded: false
   })),
   capabilities: vi.fn(() => ({
-    protocolVersion: "pact.learning.v1",
+    protocolVersion: "v0.0.1:knowledge:learning-1",
     enabled: true,
     safeAutoApplySuggestionTypes: ["retrievalProfile"]
   })),
@@ -62,7 +62,7 @@ const learningRuntimeMock = {
     explanations: []
   })),
   proposeProfile: vi.fn(({ activeProfile } = {}) => ({
-    protocolVersion: "pact.learning.v1",
+    protocolVersion: "v0.0.1:knowledge:learning-1",
     autoApplicable: false,
     candidate: {
       profileId: `${activeProfile?.profileId || "balanced"}-candidate`,
@@ -80,9 +80,9 @@ const learningRuntimeMock = {
 };
 
 const outlineRuntimeMock = {
-  protocolVersion: "pact.document-outline.v1",
+  protocolVersion: "v0.0.1:knowledge:document-outline-1",
   build: vi.fn(({ document, sections = [], blocks = [] } = {}) => ({
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     documentId: document?.documentId || "",
     nodeCount: 2,
     syntheticNodeCount: 0,
@@ -148,9 +148,9 @@ vi.mock("../../../server/platform/specialized/knowledge/preprocessing/domain/kno
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/retrieval/embedding-runtime/index.mjs", () => ({
-  EMBEDDING_PROTOCOL_VERSION: "pact.embedding.v1",
+  EMBEDDING_PROTOCOL_VERSION: "v0.0.1:knowledge:embedding-1",
   createEmbeddingRuntime: vi.fn(() => ({
-    protocolVersion: "pact.embedding.v1",
+    protocolVersion: "v0.0.1:knowledge:embedding-1",
     embedText: vi.fn((value = "") => ({
       vector: Array(8).fill(String(value).length / 1000),
       text: String(value),
@@ -170,12 +170,12 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/embedding-runt
       dimension: 8
     })),
     health: vi.fn(() => ({
-      protocolVersion: "pact.embedding.v1",
+      protocolVersion: "v0.0.1:knowledge:embedding-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.embedding.v1",
+      protocolVersion: "v0.0.1:knowledge:embedding-1",
       providers: ["mock"]
     }))
   }))
@@ -187,7 +187,7 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/vector-store/L
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runtime/index.mjs", () => ({
-  LEARNING_PROTOCOL_VERSION: "pact.learning.v1",
+  LEARNING_PROTOCOL_VERSION: "v0.0.1:knowledge:learning-1",
   createLearningRuntime: vi.fn(() => learningRuntimeMock)
 }));
 
@@ -392,7 +392,7 @@ describe("knowledge-core index even more coverage", () => {
       });
       expect(search.responseProfile).toBe("agent");
       expect(search.agentMessage).toMatchObject({
-        protocolVersion: "pact.knowledge-search.agent-message.v1",
+        protocolVersion: "v0.0.1:knowledge:search-agent-message-1",
         machineReadable: true,
         query: "promo offer coupon"
       });

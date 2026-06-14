@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const KNOWLEDGE_TAXONOMY_SCHEMA_VERSION = 1;
+export const KNOWLEDGE_TAXONOMY_SCHEMA_VERSION = "v0.0.1:knowledge:taxonomy-schema-1";
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 export const BUNDLED_KNOWLEDGE_TAXONOMY_PATH = path.resolve(

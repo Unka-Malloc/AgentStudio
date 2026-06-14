@@ -2,9 +2,9 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-export const DATA_CONNECTOR_GOVERNANCE_PROTOCOL_VERSION = "pact.data-connector-governance.v1";
-export const DATA_CONNECTOR_MANIFEST_PROTOCOL_VERSION = "pact.data-connector.v1";
-export const LOCAL_MIRROR_PROTOCOL_VERSION = "pact.local-mirror.v1";
+export const DATA_CONNECTOR_GOVERNANCE_PROTOCOL_VERSION = "v0.0.1:storage:data-connector-governance-1";
+export const DATA_CONNECTOR_MANIFEST_PROTOCOL_VERSION = "v0.0.1:storage:data-connector-1";
+export const LOCAL_MIRROR_PROTOCOL_VERSION = "v0.0.1:storage:local-mirror-1";
 
 const STATE_DIR = "data-connector-governance";
 const STATE_FILE = "registry.json";

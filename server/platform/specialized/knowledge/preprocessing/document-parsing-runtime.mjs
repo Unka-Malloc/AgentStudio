@@ -408,7 +408,7 @@ function publicSource(source = {}) {
 
 export function toPublicDocumentParsingResult(result = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     generatedAt: result.generatedAt || "",
     pipelineId: result.pipelineId || DEFAULT_PIPELINE_ID,
     expectedOutputs: asArray(result.expectedOutputs),

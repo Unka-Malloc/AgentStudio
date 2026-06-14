@@ -164,7 +164,7 @@ async function assertNormalizedHumanDocxAndYamlMachineState() {
   assertDocxNotIncludes(buffer, "startLine", "human DOCX must not expose source range internals");
 
   assert.deepEqual(firstDocx.exportConsistencyBaseline, {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     sourceFormat: "markdown",
     targetFormat: "docx",
     sectionCount: 1,
@@ -199,7 +199,7 @@ async function assertNormalizedHumanDocxAndYamlMachineState() {
     path.join(userDataPath, "jobs", jobId, "normalized-documents", firstDocx.machineReadableRelativePath),
     "utf8"
   );
-  assert.ok(machineYaml.includes("pact.normalized-document.machine.v1"));
+  assert.ok(machineYaml.includes("v0.0.1:knowledge:normalized-document-machine-1"));
   assert.ok(machineYaml.includes("chunk-background"));
   assert.ok(machineYaml.includes("section-background"));
   assert.ok(machineYaml.includes("exportConsistencyBaseline:"));

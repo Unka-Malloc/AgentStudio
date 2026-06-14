@@ -245,11 +245,6 @@ const SOURCE_LABEL_OVERRIDES = new Map([
   ["steampowered.com", "Steam"],
   ["steamcommunity.com", "Steam"],
   ["patreon.com", "Patreon"],
-  ["hsbc.co.uk", "HSBC"],
-  ["hsbc.com", "HSBC"],
-  ["monzo.com", "Monzo"],
-  ["monzoemail.com", "Monzo"],
-  ["monzomail.com", "Monzo"],
   ["paypal.com", "PayPal"],
   ["amazon.co.uk", "Amazon"],
   ["amazon.com", "Amazon"],
@@ -273,10 +268,6 @@ const SOURCE_BASE_LABEL_OVERRIDES = new Map([
   ["steam", "Steam"],
   ["steampowered", "Steam"],
   ["patreon", "Patreon"],
-  ["hsbc", "HSBC"],
-  ["monzo", "Monzo"],
-  ["monzoemail", "Monzo"],
-  ["monzomail", "Monzo"],
   ["paypal", "PayPal"],
   ["amazon", "Amazon"],
   ["netflix", "Netflix"],
@@ -294,8 +285,6 @@ const SOURCE_BASE_LABEL_OVERRIDES = new Map([
 ]);
 const BANK_SOURCE_PATTERNS = [
   /bank/i,
-  /hsbc/i,
-  /monzo/i,
   /finnair plus/i,
   /银行/,
   /信用/
@@ -310,10 +299,7 @@ const SOURCE_TYPE_OVERRIDES = new Map([
   ["patreon", "creator-platform"],
   ["substack", "creator-platform"],
   ["pixiv", "creator-platform"],
-  ["hsbc", "bank"],
-  ["monzo", "bank"],
-  ["paypal", "bank"],
-  ["招商银行信用卡", "bank"]
+  ["paypal", "bank"]
 ]);
 const BUSINESS_ENTITY_PATTERNS = {
   contractIds: [
@@ -2555,7 +2541,7 @@ function messageKnowledgeChildren(messages = []) {
 
 function transactionOverviewPayload(item) {
   return {
-    schemaVersion: "pact.transaction-overview.v1",
+    schemaVersion: "v0.0.1:transaction:transaction-overview-1",
     lineageId: item.lineageId,
     title: item.title,
     source: {
@@ -2600,7 +2586,7 @@ function transactionOverviewPayload(item) {
 
 function transactionMachinePayload(item) {
   return {
-    schemaVersion: "pact.transaction-knowledge.v2",
+    schemaVersion: "v0.0.1:knowledge:transaction-knowledge-2",
     overview: transactionOverviewPayload(item),
     transaction: {
       lineageId: item.lineageId,
@@ -2684,7 +2670,7 @@ async function writeArtifacts({ outputPath, roots, lineages, stats, maxDocs = DE
     });
   const recurring = summaries.filter((item) => item.occurrenceCount >= 2);
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     generatedAt: new Date().toISOString(),
     roots,
     outputPath,

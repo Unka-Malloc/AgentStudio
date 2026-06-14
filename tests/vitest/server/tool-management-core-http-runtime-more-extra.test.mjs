@@ -6,7 +6,7 @@ import { createToolExecutionRuntime } from "../../../server/platform/specialized
 const dispatchOperationMock = vi.hoisted(() => vi.fn(async ({ response }) => {
   response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     result: { ok: true }
   }));
   return { ok: true };
@@ -69,7 +69,7 @@ function createUrl(pathname) {
 
 function createPlatform(overrides = {}) {
   const platform = {
-    catalog: vi.fn(() => ({ schemaVersion: 1, catalog: true })),
+    catalog: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1", catalog: true })),
     registry: {
       getTool: vi.fn((toolId) => ({ id: toolId })),
       getToolByOperationId: vi.fn(() => null),
@@ -89,12 +89,12 @@ function createPlatform(overrides = {}) {
       updateGrant: vi.fn(),
       listAudit: vi.fn(() => []),
       getAudit: vi.fn(() => null),
-      metricsSummary: vi.fn(() => ({ schemaVersion: 1 })),
-      metricsExport: vi.fn(() => ({ schemaVersion: 1 })),
-      metricsHealth: vi.fn(() => ({ schemaVersion: 1 })),
+      metricsSummary: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
+      metricsExport: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
+      metricsHealth: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
       metricsPrometheus: vi.fn(() => "metric 1"),
-      metricsStorageSummary: vi.fn(() => ({ schemaVersion: 1 })),
-      pruneMetrics: vi.fn(() => ({ schemaVersion: 1 })),
+      metricsStorageSummary: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
+      pruneMetrics: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
       listPendingOperations: vi.fn(() => [])
     },
     policyEngine: {
@@ -193,7 +193,7 @@ function createRuntimeFixture(overrides = {}) {
       grantPolicyRevision: 1,
       grantPolicyState: "active",
       governancePolicyRevision: {
-        protocolVersion: "pact.policy.v1",
+        protocolVersion: "v0.0.1:risk-control:policy-1",
         revision: 1,
         updatedAt: "2026-06-05T00:00:00.000Z"
       }
@@ -302,7 +302,7 @@ describe("tool-management core HTTP/catalog/runtime more extra coverage", () => 
 
     expect(result.handled).toBe(true);
     expect(sendJsonMock).toHaveBeenCalledWith(result.response, 401, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "console_unauthenticated",
         message: "login required",
@@ -330,7 +330,7 @@ describe("tool-management core HTTP/catalog/runtime more extra coverage", () => 
     expect(resolve.handled).toBe(true);
     expect(platform.registry.resolveToolset).toHaveBeenCalledWith({});
     expect(sendJsonMock).toHaveBeenLastCalledWith(resolve.response, 200, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       result: {
         resolved: true,
         payload: {}
@@ -352,7 +352,7 @@ describe("tool-management core HTTP/catalog/runtime more extra coverage", () => 
 
     expect(pending.handled).toBe(true);
     expect(sendJsonMock).toHaveBeenCalledWith(pending.response, 503, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "pending_operation_runtime_unavailable",
         message: "Pending operation runtime is unavailable."

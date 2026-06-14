@@ -161,7 +161,7 @@ function eml({ subject, body }) {
 
 async function writeSearchRules(userDataPath, overrides = {}) {
   await writeJson(path.join(userDataPath, "rules", "source-search-rules.json"), {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: overrides.updatedAt || "2026-06-05T00:00:00.000Z",
     maxFileBytes: 256 * 1024,
     maxEvidenceBytes: 16 * 1024,

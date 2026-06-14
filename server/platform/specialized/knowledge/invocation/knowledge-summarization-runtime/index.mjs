@@ -6,7 +6,7 @@ import {
   MULTI_AGENT_COORDINATOR_PROTOCOL_VERSION
 } from "../../../agent/agent-gateway/multi-agent-coordinator/index.mjs";
 
-export const SUMMARIZATION_PROTOCOL_VERSION = "pact.summarization.v1";
+export const SUMMARIZATION_PROTOCOL_VERSION = "v0.0.1:knowledge:summarization-1";
 
 // Summarization is an externally callable knowledge workflow, not context-window compaction.
 const DEFAULT_QUERY = "总结 摘要 关键事项 时间 金额 风险 责任 决策";
@@ -580,7 +580,7 @@ export function createSummarizationRuntime({
       Retrieve: async (state) => {
         const knowledgeCore = getKnowledgeCore(runtime);
         let searchResult = {
-          protocolVersion: "pact.knowledge.v1",
+          protocolVersion: "v0.0.1:knowledge:core-1",
           query,
           items: [],
           degraded: true

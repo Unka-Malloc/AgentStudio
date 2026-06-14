@@ -81,7 +81,7 @@ function createSecurityPermissions(overrides = {}) {
 
 function createPlatform(overrides = {}) {
   const platform = {
-    catalog: vi.fn(() => ({ schemaVersion: 1, catalog: true })),
+    catalog: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1", catalog: true })),
     registry: {
       getTool: vi.fn(() => null),
       getToolByOperationId: vi.fn(() => null),
@@ -93,27 +93,27 @@ function createPlatform(overrides = {}) {
       executeTool: vi.fn(async () => ({
         status: 200,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           result: { ok: true }
         }
       }))
     },
     store: {
       listGrants: vi.fn(() => []),
-      createGrant: vi.fn(async () => ({ grant: { id: "grant-1" }, token: "sat_test" })),
-      rotateGrantToken: vi.fn(async () => ({ grant: { id: "grant-1" }, token: "sat_rotated" })),
+      createGrant: vi.fn(async () => ({ grant: { id: "grant-1" }, token: "ock_test" })),
+      rotateGrantToken: vi.fn(async () => ({ grant: { id: "grant-1" }, token: "ock_rotated" })),
       revokeGrant: vi.fn(async () => ({ id: "grant-1" })),
       updateGrant: vi.fn(() => ({ id: "grant-1" })),
       listAudit: vi.fn(() => []),
       getAudit: vi.fn(() => null),
-      metricsSummary: vi.fn(() => ({ schemaVersion: 1 })),
-      metricsExport: vi.fn(() => ({ schemaVersion: 1 })),
-      metricsHealth: vi.fn(() => ({ schemaVersion: 1 })),
+      metricsSummary: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
+      metricsExport: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
+      metricsHealth: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
       metricsPrometheus: vi.fn(() => "metric"),
-      metricsStorageSummary: vi.fn(() => ({ schemaVersion: 1 })),
-      pruneMetrics: vi.fn(() => ({ schemaVersion: 1 })),
+      metricsStorageSummary: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
+      pruneMetrics: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
       listPendingOperations: vi.fn(() => []),
-      resolvePendingOperation: vi.fn(async () => ({ status: 200, payload: { schemaVersion: 1 } }))
+      resolvePendingOperation: vi.fn(async () => ({ status: 200, payload: { schemaVersion: "v0.0.1:schema:definition-1" } }))
     },
     policyEngine: {
       preview: vi.fn(() => ({ effect: "allow" }))
@@ -227,7 +227,7 @@ function createRuntimeFixture(overrides = {}) {
       grantPolicyRevision: 1,
       grantPolicyState: "active",
       governancePolicyRevision: {
-        protocolVersion: "pact.policy.v1",
+        protocolVersion: "v0.0.1:risk-control:policy-1",
         revision: 1,
         updatedAt: "2026-06-05T00:00:00.000Z"
       }
@@ -525,7 +525,7 @@ describe("tool-management core final extra 3", () => {
     dispatchOperationMock.mockImplementationOnce(async ({ response, input, params, url }) => {
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       response.end(JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         result: {
           ok: true,
           path: url.pathname,
@@ -550,7 +550,7 @@ describe("tool-management core final extra 3", () => {
       ok: true,
       status: 200,
       payload: {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         toolId: tool.id,
         status: "ok",
         result: {

@@ -1,6 +1,6 @@
 {
-  "id": "pact.knowledge.admin",
-  "label": "Knowledge admin",
+  "id": "pact.agentLibrary.admin",
+  "label": "Agent Library admin",
   "requiredScopes": [
     "knowledge:read",
     "knowledge:write",

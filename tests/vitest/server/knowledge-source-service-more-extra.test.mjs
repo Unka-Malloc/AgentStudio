@@ -211,7 +211,7 @@ describe("knowledge-source service more extra coverage", () => {
       await fs.mkdir(disabledDir);
 
       await writeJson(path.join(root, "knowledge-sources", "sources.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-01-01T00:00:00.000Z",
         sources: [
           {

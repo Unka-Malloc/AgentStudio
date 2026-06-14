@@ -126,7 +126,7 @@ describe("DocumentOutlineRuntime", () => {
       defaultMaxTreeNodes: 6,
     });
 
-    expect(runtime.protocolVersion).toBe("pact.document-outline.v1");
+    expect(runtime.protocolVersion).toBe("v0.0.1:knowledge:document-outline-1");
     expect(runtime.rangeContainsPosition({ blockStart: 2, blockEnd: 4 }, 3)).toBe(true);
     expect(runtime.rangeContainsPosition({ blockStart: 2, blockEnd: 4 }, 1)).toBe(false);
 
@@ -162,7 +162,7 @@ describe("DocumentOutlineRuntime", () => {
     });
 
     expect(outline).toMatchObject({
-      protocolVersion: "pact.document-outline.v1",
+      protocolVersion: "v0.0.1:knowledge:document-outline-1",
       documentId: "doc-outline",
       nodeCount: 2,
       syntheticNodeCount: 0,

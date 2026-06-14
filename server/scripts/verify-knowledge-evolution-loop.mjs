@@ -66,12 +66,12 @@ try {
   );
 
   const roles = await fetchJson(`${server.url}/api/knowledge/model-roles`);
-  assert.equal(roles.protocolVersion, "pact.model-decision.v1");
+  assert.equal(roles.protocolVersion, "v0.0.1:strategy:model-decision-1");
   assert.ok(roles.roles.some((role) => role.roleId === "evidence_entailment_judge"));
   assert.equal(roles.explicitModelEnableRequired, true);
 
   const evolution = await fetchJson(`${server.url}/api/knowledge/evolution`);
-  assert.equal(evolution.protocolVersion, "pact.knowledge-evolution.v1");
+  assert.equal(evolution.protocolVersion, "v0.0.1:knowledge:evolution-1");
   assert.equal(evolution.policy.canaryBeforeActive, true);
   assert.equal(evolution.policy.noDatasetSpecificFineTuning, true);
 
@@ -122,7 +122,7 @@ try {
       }
     })
   });
-  assert.equal(skillRun.protocolVersion, "pact.knowledge-agent-skill.v1");
+  assert.equal(skillRun.protocolVersion, "v0.0.1:knowledge:agent-skill-1");
   assert.equal(skillRun.modelDecisions.semanticJudgement.roleId, "evidence_entailment_judge");
   assert.equal(skillRun.modelDecisions.semanticJudgement.usedModel, false);
 
@@ -165,7 +165,7 @@ try {
       persistSuggestions: true
     })
   });
-  assert.equal(hierarchyAudit.protocolVersion, "pact.knowledge-evolution.v1");
+  assert.equal(hierarchyAudit.protocolVersion, "v0.0.1:knowledge:evolution-1");
   assert.equal(hierarchyAudit.audit.policy.suggestionReviewRequired, true);
   assert.equal(hierarchyAudit.modelDecision.roleId, "hierarchy_quality_reviewer");
 
@@ -195,7 +195,7 @@ try {
       }
     })
   });
-  assert.equal(evolutionRun.protocolVersion, "pact.knowledge-evolution.v1");
+  assert.equal(evolutionRun.protocolVersion, "v0.0.1:knowledge:evolution-1");
   assert.equal(evolutionRun.status, "canary_published");
   assert.equal(evolutionRun.caseSource, "provided");
   assert.equal(evolutionRun.regressionGate.passed, true);

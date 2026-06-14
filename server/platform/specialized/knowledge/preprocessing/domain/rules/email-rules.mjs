@@ -17,7 +17,7 @@ function loadBundledEmailRules() {
     return JSON.parse(fsSync.readFileSync(BUNDLED_EMAIL_RULES_PATH, "utf8"));
   } catch {
     return {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       updatedAt: "",
       reportSeries: [],
       synonymDictionary: [],

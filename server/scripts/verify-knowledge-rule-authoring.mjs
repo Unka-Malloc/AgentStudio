@@ -33,7 +33,7 @@ try {
       modelEnabled: false
     })
   });
-  assert.equal(generated.protocolVersion, "pact.knowledge-rule-authoring.v1");
+  assert.equal(generated.protocolVersion, "v0.0.1:knowledge:rule-authoring-1");
   assert.equal(generated.ok, true);
   assert.equal(generated.status, "pending_human_confirmation");
   assert.equal(generated.intent.needsRule, true);

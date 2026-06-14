@@ -160,7 +160,7 @@ async function verifyBillingIntentSearch() {
       )
     );
     const specificMissSearch = knowledgeCore.search({
-      query: "招商银行信用卡电子账单",
+      query: "不存在的 Atlas 部署记录",
       limit: 10,
       explain: true,
       learningEnabled: false
@@ -548,7 +548,7 @@ try {
 
   await waitForJob(server.url, createdJob.id);
   const result = await fetchJson(`${server.url}/api/jobs/${createdJob.id}/result`);
-  assert.equal(result.preprocess?.resultType, "pact.knowledge.preprocess-result");
+  assert.equal(result.preprocess?.resultType, "pact.agentLibrary.preprocess-result");
   assert.ok(result.preprocess.blocks.length > 0);
   assert.ok(result.preprocess.chunks.length > 0);
   assert.equal(result.preprocess.counts.sources, result.sourceFiles.length);

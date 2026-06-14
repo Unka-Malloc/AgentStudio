@@ -155,7 +155,7 @@ describe("document parsing runtime", () => {
     });
 
     expect(publicResult).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       generatedAt: "2026-06-04T00:00:00.000Z",
       pipelineId: "knowledge-rule-v1",
       expectedOutputs: ["sources", "preprocess-result"],

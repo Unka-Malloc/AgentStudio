@@ -1,6 +1,6 @@
 # External Knowledge Base
 
-`ExternalKnowledgeBase` is an optional `knowledgeBase` mount for `pact.knowledge.v1`.
+`ExternalKnowledgeBase` is an optional `knowledgeBase` mount for `v0.0.1:knowledge:core-1`.
 
 It keeps the built-in `KnowledgeCore` as the canonical evidence, asset, DOCX export, and maintenance store, then mirrors searchable second-layer records into an external backend. `knowledge.search` can use the external backend first and rehydrate Pact evidence from the local adapter sidecar, so callers still receive normal evidence packs instead of backend-native chunks.
 

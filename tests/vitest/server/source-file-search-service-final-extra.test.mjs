@@ -98,7 +98,7 @@ async function writeJson(filePath, value) {
 
 async function prepareRules(userDataPath, extra = {}) {
   await writeJson(path.join(userDataPath, "rules", "source-search-rules.json"), {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: extra.updatedAt || `rules-${Math.random()}`,
     maxFileBytes: 256 * 1024,
     maxEvidenceBytes: 16 * 1024,

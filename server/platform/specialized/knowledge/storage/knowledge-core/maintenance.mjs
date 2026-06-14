@@ -1,4 +1,4 @@
-const DEFAULT_PROTOCOL_VERSION = "pact.knowledge.v1";
+const DEFAULT_PROTOCOL_VERSION = "v0.0.1:knowledge:core-1";
 
 const SEVERITY_RANK = {
   critical: 3,

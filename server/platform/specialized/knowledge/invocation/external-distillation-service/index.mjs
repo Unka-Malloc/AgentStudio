@@ -1,5 +1,5 @@
 export const EXTERNAL_KNOWLEDGE_DISTILLATION_PROTOCOL_VERSION =
-  "pact.external-knowledge-distillation.v1";
+  "v0.0.1:external-service:knowledge-distillation-1";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -132,7 +132,7 @@ function externalServiceCallRecord({
   const durationMs = Math.max(0, Date.now() - startedAtMs);
   const transferBytes = Math.max(0, Number(requestBytes || 0)) + Math.max(0, Number(responseBytes || 0));
   return {
-    protocolVersion: `${EXTERNAL_KNOWLEDGE_DISTILLATION_PROTOCOL_VERSION}.gateway-call-telemetry`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-gateway-call-telemetry-1",
     service: "external.knowledge.distillation",
     baseUrl,
     method,

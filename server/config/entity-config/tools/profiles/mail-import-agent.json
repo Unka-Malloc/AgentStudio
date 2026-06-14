@@ -5,7 +5,7 @@
   "toolsets": [
     "pact.mail.import",
     "pact.document.parse",
-    "pact.knowledge.write"
+    "pact.agentLibrary.write"
   ],
   "toolAllow": [],
   "toolDeny": [

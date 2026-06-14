@@ -67,13 +67,13 @@ import { buildKnowledgeDocxExport } from "./knowledge-docx-export.mjs";
 import { buildKnowledgeMarkdownExport } from "./knowledge-markdown-export.mjs";
 import { buildKnowledgeHtmlExport } from "./knowledge-html-export.mjs";
 
-export const KNOWLEDGE_PROTOCOL_VERSION = "pact.knowledge.v1";
-export const VECTOR_PROTOCOL_VERSION = "pact.vector.v1";
-export const EMBEDDING_PROTOCOL_VERSION = "pact.embedding.v1";
-export const ASSET_STORE_PROTOCOL_VERSION = "pact.assetStore.v1";
-export const RETRIEVAL_PROTOCOL_VERSION = "pact.retrieval.v1";
+export const KNOWLEDGE_PROTOCOL_VERSION = "v0.0.1:knowledge:core-1";
+export const VECTOR_PROTOCOL_VERSION = "v0.0.1:knowledge:vector-1";
+export const EMBEDDING_PROTOCOL_VERSION = "v0.0.1:knowledge:embedding-1";
+export const ASSET_STORE_PROTOCOL_VERSION = "v0.0.1:storage:asset-store-1";
+export const RETRIEVAL_PROTOCOL_VERSION = "v0.0.1:knowledge:retrieval-1";
 export const LEARNING_RUNTIME_PROTOCOL_VERSION = LEARNING_PROTOCOL_VERSION;
-export const KNOWLEDGE_SEARCH_AGENT_MESSAGE_PROTOCOL_VERSION = "pact.knowledge-search.agent-message.v1";
+export const KNOWLEDGE_SEARCH_AGENT_MESSAGE_PROTOCOL_VERSION = "v0.0.1:knowledge:search-agent-message-1";
 
 function nowIso() {
   return new Date().toISOString();

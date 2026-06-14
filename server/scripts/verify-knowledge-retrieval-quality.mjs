@@ -236,7 +236,7 @@ try {
 
   process.stdout.write(`${JSON.stringify({
     ok: true,
-    protocolVersion: "pact.knowledge.retrieval-quality.v1",
+    protocolVersion: "v0.0.1:knowledge:retrieval-quality-1",
     metrics: quality.metrics,
     caseCount: quality.caseCount,
     cases: quality.caseResults.map((item) => ({

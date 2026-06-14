@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
 const defaultManifestPath = path.join(repoRoot, "external-services/knowledge-distillation-service/reference-frameworks.json");
-const PROTOCOL_VERSION = "pact.external-knowledge-distillation.reference-sync.v1";
+const PROTOCOL_VERSION = "v0.0.1:external-service:knowledge-distillation-reference-sync-1";
 const STRATEGY = "manifest-pinned-git-reference-sync.v1";
 
 function parseArgs(argv = []) {

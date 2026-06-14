@@ -13,9 +13,9 @@ DOCX exports are offline corpus artifacts for other knowledge bases. Agents shou
 
 The required order is:
 
-1. Plan intent, broad branch, evidence needs, query rewrite, and validation with `/api/knowledge/agent-skill/plan` or tool id `pact.knowledge.agentSkill.plan` when available.
+1. Plan intent, broad branch, evidence needs, query rewrite, and validation with `/api/knowledge/agent-skill/plan` or tool id `pact.agentLibrary.agentSkill.plan` when available.
 2. Discover available tools and scopes from `/api/tool-management/v1/catalog` or `/toolsets/resolve`.
-3. Use `/api/tool-management/v1/execute` with tool id `pact.knowledge.search` and `explain: true`. Console-authenticated UI/runtime code may call `/api/knowledge/search` directly.
+3. Use `/api/tool-management/v1/execute` with tool id `pact.agentLibrary.search` and `explain: true`. Console-authenticated UI/runtime code may call `/api/knowledge/search` directly.
 4. Inspect `result.hierarchy.selected` before trusting item-level hits.
 5. Follow the selected collection/document/section branch into item, graph, evidence, and Markdown tools.
 6. Submit feedback for useful, weak, or missing results.
@@ -41,7 +41,7 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "toolId": "pact.knowledge.search",
+  "toolId": "pact.agentLibrary.search",
   "input": {
     "query": "...",
     "limit": 8,
@@ -56,9 +56,9 @@ Then:
 - If `hierarchy.enforced` is true, treat selected documents/sections as the search boundary.
 - If selected branches are obviously too broad, rerun with a clearer query or filters.
 - If selected branches are empty, check `knowledge.health` and `knowledge.learning.health`, then try a broader query.
-- Use `pact.knowledge.item` for structured detail.
-- Use `pact.knowledge.evidence` or `pact.knowledge.renderMarkdown` before making claims.
-- Use `pact.knowledge.graph` for relation expansion after a branch is selected.
+- Use `pact.agentLibrary.item` for structured detail.
+- Use `pact.agentLibrary.evidence` or `pact.agentLibrary.renderMarkdown` before making claims.
+- Use `pact.agentLibrary.graph` for relation expansion after a branch is selected.
 
 Do not use old `/api/tool-platform/*` or `/api/agent-tools/*` routes unless the current checkout has explicitly reintroduced them; this repo's current server docs mark them as removed.
 

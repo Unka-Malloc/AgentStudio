@@ -5,7 +5,7 @@
   "toolsets": [
     "pact.document.parse",
     "pact.document.convert",
-    "pact.knowledge.write"
+    "pact.agentLibrary.write"
   ],
   "toolAllow": [],
   "toolDeny": [

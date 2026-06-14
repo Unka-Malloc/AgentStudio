@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "updatedAt": "2026-05-01T00:00:00.000Z",
   "description": "Pact knowledge source hydration rules. Edit or override this file instead of hard-coding cloud placeholder behavior.",
   "sampleBytes": 65536,

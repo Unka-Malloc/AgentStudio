@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
-export const KNOWLEDGE_ACCESS_PROTOCOL_VERSION = "pact.knowledge-access.v1";
-export const AGENT_LIBRARY_PROTOCOL_VERSION = "pact.agent-library.v1";
+export const KNOWLEDGE_ACCESS_PROTOCOL_VERSION = "v0.0.1:knowledge:access-1";
+export const AGENT_LIBRARY_PROTOCOL_VERSION = "v0.0.1:agent:library-1";
 
 export const ACCESS_MODES = Object.freeze([
   "deny",

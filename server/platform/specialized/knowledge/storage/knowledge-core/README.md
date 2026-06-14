@@ -1,6 +1,6 @@
 # KnowledgeCore
 
-`KnowledgeCore` is the built-in implementation of `pact.knowledge.v1`.
+`KnowledgeCore` is the built-in implementation of `v0.0.1:knowledge:core-1`.
 
 It is intentionally separate from the application layer. The server registers public HTTP/RPC/CLI operations, but those handlers call the `knowledgeBase` mount protocol instead of directly using a database or retrieval algorithm.
 
@@ -34,11 +34,11 @@ The built-in storage is local and offline:
 - `knowledge-core/knowledge.sqlite`: collections, documents, sections, blocks, assets, embeddings, evidence, relationships, settings, and maintenance runs.
 - `knowledge-core/assets/`: binary assets addressed by SHA-256.
 
-The current vector implementation uses `sqlite-vec` as the primary local KNN backend and also stores JSON vectors for deterministic fallback. The `pact.vector.v1` boundary stays stable for later LanceDB or Qdrant adapters.
+The current vector implementation uses `sqlite-vec` as the primary local KNN backend and also stores JSON vectors for deterministic fallback. The `v0.0.1:knowledge:vector-1` boundary stays stable for later LanceDB or Qdrant adapters.
 
 ## Learning Runtime
 
-`KnowledgeCore` includes a `pact.learning.v1` boundary. The bundled runtime is deterministic and offline-safe: it can auto-apply retrieval profile tuning after feedback replay passes its metric gate, but it never mutates canonical facts, relations, entity merges, or taxonomy entries without creating a reviewable suggestion first.
+`KnowledgeCore` includes a `v0.0.1:knowledge:learning-1` boundary. The bundled runtime is deterministic and offline-safe: it can auto-apply retrieval profile tuning after feedback replay passes its metric gate, but it never mutates canonical facts, relations, entity merges, or taxonomy entries without creating a reviewable suggestion first.
 
 Optional LlamaIndex + LanceDB support is exposed through JavaScript adapters or external services behind `server/platform/specialized/knowledge/retrieval/learning-runtime` and the LanceDB vector adapter. Operators must install and configure those external components explicitly; startup must not download model weights implicitly.
 

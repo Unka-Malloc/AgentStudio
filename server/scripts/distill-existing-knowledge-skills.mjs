@@ -267,7 +267,7 @@ async function main() {
   const selected = rankCategories({ rows, taxonomy, minDocuments }).slice(0, topicLimit);
 
   const report = {
-    protocolVersion: "pact.knowledge-skill-distillation.v1",
+    protocolVersion: "v0.0.1:knowledge:skill-distillation-1",
     userDataPath,
     dryRun,
     scannedDocumentCount: rows.length,

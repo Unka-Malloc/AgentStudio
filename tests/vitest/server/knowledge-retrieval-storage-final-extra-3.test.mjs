@@ -207,7 +207,7 @@ describe("knowledge retrieval and storage final extra coverage 3", () => {
       const sourceRoot = path.join(userDataPath, "external-source");
       await fs.mkdir(sourceRoot, { recursive: true });
       await writeJson(path.join(userDataPath, "rules", "source-search-rules.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-06-05T00:00:00.000Z",
         maxFileBytes: 256 * 1024,
         maxEvidenceBytes: 16 * 1024,
@@ -232,7 +232,7 @@ describe("knowledge retrieval and storage final extra coverage 3", () => {
         snippetWindow: 80
       });
       await writeJson(path.join(userDataPath, "knowledge-sources", "sources.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-06-05T00:00:00.000Z",
         sources: [
           {
@@ -364,7 +364,7 @@ describe("knowledge retrieval and storage final extra coverage 3", () => {
         ]);
 
         expect(inserted).toMatchObject({
-          protocolVersion: "pact.vector.v1",
+          protocolVersion: "v0.0.1:knowledge:vector-1",
           providerId: "builtin:test-vector-store",
           upserted: 2
         });
@@ -380,7 +380,7 @@ describe("knowledge retrieval and storage final extra coverage 3", () => {
           limit: "1"
         });
         expect(search).toMatchObject({
-          protocolVersion: "pact.vector.v1",
+          protocolVersion: "v0.0.1:knowledge:vector-1",
           providerId: "builtin:test-vector-store",
           backend: "sqlite-json-fallback",
           queryProvider: "mock-embedding"
@@ -425,7 +425,7 @@ describe("knowledge retrieval and storage final extra coverage 3", () => {
       );
       const evidenceId = sourceEvidenceIdForPath(userDataPath, evidenceFile);
       await writeJson(path.join(userDataPath, "rules", "source-search-rules.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-06-05T00:00:00.000Z",
         maxFileBytes: 256 * 1024,
         maxEvidenceBytes: 16 * 1024,

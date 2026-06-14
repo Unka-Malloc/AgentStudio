@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "entityType": "pact.tool-management.entities",
   "description": "Human-maintainable tool management entity configs. Runtime falls back to code defaults when this directory is absent.",
   "groups": [

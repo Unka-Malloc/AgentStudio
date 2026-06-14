@@ -73,10 +73,10 @@ const fixturePlatform = {
     return {
       tools: [
         {
-          id: "pact.knowledge.health",
+          id: "pact.agentLibrary.health",
           status: "active",
           requiredScopes: ["knowledge:read"],
-          toolsets: ["pact.knowledge.read"],
+          toolsets: ["pact.agentLibrary.read"],
           risk: "read_only"
         },
         {
@@ -99,8 +99,8 @@ const fixturePlatform = {
     },
     listToolsets() {
       return [
-        { id: "pact.knowledge.read", grantable: true },
-        { id: "pact.knowledge.write", grantable: true },
+        { id: "pact.agentLibrary.read", grantable: true },
+        { id: "pact.agentLibrary.write", grantable: true },
         { id: "pact.storage.read", grantable: true },
         { id: "pact.storage.write", grantable: true },
         { id: "pact.agent.workspace.read", grantable: true },
@@ -122,11 +122,11 @@ const fixturePlatform = {
           id: "grant_1",
           label: "Verify grant",
           scopes: ["knowledge:read"],
-          toolsets: ["pact.knowledge.read"],
+          toolsets: ["pact.agentLibrary.read"],
           toolDeny: [],
           metadata: { maxRisk: "read_only", targets: ["codex"] }
         },
-        sawApiKeyAlias: request.headers["x-pact-tool-token"] === "sat_test"
+        sawApiKeyAlias: request.headers["x-pact-tool-token"] === "ock_test"
       };
     },
     createGrant(input = {}) {
@@ -137,13 +137,13 @@ const fixturePlatform = {
         toolsets: input.toolsets || [],
         scopes: input.scopes || [],
         metadata: input.metadata || {},
-        tokenPrefix: "sat_test",
+        tokenPrefix: "ock_test",
         enabled: input.enabled !== false,
         createdAt: "2026-05-25T00:00:00.000Z",
         updatedAt: "2026-05-25T00:00:00.000Z"
       };
       grants.push(grant);
-      return { grant, token: "sat_test_token" };
+      return { grant, token: "ock_test_token" };
     },
     listGrants() {
       return grants;
@@ -196,17 +196,17 @@ const provider = createToolSkillManagementProvider({ toolManagementPlatform: fix
 assert.equal(provider.describe().protocolVersion, TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION);
 
 const request = {
-  headers: { "x-pact-api-key": "sat_test" },
+  headers: { "x-pact-api-key": "ock_test" },
   socket: { remoteAddress: "127.0.0.1" },
   __pactRequestId: "verify-tool-skill"
 };
 const authorization = await provider.authorizeRequest({ request });
 assert.equal(authorization.ok, true);
 assert.equal(authorization.sawApiKeyAlias, true);
-assert.deepEqual(provider.visibleGrantSummary({ authorization }).toolsets, ["pact.knowledge.read"]);
+assert.deepEqual(provider.visibleGrantSummary({ authorization }).toolsets, ["pact.agentLibrary.read"]);
 assert.deepEqual(
   provider.listVisibleTools({ authorization }).map((tool) => tool.id),
-  ["pact.knowledge.health"]
+  ["pact.agentLibrary.health"]
 );
 
 const skillManifest = signedManifest({
@@ -247,13 +247,13 @@ assert.equal(hiddenSkills.summary.activeSkillCount, 0);
 assert.equal(hiddenSkills.summary.visibleSkillCount, 0);
 
 const execution = await provider.executeTool({
-  toolId: "pact.knowledge.health",
+  toolId: "pact.agentLibrary.health",
   input: {},
   request,
   context: {}
 });
 assert.equal(execution.ok, true);
-assert.equal(execution.payload.result.toolId, "pact.knowledge.health");
+assert.equal(execution.payload.result.toolId, "pact.agentLibrary.health");
 
 const resolvedInput = await provider.resolveMcpWorkspaceInput({
   input: { workspaceRef: "workspace-1" },
@@ -278,23 +278,23 @@ const publicPayload = await provider.publicMcpToolPayload({
     metadata: {
       defaultAdminUserId: "grant_internal_admin",
       adminUserIds: ["grant_internal_admin"],
-      token: "sat_private_token",
-      tokenPrefix: "sat_private",
+      token: "ock_private_token",
+      tokenPrefix: "ock_private",
       secretRef: "secret://pact/drive/google-oauth",
       endpointRef: "config://pact/drive/google-endpoint"
     },
     error: {
-      message: "Failed at /home/private-user/private.txt for workspace_a with Authorization: Bearer sat_private_token, token=sat_private_token, and --token sat_private_token",
+      message: "Failed at /home/private-user/private.txt for workspace_a with Authorization: Bearer ock_private_token, token=ock_private_token, and --token ock_private_token",
       details: {
         sourcePath: "/home/private-user/private.txt",
         workspaceId: "workspace_a",
         headers: {
-          Authorization: "Bearer sat_private_token",
-          "X-Pact-Api-Key": "sat_private_token",
+          Authorization: "Bearer ock_private_token",
+          "X-Pact-Api-Key": "ock_private_token",
           Accept: "application/json"
         },
-        apiKey: "sat_private_token",
-        password: "sat_private_password"
+        apiKey: "ock_private_token",
+        password: "ock_private_password"
       }
     }
   },
@@ -324,8 +324,8 @@ assert.equal(Object.prototype.hasOwnProperty.call(publicPayload.error.details, "
 assert.equal(JSON.stringify(publicPayload).includes("workspace_a"), false);
 assert.equal(JSON.stringify(publicPayload).includes("grant_internal_admin"), false);
 assert.equal(JSON.stringify(publicPayload).includes("/home/private-user"), false);
-assert.equal(JSON.stringify(publicPayload).includes("sat_private_token"), false);
-assert.equal(JSON.stringify(publicPayload).includes("sat_private_password"), false);
+assert.equal(JSON.stringify(publicPayload).includes("ock_private_token"), false);
+assert.equal(JSON.stringify(publicPayload).includes("ock_private_password"), false);
 
 const localGrant = await provider.createLocalMcpGrant({
   request,

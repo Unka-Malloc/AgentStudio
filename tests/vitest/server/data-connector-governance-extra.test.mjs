@@ -79,7 +79,7 @@ describe("data connector governance manifest helpers", () => {
     }));
 
     expect(normalized).toMatchObject({
-      protocolVersion: "pact.data-connector.v1",
+      protocolVersion: "v0.0.1:storage:data-connector-1",
       providerId: "acme-drive-service",
       sourceType: "cloud-file-source",
       displayName: "Acme Drive",

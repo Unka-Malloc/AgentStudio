@@ -108,7 +108,7 @@ async function writeText(filePath, value) {
 
 function taxonomyFixture() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     version: 1,
     source: "fixture",
     updatedAt: "2026-06-05T00:00:00.000Z",

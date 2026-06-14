@@ -1,13 +1,13 @@
 {
   "name": "VectorStore",
-  "version": 1,
-  "description": "Optional pact.vector.v1 module for local and external vector database adapters.",
+  "version": "v0.0.1:knowledge:vector-store-1",
+  "description": "Optional v0.0.1:knowledge:vector-1 module for local and external vector database adapters.",
   "defaultLoaded": false,
-  "protocol": "pact.vector.v1",
+  "protocol": "v0.0.1:knowledge:vector-1",
   "components": {
     "sqliteVec": {
       "path": "./LocalVectorStore/index.mjs",
-      "protocol": "pact.vector.v1",
+      "protocol": "v0.0.1:knowledge:vector-1",
       "factory": "createLocalVectorStore",
       "providerId": "sqlite-vec",
       "providerType": "sqlite-vec",
@@ -19,7 +19,7 @@
     },
     "localJsonFallback": {
       "path": "./LocalVectorStore/index.mjs",
-      "protocol": "pact.vector.v1",
+      "protocol": "v0.0.1:knowledge:vector-1",
       "factory": "createLocalVectorStore",
       "providerId": "builtin:sqlite-json-vector-store",
       "providerType": "offline-fallback",
@@ -29,7 +29,7 @@
     },
     "lanceDb": {
       "path": "./LanceDB/index.mjs",
-      "protocol": "pact.vector.v1",
+      "protocol": "v0.0.1:knowledge:vector-1",
       "factory": "createLanceDbVectorStore",
       "providerId": "lancedb",
       "providerType": "lancedb",

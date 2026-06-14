@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const EMBEDDING_PROTOCOL_VERSION = "pact.embedding.v1";
+export const EMBEDDING_PROTOCOL_VERSION = "v0.0.1:knowledge:embedding-1";
 
 export const DEFAULT_EMBEDDING_DIMENSION = 128;
 export const DEFAULT_RUNTIME_PROVIDER_ID = "builtin:hashing-vector-runtime";

@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ServerConfig } from "../../../../common/config/ServerConfig.mjs";
 
-export const ASSET_LINEAGE_PROTOCOL_VERSION = "pact.asset-lineage.v1";
+export const ASSET_LINEAGE_PROTOCOL_VERSION = "v0.0.1:asset:asset-lineage-1";
 
 const REGISTRY_FILE = path.join("asset-lineage", "registry.json");
 
@@ -60,7 +60,7 @@ async function writeJson(filePath, value) {
 
 function emptyRegistry() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: ASSET_LINEAGE_PROTOCOL_VERSION,
     updatedAt: nowIso(),
     records: {},
@@ -146,7 +146,7 @@ export function normalizeAssetLineageRecord(input = {}) {
     version: source.ocrVersion
   });
   const record = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: ASSET_LINEAGE_PROTOCOL_VERSION,
     lineageId: text(source.lineageId || `lineage_${hash({ assetId, rawObject, sourceAnchor, parser, visualModel })}`),
     assetId,

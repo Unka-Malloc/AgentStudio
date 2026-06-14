@@ -10,7 +10,7 @@ import {
 } from "../storage/knowledge-core/knowledge-html-export.mjs";
 import { evaluateKnowledgeAccess } from "../agent-library/access-policy.mjs";
 
-export const KNOWLEDGE_TRANSFORMATION_PROTOCOL_VERSION = "pact.knowledge-transformation.v1";
+export const KNOWLEDGE_TRANSFORMATION_PROTOCOL_VERSION = "v0.0.1:knowledge:transformation-1";
 
 function nowIso() {
   return new Date().toISOString();
@@ -225,7 +225,7 @@ function publicPackage({ operationId, format, rendered, documents, generatedAt, 
     : "";
   return {
     ok: true,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: KNOWLEDGE_TRANSFORMATION_PROTOCOL_VERSION,
     operationId,
     outputFormat: format,

@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 
 export const NORMALIZED_DOCUMENTS_DIR = "normalized-documents";
@@ -47,6 +48,11 @@ export function resolveNormalizedDocumentPath(userDataPath, jobId, entry) {
   const absolutePath = path.resolve(rootPath, relativePath);
   const normalizedRoot = path.resolve(rootPath);
   if (absolutePath !== normalizedRoot && !absolutePath.startsWith(`${normalizedRoot}${path.sep}`)) {
+    throw new Error("归一化文档路径越界。");
+  }
+  const realRoot = fsSync.realpathSync.native(normalizedRoot);
+  const realTarget = fsSync.realpathSync.native(absolutePath);
+  if (realTarget !== realRoot && !realTarget.startsWith(`${realRoot}${path.sep}`)) {
     throw new Error("归一化文档路径越界。");
   }
   return absolutePath;

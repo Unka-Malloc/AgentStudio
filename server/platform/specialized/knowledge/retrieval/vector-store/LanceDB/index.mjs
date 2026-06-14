@@ -4,7 +4,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { ServerConfig } from "../../../../../common/config/ServerConfig.mjs";
 
-export const VECTOR_PROTOCOL_VERSION = "pact.vector.v1";
+export const VECTOR_PROTOCOL_VERSION = "v0.0.1:knowledge:vector-1";
 export const LANCEDB_PROVIDER_ID = "lancedb";
 
 function nowIso() {
