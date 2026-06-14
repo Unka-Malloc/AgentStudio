@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "corpusId": "public-documents-smoke",
   "storageRoot": "~/.pact-server-data/evaluation-corpora/public-documents",
   "description": "Template manifest for external document evaluation corpora. Replace placeholder hashes, sizes, and paths with real external corpus metadata.",

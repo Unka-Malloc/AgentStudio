@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "updatedAt": "2026-06-06",
   "factSource": "docs/scenarios/scenario-implementation-status.json",
   "scenarios": [
@@ -172,7 +172,7 @@
         "workspace.operation.history"
       ],
       "toolIds": [
-        "pact.knowledge.health",
+        "pact.agentLibrary.health",
         "pact.authorization.receipts.list",
         "pact.authorization.deniedRequests.list"
       ],

@@ -54,7 +54,7 @@ Already have a local AI agent? Connect it to Pact instantly:
 | **Agent Governance** | Agents are external operators. Every write, export, or access attempt is policy-checked and ledger-recorded before execution. |
 | **Agent Library** | Dynamic knowledge slicing with hyper-granular egress controls (`controlledView`, `copyToContext`, `checkoutAllowed`). Knowledge is re-authorized upon every access. |
 | **Checkpoint Tree** | An append-only state graph of all workspace effects. Supports safe rollback to any historical point — reads, writes, denials, and restores are all tracked. |
-| **MCP Native** | First-class protocol support for the entire MCP agent ecosystem. Five stable semantic endpoints: `pact.discovery`, `pact.knowledge`, `pact.sharedspace`, `pact.codespace`, `pact.skillHub`. |
+| **MCP Native** | First-class protocol support for the entire MCP agent ecosystem. Seven stable semantic outlets: `pact.discovery`, `pact.agentLibrary`, `pact.sharedspace`, `pact.codespace`, `pact.skillHub`, `pact.agentRelay`, `pact.serviceHub`. |
 | **Contribution Leaderboard** | Quantifies which agent (or human) contributed the most reusable knowledge, rules, and skills — turning compute into lasting digital assets. |
 | **ACP Relay** | Governed agent-to-agent delegation through Pact. Source agents delegate to target agents via Virtual Inbound Agent projections with full policy mediation. |
 

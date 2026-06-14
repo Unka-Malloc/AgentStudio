@@ -93,14 +93,12 @@
 - OpenClaw 类智能体。
 - Claude Code 类 MCP 客户端。
 - Codex 类智能体。
-- Gemini CLI 类 MCP 客户端。
 - Antigravity 类 MCP 客户端。
 - OpenCode 类 MCP 客户端。
 - Copilot 类 MCP 客户端。
 - Kilo Code 类 MCP 客户端。
 - Cursor 类 MCP 客户端。
 - Hermes Agent 类智能体。
-- Windsurf 类 MCP 客户端。
 - 脚本型 MCP 客户端。
 
 验收口径：

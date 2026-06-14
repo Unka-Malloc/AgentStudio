@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-13
 - Status: Current maintained document
 - Scope: State Machine Registry and Verification Specification.
 - Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
@@ -13,40 +13,54 @@ This registry describes all machine-readable state machines in the Pact system, 
 
 Pact registers and enforces the following state machine lifecycles:
 
-1. **`contribution.lifecycle.v1`**
+1. **`contribution.lifecycle`**
    - **Entity Type**: `workspace_contribution`
    - **Description**: Governs asset contributions across workspaces.
-   - **Path**: `server/platform/common/state-machine/definitions/contribution.lifecycle.v1.json`
+   - **Path**: `server/platform/common/state-machine/definitions/contribution.lifecycle.json`
    - **Initial State**: `submitted`
    - **Terminal States**: `rejected`, `revoked`
 
-2. **`agentlibrary.loan.v1`**
+2. **`agentlibrary.loan`**
    - **Entity Type**: `knowledge_loan`
    - **Description**: Governs knowledge loan record lifecycles in the AgentLibrary.
-   - **Path**: `server/platform/common/state-machine/definitions/agentlibrary.loan.v1.json`
+   - **Path**: `server/platform/common/state-machine/definitions/agentlibrary.loan.json`
    - **Initial State**: `loan_requested`
    - **Terminal States**: `expired`, `revoked`, `returned`
 
-3. **`checkpoint.restore.v1`**
+3. **`checkpoint.restore`**
    - **Entity Type**: `checkpoint_restore`
    - **Description**: Governs request, preview, approval, and append-only recording lifecycle of restorations.
-   - **Path**: `server/platform/common/state-machine/definitions/checkpoint.restore.v1.json`
+   - **Path**: `server/platform/common/state-machine/definitions/checkpoint.restore.json`
    - **Initial State**: `restore_requested`
    - **Terminal States**: `rejected`, `expired`, `completed`, `failed`
 
-4. **`operation.narrow.v1`**
+4. **`operation.narrow`**
    - **Entity Type**: `operation`
    - **Description**: Narrow path state machine for Pact operations, enforcing policy-before-side-effect ordering.
-   - **Path**: `server/platform/common/state-machine/definitions/operation.narrow.v1.json`
+   - **Path**: `server/platform/common/state-machine/definitions/operation.narrow.json`
    - **Initial State**: `received`
    - **Terminal States**: `policy_denied`, `completed`, `failed`
 
-5. **`production.readiness.lifecycle.v1`**
+5. **`production.readiness.lifecycle`**
    - **Entity Type**: `production_readiness_gate`
    - **Description**: Production Readiness Gate State Machine governing evidence collection, checks, waivers, and release candidate declaration.
-   - **Path**: `server/platform/common/state-machine/definitions/production.readiness.lifecycle.v1.json`
+   - **Path**: `server/platform/common/state-machine/definitions/production.readiness.lifecycle.json`
    - **Initial State**: `not_started`
    - **Terminal States**: `passed`, `failed`, `blocked`, `waiver_rejected`, `release_candidate`
+
+6. **`version.artifact.lifecycle`**
+   - **Entity Type**: `versioned_artifact`
+   - **Description**: Governs Version Registry artifact lifecycle from draft through candidate, active, deprecated, and retired.
+   - **Path**: `server/platform/common/state-machine/definitions/version.artifact.lifecycle.json`
+   - **Initial State**: `draft`
+   - **Terminal States**: `retired`
+
+7. **`version.transition.lifecycle`**
+   - **Entity Type**: `version_transition`
+   - **Description**: Governs Version Transition migration actions from planning through dry-run, checkpoint, execution, verification, completion, recovery, rollback, or abandonment.
+   - **Path**: `server/platform/common/state-machine/definitions/version.transition.lifecycle.json`
+   - **Initial State**: `planned`
+   - **Terminal States**: `completed`, `rolled_back`, `abandoned`
 
 ---
 

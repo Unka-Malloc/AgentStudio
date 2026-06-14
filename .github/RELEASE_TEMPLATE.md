@@ -46,7 +46,7 @@ Automatically detects your OS and architecture:
 
 ## Supported Agents
 
-OpenClaw, Claude Code, Codex, Gemini CLI, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, Windsurf — and any other MCP-compatible agent.
+OpenClaw, Claude Code, Codex, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent — and any other MCP-compatible agent.
 
 ---
 

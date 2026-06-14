@@ -45,7 +45,7 @@ The inaugural release of **Pact** — a trusted agent collaboration space.
 - Full Model Context Protocol (MCP) service implementation
 - **HTTP transport** for network-based agent integration
 - **stdio transport** for local agent communication
-- Compatible with OpenClaw, Claude Code, Codex, Gemini CLI, Kilo Code, Cursor, and other MCP agents
+- Compatible with OpenClaw, Claude Code, Codex, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, and other MCP agents
 
 #### Knowledge Summarization Pipeline
 - Knowledge summarization pipeline powered by **LangGraph.js**

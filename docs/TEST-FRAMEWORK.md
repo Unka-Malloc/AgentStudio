@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-12
 - Status: Current maintained document
 - Scope: Pact Unified Test Framework.
 - Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
@@ -44,6 +44,11 @@ The runner writes machine-readable reports to `build/test-reports/`, including
   credential state stay outside the repository under `~/.pact-server-data/`.
 - Raw agent conversation history and real mail download/import directories are
   external data and must not be kept under the project checkout.
+- Deployment tests run only in fresh containers or equivalent disposable
+  isolated environments. Local developer machines may run syntax checks,
+  unit-level verifiers, and code-path probes, but they do not establish
+  deployability for VPS, Docker image, runtime bootstrap, package-manager
+  install, external service startup, or production entrypoint behavior.
 - Downloaded evaluation corpora, real mailboxes, imported messages, and real
   document sample sets stay outside the repository under
   `~/.pact-server-data/evaluation-corpora/`. Repository tests may keep only
@@ -290,6 +295,13 @@ When changing Linux packaging, GUI startup, or sidecar bundling:
 npm run test:full
 ```
 
+When changing deployment behavior, runtime bootstrap, Dockerfiles, external
+service startup, package-manager install paths, downloaded platform
+dependencies, or production entrypoint configuration, run the matching verifier
+inside a newly created container. Do not use the host machine's installed JRE,
+Python, Node.js, package-manager cache, global commands, or historical Pact data
+directory as deployment evidence.
+
 If a change intentionally updates behavior, update the matching unit or contract
 test in the same patch. If no existing suite represents the behavior, add a new
 suite to `tests/run.mjs` and document it here.
@@ -360,7 +372,7 @@ then update this list in the same patch.
   rotate/revoke storage, and MCP local grant delivery.
 - [x] `permission-management-auth-config`: enforced by the production readiness
   tool-permission gate, `npm run server:verify:console-auth`,
-  `npm run server:verify:2-3-5-security-model`,
+  `npm run server:verify:risk-control-model`,
   `npm run server:verify:tool-management`, and
   `npm run server:verify:authorization-governance`; covers client identity,
   role/policy/governance configuration, tool grants, and authorization audit.

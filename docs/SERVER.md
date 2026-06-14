@@ -136,6 +136,19 @@ npm run server:start:public
 npm run server:start:minimal
 ```
 
+客户端本机轻量 runtime：
+
+```bash
+npm run server:start:client-local -- --data-dir "$HOME/.pact-client-local-runtime"
+```
+
+`server:start:client-local` 使用 `--profile minimal --edition client-local`，
+并通过 Node `--max-old-space-size=256` 限制 V8 old-space。它面向桌面客户端
+托管的本机 sidecar：默认不带 `--with-ui`，只提供 API/MCP；保留 Tool
+Management、operation dispatch、audit/checkpoint、本地 sharedspace 和
+iCloud/OneDrive 本机目录投影；不加载 KnowledgeCore、文档解析、模型路由、
+agent gateway、agent memory、codespace 或远端云盘 API adapter。
+
 构建控制台静态资源：
 
 ```bash
@@ -165,6 +178,7 @@ node server/scripts/start-server.mjs
 - `--data-dir`
 - `--with-ui`
 - `--profile default|minimal`
+- `--edition community|pro|enterprise|client-local|custom`
 - `--server-id`
 - `--server-label`
 - `--bootstrap-url`
@@ -225,7 +239,7 @@ node server/scripts/start-server.mjs
 - `vectorStore`
 - `graphStore`
 
-`knowledgeBase` 默认由内置 `KnowledgeCore` 实现，协议版本为 `pact.knowledge.v1`。应用层只调用知识库协议方法，不直接访问 KnowledgeCore 的 SQLite、资产目录、向量实现或 Markdown 渲染逻辑。外部知识库实现可以通过 `mount-modules.json` 替换 `knowledgeBase`，只要保持协议方法兼容。
+`knowledgeBase` 默认由内置 `KnowledgeCore` 实现，协议版本为 `v0.0.1:knowledge:core-1`。应用层只调用知识库协议方法，不直接访问 KnowledgeCore 的 SQLite、资产目录、向量实现或 Markdown 渲染逻辑。外部知识库实现可以通过 `mount-modules.json` 替换 `knowledgeBase`，只要保持协议方法兼容。
 
 内置外部知识库 mount 位于 `server/platform/specialized/knowledge/storage/external-knowledge-base/index.mjs`。它保留 `KnowledgeCore` 作为 canonical evidence / asset / DOCX export 真相源，同时把第二层检索记录镜像到成熟开源后端。当前支持 `qdrant`、`opensearch` 和 `pgvector`：
 
@@ -274,11 +288,11 @@ npm run server:start
 
 KnowledgeCore 是独立知识库协议实现，不是 HTTP 控制器或 application 层的内嵌数据库：
 
-- `KnowledgeCore` 只通过 `pact.knowledge.v1` 暴露能力。
-- `EmbeddingRuntime` 只通过 `pact.embedding.v1` 生成文本、图片或混合证据 embedding。
-- `VectorStore` 只通过 `pact.vector.v1` 做 upsert/search/delete。
-- `assetStore` 只通过 `pact.assetStore.v1` 管理二进制资产和 URL/path policy。
-- `retrieval` 只通过 `pact.retrieval.v1` 做融合召回、parent expansion、rerank 和 evidence shaping。
+- `KnowledgeCore` 只通过 `v0.0.1:knowledge:core-1` 暴露能力。
+- `EmbeddingRuntime` 只通过 `v0.0.1:knowledge:embedding-1` 生成文本、图片或混合证据 embedding。
+- `VectorStore` 只通过 `v0.0.1:knowledge:vector-1` 做 upsert/search/delete。
+- `assetStore` 只通过 `v0.0.1:storage:asset-store-1` 管理二进制资产和 URL/path policy。
+- `retrieval` 只通过 `v0.0.1:knowledge:retrieval-1` 做融合召回、parent expansion、rerank 和 evidence shaping。
 
 应用层、HTTP、JSON-RPC 和 CLI 不允许直接读取 `knowledge-core/knowledge.sqlite`，也不允许拼接 `knowledge-core/assets/` 文件路径。它们只能调用注册接口，再由接口分发器调用 `knowledgeBase` mount 方法。外部知识库实现可以是本地模块，也可以在模块内部再转 RPC；但对 Pact 应用层暴露的仍然必须是同一组 `knowledge.*` 方法。
 
@@ -299,7 +313,7 @@ KnowledgeCore 是独立知识库协议实现，不是 HTTP 控制器或 applicat
 
 `ClientRuntimeAllocator` 负责按客户端维度动态分配模型、上下文和工作空间。服务端读取 `client-runtime/client-runtime-allocator.json`，只用标准字段 `clientUid + taskType` 匹配 profile，并把缺省的 `modelAlias`、`contextProfileId`、`retrievalProfileId/profileKey`、`workspaceId/sessionId` 和 `toolGrantId` 注入标准调用；调用方显式参数不会被覆盖。调用方显式选择已有 `workspaceId` 时，workspace 热切换后的 `modelAlias`、`contextProfileId`、`toolGrantId` 和 `knowledgeSourceIds` 优先于 allocator 注入默认值。运行使用率写入 `client-runtime/client-runtime-usage.json`，由 `coolingPolicy.strategy = lru-lfu-v1` 按最近窗口、频次和访问时间形成冷却状态，低频客户端可以被切到冷上下文 profile，把预算留给高频连接。管理接口：HTTP `GET|POST /api/client-runtime/profiles`、`POST /api/client-runtime/resolve`、`GET /api/client-runtime/status`；RPC `client_runtime.profiles.get|set`、`client_runtime.resolve`、`client_runtime.status`；CLI `client-runtime profiles`、`client-runtime profiles set --body profiles.json`、`client-runtime resolve --client-uid CLIENT_UID`、`client-runtime status`。控制台“系统状态 / 运维监控”热力图来自 `/api/client-runtime/status`。`clientId` 不参与用户空间识别；它只属于检索灰度、服务发现等明确声明的其他协议。
 
-客户端运行时 bootstrap 使用 `pact.client-runtime-bootstrap.v1`。客户端通过 HTTP `POST /api/client-runtime/bootstrap/plan` 或 RPC `client_runtime.bootstrap.plan` 主动声明 `os/arch/libc`、可用命令（如 `rsync`、`ssh`、`scp`、`sftp`）、需要的模块和上传规模；服务端返回裁剪后的框架模块、功能模块和 transport 降级计划。缺少本地客户端时，最小 MCP connector 可以调用 HTTP `POST /api/client-runtime/bootstrap/pull`、RPC `client_runtime.bootstrap.pull` 或 MCP tool `pact.clientRuntime.bootstrapPull` 拉取裁剪后的 client runtime manifest bundle；首版实现不伪造完整客户端或服务端仓库下载，也不默认拉取所有能力。native transport 只在客户端命令和服务端能力同时声明时可选：优先 `local-copy`，再 `rsync-over-ssh`、小文件 `scp`、`sftp`，最后总是落回 `pact-http-upload-session`；极小文本可以列出 `mcp-inline-content` 作为最后的 MCP 兼容兜底。`local-copy` 只是深拷贝字节到 Pact staging/CAS 的优化，不能保存共享路径引用或零拷贝引用。真实二进制下载 URL 由发布/能力包流程填充。
+客户端运行时 bootstrap 使用 `v0.0.1:agent:client-runtime-bootstrap-1`。客户端通过 HTTP `POST /api/client-runtime/bootstrap/plan` 或 RPC `client_runtime.bootstrap.plan` 主动声明 `os/arch/libc`、可用命令（如 `rsync`、`ssh`、`scp`、`sftp`）、需要的模块和上传规模；服务端返回裁剪后的框架模块、功能模块和 transport 降级计划。缺少本地客户端时，最小 MCP connector 可以调用 HTTP `POST /api/client-runtime/bootstrap/pull`、RPC `client_runtime.bootstrap.pull` 或 MCP tool `pact.clientRuntime.bootstrapPull` 拉取裁剪后的 client runtime manifest bundle；首版实现不伪造完整客户端或服务端仓库下载，也不默认拉取所有能力。native transport 只在客户端命令和服务端能力同时声明时可选：优先 `local-copy`，再 `rsync-over-ssh`、小文件 `scp`、`sftp`，最后总是落回 `pact-http-upload-session`；极小文本可以列出 `mcp-inline-content` 作为最后的 MCP 兼容兜底。`local-copy` 只是深拷贝字节到 Pact staging/CAS 的优化，不能保存共享路径引用或零拷贝引用。真实二进制下载 URL 由发布/能力包流程填充。
 
 ### 5.5 多智能体知识总结
 
@@ -333,7 +347,7 @@ KnowledgeCore 是独立知识库协议实现，不是 HTTP 控制器或 applicat
 - `GET /api/agent-workspaces/:workspaceId/files/download`
 - `GET/POST /api/context/profiles`
 
-同等受限能力通过 Tool Management v1 的 `pact.knowledge.*` 工具暴露给授权智能体。任何事实、实体、关系和分类法变更只允许生成审核项或建议，不允许由总结链路直接覆盖 canonical knowledge。
+同等受限能力通过 Tool Management v1 的 `pact.agentLibrary.*` 工具暴露给授权智能体；`knowledge.*` 仅作为 HTTP / JSON-RPC operation id 或内部协议方法出现，不能作为 MCP tool 名称继续授权。任何事实、实体、关系和分类法变更只允许生成审核项或建议，不允许由总结链路直接覆盖 canonical knowledge。
 
 工作空间上下文热切换接口直接面向运行时：`GET /api/agent-workspaces/:workspaceId/context` 返回解析继承链后的 profile、模型别名、工具授权、知识源、fingerprint 和 `sharingMode=team-shared`；`GET /api/agent-workspaces/:workspaceId/context-bundle?format=compressed` 导出带 `bundleHash` 的 `gzip+base64` 上下文包；`POST /api/agent-workspaces/:workspaceId/context-bundle/restore` 把该包恢复到目标工作空间。恢复会校验可选 `bundleHash`，失败时不改变目标上下文；成功时热切换目标 workspace 的 profile、`modelAlias`、`toolGrantId` 和知识源集合，并写入 `context_bundle_restore` run 与 handoff artifact。
 
@@ -377,7 +391,7 @@ KnowledgeCore 是独立知识库协议实现，不是 HTTP 控制器或 applicat
 - `POST /api/knowledge/evolution/deployments/:deploymentId/promote`
 - `POST /api/knowledge/evolution/deployments/:deploymentId/rollback`
 
-对应工具授权入口位于 `/api/tool-management/v1/execute` 的 `pact.knowledge.*` 工具。评估运行只产出指标和建议，不默认写入真实反馈；进化运行必须使用真实反馈或人工提供 case，避免用系统自己生成的样本直接发布策略。
+对应工具授权入口位于 `/api/tool-management/v1/execute` 的 `pact.agentLibrary.*` 工具。评估运行只产出指标和建议，不默认写入真实反馈；进化运行必须使用真实反馈或人工提供 case，避免用系统自己生成的样本直接发布策略。
 
 发布策略：
 
@@ -779,7 +793,7 @@ Tool Management v1 也暴露同一热插拔面：`pact.runtime.info`、`pact.run
 任务完成后还会生成归一化知识文档包，落盘在 `<userDataPath>/jobs/<jobId>/normalized-documents/`。PPT/PDF/HTML 会同时输出允许入库的原始材料副本；EML/MSG 只输出 message/thread/transaction DOCX，原始邮件继续走 raw object 审计存储。
 归一化 DOCX 是面向人类阅读和外部知识库导入的第一层 `raw-corpus-construction` 语料包：默认只保持标题、章节顺序、段落、列表和简单表格，不把 chunk id、sourceRange、evidence locator 等机器字段放进正文。机器解析中间态使用 YAML：`manifest.yaml` 和每个 DOCX 的 `machineReadableRelativePath` sidecar 保存 `sectionId`、`sourceRange`、chunk 定位和解析证据。已收纳到第二层 `knowledge-index-construction` 的 canonical knowledge 还可以通过 `GET /api/knowledge/export/docx` 或 CLI `knowledge export-docx --output knowledge.docx` 导出为标准 DOCX；如需机器附录，显式传入 `includeMachineReadable=true`，附录格式为 YAML。第三层 `knowledge-distillation` 优先从第一层原始语料全文蒸馏，必要时分批、多轮覆盖全文，并用 `knowledge.search` / evidence pack 做校验、引用和补证；知识蒸馏必须调用模型闭环，模型不可用时任务失败，不降级成规则整理。长语料会先通过 `knowledge_raw_batch_extractor` 对每个 raw corpus batch 做核心提炼，运行结果记录 `batchExtraction`、`batchExtracts`、跳过批次数和模型截断状态，最终 distiller 消费全部批次提炼结果，而不是只读取前几个批次。智能体在线上下文可以消费蒸馏出的独立文档或背景摘要。
 
-工业级知识蒸馏基准使用 `pact.external-knowledge-distillation.industrial-benchmark.v1`：唯一维护服务是 `external.knowledge.distillation`，验收重点是本地参考框架清单、route-first、windowing、分类蒸馏、项目收敛、Graph evidence、人类/智能体响应分离和 Office 专业适配。真实入口是 `npm run server:knowledge:industrial-distill-plan -- --output <report.json>`，回归门禁是 `npm run server:verify:knowledge-industrial-distillation`。
+工业级知识蒸馏基准使用 `v0.0.1:external-service:knowledge-distillation-industrial-benchmark-1`：唯一维护服务是 `external.knowledge.distillation`，验收重点是本地参考框架清单、route-first、windowing、分类蒸馏、项目收敛、Graph evidence、人类/智能体响应分离和 Office 专业适配。真实入口是 `npm run server:knowledge:industrial-distill-plan -- --output <report.json>`，回归门禁是 `npm run server:verify:knowledge-industrial-distillation`。
 
 外部知识蒸馏服务的部署门禁先于功能验收：`npm run server:verify:external-knowledge-distillation-service-gates` 检查 required-auth、业务 API bearer gate、公开健康检查、Docker 非 root、Tika checksum 和 healthcheck。远程容器态必须从外部运行配置或 secret store 注入 `PACT_EXTERNAL_KD_API_TOKEN`，不得把 token 或其它密钥写入项目目录；门禁未通过时，不继续增加新解析器、格式路由、导出或模型蒸馏能力。
 
@@ -900,7 +914,7 @@ node server/scripts/build-transaction-continuity.mjs \
 
 该框架不调用外部智能体，不按来源硬编码规则。它由业务实体抽取、事务指纹、多阶段接续评分、负样本约束和 lineage 复盘组成：先用合同号、工单号、订单号、发票号、项目编号等强实体命中；再用参与人图谱、项目名、系统、版本、地点、动作词和主题语义 token 做弱匹配；最后用时间窗口和节奏兜底。每处理 `--review-every` 封新邮件或每天一次会触发局部重聚类，允许拆分、合并、迁移历史邮件。
 
-事务标题不直接沿用邮件主题，而是使用“人类注意力”模型生成：先从发件域、发件名、订阅平台、作者名和邮件行为中抽取 `sourceLabel`、`actorLabel`、`behaviorId`，再形成 `sourceBehaviorTitle` 和 `actorBehaviorTitle`。例如 `Steam 促销活动`、`Steam 账单`、`HSBC 银行账单`、`Monzo 促销活动`、`ElRelator 的 Patreon 订阅及发布通知`。这些 attention facet 会参与接续评分，也会写入 YAML 概览和 JSON payload，方便按来源维度或作者维度检索。
+事务标题不直接沿用邮件主题，而是使用“人类注意力”模型生成：先从发件域、发件名、订阅平台、作者名和邮件行为中抽取 `sourceLabel`、`actorLabel`、`behaviorId`，再形成 `sourceBehaviorTitle` 和 `actorBehaviorTitle`。例如 `Steam 促销活动`、`Example Service 月度报告`、`Service Updates 促销活动`、`ElRelator 的 Patreon 订阅及发布通知`。这些 attention facet 会参与接续评分，也会写入 YAML 概览和 JSON payload，方便按来源维度或作者维度检索。
 
 可选 `--normalized-manifest <path>` 可把归一化 DOCX/PDF/PPT 产物的标题、文件名、hash、粒度和相对路径回写到邮件附件特征，参与事务指纹和证据文档输出。
 
@@ -1138,7 +1152,7 @@ OpenRouter、Gemini 等 API Key 模型会发起最小化连通性请求；ChatGP
 {
   "agentName": "kb-agent",
   "pluginList": ["search"],
-  "question": "最近有哪些账单？",
+  "question": "最近有哪些部署记录？",
   "sessionId": "session-1",
   "userId": "user-1",
   "projectId": "project-1",
@@ -1226,12 +1240,12 @@ npm run server:verify:agent-sync
 
 ## 20. 工具管理平台
 
-服务端只保留 `pact.tool-management.v1` 作为智能体工具和外部 token 工具的统一管理平台。旧 `/api/tool-platform/*` 和 `/api/agent-tools/*` 已移除；授权数据保存在 `<userDataPath>/tool-management/tool-management.sqlite`。
+服务端只保留 `v0.0.1:tool:management-1` 作为智能体工具和外部 token 工具的统一管理平台。旧 `/api/tool-platform/*` 和 `/api/agent-tools/*` 已移除；授权数据保存在 `<userDataPath>/tool-management/tool-management.sqlite`。
 
 核心能力：
 
 - `ToolCatalogRegistry`：从 `SERVER_API_OPERATIONS` 生成公开工具目录，同时登记 MaintenanceAgent、AgentExplorationRuntime 的内部 handler-backed 工具，并输出 catalog fingerprint。
-- `ToolsetRegistry`：内置 `pact.knowledge.read/write/maintain/admin`、`pact.storage.read`、`pact.jobs.read`、`pact.agent.sync.publish` 等企业授权单元。
+- `ToolsetRegistry`：内置 `pact.agentLibrary.read/write/maintain/admin`、`pact.storage.read`、`pact.jobs.read`、`pact.agent.sync.publish` 等企业授权单元。
 - `ToolManagementStore`：保存 grant、token hash、policy decision、tool execution、metric event 和 catalog snapshot；grant 支持 toolset 白名单/黑名单、scope、限流、来源 Origin/CIDR、过期和撤销。
 - `ToolPolicyEngine`：按 platform、grant、agent profile、session 和 runtime safety 计算 allow/deny/confirmation。
 - `ToolExecutionRuntime`：统一执行、dry-run、batch、输入 schema 校验、timeout、结果大小限制、串行锁、审计和指标埋点。
@@ -1242,9 +1256,9 @@ CLI：
 ```bash
 pact tools catalog
 pact tools toolsets
-pact tools toolsets resolve --body '{"toolsets":["pact.knowledge.read"]}'
+pact tools toolsets resolve --body '{"toolsets":["pact.agentLibrary.read"]}'
 pact tools grants create --body grant.json
-pact tools execute --tool-id pact.knowledge.health --body '{}'
+pact tools execute --tool-id pact.agentLibrary.health --body '{}'
 pact tools audit --limit 50
 pact tools metrics --since 2026-05-02T00:00:00.000Z
 ```
@@ -1266,7 +1280,10 @@ npm run server:verify:tool-management
 外部组件可以使用任意语言，但必须通过 JavaScript 调用边界接入，例如：
 
 - JavaScript adapter
-- HTTP / JSON-RPC 服务
+- HTTP 服务
+- HTTPS 服务
+- JSON-RPC 服务
+- SSE 服务
 - 明确包装的外部进程
 - 独立部署的外部服务
 

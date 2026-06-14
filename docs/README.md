@@ -108,6 +108,15 @@ graph LR
 | [boundary/N-2-N-Interfaces.md](boundary/N-2-N-Interfaces.md) | N-2-N 接口边界 | External-service and downstream-client boundaries, with in-Pact adapters/gateways and out-of-Pact services/clients split explicitly | 11 KB |
 | [boundary/U-1-Data.md](boundary/U-1-Data.md) | U-1 数据边界 | Unified vocabulary for data, resources, state, evidence, receipts, ledgers, checkpoints, projections, and external refs | 12 KB |
 
+## 安全设计文档 / Security Design Documents
+
+安全设计记录单独保存在 `docs/security/`，不和普通产品、协议或能力 ADR 混放。安全门禁使用 `server:verify:security-*` 脚本管理。
+
+| Document | 文档 | Description |
+| --- | --- | --- |
+| [security/README.md](security/README.md) | 安全设计索引 | Security design records and security gate ownership |
+| [security/design/0001-local-stdio-interface-lockdown.md](security/design/0001-local-stdio-interface-lockdown.md) | 本机 stdio 接口锁定 | Disable local stdio as a public Pact framework surface |
+
 ---
 
 ## 架构图 / Architecture Diagrams

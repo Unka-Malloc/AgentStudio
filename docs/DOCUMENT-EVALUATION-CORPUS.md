@@ -98,7 +98,7 @@ node scripts/split-mbox-corpus.mjs
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "corpusId": "public-documents-smoke",
   "storageRoot": "~/.pact-server-data/evaluation-corpora/public-documents",
   "items": [

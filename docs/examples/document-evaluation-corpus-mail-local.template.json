@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "corpusId": "local-mail-smoke",
   "storageRoot": "~/.pact-server-data/evaluation-corpora/mail/messages",
   "description": "Template manifest for local Mail evaluation samples stored outside the repository. Keep only hashes, counts, format, and external-path references in Git.",

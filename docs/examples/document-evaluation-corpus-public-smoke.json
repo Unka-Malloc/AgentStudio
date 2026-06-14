@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "corpusId": "public-documents-format-smoke",
   "storageRoot": "~/.pact-server-data/evaluation-corpora/public-documents",
   "description": "Public smoke manifest for PDF/DOCX/XLSX/PPTX evaluation samples. Replace placeholder hashes and byte sizes with real external corpus metadata.",

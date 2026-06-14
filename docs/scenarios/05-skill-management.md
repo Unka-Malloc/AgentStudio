@@ -66,7 +66,7 @@
 ## 链路要求
 
 - 技能库不能混入普通 workspace 文件目录或运行时下载目录。
-- `pact.skillHub.upload` 是真实上传入口；`workspace.skill.upload` 若继续存在，只能作为兼容别名路由到 Skill Hub / capability package lifecycle。
+- `pact.skillHub.upload` 是真实上传入口；旧式 `workspace.skill.upload` 路由完成迁移后不得继续保留。
 - 技能包不得只作为 workspace contribution 管理；workspace contribution 只能引用 skill library 记录并承载采用、统计和审核视图。
 - 上传必须校验 manifest、入口说明、引用文件和危险行为声明。
 - 高风险技能发布或启用必须进入审批链路。

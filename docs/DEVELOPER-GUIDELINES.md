@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-12
 - Status: Current maintained document
 - Scope: Developer Guidelines.
 - Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
@@ -66,3 +66,24 @@ Pact 的生命线是“可回溯、可审计”。
 
 - **读请求也是行为：** 不要认为“只读不写”就不需要记录。在第一版实现中，所有的外部可见读取操作（List, Search, Permission Check）也必须生成 Checkpoint Node。
 - **Append-Only 恢复：** 所有的恢复操作（Restore）本身也是一次新的操作记录，严禁提供类似 `git reset --hard` 那样会物理抹除历史记录的危险接口。
+
+## 9. 设计系统：外观方案与语义 Token (Appearance Presets)
+
+Pact 的前端视觉体系采用 **Appearance Preset / 外观方案**，详见 [Design System](DESIGN-SYSTEM.md)。外观方案是本地 UI 展示偏好，不是服务端策略、账号设置、租户配置或审计控制。
+
+- **Preset schema Owner-locked：** `server-web/lib/appearance-preset-config.ts`、`server/platform/common/appearance-presets/appearance-preset-store.mjs`、Web preset runtime facade、Flutter `appearance_preset_config.dart` / `buildPactTheme` 入口、Logo/Banner/Favicon 资产文件均为产品负责人锁定范围；新增配色 JSON 文件只需通过 schema 校验。
+- **禁止绕过语义 Token：** 组件必须消费 `var(--bg-surface)`、`var(--text-primary)`、`var(--brand)` 等语义 CSS 变量，Flutter 组件必须通过 `context.pactColors` 读取活动 token。
+- **禁止引入模糊效果：** `backdrop-filter: blur()`、`radial-gradient` 装饰背景、半透明 `color-mix` 表面一律禁止。
+- **禁止硬编码颜色：** 组件 CSS 中不得出现 `#xxx` 或彩色 `rgba(r,g,b,a)` 形式的颜色值（纯黑纯白透明度除外），必须使用 `var(--token)` 引用。
+- **门禁校验：** `npm run server:verify:design-system` 会检查组件色值、禁用视觉模式、配色 JSON schema，以及当前运行配色的可用性；CI 不通过则不允许合入。
+- **允许的操作：** 在 `server-web/appearance-presets/` 新增通过 schema 的源码打包配色 JSON 文件、通过 `/api/appearance-presets/import` 导入并持久化到 `.pact-server-data/appearance-presets/`、重新加载 Vue/Vite 与服务端配色 catalog、在现有 Token 基础上新增语义别名（如 `--card-header-bg: var(--bg-subtle)`）、新增使用已有 accent 的按钮变体样式、补充旧本地偏好到新 preset 的兼容迁移。
+
+## 10. 部署验证隔离 (Fresh Container Deployment Testing)
+
+涉及部署、运行时自举、镜像构建、外部服务启动、包管理器安装、平台依赖下载或生产入口配置的测试，必须在全新的容器环境中执行。本机环境只能用于代码路径调试、语法检查或非部署类快速验证，不能作为部署可用性的结论依据。
+
+- **全新环境：** 每次部署测试都应从新建容器或等价的一次性隔离环境开始，不能复用开发机上已有的 JRE、Python、Node.js、包管理器缓存、全局命令或历史数据目录。
+- **原生路径验证：** 需要验证安装流程时，应在目标基础镜像内走该平台的原生包管理器、版本管理器或推荐安装路径，确认源码下载后能自举所需组件。
+- **服务端持有长任务：** 运行时依赖下载必须由服务端后台任务持有并持久化状态，触发脚本、浏览器请求或一次性容器退出后，服务端仍应继续执行并允许后续轮询。
+- **发布渠道优先：** 部署验证优先使用已发布镜像、包、二进制或平台原生安装源；除非目标依赖没有可用发布渠道，否则不应把“从源码构建”作为主要部署路径。
+- **结论标注：** 测试报告和人工总结必须区分“本机快速检查”和“全新容器部署验证”。只有后者可以支撑 VPS、Docker、生产部署或运行资源评估结论。

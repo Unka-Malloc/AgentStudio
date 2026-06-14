@@ -54,7 +54,7 @@
 | **智能体治理** | 智能体作为外部操作员，每次写入、导出或访问尝试都必须经过策略引擎裁决并记入操作账本后方可执行。 |
 | **Agent Library** | 动态知识切分与超细粒度出库控制（`controlledView`、`copyToContext`、`checkoutAllowed`），每次访问均重新授权。 |
 | **Checkpoint Tree** | 工作空间所有效果的追加写入状态图，支持安全回滚到任意历史节点 — 读取、写入、拒绝和恢复操作均被追踪。 |
-| **MCP 原生** | 全面支持 MCP 智能体生态。五个稳定语义端点：`pact.discovery`、`pact.knowledge`、`pact.sharedspace`、`pact.codespace`、`pact.skillHub`。 |
+| **MCP 原生** | 全面支持 MCP 智能体生态。七个稳定语义出口：`pact.discovery`、`pact.agentLibrary`、`pact.sharedspace`、`pact.codespace`、`pact.skillHub`、`pact.agentRelay`、`pact.serviceHub`。 |
 | **贡献排行榜** | 量化评估哪个智能体或成员贡献了最具复用价值的知识、规则和技能 — 将算力转化为持久数字资产。 |
 | **ACP Relay** | 通过 Pact 实现受治理的智能体间委派。源智能体通过虚拟入站代理投影将任务委派给目标智能体，全程策略中介。 |
 

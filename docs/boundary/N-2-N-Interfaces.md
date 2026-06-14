@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Current boundary reference
 - Scope: N-2-N-Interfaces.
-- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-14; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 本文把 Pact 的外接面拆成两个边界、四个清单：
 
@@ -56,7 +56,7 @@
 
 外部服务适配不能裸转发上游权限，也不能绕过 Tool Management、policy、Operation Ledger、Checkpoint Tree 和 audit。下游客户端也不直接调用这些外部服务；下游只通过 Pact 的 MCP / Workspace / Operation 入口访问受控能力。
 
-`external.knowledge.distillation` 是线外远程容器服务，不是线内共享库。它的接口先由 Pact 上游网关和 Operation Scheduling Kernel 管控，再由服务自身执行 `pact.external-knowledge-distillation.service-gates.v1`：除 `/health` 和 `/v1/runtime/health` 外，业务 API 必须 bearer 鉴权；容器必须非 root、固定 Tika checksum、声明 healthcheck，且所有 token/key 来自外部配置或 secret store。
+`external.knowledge.distillation` 是线外远程容器服务，不是线内共享库。它的接口先由 Pact 上游网关和 Operation Scheduling Kernel 管控，再由服务自身执行 `v0.0.1:external-service:knowledge-distillation-service-gates-1`：除 `/health` 和 `/v1/runtime/health` 外，业务 API 必须 bearer 鉴权；容器必须非 root、固定 Tika checksum、声明 healthcheck，且所有 token/key 来自外部配置或 secret store。
 
 ### 线内适配器
 
@@ -99,7 +99,7 @@ Pact MCP service 是 Workspace API 的设备级协议适配器，不是 agent-to
 | 线内网关组件 | 责任 | 状态 |
 | --- | --- | --- |
 | HTTP MCP endpoint | 通过 `POST /mcp` 接收 MCP JSON-RPC；支持 `GET /mcp` SSE 时推送事件 | 权威服务入口 |
-| MCP categorized tools | 暴露 `pact.discovery`、`pact.knowledge`、`pact.sharedspace`、`pact.codespace`、`pact.skillHub` | 稳定 toolset |
+| MCP categorized tools | 暴露 `pact.discovery`、`pact.agentLibrary`、`pact.sharedspace`、`pact.codespace`、`pact.skillHub`、`pact.agentRelay`、`pact.serviceHub` | 稳定 toolset |
 | stdio proxy | 兼容不支持 HTTP MCP 或自定义 header 的本地 agent，只转发到 HTTP MCP | 兼容入口，不维护业务状态 |
 | Device discovery | 发布 `~/.pact/mcp/servers.json`、`/.well-known/pact/mcp.json`、`/api/mcp/discovery` | 设备级发现面 |
 | MCP handshake | 通过 `/api/mcp/handshake` 返回 server identity、endpoint、interface version、toolset version 和签名 | connector 信任 discovery URL 前必须验证 |
@@ -115,14 +115,12 @@ Pact MCP service 是 Workspace API 的设备级协议适配器，不是 agent-to
 | OpenClaw | connector install target；支持 VM / remote 环境中的目标原生 MCP 配置 |
 | Claude Code | connector install target；CLI-backed MCP 配置 |
 | Codex | connector install target；Codex 使用 bearer token env var 路径 |
-| Gemini CLI | connector install target |
 | Antigravity | connector install target |
 | OpenCode | connector install target |
 | Copilot | connector install target |
 | Kilo Code | connector install target |
 | Cursor | connector install target |
 | Hermes Agent | connector install target；支持 VM / remote 环境中的目标原生 MCP 配置 |
-| Windsurf | connector install target |
 | 脚本型 agent、人工 CLI | 通过 Workspace API / MCP 协议入口接入；不等同于 connector install target |
 
 ## 统一 API 注册切面设计稿
@@ -149,7 +147,7 @@ Pact MCP service 是 Workspace API 的设备级协议适配器，不是 agent-to
 
 ### API 描述模型
 
-API Registry 的规范记录建议使用 `pact.api-registry.v1`：
+API Registry 的规范记录建议使用 `v0.0.1:external-service:api-registry-1`：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -257,7 +255,7 @@ source registry / manifest / discovery
 
 ### 分阶段落地
 
-1. 文档和 schema：固定 `pact.api-registry.v1` 字段、Capability 映射、transport 例外口径。
+1. 文档和 schema：固定 `v0.0.1:external-service:api-registry-1` 字段、Capability 映射、transport 例外口径。
 2. 平台来源 adapter：把 `SERVER_API_OPERATIONS` 转成 API Registry projection，并保持 `/api/interfaces` 兼容。
 3. 安全内核对接：让 Capability universe 从 API Registry projection 生成或被 verifier 强制校验。
 4. 外部服务 manifest：给 knowledge/model/repo/drive/data connector/mount 增加 `apis` 声明。
