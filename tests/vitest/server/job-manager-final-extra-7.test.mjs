@@ -103,7 +103,7 @@ async function seedJob(userDataPath, jobId, meta, payload = null) {
 
 async function seedQueueState(userDataPath, items, updatedAt = "2026-06-05T08:00:00.000Z") {
   await writeJson(queueMonitorStatePath(userDataPath), {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt,
     statePath: queueMonitorStatePath(userDataPath),
     eventLogPath: queueMonitorEventLogPath(userDataPath),
