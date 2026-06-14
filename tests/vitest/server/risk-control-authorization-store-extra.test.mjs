@@ -4,36 +4,22 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  assertSecurityGovernanceModelComplete,
-  createPlatformSelfGovernanceProfile,
-  createSecurityBoundaryGovernanceProfile,
-  describeSecurityGovernanceModel,
-  getSecurityGovernanceBoundary,
-  getSecurityGovernanceEnvironment,
-  governanceControlsForBoundary,
-  listSecurityGovernanceBoundaries,
-  listSecurityGovernanceEnvironments,
-  listSecurityGovernanceObjects,
-  platformSelfGovernanceControls
-} from "../../../server/platform/common/security/governance/security-governance-model.mjs";
-import {
-  SECURITY_BOUNDARY_IDS,
-  SECURITY_ENVIRONMENT_IDS,
-  SECURITY_GOVERNANCE_MODEL_VERSION,
-  SECURITY_GOVERNANCE_OBJECT_ORDER
-} from "../../../server/platform/common/security/governance/security-governance-constants.mjs";
-import {
-  describeClientBoundaryGovernance,
-  listClientBoundaryGovernanceControls
-} from "../../../server/platform/common/security/governance/client-boundary/index.mjs";
-import {
-  describeExternalServiceBoundaryGovernance,
-  listExternalServiceBoundaryGovernanceControls
-} from "../../../server/platform/common/security/governance/external-service-boundary/index.mjs";
-import {
-  describePlatformSelfGovernance,
-  listPlatformSelfGovernanceControls
-} from "../../../server/platform/common/security/governance/platform-self-governance/index.mjs";
+  RISK_CONTROL_BOUNDARY_IDS,
+  RISK_CONTROL_GATES,
+  RISK_CONTROL_MODEL_VERSION,
+  RISK_CONTROL_OBJECT_ORDER,
+  RISK_CONTROL_POINTS,
+  appendRiskControlGateRecord,
+  assertRiskControlRegistryComplete,
+  createRiskControlOperationEnvelope,
+  createRiskControlProjection,
+  describeRiskControlModel,
+  listRiskControlBoundaries,
+  listRiskControlEnvironments,
+  listRiskControlObjects,
+  riskControlControlsByGate,
+  riskControlControlsByObject
+} from "../../../server/platform/common/security/risk-control/index.mjs";
 import { createAuthorizationStore } from "../../../server/platform/common/security/authorization/authorization-store.mjs";
 
 const tempRoots = [];
@@ -45,7 +31,7 @@ async function tempDir(prefix) {
 }
 
 async function withAuthorizationStore(testCase) {
-  const userDataPath = await tempDir("pact-security-governance-store-extra-");
+  const userDataPath = await tempDir("pact-risk-control-store-extra-");
   const store = createAuthorizationStore({ userDataPath });
   try {
     return await testCase({ store, userDataPath });
@@ -68,85 +54,73 @@ afterEach(async () => {
   await Promise.all(tempRoots.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
-describe("security governance model extra coverage", () => {
-  it("returns cloned model data, handles missing identifiers, and builds profile summaries", () => {
-    const boundaries = listSecurityGovernanceBoundaries();
-    const environments = listSecurityGovernanceEnvironments();
-    const objects = listSecurityGovernanceObjects();
+describe("risk control model extra coverage", () => {
+  it("returns cloned model data, covers every object and gate, and builds a hash-chained envelope", () => {
+    const boundaries = listRiskControlBoundaries();
+    const environments = listRiskControlEnvironments();
+    const objects = listRiskControlObjects();
 
-    expect(boundaries).toHaveLength(2);
+    expect(boundaries).toHaveLength(3);
     expect(environments).toHaveLength(3);
     expect(objects).toHaveLength(5);
 
     boundaries[0].label = "mutated-boundary";
-    environments[0].typicalComponents.push("mutated-component");
+    environments[0].label = "mutated-environment";
     objects[0].label = "mutated-object";
 
-    expect(listSecurityGovernanceBoundaries()[0].label).not.toBe("mutated-boundary");
-    expect(listSecurityGovernanceEnvironments()[0].typicalComponents).not.toContain("mutated-component");
-    expect(listSecurityGovernanceObjects()[0].label).not.toBe("mutated-object");
+    expect(listRiskControlBoundaries()[0].label).not.toBe("mutated-boundary");
+    expect(listRiskControlEnvironments()[0].label).not.toBe("mutated-environment");
+    expect(listRiskControlObjects()[0].label).not.toBe("mutated-object");
 
-    expect(getSecurityGovernanceBoundary()).toBeNull();
-    expect(getSecurityGovernanceBoundary("missing-boundary")).toBeNull();
-    expect(getSecurityGovernanceEnvironment()).toBeNull();
-    expect(getSecurityGovernanceEnvironment("missing-environment")).toBeNull();
-
-    const clientBoundary = getSecurityGovernanceBoundary(SECURITY_BOUNDARY_IDS.CLIENT_MCP_INGRESS);
-    const platformEnvironment = getSecurityGovernanceEnvironment(SECURITY_ENVIRONMENT_IDS.PLATFORM_RUNTIME);
-
-    expect(clientBoundary).toMatchObject({
-      id: SECURITY_BOUNDARY_IDS.CLIENT_MCP_INGRESS
-    });
-    expect(platformEnvironment).toMatchObject({
-      id: SECURITY_ENVIRONMENT_IDS.PLATFORM_RUNTIME
-    });
-
-    expect(governanceControlsForBoundary("missing-boundary")).toEqual([]);
-    expect(governanceControlsForBoundary(SECURITY_BOUNDARY_IDS.CLIENT_MCP_INGRESS).map((entry) => entry.objectId)).toEqual(
-      SECURITY_GOVERNANCE_OBJECT_ORDER
+    const clientControls = riskControlControlsByObject({ boundaryId: RISK_CONTROL_BOUNDARY_IDS.CLIENT_MCP_INGRESS });
+    expect(clientControls.map((entry) => entry.objectId)).toEqual(RISK_CONTROL_OBJECT_ORDER);
+    expect(clientControls.every((entry) => entry.controls.length > 0)).toBe(true);
+    expect(riskControlControlsByObject({ boundaryId: "missing-boundary" }).map((entry) => entry.controls)).toEqual(
+      RISK_CONTROL_OBJECT_ORDER.map(() => [])
     );
-    expect(platformSelfGovernanceControls().map((entry) => entry.objectId)).toEqual(SECURITY_GOVERNANCE_OBJECT_ORDER);
 
-    const boundaryProfile = createSecurityBoundaryGovernanceProfile(SECURITY_BOUNDARY_IDS.CLIENT_MCP_INGRESS);
-    expect(boundaryProfile).toMatchObject({
-      modelVersion: SECURITY_GOVERNANCE_MODEL_VERSION,
-      boundary: clientBoundary
-    });
-    expect(boundaryProfile.objects).toHaveLength(5);
-    expect(boundaryProfile.controlsByObject).toHaveLength(5);
+    const gates = new Set(riskControlControlsByGate().map((entry) => entry.gate));
+    for (const gate of RISK_CONTROL_GATES) {
+      expect(gates.has(gate)).toBe(true);
+    }
 
-    boundaryProfile.objects[0].label = "changed";
-    expect(listSecurityGovernanceObjects()[0].label).not.toBe("changed");
+    const projection = createRiskControlProjection();
+    expect(projection.boundaries).toHaveLength(3);
+    expect(projection.controlsByObject).toHaveLength(5);
+    projection.objects[0].label = "changed";
+    expect(listRiskControlObjects()[0].label).not.toBe("changed");
 
-    const platformProfile = createPlatformSelfGovernanceProfile();
-    expect(platformProfile).toMatchObject({
-      modelVersion: SECURITY_GOVERNANCE_MODEL_VERSION,
-      environment: platformEnvironment
-    });
-    expect(platformProfile.controlsByObject).toHaveLength(5);
-
-    expect(describeClientBoundaryGovernance().boundary.id).toBe(SECURITY_BOUNDARY_IDS.CLIENT_MCP_INGRESS);
-    expect(listClientBoundaryGovernanceControls()).toHaveLength(5);
-    expect(describeExternalServiceBoundaryGovernance().boundary.id).toBe(SECURITY_BOUNDARY_IDS.SERVER_API_EGRESS);
-    expect(listExternalServiceBoundaryGovernanceControls()).toHaveLength(5);
-    expect(describePlatformSelfGovernance().environment.id).toBe(SECURITY_ENVIRONMENT_IDS.PLATFORM_RUNTIME);
-    expect(listPlatformSelfGovernanceControls()).toHaveLength(5);
-
-    const model = describeSecurityGovernanceModel();
+    const model = describeRiskControlModel();
     expect(model).toMatchObject({
-      modelVersion: SECURITY_GOVERNANCE_MODEL_VERSION,
-      boundaryCount: 2,
+      modelVersion: RISK_CONTROL_MODEL_VERSION,
+      boundaryCount: 3,
       environmentCount: 3,
       objectCount: 5
     });
-    expect(model.boundaryProfiles).toHaveLength(2);
-    expect(model.platformSelfGovernance.environment).toMatchObject({
-      id: SECURITY_ENVIRONMENT_IDS.PLATFORM_RUNTIME
-    });
+    expect(model.controlCount).toBeGreaterThanOrEqual(60);
+    expect(() => assertRiskControlRegistryComplete()).not.toThrow();
 
-    expect(() => assertSecurityGovernanceModelComplete()).not.toThrow();
-    expect(() => createSecurityBoundaryGovernanceProfile("missing-boundary"))
-      .toThrow("Unknown security governance boundary: missing-boundary");
+    const firstControl = RISK_CONTROL_POINTS.find((control) => control.controlId === "client.registration.admit");
+    const secondControl = RISK_CONTROL_POINTS.find((control) => control.controlId === "client.mcp-grant.authorize");
+    const envelope = createRiskControlOperationEnvelope({
+      operationId: "risk-control.unit",
+      traceId: "trace-risk-control-unit",
+      inputHash: "sha256:unit"
+    });
+    const first = appendRiskControlGateRecord(envelope, {
+      control: firstControl,
+      decision: "allow",
+      reasonCode: "unit_first"
+    });
+    const second = appendRiskControlGateRecord(envelope, {
+      control: secondControl,
+      decision: "allow",
+      reasonCode: "unit_second"
+    });
+    expect(envelope.gateRecords).toHaveLength(2);
+    expect(first.previousRecordDigest).toBe(envelope.operationAnchorDigest);
+    expect(second.previousRecordDigest).toBe(first.recordDigest);
+    expect(second.recordDigest).toMatch(/^sha256:risk-control\.gate-record\.v1:/);
   });
 });
 
@@ -353,7 +327,7 @@ describe("authorization store extra coverage", () => {
   });
 
   it("migrates legacy tables and recovers malformed JSON rows without throwing", async () => {
-    const userDataPath = await tempDir("pact-security-governance-legacy-");
+    const userDataPath = await tempDir("pact-authorization-store-legacy-");
     const authRoot = path.join(userDataPath, "security", "authorization");
     await fs.mkdir(authRoot, { recursive: true });
     const databasePath = path.join(authRoot, "authorization.sqlite");

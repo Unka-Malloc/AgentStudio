@@ -12,6 +12,7 @@ const REQUIRED_COVERAGE = [
   "architecture",
   "agent-library-access",
   "capability-kernel-security",
+  "local-stdio-interface-lockdown",
   "workspace-contribution-governance",
   "document-parsing-real-sample",
   "external-knowledge-base-consistency",
@@ -45,6 +46,24 @@ const GATES = [
       ["npm", "run", "server:verify:platform-layout"]
     ],
     nextStep: "修复架构治理、平台分层或核心文档与实现偏差。"
+  },
+  {
+    id: "version-registry",
+    title: "版本注册表治理",
+    blockerLevel: "P0",
+    owner: "platform-version-governance",
+    coverage: ["architecture", "upgrade-migration"],
+    commands: [["npm", "run", "server:verify:version-registry"]],
+    nextStep: "所有受管版本字符串必须登记到 Version Registry，并由源码内单例事实源解析。"
+  },
+  {
+    id: "version-naming",
+    title: "版本命名治理",
+    blockerLevel: "P0",
+    owner: "platform-version-governance",
+    coverage: ["architecture", "upgrade-migration"],
+    commands: [["npm", "run", "server:verify:version-naming"]],
+    nextStep: "清理旧式 pact.*.vN、旧格式版本保留路径和不符合 Governed Version String 的版本命名。"
   },
   {
     id: "agent-library-access",
@@ -144,14 +163,14 @@ const GATES = [
     owner: "security-tooling",
     coverage: ["tool-permission", "permission-management-auth-config"],
     commands: [
-      ["npm", "run", "server:verify:2-3-5-security-model"],
+      ["npm", "run", "server:verify:risk-control-model"],
       ["npm", "run", "server:verify:tool-management"],
       ["npm", "run", "server:verify:operation-policy"],
       ["npm", "run", "server:verify:console-auth"],
       ["npm", "run", "server:verify:organization-model"],
       ["npm", "run", "server:verify:authorization-governance"]
     ],
-    nextStep: "补齐 2-3-5 安全治理架构、tool grant、risk policy、scope、CSRF/safety-confirm、组织模型和授权治理边界。"
+    nextStep: "补齐 Risk Control Registry、tool grant、risk policy、scope、CSRF/safety-confirm、组织模型和授权治理边界。"
   },
   {
     id: "capability-kernel-security",
@@ -168,6 +187,15 @@ const GATES = [
       ["npm", "run", "server:verify:windows-security-backends"]
     ],
     nextStep: "补齐 Capability Kernel、opaque key、Binding Guard、helper、recovery 和 OS backend 的生产验收。"
+  },
+  {
+    id: "local-stdio-interface-lockdown",
+    title: "本机 stdio 接口锁定",
+    blockerLevel: "P0",
+    owner: "security-boundary",
+    coverage: ["local-stdio-interface-lockdown"],
+    commands: [["npm", "run", "server:verify:security-local-stdio-lockdown"]],
+    nextStep: "修复任何可让外部源通过本机 stdio 启动 Pact、暴露 launch command/env，或把旧 source stdio 预设作为可部署能力加载的路径。"
   },
   {
     id: "key-management-storage-distribution",
@@ -204,7 +232,7 @@ const GATES = [
     owner: "agent-runtime",
     coverage: [],
     commands: [["npm", "run", "server:verify:model-routing"]],
-    nextStep: "补齐 pact.model-routing.v1、预算、fallback chain、熔断、prompt version 和成本台账。"
+    nextStep: "补齐 v0.0.1:strategy:model-routing-1、预算、fallback chain、熔断、prompt version 和成本台账。"
   },
   {
     id: "capability-package-lifecycle",
@@ -213,7 +241,7 @@ const GATES = [
     owner: "tooling-governance",
     coverage: [],
     commands: [["npm", "run", "server:verify:capability-package-lifecycle"]],
-    nextStep: "补齐 pact.tool-package.v1、pact.skill-registry.v1、签名、依赖、审批、回滚和废弃策略。"
+    nextStep: "补齐 v0.0.1:tool:package-1、v0.0.1:tool:skill-registry-1、签名、依赖、审批、回滚和废弃策略。"
   },
   {
     id: "data-connector-governance",
@@ -222,7 +250,7 @@ const GATES = [
     owner: "knowledge-connectors",
     coverage: [],
     commands: [["npm", "run", "server:verify:data-connector-governance"]],
-    nextStep: "补齐 pact.data-connector-governance.v1、OAuth refresh 策略、增量 cursor、mirror 冲突/清理、localQuery 禁远程和卸载策略。"
+    nextStep: "补齐 v0.0.1:storage:data-connector-governance-1、OAuth refresh 策略、增量 cursor、mirror 冲突/清理、localQuery 禁远程和卸载策略。"
   },
   {
     id: "performance-capacity",
@@ -231,7 +259,7 @@ const GATES = [
     owner: "production-readiness",
     coverage: [],
     commands: [["npm", "run", "server:verify:performance-capacity"]],
-    nextStep: "补齐 pact.performance-capacity.v1、容量目标、benchmark runner、失败注入和报告阈值。"
+    nextStep: "补齐 v0.0.1:platform:performance-capacity-1、容量目标、benchmark runner、失败注入和报告阈值。"
   },
   {
     id: "module-ecosystem",
@@ -240,7 +268,7 @@ const GATES = [
     owner: "module-management",
     coverage: [],
     commands: [["npm", "run", "server:verify:module-ecosystem"]],
-    nextStep: "补齐 pact.module-ecosystem.v1、create-module、contract test、示例模块、CI 模板和 schema docs。"
+    nextStep: "补齐 v0.0.1:tool:module-ecosystem-1、create-module、contract test、示例模块、CI 模板和 schema docs。"
   },
   {
     id: "workspace-governance",
@@ -297,7 +325,7 @@ const GATES = [
       ["npm", "run", "server:verify:trace-context"],
       ["npm", "run", "server:verify:runtime-logging"]
     ],
-    nextStep: "补齐 pact.trace.v1、span 关联、权限裁决引用、成本字段和 OpenTelemetry 导出映射。"
+    nextStep: "补齐 v0.0.1:platform:trace-1、span 关联、权限裁决引用、成本字段和 OpenTelemetry 导出映射。"
   },
   {
     id: "durable-workflow",
@@ -311,7 +339,7 @@ const GATES = [
       ["npm", "run", "server:verify:checkpoints"],
       ["npm", "run", "server:verify:state-coordination"]
     ],
-    nextStep: "继续把更多高风险长任务接入 pact.workflow.v1，并用真实外部服务演练 partial write 补偿。"
+    nextStep: "继续把更多高风险长任务接入 v0.0.1:workflow:core-1，并用真实外部服务演练 partial write 补偿。"
   },
   {
     id: "backup-restore",
@@ -334,11 +362,12 @@ const GATES = [
     owner: "release-engineering",
     coverage: ["upgrade-migration"],
     commands: [
+      ["npm", "run", "server:verify:v001-migration-retention"],
       ["npm", "run", "server:verify:feature-profiles"],
       ["npm", "run", "server:verify:unified-registration"],
       ["npm", "run", "server:verify:multi-source-connectors"]
     ],
-    nextStep: "补齐 schema migration report、feature profile 构建和连接器迁移门禁。"
+    nextStep: "补齐 secret-safe runtime retention report、schema migration report、feature profile 构建和连接器迁移门禁。"
   },
   {
     id: "ui-smoke",
@@ -690,8 +719,8 @@ const QUICK_COVERAGE = ["architecture", "document-parsing-real-sample", "ui-smok
   }
 
   const report = {
-    schemaVersion: 1,
-    reportType: "pact.production-readiness.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    reportType: "v0.0.1:platform:production-readiness-1",
     runId,
     generatedAt: new Date().toISOString(),
     mode: options.quick ? "quick" : "full",

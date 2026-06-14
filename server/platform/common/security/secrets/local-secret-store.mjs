@@ -3,13 +3,21 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ServerConfig } from "../../config/ServerConfig.mjs";
 
-export const LOCAL_SECRET_STORE_VERSION = "pact.local-secret-store.v1";
+export const LOCAL_SECRET_STORE_VERSION = "v0.0.1:risk-control:local-secret-store-1";
 
 const SECRET_STORE_DIR = "secrets";
 const REGISTRY_FILE = "registry.json";
 const AUDIT_FILE = "audit.jsonl";
 const VALUES_DIR = "values";
 const CONFIG_REFS_FILE = path.join("config", "refs.json");
+const SERVICEHUB_SECRET_INVALIDATION_SCOPES = Object.freeze([
+  "tool-management-catalog",
+  "mcp-tools-list",
+  "grant-projection",
+  "external-service-runtime-cache",
+  "external-service-health-state",
+  "upstream-session"
+]);
 
 const CODESPACE_CAPABILITIES = Object.freeze([
   "repository.status",
@@ -90,6 +98,20 @@ export const LOCAL_SECRET_TARGETS = Object.freeze({
     envSecrets: [
       { name: "PACT_RAGFLOW_API_KEY", key: "apiKey" },
       { name: "RAGFLOW_API_KEY", key: "apiKey" }
+    ]
+  },
+  servicehub: {
+    provider: "servicehub",
+    aliases: ["servicehub", "service-hub", "external-service", "external-services"],
+    family: "servicehub",
+    configProvider: "servicehub",
+    secretRef: "secret://servicehub/default/api-key",
+    endpointRef: "config://servicehub/default-endpoint",
+    authType: "bearer",
+    defaultMode: "contract",
+    envSecrets: [
+      { name: "PACT_SERVICEHUB_TOKEN", key: "token" },
+      { name: "PACT_SERVICEHUB_API_KEY", key: "apiKey" }
     ]
   },
   onedrive: {
@@ -223,7 +245,7 @@ async function appendAudit(dataDir, event) {
 
 function emptyRegistry() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: LOCAL_SECRET_STORE_VERSION,
     updatedAt: nowIso(),
     refs: {}
@@ -271,6 +293,235 @@ function redactedPayload(payload = {}) {
   return output;
 }
 
+function revisionOf(entry = null) {
+  const revision = Number(entry?.revision || 0);
+  return Number.isSafeInteger(revision) && revision > 0 ? revision : 0;
+}
+
+function hasExpectedRevision(expectedRevision) {
+  return expectedRevision !== undefined && expectedRevision !== null && text(expectedRevision) !== "";
+}
+
+function parseExpectedRevision(expectedRevision, secretRef) {
+  const revision = Number(expectedRevision);
+  if (!Number.isSafeInteger(revision) || revision < 0) {
+    const error = new Error(`Pact local secret expectedRevision is invalid for ${secretRef}.`);
+    error.code = "local_secret_revision_invalid";
+    error.secretRef = secretRef;
+    error.expectedRevision = expectedRevision;
+    throw error;
+  }
+  return revision;
+}
+
+function assertExpectedRevision(entry, expectedRevision, secretRef) {
+  if (!hasExpectedRevision(expectedRevision)) return;
+  const expected = parseExpectedRevision(expectedRevision, secretRef);
+  const actual = revisionOf(entry);
+  if (actual !== expected) {
+    const error = new Error(`Pact local secret revision conflict for ${secretRef}: expected ${expected}, got ${actual}.`);
+    error.code = "local_secret_revision_conflict";
+    error.secretRef = secretRef;
+    error.expectedRevision = expected;
+    error.actualRevision = actual;
+    throw error;
+  }
+}
+
+function cleanTextList(value) {
+  const values = Array.isArray(value) ? value : [value];
+  return [...new Set(values.map((item) => text(item)).filter(Boolean))];
+}
+
+function publicScopeMetadata(scope = {}) {
+  const input = asObject(scope, null);
+  if (!input) return text(scope) ? text(scope) : null;
+  const output = {};
+  for (const key of ["serviceId", "serviceName", "tenantId", "workspaceId", "authBindingId", "bindingId", "dataClass", "sensitivity"]) {
+    const value = text(input[key]);
+    if (value) output[key] = value;
+  }
+  for (const key of ["scopes", "allowedScopes", "allowedHosts", "allowedProtocols"]) {
+    const values = cleanTextList(input[key]);
+    if (values.length > 0) output[key] = values;
+  }
+  return Object.keys(output).length > 0 ? output : null;
+}
+
+function publicSecretMetadata(metadata = {}, existing = {}) {
+  const input = asObject(metadata);
+  const output = { ...asObject(existing) };
+  for (const key of ["serviceId", "serviceName", "tenantId", "workspaceId", "authBindingId", "bindingId", "dataClass", "sensitivity", "label"]) {
+    if (!Object.prototype.hasOwnProperty.call(input, key)) continue;
+    const value = text(input[key]);
+    if (value) output[key] = value;
+    else delete output[key];
+  }
+  for (const key of ["scopes", "allowedScopes", "allowedHosts", "allowedProtocols"]) {
+    if (!Object.prototype.hasOwnProperty.call(input, key)) continue;
+    const values = cleanTextList(input[key]);
+    if (values.length > 0) output[key] = values;
+    else delete output[key];
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "scope")) {
+    const scope = publicScopeMetadata(input.scope);
+    if (scope) output.scope = scope;
+    else delete output.scope;
+  }
+  return output;
+}
+
+function lifecycleStatus(entry = {}) {
+  if (entry?.revokedAt) return "revoked";
+  return text(entry?.status || "active").toLowerCase();
+}
+
+function entryResolvable(entry = null) {
+  return entry?.credentialConfigured === true && lifecycleStatus(entry) === "active";
+}
+
+function serviceIdFromSecretMetadata(metadata = {}) {
+  const source = asObject(metadata);
+  return text(source.serviceId || source.scope?.serviceId);
+}
+
+function effectiveSecretScope(metadata = {}) {
+  const source = asObject(metadata);
+  return {
+    ...source,
+    ...asObject(source.scope)
+  };
+}
+
+function normalizedHost(value = "") {
+  return text(value).toLowerCase().replace(/^\[|\]$/g, "");
+}
+
+function protocolName(value = "") {
+  return text(value).toLowerCase().replace(/:$/, "");
+}
+
+function assertScopeTextMatch({
+  scope = {},
+  expected = {},
+  field = "",
+  reasonCode = ""
+} = {}) {
+  const allowed = text(scope[field]);
+  const requested = text(expected[field]);
+  if (!allowed || !requested || allowed === requested) {
+    return;
+  }
+  const error = new Error(`Pact local secret scope denied: ${reasonCode || field}.`);
+  error.code = "local_secret_scope_denied";
+  error.reasonCode = reasonCode || `${field}_mismatch`;
+  error.field = field;
+  throw error;
+}
+
+function assertScopeListIncludes({
+  scope = {},
+  expected = {},
+  scopeField = "",
+  expectedValue = "",
+  normalize = text,
+  reasonCode = ""
+} = {}) {
+  const allowed = cleanTextList(scope[scopeField]).map((item) => normalize(item)).filter(Boolean);
+  const requested = normalize(expectedValue);
+  if (allowed.length === 0 || !requested || allowed.includes(requested)) {
+    return;
+  }
+  const error = new Error(`Pact local secret scope denied: ${reasonCode || scopeField}.`);
+  error.code = "local_secret_scope_denied";
+  error.reasonCode = reasonCode || `${scopeField}_not_allowed`;
+  error.field = scopeField;
+  throw error;
+}
+
+function assertSecretScopeAllowed({
+  entry = {},
+  secretRef = "",
+  expectedScope = {}
+} = {}) {
+  const expected = asObject(expectedScope, null);
+  if (!expected) {
+    return;
+  }
+  const scope = effectiveSecretScope(entry.metadata);
+  try {
+    assertScopeTextMatch({ scope, expected, field: "serviceId", reasonCode: "service_id_mismatch" });
+    assertScopeTextMatch({ scope, expected, field: "tenantId", reasonCode: "tenant_id_mismatch" });
+    assertScopeTextMatch({ scope, expected, field: "workspaceId", reasonCode: "workspace_id_mismatch" });
+    assertScopeTextMatch({ scope, expected, field: "authBindingId", reasonCode: "auth_binding_id_mismatch" });
+    assertScopeListIncludes({
+      scope,
+      expected,
+      scopeField: "allowedHosts",
+      expectedValue: expected.host,
+      normalize: normalizedHost,
+      reasonCode: "host_not_allowed"
+    });
+    assertScopeListIncludes({
+      scope,
+      expected,
+      scopeField: "allowedProtocols",
+      expectedValue: expected.protocol,
+      normalize: protocolName,
+      reasonCode: "protocol_not_allowed"
+    });
+    for (const requestedScope of cleanTextList(expected.scopes || expected.requiredScopes)) {
+      assertScopeListIncludes({
+        scope,
+        expected,
+        scopeField: "scopes",
+        expectedValue: requestedScope,
+        reasonCode: "scope_not_allowed"
+      });
+    }
+    for (const requestedScope of cleanTextList(expected.allowedScopes)) {
+      assertScopeListIncludes({
+        scope,
+        expected,
+        scopeField: "allowedScopes",
+        expectedValue: requestedScope,
+        reasonCode: "allowed_scope_not_allowed"
+      });
+    }
+  } catch (error) {
+    error.secretRef = secretRef;
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+function serviceHubSecretCatalogChange({
+  entry = {},
+  secretRef = "",
+  reasonCode = "",
+  at = nowIso()
+} = {}) {
+  if (entry.provider !== "servicehub" && entry.family !== "servicehub") {
+    return null;
+  }
+  const resolvedReason = text(reasonCode || "external_service_secret_changed") || "external_service_secret_changed";
+  const serviceId = serviceIdFromSecretMetadata(entry.metadata);
+  return {
+    schemaVersion: "v0.0.1:schema:definition-1",
+    source: "secret-store",
+    type: resolvedReason,
+    reasonCode: resolvedReason,
+    serviceId,
+    secretRefFingerprint: sha256(secretRef),
+    at,
+    invalidation: {
+      reasonCode: resolvedReason,
+      serviceId,
+      scopes: [...SERVICEHUB_SECRET_INVALIDATION_SCOPES]
+    }
+  };
+}
+
 async function readRegistry(dataDir = "") {
   const paths = localSecretStorePaths({ dataDir });
   const registry = await readJson(paths.registryPath, emptyRegistry());
@@ -289,8 +540,8 @@ async function saveRegistry(dataDir, registry) {
 
 function defaultCodespaceConfig() {
   return {
-    schemaVersion: 1,
-    protocolVersion: "pact.codespace.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    protocolVersion: "v0.0.1:platform:codespace-1",
     updatedAt: nowIso(),
     providers: {
       github: {
@@ -319,8 +570,8 @@ function defaultCodespaceConfig() {
 
 function defaultKnowledgeConfig() {
   return {
-    schemaVersion: 1,
-    protocolVersion: "pact.knowledge-backend-port.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    protocolVersion: "v0.0.1:knowledge:backend-port-1",
     updatedAt: nowIso(),
     providers: {
       dify: {
@@ -373,8 +624,8 @@ function defaultKnowledgeConfig() {
 
 function defaultCloudDriveConfig() {
   return {
-    schemaVersion: 1,
-    protocolVersion: "pact.cloud-drive-port.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    protocolVersion: "v0.0.1:storage:cloud-drive-port-1",
     updatedAt: nowIso(),
     connections: {}
   };
@@ -386,8 +637,8 @@ async function upsertConfigRef({ dataDir, endpointRef = "", endpoint = "", provi
   }
   const paths = localSecretStorePaths({ dataDir });
   const config = await readJson(paths.configRefsPath, {
-    schemaVersion: 1,
-    protocolVersion: "pact.runtime-config-refs.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    protocolVersion: "v0.0.1:storage:runtime-config-refs-1",
     updatedAt: nowIso(),
     refs: {}
   });
@@ -536,7 +787,7 @@ async function updateProviderManifest(input) {
   return null;
 }
 
-export async function initializeLocalSecret({
+async function upsertLocalSecret({
   dataDir = "",
   provider = "",
   secretRef = "",
@@ -546,7 +797,9 @@ export async function initializeLocalSecret({
   authType = "",
   payload = {},
   metadata = {},
-  updateManifest = true
+  updateManifest = true,
+  expectedRevision,
+  operation = "initialize"
 } = {}) {
   const target = resolveLocalSecretTarget(provider);
   if (!target) {
@@ -567,8 +820,20 @@ export async function initializeLocalSecret({
 
   const registry = await readRegistry(paths.dataDir);
   const existing = registry.refs[resolvedSecretRef] || null;
+  if (operation === "rotate" && !existing) {
+    const error = new Error(`Pact local secret is not configured: ${resolvedSecretRef}`);
+    error.code = "local_secret_not_configured";
+    error.secretRef = resolvedSecretRef;
+    throw error;
+  }
+  assertExpectedRevision(existing, expectedRevision, resolvedSecretRef);
+  const timestamp = nowIso();
+  const previousRevision = revisionOf(existing);
+  const revision = previousRevision + 1;
+  const rotatedAt = existing || operation === "rotate" ? timestamp : "";
+  const publicMetadata = publicSecretMetadata(metadata, existing?.metadata);
   const valueRecord = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: LOCAL_SECRET_STORE_VERSION,
     secretRef: resolvedSecretRef,
     provider: target.provider,
@@ -578,8 +843,11 @@ export async function initializeLocalSecret({
     endpointRef: resolvedEndpointRef,
     payload: secretPayload,
     metadata: asObject(metadata),
-    createdAt: existing?.createdAt || nowIso(),
-    updatedAt: nowIso()
+    status: "active",
+    revision,
+    createdAt: existing?.createdAt || timestamp,
+    updatedAt: timestamp,
+    ...(rotatedAt ? { rotatedAt } : {})
   };
   await writePrivateJson(paths.valuePath, valueRecord);
 
@@ -594,8 +862,12 @@ export async function initializeLocalSecret({
     valueKeys: Object.keys(secretPayload).sort(),
     redacted: redactedPayload(secretPayload),
     credentialConfigured: true,
+    status: "active",
+    revision,
     createdAt: existing?.createdAt || valueRecord.createdAt,
-    updatedAt: valueRecord.updatedAt
+    updatedAt: valueRecord.updatedAt,
+    ...(rotatedAt ? { rotatedAt } : {}),
+    ...(Object.keys(publicMetadata).length > 0 ? { metadata: publicMetadata } : {})
   };
   registry.refs[resolvedSecretRef] = entry;
   await saveRegistry(paths.dataDir, registry);
@@ -613,16 +885,31 @@ export async function initializeLocalSecret({
       })
     : null;
 
+  const event = operation === "rotate" ? "secret.rotated" : existing ? "secret.updated" : "secret.initialized";
+  const catalogChange = serviceHubSecretCatalogChange({
+    entry,
+    secretRef: resolvedSecretRef,
+    reasonCode: operation === "rotate"
+      ? "external_service_secret_rotated"
+      : existing
+        ? "external_service_secret_updated"
+        : "external_service_secret_initialized",
+    at: timestamp
+  });
   await appendAudit(paths.dataDir, {
-    event: existing ? "secret.updated" : "secret.initialized",
+    event,
     secretRef: resolvedSecretRef,
     provider: target.provider,
     family: target.family,
     mode: resolvedMode,
     authType: resolvedAuthType,
     valueKeys: entry.valueKeys,
+    previousRevision,
+    revision,
+    status: "active",
+    ...(rotatedAt ? { rotatedAt } : {}),
     manifestUpdated: Boolean(manifestUpdate),
-    createdAt: nowIso()
+    createdAt: timestamp
   });
 
   return {
@@ -636,17 +923,180 @@ export async function initializeLocalSecret({
     mode: resolvedMode,
     authType: resolvedAuthType,
     credentialConfigured: true,
+    status: "active",
+    revision,
+    ...(rotatedAt ? { rotatedAt } : {}),
     valueStored: true,
     registryPath: paths.registryPath,
     auditPath: paths.auditPath,
     valuePath: paths.valuePath,
     manifestUpdate,
+    ...(catalogChange ? { catalogChange } : {}),
+    entry
+  };
+}
+
+export async function initializeLocalSecret(input = {}) {
+  return upsertLocalSecret({ ...input, operation: "initialize" });
+}
+
+export async function rotateLocalSecret(input = {}) {
+  return upsertLocalSecret({ ...input, operation: "rotate" });
+}
+
+function localValuePathForEntry(paths, entry = {}) {
+  const storageRef = text(entry.storageRef);
+  if (!storageRef.startsWith("local:")) return "";
+  const fileName = storageRef.slice("local:".length);
+  if (!fileName || fileName.includes("/") || fileName.includes("\\") || path.basename(fileName) !== fileName) {
+    return "";
+  }
+  return path.join(paths.valuesDir, fileName);
+}
+
+export async function revokeLocalSecret({
+  dataDir = "",
+  provider = "",
+  secretRef = "",
+  expectedRevision,
+  reason = "",
+  metadata = {}
+} = {}) {
+  const target = provider ? resolveLocalSecretTarget(provider) : null;
+  if (provider && !target) {
+    throw new Error(`Unsupported Pact secret provider: ${provider}`);
+  }
+  const resolvedSecretRef = assertSecretRef(secretRef || target?.secretRef || "");
+  const paths = localSecretStorePaths({ dataDir, secretRef: resolvedSecretRef });
+  const registry = await readRegistry(paths.dataDir);
+  const existing = registry.refs[resolvedSecretRef] || null;
+  if (!existing) {
+    const error = new Error(`Pact local secret is not configured: ${resolvedSecretRef}`);
+    error.code = "local_secret_not_configured";
+    error.secretRef = resolvedSecretRef;
+    throw error;
+  }
+  assertExpectedRevision(existing, expectedRevision, resolvedSecretRef);
+
+  const timestamp = nowIso();
+  const previousRevision = revisionOf(existing);
+  const revision = previousRevision + 1;
+  const publicMetadata = publicSecretMetadata(metadata, existing.metadata);
+  const entry = {
+    ...existing,
+    secretRef: resolvedSecretRef,
+    provider: existing.provider || target?.provider || "",
+    family: existing.family || target?.family || "",
+    credentialConfigured: false,
+    status: "revoked",
+    revision,
+    revokedAt: timestamp,
+    updatedAt: timestamp,
+    ...(Object.keys(publicMetadata).length > 0 ? { metadata: publicMetadata } : {})
+  };
+  registry.refs[resolvedSecretRef] = entry;
+  await saveRegistry(paths.dataDir, registry);
+
+  const valuePath = localValuePathForEntry(paths, existing);
+  if (valuePath) {
+    await fs.unlink(valuePath).catch((error) => {
+      if (error?.code !== "ENOENT") throw error;
+    });
+  }
+
+  await appendAudit(paths.dataDir, {
+    event: "secret.revoked",
+    secretRef: resolvedSecretRef,
+    provider: entry.provider,
+    family: entry.family,
+    previousRevision,
+    revision,
+    status: "revoked",
+    revokedAt: timestamp,
+    reason: text(reason),
+    createdAt: timestamp
+  });
+  const catalogChange = serviceHubSecretCatalogChange({
+    entry,
+    secretRef: resolvedSecretRef,
+    reasonCode: "external_service_secret_revoked",
+    at: timestamp
+  });
+
+  return {
+    ok: true,
+    protocolVersion: LOCAL_SECRET_STORE_VERSION,
+    provider: entry.provider,
+    family: entry.family,
+    dataDir: paths.dataDir,
+    secretRef: resolvedSecretRef,
+    credentialConfigured: false,
+    status: "revoked",
+    revision,
+    revokedAt: timestamp,
+    registryPath: paths.registryPath,
+    auditPath: paths.auditPath,
+    valuePath,
+    ...(catalogChange ? { catalogChange } : {}),
     entry
   };
 }
 
 export async function readLocalSecretRegistry({ dataDir = "" } = {}) {
   return readRegistry(resolveDataDir(dataDir));
+}
+
+export async function resolveLocalSecretPayload({ dataDir = "", secretRef = "", expectedScope = null } = {}) {
+  const resolvedSecretRef = assertSecretRef(secretRef);
+  const paths = localSecretStorePaths({ dataDir, secretRef: resolvedSecretRef });
+  const registry = await readRegistry(paths.dataDir);
+  const entry = registry.refs[resolvedSecretRef] || null;
+  if (!entry) {
+    const error = new Error(`Pact local secret is not configured: ${resolvedSecretRef}`);
+    error.code = "local_secret_not_configured";
+    error.secretRef = resolvedSecretRef;
+    throw error;
+  }
+  if (!entryResolvable(entry)) {
+    const status = lifecycleStatus(entry);
+    const error = new Error(`Pact local secret is not active: ${resolvedSecretRef}`);
+    error.code = status === "revoked" ? "local_secret_revoked" : "local_secret_not_configured";
+    error.secretRef = resolvedSecretRef;
+    error.status = status;
+    throw error;
+  }
+  assertSecretScopeAllowed({ entry, secretRef: resolvedSecretRef, expectedScope });
+  const storageRef = text(entry.storageRef);
+  if (!storageRef.startsWith("local:")) {
+    const error = new Error(`Pact local secret storage is not local for ${resolvedSecretRef}.`);
+    error.code = "local_secret_storage_unsupported";
+    error.secretRef = resolvedSecretRef;
+    throw error;
+  }
+  const fileName = storageRef.slice("local:".length);
+  if (!fileName || fileName.includes("/") || fileName.includes("\\") || path.basename(fileName) !== fileName) {
+    const error = new Error(`Pact local secret storage ref is invalid for ${resolvedSecretRef}.`);
+    error.code = "local_secret_storage_invalid";
+    error.secretRef = resolvedSecretRef;
+    throw error;
+  }
+  const valueRecord = await readJson(path.join(paths.valuesDir, fileName), null);
+  if (valueRecord?.secretRef !== resolvedSecretRef) {
+    const error = new Error(`Pact local secret value record does not match ${resolvedSecretRef}.`);
+    error.code = "local_secret_value_mismatch";
+    error.secretRef = resolvedSecretRef;
+    throw error;
+  }
+  return {
+    secretRef: resolvedSecretRef,
+    provider: entry.provider || valueRecord.provider || "",
+    family: entry.family || valueRecord.family || "",
+    authType: entry.authType || valueRecord.authType || "",
+    status: lifecycleStatus(entry),
+    revision: revisionOf(entry),
+    metadata: asObject(entry.metadata),
+    payload: asObject(valueRecord.payload)
+  };
 }
 
 export async function listLocalSecretEntries({ dataDir = "" } = {}) {
@@ -663,7 +1113,7 @@ export async function localSecretConfigured({ dataDir = "", provider = "", secre
   const refs = Object.values(registry.refs);
   const normalizedProvider = normalizeLocalSecretProvider(provider);
   return refs.some((entry) =>
-    entry.credentialConfigured === true &&
+    entryResolvable(entry) &&
     (!secretRef || entry.secretRef === secretRef) &&
     (!normalizedProvider || entry.provider === normalizedProvider)
   );

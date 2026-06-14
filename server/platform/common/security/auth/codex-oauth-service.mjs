@@ -6,6 +6,7 @@ const CODEX_DEVICE_URL = "https://auth.openai.com/codex/device";
 const CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
 const TOKEN_REFRESH_MARGIN_MS = 60_000;
 const DEVICE_LOGIN_TTL_MS = 15 * 60_000;
+const MAX_CODEX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
 let activeDeviceLogin = null;
 
@@ -23,6 +24,33 @@ function authPath() {
 
 function stripAnsi(value) {
   return String(value || "").replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+async function readResponseTextWithLimit(response, maxBytes = MAX_CODEX_RESPONSE_BYTES) {
+  if (!response?.body?.getReader) {
+    const text = await response.text();
+    if (Buffer.byteLength(text, "utf8") > maxBytes) {
+      throw new Error(`Codex response exceeded the ${maxBytes} byte limit.`);
+    }
+    return text;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    const chunk = Buffer.from(value);
+    total += chunk.length;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`Codex response exceeded the ${maxBytes} byte limit.`);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 function decodeJwtPayload(token) {
@@ -287,7 +315,7 @@ export async function callCodexChatGptJson({ model, prompt }) {
       }),
       signal: controller.signal
     });
-    const rawText = await response.text();
+    const rawText = await readResponseTextWithLimit(response);
     if (!response.ok) {
       throw new Error(rawText || `Codex Responses 请求失败：${response.status}`);
     }

@@ -117,31 +117,58 @@ const legacyScopeFallback = authorizationEngine.evaluate({
 assert.equal(legacyScopeFallback.allowed, true);
 assert.deepEqual(legacyScopeFallback.requiredCapabilities, [apiCapabilityId("knowledge.search")]);
 
-const healthTool = catalog.tools.find((tool) => tool.id === "pact.knowledge.health");
-assert.ok(healthTool, "pact.knowledge.health tool must exist");
+const externalAuthWithoutDispatcherProof = authorizationEngine.evaluate({
+  operation: {
+    id: "mobile_relay.command.poll",
+    externalAuth: true,
+    requiredScopes: [],
+    safety: { risk: "safe_write" },
+    readOnly: false
+  }
+});
+assert.equal(externalAuthWithoutDispatcherProof.allowed, false);
+assert.equal(externalAuthWithoutDispatcherProof.reasonCode, "external_auth_not_verified");
+
+const externalAuthWithDispatcherProof = authorizationEngine.evaluate({
+  operation: {
+    id: "mobile_relay.command.poll",
+    externalAuth: true,
+    requiredScopes: [],
+    safety: { risk: "safe_write" },
+    readOnly: false
+  },
+  context: {
+    externalAuthVerified: true
+  }
+});
+assert.equal(externalAuthWithDispatcherProof.allowed, true);
+assert.equal(externalAuthWithDispatcherProof.reasonCode, "allowed_external_auth_verified");
+
+const healthTool = catalog.tools.find((tool) => tool.id === "pact.agentLibrary.health");
+assert.ok(healthTool, "pact.agentLibrary.health tool must exist");
 
 const toolCapabilityAllowed = authorizationEngine.evaluate({
   tool: healthTool,
   grant: {
     id: "grant-tool-health",
-    capabilities: [toolExecuteCapabilityId("pact.knowledge.health")]
+    capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")]
   },
   grantRequired: true
 });
 assert.equal(toolCapabilityAllowed.allowed, true);
-assert.deepEqual(toolCapabilityAllowed.requiredCapabilities, [toolExecuteCapabilityId("pact.knowledge.health")]);
+assert.deepEqual(toolCapabilityAllowed.requiredCapabilities, [toolExecuteCapabilityId("pact.agentLibrary.health")]);
 
 const toolCapabilityDenied = authorizationEngine.evaluate({
   tool: healthTool,
   grant: {
     id: "grant-tool-search",
-    capabilities: [toolExecuteCapabilityId("pact.knowledge.search")]
+    capabilities: [toolExecuteCapabilityId("pact.agentLibrary.search")]
   },
   grantRequired: true
 });
 assert.equal(toolCapabilityDenied.allowed, false);
 assert.equal(toolCapabilityDenied.reasonCode, "missing_capabilities");
-assert.deepEqual(toolCapabilityDenied.missingCapabilities, [toolExecuteCapabilityId("pact.knowledge.health")]);
+assert.deepEqual(toolCapabilityDenied.missingCapabilities, [toolExecuteCapabilityId("pact.agentLibrary.health")]);
 
 const auditDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-authz-capability-audit-"));
 const authorizationStore = createAuthorizationStore({ userDataPath: auditDataPath });
@@ -241,15 +268,15 @@ const toolStore = createToolManagementStore({
 try {
   const capabilityGrant = await toolStore.createGrant({
     label: "capability-only-tool-grant",
-    capabilities: [toolExecuteCapabilityId("pact.knowledge.health")]
+    capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")]
   });
   assert.match(capabilityGrant.token, /^ock_[A-Za-z0-9_-]+$/);
   assert.deepEqual(capabilityGrant.grant.scopes, []);
   assert.deepEqual(capabilityGrant.grant.capabilities, []);
-  assert.equal(capabilityGrant.grant.credential.protocolVersion, "pact.opaque-capability-key.v1");
+  assert.equal(capabilityGrant.grant.credential.protocolVersion, "v0.0.1:risk-control:opaque-capability-key-1");
   assert.equal(capabilityGrant.grant.credential.credentialId, capabilityGrant.grant.id);
   assert.equal(capabilityGrant.grant.credential.capabilityCount, 1);
-  assert.equal(JSON.stringify(toolStore.getRawGrant(capabilityGrant.grant.id).metadata).includes("pact.knowledge.health"), false);
+  assert.equal(JSON.stringify(toolStore.getRawGrant(capabilityGrant.grant.id).metadata).includes("pact.agentLibrary.health"), false);
 
   const toolCredentialAllowed = await toolStore.authorizeRequest({
     request: { headers: { authorization: `Bearer ${capabilityGrant.token}` } },
@@ -257,8 +284,8 @@ try {
   });
   assert.equal(toolCredentialAllowed.ok, true);
 
-  const searchTool = catalog.tools.find((tool) => tool.id === "pact.knowledge.search");
-  assert.ok(searchTool, "pact.knowledge.search tool must exist");
+  const searchTool = catalog.tools.find((tool) => tool.id === "pact.agentLibrary.search");
+  assert.ok(searchTool, "pact.agentLibrary.search tool must exist");
   const toolCredentialDenied = await toolStore.authorizeRequest({
     request: { headers: { authorization: `Bearer ${capabilityGrant.token}` } },
     tool: searchTool
@@ -268,8 +295,8 @@ try {
 
   toolStore.updateGrant(capabilityGrant.grant.id, {
     scopes: ["knowledge:read"],
-    toolsets: ["pact.knowledge.read"],
-    capabilities: [toolExecuteCapabilityId("pact.knowledge.search")]
+    toolsets: ["pact.agentLibrary.read"],
+    capabilities: [toolExecuteCapabilityId("pact.agentLibrary.search")]
   });
   const widenedProjectionStillDenied = await toolStore.authorizeRequest({
     request: { headers: { authorization: `Bearer ${capabilityGrant.token}` } },
@@ -288,7 +315,7 @@ try {
   try {
     const unavailableGrant = await unavailableKernelStore.createGrant({
       label: "capability-kernel-unavailable-grant",
-      capabilities: [toolExecuteCapabilityId("pact.knowledge.health")]
+      capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")]
     });
     const unavailableDecision = await unavailableKernelStore.authorizeRequest({
       request: { headers: { authorization: `Bearer ${unavailableGrant.token}` } },
@@ -297,7 +324,7 @@ try {
     assert.equal(unavailableDecision.ok, false);
     assert.equal(unavailableDecision.status, 503);
     assert.equal(unavailableDecision.reasonCode, "capability_kernel_unavailable");
-    assert.deepEqual(unavailableDecision.missingCapabilities, [toolExecuteCapabilityId("pact.knowledge.health")]);
+    assert.deepEqual(unavailableDecision.missingCapabilities, [toolExecuteCapabilityId("pact.agentLibrary.health")]);
   } finally {
     unavailableKernelStore.close();
     issueOnlyProvider.close();

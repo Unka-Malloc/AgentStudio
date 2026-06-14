@@ -9,13 +9,13 @@ import {
   unknownKernelCapabilities
 } from "./authorization-engine.mjs";
 
-export const OPAQUE_CAPABILITY_KEY_PROTOCOL_VERSION = "pact.opaque-capability-key.v1";
+export const OPAQUE_CAPABILITY_KEY_PROTOCOL_VERSION = "v0.0.1:risk-control:opaque-capability-key-1";
 
 const DEFAULT_ALIAS = "pact-opaque-capability-key";
 const DEFAULT_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const VALID_STATUSES = Object.freeze(["valid", "invalid"]);
 const KERNEL_STATE_VERSION = 1;
-const RECOVERY_PACKAGE_VERSION = "pact.capability-kernel-recovery.v1";
+const RECOVERY_PACKAGE_VERSION = "v0.0.1:risk-control:capability-kernel-recovery-1";
 const AEAD_ALGORITHM = "aes-256-gcm";
 
 function repoRoot() {

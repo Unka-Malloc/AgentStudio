@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { createAuthorizationEngine } from "./authorization/authorization-engine.mjs";
 
-export const SECURITY_PERMISSIONS_PROTOCOL_VERSION = "pact.security-permissions.v1";
+export const SECURITY_PERMISSIONS_PROTOCOL_VERSION = "v0.0.1:risk-control:permissions-1";
 
 function defaultSummary() {
   return {
@@ -24,7 +24,7 @@ function workspaceAssetPolicyKey(workspaceId, policyId) {
 
 function defaultGovernancePolicyRevision() {
   return {
-    protocolVersion: "pact.authorization.governance.policy-revision.v1",
+    protocolVersion: "v0.0.1:risk-control:governance-policy-revision-1",
     revision: 0,
     updatedAt: ""
   };

@@ -57,7 +57,7 @@ describe("authorization capability key and binding final second extra coverage",
 
     await expect(provider.verify({
       capabilityKey: "tool-wildcard-key",
-      requiredCapability: toolExecuteCapabilityId("pact.knowledge.health")
+      requiredCapability: toolExecuteCapabilityId("pact.agentLibrary.health")
     })).resolves.toMatchObject({
       ok: true,
       reasonCode: "capability_key_valid",
@@ -236,7 +236,7 @@ describe("authorization capability key and binding final second extra coverage",
 
     const description = await guard.describe();
     expect(description).toMatchObject({
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       provider: "memory",
       securityMode: "memory",
       alias: "final-second-binding",

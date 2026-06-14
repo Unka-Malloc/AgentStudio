@@ -50,17 +50,17 @@ afterEach(async () => {
 describe("authorization capability binding extra coverage", () => {
   it("normalizes opaque capability inputs and rejects empty or unknown requirements", async () => {
     const normalized = canonicalOpaqueCapabilities([
-      "  cap:tool:pact.knowledge.health:execute  ",
+      "  cap:tool:pact.agentLibrary.health:execute  ",
       "cap:api:knowledge.search",
       "cap:api:knowledge.search",
       "",
       "   ",
-      "cap:tool:pact.knowledge.health:execute"
+      "cap:tool:pact.agentLibrary.health:execute"
     ]);
 
     expect(normalized).toEqual([
       "cap:api:knowledge.search",
-      "cap:tool:pact.knowledge.health:execute"
+      "cap:tool:pact.agentLibrary.health:execute"
     ]);
     expect(opaqueCapabilityHash(normalized)).toBe(opaqueCapabilityHash([...normalized].reverse()));
 

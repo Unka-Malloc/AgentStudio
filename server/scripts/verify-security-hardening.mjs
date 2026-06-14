@@ -3,11 +3,20 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import Database from "better-sqlite3";
+import { createStorageBackup, restoreStorageBackup } from "../platform/common/storage/backup-restore.mjs";
+import { createClientRegistryService } from "../platform/common/storage/client-registry-repository.mjs";
+import { initializeMetadataSchema } from "../platform/common/storage/schema-manager.mjs";
 import { createAuthorizationEngine } from "../platform/common/security/authorization/authorization-engine.mjs";
 import { createAuthorizationStore } from "../platform/common/security/authorization/authorization-store.mjs";
 import { createConsoleAuth } from "../platform/common/security/auth/console-auth.mjs";
 import { createOperationAuditStore } from "../platform/common/security/operation-audit.mjs";
-import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import { resolveNormalizedDocumentPath } from "../platform/specialized/knowledge/preprocessing/file-processor/FileNormalizer/NormalizedDocuments/store.mjs";
+import {
+  proxyShouldForwardCredentials,
+  startHttpServer
+} from "../services/server-runtime/http-server.mjs";
+import { createBatchDeletionCoordinator } from "../services/client/work-queue-core/batch-deletion-coordinator.mjs";
 import { authHeaders, installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -66,6 +75,18 @@ async function verifyStaticSecurityHardeningCode() {
   assert.match(httpServerSource, /httpRateLimitPerIpPerMinute/, "HTTP layer should support IP rate limits");
   assert.match(httpServerSource, /httpRateLimitPerSubjectPerMinute/, "HTTP layer should support subject rate limits");
   assert.match(httpServerSource, /httpRateLimitLoginPerIpPerMinute/, "HTTP layer should support login rate limit");
+  assert.match(httpServerSource, /proxyShouldForwardCredentials/, "HTTP proxy must gate credential forwarding");
+  assert.match(httpServerSource, /credentialRequestHeaders/, "HTTP proxy must identify credential headers");
+  assert.match(httpServerSource, /blockedResponseHeaders/, "HTTP proxy must filter upstream response headers");
+  assert.match(httpServerSource, /"set-cookie"/, "HTTP proxy must not pass upstream Set-Cookie through");
+  assert.match(httpServerSource, /isLoopbackHostname/, "HTTP proxy should allow local migration credentials without allowing arbitrary hosts");
+  assert.match(httpServerSource, /originFromUrl/, "HTTP proxy credential trust should compare exact origins");
+  assert.doesNotMatch(
+    httpServerSource,
+    /sendJson\(response,\s*statusCode,\s*\{\s*error:\s*message\s*\}\)/,
+    "HTTP fallback errors must not reflect raw exception messages"
+  );
+  assert.match(httpServerSource, /traceId:\s*traceContext\.traceId/, "HTTP fallback errors should return trace ids instead of internals");
 
   assert.doesNotMatch(viteConfigSource, /secure:\s*false/, "vite proxy must not force TLS verification off");
   assert.match(viteConfigSource, /proxySecure/, "vite proxy secure flag should be calculated explicitly");
@@ -133,14 +154,63 @@ async function verifyStaticSecurityBlockers() {
   );
 
   const dockerfile = await fs.readFile(path.join(repoRoot, "Dockerfile"), "utf8");
-  const runtimeStage = dockerfile.split(/FROM\s+node:24-bookworm-slim\s+AS\s+runtime\b/)[1] || "";
+  const dockerStages = [...dockerfile.matchAll(/^FROM\s+\S+\s+AS\s+([A-Za-z0-9._-]+)(?:\s*(?:#.*)?)?$/gim)];
+  const runtimeStageIndex = dockerStages.findIndex((match) => String(match[1] || "").toLowerCase() === "runtime");
+  const runtimeStage = runtimeStageIndex >= 0
+    ? dockerfile.slice(
+        dockerStages[runtimeStageIndex].index + dockerStages[runtimeStageIndex][0].length,
+        dockerStages[runtimeStageIndex + 1]?.index || dockerfile.length
+      )
+    : "";
+  assert.ok(runtimeStage, "Dockerfile must define a runtime stage");
   assert.match(runtimeStage, /groupadd\s+--system[\s\S]*\bpact\b/, "runtime Docker stage must create a dedicated pact group");
   assert.match(runtimeStage, /useradd\s+--system[\s\S]*\bpact\b/, "runtime Docker stage must create a dedicated pact user");
   assert.match(runtimeStage, /COPY\s+--chown=pact:pact\s+--from=build/, "runtime Docker stage must copy app files for the pact user");
   assert.match(runtimeStage, /COPY\s+--chown=pact:pact\s+--from=runtime-deps/, "runtime Docker stage must copy runtime modules for the pact user");
-  assert.match(runtimeStage, /chown\s+-R\s+pact:pact\s+\/data\s+\/codex-home/, "runtime data directories must be owned by the pact user");
+  assert.match(
+    runtimeStage,
+    /mkdir\s+-p\s+\/opt\/pact\/data\s+\/codex-home[\s\S]*chown\s+-R\s+pact:pact\s+\/opt\/pact\s+\/codex-home/,
+    "runtime data directories must be created and owned by the pact user"
+  );
+  assert.match(runtimeStage, /VOLUME\s+\["\/opt\/pact\/data"\]/, "runtime Docker stage must expose the Pact data volume");
+  assert.match(runtimeStage, /"--data-dir",\s*"\/opt\/pact\/data"/, "runtime Docker stage must start with the Pact data directory");
   assert.match(runtimeStage, /^USER pact$/m, "runtime Docker stage must run as the pact user");
   assert.equal(/^USER root$/m.test(runtimeStage), false, "runtime Docker stage must not switch back to root");
+}
+
+function verifyProxyCredentialTrustBoundary() {
+  assert.equal(
+    proxyShouldForwardCredentials({
+      targetBaseUrl: "http://127.0.0.1:8765",
+      discoveryState: { activeServiceUrl: "http://127.0.0.1:7654" }
+    }),
+    true,
+    "loopback migration may forward credentials across local ports"
+  );
+  assert.equal(
+    proxyShouldForwardCredentials({
+      targetBaseUrl: "http://api.example.test",
+      discoveryState: { activeServiceUrl: "http://api.example.test" }
+    }),
+    false,
+    "non-loopback plaintext HTTP must not receive credentials"
+  );
+  assert.equal(
+    proxyShouldForwardCredentials({
+      targetBaseUrl: "https://api.example.test:9443",
+      discoveryState: { activeServiceUrl: "https://api.example.test" }
+    }),
+    false,
+    "same host on a different non-loopback origin must not receive credentials"
+  );
+  assert.equal(
+    proxyShouldForwardCredentials({
+      targetBaseUrl: "https://api.example.test",
+      discoveryState: { activeServiceUrl: "https://api.example.test" }
+    }),
+    true,
+    "exact trusted non-loopback HTTPS origin may receive credentials"
+  );
 }
 
 async function verifyHttpRateLimiting() {
@@ -228,6 +298,7 @@ async function verifyHttpRateLimiting() {
       body: JSON.stringify({ username: "owner", password: "wrong-pass-" + Date.now() })
     });
     assert.equal(loginFirst.status, 401);
+    assert.equal(loginFirst.payload.error, "用户名或密码错误。");
     const loginSecond = await requestJson(`${loginServer.url}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -414,7 +485,7 @@ function verifyAuditRetentionExport(userDataPath) {
       traceId: "trace_security_hardening_audit",
       tenantId: "tenant-a"
     });
-    assert.equal(exported.manifest.protocolVersion, "pact.audit-export.v1");
+    assert.equal(exported.manifest.protocolVersion, "v0.0.1:platform:audit-export-1");
     assert.equal(exported.items.length, 1);
     assert.doesNotMatch(exported.jsonl, /secret-token-value|api-key-value|\/Users\/unka\/private/);
 
@@ -432,6 +503,163 @@ function verifyAuditRetentionExport(userDataPath) {
   }
 }
 
+async function verifyClientRegistrationCapacity() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-security-client-registry-"));
+  const db = new Database(path.join(dir, "metadata.sqlite"));
+  try {
+    initializeMetadataSchema(db);
+    const registry = createClientRegistryService({ db, maxClientRegistrations: 1 });
+    const first = registry.recordClientCheckIn({
+      clientId: "client-a",
+      clientLabel: "Client A",
+      offlineAfterSeconds: 60
+    });
+    assert.equal(first.ok, true);
+
+    const updateExisting = registry.recordClientCheckIn({
+      clientId: "client-a",
+      clientLabel: "Client A updated",
+      offlineAfterSeconds: 60
+    });
+    assert.equal(updateExisting.ok, true);
+
+    const denied = registry.recordClientCheckIn({
+      clientId: "client-b",
+      clientLabel: "Client B",
+      offlineAfterSeconds: 60
+    });
+    assert.equal(denied.ok, false);
+    assert.equal(denied.statusCode, 429);
+    assert.equal(denied.code, "client_registration_capacity_exceeded");
+
+    db.prepare("UPDATE client_registrations SET last_seen_at = ? WHERE client_id = ?")
+      .run("2000-01-01T00:00:00.000Z", "client-a");
+    const afterPrune = registry.recordClientCheckIn({
+      clientId: "client-b",
+      clientLabel: "Client B",
+      offlineAfterSeconds: 60
+    });
+    assert.equal(afterPrune.ok, true);
+  } finally {
+    db.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function verifyNormalizedDocumentPathBoundary() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-security-normalized-docs-"));
+  const jobId = "job-security";
+  const normalizedRoot = path.join(dir, "jobs", jobId, "normalized-documents");
+  await fs.mkdir(normalizedRoot, { recursive: true });
+  await fs.writeFile(path.join(normalizedRoot, "safe.txt"), "ok", "utf8");
+  assert.equal(
+    resolveNormalizedDocumentPath(dir, jobId, { relativePath: "safe.txt" }),
+    path.join(normalizedRoot, "safe.txt")
+  );
+  assert.throws(
+    () => resolveNormalizedDocumentPath(dir, jobId, { relativePath: "../escape.txt" }),
+    /归一化文档路径越界/
+  );
+  const symlinkPath = path.join(normalizedRoot, "escape-link.txt");
+  const symlinkCreated = await fs.symlink("/etc/passwd", symlinkPath).then(() => true).catch(() => false);
+  if (symlinkCreated) {
+    assert.throws(
+      () => resolveNormalizedDocumentPath(dir, jobId, { relativePath: "escape-link.txt" }),
+      /归一化文档路径越界/
+    );
+  }
+  await fs.rm(dir, { recursive: true, force: true });
+}
+
+async function verifyBackupRestorePathBoundary() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-security-backup-restore-"));
+  try {
+    await fs.writeFile(path.join(dir, "data.txt"), "safe", "utf8");
+    const backup = await createStorageBackup({ userDataPath: dir, label: "security" });
+    await fs.rm(path.join(dir, "data.txt"), { force: true });
+    const symlinkCreated = await fs.symlink("/etc/passwd", path.join(dir, "data.txt")).then(() => true).catch(() => false);
+    if (!symlinkCreated) {
+      return;
+    }
+    const preview = await restoreStorageBackup({
+      userDataPath: dir,
+      backupId: backup.backupId,
+      dryRun: true,
+      apply: false
+    });
+    assert.ok(
+      preview.plannedActions.some((action) =>
+        action.relativePath === "data.txt" &&
+        action.action === "blocked" &&
+        action.reason === "target_symlink_outside_root"
+      ),
+      "backup restore preview must block symlink escapes"
+    );
+    await assert.rejects(
+      restoreStorageBackup({
+        userDataPath: dir,
+        backupId: backup.backupId,
+        dryRun: false,
+        apply: true
+      }),
+      /target_symlink_outside_root/
+    );
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function verifyDeletionCoordinatorPathBoundary() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-security-delete-boundary-"));
+  const victimDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-delete-victim-"));
+  const victimFile = path.join(victimDir, "keep.txt");
+  await fs.writeFile(victimFile, "keep", "utf8");
+  let deleteOperationCalled = false;
+  const maliciousOperation = {
+    operationId: "delete-op-malicious",
+    batchId: "batch-malicious",
+    state: {
+      jobId: "job-malicious",
+      jobDirectory: victimDir,
+      objectRootPath: path.join(dir, "objects"),
+      rawObjectPaths: [],
+      runtimeDeleted: true,
+      metadataDeleted: true,
+      artifactsDeleted: false
+    }
+  };
+  const metadataStore = {
+    listPendingDeletionOperations: () => [maliciousOperation],
+    getBatchArtifactPaths: () => ({ objectRootPath: path.join(dir, "objects") }),
+    listRawObjectStoragePathsByBatch: () => [],
+    updateBatchStatus: () => null,
+    updateDeletionOperation: (_operationId, patch = {}) => ({
+      ...maliciousOperation,
+      ...patch,
+      state: patch.state || maliciousOperation.state
+    }),
+    deleteDeletionOperation: () => {
+      deleteOperationCalled = true;
+    }
+  };
+  const coordinator = createBatchDeletionCoordinator({
+    userDataPath: dir,
+    jobManager: {
+      getJob: async () => null,
+      deleteJob: async () => null
+    },
+    metadataStore
+  });
+  try {
+    await coordinator.resumePendingDeletions();
+    assert.equal(await fs.readFile(victimFile, "utf8"), "keep");
+    assert.equal(deleteOperationCalled, false);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(victimDir, { recursive: true, force: true });
+  }
+}
+
 async function verifyHttpTraceDrilldown() {
   const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-security-hardening-http-"));
   const server = await startHttpServer({
@@ -443,6 +671,10 @@ async function verifyHttpTraceDrilldown() {
   });
   try {
     const auth = await installAuthenticatedFetch(server);
+    const missingStatic = await requestJson(`${server.url}/missing/rpc_private_token.txt`);
+    assert.equal(missingStatic.status, 404);
+    assert.doesNotMatch(JSON.stringify(missingStatic.payload), /rpc_private_token|\/missing/);
+
     const settings = await requestJson(`${server.url}/api/settings`, {
       method: "POST",
       headers: {
@@ -461,7 +693,7 @@ async function verifyHttpTraceDrilldown() {
       headers: authHeaders(auth)
     });
     assert.equal(trace.status, 200);
-    assert.equal(trace.payload.protocolVersion, "pact.trace-drilldown.v1");
+    assert.equal(trace.payload.protocolVersion, "v0.0.1:platform:trace-drilldown-1");
     assert.equal(trace.payload.traceId, traceId);
     assert.ok(
       trace.payload.auditItems.some((item) => item.operationId === "settings.set"),
@@ -472,13 +704,44 @@ async function verifyHttpTraceDrilldown() {
       headers: authHeaders(auth)
     });
     assert.equal(retention.status, 200);
-    assert.equal(retention.payload.policy.policyVersion, "pact.audit-retention.v1");
+    assert.equal(retention.payload.policy.policyVersion, "v0.0.1:platform:audit-retention-1");
+
+    const pathBrowseEscape = await requestJson(`${server.url}/api/runtime/path-browse`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders(auth, { method: "POST" })
+      },
+      body: JSON.stringify({ path: "/etc", includeHidden: true })
+    });
+    assert.equal(pathBrowseEscape.status, 200);
+    assert.equal(path.resolve(pathBrowseEscape.payload.currentPath), repoRoot);
+    assert.equal(
+      (pathBrowseEscape.payload.roots || []).some((root) => path.resolve(root.path) === path.parse(repoRoot).root),
+      false,
+      "runtime path browser must not expose the filesystem root as a selectable root"
+    );
+
+    const symlinkPath = path.join(userDataPath, "path-browser-escape-link");
+    const symlinkCreated = await fs.symlink("/etc", symlinkPath).then(() => true).catch(() => false);
+    if (symlinkCreated) {
+      const pathBrowseSymlinkEscape = await requestJson(`${server.url}/api/runtime/path-browse`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(auth, { method: "POST" })
+        },
+        body: JSON.stringify({ path: symlinkPath })
+      });
+      assert.equal(pathBrowseSymlinkEscape.status, 200);
+      assert.equal(path.resolve(pathBrowseSymlinkEscape.payload.currentPath), repoRoot);
+    }
 
     const auditExport = await requestJson(`${server.url}/api/auth/audit/export?limit=50&traceId=${encodeURIComponent(traceId)}`, {
       headers: authHeaders(auth)
     });
     assert.equal(auditExport.status, 200);
-    assert.equal(auditExport.payload.export.manifest.protocolVersion, "pact.audit-export.v1");
+    assert.equal(auditExport.payload.export.manifest.protocolVersion, "v0.0.1:platform:audit-export-1");
     assert.ok(auditExport.payload.export.manifest.itemCount >= 1);
   } finally {
     await server.close();
@@ -492,7 +755,7 @@ async function verifyCspAndHtmlSandboxRuntime(userDataPath) {
   await fs.mkdir(distPath, { recursive: true });
   await fs.writeFile(
     path.join(distPath, "index.html"),
-    `<!doctype html><html><head><script>var t = localStorage.getItem('pact-theme');</script></head><body><div id=\"root\"></div></body></html>`
+    `<!doctype html><html><head><script>var preset = localStorage.getItem('pact-appearance-preset');</script></head><body><div id=\"root\"></div></body></html>`
   );
   const server = await startHttpServer({
     userDataPath,
@@ -509,7 +772,7 @@ async function verifyCspAndHtmlSandboxRuntime(userDataPath) {
     assert.match(csp, /script-src 'self' 'nonce-[A-Za-z0-9+\/=]+'/);
     assert.doesNotMatch(csp, /script-src [^;]*'unsafe-inline'/);
     assert.match(response.body, /<script[^>]*nonce=\"[^\"]+\"/);
-    assert.match(response.body, /var t = localStorage\.getItem\('pact-theme'\);/);
+    assert.match(response.body, /var preset = localStorage\.getItem\('pact-appearance-preset'\);/);
   } finally {
     await server.close();
     await fs.rm(distRoot, { recursive: true, force: true });
@@ -520,10 +783,15 @@ const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-security-hard
 try {
   await verifyStaticSecurityBlockers();
   await verifyStaticSecurityHardeningCode();
+  verifyProxyCredentialTrustBoundary();
   await verifyHttpRateLimiting();
   await verifyAuthorizationTenantAbac(userDataPath);
   await verifyConsoleTenantCli(userDataPath);
   verifyAuditRetentionExport(userDataPath);
+  await verifyClientRegistrationCapacity();
+  await verifyNormalizedDocumentPathBoundary();
+  await verifyBackupRestorePathBoundary();
+  await verifyDeletionCoordinatorPathBoundary();
   await verifyHttpTraceDrilldown();
   await verifyCspAndHtmlSandboxRuntime(userDataPath);
 } finally {

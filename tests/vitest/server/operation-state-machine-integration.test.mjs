@@ -7,7 +7,7 @@ import { dispatchOperation } from "../../../server/platform/common/operation-dis
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const operationNarrowDefinitionPath = path.resolve(
   __dirname,
-  "../../../server/platform/common/state-machine/definitions/operation.narrow.v1.json"
+  "../../../server/platform/common/state-machine/definitions/operation.narrow.json"
 );
 
 function getOperationNarrowDefinition() {
@@ -67,7 +67,7 @@ const publishOperation = {
 describe("Operation Narrow Path State Machine Integration", () => {
   it("should load definitions correctly and pass verifier validations", () => {
     const def = getOperationNarrowDefinition();
-    expect(def.machineId).toBe("operation.narrow.v1");
+    expect(def.machineId).toBe("operation.narrow");
     expect(def.initialState).toBe("received");
     expect(def.states).toHaveLength(10);
   });

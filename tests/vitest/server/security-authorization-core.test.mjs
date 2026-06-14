@@ -31,19 +31,19 @@ import {
 describe("server authorization kernel – opaque capability key", () => {
   it("canonicalizes capabilities and hashes capability sets deterministically", () => {
     const normalized = canonicalOpaqueCapabilities([
-      "  cap:tool:pact.knowledge.health:execute  ",
+      "  cap:tool:pact.agentLibrary.health:execute  ",
       "cap:api:knowledge.search",
       "cap:api:knowledge.search",
       "",
       "   ",
-      "cap:tool:pact.knowledge.health:execute"
+      "cap:tool:pact.agentLibrary.health:execute"
     ]);
 
     expect(normalized).toEqual([
       "cap:api:knowledge.search",
-      "cap:tool:pact.knowledge.health:execute"
+      "cap:tool:pact.agentLibrary.health:execute"
     ]);
-    expect(opaqueCapabilityHash(normalized)).toBe(opaqueCapabilityHash(["cap:tool:pact.knowledge.health:execute", "cap:api:knowledge.search", "cap:tool:pact.knowledge.health:execute"]));
+    expect(opaqueCapabilityHash(normalized)).toBe(opaqueCapabilityHash(["cap:tool:pact.agentLibrary.health:execute", "cap:api:knowledge.search", "cap:tool:pact.agentLibrary.health:execute"]));
   });
 
   it("guards key hash functions against short runtime lookup keys", () => {
@@ -67,12 +67,12 @@ describe("server authorization kernel – opaque capability key", () => {
       credentialId: "unit-credential",
       capabilities: [
         apiCapabilityId("knowledge.search"),
-        toolExecuteCapabilityId("pact.knowledge.health")
+        toolExecuteCapabilityId("pact.agentLibrary.health")
       ],
       ttlMs: 60_000
     });
 
-    expect(issued.protocolVersion).toBe("pact.opaque-capability-key.v1");
+    expect(issued.protocolVersion).toBe("v0.0.1:risk-control:opaque-capability-key-1");
     expect(issued.credentialId).toBe("unit-credential");
     expect(typeof issued.capabilityKey).toBe("string");
     expect(issued.capabilityKey.startsWith("ock_")).toBe(true);
@@ -371,19 +371,19 @@ describe("server authorization policy engine – pure logic branches", () => {
 
     const decision = engine.evaluate({
       tool: {
-        id: "pact.knowledge.health",
+        id: "pact.agentLibrary.health",
         status: "active"
       },
       grant: {
         id: "grant-health",
-        capabilities: [toolExecuteCapabilityId("pact.knowledge.health")]
+        capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")]
       }
     });
 
     expect(decision.protocolVersion).toBe(AUTHORIZATION_PROTOCOL_VERSION);
     expect(decision.allowed).toBe(true);
     expect(decision.effect).toBe("allow");
-    expect(decision.requiredCapabilities).toEqual([toolExecuteCapabilityId("pact.knowledge.health")]);
+    expect(decision.requiredCapabilities).toEqual([toolExecuteCapabilityId("pact.agentLibrary.health")]);
     expect(decision.reasonCode).toBe("allowed");
     expect(decision.evaluatedLayers).toContain("tool_catalog_policy");
   });
@@ -393,19 +393,19 @@ describe("server authorization policy engine – pure logic branches", () => {
 
     const decision = engine.evaluate({
       tool: {
-        id: "pact.knowledge.health",
+        id: "pact.agentLibrary.health",
         status: "active"
       },
       grant: {
         id: "grant-health-missing",
-        capabilities: [toolExecuteCapabilityId("pact.knowledge.search")]
+        capabilities: [toolExecuteCapabilityId("pact.agentLibrary.search")]
       }
     });
 
     expect(decision.allowed).toBe(false);
     expect(decision.effect).toBe("deny");
     expect(decision.reasonCode).toBe("missing_capabilities");
-    expect(decision.missingCapabilities).toEqual([toolExecuteCapabilityId("pact.knowledge.health")]);
+    expect(decision.missingCapabilities).toEqual([toolExecuteCapabilityId("pact.agentLibrary.health")]);
   });
 
   it("uses scope-based authorization when no capability requirement exists", () => {
@@ -471,53 +471,53 @@ describe("server authorization policy engine – pure logic branches", () => {
   it("returns deny for inactive tools and toolset/policy restrictions", () => {
     const inactive = createAuthorizationEngine().evaluate({
       tool: {
-        id: "pact.knowledge.health",
+        id: "pact.agentLibrary.health",
         status: "inactive"
       },
       grant: {
         id: "grant-health",
-        capabilities: [toolExecuteCapabilityId("pact.knowledge.health")]
+        capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")]
       }
     });
 
     const missingToolset = createAuthorizationEngine().evaluate({
       tool: {
-        id: "pact.knowledge.health",
+        id: "pact.agentLibrary.health",
         status: "active"
       },
       grant: {
         id: "grant-health",
         toolsets: ["other-toolset"],
-        capabilities: [toolExecuteCapabilityId("pact.knowledge.health")]
+        capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")]
       }
     });
 
     const deniedTool = createAuthorizationEngine().evaluate({
       tool: {
-        id: "pact.knowledge.health",
+        id: "pact.agentLibrary.health",
         status: "active"
       },
       grant: {
         id: "grant-health",
-        toolDeny: ["pact.knowledge.health"],
-        capabilities: [toolExecuteCapabilityId("pact.knowledge.health")]
+        toolDeny: ["pact.agentLibrary.health"],
+        capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")]
       },
       profile: {
-        toolAllow: ["pact.knowledge.health"]
+        toolAllow: ["pact.agentLibrary.health"]
       }
     });
 
     const deniedProfile = createAuthorizationEngine().evaluate({
       tool: {
-        id: "pact.knowledge.health",
+        id: "pact.agentLibrary.health",
         status: "active"
       },
       grant: {
         id: "grant-health",
-        capabilities: [toolExecuteCapabilityId("pact.knowledge.health")]
+        capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")]
       },
       profile: {
-        toolDeny: ["pact.knowledge.health"]
+        toolDeny: ["pact.agentLibrary.health"]
       }
     });
 
@@ -648,13 +648,13 @@ describe("server authorization policy engine – pure logic branches", () => {
 
     const riskDecision = createAuthorizationEngine().evaluate({
       tool: {
-        id: "pact.knowledge.health",
+        id: "pact.agentLibrary.health",
         status: "active",
         risk: "destructive"
       },
       grant: {
         id: "grant-risk",
-        capabilities: [toolExecuteCapabilityId("pact.knowledge.health")]
+        capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")]
       },
       profile: {
         maxRisk: "destructive"
@@ -663,7 +663,7 @@ describe("server authorization policy engine – pure logic branches", () => {
 
     const confirmationDecision = createAuthorizationEngine().evaluate({
       tool: {
-        id: "pact.knowledge.health",
+        id: "pact.agentLibrary.health",
         status: "active",
         requiresApproval: true,
         risk: "destructive"
@@ -671,7 +671,7 @@ describe("server authorization policy engine – pure logic branches", () => {
       grant: {
         id: "grant-approval",
         maxRisk: "destructive",
-        capabilities: [toolExecuteCapabilityId("pact.knowledge.health")]
+        capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")]
       },
       profile: {
         maxRisk: "destructive"

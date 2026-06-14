@@ -46,7 +46,7 @@ describe("opaque capability key sealed local-file backend", () => {
       capabilityKey: "opaque-local-key",
       capabilities: [
         apiCapabilityId("knowledge.search"),
-        toolExecuteCapabilityId("pact.knowledge.health"),
+        toolExecuteCapabilityId("pact.agentLibrary.health"),
       ],
       constraints: {
         workspaceId: "workspace-1",
@@ -203,7 +203,7 @@ describe("opaque capability key sealed local-file backend", () => {
       reason: "unit recovery",
     });
     expect(recoveryPackage).toMatchObject({
-      protocolVersion: "pact.capability-kernel-recovery.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-kernel-recovery-1",
       alias: "recovery-source",
       kdf: {
         name: "scrypt",
@@ -308,7 +308,7 @@ describe("opaque capability key providers and helpers", () => {
   it("normalizes opaque capability inputs and issues opaque, parsable secrets", () => {
     const normalized = canonicalOpaqueCapabilities([
       "  cap:api:knowledge.search  ",
-      "cap:tool:pact.knowledge.health:execute",
+      "cap:tool:pact.agentLibrary.health:execute",
       "cap:api:knowledge.search",
       "",
       "   ",
@@ -316,7 +316,7 @@ describe("opaque capability key providers and helpers", () => {
 
     expect(normalized).toEqual([
       "cap:api:knowledge.search",
-      "cap:tool:pact.knowledge.health:execute",
+      "cap:tool:pact.agentLibrary.health:execute",
     ]);
     expect(createCapabilityKey()).toMatch(/^ock_[A-Za-z0-9_-]+$/);
     expect(opaqueCapabilityHash(normalized)).toBe(opaqueCapabilityHash([...normalized].reverse()));
@@ -346,7 +346,7 @@ describe("opaque capability key providers and helpers", () => {
       credentialId: "unit-denied-credential",
       capabilities: [
         apiCapabilityId("knowledge.search"),
-        toolExecuteCapabilityId("pact.knowledge.health"),
+        toolExecuteCapabilityId("pact.agentLibrary.health"),
       ],
     });
 

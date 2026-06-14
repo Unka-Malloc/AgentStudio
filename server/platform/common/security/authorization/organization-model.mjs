@@ -4,7 +4,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { ServerConfig } from "../../config/ServerConfig.mjs";
 
-export const ORGANIZATION_MODEL_PROTOCOL_VERSION = "pact.organization-model.v1";
+export const ORGANIZATION_MODEL_PROTOCOL_VERSION = "v0.0.1:platform:organization-model-1";
 export const PACT_ROOT_ORGANIZATION_ID = "pact-root";
 export const PACT_ROOT_ORGANIZATION_LABEL = "Pact Root";
 

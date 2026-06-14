@@ -70,7 +70,7 @@ describe("authorization capability deep extra coverage", () => {
     const runtimeLookupKey = Buffer.alloc(32, 17);
     const runtimeLookupKeyBase64 = runtimeLookupKey.toString("base64");
     const apiSearchCapability = apiCapabilityId("knowledge.search");
-    const toolHealthCapability = toolExecuteCapabilityId("pact.knowledge.health");
+    const toolHealthCapability = toolExecuteCapabilityId("pact.agentLibrary.health");
 
     expect(capabilityKeyHash(runtimeLookupKey, capabilityKey)).toBe(capabilityKeyHash(runtimeLookupKeyBase64, capabilityKey));
     expect(capabilityPermissionHash(runtimeLookupKey, apiSearchCapability)).toBe(
@@ -308,7 +308,7 @@ describe("authorization capability deep extra coverage", () => {
       });
 
       expect(bound).toMatchObject({
-        protocolVersion: "pact.capability-binding-guard.v1",
+        protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
         credentialId: "binding-deep-credential",
         bindingStrength: "user+agent+client",
         requireUser: true,
@@ -416,7 +416,7 @@ describe("authorization capability deep extra coverage", () => {
 
       const description = await guard.describe();
       expect(description).toMatchObject({
-        protocolVersion: "pact.capability-binding-guard.v1",
+        protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
         provider: "local-file",
         securityMode: "degraded_file_fallback",
         alias: "binding_deep_extra_alias",

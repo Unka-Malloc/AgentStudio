@@ -145,14 +145,14 @@ describe("authorization capability final extra coverage", () => {
       capabilityKey: "opaque-final-key",
       requiredCapabilities: [
         apiCapabilityId("knowledge.search"),
-        toolExecuteCapabilityId("pact.knowledge.health")
+        toolExecuteCapabilityId("pact.agentLibrary.health")
       ]
     })).resolves.toMatchObject({
       ok: true,
       reasonCode: "capability_key_valid",
       requiredCapabilities: [
         apiCapabilityId("knowledge.search"),
-        toolExecuteCapabilityId("pact.knowledge.health")
+        toolExecuteCapabilityId("pact.agentLibrary.health")
       ]
     });
 

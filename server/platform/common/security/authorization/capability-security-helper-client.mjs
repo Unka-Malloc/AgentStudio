@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const CAPABILITY_SECURITY_HELPER_PROTOCOL_VERSION = "pact.capability-security-helper.v1";
+export const CAPABILITY_SECURITY_HELPER_PROTOCOL_VERSION = "v0.0.1:risk-control:capability-security-helper-1";
 
 function repoRoot() {
   return path.resolve(fileURLToPath(new URL("../../../../..", import.meta.url)));

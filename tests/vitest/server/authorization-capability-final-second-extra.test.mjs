@@ -74,7 +74,7 @@ function fakeLookupKeySource({
     async loadRuntimeLookupKey() {
       loadCount += 1;
       return {
-        protocolVersion: "pact.opaque-capability-key.v1",
+        protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
         provider,
         securityMode,
         generation,
@@ -84,14 +84,14 @@ function fakeLookupKeySource({
     async rotateRuntimeLookupKey() {
       generation += 1;
       return {
-        protocolVersion: "pact.opaque-capability-key.v1",
+        protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
         provider,
         generation
       };
     },
     describe() {
       return {
-        protocolVersion: "pact.opaque-capability-key.v1",
+        protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
         provider,
         securityMode,
         generation,
@@ -261,7 +261,7 @@ describe("authorization capability final second extra coverage", () => {
 
     const description = await guard.describe();
     expect(description).toMatchObject({
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       provider: "memory",
       securityMode: "memory",
       alias: "final-second-guard-memory",
@@ -328,7 +328,7 @@ process.exit(1);
 
       const initialDescription = await provider.describe();
       expect(initialDescription).toMatchObject({
-        protocolVersion: "pact.opaque-capability-key.v1",
+        protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
         provider: "linux-kernel-keyring",
         alias,
         bindingCount: 0,
@@ -475,7 +475,7 @@ process.exit(1);
 
       const description = await guard.describe();
       expect(description).toMatchObject({
-        protocolVersion: "pact.capability-binding-guard.v1",
+        protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
         provider: "pass-gpg",
         securityMode: "user_keyring",
         alias: "binding_final-second_linux",

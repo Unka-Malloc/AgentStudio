@@ -63,7 +63,7 @@ describe("authorization capability key binding final extra coverage", () => {
     });
 
     const normalizedCapabilities = canonicalOpaqueCapabilities([
-      "  cap:tool:pact.knowledge.health:execute  ",
+      "  cap:tool:pact.agentLibrary.health:execute  ",
       "cap:api:knowledge.search",
       "cap:api:knowledge.search",
       "",
@@ -72,7 +72,7 @@ describe("authorization capability key binding final extra coverage", () => {
 
     expect(normalizedCapabilities).toEqual([
       "cap:api:knowledge.search",
-      "cap:tool:pact.knowledge.health:execute"
+      "cap:tool:pact.agentLibrary.health:execute"
     ]);
     expect(opaqueCapabilityHash(normalizedCapabilities)).toBe(
       opaqueCapabilityHash([...normalizedCapabilities].reverse())
@@ -142,7 +142,7 @@ describe("authorization capability key binding final extra coverage", () => {
       capabilityKey: "opaque-wildcard-key",
       requiredCapabilities: [
         apiCapabilityId("knowledge.search"),
-        toolExecuteCapabilityId("pact.knowledge.health")
+        toolExecuteCapabilityId("pact.agentLibrary.health")
       ],
       includeRecordDetails: true
     })).resolves.toMatchObject({
@@ -151,7 +151,7 @@ describe("authorization capability key binding final extra coverage", () => {
       credentialId: "opaque-wildcard-credential",
       requiredCapabilities: [
         apiCapabilityId("knowledge.search"),
-        toolExecuteCapabilityId("pact.knowledge.health")
+        toolExecuteCapabilityId("pact.agentLibrary.health")
       ],
       capabilityCount: 2,
       constraints: {
@@ -267,7 +267,7 @@ describe("authorization capability key binding final extra coverage", () => {
       }
     });
     expect(active).toMatchObject({
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       credentialId: "binding-active-credential",
       bindingStrength: "user+agent+client",
       requireUser: true,
@@ -319,7 +319,7 @@ describe("authorization capability key binding final extra coverage", () => {
       },
       status: "invalid"
     });
-    expect(invalid.protocolVersion).toBe("pact.capability-binding-guard.v1");
+    expect(invalid.protocolVersion).toBe("v0.0.1:risk-control:capability-binding-guard-1");
     await expect(guard.verifyCapabilityKeyBinding({
       capabilityKey: "binding-invalid-key",
       credentialId: "binding-invalid-credential",

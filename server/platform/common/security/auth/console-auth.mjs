@@ -1030,7 +1030,6 @@ export function createConsoleAuth({ userDataPath }) {
 
   function authorizeOperation({ request, operation, method, url }) {
     const publicAccess = operation?.public === true;
-    const externalAuth = operation?.externalAuth === true;
     if (!safeRequestMethod(method) && !sameOriginRequest(request)) {
       audit({
         operationId: operation?.id || "",
@@ -1047,7 +1046,7 @@ export function createConsoleAuth({ userDataPath }) {
       };
     }
     if (!hasUsers()) {
-      return publicAccess || externalAuth
+      return publicAccess
         ? { ok: true, setupMode: true, session: null }
         : {
             ok: false,
@@ -1056,7 +1055,7 @@ export function createConsoleAuth({ userDataPath }) {
             bootstrap: getBootstrapStatus()
           };
     }
-    if (publicAccess || externalAuth) {
+    if (publicAccess) {
       return { ok: true, session: getSessionFromRequest(request) };
     }
     const session = getSessionFromRequest(request);

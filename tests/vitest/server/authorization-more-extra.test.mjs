@@ -186,7 +186,7 @@ describe("authorization more extra coverage", () => {
       ttlMs: 60_000
     });
     expect(bound).toMatchObject({
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       credentialId: "binding-extra-credential",
       bindingStrength: "user+agent+client",
       requireUser: true,
@@ -270,7 +270,7 @@ describe("authorization more extra coverage", () => {
     })).resolves.toMatchObject({
       ok: true,
       alias: "binding_more_extra_alias",
-      protocolVersion: "pact.capability-binding-guard.v1"
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1"
     });
 
     await expect(reopened.verifyCapabilityKeyBinding({
@@ -304,7 +304,7 @@ describe("authorization more extra coverage", () => {
       expect(store.revokeApproval("missing-approval")).toBeNull();
       expect(store.hasGovernancePolicies()).toBe(false);
       expect(store.getPolicyRevision()).toMatchObject({
-        protocolVersion: "pact.authorization.governance.policy-revision.v1",
+        protocolVersion: "v0.0.1:risk-control:governance-policy-revision-1",
         revision: 0
       });
 

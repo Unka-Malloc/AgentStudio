@@ -4,13 +4,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { ServerConfig } from "../../config/ServerConfig.mjs";
 
-export const CAPABILITY_BINDING_GUARD_PROTOCOL_VERSION = "pact.capability-binding-guard.v1";
+export const CAPABILITY_BINDING_GUARD_PROTOCOL_VERSION = "v0.0.1:risk-control:capability-binding-guard-1";
 
 const DEFAULT_ALIAS = "pact-tool-bindings";
 const DEFAULT_NAMESPACE = "tool-management";
 const STATE_VERSION = 1;
 const VALID_STATUSES = Object.freeze(["valid", "invalid"]);
-const RECOVERY_PACKAGE_VERSION = "pact.capability-binding-guard-recovery.v1";
+const RECOVERY_PACKAGE_VERSION = "v0.0.1:risk-control:capability-binding-guard-recovery-1";
 const AEAD_ALGORITHM = "aes-256-gcm";
 
 function nowIso() {

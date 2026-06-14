@@ -1,17 +1,12 @@
 #!/usr/bin/env node
-import {
-  runAcpSourceStdioServerFromEnv
-} from "../platform/specialized/capabilities/agent-relay/acp-agent-relay/acp-source-stdio-server.mjs";
 
-runAcpSourceStdioServerFromEnv().catch((error) => {
-  process.stderr.write(
-    `${JSON.stringify({
-      event: "pact.acp.source_stdio.failed",
-      error: {
-        code: "acp_source_stdio_failed",
-        message: error instanceof Error ? error.message : "ACP source stdio server failed."
-      }
-    })}\n`
-  );
-  process.exitCode = 1;
-});
+process.stderr.write(
+  `${JSON.stringify({
+    event: "pact.acp.source_stdio.disabled",
+    error: {
+      code: "local_stdio_interface_disabled",
+      message: "Pact no longer exposes local stdio interfaces. Use an authenticated HTTP/HTTPS endpoint instead."
+    }
+  })}\n`
+);
+process.exitCode = 1;

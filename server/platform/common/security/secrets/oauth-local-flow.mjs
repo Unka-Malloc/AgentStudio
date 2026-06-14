@@ -5,6 +5,7 @@ import { normalizeLocalSecretProvider, resolveLocalSecretTarget } from "./local-
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 const DEFAULT_CALLBACK_PATH = "/oauth/callback";
+const MAX_OAUTH_TOKEN_RESPONSE_BYTES = 1024 * 1024;
 
 const OAUTH_PROVIDER_DEFAULTS = Object.freeze({
   onedrive: {
@@ -38,6 +39,33 @@ const OAUTH_PROVIDER_DEFAULTS = Object.freeze({
 
 function text(value) {
   return String(value ?? "").trim();
+}
+
+async function readResponseTextWithLimit(response, maxBytes = MAX_OAUTH_TOKEN_RESPONSE_BYTES) {
+  if (!response?.body?.getReader) {
+    const responseText = await response.text();
+    if (Buffer.byteLength(responseText, "utf8") > maxBytes) {
+      throw new Error(`OAuth token response exceeded the ${maxBytes} byte limit.`);
+    }
+    return responseText;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    const chunk = Buffer.from(value);
+    total += chunk.length;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`OAuth token response exceeded the ${maxBytes} byte limit.`);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 function positiveInteger(value, fallback) {
@@ -169,7 +197,7 @@ async function exchangeAuthorizationCode({
     headers,
     body
   });
-  const responseText = await response.text();
+  const responseText = await readResponseTextWithLimit(response);
   let payload = {};
   try {
     payload = responseText ? JSON.parse(responseText) : {};

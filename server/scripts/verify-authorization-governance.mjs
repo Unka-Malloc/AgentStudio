@@ -106,7 +106,7 @@ function evaluate({
 
 try {
   const initialRevision = governanceStore.getPolicyRevision();
-  assert.equal(initialRevision.protocolVersion, "pact.authorization.governance.policy-revision.v1");
+  assert.equal(initialRevision.protocolVersion, "v0.0.1:risk-control:governance-policy-revision-1");
   assert.equal(initialRevision.revision, 0);
 
   const builtins = governanceStore.listRoles();

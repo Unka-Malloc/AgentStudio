@@ -27,7 +27,7 @@ function defaultSummary() {
 
 function governanceRevision() {
   return {
-    protocolVersion: "pact.authorization.governance.policy-revision.v1",
+    protocolVersion: "v0.0.1:risk-control:governance-policy-revision-1",
     revision: 0,
     updatedAt: ""
   };

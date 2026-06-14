@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { isIP } from "node:net";
 import {
   dispatchOperation,
   getRuntimeLogger,
@@ -37,8 +38,39 @@ function parseJsonObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+function trustedApprovedPendingOperation(value = null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return String(value.pendingOperationId || "").trim() ? value : null;
+}
+
 function uniqueStrings(values = []) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function sortedStrings(values = []) {
+  return uniqueStrings(Array.isArray(values) ? values : []).sort();
+}
+
+function stableJson(value) {
+  if (value === null || value === undefined) {
+    return "null";
+  }
+  if (typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJson(item)).join(",")}]`;
+  }
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+    .join(",")}}`;
+}
+
+function fingerprintValue(value) {
+  return crypto.createHash("sha256").update(stableJson(value)).digest("hex");
 }
 
 function createCapturedResponse() {
@@ -171,18 +203,433 @@ function buildDirectOperationRequest({ operation, input = {} }) {
   return { url, requestBody, params };
 }
 
-function resultSummaryFromPayload(payload) {
+const TOKEN_LIKE_SUMMARY_KEY_NORMALIZED = new Set([
+  "authorization",
+  "auth",
+  "bearer",
+  "token",
+  "apikey",
+  "xapikey",
+  "secret",
+  "clientsecret",
+  "password",
+  "credential",
+  "credentials",
+  "accesstoken",
+  "refreshtoken",
+  "idtoken"
+]);
+
+const TOKEN_LIKE_SUMMARY_VALUE_PATTERNS = [
+  /\bAuthorization\s*[:=]\s*(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{6,}/i,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{6,}/i,
+  /\b(?:api[-_\s]?key|apikey|access[-_\s]?token|refresh[-_\s]?token|id[-_\s]?token|token|secret)\s*[:=]\s*["']?[A-Za-z0-9._~+/=-]{8,}/i,
+  /(?:^|[?&\s])(?:api[_-]?key|access_token|refresh_token|id_token|token|secret)=["']?[^&\s"']{6,}/i,
+  /\b(?:sk|pk|rk|ghp|gho|ghu|ghs|ghr|xoxb|xoxp|ya29)[A-Za-z0-9._-]{10,}\b/i,
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/
+];
+
+function normalizedSummaryKey(value = "") {
+  return String(value || "").replace(/[-_\s.]/g, "").toLowerCase();
+}
+
+function isTokenLikeSummaryKey(value = "") {
+  const normalized = normalizedSummaryKey(value);
+  return TOKEN_LIKE_SUMMARY_KEY_NORMALIZED.has(normalized) ||
+    normalized.endsWith("token") ||
+    normalized.endsWith("secret") ||
+    normalized.endsWith("apikey") ||
+    normalized.endsWith("password") ||
+    normalized.endsWith("credential");
+}
+
+function isTokenLikeSummaryString(value = "") {
+  const text = String(value || "");
+  return TOKEN_LIKE_SUMMARY_VALUE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function safeSummaryKey(key = "", { redactTokenLikeValues = false } = {}) {
+  const text = String(key || "");
+  if (!redactTokenLikeValues) {
+    return text;
+  }
+  return isTokenLikeSummaryKey(text) || isTokenLikeSummaryString(text)
+    ? "[redacted-key]"
+    : text;
+}
+
+function safeSummaryPathSegment(segment = "", { sensitive = false } = {}) {
+  const text = String(segment || "");
+  if (sensitive || isTokenLikeSummaryKey(text) || isTokenLikeSummaryString(text)) {
+    return "<redacted-key>";
+  }
+  const cleaned = text.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 64);
+  return cleaned || "field";
+}
+
+function tokenLikeSummaryEvidence(value, { path = "result", reason = "token_like_result_value" } = {}) {
+  return {
+    path,
+    reason,
+    valueType: value === null ? "null" : Array.isArray(value) ? "array" : typeof value,
+    fingerprint: crypto.createHash("sha256").update(String(value ?? "")).digest("hex")
+  };
+}
+
+function collectTokenLikeSummaryEvidence(value, {
+  path = ["result"],
+  inheritedSensitiveKey = false,
+  evidence = [],
+  seen = new WeakSet()
+} = {}) {
+  if (evidence.length >= 20) {
+    return evidence;
+  }
+  if (typeof value === "string") {
+    if (inheritedSensitiveKey || isTokenLikeSummaryString(value)) {
+      evidence.push(tokenLikeSummaryEvidence(value, {
+        path: path.join("."),
+        reason: inheritedSensitiveKey ? "sensitive_result_key" : "token_like_result_value"
+      }));
+    }
+    return evidence;
+  }
+  if (!value || typeof value !== "object") {
+    return evidence;
+  }
+  if (seen.has(value)) {
+    return evidence;
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) {
+      collectTokenLikeSummaryEvidence(item, {
+        path: path.concat(`[${index}]`),
+        inheritedSensitiveKey,
+        evidence,
+        seen
+      });
+      if (evidence.length >= 20) {
+        break;
+      }
+    }
+    return evidence;
+  }
+  for (const [key, entryValue] of Object.entries(value)) {
+    const keySensitive = isTokenLikeSummaryKey(key) || isTokenLikeSummaryString(key);
+    collectTokenLikeSummaryEvidence(entryValue, {
+      path: path.concat(safeSummaryPathSegment(key, { sensitive: keySensitive })),
+      inheritedSensitiveKey: inheritedSensitiveKey || keySensitive,
+      evidence,
+      seen
+    });
+    if (evidence.length >= 20) {
+      break;
+    }
+  }
+  return evidence;
+}
+
+function tokenLikeSummaryRedaction(value, options = {}) {
+  if (!options.redactTokenLikeValues) {
+    return null;
+  }
+  const evidence = collectTokenLikeSummaryEvidence(value);
+  if (!evidence.length) {
+    return null;
+  }
+  return {
+    decision: "redacted",
+    reason: "token_like_result_value",
+    redactedValueCount: evidence.length,
+    evidence: evidence.slice(0, 8),
+    evidenceTruncated: evidence.length > 8
+  };
+}
+
+function outputGovernanceRedactionSummary(redaction = null) {
+  if (!redaction || typeof redaction !== "object" || Array.isArray(redaction)) {
+    return null;
+  }
+  return {
+    decision: String(redaction.decision || "redacted"),
+    reason: String(redaction.reason || "token_like_result_value"),
+    redactedValueCount: Math.max(0, Number(redaction.redactedValueCount || 0) || 0),
+    evidenceCount: Array.isArray(redaction.evidence) ? redaction.evidence.length : 0,
+    evidenceTruncated: redaction.evidenceTruncated === true
+  };
+}
+
+function resultSummaryFromPayload(payload, options = {}) {
   if (!payload || typeof payload !== "object") {
     return {};
   }
   const result = payload.result !== undefined ? payload.result : payload;
+  const redaction = tokenLikeSummaryRedaction(result, options);
   if (Array.isArray(result)) {
-    return { type: "array", length: result.length };
+    return {
+      type: "array",
+      length: result.length,
+      ...(redaction ? { redaction } : {})
+    };
   }
   if (result && typeof result === "object") {
-    return { type: "object", keys: Object.keys(result).slice(0, 40) };
+    return {
+      type: "object",
+      keys: Object.keys(result).slice(0, 40).map((key) => safeSummaryKey(key, options)),
+      ...(redaction ? { redaction } : {})
+    };
   }
-  return { value: result };
+  return redaction
+    ? { value: "[redacted]", redaction }
+    : { value: result };
+}
+
+function statusClassFromCode(statusCode = 0) {
+  const code = Number(statusCode || 0);
+  if (!Number.isFinite(code) || code <= 0) {
+    return "unknown";
+  }
+  return `${Math.floor(code / 100)}xx`;
+}
+
+function secretRefFingerprint(operation = {}) {
+  const secretRef = String(operation.externalMcp?.upstream?.auth?.secretRef || "").trim();
+  if (!secretRef) {
+    return "";
+  }
+  return crypto.createHash("sha256").update(secretRef).digest("hex");
+}
+
+function externalEgressDecisionSummary(value = null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { decision: "delegated_to_servicehub_runtime" };
+  }
+  const dns = value.dns && typeof value.dns === "object" && !Array.isArray(value.dns)
+    ? value.dns
+    : null;
+  return {
+    decision: value.ok === false ? "denied" : "allowed",
+    schemaVersion: String(value.schemaVersion || ""),
+    label: String(value.label || ""),
+    protocol: String(value.protocol || ""),
+    host: String(value.host || ""),
+    port: String(value.port || ""),
+    hostKind: String(value.hostKind || ""),
+    addressCategory: String(value.addressCategory || ""),
+    reason: String(value.reason || ""),
+    allowLocalForDevelopment: value.allowLocalForDevelopment === true,
+    ...(dns ? {
+      dns: {
+        status: String(dns.status || ""),
+        host: String(dns.host || ""),
+        addressCount: Math.max(0, Number(dns.addressCount || 0) || 0),
+        restrictedAddressCount: Math.max(0, Number(dns.restrictedAddressCount || 0) || 0),
+        addressCategories: sortedStrings(dns.addressCategories),
+        restrictedAddressCategories: sortedStrings(dns.restrictedAddressCategories)
+      }
+    } : {})
+  };
+}
+
+function externalOutputGovernanceDecision({
+  operation = {},
+  externalResult = null,
+  resultBytes = 0,
+  maxResultBytes = 0,
+  resultSummaryRedaction = null
+} = {}) {
+  const upstreamType = String(operation.externalMcp?.upstream?.type || externalResult?.upstream?.type || "").trim();
+  const result = externalResult?.result;
+  const redaction = outputGovernanceRedactionSummary(resultSummaryRedaction);
+  const decision = {
+    decision: "passed",
+    mode: "summary_only",
+    resultBytes: Math.max(0, Number(resultBytes || 0) || 0),
+    maxResultBytes: Math.max(0, Number(maxResultBytes || 0) || 0),
+    ...(redaction ? { redaction } : {})
+  };
+  if (upstreamType !== "mcp" || !result || typeof result !== "object" || Array.isArray(result)) {
+    return { ok: true, decision };
+  }
+  const content = Array.isArray(result.content) ? result.content : [];
+  const blockedTypes = sortedStrings(content
+    .map((item) => String(item?.type || "").trim())
+    .filter((type) => type && !["text"].includes(type)));
+  if (!blockedTypes.length) {
+    return { ok: true, decision: { ...decision, mcpContentTypes: sortedStrings(content.map((item) => item?.type).filter(Boolean)) } };
+  }
+  return {
+    ok: false,
+    errorCode: "output_governance_blocked",
+    statusCode: 422,
+    message: "External MCP tool result contains content types that require governed asset/ref handling before exposure.",
+    decision: {
+      ...decision,
+      decision: "blocked",
+      reason: "unsupported_mcp_content_type",
+      blockedContentTypes: blockedTypes
+    }
+  };
+}
+
+function grantProjectionFingerprint(grant = {}, catalogFingerprint = "") {
+  const explicit = String(grant.projectionFingerprint || grant.projection?.fingerprint || "").trim();
+  if (explicit) {
+    return explicit;
+  }
+  const metadata = grant.metadata && typeof grant.metadata === "object" && !Array.isArray(grant.metadata)
+    ? grant.metadata
+    : {};
+  return fingerprintValue({
+    protocolVersion: "v0.0.1:tool:grant-projection-1",
+    grantId: String(grant.id || ""),
+    type: String(grant.type || ""),
+    enabled: grant.enabled !== false,
+    toolsets: sortedStrings(grant.toolsets),
+    toolAllow: sortedStrings(grant.toolAllow),
+    toolDeny: sortedStrings(grant.toolDeny),
+    scopes: sortedStrings(grant.scopes),
+    allowedOrigins: sortedStrings(grant.allowedOrigins),
+    allowedCidrs: sortedStrings(grant.allowedCidrs),
+    maxUses: grant.maxUses === null || grant.maxUses === undefined ? null : Number(grant.maxUses || 0),
+    rateLimit: grant.rateLimit && typeof grant.rateLimit === "object" && !Array.isArray(grant.rateLimit)
+      ? { perMinute: Math.max(0, Number(grant.rateLimit.perMinute || 0) || 0) }
+      : {},
+    policyRevision: Math.max(0, Number(metadata.policyRevision || 0) || 0),
+    credentialProtocol: String(metadata.credentialProtocol || ""),
+    credentialId: String(metadata.credentialId || ""),
+    catalogFingerprint: String(catalogFingerprint || grant.projection?.catalogFingerprint || "").trim()
+  });
+}
+
+function externalCallReceipt({
+  toolExecutionId,
+  traceId,
+  tool = {},
+  operation = {},
+  authorization = {},
+  context = {},
+  policySummary = {},
+  status = "ok",
+  errorCode = "",
+  durationMs = 0,
+  resultBytes = 0,
+  upstreamStatusCode = 0,
+  externalResult = null,
+  catalogFingerprint = "",
+  outputGovernance = null,
+  egressDecision = null
+} = {}) {
+  const upstream = operation.externalMcp?.upstream && typeof operation.externalMcp.upstream === "object"
+    ? operation.externalMcp.upstream
+    : {};
+  const externalMcp = operation.externalMcp && typeof operation.externalMcp === "object"
+    ? operation.externalMcp
+    : {};
+  const adoption = externalMcp.adoption && typeof externalMcp.adoption === "object"
+    ? externalMcp.adoption
+    : {};
+  const grant = authorization.grant || {};
+  const toolFingerprint = String(externalMcp.toolFingerprint || adoption.fingerprint || "").trim();
+  const catalogBindingFingerprint = String(externalMcp.catalogBindingFingerprint || "").trim();
+  const globalCatalogFingerprint = String(catalogFingerprint || externalMcp.catalogFingerprint || externalMcp.serviceCatalogFingerprint || "").trim();
+  const manifestId = String(externalMcp.manifestId || "").trim();
+  const manifestFingerprint = String(externalMcp.manifestFingerprint || "").trim();
+  const serviceCatalogVersionId = String(externalMcp.serviceCatalogVersionId || externalMcp.activeVersionId || "").trim();
+  const resolvedGrantProjectionFingerprint = grantProjectionFingerprint(grant, globalCatalogFingerprint);
+  return {
+    schemaVersion: "v0.0.1:schema:definition-1",
+    protocolVersion: "v0.0.1:external-service:servicehub-external-call-receipt-1",
+    toolExecutionId,
+    traceId,
+    serviceId: String(externalMcp.serviceId || externalResult?.serviceId || ""),
+    upstreamToolName: String(externalMcp.upstreamToolName || externalResult?.upstreamToolName || ""),
+    toolId: String(tool.id || ""),
+    operationId: String(tool.operationId || operation.id || ""),
+    toolVersion: String(tool.version || ""),
+    toolsetIds: Array.isArray(tool.toolsets) ? tool.toolsets : [],
+    catalogVersion: globalCatalogFingerprint || catalogBindingFingerprint,
+    catalogFingerprint: globalCatalogFingerprint,
+    catalogBindingFingerprint,
+    manifestId,
+    manifestFingerprint,
+    serviceCatalogVersionId,
+    activeVersionId: String(externalMcp.activeVersionId || serviceCatalogVersionId).trim(),
+    serviceFingerprint: String(externalMcp.serviceFingerprint || "").trim(),
+    discoveredAt: String(externalMcp.discoveredAt || "").trim(),
+    toolAdoption: {
+      protocolVersion: String(adoption.protocolVersion || ""),
+      state: String(adoption.state || ""),
+      fingerprint: toolFingerprint,
+      currentToolFingerprint: String(externalMcp.currentToolFingerprint || "").trim(),
+      previousFingerprint: String(adoption.previousFingerprint || "").trim(),
+      reasonCode: String(adoption.reasonCode || "").trim(),
+      discoveredAt: String(adoption.discoveredAt || externalMcp.discoveredAt || "").trim(),
+      adoptedAt: String(adoption.adoptedAt || "").trim(),
+      adoptedBy: String(adoption.adoptedBy || "").trim()
+    },
+    grantId: String(grant.id || ""),
+    grantProjectionFingerprint: resolvedGrantProjectionFingerprint,
+    subject: {
+      type: "grant",
+      agentId: String(context.agentId || context.agentProfileId || ""),
+      profileId: String(context.profileId || context.agentProfileId || ""),
+      tenantId: String(context.tenantId || ""),
+      workspaceId: String(context.workspaceId || "")
+    },
+    risk: String(tool.risk || operation.safety?.risk || ""),
+    serviceProtocolVersion: String(externalResult?.protocolVersion || ""),
+    upstream: {
+      type: String(upstream.type || externalResult?.upstream?.type || ""),
+      transport: String(upstream.transport || externalResult?.upstream?.transport || ""),
+      endpointRedacted: true
+    },
+    decisions: {
+      policy: policySummary,
+      egress: externalEgressDecisionSummary(egressDecision || externalResult?.egressDecision),
+      mappingSandbox: { decision: "manifest_bound" },
+      outboundGovernance: { decision: "summary_only" },
+      quotaBulkhead: { decision: "tool_concurrency_applied" },
+      errorTaxonomy: { decision: errorCode ? "normalized_error_code" : "not_applicable", errorCode },
+      reconciliation: { decision: "not_configured" },
+      streamingBackpressure: { decision: "non_streaming_result" },
+      outputGovernance: outputGovernance && typeof outputGovernance === "object" && !Array.isArray(outputGovernance)
+        ? outputGovernance
+        : { decision: "summary_only" }
+    },
+    deadline: {
+      timeoutMs: Math.max(0, Number(tool.timeoutMs || 0) || 0),
+      durationMs: Math.max(0, Number(durationMs || 0) || 0)
+    },
+    retry: {
+      attempt: 1,
+      retryApplied: false
+    },
+    circuit: {
+      state: "not_recorded"
+    },
+    upstreamStatusClass: upstreamStatusCode ? statusClassFromCode(upstreamStatusCode) : (status === "ok" ? "success" : "unknown"),
+    resultBytes: Math.max(0, Number(resultBytes || 0) || 0),
+    secretRefFingerprint: secretRefFingerprint(operation),
+    unknownOutcome: ["tool_timeout", "AbortError"].includes(String(errorCode || "")),
+    recoveryStatus: "not_required",
+    assetRefs: [],
+    redaction: {
+      rawUrlQuery: "omitted",
+      headers: "omitted",
+      requestBody: "omitted",
+      responseBody: "omitted",
+      secrets: "omitted",
+      stackTrace: "omitted",
+      internalPaths: "omitted"
+    },
+    auditRef: {
+      kind: "tool_execution",
+      id: toolExecutionId
+    },
+    status
+  };
 }
 
 function jsonByteLength(value) {
@@ -193,9 +640,405 @@ function jsonByteLength(value) {
   }
 }
 
+function schemaTypeList(schema = {}) {
+  const rawType = schema.type;
+  if (Array.isArray(rawType)) {
+    return rawType.map((type) => String(type || "").trim()).filter(Boolean);
+  }
+  const type = String(rawType || "").trim();
+  if (type) {
+    return [type];
+  }
+  if (schema.properties) {
+    return ["object"];
+  }
+  if (schema.items) {
+    return ["array"];
+  }
+  return [];
+}
+
+function jsonSchemaValueEquals(left, right) {
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return left === right;
+  }
+}
+
+const SAFE_JSON_SCHEMA_PATTERN_MAX_LENGTH = 160;
+
+function jsonSchemaSubschemas(schema = {}, keyword = "") {
+  const value = schema?.[keyword];
+  return Array.isArray(value)
+    ? value.filter((item) => item && typeof item === "object" && !Array.isArray(item))
+    : [];
+}
+
+function validateSafeJsonSchemaPattern(pattern = "") {
+  const patternText = String(pattern);
+  if (patternText.length > SAFE_JSON_SCHEMA_PATTERN_MAX_LENGTH) {
+    return {
+      ok: false,
+      error: `pattern exceeds ${SAFE_JSON_SCHEMA_PATTERN_MAX_LENGTH} characters`
+    };
+  }
+  if (/\\[1-9]/.test(patternText)) {
+    return { ok: false, error: "backreferences are not supported" };
+  }
+  if (/\(\?/.test(patternText)) {
+    return { ok: false, error: "lookaround and advanced group syntax are not supported" };
+  }
+  if (/\([^)]*[*+][^)]*\)\s*(?:[*+?]|\{\d*,?\d*\})/.test(patternText)) {
+    return { ok: false, error: "nested quantified groups are not supported" };
+  }
+  if ((patternText.match(/\.\*/g) || []).length > 1) {
+    return { ok: false, error: "multiple wildcard repetitions are not supported" };
+  }
+  try {
+    return { ok: true, regex: new RegExp(patternText, "u") };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "invalid regular expression"
+    };
+  }
+}
+
+function isValidJsonSchemaDate(value = "") {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return false;
+  }
+  const [, year, month, day] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  return date.getUTCFullYear() === Number(year) &&
+    date.getUTCMonth() === Number(month) - 1 &&
+    date.getUTCDate() === Number(day);
+}
+
+function isValidJsonSchemaHostname(value = "") {
+  const text = String(value || "").trim();
+  if (!text || text.length > 253 || text.endsWith(".")) {
+    return false;
+  }
+  return text.split(".").every((label) =>
+    label.length > 0 &&
+    label.length <= 63 &&
+    /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)
+  );
+}
+
+function stringMatchesJsonSchemaFormat(value = "", format = "") {
+  const normalized = String(format || "").trim().toLowerCase();
+  if (!normalized) {
+    return { ok: true };
+  }
+  switch (normalized) {
+    case "email":
+      return { ok: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) };
+    case "uri":
+      try {
+        new URL(value);
+        return { ok: true };
+      } catch {
+        return { ok: false };
+      }
+    case "url":
+      try {
+        const parsed = new URL(value);
+        return { ok: ["http:", "https:"].includes(parsed.protocol) };
+      } catch {
+        return { ok: false };
+      }
+    case "uuid":
+      return { ok: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) };
+    case "date":
+      return { ok: isValidJsonSchemaDate(value) };
+    case "date-time":
+      return {
+        ok: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+          Number.isFinite(Date.parse(value))
+      };
+    case "time":
+      return { ok: /^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-][01]\d:[0-5]\d)?$/.test(value) };
+    case "ipv4":
+      return { ok: isIP(value) === 4 };
+    case "ipv6":
+      return { ok: isIP(value) === 6 };
+    case "hostname":
+      return { ok: isValidJsonSchemaHostname(value) };
+    default:
+      return {
+        ok: false,
+        unsupported: true,
+        format: normalized
+      };
+  }
+}
+
+function valueMatchesSchemaType(value, type = "") {
+  switch (type) {
+    case "null":
+      return value === null;
+    case "array":
+      return Array.isArray(value);
+    case "number":
+      return typeof value === "number" && Number.isFinite(value);
+    case "integer":
+      return typeof value === "number" && Number.isInteger(value);
+    case "boolean":
+      return typeof value === "boolean";
+    case "object":
+      return Boolean(value && typeof value === "object" && !Array.isArray(value));
+    case "string":
+      return typeof value === "string";
+    default:
+      return true;
+  }
+}
+
+function validateInputValueAgainstSchema({
+  operationId = "",
+  schema = {},
+  value,
+  path = "input"
+} = {}) {
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+    return { ok: true };
+  }
+  const types = schemaTypeList(schema);
+  if (types.length && !types.some((type) => valueMatchesSchemaType(value, type))) {
+    return {
+      ok: false,
+      error: `Tool operation ${operationId} ${path} must be ${types.join(" or ")}.`
+    };
+  }
+  if (Array.isArray(schema.enum) && !schema.enum.some((item) => jsonSchemaValueEquals(item, value))) {
+    return {
+      ok: false,
+      error: `Tool operation ${operationId} ${path} must be one of the declared enum values.`
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(schema, "const") && !jsonSchemaValueEquals(schema.const, value)) {
+    return {
+      ok: false,
+      error: `Tool operation ${operationId} ${path} must match the declared const value.`
+    };
+  }
+  for (const [index, subschema] of jsonSchemaSubschemas(schema, "allOf").entries()) {
+    const validation = validateInputValueAgainstSchema({
+      operationId,
+      schema: subschema,
+      value,
+      path
+    });
+    if (!validation.ok) {
+      return {
+        ok: false,
+        error: `Tool operation ${operationId} ${path} must satisfy allOf[${index}]: ${validation.error}`
+      };
+    }
+  }
+  const anyOf = jsonSchemaSubschemas(schema, "anyOf");
+  if (anyOf.length) {
+    const matched = anyOf.some((subschema) => validateInputValueAgainstSchema({
+      operationId,
+      schema: subschema,
+      value,
+      path
+    }).ok);
+    if (!matched) {
+      return {
+        ok: false,
+        error: `Tool operation ${operationId} ${path} must satisfy at least one anyOf schema.`
+      };
+    }
+  }
+  const oneOf = jsonSchemaSubschemas(schema, "oneOf");
+  if (oneOf.length) {
+    const matchCount = oneOf.filter((subschema) => validateInputValueAgainstSchema({
+      operationId,
+      schema: subschema,
+      value,
+      path
+    }).ok).length;
+    if (matchCount !== 1) {
+      return {
+        ok: false,
+        error: `Tool operation ${operationId} ${path} must satisfy exactly one oneOf schema.`
+      };
+    }
+  }
+  if (schema.not && typeof schema.not === "object" && !Array.isArray(schema.not)) {
+    const validation = validateInputValueAgainstSchema({
+      operationId,
+      schema: schema.not,
+      value,
+      path
+    });
+    if (validation.ok) {
+      return {
+        ok: false,
+        error: `Tool operation ${operationId} ${path} must not match the declared not schema.`
+      };
+    }
+  }
+  if (typeof value === "string") {
+    const length = value.length;
+    const minLength = Number(schema.minLength);
+    const maxLength = Number(schema.maxLength);
+    if (Number.isFinite(minLength) && length < minLength) {
+      return {
+        ok: false,
+        error: `Tool operation ${operationId} ${path} must be at least ${minLength} characters.`
+      };
+    }
+    if (Number.isFinite(maxLength) && length > maxLength) {
+      return {
+        ok: false,
+        error: `Tool operation ${operationId} ${path} must be at most ${maxLength} characters.`
+      };
+    }
+    if (Object.prototype.hasOwnProperty.call(schema, "pattern")) {
+      const patternValidation = validateSafeJsonSchemaPattern(schema.pattern);
+      if (!patternValidation.ok) {
+        return {
+          ok: false,
+          error: `Tool operation ${operationId} ${path} uses unsupported pattern: ${patternValidation.error}.`
+        };
+      }
+      if (!patternValidation.regex.test(value)) {
+        return {
+          ok: false,
+          error: `Tool operation ${operationId} ${path} must match the declared pattern.`
+        };
+      }
+    }
+    if (schema.format) {
+      const formatValidation = stringMatchesJsonSchemaFormat(value, schema.format);
+      if (formatValidation.unsupported) {
+        return {
+          ok: false,
+          error: `Tool operation ${operationId} ${path} uses unsupported string format: ${formatValidation.format}.`
+        };
+      }
+      if (!formatValidation.ok) {
+        return {
+          ok: false,
+          error: `Tool operation ${operationId} ${path} must match format ${String(schema.format).trim()}.`
+        };
+      }
+    }
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const minimum = Number(schema.minimum);
+    const maximum = Number(schema.maximum);
+    if (Number.isFinite(minimum) && value < minimum) {
+      return {
+        ok: false,
+        error: `Tool operation ${operationId} ${path} must be at least ${minimum}.`
+      };
+    }
+    if (Number.isFinite(maximum) && value > maximum) {
+      return {
+        ok: false,
+        error: `Tool operation ${operationId} ${path} must be at most ${maximum}.`
+      };
+    }
+  }
+  if (Array.isArray(value)) {
+    const minItems = Number(schema.minItems);
+    const maxItems = Number(schema.maxItems);
+    if (Number.isFinite(minItems) && value.length < minItems) {
+      return {
+        ok: false,
+        error: `Tool operation ${operationId} ${path} must contain at least ${minItems} items.`
+      };
+    }
+    if (Number.isFinite(maxItems) && value.length > maxItems) {
+      return {
+        ok: false,
+        error: `Tool operation ${operationId} ${path} must contain at most ${maxItems} items.`
+      };
+    }
+    if (schema.items && typeof schema.items === "object" && !Array.isArray(schema.items)) {
+      for (let index = 0; index < value.length; index += 1) {
+        const itemValidation = validateInputValueAgainstSchema({
+          operationId,
+          schema: schema.items,
+          value: value[index],
+          path: `${path}[${index}]`
+        });
+        if (!itemValidation.ok) {
+          return itemValidation;
+        }
+      }
+    }
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
+      ? schema.properties
+      : {};
+    const required = Array.isArray(schema.required) ? schema.required : [];
+    for (const key of required) {
+      if (value[key] === undefined || value[key] === null || value[key] === "") {
+        return {
+          ok: false,
+          error: `Tool operation ${operationId} missing required input: ${path}.${key}.`
+        };
+      }
+    }
+    const maxProperties = Number(schema.maxProperties);
+    if (Number.isFinite(maxProperties) && Object.keys(value).length > maxProperties) {
+      return {
+        ok: false,
+        error: `Tool operation ${operationId} ${path} must contain at most ${maxProperties} properties.`
+      };
+    }
+    for (const [key, entryValue] of Object.entries(value)) {
+      const propertySchema = properties[key];
+      if (!propertySchema) {
+        if (schema.additionalProperties === false) {
+          return {
+            ok: false,
+            error: `Tool operation ${operationId} received undeclared input: ${path}.${key}.`
+          };
+        }
+        if (schema.additionalProperties && typeof schema.additionalProperties === "object" && !Array.isArray(schema.additionalProperties)) {
+          const additionalValidation = validateInputValueAgainstSchema({
+            operationId,
+            schema: schema.additionalProperties,
+            value: entryValue,
+            path: `${path}.${key}`
+          });
+          if (!additionalValidation.ok) {
+            return additionalValidation;
+          }
+        }
+        continue;
+      }
+      if (entryValue === undefined || entryValue === null) {
+        continue;
+      }
+      const propertyValidation = validateInputValueAgainstSchema({
+        operationId,
+        schema: propertySchema,
+        value: entryValue,
+        path: `${path}.${key}`
+      });
+      if (!propertyValidation.ok) {
+        return propertyValidation;
+      }
+    }
+  }
+  return { ok: true };
+}
+
 function validateInputSchema(operation, input = {}) {
   const schema = operation.inputSchema || {};
-  if ((schema.type || "object") !== "object") {
+  const topLevelTypes = schemaTypeList(schema);
+  if (topLevelTypes.length && !topLevelTypes.includes("object")) {
     return { ok: true };
   }
   if (!input || typeof input !== "object" || Array.isArray(input)) {
@@ -212,30 +1055,24 @@ function validateInputSchema(operation, input = {}) {
       };
     }
   }
-  const properties = schema.properties || {};
-  for (const [key, property] of Object.entries(properties)) {
-    if (input[key] === undefined || input[key] === null || !property?.type) {
-      continue;
-    }
-    const type = property.type;
-    const ok =
-      type === "array"
-        ? Array.isArray(input[key])
-        : type === "number" || type === "integer"
-          ? typeof input[key] === "number" && Number.isFinite(input[key])
-          : type === "boolean"
-            ? typeof input[key] === "boolean"
-            : type === "object"
-              ? typeof input[key] === "object" && !Array.isArray(input[key])
-              : typeof input[key] === "string";
-    if (!ok) {
+  const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
+    ? schema.properties
+    : {};
+  if (schema.additionalProperties === false) {
+    const extraKeys = Object.keys(input).filter((key) => !Object.prototype.hasOwnProperty.call(properties, key));
+    if (extraKeys.length) {
       return {
         ok: false,
-        error: `Tool operation ${operation.id} input ${key} must be ${type}.`
+        error: `Tool operation ${operation.id} received undeclared input: ${extraKeys.sort().join(", ")}.`
       };
     }
   }
-  return { ok: true };
+  return validateInputValueAgainstSchema({
+    operationId: operation.id,
+    schema,
+    value: input,
+    path: "input"
+  });
 }
 
 function timeoutError(timeoutMs) {
@@ -282,12 +1119,20 @@ export function createToolExecutionRuntime({
     return { ok: true, operationCount: operationsById.size };
   }
 
+  function currentCatalogFingerprint() {
+    try {
+      return String(registry?.getCatalog?.().fingerprint || "").trim();
+    } catch {
+      return "";
+    }
+  }
+
   function appendAuthorizationDecision(decision = {}) {
     if (!securityPermissions || typeof securityPermissions.appendDecision !== "function") {
       return;
     }
     securityPermissions.appendDecision({
-      protocolVersion: "pact.authorization.v1",
+      protocolVersion: "v0.0.1:risk-control:authorization-1",
       allowed: false,
       effect: "deny",
       evaluatedLayers: ["tool_token_authorization"],
@@ -361,6 +1206,7 @@ export function createToolExecutionRuntime({
   authorizedGrant = null,
   approvedPendingOperation = null
   } = {}) {
+    const trustedApproval = trustedApprovedPendingOperation(approvedPendingOperation);
     const requestTrace = traceContextFromRequest(request);
     const traceId = context.traceId || requestTrace?.traceId || randomId("trace");
     const toolExecutionId = randomId("tool_exec");
@@ -425,7 +1271,7 @@ export function createToolExecutionRuntime({
         ok: false,
         status,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           traceId,
           error: {
             code: reasonCode,
@@ -452,7 +1298,7 @@ export function createToolExecutionRuntime({
       ? {
           ok: true,
           grant: authorizedGrant,
-          sourceIp: approvedPendingOperation?.sourceIp || sourceIpFromRequest(request)
+          sourceIp: trustedApproval?.sourceIp || sourceIpFromRequest(request)
         }
       : await store.authorizeRequest({
           request,
@@ -554,7 +1400,7 @@ export function createToolExecutionRuntime({
         ok: false,
         status: authorization.status || 403,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           traceId,
           error: {
             code: decision.reasonCode,
@@ -580,19 +1426,86 @@ export function createToolExecutionRuntime({
       toolExecutionId
     });
 
-    const approvalAlreadyGranted = approvedPendingOperation ||
-      context.approval?.approved === true ||
-      context.pendingOperationApproved === true;
+    // Approval proof must come from resumePendingOperation's internal parameter, never caller context.
+    const approvalAlreadyGranted = Boolean(trustedApproval);
     const policySummary = policyRevisionSummary(policy);
-    const pendingApprovalRequested = String(context.transport || "").toLowerCase() === "mcp" ||
-      context.requirePendingOperation === true ||
-      context.pendingApprovalRequired === true;
+    async function denyInvalidInput(schemaValidation) {
+      const durationMs = Date.now() - startedAtMs;
+      logTool("warn", "tool_management.execute.denied", {
+        traceId,
+        toolExecutionId,
+        toolId: tool.id,
+        operationId: tool.operationId,
+        risk: tool.risk,
+        reason: "invalid_input",
+        error: schemaValidation.error,
+        durationMs
+      });
+      appendExecution({
+        toolExecutionId,
+        traceId,
+        toolId: tool.id,
+        toolVersion: tool.version,
+        toolsetIds: tool.toolsets,
+        subjectType: "grant",
+        subjectId: authorization.grant.id,
+        grantId: authorization.grant.id,
+        agentId: context.agentId || "",
+        profileId: context.profileId || "",
+        operationId: tool.operationId,
+        risk: tool.risk,
+        decision: policy.effect,
+        input,
+        resultSummary: {
+          type: "invalid_input",
+          error: schemaValidation.error,
+          policy: policySummary
+        },
+        status: "denied",
+        errorCode: "invalid_input",
+        durationMs,
+        policyDecisionId: policy.decisionId,
+        sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+        userAgent: request?.headers?.["user-agent"] || "",
+        startedAt,
+        finishedAt: nowIso()
+      });
+      store.appendMetric({
+        traceId,
+        toolId: tool.id,
+        grantId: authorization.grant.id,
+        profileId: context.profileId || "",
+        status: "denied",
+        risk: tool.risk,
+        durationMs,
+        inputBytes,
+        reasonCode: "invalid_input"
+      });
+      await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "denied" }, { type: "tools.execution.denied" });
+      return {
+        ok: false,
+        status: 400,
+        payload: {
+          schemaVersion: "v0.0.1:schema:definition-1",
+          traceId,
+          error: {
+            code: "invalid_input",
+            message: schemaValidation.error,
+            details: {
+              toolExecutionId,
+              decisionId: policy.decisionId,
+              policy: policySummary
+            }
+          }
+        }
+      };
+    }
+    const pendingApprovalRequired = tool.requiresApproval === true;
     if (
       !dryRun &&
       policy.effect !== "dry_run_only" &&
       ["allow", "require_confirmation"].includes(policy.effect) &&
-      tool.requiresApproval === true &&
-      pendingApprovalRequested &&
+      pendingApprovalRequired &&
       !approvalAlreadyGranted
     ) {
       const durationMs = Date.now() - startedAtMs;
@@ -673,7 +1586,7 @@ export function createToolExecutionRuntime({
         ok: true,
         status: 202,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           toolExecutionId,
           traceId,
           toolId: tool.id,
@@ -740,7 +1653,7 @@ export function createToolExecutionRuntime({
         ok: false,
         status: policy.effect === "require_confirmation" ? 409 : 403,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           traceId,
           error: {
             code: policy.reasonCode,
@@ -808,7 +1721,7 @@ export function createToolExecutionRuntime({
         ok: true,
         status: 200,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           toolExecutionId,
           traceId,
           toolId: tool.id,
@@ -821,15 +1734,78 @@ export function createToolExecutionRuntime({
     }
 
     if (operation.externalMcp?.serviceId && operation.externalMcp?.upstreamToolName) {
+      const schemaValidation = validateInputSchema(operation, input);
+      if (!schemaValidation.ok) {
+        return denyInvalidInput(schemaValidation);
+      }
       if (!externalMcpPassthroughRuntime?.callTool) {
+        const durationMs = Date.now() - startedAtMs;
+        const errorCode = "external_mcp_passthrough_unavailable";
+        const receipt = externalCallReceipt({
+          toolExecutionId,
+          traceId,
+          tool,
+          operation,
+          authorization,
+          context,
+          policySummary,
+          catalogFingerprint: currentCatalogFingerprint(),
+          status: "failed",
+          errorCode,
+          durationMs
+        });
+        appendExecution({
+          toolExecutionId,
+          traceId,
+          toolId: tool.id,
+          toolVersion: tool.version,
+          toolsetIds: tool.toolsets,
+          subjectType: "grant",
+          subjectId: authorization.grant.id,
+          grantId: authorization.grant.id,
+          agentId: context.agentId || "",
+          profileId: context.profileId || "",
+          operationId: tool.operationId,
+          risk: tool.risk,
+          decision: policy.effect,
+          input,
+          resultSummary: {
+            type: "external_mcp_error",
+            errorCode,
+            serviceId: operation.externalMcp.serviceId,
+            upstreamToolName: operation.externalMcp.upstreamToolName,
+            externalCallReceipt: receipt,
+            policy: policySummary
+          },
+          status: "failed",
+          errorCode,
+          durationMs,
+          policyDecisionId: policy.decisionId,
+          sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+          userAgent: request?.headers?.["user-agent"] || "",
+          startedAt,
+          finishedAt: nowIso()
+        });
+        store.appendMetric({
+          traceId,
+          toolId: tool.id,
+          grantId: authorization.grant.id,
+          profileId: context.profileId || "",
+          status: "failed",
+          risk: tool.risk,
+          durationMs,
+          inputBytes,
+          reasonCode: errorCode
+        });
+        await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "failed" }, { type: "tools.execution.failed" });
         return {
           ok: false,
           status: 503,
           payload: {
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             traceId,
             error: {
-              code: "external_mcp_passthrough_unavailable",
+              code: errorCode,
               message: "External MCP passthrough runtime is unavailable.",
               details: { toolExecutionId }
             }
@@ -843,14 +1819,19 @@ export function createToolExecutionRuntime({
               serviceId: operation.externalMcp.serviceId,
               toolName: operation.externalMcp.upstreamToolName,
               input,
-              timeoutMs: tool.timeoutMs
+              timeoutMs: tool.timeoutMs,
+              context: {
+                tenantId: context.tenantId || "",
+                workspaceId: context.workspaceId || "",
+                authBindingId: context.authBindingId || context.bindingId || ""
+              }
             }),
             tool.timeoutMs
           )
         );
         const result = {
-          schemaVersion: 1,
-          protocolVersion: externalResult.protocolVersion || "pact.external-mcp-passthrough.v1",
+          schemaVersion: "v0.0.1:schema:definition-1",
+          protocolVersion: externalResult.protocolVersion || "v0.0.1:external-service:mcp-passthrough-1",
           serviceId: operation.externalMcp.serviceId,
           upstreamToolName: operation.externalMcp.upstreamToolName,
           upstream: externalResult.upstream,
@@ -859,6 +1840,101 @@ export function createToolExecutionRuntime({
         };
         const resultBytes = jsonByteLength(result);
         const durationMs = Date.now() - startedAtMs;
+        const externalResultSummary = resultSummaryFromPayload(result, { redactTokenLikeValues: true });
+        const outputGovernance = externalOutputGovernanceDecision({
+          operation,
+          externalResult,
+          resultBytes,
+          maxResultBytes: tool.maxResultBytes,
+          resultSummaryRedaction: externalResultSummary.redaction || null
+        });
+        const receipt = externalCallReceipt({
+          toolExecutionId,
+          traceId,
+          tool,
+          operation,
+          authorization,
+          context,
+          policySummary,
+          catalogFingerprint: currentCatalogFingerprint(),
+          status: "ok",
+          durationMs,
+          resultBytes,
+          externalResult,
+          outputGovernance: outputGovernance.decision
+        });
+        if (!outputGovernance.ok) {
+          appendExecution({
+            toolExecutionId,
+            traceId,
+            toolId: tool.id,
+            toolVersion: tool.version,
+            toolsetIds: tool.toolsets,
+            subjectType: "grant",
+            subjectId: authorization.grant.id,
+            grantId: authorization.grant.id,
+            agentId: context.agentId || "",
+            profileId: context.profileId || "",
+            operationId: tool.operationId,
+            risk: tool.risk,
+            decision: policy.effect,
+            input,
+            resultSummary: {
+              type: "output_governance_blocked",
+              errorCode: outputGovernance.errorCode,
+              serviceId: operation.externalMcp.serviceId,
+              upstreamToolName: operation.externalMcp.upstreamToolName,
+              externalCallReceipt: {
+                ...receipt,
+                status: "failed",
+                decisions: {
+                  ...receipt.decisions,
+                  outputGovernance: outputGovernance.decision,
+                  errorTaxonomy: { decision: "normalized_error_code", errorCode: outputGovernance.errorCode }
+                },
+                unknownOutcome: false
+              },
+              policy: policySummary
+            },
+            status: "failed",
+            errorCode: outputGovernance.errorCode,
+            durationMs,
+            policyDecisionId: policy.decisionId,
+            sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
+            userAgent: request?.headers?.["user-agent"] || "",
+            startedAt,
+            finishedAt: nowIso()
+          });
+          store.appendMetric({
+            traceId,
+            toolId: tool.id,
+            grantId: authorization.grant.id,
+            profileId: context.profileId || "",
+            status: "failed",
+            risk: tool.risk,
+            durationMs,
+            inputBytes,
+            resultBytes,
+            reasonCode: outputGovernance.errorCode
+          });
+          await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "failed" }, { type: "tools.execution.failed" });
+          return {
+            ok: false,
+            status: outputGovernance.statusCode || 422,
+            payload: {
+              schemaVersion: "v0.0.1:schema:definition-1",
+              traceId,
+              error: {
+                code: outputGovernance.errorCode,
+                message: outputGovernance.message,
+                details: {
+                  toolExecutionId,
+                  blockedContentTypes: outputGovernance.decision.blockedContentTypes || []
+                }
+              }
+            }
+          };
+        }
         if (resultBytes > Number(tool.maxResultBytes || 0)) {
           appendExecution({
             toolExecutionId,
@@ -879,6 +1955,16 @@ export function createToolExecutionRuntime({
               type: "oversize",
               byteLength: resultBytes,
               maxResultBytes: tool.maxResultBytes,
+              externalCallReceipt: {
+                ...receipt,
+                status: "failed",
+                decisions: {
+                  ...receipt.decisions,
+                  outputGovernance: { decision: "result_size_limit_exceeded" },
+                  errorTaxonomy: { decision: "normalized_error_code", errorCode: "result_too_large" }
+                },
+                unknownOutcome: false
+              },
               policy: policySummary
             },
             status: "failed",
@@ -907,7 +1993,7 @@ export function createToolExecutionRuntime({
             ok: false,
             status: 413,
             payload: {
-              schemaVersion: 1,
+              schemaVersion: "v0.0.1:schema:definition-1",
               traceId,
               error: {
                 code: "result_too_large",
@@ -936,12 +2022,12 @@ export function createToolExecutionRuntime({
           risk: tool.risk,
           decision: policy.effect,
           input,
-          result,
           resultSummary: {
             type: "external_mcp",
             serviceId: operation.externalMcp.serviceId,
             upstreamToolName: operation.externalMcp.upstreamToolName,
-            result: resultSummaryFromPayload(result),
+            externalCallReceipt: receipt,
+            result: externalResultSummary,
             policy: policySummary
           },
           status: "ok",
@@ -969,7 +2055,7 @@ export function createToolExecutionRuntime({
           ok: true,
           status: 200,
           payload: {
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             toolExecutionId,
             traceId,
             toolId: tool.id,
@@ -983,6 +2069,21 @@ export function createToolExecutionRuntime({
         const durationMs = Date.now() - startedAtMs;
         const message = error instanceof Error ? error.message : "External MCP tool execution failed.";
         const errorCode = error?.code || "external_mcp_tool_execution_failed";
+        const receipt = externalCallReceipt({
+          toolExecutionId,
+          traceId,
+          tool,
+          operation,
+          authorization,
+          context,
+          policySummary,
+          catalogFingerprint: currentCatalogFingerprint(),
+          status: "failed",
+          errorCode,
+          durationMs,
+          upstreamStatusCode: error?.statusCode || 0,
+          egressDecision: error?.egressDecision || null
+        });
         appendExecution({
           toolExecutionId,
           traceId,
@@ -1003,6 +2104,7 @@ export function createToolExecutionRuntime({
             errorCode,
             serviceId: operation.externalMcp.serviceId,
             upstreamToolName: operation.externalMcp.upstreamToolName,
+            externalCallReceipt: receipt,
             policy: policySummary
           },
           status: "failed",
@@ -1030,7 +2132,7 @@ export function createToolExecutionRuntime({
           ok: false,
           status: error?.statusCode || 502,
           payload: {
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             traceId,
             error: {
               code: errorCode,
@@ -1056,75 +2158,7 @@ export function createToolExecutionRuntime({
       };
       const schemaValidation = validateInputSchema(operation, operationInput);
       if (!schemaValidation.ok) {
-      const durationMs = Date.now() - startedAtMs;
-      logTool("warn", "tool_management.execute.denied", {
-        traceId,
-        toolExecutionId,
-        toolId: tool.id,
-        operationId: tool.operationId,
-        risk: tool.risk,
-        reason: "invalid_input",
-        error: schemaValidation.error,
-        durationMs
-      });
-      appendExecution({
-        toolExecutionId,
-        traceId,
-        toolId: tool.id,
-        toolVersion: tool.version,
-        toolsetIds: tool.toolsets,
-        subjectType: "grant",
-        subjectId: authorization.grant.id,
-        grantId: authorization.grant.id,
-        agentId: context.agentId || "",
-        profileId: context.profileId || "",
-        operationId: tool.operationId,
-        risk: tool.risk,
-        decision: policy.effect,
-        input,
-        resultSummary: {
-          type: "invalid_input",
-          error: schemaValidation.error,
-          policy: policySummary
-        },
-        status: "denied",
-        errorCode: "invalid_input",
-        durationMs,
-        policyDecisionId: policy.decisionId,
-        sourceIp: authorization.sourceIp || sourceIpFromRequest(request),
-        userAgent: request?.headers?.["user-agent"] || "",
-        startedAt,
-        finishedAt: nowIso()
-      });
-      store.appendMetric({
-        traceId,
-        toolId: tool.id,
-        grantId: authorization.grant.id,
-        profileId: context.profileId || "",
-        status: "denied",
-        risk: tool.risk,
-        durationMs,
-        inputBytes,
-        reasonCode: "invalid_input"
-      });
-      await publishEvent("tools.execution", { toolExecutionId, traceId, toolId: tool.id, status: "denied" }, { type: "tools.execution.denied" });
-      return {
-        ok: false,
-        status: 400,
-        payload: {
-          schemaVersion: 1,
-          traceId,
-          error: {
-            code: "invalid_input",
-            message: schemaValidation.error,
-            details: {
-              toolExecutionId,
-              decisionId: policy.decisionId,
-              policy: policySummary
-            }
-          }
-        }
-      };
+        return denyInvalidInput(schemaValidation);
     }
 
     const previousAuthorization = request.__pactToolRuntimeAuthorization;
@@ -1238,7 +2272,7 @@ export function createToolExecutionRuntime({
           ok: false,
           status: 413,
           payload: {
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             traceId,
             error: {
               code: "result_too_large",
@@ -1311,7 +2345,7 @@ export function createToolExecutionRuntime({
         status: statusCode,
         captured,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           toolExecutionId,
           traceId,
           toolId: tool.id,
@@ -1380,7 +2414,7 @@ export function createToolExecutionRuntime({
         ok: false,
         status: 500,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           traceId,
           error: {
             code: errorCode,
@@ -1412,7 +2446,7 @@ export function createToolExecutionRuntime({
         ok: false,
         status: 404,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           error: {
             code: "pending_operation_not_found",
             message: "Pending operation was not found."
@@ -1425,7 +2459,7 @@ export function createToolExecutionRuntime({
         ok: false,
         status: 409,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           pendingOperation: pending,
           error: {
             code: "pending_operation_not_pending",
@@ -1462,7 +2496,7 @@ export function createToolExecutionRuntime({
         ok: true,
         status: 200,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           status: "rejected",
           pendingOperation: rejected
         }
@@ -1473,7 +2507,7 @@ export function createToolExecutionRuntime({
         ok: false,
         status: 400,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           error: {
             code: "invalid_pending_operation_resolution",
             message: "Pending operation resolution must be approved or rejected."
@@ -1502,7 +2536,7 @@ export function createToolExecutionRuntime({
         ok: false,
         status: 409,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           status: "failed",
           pendingOperation: failed,
           error: {

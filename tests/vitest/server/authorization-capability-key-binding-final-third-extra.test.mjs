@@ -89,7 +89,7 @@ function fakeOpaqueLookupKeySource({
     async loadRuntimeLookupKey() {
       loadCount += 1;
       return {
-        protocolVersion: "pact.opaque-capability-key.v1",
+        protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
         provider,
         securityMode,
         generation,
@@ -99,14 +99,14 @@ function fakeOpaqueLookupKeySource({
     async rotateRuntimeLookupKey() {
       generation += 1;
       return {
-        protocolVersion: "pact.opaque-capability-key.v1",
+        protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
         provider,
         generation
       };
     },
     describe() {
       return {
-        protocolVersion: "pact.opaque-capability-key.v1",
+        protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
         provider,
         securityMode,
         generation,
@@ -155,14 +155,14 @@ describe("authorization capability key binding final third extra coverage", () =
     );
 
     expect(canonicalOpaqueCapabilities([
-      "cap:tool:pact.knowledge.health:execute",
+      "cap:tool:pact.agentLibrary.health:execute",
       "cap:api:knowledge.search",
       "cap:*",
       "cap:api:knowledge.search"
     ])).toEqual([
       "cap:*",
       "cap:api:knowledge.search",
-      "cap:tool:pact.knowledge.health:execute"
+      "cap:tool:pact.agentLibrary.health:execute"
     ]);
 
     expect(opaqueCapabilityHash(["cap:*", "cap:api:knowledge.search"]))
@@ -245,7 +245,7 @@ process.exit(0);
 
       const initialDescription = await store.describe();
       expect(initialDescription).toMatchObject({
-        protocolVersion: "pact.opaque-capability-key.v1",
+        protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
         provider: "linux-kernel-keyring",
         securityMode: "keyring",
         runtimeLookupKeyRotationSupported: true
@@ -263,7 +263,7 @@ process.exit(0);
 
       const rotated = await store.keySource.rotateRuntimeLookupKey();
       expect(rotated).toMatchObject({
-        protocolVersion: "pact.opaque-capability-key.v1",
+        protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
         provider: "linux-kernel-keyring"
       });
 
@@ -303,7 +303,7 @@ process.exit(0);
 
       const description = await store.describe();
       expect(description).toMatchObject({
-        protocolVersion: "pact.opaque-capability-key.v1",
+        protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
         provider: "linux-kernel-keyring",
         securityMode: "keyring",
         alias: "opaque_final_third_auto",
@@ -349,7 +349,7 @@ process.exit(0);
     });
 
     expect(issuedOne).toMatchObject({
-      protocolVersion: "pact.opaque-capability-key.v1",
+      protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
       credentialId: "opaque-memory-credential",
       capabilityKey: "opaque-memory-key-1",
       capabilityCount: 1
@@ -363,7 +363,7 @@ process.exit(0);
       capabilityKey: "opaque-memory-key-1",
       requiredCapabilities: [
         apiCapabilityId("knowledge.search"),
-        toolExecuteCapabilityId("pact.knowledge.health")
+        toolExecuteCapabilityId("pact.agentLibrary.health")
       ],
       includeRecordDetails: true
     });
@@ -378,7 +378,7 @@ process.exit(0);
     });
     expect(decision.requiredCapabilities).toEqual([
       apiCapabilityId("knowledge.search"),
-      toolExecuteCapabilityId("pact.knowledge.health")
+      toolExecuteCapabilityId("pact.agentLibrary.health")
     ]);
     expect(decision.capabilitySetHash).toBeTruthy();
     expect(decision.keyHash).toBeTruthy();
@@ -427,7 +427,7 @@ process.exit(0);
 
     const description = await provider.describe();
     expect(description).toMatchObject({
-      protocolVersion: "pact.opaque-capability-key.v1",
+      protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
       provider: "memory",
       alias: "opaque-memory-final-third",
       bindingCount: 2,
@@ -448,7 +448,7 @@ process.exit(0);
 
     const initialDescription = await guard.describe();
     expect(initialDescription).toMatchObject({
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       provider: "memory",
       securityMode: "memory",
       alias: "binding_final_third_memory",

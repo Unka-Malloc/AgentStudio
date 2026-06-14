@@ -237,7 +237,7 @@ try {
     passphrase: "verify binding recovery passphrase",
     reason: "verify-binding-recovery"
   });
-  assert.equal(recoveryPackage.protocolVersion, "pact.capability-binding-guard-recovery.v1");
+  assert.equal(recoveryPackage.protocolVersion, "v0.0.1:risk-control:capability-binding-guard-recovery-1");
   assert.equal(JSON.stringify(recoveryPackage).includes("bindingLookupKeyBase64"), false);
   assert.equal(JSON.stringify(recoveryPackage).includes(capabilityKey), false);
   assert.equal(JSON.stringify(recoveryPackage).includes("user-a"), false);
@@ -309,8 +309,8 @@ try {
   ], { env: recoveryEnv });
   const cliExportPayload = JSON.parse(cliExport.stdout);
   assert.equal(cliExportPayload.ok, true);
-  assert.equal(cliExportPayload.protocolVersion, "pact.security-recovery.v1");
-  assert.equal(cliExportPayload.components.capabilityBindingGuard.protocolVersion, "pact.capability-binding-guard-recovery.v1");
+  assert.equal(cliExportPayload.protocolVersion, "v0.0.1:risk-control:recovery-1");
+  assert.equal(cliExportPayload.components.capabilityBindingGuard.protocolVersion, "v0.0.1:risk-control:capability-binding-guard-recovery-1");
   const cliRecoveryStat = await fs.stat(cliRecoveryPath);
   assert.equal(cliRecoveryStat.mode & 0o077, 0, "security recovery package file must not be group/world-readable");
   const cliRecoveryBytes = await fs.readFile(cliRecoveryPath, "utf8");
@@ -388,16 +388,16 @@ try {
   try {
     const grant = await toolStore.createGrant({
       label: "bound-tool-grant",
-      capabilities: [toolExecuteCapabilityId("pact.knowledge.health")],
+      capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")],
       metadata: {
         agentId: "agent-a",
         boundUserId: "user-a"
       }
     });
-    assert.equal(grant.grant.credential.bindingProtocol, "pact.capability-binding-guard.v1");
+    assert.equal(grant.grant.credential.bindingProtocol, "v0.0.1:risk-control:capability-binding-guard-1");
     assert.equal(grant.grant.credential.bindingStrength, "user+agent");
 
-    const healthTool = { id: "pact.knowledge.health" };
+    const healthTool = { id: "pact.agentLibrary.health" };
     const correctBinding = await toolStore.authorizeRequest({
       request: { headers: { authorization: `Bearer ${grant.token}` } },
       tool: healthTool,
@@ -424,7 +424,7 @@ try {
         agentId: "agent-b",
         boundUserId: "user-b"
       },
-      capabilities: [toolExecuteCapabilityId("pact.knowledge.search")]
+      capabilities: [toolExecuteCapabilityId("pact.agentLibrary.search")]
     });
     const projectionTamperStillDenied = await toolStore.authorizeRequest({
       request: { headers: { authorization: `Bearer ${grant.token}` } },

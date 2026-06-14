@@ -157,6 +157,18 @@ function ensureOperationAuditColumns(db) {
   if (!cols.has("tenant_id")) {
     db.exec("ALTER TABLE operation_audit_log ADD COLUMN tenant_id TEXT NOT NULL DEFAULT ''");
   }
+  if (!cols.has("risk_control_anchor_digest")) {
+    db.exec("ALTER TABLE operation_audit_log ADD COLUMN risk_control_anchor_digest TEXT NOT NULL DEFAULT ''");
+  }
+  if (!cols.has("risk_control_last_record_digest")) {
+    db.exec("ALTER TABLE operation_audit_log ADD COLUMN risk_control_last_record_digest TEXT NOT NULL DEFAULT ''");
+  }
+  if (!cols.has("risk_control_gate_count")) {
+    db.exec("ALTER TABLE operation_audit_log ADD COLUMN risk_control_gate_count INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!cols.has("risk_control_envelope_json")) {
+    db.exec("ALTER TABLE operation_audit_log ADD COLUMN risk_control_envelope_json TEXT NOT NULL DEFAULT '{}'");
+  }
 }
 
 function ensureSchema(db) {
@@ -180,6 +192,10 @@ function ensureSchema(db) {
       redacted_input_json TEXT NOT NULL DEFAULT '{}',
       redacted_output_summary_json TEXT NOT NULL DEFAULT '{}',
       error TEXT NOT NULL DEFAULT '',
+      risk_control_anchor_digest TEXT NOT NULL DEFAULT '',
+      risk_control_last_record_digest TEXT NOT NULL DEFAULT '',
+      risk_control_gate_count INTEGER NOT NULL DEFAULT 0,
+      risk_control_envelope_json TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL
     );
   `);
@@ -215,6 +231,39 @@ function parseJson(value, fallback) {
   }
 }
 
+function riskControlAuditSnapshot(value = null) {
+  const envelope = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const records = Array.isArray(envelope.gateRecords) ? envelope.gateRecords : [];
+  const compactEnvelope = {
+    envelopeVersion: String(envelope.envelopeVersion || ""),
+    operationId: String(envelope.operationId || ""),
+    traceId: String(envelope.traceId || ""),
+    inputHash: String(envelope.inputHash || ""),
+    operationAnchorDigest: String(envelope.operationAnchorDigest || ""),
+    gateRecords: records.map((record) => ({
+      recordVersion: String(record.recordVersion || ""),
+      controlRef: record.controlRef || {},
+      gate: String(record.gate || ""),
+      decision: String(record.decision || ""),
+      reasonCode: String(record.reasonCode || ""),
+      subject: record.subject || {},
+      resource: record.resource || {},
+      environment: record.environment || {},
+      evidence: Array.isArray(record.evidence) ? record.evidence : [],
+      occurredAt: String(record.occurredAt || ""),
+      previousRecordDigest: String(record.previousRecordDigest || ""),
+      recordDigest: String(record.recordDigest || "")
+    }))
+  };
+  const redactedEnvelope = redactOperationAuditValue(compactEnvelope);
+  return {
+    anchorDigest: String(envelope.operationAnchorDigest || ""),
+    lastRecordDigest: String(records.at(-1)?.recordDigest || ""),
+    gateCount: records.length,
+    envelope: truncateJson(redactedEnvelope)
+  };
+}
+
 export function createOperationAuditStore({ userDataPath }) {
   const rootPath = path.join(userDataPath, "security");
   fs.mkdirSync(rootPath, { recursive: true });
@@ -224,8 +273,10 @@ export function createOperationAuditStore({ userDataPath }) {
   const insertStmt = db.prepare(`
     INSERT INTO operation_audit_log (
       audit_id, trace_id, request_id, tenant_id, operation_id, transport, actor_json, risk, read_only, status, duration_ms,
-      input_hash, redacted_input_json, redacted_output_summary_json, error, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      input_hash, redacted_input_json, redacted_output_summary_json, error,
+      risk_control_anchor_digest, risk_control_last_record_digest, risk_control_gate_count, risk_control_envelope_json,
+      created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   function append(entry = {}) {
@@ -234,6 +285,7 @@ export function createOperationAuditStore({ userDataPath }) {
     const outputSummary = summarizeOutput(entry.output);
     const auditId = entry.auditId || `op_audit_${crypto.randomUUID()}`;
     const actor = actorFrom(entry.actor || {});
+    const riskControl = riskControlAuditSnapshot(entry.riskControl || entry.riskControlEnvelope || null);
     insertStmt.run(
       auditId,
       String(entry.traceId || ""),
@@ -250,6 +302,10 @@ export function createOperationAuditStore({ userDataPath }) {
       JSON.stringify(redactedInput),
       JSON.stringify(outputSummary),
       String(entry.error || "").replace(ABSOLUTE_PATH_PATTERN, "<redacted-path>").slice(0, 2000),
+      riskControl.anchorDigest,
+      riskControl.lastRecordDigest,
+      riskControl.gateCount,
+      JSON.stringify(riskControl.envelope),
       entry.createdAt || nowIso()
     );
     return { auditId };
@@ -314,6 +370,12 @@ export function createOperationAuditStore({ userDataPath }) {
         inputHash: row.input_hash,
         redactedInput: parseJson(row.redacted_input_json, {}),
         redactedOutputSummary: parseJson(row.redacted_output_summary_json, {}),
+        riskControl: {
+          anchorDigest: row.risk_control_anchor_digest || "",
+          lastRecordDigest: row.risk_control_last_record_digest || "",
+          gateCount: Number(row.risk_control_gate_count || 0),
+          envelope: parseJson(row.risk_control_envelope_json, {})
+        },
         error: row.error,
         createdAt: row.created_at
       }))
@@ -324,7 +386,7 @@ export function createOperationAuditStore({ userDataPath }) {
     try {
       const parsed = JSON.parse(fs.readFileSync(retentionPolicyPath, "utf8"));
       return {
-        policyVersion: "pact.audit-retention.v1",
+        policyVersion: "v0.0.1:platform:audit-retention-1",
         retentionDays: Math.max(1, Math.min(Number(parsed.retentionDays || DEFAULT_RETENTION_DAYS), 3650)),
         maxExportItems: Math.max(1, Math.min(Number(parsed.maxExportItems || DEFAULT_MAX_EXPORT_ITEMS), 10000)),
         updatedAt: parsed.updatedAt || "",
@@ -332,7 +394,7 @@ export function createOperationAuditStore({ userDataPath }) {
       };
     } catch {
       return {
-        policyVersion: "pact.audit-retention.v1",
+        policyVersion: "v0.0.1:platform:audit-retention-1",
         retentionDays: DEFAULT_RETENTION_DAYS,
         maxExportItems: DEFAULT_MAX_EXPORT_ITEMS,
         updatedAt: "",
@@ -343,7 +405,7 @@ export function createOperationAuditStore({ userDataPath }) {
 
   function setRetentionPolicy(input = {}) {
     const policy = {
-      policyVersion: "pact.audit-retention.v1",
+      policyVersion: "v0.0.1:platform:audit-retention-1",
       retentionDays: Math.max(1, Math.min(Number(input.retentionDays || DEFAULT_RETENTION_DAYS), 3650)),
       maxExportItems: Math.max(1, Math.min(Number(input.maxExportItems || DEFAULT_MAX_EXPORT_ITEMS), 10000)),
       updatedAt: nowIso(),
@@ -372,7 +434,7 @@ export function createOperationAuditStore({ userDataPath }) {
       limit: asLimit(input.limit, Math.min(policy.maxExportItems, DEFAULT_MAX_EXPORT_ITEMS), policy.maxExportItems)
     });
     const manifest = {
-      protocolVersion: "pact.audit-export.v1",
+      protocolVersion: "v0.0.1:platform:audit-export-1",
       exportedAt: nowIso(),
       redactionPolicy: "operation-audit-redacted-v1",
       retentionDays: policy.retentionDays,
@@ -402,7 +464,7 @@ export function createOperationAuditStore({ userDataPath }) {
     const normalizedTraceId = String(traceId || input.traceId || "").trim();
     if (!normalizedTraceId) {
       return {
-        protocolVersion: "pact.trace-drilldown.v1",
+        protocolVersion: "v0.0.1:platform:trace-drilldown-1",
         traceId: "",
         auditItems: [],
         spans: [],
@@ -415,7 +477,7 @@ export function createOperationAuditStore({ userDataPath }) {
       limit: input.limit || 200
     }).reverse();
     return {
-      protocolVersion: "pact.trace-drilldown.v1",
+      protocolVersion: "v0.0.1:platform:trace-drilldown-1",
       traceId: normalizedTraceId,
       count: auditItems.length,
       auditItems,
@@ -428,7 +490,12 @@ export function createOperationAuditStore({ userDataPath }) {
         actor: item.actor,
         durationMs: item.durationMs,
         createdAt: item.createdAt,
-        inputHash: item.inputHash
+        inputHash: item.inputHash,
+        riskControl: {
+          anchorDigest: item.riskControl?.anchorDigest || "",
+          lastRecordDigest: item.riskControl?.lastRecordDigest || "",
+          gateCount: item.riskControl?.gateCount || 0
+        }
       }))
     };
   }

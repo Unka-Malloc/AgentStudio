@@ -55,7 +55,7 @@ describe("capability binding guard extra branches", () => {
     const keyPath = statePath.replace(/\.sealed\.json$/, ".sealing-key");
     const persisted = JSON.parse(await fs.promises.readFile(statePath, "utf8"));
     expect(persisted).toMatchObject({
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       alias: "unit_local_file_alias",
       provider: "local-file"
     });
@@ -167,7 +167,7 @@ describe("capability binding guard extra branches", () => {
       reason: "unit test"
     });
     expect(recoveryPackage).toMatchObject({
-      protocolVersion: "pact.capability-binding-guard-recovery.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-recovery-1",
       alias: "unit-binding-recovery-source",
       kdf: { name: "scrypt" }
     });
@@ -649,7 +649,7 @@ describe("capability binding guard extra branches", () => {
 
     await fs.promises.mkdir(path.dirname(statePath), { recursive: true });
     await fs.promises.writeFile(statePath, JSON.stringify({
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       alias: "unit-local-file-missing-sealed-state",
       provider: "local-file",
       securityMode: "degraded_file_fallback",

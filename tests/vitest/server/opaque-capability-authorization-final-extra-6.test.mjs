@@ -74,14 +74,14 @@ afterEach(async () => {
 describe("opaque capability authorization final extra 6 coverage", () => {
   it("normalizes wildcard and comma-separated capability inputs and handles origin, referer, and CIDR boundary checks", () => {
     const normalized = normalizeKernelCapabilities(
-      "  cap:api:knowledge.search, cap:tool:pact.knowledge.health:execute  ",
+      "  cap:api:knowledge.search, cap:tool:pact.agentLibrary.health:execute  ",
       ["cap:*", " cap:tool:* "],
       "cap:api:knowledge.search"
     );
 
     expect(normalized).toEqual([
       "cap:api:knowledge.search",
-      "cap:tool:pact.knowledge.health:execute",
+      "cap:tool:pact.agentLibrary.health:execute",
       "cap:*",
       "cap:tool:*"
     ]);
@@ -91,7 +91,7 @@ describe("opaque capability authorization final extra 6 coverage", () => {
 
     const subject = {
       subjectId: "subject-1",
-      capabilities: [toolExecuteCapabilityId("pact.knowledge.health")]
+      capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")]
     };
     const operation = { id: "unknown.operation", requiredScopes: [] };
 
@@ -145,17 +145,17 @@ describe("opaque capability authorization final extra 6 coverage", () => {
 
   it("applies tool/profile allowlists before risk gating and confirmation requirements", () => {
     const tool = {
-      id: "pact.knowledge.health",
+      id: "pact.agentLibrary.health",
       status: "active",
       risk: "read_only"
     };
     const subject = {
       subjectId: "subject-allowlists",
-      capabilities: [toolExecuteCapabilityId("pact.knowledge.health")]
+      capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")]
     };
     const grant = {
       id: "grant-allowlists",
-      capabilities: [toolExecuteCapabilityId("pact.knowledge.health")],
+      capabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")],
       maxRisk: "destructive"
     };
 

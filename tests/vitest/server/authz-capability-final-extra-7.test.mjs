@@ -212,7 +212,7 @@ describe("authz capability final extra 7 coverage", () => {
       reason: "unit-test"
     });
     expect(recoveryPackage).toMatchObject({
-      protocolVersion: "pact.capability-binding-guard-recovery.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-recovery-1",
       alias: "authz-final-extra-7-guard-recovery"
     });
 
@@ -225,7 +225,7 @@ describe("authz capability final extra 7 coverage", () => {
     });
     expect(imported).toMatchObject({
       ok: true,
-      protocolVersion: "pact.capability-binding-guard.v1"
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1"
     });
     await expect(importedGuard.verifyCapabilityKeyBinding({
       capabilityKey,
@@ -243,7 +243,7 @@ describe("authz capability final extra 7 coverage", () => {
     await expect(importedGuard.importRecoveryPackage({
       recoveryPackage: {
         ...recoveryPackage,
-        protocolVersion: "pact.capability-binding-guard-recovery.v0"
+        protocolVersion: "v0.0.1:risk-control:capability-binding-guard-recovery-0"
       },
       passphrase: "correct horse battery staple"
     })).rejects.toThrow("Unsupported capability binding guard recovery package.");
@@ -297,7 +297,7 @@ describe("authz capability final extra 7 coverage", () => {
       constraints: { workspaceId: "workspace-a" }
     });
     expect(exactKey).toMatchObject({
-      protocolVersion: "pact.opaque-capability-key.v1",
+      protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
       capabilityKey: "opaque-exact-key",
       credentialId: "opaque-exact"
     });
@@ -343,7 +343,7 @@ describe("authz capability final extra 7 coverage", () => {
 
     await expect(provider.verify({
       capabilityKey: toolWildcardKey.capabilityKey,
-      requiredCapability: toolExecuteCapabilityId("pact.knowledge.health")
+      requiredCapability: toolExecuteCapabilityId("pact.agentLibrary.health")
     })).resolves.toMatchObject({
       ok: true,
       reasonCode: "capability_key_valid",
@@ -472,7 +472,7 @@ describe("authz capability final extra 7 coverage", () => {
       reason: "unit-test"
     });
     expect(recoveryPackage).toMatchObject({
-      protocolVersion: "pact.capability-kernel-recovery.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-kernel-recovery-1",
       alias: "authz_final_extra_7_opaque_recovery"
     });
 
@@ -487,7 +487,7 @@ describe("authz capability final extra 7 coverage", () => {
     });
     expect(restored).toMatchObject({
       ok: true,
-      protocolVersion: "pact.opaque-capability-key.v1"
+      protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1"
     });
     await expect(restoredProvider.verify({
       capabilityKey,
@@ -501,7 +501,7 @@ describe("authz capability final extra 7 coverage", () => {
     await expect(restoredProvider.importRecoveryPackage({
       recoveryPackage: {
         ...recoveryPackage,
-        protocolVersion: "pact.capability-kernel-recovery.v0"
+        protocolVersion: "v0.0.1:risk-control:capability-kernel-recovery-0"
       },
       passphrase: "correct horse battery staple"
     })).rejects.toThrow("Unsupported capability kernel recovery package.");

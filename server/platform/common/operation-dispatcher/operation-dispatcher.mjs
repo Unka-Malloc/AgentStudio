@@ -15,9 +15,30 @@ import {
   traceContextFromRequest,
   traceDetails
 } from "../observability/trace-context.mjs";
+import {
+  RISK_CONTROL_BOUNDARY_IDS,
+  RISK_CONTROL_ENVIRONMENT_IDS,
+  RISK_CONTROL_POINTS,
+  appendRiskControlGateRecord,
+  createRiskControlOperationEnvelope,
+  digestRiskControlValue
+} from "../security/risk-control/index.mjs";
 
 const operationLocks = new Map();
 const dispatcherAuthorizationEngine = createAuthorizationEngine();
+const RISK_CONTROL_BY_ID = new Map(RISK_CONTROL_POINTS.map((control) => [control.controlId, control]));
+
+const DISPATCHER_RISK_CONTROL_IDS = Object.freeze({
+  admit: "client.registration.admit",
+  externalBind: "client.agent-identity.bind",
+  consoleBind: "client.operator-identity.bind",
+  externalAuthorize: "client.mcp-grant.authorize",
+  operationAuthorize: "client.operation-permission.authorize",
+  platformAuthorize: "platform.capability-kernel.authorize",
+  approve: "client.high-risk-confirmation.approve",
+  execute: "platform.operation-ledger.execute",
+  auditRecover: "platform.audit.audit"
+});
 
 const LOCAL_FORWARD_PREFIXES = [
   "/api/jobs",
@@ -108,6 +129,190 @@ function parseJsonObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+function firstText(...values) {
+  for (const value of values) {
+    const text = String(value || "").trim();
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+}
+
+function compactStrings(values = [], limit = 50) {
+  return [...new Set((Array.isArray(values) ? values : [])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean))]
+    .slice(0, limit);
+}
+
+function arrayOf(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  return value === undefined || value === null || value === "" ? [] : [value];
+}
+
+function cleanRiskControlValue(value, depth = 0) {
+  if (value === undefined || typeof value === "function" || typeof value === "symbol") {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (typeof value === "string") {
+    return value.length > 500 ? `${value.slice(0, 500)}...` : value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : String(value);
+  }
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (depth > 6) {
+    return "[truncated-depth]";
+  }
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, 50)
+      .map((item) => cleanRiskControlValue(item, depth + 1))
+      .filter((item) => item !== undefined);
+  }
+  if (Buffer.isBuffer(value)) {
+    return {
+      type: "buffer",
+      byteLength: value.length
+    };
+  }
+  const output = {};
+  for (const [key, nested] of Object.entries(value).slice(0, 50)) {
+    const cleaned = cleanRiskControlValue(nested, depth + 1);
+    if (cleaned !== undefined) {
+      output[key] = cleaned;
+    }
+  }
+  return output;
+}
+
+function riskControlInputHash({ operation, transport, method, input }) {
+  return digestRiskControlValue("v0.0.1:strategy:risk-control-operation-input-1", cleanRiskControlValue({
+    operationId: operation?.id || "",
+    transport,
+    method,
+    input: input || {}
+  }));
+}
+
+function riskControlSubject({ actor = null, authSession = null } = {}) {
+  const user = authSession?.user || actor?.user || actor || {};
+  const subjectType =
+    actor?.type ||
+    user.type ||
+    (user.roleId === "tool-grant" ? "tool-grant" : user.userId ? "console-user" : "anonymous");
+  const subject = {
+    type: subjectType,
+    userId: firstText(user.userId, actor?.userId),
+    subjectId: firstText(user.subjectId, actor?.subjectId, user.userId, actor?.userId),
+    roleId: firstText(user.roleId, actor?.roleId),
+    tenantId: firstText(user.tenantId, actor?.tenantId),
+    orgId: firstText(user.orgId, actor?.orgId),
+    grantId: firstText(user.grantId, actor?.grantId, user.roleId === "tool-grant" ? user.userId : ""),
+    scopes: compactStrings([...arrayOf(user.scopes), ...arrayOf(actor?.scopes)]),
+    capabilities: compactStrings([...arrayOf(user.capabilities), ...arrayOf(actor?.capabilities)]),
+    toolsets: compactStrings([...arrayOf(user.toolsets), ...arrayOf(actor?.toolsets)])
+  };
+  return cleanRiskControlValue(subject);
+}
+
+function riskControlResource({ operation, transport, method, url, statusCode = 0 }) {
+  return cleanRiskControlValue({
+    operationId: operation?.id || "",
+    feature: operation?.feature || "",
+    transport,
+    method,
+    path: url?.pathname || "",
+    statusCode: Number(statusCode || 0) || 0,
+    risk: operation?.safety?.risk || "",
+    readOnly: operation?.readOnly === true,
+    requiredScopes: compactStrings(operation?.requiredScopes || [])
+  });
+}
+
+function riskControlEnvironment({ control, transport }) {
+  return {
+    boundaryId: control?.owner?.boundaryId || RISK_CONTROL_BOUNDARY_IDS.PLATFORM_SELF,
+    environmentId: control?.owner?.environmentId || RISK_CONTROL_ENVIRONMENT_IDS.PLATFORM_RUNTIME,
+    transport
+  };
+}
+
+function riskControlById(controlId) {
+  const control = RISK_CONTROL_BY_ID.get(controlId);
+  if (!control) {
+    throw new Error(`Risk Control point is not registered: ${controlId}`);
+  }
+  return control;
+}
+
+function createDispatcherRiskControlEnvelope({
+  request,
+  operation,
+  traceContext,
+  transport,
+  method,
+  input
+}) {
+  const envelope = createRiskControlOperationEnvelope({
+    operationId: operation.id,
+    traceId: traceContext.traceId,
+    inputHash: riskControlInputHash({ operation, transport, method, input })
+  });
+  if (request && typeof request === "object") {
+    request.__pactRiskControl = envelope;
+  }
+  return envelope;
+}
+
+function appendDispatcherRiskGate({
+  envelope,
+  request,
+  operation,
+  actor = null,
+  authSession = null,
+  traceContext,
+  transport,
+  method,
+  url,
+  controlId,
+  decision = "allow",
+  reasonCode = "",
+  statusCode = 0,
+  details = {}
+}) {
+  const targetEnvelope = envelope || request?.__pactRiskControl;
+  if (!targetEnvelope) {
+    throw new Error(`Risk Control envelope missing for operation ${operation?.id || ""}.`);
+  }
+  const control = riskControlById(controlId);
+  const evidence = cleanRiskControlValue({
+    type: "operation-dispatcher",
+    traceId: traceContext?.traceId || "",
+    requestId: traceContext?.requestId || requestIdFromRequest(request),
+    statusCode: Number(statusCode || 0) || 0,
+    details
+  });
+  return appendRiskControlGateRecord(targetEnvelope, {
+    control,
+    decision,
+    reasonCode,
+    subject: riskControlSubject({ actor, authSession }),
+    intent: `${transport || "internal"}:${method || ""}:${operation?.id || ""}`,
+    resource: riskControlResource({ operation, transport, method, url, statusCode }),
+    environment: riskControlEnvironment({ control, transport }),
+    evidence: [evidence]
+  });
+}
+
 function inputFromRequest({ operation, requestBody, url, params = {}, applyHttpQuery = true }) {
   const input = {
     ...parseJsonObject(requestBody),
@@ -173,9 +378,14 @@ function validateInputSchema(operation, input = {}) {
 }
 
 function actorFromAuthSession(authSession) {
-  return authSession?.user
-    ? { type: "console-user", user: authSession.user }
-    : { type: "anonymous" };
+  if (!authSession?.user) {
+    return { type: "anonymous" };
+  }
+  const user = authSession.user;
+  return {
+    type: user.type || (user.roleId === "tool-grant" ? "tool-grant" : "console-user"),
+    user
+  };
 }
 
 function actorFromInput({ actor = null, authSession = null } = {}) {
@@ -229,7 +439,8 @@ function auditOperation({
   status,
   startedAt,
   output = undefined,
-  error = ""
+  error = "",
+  riskControlEnvelope = null
 }) {
   if (!operationAuditStore || operation.audit?.enabled === false) {
     return null;
@@ -247,8 +458,109 @@ function auditOperation({
     durationMs: startedAt ? Date.now() - startedAt : 0,
     input: operation.audit?.recordInput === false ? {} : input,
     output: operation.audit?.recordOutput === true ? output : undefined,
-    error
+    error,
+    riskControl: riskControlEnvelope
   });
+}
+
+function externalAuthVerifierConfig(operation = {}) {
+  const verifier = operation.externalAuthVerifier;
+  if (typeof verifier === "string") {
+    return { method: verifier };
+  }
+  if (verifier && typeof verifier === "object" && !Array.isArray(verifier)) {
+    return verifier;
+  }
+  return {};
+}
+
+async function verifyExternalAuth({
+  operation,
+  controllers,
+  request,
+  input,
+  requestBody,
+  url,
+  params,
+  method,
+  transport
+}) {
+  const verifierConfig = externalAuthVerifierConfig(operation);
+  const controllerName = verifierConfig.controller || operation.target?.controller || "";
+  const methodName = verifierConfig.method || "";
+  const verifier = controllers?.[controllerName]?.[methodName];
+  if (typeof verifier !== "function") {
+    return {
+      ok: false,
+      status: 503,
+      reasonCode: "external_auth_verifier_missing",
+      error: "External authentication verifier is not registered."
+    };
+  }
+
+  try {
+    const verification = await verifier({
+      operation,
+      request,
+      input,
+      requestBody,
+      url,
+      params,
+      method,
+      transport,
+      externalAuth: verifierConfig
+    });
+    if (verification === true) {
+      return { ok: true };
+    }
+    if (verification?.ok === true) {
+      return verification;
+    }
+    return {
+      ok: false,
+      status: Number(verification?.status || verification?.statusCode || 401) || 401,
+      reasonCode: verification?.reasonCode || verification?.code || "external_auth_denied",
+      error: verification?.error || verification?.message || "External authentication denied.",
+      missingScopes: verification?.missingScopes || [],
+      missingCapabilities: verification?.missingCapabilities || []
+    };
+  } catch (error) {
+    logOperation(getRuntimeLogger(), "error", "operation.external_auth.verifier_failed", {
+      operationId: operation.id,
+      verifier: `${controllerName}.${methodName}`,
+      error: summarizeError(error)
+    });
+    return {
+      ok: false,
+      status: 503,
+      reasonCode: "external_auth_verifier_failed",
+      error: "External authentication verifier failed."
+    };
+  }
+}
+
+function externalAuthDeniedPayload(operation, verification, traceId) {
+  const status = Number(verification?.status || verification?.statusCode || 401) || 401;
+  const reasonCode =
+    verification?.reasonCode ||
+    verification?.code ||
+    (status === 401 ? operation.externalAuthMissingCode : "external_auth_denied");
+  const error = verification?.error || verification?.message || "External authentication denied.";
+  const payload = {
+    schemaVersion: "v0.0.1:schema:definition-1",
+    error: {
+      code: reasonCode,
+      message: error
+    },
+    traceId
+  };
+  if (Array.isArray(verification?.missingScopes) && verification.missingScopes.length > 0) {
+    payload.error.missingScopes = verification.missingScopes;
+  }
+  if (Array.isArray(verification?.missingCapabilities) && verification.missingCapabilities.length > 0) {
+    payload.error.missingCapabilities = verification.missingCapabilities;
+  }
+  return payload;
 }
 
 async function withOperationConcurrency(operation, run, concurrencyScope = "default") {
@@ -300,32 +612,50 @@ export function findRpcOperation({
   return operations.find((operation) => operation.rpc?.method === normalizedMethod) || null;
 }
 
-export function shouldProxyRegisteredApiRequest({
+export function findProxyRegisteredApiRequest({
+  method,
   pathname,
   discoveryState,
   operations = SERVER_API_OPERATIONS
 }) {
   if (!discoveryState || discoveryState.mode !== "forward") {
-    return false;
+    return null;
   }
 
   if (!pathname.startsWith("/api/")) {
-    return false;
+    return null;
   }
 
   if (LOCAL_FORWARD_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
-    return false;
+    return null;
   }
 
-  const operation = operations.find((item) => matchPath(item.http.path, pathname));
-  if (operation?.http.localInForwardMode) {
-    return false;
+  const normalizedMethod = String(method || "").trim().toUpperCase();
+  if (!normalizedMethod) {
+    return null;
+  }
+
+  const operation = operations.find((item) =>
+    item.http.method === normalizedMethod && matchPath(item.http.path, pathname)
+  );
+  if (!operation || operation.http.localInForwardMode || operation.externalAuth === true) {
+    return null;
   }
 
   const targetBaseUrl = String(
     discoveryState.forwardBaseUrl || discoveryState.activeServiceUrl || ""
   ).trim().replace(/\/+$/, "");
-  return Boolean(targetBaseUrl && targetBaseUrl !== discoveryState.advertisedBaseUrl);
+  if (!targetBaseUrl || targetBaseUrl === discoveryState.advertisedBaseUrl) {
+    return null;
+  }
+  return {
+    operation,
+    targetBaseUrl
+  };
+}
+
+export function shouldProxyRegisteredApiRequest(input = {}) {
+  return Boolean(findProxyRegisteredApiRequest(input));
 }
 
 async function invokeRegisteredOperation({
@@ -386,7 +716,7 @@ export async function dispatchOperation({
     throw new Error("dispatchOperation requires an operation.");
   }
   const parentTrace = traceContextFromRequest(request) || getTraceContext();
-  const actor = actorFromInput({ actor: providedActor, authSession: providedAuthSession });
+  let actor = actorFromInput({ actor: providedActor, authSession: providedAuthSession });
   const traceContext = childTraceContext({
     parent: parentTrace,
     transport,
@@ -395,16 +725,57 @@ export async function dispatchOperation({
   });
   setTraceContextOnRequest(request, traceContext);
 
-  return runWithTraceContext(traceContext, async () => {
-    const operationInput = input || inputFromRequest({
-      operation,
-      requestBody,
-      url,
-      params,
-      applyHttpQuery
-    });
-    const startedAt = Date.now();
-    notifyNarrowTransition(request, "operation.normalize", "normalized");
+	  return runWithTraceContext(traceContext, async () => {
+	    const operationInput = input || inputFromRequest({
+	      operation,
+	      requestBody,
+	      url,
+	      params,
+	      applyHttpQuery
+	    });
+	    let authSession = providedAuthSession;
+	    const riskControlEnvelope = createDispatcherRiskControlEnvelope({
+	      request,
+	      operation,
+	      traceContext,
+	      transport,
+	      method,
+	      input: operationInput
+	    });
+	    const appendRiskGate = (gate = {}) => appendDispatcherRiskGate({
+	      envelope: riskControlEnvelope,
+	      request,
+	      operation,
+	      actor: gate.actor === undefined ? actor : gate.actor,
+	      authSession: gate.authSession === undefined ? authSession : gate.authSession,
+	      traceContext,
+	      transport,
+	      method,
+	      url,
+	      ...gate
+	    });
+	    const writeAuditOperation = (entry = {}) => {
+	      appendRiskGate({
+	        controlId: DISPATCHER_RISK_CONTROL_IDS.auditRecover,
+	        decision: "allow",
+	        reasonCode: entry.status === "denied"
+	          ? "audit_denied_request"
+	          : entry.status === "failed"
+	            ? "audit_failed_operation"
+	            : "audit_operation_recorded",
+	        statusCode: entry.statusCode || 0,
+	        details: {
+	          auditStatus: entry.status || "",
+	          hasError: Boolean(entry.error)
+	        }
+	      });
+	      return auditOperation({
+	        ...entry,
+	        riskControlEnvelope
+	      });
+	    };
+	    const startedAt = Date.now();
+	    notifyNarrowTransition(request, "operation.normalize", "normalized");
 
     logOperation(logger, "debug", operationEventName(transport, "matched"), {
       requestId: requestIdFromRequest(request),
@@ -421,17 +792,27 @@ export async function dispatchOperation({
         : summarizeForLog(operationInput, { maxDepth: 4, maxArrayItems: 8, maxObjectKeys: 50 })
     });
 
-    const schema = validateInputSchema(operation, operationInput);
-    if (!schema.ok) {
-      auditOperation({
-        operationAuditStore,
-        operation,
-        transport,
-        actor,
-        input: operationInput,
-        status: "denied",
-        error: schema.error
-      });
+	    const schema = validateInputSchema(operation, operationInput);
+	    if (!schema.ok) {
+	      appendRiskGate({
+	        controlId: DISPATCHER_RISK_CONTROL_IDS.admit,
+	        decision: "deny",
+	        reasonCode: "schema_invalid",
+	        statusCode: schema.status || 400,
+	        details: {
+	          error: schema.error
+	        }
+	      });
+	      writeAuditOperation({
+	        operationAuditStore,
+	        operation,
+	        transport,
+	        actor,
+	        input: operationInput,
+	        status: "denied",
+	        statusCode: schema.status || 400,
+	        error: schema.error
+	      });
       logOperation(logger, "warn", operationEventName(transport, "denied"), {
         requestId: requestIdFromRequest(request),
         operationId: operation.id,
@@ -449,39 +830,105 @@ export async function dispatchOperation({
         ok: false,
         handled: true,
         statusCode: schema.status || 400,
-        operation,
-        input: operationInput,
-        traceContext
-      };
-    }
+	        operation,
+	        input: operationInput,
+	        traceContext,
+	        riskControl: riskControlEnvelope
+	      };
+	    }
 
-    let authSession = providedAuthSession;
-    const authEnabled = true;
+	    appendRiskGate({
+	      controlId: DISPATCHER_RISK_CONTROL_IDS.admit,
+	      decision: "allow",
+	      reasonCode: "schema_valid",
+	      details: {
+	        schema: "valid"
+	      }
+	    });
+	    const authEnabled = true;
     const shouldRunConsoleAuthorization =
       !skipAuthorization && operation.externalAuth !== true && typeof authorizeOperation === "function";
 
-    // M-1: for externalAuth operations, require at least one credential header
-    // at the framework level, so that completely unauthenticated callers are
-    // rejected even if an individual handler forgets to validate its token.
     if (!skipAuthorization && operation.externalAuth === true) {
-      const hasCredential = Boolean(
-        request?.headers?.["authorization"] ||
-        request?.headers?.["x-pact-tool-token"]
-      );
-      if (!hasCredential) {
-        const errorCode = operation.externalAuthMissingCode || "missing_external_auth";
-        sendOperationDenied(response, 401, {
-          schemaVersion: 1,
-          error: {
-            code: errorCode,
-            message: "External authentication requires Authorization or x-pact-tool-token."
-          },
-          traceId: traceContext.traceId
-        });
-        notifyNarrowTransition(request, "operation.policy_deny", "policy_denied");
-        return { ok: false, handled: true, statusCode: 401, operation, input: operationInput, traceContext };
-      }
-    }
+      const verification = await verifyExternalAuth({
+        operation,
+        controllers,
+        request,
+        input: operationInput,
+        requestBody,
+        url,
+        params,
+        method,
+        transport
+	      });
+	      if (!verification.ok) {
+	        const status = Number(verification.status || verification.statusCode || 401) || 401;
+	        const error = verification.error || verification.message || "external authentication denied";
+	        appendRiskGate({
+	          controlId: (verification.missingScopes || []).length > 0 || (verification.missingCapabilities || []).length > 0
+	            ? DISPATCHER_RISK_CONTROL_IDS.externalAuthorize
+	            : DISPATCHER_RISK_CONTROL_IDS.externalBind,
+	          decision: "deny",
+	          reasonCode: verification.reasonCode || verification.code || "external_auth_denied",
+	          statusCode: status,
+	          details: {
+	            missingScopes: verification.missingScopes || [],
+	            missingCapabilities: verification.missingCapabilities || []
+	          }
+	        });
+	        writeAuditOperation({
+	          operationAuditStore,
+	          operation,
+	          transport,
+	          authSession,
+	          actor,
+	          input: operationInput,
+	          status: "denied",
+	          statusCode: status,
+	          error
+	        });
+        logOperation(logger, "warn", operationEventName(transport, "denied"), {
+          requestId: requestIdFromRequest(request),
+          operationId: operation.id,
+          reason: verification.reasonCode || verification.code || "external_auth",
+          status
+	        });
+	        sendOperationDenied(response, status, externalAuthDeniedPayload(operation, verification, traceContext.traceId));
+	        notifyNarrowTransition(request, "operation.policy_deny", "policy_denied");
+	        return { ok: false, handled: true, statusCode: status, operation, input: operationInput, traceContext, riskControl: riskControlEnvelope };
+	      }
+	      if (request && typeof request === "object") {
+	        request.__pactExternalAuth = verification;
+	      }
+	      if (verification.authSession) {
+	        authSession = verification.authSession;
+	      }
+	      if (verification.actor) {
+	        actor = verification.actor;
+	      }
+	      appendRiskGate({
+	        controlId: DISPATCHER_RISK_CONTROL_IDS.externalBind,
+	        decision: "allow",
+	        reasonCode: "external_auth_bound",
+	        actor,
+	        authSession,
+	        details: {
+	          verifier: externalAuthVerifierConfig(operation).method || "",
+	          grantId: firstText(verification.grantId, verification.grant?.id, authSession?.user?.grantId, authSession?.user?.userId)
+	        }
+	      });
+	      appendRiskGate({
+	        controlId: DISPATCHER_RISK_CONTROL_IDS.externalAuthorize,
+	        decision: "allow",
+	        reasonCode: "external_auth_authorized",
+	        actor,
+	        authSession,
+	        details: {
+	          authorizationDecisionId: verification.authorizationDecision?.decisionId || "",
+	          scopes: authSession?.user?.scopes || []
+	        }
+	      });
+	    }
 
     if (shouldRunConsoleAuthorization) {
       const authorization = await authorizeOperation({
@@ -489,18 +936,45 @@ export async function dispatchOperation({
         operation,
         method,
         url
-      });
-      if (!authorization.ok) {
-        auditOperation({
-          operationAuditStore,
-          operation,
-          transport,
-          authSession: authorization.session || null,
-          actor,
-          input: operationInput,
-          status: "denied",
-          error: authorization.error || "authorization denied"
-        });
+	      });
+	      if (!authorization.ok) {
+	        const authorizationSession = authorization.session || null;
+	        if (authorizationSession) {
+	          appendRiskGate({
+	            controlId: DISPATCHER_RISK_CONTROL_IDS.consoleBind,
+	            decision: "allow",
+	            reasonCode: "console_session_bound",
+	            authSession: authorizationSession,
+	            details: {
+	              publicAccess: operation.public === true
+	            }
+	          });
+	        }
+	        appendRiskGate({
+	          controlId: authorizationSession
+	            ? DISPATCHER_RISK_CONTROL_IDS.operationAuthorize
+	            : DISPATCHER_RISK_CONTROL_IDS.consoleBind,
+	          decision: "deny",
+	          reasonCode: authorization.authorizationDecision?.reasonCode || "authorization_denied",
+	          statusCode: authorization.status || 403,
+	          authSession: authorizationSession,
+	          details: {
+	            authorizationDecisionId: authorization.authorizationDecision?.decisionId || "",
+	            missingScopes: authorization.authorizationDecision?.missingScopes || [],
+	            missingCapabilities: authorization.authorizationDecision?.missingCapabilities || []
+	          }
+	        });
+	        writeAuditOperation({
+	          operationAuditStore,
+	          operation,
+	          transport,
+	          authSession: authorizationSession,
+	          actor,
+	          input: operationInput,
+	          status: "denied",
+	          statusCode: authorization.status || 403,
+	          error: authorization.error || "authorization denied"
+	        });
         logOperation(logger, "warn", operationEventName(transport, "denied"), {
           requestId: requestIdFromRequest(request),
           operationId: operation.id,
@@ -520,13 +994,37 @@ export async function dispatchOperation({
           ok: false,
           handled: true,
           statusCode: authorization.status || 403,
-          operation,
-          input: operationInput,
-          traceContext
-        };
-      }
-      authSession = authorization.session || null;
-    } else if (skipAuthorization) {
+	          operation,
+	          input: operationInput,
+	          traceContext,
+	          riskControl: riskControlEnvelope
+	        };
+	      }
+	      authSession = authorization.session || null;
+	      actor = actorFromInput({ actor: providedActor, authSession });
+	      appendRiskGate({
+	        controlId: DISPATCHER_RISK_CONTROL_IDS.consoleBind,
+	        decision: "allow",
+	        reasonCode: authSession ? "console_session_bound" : "public_access_bound",
+	        actor,
+	        authSession,
+	        details: {
+	          publicAccess: operation.public === true,
+	          setupMode: authorization.setupMode === true
+	        }
+	      });
+	      appendRiskGate({
+	        controlId: DISPATCHER_RISK_CONTROL_IDS.operationAuthorize,
+	        decision: "allow",
+	        reasonCode: authorization.authorizationDecision?.reasonCode || (operation.public === true ? "allowed_public" : "operation_authorized"),
+	        actor,
+	        authSession,
+	        details: {
+	          authorizationDecisionId: authorization.authorizationDecision?.decisionId || "",
+	          requiredScopes: operation.requiredScopes || []
+	        }
+	      });
+	    } else if (skipAuthorization) {
       const authorizationDecision = dispatcherAuthorizationEngine.evaluate({
         operation,
         request,
@@ -540,21 +1038,33 @@ export async function dispatchOperation({
         traceId: traceContext.traceId,
         enforceConfirmation: false
       });
-      if (!authorizationDecision.allowed) {
-        const missingScopes = authorizationDecision.missingScopes || [];
-        const error = missingScopes.length > 0
-          ? `Operation ${operation.id} requires scopes: ${missingScopes.join(", ")}.`
-          : `Operation ${operation.id} authorization denied: ${authorizationDecision.reasonCode}.`;
-        auditOperation({
-          operationAuditStore,
-          operation,
-          transport,
-          authSession,
-          actor,
-          input: operationInput,
-          status: "denied",
-          error
-        });
+	      if (!authorizationDecision.allowed) {
+	        const missingScopes = authorizationDecision.missingScopes || [];
+	        const error = missingScopes.length > 0
+	          ? `Operation ${operation.id} requires scopes: ${missingScopes.join(", ")}.`
+	          : `Operation ${operation.id} authorization denied: ${authorizationDecision.reasonCode}.`;
+	        appendRiskGate({
+	          controlId: DISPATCHER_RISK_CONTROL_IDS.platformAuthorize,
+	          decision: "deny",
+	          reasonCode: authorizationDecision.reasonCode || "authorization_denied",
+	          statusCode: 403,
+	          details: {
+	            authorizationDecisionId: authorizationDecision.decisionId,
+	            missingScopes,
+	            missingCapabilities: authorizationDecision.missingCapabilities || []
+	          }
+	        });
+	        writeAuditOperation({
+	          operationAuditStore,
+	          operation,
+	          transport,
+	          authSession,
+	          actor,
+	          input: operationInput,
+	          status: "denied",
+	          statusCode: 403,
+	          error
+	        });
         logOperation(logger, "warn", operationEventName(transport, "denied"), {
           requestId: requestIdFromRequest(request),
           operationId: operation.id,
@@ -574,12 +1084,76 @@ export async function dispatchOperation({
           ok: false,
           handled: true,
           statusCode: 403,
-          operation,
-          input: operationInput,
-          traceContext
-        };
-      }
-    }
+	          operation,
+	          input: operationInput,
+	          traceContext,
+	          riskControl: riskControlEnvelope
+	        };
+	      }
+	      appendRiskGate({
+	        controlId: DISPATCHER_RISK_CONTROL_IDS.platformAuthorize,
+	        decision: "allow",
+	        reasonCode: authorizationDecision.reasonCode || "preauthorized_dispatch_allowed",
+	        details: {
+	          authorizationDecisionId: authorizationDecision.decisionId,
+	          skipAuthorization: true
+	        }
+	      });
+	    } else if (operation.externalAuth !== true && operation.public !== true && ["http", "rpc"].includes(transport)) {
+	      const error = "Operation authorizer is not registered for this transport.";
+	      appendRiskGate({
+	        controlId: DISPATCHER_RISK_CONTROL_IDS.operationAuthorize,
+	        decision: "deny",
+	        reasonCode: "operation_authorizer_missing",
+	        statusCode: 503,
+	        details: {
+	          transport
+	        }
+	      });
+	      writeAuditOperation({
+	        operationAuditStore,
+	        operation,
+	        transport,
+	        authSession,
+	        actor,
+	        input: operationInput,
+	        status: "denied",
+	        statusCode: 503,
+	        error
+	      });
+	      logOperation(logger, "error", operationEventName(transport, "denied"), {
+	        requestId: requestIdFromRequest(request),
+	        operationId: operation.id,
+	        reason: "operation_authorizer_missing",
+	        status: 503
+	      });
+	      sendOperationDenied(response, 503, {
+	        error: "操作授权器未注册。",
+	        traceId: traceContext.traceId
+	      });
+	      notifyNarrowTransition(request, "operation.policy_deny", "policy_denied");
+	      return {
+	        ok: false,
+	        handled: true,
+	        statusCode: 503,
+	        operation,
+	        input: operationInput,
+	        traceContext,
+	        riskControl: riskControlEnvelope
+	      };
+	    } else if (operation.externalAuth !== true) {
+	      appendRiskGate({
+	        controlId: operation.public === true
+	          ? DISPATCHER_RISK_CONTROL_IDS.operationAuthorize
+	          : DISPATCHER_RISK_CONTROL_IDS.platformAuthorize,
+	        decision: "allow",
+	        reasonCode: operation.public === true ? "allowed_public_without_authorizer" : "internal_dispatch_authorized",
+	        details: {
+	          transport,
+	          publicAccess: operation.public === true
+	        }
+	      });
+	    }
 
     const safety = evaluateOperationSafety({
       operation,
@@ -589,18 +1163,32 @@ export async function dispatchOperation({
       request,
       authSession,
       authEnabled
-    });
-    if (!safety.ok) {
-      auditOperation({
-        operationAuditStore,
-        operation,
-        transport,
-        authSession,
-        actor,
-        input: operationInput,
-        status: "denied",
-        error: safety.error || "operation safety denied"
-      });
+	    });
+	    if (!safety.ok) {
+	      appendRiskGate({
+	        controlId: DISPATCHER_RISK_CONTROL_IDS.approve,
+	        decision: "deny",
+	        reasonCode: safety.safety?.blocked || safety.safety?.risk === "destructive"
+	          ? "risk_blocked"
+	          : "approval_denied",
+	        statusCode: safety.status || 403,
+	        details: {
+	          risk: safety.safety?.risk || "",
+	          approvalScope: safety.safety?.approvalScope || "",
+	          requiresConfirmation: safety.safety?.requiresConfirmation === true
+	        }
+	      });
+	      writeAuditOperation({
+	        operationAuditStore,
+	        operation,
+	        transport,
+	        authSession,
+	        actor,
+	        input: operationInput,
+	        status: "denied",
+	        statusCode: safety.status || 403,
+	        error: safety.error || "operation safety denied"
+	      });
       logOperation(logger, "warn", operationEventName(transport, "denied"), {
         requestId: requestIdFromRequest(request),
         operationId: operation.id,
@@ -624,13 +1212,25 @@ export async function dispatchOperation({
         ok: false,
         handled: true,
         statusCode: safety.status || 403,
-        operation,
-        input: operationInput,
-        traceContext
-      };
-    }
+	        operation,
+	        input: operationInput,
+	        traceContext,
+	        riskControl: riskControlEnvelope
+	      };
+	    }
 
-    notifyNarrowTransition(request, "operation.policy_allow", "policy_checked");
+	    appendRiskGate({
+	      controlId: DISPATCHER_RISK_CONTROL_IDS.approve,
+	      decision: "allow",
+	      reasonCode: safety.safety?.requiresConfirmation ? "approval_confirmed" : "approval_not_required",
+	      details: {
+	        risk: safety.safety?.risk || "",
+	        approvalScope: safety.safety?.approvalScope || "",
+	        requiresConfirmation: safety.safety?.requiresConfirmation === true
+	      }
+	    });
+
+	    notifyNarrowTransition(request, "operation.policy_allow", "policy_checked");
     notifyNarrowTransition(request, "operation.ledger_start", "ledger_started");
 
     try {
@@ -642,12 +1242,21 @@ export async function dispatchOperation({
       });
       await withOperationConcurrency(
         operation,
-        () => {
-          notifyNarrowTransition(request, "operation.execute_start", "executing");
-          notifySideEffectStart(request);
-          return invokeRegisteredOperation({
-            operation,
-            controllers,
+	        () => {
+	          notifyNarrowTransition(request, "operation.execute_start", "executing");
+	          notifySideEffectStart(request);
+	          appendRiskGate({
+	            controlId: DISPATCHER_RISK_CONTROL_IDS.execute,
+	            decision: "allow",
+	            reasonCode: "execute_started",
+	            details: {
+	              concurrencySafe: operation.concurrencySafe === true,
+	              concurrencyGroup: operation.concurrencyGroup || operation.id
+	            }
+	          });
+	          return invokeRegisteredOperation({
+	            operation,
+	            controllers,
             request,
             response,
             requestBody,
@@ -658,18 +1267,19 @@ export async function dispatchOperation({
           });
         },
         concurrencyScope
-      );
-      const statusCode = response?.statusCode || 200;
-      auditOperation({
-        operationAuditStore,
-        operation,
-        transport,
-        authSession,
-        actor,
-        input: operationInput,
-        status: statusCode >= 400 ? "failed" : "ok",
-        startedAt
-      });
+	      );
+	      const statusCode = response?.statusCode || 200;
+	      writeAuditOperation({
+	        operationAuditStore,
+	        operation,
+	        transport,
+	        authSession,
+	        actor,
+	        input: operationInput,
+	        status: statusCode >= 400 ? "failed" : "ok",
+	        statusCode,
+	        startedAt
+	      });
       logOperation(logger, statusCode >= 400 ? "warn" : "debug", operationEventName(transport, "completed"), {
         requestId: requestIdFromRequest(request),
         operationId: operation.id,
@@ -688,22 +1298,24 @@ export async function dispatchOperation({
         handled: true,
         statusCode,
         operation,
-        input: operationInput,
-        authSession,
-        traceContext
-      };
-    } catch (error) {
-      auditOperation({
-        operationAuditStore,
-        operation,
-        transport,
+	        input: operationInput,
+	        authSession,
+	        traceContext,
+	        riskControl: riskControlEnvelope
+	      };
+	    } catch (error) {
+	      writeAuditOperation({
+	        operationAuditStore,
+	        operation,
+	        transport,
         authSession,
         actor,
-        input: operationInput,
-        status: "failed",
-        startedAt,
-        error: error instanceof Error ? error.message : "operation failed"
-      });
+	        input: operationInput,
+	        status: "failed",
+	        statusCode: response?.statusCode || 500,
+	        startedAt,
+	        error: error instanceof Error ? error.message : "operation failed"
+	      });
       logOperation(logger, "error", operationEventName(transport, "failed"), {
         requestId: requestIdFromRequest(request),
         operationId: operation.id,
@@ -984,7 +1596,7 @@ export async function dispatchRpcOperation({
       reason: "unknown-method",
       method: payload.method || ""
     });
-    sendJson(response, 404, rpcError(id, 404, `RPC 方法不存在：${payload.method || ""}`));
+    sendJson(response, 404, rpcError(id, 404, "RPC 方法不存在。"));
     return;
   }
 
@@ -1029,7 +1641,7 @@ export async function dispatchRpcOperation({
     sendJson(
       response,
       200,
-      rpcError(id, 500, error instanceof Error ? error.message : "RPC 调用失败")
+      rpcError(id, 500, "RPC 调用失败。")
     );
     return;
   }

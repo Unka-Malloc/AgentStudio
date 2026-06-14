@@ -181,7 +181,7 @@ describe("operation audit extra coverage", () => {
     const store = trackStore(createOperationAuditStore({ userDataPath: tempRoot }));
 
     expect(store.getRetentionPolicy()).toMatchObject({
-      policyVersion: "pact.audit-retention.v1",
+      policyVersion: "v0.0.1:platform:audit-retention-1",
       retentionDays: 90,
       maxExportItems: 1000,
       updatedAt: "",
@@ -236,7 +236,7 @@ describe("operation audit extra coverage", () => {
 
     const trace = store.getTrace("trace-a", { limit: 10 });
     expect(trace).toMatchObject({
-      protocolVersion: "pact.trace-drilldown.v1",
+      protocolVersion: "v0.0.1:platform:trace-drilldown-1",
       traceId: "trace-a",
       count: 3,
     });
@@ -249,7 +249,7 @@ describe("operation audit extra coverage", () => {
     expect(store.getTrace("", {})).toMatchObject({
       auditItems: [],
       count: 0,
-      protocolVersion: "pact.trace-drilldown.v1",
+      protocolVersion: "v0.0.1:platform:trace-drilldown-1",
       spans: [],
       traceId: "",
     });
@@ -262,7 +262,7 @@ describe("operation audit extra coverage", () => {
       userId: "user-a",
     });
     expect(exported.manifest).toMatchObject({
-      protocolVersion: "pact.audit-export.v1",
+      protocolVersion: "v0.0.1:platform:audit-export-1",
       redactionPolicy: "operation-audit-redacted-v1",
       itemCount: 1,
       filters: {
@@ -285,7 +285,7 @@ describe("operation audit extra coverage", () => {
 
     const pruneResult = store.pruneExpired({ retentionDays: 2 });
     expect(pruneResult).toMatchObject({
-      policyVersion: "pact.audit-retention.v1",
+      policyVersion: "v0.0.1:platform:audit-retention-1",
       retentionDays: 2,
       deletedCount: 1,
     });
