@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" role="img" aria-label="Pact Product Matrix">
+  <title>Pact — Product Capabilities</title>
+  <defs>
+    <linearGradient id="pm-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0b0c10"/>
+      <stop offset="100%" stop-color="#0e0f14"/>
+    </linearGradient>
+    <linearGradient id="pm-brass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c9a96e"/>
+      <stop offset="100%" stop-color="#a8893a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="420" rx="12" fill="url(#pm-bg)"/>
+
+  <!-- Title -->
+  <text x="480" y="44" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" letter-spacing="4" fill="#9a8e7c">PRODUCT CAPABILITIES</text>
+
+  <!-- Grid: 3 columns x 2 rows -->
+  <!-- Row 1 -->
+  <!-- Cell 1: Agent Governance -->
+  <rect x="32" y="70" width="288" height="150" rx="6" fill="none" stroke="#2a2620" stroke-width="1"/>
+  <rect x="32" y="70" width="288" height="1" fill="url(#pm-brass)" opacity="0.5"/>
+  <text x="52" y="100" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#e8dcc8">Agent Governance</text>
+  <text x="52" y="122" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" fill="#9a8e7c">Policy Engine + Operation Ledger</text>
+  <text x="52" y="146" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" fill="#6a6054">Every state change is policy-checked and</text>
+  <text x="52" y="161" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" fill="#6a6054">permanently recorded before execution.</text>
+  <text x="52" y="186" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#d4952e">Zero Trust</text>
+  <text x="116" y="186" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#5aaa8a">Append-Only</text>
+  <text x="196" y="186" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#6a9ec0">Immutable</text>
+
+  <!-- Cell 2: Knowledge Governance -->
+  <rect x="336" y="70" width="288" height="150" rx="6" fill="none" stroke="#2a2620" stroke-width="1"/>
+  <rect x="336" y="70" width="288" height="1" fill="url(#pm-brass)" opacity="0.5"/>
+  <text x="356" y="100" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#e8dcc8">Agent Library</text>
+  <text x="356" y="122" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" fill="#9a8e7c">Knowledge Slicing + Re-authorization</text>
+  <text x="356" y="146" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" fill="#6a6054">Upstream knowledge dynamically sliced and</text>
+  <text x="356" y="161" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" fill="#6a6054">re-authorized upon every agent access.</text>
+  <text x="356" y="186" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#d4952e">controlledView</text>
+  <text x="444" y="186" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#5aaa8a">copyToContext</text>
+  <text x="540" y="186" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#6a9ec0">checkoutAllowed</text>
+
+  <!-- Cell 3: Checkpoint Tree -->
+  <rect x="640" y="70" width="288" height="150" rx="6" fill="none" stroke="#2a2620" stroke-width="1"/>
+  <rect x="640" y="70" width="288" height="1" fill="url(#pm-brass)" opacity="0.5"/>
+  <text x="660" y="100" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#e8dcc8">Checkpoint Tree</text>
+  <text x="660" y="122" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" fill="#9a8e7c">Full Replay + Safe Rollback</text>
+  <text x="660" y="146" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" fill="#6a6054">Reads, writes, denials, and restores all</text>
+  <text x="660" y="161" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" fill="#6a6054">generate immutable checkpoint nodes.</text>
+  <text x="660" y="186" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#d4952e">Git-like</text>
+  <text x="712" y="186" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#5aaa8a">Point-in-Time</text>
+  <text x="800" y="186" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#6a9ec0">100% Auditable</text>
+
+  <!-- Row 2 -->
+  <!-- Cell 4: MCP Native -->
+  <rect x="32" y="240" width="288" height="150" rx="6" fill="none" stroke="#2a2620" stroke-width="1"/>
+  <rect x="32" y="240" width="288" height="1" fill="url(#pm-brass)" opacity="0.5"/>
+  <text x="52" y="270" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#e8dcc8">MCP Native Ecosystem</text>
+  <text x="52" y="292" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" fill="#9a8e7c">9 Agent Targets + One-Line Install</text>
+  <text x="52" y="316" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" fill="#6a6054">OpenClaw, Claude Code, Codex, Antigravity,</text>
+  <text x="52" y="331" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" fill="#6a6054">OpenCode, Copilot, Kilo Code, Cursor, Hermes.</text>
+  <text x="52" y="356" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#d4952e">HTTP + stdio</text>
+  <text x="130" y="356" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#5aaa8a">Auto-Discovery</text>
+  <text x="230" y="356" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#6a9ec0">Local Grant</text>
+
+  <!-- Cell 5: ACP Relay -->
+  <rect x="336" y="240" width="288" height="150" rx="6" fill="none" stroke="#2a2620" stroke-width="1"/>
+  <rect x="336" y="240" width="288" height="1" fill="url(#pm-brass)" opacity="0.5"/>
+  <text x="356" y="270" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#e8dcc8">ACP Agent Relay</text>
+  <text x="356" y="292" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" fill="#9a8e7c">Governed Agent-to-Agent Delegation</text>
+  <text x="356" y="316" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" fill="#6a6054">Source agents delegate to target agents via</text>
+  <text x="356" y="331" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" fill="#6a6054">virtual inbound projections with full policy.</text>
+  <text x="356" y="356" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#d4952e">Relay Session</text>
+  <text x="440" y="356" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#5aaa8a">Delegation Grant</text>
+  <text x="548" y="356" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#6a9ec0">Tool Projection</text>
+
+  <!-- Cell 6: Contribution Leaderboard -->
+  <rect x="640" y="240" width="288" height="150" rx="6" fill="none" stroke="#2a2620" stroke-width="1"/>
+  <rect x="640" y="240" width="288" height="1" fill="url(#pm-brass)" opacity="0.5"/>
+  <text x="660" y="270" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#e8dcc8">Contribution Leaderboard</text>
+  <text x="660" y="292" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" fill="#9a8e7c">Compute to Digital Assets</text>
+  <text x="660" y="316" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" fill="#6a6054">Quantifies which agent or human contributed</text>
+  <text x="660" y="331" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" fill="#6a6054">the most reusable knowledge and skills.</text>
+  <text x="660" y="356" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#d4952e">Ranked</text>
+  <text x="706" y="356" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#5aaa8a">Reusable</text>
+  <text x="767" y="356" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" font-weight="600" fill="#6a9ec0">Quantified</text>
+
+  <!-- Bottom border line -->
+  <line x1="32" y1="408" x2="928" y2="408" stroke="url(#pm-brass)" stroke-width="0.5" opacity="0.3"/>
+</svg>

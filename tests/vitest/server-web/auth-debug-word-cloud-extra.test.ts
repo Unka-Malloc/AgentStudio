@@ -161,7 +161,7 @@ function createAuthHarness() {
 
 function createWordCloudSet(overrides: Partial<KnowledgeWordCloudSet> = {}): KnowledgeWordCloudSet {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     wordBagSetId: "set-1",
     title: "Terms",
     status: "draft",

@@ -162,7 +162,7 @@ function normalizeDictionary(raw = {}, configPath = "") {
   }
 
   return {
-    schemaVersion: Number(raw.schemaVersion || 1),
+    schemaVersion: String(raw.schemaVersion || "v0.0.1:schema:definition-1"),
     configPath,
     includeUnknownReadableText: raw.includeUnknownReadableText !== false,
     plainTextFallbackExtension: normalizeExtension(raw.plainTextFallbackExtension),

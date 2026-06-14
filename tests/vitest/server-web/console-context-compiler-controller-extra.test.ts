@@ -32,7 +32,7 @@ function makeFixture() {
     clearAllBusy,
     error,
     recentTurns: () => [
-      { role: "user", text: "最近账单风险？" },
+      { role: "user", text: "最近部署风险？" },
       { role: "assistant", text: "需要证据。" },
     ],
     selectedContextProfileId: () => "balanced",
@@ -162,7 +162,7 @@ describe("console context compiler controller extra coverage", () => {
         expect.objectContaining({ evidenceId: "ev-4", sourceLocator: "preview/ev-4" }),
       ],
       recentTurns: [
-        { role: "user", text: "最近账单风险？" },
+        { role: "user", text: "最近部署风险？" },
         { role: "assistant", text: "需要证据。" },
       ],
     });

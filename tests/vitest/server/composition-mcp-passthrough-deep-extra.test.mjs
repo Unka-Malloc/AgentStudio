@@ -277,7 +277,7 @@ describe("composition MCP passthrough deep extras", () => {
       name: "sharedspace.file.write",
       _meta: {
         mcpOutlet: "pact.sharedspace",
-        architectureCategory: "Sharedspace"
+        architectureCategory: "Shared Space"
       }
     });
   });
@@ -288,6 +288,7 @@ describe("composition MCP passthrough deep extras", () => {
       serviceId: "mcp-service",
       serviceName: "MCP Service",
       displayName: "MCP Service",
+      policyPreset: "servicehub.development-local",
       upstream: {
         type: "mcp",
         transport: "streamable-http",
@@ -295,7 +296,7 @@ describe("composition MCP passthrough deep extras", () => {
       },
       binding: {
         mode: "passthrough",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       }
     });
 
@@ -342,7 +343,7 @@ describe("composition MCP passthrough deep extras", () => {
     const discovery = await discoverExternalMcpTools(serviceConfig);
     expect(discovery).toMatchObject({
       ok: true,
-      protocolVersion: "pact.external-mcp-passthrough.v1",
+      protocolVersion: "v0.0.1:external-service:mcp-passthrough-1",
       serviceId: "mcp-service",
       initializeResult: {
         capabilities: { tools: true },
@@ -398,18 +399,13 @@ describe("composition MCP passthrough deep extras", () => {
       cachePath: externalMcpToolCachePath(userDataPath),
       serviceId: "mcp-service",
       toolCount: 1,
+      activeToolCount: 0,
+      candidateToolCount: 1,
       tools: ["ping.tool"]
     });
 
     const runtime = createExternalMcpPassthroughRuntime({ userDataPath });
-    expect(runtime.listVirtualOperationsSync()).toEqual([
-      expect.objectContaining({
-        id: "external.mcp.mcp_service.ping_tool",
-        toolId: "pact.externalMcp.mcp_service.ping_tool",
-        featureId: "external-mcp",
-        aspects: expect.arrayContaining(["external-mcp-passthrough", "external-service", "skill-hub"])
-      })
-    ]);
+    expect(runtime.listVirtualOperationsSync()).toEqual([]);
 
     fetchMock.mockReset();
     fetchMock
@@ -483,7 +479,7 @@ describe("composition MCP passthrough deep extras", () => {
       },
       binding: {
         mode: "passthrough",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       }
     })).rejects.toMatchObject({
       message: "External MCP HTTP 502 for initialize.",
@@ -497,7 +493,7 @@ describe("composition MCP passthrough deep extras", () => {
   it("normalizes compiled HTTP requests, maps HTTP failures, and aborts on timeout", async () => {
     const userDataPath = await tempDir("pact-composition-http-runtime-");
     await writeJson(externalMcpToolCachePath(userDataPath), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       kind: "pact.external-mcp.tool-cache",
       updatedAt: "2026-06-05T00:00:00.000Z",
       services: {
@@ -511,7 +507,7 @@ describe("composition MCP passthrough deep extras", () => {
           },
           binding: {
             mode: "compile",
-            outlet: "pact.skillHub"
+            outlet: "pact.serviceHub"
           },
           tools: [
             {
@@ -613,7 +609,7 @@ describe("composition MCP passthrough deep extras", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      protocolVersion: "pact.external-http-compile.v1",
+      protocolVersion: "v0.0.1:external-service:http-compile-1",
       serviceId: "http-service",
       upstreamToolName: "lookup_item",
       upstream: {

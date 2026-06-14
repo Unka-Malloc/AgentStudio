@@ -56,7 +56,7 @@ describe("agent workspace final eighth extra coverage", () => {
       const sessionContext = runtime.getSessionContext(session.sessionId);
       expect(sessionContext).toMatchObject({
         sessionId: session.sessionId,
-        sessionProtocolVersion: "pact.agent-session-thread.v1",
+        sessionProtocolVersion: "v0.0.1:agent:session-thread-1",
         contextProfileId: "workspace-profile",
         modelAlias: "session-model",
         toolGrantId: "session-grant"

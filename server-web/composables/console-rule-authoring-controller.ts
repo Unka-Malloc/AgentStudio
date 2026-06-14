@@ -335,7 +335,7 @@ export function createConsoleRuleAuthoringController(
       });
       ruleAuthoringResult.value = {
         ...(ruleAuthoringResult.value || {
-          protocolVersion: "pact.knowledge-rule-authoring.v1",
+          protocolVersion: "v0.0.1:knowledge:rule-authoring-1",
           ok: true,
           status: "published",
         }),

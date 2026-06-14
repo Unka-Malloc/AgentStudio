@@ -44,6 +44,7 @@ const forbiddenPatterns = [
 const allowedRootNames = new Set([
   ".dockerignore",
   ".env.example",
+  ".codex-research",
   ".gemini",
   ".git",
   ".gitattributes",
@@ -97,7 +98,10 @@ const sourceRootsToScan = [
 const nestedScanExcludedPaths = new Set([
   "client-cli/target",
   "client-gui/.dart_tool",
+  ".codex-research",
+  "client-gui/android/build",
   "client-gui/build",
+  "client-gui/coverage",
   "client-gui/linux/flutter/ephemeral",
   "client-gui/macos/Flutter/ephemeral",
   "client-gui/macos/Pods",
@@ -110,6 +114,10 @@ const nestedGeneratedPatterns = [/\.pyc$/u, /\.pyo$/u, /\.pyd$/u, /\.eml$/u, /\.
 const forbiddenNestedPaths = new Set([
   "server/communication",
   "client-cli/communication",
+  "client-cli/target",
+  "client-gui/android/build",
+  "client-gui/build",
+  "client-gui/coverage",
   "tests/email-corpus"
 ]);
 const dataDirPolicyExcludedPaths = new Set([
@@ -134,11 +142,16 @@ const repositoryWideCredentialScanExcludedPaths = new Set([
   ".kilo/node_modules",
   "client-cli/target",
   "client-gui/.dart_tool",
+  ".codex-research",
+  "client-gui/android/build",
   "client-gui/build",
+  "client-gui/coverage",
   "client-gui/linux/flutter/ephemeral",
   "client-gui/macos/Flutter/ephemeral",
   "client-gui/macos/Pods",
   "client-gui/windows/flutter/ephemeral",
+  "build/client-cli/target",
+  "build/client-gui",
   "server/platform/modules/knowledge/runtime/jre",
   "build/release/mcp"
 ]);
@@ -380,12 +393,12 @@ async function scanNestedGeneratedArtifacts(directory, relativePath, generatedAr
     const childRelativePath = relativePath ? path.join(relativePath, entry.name) : entry.name;
     const normalizedChildPath = toPosix(childRelativePath);
 
-    if (shouldSkipNestedScan(normalizedChildPath)) {
+    if (forbiddenNestedPaths.has(normalizedChildPath)) {
+      generatedArtifacts.add(normalizedChildPath);
       continue;
     }
 
-    if (forbiddenNestedPaths.has(normalizedChildPath)) {
-      generatedArtifacts.add(normalizedChildPath);
+    if (shouldSkipNestedScan(normalizedChildPath)) {
       continue;
     }
 

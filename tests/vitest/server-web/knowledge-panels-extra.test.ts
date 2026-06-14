@@ -309,7 +309,7 @@ function makeMaintenanceContext(overrides: Record<string, unknown> = {}) {
       if (name === "retrieval.name") return "知识维护";
       return defaultValue;
     }),
-    maintenanceJson: asRef('{"schemaVersion":1}'),
+    maintenanceJson: asRef('{"schemaVersion": "v0.0.1:schema:definition-1"}'),
     saveKnowledgeMaintenance: vi.fn(),
     setMaintenanceFieldFromEvent: vi.fn(),
     setMaintenanceFieldValue: vi.fn(),

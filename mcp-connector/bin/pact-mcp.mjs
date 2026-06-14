@@ -39,7 +39,6 @@ function msg(en, zh) {
 const DEFAULT_TOKEN_ENV = "PACT_MCP_TOKEN";
 const DEFAULT_CODEX_BIN = "codex";
 const DEFAULT_CLAUDE_BIN = "claude";
-const DEFAULT_GEMINI_BIN = "gemini";
 const DEFAULT_KILO_BIN = "kilo";
 const DEFAULT_COPILOT_BIN = "copilot";
 const DEFAULT_OPENCODE_BIN = "opencode";
@@ -69,12 +68,6 @@ const AGENT_CLI_TARGETS = [
     label: "Claude Code",
     binOption: "claude-bin",
     commandNames: ["claude"]
-  },
-  {
-    target: "gemini-cli",
-    label: "Gemini CLI",
-    binOption: "gemini-bin",
-    commandNames: ["gemini"]
   },
   {
     target: "copilot",
@@ -110,7 +103,6 @@ const APP_DISCOVERY_NAME_HINTS = [
   "copilot",
   "cursor",
   "devin",
-  "gemini",
   "goose",
   "hermes",
   "kilo",
@@ -120,16 +112,14 @@ const APP_DISCOVERY_NAME_HINTS = [
   "roo",
   "tabnine",
   "trae",
-  "windsurf",
   "zeroclaw"
 ];
 const APP_DISCOVERY_WORD_HINTS = ["agent", "bot", "claw", "code"];
 const PLUGIN_NAME = "pact-mcp";
 const MARKETPLACE_NAME = "pact-local";
-const GEMINI_EXTENSION_NAME = "Pact";
 const MCP_SERVER_NAME = "pact";
-const MCP_STABLE_TOOL_NAME = "pact.call";
-const MCP_INTERFACE_VERSION = "pact.mcp.v1";
+const MCP_STABLE_TOOL_NAME = "pact.discovery";
+const MCP_INTERFACE_VERSION = "v0.0.1:mcp:interface-1";
 const BOOTSTRAP_CURL_FLAGS = "-fL --retry 3 --connect-timeout 20 -sS";
 const BOOTSTRAP_INSTALL_SCRIPT = "pact-mcp-install.sh";
 const BOOTSTRAP_INSTALL_SCRIPT_ZH_CN = "pact-mcp-install.zh-CN.sh";
@@ -138,14 +128,12 @@ const SUPPORTED_TARGETS = [
   "openclaw",
   "claude-code",
   "codex",
-  "gemini-cli",
   "antigravity",
   "opencode",
   "copilot",
   "kilo-code",
   "cursor",
-  "hermes",
-  "windsurf"
+  "hermes"
 ];
 const PRIORITY_INSTALL_TARGETS = Object.freeze(["claude-code", "codex", "openclaw"]);
 const PRIORITY_INSTALL_TARGET = PRIORITY_INSTALL_TARGETS.join(",");
@@ -155,8 +143,6 @@ const PACT_MCP_DISCOVERY_FILE_ENV = "PACT_MCP_DISCOVERY_FILE";
 const DEFAULT_DISCOVERY_REGISTRY = path.join(os.homedir(), ".pact", "mcp", "servers.json");
 const DEFAULT_SCAN_PORTS = [7228, 7229, 7230, 7231, 7232, 7233, 7234, 7235, 7236, 7237];
 const TARGET_ALIASES = new Map([
-  ["gemini", "gemini-cli"],
-  ["gemini_cli", "gemini-cli"],
   ["claude", "claude-code"],
   ["claude_code", "claude-code"],
   ["claudecode", "claude-code"],
@@ -173,40 +159,34 @@ const TARGET_LABELS = {
   openclaw: "OpenClaw",
   "claude-code": "Claude Code",
   codex: "Codex",
-  "gemini-cli": "Gemini CLI",
   antigravity: "Antigravity",
   opencode: "OpenCode",
   copilot: "Copilot",
   "kilo-code": "Kilo Code",
   cursor: "Cursor",
-  hermes: "Hermes Agent",
-  windsurf: "Windsurf"
+  hermes: "Hermes Agent"
 };
 const TARGET_INSTALL_MODES = {
   openclaw: "openclaw-release-mcp-cli",
   "claude-code": "claude-code-release-mcp-cli",
   codex: "codex-release-plugin-and-mcp-cli",
-  "gemini-cli": "gemini-release-mcp-cli",
   antigravity: "antigravity-release-mcp-config",
   opencode: "opencode-release-mcp-config",
   copilot: "copilot-release-mcp-cli",
   "kilo-code": "kilo-release-global-kilo-json",
   cursor: "cursor-release-mcp-config",
-  hermes: "hermes-remote-mcp-cli",
-  windsurf: "windsurf-release-mcp-config"
+  hermes: "hermes-remote-mcp-cli"
 };
 const TARGET_LOCATIONS = Object.freeze({
   openclaw: ["local", "orbstack", "remote-linux"],
   "claude-code": ["local", "orbstack", "remote-linux"],
   codex: ["local", "orbstack", "remote-linux"],
-  "gemini-cli": ["local", "orbstack", "remote-linux"],
   antigravity: ["local"],
   opencode: ["local", "orbstack", "remote-linux"],
   copilot: ["local", "orbstack", "remote-linux"],
   "kilo-code": ["local", "orbstack", "remote-linux"],
   cursor: ["local"],
-  hermes: ["orbstack", "remote-linux"],
-  windsurf: ["local"]
+  hermes: ["orbstack", "remote-linux"]
 });
 const SCAN_COMMAND_TIMEOUT_MS = 3000;
 const REMOTE_SCAN_COMMAND_TIMEOUT_MS = 8000;
@@ -260,7 +240,7 @@ function supportedTargetDetails() {
 
 function sharedspaceExchangeReceiptContract() {
   return {
-    schemaVersion: "pact.mcp.sharedspace-exchange.v1",
+    schemaVersion: "v0.0.1:mcp:sharedspace-exchange-1",
     locations: [
       "structuredContent.exchange",
       "notifications/pact/operation_reply.params.exchange"
@@ -376,12 +356,10 @@ function usage() {
     "  --auto-update                 Enable automatic push updates when installing (non-interactive mode).",
     "  --codex-bin COMMAND           Codex CLI command or explicit path. Default: codex.",
     "  --claude-bin COMMAND          Claude Code CLI command or explicit path. Default: claude.",
-    "  --gemini-bin COMMAND          Gemini CLI command or explicit path. Default: gemini.",
     "  --kilo-bin COMMAND            Kilo Code CLI command or explicit path. Default: kilo.",
     "  --copilot-bin COMMAND         Copilot CLI command or explicit path. Default: copilot.",
     "  --opencode-bin COMMAND         OpenCode CLI command or explicit path. Default: opencode.",
     "  --cursor-config PATH           Cursor MCP settings path.",
-    "  --windsurf-config PATH         Windsurf MCP settings path.",
     "  --orb-bin COMMAND             OrbStack CLI command or explicit path. Default: orb.",
     "  --docker-bin COMMAND          Docker CLI command or explicit path. Default: docker.",
     "  --podman-bin COMMAND          Podman CLI command or explicit path. Default: podman.",
@@ -504,9 +482,6 @@ function notDetectedTargetDetail(target) {
   if (target === "cursor") {
     return "Cursor MCP config path not found yet. Pass --cursor-config with an explicit path.";
   }
-  if (target === "windsurf") {
-    return "Windsurf MCP config path not found yet. Pass --windsurf-config with an explicit path.";
-  }
   const descriptor = AGENT_CLI_TARGETS.find((item) => item.target === target);
   if (descriptor) {
     return `${descriptor.commandNames.join("/")} executable was not detected. Pass --${descriptor.binOption} with an explicit command or path.`;
@@ -528,9 +503,6 @@ function targetBinOption(target) {
 function targetDefaultCommand(target) {
   if (target === "claude-code") {
     return "claude";
-  }
-  if (target === "gemini-cli") {
-    return "gemini";
   }
   if (target === "kilo-code") {
     return "kilo";
@@ -1359,7 +1331,7 @@ async function verifyPactHandshake(baseUrl, discovery) {
   if (
     !result.ok ||
     result.payload?.ok !== true ||
-    payload.schemaVersion !== "pact.mcp.handshake.v1" ||
+    payload.schemaVersion !== "v0.0.1:mcp:handshake-1" ||
     payload.nonce !== nonce ||
     payload.server?.name !== "Pact" ||
     payload.server?.interfaceVersion !== MCP_INTERFACE_VERSION ||
@@ -1519,12 +1491,24 @@ async function verifyMcpTools({ baseUrl, token }) {
     })
   });
   const tools = toolsList.payload?.result?.tools || [];
-  const hasStableOutlet = tools.some(t => t.name === MCP_STABLE_TOOL_NAME || t.name === "pact.discovery" || t.name === "pact.knowledge");
+  const expectedOutlets = [
+    "pact.discovery",
+    "pact.agentLibrary",
+    "pact.sharedspace",
+    "pact.codespace",
+    "pact.skillHub",
+    "pact.agentRelay",
+    "pact.serviceHub"
+  ];
+  const toolNames = new Set(tools.map((tool) => tool.name));
+  const hasStableOutlet = toolNames.has(MCP_STABLE_TOOL_NAME);
+  const hasSevenOutlets = expectedOutlets.every((name) => toolNames.has(name));
   if (
     !toolsList.ok
     || !health.ok
-    || (tools.length !== 1 && tools.length !== 5)
+    || tools.length !== expectedOutlets.length
     || !hasStableOutlet
+    || !hasSevenOutlets
     || health.payload?.result?.structuredContent?.payload?.ok !== true
   ) {
     throw new Error("MCP HTTP verification failed.");
@@ -1535,7 +1519,7 @@ async function verifyMcpTools({ baseUrl, token }) {
     : [];
   return {
     toolCount: tools.length,
-    stableToolName: tools.find(t => t.name === MCP_STABLE_TOOL_NAME || t.name === "pact.discovery")?.name || tools[0]?.name || "",
+    stableToolName: tools.find(t => t.name === MCP_STABLE_TOOL_NAME)?.name || "",
     systemHealthOk: health.payload?.result?.structuredContent?.payload?.ok === true,
     sharedHubOk: runtimeMeta.sharedHub?.sharedspace?.outlet === "pact.sharedspace",
     priorityTargets: Array.isArray(runtimeMeta.priorityTargets) ? runtimeMeta.priorityTargets : [],
@@ -1562,14 +1546,14 @@ async function createCodexPlugin({ marketplaceRoot, baseUrl, tokenEnv }) {
     interface: {
       displayName: "Pact MCP",
       shortDescription: "Connect Codex to Pact MCP",
-      longDescription: "Use the Pact HTTP MCP endpoint through the stable pact.call tool.",
+      longDescription: "Use the Pact HTTP MCP endpoint through the stable seven-outlet MCP surface.",
       developerName: "Unka-Malloc",
       category: "Coding",
       capabilities: ["Interactive", "Read", "Write"],
       websiteURL: "https://github.com/Unka-Malloc/Pact",
       privacyPolicyURL: "https://github.com/Unka-Malloc/Pact",
       termsOfServiceURL: "https://github.com/Unka-Malloc/Pact",
-      defaultPrompt: ["Use Pact MCP through the stable pact.call tool"],
+      defaultPrompt: ["Use Pact MCP through the stable pact.discovery, pact.agentLibrary, pact.sharedspace, pact.codespace, pact.skillHub, pact.agentRelay, and pact.serviceHub outlets"],
       brandColor: "#2563EB",
       screenshots: []
     }
@@ -1580,7 +1564,7 @@ async function createCodexPlugin({ marketplaceRoot, baseUrl, tokenEnv }) {
         type: "http",
         url: `${baseUrl}/mcp`,
         bearer_token_env_var: tokenEnv,
-        note: "Pact Unified Agent Workspace MCP. Provides five specialized outlets for Knowledge (Distillation/Sharing/Graph), Workspace (Shared Space), Resource Listing, Skill & Tooling, and Protocol Help. Token is provided through PACT_MCP_TOKEN by the connector installer."
+        note: "Pact Unified Agent Workspace MCP. Provides seven stable outlets: Discovery, Agent Library, Shared Space, Code Space, Skill Hub, Agent Relay, and ServiceHub. Token is provided through PACT_MCP_TOKEN by the connector installer."
       }
     }
   });
@@ -1825,139 +1809,6 @@ async function installClaudeCodeRemote({ baseUrl, token, context, claudeBin }) {
     remote: remoteContextLabel(context),
     url,
     mcpGetHasPact: get.stdout.includes(MCP_SERVER_NAME) || get.stdout.includes(url)
-  };
-}
-
-async function createGeminiExtension({ extensionRoot, baseUrl, token }) {
-  await writeJson(path.join(extensionRoot, "gemini-extension.json"), {
-    name: GEMINI_EXTENSION_NAME,
-    version: packageJson.version,
-    description: "Connect Gemini CLI to the Pact MCP service.",
-    mcpServers: {
-      [MCP_SERVER_NAME]: {
-        httpUrl: `${baseUrl}/mcp`,
-        headers: {
-          "X-Pact-Api-Key": token
-        },
-        timeout: HTTP_TIMEOUT_MS
-      }
-    }
-  });
-  await writeText(
-    path.join(extensionRoot, "README.md"),
-    "# Pact MCP\n\nGemini CLI extension generated by the `pact-mcp` connector release package.\n"
-  );
-}
-
-async function installGemini({ baseUrl, token, geminiBin, extensionRoot }) {
-  await createGeminiExtension({ extensionRoot, baseUrl, token });
-  await runInstallCommand(geminiBin, ["extensions", "validate", extensionRoot]);
-  await runInstallCommand(geminiBin, ["mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
-  await runInstallCommand(geminiBin, [
-    "mcp",
-    "add",
-    "--scope",
-    "user",
-    "--transport",
-    "http",
-    "--header",
-    `X-Pact-Api-Key: ${token}`,
-    "--timeout",
-    String(HTTP_TIMEOUT_MS),
-    "--trust",
-    "--description",
-    "Pact Unified Agent Workspace MCP. Provides five specialized outlets for Knowledge (Distillation/Sharing/Graph), Workspace (Shared Space), Resource Listing, Skill & Tooling, and Protocol Help.",
-    MCP_SERVER_NAME,
-    `${baseUrl}/mcp`
-  ]);
-  const list = await runInstallCommand(geminiBin, ["mcp", "list"]);
-  const listOutput = `${list.stdout}\n${list.stderr}`;
-  if (!listOutput.includes(MCP_SERVER_NAME)) {
-    throw new Error("Gemini CLI MCP list does not include pact after install.");
-  }
-  return {
-    installMode: "gemini-release-mcp-cli",
-    extensionRoot,
-    mcpListHasPact: true
-  };
-}
-
-async function installGeminiOrb({ baseUrl, token, orbBin, vmName, vmUser, geminiBin }) {
-  if (!vmName || !vmUser || !geminiBin) {
-    throw new Error("Gemini VM install requires a discovered or explicit OrbStack VM, user, and gemini CLI path.");
-  }
-  const url = `${vmBaseUrl(baseUrl)}/mcp`;
-  await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, geminiBin, "mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
-  await runInstallCommand(orbBin, [
-    "-m",
-    vmName,
-    "-u",
-    vmUser,
-    geminiBin,
-    "mcp",
-    "add",
-    "--scope",
-    "user",
-    "--transport",
-    "http",
-    "--header",
-    `X-Pact-Api-Key: ${token}`,
-    "--timeout",
-    String(HTTP_TIMEOUT_MS),
-    "--trust",
-    "--description",
-    "Pact Unified Agent Workspace MCP. Provides five specialized outlets for Knowledge (Distillation/Sharing/Graph), Workspace (Shared Space), Resource Listing, Skill & Tooling, and Protocol Help.",
-    MCP_SERVER_NAME,
-    url
-  ]);
-  const list = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, geminiBin, "mcp", "list"]);
-  const listOutput = `${list.stdout}\n${list.stderr}`;
-  if (!listOutput.includes(MCP_SERVER_NAME)) {
-    throw new Error("Gemini CLI MCP list inside OrbStack does not include pact after install.");
-  }
-  return {
-    installMode: "gemini-orbstack-mcp-cli",
-    vm: vmName,
-    vmUser,
-    url,
-    mcpListHasPact: true
-  };
-}
-
-async function installGeminiRemote({ baseUrl, token, context, geminiBin }) {
-  if (!context?.kind || !context?.id || !context?.bin || !geminiBin) {
-    throw new Error("Gemini remote install requires a discovered remote context and gemini CLI path.");
-  }
-  const url = `${await remoteClientBaseUrl(context, baseUrl)}/mcp`;
-  await runRemoteLinuxCommand(context, [geminiBin, "mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
-  await runRemoteLinuxCommand(context, [
-    geminiBin,
-    "mcp",
-    "add",
-    "--scope",
-    "user",
-    "--transport",
-    "http",
-    "--header",
-    `X-Pact-Api-Key: ${token}`,
-    "--timeout",
-    String(HTTP_TIMEOUT_MS),
-    "--trust",
-    "--description",
-    "Pact Unified Agent Workspace MCP. Provides five specialized outlets for Knowledge (Distillation/Sharing/Graph), Workspace (Shared Space), Resource Listing, Skill & Tooling, and Protocol Help.",
-    MCP_SERVER_NAME,
-    url
-  ]);
-  const list = await runRemoteLinuxCommand(context, [geminiBin, "mcp", "list"]);
-  const listOutput = `${list.stdout}\n${list.stderr}`;
-  if (!listOutput.includes(MCP_SERVER_NAME)) {
-    throw new Error(`Gemini CLI MCP list inside ${remoteContextLabel(context)} does not include pact after install.`);
-  }
-  return {
-    installMode: `gemini-${context.kind}-mcp-cli`,
-    remote: remoteContextLabel(context),
-    url,
-    mcpListHasPact: true
   };
 }
 
@@ -2543,8 +2394,8 @@ function buildDeviceHubManifest({
       }
     : null;
   return {
-    version: 1,
-    schemaVersion: "pact.mcp.device-hub.v1",
+    version: "v0.0.1:mcp:device-hub-1",
+    schemaVersion: "v0.0.1:mcp:device-hub-1",
     generatedAt: new Date().toISOString(),
     discovery: {
       strategy: "shared-device-hub",
@@ -2744,47 +2595,6 @@ async function uninstallClaudeCodeRemote({ context, claudeBin }) {
     remote: remoteContextLabel(context),
     removedMcp: remove.ok,
     mcpGetHasPact: get.ok && get.stdout.includes(MCP_SERVER_NAME)
-  };
-}
-
-async function uninstallGemini({ geminiBin, extensionRoot }) {
-  const remove = await runInstallCommand(geminiBin, ["mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
-  await removeDirIfExists(extensionRoot);
-  return {
-    uninstallMode: "gemini-release-mcp-cli",
-    removedMcp: remove.ok,
-    extensionRoot
-  };
-}
-
-async function uninstallGeminiOrb({ orbBin, vmName, vmUser, geminiBin }) {
-  if (!vmName || !vmUser || !geminiBin) {
-    throw new Error("Gemini VM uninstall requires a discovered or explicit OrbStack VM, user, and gemini CLI path.");
-  }
-  const remove = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, geminiBin, "mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
-  const list = await runInstallCommand(orbBin, ["-m", vmName, "-u", vmUser, geminiBin, "mcp", "list"], { allowFailure: true });
-  const listOutput = `${list.stdout}\n${list.stderr}`;
-  return {
-    uninstallMode: "gemini-orbstack-mcp-cli",
-    vm: vmName,
-    vmUser,
-    removedMcp: remove.ok,
-    mcpListHasPact: listOutput.includes(MCP_SERVER_NAME)
-  };
-}
-
-async function uninstallGeminiRemote({ context, geminiBin }) {
-  if (!context?.kind || !context?.id || !context?.bin || !geminiBin) {
-    throw new Error("Gemini remote uninstall requires a discovered remote context and gemini CLI path.");
-  }
-  const remove = await runRemoteLinuxCommand(context, [geminiBin, "mcp", "remove", "--scope", "user", MCP_SERVER_NAME], { allowFailure: true });
-  const list = await runRemoteLinuxCommand(context, [geminiBin, "mcp", "list"], { allowFailure: true });
-  const listOutput = `${list.stdout}\n${list.stderr}`;
-  return {
-    uninstallMode: `gemini-${context.kind}-mcp-cli`,
-    remote: remoteContextLabel(context),
-    removedMcp: remove.ok,
-    mcpListHasPact: listOutput.includes(MCP_SERVER_NAME)
   };
 }
 
@@ -3224,8 +3034,8 @@ async function resetServerConfig({ options, publishEnv = true }) {
   const discoveryPath = discoveryRegistryPath(options);
   const existingManifest = await readJson(discoveryPath, {});
   const resetManifest = {
-    version: 1,
-    schemaVersion: "pact.mcp.device-hub.v1",
+    version: "v0.0.1:mcp:device-hub-1",
+    schemaVersion: "v0.0.1:mcp:device-hub-1",
     generatedAt: new Date().toISOString(),
     discovery: {
       strategy: "shared-device-hub",
@@ -4445,16 +4255,16 @@ function candidateIdentity(candidate) {
     const claudeBin = String(overrides["claude-bin"] || "").trim();
     return claudeBin ? `claude-code:local:${claudeBin}` : "";
   }
-  if (location === "orb" && ["codex", "gemini-cli", "copilot", "kilo-code", "opencode"].includes(candidate?.target)) {
+  if (location === "orb" && ["codex", "copilot", "kilo-code", "opencode"].includes(candidate?.target)) {
     const vmName = String(overrides["orb-vm"] || "").trim();
     const vmUser = String(overrides["orb-user"] || "").trim();
     return vmName && vmUser ? `${candidate.target}:orb:${vmName}:${vmUser}` : "";
   }
-  if (isGenericRemoteLocation(location) && ["codex", "gemini-cli", "copilot", "kilo-code", "opencode"].includes(candidate?.target)) {
+  if (isGenericRemoteLocation(location) && ["codex", "copilot", "kilo-code", "opencode"].includes(candidate?.target)) {
     const remoteId = String(overrides["remote-id"] || "").trim();
     return remoteId ? `${candidate.target}:${location}:${remoteId}` : "";
   }
-  if (location === "local" && ["codex", "gemini-cli", "copilot", "kilo-code", "opencode", "claude-code"].includes(candidate?.target)) {
+  if (location === "local" && ["codex", "copilot", "kilo-code", "opencode", "claude-code"].includes(candidate?.target)) {
     const descriptor = AGENT_CLI_TARGETS.find((item) => item.target === candidate.target);
     const binPath = descriptor ? String(overrides[descriptor.binOption] || "").trim() : "";
     return binPath ? `${candidate.target}:local:${binPath}` : "";
@@ -4544,9 +4354,6 @@ function candidateBin(candidate, settings) {
   }
   if (candidate.target === "claude-code") {
     return String(overrides["claude-bin"] || settings.claudeBin || "");
-  }
-  if (candidate.target === "gemini-cli") {
-    return String(overrides["gemini-bin"] || settings.geminiBin || "");
   }
   if (candidate.target === "kilo-code") {
     return String(overrides["kilo-bin"] || settings.kiloBin || "");
@@ -4651,9 +4458,6 @@ async function candidateHasInstalledPactMcp(settings, candidate) {
   if (candidate.target === "cursor") {
     return localJsonConfigHasPact(settings.cursorConfigPath);
   }
-  if (candidate.target === "windsurf") {
-    return localJsonConfigHasPact(settings.windsurfConfigPath);
-  }
   if (candidate.target === "opencode") {
     return candidateLocation(candidate) === "local"
       ? localJsonConfigHasPact(settings.opencodeConfigPath)
@@ -4668,10 +4472,6 @@ async function candidateHasInstalledPactMcp(settings, candidate) {
   }
   if (candidate.target === "claude-code") {
     const result = await runCandidateClientCommand(settings, candidate, ["mcp", "get", MCP_SERVER_NAME]);
-    return result.ok && mcpOutputHasPact(result);
-  }
-  if (candidate.target === "gemini-cli") {
-    const result = await runCandidateClientCommand(settings, candidate, ["mcp", "list"]);
     return result.ok && mcpOutputHasPact(result);
   }
   if (candidate.target === "copilot") {
@@ -4751,7 +4551,6 @@ async function detectLocalClawCompatibleTargets() {
 function descriptorConfiguredBin(settings, descriptor) {
   if (descriptor.target === "codex") return settings.codexBin;
   if (descriptor.target === "claude-code") return settings.claudeBin;
-  if (descriptor.target === "gemini-cli") return settings.geminiBin;
   if (descriptor.target === "copilot") return settings.copilotBin;
   if (descriptor.target === "kilo-code") return settings.kiloBin;
   if (descriptor.target === "opencode") return settings.opencodeBin;
@@ -5183,12 +4982,9 @@ async function scanInstallTargets(options = {}) {
   const antigravityDetected = await pathExists(settings.antigravityConfigPath) || await directoryExists(antigravityConfigDir);
   const cursorConfigDir = path.dirname(settings.cursorConfigPath);
   const cursorDetected = await pathExists(settings.cursorConfigPath) || await directoryExists(cursorConfigDir);
-  const windsurfConfigDir = path.dirname(settings.windsurfConfigPath);
-  const windsurfDetected = await pathExists(settings.windsurfConfigPath) || await directoryExists(windsurfConfigDir);
   for (const configTarget of [
     ["antigravity", settings.antigravityConfigPath, antigravityDetected],
-    ["cursor", settings.cursorConfigPath, cursorDetected],
-    ["windsurf", settings.windsurfConfigPath, windsurfDetected]
+    ["cursor", settings.cursorConfigPath, cursorDetected]
   ]) {
     const [target, configPath, detected] = configTarget;
     candidates.push({
@@ -5243,7 +5039,6 @@ function installerOptions(options) {
     tokenEnv: String(option(options, "token-env", DEFAULT_TOKEN_ENV)),
     codexBin: String(option(options, "codex-bin", process.env.CODEX_CLI_PATH || DEFAULT_CODEX_BIN)),
     claudeBin: String(option(options, "claude-bin", process.env.CLAUDE_CODE_CLI_PATH || DEFAULT_CLAUDE_BIN)),
-    geminiBin: String(option(options, "gemini-bin", process.env.GEMINI_CLI_PATH || DEFAULT_GEMINI_BIN)),
     kiloBin: String(option(options, "kilo-bin", process.env.KILO_CLI_PATH || DEFAULT_KILO_BIN)),
     copilotBin: String(option(options, "copilot-bin", process.env.COPILOT_CLI_PATH || DEFAULT_COPILOT_BIN)),
     opencodeBin: String(option(options, "opencode-bin", process.env.OPENCODE_CLI_PATH || DEFAULT_OPENCODE_BIN)),
@@ -5267,12 +5062,10 @@ function installerOptions(options) {
     orbVm: String(option(options, "orb-vm", sharedVmName)),
     orbUser: String(option(options, "orb-user", sharedVmUser)),
     marketplaceRoot: path.resolve(String(option(options, "marketplace-root", path.join(os.homedir(), ".pact", "codex-plugin-marketplace")))),
-    geminiExtensionRoot: path.resolve(String(option(options, "gemini-extension-root", path.join(os.homedir(), ".pact", "gemini-extensions", PLUGIN_NAME)))),
     kiloConfigPath: path.resolve(String(option(options, "kilo-config", path.join(os.homedir(), ".config", "kilo", "kilo.json")))),
     antigravityConfigPath: path.resolve(String(option(options, "antigravity-config", path.join(os.homedir(), ".gemini", "antigravity", "mcp_config.json")))),
     opencodeConfigPath: path.resolve(String(option(options, "opencode-config", path.join(os.homedir(), ".config", "opencode", "opencode.jsonc")))),
     cursorConfigPath: path.resolve(String(option(options, "cursor-config", path.join(os.homedir(), "Library", "Application Support", "Cursor", "User", "globalStorage", "saoudrizwan.claude-dev", "settings", "cline_mcp_settings.json")))),
-    windsurfConfigPath: path.resolve(String(option(options, "windsurf-config", path.join(os.homedir(), ".codeium", "windsurf", "mcp_config.json")))),
     openclawVm: String(option(options, "openclaw-vm", sharedVmName)),
     openclawVmUser: String(option(options, "openclaw-user", sharedVmUser)),
     openclawBin: String(option(options, "openclaw-bin", "")),
@@ -5849,29 +5642,6 @@ async function installTargets({ options, targets, token, tokenInfo = null, optio
               token,
               claudeBin: settings.claudeBin
             });
-      } else if (target === "gemini-cli") {
-        clientResult = remoteContext
-          ? await installGeminiRemote({
-              baseUrl: settings.baseUrl,
-              token,
-              context: remoteContext,
-              geminiBin: settings.geminiBin
-            })
-          : settings.executionLocation === "orb"
-          ? await installGeminiOrb({
-              baseUrl: settings.baseUrl,
-              token,
-              orbBin: settings.orbBin,
-              vmName: settings.orbVm,
-              vmUser: settings.orbUser,
-              geminiBin: settings.geminiBin
-            })
-          : await installGemini({
-              baseUrl: settings.baseUrl,
-              token,
-              geminiBin: settings.geminiBin,
-              extensionRoot: settings.geminiExtensionRoot
-            });
       } else if (target === "kilo-code") {
         clientResult = remoteContext
           ? await installKiloRemote({
@@ -5961,13 +5731,6 @@ async function installTargets({ options, targets, token, tokenInfo = null, optio
           token,
           configPath: settings.cursorConfigPath,
           installMode: "cursor-release-mcp-config"
-        });
-      } else if (target === "windsurf") {
-        clientResult = await installMcpServersJsonConfig({
-          baseUrl: settings.baseUrl,
-          token,
-          configPath: settings.windsurfConfigPath,
-          installMode: "windsurf-release-mcp-config"
         });
       } else if (target === "opencode") {
         clientResult = remoteContext
@@ -6273,23 +6036,6 @@ async function uninstallTargets({ options, targets, optionOverrides = {} }) {
           : await uninstallClaudeCode({
               claudeBin: settings.claudeBin
             });
-      } else if (target === "gemini-cli") {
-        uninstalled[target] = remoteContext
-          ? await uninstallGeminiRemote({
-              context: remoteContext,
-              geminiBin: settings.geminiBin
-            })
-          : settings.executionLocation === "orb"
-          ? await uninstallGeminiOrb({
-              orbBin: settings.orbBin,
-              vmName: settings.orbVm,
-              vmUser: settings.orbUser,
-              geminiBin: settings.geminiBin
-            })
-          : await uninstallGemini({
-              geminiBin: settings.geminiBin,
-              extensionRoot: settings.geminiExtensionRoot
-            });
       } else if (target === "kilo-code") {
         uninstalled[target] = remoteContext
           ? await uninstallKiloRemote({
@@ -6355,11 +6101,6 @@ async function uninstallTargets({ options, targets, optionOverrides = {} }) {
         uninstalled[target] = await uninstallMcpServersJsonConfig({
           configPath: settings.cursorConfigPath,
           uninstallMode: "cursor-release-mcp-config"
-        });
-      } else if (target === "windsurf") {
-        uninstalled[target] = await uninstallMcpServersJsonConfig({
-          configPath: settings.windsurfConfigPath,
-          uninstallMode: "windsurf-release-mcp-config"
         });
       } else if (target === "opencode") {
         uninstalled[target] = remoteContext
@@ -6718,7 +6459,7 @@ async function doctorCommand(options) {
       ok: false,
       skipped: true,
       toolCount: 0,
-      stableToolOnly: false,
+      stableOutletSet: false,
       reason: "Set PACT_MCP_TOKEN, pass --token, or use --token-stdin to verify tools/list."
     },
     systemHealth: {
@@ -6738,11 +6479,11 @@ async function doctorCommand(options) {
     try {
       const verification = await verifyMcpTools({ baseUrl: settings.baseUrl, token });
       checks.toolsList = {
-        ok: verification.toolCount === 5 && verification.stableToolName === "pact.discovery",
+        ok: verification.toolCount === 7 && verification.stableToolName === "pact.discovery",
         skipped: false,
         toolCount: verification.toolCount,
-        stableToolOnly: false,
-        categorizedOutletsOnly: verification.toolCount === 5,
+        stableOutletSet: verification.toolCount === 7,
+        categorizedOutletsOnly: verification.toolCount === 7,
         sharedHubOk: verification.sharedHubOk,
         priorityTargets: verification.priorityTargets,
         supportedTargets: verification.supportedTargets
@@ -6759,7 +6500,7 @@ async function doctorCommand(options) {
         ok: false,
         skipped: false,
         toolCount: 0,
-        stableToolOnly: false,
+        stableOutletSet: false,
         categorizedOutletsOnly: false,
         reason
       };

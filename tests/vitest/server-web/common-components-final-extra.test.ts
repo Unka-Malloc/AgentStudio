@@ -42,31 +42,38 @@ const ElSelectStub = defineComponent({
   emits: ["update:modelValue", "change"],
   setup(props, { emit, slots }) {
     return () =>
-      h(
-        "select",
-        {
-          class: "option-bar-select-stub",
-          multiple: Boolean(props.multiple),
-          disabled: Boolean(props.disabled),
-          value: props.modelValue as string,
-          "data-placeholder": props.placeholder,
-          "data-popper-class": props.popperClass,
-          "data-size": props.size,
-          onChange: (event: Event) => {
-            const value = (event.target as HTMLSelectElement).value;
-            emit("update:modelValue", value);
-            emit("change", value);
+      h("div", { class: "option-bar-select-stub-shell" }, [
+        h("div", { class: "option-bar-selected-label-stub" }, slots.label?.({
+          label: props.modelValue === "a" ? "Alpha" : String(props.modelValue ?? ""),
+          value: props.modelValue,
+          index: 0,
+        })),
+        h(
+          "select",
+          {
+            class: "option-bar-select-stub",
+            multiple: Boolean(props.multiple),
+            disabled: Boolean(props.disabled),
+            value: props.modelValue as string,
+            "data-placeholder": props.placeholder,
+            "data-popper-class": props.popperClass,
+            "data-size": props.size,
+            onChange: (event: Event) => {
+              const value = (event.target as HTMLSelectElement).value;
+              emit("update:modelValue", value);
+              emit("change", value);
+            },
           },
-        },
-        slots.default?.(),
-      );
+          slots.default?.(),
+        ),
+      ]);
   },
 });
 
 const ElOptionStub = defineComponent({
   name: "ElOption",
   props: ["label", "value", "disabled"],
-  setup(props) {
+  setup(props, { slots }) {
     return () =>
       h(
         "option",
@@ -74,7 +81,7 @@ const ElOptionStub = defineComponent({
           value: String(props.value ?? ""),
           disabled: Boolean(props.disabled),
         },
-        String(props.label ?? ""),
+        slots.default?.() || String(props.label ?? ""),
       );
   },
 });
@@ -180,7 +187,7 @@ describe("server-web common components final extra coverage", () => {
         size: "small",
         popperClass: "custom-popper",
         options: [
-          { value: "a", label: "Alpha" },
+          { value: "a", label: "Alpha", swatches: ["#111111", "#2563eb", "#60a5fa"], icon: "moon" },
           { value: "b", label: "Beta", disabled: true },
         ],
       },
@@ -197,6 +204,10 @@ describe("server-web common components final extra coverage", () => {
     expect(select.attributes("data-placeholder")).toBe("请选择");
     expect(select.attributes("data-popper-class")).toBe("custom-popper");
     expect(select.findAll("option").map((option) => option.text())).toEqual(["Alpha", "Beta"]);
+    expect(wrapper.findAll(".option-bar-option-swatch")).toHaveLength(3);
+    expect(wrapper.findAll(".option-bar-option-icon").length).toBeGreaterThanOrEqual(2);
+    expect(wrapper.find(".option-bar-selected-label-stub .option-bar-option-icon").exists()).toBe(true);
+    expect(wrapper.find(".option-bar-option-row").attributes("data-has-swatches")).toBe("true");
 
     await select.setValue("b");
     expect(wrapper.emitted("update:modelValue")?.[0]).toEqual(["b"]);

@@ -8,7 +8,6 @@ import {
 
 export function useMaintenanceAgentViewConsole() {
   const {
-    agentSelectorOptions,
     approveMaintenanceAgentRun,
     autoApproveRiskOptionBarOptions,
     busyKey,
@@ -16,14 +15,10 @@ export function useMaintenanceAgentViewConsole() {
     canApproveMaintenanceAgent,
     canRunMaintenanceAgent,
     cancelMaintenanceAgentRun,
-    chatMaintenanceAgent,
-    currentAgentModelOptionLabel,
     displayedMaintenanceAgentRuns,
     enabledBooleanOptionBarOptions,
     latestMaintenanceAgentRun,
     maintenanceAgentConfig,
-    maintenanceAgentMessage,
-    maintenanceAgentModelAlias,
     maintenanceAgentResultJson,
     maintenanceAgentRunbook,
     maintenanceAgentRunbookOptionBarOptions,
@@ -39,7 +34,6 @@ export function useMaintenanceAgentViewConsole() {
   } = useServerConsoleShellContext();
 
   return {
-    agentSelectorOptions,
     approveMaintenanceAgentRun,
     autoApproveRiskOptionBarOptions,
     busyKey,
@@ -47,15 +41,11 @@ export function useMaintenanceAgentViewConsole() {
     canApproveMaintenanceAgent,
     canRunMaintenanceAgent,
     cancelMaintenanceAgentRun,
-    chatMaintenanceAgent,
-    currentAgentModelOptionLabel,
     displayedMaintenanceAgentRuns,
     enabledBooleanOptionBarOptions,
     formatCompactDate,
     latestMaintenanceAgentRun,
     maintenanceAgentConfig,
-    maintenanceAgentMessage,
-    maintenanceAgentModelAlias,
     maintenanceAgentResultJson,
     maintenanceAgentRiskLabel,
     maintenanceAgentRunbook,

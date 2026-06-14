@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "frameworkId": "pact.default-knowledge-skill-framework",
-  "version": 1,
+  "version": "v0.0.1:knowledge:skill-framework-1",
   "layers": [
     {
       "id": "applicability",

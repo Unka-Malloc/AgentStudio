@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'src/controllers/future_client_controller.dart';
 import 'src/ui/client_shell.dart';
+import 'src/ui/appearance_preset_config.dart';
 import 'src/ui/theme.dart';
 
 class PactApp extends StatefulWidget {
@@ -31,11 +32,28 @@ class _PactAppState extends State<PactApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Pact 便携客户端',
-      debugShowCheckedModeBanner: false,
-      theme: buildPactTheme(),
-      home: ClientShell(controller: _controller),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final presetId = _controller.appearancePresetId;
+        final presets = _controller.appearancePresetConfigs;
+        return MaterialApp(
+          title: 'Pact 便携客户端',
+          debugShowCheckedModeBanner: false,
+          themeMode: themeModeForAppearance(presetId, presets),
+          theme: buildPactTheme(
+            presetId: presetId,
+            presets: presets,
+            platformBrightness: Brightness.light,
+          ),
+          darkTheme: buildPactTheme(
+            presetId: presetId,
+            presets: presets,
+            platformBrightness: Brightness.dark,
+          ),
+          home: ClientShell(controller: _controller),
+        );
+      },
     );
   }
 }

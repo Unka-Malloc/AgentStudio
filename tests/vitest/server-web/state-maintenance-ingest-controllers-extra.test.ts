@@ -76,12 +76,12 @@ function makeServerState(overrides: Record<string, unknown> = {}) {
     runtime: { mountModules: { local: "v1" }, info: "x", pid: "123" },
     settings: {
       path: "/etc/settings",
-      value: { schemaVersion: 1, openAiModel: "gpt", deepSeekApiBaseUrl: "https://deepseek.example" },
+      value: { schemaVersion: "v0.0.1:schema:definition-1", openAiModel: "gpt", deepSeekApiBaseUrl: "https://deepseek.example" },
     },
     discovery: { path: "/etc/discovery", value: { items: [] }, bootstrap: { default: true } },
     emailRules: { path: "/etc/email-rules", rules: {} },
     expertVocabulary: { path: "/etc/vocab", vocabulary: {} },
-    knowledgeTaxonomy: { schemaVersion: 1, topics: [] },
+    knowledgeTaxonomy: { schemaVersion: "v0.0.1:schema:definition-1", topics: [] },
     storage: { summary: {} },
     jobs: {
       summary: {
@@ -102,7 +102,7 @@ function makeServerState(overrides: Record<string, unknown> = {}) {
 
 function makeMaintenanceConfig(): MaintenanceAgentConfig {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     enabled: true,
     plannerMode: "gateway",
     autoApproveRisk: "safe_write",
@@ -121,7 +121,7 @@ function makeMaintenanceConfig(): MaintenanceAgentConfig {
 
 function makeMaintenanceRun(id: string, status: MaintenanceAgentRun["status"], overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     runId: id,
     status,
     trigger: "manual",
@@ -133,7 +133,7 @@ function makeMaintenanceRun(id: string, status: MaintenanceAgentRun["status"], o
     approvalReason: "",
     planHash: "h1",
     plan: {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       source: "planner",
       intent: "intent",
       summary: "summary",
@@ -585,7 +585,7 @@ describe("console maintenance agent controller", () => {
       makeMaintenanceRun("run-started", "running", { runId: "run-started" }),
     );
     mockMaintenanceClient.chatMaintenanceAgent.mockResolvedValue({
-      plan: makeMaintenanceRun("plan-run", "queued", { runId: "plan-run", planHash: "p1", plan: { schemaVersion: 1, source: "planner", intent: "x", summary: "x", risk: "safe_write", requiresApproval: false, approvalReason: "", steps: [] } }),
+      plan: makeMaintenanceRun("plan-run", "queued", { runId: "plan-run", planHash: "p1", plan: { schemaVersion: "v0.0.1:schema:definition-1", source: "planner", intent: "x", summary: "x", risk: "safe_write", requiresApproval: false, approvalReason: "", steps: [] } }),
       run: makeMaintenanceRun("run-chat", "running"),
     });
     mockMaintenanceClient.approveMaintenanceAgentRun.mockResolvedValue({
@@ -681,7 +681,7 @@ describe("console knowledge ingest controller", () => {
       refreshKnowledgeConsole: vi.fn(),
       refreshState: vi.fn(),
       setBusy: vi.fn(),
-      settingsDraft: ref({ schemaVersion: 1 } as any),
+      settingsDraft: ref({ schemaVersion: "v0.0.1:schema:definition-1" } as any),
     });
 
     expect(controller.canSubmitKnowledgeIngest.value).toBe(false);

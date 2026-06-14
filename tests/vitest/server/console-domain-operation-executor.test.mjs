@@ -213,7 +213,7 @@ describe("runtime and knowledge execution branches", () => {
       status: 200,
       payload: {
         ok: true,
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         items: [{ id: "r-1" }, { id: "r-2" }],
         count: 2
       }

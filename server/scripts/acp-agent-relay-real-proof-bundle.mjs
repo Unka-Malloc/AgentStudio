@@ -1712,7 +1712,7 @@ function buildTopLevelRealProofMatrix({
   const requiredRequirements = requirements.filter((item) => item.required);
   const failedRequired = requiredRequirements.filter((item) => item.status !== "proven");
   return {
-    schemaVersion: "pact.acp-agent-relay.real-proof-matrix.v1",
+    schemaVersion: "v0.0.1:agent:acp-agent-relay-real-proof-matrix-1",
     relayProofMatrixSchemaVersion: asText(relayProofMatrix?.schemaVersion),
     relayRequiredProofsMet: relayRequiredProofsMet === true,
     codexCliRequired: Boolean(codexCliRequired),
@@ -2203,7 +2203,7 @@ export function buildRealRelayProofBundle({
       allRequiredProofsMet
   );
   return {
-    schemaVersion: "pact.acp-agent-relay.real-proof-bundle.v1",
+    schemaVersion: "v0.0.1:agent:acp-agent-relay-real-proof-bundle-1",
     verifier: "acp-agent-relay-real",
     ok,
     generatedAt: asText(generatedAt),

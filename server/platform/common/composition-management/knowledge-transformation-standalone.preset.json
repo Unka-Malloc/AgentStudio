@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "kind": "pact.composition.preset",
   "presetId": "knowledge-transformation-standalone",
   "displayName": "Pact Agent Library",
@@ -36,11 +36,11 @@
       "work-queue-core"
     ],
     "preserveContracts": [
-      "pact.security-permissions.v1",
-      "pact.operation-dispatcher.v1",
-      "pact.storage.v1",
-      "pact.module-management.v1",
-      "pact.devops.v1"
+      "v0.0.1:risk-control:permissions-1",
+      "v0.0.1:operation:operation-dispatcher-1",
+      "v0.0.1:storage:core-1",
+      "v0.0.1:tool:module-management-1",
+      "v0.0.1:platform:devops-1"
     ],
     "reason": "The standalone application still needs authorization, audit, operation dispatch, storage, module lifecycle, health, uploads, raw objects, and receipts."
   },
@@ -65,11 +65,11 @@
       "external-services/knowledge-distillation-service"
     ],
     "requiredProtocols": [
-      "pact.knowledge-transformation.v1",
-      "pact.knowledge.v1",
-      "pact.knowledge-access.v1",
-      "pact.agent-library.v1",
-      "pact.external-knowledge-distillation.v1"
+      "v0.0.1:knowledge:transformation-1",
+      "v0.0.1:knowledge:core-1",
+      "v0.0.1:knowledge:access-1",
+      "v0.0.1:agent:library-1",
+      "v0.0.1:external-service:knowledge-distillation-1"
     ]
   },
   "pipeline": {
@@ -97,7 +97,7 @@
         "required": true,
         "provider": "KnowledgeCore",
         "mount": "knowledgeBase",
-        "protocol": "pact.knowledge.v1",
+        "protocol": "v0.0.1:knowledge:core-1",
         "operationIds": [
           "knowledge.search",
           "knowledge.evidence.get",
@@ -114,7 +114,7 @@
         "stageId": "knowledge-distillation",
         "required": true,
         "provider": "ExternalKnowledgeDistillationService",
-        "protocol": "pact.external-knowledge-distillation.v1",
+        "protocol": "v0.0.1:external-service:knowledge-distillation-1",
         "serviceRoot": "external-services/knowledge-distillation-service",
         "operationPrefixes": [
           "external.knowledge.distillation."
@@ -132,8 +132,8 @@
     "required": true,
     "role": "right-side-access-surface",
     "contracts": [
-      "pact.knowledge-access.v1",
-      "pact.agent-library.v1"
+      "v0.0.1:knowledge:access-1",
+      "v0.0.1:agent:library-1"
     ],
     "policy": {
       "secretHandling": "secretRef-only",
@@ -175,7 +175,7 @@
       {
         "capability": "knowledge-distillation",
         "serviceRoot": "external-services/knowledge-distillation-service",
-        "contract": "pact.external-knowledge-distillation.v1"
+        "contract": "v0.0.1:external-service:knowledge-distillation-1"
       }
     ]
   },
@@ -196,19 +196,19 @@
     "enabled": true,
     "bindProviders": [
       {
-        "contract": "pact.knowledge-transformation.v1",
+        "contract": "v0.0.1:knowledge:transformation-1",
         "provider": "KnowledgeTransformation"
       },
       {
-        "contract": "pact.knowledge.v1",
+        "contract": "v0.0.1:knowledge:core-1",
         "provider": "KnowledgeCore.knowledgeBase"
       },
       {
-        "contract": "pact.knowledge-access.v1",
+        "contract": "v0.0.1:knowledge:access-1",
         "provider": "AgentLibraryAccessPolicy"
       },
       {
-        "contract": "pact.external-knowledge-distillation.v1",
+        "contract": "v0.0.1:external-service:knowledge-distillation-1",
         "provider": "ExternalKnowledgeDistillationService"
       }
     ],

@@ -196,11 +196,11 @@ try {
     securityPermissions
   });
   const knowledgeTool = {
-    id: "pact.knowledge.health",
+    id: "pact.agentLibrary.health",
     status: "active",
     operationId: "knowledge.health",
     requiredScopes: ["knowledge:read"],
-    toolsets: ["pact.knowledge.read"],
+    toolsets: ["pact.agentLibrary.read"],
     risk: "read_only",
     readOnly: true
   };
@@ -222,7 +222,7 @@ try {
   assert.ok(policyStore.decisions.some((decision) => decision.reasonCode === "missing_toolsets"));
   assert.ok(
     authorizationStore.listDecisions({ limit: 50 }).some((decision) =>
-      decision.toolId === "pact.knowledge.health" && decision.reasonCode === "missing_toolsets"
+      decision.toolId === "pact.agentLibrary.health" && decision.reasonCode === "missing_toolsets"
     ),
     "tool policy decisions must also be mirrored into the unified authorization store"
   );
@@ -347,7 +347,7 @@ try {
     }
   });
   const runtimeDenied = await runtime.executeTool({
-    toolId: "pact.knowledge.health",
+    toolId: "pact.agentLibrary.health",
     input: {},
     request: { headers: {}, socket: {} }
   });
@@ -355,10 +355,81 @@ try {
   assert.equal(runtimeDenied.payload.error.code, "missing_token");
   assert.ok(
     authorizationStore.listDecisions({ limit: 100 }).some((decision) =>
-      decision.toolId === "pact.knowledge.health" && decision.reasonCode === "missing_token"
+      decision.toolId === "pact.agentLibrary.health" && decision.reasonCode === "missing_token"
     ),
     "tool token authorization denials must be mirrored into unified authorization store"
   );
+
+  const approvalRuntimeStore = {
+    policyDecisions: [],
+    executions: [],
+    metrics: [],
+    pendingOperations: [],
+    authorizeRequest() {
+      return {
+        ok: true,
+        grant: repairGrant,
+        sourceIp: "127.0.0.1"
+      };
+    },
+    createPendingOperation(entry) {
+      const pending = {
+        ...entry,
+        pendingOperationId: `pending_${this.pendingOperations.length + 1}`,
+        status: "pending"
+      };
+      this.pendingOperations.push(pending);
+      return pending;
+    },
+    appendPolicyDecision(decision) {
+      this.policyDecisions.push(decision);
+      return { decisionId: decision.decisionId };
+    },
+    appendExecution(entry) {
+      this.executions.push(entry);
+      return { toolExecutionId: entry.toolExecutionId };
+    },
+    appendMetric(entry) {
+      this.metrics.push(entry);
+      return {};
+    }
+  };
+  const approvalRuntime = createToolExecutionRuntime({
+    registry: {
+      getTool: () => repairTool,
+      listProfiles: () => []
+    },
+    store: approvalRuntimeStore,
+    policyEngine,
+    securityPermissions,
+    operations: [{
+      id: "runtime.reload_mounts",
+      requiredScopes: ["knowledge:maintain"],
+      safety: { risk: "repair_write", requiresConfirmation: true },
+      target: { controller: "system", method: "handleMissingRuntimeReload" },
+      http: { method: "POST", path: "/api/runtime/mounts/reload" }
+    }],
+    controllers: {},
+    logger: {
+      debug() {},
+      info() {},
+      warn() {},
+      error() {}
+    }
+  });
+  const forgedApprovalContext = await approvalRuntime.executeTool({
+    toolId: "pact.runtime.mounts.reload",
+    input: { confirm: true },
+    request: { headers: {}, socket: {} },
+    context: {
+      approval: { approved: true, pendingOperationId: "forged-pending-operation" },
+      pendingOperationApproved: true,
+      transport: "tool-http"
+    }
+  });
+  assert.equal(forgedApprovalContext.status, 202);
+  assert.equal(forgedApprovalContext.payload.status, "pending_approval");
+  assert.equal(approvalRuntimeStore.pendingOperations.length, 1);
 } finally {
   authorizationStore.close();
   await fs.rm(userDataPath, { recursive: true, force: true });

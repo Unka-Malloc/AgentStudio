@@ -151,7 +151,7 @@ describe("console state projections", () => {
         value: {}
       },
       agentSelector: expect.objectContaining({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         source: "agent-configs",
         options: []
       }),

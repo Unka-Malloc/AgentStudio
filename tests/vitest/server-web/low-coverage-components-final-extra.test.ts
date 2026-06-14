@@ -391,7 +391,7 @@ function createAgentRetrievalContext() {
         },
         {
           runId: "run-2",
-          query: "最近的账单",
+          query: "最近的部署记录",
           status: "running",
         },
       ]),
@@ -869,7 +869,7 @@ describe("Agent retrieval debug panels", () => {
     expect(wrapper.find('[data-config-target="agent-explore-agent"]').exists()).toBe(true);
     expect(wrapper.find("button.primary-action").attributes("disabled")).toBeDefined();
 
-    await wrapper.find('input[type="search"]').setValue("查找最近账单");
+    await wrapper.find('input[type="search"]').setValue("查找最近部署记录");
     expect(wrapper.find("button.primary-action").attributes("disabled")).toBeUndefined();
 
     await wrapper.find('[data-label="智能体"] .select-control-stub-select').setValue("agent-b");

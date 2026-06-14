@@ -121,10 +121,10 @@ const concreteMcpNames = new Set(catalog.tools.map((tool) => tool.id));
 for (const requiredTool of [
   "pact.workspace.file.upload",
   "pact.workspace.contribution.submit",
-  "pact.knowledge.access.evaluate",
+  "pact.agentLibrary.access.evaluate",
   "pact.workspace.code.change.upload",
   "pact.rawCorpus.format.convert",
-  "pact.knowledge.dossier.export"
+  "pact.agentLibrary.dossier.export"
 ]) {
   assert.equal(concreteMcpNames.has(requiredTool), true, `${requiredTool} must be in capabilities list`);
 }
@@ -167,10 +167,10 @@ try {
   const runtimeToolNames = new Set(runtimeCatalog.payload.tools.map((tool) => tool.id));
   for (const requiredTool of concreteMcpNames) {
     if (!requiredTool.startsWith("pact.workspace.") &&
-        !requiredTool.startsWith("pact.knowledge.access.") &&
+        !requiredTool.startsWith("pact.agentLibrary.access.") &&
         !requiredTool.startsWith("pact.authorization.") &&
         !requiredTool.startsWith("pact.rawCorpus.") &&
-        !requiredTool.startsWith("pact.knowledge.dossier")) {
+        !requiredTool.startsWith("pact.agentLibrary.dossier")) {
       continue;
     }
     assert.equal(runtimeToolNames.has(requiredTool), true, `${requiredTool} must be active in runtime tool catalog`);
@@ -200,7 +200,7 @@ try {
     body: JSON.stringify(mcpRequest("tools/call", {
       name: "pact.discovery",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation: "pact.capabilities.list",
         input: {}
       }
@@ -211,10 +211,10 @@ try {
   for (const requiredTool of [
     "pact.workspace.file.upload",
     "pact.workspace.contribution.submit",
-    "pact.knowledge.access.evaluate",
+    "pact.agentLibrary.access.evaluate",
     "pact.workspace.code.change.upload",
     "pact.rawCorpus.format.convert",
-    "pact.knowledge.dossier.export"
+    "pact.agentLibrary.dossier.export"
   ]) {
     assert.equal(mcpOperationNames.has(requiredTool), true, `${requiredTool} must be visible in MCP capabilities`);
   }

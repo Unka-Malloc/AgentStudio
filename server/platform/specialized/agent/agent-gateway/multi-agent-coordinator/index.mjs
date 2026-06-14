@@ -1,6 +1,6 @@
 import { Annotation, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
 
-export const MULTI_AGENT_COORDINATOR_PROTOCOL_VERSION = "pact.multi-agent.v1";
+export const MULTI_AGENT_COORDINATOR_PROTOCOL_VERSION = "v0.0.1:agent:multi-agent-1";
 
 export const DEFAULT_SUMMARIZATION_ROLES = [
   {

@@ -23,7 +23,10 @@ import {
   listLocalSecretEntries,
   normalizeLocalSecretProvider,
   readLocalSecretRegistry,
-  resolveLocalSecretTarget
+  revokeLocalSecret,
+  resolveLocalSecretPayload,
+  resolveLocalSecretTarget,
+  rotateLocalSecret
 } from "../../../server/platform/common/security/secrets/local-secret-store.mjs";
 
 const tempRoots = [];
@@ -177,6 +180,9 @@ describe("initialization and manifest branches", () => {
         mode: "live",
         authType: "serviceAccount",
         valueKeys: ["httpPassword", "oauth", "refresh"],
+        previousRevision: 0,
+        revision: 1,
+        status: "active",
         manifestUpdated: true,
         createdAt: "2026-06-04T00:00:00.000Z"
       }
@@ -321,6 +327,9 @@ describe("initialization and manifest branches", () => {
     const entry = registry.refs[defaultSecretRefForProvider("dify")];
     expect(entry.createdAt).toBe(createdAt.toISOString());
     expect(entry.updatedAt).toBe(updatedAt.toISOString());
+    expect(entry.revision).toBe(2);
+    expect(entry.rotatedAt).toBe(updatedAt.toISOString());
+    expect(entry.status).toBe("active");
     expect(result.entry.valueKeys).toEqual(["apiKey"]);
     expect(result.entry.valueKeys).toEqual(entry.valueKeys);
 
@@ -330,6 +339,10 @@ describe("initialization and manifest branches", () => {
       event: "secret.updated",
       valueKeys: ["apiKey"],
       secretRef: defaultSecretRefForProvider("dify"),
+      previousRevision: 1,
+      revision: 2,
+      rotatedAt: updatedAt.toISOString(),
+      status: "active",
       createdAt: updatedAt.toISOString()
     });
   });
@@ -482,7 +495,7 @@ describe("query APIs and validation errors", () => {
     await fs.writeFile(
       registryPath,
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: LOCAL_SECRET_STORE_VERSION,
         updatedAt: "2026-06-04T00:00:00.000Z",
         refs: {
@@ -532,6 +545,337 @@ describe("query APIs and validation errors", () => {
     } finally {
       target.endpointRef = originalEndpointRef;
     }
+  });
+
+  it("resolves ServiceHub secret payloads from local storage without exposing values in registry", async () => {
+    const dataDir = await createTempDir("pact-secret-servicehub-");
+    const secretRef = "secret://servicehub/external-http/api-token";
+
+    const result = await initializeLocalSecret({
+      dataDir,
+      provider: "servicehub",
+      secretRef,
+      payload: {
+        token: "servicehub-secret-token"
+      },
+      updateManifest: false
+    });
+
+    expect(result.provider).toBe("servicehub");
+    expect(result.family).toBe("servicehub");
+    expect(result.manifestUpdate).toBe(null);
+
+    const registry = await readLocalSecretRegistry({ dataDir });
+    expect(JSON.stringify(registry)).not.toContain("servicehub-secret-token");
+    expect(registry.refs[secretRef]).toMatchObject({
+      provider: "servicehub",
+      family: "servicehub",
+      credentialConfigured: true,
+      valueKeys: ["token"],
+      redacted: {
+        token: "***oken"
+      }
+    });
+
+    await expect(resolveLocalSecretPayload({ dataDir, secretRef })).resolves.toMatchObject({
+      secretRef,
+      provider: "servicehub",
+      family: "servicehub",
+      authType: "bearer",
+      payload: {
+        token: "servicehub-secret-token"
+      }
+    });
+    await expect(resolveLocalSecretPayload({
+      dataDir,
+      secretRef: "secret://servicehub/missing"
+    })).rejects.toMatchObject({
+      code: "local_secret_not_configured"
+    });
+  });
+
+  it("rotates ServiceHub secrets with revision, rotatedAt and scoped registry metadata", async () => {
+    const dataDir = await createTempDir("pact-secret-servicehub-rotate-");
+    const secretRef = "secret://servicehub/weather/api-token";
+    vi.useFakeTimers();
+    const createdAt = new Date("2026-06-05T08:00:00.000Z");
+    const rotatedAt = new Date("2026-06-05T09:00:00.000Z");
+
+    vi.setSystemTime(createdAt);
+    await initializeLocalSecret({
+      dataDir,
+      provider: "servicehub",
+      secretRef,
+      payload: { token: "first-servicehub-token" },
+      metadata: {
+        scope: {
+          serviceId: "weather-api",
+          tenantId: "tenant-a",
+          workspaceId: "workspace-a",
+          allowedHosts: ["api.weather.example.invalid"],
+          allowedProtocols: ["https"],
+          scopes: ["forecast.read"]
+        },
+        token: "metadata-token-must-not-enter-registry"
+      },
+      updateManifest: false
+    });
+
+    vi.setSystemTime(rotatedAt);
+    const rotated = await rotateLocalSecret({
+      dataDir,
+      provider: "servicehub",
+      secretRef,
+      payload: { token: "second-servicehub-token" },
+      expectedRevision: 1,
+      metadata: {
+        scope: {
+          serviceId: "weather-api",
+          tenantId: "tenant-a",
+          workspaceId: "workspace-a",
+          allowedHosts: ["api.weather.example.invalid"],
+          allowedProtocols: ["https"],
+          scopes: ["forecast.current.read"]
+        },
+        token: "rotated-metadata-token-must-not-enter-registry"
+      },
+      updateManifest: false
+    });
+
+    expect(rotated).toMatchObject({
+      provider: "servicehub",
+      family: "servicehub",
+      status: "active",
+      revision: 2,
+      rotatedAt: rotatedAt.toISOString(),
+      catalogChange: {
+        source: "secret-store",
+        type: "external_service_secret_rotated",
+        reasonCode: "external_service_secret_rotated",
+        serviceId: "weather-api",
+        invalidation: {
+          reasonCode: "external_service_secret_rotated",
+          serviceId: "weather-api",
+          scopes: expect.arrayContaining([
+            "tool-management-catalog",
+            "mcp-tools-list",
+            "external-service-runtime-cache",
+            "upstream-session"
+          ])
+        }
+      }
+    });
+    expect(rotated.catalogChange.secretRefFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(rotated.catalogChange)).not.toContain(secretRef);
+    expect(JSON.stringify(rotated.catalogChange)).not.toContain("second-servicehub-token");
+    expect(rotated.entry).toMatchObject({
+      credentialConfigured: true,
+      status: "active",
+      revision: 2,
+      rotatedAt: rotatedAt.toISOString(),
+      metadata: {
+        scope: {
+          serviceId: "weather-api",
+          tenantId: "tenant-a",
+          workspaceId: "workspace-a",
+          allowedHosts: ["api.weather.example.invalid"],
+          allowedProtocols: ["https"],
+          scopes: ["forecast.current.read"]
+        }
+      }
+    });
+
+    const registry = await readLocalSecretRegistry({ dataDir });
+    expect(JSON.stringify(registry)).not.toContain("first-servicehub-token");
+    expect(JSON.stringify(registry)).not.toContain("second-servicehub-token");
+    expect(JSON.stringify(registry)).not.toContain("metadata-token-must-not-enter-registry");
+    expect(JSON.stringify(registry)).not.toContain("rotated-metadata-token-must-not-enter-registry");
+    expect(registry.refs[secretRef]).toMatchObject(rotated.entry);
+
+	    await expect(resolveLocalSecretPayload({ dataDir, secretRef })).resolves.toMatchObject({
+	      status: "active",
+	      revision: 2,
+	      metadata: {
+	        scope: {
+          serviceId: "weather-api",
+          tenantId: "tenant-a",
+          workspaceId: "workspace-a",
+          allowedHosts: ["api.weather.example.invalid"],
+          allowedProtocols: ["https"],
+          scopes: ["forecast.current.read"]
+        }
+	      },
+	      payload: { token: "second-servicehub-token" }
+	    });
+	    await expect(resolveLocalSecretPayload({
+	      dataDir,
+	      secretRef,
+	      expectedScope: {
+	        serviceId: "weather-api",
+	        tenantId: "tenant-a",
+	        workspaceId: "workspace-a",
+	        host: "api.weather.example.invalid",
+	        protocol: "https",
+	        scopes: ["forecast.current.read"]
+	      }
+	    })).resolves.toMatchObject({
+	      revision: 2,
+	      payload: { token: "second-servicehub-token" }
+	    });
+	    await expect(resolveLocalSecretPayload({
+	      dataDir,
+	      secretRef,
+	      expectedScope: {
+	        serviceId: "other-api",
+	        host: "api.weather.example.invalid",
+	        protocol: "https"
+	      }
+	    })).rejects.toMatchObject({
+	      code: "local_secret_scope_denied",
+	      reasonCode: "service_id_mismatch"
+	    });
+	    await expect(resolveLocalSecretPayload({
+	      dataDir,
+	      secretRef,
+	      expectedScope: {
+	        serviceId: "weather-api",
+	        host: "evil.example.invalid",
+	        protocol: "https"
+	      }
+	    })).rejects.toMatchObject({
+	      code: "local_secret_scope_denied",
+	      reasonCode: "host_not_allowed"
+	    });
+	    await expect(resolveLocalSecretPayload({
+	      dataDir,
+	      secretRef,
+	      expectedScope: {
+	        serviceId: "weather-api",
+	        host: "api.weather.example.invalid",
+	        protocol: "https",
+	        scopes: ["forecast.write"]
+	      }
+	    })).rejects.toMatchObject({
+	      code: "local_secret_scope_denied",
+	      reasonCode: "scope_not_allowed"
+	    });
+	    await expect(rotateLocalSecret({
+	      dataDir,
+	      provider: "servicehub",
+      secretRef,
+      payload: { token: "stale-servicehub-token" },
+      expectedRevision: 1,
+      updateManifest: false
+    })).rejects.toMatchObject({
+      code: "local_secret_revision_conflict",
+      expectedRevision: 1,
+      actualRevision: 2
+    });
+    await expect(resolveLocalSecretPayload({ dataDir, secretRef })).resolves.toMatchObject({
+      revision: 2,
+      payload: { token: "second-servicehub-token" }
+    });
+
+    const audit = (await fs.readFile(rotated.auditPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    expect(audit.map((item) => item.event)).toEqual(["secret.initialized", "secret.rotated"]);
+    expect(audit[1]).toMatchObject({
+      event: "secret.rotated",
+      secretRef,
+      previousRevision: 1,
+      revision: 2,
+      rotatedAt: rotatedAt.toISOString(),
+      status: "active"
+    });
+  });
+
+  it("revokes ServiceHub secrets fail closed for resolve and configured checks", async () => {
+    const dataDir = await createTempDir("pact-secret-servicehub-revoke-");
+    const secretRef = "secret://servicehub/revoked/api-token";
+    vi.useFakeTimers();
+    const createdAt = new Date("2026-06-05T10:00:00.000Z");
+    const revokedAt = new Date("2026-06-05T10:15:00.000Z");
+
+    vi.setSystemTime(createdAt);
+    const initialized = await initializeLocalSecret({
+      dataDir,
+      provider: "servicehub",
+      secretRef,
+      payload: { token: "revoked-servicehub-token" },
+      metadata: {
+        scope: {
+          serviceId: "revoked-api"
+        }
+      },
+      updateManifest: false
+    });
+    await expect(resolveLocalSecretPayload({ dataDir, secretRef })).resolves.toMatchObject({
+      payload: { token: "revoked-servicehub-token" }
+    });
+
+    vi.setSystemTime(revokedAt);
+    const revoked = await revokeLocalSecret({
+      dataDir,
+      provider: "servicehub",
+      secretRef,
+      expectedRevision: 1,
+      reason: "operator rotation cleanup"
+    });
+
+    expect(revoked).toMatchObject({
+      credentialConfigured: false,
+      status: "revoked",
+      revision: 2,
+      revokedAt: revokedAt.toISOString(),
+      catalogChange: {
+        source: "secret-store",
+        type: "external_service_secret_revoked",
+        reasonCode: "external_service_secret_revoked",
+        serviceId: "revoked-api",
+        invalidation: {
+          serviceId: "revoked-api",
+          scopes: expect.arrayContaining([
+            "external-service-runtime-cache",
+            "upstream-session"
+          ])
+        }
+      }
+    });
+    expect(revoked.catalogChange.secretRefFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(revoked.catalogChange)).not.toContain(secretRef);
+    expect(JSON.stringify(revoked.catalogChange)).not.toContain("revoked-servicehub-token");
+    expect(revoked.entry).toMatchObject({
+      credentialConfigured: false,
+      status: "revoked",
+      revision: 2,
+      revokedAt: revokedAt.toISOString()
+    });
+    expect(await localSecretConfigured({ dataDir, provider: "servicehub", secretRef })).toBe(false);
+    await expect(resolveLocalSecretPayload({ dataDir, secretRef })).rejects.toMatchObject({
+      code: "local_secret_revoked",
+      status: "revoked"
+    });
+    await expect(fs.access(initialized.valuePath)).rejects.toThrow();
+
+    const registry = await readLocalSecretRegistry({ dataDir });
+    expect(JSON.stringify(registry)).not.toContain("revoked-servicehub-token");
+    expect(registry.refs[secretRef]).toMatchObject({
+      credentialConfigured: false,
+      status: "revoked",
+      revision: 2,
+      revokedAt: revokedAt.toISOString()
+    });
+
+    const audit = (await fs.readFile(revoked.auditPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    expect(audit.map((item) => item.event)).toEqual(["secret.initialized", "secret.revoked"]);
+    expect(audit[1]).toMatchObject({
+      event: "secret.revoked",
+      secretRef,
+      previousRevision: 1,
+      revision: 2,
+      status: "revoked",
+      revokedAt: revokedAt.toISOString(),
+      reason: "operator rotation cleanup"
+    });
   });
 
   it("throws for invalid or unsupported inputs", async () => {

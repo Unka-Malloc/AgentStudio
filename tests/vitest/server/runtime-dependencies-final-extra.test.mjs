@@ -182,7 +182,7 @@ describe("runtime dependencies final extra coverage", () => {
     expect(result.summary.total).toBe(10);
 
     const config = JSON.parse(await fs.readFile(result.sourceConfigPath, "utf8"));
-    expect(config.protocolVersion).toBe("pact.runtime-dependencies.v1");
+    expect(config.protocolVersion).toBe("v0.0.1:platform:runtime-dependencies-1");
     expect(config.sources.python.default.fileName).toBe("python-3.13.5-macos11.pkg");
     expect(config.sources.python.default.url).toContain("/python/3.13.5/");
     expect(config.sources.jre.default.fileName).toBe("OpenJDK21U-jre_aarch64_mac_hotspot_21.0.10_7.tar.gz");
@@ -195,8 +195,8 @@ describe("runtime dependencies final extra coverage", () => {
   it("falls back to the default artifact filename when a source URL cannot be parsed", async () => {
     const platformArtifactName = `python-${platformKey}`;
     await writeSourceConfig({
-      schemaVersion: 1,
-      protocolVersion: "pact.runtime-dependencies.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:platform:runtime-dependencies-1",
       sources: {
         python: {
           default: {
@@ -222,8 +222,8 @@ describe("runtime dependencies final extra coverage", () => {
 
   it("treats an existing Docker installer cache as already available", async () => {
     const configPath = await writeSourceConfig({
-      schemaVersion: 1,
-      protocolVersion: "pact.runtime-dependencies.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:platform:runtime-dependencies-1",
       sources: {
         docker: {
           default: {
@@ -252,8 +252,8 @@ describe("runtime dependencies final extra coverage", () => {
 
   it("keeps a dry-run Gerrit plan available even when the WAR URL is blank", async () => {
     await writeSourceConfig({
-      schemaVersion: 1,
-      protocolVersion: "pact.runtime-dependencies.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:platform:runtime-dependencies-1",
       sources: {
         gerrit: {
           default: {
@@ -314,8 +314,8 @@ describe("runtime dependencies final extra coverage", () => {
     const overrideUrl = "https://mirror.example.invalid/python-platform.tgz";
     const overrideFileName = `python-${platformKey}-mirror.tgz`;
     const configPath = await writeSourceConfig({
-      schemaVersion: 1,
-      protocolVersion: "pact.runtime-dependencies.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:platform:runtime-dependencies-1",
       sources: {
         python: {
           default: {
@@ -346,8 +346,8 @@ describe("runtime dependencies final extra coverage", () => {
 
   it("returns mirror guidance for missing builtin sources and surfaces curl failures", async () => {
     await writeSourceConfig({
-      schemaVersion: 1,
-      protocolVersion: "pact.runtime-dependencies.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:platform:runtime-dependencies-1",
       sources: {
         caddy: {
           default: {
@@ -494,8 +494,8 @@ describe("runtime dependencies final extra coverage", () => {
     });
 
     await writeSourceConfig({
-      schemaVersion: 1,
-      protocolVersion: "pact.runtime-dependencies.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:platform:runtime-dependencies-1",
       sources: {
         dify: {
           images: ["example.invalid/dify:latest"],
@@ -581,8 +581,8 @@ describe("runtime dependencies final extra coverage", () => {
 
   it("summarizes cached installs separately from present dependencies", async () => {
     await writeSourceConfig({
-      schemaVersion: 1,
-      protocolVersion: "pact.runtime-dependencies.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:platform:runtime-dependencies-1",
       sources: {
         docker: {
           default: {
@@ -677,8 +677,8 @@ describe("runtime dependencies final extra coverage", () => {
     );
 
     await writeSourceConfig({
-      schemaVersion: 1,
-      protocolVersion: "pact.runtime-dependencies.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:platform:runtime-dependencies-1",
       sources: {
         dify: {
           images: [],

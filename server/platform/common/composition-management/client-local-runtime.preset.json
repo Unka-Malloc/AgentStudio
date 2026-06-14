@@ -1,0 +1,209 @@
+{
+  "schemaVersion": "v0.0.1:schema:definition-1",
+  "kind": "pact.composition.preset",
+  "presetId": "client-local-runtime",
+  "displayName": "Pact Client Local Runtime",
+  "status": "active",
+  "featureEdition": "client-local",
+  "compositionClass": "deployment-dependency-package",
+  "deploymentTarget": {
+    "applicationId": "client-local-runtime",
+    "serviceName": "pact.client.local-runtime",
+    "boundary": "client-managed-local-sidecar",
+    "outputBundleId": "pact-client-local-runtime",
+    "outputRoot": "build/composition-packages/client-local-runtime"
+  },
+  "intent": {
+    "summary": "Package the thinnest Pact runtime that a desktop client can supervise locally to expose MCP sharedspace, local directory, iCloud/OneDrive local projection, and mobile relay pairing operations without running the full server feature set.",
+    "runtimeKind": "client-supervised-sidecar",
+    "executionPolicy": "client-starts-and-monitors; server-runtime-keeps-mcp-entrypoint-policy-audit-sharedspace-execution-and-mobile-relay-queue",
+    "dehydrationGoal": "api-only-local-mcp-and-mobile-relay-runtime-for-desktop-client"
+  },
+  "coreDependencyPackage": {
+    "policy": "include-only-foundation-needed-for-mcp-sharedspace-control-plane",
+    "featureIds": [
+      "core-platform",
+      "security-permissions",
+      "operation-dispatcher",
+      "console-shell",
+      "storage-core",
+      "module-management-core",
+      "data-structure-core",
+      "devops-core",
+      "tool-management-core",
+      "work-queue-core",
+      "local-sharedspace",
+      "mobile-relay"
+    ],
+    "preserveContracts": [
+      "v0.0.1:mcp:http-1",
+      "v0.0.1:tool:management-1",
+      "v0.0.1:operation:operation-dispatcher-1",
+      "v0.0.1:risk-control:permissions-1",
+      "v0.0.1:storage:core-1",
+      "v0.0.1:sharedspace:sharedspace-local-directory-1",
+      "v0.0.1:storage:cloud-drive-port-1",
+      "v0.0.1:mcp:mobile-relay-1"
+    ],
+    "reason": "The local sidecar must keep the authoritative MCP adapter, grant/policy/audit path, operation dispatch, storage, checkpoints, local directory mounts, cloud-drive local projection receipts, and mobile relay queue; it intentionally excludes knowledge, model, agent gateway, and agent exploration runtimes."
+  },
+  "applicationDependencyPackage": {
+    "policy": "include-local-sharedspace-cloud-drive-projection-and-mobile-relay-only",
+    "featureIds": [
+      "local-sharedspace",
+      "mobile-relay"
+    ],
+    "moduleDescriptors": [
+      "server/platform/specialized/agent/cloud-drive-port/module.json"
+    ],
+    "moduleEntrypoints": [
+      "server/platform/specialized/agent/agent-workspace/index.mjs",
+      "server/platform/specialized/agent/cloud-drive-port/index.mjs",
+      "server/platform/specialized/console/cloud-drive-upstream-gateway.mjs",
+      "server/platform/common/mobile-relay/index.mjs",
+      "server/platform/common/console/http/controllers/system-controller-mobile-relay-handlers.mjs",
+      "server/platform/common/mcp/http-mcp-adapter.mjs"
+    ],
+    "requiredProtocols": [
+      "v0.0.1:mcp:http-1",
+      "v0.0.1:mcp:sharedspace-exchange-1",
+      "v0.0.1:storage:cloud-drive-port-1",
+      "v0.0.1:mcp:mobile-relay-1"
+    ],
+    "requiredOperations": [
+      "system.health",
+      "discovery.get_config",
+      "tool_management.catalog",
+      "tool_management.create_grant",
+      "tool_management.grants",
+      "agent_workspaces.create",
+      "sharedspace.localDir.connect",
+      "sharedspace.localDir.list",
+      "sharedspace.item.list",
+      "sharedspace.file.read",
+      "sharedspace.file.write",
+      "sharedspace.item.delete",
+      "sharedspace.sync.plan",
+      "sharedspace.sync.apply",
+      "external.cloudDrive.connect",
+      "external.cloudDrive.status",
+      "external.cloudDrive.item.list",
+      "external.cloudDrive.file.download",
+      "external.cloudDrive.file.upload",
+      "external.cloudDrive.sync.plan",
+      "external.cloudDrive.sync.apply",
+      "external.cloudDrive.permission.list",
+      "mobile_relay.config",
+      "mobile_relay.pairing.create",
+      "mobile_relay.pairing.claim",
+      "mobile_relay.pairing.status",
+      "mobile_relay.pc.check_in",
+      "mobile_relay.command.create",
+      "mobile_relay.command.poll",
+      "mobile_relay.command.complete",
+      "mobile_relay.command.result"
+    ]
+  },
+  "runtimeEnvelope": {
+    "defaultProfile": "minimal",
+    "defaultUiMode": "api-only",
+    "defaultListenHost": "127.0.0.1",
+    "recommendedNodeOptions": "--max-old-space-size=256",
+    "clientSupervisorResponsibilities": [
+      "start-stop-restart",
+      "health-check-/api/healthz",
+      "data-dir-selection",
+      "log-tail",
+      "mcp-discovery-publication",
+      "target-agent-mcp-config-write",
+      "mobile-relay-gateway-url-selection",
+      "mobile-relay-command-execution"
+    ],
+    "excludedResponsibilities": [
+      "mcp-tools-call-routing",
+      "operation-policy-decision",
+      "audit-ledger-authority",
+      "checkpoint-authority",
+      "knowledge-search",
+      "model-routing",
+      "agent-gateway",
+      "agent-memory"
+    ]
+  },
+  "dehydration": {
+    "profileId": "client-local-runtime",
+    "mode": "detach-client-local-mcp-runtime-from-full-platform",
+    "preserveCapabilities": [
+      "mcp-http",
+      "local-grant",
+      "tool-management-catalog",
+      "operation-dispatch",
+      "audit",
+      "checkpoint",
+      "local-directory-sharedspace",
+      "cloud-drive-local-projection",
+      "mobile-relay-pairing",
+      "mobile-relay-command-queue",
+      "runtime-health"
+    ],
+    "removeSurfaces": [
+      "full-control-panel",
+      "knowledge-ui",
+      "knowledge-core",
+      "document-parsing",
+      "agent-gateway",
+      "agent-exploration",
+      "agent-memory",
+      "codespace",
+      "gerrit",
+      "external-data-connectors",
+      "maintenance-agent"
+    ],
+    "runtimeArtifacts": {
+      "sqlite": "local-data-dir",
+      "objectStorage": "local-data-dir",
+      "cloudDriveProjection": "local-directory-only",
+      "mobileRelayQueue": "local-data-dir",
+      "remoteCloudApi": "excluded"
+    }
+  },
+  "startupComposition": {
+    "enabled": true,
+    "bindProviders": [
+      {
+        "contract": "v0.0.1:mcp:http-1",
+        "provider": "HttpMcpAdapter"
+      },
+      {
+        "contract": "v0.0.1:tool:management-1",
+        "provider": "ToolManagementCore"
+      },
+      {
+        "contract": "v0.0.1:sharedspace:sharedspace-local-directory-1",
+        "provider": "AgentWorkspace.localDirectory"
+      },
+      {
+        "contract": "v0.0.1:storage:cloud-drive-port-1",
+        "provider": "CloudDrivePort.localProjection"
+      },
+      {
+        "contract": "v0.0.1:mcp:mobile-relay-1",
+        "provider": "MobileRelay.fileQueue"
+      }
+    ],
+    "healthGates": [
+      "system.health",
+      "tool_management.catalog",
+      "sharedspace.localDir.list",
+      "external.cloudDrive.status",
+      "mobile_relay.config"
+    ],
+    "fallbackPolicy": "client-local-runtime-starts-api-only-and-reports-degraded-sharedspace-when-local-directory-or-cloud-projection-is-not-configured; mobile-relay-remains-available-as-token-protected-queue"
+  },
+  "verification": [
+    "npm run server:verify:client-local-runtime-profile --silent",
+    "npm run server:verify:mobile-relay --silent",
+    "npm run server:verify:v001-local-dir-e2e --silent",
+    "npm run server:verify:v001-cloud-drive-e2e --silent"
+  ]
+}

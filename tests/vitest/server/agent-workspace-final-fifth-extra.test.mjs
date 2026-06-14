@@ -102,7 +102,7 @@ describe("agent workspace final fifth extra coverage", () => {
 
   it("reuses existing checkpoint trees and skips checkpoint creation when tree ids are unavailable", async () => {
     const merkleState = {
-      protocolVersion: "pact.merkle.test.v1",
+      protocolVersion: "v0.0.1:test:merkle-1",
       cas: {
         putBlock: vi.fn(async (content) => {
           const buffer = Buffer.isBuffer(content) ? content : Buffer.from(content || "");

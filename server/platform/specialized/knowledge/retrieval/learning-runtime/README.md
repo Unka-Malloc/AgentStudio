@@ -1,6 +1,6 @@
 # LearningRuntime
 
-`LearningRuntime` implements the `pact.learning.v1` boundary used by `KnowledgeCore`.
+`LearningRuntime` implements the `v0.0.1:knowledge:learning-1` boundary used by `KnowledgeCore`.
 
 The bundled runtime is deterministic and offline-safe. It performs reciprocal-rank style candidate fusion, aggregates feedback, proposes retrieval profile updates, and emits reviewable suggestions. It may auto-apply retrieval profile versions only after the configured metric gate passes.
 

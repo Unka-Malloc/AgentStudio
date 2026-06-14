@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: Pact 使用说明.
-- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-14; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 当前交付形态只有两部分：
 
@@ -207,19 +207,30 @@ npm run cli -- \
   --output-result result.json
 ```
 
-### 3.2 MCP 按需拉取裁剪客户端
+### 3.2 MCP 与当前客户端包
 
-MCP 不能假设机器上已经安装了完整 `pact-client-cli` 或后台 `clientd`。正常流程是：最小 MCP connector 先完成服务端发现和握手，然后通过服务端 bootstrap 操作按需拉取裁剪后的客户端运行时。
+MCP connector 不能假设机器上已经安装完整 Pact 客户端。当前实现的客户端包是独立的 `future-client` 桌面包，由 `client-gui/packaging.modules.json` 定义，并通过 `npm run client:package:plan`、`npm run client:build:macos`、`npm run client:build:windows`、`npm run client:build:linux` 单独打包。根 npm 包只代表服务端和 Server Console，不携带客户端源码或构建产物。
 
-这不是拉取完整客户端，也不是拉取服务端仓库。客户端必须声明自己需要哪些能力，服务端只返回这些能力依赖的模块。例如只为了 MCP 大文件上传，通常只需要：
+当前客户端包只包含：
 
-- runtime framework
-- `pact-client-cli`
-- `clientd`
-- upload queue
-- `mcp-local-bridge`
-- HTTP upload session/checkpoint
-- 当前机器和服务端同时支持的 transport adapter，例如 `rsync`、`scp`、`sftp`
+- Flutter desktop shell
+- Rust `pact-client` sidecar
+- target adapters
+- MCP plugin lifecycle
+- passive Skill Hub
+- model forwarding
+- mobile relay
+- activity / snapshot store
+- settings
+
+以下能力尚未实现，必须作为 TODO 处理，不能写成已可用能力：
+
+- TODO `clientd`
+- TODO upload queue
+- TODO `mcp-local-bridge`
+- TODO local data connectors
+- TODO local knowledge cache
+- TODO client-side mail import runtime
 
 MCP connector 内部应先请求计划：
 
@@ -231,7 +242,7 @@ MCP connector 内部应先请求计划：
     "arch": "x64",
     "availableCommands": ["rsync", "ssh", "scp", "sftp"]
   },
-  "modules": ["upload", "mcp-local-bridge"],
+  "modules": ["client-cli", "target-adapters", "mcp-plugins"],
   "transfer": {
     "directory": true,
     "incremental": true,
@@ -241,7 +252,7 @@ MCP connector 内部应先请求计划：
 }
 ```
 
-对应入口：
+协议入口保留为未来 bootstrap 边界：
 
 ```text
 HTTP POST /api/client-runtime/bootstrap/plan
@@ -249,7 +260,7 @@ RPC  client_runtime.bootstrap.plan
 MCP  pact.clientRuntime.bootstrapPlan
 ```
 
-如果本地缺少客户端运行时，connector 再调用拉取入口：
+拉取入口仍是 TODO。当前实现不得伪造二进制下载 URL，也不得启动本地 stdio bridge：
 
 ```text
 HTTP POST /api/client-runtime/bootstrap/pull
@@ -257,7 +268,7 @@ RPC  client_runtime.bootstrap.pull
 MCP  pact.clientRuntime.bootstrapPull
 ```
 
-`bootstrap.pull` 返回裁剪模块的 artifact refs、版本、digest、签名状态和交付信息。首版实现返回 inline manifest bundle，不伪造二进制下载 URL；后续发布流水线接入后，响应中的 artifact refs 会带上真实下载 URL。connector 启用任何模块前都必须校验签名和 digest，再安装到本机 client runtime 目录并启动 local bridge。之后 MCP 上传大文件或目录时，才通过 local bridge 调用 `pact-client upload enqueue`，复用后台队列、分块、checkpoint 和断点续传。若 transport 选择 `local-copy`，也必须把真实 bytes 深拷贝到 Pact staging/CAS，不能保存共享路径引用或零拷贝引用。
+`bootstrap.pull` 的未来实现必须返回裁剪模块的 artifact refs、版本、digest、签名状态和交付信息。connector 启用任何模块前都必须校验签名和 digest。大文件上传在 TODO 能力落地前继续使用服务端 HTTP upload session / checkpoint 链路，不存在 `pact-client upload enqueue` 或后台本地队列。
 
 ## 4. 邮件导入
 
@@ -278,39 +289,9 @@ MCP  pact.clientRuntime.bootstrapPull
 
 ## 5. 本地数据连接器
 
-客户端连接器用于把多应用数据源同步成本地 mirror，再通过上传队列提交服务端。搜索默认不实时访问远端 Gmail、Drive、Slack 或 Teams API。
+TODO。当前客户端没有 `pact-client connectors ...` 命令、没有本地 connector process runtime、没有 `portable-data/connectors` mirror，也没有通过标准输入/标准输出运行的客户端连接器协议。
 
-常用命令：
-
-```bash
-pact-client connectors list
-pact-client connectors install slack
-pact-client connectors enable slack
-pact-client connectors auth start slack '{"accountHint":"me@example.com"}'
-pact-client connectors sync slack '{"syncBatchId":"client-batch-2026-03","messages":[]}'
-pact-client connectors query-local "3 月账单"
-```
-
-外部连接器可以按目录包动态安装。包内必须包含 `connector.json`，进程型连接器的 `runtime.kind` 为 `process`，`entrypoint` 指向包内相对路径的可执行文件：
-
-```text
-acme-files-connector/
-  connector.json
-  connector.sh
-```
-
-```bash
-pact-client connectors install ./acme-files-connector
-pact-client connectors enable acme-files
-pact-client connectors sync acme-files '{"syncBatchId":"client-batch-2026-03"}'
-pact-client connectors query-local "3 月账单"
-pact-client connectors health acme-files
-pact-client connectors uninstall acme-files '{"removeCache":true}'
-```
-
-运行时通过标准输入接收 JSON 请求，通过标准输出返回 JSON。请求包含 `operation`、`providerId`、`params`、`paths` 和 `policy`；`policy.remoteCallsAllowed=false` 表示 `localQuery` 只能查询本地 mirror，不能现场访问远端 API。卸载时如 `uninstallPolicy.removeModuleOnUninstall=true`，客户端会在调用连接器 `uninstall` 钩子后删除 `portable-data/connectors/modules/<providerId>`。
-
-聊天来源写入 `portable-data/chat-index/chat.sqlite`，邮件、网盘文件和知识镜像写入 `portable-data/connectors/cache`。连接器上传到服务端时会携带 `clientUid/sourceType/providerId/externalId/syncBatchId/contentHash/capturedAt/sourceMetadata`，原始文件仍只按 `ClientUID -> SourceType -> FileName` 归档，服务端不向源文件追加检索字段。
+数据连接器治理目前保留在服务端协议层。服务端可以校验 `v0.0.1:storage:data-connector-1` manifest、OAuth refresh 策略、增量 cursor、冲突处理、rate limit、localQuery 禁远程和 uninstall policy，但这不表示桌面客户端已经实现本地连接器运行时。
 
 ## 6. 归一化 DOCX 输出
 

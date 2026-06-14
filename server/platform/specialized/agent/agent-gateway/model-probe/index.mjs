@@ -5,6 +5,7 @@ import {
 import { callAgentGateway } from "../index.mjs";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_MODEL_PROBE_RESPONSE_BYTES = 4 * 1024 * 1024;
 const PROBE_EXPECTED_ANSWER = "PactProbeOK";
 const PROBE_PROMPT = `这是 Pact 模型库连通性探测。请只回复：${PROBE_EXPECTED_ANSWER}`;
 
@@ -63,6 +64,55 @@ function timeoutSignal(timeoutMs) {
   };
 }
 
+function modelProbeResponseTooLargeError(maxBytes = MAX_MODEL_PROBE_RESPONSE_BYTES) {
+  const error = new Error(`Model probe response exceeded the ${maxBytes} byte response limit.`);
+  error.code = "model_probe_response_too_large";
+  error.maxBytes = maxBytes;
+  return error;
+}
+
+async function readProbeResponseTextWithLimit(response, maxBytes = MAX_MODEL_PROBE_RESPONSE_BYTES) {
+  const declaredLength = Number(response.headers.get("content-length") || 0);
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try {
+      await response.body?.cancel?.();
+    } catch {
+      // The caller only needs the bounded failure.
+    }
+    throw modelProbeResponseTooLargeError(maxBytes);
+  }
+  if (!response.body?.getReader) {
+    return "";
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value) {
+        continue;
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // Preserve the size-limit error.
+        }
+        throw modelProbeResponseTooLargeError(maxBytes);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 async function fetchJsonProbe({
   url,
   method = "POST",
@@ -79,7 +129,9 @@ async function fetchJsonProbe({
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: timeout.signal
     });
-    const rawText = await response.text().catch(() => "");
+    const rawText = await readProbeResponseTextWithLimit(response).catch((error) =>
+      error?.code === "model_probe_response_too_large" ? error.message : ""
+    );
     return {
       ok: response.ok,
       status: response.status,

@@ -275,7 +275,7 @@ describe("knowledge-source service final extra coverage", () => {
       const docsDir = path.join(root, "docs");
       await fs.mkdir(docsDir);
       await writeJson(path.join(root, "knowledge-sources", "sources.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-01-01T00:00:00.000Z",
         sources: [
           {
@@ -331,7 +331,7 @@ describe("knowledge-source service final extra coverage", () => {
   it("treats a non-array sources payload as empty", async () => {
     await withTempDir(async (root) => {
       await writeJson(path.join(root, "knowledge-sources", "sources.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-01-01T00:00:00.000Z",
         sources: {
           sourceId: "not-an-array"
@@ -536,7 +536,7 @@ describe("knowledge-source service final extra coverage", () => {
       });
 
       await writeJson(path.join(root, "knowledge-sources", "sources.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-01-01T00:00:01.000Z",
         sources: [
           {
@@ -681,7 +681,7 @@ describe("knowledge-source service final extra coverage", () => {
         expect(vi.getTimerCount()).toBe(1);
 
         await writeJson(path.join(root, "knowledge-sources", "sources.json"), {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           updatedAt: "2026-01-11T00:00:01.000Z",
           sources: []
         });

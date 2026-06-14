@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import PactTabs, { type PactTab } from "../PactTabs.vue";
 import { useAgentRetrievalViewContext } from "../../composables/agentRetrievalViewContext";
 import {
   agentExploreTabMeta,
@@ -15,38 +17,39 @@ const {
     switchAgentExploreTab,
   },
 } = useAgentRetrievalViewContext();
+
+const tabs = computed<PactTab[]>(() =>
+  agentExploreTabs.value.map((session) => ({
+    key: session.runId,
+    label: agentExploreTabTitle(session),
+    meta: agentExploreTabMeta(session),
+    closable: true,
+    disabled: agentExploreTabBusy(session),
+    draft: isAgentExploreDraftSession(session),
+  })),
+);
+
+function handleChange(key: string) {
+  const session = agentExploreTabs.value.find((s) => s.runId === key);
+  if (session) switchAgentExploreTab(session);
+}
+
+function handleClose(key: string) {
+  const session = agentExploreTabs.value.find((s) => s.runId === key);
+  if (session) closeAgentExploreTab(session);
+}
 </script>
 
 <template>
-  <div v-if="agentExploreTabs.length" class="agent-explore-tab-strip" role="tablist" aria-label="智能检索会话">
-    <div
-      v-for="session in agentExploreTabs"
-      :key="session.runId"
-      class="agent-explore-tab"
-      role="tab"
-      tabindex="0"
-      :aria-selected="session.runId === agentExploreActiveTabId"
-      :data-active="session.runId === agentExploreActiveTabId"
-      :data-draft="isAgentExploreDraftSession(session)"
-      :data-disabled="agentExploreTabBusy(session)"
-      @click="agentExploreTabBusy(session) ? undefined : switchAgentExploreTab(session)"
-      @keydown.enter.prevent="agentExploreTabBusy(session) ? undefined : switchAgentExploreTab(session)"
-      @keydown.space.prevent="agentExploreTabBusy(session) ? undefined : switchAgentExploreTab(session)"
-    >
-      <div class="agent-explore-tab-main">
-        <strong>{{ agentExploreTabTitle(session) }}</strong>
-        <span>{{ agentExploreTabMeta(session) }}</span>
-      </div>
-      <button
-        class="agent-explore-tab-close"
-        type="button"
-        title="关闭标签"
-        :aria-label="`关闭标签 ${agentExploreTabTitle(session)}`"
-        :disabled="agentExploreTabBusy(session)"
-        @click.stop="closeAgentExploreTab(session)"
-      >
-        ×
-      </button>
-    </div>
-  </div>
+  <PactTabs
+    v-if="agentExploreTabs.length"
+    :model-value="agentExploreActiveTabId"
+    :tabs="tabs"
+    variant="card"
+    size="small"
+    :scrollable="true"
+    aria-label="智能检索会话"
+    @change="handleChange"
+    @close="handleClose"
+  />
 </template>

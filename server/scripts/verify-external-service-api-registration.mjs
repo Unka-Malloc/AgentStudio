@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SERVER_API_OPERATIONS } from "../platform/common/operation-dispatcher/operation-registry.mjs";
@@ -10,14 +12,17 @@ import {
   validateExternalServiceConfig
 } from "../platform/common/composition-management/external-service-adapter.mjs";
 import {
-  loadCompositionPresets,
-  validateCompositionPreset
-} from "../platform/common/composition-management/index.mjs";
-import {
   callExternalLlmService,
   describeExternalLlmServiceAdapters,
   isExternalLlmServiceConfig
 } from "../platform/common/composition-management/external-llm-service-adapters.mjs";
+import {
+  describeExternalServices,
+  inspectExternalServiceHealth
+} from "../platform/common/composition-management/external-service-registry.mjs";
+import {
+  createExternalMcpPassthroughRuntime
+} from "../platform/common/composition-management/external-mcp-passthrough-runtime.mjs";
 import { createToolCatalog } from "../platform/specialized/capabilities/tools/tool-management-core/catalog.mjs";
 import {
   KERNEL_API_OPERATION_IDS,
@@ -69,9 +74,9 @@ const SERVICE_REGISTRATION_REQUIREMENTS = Object.freeze({
     requiredFiles: ["server.mjs", "README.md", "Dockerfile", "reference-frameworks.json", "format-routes.json", "parser-strategies.json", "format-conversion-profiles.json", "model-distillation-profiles.json"],
     rejectedInternalOperationPrefixes: ["knowledge.distillation."],
     rejectedInternalToolIds: [
-      "pact.knowledge.distillation.export",
-      "pact.knowledge.distillation.runs.create",
-      "pact.knowledge.distillation.runs.get"
+      "pact.agentLibrary.distillation.export",
+      "pact.agentLibrary.distillation.runs.create",
+      "pact.agentLibrary.distillation.runs.get"
     ],
     deprecatedInternalOperationIds: [
       "knowledge.distillation.export",
@@ -90,6 +95,15 @@ const SERVICE_REGISTRATION_REQUIREMENTS = Object.freeze({
       "knowledge.distillation.workbench.runs.artifacts",
       "knowledge.distillation.workbench.runs.compare"
     ]
+  },
+  "rag-service": {
+    namespace: "external.knowledge.rag",
+    pathPrefix: "/api/external/rag",
+    operationIds: [],
+    requiredFiles: ["Dockerfile", "README.md", "external-service.config.json"],
+    rejectedInternalOperationPrefixes: [],
+    rejectedInternalToolIds: [],
+    deprecatedInternalOperationIds: []
   }
 });
 
@@ -115,7 +129,7 @@ async function assertRequiredFiles(serviceName, requiredFiles = []) {
 
 async function assertExternalServiceTypeValidation() {
   const baseConfig = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     kind: "pact.external-service.config",
     serviceId: "verify-external-service-type",
     serviceName: "external.verify.service",
@@ -124,7 +138,7 @@ async function assertExternalServiceTypeValidation() {
     startupPolicy: "external-only",
     binding: {
       mode: "passthrough",
-      outlet: "pact.skillHub",
+      outlet: "pact.serviceHub",
       requiredScopes: ["knowledge:read"],
       risk: "read_only"
     },
@@ -133,11 +147,8 @@ async function assertExternalServiceTypeValidation() {
   const acceptedUpstreams = [
     {
       type: "acp",
-      transport: "stdio",
-      command: {
-        executable: process.execPath,
-        args: ["--version"]
-      },
+      transport: "http",
+      url: "https://agent-relay.example.com:443/acp",
       metadata: {
         agentProfileId: "verify.acp.agent"
       }
@@ -150,13 +161,40 @@ async function assertExternalServiceTypeValidation() {
     { type: "cloud-drive", provider: "onedrive", mode: "contract", secretRef: "secret://pact/drive/onedrive-oauth" },
     { type: "http", url: "http://127.0.0.1:8787/health" },
     { type: "https", url: "https://example.com:443/api" },
-    { type: "openai", url: "https://api.openai.com:443/v1" },
+    { type: "json-rpc", url: "https://rpc.example.com:443/jsonrpc" },
+    { type: "sse", url: "https://events.example.com:443/v1/events" },
     { type: "internal-proprietary-service", url: "" }
   ];
   for (const upstream of acceptedUpstreams) {
+    const tools = (() => {
+      if (upstream.type === "http" || upstream.type === "https") {
+        return [{ name: "verify", method: "GET", path: "/verify" }];
+      }
+      if (upstream.type === "json-rpc") {
+        return [{ name: "verify", method: "verify.ping" }];
+      }
+      if (upstream.type === "sse") {
+        return [{ name: "watch", transport: { type: "sse" } }];
+      }
+      return [];
+    })();
     const config = normalizeExternalServiceConfig({
       ...baseConfig,
       serviceId: `${baseConfig.serviceId}-${upstream.type}`,
+      ...(upstream.type === "acp"
+        ? {
+            binding: {
+              mode: "passthrough",
+              outlet: "pact.agentRelay",
+              requiredScopes: ["agent_relay:prompt"],
+              risk: "repair_write"
+            }
+          }
+        : {}),
+      ...(String(upstream.url || upstream.baseUrl || upstream.endpointUrl || "").includes("127.0.0.1")
+        ? { policyPreset: "servicehub.development-local" }
+        : {}),
+      ...(tools.length ? { tools } : {}),
       upstream
     });
     const validation = await validateExternalServiceConfig({
@@ -173,11 +211,6 @@ async function assertExternalServiceTypeValidation() {
       assert.equal(config.upstream.modelProtocol, upstream.modelProtocol, "LLM upstream must retain modelProtocol for adapter routing");
       assert.equal(config.upstream.provider, upstream.provider, "LLM upstream must retain provider for adapter routing");
     }
-    if (upstream.type === "openai") {
-      assert.equal(config.upstream.type, "llm", "legacy openai upstream type must normalize to LLM Service");
-      assert.equal(config.upstream.modelProtocol, "openai-compatible", "legacy openai upstream must be classified as OpenAI-compatible");
-      assert.equal(config.upstream.provider, "openai", "legacy OpenAI host must infer provider openai");
-    }
     if (upstream.type === "cloud-drive") {
       assert.equal(config.upstream.type, "cloud-drive", "Cloud Drive upstream must keep the cloud-drive service type");
       assert.equal(config.upstream.provider, "onedrive", "Cloud Drive upstream must retain provider for adapter routing");
@@ -192,6 +225,7 @@ async function assertExternalServiceTypeValidation() {
   const missingPortConfig = normalizeExternalServiceConfig({
     ...baseConfig,
     serviceId: `${baseConfig.serviceId}-missing-port`,
+    policyPreset: "servicehub.development-local",
     upstream: {
       type: "http",
       url: "http://127.0.0.1/health"
@@ -207,71 +241,149 @@ async function assertExternalServiceTypeValidation() {
     /explicit port/,
     "HTTP external service explicit-port validation must be reported"
   );
-  const missingAcpCommandConfig = normalizeExternalServiceConfig({
+}
+
+async function withMockHttpServer(callback) {
+  const server = http.createServer();
+  const port = await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve(server.address().port);
+    });
+  });
+  try {
+    return await callback({ server, port });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  const retiredOpenAiConfig = normalizeExternalServiceConfig({
     ...baseConfig,
-    serviceId: `${baseConfig.serviceId}-acp-missing-command`,
+    serviceId: `${baseConfig.serviceId}-retired-openai`,
     upstream: {
-      type: "acp",
-      transport: "stdio"
-    },
-    binding: {
-      mode: "passthrough",
-      outlet: "pact.agentRelay",
-      requiredScopes: ["agent_relay:prompt"],
-      risk: "repair_write"
+      type: "openai",
+      url: "https://api.openai.com:443/v1"
     }
   });
-  const missingAcpCommandValidation = await validateExternalServiceConfig({
-    config: missingAcpCommandConfig,
+  const retiredOpenAiValidation = await validateExternalServiceConfig({
+    config: retiredOpenAiConfig,
     requireKnownPaths: false
   });
-  assert.equal(missingAcpCommandValidation.ok, false, "ACP stdio external service without command must be rejected");
+  assert.equal(retiredOpenAiValidation.ok, false, "retired openai upstream type must be rejected");
   assert.match(
-    JSON.stringify(missingAcpCommandValidation.errors || []),
-    /ACP stdio upstream requires upstream\.command\.executable/,
-    "ACP stdio command validation must be reported"
+    JSON.stringify(retiredOpenAiValidation.errors || []),
+    /upstream\.type=openai is retired/,
+    "retired openai upstream type must direct operators to upstream.type=llm"
   );
 }
 
-async function assertAcpAgentRelaySourceStdioPreset() {
-  const presets = await loadCompositionPresets({ cwd: repoRoot });
-  const record = presets.find(({ preset }) => preset?.presetId === "acp-agent-relay-source-stdio");
-  assert.ok(record, "ACP Agent Relay source stdio composition preset must be registered");
-
-  const validation = await validateCompositionPreset({
-    preset: record.preset,
-    filePath: record.filePath,
-    cwd: repoRoot
+async function assertExternalHealthInspectionDoesNotExposeBody() {
+  await withMockHttpServer(async ({ server, port }) => {
+    server.removeAllListeners("request");
+    server.on("request", (_request, response) => {
+      const body = "private-token=health-secret-value";
+      response.writeHead(200, {
+        "Content-Type": "text/plain",
+        "Content-Length": String(Buffer.byteLength(body))
+      });
+      response.end(body);
+    });
+    const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-external-health-body-"));
+    try {
+      const configDir = path.join(userDataPath, "external-services", "configs");
+      await fs.mkdir(configDir, { recursive: true });
+      await fs.writeFile(
+        path.join(configDir, "verify-health-body.external-service.json"),
+        `${JSON.stringify({
+          schemaVersion: "v0.0.1:schema:definition-1",
+          kind: "pact.external-service.config",
+          serviceId: "verify-health-body",
+          serviceName: "external.verify.healthBody",
+          displayName: "Verify Health Body",
+          mode: "connected",
+          startupPolicy: "external-only",
+          policyPreset: "servicehub.development-local",
+          healthCheck: {
+            type: "http",
+            url: `http://127.0.0.1:${port}/health`,
+            required: true
+          }
+        }, null, 2)}\n`,
+        "utf8"
+      );
+      const health = await inspectExternalServiceHealth({
+        userDataPath,
+        cwd: repoRoot,
+        serviceId: "verify-health-body"
+      });
+      assert.equal(health.ok, true, "mock external service health must pass");
+      assert.equal(health.results[0]?.ok, true, "mock external service health result must be healthy");
+      assert.equal("body" in health.results[0], false, "external service health inspection must not return upstream response bodies");
+      assert.equal(
+        JSON.stringify(health).includes("health-secret-value"),
+        false,
+        "external service health inspection must not leak upstream response body content"
+      );
+    } finally {
+      await fs.rm(userDataPath, { recursive: true, force: true });
+    }
   });
-  assert.equal(
-    validation.ok,
-    true,
-    `ACP Agent Relay source stdio preset must validate: ${JSON.stringify(validation.errors || [])}`
-  );
+}
 
-  const config = validation.externalService;
-  assert.equal(config.serviceId, "acp-agent-relay-source-stdio");
-  assert.equal(config.upstream.type, "acp");
-  assert.equal(config.upstream.transport, "stdio");
-  assert.equal(config.upstream.command.executable, "node");
-  assert.deepEqual(config.upstream.command.args, ["server/scripts/acp-agent-relay-source-stdio.mjs"]);
-  assert.equal(config.binding.outlet, "pact.agentRelay");
-  assert.equal(config.binding.risk, "repair_write");
-  assert.equal(config.binding.requiredScopes.includes("agent_relay:view"), true);
-  assert.equal(config.binding.requiredScopes.includes("agent_relay:operate"), true);
-  assert.equal(config.upstream.metadata.protocol, "pact.acp-agent-relay.v1");
-  assert.equal(config.upstream.metadata.stdout, "json-rpc-only");
-  assert.equal(config.upstream.metadata.diagnostics, "stderr");
-  assert.equal(record.preset.serviceContracts?.auditRequired, true);
-  assert.equal(record.preset.serviceContracts?.stdioContract?.stdout, "newline-delimited-json-rpc");
-  assert.equal(record.preset.serviceContracts?.stdioContract?.stderr, "diagnostics-only");
-  assert.equal(config.metadata.sourceContextEnv.includes("PACT_ACP_SOURCE_STDIO_STORE_PATH"), true);
-  assert.equal(config.metadata.sourceContextEnv.includes("PACT_ACP_SOURCE_STDIO_USER_DATA_PATH"), true);
-  assert.equal(config.metadata.sourceContextEnv.includes("PACT_ACP_RELAY_STORE_PATH"), true);
-  assert.equal(config.metadata.sourceContextEnv.includes("PACT_ACP_RELAY_USER_DATA_PATH"), true);
-  assert.equal(validation.pathRefs.includes("server/scripts/acp-agent-relay-source-stdio.mjs"), true);
-  assert.equal(validation.operationIds.includes("acp_agent_relay.prompt.send"), true);
-  assert.equal(validation.operationIds.includes("acp_agent_relay.session.resume"), true);
+async function assertExternalHttpToolResponseLimit() {
+  await withMockHttpServer(async ({ server, port }) => {
+    server.on("request", (_request, response) => {
+      const body = "x".repeat((4 * 1024 * 1024) + 1);
+      response.writeHead(200, {
+        "Content-Type": "text/plain",
+        "Content-Length": String(Buffer.byteLength(body))
+      });
+      response.end(body);
+    });
+    const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-external-http-limit-"));
+    try {
+      const runtime = createExternalMcpPassthroughRuntime({ userDataPath });
+      await runtime.refreshConfig({
+        schemaVersion: "v0.0.1:schema:definition-1",
+        kind: "pact.external-service.config",
+        serviceId: "verify-http-response-limit",
+        serviceName: "external.verify.httpResponseLimit",
+        displayName: "Verify HTTP Response Limit",
+        mode: "connected",
+        startupPolicy: "external-only",
+        policyPreset: "servicehub.development-local",
+        upstream: {
+          type: "http",
+          url: `http://127.0.0.1:${port}`,
+          transport: "http"
+        },
+        binding: {
+          mode: "compile",
+          outlet: "pact.serviceHub",
+          requiredScopes: ["knowledge:read"],
+          risk: "read_only"
+        },
+        tools: [
+          {
+            name: "large_result",
+            method: "GET",
+            path: "/large"
+          }
+        ],
+        healthCheck: { type: "none" }
+      });
+      await assert.rejects(
+        () => runtime.callTool({
+          serviceId: "verify-http-response-limit",
+          toolName: "large_result"
+        }),
+        /External HTTP tool response exceeded the 4194304 byte response limit/,
+        "external HTTP compiled tools must reject oversized upstream responses"
+      );
+    } finally {
+      await fs.rm(userDataPath, { recursive: true, force: true });
+    }
+  });
 }
 
 function assertExternalLlmServiceAdapterScaffold() {
@@ -281,7 +393,7 @@ function assertExternalLlmServiceAdapterScaffold() {
     const row = description.protocols.find((item) => item.protocol === protocol);
     assert.equal(Boolean(row?.registered), true, `${protocol} must have an LLM adapter scaffold`);
     const config = normalizeExternalServiceConfig({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       kind: "pact.external-service.config",
       serviceId: `verify-llm-${protocol}`,
       serviceName: `external.verify.llm.${protocol}`,
@@ -295,8 +407,8 @@ function assertExternalLlmServiceAdapterScaffold() {
         url: "http://127.0.0.1:8787/v1"
       },
       binding: {
-        mode: "passthrough",
-        outlet: "pact.skillHub",
+        mode: "compile",
+        outlet: "pact.serviceHub",
         requiredScopes: ["knowledge:read"],
         risk: "read_only"
       },
@@ -317,8 +429,27 @@ const kernelApiOperationIds = new Set(KERNEL_API_OPERATION_IDS);
 const kernelToolIds = new Set(KERNEL_TOOL_IDS);
 
 await assertExternalServiceTypeValidation();
-await assertAcpAgentRelaySourceStdioPreset();
+await assertExternalHealthInspectionDoesNotExposeBody();
+await assertExternalHttpToolResponseLimit();
 assertExternalLlmServiceAdapterScaffold();
+
+const healthInspectOperation = operationsById.get("external_services.health.inspect");
+assert.ok(healthInspectOperation, "external service health inspection operation must be registered");
+assert.deepEqual(
+  healthInspectOperation.requiredScopes,
+  ["runtime:admin"],
+  "external service health inspection performs network egress and must require runtime admin"
+);
+assert.equal(
+  healthInspectOperation.safety?.risk,
+  "safe_write",
+  "external service health inspection must not be classified as simple read-only metadata"
+);
+assert.equal(
+  healthInspectOperation.safety?.requiresConfirmation,
+  true,
+  "external service health inspection must require explicit confirmation"
+);
 
 for (const operationId of CLOUD_DRIVE_EXTERNAL_OPERATION_IDS) {
   const operation = operationsById.get(operationId);
@@ -441,6 +572,19 @@ for (const serviceName of externalServiceNames) {
     );
   }
 }
+
+const externalServiceState = await describeExternalServices({ cwd: repoRoot });
+const ragServiceEntry = externalServiceState.services.find((entry) => entry.serviceId === "rag-service");
+assert.ok(ragServiceEntry, "rag-service external-service.config.json must be discovered by the generic registry scan");
+assert.equal(ragServiceEntry.source, "discovered", "rag-service must enter through dynamic config discovery");
+assert.equal(
+  externalServiceState.maintenancePresets.some((preset) => preset.serviceId === "rag-service"),
+  true,
+  "rag-service health check must be exposed as a generic maintenance preset"
+);
+const healthInspection = await inspectExternalServiceHealth({ cwd: repoRoot, serviceId: "rag-service" });
+assert.equal(healthInspection.checkedCount, 1, "generic external service health inspection must target rag-service");
+assert.equal(healthInspection.results[0].serviceId, "rag-service");
 
 const runtimeProvidersText = await fs.readFile(
   path.join(repoRoot, "server/platform/interactive/server-runtime-providers.mjs"),

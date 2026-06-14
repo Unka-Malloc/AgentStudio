@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-12
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: GitHub 协作约定.
 - Staleness check: Scanned on 2026-06-12; this update covers local worktree collaboration only and does not change release/readiness claims.

@@ -155,7 +155,7 @@ describe("agent gateway routing final extra coverage", () => {
     const publicRegistry = publicAgentGatewayRegistry(settings);
     expect(publicRegistry).toMatchObject({
       provider: "agent-gateway",
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       defaultAlias: "custom-main"
     });
     expect(publicRegistry.agents).toHaveLength(5);
@@ -345,7 +345,7 @@ describe("agent gateway routing final extra coverage", () => {
       await fs.writeFile(
         path.join(userDataPath, "state", "model-routing-state.json"),
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           protocolVersion: MODEL_ROUTING_PROTOCOL_VERSION,
           updatedAt: "2026-06-05T00:00:00.000Z",
           circuits: {
@@ -387,7 +387,7 @@ describe("agent gateway routing final extra coverage", () => {
 
       const summary = await inspectAgentModelRouting({ userDataPath, limit: 2 });
       expect(summary).toMatchObject({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: MODEL_ROUTING_PROTOCOL_VERSION,
         statePath: "state/model-routing-state.json",
         ledgerPath: "logs/model-routing-ledger.jsonl"

@@ -153,7 +153,7 @@ function makeBaseline(overrides: Record<string, unknown> = {}) {
     boundaries: { externalState: "contract-mode adapters" },
     mcpOutlets: ["documentParser"],
     ports: [{ implementation: "local", port: "SecretStorePort", verificationMode: "sealed" }],
-    protocolVersion: "pact.v001.baseline.v1",
+    protocolVersion: "v0.0.1:platform:baseline-1",
     rootPath: "/tmp/pact-baseline",
     status: "ready",
     storageStates: ["configured"],

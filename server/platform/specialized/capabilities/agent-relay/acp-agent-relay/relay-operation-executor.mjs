@@ -39,8 +39,8 @@ function asBoolean(value, fallback = false) {
 function operationResult(ok, data = {}, error = null) {
   return {
     ok,
-    schemaVersion: 1,
-    protocol: "pact.acp-agent-relay.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    protocol: "v0.0.1:agent:acp-agent-relay-1",
     ...(ok ? { data } : { error: error || data })
   };
 }
@@ -112,6 +112,130 @@ function promptRequestFingerprint(input = {}, promptText = "") {
     approval: normalizedApprovalFingerprint(input.approval),
     fileWrites: (Array.isArray(input.fileWrites) ? input.fileWrites : []).map((write) => normalizedWriteFingerprint(write))
   });
+}
+
+function agentRelayRequestTemplates() {
+  const templates = [
+    {
+      templateId: "custom-cli-target.upsert",
+      operationId: "acp_agent_relay.targets.upsert",
+      method: "POST",
+      path: "/api/agent-relay/v1/targets",
+      risk: "repair_write",
+      requiredScopes: ["agent_relay:operate"],
+      description: "Register a governed local CLI fallback target and an optional source-visible virtual agent.",
+      body: {
+        targetId: "custom.local.example",
+        label: "Local Example CLI",
+        enabled: true,
+        transport: {
+          type: "agent-cli-exec",
+          command: {
+            executable: "example-cli",
+            args: [],
+            promptArgs: [],
+            promptDelivery: "argument",
+            timeoutMs: 240000
+          }
+        },
+        capabilityPolicy: {
+          writes: "deny",
+          terminal: "deny",
+          maxRisk: "read_only"
+        },
+        virtualAgent: {
+          virtualAgentId: "custom.local.example.agent",
+          displayName: "Example CLI",
+          targetId: "custom.local.example",
+          enabled: true,
+          defaultMode: "ask",
+          advertisedModes: ["ask"]
+        }
+      },
+      targetCliProjection: {
+        argument: "example-cli <prompt>",
+        stdin: "printf '<prompt>' | example-cli",
+        hiddenFromTarget: [
+          "sourceId",
+          "sourceSubjectId",
+          "sourceSessionId",
+          "workspaceId",
+          "relaySessionId",
+          "relayTurnId",
+          "Pact bearer tokens",
+          "relay MCP child grants",
+          "audit metadata"
+        ]
+      }
+    },
+    {
+      templateId: "session.create",
+      operationId: "acp_agent_relay.session.create",
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions",
+      risk: "safe_write",
+      requiredScopes: ["agent_relay:operate"],
+      description: "Create a durable Pact-owned relay session for a source agent and selected virtual agent.",
+      body: {
+        sourceId: "codex",
+        sourceSessionId: "codex-thread-or-run-id",
+        sourceSubjectId: "authenticated-source-subject",
+        workspaceId: "workspace-id",
+        virtualAgentId: "custom.local.example.agent",
+        mode: "ask"
+      },
+      pactOnlyFields: [
+        "sourceId",
+        "sourceSessionId",
+        "sourceSubjectId",
+        "workspaceId",
+        "virtualAgentId",
+        "mode"
+      ],
+      targetCliProjection: {
+        sentToTargetCli: false
+      }
+    },
+    {
+      templateId: "prompt.send",
+      operationId: "acp_agent_relay.prompt.send",
+      method: "POST",
+      path: "/api/agent-relay/v1/sessions/{relaySessionId}/prompt",
+      risk: "repair_write",
+      requiredScopes: ["agent_relay:operate"],
+      description: "Send one governed prompt turn through an existing relay session.",
+      body: {
+        prompt: "Write the delegated task for the target agent here.",
+        mode: "ask",
+        idempotencyKey: "source-generated-stable-turn-key"
+      },
+      pactOnlyFields: [
+        "sessionId path parameter",
+        "mode",
+        "idempotencyKey",
+        "authorization context",
+        "approval metadata"
+      ],
+      targetCliProjection: {
+        sentToTargetCli: "prompt",
+        hiddenFromTarget: [
+          "sessionId",
+          "idempotencyKey",
+          "authorization context",
+          "Pact audit metadata"
+        ]
+      }
+    }
+  ];
+  return templates;
+}
+
+function agentRelayTemplateEnvelope(template = {}) {
+  return {
+    schemaVersion: "v0.0.1:schema:definition-1",
+    protocol: "v0.0.1:agent:acp-agent-relay-1",
+    ...template
+  };
 }
 
 function createAuditEvidence({ input = {}, session = {}, turn = {}, route = {} } = {}) {
@@ -316,6 +440,14 @@ function targetFinalResponseCapability(target = {}) {
       waitForFinalResponse: true
     };
   }
+  if (["agent-cli-exec", "local-cli-exec", "cli-exec"].includes(type)) {
+    return {
+      policy: "agent_cli_exec_stdout",
+      agentApiFinalResponseReadSupported: false,
+      connectTrajectorySupported: false,
+      waitForFinalResponse: true
+    };
+  }
   return {
     policy: "target_acp_completion",
     agentApiFinalResponseReadSupported: false,
@@ -340,7 +472,12 @@ function targetCommunicationDescriptor(target = {}) {
     targetCommunicationMode = "native_acp_stdio";
     nativeAcpTargetSupported = true;
   } else if (normalizedType === "codex-cli-exec") {
-    targetCommunicationMode = "codex_cli_exec_proxy";
+    targetCommunicationMode = transport.degraded === true || metadata.degraded === true
+      ? "codex_cli_exec_fallback"
+      : "codex_cli_exec_proxy";
+    nativeAcpSourceSupported = false;
+  } else if (["agent-cli-exec", "local-cli-exec", "cli-exec"].includes(normalizedType)) {
+    targetCommunicationMode = "agent_cli_exec_fallback";
     nativeAcpSourceSupported = false;
   } else if (normalizedType === "antigravity-agentapi") {
     targetCommunicationMode = "agent_api_proxy";
@@ -357,7 +494,9 @@ function targetCommunicationDescriptor(target = {}) {
     nativeAcpTargetSupported,
     nativeAcpTargetVerified,
     nativeAcpSourceSupported,
-    nativeAcpSourceVerified
+    nativeAcpSourceVerified,
+    degraded: transport.degraded === true || metadata.degraded === true,
+    degradationReasonCode: asText(transport.degradationReasonCode || metadata.degradation?.reasonCode)
   };
 }
 
@@ -446,7 +585,10 @@ function downstreamClientAssemblyDescriptor(record = {}) {
       protocol: asText(communication.protocol),
       direction: asText(communication.direction),
       transport: asText(communication.transport),
-      targetRole: asText(communication.targetRole)
+      targetRole: asText(communication.targetRole),
+      degraded: communication.degraded === true,
+      preferredTransport: asText(communication.preferredTransport),
+      fallbackTransport: asText(communication.fallbackTransport)
     },
     capabilities: {
       configurationStrategy: asText(capabilities.configurationStrategy),
@@ -459,7 +601,9 @@ function downstreamClientAssemblyDescriptor(record = {}) {
       connectObservationSupported: capabilities.connectObservationSupported === true,
       protocolBoundary: asText(capabilities.protocolBoundary),
       toolBoundary: asText(capabilities.toolBoundary),
-      mcpInterfaceVersion: asText(capabilities.mcpInterfaceVersion)
+      mcpInterfaceVersion: asText(capabilities.mcpInterfaceVersion),
+      degraded: capabilities.degraded === true,
+      degradation: asObject(capabilities.degradation, null)
     },
     acpRelay: target.targetId || virtualAgent.virtualAgentId
       ? {
@@ -1382,6 +1526,8 @@ export class RelayOperationExecutor {
       }
     }
     switch (operationId) {
+      case "acp_agent_relay.templates.list":
+        return this.listTemplates(effectiveInput);
       case "acp_agent_relay.virtual_agents.list":
         return this.listVirtualAgents(effectiveInput);
       case "acp_agent_relay.virtual_agents.upsert":
@@ -1636,6 +1782,32 @@ export class RelayOperationExecutor {
   async listVirtualAgents(input = {}) {
     return operationResult(true, {
       virtualAgents: await this.buildVirtualAgentCatalog(input)
+    });
+  }
+
+  async listTemplates(input = {}) {
+    const templateId = asText(input.templateId || input.template_id || input.id);
+    const templates = agentRelayRequestTemplates().map(agentRelayTemplateEnvelope);
+    if (templateId) {
+      const template = templates.find((item) => item.templateId === templateId);
+      if (!template) {
+        return operationResult(false, {}, {
+          code: "template_not_found",
+          message: "ACP relay request template was not found.",
+          details: {
+            templateId,
+            availableTemplateIds: templates.map((item) => item.templateId)
+          }
+        });
+      }
+      return operationResult(true, {
+        template,
+        templateIds: templates.map((item) => item.templateId)
+      });
+    }
+    return operationResult(true, {
+      templates,
+      templateIds: templates.map((item) => item.templateId)
     });
   }
 

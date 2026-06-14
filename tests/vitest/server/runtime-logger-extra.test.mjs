@@ -159,7 +159,7 @@ describe("runtime logger extra coverage", () => {
 
     const stored = records.find((entry) => entry.event === "runtime.file.sink");
     expect(stored).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       level: "info",
       component: "server",
       event: "runtime.file.sink",

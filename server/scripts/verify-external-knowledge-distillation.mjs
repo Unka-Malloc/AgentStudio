@@ -103,7 +103,7 @@ function assertExternalGatewayCall(payload = {}, {
 } = {}) {
   const call = payload.pactExternalServiceCall;
   assert.ok(call, "platform gateway responses must include external service call telemetry");
-  assert.equal(call.protocolVersion, "pact.external-knowledge-distillation.v1.gateway-call-telemetry");
+  assert.equal(call.protocolVersion, "v0.0.1:external-service:knowledge-distillation-gateway-call-telemetry-1");
   assert.equal(call.service, "external.knowledge.distillation");
   assert.equal(call.baseUrl, serviceUrl);
   assert.equal(call.method, method);
@@ -164,7 +164,7 @@ function assertReferenceFrameworkAuditSummary(audit = {}, minExpectedCount = 6) 
 async function startMockModelGateway() {
   const calls = [];
   const invalidFirstAttemptKeys = new Set();
-  const modelOutputContract = "pact.external-knowledge-distillation.model-output.v1";
+  const modelOutputContract = "v0.0.1:external-service:knowledge-distillation-model-output-1";
   function parsePrompt(question = "") {
     try {
       return question ? JSON.parse(question) : {};
@@ -1484,7 +1484,7 @@ try {
   await waitForService(serviceUrl);
   const directRuntime = await fetchJson(`${serviceUrl}/v1/runtime/health`);
   assert.equal(directRuntime.status, 200);
-  assert.equal(directRuntime.payload.protocolVersion, "pact.external-knowledge-distillation.v1.runtime-doctor");
+  assert.equal(directRuntime.payload.protocolVersion, "v0.0.1:external-service:knowledge-distillation-runtime-doctor-1");
   assert.ok(directRuntime.payload.runtimes["tika.app"], "runtime doctor must report Tika fallback runtime state");
   assert.ok(directRuntime.payload.runtimes["ocr.tesseract"], "runtime doctor must report image OCR runtime state");
   assert.ok(directRuntime.payload.runtimes["pdf.pymupdf"], "runtime doctor must report PDF visual runtime state");
@@ -1562,27 +1562,27 @@ try {
   assert.equal(capabilities.payload.workflowScopes.defaultValue, "project");
   assert.equal(capabilities.payload.workflowScopes.documentSelectorFields.includes("sourceId"), true);
   assert.equal(capabilities.payload.pipelineSeparation.strategy, "document-ingestion-vs-distillation-core-boundary.v1");
-  assert.equal(capabilities.payload.pipelineSeparation.documentIngestionAdapter.moduleBoundary, "external-kd.document-parsing.module.v1");
-  assert.equal(capabilities.payload.pipelineSeparation.documentIngestionAdapter.outputContract, "pact.normalized-distillation-documents.v1");
-  assert.equal(capabilities.payload.pipelineSeparation.distillationAlgorithmCore.moduleBoundary, "external-kd.distillation-algorithm.module.v1");
-  assert.equal(capabilities.payload.pipelineSeparation.distillationAlgorithmCore.inputContract, "external-kd.algorithm-input.normalized-documents.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.documentIngestionAdapter.moduleBoundary, "v0.0.1:external-service:knowledge-distillation-document-parsing-module-1");
+  assert.equal(capabilities.payload.pipelineSeparation.documentIngestionAdapter.outputContract, "v0.0.1:knowledge:normalized-distillation-documents-1");
+  assert.equal(capabilities.payload.pipelineSeparation.distillationAlgorithmCore.moduleBoundary, "v0.0.1:external-service:knowledge-distillation-distillation-algorithm-module-1");
+  assert.equal(capabilities.payload.pipelineSeparation.distillationAlgorithmCore.inputContract, "v0.0.1:external-service:knowledge-distillation-algorithm-input-normalized-documents-1");
   assert.equal(capabilities.payload.pipelineSeparation.distillationAlgorithmCore.forbiddenInputFields.includes("contentBase64"), true);
-  assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.moduleBoundary, "external-kd.model-distillation.module.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.moduleBoundary, "v0.0.1:external-service:knowledge-distillation-model-distillation-module-1");
   assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
-  assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.outputContract, "pact.external-knowledge-distillation.model-output.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.outputContract, "v0.0.1:external-service:knowledge-distillation-model-output-1");
   assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.outputValidationStrategy, "model-distillation-machine-readable-contract.v1");
   assert.equal(capabilities.payload.pipelineSeparation.modelDistillation.outputRepairStrategy, "model-distillation-contract-repair-retry.v1");
-  assert.equal(capabilities.payload.pipelineSeparation.formatConversion.moduleBoundary, "external-kd.format-conversion.module.v1");
+  assert.equal(capabilities.payload.pipelineSeparation.formatConversion.moduleBoundary, "v0.0.1:external-service:knowledge-distillation-format-conversion-module-1");
   assert.equal(capabilities.payload.distillationAlgorithm.parserPayloadFieldsAllowed, false);
   assert.equal(capabilities.payload.distillationAlgorithm.entrypoint, "runDistillationAlgorithmWorkflow");
   assert.equal(capabilities.payload.modelDistillation.requiredRealModelCall, true);
   assert.equal(capabilities.payload.modelDistillation.noBuiltinFallback, true);
   assert.equal(capabilities.payload.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
-  assert.equal(capabilities.payload.modelDistillation.outputContract, "pact.external-knowledge-distillation.model-output.v1");
+  assert.equal(capabilities.payload.modelDistillation.outputContract, "v0.0.1:external-service:knowledge-distillation-model-output-1");
   assert.equal(capabilities.payload.modelDistillation.outputValidationStrategy, "model-distillation-machine-readable-contract.v1");
   assert.equal(capabilities.payload.modelDistillation.outputRepairStrategy, "model-distillation-contract-repair-retry.v1");
   assert.equal(capabilities.payload.modelDistillation.outputRepairMaxAttempts >= 1, true);
-  assert.equal(capabilities.payload.modelDistillation.profileRegistry.protocolVersion, "pact.external-knowledge-distillation.model-distillation-profiles.v1");
+  assert.equal(capabilities.payload.modelDistillation.profileRegistry.protocolVersion, "v0.0.1:external-service:knowledge-distillation-model-distillation-profiles-1");
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.strategy, "singleton-model-distillation-profile-registry.v1");
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.source, "external-services/knowledge-distillation-service/model-distillation-profiles.json");
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.profileCount, 1);
@@ -1593,7 +1593,7 @@ try {
     profile.requiredRealModelCall === true &&
     profile.noBuiltinFallback === true &&
     profile.parameters.responseProfile === "machine-readable" &&
-    profile.requiredOutput.machineReadableContract === "pact.external-knowledge-distillation.model-output.v1" &&
+    profile.requiredOutput.machineReadableContract === "v0.0.1:external-service:knowledge-distillation-model-output-1" &&
     profile.outputRepairPolicy.enabled === true &&
     profile.outputRepairPolicy.strategy === "model-distillation-contract-repair-retry.v1" &&
     profile.transportPolicy.maxAttempts === 2 &&
@@ -1607,7 +1607,7 @@ try {
   assert.equal(capabilities.payload.timeFiltering.timeFields.includes("eventTime"), true);
   assert.equal(capabilities.payload.fileCompatibility.routingStrategy, "content-signature-extension-media-shape-routing.v2");
   assert.equal(capabilities.payload.fileCompatibility.routeOrder[0], "contentSignature");
-  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.protocolVersion, "pact.external-knowledge-distillation.format-routes.v1");
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.protocolVersion, "v0.0.1:external-service:knowledge-distillation-format-routes-1");
   assert.equal(capabilities.payload.fileCompatibility.routeRegistry.strategy, "singleton-format-route-registry.v1");
   assert.equal(capabilities.payload.fileCompatibility.routeRegistry.source, "external-services/knowledge-distillation-service/format-routes.json");
   assert.equal(capabilities.payload.fileCompatibility.routeRegistry.routeCount >= 24, true);
@@ -1616,7 +1616,7 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("singleton-format-route-registry.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("singleton-parser-strategy-registry.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("singleton-model-distillation-profile-registry.v1"), true);
-  assert.equal(capabilities.payload.algorithms.includes("pact.external-knowledge-distillation.model-output.v1"), true);
+  assert.equal(capabilities.payload.algorithms.includes("v0.0.1:external-service:knowledge-distillation-model-output-1"), true);
   assert.equal(capabilities.payload.algorithms.includes("model-distillation-machine-readable-contract.v1"), true);
   assert.equal(capabilities.payload.algorithms.includes("model-distillation-contract-repair-retry.v1"), true);
   assert.equal(capabilities.payload.fileCompatibility.contentSignatureRouting.strategy, "content-signature-routing.v1");
@@ -1657,10 +1657,10 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.binaryProfileStrategy, "bounded-binary-file-profile.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.structuredJsonFileRefStrategy, "structured-json-file-ref-streaming-window.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.manifestMaxDocuments >= 1000, true);
-  assert.equal(capabilities.payload.parserExecution.boundary, "external-kd.document-parsing.module.v1");
-  assert.equal(capabilities.payload.parserExecution.outputContract, "pact.normalized-distillation-documents.v1");
-  assert.equal(capabilities.payload.parserExecution.consumedByAlgorithmContract, "external-kd.algorithm-input.normalized-documents.v1");
-  assert.equal(capabilities.payload.parserExecution.strategyRegistry.protocolVersion, "pact.external-knowledge-distillation.parser-strategies.v1");
+  assert.equal(capabilities.payload.parserExecution.boundary, "v0.0.1:external-service:knowledge-distillation-document-parsing-module-1");
+  assert.equal(capabilities.payload.parserExecution.outputContract, "v0.0.1:knowledge:normalized-distillation-documents-1");
+  assert.equal(capabilities.payload.parserExecution.consumedByAlgorithmContract, "v0.0.1:external-service:knowledge-distillation-algorithm-input-normalized-documents-1");
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.protocolVersion, "v0.0.1:external-service:knowledge-distillation-parser-strategies-1");
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategy, "singleton-parser-strategy-registry.v1");
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.source, "external-services/knowledge-distillation-service/parser-strategies.json");
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategyCount >= 145, true);
@@ -1804,8 +1804,8 @@ try {
   assert.equal(capabilities.payload.componentPipelineGraph.strategy, "haystack-llamaindex-inspired-component-pipeline-graph.v1");
   assert.equal(capabilities.payload.componentPipelineGraph.registryStrategy, "external-kd-configurable-component-registry.v1");
   assert.equal(capabilities.payload.componentPipelineGraph.artifact, "component-pipeline-graph-json");
-  assert.equal(capabilities.payload.componentPipelineGraph.moduleBoundaries.includes("external-kd.document-parsing.module.v1"), true);
-  assert.equal(capabilities.payload.componentPipelineGraph.moduleBoundaries.includes("external-kd.distillation-algorithm.module.v1"), true);
+  assert.equal(capabilities.payload.componentPipelineGraph.moduleBoundaries.includes("v0.0.1:external-service:knowledge-distillation-document-parsing-module-1"), true);
+  assert.equal(capabilities.payload.componentPipelineGraph.moduleBoundaries.includes("v0.0.1:external-service:knowledge-distillation-distillation-algorithm-module-1"), true);
   assert.equal(capabilities.payload.componentPipelineGraph.parserPayloadFieldsAllowedInAlgorithmCore, false);
   assert.equal(capabilities.payload.referenceGapReport.strategy, "reference-framework-gap-report.v1");
   assert.equal(capabilities.payload.referenceGapReport.localAuditStrategy, "reference-framework-local-checkout-audit.v1");
@@ -1929,7 +1929,7 @@ try {
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("markdown.frontmatter"), true);
   assert.equal(capabilities.payload.parserExecution.builtInParsers.includes("markdown.structure"), true);
   assert.equal(capabilities.payload.formatConversion.strategy, "office-document-professional-adaptation.v1");
-  assert.equal(capabilities.payload.formatConversion.profileRegistry.protocolVersion, "pact.external-knowledge-distillation.format-conversion-profiles.v1");
+  assert.equal(capabilities.payload.formatConversion.profileRegistry.protocolVersion, "v0.0.1:external-service:knowledge-distillation-format-conversion-profiles-1");
   assert.equal(capabilities.payload.formatConversion.profileRegistry.strategy, "singleton-format-conversion-profile-registry.v1");
   assert.equal(capabilities.payload.formatConversion.profileRegistry.source, "external-services/knowledge-distillation-service/format-conversion-profiles.json");
   assert.equal(capabilities.payload.formatConversion.profileRegistry.profileCount, 7);
@@ -2034,7 +2034,7 @@ try {
     headers: authHeaders(auth)
   });
   assert.equal(runtimeHealth.status, 200);
-  assert.equal(runtimeHealth.payload.protocolVersion, "pact.external-knowledge-distillation.v1.runtime-doctor");
+  assert.equal(runtimeHealth.payload.protocolVersion, "v0.0.1:external-service:knowledge-distillation-runtime-doctor-1");
   assert.equal(runtimeHealth.payload.pactRegistration.namespace, "external.knowledge.distillation");
   assert.ok(runtimeHealth.payload.runtimes["tika.app"], "platform runtime health must proxy Tika fallback runtime state");
   assert.ok(runtimeHealth.payload.runtimes["ocr.tesseract"], "platform runtime health must proxy OCR runtime state");
@@ -2640,7 +2640,7 @@ try {
     createRun.payload.result.classification.groupCount >= 2,
     "unrelated source documents should be separated into classified distillation groups"
   );
-  assert.equal(createRun.payload.result.algorithmVersion, "external-service.route-window-community-claim-gated-graph-incremental-distillation.v5");
+  assert.equal(createRun.payload.result.algorithmVersion, "v0.0.1:strategy:external-service-route-window-community-claim-gated-graph-incremental-distillation-5");
   assert.equal(createRun.payload.result.workflowScope, "project");
   assert.equal(createRun.payload.result.agentMessage.workflowScope, "project");
   assert.equal(createRun.payload.result.incrementalPlan.strategy, "project-snapshot-incremental-convergence.v1");
@@ -2652,27 +2652,27 @@ try {
   assert.equal(createRun.payload.result.graphEvidence.covariates.some((claim) => claim.covariate_type === "claim"), true);
   assert.equal(createRun.payload.result.componentPipelineGraph.strategy, "haystack-llamaindex-inspired-component-pipeline-graph.v1");
   assert.equal(createRun.payload.result.componentPipelineGraph.componentRegistry.strategy, "external-kd-configurable-component-registry.v1");
-  assert.equal(createRun.payload.result.componentPipelineGraph.nodes.some((node) => node.nodeId === "parser-strategy-executor" && node.moduleBoundary === "external-kd.document-parsing.module.v1"), true);
-  assert.equal(createRun.payload.result.componentPipelineGraph.nodes.some((node) => node.nodeId === "classification-router" && node.moduleBoundary === "external-kd.distillation-algorithm.module.v1"), true);
+  assert.equal(createRun.payload.result.componentPipelineGraph.nodes.some((node) => node.nodeId === "parser-strategy-executor" && node.moduleBoundary === "v0.0.1:external-service:knowledge-distillation-document-parsing-module-1"), true);
+  assert.equal(createRun.payload.result.componentPipelineGraph.nodes.some((node) => node.nodeId === "classification-router" && node.moduleBoundary === "v0.0.1:external-service:knowledge-distillation-distillation-algorithm-module-1"), true);
   assert.equal(createRun.payload.result.componentPipelineGraph.nodes.some((node) => node.nodeId === "evidence-ranker" && node.componentType === "ranker"), true);
-  assert.equal(createRun.payload.result.componentPipelineGraph.edges.some((edge) => edge.contract === "external-kd.algorithm-input.normalized-documents.v1"), true);
+  assert.equal(createRun.payload.result.componentPipelineGraph.edges.some((edge) => edge.contract === "v0.0.1:external-service:knowledge-distillation-algorithm-input-normalized-documents-1"), true);
   assert.equal(createRun.payload.result.componentPipelineGraph.contracts.parserPayloadFieldsAllowedInAlgorithmCore, false);
   assert.equal(createRun.payload.result.componentPipelineGraph.rankers.some((ranker) => ranker.id === "semantic-lexical-polarity-evidence-ranker"), true);
   assert.equal(createRun.payload.result.agentMessage.componentPipelineGraph.artifactId, "component-pipeline-graph-json");
   assert.equal(createRun.payload.result.agentMessage.componentPipelineGraph.nodeCount, createRun.payload.result.componentPipelineGraph.nodes.length);
-  assert.equal(createRun.payload.result.modelDistillation.moduleBoundary, "external-kd.model-distillation.module.v1");
+  assert.equal(createRun.payload.result.modelDistillation.moduleBoundary, "v0.0.1:external-service:knowledge-distillation-model-distillation-module-1");
   assert.equal(createRun.payload.result.modelDistillation.strategy, "required-agent-gateway-real-model-call.v1");
   assert.equal(createRun.payload.result.modelDistillation.profileId, "real-model-grounded-distillation.v1");
   assert.equal(createRun.payload.result.modelDistillation.status, "completed");
   assert.equal(createRun.payload.result.modelDistillation.modelAlias, "verify-real-model-gateway");
   assert.equal(createRun.payload.result.modelDistillation.outputValidation.strategy, "model-distillation-machine-readable-contract.v1");
-  assert.equal(createRun.payload.result.modelDistillation.outputValidation.contract, "pact.external-knowledge-distillation.model-output.v1");
+  assert.equal(createRun.payload.result.modelDistillation.outputValidation.contract, "v0.0.1:external-service:knowledge-distillation-model-output-1");
   assert.equal(createRun.payload.result.modelDistillation.outputValidation.status, "passed");
   assert.equal(createRun.payload.result.modelDistillation.contractRepair.strategy, "model-distillation-contract-repair-retry.v1");
   assert.equal(createRun.payload.result.modelDistillation.contractRepair.status, "repaired");
   assert.equal(createRun.payload.result.modelDistillation.contractRepair.attemptCount, 1);
   assert.equal(createRun.payload.result.modelDistillation.outputValidation.contractRepair.status, "repaired");
-  assert.equal(createRun.payload.result.modelDistillation.machineReadablePayload.protocolVersion, "pact.external-knowledge-distillation.model-output.v1");
+  assert.equal(createRun.payload.result.modelDistillation.machineReadablePayload.protocolVersion, "v0.0.1:external-service:knowledge-distillation-model-output-1");
   assert.equal(createRun.payload.result.modelDistillation.machineReadablePayload.distillationScope, "project-convergence");
   assert.equal(
     createRun.payload.result.modelDistillation.outputValidation.gates.every((gate) => gate.status === "passed"),
@@ -3223,7 +3223,7 @@ try {
   assert.equal(htmlMarkupCorpus.windowPlan.windows.some((window) => window.elementRefs?.some((ref) => ref.type === "table-row")), true);
   assert.equal(createRun.payload.result.graphEvidence.text_units.some((unit) => (
     unit.sourceId === "source-38" &&
-    unit.metadata?.semanticChunkStrategy === "unstructured.by-title-element-windowing.v1" &&
+    unit.metadata?.semanticChunkStrategy === "v0.0.1:strategy:unstructured-by-title-element-windowing-1" &&
     unit.metadata?.elementTypes?.includes("table-row")
   )), true);
   assert.equal(htmlMarkupCorpus.windowPlan.windows.some((window) => (
@@ -6047,7 +6047,7 @@ try {
     assert.ok(workspaceEntries[entryName], `workspace package must include ${entryName}`);
   }
   const workspaceManifest = JSON.parse(Buffer.from(workspaceEntries["manifest.json"]).toString("utf8"));
-  assert.equal(workspaceManifest.protocolVersion, "pact.external-knowledge-distillation.v1.workspace-package");
+  assert.equal(workspaceManifest.protocolVersion, "v0.0.1:external-service:knowledge-distillation-workspace-package-1");
   assert.equal(workspaceManifest.artifactValidationStrategy, "response-profile-json-artifact-self-check.v1");
   assert.equal(workspaceManifest.validationStatusCounts.failed || 0, 0);
   assert.equal(workspaceManifest.artifacts.every((item) => item.byteSize > 0 && /^[a-f0-9]{64}$/.test(item.sha256)), true);

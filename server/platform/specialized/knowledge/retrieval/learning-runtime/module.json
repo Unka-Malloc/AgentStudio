@@ -1,9 +1,9 @@
 {
   "name": "LearningRuntime",
-  "version": 1,
-  "description": "Auditable pact.learning.v1 runtime for feedback aggregation, retrieval profile tuning, and knowledge suggestions.",
+  "version": "v0.0.1:knowledge:learning-runtime-1",
+  "description": "Auditable v0.0.1:knowledge:learning-1 runtime for feedback aggregation, retrieval profile tuning, and knowledge suggestions.",
   "defaultLoaded": false,
-  "protocol": "pact.learning.v1",
+  "protocol": "v0.0.1:knowledge:learning-1",
   "components": {
     "deterministicFallback": {
       "path": "./index.mjs",

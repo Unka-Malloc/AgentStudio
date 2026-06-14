@@ -42,7 +42,7 @@ const forbiddenRuntimePatterns = [
   "internalKnowledgeDistillationRemovedPayload",
   "executeKnowledgeDistillationWorkflowOperation",
   // Legacy protocol
-  "pact.knowledge-distillation.v1",
+  "v0.0.1:knowledge:distillation-1",
 ];
 
 // Quoted internal operation IDs (not external.knowledge.distillation.*)
@@ -172,7 +172,7 @@ for (const file of jsonFiles) {
     '"knowledge.distillation.runs.create"',
     '"knowledge.distillation.runs.get"',
     '"knowledge.distillation.workbench.',
-    '"pact.knowledge-distillation.v1"',
+    '"v0.0.1:knowledge:distillation-1"',
   ]) {
     if (content.includes(badId)) {
       const lines = content.split("\n");

@@ -11,7 +11,7 @@ import {
   normalizeUnifiedRegistration
 } from "./unified-registration-core/unified-registration.mjs";
 
-export const DEVOPS_PROTOCOL_VERSION = "pact.devops.v1";
+export const DEVOPS_PROTOCOL_VERSION = "v0.0.1:platform:devops-1";
 
 export function createDevopsProvider({ userDataPath = "" } = {}) {
   return Object.freeze({

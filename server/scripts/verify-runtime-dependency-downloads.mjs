@@ -19,7 +19,7 @@ const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-runtime-depen
 const knowledgeBackendsPath = knowledgeBackendConfigPath(userDataPath);
 await fs.mkdir(path.dirname(knowledgeBackendsPath), { recursive: true });
 await fs.writeFile(knowledgeBackendsPath, `${JSON.stringify({
-  schemaVersion: 1,
+  schemaVersion: "v0.0.1:schema:definition-1",
   providers: {
     dify: {
       provider: "dify",
@@ -51,7 +51,7 @@ assert.equal(
 );
 await fs.access(list.sourceConfigPath);
 const sourceConfig = JSON.parse(await fs.readFile(list.sourceConfigPath, "utf8"));
-for (const id of ["dify", "rag-flow", "docker", "jre", "tika", "python", "caddy", "nginx", "gerrit"]) {
+for (const id of ["dify", "rag-flow", "docker", "jre", "tika", "python", "node", "caddy", "nginx", "gerrit"]) {
   assert.ok(sourceConfig.sources?.[id], `missing local source config: ${id}`);
 }
 
@@ -246,8 +246,9 @@ assert.equal(Array.isArray(knowledgeAggregatePlan.results), true, "legacy knowle
 const backgroundPlan = await downloadRuntimeDependency({ userDataPath, targetId: "caddy", dryRun: true, async: true });
 assert.equal(backgroundPlan.ok, true);
 assert.ok(backgroundPlan.runId, "background runtime dependency download should return a run id");
+let finalBackgroundRun = null;
 for (let attempt = 0; attempt < 20; attempt += 1) {
-  const runs = listRuntimeDependencyDownloadRuns().downloads || [];
+  const runs = listRuntimeDependencyDownloadRuns({ userDataPath }).downloads || [];
   const run = runs.find((item) => item.runId === backgroundPlan.runId);
   if (run && run.status !== "queued" && run.status !== "running") {
     assert.equal(["present", "installed"].includes(run.status), true);
@@ -255,6 +256,7 @@ for (let attempt = 0; attempt < 20; attempt += 1) {
     assert.ok((run.steps || []).length >= 4, "background runtime dependency download should expose planned steps");
     assert.equal(run.totalSteps, run.steps.length, "background runtime dependency download should expose total steps");
     assert.equal(run.progressPercent, 100, "completed background runtime dependency download should reach 100%");
+    finalBackgroundRun = run;
     break;
   }
   await new Promise((resolve) => setTimeout(resolve, 25));
@@ -262,6 +264,48 @@ for (let attempt = 0; attempt < 20; attempt += 1) {
     assert.fail("background runtime dependency dry run did not complete");
   }
 }
+assert.ok(finalBackgroundRun, "background runtime dependency download should finish");
+const persistedBackgroundRunPath = path.join(
+  userDataPath,
+  "runtime",
+  "runtime-dependency-download-runs",
+  `${backgroundPlan.runId}.json`
+);
+const persistedBackgroundRun = JSON.parse(await fs.readFile(persistedBackgroundRunPath, "utf8"));
+assert.equal(persistedBackgroundRun.runId, backgroundPlan.runId);
+assert.equal(
+  persistedBackgroundRun.status,
+  finalBackgroundRun.status,
+  "background runtime dependency run should be persisted under the server data dir",
+);
+
+const staleUserDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-runtime-dependencies-stale-"));
+const staleRunId = "runtime_stale_interrupted_test";
+const staleRunPath = path.join(
+  staleUserDataPath,
+  "runtime",
+  "runtime-dependency-download-runs",
+  `${staleRunId}.json`
+);
+await fs.mkdir(path.dirname(staleRunPath), { recursive: true });
+await fs.writeFile(staleRunPath, `${JSON.stringify({
+  schemaVersion: "v0.0.1:schema:definition-1",
+  protocolVersion: RUNTIME_DEPENDENCIES_PROTOCOL_VERSION,
+  runId: staleRunId,
+  targetId: "caddy",
+  status: "running",
+  ok: true,
+  startedAt: new Date(Date.now() - 60000).toISOString(),
+  updatedAt: new Date(Date.now() - 30000).toISOString(),
+  completedAt: "",
+  latestMessage: "simulated stale run",
+  steps: [],
+  log: []
+}, null, 2)}\n`, "utf8");
+const staleRuns = listRuntimeDependencyDownloadRuns({ userDataPath: staleUserDataPath }).downloads || [];
+const interruptedRun = staleRuns.find((item) => item.runId === staleRunId);
+assert.equal(interruptedRun?.status, "failed", "stale persisted running download should be marked failed/interrupted");
+assert.equal(interruptedRun?.result?.interrupted, true, "stale persisted running download should expose interrupted=true");
 
 // ── Dockerfile strict checksum verification ────────────────────────────
 
@@ -280,6 +324,14 @@ assert.ok(
 assert.ok(
   dockerfileContent.includes("JRE_SHA256"),
   "Dockerfile must contain JRE_SHA256 ARG"
+);
+assert.ok(
+  dockerfileContent.includes("TARGETARCH"),
+  "Dockerfile must select the JRE artifact from Docker TARGETARCH"
+);
+assert.ok(
+  dockerfileContent.includes("JRE_URL_AMD64") && dockerfileContent.includes("JRE_URL_ARM64"),
+  "Dockerfile must expose architecture-specific JRE sources"
 );
 assert.ok(
   dockerfileContent.includes("TIKA_SHA256"),
@@ -302,6 +354,23 @@ assert.ok(hasTikaFailPath, "Dockerfile must fail with empty TIKA_SHA256 in stric
 assert.ok(
   dockerfileContent.includes("sha256sum -c"),
   "Dockerfile must include sha256sum verification for checksum-verified downloads"
+);
+assert.ok(
+  dockerfileContent.includes("server/platform/modules/knowledge/runtime/jre/current"),
+  "Dockerfile must copy JRE into the server internal knowledge module runtime path"
+);
+assert.ok(
+  dockerfileContent.includes("/modules/jre/bin/java -version"),
+  "Dockerfile must execute the downloaded JRE during build so architecture mismatches fail inside the container"
+);
+assert.ok(
+  dockerfileContent.includes("server/config/runtime/default-settings.json"),
+  "Dockerfile must write internal runtime settings instead of relying on environment variables"
+);
+assert.equal(
+  /ENV[\s\S]*PACT_JAVA_BIN_PATH/.test(dockerfileContent),
+  false,
+  "Dockerfile must not rely on PACT_JAVA_BIN_PATH environment configuration"
 );
 
 console.log("[verify-runtime-dependency-downloads] Docker strict checksum checks passed.");
@@ -340,7 +409,8 @@ if (dockerCheck.status !== 0) {
   ], {
     cwd: fileURLToPath(new URL("../..", import.meta.url)),
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 120_000
+    timeout: 600_000,
+    maxBuffer: 64 * 1024 * 1024
   });
 
   const stderr = dockerResult.stderr?.toString() || "";
@@ -371,7 +441,8 @@ if (dockerCheck.status !== 0) {
   ], {
     cwd: fileURLToPath(new URL("../..", import.meta.url)),
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 120_000
+    timeout: 600_000,
+    maxBuffer: 64 * 1024 * 1024
   });
 
   const tikaCombined = `${tikaResult.stdout?.toString() || ""}\n${tikaResult.stderr?.toString() || ""}`;

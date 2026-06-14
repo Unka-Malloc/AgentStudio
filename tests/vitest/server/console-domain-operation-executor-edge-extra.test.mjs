@@ -463,7 +463,7 @@ describe("console-domain workspace and context executor edge coverage", () => {
   function workspaceHarness() {
     const ok = (extra = {}) => ({ ok: true, workspaceId: "ws-1", ...extra });
     return {
-      protocolVersion: "pact.agent-workspace.v1",
+      protocolVersion: "v0.0.1:workspace:agent-workspace-1",
       listWorkspaces: vi.fn(() => ({ items: [{ workspaceId: "ws-1" }] })),
       getWorkspace: vi.fn(({ workspaceId }) => (workspaceId === "missing" ? null : { workspaceId, title: "Workspace" })),
       createWorkspace: vi.fn((input) => ({ ok: true, workspace: { workspaceId: "created", title: input.title } })),
@@ -587,7 +587,7 @@ describe("console-domain workspace and context executor edge coverage", () => {
     await expect(runOperation("agent_workspaces.issues.resolve", { input: { id: "missing" }, context }))
       .resolves.toMatchObject({ status: 404 });
     await expect(runOperation("agent_workspaces.locks.list", { input: { includeExpired: "true" }, context }))
-      .resolves.toMatchObject({ status: 200, payload: { protocolVersion: "pact.agent-workspace.v1" } });
+      .resolves.toMatchObject({ status: 200, payload: { protocolVersion: "v0.0.1:workspace:agent-workspace-1" } });
     await expect(runOperation("agent_workspaces.locks.write", { input: { lockId: "held" }, context }))
       .resolves.toMatchObject({ status: 409 });
     await expect(runOperation("agent_workspaces.locks.write", { input: { action: "release" }, context }))

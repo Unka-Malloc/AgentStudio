@@ -12,6 +12,7 @@ import {
 import { useExternalServicesViewController } from "../../../server-web/composables/external-services-view-controller";
 
 const clientMocks = vi.hoisted(() => ({
+  adoptExternalServiceTools: vi.fn(),
   getExternalServiceConfig: vi.fn(),
   refreshExternalServiceRuntime: vi.fn(),
   saveExternalServiceConfig: vi.fn(),
@@ -26,7 +27,7 @@ vi.mock("../../../server-web/lib/external-services-client", () => ({
     { value: "compile", label: "compile" },
   ],
   externalServiceBindingOutletOptions: [
-    { value: "pact.skillHub", label: "pact.skillHub" },
+    { value: "pact.serviceHub", label: "pact.serviceHub" },
   ],
   externalServiceCloudDriveModeOptions: [
     { value: "local", label: "local" },
@@ -44,18 +45,17 @@ vi.mock("../../../server-web/lib/external-services-client", () => ({
   ],
   externalServiceMcpTransportOptions: [
     { value: "streamable-http", label: "streamable-http" },
-    { value: "stdio", label: "stdio" },
+    { value: "sse", label: "sse" },
   ],
   externalServiceModeOptions: [
     { value: "managed", label: "managed" },
     { value: "connected", label: "connected" },
     { value: "on-demand", label: "on-demand" },
   ],
-  externalServiceModelProtocolOptions: [
-    { value: "openai-compatible", label: "OpenAI Compatible" },
-    { value: "anthropic-messages", label: "Anthropic Messages" },
-    { value: "custom-json-http", label: "Custom JSON HTTP" },
-  ],
+	  externalServiceModelProtocolOptions: [
+	    { value: "openai-compatible", label: "OpenAI Compatible" },
+	    { value: "openai-responses", label: "OpenAI Responses" },
+	  ],
   externalServiceRiskOptions: [
     { value: "read_only", label: "read_only" },
     { value: "safe_write", label: "safe_write" },
@@ -70,9 +70,11 @@ vi.mock("../../../server-web/lib/external-services-client", () => ({
     { value: "cloud-drive", label: "Cloud Drive Service" },
     { value: "http", label: "HTTP 服务" },
     { value: "https", label: "HTTPS 服务" },
-    { value: "rpc", label: "RPC 服务" },
+    { value: "json-rpc", label: "JSON-RPC 服务" },
+    { value: "sse", label: "SSE 服务" },
     { value: "other", label: "其它服务" },
   ],
+  adoptExternalServiceTools: clientMocks.adoptExternalServiceTools,
   getExternalServiceConfig: clientMocks.getExternalServiceConfig,
   refreshExternalServiceRuntime: clientMocks.refreshExternalServiceRuntime,
   saveExternalServiceConfig: clientMocks.saveExternalServiceConfig,
@@ -87,7 +89,7 @@ const mountedWrappers: Array<{ unmount: () => void }> = [];
 
 function makeConfig(overrides: Record<string, any> = {}) {
   const base = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     kind: "pact.external-service.config",
     serviceId: "mcp-docs",
     serviceName: "Docs MCP",
@@ -112,7 +114,7 @@ function makeConfig(overrides: Record<string, any> = {}) {
     },
     binding: {
       mode: "passthrough",
-      outlet: "pact.skillHub",
+      outlet: "pact.serviceHub",
       requiredScopes: ["knowledge:read"],
       risk: "read_only",
       metadata: {},
@@ -182,13 +184,153 @@ function makeEntry(overrides: Record<string, any> = {}) {
   };
 }
 
+function makeTemplate(templateId: string, label: string, protocolFamily: string, fields: Array<Record<string, any>>) {
+  const extraOptionalGroups = protocolFamily === "generic-sse"
+    ? [
+        {
+          id: "event-filter",
+          label: "Event filters",
+          kind: "optional",
+          mode: "any",
+          fields: [
+            { path: "tools[].sse.eventTypes", label: "Allowed event types" },
+          ],
+        },
+        {
+          id: "stream-budget",
+          label: "Stream budget",
+          kind: "optional",
+          mode: "any",
+          fields: [
+            { path: "tools[].sse.maxEvents", label: "Max output events" },
+            { path: "tools[].sse.maxBytes", label: "Max response bytes" },
+          ],
+        },
+      ]
+    : [];
+  return {
+    templateId,
+    label,
+    upstreamType: protocolFamily,
+    bindingMode: protocolFamily === "raw-mcp-streamable-http" ? "passthrough" : "compile",
+    minimalRequiredFields: fields.map((field) => field.value ? `${field.path}=${field.value}` : field.path),
+    optionalGroups: ["upstream.auth.secretRef"],
+    fieldModel: {
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolFamily,
+      endpointField: fields.find((field) => String(field.path).includes("url") || String(field.path).includes("baseUrl"))?.path || "",
+      minimum: {
+        id: `minimum-${protocolFamily}`,
+        label: "Minimum usable draft",
+        kind: "minimum",
+        fields,
+      },
+      requiredGroups: [
+        {
+          id: "required",
+          label: "Required",
+          kind: "required",
+          fields,
+        },
+      ],
+      optionalGroups: [
+        {
+          id: "secret-auth",
+          label: "SecretStore auth",
+          kind: "optional",
+          mode: "all-or-none",
+          fields: [
+            { path: "upstream.auth.type", label: "Auth type" },
+            { path: "upstream.auth.secretRef", label: "Secret ref" },
+          ],
+        },
+        ...extraOptionalGroups,
+      ],
+      defaultedGroups: [
+        {
+          id: "defaults",
+          label: "Defaults",
+          kind: "defaulted",
+          fields: [
+            { path: "binding", label: "binding" },
+            { path: "policyPreset", label: "policyPreset" },
+          ],
+        },
+      ],
+      materializedOnlyGroups: [],
+    },
+  };
+}
+
 function makeState(overrides: Record<string, any> = {}) {
   const services = overrides.services || [
     makeEntry({
       externalMcp: {
         serviceId: "mcp-docs",
         toolCount: 3,
-        tools: [],
+        activeToolCount: 1,
+        candidateToolCount: 2,
+        tools: ["searchDocs", "writeDraft", "deleteDraft"],
+        activeTools: ["searchDocs"],
+        candidateTools: ["writeDraft", "deleteDraft"],
+        activeToolDetails: [{
+          name: "searchDocs",
+          title: "Search Docs",
+          fingerprint: "fp-search",
+          adoptionState: "adopted",
+          inputSchema: {
+            type: "object",
+            required: ["query"],
+            propertyCount: 1,
+            properties: [{ name: "query", type: "string", required: true }],
+          },
+          transport: { type: "mcp" },
+        }],
+        candidateToolDetails: [
+          {
+            name: "writeDraft",
+            title: "Write Draft",
+            descriptionPreview: "Create a draft from search results.",
+            fingerprint: "fp-write",
+            previousFingerprint: "fp-write-old",
+            adoptionState: "candidate",
+            reasonCode: "fingerprint_changed_requires_readoption",
+            risk: "safe_write",
+            requiredScopes: ["knowledge:write"],
+            inputSchema: {
+              type: "object",
+              required: ["title"],
+              propertyCount: 2,
+              properties: [
+                { name: "title", type: "string", required: true },
+                { name: "body", type: "string", required: false },
+              ],
+            },
+            transport: { type: "mcp" },
+            review: {
+              diff: {
+                changedFields: ["description", "inputSchema"],
+                currentFingerprint: "fp-write",
+                previousFingerprint: "fp-write-old",
+              },
+            },
+          },
+          {
+            name: "deleteDraft",
+            title: "Delete Draft",
+            fingerprint: "fp-delete",
+            adoptionState: "candidate",
+            reasonCode: "awaiting_operator_adoption",
+            risk: "safe_write",
+            inputSchema: {
+              type: "object",
+              required: ["id"],
+              propertyCount: 1,
+              properties: [{ name: "id", type: "string", required: true }],
+            },
+            transport: { type: "mcp" },
+          },
+        ],
         discoveredAt: "2026-06-04T03:20:00.000Z",
       },
     }),
@@ -227,9 +369,33 @@ function makeState(overrides: Record<string, any> = {}) {
       },
     }),
   ];
+  const templates = overrides.templates || [
+    makeTemplate("external-service.template.raw-mcp-streamable-http", "Raw MCP Streamable HTTP", "raw-mcp-streamable-http", [
+      { path: "serviceId", label: "Service ID" },
+      { path: "upstream.url", label: "MCP URL" },
+    ]),
+    makeTemplate("external-service.template.https-json", "HTTPS JSON", "https-json", [
+      { path: "serviceId", label: "Service ID" },
+      { path: "upstream.baseUrl", label: "Base URL" },
+      { path: "tools[].name", label: "Tool name" },
+      { path: "tools[].method", label: "HTTP method", value: "POST" },
+      { path: "tools[].path", label: "HTTP path" },
+    ]),
+    makeTemplate("external-service.template.json-rpc", "JSON-RPC", "json-rpc-2.0", [
+      { path: "serviceId", label: "Service ID" },
+      { path: "upstream.url", label: "JSON-RPC URL" },
+      { path: "tools[].name", label: "Tool name" },
+      { path: "tools[].method", label: "RPC method", alternatives: ["tools[].rpc.method"] },
+    ]),
+    makeTemplate("external-service.template.sse", "Generic SSE", "generic-sse", [
+      { path: "serviceId", label: "Service ID" },
+      { path: "upstream.url", label: "SSE URL" },
+      { path: "tools[].name", label: "Tool name" },
+    ]),
+  ];
   return {
     ok: true,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     generatedAt: "2026-06-04T04:00:00.000Z",
     registryKind: "pact.external-service.registry",
     registryPath: "/tmp/pact/external-services.json",
@@ -239,6 +405,14 @@ function makeState(overrides: Record<string, any> = {}) {
     activeValidation: { ok: true, errors: [], warnings: ["registry warning"] },
     templateConfig: makeConfig({ serviceId: "template", serviceName: "Template" }),
     templateConfigText: "{}",
+    templateCatalog: {
+      schemaVersion: "v0.0.1:schema:definition-1",
+      kind: "pact.servicehub.template-catalog",
+      generatedAt: "2026-06-04T04:00:00.000Z",
+      defaultPolicyPreset: "servicehub.production-default",
+      templates,
+    },
+    templates,
     externalMcpCache: {
       updatedAt: "2026-06-04T04:05:00.000Z",
       serviceCount: services.length,
@@ -324,6 +498,9 @@ describe("useExternalServicesViewController", () => {
     expect(controller.serviceDiscoveryTone(mcpService)).toBe("success");
     expect(controller.serviceDiscoveryRegistrationLabel(mcpService)).toBe("工具已发现");
     expect(controller.serviceDiscoveryRegistrationTone(mcpService)).toBe("success");
+    expect(controller.serviceCandidateToolCount(mcpService)).toBe(2);
+    expect(controller.serviceActiveToolCount(mcpService)).toBe(1);
+    expect(controller.serviceToolAdoptionLabel(mcpService)).toBe("2 candidate / 1 active");
     expect(controller.serviceHeartbeatLastAtLabel(mcpService)).toBe("Latest: -");
     expect(controller.isServiceHeartbeatRefreshing(mcpService)).toBe(false);
 
@@ -367,7 +544,12 @@ describe("useExternalServicesViewController", () => {
     expect(controller.configEditorOpen).toBe(true);
     expect(controller.configEditorMode).toBe("add");
     expect(controller.configEditorTitle).toBe("添加服务");
-    expect(controller.configEditorSubtitle).toContain("服务身份");
+    expect(controller.configEditorSubtitle).toContain("最小可用组合");
+    expect(controller.currentTemplateLabel).toBe("Raw MCP Streamable HTTP");
+    expect(controller.minimumFieldLabels).toEqual([
+      "serviceId",
+      "upstream.url",
+    ]);
     expect(shell.openExternalServiceTab).toHaveBeenCalledWith("list");
 
     controller.updateRootField("serviceId" as any, "drive-sync");
@@ -400,14 +582,149 @@ describe("useExternalServicesViewController", () => {
     expect(controller.dirty).toBe(true);
 
     controller.updateUpstreamTypeSelection("llm");
-    expect(controller.configDraft.upstream?.modelProtocol).toBe("openai-compatible");
+    expect(controller.configDraft.upstream?.modelProtocol).toBe("");
     expect(controller.isLlmServiceDraft).toBe(true);
-    expect(controller.modelProtocolSelectValue).toBe("openai-compatible");
-    controller.updateModelProtocol("anthropic-messages");
-    controller.updateModelProvider("anthropic");
+    expect(controller.modelProtocolSelectValue).toBe("openai-responses");
+    controller.updateModelProtocol("openai-compatible");
+    expect(controller.configDraft.upstream?.modelProtocol).toBe("openai-compatible");
+    controller.updateModelProvider("openai");
     controller.updateUpstreamField("timeoutMs", "1500");
-    expect(controller.configDraft.upstream?.provider).toBe("anthropic");
+    expect(controller.configDraft.upstream?.provider).toBe("openai");
     expect(controller.configDraft.upstream?.timeoutMs).toBe(1500);
+
+    controller.updateUpstreamTypeSelection("https");
+    controller.updateUpstreamField("url", "https://api.example.com:443");
+    controller.updatePrimaryToolField("name", "searchItems");
+    controller.updatePrimaryToolField("method", "post");
+    controller.updatePrimaryToolField("path", "/v1/items/search");
+    expect(controller.showMcpTransportField).toBe(false);
+    expect(controller.showToolMappingFields).toBe(true);
+    expect(controller.endpointFieldLabel).toBe("Base URL");
+    expect(controller.currentTemplateLabel).toBe("HTTPS JSON");
+    expect(controller.minimumFieldLabels).toEqual([
+      "serviceId",
+      "upstream.baseUrl",
+      "tools[].name",
+      "tools[].method=POST",
+      "tools[].path",
+    ]);
+    expect(controller.optionalFieldGroupSummaries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "secret-auth",
+        mode: "整组填写",
+        fields: ["upstream.auth.type", "upstream.auth.secretRef"],
+      }),
+    ]));
+    expect(controller.defaultedFieldLabels).toEqual(["binding", "policyPreset"]);
+    expect(JSON.parse(controller.configText)).toMatchObject({
+      templateId: "external-service.template.https-json",
+      serviceId: "drive-sync",
+      upstream: {
+        baseUrl: "https://api.example.com:443",
+      },
+      tools: [
+        {
+          name: "searchItems",
+          method: "POST",
+          path: "/v1/items/search",
+        },
+      ],
+    });
+    expect(JSON.parse(controller.configText).upstream).not.toHaveProperty("type");
+    expect(JSON.parse(controller.configText).upstream).not.toHaveProperty("transport");
+
+    controller.updateUpstreamTypeSelection("json-rpc");
+    controller.updateUpstreamField("url", "https://rpc.example.com:443/jsonrpc");
+    controller.updatePrimaryToolField("name", "lookupTicket");
+    controller.updatePrimaryToolField("method", "ticket.lookup");
+    controller.updateUpstreamAuthField("type", "bearer");
+    controller.updateUpstreamAuthField("secretRef", "secret://servicehub/rpc/api-key");
+    expect(controller.isJsonRpcServiceDraft).toBe(true);
+    expect(controller.endpointFieldLabel).toBe("JSON-RPC URL");
+    expect(controller.currentTemplateLabel).toBe("JSON-RPC");
+    expect(controller.minimumFieldLabels).toEqual([
+      "serviceId",
+      "upstream.url",
+      "tools[].name",
+      "tools[].method | tools[].rpc.method",
+    ]);
+    expect(JSON.parse(controller.configText)).toMatchObject({
+      templateId: "external-service.template.json-rpc",
+      upstream: {
+        url: "https://rpc.example.com:443/jsonrpc",
+        auth: {
+          type: "bearer",
+          secretRef: "secret://servicehub/rpc/api-key",
+        },
+      },
+      tools: [
+        {
+          name: "lookupTicket",
+          method: "ticket.lookup",
+        },
+      ],
+    });
+    expect(JSON.parse(controller.configText).upstream).not.toHaveProperty("type");
+
+    controller.updateUpstreamTypeSelection("sse");
+    controller.updateUpstreamField("url", "https://events.example.com:443/v1/events");
+    controller.updatePrimaryToolField("name", "watchEvents");
+    expect(controller.isSseServiceDraft).toBe(true);
+    expect(controller.endpointFieldLabel).toBe("SSE URL");
+    expect(controller.currentTemplateLabel).toBe("Generic SSE");
+    expect(controller.minimumFieldLabels).toEqual([
+      "serviceId",
+      "upstream.url",
+      "tools[].name",
+    ]);
+    expect(JSON.parse(controller.configText)).toMatchObject({
+      templateId: "external-service.template.sse",
+      upstream: {
+        url: "https://events.example.com:443/v1/events",
+      },
+      tools: [
+        {
+          name: "watchEvents",
+        },
+      ],
+    });
+    expect(JSON.parse(controller.configText).upstream).not.toHaveProperty("type");
+    expect(JSON.parse(controller.configText).upstream).not.toHaveProperty("eventFormat");
+    expect(controller.advancedOptionalFieldRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        groupId: "event-filter",
+        path: "tools[].sse.eventTypes",
+        value: "",
+      }),
+      expect.objectContaining({
+        groupId: "stream-budget",
+        path: "tools[].sse.maxEvents",
+        value: "",
+      }),
+    ]));
+    controller.updateAdvancedOptionalField("tools[].sse.eventTypes", "delta, done");
+    controller.updateAdvancedOptionalField("tools[].sse.maxEvents", "2");
+    controller.updateAdvancedOptionalField("tools[].sse.maxBytes", "4096");
+    expect(JSON.parse(controller.configText).tools[0].sse).toMatchObject({
+      eventTypes: ["delta", "done"],
+      maxEvents: 2,
+      maxBytes: 4096,
+    });
+
+    controller.onConfigInput(JSON.stringify({
+      templateId: "external-service.template.https-json",
+      serviceId: "json-minimum-https",
+      upstream: {
+        baseUrl: "https://api.example.com:443",
+      },
+      tools: [{
+        name: "searchItems",
+        method: "POST",
+        path: "/v1/items/search",
+      }],
+    }));
+    expect(controller.configDraft.upstream?.type).toBe("https");
+    expect(controller.endpointFieldLabel).toBe("Base URL");
 
     controller.updateCustomUpstreamType("workflow_rpc");
     expect(controller.configDraft.upstream?.type).toBe("workflow_rpc");
@@ -417,7 +734,7 @@ describe("useExternalServicesViewController", () => {
 
     controller.onConfigInput("{bad json");
     expect(controller.dirty).toBe(true);
-    expect(controller.configDraft.serviceId).toBe("drive-sync");
+    expect(controller.configDraft.serviceId).toBe("json-minimum-https");
 
     controller.onConfigInput(JSON.stringify({
       serviceId: "json-service",
@@ -435,7 +752,7 @@ describe("useExternalServicesViewController", () => {
     }));
     expect(controller.configDraft.serviceId).toBe("json-service");
     expect(controller.requiredScopesText).toBe("knowledge:read, knowledge:write");
-    expect(controller.modelProtocolSelectValue).toBe("custom-json-http");
+    expect(controller.modelProtocolSelectValue).toBe("openai-responses");
     expect(controller.activeConfigSummary.serviceId).toBe("json-service");
 
     const bareEntry = makeEntry({
@@ -465,6 +782,31 @@ describe("useExternalServicesViewController", () => {
     clientMocks.getExternalServiceConfig.mockResolvedValue(initialState);
     const { controller } = mountController();
     await flushControllerPromises();
+    const initialService = (controller.services as any[])[0];
+    expect(controller.serviceCandidateToolReviewRows(initialService)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: "writeDraft",
+        fingerprint: "fp-write",
+        previousFingerprint: "fp-write-old",
+        reasonCode: "fingerprint_changed_requires_readoption",
+        inputSchema: expect.objectContaining({
+          required: ["title"],
+          propertyCount: 2,
+        }),
+        review: expect.objectContaining({
+          diff: expect.objectContaining({
+            changedFields: ["description", "inputSchema"],
+          }),
+        }),
+      }),
+    ]));
+    expect(controller.serviceActiveToolReviewRows(initialService)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "searchDocs", fingerprint: "fp-search" }),
+    ]));
+    expect(controller.serviceCandidateToolFingerprintMap(initialService)).toEqual({
+      writeDraft: "fp-write",
+      deleteDraft: "fp-delete",
+    });
     controller.openAddServiceConfig();
 
     clientMocks.verifyExternalServiceConfig.mockResolvedValueOnce({
@@ -567,6 +909,70 @@ describe("useExternalServicesViewController", () => {
     expect(controller.serviceHeartbeatLastAtLabel(scopedEntry)).not.toBe("Latest: -");
     expect(controller.isServiceHeartbeatRefreshing(scopedEntry)).toBe(false);
 
+    const adoptedState = makeState({
+      services: [
+        makeEntry({
+          externalMcp: {
+            serviceId: "mcp-docs",
+            toolCount: 3,
+            activeToolCount: 3,
+            candidateToolCount: 0,
+            tools: ["searchDocs", "writeDraft", "deleteDraft"],
+            activeTools: ["searchDocs", "writeDraft", "deleteDraft"],
+            candidateTools: [],
+            discoveredAt: "2026-06-04T05:15:00.000Z",
+          },
+        }),
+      ],
+    });
+    clientMocks.adoptExternalServiceTools.mockResolvedValueOnce({
+      ok: true,
+      serviceId: "mcp-docs",
+      adoptedToolNames: ["writeDraft", "deleteDraft"],
+      activeToolCount: 3,
+      candidateToolCount: 0,
+      state: adoptedState,
+    });
+    await controller.adoptCandidateTools("mcp-docs");
+    expect(clientMocks.adoptExternalServiceTools).toHaveBeenCalledWith({
+      serviceId: "mcp-docs",
+      toolNames: [],
+      adoptAll: true,
+      adoptedBy: "operator",
+      expectedFingerprints: {},
+    });
+    expect(controller.actionMessage).toBe("已采纳 2 个候选工具。");
+    expect(controller.serviceCandidateToolCount((controller.services as any[])[0])).toBe(0);
+    expect(controller.serviceActiveToolCount((controller.services as any[])[0])).toBe(3);
+    expect(controller.isServiceToolAdopting("mcp-docs")).toBe(false);
+
+    clientMocks.adoptExternalServiceTools.mockResolvedValueOnce({
+      ok: true,
+      serviceId: "mcp-docs",
+      adoptedToolNames: ["writeDraft"],
+      activeToolCount: 2,
+      candidateToolCount: 1,
+      state: initialState,
+    });
+    await controller.adoptCandidateTools(initialService, ["writeDraft"]);
+    expect(clientMocks.adoptExternalServiceTools).toHaveBeenLastCalledWith({
+      serviceId: "mcp-docs",
+      toolNames: ["writeDraft"],
+      adoptAll: false,
+      adoptedBy: "operator",
+      expectedFingerprints: {
+        writeDraft: "fp-write",
+      },
+    });
+
+    clientMocks.adoptExternalServiceTools.mockResolvedValueOnce({
+      ok: false,
+      serviceId: "mcp-docs",
+      error: "candidate changed",
+    });
+    await controller.adoptCandidateTools("mcp-docs");
+    expect(controller.actionError).toBe("candidate changed");
+
     clientMocks.refreshExternalServiceRuntime.mockRejectedValueOnce(new Error("refresh crashed"));
     await controller.refreshRuntime("mcp-docs");
     expect(controller.actionError).toBe("refresh crashed");
@@ -658,7 +1064,7 @@ describe("useExternalServicesViewController", () => {
       expect(controller.serviceDiscoveryRegistrationLabel(pendingDiscovery as any)).toBe("工具待刷新");
       expect(controller.serviceDiscoveryRegistrationTone(pendingDiscovery as any)).toBe("warning");
 
-      expect(controller.serviceDiscoveryLabel(genericEndpoint as any)).toBe("HTTP / HTTPS 服务");
+      expect(controller.serviceDiscoveryLabel(genericEndpoint as any)).toBe("HTTPS 服务");
       expect(controller.serviceDiscoveryRegistrationLabel(genericEndpoint as any)).toBe("端点已注册");
 
       expect(controller.serviceDiscoveryLabel(noIdentityService as any)).toBe("其它服务");

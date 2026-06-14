@@ -1,16 +1,19 @@
 {
   "name": "KnowledgeBackendPort",
-  "version": 1,
+  "version": "v0.0.1:knowledge:knowledge-backend-port-1",
   "description": "v0.0.1 KnowledgeBasePort for Dify and RAGFlow compatibility through secretRef, policy overlay, receipts, and contract-mode verification.",
   "defaultLoaded": false,
-  "protocol": "pact.knowledge-backend-port.v1",
+  "protocol": "v0.0.1:knowledge:backend-port-1",
   "components": {
     "knowledgeBackendPort": {
       "path": "./index.mjs",
       "factory": "createKnowledgeBackendPort",
       "packaging": "operator-configured",
       "readOnlyRuntime": false,
-      "providers": ["dify", "ragflow"],
+      "providers": [
+        "dify",
+        "ragflow"
+      ],
       "configFile": "knowledge/knowledge-backends.json"
     }
   },

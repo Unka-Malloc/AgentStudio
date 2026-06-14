@@ -290,7 +290,7 @@ async function assertQdrantAdapter() {
       limit: 5,
       batchId: "batch-external"
     });
-    assert.equal(search.protocolVersion, "pact.knowledge.v1");
+    assert.equal(search.protocolVersion, "v0.0.1:knowledge:core-1");
     assert.equal(search.externalKnowledgeBase.used, true);
     assert.equal(search.items.length, 1);
     assert.match(search.items[0].title, /Budget approval/);

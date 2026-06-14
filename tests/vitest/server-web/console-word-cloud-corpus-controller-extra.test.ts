@@ -23,7 +23,7 @@ vi.mock("../../../server-web/lib/knowledge-word-cloud-client", () => ({
 
 function createDefaultWordCloudSetFixture(terms: KnowledgeWordCloudTerm[] = []): KnowledgeWordCloudSet {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     wordBagSetId: "draft-set",
     title: "语料词云",
     status: "draft",

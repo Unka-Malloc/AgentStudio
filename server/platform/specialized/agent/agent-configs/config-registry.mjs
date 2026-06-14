@@ -57,7 +57,7 @@ function manifestPath(directory) {
 
 function defaultManifest(kind) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     kind,
     updatedAt: nowIso(),
     entries: []
@@ -101,7 +101,7 @@ function modelFromAgent(agent = {}, index = 0) {
     identity || index
   ])}`;
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     id,
     agentUid: identity,
     provider,
@@ -159,7 +159,7 @@ function mergeModelSecretFromSettings(model = {}, settingsAgents = []) {
 function agentFromLibraryEntry(agent = {}, modelId = "") {
   const id = agentIdentity(agent) || `agent_${stableDigest([agent.provider, agent.model, agent.label, agent.agentName])}`;
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     id,
     uid: id,
     instanceId: id,
@@ -390,7 +390,7 @@ export class AgentConfigRegistry {
     await this.ensureLayout();
     const id = modelIdentity(model) || `model_${stableDigest([model.provider, model.model, model.baseUrl || model.url])}`;
     const file = `${safeFileId(id, "model")}.json`;
-    const next = { ...model, id, schemaVersion: model.schemaVersion || 1 };
+    const next = { ...model, id, schemaVersion: model.schemaVersion || "v0.0.1:schema:definition-1" };
     await writeJson(path.join(this.modelListPath, file), next);
     const manifest = normalizeManifest(
       "model-list",
@@ -414,7 +414,7 @@ export class AgentConfigRegistry {
       uid: id,
       instanceId: id,
       alias: id,
-      schemaVersion: agent.schemaVersion || 1
+      schemaVersion: agent.schemaVersion || "v0.0.1:schema:definition-1"
     };
     await writeJson(path.join(this.agentListPath, file), next);
     const manifest = normalizeManifest(

@@ -12,7 +12,7 @@ import {
 } from "../../../server/platform/specialized/knowledge/agent-library/access-policy.mjs";
 
 const __dirname = path.fileURLToPath(new URL(".", import.meta.url));
-const defPath = path.resolve(__dirname, "../../../server/platform/common/state-machine/definitions/agentlibrary.loan.v1.json");
+const defPath = path.resolve(__dirname, "../../../server/platform/common/state-machine/definitions/agentlibrary.loan.json");
 const allowPolicyGuardContext = { policyDecision: { allowed: true } };
 
 describe("Knowledge Loan Lifecycle State Machine", () => {
@@ -26,7 +26,7 @@ describe("Knowledge Loan Lifecycle State Machine", () => {
   it("should pass schema and core validation checks", () => {
     const validation = validateStateMachineDefinition(definition);
     expect(validation.ok).toBe(true);
-    expect(definition.machineId).toBe("agentlibrary.loan.v1");
+    expect(definition.machineId).toBe("agentlibrary.loan");
     expect(definition.initialState).toBe("loan_requested");
   });
 

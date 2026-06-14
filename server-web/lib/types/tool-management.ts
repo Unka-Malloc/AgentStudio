@@ -29,7 +29,7 @@ export type ToolManagementGrant = {
 };
 
 export type ToolManagementGrantsResponse = {
-  schemaVersion: number;
+  schemaVersion: string;
   grants: ToolManagementGrant[];
 };
 
@@ -48,10 +48,27 @@ export type ToolManagementRisk =
 export type ToolManagementToolset = {
   id: string;
   label: string;
+  description?: string;
   requiredScopes: string[];
   maxRisk: ToolManagementRisk;
   grantable?: boolean;
   defaultForAgents?: boolean;
+};
+
+export type ToolManagementToolGroup = {
+  id: string;
+  label: string;
+  description?: string;
+  toolsetId: string;
+  requiredScopes: string[];
+  defaultForAgents: boolean;
+  grantable: boolean;
+  maxRisk: ToolManagementRisk;
+  toolCount: number;
+  activeToolCount: number;
+  internalToolCount: number;
+  writeToolCount: number;
+  sampleToolIds: string[];
 };
 
 export type ToolManagementProfile = {
@@ -92,11 +109,12 @@ export type ToolManagementTool = {
 };
 
 export type ToolManagementCatalog = {
-  schemaVersion: number;
+  schemaVersion: string;
   generatedAt: string;
   fingerprint: string;
   scopes: ToolManagementScope[];
   toolsets: ToolManagementToolset[];
+  toolGroups?: ToolManagementToolGroup[];
   profiles: ToolManagementProfile[];
   tools: ToolManagementTool[];
 };
@@ -125,7 +143,7 @@ export type ToolManagementAuditItem = {
 };
 
 export type ToolManagementAuditResponse = {
-  schemaVersion: number;
+  schemaVersion: string;
   items: ToolManagementAuditItem[];
 };
 
@@ -145,6 +163,6 @@ export type ToolManagementMetrics = {
 };
 
 export type ToolManagementMetricsResponse = {
-  schemaVersion: number;
+  schemaVersion: string;
   metrics: ToolManagementMetrics;
 };

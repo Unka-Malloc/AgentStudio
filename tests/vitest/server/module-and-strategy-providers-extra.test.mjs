@@ -88,7 +88,7 @@ function resetCommonMocks() {
   });
   saveSettingsMock.mockImplementation(async (_userDataPath, value) => value);
   listModuleTemplatesMock.mockReturnValue({
-    protocolVersion: "pact.module-ecosystem.v1",
+    protocolVersion: "v0.0.1:tool:module-ecosystem-1",
     templates: [{ templateId: "documentParser" }]
   });
   planModuleScaffoldMock.mockImplementation(async (input = {}, options = {}) => ({
@@ -192,7 +192,7 @@ function createToolPlatform({
   tool = {
     id: "tool.demo",
     requiredScopes: ["knowledge:read"],
-    toolsets: ["pact.knowledge.read"],
+    toolsets: ["pact.agentLibrary.read"],
     safety: { risk: "read_only" }
   }
 } = {}) {
@@ -201,14 +201,14 @@ function createToolPlatform({
     registry: {
       getTool: vi.fn((toolId) => (toolId === tool.id ? tool : null)),
       listProfiles: vi.fn(() => [
-        { id: "profile.default", toolsets: ["pact.knowledge.read"] }
+        { id: "profile.default", toolsets: ["pact.agentLibrary.read"] }
       ])
     },
     store: {
       getRawGrant: vi.fn((grantId) => ({
         id: grantId,
         scopes: ["knowledge:read"],
-        toolsets: ["pact.knowledge.read"]
+        toolsets: ["pact.agentLibrary.read"]
       })),
       appendPolicyDecision: vi.fn((decision) => {
         appendedDecisions.push(decision);
@@ -668,7 +668,7 @@ describe("module management provider extra coverage", () => {
     expect(refreshed).toEqual({ ok: true, settings: { runtimeProfile: "refresh" } });
 
     expect(provider.listModuleTemplates()).toEqual({
-      protocolVersion: "pact.module-ecosystem.v1",
+      protocolVersion: "v0.0.1:tool:module-ecosystem-1",
       templates: [{ templateId: "documentParser" }]
     });
     await expect(provider.planModuleScaffold({ templateId: "documentParser" })).resolves.toMatchObject({
@@ -697,7 +697,7 @@ describe("strategy management provider extra coverage", () => {
     });
 
     expect(provider.describe()).toEqual({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: STRATEGY_MANAGEMENT_PROTOCOL_VERSION,
       capabilities: [
         "workflow-policy.evaluate",
@@ -711,7 +711,7 @@ describe("strategy management provider extra coverage", () => {
       delegatedProtocols: {
         modelRouting: STRATEGY_MANAGEMENT_MODEL_ROUTING_PROTOCOL_VERSION,
         modelDecision: STRATEGY_MANAGEMENT_MODEL_DECISION_PROTOCOL_VERSION,
-        toolPolicy: "pact.authorization.v1"
+        toolPolicy: "v0.0.1:risk-control:authorization-1"
       }
     });
     expect(provider.shouldUseModelRouting({})).toBe(false);
@@ -726,7 +726,7 @@ describe("strategy management provider extra coverage", () => {
       risk: " destructive "
     });
     expect(workflowBlocked).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: STRATEGY_MANAGEMENT_PROTOCOL_VERSION,
       policyType: "workflow-policy",
       workflowId: "workflow.blocked",
@@ -766,7 +766,7 @@ describe("strategy management provider extra coverage", () => {
       agentId: "agent-alpha"
     });
     expect(agentPolicy).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: STRATEGY_MANAGEMENT_PROTOCOL_VERSION,
       policyType: "agent-policy",
       roleId: "route.alpha",
@@ -836,7 +836,7 @@ describe("strategy management provider extra coverage", () => {
         selectedAlias: "fallback",
         strategyProtocolVersion: STRATEGY_MANAGEMENT_PROTOCOL_VERSION,
         strategyPolicyDecision: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           protocolVersion: STRATEGY_MANAGEMENT_PROTOCOL_VERSION,
           policyType: "agent-policy",
           decisionId: expect.any(String),
@@ -868,7 +868,7 @@ describe("strategy management provider extra coverage", () => {
           allowed: true,
           reasonCode: "approved",
           missingScopes: ["knowledge:read", "knowledge:read"],
-          missingToolsets: ["pact.knowledge.read", "pact.knowledge.read"],
+          missingToolsets: ["pact.agentLibrary.read", "pact.agentLibrary.read"],
           evaluatedLayers: ["security_permissions", "security_permissions"],
           createdAt: "2026-06-05T00:00:00.000Z"
         }))

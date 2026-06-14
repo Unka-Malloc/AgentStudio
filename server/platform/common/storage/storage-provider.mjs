@@ -3,7 +3,7 @@ import { createStorageBackup, listStorageBackups, restoreStorageBackup } from ".
 import { reconcileStorage, runStorageDoctor } from "./ops-tools.mjs";
 import { resolveStoredObjectPath } from "./raw-object-store.mjs";
 
-export const STORAGE_PROTOCOL_VERSION = "pact.storage.v1";
+export const STORAGE_PROTOCOL_VERSION = "v0.0.1:storage:core-1";
 
 function unavailable(methodName) {
   const error = new Error(`storage provider method is not available: ${methodName}`);

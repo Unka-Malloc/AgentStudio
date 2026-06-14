@@ -172,7 +172,7 @@ describe("runtime dependencies extra coverage", () => {
     ).toBe(result.sourceConfigPath);
 
     const sourceConfig = JSON.parse(await fs.readFile(result.sourceConfigPath, "utf8"));
-    expect(sourceConfig.protocolVersion).toBe("pact.runtime-dependencies.v1");
+    expect(sourceConfig.protocolVersion).toBe("v0.0.1:platform:runtime-dependencies-1");
     expect(sourceConfig.sources.gerrit.default.warUrl).toContain("gerrit-war");
     expect(sourceConfig.sources.python.default.url).toContain("python.org");
     expect(sourceConfig.sources.caddy.default.url).toContain("caddyserver.com/api/download");
@@ -184,8 +184,8 @@ describe("runtime dependencies extra coverage", () => {
     await fs.writeFile(
       configPath,
       JSON.stringify({
-        schemaVersion: 1,
-        protocolVersion: "pact.runtime-dependencies.v1",
+        schemaVersion: "v0.0.1:schema:definition-1",
+        protocolVersion: "v0.0.1:platform:runtime-dependencies-1",
         sources: {
           docker: {
             default: {
@@ -301,7 +301,7 @@ describe("runtime dependencies extra coverage", () => {
     expect(result.sourceConfigPath).toBe(configPath);
     const written = JSON.parse(await fs.readFile(configPath, "utf8"));
     expect(written.lastReadError).toContain("Unexpected token");
-    expect(written.protocolVersion).toBe("pact.runtime-dependencies.v1");
+    expect(written.protocolVersion).toBe("v0.0.1:platform:runtime-dependencies-1");
     expect(result.summary.total).toBe(10);
   });
 

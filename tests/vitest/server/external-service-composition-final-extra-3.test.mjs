@@ -111,7 +111,7 @@ describe("external service composition final extra 3", () => {
       },
       binding: {
         mode: "compile",
-        outlet: "pact.skillHub",
+        outlet: "pact.serviceHub",
         scopes: ["models:invoke", "models:invoke", "workspace:read"]
       },
       health: {
@@ -154,7 +154,7 @@ describe("external service composition final extra 3", () => {
       },
       binding: {
         mode: "compile",
-        outlet: "pact.skillHub",
+        outlet: "pact.serviceHub",
         scopes: ["models:invoke", "models:invoke", "workspace:read"]
       },
       health: {
@@ -248,7 +248,7 @@ describe("external service composition final extra 3", () => {
       },
       binding: {
         mode: "passthrough",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       }
     }, { timeoutMs: 5 });
 
@@ -303,7 +303,7 @@ describe("external service composition final extra 3", () => {
       },
       binding: {
         mode: "passthrough",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       }
     })).rejects.toBeInstanceOf(SyntaxError);
   });
@@ -313,7 +313,7 @@ describe("external service composition final extra 3", () => {
     const cachePath = externalMcpToolCachePath(userDataPath);
 
     await writeJson(cachePath, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       kind: EXTERNAL_MCP_CACHE_KIND,
       updatedAt: "2026-06-05T00:00:00.000Z",
       services: {
@@ -328,7 +328,7 @@ describe("external service composition final extra 3", () => {
           },
           binding: {
             mode: "passthrough",
-            outlet: "pact.skillHub"
+            outlet: "pact.serviceHub"
           },
           tools: [
             {
@@ -360,7 +360,7 @@ describe("external service composition final extra 3", () => {
           },
           binding: {
             mode: "compile",
-            outlet: "pact.skillHub"
+            outlet: "pact.serviceHub"
           },
           tools: [
             {
@@ -408,7 +408,7 @@ describe("external service composition final extra 3", () => {
           },
           binding: {
             mode: "compile",
-            outlet: "pact.skillHub"
+            outlet: "pact.serviceHub"
           },
           tools: [
             {
@@ -654,7 +654,7 @@ describe("external service composition final extra 3", () => {
           },
           binding: {
             mode: "compile",
-            outlet: "pact.skillHub"
+            outlet: "pact.serviceHub"
           }
         }
       }
@@ -701,7 +701,7 @@ describe("external service composition final extra 3", () => {
           },
           binding: {
             mode: "compile",
-            outlet: "pact.skillHub"
+            outlet: "pact.serviceHub"
           }
         }
       }

@@ -2,6 +2,7 @@ import {
   dispatchInternalOperation as dispatchInternalOperationCore,
   dispatchRegisteredHttpOperation as dispatchRegisteredHttpOperationCore,
   dispatchRpcOperation as dispatchRpcOperationCore,
+  findProxyRegisteredApiRequest as findProxyRegisteredApiRequestCore,
   shouldProxyRegisteredApiRequest as shouldProxyRegisteredApiRequestCore
 } from "../operation-dispatcher/operation-dispatcher.mjs";
 import {
@@ -10,7 +11,7 @@ import {
 } from "../operation-dispatcher/operation-registry.mjs";
 import { PROTOCOL_OPERATION_IDS } from "../operation-dispatcher/protocol-operation-definitions.mjs";
 
-export const CORE_PLATFORM_PROTOCOL_VERSION = "pact.core-platform.v1";
+export const CORE_PLATFORM_PROTOCOL_VERSION = "v0.0.1:platform:core-1";
 
 const CORE_VERIFICATION_COMMAND = "npm run server:verify:core-platform";
 const FULL_VERIFICATION_COMMAND = "npm run server:verify";
@@ -229,6 +230,12 @@ export function createCorePlatformProvider({
     buildSystemInterfaces,
     shouldProxyRegisteredApiRequest(input = {}) {
       return shouldProxyRegisteredApiRequestCore({
+        ...input,
+        operations: effectiveOperations(input)
+      });
+    },
+    findProxyRegisteredApiRequest(input = {}) {
+      return findProxyRegisteredApiRequestCore({
         ...input,
         operations: effectiveOperations(input)
       });

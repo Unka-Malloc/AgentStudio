@@ -1305,7 +1305,7 @@ Options:
       bundle.codexAntigravity.proofMatrixUnsupportedIds,
       ["native_codex_cli_acp_source", "native_antigravity_ide_cli_acp_source"]
     );
-    assert.equal(bundle.proofMatrix.schemaVersion, "pact.acp-agent-relay.real-proof-matrix.v1");
+    assert.equal(bundle.proofMatrix.schemaVersion, "v0.0.1:agent:acp-agent-relay-real-proof-matrix-1");
     assert.equal(bundle.proofMatrix.requirements.find((item) => item.id === "codex_cli_participation")?.status, "not_required");
     assert.equal(bundle.proofMatrix.requirements.find((item) => item.id === "codex_cli_participation")?.required, false);
     assert.equal(bundle.proofMatrix.requirements.find((item) => item.id === "codex_cli_target_communication")?.status, "not_required");
@@ -1313,7 +1313,7 @@ Options:
     assert.equal(bundle.proofMatrix.requirements.find((item) => item.id === "native_codex_cli_acp_source")?.status, "unsupported");
     assert.equal(bundle.proofMatrix.requirements.find((item) => item.id === "native_antigravity_ide_cli_acp_source")?.status, "unsupported");
     assert.equal(bundle.proofMatrix.requirements.find((item) => item.id === "native_antigravity_ide_cli_acp_source")?.evidence.chatIsAcpTransport, false);
-    assert.equal(bundle.relayProofMatrix.schemaVersion, "pact.acp-agent-relay.proof-matrix.v1");
+    assert.equal(bundle.relayProofMatrix.schemaVersion, "v0.0.1:agent:acp-agent-relay-proof-matrix-1");
     assert.equal(bundle.relayProofMatrix.requirements.find((item) => item.id === "source_facing_multi_turn_continuity")?.status, "proven");
     assert.equal(bundle.relayProofMatrix.requirements.find((item) => item.id === "source_facing_session_close_terminal")?.status, "proven");
     assert.equal(bundle.relayProofMatrix.requirements.find((item) => item.id === "codex_cli_participation")?.status, "not_required");
@@ -1477,7 +1477,7 @@ Options:
     assert.equal(codexCliBundle.codexCliTarget.restartSessionLoadProof.sessionListedAfterRestart, true);
     assert.equal(codexCliBundle.codexCliTarget.restartSessionLoadProof.reasoningTraceReplaySuppressed, true);
     assert.equal(codexCliBundle.codexCli.proofMatrixAllRequiredProofsMet, true);
-    assert.equal(codexCliBundle.proofMatrix.schemaVersion, "pact.acp-agent-relay.real-proof-matrix.v1");
+    assert.equal(codexCliBundle.proofMatrix.schemaVersion, "v0.0.1:agent:acp-agent-relay-real-proof-matrix-1");
     assert.equal(codexCliBundle.proofMatrix.allRequiredProofsMet, true);
     assert.equal(codexCliBundle.proofMatrix.requirements.find((item) => item.id === "codex_cli_participation")?.required, true);
     assert.equal(codexCliBundle.proofMatrix.requirements.find((item) => item.id === "codex_cli_participation")?.status, "proven");

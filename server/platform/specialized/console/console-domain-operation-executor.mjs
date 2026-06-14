@@ -19,6 +19,7 @@ import {
 import { executeRepoOperation } from "../capabilities/code-repository/repo-operations/index.mjs";
 import {
   downloadRuntimeDependency,
+  listRuntimeDependencyDownloadRuns,
   listRuntimeDependencies,
   updateRuntimeDependencyConfiguration
 } from "../capabilities/runtime-dependencies/index.mjs";
@@ -136,7 +137,7 @@ function requireStrategyManagementProvider(context = {}) {
 
 function protocolPayload(payload = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     ok: true,
     ...payload
   };
@@ -257,15 +258,24 @@ function createPathBrowserRoots({ userDataPath, distPath } = {}) {
     if (!nextPath) {
       return;
     }
-    roots.set(path.resolve(nextPath), label);
+    const rootPathValue = path.resolve(nextPath);
+    let realPath = rootPathValue;
+    try {
+      realPath = fsSync.realpathSync.native(rootPathValue);
+    } catch {
+      // Non-existent optional roots are still displayed but cannot authorize traversal.
+    }
+    roots.set(rootPathValue, {
+      label,
+      path: rootPathValue,
+      realPath
+    });
   };
 
   addRoot("当前项目", process.cwd());
   addRoot("Pact 数据目录", userDataPath);
   addRoot("Pact 前端构建", distPath);
   addRoot("当前用户", os.homedir());
-  const rootPath = path.parse(process.cwd()).root;
-  addRoot(rootPath === "/" ? "根目录" : rootPath, rootPath);
 
   const cloudStoragePath = path.join(os.homedir(), "Library", "CloudStorage");
   try {
@@ -302,31 +312,70 @@ function createPathBrowserRoots({ userDataPath, distPath } = {}) {
     }
   }
 
-  return [...roots.entries()].map(([rootPathValue, label]) => ({
-    label,
-    path: rootPathValue
+  return [...roots.values()];
+}
+
+function publicPathBrowserRoots(roots = []) {
+  return roots.map((root) => ({
+    label: root.label,
+    path: root.path
   }));
 }
 
-async function resolvePathBrowserDirectory(inputPath) {
-  const requestedPath = String(inputPath || "").trim();
-  const absolutePath = path.resolve(requestedPath || process.cwd());
+function pathWithinRoot(candidatePath, rootPathValue) {
+  const relative = path.relative(path.resolve(rootPathValue), path.resolve(candidatePath));
+  return relative === "" || (relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function findPathBrowserRoot(candidatePath, roots = [], key = "path") {
+  const matching = roots
+    .filter((root) => pathWithinRoot(candidatePath, root[key] || root.path))
+    .sort((left, right) => String(right[key] || right.path).length - String(left[key] || left.path).length);
+  return matching[0] || null;
+}
+
+async function realpathOrResolved(candidatePath) {
   try {
-    const stats = await fs.stat(absolutePath);
-    if (stats.isDirectory()) {
-      return absolutePath;
-    }
-    return path.dirname(absolutePath);
+    return await fs.realpath(candidatePath);
   } catch {
-    return path.dirname(absolutePath);
+    return path.resolve(candidatePath);
   }
 }
 
-async function statPathBrowserEntry({ absolutePath, name, mode, extensions }) {
+async function resolvePathBrowserDirectory(inputPath, roots = []) {
+  const requestedPath = String(inputPath || "").trim();
+  const absolutePath = path.resolve(requestedPath || process.cwd());
+  let directoryPath = absolutePath;
+  try {
+    const stats = await fs.stat(absolutePath);
+    if (stats.isDirectory()) {
+      directoryPath = absolutePath;
+    } else {
+      directoryPath = path.dirname(absolutePath);
+    }
+  } catch {
+    directoryPath = path.dirname(absolutePath);
+  }
+  const realDirectoryPath = await realpathOrResolved(directoryPath);
+  if (
+    findPathBrowserRoot(directoryPath, roots, "path") &&
+    findPathBrowserRoot(realDirectoryPath, roots, "realPath")
+  ) {
+    return directoryPath;
+  }
+  return roots[0]?.path || process.cwd();
+}
+
+async function statPathBrowserEntry({ absolutePath, name, mode, extensions, roots }) {
   const stats = await fs.stat(absolutePath);
   const type = stats.isDirectory() ? "directory" : stats.isFile() ? "file" : "other";
   const extension = path.extname(name).toLowerCase();
   const fileAllowed = extensions.length === 0 || extensions.includes(extension);
+  const realEntryPath = await realpathOrResolved(absolutePath);
+  const withinAllowedRoot = Boolean(
+    findPathBrowserRoot(absolutePath, roots, "path") &&
+      findPathBrowserRoot(realEntryPath, roots, "realPath")
+  );
   return {
     name,
     path: absolutePath,
@@ -335,9 +384,10 @@ async function statPathBrowserEntry({ absolutePath, name, mode, extensions }) {
     modifiedAt: stats.mtime.toISOString(),
     hidden: name.startsWith("."),
     selectable:
-      (mode === "directory" && type === "directory") ||
-      (mode === "file" && type === "file" && fileAllowed),
-    browsable: type === "directory"
+      withinAllowedRoot &&
+      ((mode === "directory" && type === "directory") ||
+        (mode === "file" && type === "file" && fileAllowed)),
+    browsable: withinAllowedRoot && type === "directory"
   };
 }
 
@@ -349,9 +399,14 @@ async function browseServerPath({
   userDataPath,
   distPath
 }) {
-  const currentPath = await resolvePathBrowserDirectory(requestedPath);
   const roots = createPathBrowserRoots({ userDataPath, distPath });
-  const parentPath = path.dirname(currentPath);
+  const currentPath = await resolvePathBrowserDirectory(requestedPath, roots);
+  const currentRoot = findPathBrowserRoot(currentPath, roots, "path");
+  const parentCandidate = path.dirname(currentPath);
+  const parentPath =
+    currentRoot && path.resolve(currentPath) !== path.resolve(currentRoot.path)
+      ? parentCandidate
+      : currentPath;
   let entries = [];
   let error = "";
 
@@ -367,7 +422,7 @@ async function browseServerPath({
     for (const name of names) {
       const absolutePath = path.join(currentPath, name);
       try {
-        listed.push(await statPathBrowserEntry({ absolutePath, name, mode, extensions }));
+        listed.push(await statPathBrowserEntry({ absolutePath, name, mode, extensions, roots }));
       } catch {
         // Ignore unreadable entries; the browser is for choosing paths, not diagnostics.
       }
@@ -391,7 +446,7 @@ async function browseServerPath({
     parentPath: parentPath === currentPath ? "" : parentPath,
     mode,
     extensions,
-    roots,
+    roots: publicPathBrowserRoots(roots),
     entries,
     truncated: entries.length >= PATH_BROWSER_MAX_ENTRIES,
     error
@@ -514,13 +569,52 @@ function resolveKnowledgeSearchResponseProfile(payload = {}, context = {}) {
 
 function subjectFromAuthSession(authSession = null) {
   const user = authSession?.user || {};
+  const subjectType = user.type ||
+    (user.roleId === "tool-grant" ? "tool-grant" : "") ||
+    (user.userId ? "console-user" : "anonymous");
   return {
-    type: user.userId ? "console-user" : "anonymous",
-    subjectId: user.userId || user.username || "",
+    type: subjectType,
+    subjectId: user.userId || user.subjectId || user.username || "",
     username: user.username || "",
     roleId: user.roleId || "",
     scopes: Array.isArray(user.scopes) ? user.scopes : []
   };
+}
+
+function authenticatedCallerClaimsLocked(context = {}, subject = {}) {
+  const user = context.authSession?.user || {};
+  return (
+    context.transport === "mcp" ||
+    user.type === "tool-grant" ||
+    user.roleId === "tool-grant" ||
+    subject.type === "tool-grant" ||
+    subject.roleId === "tool-grant"
+  );
+}
+
+function firstInputString(input = {}, keys = []) {
+  for (const key of keys) {
+    const value = String(input[key] || "").trim();
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
+
+function callerIdClaim(context = {}, input = {}, subject = {}, keys = ["actorId", "actor-id", "actor"]) {
+  const authenticatedId = subject.subjectId || subject.username || "anonymous";
+  if (authenticatedCallerClaimsLocked(context, subject)) {
+    return authenticatedId;
+  }
+  return firstInputString(input, keys) || authenticatedId;
+}
+
+function callerKindClaim(context = {}, input = {}, subject = {}) {
+  if (authenticatedCallerClaimsLocked(context, subject)) {
+    return subject.type || "agent";
+  }
+  return String(input.contributorKind || input["contributor-kind"] || subject.type || "agent").trim() || "agent";
 }
 
 function workspaceIdFrom(input = {}, fallback = "") {
@@ -869,8 +963,8 @@ async function publishAuthorizationGovernanceUpdate({
   const policyRevision = securityPermissions?.getGovernancePolicyRevision?.() || null;
   const entityId = governanceEntityId(entityType, entity);
   const payload = {
-    schemaVersion: 1,
-    protocolVersion: "pact.authorization.governance.update.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    protocolVersion: "v0.0.1:risk-control:governance-update-1",
     operationId,
     mutation: {
       entityType,
@@ -1487,14 +1581,17 @@ async function executeWorkspaceContributionOperation({ operationId, input, conte
     username: runtimeSubject.username || authSubject.username || runtimeSubject.label || "",
     scopes: Array.isArray(runtimeSubject.scopes) ? runtimeSubject.scopes : authSubject.scopes
   };
+  const callerId = callerIdClaim(context, input, subject);
+  const contributorId = callerIdClaim(context, input, subject, ["contributorId", "contributor-id"]);
+  const contributorKind = callerKindClaim(context, input, subject);
   const securityPermissions = context.securityPermissions;
   try {
     if (operationId === "workspace.contribution.submit" || operationId === "knowledge.contribution.submit") {
       const resultPayload = registry.submitContribution({
         ...input,
         workspaceId: workspaceIdFrom(input),
-        contributorId: input.contributorId || subject.subjectId || subject.username || "anonymous",
-        contributorKind: input.contributorKind || subject.type || "agent",
+        contributorId,
+        contributorKind,
         contributionType: input.contributionType ||
           (operationId === "knowledge.contribution.submit" ? "knowledge" : undefined) ||
           (input.skillManifestRef ? "skill" : undefined)
@@ -1521,7 +1618,7 @@ async function executeWorkspaceContributionOperation({ operationId, input, conte
     if (operationId === "workspace.contribution.permission.request") {
       const resultPayload = registry.requestPermission(context.contributionId || input.contributionId, {
         ...input,
-        requesterId: input.requesterId || subject.subjectId || subject.username
+        requesterId: callerIdClaim(context, input, subject, ["requesterId", "requester-id"])
       });
       return result(201, protocolPayload(resultPayload));
     }
@@ -1536,58 +1633,58 @@ async function executeWorkspaceContributionOperation({ operationId, input, conte
     if (operationId === "workspace.contribution.scan") {
       return result(200, protocolPayload(registry.scanContribution(context.contributionId || input.contributionId, {
         ...input,
-        actorId: input.actorId || subject.subjectId || subject.username
+        actorId: callerId
       })));
     }
     if (operationId === "workspace.contribution.review") {
       return result(200, protocolPayload(registry.reviewContribution(context.contributionId || input.contributionId, {
         ...input,
-        actorId: input.actorId || subject.subjectId || subject.username,
-        reviewerId: input.reviewerId || subject.subjectId || subject.username
+        actorId: callerId,
+        reviewerId: callerIdClaim(context, input, subject, ["reviewerId", "reviewer-id"])
       })));
     }
     if (operationId === "workspace.contribution.preview") {
       return result(200, protocolPayload(registry.previewContribution(context.contributionId || input.contributionId, {
         ...input,
-        actorId: input.actorId || subject.subjectId || subject.username
+        actorId: callerId
       })));
     }
     if (operationId === "workspace.contribution.publish") {
       return result(200, protocolPayload(registry.publishContribution(context.contributionId || input.contributionId, {
         ...input,
-        actorId: input.actorId || subject.subjectId || subject.username
+        actorId: callerId
       })));
     }
     if (operationId === "workspace.contribution.adopt") {
       return result(200, protocolPayload(registry.adoptContribution(context.contributionId || input.contributionId, {
         ...input,
-        actorId: input.actorId || subject.subjectId || subject.username
+        actorId: callerId
       })));
     }
     if (operationId === "workspace.contribution.reject") {
       return result(200, protocolPayload(registry.rejectContribution(context.contributionId || input.contributionId, {
         ...input,
-        actorId: input.actorId || subject.subjectId || subject.username
+        actorId: callerId
       })));
     }
     if (operationId === "workspace.contribution.request_changes") {
       return result(200, protocolPayload(registry.requestChanges(context.contributionId || input.contributionId, {
         ...input,
-        actorId: input.actorId || subject.subjectId || subject.username
+        actorId: callerId
       })));
     }
     if (operationId === "workspace.contribution.revoke") {
       return result(200, protocolPayload(registry.revokeContribution(context.contributionId || input.contributionId, {
         ...input,
-        actorId: input.actorId || subject.subjectId || subject.username
+        actorId: callerId
       })));
     }
     if (operationId === "workspace.skill.upload") {
       const resultPayload = registry.submitContribution({
         ...input,
         workspaceId: workspaceIdFrom(input),
-        contributorId: input.contributorId || subject.subjectId || subject.username || "anonymous",
-        contributorKind: input.contributorKind || subject.type || "agent",
+        contributorId,
+        contributorKind,
         contributionType: "skill",
         title: input.title || input.skillId || "workspace skill"
       });
@@ -1613,7 +1710,7 @@ async function executeWorkspaceContributionOperation({ operationId, input, conte
       const resultPayload = registry.recordUsage(input.contributionId || input.skillId, {
         ...input,
         action: input.action || "skill.used",
-        actorId: input.actorId || subject.subjectId || subject.username
+        actorId: callerId
       });
       return result(200, protocolPayload(resultPayload));
     }
@@ -1715,7 +1812,7 @@ async function executeKnowledgeManagementOperation({ operationId, input, context
 
   if (id === "knowledge.config_schema") {
     return result(200, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       groups: [
         {
           id: "retrieval",
@@ -2523,7 +2620,7 @@ async function executeSystemObservationOperation({ operationId, input = {}, cont
       limit: Number(input.limit || 100)
     });
     return result(200, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       count: trees.length,
       items: trees.map((tree) => checkpointTreeApi.checkpointTreeSummary(tree))
     });
@@ -3641,6 +3738,7 @@ async function executeConsoleAuthOperation({ operationId, input = {}, context })
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "登录失败。";
+      const publicMessage = "用户名或密码错误。";
       authProvider.audit({
         operationId: "auth.login",
         action: "login",
@@ -3657,7 +3755,7 @@ async function executeConsoleAuthOperation({ operationId, input = {}, context })
         input: inputSummary,
         error: message
       });
-      return result(401, { error: message });
+      return result(401, { error: publicMessage });
     }
   }
   if (id === "auth.logout") {
@@ -3948,7 +4046,7 @@ async function executeWorkspaceAuditOperation({ operationId, input = {}, context
       !["denied", "failed", "error"].includes(String(item.status || "").toLowerCase())
     );
     return result(200, protocolPayload({
-      protocolVersion: "pact.workspace-operation-revert-scope.v1",
+      protocolVersion: "v0.0.1:workspace:operation-revert-scope-1",
       requestedAuditId: auditId,
       operationId: input.operationId || input["operation-id"] || "",
       candidateCount: selectedItems.length,
@@ -4550,6 +4648,7 @@ async function executeStrategyManagementOperation({ operationId, input = {}, con
     "strategy.workflow_policy.evaluate",
     "strategy.agent_policy.evaluate",
     "strategy.route_policy.evaluate",
+    "strategy.queue_policy.evaluate",
     "strategy.tool_policy.preview"
   ]);
   if (!handledOperations.has(id)) {
@@ -4571,9 +4670,12 @@ async function executeStrategyManagementOperation({ operationId, input = {}, con
   if (id === "strategy.route_policy.evaluate") {
     return result(200, strategyManagementProvider.evaluateRoutePolicy(input));
   }
+  if (id === "strategy.queue_policy.evaluate") {
+    return result(200, strategyManagementProvider.evaluateQueuePolicy(input));
+  }
   if (id === "strategy.tool_policy.preview") {
     return result(200, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       decision: strategyManagementProvider.evaluateToolPolicy(input)
     });
   }
@@ -4717,6 +4819,12 @@ async function executeDiscoveryOperation({ operationId, input = {}, context }) {
       serverId: discoveryState.serverId,
       offlineAfterSeconds: discoveryState.offlineAfterSeconds
     });
+    if (record?.ok === false) {
+      return result(record.statusCode || 429, {
+        error: record.error || "客户端登记失败。",
+        code: record.code || "client_registration_rejected"
+      });
+    }
     await publishProtocolEvent(
       context.protocolEventBus,
       "discovery.clients",
@@ -4790,7 +4898,7 @@ async function executeDiscoveryOperation({ operationId, input = {}, context }) {
       return result(404, { error: "未找到目标客户端。" });
     }
     const command = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       command: "migrate_to_active_service",
       clientId: targetClientId,
       desiredServiceUrl: discoveryState.activeServiceUrl || "",
@@ -5239,6 +5347,7 @@ async function executeKnowledgeAgentSupportOperation({ operationId, input, conte
 
 function knowledgeBackendSubject(context = {}, input = {}) {
   const authSubject = subjectFromAuthSession(context.authSession);
+  const runtimeSubject = objectOrNull(context.subject) || {};
   const requestedSubject = input.subject && typeof input.subject === "object" && !Array.isArray(input.subject)
     ? input.subject
     : (input.subjectId || input["subject-id"] || input.username)
@@ -5247,6 +5356,28 @@ function knowledgeBackendSubject(context = {}, input = {}) {
           username: input.username || input.subjectId || input["subject-id"] || ""
         }
     : null;
+  const subjectLockedToGrant =
+    context.transport === "mcp" ||
+    authSubject.type === "tool-grant" ||
+    authSubject.roleId === "tool-grant" ||
+    runtimeSubject.type === "tool-grant";
+  if (subjectLockedToGrant) {
+    const grantSubject = authSubject.type === "tool-grant" || authSubject.roleId === "tool-grant"
+      ? authSubject
+      : runtimeSubject.type === "tool-grant"
+        ? {
+            type: "tool-grant",
+            subjectId: runtimeSubject.subjectId || runtimeSubject.id || "",
+            username: runtimeSubject.username || runtimeSubject.label || runtimeSubject.subjectId || "",
+            roleId: "tool-grant",
+            scopes: Array.isArray(runtimeSubject.scopes) ? runtimeSubject.scopes : []
+          }
+        : authSubject;
+    return {
+      ...grantSubject,
+      declaredSubject: requestedSubject || runtimeSubject.declaredSubject || null
+    };
+  }
   if (!requestedSubject) {
     return authSubject;
   }
@@ -6416,7 +6547,7 @@ async function executeAgentWorkspaceManagementOperation({ operationId, input, co
       }
     });
     return result(201, protocolPayload({
-      protocolVersion: "pact.workspace-proposal.v1",
+      protocolVersion: "v0.0.1:workspace:proposal-1",
       created: true,
       proposal: operationResult.submission,
       submission: operationResult.submission
@@ -6467,7 +6598,7 @@ async function executeAgentWorkspaceManagementOperation({ operationId, input, co
       decision = decisionResult.decision;
     }
     return result(200, protocolPayload({
-      protocolVersion: "pact.workspace-proposal.v1",
+      protocolVersion: "v0.0.1:workspace:proposal-1",
       applied: accepted,
       status: proposal.status,
       proposal,
@@ -6946,7 +7077,7 @@ async function executeGerritOperation({ operationId, input }) {
   if (operationId === "workspace.code.change.upload") {
     const operationResult = await uploadGerritGitChange(input);
     return result(operationResult.ok ? 200 : operationResult.status || 400, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       operationId,
       ...operationResult
     });
@@ -7072,6 +7203,12 @@ async function executeRuntimeDependencyOperation({ operationId, input, context }
     } catch (error) {
       return result(400, errorPayload(error, "Runtime dependency download failed."));
     }
+  }
+  if (operationId === "runtime.dependencies.downloads") {
+    return result(200, listRuntimeDependencyDownloadRuns({
+      ...input,
+      userDataPath: context.userDataPath
+    }));
   }
   if (operationId === "runtime.dependencies.configure") {
     try {

@@ -310,7 +310,7 @@ async function buildExternalIndustrialBenchmark() {
     sourceEvidencePassCount: referenceAudits.filter((audit) => audit.sourceEvidencePassed).length
   };
   return {
-    protocolVersion: "pact.external-knowledge-distillation.industrial-benchmark.v1",
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-industrial-benchmark-1",
     service: "external.knowledge.distillation",
     generatedAt: new Date().toISOString(),
     referenceManifest: {

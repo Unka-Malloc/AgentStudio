@@ -2,16 +2,18 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Current boundary reference
 - Scope: 2-3-5 Security Model.
 - Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
-本文定义 Pact 的安全治理总模型：两条边界、三个环境、五个对象。
+本文定义 Pact 风控模型的风险归属轴：两条边界、三个环境、五个对象。
 
-该模型用于统一后续权限、连接器、客户端运行时、应用服务器接入、审计和生产门禁设计。任何新能力只要跨过客户端 MCP 入口或服务端 API 出口，都必须能说明它属于哪个环境、穿过哪条边界、命中哪些对象，以及最终由哪些平台运行时内部事实源裁决。
+该模型用于统一后续权限、连接器、客户端运行时、应用服务器接入、审计和生产门禁设计。任何新能力只要跨过客户端 MCP 入口或服务端 API 出口，都必须能说明它属于哪个环境、穿过哪条边界、命中哪些对象，落到哪个风控生命周期控制点，以及最终由哪些平台运行时内部事实源裁决。
 
 Security Model 的显式能力词表至少包含：准入、身份、权限、行为、密钥、凭据、风险。它们不是新增的第六类对象，而是每个跨边界接口、adapter、connector、mount 和 tool/skill 执行路径必须声明的安全控制项。
+
+每个安全控制项必须注册为 Risk Control Point，并用 JS/ESM 声明式 Risk Control DSL 描述。第一版核心原语是 `control`、`owner`、`gate`、`enforcedBy`、`factSource`、`binds`、`decision`、`failsClosed`、`evidence` 和 `verifiedBy`；控制台配置只能投影这些注册项，不能替代注册表。
 
 ## 总览
 
@@ -65,24 +67,44 @@ Security Model 只覆盖安全领域，不承载 API 对接、数据链路或业
 
 代码入口：
 
-- `server/platform/common/security/governance/security-governance-constants.mjs`：模型版本、边界 ID、环境 ID、对象 ID。
-- `server/platform/common/security/governance/boundaries.mjs`：两条安全边界定义。
-- `server/platform/common/security/governance/environments.mjs`：三个运行环境定义。
-- `server/platform/common/security/governance/objects.mjs`：五个对象定义。
-- `server/platform/common/security/governance/security-governance-model.mjs`：2-3-5 模型装配、查询和完整性检查。
-- `server/platform/common/security/governance/control-map.mjs`：对象控制项装配工具。
-- `server/platform/common/security/governance/*/controls.mjs`：每个边界或平台自我治理的控制项汇总。
-- `server/platform/common/security/governance/client-boundary/<object>.mjs`：客户端 MCP 入口按对象拆分的真实控制项，例如 `client-boundary/identity-admission-authentication.mjs`。
-- `server/platform/common/security/governance/external-service-boundary/<object>.mjs`：服务端 API 出口按对象拆分的真实控制项，例如 `external-service-boundary/permission-behavior-policy.mjs`。
-- `server/platform/common/security/governance/platform-self-governance/<object>.mjs`：平台运行时自我治理按对象拆分的内部控制项，例如 `platform-self-governance/audit-fact-verification.mjs`。
-- `server/scripts/verify-2-3-5-security-model.mjs`：模型、文档和分层入口一致性验证。
+- `server/platform/common/security/risk-control/model/`：风控模型领域版本身份、风险归属轴、生命周期 gate、边界、环境和对象定义；版本推进和迁移执行使用平台统一能力。
+- `server/platform/common/security/risk-control/registry/`：Risk Control DSL、Registry、Definition Lifecycle、digest、reference validation 和 index。
+- `server/platform/common/security/risk-control/catalogs/`：`enforcedBy`、`factSource`、`verifiedBy`、Evidence Store、Evidence Governance Profile 等可解析目录。
+- `server/platform/common/security/risk-control/controls/`：Atomic Risk Control Point 定义。
+- `server/platform/common/security/risk-control/paths/`：Risk Control Path 定义。
+- `server/platform/common/security/risk-control/projections/`：生成 `controlsByObject`、console、doctor、docs 和 API 输出投影。
+- `server/platform/common/security/governance/`：旧实现路径；本阶段完成标准要求全量迁移并移除，不能作为兼容 facade 或迁移期旧导入位置保留。
+- `server/scripts/verify-risk-control-model.mjs`：Risk Control Validation Gate，以及 Platform Managed Migration 的风控领域 completion verifier；它替代并移除旧 `verify-2-3-5-security-model.mjs`，但不承担独立迁移执行。
 
 ## 核心原则
 
 - 两条边界都是外部边界。平台运行时自我治理不是第三条外部边界，而是平台运行时内部支撑这两条边界的治理能力。
-- 三个环境不是权限主体。终端智能体、平台运行时、应用服务器只是安全治理的运行位置和信任假设。
+- 三个环境不是权限主体。终端智能体、平台运行时、应用服务器只是风控模型的运行位置和信任假设。
 - 权限内核只认 Capability。组织、用户、角色、Owner、智能体、provider account、外部 scope 都不得进入 Capability Kernel。
 - Binding Guard 处理调用身份绑定。`opaqueKey + namespace/user/agent/client` 是否匹配由 Binding Guard 裁决，不由 Capability Kernel 裁决。
+- Risk Control Registry 是装配和验证事实源，不是请求时裁决引擎。Registry 无效时，相关风控能力必须在 build、verify、doctor 或 server boot 阶段 fail closed、degraded 或 blocked；请求路径仍由 Capability Kernel、Binding Guard、Policy、Approval、Execution、Audit 和 Recovery 各自裁决，并记录经过的 `controlId`。
+- Risk Control 与 Capability Kernel 的版本推进、状态迁移、退役和 recovery 都必须使用平台统一版本能力、Platform Managed Migration 和 Migration Path Config；风控 Registry 和权限内核只能提供领域定义、合同引用、domainMapping、adopted verifier reference 和 verifier evidence，不能单独封装迁移 runner、兼容分支或版本 registry。
+- Risk Control Operation Envelope 是现有 Intent Operation envelope 的风控证据段，不是第二套 operation 协议。它由 append-only Risk Control Gate Record 列表组成，承载 subject、intent、resource、environment、`controlId@definitionVersion`、digest、gate decision、reason、evidence、adopted `enforcedById@componentContractVersion + componentDigest`、adopted `factSourceId@factContractVersion + factSourceDigest` 和 time；可信 controlRef 必须由服务端风控路径追加，不能信任客户端自带字段。
+- Risk Control Gate Record 必须组成严格的 operation-local hash chain。首条记录锚定 operation identity 和 input hash，后续记录必须连续链接前序 digest；缺失、重排、fork 或 digest mismatch 都会使该 operation 的风控证据链无效。
+- Risk Control digest canonicalization 统一使用 canonical JSON、SHA-256 和 domain-separated prefix。`definitionDigest`、`storeDigest`、`profileDigest`、`evidenceLocatorId`、`operationAnchorDigest`、`recordDigest` 和 `evidenceDigest` 必须能被 verifier、doctor、audit 和 recovery 跨运行时复算。
+- Risk Control Gate Record 的所有 evidence 都必须统一注册解析。无论大小、轻重或敏感度，每个 evidence item 都必须保存完整 Evidence Locator 和匹配的 `evidenceLocatorId`；locator payload 包含 `storeId@storeVersion`、`storeDigest`、`evidenceRef` 和 `evidenceDigest`，`storeId@storeVersion` 必须解析到 Evidence Store catalog。`classificationProfile`、`redactionPolicyProfile`、`retentionProfile` 都必须解析为 `profileId@profileVersion + profileDigest`，其中 `profileVersion` 使用 `v0.0.1:risk-control:evidence-profile:profile-schema-1:lifecycle-1:contract-1:revision-1` 形式；这些 profile 引用和 inline projection 不进入 locator identity，但必须由 `recordDigest` 覆盖；实际采用 profile 必须同时满足 Evidence Store 允许/默认 profile 合同和 Control Definition 最低治理 profile 要求。
+- Risk Control Evidence Store registration 自身必须有 lifecycle、version 和 digest。`storeVersion` 使用 `v0.0.1:risk-control:evidence-store:schema-1:lifecycle-1:contract-1:revision-1` 形式；Evidence Store lifecycle 使用 `candidate`、`active`、`deprecated`、`retired` 四态；只有 `active` store version 可以被新建 Gate Record 选择，`deprecated` / `retired` 只用于历史验证和 recovery。
+- `storeId` 是长期证据解释身份。同一 `storeId` 只能在 evidence authority、`evidenceRef` namespace 和 resolution meaning 兼容时复用；不兼容变化必须新建 `storeId`，不能只 bump `storeVersion`。
+- Risk Control Migration Completion Verifier 是 Platform Managed Migration 的风控领域硬验收验证。只要仍存在旧 `security/governance` 生产导入、旧 verifier 权威入口、手写 `controlsByObject`/control map、Registry 外控制点事实源、未解析 `controlId@definitionVersion` 或 digest，就不能声明平台迁移完成。
+- `controlId` 是长期审计身份，必须使用稳定 dotted ID，不得复用或静默改义。旧 control map 字符串只能作为 displayName 或 migration source，不能作为事实引用；dotted namespace 只服务可读性，不能被解析为 `owner`、`gate`、`enforcedBy` 或 `factSource`；控制点语义变化必须新建 `controlId`，旧控制点通过生命周期状态声明 deprecated、superseded 或终止关系。
+- 旧 control map 字符串不是迁移单位。一个旧字符串如果覆盖多个 lifecycle gate、enforcing component、fact source 或可验证责任，必须拆成多条 Atomic Risk Control Point；迁移来源只用于追溯，不决定新控制点数量。
+- 旧 label 如果表达组件、存储或事实权威，例如 Operation Ledger、Checkpoint Tree、Tool Management 或 Capability Kernel verify，必须先分类为 `enforcedBy` 或 `factSource` catalog entry；新 `controlId` 命名被治理的责任，不命名组件本身。
+- Risk Control Definition Lifecycle 只描述控制点定义在 Registry 中的状态，不描述单次请求的 allow、deny、needsApproval、degraded 或执行结果。第一版状态集合是 `draft`、`candidate`、`active`、`deprecated`、`superseded` 和 `retired`；不提供 `disabled` 作为普通安全开关。
+- Risk Control Definition Lifecycle 必须按显式迁移表执行。`candidate -> active` 必须通过 Validation Gate；`active -> superseded` 必须带 `supersededBy`；`deprecated -> active` 只允许兼容回滚且必须带 reason；`retired` 不可恢复；不允许 `active -> retired` 直接跳转。
+- 同一个 `controlId` 同一时间只能有一个 `active` 定义。历史定义可以保留用于审计和恢复解释，但生产投影必须解析到唯一 active 定义。
+- 每个控制点定义必须有 Risk Control Definition Version：`v0.0.1:risk-control:definition:model-1:dsl-1:lifecycle-1:control-1:revision-1`，并携带 canonical definition digest。trace、audit、doctor 和 recovery 必须记录完整 `controlId@definitionVersion` 与 digest。
+- Risk Control Definition Digest 只覆盖影响风控语义和证据解释的 canonical 字段，例如 owner、gate、adopted enforcedBy reference、adopted factSource reference、adopted verifiedBy reference、binds、decision、failsClosed、evidence、supersededBy 和 lifecycle constraints；不覆盖 displayName、description、notes、docsUrl、UI grouping 或排序字段。
+- Risk Control Point 必须是单 gate 原子控制点：一个主生命周期 gate、一个主 `enforcedBy` 和一个可验证风控责任。跨多个 gate 的高层流程必须拆成多个 `controlId`。
+- Risk Control Path 可以把多个 active atomic controls 组合成端到端风控链路，用于 trace、doctor、console 和文档解释；Path 不执行裁决，不能替代 atomic control，也不能引用 inactive、retired 或无法解析的控制点。
+- Risk Control Registry 的语义字段必须是可解析引用。`controlId`、`owner`、`gate`、`enforcedBy`、`factSource`、`verifiedBy`、Evidence Locator 和 Evidence Governance Profile 不能是自由字符串；显示名称和说明可以是自由文本，但不能参与风控语义。
+- `enforcedBy` 和 `factSource` 必须引用不同目录，并使用 adopted versioned catalog reference，包含稳定 catalog ID、contract version 和 digest，不能使用裸 ID、代码路径、模块名、UI label 或显示名。前者回答“谁执行控制”，后者回答“可信事实从哪里来”；同一底层模块可以同时出现在两个目录，但注册语义不能混用。
+- `verifiedBy` 也必须引用独立 verifier catalog，并使用 adopted versioned catalog reference，包含稳定 verifier ID、contract version 和 digest；脚本路径、测试名、命令、CI job、run ID 和输出 digest 只能作为 catalog metadata 或 verifier run evidence，不能作为语义引用。
+- `enforcedBy`、`factSource` 和 `verifiedBy` catalog entry 使用 `candidate`、`active`、`deprecated`、`retired` 生命周期；新控制点定义、新 Gate Record 和新 verifier evidence 只能选择 active version，deprecated / retired 只用于历史解析和 recovery；不提供 `disabled`，运行时不可用必须表达为 health、degraded 或 blocked。
 - 普通业务 DB 不是安全事实源。业务 DB、可见 DB、agent 可写 DB、JSON 运行态文件只能作为展示、申请单、审计投影或缓存。
 - `file fallback` 是可用性方案，不是强安全边界。它必须标记 degraded，不得伪装成 keyring-backed 或企业级隔离。
 
@@ -153,7 +175,7 @@ Security Model 只覆盖安全领域，不承载 API 对接、数据链路或业
 
 典型组件：
 
-- OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf 等本地智能体或 agent client。
+- OpenClaw、Claude Code、Codex、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 等本地智能体或 agent client。
 - MCP connector、stdio/HTTP MCP client、本机 discovery 和 local grant installer。
 - `pact-client-cli`、client runtime、clientd、upload queue、checkpoint upload adapter。
 - 本机文件系统、本机命令、本机缓存、本机 bridge、本机 runtime module。
@@ -390,7 +412,7 @@ Security Model 只覆盖安全领域，不承载 API 对接、数据链路或业
 
 ## 与权限内核的关系
 
-2-3-5 Security Model 是上层安全治理架构；Capability Kernel 是其中“权限与行为策略”的核心裁决组件之一。
+2-3-5 Security Model 是风控模型的风险归属轴；Capability Kernel 是其中“权限与行为策略”的核心裁决组件之一。
 
 关系如下：
 
@@ -404,3 +426,5 @@ Security Model 只覆盖安全领域，不承载 API 对接、数据链路或业
 ```
 
 Capability Kernel 不处理用户、组织、角色、Owner、智能体、provider account、provider scope 或业务状态。它只处理 `opaqueKey + requestedCapability -> allow/deny`。其余对象由平台运行时的其他组件完成，但这些组件不能绕过 Capability Kernel 或把普通业务 DB 提升为最终权限事实源。
+
+Capability Kernel 的 capability contract、sealed state schema、恢复包和状态迁移也必须走平台统一版本能力、Platform Managed Migration 和 Migration Path Config；权限内核只提供可验证合同和领域映射，不单独封装版本 registry、迁移 runner 或兼容分支。

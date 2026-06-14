@@ -86,10 +86,10 @@ function validateBaselineReadinessReport(report) {
   if (!report || typeof report !== "object") {
     return { ok: false, errors: ["Report is not a valid object."] };
   }
-  if (!report.schemaVersion || report.schemaVersion !== 1) {
+  if (!report.schemaVersion || report.schemaVersion !== "v0.0.1:schema:definition-1") {
     errors.push("Report missing or invalid schemaVersion.");
   }
-  if (!report.reportType || report.reportType !== "pact.readiness.report.v0.1") {
+  if (!report.reportType || report.reportType !== "v0.0.1:production-readiness:report-0.1") {
     errors.push("Report missing or invalid reportType.");
   }
   if (!report.runId || typeof report.runId !== "string") {
@@ -213,22 +213,22 @@ const scopeEvidencePlan = {
   "contribution.lifecycle": {
     requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/contribution-lifecycle-state-machine.test.mjs"]],
     requiredReports: [],
-    requiredFiles: ["server/platform/common/state-machine/definitions/contribution.lifecycle.v1.json"]
+    requiredFiles: ["server/platform/common/state-machine/definitions/contribution.lifecycle.json"]
   },
   "agentlibrary.loan": {
     requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/knowledge-loan-lifecycle-state-machine.test.mjs"]],
     requiredReports: [],
-    requiredFiles: ["server/platform/common/state-machine/definitions/agentlibrary.loan.v1.json"]
+    requiredFiles: ["server/platform/common/state-machine/definitions/agentlibrary.loan.json"]
   },
   "checkpoint.restore": {
     requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/checkpoint-restore-lifecycle-state-machine.test.mjs"]],
     requiredReports: [],
-    requiredFiles: ["server/platform/common/state-machine/definitions/checkpoint.restore.v1.json"]
+    requiredFiles: ["server/platform/common/state-machine/definitions/checkpoint.restore.json"]
   },
   "operation.narrow": {
     requiredCommands: [["npx", "vitest", "run", "tests/vitest/server/operation-state-machine-integration.test.mjs"]],
     requiredReports: [],
-    requiredFiles: ["server/platform/common/state-machine/definitions/operation.narrow.v1.json"]
+    requiredFiles: ["server/platform/common/state-machine/definitions/operation.narrow.json"]
   },
   "production-readiness-baseline": {
     requiredCommands: [
@@ -239,7 +239,7 @@ const scopeEvidencePlan = {
     ],
     requiredReports: [{ path: "build/reports/state-machines/latest.json", producedBy: "npm run server:verify:state-machines" }],
     requiredFiles: [
-      "server/platform/common/state-machine/definitions/production.readiness.lifecycle.v1.json",
+      "server/platform/common/state-machine/definitions/production.readiness.lifecycle.json",
       "server/platform/specialized/production-readiness/readiness-scope-registry.mjs",
       "server/platform/common/state-machine/guards/guard-evaluator.mjs"
     ]

@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "bundleType": "pact.agent-skill.bundle",
   "skillId": "pact.project.release",
-  "protocolVersion": "pact.project-release-skill.v1",
+  "protocolVersion": "v0.0.1:platform:project-release-skill-1",
   "permissions": {
     "allowDownstream": false
   },

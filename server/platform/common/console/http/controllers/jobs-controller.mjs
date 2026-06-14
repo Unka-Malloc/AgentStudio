@@ -738,6 +738,64 @@ export function createJobsController({
     async handleListJobs({ limit, response }) {
       sendJson(response, 200, await jobWorkflow.listJobs({ limit }));
     },
+    async handleInspectWorkQueue({ limit, response }) {
+      if (typeof jobWorkflow.inspectWorkQueue !== "function") {
+        sendJson(response, 200, {
+          ok: true,
+          enabled: false,
+          reason: "work_queue_provider_unavailable"
+        });
+        return;
+      }
+      const inspected = await jobWorkflow.inspectWorkQueue({ limit: Number(limit || 100) });
+      const description = typeof jobWorkflow.describe === "function" ? jobWorkflow.describe() : {};
+      sendJson(response, 200, {
+        ok: true,
+        enabled: true,
+        description,
+        ...inspected
+      });
+    },
+    async handlePauseWorkQueue({ requestBody, response }) {
+      const payload = requestBody.length > 0 ? JSON.parse(requestBody.toString("utf8")) : {};
+      if (typeof jobWorkflow.pauseWorkQueue !== "function") {
+        sendJson(response, 409, { ok: false, error: "work queue provider is not available." });
+        return;
+      }
+      sendJson(response, 200, await jobWorkflow.pauseWorkQueue({
+        reason: payload.reason || "operator_pause",
+        actor: payload.actor || { source: "jobs-controller" }
+      }));
+    },
+    async handleResumeWorkQueue({ requestBody, response }) {
+      const payload = requestBody.length > 0 ? JSON.parse(requestBody.toString("utf8")) : {};
+      if (typeof jobWorkflow.resumeWorkQueue !== "function") {
+        sendJson(response, 409, { ok: false, error: "work queue provider is not available." });
+        return;
+      }
+      sendJson(response, 200, await jobWorkflow.resumeWorkQueue({
+        reason: payload.reason || "operator_resume",
+        actor: payload.actor || { source: "jobs-controller" }
+      }));
+    },
+    async handleDrainWorkQueue({ requestBody, response }) {
+      const payload = requestBody.length > 0 ? JSON.parse(requestBody.toString("utf8")) : {};
+      if (typeof jobWorkflow.drainWorkQueue !== "function") {
+        sendJson(response, 409, { ok: false, error: "work queue provider is not available." });
+        return;
+      }
+      sendJson(response, 200, await jobWorkflow.drainWorkQueue({
+        reason: payload.reason || "operator_drain",
+        actor: payload.actor || { source: "jobs-controller" }
+      }));
+    },
+    async handleDispatchWorkQueue({ response }) {
+      if (typeof jobWorkflow.dispatchWorkQueue !== "function") {
+        sendJson(response, 409, { ok: false, error: "work queue provider is not available." });
+        return;
+      }
+      sendJson(response, 200, await jobWorkflow.dispatchWorkQueue());
+    },
     async handleGetJob({ request, requestBody, jobId, response }) {
       const job = await jobWorkflow.getJob(jobId);
 

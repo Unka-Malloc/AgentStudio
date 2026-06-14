@@ -10,43 +10,32 @@
   text-overflow: ellipsis;
 }
 
-/* ─── Mobile hamburger button ─── */
-.topbar-hamburger {
-  display: none;
+/* ─── Sidebar toggle button ─── */
+.topbar-sidebar-toggle {
+  display: inline-flex;
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  flex-direction: column;
+  width: 34px;
+  height: 34px;
   align-items: center;
   justify-content: center;
-  gap: var(--space-1);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
+  transition: color var(--dur-fast) var(--ease-std);
 }
 
-.topbar-hamburger span {
+.topbar-sidebar-toggle:hover {
+  background: transparent;
+  color: var(--brand);
+}
+
+.topbar-sidebar-toggle svg {
   display: block;
   width: 16px;
-  height: 2px;
-  border-radius: var(--radius-full);
-  background: currentColor;
-  transition: transform var(--dur-base) var(--ease-std), opacity var(--dur-base) var(--ease-std);
-}
-
-.topbar-hamburger[aria-expanded="true"] span:nth-child(1) {
-  transform: translateY(7px) rotate(45deg);
-}
-
-.topbar-hamburger[aria-expanded="true"] span:nth-child(2) {
-  opacity: 0;
-}
-
-.topbar-hamburger[aria-expanded="true"] span:nth-child(3) {
-  transform: translateY(-7px) rotate(-45deg);
+  height: 16px;
 }
 
 /* ─── Auth gate brand block ─── */

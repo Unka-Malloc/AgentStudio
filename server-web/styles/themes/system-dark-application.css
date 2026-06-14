@@ -119,7 +119,7 @@
     background: color-mix(in srgb, var(--word-cloud-fill) 40%, var(--bg-surface));
     border-color: color-mix(in srgb, var(--word-cloud-accent) 48%, transparent);
   }
-  /* .word-cloud-corpus-path: 固定暗色，不在深色模式再次覆盖 */
+  /* .word-cloud-corpus-path follows the shared semantic word-cloud scope tokens. */
   .word-cloud-action-popover,
   .word-cloud-foundation span {
     background: var(--bg-surface);

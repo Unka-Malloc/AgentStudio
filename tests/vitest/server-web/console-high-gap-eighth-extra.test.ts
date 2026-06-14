@@ -16,6 +16,7 @@ import WorkspaceProfilePanel from "../../../server-web/components/workspaces/det
 import WorkspaceResourceMounts from "../../../server-web/components/workspaces/WorkspaceResourceMounts.vue";
 import { pickAgentRetrievalShellContext } from "../../../server-web/composables/console-shell-agent-retrieval-context";
 import { pickKnowledgeShellContext } from "../../../server-web/composables/console-shell-knowledge-context";
+import { setConsoleLocaleState } from "../../../server-web/i18n/console";
 import { getToolManagementAudit, getToolManagementCatalog, getToolManagementGrants, getToolManagementMetrics, previewToolPolicy, createToolGrant, updateToolGrant, deleteToolGrant, rotateToolGrantToken } from "../../../server-web/lib/tool-management-client";
 
 const mountedWrappers: VueWrapper[] = [];
@@ -55,6 +56,7 @@ vi.mock("../../../server-web/lib/bridge-http", () => ({
 }));
 
 vi.mock("../../../server-web/composables/serverConsoleShellContext", () => ({
+  useOptionalServerConsoleShellContext: () => serverConsoleShellMock.current,
   useServerConsoleShellContext: () => serverConsoleShellMock.current,
 }));
 
@@ -422,6 +424,8 @@ afterEach(() => {
     mountedWrappers.pop()?.unmount();
   }
   document.body.innerHTML = "";
+  document.documentElement.lang = "";
+  setConsoleLocaleState("zh-CN");
   vi.restoreAllMocks();
 });
 
@@ -730,21 +734,17 @@ describe("console shell projections", () => {
       addManualWordCloud: vi.fn(),
       addTermActionToCloud: vi.fn(),
       addTermInputToCloud: vi.fn(),
-      autoFillCloudWithAgent: vi.fn(),
       clearRemovedTermsFromCloud: vi.fn(),
       clearWordCloudCorpusPaths: vi.fn(),
-      fillingWordBagIds: ["bag-b"],
       openWordCloudCorpusDirectoryPicker: vi.fn(),
       openWordCloudCorpusFilePicker: vi.fn(),
       pinWordCloud: vi.fn(),
       pinnedWordBagIds: ["bag-c"],
-      proposeWordCloud: vi.fn(),
       removeTermFromCloud: vi.fn(),
       removeWordCloudCorpusPath: vi.fn(),
       saveWordCloud: vi.fn(),
       selectWordCloud: vi.fn(),
       selectedWordCloud: {},
-      selectedWordCloudModel: {},
       setWordCloudTermInput: vi.fn(),
       toggleWordCloudActionMenu: vi.fn(),
       wordBagActionMenuId: "menu-1",
@@ -756,8 +756,6 @@ describe("console shell projections", () => {
       wordCloudDraft: {},
       wordCloudMessages: [],
       wordCloudModelAlias: "alias",
-      wordCloudModelOptions: [],
-      wordCloudPrompt: "",
       wordCloudState: {},
       wordCloudTermInputs: [],
       wordCloudTerms: [],
@@ -1044,6 +1042,20 @@ describe("ApprovalFlowCardList", () => {
 
     expect(wrapper.get(".approval-request-empty-card strong").text()).toBe("没有待处理的授权请求");
   });
+
+  it("renders the empty state in English when the console locale is English", () => {
+    setConsoleLocaleState("en");
+    approvalFlowViewMock.current = makeApprovalFlowContext({
+      approvalFlowCards: ref([]),
+    });
+
+    const wrapper = mount(ApprovalFlowCardList);
+
+    mountedWrappers.push(wrapper);
+
+    expect(wrapper.get(".approval-request-empty-card strong").text()).toBe("No Pending Authorization Requests");
+    expect(wrapper.get(".approval-request-empty-card span").text()).toBe("No approval items require manual review.");
+  });
 });
 
 describe("RuleAuthoringPanel", () => {
@@ -1108,6 +1120,86 @@ describe("RuleAuthoringPanel", () => {
     await wrapper.get("form").trigger("submit");
     expect(context.runRuleAuthoringChat).toHaveBeenCalledTimes(1);
     expect(wrapper.get(".rule-authoring-result-panel-stub").text()).toBe("结果面板");
+  });
+
+  it("renders the create rule controls in English when the shell language is English", async () => {
+    serverConsoleShellMock.current = {
+      languageMode: "en",
+    };
+    const context = makeRuleAuthoringContext();
+    knowledgeRulesContextMock.current = context;
+
+    const wrapper = mount(RuleAuthoringPanel, {
+      global: {
+        stubs: {
+          AgentModelOptionBar: AgentModelOptionBarStub,
+          OptionBar: OptionBarStub,
+          RuleAuthoringResultPanel: SimplePanelStub,
+          SegmentedToggle: SegmentedToggleStub,
+        },
+      },
+    });
+
+    mountedWrappers.push(wrapper);
+
+    const toggleOptions = wrapper.findComponent(SegmentedToggleStub).props("options") as Array<{ value: string; label: string }>;
+    expect(toggleOptions).toEqual([
+      { value: "chat", label: "AI Chat" },
+      { value: "manual", label: "Manual Config" },
+    ]);
+    expect(wrapper.findComponent(SegmentedToggleStub).props("ariaLabel")).toBe("Create Rule Mode");
+    expect(wrapper.text()).toContain("Create Rule");
+    expect(wrapper.text()).toContain("Requirement");
+    expect(wrapper.get("textarea").attributes("placeholder")).toBe(
+      "Example: create a golden rule that skips identical knowledge.",
+    );
+    expect(wrapper.findComponent(AgentModelOptionBarStub).props("label")).toBe("Agents");
+    expect(wrapper.get(".primary-action").text()).toBe("Generate Rule Draft");
+
+    context.ruleCreationMode.value = "manual";
+    await flush();
+
+    expect(wrapper.get(".primary-action").text()).toBe("Create Rule from Config");
+    expect(wrapper.findAll(".option-bar-stub").map((item) => item.attributes("data-label"))).toEqual([
+      "Scope",
+      "Match Method",
+      "Action",
+    ]);
+    expect(wrapper.text()).not.toContain("智能对话");
+    expect(wrapper.text()).not.toContain("人工配置");
+    expect(wrapper.text()).not.toContain("生成规则草稿");
+  });
+
+  it("uses the English document language when the injected shell language is stale", () => {
+    document.documentElement.lang = "en";
+    serverConsoleShellMock.current = {
+      languageMode: "zh-CN",
+    };
+    const context = makeRuleAuthoringContext();
+    knowledgeRulesContextMock.current = context;
+
+    const wrapper = mount(RuleAuthoringPanel, {
+      global: {
+        stubs: {
+          AgentModelOptionBar: AgentModelOptionBarStub,
+          OptionBar: OptionBarStub,
+          RuleAuthoringResultPanel: SimplePanelStub,
+          SegmentedToggle: SegmentedToggleStub,
+        },
+      },
+    });
+
+    mountedWrappers.push(wrapper);
+
+    const toggleOptions = wrapper.findComponent(SegmentedToggleStub).props("options") as Array<{ value: string; label: string }>;
+    expect(toggleOptions.map((option) => option.label)).toEqual(["AI Chat", "Manual Config"]);
+    expect(wrapper.text()).toContain("Requirement");
+    expect(wrapper.get("textarea").attributes("placeholder")).toBe(
+      "Example: create a golden rule that skips identical knowledge.",
+    );
+    expect(wrapper.get(".primary-action").text()).toBe("Generate Rule Draft");
+    expect(wrapper.text()).not.toContain("需求");
+    expect(wrapper.text()).not.toContain("生成规则草稿");
   });
 });
 

@@ -10,7 +10,7 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const defPath = path.resolve(__dirname, "../../../server/platform/common/state-machine/definitions/contribution.lifecycle.v1.json");
+const defPath = path.resolve(__dirname, "../../../server/platform/common/state-machine/definitions/contribution.lifecycle.json");
 const approvedGuardContext = { approvalRecord: { status: "approved" } };
 const adoptionGuardContext = { adoptionPolicy: { compliant: true } };
 const adminGuardContext = { subjectPermissions: { roles: ["admin"] } };
@@ -26,7 +26,7 @@ describe("Contribution Lifecycle State Machine", () => {
   it("should pass schema and core validation checks", () => {
     const validation = validateStateMachineDefinition(definition);
     expect(validation.ok).toBe(true);
-    expect(definition.machineId).toBe("contribution.lifecycle.v1");
+    expect(definition.machineId).toBe("contribution.lifecycle");
     expect(definition.initialState).toBe("submitted");
   });
 

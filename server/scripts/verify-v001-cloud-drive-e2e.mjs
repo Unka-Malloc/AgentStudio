@@ -68,7 +68,7 @@ async function callMcpStructured({ serverUrl, token, operation, input = {}, tool
     body: JSON.stringify(mcpRequest("tools/call", {
       name: effectiveToolName,
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation,
         input,
         clientVersion: "verify-v001-cloud-drive-e2e"

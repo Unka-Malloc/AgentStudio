@@ -17,11 +17,11 @@ import RuntimeDownloadsSummaryCard from "../../../server-web/components/admin/ru
 import InfoFeedConversationPanel from "../../../server-web/components/feed/InfoFeedConversationPanel.vue";
 import InfoFeedParentContextCards from "../../../server-web/components/feed/InfoFeedParentContextCards.vue";
 import InfoFeedPausePanels from "../../../server-web/components/feed/InfoFeedPausePanels.vue";
-import WordCloudAgentDialog from "../../../server-web/components/knowledge/word-cloud/WordCloudAgentDialog.vue";
 import WordCloudCardList from "../../../server-web/components/knowledge/word-cloud/WordCloudCardList.vue";
 import WordCloudStage from "../../../server-web/components/knowledge/word-cloud/WordCloudStage.vue";
 import ConsoleAuthGate from "../../../server-web/components/shell/ConsoleAuthGate.vue";
 import ConsoleDrawer from "../../../server-web/components/shell/ConsoleDrawer.vue";
+import ConsolePreferencesPanel from "../../../server-web/components/shell/ConsolePreferencesPanel.vue";
 import ConsoleSideNavBrand from "../../../server-web/components/shell/side-nav/ConsoleSideNavBrand.vue";
 import ConsoleSideNavFooter from "../../../server-web/components/shell/side-nav/ConsoleSideNavFooter.vue";
 import WorkspaceDetailPanel from "../../../server-web/components/workspaces/WorkspaceDetailPanel.vue";
@@ -161,6 +161,34 @@ const StatusPillStub = defineComponent({
   },
 });
 
+const OptionBarProbeStub = defineComponent({
+  name: "OptionBar",
+  props: ["modelValue", "label", "options"],
+  emits: ["update:model-value", "update:modelValue", "change"],
+  setup(props, { emit }) {
+    return () => h("label", {
+      class: "option-bar-probe",
+      "data-label": String(props.label || ""),
+      "data-model": String(props.modelValue || ""),
+      onClick: () => {
+        const firstOption = Array.isArray(props.options) ? props.options[0] : null;
+        if (firstOption) {
+          emit("update:model-value", firstOption.value);
+          emit("update:modelValue", firstOption.value);
+          emit("change", firstOption.value);
+        }
+      },
+    }, [
+      h("span", { class: "option-bar-probe-label" }, String(props.label || "")),
+      ...(Array.isArray(props.options)
+        ? props.options.map((option: { label?: string; value?: unknown }) =>
+            h("span", { class: "option-bar-probe-option" }, `${option.label || ""}:${String(option.value)}`),
+          )
+        : []),
+    ]);
+  },
+});
+
 const commonStubs = {
   AgentModelOptionBar: AgentModelOptionBarStub,
   ApprovalFlowCardList: SimpleStub,
@@ -286,8 +314,6 @@ beforeEach(() => {
   knowledgeWordCloudContextMock.mockReturnValue({
     busyKey: ref(""),
     canWriteKnowledge: ref(true),
-    proposeWordCloud: vi.fn(),
-    selectedWordCloudModel: ref({ enabled: true }),
     wordCloudCardRows: ref([
       { cloud: { wordBagId: "bag-1", label: "Risk" } },
     ]),
@@ -295,8 +321,6 @@ beforeEach(() => {
       { at: "2026-01-01T00:00:00.000Z", id: "m1", role: "agent", text: "Grouped" },
     ]),
     wordCloudModelAlias: ref("agent-a"),
-    wordCloudModelOptions: ref([{ label: "Agent A", value: "agent-a" }]),
-    wordCloudPrompt: ref("Group by risk"),
     wordCloudState: ref({ ok: true }),
   });
 
@@ -324,15 +348,38 @@ beforeEach(() => {
     drawerOpen: ref(true),
     drawerTab: ref("preferences"),
     hasFeature: vi.fn(() => true),
+    appearanceCycleScheme: ref("dark"),
+    appearanceCycleSchemeOptions: ref([
+      { label: "深色", value: "dark", icon: "moon" },
+      { label: "浅色", value: "light", icon: "sun" },
+    ]),
+    appearancePresetCatalogMessage: ref(""),
+    appearancePresetImporting: ref(false),
+    appearancePresetOptionsForCycleScheme: ref([
+      { label: "落日余烬", value: "sunset-ember" },
+      { label: "盛夜古堡", value: "dracula" },
+    ]),
+    appearancePresetSelectionId: ref("dracula"),
+    importAppearancePresetFileToServer: vi.fn(),
     isAuthenticated: ref(true),
     languageMode: ref("zh"),
+    languageOptionBarOptions: ref([{ label: "简体中文", value: "zh-CN" }]),
     loginForm: reactive({ username: "owner", password: "secret" }),
     msg: {
       close: "关闭",
       drawer: {
+        appearancePreset: "配色",
         directories: "目录",
+        importAppearancePresetToServer: "导入到服务端",
+        language: "语言",
         preferences: "偏好",
+        preferencesDescription: "控制台本地显示设置",
+        preferencesTitle: "界面偏好",
+        reloadAppearancePresets: "重新加载配色文件",
         serviceDiscovery: "发现",
+        theme: "主题",
+        themeDark: "深色",
+        themeLight: "浅色",
         title: "设置",
         users: "用户",
       },
@@ -344,16 +391,39 @@ beforeEach(() => {
       },
     },
     openDrawer: vi.fn(),
+    refreshAppearancePresetConfigs: vi.fn(),
+    setAppearanceCycleScheme: vi.fn(),
+    setAppearancePreset: vi.fn(),
+    setLanguage: vi.fn(),
     submitLoginAuth: vi.fn(),
     toggleLanguage: vi.fn(),
     tt: vi.fn((value: string) => value),
   });
 
   sideNavContextMock.mockReturnValue({
+    appearanceCycleScheme: ref("dark"),
+    appearanceCycleSchemeLabel: ref("深色主题组"),
+    appearancePresetLabel: ref("绿野仙踪"),
     consoleState: ref(null),
-    msg: { loading: "加载中", nav: { systemConfig: "系统设置" } },
+    cycleAppearancePreset: vi.fn(),
+    languageMode: ref("zh-CN"),
+    msg: ref({
+      loading: "加载中",
+      nav: { systemConfig: "系统设置" },
+      topbar: {
+        appearanceCycleSchemeDarkLabel: "深色主题组",
+        appearanceCycleSchemeDarkTitle: "当前：深色主题组（点击切换浅色主题组）",
+        appearanceCycleSchemeLightLabel: "浅色主题组",
+        appearanceCycleSchemeLightTitle: "当前：浅色主题组（点击切换深色主题组）",
+        appearancePresetLabel: "配色",
+        appearancePresetTitle: "配色（点击切换下一个）",
+      },
+    }),
     openDrawer: vi.fn(),
     sideNavOpen: ref(true),
+    toggleAppearanceCycleScheme: vi.fn(),
+    toggleLanguage: vi.fn(),
+    tt: vi.fn((value: string) => value),
   });
 
   workspacesContextMock.mockReturnValue({
@@ -401,7 +471,7 @@ describe("server-web zero-gap components", () => {
     expect(mountWithStubs(OpsMonitorSummaryCard).text()).toContain("进程 1 / 2");
 
     const summary = mountWithStubs(RuntimeDownloadsSummaryCard);
-    expect(summary.text()).toContain("运行时配置");
+    expect(summary.text()).toContain("环境配置");
     expect(summary.text()).toContain("/tmp/pact-cache");
 
     const panel = mountWithStubs(RuntimeDownloadsPanel);
@@ -445,7 +515,7 @@ describe("server-web zero-gap components", () => {
 
   it("covers feed pause, parent context and conversation branches", async () => {
     const conversation = mountWithStubs(InfoFeedConversationPanel);
-    expect(conversation.text()).toContain("历史记录");
+    expect(conversation.text()).toContain("输入问题后");
     expect(conversation.text()).toContain("信息流");
 
     const pause = mountWithStubs(InfoFeedPausePanels);
@@ -468,18 +538,14 @@ describe("server-web zero-gap components", () => {
     expect(mountWithStubs(InfoFeedConversationPanel).findComponent(SimpleStub).exists()).toBe(true);
   });
 
-  it("covers word-cloud list, stage and agent dialog branches", async () => {
+  it("covers word-cloud list and stage branches", async () => {
     const list = mountWithStubs(WordCloudCardList);
     expect(list.find(".word-cloud-card-list").exists()).toBe(true);
 
     const stage = mountWithStubs(WordCloudStage);
     expect(stage.find(".word-cloud-stage").exists()).toBe(true);
 
-    const dialog = mountWithStubs(WordCloudAgentDialog);
-    expect(dialog.text()).toContain("智能体分组");
-    await dialog.find("form").trigger("submit");
     const context = knowledgeWordCloudContextMock.mock.results.at(-1)?.value;
-    expect(context.proposeWordCloud).toHaveBeenCalled();
 
     knowledgeWordCloudContextMock.mockReturnValueOnce({
       ...context,
@@ -516,10 +582,43 @@ describe("server-web zero-gap components", () => {
     expect(brand.text()).toContain("加载中");
 
     const footer = mountWithStubs(ConsoleSideNavFooter);
-    await footer.find("button").trigger("click");
     const sideNavContext = sideNavContextMock.mock.results.at(-1)?.value;
+    const globalActions = footer.findAll(".side-global-action");
+    await globalActions[0].trigger("click");
+    await globalActions[1].trigger("click");
+    expect(sideNavContext.toggleAppearanceCycleScheme).toHaveBeenCalled();
+    expect(sideNavContext.cycleAppearancePreset).toHaveBeenCalled();
+
+    await footer.find(".side-cta").trigger("click");
     expect(sideNavContext.sideNavOpen.value).toBe(false);
     expect(sideNavContext.openDrawer).toHaveBeenCalledWith("preferences");
+  });
+
+  it("renders appearance preferences as scheme and filtered preset selectors", async () => {
+    const preferences = mountWithStubs(ConsolePreferencesPanel, {
+      global: {
+        stubs: {
+          OptionBar: OptionBarProbeStub,
+        },
+      },
+    });
+
+    const optionBars = preferences.findAll(".option-bar-probe");
+    expect(optionBars).toHaveLength(3);
+    expect(optionBars[0].attributes("data-label")).toBe("");
+    expect(optionBars[0].attributes("data-model")).toBe("zh");
+    expect(optionBars[0].text()).toContain("简体中文:zh-CN");
+    expect(optionBars[1].attributes("data-label")).toBe("主题");
+    expect(optionBars[1].text()).toContain("深色:dark");
+    expect(optionBars[1].text()).toContain("浅色:light");
+    expect(optionBars[2].attributes("data-label")).toBe("配色");
+    expect(optionBars[2].attributes("data-model")).toBe("dracula");
+    expect(optionBars[2].text()).toContain("落日余烬:sunset-ember");
+    expect(optionBars[2].text()).toContain("盛夜古堡:dracula");
+
+    await optionBars[1].trigger("click");
+    const shellContext = shellContextMock.mock.results.at(-1)?.value;
+    expect(shellContext.setAppearanceCycleScheme).toHaveBeenCalledWith("dark");
   });
 
   it("covers workspace detail and resolved profile panels", () => {

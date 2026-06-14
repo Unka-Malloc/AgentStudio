@@ -14,7 +14,7 @@ import {
 } from "../../../server/platform/common/state-machine/state-machine-core.mjs";
 
 const mockDefinition = {
-  machineId: "test.lifecycle.v1",
+  machineId: "v0.0.1:strategy:test-lifecycle-1",
   entityType: "test_entity",
   version: "1.0.0",
   description: "Test lifecycle state machine for unit tests.",
@@ -48,7 +48,7 @@ const mockDefinition = {
 };
 
 const multiCellDefinition = {
-  machineId: "multi.cell.v1",
+  machineId: "v0.0.1:strategy:multi-cell-1",
   entityType: "test_entity",
   version: "1.0.0",
   description: "Multi-cell test state machine for disambiguation tests.",
@@ -479,7 +479,7 @@ describe("State Machine Core - Multi-cell Disambiguation", () => {
 describe("State Machine Core - requires_policy Evidence Check", () => {
   it("should reject requires_policy without allow evidence", () => {
     const def = {
-      machineId: "policy.evidence.v1",
+      machineId: "v0.0.1:strategy:policy-evidence-1",
       entityType: "test",
       version: "1.0.0",
       description: "Policy evidence test definition.",
@@ -504,7 +504,7 @@ describe("State Machine Core - requires_policy Evidence Check", () => {
 
   it("should allow requires_policy with allow evidence", () => {
     const def = {
-      machineId: "policy.evidence.v2",
+      machineId: "v0.0.1:strategy:policy-evidence-2",
       entityType: "test",
       version: "1.0.0",
       description: "Policy evidence v2 test definition.",
@@ -531,7 +531,7 @@ describe("State Machine Core - requires_policy Evidence Check", () => {
 describe("State Machine Core - requires_approval Evidence Check", () => {
   it("should reject requires_approval without approved evidence", () => {
     const def = {
-      machineId: "approval.evidence.v1",
+      machineId: "v0.0.1:strategy:approval-evidence-1",
       entityType: "test",
       version: "1.0.0",
       description: "Approval evidence test definition.",
@@ -556,7 +556,7 @@ describe("State Machine Core - requires_approval Evidence Check", () => {
 
   it("should allow requires_approval with approved evidence", () => {
     const def = {
-      machineId: "approval.evidence.v2",
+      machineId: "v0.0.1:strategy:approval-evidence-2",
       entityType: "test",
       version: "1.0.0",
       description: "Approval evidence v2 test definition.",

@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const dispatchOperationMock = vi.hoisted(() => vi.fn(async ({ response }) => {
   response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     result: { ok: true }
   }));
   return { ok: true };
@@ -79,7 +79,7 @@ function createUrl(pathname) {
 
 function createPlatform(overrides = {}) {
   const platform = {
-    catalog: vi.fn(() => ({ schemaVersion: 1, catalog: true })),
+    catalog: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1", catalog: true })),
     registry: {
       getTool: vi.fn(() => ({ id: "tool.alpha" })),
       getToolByOperationId: vi.fn(() => ({ id: "tool.alpha" })),
@@ -90,11 +90,11 @@ function createPlatform(overrides = {}) {
     runtime: {
       executeTool: vi.fn(async () => ({
         status: 200,
-        payload: { schemaVersion: 1, result: { ok: true } }
+        payload: { schemaVersion: "v0.0.1:schema:definition-1", result: { ok: true } }
       })),
       resumePendingOperation: vi.fn(async () => ({
         status: 200,
-        payload: { schemaVersion: 1, status: "completed" }
+        payload: { schemaVersion: "v0.0.1:schema:definition-1", status: "completed" }
       }))
     },
     store: {
@@ -156,10 +156,10 @@ function createRuntimeFixture(overrides = {}) {
   };
 
   const tool = {
-    id: "pact.knowledge.search",
+    id: "pact.agentLibrary.search",
     operationId: operation.id,
     version: "1.0.0",
-    toolsets: ["pact.knowledge.read"],
+    toolsets: ["pact.agentLibrary.read"],
     requiredScopes: ["knowledge:read"],
     risk: "read_only",
     timeoutMs: 1000,
@@ -234,7 +234,7 @@ function createRuntimeFixture(overrides = {}) {
       grantPolicyRevision: 1,
       grantPolicyState: "active",
       governancePolicyRevision: {
-        protocolVersion: "pact.policy.v1",
+        protocolVersion: "v0.0.1:risk-control:policy-1",
         revision: 1,
         updatedAt: "2026-06-05T00:00:00.000Z"
       }
@@ -307,12 +307,12 @@ describe("tool-management store malformed persistence", () => {
           scopes: "knowledge:read",
           metadata: {
             note: "keep-me",
-            credentialProtocol: "pact.opaque-capability-key.v1",
+            credentialProtocol: "v0.0.1:risk-control:opaque-capability-key-1",
             credentialId: "grant-legacy",
             capabilitySetHash: "hash-1",
             capabilityCount: 2,
             runtimeLookupGeneration: 7,
-            credentialBindingProtocol: "pact.capability-binding-guard.v1",
+            credentialBindingProtocol: "v0.0.1:risk-control:capability-binding-guard-1",
             credentialBindingStrength: "strict",
             credentialBindingRequiredUser: true,
             credentialBindingRequiredAgent: false,
@@ -337,12 +337,12 @@ describe("tool-management store malformed persistence", () => {
           "broken",
           JSON.stringify({
             note: "keep-me",
-            credentialProtocol: "pact.opaque-capability-key.v1",
+            credentialProtocol: "v0.0.1:risk-control:opaque-capability-key-1",
             credentialId: "grant-legacy",
             capabilitySetHash: "hash-1",
             capabilityCount: 2,
             runtimeLookupGeneration: 7,
-            credentialBindingProtocol: "pact.capability-binding-guard.v1",
+            credentialBindingProtocol: "v0.0.1:risk-control:capability-binding-guard-1",
             credentialBindingStrength: "strict",
             credentialBindingRequiredUser: true,
             credentialBindingRequiredAgent: false,
@@ -379,12 +379,12 @@ describe("tool-management store malformed persistence", () => {
           });
           expect(loaded.metadata).toMatchObject({
             note: "keep-me",
-            credentialProtocol: "pact.opaque-capability-key.v1",
+            credentialProtocol: "v0.0.1:risk-control:opaque-capability-key-1",
             credentialId: "grant-legacy",
             capabilitySetHash: "hash-1",
             capabilityCount: 2,
             runtimeLookupGeneration: 7,
-            credentialBindingProtocol: "pact.capability-binding-guard.v1",
+            credentialBindingProtocol: "v0.0.1:risk-control:capability-binding-guard-1",
             credentialBindingStrength: "strict",
             credentialBindingRequiredUser: true,
             credentialBindingRequiredAgent: false,
@@ -395,12 +395,12 @@ describe("tool-management store malformed persistence", () => {
           expect(loaded.metadata).not.toHaveProperty("capabilityIds");
           expect(loaded.metadata).not.toHaveProperty("permissions");
           expect(loaded.credential).toMatchObject({
-            protocolVersion: "pact.opaque-capability-key.v1",
+            protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
             credentialId: "grant-legacy",
             capabilitySetHash: "hash-1",
             capabilityCount: 2,
             runtimeLookupGeneration: 7,
-            bindingProtocol: "pact.capability-binding-guard.v1",
+            bindingProtocol: "v0.0.1:risk-control:capability-binding-guard-1",
             bindingStrength: "strict",
             bindingRequiredUser: true,
             bindingRequiredAgent: false,
@@ -480,7 +480,7 @@ describe("tool-management catalog filtering", () => {
     });
     expect(knowledgeTool).toMatchObject({
       id: expect.any(String),
-      toolsets: ["pact.knowledge.read"],
+      toolsets: ["pact.agentLibrary.read"],
       requiredScopes: ["knowledge:read"],
       status: "active"
     });
@@ -729,7 +729,7 @@ describe("tool-management runtime and HTTP mappings", () => {
       ok: true,
       status: 200,
       payload: {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         status: "ok",
         pendingOperation: {
           pendingOperationId: "pending-4",
@@ -753,7 +753,7 @@ describe("tool-management runtime and HTTP mappings", () => {
         resumePendingOperation: vi.fn(async () => ({
           status: 400,
           payload: {
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             error: {
               code: "invalid_pending_operation_resolution",
               message: "Pending operation resolution must be approved or rejected."
@@ -778,7 +778,7 @@ describe("tool-management runtime and HTTP mappings", () => {
     expect(sendJsonMock).toHaveBeenCalledWith(expect.objectContaining({
       statusCode: 404
     }), 404, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "grant_not_found",
         message: "Grant not found."
@@ -797,7 +797,7 @@ describe("tool-management runtime and HTTP mappings", () => {
     });
     expect(invalidResolution).toBe(true);
     expect(sendJsonMock).toHaveBeenCalledWith(invalidResolutionResponse, 400, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "invalid_pending_operation_resolution",
         message: "Pending operation resolution must be approved or rejected."

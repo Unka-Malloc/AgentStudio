@@ -9,6 +9,7 @@ export function createSystemControllerCapabilityEcosystemHandlers({
     "strategy.workflow_policy.evaluate",
     "strategy.agent_policy.evaluate",
     "strategy.route_policy.evaluate",
+    "strategy.queue_policy.evaluate",
     "strategy.tool_policy.preview"
   ]);
 

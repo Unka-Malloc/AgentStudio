@@ -1,13 +1,13 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "name": "AcpAgentRelay",
-  "version": 1,
+  "version": "v0.0.1:agent:acp-agent-relay-1",
   "category": "agent-client-protocol",
   "agentCommunicationKind": "acp",
   "applicationSubsystem": "agent-relay",
   "description": "Phase 0/1 ACP Agent Relay capability runtime and operation facade.",
   "defaultLoaded": true,
-  "protocol": "pact.acp-agent-relay.v1",
+  "protocol": "v0.0.1:agent:acp-agent-relay-1",
   "components": {
     "acpAgentRelay": {
       "path": "./index.mjs",
@@ -20,10 +20,7 @@
         "createAcpSourceJsonRpcLineTransport",
         "createAcpSourceJsonRpcService",
         "createAcpSourceJsonRpcTransportPair",
-        "createAcpSourceStdioServer",
-        "createAcpSourceStdioServerOptionsFromEnv",
         "executeAcpAgentRelayOperation",
-        "runAcpSourceStdioServerFromEnv",
         "AcpInboundFacade",
         "AcpSourceJsonRpcBridge",
         "AcpSourceJsonRpcService",
@@ -56,6 +53,7 @@
         "RelayOperationExecutor"
       ],
       "operations": [
+        "acp_agent_relay.templates.list",
         "acp_agent_relay.virtual_agents.list",
         "acp_agent_relay.virtual_agents.upsert",
         "acp_agent_relay.targets.list",

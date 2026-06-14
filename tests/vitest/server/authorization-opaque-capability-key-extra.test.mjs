@@ -33,17 +33,17 @@ afterEach(async () => {
 describe("authorization opaque capability key extra branches", () => {
   it("normalizes helper inputs, hashes consistently, and rejects short lookup keys", () => {
     const canonical = canonicalOpaqueCapabilities([
-      "  cap:tool:pact.knowledge.health:execute  ",
+      "  cap:tool:pact.agentLibrary.health:execute  ",
       "cap:api:knowledge.search",
-      "cap:tool:pact.knowledge.health:execute"
+      "cap:tool:pact.agentLibrary.health:execute"
     ]);
 
     expect(canonical).toEqual([
       "cap:api:knowledge.search",
-      "cap:tool:pact.knowledge.health:execute"
+      "cap:tool:pact.agentLibrary.health:execute"
     ]);
     expect(opaqueCapabilityHash([
-      "cap:tool:pact.knowledge.health:execute",
+      "cap:tool:pact.agentLibrary.health:execute",
       "cap:api:knowledge.search"
     ])).toBe(opaqueCapabilityHash(canonical));
 
@@ -120,7 +120,7 @@ describe("authorization opaque capability key extra branches", () => {
     });
     await expect(provider.verify({
       capabilityKey: toolWildcardKey.capabilityKey,
-      requiredCapability: toolExecuteCapabilityId("pact.knowledge.health")
+      requiredCapability: toolExecuteCapabilityId("pact.agentLibrary.health")
     })).resolves.toMatchObject({
       ok: true,
       reasonCode: "capability_key_valid",

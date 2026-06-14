@@ -53,7 +53,7 @@ function makeSource(overrides: Partial<KnowledgeSource> = {}): KnowledgeSource {
 
 function makeSourcesState(overrides: Partial<KnowledgeSourceState> = {}): KnowledgeSourceState {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: "2026-06-04T00:00:00.000Z",
     summary: {
       totalCount: 1,

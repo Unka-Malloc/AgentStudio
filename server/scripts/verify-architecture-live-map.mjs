@@ -15,6 +15,8 @@ const ALL_GATE_IDS = [
   "rag-evaluation",
   "distillation-evaluation",
   "module-ecosystem",
+  "version-registry",
+  "version-naming",
   "asset-lineage",
   "architecture",
   "executive-report",
@@ -24,8 +26,8 @@ const ALL_GATE_IDS = [
 function productionHealth(overrides = {}) {
   const gateOverrides = new Map((overrides.gates || []).map((gate) => [gate.id, gate]));
   return {
-    schemaVersion: 1,
-    reportType: "pact.production-health.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    reportType: "v0.0.1:platform:production-health-1",
     generatedAt: "2026-05-22T00:00:00.000Z",
     status: overrides.status || "pass",
     latestReport: {
@@ -48,7 +50,7 @@ function productionHealth(overrides = {}) {
 async function verifyLiveMap() {
   const liveMap = await buildArchitectureLiveMap({ productionHealth: productionHealth() });
   assert.equal(liveMap.protocolVersion, ARCHITECTURE_LIVE_MAP_PROTOCOL_VERSION);
-  assert.equal(liveMap.schemaVersion, 1);
+  assert.equal(liveMap.schemaVersion, "v0.0.1:schema:definition-1");
   assert.equal(liveMap.productionStatus, "pass");
   assert.ok(liveMap.nodes.length >= 6, "core architecture nodes must be listed");
   assert.equal(liveMap.summary.total, liveMap.nodes.length);
@@ -67,6 +69,15 @@ async function verifyLiveMap() {
   assert.deepEqual(
     workspaceNode.gates.map((gate) => gate.gateId),
     ["workspace-contribution-governance", "workspace-governance"]
+  );
+  const versionControlNode = nodesById.get("version-control");
+  assert.ok(versionControlNode, "version control node must exist");
+  assert.equal(versionControlNode.status, "pass");
+  assert.ok(versionControlNode.docRefs.every((ref) => ref.exists), "version control docs must resolve");
+  assert.ok(versionControlNode.implementationPaths.every((ref) => ref.exists), "version control implementation path must resolve");
+  assert.deepEqual(
+    versionControlNode.gates.map((gate) => gate.gateId),
+    ["architecture", "version-registry", "version-naming"]
   );
 
   const blockedMap = await buildArchitectureLiveMap({

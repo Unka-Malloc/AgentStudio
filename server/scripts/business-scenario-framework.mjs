@@ -621,7 +621,7 @@ export async function createBusinessHarness(options = {}) {
       uploadSessionId: ""
     });
     await writeJson(filePath("background", "queue-monitor-state.json"), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       updatedAt: staleAt,
       items: {
         [queueId]: {
@@ -870,7 +870,7 @@ export async function runScenarioSuite(scenarios, options = {}) {
   }
 
   const report = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     generatedAt: nowIso(),
     summary: {
       total: results.length,

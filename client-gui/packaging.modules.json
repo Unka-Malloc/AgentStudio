@@ -33,7 +33,7 @@
       "cargoBin": "pact-client"
     },
     "portable-data": {
-      "label": "Future client local state, activity, snapshots, and target config cache",
+      "label": "Future client local state, mobile relay, activity, snapshots, and target config cache",
       "category": "storage",
       "enabled": true,
       "required": true,
@@ -50,13 +50,14 @@
         "future-client/pairings",
         "future-client/skills",
         "future-client/pins",
+        "future-client/mobile-relay",
         "future-client/activity",
         "future-client/snapshots",
         "target-config-cache"
       ]
     },
     "target-adapters": {
-      "label": "Target adapters for OpenClaw, Claude Code, Codex, Gemini CLI, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, and Windsurf",
+      "label": "Target adapters for OpenClaw, Claude Code, Codex, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, and Hermes Agent",
       "category": "agents",
       "enabled": true,
       "required": true,
@@ -74,14 +75,12 @@
         "openclaw",
         "claude-code",
         "codex",
-        "gemini-cli",
         "antigravity",
         "opencode",
         "copilot",
         "kilo-code",
         "cursor",
-        "hermes",
-        "windsurf"
+        "hermes"
       ]
     },
     "mcp-plugins": {
@@ -132,6 +131,22 @@
         "portable-data"
       ]
     },
+    "mobile-relay": {
+      "label": "Mobile pairing and command relay control plane",
+      "category": "mobile-relay",
+      "enabled": true,
+      "required": true,
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "packaging": "runtime-capability",
+      "requires": [
+        "portable-data",
+        "target-adapters"
+      ]
+    },
     "activity-snapshots": {
       "label": "Activity log and independent snapshot store",
       "category": "activity",
@@ -161,6 +176,32 @@
       "requires": [
         "portable-data"
       ]
+    }
+  },
+  "deferredCapabilities": {
+    "clientd": {
+      "status": "todo",
+      "reason": "The current client has no background daemon; GUI and pact-client use explicit local commands and portable state."
+    },
+    "upload-queue": {
+      "status": "todo",
+      "reason": "Large-file upload queue is not part of the current future-client package."
+    },
+    "mcp-local-bridge": {
+      "status": "todo",
+      "reason": "The current MCP connector talks to authenticated HTTP/HTTPS Pact endpoints; no local stdio bridge is shipped."
+    },
+    "client-connectors": {
+      "status": "todo",
+      "reason": "Local data connectors are deferred; connector governance remains server-side until a client runtime is implemented."
+    },
+    "knowledge-cache": {
+      "status": "todo",
+      "reason": "The client does not ship a local long-term knowledge cache in the current package."
+    },
+    "mail-import-runtime": {
+      "status": "todo",
+      "reason": "Mail import remains a server ingestion flow; no client-side connector runtime is packaged."
     }
   }
 }

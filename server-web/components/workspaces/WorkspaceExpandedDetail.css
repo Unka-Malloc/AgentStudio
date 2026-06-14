@@ -10,12 +10,6 @@
   min-width: 0;
 }
 
-.ws-card-expanded .workspace-status-row {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-
 .ws-card-expanded .workspace-chain-panel {
   margin: var(--space-4) 0;
 }
@@ -226,54 +220,6 @@
   max-height: 240px;
   white-space: pre;
   margin: 0;
-}
-
-.ws-card-expanded .copyable-wrapper {
-  position: relative;
-  display: inline-flex;
-  max-width: 100%;
-  align-items: center;
-  cursor: pointer;
-}
-
-.ws-card-expanded .copyable-wrapper::after {
-  content: attr(data-pact-tooltip);
-  position: absolute;
-  top: -28px;
-  left: 0;
-  background: var(--pact-copy-popover-bg);
-  color: var(--pact-copy-popover-fg);
-  border: 1px solid var(--pact-copy-popover-border);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(4px);
-  transition: opacity 0.1s ease-out, transform 0.1s ease-out;
-  z-index: 100;
-  box-shadow: var(--pact-copy-popover-shadow);
-}
-
-.ws-card-expanded .copyable-wrapper:hover::after {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.ws-card-expanded .copyable-code {
-  user-select: all;
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: background-color 0.15s, color 0.15s;
-}
-
-.ws-card-expanded .copyable-wrapper:active .copyable-code {
-  background: var(--accent);
-  color: var(--bg-surface);
 }
 
 .ws-card-expanded .workspace-delete-actions {

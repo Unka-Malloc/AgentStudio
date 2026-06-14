@@ -119,8 +119,8 @@ export function buildReadinessReport(
   }));
 
   return {
-    schemaVersion: 1,
-    reportType: "pact.readiness.report.v0.1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    reportType: "v0.0.1:production-readiness:report-0.1",
     runId,
     generatedAt: new Date().toISOString(),
     branch: branch || "",

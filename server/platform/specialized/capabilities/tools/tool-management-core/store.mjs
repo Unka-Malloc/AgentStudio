@@ -26,8 +26,8 @@ import {
   toolsetsToScopes
 } from "./catalog.mjs";
 
-const TOKEN_PREFIX = "sat_";
 const DEFAULT_RATE_LIMIT_PER_MINUTE = 0;
+const DEFAULT_GRANT_CAPABILITIES = Object.freeze(["cap:tool:*"]);
 
 function nowIso() {
   return new Date().toISOString();
@@ -35,10 +35,6 @@ function nowIso() {
 
 function randomId(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${crypto.randomBytes(5).toString("hex")}`;
-}
-
-function createToken() {
-  return `${TOKEN_PREFIX}${crypto.randomBytes(24).toString("base64url")}`;
 }
 
 function isEnabled(value = "") {
@@ -280,7 +276,8 @@ function resolveGrantCapabilities(grant = {}, { registry = null, capabilityResol
       (toolsetResolution.tools || []).map((tool) => toolExecuteCapabilityId(tool.id))
     );
   }
-  return normalizeKernelCapabilities(explicit, resolved);
+  const capabilities = normalizeKernelCapabilities(explicit, resolved);
+  return capabilities.length > 0 ? capabilities : [...DEFAULT_GRANT_CAPABILITIES];
 }
 
 function credentialMetadataFromIssue(issue = {}) {
@@ -374,6 +371,25 @@ function bindingContextFromRequest({ request = null, context = {} } = {}) {
       headerValue(request, "x-pact-client-id", "x-pact-client-name")
     )
   };
+}
+
+function bindingContextMismatch(boundContext = {}, requestContext = {}) {
+  const checks = [
+    ["userId", "binding_user_mismatch"],
+    ["boundUserId", "binding_user_mismatch"],
+    ["agentId", "binding_agent_mismatch"],
+    ["agentProfileId", "binding_agent_mismatch"],
+    ["clientId", "binding_client_mismatch"],
+    ["namespace", "binding_namespace_mismatch"]
+  ];
+  for (const [key, reasonCode] of checks) {
+    const boundValue = String(boundContext?.[key] || "").trim();
+    const requestValue = String(requestContext?.[key] || "").trim();
+    if (boundValue && requestValue && boundValue !== requestValue) {
+      return { ok: false, reasonCode, key };
+    }
+  }
+  return { ok: true };
 }
 
 function hasColumn(db, tableName, columnName) {
@@ -706,18 +722,56 @@ function rowToGrant(row) {
   };
 }
 
-function publicGrant(grant) {
+function publicGrant(grant, { catalogFingerprint = "" } = {}) {
   if (!grant) {
     return null;
   }
   const { tokenHash, ...rest } = grant;
   const metadata = sanitizeGrantMetadata(rest.metadata);
+  const projection = grantProjectionDescriptor(rest, {
+    metadata,
+    catalogFingerprint
+  });
   return {
     ...rest,
     metadata,
     capabilities: [],
     credential: credentialFromMetadata(metadata),
+    projection,
+    projectionFingerprint: projection.fingerprint,
+    catalogFingerprintAtRead: projection.catalogFingerprint,
     hasToken: Boolean(tokenHash)
+  };
+}
+
+function grantProjectionDescriptor(grant = {}, {
+  metadata = {},
+  catalogFingerprint = ""
+} = {}) {
+  const normalizedMetadata = metadata && typeof metadata === "object" && !Array.isArray(metadata)
+    ? metadata
+    : {};
+  const projection = {
+    protocolVersion: "v0.0.1:tool:grant-projection-1",
+    grantId: String(grant.id || ""),
+    type: String(grant.type || ""),
+    enabled: grant.enabled !== false,
+    toolsets: normalizeStringList(grant.toolsets).sort(),
+    toolAllow: normalizeStringList(grant.toolAllow).sort(),
+    toolDeny: normalizeStringList(grant.toolDeny).sort(),
+    scopes: normalizeStringList(grant.scopes).sort(),
+    allowedOrigins: normalizeStringList(grant.allowedOrigins).sort(),
+    allowedCidrs: normalizeStringList(grant.allowedCidrs).sort(),
+    maxUses: grant.maxUses === null || grant.maxUses === undefined ? null : Number(grant.maxUses || 0),
+    rateLimit: normalizeRateLimit(grant.rateLimit),
+    policyRevision: Math.max(0, Number(normalizedMetadata.policyRevision || 0) || 0),
+    credentialProtocol: String(normalizedMetadata.credentialProtocol || "").trim(),
+    credentialId: String(normalizedMetadata.credentialId || "").trim(),
+    catalogFingerprint: String(catalogFingerprint || "").trim()
+  };
+  return {
+    ...projection,
+    fingerprint: hashValue(projection)
   };
 }
 
@@ -771,8 +825,8 @@ function relayChildOperationSummary(value = null) {
     ? value.requestBindingMismatches.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 16)
     : [];
   const summary = {
-    schemaVersion: 1,
-    binding: text("binding") || "pact.acp-agent-relay.child-operation.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    binding: text("binding") || "v0.0.1:agent:acp-agent-relay-child-operation-1",
     relaySessionId: text("relaySessionId"),
     relayTurnId: text("relayTurnId"),
     virtualAgentId: text("virtualAgentId"),
@@ -1536,7 +1590,7 @@ export function createToolManagementStore({
     }
     try {
       const result = changeListener({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         source: "tool-management-store",
         at: nowIso(),
         ...event
@@ -1555,6 +1609,20 @@ export function createToolManagementStore({
     } catch {
       return null;
     }
+  }
+
+  function currentCatalogFingerprint() {
+    try {
+      return String(registry?.getCatalog?.().fingerprint || "").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  function toPublicGrant(grant) {
+    return publicGrant(grant, {
+      catalogFingerprint: currentCatalogFingerprint()
+    });
   }
 
   async function flushChangeNotifications() {
@@ -1654,7 +1722,7 @@ export function createToolManagementStore({
     const rows = includeRevoked
       ? db.prepare("SELECT * FROM tool_grants ORDER BY created_at DESC").all()
       : db.prepare("SELECT * FROM tool_grants WHERE revoked_at = '' ORDER BY created_at DESC").all();
-    return rows.map(rowToGrant).map(publicGrant);
+    return rows.map(rowToGrant).map(toPublicGrant);
   }
 
   async function createGrant(input = {}) {
@@ -1668,7 +1736,7 @@ export function createToolManagementStore({
     const capabilities = resolveGrantCapabilities(baseGrant, { registry, capabilityResolver });
     let token = "";
     let credentialMetadata = {};
-    if (capabilities.length > 0 && resolvedCapabilityKeyProvider) {
+    if (resolvedCapabilityKeyProvider) {
       const issued = await resolvedCapabilityKeyProvider.issue({
         credentialId: baseGrant.id,
         capabilities,
@@ -1693,12 +1761,7 @@ export function createToolManagementStore({
         };
       }
     } else {
-      token = createToken();
-      credentialMetadata = {
-        credentialProtocol: "pact.legacy-token-hash.v1",
-        credentialId: baseGrant.id,
-        credentialIssuedAt: nowIso()
-      };
+      throw new Error("Capability Kernel provider is required to issue Tool Management grants.");
     }
     const grant = normalizeGrantInput({
       ...baseGrant,
@@ -1710,13 +1773,16 @@ export function createToolManagementStore({
       tokenPrefix: `${token.slice(0, 10)}...`
     });
     upsertGrant(grant);
+    const publicCreatedGrant = toPublicGrant(grant);
     appendGrantEvent(grant.id, "created", {
       scopes: grant.scopes,
       credentialProtocol: grant.metadata.credentialProtocol || "",
       capabilitySetHash: grant.metadata.capabilitySetHash || "",
       capabilityCount: grant.metadata.capabilityCount || 0,
       policyRevision: grant.metadata.policyRevision || 0,
-      toolsets: grant.toolsets
+      toolsets: grant.toolsets,
+      catalogFingerprint: publicCreatedGrant.projection?.catalogFingerprint || "",
+      projectionFingerprint: publicCreatedGrant.projectionFingerprint || ""
     });
     await notifyChange({
       type: "grant_created",
@@ -1724,7 +1790,7 @@ export function createToolManagementStore({
       reasonCode: "grant_created"
     });
     return {
-      grant: publicGrant(grant),
+      grant: publicCreatedGrant,
       token
     };
   }
@@ -1751,13 +1817,18 @@ export function createToolManagementStore({
       existing
     );
     upsertGrant(updated);
-    appendGrantEvent(updated.id, "updated", { patch: summarizeValue(patch) });
+    const publicUpdatedGrant = toPublicGrant(updated);
+    appendGrantEvent(updated.id, "updated", {
+      patch: summarizeValue(patch),
+      catalogFingerprint: publicUpdatedGrant.projection?.catalogFingerprint || "",
+      projectionFingerprint: publicUpdatedGrant.projectionFingerprint || ""
+    });
     notifyChange({
       type: "grant_updated",
       grantId: updated.id,
       reasonCode: "grant_updated"
     });
-    return publicGrant(updated);
+    return publicUpdatedGrant;
   }
 
   function deleteGrant(grantId) {
@@ -1807,7 +1878,7 @@ export function createToolManagementStore({
       reasonCode: "grant_revoked",
       reason: updated.reason || "grant_revoked"
     });
-    return publicGrant(updated);
+    return toPublicGrant(updated);
   }
 
   async function rotateGrantToken(grantId) {
@@ -1831,7 +1902,7 @@ export function createToolManagementStore({
     }
     let token = "";
     let credentialMetadata = {};
-    if (capabilities.length > 0 && resolvedCapabilityKeyProvider) {
+    if (resolvedCapabilityKeyProvider) {
       const issued = await resolvedCapabilityKeyProvider.issue({
         credentialId: existing.id,
         capabilities,
@@ -1856,12 +1927,7 @@ export function createToolManagementStore({
         };
       }
     } else {
-      token = createToken();
-      credentialMetadata = {
-        credentialProtocol: "pact.legacy-token-hash.v1",
-        credentialId: existing.id,
-        credentialIssuedAt: nowIso()
-      };
+      throw new Error("Capability Kernel provider is required to rotate Tool Management grants.");
     }
     const updated = {
       ...existing,
@@ -1884,12 +1950,12 @@ export function createToolManagementStore({
       reasonCode: "grant_token_rotated"
     });
     return {
-      grant: publicGrant(updated),
+      grant: toPublicGrant(updated),
       token
     };
   }
 
-  function finishGrantAuthorization({ grant, request, sourceIp = "" }) {
+  function finishGrantAuthorization({ grant, request, sourceIp = "", requiredScopes = [], recordUse = true }) {
     const resolvedSourceIp = sourceIp || sourceIpFromRequest(request);
     const perMinute = Math.max(0, Number(grant.rateLimit?.perMinute || 0));
     let grantRateLimited = false;
@@ -1904,11 +1970,11 @@ export function createToolManagementStore({
     const authorizationDecision = evaluateAuthorizationPolicy({
       operation: {
         id: "tool.grant.authorize",
-        requiredScopes: [],
+        requiredScopes: Array.isArray(requiredScopes) ? requiredScopes : [],
         safety: { risk: "read_only" },
         readOnly: true
       },
-      grant: publicGrant(grant),
+      grant: toPublicGrant(grant),
       request,
       context: {
         grantRateLimited,
@@ -1932,7 +1998,15 @@ export function createToolManagementStore({
         reasonCode: authorizationDecision.reasonCode,
         missingCapabilities: authorizationDecision.missingCapabilities || [],
         missingScopes: authorizationDecision.missingScopes || [],
-        grant: publicGrant(grant),
+        grant: toPublicGrant(grant),
+        authorizationDecision
+      };
+    }
+    if (recordUse === false) {
+      return {
+        ok: true,
+        grant: toPublicGrant(grant),
+        sourceIp: resolvedSourceIp,
         authorizationDecision
       };
     }
@@ -1946,12 +2020,20 @@ export function createToolManagementStore({
     upsertGrant(updated);
     return {
       ok: true,
-      grant: publicGrant(updated),
+      grant: toPublicGrant(updated),
       sourceIp: resolvedSourceIp
     };
   }
 
-  async function authorizeOpaqueToolCapability({ token, grant, request, context = {}, tool }) {
+  async function authorizeOpaqueToolCapability({
+    token,
+    grant,
+    request,
+    context = {},
+    tool,
+    requiredScopes = [],
+    recordUse = true
+  }) {
     const requiredCapability = toolExecuteCapabilityId(tool.id);
     const credentialDecision = await resolvedCapabilityKeyProvider.verify({
       capabilityKey: token,
@@ -1970,7 +2052,7 @@ export function createToolManagementStore({
         reasonCode,
         missingCapabilities: credentialDecision.missingCapabilities || [requiredCapability],
         missingScopes: [],
-        grant: publicGrant(grant),
+        grant: toPublicGrant(grant),
         authorizationDecision: credentialDecision
       };
     }
@@ -1982,15 +2064,30 @@ export function createToolManagementStore({
         reasonCode: "credential_binding_mismatch",
         missingCapabilities: [],
         missingScopes: [],
-        grant: publicGrant(grant),
+        grant: toPublicGrant(grant),
         authorizationDecision: credentialDecision
       };
     }
     if (typeof resolvedCapabilityBindingGuard?.verifyCapabilityKeyBinding === "function") {
+      const boundContext = bindingContextFromGrant(grant);
+      const requestBindingContext = bindingContextFromRequest({ request, context });
+      const contextMismatch = bindingContextMismatch(boundContext, requestBindingContext);
+      if (!contextMismatch.ok) {
+        return {
+          ok: false,
+          status: 403,
+          error: "工具访问密钥与当前用户或智能体绑定不匹配。",
+          reasonCode: contextMismatch.reasonCode || "capability_binding_denied",
+          missingCapabilities: [],
+          missingScopes: [],
+          grant: toPublicGrant(grant),
+          authorizationDecision: contextMismatch
+        };
+      }
       const bindingDecision = await resolvedCapabilityBindingGuard.verifyCapabilityKeyBinding({
         capabilityKey: token,
         credentialId: grant.id,
-        context: bindingContextFromRequest({ request, context })
+        context: boundContext
       });
       if (!bindingDecision.ok) {
         return {
@@ -2000,7 +2097,7 @@ export function createToolManagementStore({
           reasonCode: bindingDecision.reasonCode || "capability_binding_denied",
           missingCapabilities: [],
           missingScopes: [],
-          grant: publicGrant(grant),
+          grant: toPublicGrant(grant),
           authorizationDecision: bindingDecision
         };
       }
@@ -2008,11 +2105,13 @@ export function createToolManagementStore({
     return finishGrantAuthorization({
       grant,
       request,
-      sourceIp: sourceIpFromRequest(request)
+      sourceIp: sourceIpFromRequest(request),
+      requiredScopes,
+      recordUse
     });
   }
 
-  async function authorizeRequest({ request, requiredScopes = [], tool = null, context = {} } = {}) {
+  async function authorizeRequest({ request, requiredScopes = [], tool = null, context = {}, recordUse = true } = {}) {
     const token = readBearerToken(request);
     if (!token) {
       return {
@@ -2033,8 +2132,16 @@ export function createToolManagementStore({
         reasonCode: "invalid_token"
       };
     }
-    void requiredScopes;
-    if (tool?.id && token.startsWith("ock_")) {
+    if (!token.startsWith("ock_")) {
+      return {
+        ok: false,
+        status: 401,
+        error: "工具访问令牌使用了已退役的格式。",
+        reasonCode: "retired_token_protocol",
+        grant: toPublicGrant(grant)
+      };
+    }
+    if (tool?.id) {
       if (typeof resolvedCapabilityKeyProvider?.verify !== "function") {
         return {
           ok: false,
@@ -2043,7 +2150,7 @@ export function createToolManagementStore({
           reasonCode: "capability_kernel_unavailable",
           missingCapabilities: [toolExecuteCapabilityId(tool.id)],
           missingScopes: [],
-          grant: publicGrant(grant),
+          grant: toPublicGrant(grant),
           authorizationDecision: {
             ok: false,
             reasonCode: "capability_kernel_unavailable",
@@ -2051,12 +2158,14 @@ export function createToolManagementStore({
           }
         };
       }
-      return authorizeOpaqueToolCapability({ token, grant, request, context, tool });
+      return authorizeOpaqueToolCapability({ token, grant, request, context, tool, requiredScopes, recordUse });
     }
     return finishGrantAuthorization({
       grant,
       request,
-      sourceIp: sourceIpFromRequest(request)
+      sourceIp: sourceIpFromRequest(request),
+      requiredScopes,
+      recordUse
     });
   }
 
@@ -2490,7 +2599,7 @@ export function createToolManagementStore({
         `).all(...requestFilters.params, normalizedLimit).map(rowToHttpRequestMetricEvent)
       : [];
     return {
-      schemaVersion: "pact.tool-management.metrics-export.v1",
+      schemaVersion: "v0.0.1:tool:management-metrics-export-1",
       generatedAt: nowIso(),
       filters: {
         limit: normalizedLimit,
@@ -2745,7 +2854,7 @@ export function createToolManagementStore({
         ? "warn"
         : "ok";
     return {
-      schemaVersion: "pact.tool-management.metrics-health.v1",
+      schemaVersion: "v0.0.1:tool:management-metrics-health-1",
       generatedAt: endedAt,
       status,
       window: {
@@ -3013,7 +3122,7 @@ export function createToolManagementStore({
     const metricRows = toolMetricEvents.rows + httpRequestMetricEvents.rows;
     const transferBytesTotal = toolMetricEvents.transferBytesTotal + httpRequestMetricEvents.transferBytesTotal;
     return {
-      schemaVersion: "pact.tool-management.metrics-storage.v1",
+      schemaVersion: "v0.0.1:tool:management-metrics-storage-1",
       generatedAt: nowIso(),
       database: {
         fileName: path.basename(databasePath),
@@ -3116,7 +3225,7 @@ export function createToolManagementStore({
         };
 
     return {
-      schemaVersion: "pact.tool-management.metrics-prune.v1",
+      schemaVersion: "v0.0.1:tool:management-metrics-prune-1",
       dryRun: Boolean(dryRun),
       cutoff,
       retentionDays: normalizeRetentionDays(retentionDays),
@@ -3308,7 +3417,7 @@ export function createToolManagementStore({
     db,
     rootPath,
     listGrants,
-    getGrant: (grantId) => publicGrant(getGrant(grantId)),
+    getGrant: (grantId) => toPublicGrant(getGrant(grantId)),
     getRawGrant: getGrant,
     createGrant,
     updateGrant,

@@ -57,19 +57,19 @@ function createPlatform(overrides = {}) {
   const runtimeExecuteTool = vi.fn(async (args) => ({
     status: 201,
     payload: {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       result: args
     }
   }));
   const runtimeResumePendingOperation = vi.fn(async (args) => ({
     status: 202,
     payload: {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       result: args
     }
   }));
   const platform = {
-    catalog: vi.fn(() => ({ schemaVersion: 1, catalog: true })),
+    catalog: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1", catalog: true })),
     registry: {
       getTool: vi.fn((toolId) => ({ id: toolId, name: `tool:${toolId}` })),
       getToolByOperationId: vi.fn((operationId) => ({ id: `tool.${operationId}`, operationId })),
@@ -156,7 +156,7 @@ describe("tool-management http router (extra coverage)", () => {
     expect(result.handled).toBe(true);
     expect(platform.catalog).toHaveBeenCalledTimes(1);
     expect(platform.registry.getTool).not.toHaveBeenCalled();
-    expect(sendJsonMock).toHaveBeenCalledWith(result.response, 200, { schemaVersion: 1, catalog: true });
+    expect(sendJsonMock).toHaveBeenCalledWith(result.response, 200, { schemaVersion: "v0.0.1:schema:definition-1", catalog: true });
     expect(result.response.statusCode).toBe(200);
   });
 
@@ -191,7 +191,7 @@ describe("tool-management http router (extra coverage)", () => {
     }));
     expect(platform.catalog).not.toHaveBeenCalled();
     expect(sendJsonMock).toHaveBeenCalledWith(result.response, 401, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "console_unauthenticated",
         message: "token missing",
@@ -221,16 +221,16 @@ describe("tool-management http router (extra coverage)", () => {
       toolId: "tool.execute",
       input: { alpha: 1 },
       request: executeResult.request,
-      context: { source: "unit-test" },
+      context: expect.objectContaining({ source: "unit-test", transport: "tool-http" }),
       dryRun: true
     }));
     expect(sendJsonMock).toHaveBeenLastCalledWith(executeResult.response, 201, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       result: expect.objectContaining({
         toolId: "tool.execute",
         input: { alpha: 1 },
         request: executeResult.request,
-        context: { source: "unit-test" },
+        context: expect.objectContaining({ source: "unit-test", transport: "tool-http" }),
         dryRun: true
       })
     });
@@ -253,20 +253,20 @@ describe("tool-management http router (extra coverage)", () => {
     expect(platform.runtime.executeTool).toHaveBeenNthCalledWith(2, expect.objectContaining({
       toolId: "tool.first",
       input: { x: 1 },
-      context: { batch: true, call: 1 },
+      context: expect.objectContaining({ batch: true, call: 1, transport: "tool-http-batch" }),
       dryRun: true
     }));
     expect(platform.runtime.executeTool).toHaveBeenNthCalledWith(3, expect.objectContaining({
       toolId: "tool.second",
       input: { y: 2 },
-      context: { batch: true },
+      context: expect.objectContaining({ batch: true, transport: "tool-http-batch" }),
       dryRun: true
     }));
     expect(sendJsonMock).toHaveBeenLastCalledWith(batchResult.response, 200, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       results: [
-        expect.objectContaining({ schemaVersion: 1, result: expect.any(Object) }),
-        expect.objectContaining({ schemaVersion: 1, result: expect.any(Object) })
+        expect.objectContaining({ schemaVersion: "v0.0.1:schema:definition-1", result: expect.any(Object) }),
+        expect.objectContaining({ schemaVersion: "v0.0.1:schema:definition-1", result: expect.any(Object) })
       ]
     });
   });
@@ -285,7 +285,7 @@ describe("tool-management http router (extra coverage)", () => {
     expect(result.handled).toBe(true);
     expect(platform.store.createGrant).not.toHaveBeenCalled();
     expect(sendJsonMock).toHaveBeenCalledWith(result.response, 403, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "confirmation_required",
         message: "Tool management grant changes require x-pact-safety-confirm: true."
@@ -308,7 +308,7 @@ describe("tool-management http router (extra coverage)", () => {
     expect(createGrantResult.handled).toBe(true);
     expect(platform.store.createGrant).toHaveBeenCalledWith({ label: "Grant", scopes: ["knowledge:read"] });
     expect(sendJsonMock).toHaveBeenCalledWith(createGrantResult.response, 201, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       grant: { id: "grant-new", label: "Grant", scopes: ["knowledge:read"] },
       token: "token-new"
     });
@@ -323,7 +323,7 @@ describe("tool-management http router (extra coverage)", () => {
     expect(rotated.handled).toBe(true);
     expect(platform.store.rotateGrantToken).toHaveBeenCalledWith("grant/id");
     expect(sendJsonMock).toHaveBeenLastCalledWith(rotated.response, 200, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       grant: { id: "grant/id", rotated: true },
       token: "token-rotated"
     });
@@ -350,7 +350,7 @@ describe("tool-management http router (extra coverage)", () => {
     expect(platform.runtime.executeTool).not.toHaveBeenCalled();
     expect(platform.store.createGrant).not.toHaveBeenCalled();
     expect(sendJsonMock).toHaveBeenCalledWith(result.response, 503, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "pending_operation_runtime_unavailable",
         message: "Pending operation runtime is unavailable."

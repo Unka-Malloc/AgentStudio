@@ -128,8 +128,8 @@ describe("codespace provider config and path handling", () => {
     const customRoot = "/tmp/codespace-custom-root";
     const customConfigPath = providerConfigPath(customRoot);
     setJson(customConfigPath, {
-      schemaVersion: 1,
-      protocolVersion: "pact.codespace.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:platform:codespace-1",
       updatedAt: "2026-06-04T00:10:00.000Z",
       providers: {
         github: {
@@ -183,7 +183,7 @@ describe("codespace repo port routing", () => {
   it("maps repo operations, preserves contract receipts, and blocks disabled providers", async () => {
     const root = "/tmp/codespace-repo-root";
     setJson(providerConfigPath(root), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: CODESPACE_PROTOCOL_VERSION,
       updatedAt: "2026-06-04T00:00:00.000Z",
       providers: {
@@ -282,7 +282,7 @@ describe("codespace repo port routing", () => {
     });
 
     setJson(providerConfigPath(root), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: CODESPACE_PROTOCOL_VERSION,
       updatedAt: "2026-06-04T00:20:00.000Z",
       providers: {
@@ -438,7 +438,7 @@ describe("codespace uploads, review actions, and sync status", () => {
   it("handles github uploads, review calls, upload validation errors, and gerrit syncs", async () => {
     const root = "/tmp/codespace-upload-root";
     setJson(providerConfigPath(root), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: CODESPACE_PROTOCOL_VERSION,
       updatedAt: "2026-06-04T00:00:00.000Z",
       providers: {
@@ -632,7 +632,7 @@ describe("codespace uploads, review actions, and sync status", () => {
   it("fetches and normalizes Gerrit status updates when requested", async () => {
     const root = "/tmp/codespace-sync-root";
     setJson(providerConfigPath(root), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: CODESPACE_PROTOCOL_VERSION,
       updatedAt: "2026-06-04T00:00:00.000Z",
       providers: {

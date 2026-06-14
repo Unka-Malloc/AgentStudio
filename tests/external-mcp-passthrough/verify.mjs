@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  adoptExternalServiceTools,
   externalServiceRegistryPath,
   refreshExternalServiceRuntime,
   saveExternalServiceConfig
@@ -179,9 +180,10 @@ async function main() {
         transport: "streamable-http",
         url: upstream.mcpUrl
       },
+      policyPreset: "servicehub.development-local",
       binding: {
         mode: "passthrough",
-        outlet: "pact.skillHub",
+        outlet: "pact.serviceHub",
         requiredScopes: ["knowledge:read"],
         risk: "read_only"
       }
@@ -240,10 +242,21 @@ async function main() {
     assert.equal(saved.externalMcpDiscovery.ok, true);
     assert.equal(saved.externalMcpDiscovery.tools.includes("echo"), true);
 
-    const runtimeRefresh = await refreshExternalServiceRuntime({ userDataPath });
+    const runtimeRefresh = await refreshExternalServiceRuntime({ userDataPath, cwd: userDataPath });
     assert.equal(runtimeRefresh.ok, true, JSON.stringify(runtimeRefresh.results));
     assert.equal(runtimeRefresh.refreshedCount, 1);
-    assert.equal(runtimeRefresh.state.services[0].externalMcp.toolCount >= 2, true);
+    const refreshedFixture = runtimeRefresh.state.services.find((entry) => entry.serviceId === "fixture-upstream");
+    assert.equal(refreshedFixture.externalMcp.toolCount >= 2, true);
+    const adopted = await adoptExternalServiceTools({
+      userDataPath,
+      cwd: userDataPath,
+      serviceId: "fixture-upstream",
+      adoptAll: true,
+      adoptedBy: "verify-external-mcp-passthrough"
+    });
+    assert.equal(adopted.ok, true, adopted.error || "fixture-upstream tool adoption should succeed");
+    assert.equal(adopted.adoptedToolNames.length >= 2, true, "expected external MCP tools to be adopted");
+    assert.equal(adopted.activeToolCount >= 2, true, "expected active external MCP tools after adoption");
 
     platform = createToolManagementPlatform({
       userDataPath,
@@ -268,7 +281,7 @@ async function main() {
     const grantResult = await platform.store.createGrant({
       label: "verify external MCP passthrough",
       scopes: ["knowledge:read"],
-      toolsets: ["pact.knowledge.read"],
+      toolsets: ["pact.agentLibrary.read"],
       toolAllow: [echoTool.id, addTool.id],
       reason: "External MCP passthrough verification."
     });

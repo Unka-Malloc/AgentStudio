@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: Pact 生产级能力差距清单.
 - Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
@@ -128,7 +128,7 @@
 
 ### P0-00 智能体知识源头权限门禁缺失
 
-当前状态：传统知识库倾向于把已经存进去的内容按召回和排序结果提供给智能体，重点放在优化切分、召回、排序和摘要。Pact 的路线不同：知识能力应命名和治理为 `AgentLibrary / 图书馆`，必须从 source / asset 入库开始治理智能体是否能发现、读取、引用、复制进上下文、导出、下载或写入长期 memory。当前代码已具备 `pact.knowledge-access.v1`、`pact.agent-library.v1`、accessMode / checkoutPolicy / loanRecord 裁决实现，并已通过 specialized console operation executor 绑定 `knowledge.access.*` 协议入口；v0.0.1 已把 Dify/RAGFlow contract-mode `KnowledgeBasePort` 的检索、evidence 回读和 export gate 接入同一裁决链。剩余差距是把真实上游凭据环境、上下文编译、蒸馏、memory 写入和更多外部 adapter 的所有出口继续强制接入该裁决，而不是只在验证脚本和控制台入口中证明能力存在。
+当前状态：传统知识库倾向于把已经存进去的内容按召回和排序结果提供给智能体，重点放在优化切分、召回、排序和摘要。Pact 的路线不同：知识能力应命名和治理为 `AgentLibrary / 图书馆`，必须从 source / asset 入库开始治理智能体是否能发现、读取、引用、复制进上下文、导出、下载或写入长期 memory。当前代码已具备 `v0.0.1:knowledge:access-1`、`v0.0.1:agent:library-1`、accessMode / checkoutPolicy / loanRecord 裁决实现，并已通过 specialized console operation executor 绑定 `knowledge.access.*` 协议入口；v0.0.1 已把 Dify/RAGFlow contract-mode `KnowledgeBasePort` 的检索、evidence 回读和 export gate 接入同一裁决链。Agent Library 对外 Tool Management tool id、toolset、ACP 默认 advertised tool、Skill 依赖和 Pact 技能参考已迁移到 `pact.agentLibrary.*`；`v0.0.1:knowledge:core-1` 仅保留为内部 mount/protocol 语义，不再作为 MCP 对外入口或授权心智。剩余差距是把真实上游凭据环境、上下文编译、蒸馏、memory 写入和更多外部 adapter 的所有出口继续强制接入该裁决，而不是只在验证脚本和控制台入口中证明能力存在。
 
 为什么重要：随着大模型基座智力、上下文窗口和注意力能力提升，知识库不应主要承担“有限信息投喂器”的角色，而应成为一栋权限严密、分类清楚、索引完备的团队知识图书馆。智能体有门禁卡才能进入，有楼层权限才能访问 source group，有图书权限才能读具体内容，有借阅权限才能带走。高敏感资产可以只允许受控读取，不允许导出、下载、写 artifact、写 memory 或送入未授权模型上下文。
 
@@ -140,7 +140,8 @@
 
 怎么补：
 
-- 继续完善 `pact.knowledge-access.v1` 和 `pact.agent-library.v1` 在所有知识出口的强制接入。
+- 继续完善 `v0.0.1:knowledge:access-1` 和 `v0.0.1:agent:library-1` 在所有知识出口的强制接入。
+- 保持 Tool Management toolset、grant fixture、doctor/connector 文案和 verifier 使用 `pact.agentLibrary.*` 对外命名；旧 `pact.knowledge.*` 只能作为被拒绝的迁移输入或内部协议前缀，不能继续作为可授权的对外 toolset。
 - 增加 `libraryCardId`、`knowledgeAccessReceipt`、`loanRecord`、`requestedEgress`、`canRetain`、`canShare`、`revocationPolicy`。
 - 定义外部知识库再授权模型：`upstreamKnowledgeRef`、`upstreamPolicyRef`、`derivedKnowledgeSpace`、`authorizationOverlay`、`upstreamAccessDenied`。
 - 支持同一 `upstreamKnowledgeRef` 映射多个 `derivedViewRef`，并按 subject / workspace / agent profile 分配不同权限。
@@ -155,9 +156,9 @@
 
 当前实现入口：
 
-- `server/platform/specialized/knowledge/agent-library/access-policy.mjs` 实现 `pact.knowledge-access.v1` 和 `pact.agent-library.v1` 的源头裁决、标准 `accessMode`、`requestedEgress`、`authorizationOverlay`、`knowledgeAccessReceipt`、`loanRecord` 和 denied request audit；`server/platform/specialized/console/console-domain-operation-executor.mjs` 负责控制台协议入口绑定，`common/console` 不再直接持有 access policy。
-- `server/platform/specialized/knowledge/storage/knowledge-backend-port/index.mjs` 实现 v0.0.1 Dify/RAGFlow `pact.knowledge-backend-port.v1` contract-mode：运行配置写入 `ServerConfig.getDataDir()/knowledge/knowledge-backends.json`，只保存 `secretRef` / `endpointRef`；safe discovery 不返回正文、snippet、上游裸 ID 或私有路径；授权 evidence 读取写 receipt/loan record，拒绝读取和拒绝导出写 denied request audit。缺少真实 Dify/RAGFlow 凭据时只能标记 `contractVerified`。
-- `server/platform/specialized/agent/cloud-drive-port/index.mjs` 实现 v0.0.1 `pact.cloud-drive-port.v1`：运行连接配置写入 `ServerConfig.getDataDir()/agent-workspaces/cloud-drive-connections.json`，ledger 写入 `agent-workspaces/cloud-drive-ledger.json`；iCloud 和 OneDrive 当前按本机同步目录 / local projection 支持，对 `.pact-data/<client>` 默认空间实读实写，对 `.pact-data/public` 和高级暴露目录默认只读，公开响应不暴露本机绝对路径；Google Drive、Dropbox 无真实 OAuth 凭据时只能标记 `contractVerified`，并通过 transfer receipt、access receipt、checkpoint 和 operation audit 证明合同链路。OneDrive OAuth / Microsoft Graph remote-live、真实 provider fileId / eTag / webUrl receipt 和真实远端同步证据是后续适配目标，不属于 v0.0.1 当前完成口径。
+- `server/platform/specialized/knowledge/agent-library/access-policy.mjs` 实现 `v0.0.1:knowledge:access-1` 和 `v0.0.1:agent:library-1` 的源头裁决、标准 `accessMode`、`requestedEgress`、`authorizationOverlay`、`knowledgeAccessReceipt`、`loanRecord` 和 denied request audit；`server/platform/specialized/console/console-domain-operation-executor.mjs` 负责控制台协议入口绑定，`common/console` 不再直接持有 access policy。
+- `server/platform/specialized/knowledge/storage/knowledge-backend-port/index.mjs` 实现 v0.0.1 Dify/RAGFlow `v0.0.1:knowledge:backend-port-1` contract-mode：运行配置写入 `ServerConfig.getDataDir()/knowledge/knowledge-backends.json`，只保存 `secretRef` / `endpointRef`；safe discovery 不返回正文、snippet、上游裸 ID 或私有路径；授权 evidence 读取写 receipt/loan record，拒绝读取和拒绝导出写 denied request audit。缺少真实 Dify/RAGFlow 凭据时只能标记 `contractVerified`。
+- `server/platform/specialized/agent/cloud-drive-port/index.mjs` 实现 v0.0.1 `v0.0.1:storage:cloud-drive-port-1`：运行连接配置写入 `ServerConfig.getDataDir()/agent-workspaces/cloud-drive-connections.json`，ledger 写入 `agent-workspaces/cloud-drive-ledger.json`；iCloud 和 OneDrive 当前按本机同步目录 / local projection 支持，对 `.pact-data/<client>` 默认空间实读实写，对 `.pact-data/public` 和高级暴露目录默认只读，公开响应不暴露本机绝对路径；Google Drive、Dropbox 无真实 OAuth 凭据时只能标记 `contractVerified`，并通过 transfer receipt、access receipt、checkpoint 和 operation audit 证明合同链路。OneDrive OAuth / Microsoft Graph remote-live、真实 provider fileId / eTag / webUrl receipt 和真实远端同步证据是后续适配目标，不属于 v0.0.1 当前完成口径。
 - `npm run server:verify:agent-library-access` 验证 A/B 再授权：A 获取授权范围并产生 receipt / loan record，B 在所有出口 `searchResult`、`evidenceRead`、`contextBundle`、`artifactWrite`、`exportFile`、`distillationInput`、`distillationOutput`、`memoryWrite`、`toolCall`、`evaluationSample` 都被同一套裁决拒绝。
 - `npm run server:verify:production-readiness` 已把该能力纳入 P0 门禁。
 
@@ -165,7 +166,7 @@
 
 ### P0-00-02 终端贡献型资产治理缺失
 
-当前状态：信息源不只来自上游知识库，很多高价值资产来自终端贡献：人类或本地智能体过滤、验证、精加工后的知识、Skills、工具、脚本、文件、黄金规则和专家意见。当前系统已具备 `pact.workspace-contribution.v1` 的持久贡献注册表、固定 workspace asset bucket、贡献状态机、发布审核流、跨 workspace adoption、贡献排行榜、统计面板、贡献授权和 usage / loan / audit 记录，并已通过 specialized console operation executor 绑定 `workspace.contribution.*` 与 `workspace.skill.*` 协议入口。剩余生产硬化方向是把更多真实客户端、真实组织策略和真实资产规模纳入持续门禁，而不是停留在控制台 runtime 内存注册表。
+当前状态：信息源不只来自上游知识库，很多高价值资产来自终端贡献：人类或本地智能体过滤、验证、精加工后的知识、Skills、工具、脚本、文件、黄金规则和专家意见。当前系统已具备 `v0.0.1:workspace:contribution-1` 的持久贡献注册表、固定 workspace asset bucket、贡献状态机、发布审核流、跨 workspace adoption、贡献排行榜、统计面板、贡献授权和 usage / loan / audit 记录，并已通过 specialized console operation executor 绑定 `workspace.contribution.*` 与 `workspace.skill.*` 协议入口。剩余生产硬化方向是把更多真实客户端、真实组织策略和真实资产规模纳入持续门禁，而不是停留在控制台 runtime 内存注册表。
 
 为什么重要：人过滤和精加工的信息往往最有效。过去如果只用知识库视角看这些材料，会把专家意见、黄金规则、Skills、脚本、文件和工具都压成“知识条目”，失去可操作性。AgentLibrary 应允许下游智能体向上提交资产，并让贡献资产在公共工作空间中被发现、授权、复用和审计。
 
@@ -173,7 +174,7 @@
 
 怎么补：
 
-- 继续完善 `pact.workspace-contribution.v1` 的持久化资产、跨 workspace 复用和发布审核闭环。
+- 继续完善 `v0.0.1:workspace:contribution-1` 的持久化资产、跨 workspace 复用和发布审核闭环。
 - 每个 workspace 固定提供 `skills/`、`tools/`、`scripts/`、`files/`、`knowledge/`、`rules/`、`expert-opinions/` 存放位置。
 - 允许下游智能体选择一个或多个可访问 workspace 上传贡献。
 - 贡献类型覆盖 `knowledge`、`skill`、`tool`、`script`、`file`、`goldenRule`、`expertOpinion`。
@@ -187,7 +188,7 @@
 
 当前实现入口：
 
-- `server/platform/specialized/agent/workspace-contribution/index.mjs` 实现 `pact.workspace-contribution.v1` 的持久贡献注册表、固定 workspace asset bucket 物化、submitted -> scanned -> reviewed -> preview -> published/adopted/revoked 发布审核状态机、贡献授权、loan record、usage event、audit event、排行榜和资产贡献统计报表；`server/platform/specialized/console/console-domain-operation-executor.mjs` 负责控制台协议入口绑定，`common/console` 不再直接持有 contribution registry。
+- `server/platform/specialized/agent/workspace-contribution/index.mjs` 实现 `v0.0.1:workspace:contribution-1` 的持久贡献注册表、固定 workspace asset bucket 物化、submitted -> scanned -> reviewed -> preview -> published/adopted/revoked 发布审核状态机、贡献授权、loan record、usage event、audit event、排行榜和资产贡献统计报表；`server/platform/specialized/console/console-domain-operation-executor.mjs` 负责控制台协议入口绑定，`common/console` 不再直接持有 contribution registry。
 - `npm run server:verify:workspace-contribution-governance` 验证 Skill 贡献从 submitted -> scanned -> reviewed -> preview -> published，随后授权 B 下载/安装/执行，跨 workspace adoption 生成目标 workspace asset，重载 registry 后仍可读取持久资产记录，并按 `rankScoreV0 = usageCount * successRate + uniqueWorkspaceAdoptions - rollbackCount` 生成排行榜；`acceptedCount` 只作为报表维度。
 - `npm run server:verify:production-readiness` 已把该能力纳入 P0 门禁。
 
@@ -222,7 +223,7 @@
 
 ### P0-02 内部 Trace 与可观测性不足
 
-当前差距：项目有日志、审计和若干状态接口，但还没有统一的 `pact.trace.v1` 内部 Trace schema；模型调用、检索、文档解析、外部知识库、工具调用、会话分叉、队列任务之间无法用同一个 trace 串起来。OpenTelemetry 应作为导出映射，不是内部事实源。
+当前差距：项目有日志、审计和若干状态接口，但还没有统一的 `v0.0.1:platform:trace-1` 内部 Trace schema；模型调用、检索、文档解析、外部知识库、工具调用、会话分叉、队列任务之间无法用同一个 trace 串起来。OpenTelemetry 应作为导出映射，不是内部事实源。
 
 P0 已确认所有操作都必须进入统一 Operation Scheduling Kernel 和 Operation Ledger：API / RPC / MCP / CLI / 控制台、读写请求、权限拒绝、后台任务、workflow activity、队列状态变更、provider side effect、工具执行和模型调用都不能只停留在模块本地 audit、provider ledger、queue event 或 runtime log。只有调度内核 accepted 的 operation 才能产生真实副作用；其它路径必须拒绝为 unmanaged / not scheduled。
 
@@ -236,10 +237,10 @@ P0 也已确认统一审批：高危 operation 必须由 Operation Scheduling Ke
 
 怎么补：
 
-- 定义 `pact.trace.v1`：trace/span 命名、属性、敏感字段脱敏、采样、成本、token、权限裁决、asset/evidence/checkpoint 引用。
+- 定义 `v0.0.1:platform:trace-1`：trace/span 命名、属性、敏感字段脱敏、采样、成本、token、权限裁决、asset/evidence/checkpoint 引用。
 - 定义统一 Operation Scheduling Kernel facade：任何受管 operation 先获得内核 accepted / rejected decision、`operationId` / `traceId` 和 `started` / `pending` 账本记录，写操作和外部副作用在账本不可写或未获内核许可时必须失败在副作用之前。
 - 定义统一 pending operation 模型：调度内核保存原 intent envelope、risk、policy、approvalScope、expiresAt 和 resume pointer；`/approval` 批准后恢复原 operation，拒绝 / 过期 / 撤销时不执行副作用。
-- 定义 `pact.trace.v1 -> OpenTelemetry` 映射：内部 Trace 是事实源，OTel/OTLP 是可选导出目标。
+- 定义 `v0.0.1:platform:trace-1 -> OpenTelemetry` 映射：内部 Trace 是事实源，OTel/OTLP 是可选导出目标。
 - 为这些路径打 span：upload、parse、normalize、ingest、search、evidence、distill、agent gateway、tool execution、session fork、workspace context load。
 - 接入可选 OTLP exporter，默认本地可关闭，生产可接 Jaeger、Tempo、Phoenix 或其它 OTel backend。
 - 服务端提供 trace drill-down 数据：一个回答或操作可以追溯文档、检索、证据、模型、工具、成本。
@@ -268,15 +269,15 @@ P0 也已确认统一审批：高危 operation 必须由 Operation Scheduling Ke
 
 怎么补：
 
-- 定义 `pact.workflow.v1`，先不强依赖 Temporal，但协议语义向 durable workflow 对齐。
+- 定义 `v0.0.1:workflow:core-1`，先不强依赖 Temporal，但协议语义向 durable workflow 对齐。
 - 将高风险长任务拆成 workflow + activity：文档解析、外部 KB ingest、蒸馏、批量邮件整理、导出、重建索引。
 - activity 必须幂等，写入幂等 key、输入 hash、输出 hash、补偿动作。
 - 后续可接 Temporal / BullMQ / 自研 durable runner，但接口先稳定。
 
 当前实现入口：
 
-- `docs/PROTOCOLS.md` 已定义 `pact.workflow.v1` 和 `pact.checkpoint-tree.v1` 的协议边界。
-- `server/platform/common/workflow/durable-workflow-store.mjs` 实现单机 `pact.workflow.v1` durable workflow store：workflow/activity/signal/timer/human review/external partial write 都写入 hash-chain execution history，支持重启恢复、活动幂等复用和 partial write 补偿语义。
+- `docs/PROTOCOLS.md` 已定义 `v0.0.1:workflow:core-1` 和 `v0.0.1:storage:checkpoint-tree-1` 的协议边界。
+- `server/platform/common/workflow/durable-workflow-store.mjs` 实现单机 `v0.0.1:workflow:core-1` durable workflow store：workflow/activity/signal/timer/human review/external partial write 都写入 hash-chain execution history，支持重启恢复、活动幂等复用和 partial write 补偿语义。
 - `server/services/client/work-queue-core/jobs/job-manager.mjs` 已把导入解析 job 接入 durable workflow：创建 job 时写入 workflow，worker-run 作为 activity 记录 heartbeat、完成、失败和恢复信号。
 - `server/platform/common/data-structure/checkpoint-tree-store.mjs` 提供 checkpoint tree 持久化、节点状态、事件追加、tree lock 和恢复查询基础。
 - `server/scripts/verify-durable-workflow.mjs` 验证 activity 幂等、hash-chain history、模拟崩溃恢复、timer、human review、external partial write commit 和最终 workflow completion。
@@ -307,7 +308,7 @@ P0 也已确认统一审批：高危 operation 必须由 Operation Scheduling Ke
 
 当前实现入口：
 
-- `server/platform/specialized/knowledge/storage/external-knowledge-base/index.mjs` 定义 `pact.external-knowledge-adapter.v1`，支持 `qdrant`、`opensearch`、`pgvector/postgres` 外部后端和本地 fallback。
+- `server/platform/specialized/knowledge/storage/external-knowledge-base/index.mjs` 定义 `v0.0.1:external-service:knowledge-adapter-1`，支持 `qdrant`、`opensearch`、`pgvector/postgres` 外部后端和本地 fallback。
 - adapter 覆盖 upsert、search、deleteBatch、health、permission/sourceIds 过滤、backendTrace、evidence pack 和混合检索能力声明。
 - `server/scripts/verify-external-knowledge-base.mjs` 验证 Qdrant/OpenSearch/pgvector 语义、batch 删除、回读、provider health 和 source 过滤。
 - `server/scripts/verify-knowledge-retrieval-quality.mjs` 与 `server/scripts/verify-source-evidence-preview.mjs` 验证检索质量和 evidence 回读。
@@ -355,7 +356,7 @@ P0 也已确认统一审批：高危 operation 必须由 Operation Scheduling Ke
 
 怎么补：
 
-- 定义 `pact.evaluation.v1`：dataset、case、expected、rubric、judge model、deterministic metric、result、trace。
+- 定义 `v0.0.1:strategy:evaluation-1`：dataset、case、expected、rubric、judge model、deterministic metric、result、trace。
 - 建立真实业务基准集：项目 Markdown、邮件线程、合同/发票/审批、PDF 表格、图文 PPT。
 - 每个模型/profile/tool grant 变更必须跑离线评估。
 - 生产流量抽样进入 shadow eval，不直接影响用户但生成质量趋势。
@@ -383,12 +384,29 @@ P0 也已确认统一审批：高危 operation 必须由 Operation Scheduling Ke
 
 怎么补：
 
-- 定义 `pact.security.v1`：tenant、workspace、subject、role、grant、data class、secret ref、audit event。
+- 定义 `v0.0.1:risk-control:core-1`：tenant、workspace、subject、role、grant、data class、secret ref、audit event。
 - 所有 trace/eval/export 必须走 redaction policy。
 - 工具执行必须按风险等级分层：read、write、repair、external side effect、shell/process。
 - 密钥只保存 secret ref，不进入 settings JSON、trace、export、bundle。
 - 增加安全门禁：越权检索、越权导出、工具越权、secret leak、trace leak。
 - 建立 Capability Key Kernel：调用者只持有一个 opaque key；内核只接受 `opaqueKey + requestedCapability` 并返回 allow/deny；普通业务 DB 只能做审计投影、展示、申请单或缓存，不能参与最终裁决。
+
+#### ServiceHub MCP 封装与转发生产缺口
+
+当前实现进展：ServiceHub 已有七入口 MCP outlet、HTTP/HTTPS-only raw MCP 校验、`pact.serviceHub` 默认绑定且 ServiceHub 模板禁止回绑旧 outlet、HTTP/HTTPS/JSON-RPC/SSE 分模板静态校验、最小 Registration Draft 和机器可读 `formContract` / `fieldModel`（已选模板必填字段、直接 JSON 必填字段、最小可用组合、必填分组、组合可选、模板注入默认、默认隐藏和 materialized-only 字段分层）、只读模板目录和 draft API、最小 Materialized Manifest 生成/落盘/脱敏并带稳定 `manifestFingerprint`、外部 MCP Streamable HTTP discovery/call、旧 HTTP+SSE MCP discovery/call、HTTP/OpenAPI/RPC compiled tool runtime、JSON-RPC 200/error envelope 失败映射、Generic SSE 有界 `GET` runtime、OpenAI-compatible / OpenAI Responses model gateway 有界 JSON POST runtime、Tool Management 外部转发前按采纳时 `inputSchema` 拦截非法输入、Tool Adoption review descriptor、candidate/active 工具详情投影、同名 fingerprint 变化 diff、采纳时 expected fingerprint compare-and-swap、prompt-injection 式描述 / 新增写能力 / risk 升级的候选工具 promotion 风险承认门禁、上游删除 active 工具时写入 operator 可见 tombstone 且不直接改写 active catalog、同名 schema/transport 变化时保留旧 active 并生成 replacement candidate、采纳 replacement candidate 时才替换旧 active、服务级 `activeVersion` / `candidateVersion` / `rollbackVersions` 快照、`external_services.versions.promote` / `external_services.versions.rollback` 控制面操作、Tool Management rollback runtime invalidation hook、in-flight HTTP/SSE/raw MCP 调用 abort、旧 activeVersion 返回结果丢弃、当前无持久 health cache 时的显式 no-op 清理结果、Tool Catalog 脱敏投影 ServiceHub manifest fingerprint / active version id / tool adoption fingerprint / service fingerprint / catalog binding fingerprint 且 catalog fingerprint 对外部 manifest、inputSchema、transport、adoption fingerprint 变化敏感、Tool Management grant 公共投影带 `projectionFingerprint`，`externalCallReceipt` 写入全局 catalog fingerprint、service catalog version id、catalog binding fingerprint、materialized manifest fingerprint、service fingerprint、tool adoption fingerprint、grant projection fingerprint、脱敏 egress decision，并覆盖成功、失败和 passthrough runtime unavailable 分支、外部服务 registry save/verify/refresh/health/admin API、显式 HTTP/HTTPS URL 与端口校验、字面 localhost/loopback/private/link-local/metadata 风险地址在生产默认下 fail-closed、运行时 DNS 解析结果命中私网/link-local/loopback 等受限地址时生产默认 fail-closed 且仅显式 `servicehub.development-local` 放行、外部 OpenAPI/MCP/HTTP tool/health fetch 禁止自动跟随 redirect 并记录/验证 3xx Location 决策、MCP connector/install/doctor/release 链路迁移到 `pact.discovery`，运行时对污染 cache 中的 raw MCP `transport=stdio|command|unknown` 二次 fail-closed，ServiceHub MCP 注册显式拒绝 `upstream.command/args/cwd/env` 等本地启动描述符，以及控制台不再暴露 stdio MCP 或旧 `pact.knowledge` outlet。控制台注册表单已从模板 catalog 的 `operatorMinimumDraft` 启动，按协议拆分 HTTP、HTTPS、JSON-RPC、Generic SSE 和 MCP transport，默认只展示最小必填字段；直接 JSON draft 用 `templateId` 区分协议族，`upstream.type` / raw MCP `transport` 由模板注入；泛化 RPC 不再作为默认一等注册选项展示；auth、timeout、health、binding、SSE event/budget、HTTP mapping、JSON-RPC endpoint、model budget/redaction/routing 等治理覆盖被折叠为组合可选字段，并在可选区按 `fieldModel.optionalGroups` 编辑；OpenAI-compatible model gateway 默认草案不再预填 `modelProtocol`、provider/auth，控制台只暴露当前 runtime 支持的 `openai-compatible` 与 `openai-responses`；候选工具弹层已按 Candidate/Active 分组展示 schema/risk/transport/fingerprint/reason，并支持选择性采纳。
+
+当前阻断缺口：
+
+- Tool Adoption Gate 仍不够完整。当前 save 已避免 discovery/refresh 失败后激活 registry，成功 discovery/refresh 只写 candidate catalog，控制台会显示 candidate/active 工具计数和 per-tool review 摘要，并可通过 `external_services.tools.adopt` / `/api/external-services/tools/adopt` 兼容采纳，或通过 `external_services.versions.promote` / `/api/external-services/versions/promote` 显式发布 candidate version 后才进入 `tools/list`；同名上游工具的 fingerprint 变化会生成 replacement candidate 并记录 previous/current diff，旧 active 保持到 operator 采纳 replacement；上游删除 active 工具会生成 tombstone evidence，工具目录不会被 refresh 静默删除；采纳/发布时可提交 expected tool fingerprint、candidate version id 和 candidate fingerprint 防止 stale candidate 竞态；prompt-injection 式描述、新增写能力、readOnly 降级或 risk 升级会阻断 promotion，除非 operator/admin 显式 `acknowledgeRisk`；production profile 下 adopt/promote、virtual `tools/list` 和 runtime direct call 会强制校验所有 ServiceHub production gate evidence，要求每个 gate `status=passed` 且带 `verifierId`、`evidenceRef`、`verifiedAt`，并绑定当前 manifest fingerprint 与已验证 candidate fingerprint，缺 evidence 时 fail-closed；`external_services.production.verify` / `/api/external-services/production/verify` 已提供 local-contract verifier runner，会在 manifest validation/discovery 成功、cache service 与 manifest fingerprint 一致、candidate version 未过期且 candidate 非空时，为 manifest 定义的每个 production gate 生成带 `evidenceRef`、`evidenceDigest`、`recordDigest`、manifest fingerprint 和 candidate fingerprint 的 `passed` gate record，并写回 materialized manifest 与 external MCP tool cache；production gate evaluator 会要求 `evidenceDigest` / `recordDigest` 为稳定 `sha256` 摘要，带 `evidencePayload` 时重算 evidence 摘要，并用去除 `recordDigest` 后的稳定记录哈希校验 record，防止篡改 gate record 后继续 promotion；非模型网关生产 candidate 的对象输入 schema 必须显式关闭 undeclared properties，开放或未声明 `additionalProperties` 的 HTTP/HTTPS/JSON-RPC/SSE/raw MCP 工具不得 promotion，closed-schema walker 已递归检查 `allOf`、`anyOf` 和 `oneOf` 分支，避免组合 schema 误报或漏报开放对象；发布会保存旧 activeVersion 到 rollbackVersions，`external_services.versions.rollback` 可恢复旧 schema/risk/transport；registry wrapper 与底层 runtime mutation 都会返回机器可读 `catalogChange`，Tool Management 的 `refreshExternalServiceTools(catalogChange)` 会先调用 runtime invalidation hook，再把 `external_service_production_verified`、`external_service_tools_adopted`、`external_service_catalog_promoted`、`external_service_catalog_rolled_back` 等 reasonCode 连同 service/version/manifest/invalidation 细节广播到 MCP `notifications/tools/list_changed`；rollback 事件会触发 in-flight 调用 abort、上游 session close best-effort、runtime cache invalidation 标记和无持久 health cache 的显式 no-op 清理结果；执行 receipt 已绑定 materialized manifest fingerprint、service catalog version id、adopted tool fingerprint、per-operation catalog binding fingerprint、全局 Tool Management catalog fingerprint 和 grant projection fingerprint；Tool Management 与 external passthrough runtime direct call 都会按采纳时 `inputSchema` 做安全子集校验，覆盖 object/array/string/number/integer/boolean/null、required、enum/const、`allOf`、`anyOf`、`oneOf`、`not`、常见 string `format`、安全 `pattern` 子集、min/max、minLength/maxLength、minItems/maxItems、maxProperties、嵌套 `items/properties` 和 `additionalProperties=false`，防止外部工具退化为自由参数代理；raw MCP direct call 也必须命中已注册工具名，不再允许任意未注册 `toolName` 透传；旧 no-adoption/no-policy cache 不再被兼容解释为 active，describe 只暴露 `legacyMigration.requires_readoption`，`tools/list` 和 runtime direct call 都必须重新采纳后才可用。`pattern` 的上线决策是保守安全子集而不是完整 ECMA 正则兼容：过长 pattern、backreference、lookaround、嵌套量词和多重 wildcard repetition 会 fail closed，避免 ReDoS 风险；需要复杂 pattern 的上游服务必须改用更简单 schema 或在受控 verifier 中扩展白名单。但还缺真实 live verifier / external dependency probe、真实 Evidence Locator 服务与 verifier 合同解析、重命名确认/alias 迁移、未来引入持久 health cache 或跨实例 session pool 后的分布式清理 verifier，以及按 manifest/tool/catalog fingerprint 重新投影 grant 的完整持久化机制。
+- Egress 仍需继续生产化。已有字面 host/IP 的 localhost、loopback、private、link-local、CGNAT、benchmark、multicast、reserved 地址默认拒绝，运行时 DNS 解析结果中的受限地址默认拒绝，`servicehub.development-local` 才允许本机开发，3xx Location 已显式记录/重校验且不会自动跟随；外部调用成功和失败路径会把脱敏 egress decision 写入 `externalCallReceipt.decisions.egress`，仅保留 host/category/DNS 计数和分类，不写 URL query、headers、body 或 secret；active runtime 遇到旧 cache 缺少 policy envelope 时会按 `servicehub.production-default` 执行 egress，而不是跳过校验；ServiceHub OpenAPI spec fetch、raw MCP Streamable HTTP、raw MCP SSE、compiled HTTP/JSON-RPC/SSE/model gateway 和 health check 都已通过共享 pinned fetch 把实际连接 DNS lookup 固定到已验证 answer，避免校验后再解析造成 DNS rebinding 窗口。剩余缺口是 container/management network 细分策略、旧 cache policy envelope 持久 reconciliation、按 service/tenant/workspace 的 egress allow policy，以及把 pinned fetch 证据纳入正式 Evidence Locator/verifier 合同。
+- SecretStore 通用注入仍需继续生产化。HTTP/HTTPS/JSON-RPC/SSE/MCP ServiceHub 模板已有 literal credential/header fail-closed 校验，`upstream.auth` 必须走 `secret://`；任意 header 名只要携带明显 literal credential value 也会在注册/verify 阶段 fail closed，materialized manifest redaction 和 runtime safe header map 也会兜底移除 token-like header value；运行时已能解析 local SecretStore 并向 MCP discovery/call、OpenAPI spec fetch 和 compiled HTTP call 注入 `bearer`、`api-key`、`basic` 认证 header，且 cache/manifest 只保留 public `secretRef` descriptor；本地 SecretStore 已支持 `revision`、`expectedRevision`、`rotateLocalSecret`、`revokeLocalSecret`、revoked fail-closed 和 servicehub secret lifecycle catalogChange，直接 secret rotate/revoke 事件也能通过 Tool Management normalization 触发 `external-service-runtime-cache` 与 `upstream-session` 失效；声明了 metadata scope 的 servicehub secret 会在解析时按 serviceId、host、protocol、tenantId、workspaceId、authBindingId 和 required scopes 做 fail-closed 校验，Tool Management 外部调用会把 `tenantId` / `workspaceId` / `authBindingId` 传入 ServiceHub runtime，ServiceHub runtime 再把当前 service/url/scope 传入 SecretStore；registry save、refresh、production verify、adopt、promote、rollback 也都会返回带 runtime/session invalidation scopes 的 catalogChange。但 auth binding evidence、跨实例事件传播和日志/trace/output 泄露门禁仍未完成。
+- Materialized Manifest 已有最小机器可读实现，记录 template、policy preset、redacted config、validation/discovery evidence 摘要、missing production gate 和稳定 `manifestFingerprint`，且该指纹已进入外部工具缓存、Tool Catalog 投影和 `externalCallReceipt`；但它尚未成为独立不可变 runtime contract，仍缺少完整展开 policy evidence、secret binding 状态、promotion metadata、catalog version、active/candidate 区分和 rollback target。
+- Raw MCP SSE 已从模板合同推进到旧 HTTP+SSE runtime：当前会先 GET SSE endpoint、读取 `endpoint` 事件、向 message endpoint POST JSON-RPC，并从同一 SSE 流按 JSON-RPC id 等待 `initialize`、`tools/list` 和 `tools/call` 响应；但仍缺重连/resume、stream cancel 细化、session invalidation verifier 和 live contract verifier。
+- Generic SSE 已从模板与静态校验推进到有界 runtime：当前会把最小工具编译为 `GET` 请求，解析 `text/event-stream` 为 `events[]`，并按 `tools[].sse.maxEvents`（默认 1）截断输出；reader 已有 byte/event budget、`tools[].sse.maxBytes`、event budget fail-closed、cancel/release/orphan cleanup evidence，Generic SSE 截断和 raw MCP SSE byte/event 超限都会关闭 reader 并返回 `streamEvidence`。剩余边界是长连接生产转发、chunk output governance、真实 live verifier 和跨实例 stream/session 清理证据，当前不作为对外生产能力开放。
+- OpenAI-compatible model gateway 已从 scaffold 推进到有界 JSON POST runtime：`openai-compatible` 自动生成 `chat_completions_create`，`openai-responses` 自动生成 `responses_create`，并走 SecretStore、egress、Tool Adoption、receipt 和 output governance 路径；模型网关 `stream:true` 请求和上游 `text/event-stream` 响应已 fail-closed，避免在 chunk governance 未完成前把模型流式输出暴露给 agent；但非 OpenAI LLM 协议仍是 scaffold，模型 token/cost budget、provider error taxonomy、streaming chunk governance、redaction verifier 和 contract/live verifier 仍未闭环。
+- Error taxonomy、externalCallReceipt、output governance、mapping sandbox、quota/bulkhead、deadline/cancellation、unknown outcome reconciliation 仍不足。Tool Management 已在外部服务调用 `result_summary_json` 写入脱敏 `externalCallReceipt` 摘要，并记录 materialized manifest、global catalog、catalog binding、service、tool adoption、grant projection fingerprint 和运行时 egress decision；外部 MCP 标量或嵌套 token-like 输出只进入脱敏摘要和 hash evidence，成功执行审计 entry 不再携带完整上游 `result`；raw MCP 工具返回 `image`、`audio`、`resource` 等非文本 MCP content 时，当前会以 `output_governance_blocked` fail closed，并只在 receipt 中记录 blocked content type，不返回原始 payload。但部分 control decision 仍有占位项，尚未和 quota/bulkhead ledger、mapping sandbox evidence、完整 output governance evidence、deadline lease、recovery record、auth binding evidence 和 catalog snapshot retention 完整绑定；外部副作用工具在没有 idempotency/status/reconcile/compensation/operator recovery evidence 前不得 promotion。
+
+上线策略：ServiceHub 可以开放 registration draft、template catalog、static verify、operator/admin save，以及已验证的 raw MCP Streamable HTTP、Raw MCP SSE、compiled HTTP/HTTPS/JSON-RPC、Generic SSE 有界响应和 OpenAI-compatible model gateway 有界转发。生产 profile 必须 fail closed。任何缺少 adoption/promotion、egress、secret、receipt、bounded streaming 或 output governance evidence 的服务，只能处于 draft/draftVerified/contractVerified 状态，不得进入生产 `tools/list`。
 
 #### Capability Key 设计要求
 
@@ -507,7 +525,7 @@ process memory:
 
 sealed state 写入必须串行化。Capability Kernel 和 Binding Guard 都维护内部 mutation queue；跨 helper / CLI / server 进程再使用 data dir 下的私有 lock file。并发签发、绑定、撤销、恢复导入和调用密钥轮换按顺序提交，首次 runtime lookup key 初始化也必须在锁内完成并持久化；读路径在当前写入完成后再返回裁决或 recovery package。这样保证 file fallback 和 keyring-backed 模式不会在高并发本机调用下出现后写覆盖先写的权限状态丢失。
 
-增强模式的第一步是命令级安全 helper，而不是立即要求用户安装长期驻留 daemon 或独立系统用户。`pact.capability-security-helper.v1` 接收一次 JSON 请求，在独立子进程内加载 Capability Kernel 与 Binding Guard，完成 `issueCapabilityKey`、`verifyCapability`、`verifyBinding`、`verifyCapabilityAndBinding` 和撤销操作，只返回当前请求的 allow/deny、reasonCode 与必要 credential 摘要；它不提供列出某个 key 全部 Capability 或绑定身份集合的接口。这个模式仍然继承当前后端的安全边界：keyring-backed 时可防普通业务 DB 和 grant projection 篡改，file fallback 时只保证可用和语义一致，不承诺同 OS 用户恶意进程隔离。
+增强模式的第一步是命令级安全 helper，而不是立即要求用户安装长期驻留 daemon 或独立系统用户。`v0.0.1:risk-control:capability-security-helper-1` 接收一次 JSON 请求，在独立子进程内加载 Capability Kernel 与 Binding Guard，完成 `issueCapabilityKey`、`verifyCapability`、`verifyBinding`、`verifyCapabilityAndBinding` 和撤销操作，只返回当前请求的 allow/deny、reasonCode 与必要 credential 摘要；它不提供列出某个 key 全部 Capability 或绑定身份集合的接口。这个模式仍然继承当前后端的安全边界：keyring-backed 时可防普通业务 DB 和 grant projection 篡改，file fallback 时只保证可用和语义一致，不承诺同 OS 用户恶意进程隔离。
 
 恢复和迁移必须支持 recovery package：
 
@@ -518,7 +536,7 @@ pact security recovery import
 
 recovery package 用于换机器、重装系统、keyring 损坏或从 file fallback 升级到 keyring。导出必须有用户确认，默认加密，可包含 sealed state、epoch、stateRoot、后端类型和迁移元数据；不得进入普通 trace、bundle、checkpoint node 或审计导出。
 
-`pact security recovery export` 输出统一安全恢复包 `pact.security-recovery.v1`，其中包含两个互相独立的加密组件：
+`pact security recovery export` 输出统一安全恢复包 `v0.0.1:risk-control:recovery-1`，其中包含两个互相独立的加密组件：
 
 - `capabilityKernel`：恢复 opaque key 与 Capability 的 sealed binding。
 - `capabilityBindingGuard`：恢复 opaque key 与 namespace/user/agent/client 的 sealed binding。
@@ -596,11 +614,11 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 - `server/platform/common/security/auth/console-auth.mjs` 和 `server/scripts/console-auth.mjs` 提供 owner/admin/operator/viewer、登录、session、token rotation、审计和初始凭据治理。
 - `auth.sessions.rotate` / `POST /api/auth/sessions/rotate` / `auth sessions rotate` 提供当前控制台 session token rotation；轮换后旧 session token 立即失效，新 CSRF token 由 session token HMAC 派生，并写入审计。
-- `server/platform/common/security/authorization/organization-model.mjs` 提供独立组织模型 `pact.organization-model.v1`：根节点固定为 `Pact Root`，组织可以挂 Root 或其它组织，用户可以挂 Root 或组织，Owner 默认挂 Root；该模型只提供身份归属和治理上下文，不提供 Root 权限，也不进入 Capability Kernel。
+- `server/platform/common/security/authorization/organization-model.mjs` 提供独立组织模型 `v0.0.1:platform:organization-model-1`：根节点固定为 `Pact Root`，组织可以挂 Root 或其它组织，用户可以挂 Root 或组织，Owner 默认挂 Root；该模型只提供身份归属和治理上下文，不提供 Root 权限，也不进入 Capability Kernel。
 - `server/platform/common/security/authorization/authorization-engine.mjs` 维护硬编码 Capability manifest，支持 subject/tool grant 的 `tenantId`、workspace allowlist、dataClass allowlist 和 egress allowlist；tenant mismatch、workspace/dataClass/egress 越界会写入 authorization decision 与 denied request audit；未知 Capability 在签发和 grant 创建时会被拒绝，不能静默降级。
 - `server/platform/common/security/authorization/opaque-capability-key.mjs` 提供 Capability Key Kernel 的本机封装：新发 key 为 `ock_` opaque key；验证只接受 `opaqueKey + requestedCapability`；sealed state 优先走 OS keyring，keyring 不可用时可用 file fallback 并标记 degraded；macOS 使用 Keychain，Linux 已实现 `keyctl`、`secret-tool` 和 `pass` 三类后端，Windows 已实现 DPAPI-protected file 后端；支持 recovery package 导出/导入。
 - `server/platform/common/security/authorization/capability-binding-guard.mjs` 提供内核外 Binding Guard：签发时把 `opaqueKey + namespace/user/agent/client` 写入 sealed binding；执行时只验证当前请求上下文是否匹配，不返回、不暴露绑定身份集合；普通 grant metadata 被篡改后不能改变 sealed binding 裁决；Linux 与 Capability Kernel 共用 `keyctl`、`secret-tool`、`pass` 后端排序，Windows 共用 DPAPI-protected file 后端。
-- `server/scripts/pact-capability-security-helper.mjs` 和 `server/platform/common/security/authorization/capability-security-helper-client.mjs` 提供 `pact.capability-security-helper.v1` 命令级 helper：调用方可以把 opaque key 签发、指定 Capability 验证、Binding Guard 验证和 credential 撤销交给独立子进程完成；Tool Management 可通过 `PACT_TOOL_GRANT_CAPABILITY_SECURITY_HELPER=1` 进入该路径；helper 响应不包含完整 capability 列表、metadata、constraints、runtime lookup key、binding lookup key 或明文身份集合。
+- `server/scripts/pact-capability-security-helper.mjs` 和 `server/platform/common/security/authorization/capability-security-helper-client.mjs` 提供 `v0.0.1:risk-control:capability-security-helper-1` 命令级 helper：调用方可以把 opaque key 签发、指定 Capability 验证、Binding Guard 验证和 credential 撤销交给独立子进程完成；Tool Management 可通过 `PACT_TOOL_GRANT_CAPABILITY_SECURITY_HELPER=1` 进入该路径；helper 响应不包含完整 capability 列表、metadata、constraints、runtime lookup key、binding lookup key 或明文身份集合。
 - `server/platform/common/security/authorization/capability-kernel-status.mjs` 把 provider、securityMode、degraded、stateRoot、bindingCount 和 recoverySupported 汇总为脱敏状态；`server/scripts/doctor.mjs` 和 production health console 都会显示 `degraded_file_fallback`，避免文件降级被静默隐藏。
 - `server/scripts/pact.mjs` 提供 `pact security capability-kernel status`、`pact security binding-guard status`、`pact security recovery export` 和 `pact security recovery import`；recovery package 写出文件默认 `0600`，统一包同时包含 Capability Kernel 与 Binding Guard 两个加密组件，CLI 输出只返回 epoch、stateRoot、路径和状态摘要，不输出 passphrase、runtime lookup key、binding lookup key、明文 key、明文 capability 或明文身份。
 - `server/platform/common/security/operation-audit.mjs` 支持 tenant/trace 查询、审计保留策略、过期清理和脱敏 JSONL 导出，导出前统一调用 redaction policy，避免 secret、token、cookie、API key 和本机绝对路径进入审计包。
@@ -630,9 +648,9 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 怎么补：
 
-- 增加 `pact.backup.v1`：metadata DB、knowledge DB、raw objects、assets、jobs、settings、mount configs、model configs、auth DB 的 manifest。
+- 增加 `v0.0.1:storage:backup-1`：metadata DB、knowledge DB、raw objects、assets、jobs、settings、mount configs、model configs、auth DB 的 manifest。
 - 增加 `server:backup`、`server:restore --dry-run`、`server:verify:restore-drill`。
-- 增加 `pact.checkpoint-tree.v1`：统一 Checkpoint Tree，覆盖访问请求、文件变动、知识贡献、技能调用、权限裁决、上下文暴露、diff、restore preview、restore commit 和按 operation scope 回撤。
+- 增加 `v0.0.1:storage:checkpoint-tree-1`：统一 Checkpoint Tree，覆盖访问请求、文件变动、知识贡献、技能调用、权限裁决、上下文暴露、diff、restore preview、restore commit 和按 operation scope 回撤。
 - 访问请求也必须进入树：search、evidence read、asset download、context bundle、export、checkout、memory write、tool call input 都会改变 receipt、loan record、usage event、denied request audit 或上下文暴露状态。
 - 建立 Checkpoint Tree 安全恢复演示：A 逐个删除工作空间很多文件，管控台下滑找到 A 操作前节点，点击“恢复到此节点”，系统以新的 restore operation 回到目标状态，同时保留 A 的删除历史和恢复审计。
 - 每次 schema migration 输出 migration report。
@@ -641,7 +659,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前实现入口：
 
-- `server/platform/common/storage/backup-restore.mjs` 定义 `pact.backup-restore.v1`，支持服务端数据目录备份、`backup-manifest.json`、文件 hash、分类汇总、restore preview 和受控恢复报告。
+- `server/platform/common/storage/backup-restore.mjs` 定义 `v0.0.1:storage:backup-restore-1`，支持服务端数据目录备份、`backup-manifest.json`、文件 hash、分类汇总、restore preview 和受控恢复报告。
 - `GET /api/storage/backups`、`POST /api/storage/backups`、`POST /api/storage/backups/restore-preview`、`POST /api/storage/backups/restore` 提供服务端调用面；Tool Management 暴露 `pact.storageBackups.*`。
 - `server/platform/common/data-structure/checkpoint-tree-store.mjs` 和 `/api/system/checkpoint-trees` 提供长任务 checkpoint tree 查询、节点状态和事件链。
 - `server/platform/common/storage/rebuild-metadata.mjs`、`ops-tools.mjs` 和 `sqlite-migrations.mjs` 覆盖元数据重建、存储 doctor/reconcile 和 SQLite schema migration。
@@ -662,7 +680,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前实现入口：
 
-- `server/platform/specialized/agent/agent-workspace/index.mjs` 在 `pact.agent-session-thread.v1` 内补齐 `compareSessions()`、`createSessionMergeProposal()` 和 `archiveSession()`。
+- `server/platform/specialized/agent/agent-workspace/index.mjs` 在 `v0.0.1:agent:session-thread-1` 内补齐 `compareSessions()`、`createSessionMergeProposal()` 和 `archiveSession()`。
 - `compareSessions()` 只读比较两条线程，按 cloned source event 识别共同历史，输出 left-only / right-only / divergence 和同一 artifact/asset/document/path 的冲突。
 - `createSessionMergeProposal()` 只向目标 session 追加 `session_merge_proposal` 事件，`autoMergeApplied=false`，所有冲突进入人工或上层 decision，不自动写最终决策。
 - `archiveSession()` 追加 `session_archived` 事件并把 session 状态标记为 `archived`，不删除历史事件。
@@ -680,7 +698,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前实现入口：
 
-- `server/platform/common/production-readiness/report-reader.mjs` 读取 `docs/reports/history/production-readiness/<run-id>/report.json`，输出 `pact.production-health.v1`，按生产准入、知识质量、智能体运行时、权限安全、可观测性、连续性聚合状态。
+- `server/platform/common/production-readiness/report-reader.mjs` 读取 `docs/reports/history/production-readiness/<run-id>/report.json`，输出 `v0.0.1:platform:production-health-1`，按生产准入、知识质量、智能体运行时、权限安全、可观测性、连续性聚合状态。
 - `GET /api/production/health` / `production.health` 提供控制台和外部调用可复用的生产健康摘要，权限要求为 `console:read`。
 - `server-web/views/admin/ProductionHealthView.vue` 提供 `/admin/production-health` 管理页，展示最新 release gate、覆盖缺口、门禁明细、报告历史和执行入口。
 - `npm run server:verify:production-health-console` 验证报告读取、操作注册、前端路由、桥接方法和 feature registry 是否闭环。
@@ -693,11 +711,11 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 对标依据：Phoenix 评估和 traces 会记录模型、prompt、score、耗时；生产 Agent 需要知道改了哪个模型或 prompt 后质量/成本如何变化。
 
-补全方式：`pact.model-routing.v1` 增加 budget、circuit breaker、fallback chain、prompt version、cost ledger。
+补全方式：`v0.0.1:strategy:model-routing-1` 增加 budget、circuit breaker、fallback chain、prompt version、cost ledger。
 
 当前实现入口：
 
-- `server/platform/specialized/agent/agent-gateway/model-routing/index.mjs` 实现 `pact.model-routing.v1`，覆盖预算估算、fallback chain、熔断状态、prompt version、成本估算和 JSONL 成本台账。
+- `server/platform/specialized/agent/agent-gateway/model-routing/index.mjs` 实现 `v0.0.1:strategy:model-routing-1`，覆盖预算估算、fallback chain、熔断状态、prompt version、成本估算和 JSONL 成本台账。
 - `callAgentGateway()` 在请求携带 `modelRouting` 或全局 `settings.modelRouting` 时启用模型路由；同一次调用先做上下文压缩和客户端运行时分配，再按候选模型执行降级链。
 - `model-decision-runtime` 已把知识库模型角色调用接入模型路由，按角色生成 `model-decision.<roleId>` 路由、prompt version 和预算约束。
 - `GET /api/model-routing/health` / `model_routing.health` 读取模型路由熔断状态、最近台账、状态分布和估算成本。
@@ -711,11 +729,11 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 对标依据：Haystack/LlamaIndex 的组件化和 pipeline 生态强调可替换组件；企业生产中可替换组件必须带版本和治理。
 
-补全方式：定义 `pact.skill-registry.v1` 和 `pact.tool-package.v1`，所有外部工具/技能必须声明 capability、risk、input schema、secret refs、version、license。
+补全方式：定义 `v0.0.1:tool:skill-registry-1` 和 `v0.0.1:tool:package-1`，所有外部工具/技能必须声明 capability、risk、input schema、secret refs、version、license。
 
 当前实现入口：
 
-- `server/platform/specialized/capabilities/package-lifecycle/index.mjs` 实现 `pact.capability-package-lifecycle.v1`，并定义 `pact.tool-package.v1` 与 `pact.skill-registry.v1` 的统一 manifest 校验。
+- `server/platform/specialized/capabilities/package-lifecycle/index.mjs` 实现 `v0.0.1:tool:capability-package-lifecycle-1`，并定义 `v0.0.1:tool:package-1` 与 `v0.0.1:tool:skill-registry-1` 的统一 manifest 校验。
 - 能力包 manifest 必须声明 `kind`、`name`、`version`、`capabilities`、`risk`、`inputSchema`、`secretRefs`、`dependencies`、`compatibility`、`sandbox`、`license` 和签名摘要；写能力包不能使用 `none` sandbox。
 - 新增 `/api/capability-packages`、`/api/capability-packages/plan`、`/api/capability-packages/:packageId/lifecycle`，覆盖预检、提交、审批、安装、激活、回滚、废弃。
 - Tool Management catalog 已暴露 `pact.capabilityPackages.*` 工具入口，外部智能体必须通过 grant 和 policy 调用。
@@ -733,7 +751,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前实现入口：
 
-- `server/platform/specialized/knowledge/connectors/data-connector-governance/index.mjs` 定义 `pact.data-connector-governance.v1`、`pact.data-connector.v1` 和 `pact.local-mirror.v1`，只治理服务端连接器合同，不实现客户端连接器。
+- `server/platform/specialized/knowledge/connectors/data-connector-governance/index.mjs` 定义 `v0.0.1:storage:data-connector-governance-1`、`v0.0.1:storage:data-connector-1` 和 `v0.0.1:storage:local-mirror-1`，只治理服务端连接器合同，不实现客户端连接器。
 - 连接器 manifest 预检覆盖 provider/source 命名、capability、OAuth refresh、增量 cursor、冲突策略、hash collision 策略、rate limit、localQuery 禁远程、mirror dedupe 和卸载保留策略。
 - `GET /api/data-connectors/governance`、`POST /api/data-connectors/governance/plan`、`POST /api/data-connectors/governance/conformance` 提供服务端治理调用面；Tool Management catalog 暴露 `pact.dataConnectors.governance*`。
 - `npm run server:verify:data-connector-governance` 验证 manifest、OAuth refresh 策略、增量 cursor、未变更跳过、冲突更新、hash collision quarantine、rate limit、localQuery 禁远程、mirror cleanup、uninstall policy、操作注册和 Tool Management 暴露。
@@ -750,7 +768,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前实现入口：
 
-- `server/platform/specialized/knowledge/performance/capacity-benchmark/index.mjs` 定义 `pact.performance-capacity.v1`，内置 `smoke`、`pilot`、`production` 容量目标档位。
+- `server/platform/specialized/knowledge/performance/capacity-benchmark/index.mjs` 定义 `v0.0.1:platform:performance-capacity-1`，内置 `smoke`、`pilot`、`production` 容量目标档位。
 - benchmark runner 使用合成 corpus 实际走 `KnowledgeCore.ingestSources()` 和 `knowledgeCore.search()`，记录 ingest latency、search p50/p95/QPS、命中数和缺失查询恢复。
 - runner 复用 `data-connector-governance` 模拟外部 mirror sync，覆盖外部同步延迟、cursor 和 rate limit 失败注入；蒸馏吞吐以确定性摘要模拟记录，不触发模型成本。
 - `GET /api/performance/capacity/targets` 和 `POST /api/performance/capacity/benchmark` 提供服务端调用面；Tool Management catalog 暴露 `pact.performance.capacity.*`。
@@ -783,7 +801,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前实现入口：
 
-- `server/platform/specialized/knowledge/invocation/knowledge-evolution-runtime/index.mjs` 在 `knowledgeSkillSet` 目标中输出 `pact.knowledge-distillation-optimization.v1` 优化报告。
+- `server/platform/specialized/knowledge/invocation/knowledge-evolution-runtime/index.mjs` 在 `knowledgeSkillSet` 目标中输出 `v0.0.1:knowledge:distillation-optimization-1` 优化报告。
 - 优化报告记录 `promptVersion`、baseline skill/model/framework、候选 skill IDs、评估数据集版本和 case IDs、错误归因、历史指标趋势、canary deployment，以及是否需要人工审核。
 - 失败评估会生成 `humanReview.status=queued` 和 review reasons；通过评估并发布 canary 时记录 `humanReview.required=false`，仍保留 promote/rollback 路径。
 - `npm run server:verify:knowledge-distillation-optimization` 验证失败->人工审核、第二轮通过->canary、趋势对比、prompt/dataset 版本和持久化运行记录。
@@ -798,7 +816,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前实现入口：
 
-- `server/platform/common/module-manager/module-ecosystem/index.mjs` 定义 `pact.module-ecosystem.v1`，提供 `documentParser`、`analysis`、`knowledgeBase`、`vectorStore`、`graphStore`、`customMount`、`toolPackage`、`skillPackage` 模板。
+- `server/platform/common/module-manager/module-ecosystem/index.mjs` 定义 `v0.0.1:tool:module-ecosystem-1`，提供 `documentParser`、`analysis`、`knowledgeBase`、`vectorStore`、`graphStore`、`customMount`、`toolPackage`、`skillPackage` 模板。
 - `node server/scripts/pact-create-module.mjs --template ...` 生成服务端模块脚手架，包含 manifest、示例 `index.mjs`、sample、contract test 脚本和 GitHub Actions CI 模板。
 - `node server/scripts/pact-module-contract-test.mjs` 验证 mount factory、`reload/close`、sample extraction、postcommit hook 或 capability package manifest。
 - `GET /api/modules/templates`、`POST /api/modules/plan`、`POST /api/modules/scaffold`、`POST /api/modules/contract-test` 提供服务端调用面；Tool Management 暴露 `pact.modules.*`。
@@ -814,7 +832,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前实现入口：
 
-- `server/platform/specialized/agent/workspace-governance/index.mjs` 定义 `pact.workspace-governance.v1`，持久化 workspace policy、share grant 和 audit events。
+- `server/platform/specialized/agent/workspace-governance/index.mjs` 定义 `v0.0.1:workspace:governance-1`，持久化 workspace policy、share grant 和 audit events。
 - 工作空间策略包含 `organizationId`、`projectId`、`departmentId`、`dataClass`、`ownerSubjectIds`、`allowedSubjectIds`、`externalCollaboratorIds`、`allowedActions`、`copyPolicy`、`retention` 和 `legalHold`。
 - 策略评估覆盖组织不匹配、外部协作者未列名、主体不在授权范围、dataClass clearance 不足、export/checkout 禁止、legalHold 阻断删除/清理、跨 workspace copy/share 的项目和审批约束。
 - `GET /api/workspace-governance`、`POST /api/workspace-governance/policies`、`POST /api/workspace-governance/evaluate`、`POST /api/workspace-governance/share-grants` 提供服务端调用面；Tool Management 暴露 `pact.workspaceGovernance.*`。
@@ -827,11 +845,11 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前差距：图片、表格、OCR、视觉模型、图文流导出已有方向，但缺少统一 asset lineage、视觉模型版本、坐标锚点和重解析策略。
 
-补全方式：定义 `pact.asset-lineage.v1`，资产必须能追溯 raw object、page/slide、bbox、parser/model/version。
+补全方式：定义 `v0.0.1:asset:asset-lineage-1`，资产必须能追溯 raw object、page/slide、bbox、parser/model/version。
 
 当前实现入口：
 
-- `server/platform/specialized/knowledge/assets/asset-lineage/index.mjs` 定义 `pact.asset-lineage.v1`，持久化多模态资产血缘记录、派生链、重解析计划和审计事件。
+- `server/platform/specialized/knowledge/assets/asset-lineage/index.mjs` 定义 `v0.0.1:asset:asset-lineage-1`，持久化多模态资产血缘记录、派生链、重解析计划和审计事件。
 - lineage record 覆盖 `assetId`、`assetType`、`rawObject.objectId/uri/contentHash/mediaType`、`sourceAnchor.page/slideIndex/bbox/sourceRange`、`parser.id/version`、`visualModel.id/version/promptVersion`、`ocr.id/version`、`derivedFromAssetIds`、`producedBy` 和 `reparsePolicy`。
 - `GET /api/asset-lineage`、`POST /api/asset-lineage/records`、`POST /api/asset-lineage/trace`、`POST /api/asset-lineage/reparse-plan` 提供服务端调用面；Tool Management 暴露 `pact.assetLineage.*`。
 - `npm run server:verify:asset-lineage` 验证 image/table lineage、raw object/page/bbox/parser/model/OCR 字段、派生链 trace、parser/model/source hash 变化触发重解析候选、操作注册和 Tool Management 暴露。
@@ -846,7 +864,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前实现入口：
 
-- `server/platform/common/production-readiness/executive-report.mjs` 定义 `pact.executive-report.v1`，生成并持久化服务端管理层报告。
+- `server/platform/common/production-readiness/executive-report.mjs` 定义 `v0.0.1:platform:executive-report-1`，生成并持久化服务端管理层报告。
 - 报告聚合 production health、workspace contribution reports、capacity summary、evaluation summary 和 trace summary，输出 `executiveSummary`、`productionReadiness`、`assetValue`、`qualityAndEvaluation`、`capacityAndCost`、`traceAndSecurity` 和 `risks`。
 - 资产价值统计覆盖 accepted/usage/unique workspace adoption、permission request/grant、rollback、asset type、contributor、top reusable assets、high-demand restricted assets、rollback hotspots 和 under-maintained assets。
 - `GET /api/executive-report`、`POST /api/executive-report/preview`、`POST /api/executive-report/generate` 提供服务端调用面；Tool Management 暴露 `pact.executiveReport.*`。
@@ -860,7 +878,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前实现入口：
 
-- `server/platform/common/production-readiness/architecture-live-map.mjs` 定义 `pact.architecture-live-map.v1`，把核心架构节点映射到设计文档、服务端实现路径和 production readiness gate。
+- `server/platform/common/production-readiness/architecture-live-map.mjs` 定义 `v0.0.1:platform:architecture-live-map-1`，把核心架构节点映射到设计文档、服务端实现路径和 production readiness gate。
 - 节点覆盖 workspace asset governance、AgentLibrary access、knowledge core、module ecosystem、asset lineage 和 production readiness。
 - `GET /api/architecture/live-map` 提供服务端调用面；Tool Management 暴露 `pact.architecture.liveMap`。
 - `npm run server:verify:architecture-live-map` 验证文档/实现路径存在、门禁状态联动、操作注册和 Tool Management 暴露。
@@ -873,7 +891,7 @@ request(userId, agentId, namespace, operation, opaqueKey)
 
 当前实现入口：
 
-- `server/platform/common/production-readiness/sample-business-pack.mjs` 定义 `pact.sample-business-pack.v1`，内置 `enterprise-knowledge-pilot` 样例业务包。
+- `server/platform/common/production-readiness/sample-business-pack.mjs` 定义 `v0.0.1:platform:sample-business-pack-1`，内置 `enterprise-knowledge-pilot` 样例业务包。
 - 样例包可物化 EML 邮件线程、PDF 安全评审、PPTX 路线图、Markdown 项目文档和外部知识库 `docker-compose.yml`。
 - manifest 提供 `assets`、`ingestPlan`、`externalServices`、内容 `sha256` 和 parser route，便于新成员直接对照导入链路。
 - `GET /api/sample-business-packs`、`GET /api/sample-business-packs/:packId`、`POST /api/sample-business-packs/materialize` 提供服务端调用面；Tool Management 暴露 `pact.sampleBusinessPack.*`。

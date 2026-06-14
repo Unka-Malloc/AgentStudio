@@ -11,16 +11,12 @@ defineProps<{
 const {
   addChildWordCloud,
   addTermActionToCloud,
-  autoFillCloudWithAgent,
   collapsedWordBagIds,
-  fillingWordBagIds,
   jumpToCloud,
   pinWordCloud,
   pinnedWordBagIds,
   selectWordCloud,
   selectedWordCloud,
-  selectedWordCloudModel,
-  titleFocusedWordBagId,
   toggleWordCloudActionMenu,
   toggleWordCloudCollapsed,
   updateWordCloudField,
@@ -42,36 +38,13 @@ const {
       <div class="word-cloud-title-wrap">
         <input
           class="word-cloud-card-title-input"
-          :class="{ 'has-confirm': titleFocusedWordBagId === row.cloud.wordBagId && selectedWordCloudModel.enabled && !fillingWordBagIds.has(row.cloud.wordBagId) }"
           :value="row.cloud.label"
           type="text"
           autocomplete="off"
           placeholder="未命名词袋"
           @click.stop
-          @focus="titleFocusedWordBagId = row.cloud.wordBagId"
-          @blur="titleFocusedWordBagId = null"
           @input="updateWordCloudField(row.cloud.wordBagId, 'label', ($event.target as HTMLInputElement).value)"
         />
-        <span v-if="fillingWordBagIds.has(row.cloud.wordBagId)" class="word-cloud-title-filling" title="智能体正在填充词云…">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="word-cloud-title-spin">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-          </svg>
-        </span>
-        <button
-          v-else-if="titleFocusedWordBagId === row.cloud.wordBagId && selectedWordCloudModel.enabled"
-          class="word-cloud-title-confirm-btn"
-          type="button"
-          title="调用智能体填充相关词汇"
-          aria-label="填充词汇"
-          @mousedown.prevent
-          @click.stop="autoFillCloudWithAgent(row.cloud.wordBagId)"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M12 2a10 10 0 0 1 7.38 16.8"/>
-            <polyline points="16 12 12 8 8 12"/>
-            <line x1="12" y1="8" x2="12" y2="16"/>
-          </svg>
-        </button>
       </div>
       <div class="word-cloud-card-corner-actions" @click.stop>
         <button

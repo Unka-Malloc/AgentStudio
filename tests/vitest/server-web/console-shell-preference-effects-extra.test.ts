@@ -7,12 +7,12 @@ import {
   vi,
 } from "vitest";
 import {
+  applyAppearancePresetDocument,
   applyConsoleLanguageDocument,
-  applyConsoleThemeDocument,
+  persistAppearancePreset,
   persistConsoleLanguage,
-  persistConsoleTheme,
+  readStoredAppearancePreset,
   readStoredConsoleLanguage,
-  readStoredConsoleTheme,
 } from "../../../server-web/composables/console-shell-preference-effects";
 import { consoleMessages } from "../../../server-web/i18n/console";
 
@@ -34,16 +34,18 @@ describe("console shell preference effects extra coverage", () => {
     document.title = "";
   });
 
-  it("reads only supported stored theme and language values", () => {
-    browserWindowMock.readBrowserLocalStorageItem.mockReturnValueOnce("dark");
-    expect(readStoredConsoleTheme()).toBe("dark");
+  it("reads only supported stored appearance preset and language values", () => {
+    browserWindowMock.readBrowserLocalStorageItem.mockImplementation((key: string) =>
+      key === "pact-appearance-preset" ? "sunset-ember" : null,
+    );
+    expect(readStoredAppearancePreset()).toBe("sunset-ember");
 
-    browserWindowMock.readBrowserLocalStorageItem.mockReturnValueOnce("light");
-    expect(readStoredConsoleTheme()).toBe("light");
+    browserWindowMock.readBrowserLocalStorageItem.mockImplementation((key: string) =>
+      key === "pact-appearance-preset" ? "unknown" : null,
+    );
+    expect(readStoredAppearancePreset()).toBeNull();
 
-    browserWindowMock.readBrowserLocalStorageItem.mockReturnValueOnce("system");
-    expect(readStoredConsoleTheme()).toBeNull();
-
+    browserWindowMock.readBrowserLocalStorageItem.mockReset();
     browserWindowMock.readBrowserLocalStorageItem.mockReturnValueOnce("en");
     expect(readStoredConsoleLanguage()).toBe("en");
 
@@ -62,30 +64,34 @@ describe("console shell preference effects extra coverage", () => {
       throw new Error("storage blocked");
     });
 
-    expect(readStoredConsoleTheme()).toBeNull();
+    expect(readStoredAppearancePreset()).toBeNull();
     expect(readStoredConsoleLanguage()).toBeNull();
-    expect(() => persistConsoleTheme("dark")).not.toThrow();
+    expect(() => persistAppearancePreset("sunset-ember")).not.toThrow();
     expect(() => persistConsoleLanguage("en")).not.toThrow();
   });
 
   it("persists preferences using stable storage keys", () => {
-    persistConsoleTheme("light");
+    persistAppearancePreset("geek-light-blue");
     persistConsoleLanguage("zh-CN");
 
-    expect(browserWindowMock.writeBrowserLocalStorageItem).toHaveBeenCalledWith("pact-theme", "light");
+    expect(browserWindowMock.writeBrowserLocalStorageItem).toHaveBeenCalledWith("pact-appearance-preset", "geek-light-blue");
     expect(browserWindowMock.writeBrowserLocalStorageItem).toHaveBeenCalledWith("pact-language", "zh-CN");
   });
 
-  it("applies theme classes exclusively and clears classes for system mode", () => {
-    applyConsoleThemeDocument("dark");
-    expect(document.documentElement.classList.contains("theme-dark")).toBe(true);
-    expect(document.documentElement.classList.contains("theme-light")).toBe(false);
+  it("migrates legacy theme values and applies appearance through document dataset", () => {
+    browserWindowMock.readBrowserLocalStorageItem.mockImplementation((key: string) =>
+      key === "pact-theme" ? "dark" : null,
+    );
+    expect(readStoredAppearancePreset()).toBe("sunset-ember");
+    expect(browserWindowMock.writeBrowserLocalStorageItem).toHaveBeenCalledWith(
+      "pact-appearance-preset",
+      "sunset-ember",
+    );
 
-    applyConsoleThemeDocument("light");
-    expect(document.documentElement.classList.contains("theme-dark")).toBe(false);
-    expect(document.documentElement.classList.contains("theme-light")).toBe(true);
-
-    applyConsoleThemeDocument("system");
+    document.documentElement.classList.add("theme-dark", "theme-light");
+    applyAppearancePresetDocument("geek-light-blue");
+    expect(document.documentElement.dataset.appearancePreset).toBe("geek-light-blue");
+    expect(document.documentElement.dataset.appearanceColorScheme).toBe("light");
     expect(document.documentElement.classList.contains("theme-dark")).toBe(false);
     expect(document.documentElement.classList.contains("theme-light")).toBe(false);
   });

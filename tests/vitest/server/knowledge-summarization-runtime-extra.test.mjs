@@ -26,7 +26,7 @@ function createKnowledgeCore(searchItems = []) {
   return {
     enabled: true,
     search: vi.fn(async (input = {}) => ({
-      protocolVersion: "pact.knowledge.v1",
+      protocolVersion: "v0.0.1:knowledge:core-1",
       query: input.query,
       items: searchItems,
       count: searchItems.length,
@@ -40,7 +40,7 @@ function createContextRuntime() {
     assemble: vi.fn(async (input = {}) => {
       assembleCalls.push(input);
       return {
-        protocolVersion: "pact.context.v1",
+        protocolVersion: "v0.0.1:agent:context-1",
         profileId: input.contextProfileId || "default-context",
         roleId: input.roleId,
         budgetReport: {
@@ -388,8 +388,8 @@ describe("knowledge summarization runtime extra coverage", () => {
     });
 
     expect(response).toMatchObject({
-      protocolVersion: "pact.summarization.v1",
-      coordinatorProtocolVersion: "pact.multi-agent.v1",
+      protocolVersion: "v0.0.1:knowledge:summarization-1",
+      coordinatorProtocolVersion: "v0.0.1:agent:multi-agent-1",
       graphRuntime: "langgraph-js",
       run: {
         status: "completed",
@@ -435,7 +435,7 @@ describe("knowledge summarization runtime extra coverage", () => {
 
     const fetched = runtime.getRun(response.run.runId);
     expect(fetched).toMatchObject({
-      protocolVersion: "pact.summarization.v1",
+      protocolVersion: "v0.0.1:knowledge:summarization-1",
       run: { runId: response.run.runId, status: "completed" },
       coverage: expect.objectContaining({ totalEvidence: 3, coveredEvidence: 3 }),
     });

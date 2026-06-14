@@ -154,14 +154,14 @@ if (token) {
     headers,
     body: JSON.stringify(mcpRequest("tools/list", {}, 2))
   });
-  report.systemHealth = await jsonFetch(`${baseUrl}/mcp`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(mcpRequest("tools/call", {
-      name: "pact.call",
-      arguments: {
-        apiVersion: "pact.mcp.v1",
-        operation: "system.health",
+	  report.systemHealth = await jsonFetch(`${baseUrl}/mcp`, {
+	    method: "POST",
+	    headers,
+	    body: JSON.stringify(mcpRequest("tools/call", {
+	      name: "pact.discovery",
+	      arguments: {
+	        apiVersion: "v0.0.1:mcp:interface-1",
+	        operation: "system.health",
         input: {}
       }
     }, 3))
@@ -185,14 +185,26 @@ report.deviceManifest = await readDeviceManifest();
 const vmHealthUrl = String(report.discovery.payload?.mcpServers?.pact?.vmHttpUrl || "")
   .replace(/\/mcp$/, "/api/healthz");
 report.orbStack = vmHealthUrl
-  ? {
-      kate: await checkOrbStackVm({ vm: "kate", user: "kate", healthUrl: vmHealthUrl }),
-      serena: await checkOrbStackVm({ vm: "serena", user: "serena", healthUrl: vmHealthUrl })
+	  ? {
+	      kate: await checkOrbStackVm({ vm: "kate", user: "kate", healthUrl: vmHealthUrl }),
+	      serena: await checkOrbStackVm({ vm: "serena", user: "serena", healthUrl: vmHealthUrl })
     }
   : {
       kate: { ok: false, skipped: true, reason: "No VM health URL discovered." },
-      serena: { ok: false, skipped: true, reason: "No VM health URL discovered." }
-    };
+	      serena: { ok: false, skipped: true, reason: "No VM health URL discovered." }
+	    };
+
+const expectedOutlets = [
+  "pact.discovery",
+  "pact.agentLibrary",
+  "pact.sharedspace",
+  "pact.codespace",
+  "pact.skillHub",
+  "pact.agentRelay",
+  "pact.serviceHub"
+];
+const listedToolNames = new Set((report.toolsList.payload?.result?.tools || []).map((tool) => tool.name));
+const hasSevenOutlets = expectedOutlets.every((name) => listedToolNames.has(name));
 
 const ok = report.signedDiscovery.ok
   && report.discovery.ok
@@ -200,8 +212,8 @@ const ok = report.signedDiscovery.ok
   && report.deviceManifest.ok
   && (!token || (
     report.toolsList.ok
-    && (report.toolsList.payload?.result?.tools || []).length === 1
-    && report.toolsList.payload?.result?.tools?.[0]?.name === "pact.call"
+    && (report.toolsList.payload?.result?.tools || []).length === expectedOutlets.length
+    && hasSevenOutlets
     && report.systemHealth.ok
     && report.systemHealth.payload?.result?.structuredContent?.payload?.ok === true
   ));
@@ -239,13 +251,12 @@ console.log(JSON.stringify({
     },
     toolsList: {
       ok: report.toolsList.ok,
-      status: report.toolsList.status,
-      skipped: report.toolsList.skipped === true,
-      toolCount: report.toolsList.payload?.result?.tools?.length || 0,
-      stableToolOnly: (report.toolsList.payload?.result?.tools || []).length === 1
-        && report.toolsList.payload?.result?.tools?.[0]?.name === "pact.call",
-      reason: report.toolsList.reason || ""
-    },
+	      status: report.toolsList.status,
+	      skipped: report.toolsList.skipped === true,
+	      toolCount: report.toolsList.payload?.result?.tools?.length || 0,
+	      stableOutletSet: hasSevenOutlets,
+	      reason: report.toolsList.reason || ""
+	    },
     systemHealth: {
       ok: report.systemHealth.ok,
       status: report.systemHealth.status,

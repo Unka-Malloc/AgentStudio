@@ -96,7 +96,7 @@ async function callMcpRaw(baseUrl, token, operation, input = {}, id = 1, toolNam
     body: JSON.stringify(mcpRequest("tools/call", {
       name: toolName,
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation,
         input,
         clientVersion: "verify-workspace-local-dir-sync"

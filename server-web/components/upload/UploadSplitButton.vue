@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import BrowseSelectButton from "../BrowseSelectButton.vue";
 import { uploadFileListIcons } from "../../lib/upload-file-list";
 import { useConsoleDocumentDismissController } from "../../composables/console-document-dismiss-controller";
+import { currentConsoleLocale, localizeConsoleText, resolveEffectiveConsoleLocale } from "../../i18n/console";
 
 withDefaults(defineProps<{
   disabled?: boolean;
@@ -19,6 +20,10 @@ const folderIconUrl = uploadFileListIcons.folder;
 const chevronDownIconUrl = uploadFileListIcons.chevronDown;
 const uploadMenuOpen = ref(false);
 const uploadMenuRoot = ref<HTMLElement | null>(null);
+const locale = computed(() => resolveEffectiveConsoleLocale(currentConsoleLocale.value));
+function t(value: string) {
+  return localizeConsoleText(value, locale.value);
+}
 
 function closeUploadMenu() {
   uploadMenuOpen.value = false;
@@ -45,17 +50,17 @@ useConsoleDocumentDismissController({
 </script>
 
 <template>
-  <div ref="uploadMenuRoot" class="upload-split-button" aria-label="上传文件">
+  <div ref="uploadMenuRoot" class="upload-split-button" :aria-label="t('上传文件')">
     <BrowseSelectButton
       kind="local-files"
       button-class="upload-split-main"
-      button-text="上传文件"
+      :button-text="t('上传文件')"
       :disabled="disabled"
       :multiple="true"
       @select="emit('select', $event)"
     >
       <img :src="uploadIconUrl" alt="" aria-hidden="true" />
-      <span>上传文件</span>
+      <span>{{ t("上传文件") }}</span>
     </BrowseSelectButton>
     <button
       class="upload-split-arrow"
@@ -63,7 +68,7 @@ useConsoleDocumentDismissController({
       :disabled="disabled"
       aria-haspopup="menu"
       :aria-expanded="uploadMenuOpen"
-      aria-label="展开上传选项"
+      :aria-label="t('展开上传选项')"
       @click="toggleUploadMenu"
     >
       <img :src="chevronDownIconUrl" alt="" aria-hidden="true" />
@@ -72,12 +77,12 @@ useConsoleDocumentDismissController({
       <BrowseSelectButton
         kind="local-directory"
         button-class="upload-split-menu-item"
-        button-text="上传文件夹"
+        :button-text="t('上传文件夹')"
         :disabled="disabled"
         @select="handleDirectorySelected"
       >
         <img :src="folderIconUrl" alt="" aria-hidden="true" />
-        <span>上传文件夹</span>
+        <span>{{ t("上传文件夹") }}</span>
       </BrowseSelectButton>
     </div>
   </div>

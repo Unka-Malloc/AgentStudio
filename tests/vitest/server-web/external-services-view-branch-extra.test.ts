@@ -194,10 +194,17 @@ function createController(overrides: Record<string, unknown> = {}) {
     dirty: false,
     healthCheckTypeOptions: [{ value: "none", label: "none" }],
     isCloudDriveServiceDraft: false,
+    isHttpJsonServiceDraft: false,
+    isJsonRpcServiceDraft: false,
     isLlmServiceDraft: false,
+    isMcpServiceDraft: true,
+    isSseServiceDraft: false,
     loading: false,
     loadError: "",
-    mcpTransportOptions: [{ value: "streamable-http", label: "streamable-http" }],
+    mcpTransportOptions: [
+      { value: "streamable-http", label: "streamable-http" },
+      { value: "sse", label: "sse" },
+    ],
     modeOptions: [{ value: "connected", label: "connected" }],
     modelProtocolOptions: [{ value: "openai-compatible", label: "OpenAI Compatible" }],
     modelProtocolSelectValue: "openai-compatible",
@@ -211,12 +218,39 @@ function createController(overrides: Record<string, unknown> = {}) {
     riskOptions: [{ value: "read_only", label: "read_only" }],
     saveConfig: vi.fn(),
     saving: false,
+    showToolMappingFields: false,
+    showMcpTransportField: true,
+    endpointFieldLabel: "Endpoint URL",
+    endpointFieldPlaceholder: "https://mcp.example.com:443/mcp/",
+    endpointFieldValue: "",
+    minimumFieldLabels: [],
+    requiredFieldGroupSummaries: [],
+    optionalFieldGroupSummaries: [],
+    defaultedFieldLabels: [],
+    advancedOptionalFieldRows: [],
+    currentTemplateLabel: "Raw MCP Streamable HTTP",
+    httpMethodOptions: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    primaryToolName: "",
+    primaryHttpMethod: "GET",
+    primaryHttpPath: "/",
+    primaryRpcMethod: "",
+    upstreamAuthType: "none",
+    upstreamAuthHeaderName: "",
+    upstreamAuthSecretRef: "",
     serviceDiscoveryLabel: vi.fn(() => "MCP 服务"),
     serviceDiscoveryRegistrationLabel: vi.fn(() => "工具已发现"),
     serviceDiscoveryRegistrationTone: vi.fn(() => "success"),
     serviceDiscoveryTone: vi.fn(() => "success"),
     serviceHeartbeatLastAtLabel: vi.fn(() => "Latest: -"),
     isServiceHeartbeatRefreshing: vi.fn(() => false),
+    serviceActiveToolCount: vi.fn(() => 0),
+    serviceCandidateToolCount: vi.fn(() => 0),
+    serviceToolAdoptionLabel: vi.fn(() => "工具已采纳"),
+    serviceActiveToolReviewRows: vi.fn(() => []),
+    serviceCandidateToolReviewRows: vi.fn(() => []),
+    serviceCandidateToolFingerprintMap: vi.fn(() => ({})),
+    isServiceToolAdopting: vi.fn(() => false),
+    adoptCandidateTools: vi.fn().mockResolvedValue(undefined),
     serviceSourceDetail: vi.fn(() => "本地配置 / mcp-docs"),
     services: [],
     showCustomUpstreamType: false,
@@ -239,6 +273,9 @@ function createController(overrides: Record<string, unknown> = {}) {
     updateHealthCheckRequired: vi.fn(),
     updateModelProtocol: vi.fn(),
     updateModelProvider: vi.fn(),
+    updatePrimaryToolField: vi.fn(),
+    updateAdvancedOptionalField: vi.fn(),
+    updateUpstreamAuthField: vi.fn(),
     updateRequiredScopes: vi.fn(),
     updateRootField: vi.fn(),
     updateUpstreamField: vi.fn(),
@@ -298,8 +335,8 @@ describe("ExternalServicesView branch coverage", () => {
 
     expect(wrapper.find('input[placeholder="internal-proprietary-service"]').exists()).toBe(true);
     expect(wrapper.find('select[aria-label="模型协议"]').exists()).toBe(true);
-    expect(wrapper.find('input[placeholder="anthropic / google / aws-bedrock"]').exists()).toBe(true);
-    expect(wrapper.find('input[placeholder="http://127.0.0.1:8787/mcp/"]').exists()).toBe(true);
+    expect(wrapper.find('input[placeholder="openai / anthropic / google / aws-bedrock"]').exists()).toBe(true);
+    expect(wrapper.find('input[placeholder="https://mcp.example.com:443/mcp/"]').exists()).toBe(true);
     expect(wrapper.find('select[aria-label="网盘 Provider"]').exists()).toBe(false);
     expect(wrapper.find('select[aria-label="网盘适配模式"]').exists()).toBe(false);
     expect(wrapper.find('input[placeholder="http://127.0.0.1:8787/cloud-drive/"]').exists()).toBe(false);
@@ -502,12 +539,15 @@ describe("ExternalServicesView branch coverage", () => {
         { value: "mcp", label: "MCP 服务" },
         { value: "llm", label: "LLM Service" },
         { value: "cloud-drive", label: "Cloud Drive Service" },
-        { value: "http", label: "HTTP / HTTPS 服务" },
+        { value: "http", label: "HTTP 服务" },
+        { value: "https", label: "HTTPS 服务" },
+        { value: "json-rpc", label: "JSON-RPC 服务" },
+        { value: "sse", label: "SSE 服务" },
         { value: "other", label: "其它服务" },
       ],
       mcpTransportOptions: [
         { value: "streamable-http", label: "streamable-http" },
-        { value: "http", label: "http" },
+        { value: "sse", label: "sse" },
       ],
       bindingModeOptions: [
         { value: "passthrough", label: "passthrough" },
@@ -549,8 +589,8 @@ describe("ExternalServicesView branch coverage", () => {
     await getLabeledControl(form, "超时 ms", "input").setValue("45000");
     expect(controller.updateUpstreamField).toHaveBeenCalledWith("timeoutMs", "45000");
 
-    await getLabeledControl(form, "协议 / 传输", "select").setValue("http");
-    expect(controller.updateUpstreamField).toHaveBeenCalledWith("transport", "http");
+    await getLabeledControl(form, "MCP Transport", "select").setValue("sse");
+    expect(controller.updateUpstreamField).toHaveBeenCalledWith("transport", "sse");
 
     await getLabeledControl(form, "Endpoint URL", "input").setValue("http://127.0.0.1:8787/mcp/v2");
     expect(controller.updateUpstreamField).toHaveBeenCalledWith("url", "http://127.0.0.1:8787/mcp/v2");
@@ -641,7 +681,7 @@ describe("ExternalServicesView branch coverage", () => {
 
     const form = wrapper.get(".external-service-config-form");
 
-    await getLabeledControl(form, "Provider", "input").setValue("anthropic");
+    await wrapper.get('input[placeholder="openai / anthropic / google / aws-bedrock"]').setValue("anthropic");
     expect(controller.updateModelProvider).toHaveBeenCalledWith("anthropic");
 
     await getLabeledControl(form, "网盘 Provider", "select").setValue("onedrive");

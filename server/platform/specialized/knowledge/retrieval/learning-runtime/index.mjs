@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const LEARNING_PROTOCOL_VERSION = "pact.learning.v1";
+export const LEARNING_PROTOCOL_VERSION = "v0.0.1:knowledge:learning-1";
 
 const DEFAULT_PROFILE = {
   profileId: "balanced",

@@ -64,7 +64,7 @@ vi.mock("../../../server/platform/common/platform-core/state-coordinator.mjs", (
 
 const taxonomyRuntimeMock = {
   loadSync: vi.fn(() => ({
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     version: "mock",
     source: "mock-taxonomy",
     categories: []
@@ -72,7 +72,7 @@ const taxonomyRuntimeMock = {
 };
 
 const embeddingRuntimeMock = {
-  protocolVersion: "pact.embedding.v1",
+  protocolVersion: "v0.0.1:knowledge:embedding-1",
   embedText: vi.fn((value = "") => ({
     vector: Array.from(String(value)).map(() => 0.01),
     text: String(value),
@@ -92,12 +92,12 @@ const embeddingRuntimeMock = {
     dimension: 8
   })),
   health: vi.fn(() => ({
-    protocolVersion: "pact.embedding.v1",
+    protocolVersion: "v0.0.1:knowledge:embedding-1",
     ok: true,
     degraded: false
   })),
   capabilities: vi.fn(() => ({
-    protocolVersion: "pact.embedding.v1",
+    protocolVersion: "v0.0.1:knowledge:embedding-1",
     providers: []
   }))
 };
@@ -108,27 +108,27 @@ const vectorStoreMock = {
   deleteByTargetIds: vi.fn(),
   search: vi.fn(() => []),
   health: vi.fn(() => ({
-    protocolVersion: "pact.vector.v1",
+    protocolVersion: "v0.0.1:knowledge:vector-1",
     ok: true,
     degraded: false
   })),
   capabilities: vi.fn(() => ({
-    protocolVersion: "pact.vector.v1",
+    protocolVersion: "v0.0.1:knowledge:vector-1",
     providers: ["sqlite-vec"]
   })),
   close: vi.fn()
 };
 
 const learningRuntimeMock = {
-  LEARNING_PROTOCOL_VERSION: "pact.learning.v1",
-  protocolVersion: "pact.learning.v1",
+  LEARNING_PROTOCOL_VERSION: "v0.0.1:knowledge:learning-1",
+  protocolVersion: "v0.0.1:knowledge:learning-1",
   health: vi.fn(() => ({
-    protocolVersion: "pact.learning.v1",
+    protocolVersion: "v0.0.1:knowledge:learning-1",
     ok: true,
     degraded: false
   })),
   capabilities: vi.fn(() => ({
-    protocolVersion: "pact.learning.v1",
+    protocolVersion: "v0.0.1:knowledge:learning-1",
     enabled: true,
     safeAutoApplySuggestionTypes: ["retrievalProfile", "rankingRule", "decay"]
   })),
@@ -139,7 +139,7 @@ const learningRuntimeMock = {
     explanations: []
   })),
   proposeProfile: vi.fn(() => ({
-    protocolVersion: "pact.learning.v1",
+    protocolVersion: "v0.0.1:knowledge:learning-1",
     candidate: {
       profileId: "balanced-candidate",
       topK: 10,
@@ -160,7 +160,7 @@ vi.mock("../../../server/platform/specialized/knowledge/preprocessing/domain/kno
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/retrieval/embedding-runtime/index.mjs", () => ({
-  EMBEDDING_PROTOCOL_VERSION: "pact.embedding.v1",
+  EMBEDDING_PROTOCOL_VERSION: "v0.0.1:knowledge:embedding-1",
   createEmbeddingRuntime: vi.fn(() => embeddingRuntimeMock)
 }));
 
@@ -170,15 +170,15 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/vector-store/L
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runtime/index.mjs", () => ({
-  LEARNING_PROTOCOL_VERSION: "pact.learning.v1",
+  LEARNING_PROTOCOL_VERSION: "v0.0.1:knowledge:learning-1",
   createLearningRuntime: vi.fn(() => learningRuntimeMock)
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/storage/knowledge-core/outline-runtime-loader.mjs", () => ({
   createNoopDocumentOutlineRuntime: vi.fn(() => ({
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     build: vi.fn(() => ({
-      protocolVersion: "pact.document-outline.v1",
+      protocolVersion: "v0.0.1:knowledge:document-outline-1",
       documentId: "",
       nodeCount: 0,
       syntheticNodeCount: 0,
@@ -188,9 +188,9 @@ vi.mock("../../../server/platform/specialized/knowledge/storage/knowledge-core/o
     rangeContainsPosition: vi.fn(() => false)
   })),
   resolveDocumentOutlineRuntime: vi.fn(async () => ({
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     build: vi.fn(() => ({
-      protocolVersion: "pact.document-outline.v1",
+      protocolVersion: "v0.0.1:knowledge:document-outline-1",
       documentId: "",
       nodeCount: 0,
       syntheticNodeCount: 0,
@@ -408,7 +408,7 @@ describe("knowledge source service storage final third coverage", () => {
       await fs.writeFile(legacyPath, "legacy placeholder", "utf8");
 
       await writeJson(path.join(root, "knowledge-sources", "source-hydration.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         placeholderExtensionsMode: "replace",
         placeholderTextSignaturesMode: "replace",
         placeholderExtensions: [".txt"],

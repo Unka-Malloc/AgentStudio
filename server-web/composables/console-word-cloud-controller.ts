@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from "vue";
+import { ref, type Ref } from "vue";
 import type {
   KnowledgeWordCloudCorpusPath,
   KnowledgeWordCloudSet,
@@ -6,10 +6,7 @@ import type {
 } from "../lib/types";
 import { createConsoleWordCloudCorpusController } from "./console-word-cloud-corpus-controller";
 import { createConsoleWordCloudEditorController } from "./console-word-cloud-editor-controller";
-import type {
-  ConsoleWordCloudAgentOption,
-  ConsoleWordCloudMessage,
-} from "./console-word-cloud-types";
+import type { ConsoleWordCloudMessage } from "./console-word-cloud-types";
 import { createConsoleWordCloudWorkflowController } from "./console-word-cloud-workflow-controller";
 import {
   cloneWordCloudSet,
@@ -27,7 +24,6 @@ type ReadonlyRef<T> = {
 };
 
 export type ConsoleWordCloudControllerOptions = {
-  agentSelectorOptions: ReadonlyRef<ConsoleWordCloudAgentOption[]>;
   busyKey: ReadonlyRef<string>;
   canReadKnowledge: ReadonlyRef<boolean>;
   canWriteKnowledge: ReadonlyRef<boolean>;
@@ -36,41 +32,9 @@ export type ConsoleWordCloudControllerOptions = {
   setBusy: (key: string) => void;
 };
 
-export type { ConsoleWordCloudAgentOption } from "./console-word-cloud-types";
-
-function inactiveWordCloudAgentOption(value?: string): ConsoleWordCloudAgentOption {
-  const selectedValue = String(value || "").trim();
-  return {
-    value: selectedValue,
-    agentUid: selectedValue,
-    label: selectedValue ? "已移除的智能体" : "未选择智能体",
-    provider: "",
-    model: "",
-    moduleIds: [],
-    capabilities: [],
-    status: "unconfigured",
-    enabled: false,
-    selectable: false,
-    disabledReason: selectedValue ? "已从智能体列表删除" : "未分配",
-    reason: selectedValue ? "已从智能体列表删除" : "未分配",
-  };
-}
-
-function selectedWordCloudAgentFromOptions(
-  options: ConsoleWordCloudAgentOption[],
-  value?: string,
-): ConsoleWordCloudAgentOption {
-  const selectedValue = String(value || "").trim();
-  if (!selectedValue) {
-    return inactiveWordCloudAgentOption("");
-  }
-  return options.find((item) => item.value === selectedValue) || inactiveWordCloudAgentOption(selectedValue);
-}
-
 export function createConsoleWordCloudController(options: ConsoleWordCloudControllerOptions) {
   const wordCloudState = ref<KnowledgeWordCloudState | null>(null);
   const wordCloudDraft = ref<KnowledgeWordCloudSet | null>(null);
-  const wordCloudPrompt = ref("");
   const wordCloudModelAlias = ref("");
   const wordCloudCorpusPaths = ref<KnowledgeWordCloudCorpusPath[]>([]);
   const selectedWordBagId = ref("");
@@ -78,15 +42,7 @@ export function createConsoleWordCloudController(options: ConsoleWordCloudContro
   const collapsedWordBagIds = ref<Set<string>>(new Set());
   const pinnedWordBagIds = ref<Set<string>>(new Set());
   const wordCloudTermInputs = ref<Record<string, string>>({});
-  const fillingWordBagIds = ref<Set<string>>(new Set());
-  const fillTargetWordBagId = ref<string | null>(null);
-  const fillSourceWordBagSetId = ref<string | null>(null);
   const wordCloudMessages = ref<ConsoleWordCloudMessage[]>([]);
-
-  const wordCloudModelOptions = computed(() => options.agentSelectorOptions.value);
-  const selectedWordCloudModel = computed(() =>
-    selectedWordCloudAgentFromOptions(wordCloudModelOptions.value, wordCloudModelAlias.value),
-  );
   const {
     addChildWordCloud,
     addManualWordCloud,
@@ -161,12 +117,9 @@ export function createConsoleWordCloudController(options: ConsoleWordCloudContro
 
   const {
     applyWordCloudEvent,
-    autoFillCloudWithAgent,
-    proposeWordCloud,
     refreshWordCloud,
     saveWordCloud,
   } = createConsoleWordCloudWorkflowController({
-    addTermToCloud,
     applySavedWordCloudSet,
     autoAbsorbWordCloudTerms,
     busyKey: options.busyKey,
@@ -175,19 +128,13 @@ export function createConsoleWordCloudController(options: ConsoleWordCloudContro
     clearAllBusy: options.clearAllBusy,
     createDefaultWordCloudSet,
     error: options.error,
-    fillingWordBagIds,
-    fillSourceWordBagSetId,
-    fillTargetWordBagId,
-    refreshWordCloudCorpusTerms,
     resolveWordCloudCorpusPathsForQuery,
-    selectedWordCloudModel,
     setBusy: options.setBusy,
     setWordCloudDraftFromState,
     wordCloudCorpusPaths,
     wordCloudDraft,
     wordCloudMessages,
     wordCloudModelAlias,
-    wordCloudPrompt,
     wordCloudState,
     wordCloudTerms,
   });
@@ -201,13 +148,11 @@ export function createConsoleWordCloudController(options: ConsoleWordCloudContro
     addWordCloudCorpusPaths,
     applySavedWordCloudSet,
     applyWordCloudEvent,
-    autoFillCloudWithAgent,
     clearRemovedTermsFromCloud,
     clearWordCloudCorpusPaths,
     cloneWordCloudSet,
     collapsedWordBagIds,
     createDefaultWordCloudSet,
-    fillingWordBagIds,
     findWordCloudInTree,
     flattenWordCloudCards,
     mutateWordCloudDraft,
@@ -220,7 +165,6 @@ export function createConsoleWordCloudController(options: ConsoleWordCloudContro
     pinWordCloud,
     pinnedWordBagIds,
     preferredWordCloudCorpusPaths,
-    proposeWordCloud,
     refreshWordCloud,
     refreshWordCloudCorpusTerms,
     removeSelectedWordCloud,
@@ -231,7 +175,6 @@ export function createConsoleWordCloudController(options: ConsoleWordCloudContro
     selectWordCloud,
     selectedWordBagId,
     selectedWordCloud,
-    selectedWordCloudModel,
     setWordCloudDraftCorpusPaths,
     setWordCloudDraftFromState,
     setWordCloudTermInput,
@@ -249,9 +192,7 @@ export function createConsoleWordCloudController(options: ConsoleWordCloudContro
     wordCloudDraft,
     wordCloudMessages,
     wordCloudModelAlias,
-    wordCloudModelOptions,
     wordCloudPalette,
-    wordCloudPrompt,
     wordCloudState,
     wordCloudTermFrequencyMap,
     wordCloudTermIdentity,

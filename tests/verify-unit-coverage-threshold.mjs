@@ -44,7 +44,7 @@ const reports = {
     "build/coverage/node-vue-non-acp-strict/lcov.info",
     "build/coverage/node-vue-non-acp/lcov.info",
   ]),
-  clientGui: process.env.PACT_UNIT_COVERAGE_CLIENT_GUI_REPORT || "client-gui/coverage/lcov.info",
+  clientGui: process.env.PACT_UNIT_COVERAGE_CLIENT_GUI_REPORT || "build/coverage/client-gui/lcov.info",
   clientCli: process.env.PACT_UNIT_COVERAGE_CLIENT_CLI_REPORT || "build/coverage/client-cli/lcov.info",
 };
 

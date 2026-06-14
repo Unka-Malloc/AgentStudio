@@ -76,7 +76,7 @@ try {
   await waitForJob(server.url, createdJob.id);
 
   const capabilities = await fetchJson(`${server.url}/api/knowledge/capabilities`);
-  assert.equal(capabilities.protocolVersion, "pact.knowledge.v1");
+  assert.equal(capabilities.protocolVersion, "v0.0.1:knowledge:core-1");
   assert.equal(capabilities.modalities.text, true);
   assert.equal(capabilities.modalities.image, true);
 
@@ -150,7 +150,7 @@ try {
       limit: 5
     })
   });
-  assert.equal(search.protocolVersion, "pact.knowledge.v1");
+  assert.equal(search.protocolVersion, "v0.0.1:knowledge:core-1");
   assert.equal(search.modalityPolicy.mode, "multimodal");
   assert.equal(search.modalityPolicy.filtersAllowed, false);
   assert.ok(search.items.length > 0);
@@ -217,7 +217,7 @@ try {
     }
   );
   const cliPayload = JSON.parse(cliResult.stdout);
-  assert.equal(cliPayload.protocolVersion, "pact.knowledge.v1");
+  assert.equal(cliPayload.protocolVersion, "v0.0.1:knowledge:core-1");
   assert.ok(cliPayload.items.length > 0);
   assert.match(cliPayload.rendered.markdown, /pact_knowledge:/);
 

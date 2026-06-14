@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -191,25 +190,6 @@ async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
 }
 
-async function prepareMigrationFixture(dataDir) {
-  const files = {
-    "auth/console-auth.sqlite": "sqlite-placeholder\n",
-    "security/authorization/grants.json": JSON.stringify({ grants: [] }, null, 2),
-    "agent-workspaces/workspaces.json": JSON.stringify({ workspaces: [] }, null, 2),
-    "agent-workspaces/local-dir-mounts.json": JSON.stringify({ mounts: [] }, null, 2),
-    "agent-workspaces/cloud-drive-connections.json": JSON.stringify({ connections: [] }, null, 2),
-    "code-management/codespace-providers.json": JSON.stringify({ providers: [] }, null, 2),
-    "knowledge/knowledge-backends.json": JSON.stringify({ providers: [] }, null, 2),
-    "protocol-events/events.jsonl": "",
-    "logs/runtime.log": "v001 readiness fixture\n"
-  };
-  for (const [relativePath, content] of Object.entries(files)) {
-    const filePath = path.join(dataDir, relativePath);
-    await ensureDir(path.dirname(filePath));
-    await fs.writeFile(filePath, content, "utf8");
-  }
-}
-
 async function writeStageEvidence(runDir, stageId, commandResults) {
   const evidencePath = path.join(runDir, `${stageId}.log`);
   const lines = [];
@@ -368,23 +348,16 @@ async function main() {
   const runDir = path.join(outputRoot, runId);
   await ensureDir(runDir);
 
-  const migrationDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-v001-migration-fixture-"));
-  await prepareMigrationFixture(migrationDataDir);
-
   const stages = [
     {
       id: "migration",
-      title: "Phase 5 migration retention report",
+      title: "Phase 5 secret-safe migration retention report",
       verificationMode: "verified",
       commands: [[
         process.execPath,
-        "server/scripts/migrate-v001.mjs",
-        "--data-dir",
-        migrationDataDir,
+        "server/scripts/verify-v001-migration-retention.mjs",
         "--output-dir",
-        path.join(runDir, "migration"),
-        "--no-copy-recovery-files",
-        "--json"
+        path.join(runDir, "migration")
       ]]
     },
     {
@@ -460,8 +433,8 @@ async function main() {
   const allPass = stageResults.every((stage) => stage.status === "pass");
   const missingRealCredentials = externalProviders.filter((target) => !target.credentialConfigured);
   const report = {
-    schemaVersion: 1,
-    reportType: "pact.v001.readiness-report.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    reportType: "v0.0.1:production-readiness:readiness-report-1",
     runId,
     generatedAt: new Date().toISOString(),
     repoRoot,

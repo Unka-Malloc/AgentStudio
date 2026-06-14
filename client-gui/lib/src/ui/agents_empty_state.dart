@@ -9,19 +9,20 @@ class AgentsEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.pactColors;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          Icon(
             Icons.smart_toy_outlined,
-            color: PactColors.textMuted,
+            color: colors.textMuted,
             size: 32,
           ),
           const SizedBox(height: 10),
-          const Text(
+          Text(
             'No supported targets detected.',
-            style: TextStyle(color: PactColors.textMuted),
+            style: TextStyle(color: colors.textMuted),
           ),
           const SizedBox(height: 16),
           OutlinedButton.icon(

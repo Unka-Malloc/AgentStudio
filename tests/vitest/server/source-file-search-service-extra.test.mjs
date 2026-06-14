@@ -165,7 +165,7 @@ async function prepareFixture(userDataPath) {
   );
 
   await writeJson(path.join(userDataPath, "rules", "source-search-rules.json"), {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: "2026-06-04T00:00:00.000Z",
     maxFileBytes: 256 * 1024,
     maxEvidenceBytes: 16 * 1024,
@@ -331,7 +331,7 @@ describe("source-file-search service extra coverage", () => {
         "utf8"
       );
       await writeJson(path.join(userDataPath, "rules", "source-search-rules.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "source-defaults-2026-06-05",
         maxFileBytes: 256 * 1024,
         maxEvidenceBytes: 16 * 1024,
@@ -398,7 +398,7 @@ describe("source-file-search service extra coverage", () => {
         body: "也包含 上限 关键字。"
       }), "utf8");
       await writeJson(path.join(userDataPath, "rules", "source-search-rules.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "bounded-walk-2026-06-05",
         maxFileBytes: 256 * 1024,
         maxEvidenceBytes: 16 * 1024,
@@ -459,7 +459,7 @@ describe("source-file-search service extra coverage", () => {
         body: "missing-token appears only in this file but rg reported no matches"
       }), "utf8");
       await writeJson(path.join(userDataPath, "rules", "source-search-rules.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "rg-empty-2026-06-05",
         maxFileBytes: 256 * 1024,
         maxEvidenceBytes: 16 * 1024,
@@ -513,7 +513,7 @@ describe("source-file-search service extra coverage", () => {
         body: "x".repeat(1024 * 1024 + 64 * 1024)
       }), "utf8");
       await writeJson(path.join(userDataPath, "rules", "source-search-rules.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "large-evidence-2026-06-05",
         maxFileBytes: 2 * 1024 * 1024,
         maxEvidenceBytes: 16 * 1024,

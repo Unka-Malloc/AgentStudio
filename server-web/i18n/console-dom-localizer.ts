@@ -17,6 +17,21 @@ function shouldSkipConsoleLocalizeElement(element: Element | null) {
     return false;
   }
   const tagName = element.tagName.toLowerCase();
+  if (["script", "style", "pre", "code"].includes(tagName)) {
+    return true;
+  }
+  return Boolean(
+    element.closest(
+      "[data-i18n-skip], pre, code, .json-config-file-editor, .markdown-body, .agent-answer, .evidence-readable-body",
+    ),
+  );
+}
+
+function shouldSkipConsoleLocalizeText(element: Element | null) {
+  if (!element) {
+    return true;
+  }
+  const tagName = element.tagName.toLowerCase();
   if (["script", "style", "textarea", "pre", "code"].includes(tagName)) {
     return true;
   }
@@ -28,7 +43,7 @@ function shouldSkipConsoleLocalizeElement(element: Element | null) {
 }
 
 function localizeConsoleElementAttributes(element: Element, locale: ConsoleLocale) {
-  for (const attr of ["placeholder", "title", "aria-label", "alt", "data-tooltip"]) {
+  for (const attr of ["placeholder", "title", "aria-label", "alt", "data-tooltip", "data-label"]) {
     const current = element.getAttribute(attr);
     if (!current) {
       continue;
@@ -43,7 +58,7 @@ function localizeConsoleElementAttributes(element: Element, locale: ConsoleLocal
 function localizeConsoleNode(root: Node, locale: ConsoleLocale) {
   if (root.nodeType === Node.TEXT_NODE) {
     const parent = root.parentElement;
-    if (!parent || shouldSkipConsoleLocalizeElement(parent)) {
+    if (shouldSkipConsoleLocalizeText(parent)) {
       return;
     }
     const current = root.nodeValue || "";
@@ -77,7 +92,7 @@ function localizeConsoleNode(root: Node, locale: ConsoleLocale) {
             : NodeFilter.FILTER_ACCEPT;
         }
         const parent = node.parentElement;
-        return shouldSkipConsoleLocalizeElement(parent)
+        return shouldSkipConsoleLocalizeText(parent)
           ? NodeFilter.FILTER_REJECT
           : NodeFilter.FILTER_ACCEPT;
       },
@@ -141,7 +156,7 @@ export function installConsoleDomLocalizer(getLocale: () => ConsoleLocale): Cons
     subtree: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ["placeholder", "title", "aria-label", "alt", "data-tooltip"],
+    attributeFilter: ["placeholder", "title", "aria-label", "alt", "data-tooltip", "data-label"],
   });
   refresh();
 

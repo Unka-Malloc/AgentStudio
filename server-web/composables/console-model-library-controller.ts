@@ -223,9 +223,9 @@ export function createConsoleModelLibraryController(options: ConsoleModelLibrary
     };
     const timestamp = formatMachineDate(new Date().toISOString(), "full").replace(/[: ]/g, "-");
     const exportPayload = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       exportedAt: new Date().toISOString(),
-      type: "pact.agent-model-config.v1",
+      type: "v0.0.1:agent:model-config-1",
       source: "server-console-model-library",
       note: "导出的是当前大模型配置；密钥和 Token 字段已脱敏，未包含其它大模型配置。",
       model: redactAgentModelEntryForExport(normalizedEntry),

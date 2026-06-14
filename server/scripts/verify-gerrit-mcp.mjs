@@ -71,7 +71,7 @@ async function callMcpOperation({ serverUrl, token, outlet = "pact.codespace", o
     body: JSON.stringify(mcpRequest("tools/call", {
       name: outlet,
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation,
         input,
         clientVersion: "verify-gerrit-mcp"
@@ -543,7 +543,7 @@ async function verifyMaintenanceArtifacts() {
   assert.equal(gerritManifest.compatibilityLayer, "external-service-compatibility");
   assert.equal(gerritManifest.compatibilityBoundary, "remote-service");
   assert.equal(gerritManifest.serviceProviders.includes("gerrit"), true);
-  assert.equal(gerritManifest.protocol, "pact.code-review.v1");
+  assert.equal(gerritManifest.protocol, "v0.0.1:platform:code-review-1");
   assert.equal(gerritManifest.maintenanceSkill, skillPath);
   assert.deepEqual(gerritManifest.components.gerritMcpRoute.operations, [
     "gerrit.read",
@@ -560,7 +560,7 @@ async function verifyMaintenanceArtifacts() {
   assert.equal(repoManifest.compatibilityLayer, "pact-internal-compatibility");
   assert.equal(repoManifest.compatibilityBoundary, "resource-operation");
   assert.equal(repoManifest.internalCompatibilityKind, "resource-operation");
-  assert.equal(repoManifest.protocol, "pact.resource-operation.v1");
+  assert.equal(repoManifest.protocol, "v0.0.1:operation:resource-operation-1");
   assert.equal(repoManifest.maintenanceSkill, skillPath);
   assert.equal(repoManifest.components.repoOperationRoute.operations.includes("repo.proposal.create"), true);
   assert.equal(repoManifest.components.repoOperationRoute.operations.includes("repo.change.abandon"), true);
@@ -768,7 +768,15 @@ try {
   });
   assert.equal(toolsList.status, 200);
   const publicToolNames = toolsList.payload.result.tools.map((tool) => tool.name);
-  assert.deepEqual(publicToolNames.sort(), ["pact.discovery", "pact.knowledge", "pact.sharedspace", "pact.codespace", "pact.skillHub"].sort());
+  assert.deepEqual(publicToolNames.sort(), [
+    "pact.discovery",
+    "pact.agentLibrary",
+    "pact.sharedspace",
+    "pact.codespace",
+    "pact.skillHub",
+    "pact.agentRelay",
+    "pact.serviceHub"
+  ].sort());
   assert.equal(publicToolNames.includes("pact.gerrit.read"), false);
 
   const capabilities = await callMcpOperation({

@@ -94,12 +94,12 @@ if (action === "loadRuntimeLookupKey") {
   process.exit(0);
 }
 if (action === "describe") {
-  process.stdout.write("pact.opaque-capability-key.v1");
+  process.stdout.write("v0.0.1:risk-control:opaque-capability-key-1");
   process.exit(0);
 }
 if (action === "rotateRuntimeLookupKey") {
   console.log(JSON.stringify({
-    protocolVersion: "pact.opaque-capability-key.v1",
+    protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
     provider: "command",
     generation: 2,
     runtimeLookupKeyBase64: "${runtimeLookupKeyBase64}"
@@ -149,7 +149,7 @@ if (action === "describe") {
   process.exit(1);
 }
 console.log(JSON.stringify({
-  protocolVersion: "pact.opaque-capability-key.v1",
+  protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
   provider: "command",
   generation: 7,
   runtimeLookupKeyBase64: "${Buffer.alloc(32, 9).toString("base64")}"
@@ -186,7 +186,7 @@ const action = (() => {
   }
 })();
 const payload = {
-  protocolVersion: "pact.opaque-capability-key.v1",
+  protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
   provider: "command",
   generation: 1,
   runtimeLookupKeyBase64: "${shortKey}"

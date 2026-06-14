@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "kind": "pact.composition.preset",
   "presetId": "gerrit-service",
   "displayName": "Gerrit Service",
@@ -32,11 +32,11 @@
       "tool-management-core"
     ],
     "preserveContracts": [
-      "pact.security-permissions.v1",
-      "pact.operation-dispatcher.v1",
-      "pact.storage.v1",
-      "pact.module-management.v1",
-      "pact.devops.v1"
+      "v0.0.1:risk-control:permissions-1",
+      "v0.0.1:operation:operation-dispatcher-1",
+      "v0.0.1:storage:core-1",
+      "v0.0.1:tool:module-management-1",
+      "v0.0.1:platform:devops-1"
     ],
     "reason": "The Gerrit integration still needs authorization, secretRef handling, operation dispatch, audit, provider registration, module lifecycle, health, and tool exposure."
   },
@@ -60,10 +60,10 @@
       "server/scripts/gerrit-local.mjs"
     ],
     "requiredProtocols": [
-      "pact.code-review.v1",
-      "pact.codespace.v1",
-      "pact.resource-operation.v1",
-      "pact.runtime-dependencies.v1"
+      "v0.0.1:platform:code-review-1",
+      "v0.0.1:platform:codespace-1",
+      "v0.0.1:operation:resource-operation-1",
+      "v0.0.1:platform:runtime-dependencies-1"
     ],
     "requiredOperations": [
       "runtime.dependencies.list",
@@ -147,7 +147,7 @@
     "smokeCommand": "npm run server:gerrit:smoke"
   },
   "externalService": {
-    "schemaVersion": 1,
+    "schemaVersion": "v0.0.1:schema:definition-1",
     "kind": "pact.external-service.config",
     "serviceId": "gerrit-service",
     "serviceName": "external.code-review.gerrit",
@@ -247,19 +247,19 @@
     "enabled": true,
     "bindProviders": [
       {
-        "contract": "pact.runtime-dependencies.v1",
+        "contract": "v0.0.1:platform:runtime-dependencies-1",
         "provider": "RuntimeDependencies"
       },
       {
-        "contract": "pact.code-review.v1",
+        "contract": "v0.0.1:platform:code-review-1",
         "provider": "GerritCodeReviewRoute"
       },
       {
-        "contract": "pact.codespace.v1",
+        "contract": "v0.0.1:platform:codespace-1",
         "provider": "CodespaceManagement"
       },
       {
-        "contract": "pact.resource-operation.v1",
+        "contract": "v0.0.1:operation:resource-operation-1",
         "provider": "RepoOperationsCompatibilityRoute"
       }
     ],

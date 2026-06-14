@@ -396,7 +396,7 @@ describe("console-word-cloud-utils", () => {
 
   it("clones structures and auto-absorbs compatible terms", () => {
     const source = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       wordBagSetId: "set",
       title: "set",
       status: "draft",

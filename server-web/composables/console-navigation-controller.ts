@@ -69,6 +69,7 @@ export function createConsoleNavigationController(options: ConsoleNavigationCont
   const knowledgeManagementPanel = ref<KnowledgeManagementPanel>("knowledge");
   const drawerOpen = ref(false);
   const drawerTab = ref<DrawerTab>("discovery");
+  const sideNavCollapsed = ref(false);
   const sideNavOpen = ref(false);
   const currentView = ref<AppView>("dashboard");
   const adminView = ref<AdminView>("jobs");
@@ -170,7 +171,7 @@ export function createConsoleNavigationController(options: ConsoleNavigationCont
 
   function refreshAdminSection(tab: AdminView) {
     void options.refreshAuthAdmin();
-    if (["tools", "toolList", "toolStats", "agentPermissions"].includes(tab)) {
+    if (["tools", "toolList", "toolGovernance", "toolStats", "agentPermissions"].includes(tab)) {
       void Promise.resolve(options.refreshToolManagement({ silent: true })).then(() => {
         if (tab === "agentPermissions") {
           options.ensureAgentPermissionGroupsDraft();
@@ -191,7 +192,6 @@ export function createConsoleNavigationController(options: ConsoleNavigationCont
     }
     if (tab === "opsMonitor") {
       void options.refreshBackgroundProcesses({ silent: true });
-      void options.refreshClientRuntimeStatus({ silent: true });
       void options.refreshMonitorAlerts({ silent: true });
     }
     if (tab === "logs") {
@@ -343,10 +343,7 @@ export function createConsoleNavigationController(options: ConsoleNavigationCont
   }
 
   function openDrawer(tab: DrawerTab) {
-    let nextTab = tab;
-    if (nextTab === "syncDirectories" && !options.hasFeature("knowledge-core")) {
-      nextTab = "discovery";
-    }
+    const nextTab = tab;
     drawerTab.value = nextTab;
     drawerOpen.value = true;
     if (nextTab === "users") {
@@ -381,6 +378,7 @@ export function createConsoleNavigationController(options: ConsoleNavigationCont
     openKnowledgeManagementPanel,
     openKnowledgeTab,
     refreshSystemStatusLogs,
+    sideNavCollapsed,
     sideNavOpen,
     syncNavigationStateFromRoute,
     switchView,

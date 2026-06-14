@@ -73,7 +73,6 @@ export function createSystemControllerContexts({
   const toPublicDocumentParsingResult = requireDomainService("toPublicDocumentParsingResult");
   const enhanceAffairTaxonomy = requireDomainService("enhanceAffairTaxonomy");
   const executeConsoleDomainOperation = requireDomainService("executeConsoleDomainOperation");
-  const resumeKnowledgeWordCloudClassificationTasks = requireDomainService("resumeKnowledgeWordCloudClassificationTasks");
   const uploadSessionStore = requireDomainProvider(
     "uploadSessionStore",
     (provider) =>
@@ -205,18 +204,6 @@ export function createSystemControllerContexts({
     return active.length === 0 || active.includes(featureId);
   }
 
-  function resumeKnowledgeWordCloudTasks() {
-    return resumeKnowledgeWordCloudClassificationTasks({
-      userDataPath,
-      metadataStore,
-      protocolEventBus,
-      contextRuntime,
-      clientRuntimeAllocator,
-      queueMonitor,
-      agentRuntimeProvider
-    });
-  }
-
   return Object.freeze({
     executeConsoleDomainOperation,
     knowledgeDomainContext,
@@ -225,7 +212,6 @@ export function createSystemControllerContexts({
     authorizationFacadeContext,
     accessControlContext,
     appendConsoleOperationLog,
-    isFeatureActive,
-    resumeKnowledgeWordCloudTasks
+    isFeatureActive
   });
 }

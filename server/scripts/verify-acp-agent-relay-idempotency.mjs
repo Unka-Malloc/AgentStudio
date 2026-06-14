@@ -166,7 +166,7 @@ while (true) {
       jsonrpc: "2.0",
       id: message.id,
       result: {
-        protocolVersion: "target.acp.idempotency.v1",
+        protocolVersion: "v0.0.1:strategy:target-acp-idempotency-1",
         capabilities: {
           session: ["new", "resume"],
           updates: ["progress"]
@@ -322,7 +322,7 @@ try {
     { virtualAgentId, sourceId },
     "idempotency-init"
   ));
-  assert.equal(initialize.result?.pactProtocolVersion, "pact.acp-agent-relay.v1");
+  assert.equal(initialize.result?.pactProtocolVersion, "v0.0.1:agent:acp-agent-relay-1");
   assert.equal(initialize.result?.capabilitiesSnapshot?.target?.transportType, "stdio");
 
   const session = await firstSourceServer.request(createRequest(
@@ -374,7 +374,7 @@ try {
     { virtualAgentId, sourceId, workspaceId },
     "idempotency-restart-init"
   ));
-  assert.equal(restartInitialize.result?.pactProtocolVersion, "pact.acp-agent-relay.v1");
+  assert.equal(restartInitialize.result?.pactProtocolVersion, "v0.0.1:agent:acp-agent-relay-1");
 
   const loaded = await secondSourceServer.request(createRequest(
     ACP_METHODS.sessionLoad,
@@ -497,7 +497,7 @@ try {
       usedSourceRestart: loadedSessionId === session.result.sessionId
     },
     loadProof: {
-      sourceRestartInitialized: restartInitialize.result?.pactProtocolVersion === "pact.acp-agent-relay.v1",
+      sourceRestartInitialized: restartInitialize.result?.pactProtocolVersion === "v0.0.1:agent:acp-agent-relay-1",
       relaySessionId: loadedSessionId,
       pendingPermissionRequestCount: Number(loaded.result?.pendingPermissionRequestCount || 0),
       sessionGetMatchedTurn: loadedSessionGet.result?.turns?.some((turn) => turn.relayTurnId === firstPrompt.result.turnId) === true,

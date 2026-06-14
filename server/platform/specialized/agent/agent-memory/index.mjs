@@ -5,7 +5,7 @@ import {
   appendJsonLineSerialized
 } from "../../../common/platform-core/state-coordinator.mjs";
 
-export const AGENT_MEMORY_PROTOCOL_VERSION = "pact.agent-memory.v1";
+export const AGENT_MEMORY_PROTOCOL_VERSION = "v0.0.1:agent:memory-1";
 
 const SENSITIVE_KEY_PATTERN =
   /token|secret|password|passwd|authorization|cookie|api[-_]?key|client[-_]?secret|csrf/i;

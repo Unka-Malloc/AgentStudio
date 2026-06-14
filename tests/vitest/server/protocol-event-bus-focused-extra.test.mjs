@@ -113,7 +113,7 @@ describe("protocol event bus focused extra coverage", () => {
       readerState.lines = [
         "{not-json",
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           offset: 2,
           id: "event-2",
           topic: "alpha",

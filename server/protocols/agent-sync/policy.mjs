@@ -6,7 +6,7 @@ import {
   waitForStateIdle
 } from "../../platform/common/platform-core/state-coordinator.mjs";
 
-export const AGENT_SYNC_SCHEMA_VERSION = 1;
+export const AGENT_SYNC_SCHEMA_VERSION = "v0.0.1:agent:sync-schema-1";
 export const AGENT_SYNC_PREFIX = "agent.sync.";
 
 const DEFAULT_TOPICS = [

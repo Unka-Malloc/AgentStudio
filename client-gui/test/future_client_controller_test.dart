@@ -4,29 +4,163 @@ import 'dart:io';
 import 'package:flutter_client/src/controllers/future_client_controller.dart';
 import 'package:flutter_client/src/models/future_client_models.dart';
 import 'package:flutter_client/src/services/agent_service.dart';
+import 'package:flutter_client/src/services/mobile_relay_service.dart';
 import 'package:flutter_client/src/services/portable_data_root.dart';
+import 'package:flutter_client/src/ui/appearance_preset_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('initializes against portable data without legacy runtime services', () async {
-    final directory = await Directory.systemTemp.createTemp('pact-future-client-');
-    addTearDown(() async {
-      if (await directory.exists()) {
-        await directory.delete(recursive: true);
-      }
-    });
+  test(
+    'initializes against portable data without legacy runtime services',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'pact-future-client-',
+      );
+      addTearDown(() async {
+        if (await directory.exists()) {
+          await directory.delete(recursive: true);
+        }
+      });
+
+      final controller = FutureClientController(
+        portableData: PortableDataRoot(dataDirectoryOverride: directory),
+        agentService: _FakeAgentService(),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.initialized, isTrue);
+      expect(controller.portableDataPath, directory.path);
+      expect(
+        await File('${directory.path}/.pact-workspace.json').exists(),
+        isTrue,
+      );
+    },
+  );
+
+  test('loads and saves local appearance preset preference', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'pact-appearance-preference-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final portableData = PortableDataRoot(dataDirectoryOverride: directory);
+    final preferencesFile = File(
+      '${(await portableData.futureClientDirectory()).path}/appearance-preferences.json',
+    );
+    await preferencesFile.writeAsString(
+      '{"schemaVersion":1,"appearancePresetId":"ember-dark"}',
+      flush: true,
+    );
 
     final controller = FutureClientController(
-      portableData: PortableDataRoot(dataDirectoryOverride: directory),
+      portableData: portableData,
       agentService: _FakeAgentService(),
     );
     addTearDown(controller.dispose);
 
     await controller.initialize();
+    expect(controller.appearancePresetId, AppearancePresetIds.sunsetEmber);
 
-    expect(controller.initialized, isTrue);
-    expect(controller.portableDataPath, directory.path);
-    expect(await File('${directory.path}/.pact-workspace.json').exists(), isTrue);
+    await controller.setAppearancePreset(AppearancePresetIds.cappuccinoDark);
+    expect(controller.appearancePresetId, AppearancePresetIds.cappuccinoDark);
+    expect(
+      await preferencesFile.readAsString(),
+      contains('"appearancePresetId": "cappuccino-dark"'),
+    );
+  });
+
+  test('invalid local appearance preset falls back to default-system', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'pact-appearance-invalid-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final portableData = PortableDataRoot(dataDirectoryOverride: directory);
+    final preferencesFile = File(
+      '${(await portableData.futureClientDirectory()).path}/appearance-preferences.json',
+    );
+    await preferencesFile.writeAsString(
+      '{"schemaVersion":1,"appearancePresetId":"unknown"}',
+      flush: true,
+    );
+
+    final controller = FutureClientController(
+      portableData: portableData,
+      agentService: _FakeAgentService(),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+    expect(controller.appearancePresetId, AppearancePresetIds.defaultSystem);
+  });
+
+  test('loads external appearance preset configs from portable data', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'pact-appearance-external-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final portableData = PortableDataRoot(dataDirectoryOverride: directory);
+    final futureClientDirectory = await portableData.futureClientDirectory();
+    final presetsDirectory = Directory(
+      '${futureClientDirectory.path}/appearance-presets',
+    );
+    await presetsDirectory.create(recursive: true);
+    await File('${presetsDirectory.path}/agent-preview.json').writeAsString('''
+{
+  "schemaVersion": 1,
+  "id": "agent-preview",
+  "label": {
+    "en": "Agent Preview",
+    "zh-CN": "智能体预览"
+  },
+  "mode": "light",
+  "tokens": {
+    "bg-base": "#fff7ed",
+    "bg-surface": "#ffffff",
+    "bg-subtle": "#ffedd5",
+    "text-primary": "#1c1917",
+    "text-muted": "#78716c",
+    "text-on-brand": "#ffffff",
+    "brand": "#7c3aed",
+    "brand-strong": "#5b21b6",
+    "brand-subtle": "#ede9fe",
+    "success": "#15803d",
+    "warning": "#b45309",
+    "danger": "#b91c1c"
+  }
+}
+''', flush: true);
+    await File(
+      '${futureClientDirectory.path}/appearance-preferences.json',
+    ).writeAsString(
+      '{"schemaVersion":1,"appearancePresetId":"agent-preview"}',
+      flush: true,
+    );
+
+    final controller = FutureClientController(
+      portableData: portableData,
+      agentService: _FakeAgentService(),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+    expect(controller.appearancePresetId, 'agent-preview');
+    expect(controller.appearancePresetLabel, 'Agent Preview');
+    expect(controller.appearancePresetDirectoryPath, presetsDirectory.path);
+    expect(
+      controller.appearancePresetConfigs.any(
+        (config) => config.id == 'agent-preview',
+      ),
+      isTrue,
+    );
+
+    await File(
+      '${presetsDirectory.path}/broken.json',
+    ).writeAsString('{"schemaVersion": 1, "id": "broken"}', flush: true);
+    await controller.reloadAppearancePresets();
+
+    expect(controller.appearancePresetId, 'agent-preview');
+    expect(controller.appearancePresetLoadErrors, isNotEmpty);
   });
 
   test('keeps error state when portable data initialization fails', () async {
@@ -44,24 +178,27 @@ void main() {
     expect(controller.statusCaption, 'Error');
   });
 
-  test('selecting same section keeps state, selecting agents auto scans only once', () async {
-    final service = _FakeAgentService();
-    final controller = FutureClientController(agentService: service);
-    addTearDown(controller.dispose);
+  test(
+    'selecting same section keeps state, selecting agents auto scans only once',
+    () async {
+      final service = _FakeAgentService();
+      final controller = FutureClientController(agentService: service);
+      addTearDown(controller.dispose);
 
-    controller.selectSection(FutureClientSection.settings);
-    controller.selectSection(FutureClientSection.settings);
-    expect(controller.currentSection, FutureClientSection.settings);
+      controller.selectSection(FutureClientSection.settings);
+      controller.selectSection(FutureClientSection.settings);
+      expect(controller.currentSection, FutureClientSection.settings);
 
-    controller.selectSection(FutureClientSection.agents);
-    await Future<void>.delayed(Duration.zero);
+      controller.selectSection(FutureClientSection.agents);
+      await Future<void>.delayed(Duration.zero);
 
-    controller.selectSection(FutureClientSection.agents);
-    await Future<void>.delayed(Duration.zero);
+      controller.selectSection(FutureClientSection.agents);
+      await Future<void>.delayed(Duration.zero);
 
-    expect(controller.currentSection, FutureClientSection.agents);
-    expect(service.scanTargetsCalls, 1);
-  });
+      expect(controller.currentSection, FutureClientSection.agents);
+      expect(service.scanTargetsCalls, 1);
+    },
+  );
 
   test('scanTargets captures failed scans and clears busy flag', () async {
     final service = _FakeAgentService()..throwScanTargets = true;
@@ -76,6 +213,70 @@ void main() {
     expect(controller.statusMessage, '目标适配器扫描失败。');
     expect(controller.statusCaption, 'Targets');
   });
+
+  test('scanTargets selects an agent and loads native agent history', () async {
+    final directory = await Directory.systemTemp.createTemp('pact-agent-chat-');
+    addTearDown(() => directory.delete(recursive: true));
+    final service = _FakeAgentService()
+      ..conversationSessions['codex'] = [
+        _conversationSessionJson(
+          id: 'native-codex-1',
+          agentId: 'codex',
+          text: 'Hello from native Codex history',
+        ),
+      ];
+    final controller = FutureClientController(
+      portableData: PortableDataRoot(dataDirectoryOverride: directory),
+      agentService: service,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.scanTargets();
+    expect(controller.selectedConversationAgentId, 'codex');
+    expect(controller.selectedConversationSessions, hasLength(1));
+    expect(controller.selectedConversationSession?.messages, hasLength(2));
+    expect(
+      controller.selectedConversationSession?.messages.first.text,
+      'Hello from native Codex history',
+    );
+    expect(controller.statusMessage, contains('已读取 1 条 codex 原生历史'));
+  });
+
+  test(
+    'sendConversationMessage routes through runtime adapter without local append',
+    () async {
+      final service = _FakeAgentService()
+        ..conversationSessions['codex'] = [
+          _conversationSessionJson(
+            id: 'native-codex-1',
+            agentId: 'codex',
+            text: 'Existing native Codex history',
+          ),
+        ];
+      final controller = FutureClientController(agentService: service);
+      addTearDown(controller.dispose);
+
+      await controller.scanTargets();
+      await controller.sendConversationMessage('  Hello Codex  ');
+
+      expect(service.runtimeMessageCalls, 1);
+      expect(service.lastRuntimeMessageArgs, [
+        'agent',
+        'message',
+        'send',
+        '--agent',
+        'codex',
+        '--text',
+        'Hello Codex',
+        '--session-id',
+        'native-codex-1',
+      ]);
+      expect(service.conversationAppendCalls, 0);
+      expect(controller.selectedConversationSessions, hasLength(1));
+      expect(controller.lastError, isEmpty);
+      expect(controller.statusMessage, '已通过 Codex runtime adapter 发送消息。');
+    },
+  );
 
   test('inspect target captures failures', () async {
     final service = _FakeAgentService()..throwInspectTarget = true;
@@ -100,29 +301,38 @@ void main() {
     expect(controller.statusCaption, 'Target inspect');
   });
 
-  test('adds manual target using trimmed input and ignores empty names', () async {
-    final service = _FakeAgentService();
-    final controller = FutureClientController(agentService: service);
-    addTearDown(controller.dispose);
+  test(
+    'adds manual target using trimmed input and ignores empty names',
+    () async {
+      final service = _FakeAgentService();
+      final controller = FutureClientController(agentService: service);
+      addTearDown(controller.dispose);
 
-    await controller.addManualTarget(target: '  openclaw  ', configPath: ' /tmp/openclaw.json ');
-    expect(service.addedTarget, 'openclaw');
-    expect(service.addedConfigPath, '/tmp/openclaw.json');
-    expect(service.scanTargetsCalls, 2);
-    expect(controller.statusMessage, contains('已添加 openclaw 手动目标。'));
+      await controller.addManualTarget(
+        target: '  openclaw  ',
+        configPath: ' /tmp/openclaw.json ',
+      );
+      expect(service.addedTarget, 'openclaw');
+      expect(service.addedConfigPath, '/tmp/openclaw.json');
+      expect(service.scanTargetsCalls, 2);
+      expect(controller.statusMessage, contains('已添加 openclaw 手动目标。'));
 
-    service.scanTargetsCalls = 0;
-    await controller.addManualTarget(target: '   ');
-    expect(service.scanTargetsCalls, 0);
-    expect(controller.lastError, isEmpty);
-  });
+      service.scanTargetsCalls = 0;
+      await controller.addManualTarget(target: '   ');
+      expect(service.scanTargetsCalls, 0);
+      expect(controller.lastError, isEmpty);
+    },
+  );
 
   test('adds manual target failure keeps error state', () async {
     final service = _FakeAgentService()..throwAddTarget = true;
     final controller = FutureClientController(agentService: service);
     addTearDown(controller.dispose);
 
-    await controller.addManualTarget(target: 'openclaw', configPath: ' /tmp/openclaw.json ');
+    await controller.addManualTarget(
+      target: 'openclaw',
+      configPath: ' /tmp/openclaw.json ',
+    );
 
     expect(controller.lastError, contains('add failed'));
     expect(controller.statusMessage, 'openclaw 手动目标添加失败。');
@@ -137,18 +347,21 @@ void main() {
     expect(controller.portableData, isA<PortableDataRoot>());
   });
 
-  test('restores snapshots successfully and ignores blank snapshot ids', () async {
-    final service = _FakeAgentService();
-    final controller = FutureClientController(agentService: service);
-    addTearDown(controller.dispose);
+  test(
+    'restores snapshots successfully and ignores blank snapshot ids',
+    () async {
+      final service = _FakeAgentService();
+      final controller = FutureClientController(agentService: service);
+      addTearDown(controller.dispose);
 
-    await controller.restoreSnapshot('snapshot-codex-1');
-    expect(service.restoredSnapshotId, 'snapshot-codex-1');
-    expect(controller.snapshotRestoreResult?['ok'], isTrue);
+      await controller.restoreSnapshot('snapshot-codex-1');
+      expect(service.restoredSnapshotId, 'snapshot-codex-1');
+      expect(controller.snapshotRestoreResult?['ok'], isTrue);
 
-    await controller.restoreSnapshot('   ');
-    expect(service.restoreSnapshotCount, 1);
-  });
+      await controller.restoreSnapshot('   ');
+      expect(service.restoreSnapshotCount, 1);
+    },
+  );
 
   test('restores snapshot handles client failure', () async {
     final service = _FakeAgentService()..throwRestoreSnapshot = true;
@@ -275,14 +488,22 @@ void main() {
     await controller.refreshModelProfiles();
     expect(controller.modelProfiles, isNotEmpty);
 
-    await controller.saveCommandModelProfile(profileId: 'local-echo', command: 'cat');
+    await controller.saveCommandModelProfile(
+      profileId: 'local-echo',
+      command: 'cat',
+    );
     expect(controller.modelProfiles.single['id'], 'local-echo');
 
     await controller.forwardModelText(profileId: 'local-echo', text: 'hello');
     expect(controller.modelForwardingResult?['output'], 'hello');
 
     service.modelBusyGate = Completer<void>();
-    unawaited(controller.saveCommandModelProfile(profileId: 'local-echo', command: 'cat'));
+    unawaited(
+      controller.saveCommandModelProfile(
+        profileId: 'local-echo',
+        command: 'cat',
+      ),
+    );
     await Future<void>.delayed(Duration.zero);
     await controller.forwardModelText(profileId: 'local-echo', text: 'skip');
     expect(service.saveCommandCount, 2);
@@ -300,6 +521,106 @@ void main() {
     expect(controller.lastError, contains('forward failed'));
     expect(controller.statusMessage, 'Model Forwarding 操作失败。');
   });
+
+  test(
+    'creates mobile pairing and executes relayed native history command',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'pact-mobile-chat-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final agentService = _FakeAgentService()
+        ..conversationSessions['codex'] = [
+          _conversationSessionJson(
+            id: 'native-phone-list',
+            agentId: 'codex',
+            text: 'From native history',
+          ),
+        ];
+      final relayService = _FakeMobileRelayService()
+        ..queuedCommands = [
+          const MobileRelayCommand(
+            commandId: 'cmd-1',
+            type: 'agent.sessions.list',
+            payload: {'agentId': 'codex'},
+            status: 'pending',
+            createdAt: '2026-06-12T00:00:00.000Z',
+          ),
+        ];
+      final controller = FutureClientController(
+        portableData: PortableDataRoot(dataDirectoryOverride: directory),
+        agentService: agentService,
+        mobileRelayService: relayService,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.scanTargets();
+      await controller.createMobilePairing();
+
+      expect(relayService.createPairingCalls, 1);
+      expect(controller.mobileRelayConfig.lastPairingCode, '1234-5678');
+      expect(controller.mobileRelayConfig.hasPairing, isTrue);
+
+      await controller.pollMobileRelayOnce();
+
+      expect(relayService.syncCalls, 1);
+      expect(controller.selectedConversationAgentId, 'codex');
+      expect(
+        controller.selectedConversationSession?.messages.first.text,
+        'From native history',
+      );
+    },
+  );
+
+  test(
+    'mobile relay runtime message command refreshes native history',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'pact-mobile-runtime-chat-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final agentService = _FakeAgentService()
+        ..conversationSessions['codex'] = [
+          _conversationSessionJson(
+            id: 'native-phone-runtime',
+            agentId: 'codex',
+            text: 'After phone runtime send',
+          ),
+        ];
+      final relayService = _FakeMobileRelayService()
+        ..queuedCommands = [
+          const MobileRelayCommand(
+            commandId: 'cmd-runtime-1',
+            type: 'agent.message.send',
+            payload: {'agentId': 'codex', 'text': 'From phone'},
+            status: 'pending',
+            createdAt: '2026-06-12T00:00:00.000Z',
+          ),
+        ];
+      final controller = FutureClientController(
+        portableData: PortableDataRoot(dataDirectoryOverride: directory),
+        agentService: agentService,
+        mobileRelayService: relayService,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.createMobilePairing();
+      await controller.pollMobileRelayOnce();
+
+      expect(relayService.syncCalls, 1);
+      expect(
+        controller.lastMobileRelayCommands.single.type,
+        'agent.message.send',
+      );
+      expect(controller.selectedConversationAgentId, 'codex');
+      expect(
+        controller.selectedConversationSession?.messages.first.text,
+        'After phone runtime send',
+      );
+    },
+  );
 }
 
 class _ThrowingPortableDataRoot extends PortableDataRoot {
@@ -307,6 +628,43 @@ class _ThrowingPortableDataRoot extends PortableDataRoot {
   Future<Directory> dataDirectory() async {
     throw Exception('boot error');
   }
+}
+
+Map<String, dynamic> _conversationSessionJson({
+  required String id,
+  required String agentId,
+  required String text,
+}) {
+  return {
+    'id': id,
+    'agentId': agentId,
+    'adapterId': agentId,
+    'nativeSessionId': id,
+    'sourceKind': '$agentId-native-history',
+    'importMode': 'precise-adapter',
+    'sourceTool': agentId,
+    'sourcePath': '/tmp/$agentId/history.jsonl',
+    'title': text,
+    'createdAt': '2026-06-12T00:00:00Z',
+    'updatedAt': '2026-06-12T00:00:01Z',
+    'native': true,
+    'readOnly': true,
+    'messageCount': 2,
+    'messages': [
+      {
+        'id': 'msg-user-$id',
+        'role': 'user',
+        'text': text,
+        'createdAt': '2026-06-12T00:00:00Z',
+      },
+      {
+        'id': 'msg-agent-$id',
+        'role': 'agent',
+        'text': '原生智能体历史响应',
+        'createdAt': '2026-06-12T00:00:01Z',
+      },
+    ],
+  };
 }
 
 class _FakeAgentService extends AgentService {
@@ -329,6 +687,10 @@ class _FakeAgentService extends AgentService {
   int rollbackMcpCalls = 0;
   int requestSkillHubCalls = 0;
   int refreshSkillHubCalls = 0;
+  int conversationListCalls = 0;
+  int conversationAppendCalls = 0;
+  int conversationDeleteCalls = 0;
+  int runtimeMessageCalls = 0;
 
   bool throwScanTargets = false;
   bool throwInspectTarget = false;
@@ -348,6 +710,7 @@ class _FakeAgentService extends AgentService {
   String pairedAgent = '';
   String updatedPluginTarget = '';
   String rolledBackSnapshotId = '';
+  List<String> lastRuntimeMessageArgs = const [];
 
   List<TargetCandidate> scanTargetsResult = [
     TargetCandidate(
@@ -361,7 +724,12 @@ class _FakeAgentService extends AgentService {
       manual: false,
       configPath: '/tmp/codex.toml',
       adapterStatus: 'implemented',
-      supportedActions: ['mcp.plugin.status', 'mcp.plugin.update', 'mcp.plugin.rollback'],
+      supportedActions: [
+        'mcp.plugin.status',
+        'mcp.plugin.update',
+        'mcp.plugin.rollback',
+        'runtime.message.send',
+      ],
     ),
   ];
   Map<String, dynamic> pairingResult = {'ok': true, 'status': 'requested'};
@@ -379,6 +747,7 @@ class _FakeAgentService extends AgentService {
   List<Map<String, dynamic>> modelProfiles = [
     {'id': 'local-echo', 'provider': 'command', 'command': 'cat'},
   ];
+  Map<String, List<Map<String, dynamic>>> conversationSessions = {};
 
   Map<String, dynamic> mcpStatusResult = {
     'ok': true,
@@ -599,5 +968,229 @@ class _FakeAgentService extends AgentService {
       await modelBusyGate!.future;
     }
     return {'ok': true, 'mode': 'thin-forward', 'output': text};
+  }
+
+  @override
+  Future<Map<String, dynamic>> runCli(List<String> args) async {
+    if (args.length >= 3 &&
+        args[0] == 'agent' &&
+        args[1] == 'message' &&
+        args[2] == 'send') {
+      runtimeMessageCalls++;
+      lastRuntimeMessageArgs = List<String>.from(args);
+      return {
+        'ok': true,
+        'mode': 'runtime-adapter',
+        'adapterId': _argValue(args, '--agent', fallback: 'codex'),
+        'runtimeProtocol': 'codex-cli-exec',
+      };
+    }
+    if (args.length >= 2 && args.first == 'conversations') {
+      switch (args[1]) {
+        case 'list':
+          conversationListCalls++;
+          final agent = _argValue(args, '--agent');
+          return {
+            'ok': true,
+            'sessions': conversationSessions[agent] ?? const [],
+          };
+        case 'append':
+          conversationAppendCalls++;
+          final agent = _argValue(args, '--agent');
+          final label = _argValue(args, '--agent-label', fallback: agent);
+          final text = _argValue(args, '--text').trim();
+          final sessionId = _argValue(
+            args,
+            '--session-id',
+            fallback: 'session-$conversationAppendCalls',
+          );
+          final session = _conversationSession(
+            id: sessionId,
+            agentId: agent,
+            agentLabel: label,
+            text: text,
+          );
+          conversationSessions = {
+            ...conversationSessions,
+            agent: [
+              session,
+              ...(conversationSessions[agent] ?? const []).where(
+                (item) => item['id'] != sessionId,
+              ),
+            ],
+          };
+          return {'ok': true, 'session': session};
+        case 'delete':
+          conversationDeleteCalls++;
+          final agent = _argValue(args, '--agent');
+          final sessionId = _argValue(args, '--session-id');
+          conversationSessions = {
+            ...conversationSessions,
+            agent: (conversationSessions[agent] ?? const [])
+                .where((item) => item['id'] != sessionId)
+                .toList(),
+          };
+          return {'ok': true};
+      }
+    }
+    return {'ok': true};
+  }
+
+  String _argValue(List<String> args, String flag, {String fallback = ''}) {
+    final index = args.indexOf(flag);
+    if (index < 0 || index + 1 >= args.length) {
+      return fallback;
+    }
+    return args[index + 1];
+  }
+
+  Map<String, dynamic> _conversationSession({
+    required String id,
+    required String agentId,
+    required String agentLabel,
+    required String text,
+  }) {
+    return {
+      'id': id,
+      'agentId': agentId,
+      'title': text,
+      'createdAt': '2026-06-12T00:00:00Z',
+      'updatedAt': '2026-06-12T00:00:01Z',
+      'messages': [
+        {
+          'id': 'msg-user-$id',
+          'role': 'user',
+          'text': text,
+          'createdAt': '2026-06-12T00:00:00Z',
+        },
+        {
+          'id': 'msg-agent-$id',
+          'role': 'agent',
+          'text': '本机展示：已记录给 $agentLabel 的消息，尚未连接真实智能体运行时。',
+          'createdAt': '2026-06-12T00:00:01Z',
+        },
+      ],
+    };
+  }
+}
+
+class _FakeMobileRelayService extends MobileRelayService {
+  _FakeMobileRelayService();
+
+  int createPairingCalls = 0;
+  int syncCalls = 0;
+  MobileRelayConfig config = MobileRelayConfig.defaults();
+  List<MobileRelayCommand> queuedCommands = const [];
+
+  @override
+  Future<MobileRelayConfig> loadConfig({
+    required AgentService agentService,
+  }) async {
+    return config;
+  }
+
+  @override
+  Future<void> saveConfig({
+    required AgentService agentService,
+    required MobileRelayConfig config,
+  }) async {
+    this.config = config;
+  }
+
+  @override
+  Future<MobileRelayConfig> configureGateway({
+    required AgentService agentService,
+    required bool useCustomGateway,
+    required String customGatewayUrl,
+  }) async {
+    config = config.copyWith(
+      useCustomGateway: useCustomGateway,
+      customGatewayUrl: customGatewayUrl,
+    );
+    return config;
+  }
+
+  @override
+  Future<Map<String, dynamic>> createPairing({
+    required AgentService agentService,
+  }) async {
+    createPairingCalls++;
+    config = config.copyWith(
+      pairingId: 'pair-1',
+      pcToken: 'pc-token',
+      lastPairingCode: '1234-5678',
+      lastPairingExpiresAt: '2026-06-12T12:00:00.000Z',
+      paired: false,
+      relayEnabled: true,
+    );
+    return {
+      'ok': true,
+      'pairingId': 'pair-1',
+      'pcToken': 'pc-token',
+      'pairingCode': '1234-5678',
+      'expiresAt': '2026-06-12T12:00:00.000Z',
+      'pairing': {'status': 'pending'},
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> syncCommands({
+    required AgentService agentService,
+  }) async {
+    syncCalls++;
+    final commands = queuedCommands;
+    queuedCommands = const [];
+    return {
+      'ok': true,
+      'commands': commands.map((command) {
+        return {
+          'commandId': command.commandId,
+          'type': command.type,
+          'payload': command.payload,
+          'status': command.status,
+          'createdAt': command.createdAt,
+        };
+      }).toList(),
+      'completed': commands.map((command) {
+        final agentId = (command.payload['agentId'] ?? 'codex').toString();
+        final sessions = agentService is _FakeAgentService
+            ? (agentService.conversationSessions[agentId] ?? const [])
+            : const <Map<String, dynamic>>[];
+        if (command.type == 'agent.sessions.list') {
+          return {
+            'command': {
+              'commandId': command.commandId,
+              'type': command.type,
+              'payload': command.payload,
+            },
+            'ok': true,
+            'completion': {
+              'command': {
+                'result': {'sessions': sessions},
+              },
+            },
+          };
+        }
+        final text = (command.payload['text'] ?? 'From phone').toString();
+        return {
+          'command': {
+            'commandId': command.commandId,
+            'type': command.type,
+            'payload': command.payload,
+          },
+          'ok': true,
+          'completion': {
+            'command': {
+              'result': {
+                'ok': true,
+                'mode': 'runtime-adapter',
+                'adapterId': agentId,
+                'output': text,
+              },
+            },
+          },
+        };
+      }).toList(),
+    };
   }
 }

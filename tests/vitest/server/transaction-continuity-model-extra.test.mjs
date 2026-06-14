@@ -50,7 +50,7 @@ async function writeNormalizedManifest(root) {
     manifestPath,
     JSON.stringify(
       {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         packageType: "pact.normalized-documents",
         documents: [
           {

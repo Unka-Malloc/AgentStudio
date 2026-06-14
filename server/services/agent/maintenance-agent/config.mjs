@@ -7,7 +7,7 @@ import {
   waitForStateIdle
 } from "../../../platform/interactive/product-api.mjs";
 
-export const MAINTENANCE_AGENT_SCHEMA_VERSION = 1;
+export const MAINTENANCE_AGENT_SCHEMA_VERSION = "v0.0.1:platform:maintenance-agent-schema-1";
 export const MAINTENANCE_AGENT_RISKS = [
   "read_only",
   "safe_write",

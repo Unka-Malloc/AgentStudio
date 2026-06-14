@@ -92,7 +92,7 @@ function mcpToolCall(name, operation, input = {}, id = 1) {
   return mcpRequest("tools/call", {
     name,
     arguments: {
-      apiVersion: "pact.mcp.v1",
+      apiVersion: "v0.0.1:mcp:interface-1",
       operation,
       input
     }
@@ -140,6 +140,16 @@ function assertNoMcpInternalLeak(value, label) {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-mcp-http-"));
+const originalCapabilityKernelEnv = {
+  PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER,
+  PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER: process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER,
+  PACT_OPAQUE_CAPABILITY_KEY_PROVIDER: process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER,
+  PACT_CAPABILITY_BINDING_GUARD_PROVIDER: process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER
+};
+process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
+process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
+process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER = "local-file";
+process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = "local-file";
 const server = await startHttpServer({
   userDataPath,
   distPath: "",
@@ -154,15 +164,15 @@ try {
   const discovery = await fetchJson(`${server.url}/api/mcp/discovery`);
   assert.equal(discovery.status, 200);
   assert.equal(discovery.payload.mcpServers.pact.httpUrl, `${server.url}/mcp`);
-  assert.equal(discovery.payload.stableToolName, "pact.call");
-  assert.equal(discovery.payload.interfaceVersion, "pact.mcp.v1");
+  assert.equal(discovery.payload.stableToolName, "pact.discovery");
+  assert.equal(discovery.payload.interfaceVersion, "v0.0.1:mcp:interface-1");
   assert.equal(discovery.payload.serverVersion, "0.0.1");
   assert.equal(discovery.payload.identity.algorithm, "Ed25519");
   assert.ok(discovery.payload.identity.keyId);
   assert.equal(discovery.payload.handshake.url, `${server.url}/api/mcp/handshake`);
   assert.equal(discovery.payload.sharedHub.sharedspace.outlet, "pact.sharedspace");
   assert.equal(discovery.payload.sharedHub.sharedspace.referencePolicy, "use-public-workspace-ref");
-  assert.equal(discovery.payload.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+  assert.equal(discovery.payload.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
   assert.ok(discovery.payload.sharedHub.sharedspace.exchangeReceipt.locations.includes("notifications/pact/operation_reply.params.exchange"));
   assert.ok(discovery.payload.sharedHub.sharedspace.exchangeReceipt.fields.includes("outlet"));
   assert.ok(discovery.payload.sharedHub.sharedspace.exchangeReceipt.fields.includes("referencePolicy"));
@@ -244,14 +254,12 @@ try {
     "openclaw",
     "claude-code",
     "codex",
-    "gemini-cli",
     "antigravity",
     "opencode",
     "copilot",
     "kilo-code",
     "cursor",
-    "hermes",
-    "windsurf"
+    "hermes"
   ];
   assert.deepEqual(targetIds, expectedInstallTargets);
   const clientTargetsById = new Map(discovery.payload.clientTargets.map((target) => [target.target, target]));
@@ -317,7 +325,7 @@ try {
   assert.equal(handshake.payload.payload.sharedHub.canonicalMcpUrl, `${server.url}/mcp`);
   assert.equal(handshake.payload.payload.sharedHub.sharedspace.outlet, "pact.sharedspace");
   assert.equal(handshake.payload.payload.sharedHub.sharedspace.referencePolicy, "use-public-workspace-ref");
-  assert.equal(handshake.payload.payload.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+  assert.equal(handshake.payload.payload.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
   assert.ok(handshake.payload.payload.sharedHub.sharedspace.coreOperations.includes("pact.sharedspace.file.write"));
   assert.equal(handshake.payload.payload.sharedHub.sharedspace.coreOperations.includes("pact.sharedspace.drive.file.upload"), false);
   assert.equal(handshake.payload.signature.algorithm, "Ed25519");
@@ -372,7 +380,7 @@ try {
   assert.equal(initialize.status, 200);
   assert.equal(initialize.payload.result.serverInfo.name, "Pact");
   assert.equal(initialize.payload.result.capabilities.tools.listChanged, true);
-  assert.equal(initialize.payload.result._meta.stableToolName, "pact.call");
+  assert.equal(initialize.payload.result._meta.stableToolName, "pact.discovery");
   assert.equal(initialize.payload.result._meta.sharedHub.canonicalMcpUrl, `${server.url}/mcp`);
   assert.equal(initialize.payload.result._meta.sharedHub.sharedspace.outlet, "pact.sharedspace");
   assert.equal(
@@ -438,7 +446,7 @@ try {
     body: JSON.stringify(mcpRequest("tools/call", {
       name: "pact.discovery",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation: "pact.mcp.version"
       }
     }, 20))
@@ -459,8 +467,7 @@ try {
     body: JSON.stringify(mcpRequest("unknown /home/private-user/report.txt --token rpc_private_token", {}, 21))
   });
   assert.equal(unknownMethodProbe.status, 200);
-  assert.match(unknownMethodProbe.payload.error.message, /\[server-internal-path\]/);
-  assert.match(unknownMethodProbe.payload.error.message, /--token <redacted-token>/);
+  assert.equal(unknownMethodProbe.payload.error.message, "MCP method not found.");
   assert.equal(JSON.stringify(unknownMethodProbe.payload).includes("rpc_private_token"), false);
   assertNoMcpInternalLeak(unknownMethodProbe.payload, "MCP unknown method error");
 
@@ -472,6 +479,34 @@ try {
     ),
     "MCP token denials must be recorded in the unified authorization store"
   );
+
+  const forwardedLocalGrant = await fetchJson(`${server.url}/api/mcp/local-grant`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Forwarded-For": "203.0.113.10"
+    },
+    body: JSON.stringify({
+      targets: ["codex"],
+      label: "verify-mcp-local-grant-forwarded"
+    })
+  });
+  assert.equal(forwardedLocalGrant.status, 403);
+  assert.equal(forwardedLocalGrant.payload.error.code, "local_pairing_required");
+
+  const crossOriginLocalGrant = await fetchJson(`${server.url}/api/mcp/local-grant`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: "https://evil.example.test"
+    },
+    body: JSON.stringify({
+      targets: ["codex"],
+      label: "verify-mcp-local-grant-cross-origin"
+    })
+  });
+  assert.equal(crossOriginLocalGrant.status, 403);
+  assert.equal(crossOriginLocalGrant.payload.error.code, "local_pairing_required");
 
   const localGrant = await fetchJson(`${server.url}/api/mcp/local-grant`, {
     method: "POST",
@@ -542,7 +577,7 @@ try {
   assert.match(localGrant.payload.sharedHub.vmMcpUrl, /host\.orb\.internal:\d+\/mcp$/);
   assert.equal(localGrant.payload.sharedHub.sharedspace.outlet, "pact.sharedspace");
   assert.equal(localGrant.payload.sharedHub.sharedspace.referencePolicy, "use-public-workspace-ref");
-  assert.equal(localGrant.payload.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+  assert.equal(localGrant.payload.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
   assert.ok(localGrant.payload.sharedHub.sharedspace.exchangeReceipt.locations.includes("structuredContent.exchange"));
   assert.ok(localGrant.payload.sharedHub.sharedspace.exchangeReceipt.fields.includes("referencePolicy"));
   assert.ok(localGrant.payload.sharedHub.sharedspace.exchangeReceipt.fields.includes("syncReceiptId"));
@@ -592,7 +627,7 @@ try {
   assert.equal(unknownTargetGrant.payload.targetMatch.matched, false);
   assert.deepEqual(unknownTargetGrant.payload.supportedTargets, expectedInstallTargets);
   assert.deepEqual(unknownTargetGrant.payload.targetMatch.matchedTargetDetails, []);
-  assert.equal(unknownTargetGrant.payload.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+  assert.equal(unknownTargetGrant.payload.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
   assert.equal(unknownTargetGrant.payload.toolsets.includes("pact.storage.write"), false);
 
   const explicitScopeGrant = await fetchJson(`${server.url}/api/mcp/local-grant`, {
@@ -634,7 +669,15 @@ try {
   assert.equal(explicitToolsetGrant.payload.ok, true);
   assert.equal(explicitToolsetGrant.payload.toolsets.includes("pact.storage.write"), true);
 
-  const expectedTools = ["pact.discovery", "pact.knowledge", "pact.sharedspace", "pact.codespace", "pact.skillHub"];
+  const expectedTools = [
+    "pact.discovery",
+    "pact.agentLibrary",
+    "pact.sharedspace",
+    "pact.codespace",
+    "pact.skillHub",
+    "pact.agentRelay",
+    "pact.serviceHub"
+  ];
 
   const localGrantList = await fetchJson(`${server.url}/mcp`, {
     method: "POST",
@@ -642,7 +685,7 @@ try {
     body: JSON.stringify(mcpRequest("tools/list", {}, 30))
   });
   assert.equal(localGrantList.status, 200);
-  assert.equal(localGrantList.payload.result.tools.length, 5);
+  assert.equal(localGrantList.payload.result.tools.length, 7);
   for (const name of expectedTools) {
     assert.ok(localGrantList.payload.result.tools.some(t => t.name === name));
   }
@@ -653,10 +696,13 @@ try {
     body: JSON.stringify(mcpRequest("tools/list", {}, 31))
   });
   assert.equal(localGrantBearerList.status, 200);
-  assert.equal(localGrantBearerList.payload.result.tools.length, 5);
-  assert.equal(localGrantBearerList.payload.result._meta.stableToolName, "pact.call");
+  assert.equal(localGrantBearerList.payload.result.tools.length, 7);
+  assert.equal(localGrantBearerList.payload.result._meta.stableToolName, "pact.discovery");
   assert.equal(localGrantBearerList.payload.result._meta.sharedHub.canonicalMcpUrl, `${server.url}/mcp`);
   assert.equal(localGrantBearerList.payload.result._meta.sharedHub.sharedspace.outlet, "pact.sharedspace");
+  assert.equal(localGrantBearerList.payload.result._meta.capabilityFamilies.agentRelay.protocol, "v0.0.1:agent:acp-agent-relay-1");
+  assert.equal(localGrantBearerList.payload.result._meta.capabilityFamilies.agentRelay.templateOperation, "pact.agentRelay.templates.list");
+  assert.equal(localGrantBearerList.payload.result._meta.capabilityFamilies.agentRelay.mcpOutlet, "pact.agentRelay");
   assert.equal(
     localGrantBearerList.payload.result._meta.connector.autoInstallCommand,
     `npx pact-mcp-connector@latest install --target auto --url '${server.url}' --json`
@@ -678,13 +724,13 @@ try {
     body: JSON.stringify(mcpRequest("tools/call", {
       name: "pact.discovery",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation: "pact.mcp.version"
       }
     }, 314))
   });
   assert.equal(versionProbe.status, 200);
-  assert.equal(versionProbe.payload.result.structuredContent.stableToolName, "pact.call");
+  assert.equal(versionProbe.payload.result.structuredContent.stableToolName, "pact.discovery");
   assert.equal(versionProbe.payload.result.structuredContent.sharedHub.canonicalMcpUrl, `${server.url}/mcp`);
   assert.equal(versionProbe.payload.result.structuredContent.sharedHub.sharedspace.outlet, "pact.sharedspace");
   assert.deepEqual(versionProbe.payload.result.structuredContent.supportedTargets.map((target) => target.target), expectedInstallTargets);
@@ -730,7 +776,7 @@ try {
   assert.deepEqual(updateTargetDetails.get("hermes").locations, ["orbstack", "remote-linux"]);
   assert.equal(updateProbe.payload.result.structuredContent.sharedHub.canonicalMcpUrl, `${server.url}/mcp`);
   assert.equal(updateProbe.payload.result.structuredContent.sharedHub.sharedspace.outlet, "pact.sharedspace");
-  assert.equal(updateProbe.payload.result.structuredContent.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+  assert.equal(updateProbe.payload.result.structuredContent.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
   assert.match(updateProbe.payload.result.structuredContent.priorityInstallCommand, new RegExp(`--url '${server.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'`));
   assert.match(updateProbe.payload.result.content[0].text, new RegExp(`--url '${server.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'`));
   assert.match(updateProbe.payload.result.content[0].text, /claude-code,codex,openclaw/);
@@ -741,7 +787,7 @@ try {
     body: JSON.stringify(mcpRequest("tools/call", {
       name: "pact.discovery",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation: "pact.capabilities.list"
       }
     }, 32))
@@ -752,7 +798,7 @@ try {
   const localSkillCatalog = localGrantCapabilities.payload.result.structuredContent.skillCatalog;
   assert.equal(localGrantCapabilities.payload.result.structuredContent.sharedHub.canonicalMcpUrl, `${server.url}/mcp`);
   assert.equal(localGrantCapabilities.payload.result.structuredContent.sharedHub.sharedspace.outlet, "pact.sharedspace");
-  assert.equal(localGrantCapabilities.payload.result.structuredContent.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+  assert.equal(localGrantCapabilities.payload.result.structuredContent.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
   assert.ok(localGrantCapabilities.payload.result.structuredContent.sharedHub.sharedspace.coreOperations.includes("pact.sharedspace.file.write"));
   assert.equal(localGrantCapabilities.payload.result.structuredContent.sharedHub.sharedspace.coreOperations.includes("pact.sharedspace.drive.file.upload"), false);
   assert.equal(
@@ -764,14 +810,17 @@ try {
   assert.deepEqual(localGrantCapabilities.payload.result.structuredContent.supportedTargets.map((target) => target.target), expectedInstallTargets);
   const operationByName = new Map(localOperations.map((operation) => [operation.name, operation]));
   assert.equal(operationByName.get("pact.sharedspace.file.write")._meta.mcpOutlet, "pact.sharedspace");
-  assert.equal(operationByName.get("pact.sharedspace.file.write")._meta.exchangeReceipt.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+  assert.equal(operationByName.get("pact.sharedspace.file.write")._meta.exchangeReceipt.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
   assert.ok(operationByName.get("pact.sharedspace.file.write")._meta.exchangeReceipt.locations.includes("structuredContent.exchange"));
   assert.ok(operationByName.get("pact.sharedspace.file.write")._meta.exchangeReceipt.fields.includes("checkpointId"));
+  assert.equal(operationByName.get("pact.agentRelay.templates.list")._meta.mcpOutlet, "pact.agentRelay");
+  assert.equal(operationByName.get("pact.agentRelay.virtualAgents.list")._meta.mcpOutlet, "pact.agentRelay");
+  assert.equal(operationByName.has("pact.agentRelay.prompt"), false);
   assert.equal(operationByName.get("pact.repo.status")._meta.mcpOutlet, "pact.codespace");
-  if (operationByName.has("pact.knowledge.skills.list")) {
-    assert.equal(operationByName.get("pact.knowledge.skills.list")._meta.mcpOutlet, "pact.skillHub");
+  if (operationByName.has("pact.agentLibrary.skills.list")) {
+    assert.equal(operationByName.get("pact.agentLibrary.skills.list")._meta.mcpOutlet, "pact.skillHub");
   }
-  assert.equal(operationByName.get("pact.knowledge.search")._meta.mcpOutlet, "pact.knowledge");
+  assert.equal(operationByName.get("pact.agentLibrary.search")._meta.mcpOutlet, "pact.agentLibrary");
   assert.equal(localSkillCatalog.summary.activeSkillCount, 1);
   assert.equal(localSkillCatalog.summary.visibleSkillCount, 1);
   assert.equal(localSkillCatalog.skills[0].name, "mcp-discovery-visible-skill");
@@ -780,21 +829,32 @@ try {
   assert.equal(Object.prototype.hasOwnProperty.call(localSkillCatalog.skills[0].library, "absolutePath"), false);
   assert.equal(JSON.stringify(localSkillCatalog).includes("MCP Discovery Visible Skill\\n"), false);
   assert.ok(localOutlets["pact.sharedspace"].operations.includes("pact.sharedspace.file.write"));
-  assert.equal(localOutlets["pact.sharedspace"].exchangeReceipt.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+  assert.equal(localOutlets["pact.sharedspace"].exchangeReceipt.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
   assert.ok(localOutlets["pact.sharedspace"].exchangeReceipt.actions.includes("file-written"));
   assert.equal(localOutlets["pact.sharedspace"].exchangeReceipt.actions.includes("drive-sync-applied"), false);
   assert.ok(localOutlets["pact.codespace"].operations.includes("pact.repo.status"));
   assert.ok(localOutlets["pact.skillHub"]);
-  if (localOutlets["pact.skillHub"].operations.includes("pact.knowledge.skills.list")) {
-    assert.equal(operationByName.get("pact.knowledge.skills.list")._meta.mcpOutlet, "pact.skillHub");
+  assert.ok(localOutlets["pact.agentRelay"]);
+  assert.ok(localOutlets["pact.agentRelay"].operations.includes("pact.agentRelay.templates.list"));
+  assert.ok(localOutlets["pact.agentRelay"].operations.includes("pact.agentRelay.virtualAgents.list"));
+  if (localOutlets["pact.skillHub"].operations.includes("pact.agentLibrary.skills.list")) {
+    assert.equal(operationByName.get("pact.agentLibrary.skills.list")._meta.mcpOutlet, "pact.skillHub");
   }
   assert.equal(localOutlets["pact.skillHub"].skillCatalog.visibleSkillCount, 1);
-  assert.ok(localOutlets["pact.knowledge"].operations.includes("pact.knowledge.search"));
+  assert.ok(localOutlets["pact.agentLibrary"].operations.includes("pact.agentLibrary.search"));
+  const agentRelayFamily = localGrantCapabilities.payload.result.structuredContent.capabilityFamilies.agentRelay;
+  assert.equal(agentRelayFamily.available, true);
+  assert.equal(agentRelayFamily.canView, true);
+  assert.equal(agentRelayFamily.canOperate, false);
+  assert.equal(agentRelayFamily.mcpOutlet, "pact.agentRelay");
+  assert.equal(agentRelayFamily.templateOperation, "pact.agentRelay.templates.list");
+  assert.ok(agentRelayFamily.templateIds.includes("prompt.send"));
+  assert.equal(agentRelayFamily.primaryFlow[0].operation, "pact.agentRelay.templates.list");
 
   const mismatchedOutletCall = await fetchJson(`${server.url}/mcp`, {
     method: "POST",
     headers: apiKeyHeaders(localGrant.payload.token),
-    body: JSON.stringify(mcpToolCall("pact.knowledge", "pact.sharedspace.file.write", {
+    body: JSON.stringify(mcpToolCall("pact.agentLibrary", "pact.sharedspace.file.write", {
       workspaceRef: "workspace-1",
       path: "notes/hello.txt",
       content: "wrong outlet"
@@ -802,7 +862,7 @@ try {
   });
   assert.equal(mismatchedOutletCall.status, 200);
   assert.equal(mismatchedOutletCall.payload.error.data.code, "operation_outlet_mismatch");
-  assert.equal(mismatchedOutletCall.payload.error.data.requestedTool, "pact.knowledge");
+  assert.equal(mismatchedOutletCall.payload.error.data.requestedTool, "pact.agentLibrary");
   assert.equal(mismatchedOutletCall.payload.error.data.expectedTool, "pact.sharedspace");
   assert.equal(mismatchedOutletCall.payload.error.data.example.name, "pact.sharedspace");
 
@@ -831,7 +891,7 @@ try {
   const workspaceRef = createdWorkspacePayload.workspace.workspaceRef;
   const createdExchange = createdSharedWorkspace.payload.result.structuredContent.exchange;
   assert.equal(workspaceRef, "workspace-1");
-  assert.equal(createdExchange.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+  assert.equal(createdExchange.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
   assert.equal(createdExchange.action, "workspace-created");
   assert.equal(createdExchange.outlet, "pact.sharedspace");
   assert.equal(createdExchange.referencePolicy, "use-public-workspace-ref");
@@ -860,7 +920,7 @@ try {
   assert.match(sharedspaceWriteSse.text, /notifications\/pact\/operation_reply/);
   assert.match(sharedspaceWriteSse.text, /pact\.sharedspace\.file\.write/);
   assert.match(sharedspaceWriteSse.text, /"status":"completed"/);
-  assert.match(sharedspaceWriteSse.text, /"exchange":\{"schemaVersion":"pact\.mcp\.sharedspace-exchange\.v1"/);
+  assert.match(sharedspaceWriteSse.text, /"exchange":\{"schemaVersion":"v0\.0\.1:mcp:sharedspace-exchange-1"/);
   assert.match(sharedspaceWriteSse.text, /"action":"file-written"/);
   assert.match(sharedspaceWriteSse.text, /"path":"notes\/hello\.txt"/);
   assert.equal(sharedspaceWrite.status, 200);
@@ -942,12 +1002,12 @@ try {
   });
   assert.equal(failedSharedspaceRead.status, 200);
   assert.ok(failedSharedspaceRead.payload.error);
-  assert.equal(failedSharedspaceRead.payload.error.data.exchange.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+  assert.equal(failedSharedspaceRead.payload.error.data.exchange.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
   assert.equal(failedSharedspaceRead.payload.error.data.exchange.action, "file-read");
   assert.equal(failedSharedspaceRead.payload.error.data.exchange.path, "[server-internal-path]");
   assert.equal(failedSharedspaceRead.payload.error.data.target.targetKind, "sharedspace");
   assert.equal(failedSharedspaceRead.payload.error.data.target.workspaceId, "workspace-hidden");
-  assert.match(failedSharedspaceReadSse.text, /"exchange":\{"schemaVersion":"pact\.mcp\.sharedspace-exchange\.v1"/);
+  assert.match(failedSharedspaceReadSse.text, /"exchange":\{"schemaVersion":"v0\.0\.1:mcp:sharedspace-exchange-1"/);
   assert.match(failedSharedspaceReadSse.text, /"action":"file-read"/);
   assert.match(failedSharedspaceReadSse.text, /"path":"\[server-internal-path\]"/);
   assertNoMcpInternalLeak(failedSharedspaceRead.payload, "MCP failed sharedspace response");
@@ -970,19 +1030,19 @@ try {
     body: JSON.stringify(mcpRequest("tools/list", {}, 3))
   });
   assert.equal(list.status, 200);
-  assert.equal(list.payload.result.tools.length, 5);
+  assert.equal(list.payload.result.tools.length, 7);
   for (const name of expectedTools) {
     assert.ok(list.payload.result.tools.some(t => t.name === name));
   }
-  assert.equal(list.payload.result._meta.stableToolName, "pact.call");
+  assert.equal(list.payload.result._meta.stableToolName, "pact.discovery");
 
   const health = await fetchJson(`${server.url}/mcp`, {
     method: "POST",
     headers: apiKeyHeaders(grant.payload.token),
     body: JSON.stringify(mcpRequest("tools/call", {
-      name: "pact.call",
+      name: "pact.discovery",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation: "system.health",
         input: {}
       }
@@ -997,15 +1057,19 @@ try {
     method: "POST",
     headers: apiKeyHeaders(grant.payload.token),
     body: JSON.stringify(mcpRequest("tools/call", {
-      name: "pact.call",
+      name: "pact.discovery",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation: "system.health",
         input: {},
         workspaceId: "workspace_private_envelope_probe",
         operatorId: "/home/private-user/agent",
         intent: "inspect /home/private-user/report.txt with Authorization: Bearer envelope_private_token and apiKey=envelope_private_token",
         subject: {
+          type: "console-user",
+          subjectId: "attacker-subject",
+          username: "attacker",
+          scopes: ["auth:admin"],
           token: "envelope_private_token",
           tokenPrefix: "envelope_private",
           secretRef: "secret://pact/mcp/envelope",
@@ -1021,16 +1085,23 @@ try {
   assert.equal(internalEnvelopeProbe.status, 200);
   assert.equal(internalEnvelopeProbe.payload.result.structuredContent.envelope.workspaceId, "workspace-hidden");
   assert.equal(internalEnvelopeProbe.payload.result.structuredContent.envelope.operatorId, "[server-internal-path]");
+  assert.equal(internalEnvelopeProbe.payload.result.structuredContent.envelope.subject.type, "tool-grant");
+  assert.equal(internalEnvelopeProbe.payload.result.structuredContent.envelope.subject.subjectId, grant.payload.grant.id);
+  assert.equal(internalEnvelopeProbe.payload.result.structuredContent.envelope.subject.declaredSubject.type, "console-user");
+  assert.equal(internalEnvelopeProbe.payload.result.structuredContent.envelope.subject.declaredSubject.subjectId, "attacker-subject");
+  assert.equal(internalEnvelopeProbe.payload.result.structuredContent.envelope.subject.declaredSubject.username, "attacker");
+  assert.deepEqual(internalEnvelopeProbe.payload.result.structuredContent.envelope.subject.declaredSubject.scopes, ["auth:admin"]);
   assert.equal(
     internalEnvelopeProbe.payload.result.structuredContent.envelope.intent,
     "inspect [server-internal-path] with Authorization: Bearer <redacted-token> and apiKey=<redacted-secret>"
   );
-  assert.equal(Object.prototype.hasOwnProperty.call(internalEnvelopeProbe.payload.result.structuredContent.envelope.subject, "token"), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(internalEnvelopeProbe.payload.result.structuredContent.envelope.subject, "tokenPrefix"), false);
-  assert.equal(internalEnvelopeProbe.payload.result.structuredContent.envelope.subject.secretRef, "secret://pact/mcp/envelope");
-  assert.equal(Object.prototype.hasOwnProperty.call(internalEnvelopeProbe.payload.result.structuredContent.envelope.subject.headers, "Authorization"), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(internalEnvelopeProbe.payload.result.structuredContent.envelope.subject.headers, "X-Pact-Api-Key"), false);
-  assert.equal(internalEnvelopeProbe.payload.result.structuredContent.envelope.subject.headers.Accept, "application/json");
+  const declaredSubject = internalEnvelopeProbe.payload.result.structuredContent.envelope.subject.declaredSubject;
+  assert.equal(Object.prototype.hasOwnProperty.call(declaredSubject, "token"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(declaredSubject, "tokenPrefix"), false);
+  assert.equal(declaredSubject.secretRef, "secret://pact/mcp/envelope");
+  assert.equal(Object.prototype.hasOwnProperty.call(declaredSubject.headers, "Authorization"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(declaredSubject.headers, "X-Pact-Api-Key"), false);
+  assert.equal(declaredSubject.headers.Accept, "application/json");
   assertNoMcpInternalLeak(internalEnvelopeProbe.payload, "MCP operation envelope");
   assert.equal(JSON.stringify(internalEnvelopeProbe.payload).includes("envelope_private_token"), false);
 
@@ -1038,9 +1109,9 @@ try {
     method: "POST",
     headers: apiKeyHeaders(grant.payload.token),
     body: JSON.stringify(mcpRequest("tools/call", {
-      name: "pact.call",
+      name: "pact.discovery",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation: "pact.capabilities.list"
       }
     }, 5))
@@ -1057,7 +1128,7 @@ try {
     }, 6))
   });
   assert.equal(unsupportedDirectCall.status, 200);
-  assert.equal(unsupportedDirectCall.payload.error.data.stableToolName, "pact.call");
+  assert.equal(unsupportedDirectCall.payload.error.data.stableToolName, "pact.discovery");
   assert.ok(unsupportedDirectCall.payload.error.data.categorizedOutlets.includes("pact.discovery"));
 
   const mcpMetrics = await fetchJson(`${server.url}/api/tool-management/v1/metrics/summary`);
@@ -1094,4 +1165,11 @@ try {
 } finally {
   await server.close();
   await fs.rm(userDataPath, { recursive: true, force: true });
+  for (const [key, value] of Object.entries(originalCapabilityKernelEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
 }

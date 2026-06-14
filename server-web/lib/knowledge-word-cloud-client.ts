@@ -7,7 +7,6 @@ import type {
   KnowledgeWordCloudCorpusPath,
   KnowledgeWordCloudExportResponse,
   KnowledgeWordCloudImportResponse,
-  KnowledgeWordCloudProposeResponse,
   KnowledgeWordCloudState,
 } from "./types";
 
@@ -135,14 +134,6 @@ export function getKnowledgeWordBagTerms(payload: KnowledgeWordBagTermsPayload) 
   return postJson<KnowledgeWordBagTermsResponse>(
     "/api/knowledge/word-clouds/word-bags/terms",
     payload,
-  );
-}
-
-export function proposeKnowledgeWordClouds(payload: Record<string, unknown>) {
-  return postJson<KnowledgeWordCloudProposeResponse>(
-    "/api/knowledge/word-clouds/propose",
-    payload,
-    { safetyConfirm: true },
   );
 }
 

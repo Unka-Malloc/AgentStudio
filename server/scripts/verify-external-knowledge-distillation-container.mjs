@@ -122,7 +122,7 @@ async function fetchJson(url, options = {}) {
 
 async function startMockModelGateway() {
   const calls = [];
-  const modelOutputContract = "pact.external-knowledge-distillation.model-output.v1";
+  const modelOutputContract = "v0.0.1:external-service:knowledge-distillation-model-output-1";
   function parsePrompt(question = "") {
     try {
       return question ? JSON.parse(question) : {};
@@ -587,25 +587,25 @@ try {
   assert.equal(capabilities.payload.largeDocumentPolicy.spreadsheetSharedStringLookupStrategy, "spreadsheetml-shared-string-disk-index.v1");
   assert.equal(capabilities.payload.largeDocumentPolicy.spreadsheetSharedStringIndexRecordBytes, 16);
   assert.equal(capabilities.payload.largeDocumentPolicy.tikaTimeoutMs >= 120_000, true);
-  assert.equal(capabilities.payload.parserExecution.strategyRegistry.protocolVersion, "pact.external-knowledge-distillation.parser-strategies.v1");
+  assert.equal(capabilities.payload.parserExecution.strategyRegistry.protocolVersion, "v0.0.1:external-service:knowledge-distillation-parser-strategies-1");
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategy, "singleton-parser-strategy-registry.v1");
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.strategyCount >= 145, true);
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.builtInParserCount >= 103, true);
   assert.equal(capabilities.payload.parserExecution.strategyRegistry.routeBoundStrategyCount >= 105, true);
-  assert.equal(capabilities.payload.formatConversion.profileRegistry.protocolVersion, "pact.external-knowledge-distillation.format-conversion-profiles.v1");
+  assert.equal(capabilities.payload.formatConversion.profileRegistry.protocolVersion, "v0.0.1:external-service:knowledge-distillation-format-conversion-profiles-1");
   assert.equal(capabilities.payload.formatConversion.profileRegistry.strategy, "singleton-format-conversion-profile-registry.v1");
   assert.equal(capabilities.payload.formatConversion.profileRegistry.profileCount, 7);
-  assert.equal(capabilities.payload.modelDistillation.profileRegistry.protocolVersion, "pact.external-knowledge-distillation.model-distillation-profiles.v1");
+  assert.equal(capabilities.payload.modelDistillation.profileRegistry.protocolVersion, "v0.0.1:external-service:knowledge-distillation-model-distillation-profiles-1");
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.strategy, "singleton-model-distillation-profile-registry.v1");
   assert.equal(capabilities.payload.modelDistillation.profileRegistry.defaultProfileId, "real-model-grounded-distillation.v1");
-  assert.equal(capabilities.payload.modelDistillation.outputContract, "pact.external-knowledge-distillation.model-output.v1");
+  assert.equal(capabilities.payload.modelDistillation.outputContract, "v0.0.1:external-service:knowledge-distillation-model-output-1");
   assert.equal(capabilities.payload.modelDistillation.outputValidationStrategy, "model-distillation-machine-readable-contract.v1");
   assert.equal(capabilities.payload.modelDistillation.outputRepairStrategy, "model-distillation-contract-repair-retry.v1");
   assert.equal(capabilities.payload.modelDistillation.profiles.some((profile) => (
     profile.id === "real-model-grounded-distillation.v1" &&
     profile.requiredRealModelCall === true &&
     profile.noBuiltinFallback === true &&
-    profile.requiredOutput.machineReadableContract === "pact.external-knowledge-distillation.model-output.v1" &&
+    profile.requiredOutput.machineReadableContract === "v0.0.1:external-service:knowledge-distillation-model-output-1" &&
     profile.outputRepairPolicy.enabled === true &&
     profile.outputRepairPolicy.strategy === "model-distillation-contract-repair-retry.v1" &&
     profile.transportPolicy.maxAttempts === 2 &&
@@ -643,7 +643,7 @@ try {
   assert.equal(capabilities.payload.algorithms.includes("spreadsheetml-shared-string-disk-index.v1"), true);
   assert.equal(capabilities.payload.fileCompatibility.routingStrategy, "content-signature-extension-media-shape-routing.v2");
   assert.equal(capabilities.payload.fileCompatibility.routeOrder[0], "contentSignature");
-  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.protocolVersion, "pact.external-knowledge-distillation.format-routes.v1");
+  assert.equal(capabilities.payload.fileCompatibility.routeRegistry.protocolVersion, "v0.0.1:external-service:knowledge-distillation-format-routes-1");
   assert.equal(capabilities.payload.fileCompatibility.routeRegistry.strategy, "singleton-format-route-registry.v1");
   assert.equal(capabilities.payload.fileCompatibility.routeRegistry.source, "external-services/knowledge-distillation-service/format-routes.json");
   assert.equal(capabilities.payload.fileCompatibility.routeRegistry.routeCount >= 24, true);
@@ -1548,7 +1548,7 @@ try {
   assert.match(markupChild.windowPlan.windows[0]?.excerpt || "", /External KD Runbook|Parser Strategy|markup\.structure/);
   assert.equal(projectPackageRun.payload.result.graphEvidence.text_units.some((unit) => (
     unit.sourceId === "container-project-package!docs/runbook.adoc" &&
-    unit.metadata?.semanticChunkStrategy === "unstructured.by-title-element-windowing.v1" &&
+    unit.metadata?.semanticChunkStrategy === "v0.0.1:strategy:unstructured-by-title-element-windowing-1" &&
     unit.metadata?.elementTypes?.includes("table-row")
   )), true);
   const candidateSourceIds = new Set(projectPackageRun.payload.result.candidates.flatMap((candidate) => candidate.sourceIds || []));

@@ -6,8 +6,103 @@
 
 .knowledge-log-filters {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(110px, 0.5fr) minmax(140px, 1fr) minmax(120px, 0.5fr) minmax(120px, 0.5fr);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--space-2);
+}
+
+.knowledge-log-actions {
+  justify-content: flex-end;
+}
+
+.knowledge-log-pagination {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto minmax(120px, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.knowledge-log-page-size-control {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.knowledge-log-page-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55em;
+  min-width: 132px;
+  color: var(--text-secondary);
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.knowledge-log-page-indicator strong {
+  color: var(--text-primary);
+  font-family: inherit;
+  font-weight: 800;
+}
+
+.knowledge-log-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.knowledge-log-page-size .option-bar-select {
+  width: 116px;
+}
+
+.knowledge-log-pagination .tool-button {
+  min-height: 34px;
+}
+
+.knowledge-log-page-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  min-width: max-content;
+}
+
+.knowledge-log-page-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  font-size: 1em;
+  line-height: 1;
+}
+
+.knowledge-log-page-icon svg {
+  width: 1em;
+  height: 1em;
+}
+
+.knowledge-log-filter-field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.knowledge-log-filter-field > span {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.knowledge-log-filters .option-bar {
+  gap: var(--space-1);
+}
+
+.knowledge-log-filters .option-bar-label {
+  font-weight: 700;
 }
 
 .knowledge-log-filters input,
@@ -17,15 +112,28 @@
 }
 
 .knowledge-log-table-shell {
+  --knowledge-log-row-max-height: 96px;
+  --knowledge-log-cell-content-max-height: 72px;
   width: 100%;
   min-width: 0;
   overflow: hidden;
   border-radius: var(--radius-md);
 }
 
+.knowledge-log-table-shell .el-table__body tr.el-table__row {
+  height: var(--knowledge-log-row-max-height);
+  max-height: var(--knowledge-log-row-max-height);
+}
+
+.knowledge-log-table-shell .el-table__body td.el-table__cell {
+  height: var(--knowledge-log-row-max-height);
+  max-height: var(--knowledge-log-row-max-height);
+}
+
 .knowledge-log-table-shell .el-table .cell {
   white-space: normal;
-  overflow: visible;
+  max-height: var(--knowledge-log-cell-content-max-height);
+  overflow: hidden;
   text-overflow: clip;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -42,14 +150,53 @@
 .knowledge-log-stage,
 .knowledge-log-progress,
 .knowledge-log-time,
-.knowledge-log-detail,
+.knowledge-log-detail-list,
 .knowledge-log-error,
 .knowledge-log-table-shell .mono-compact {
   white-space: normal;
-  overflow: visible;
+  overflow: hidden;
   text-overflow: clip;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.knowledge-log-kind,
+.knowledge-log-target,
+.knowledge-log-stage,
+.knowledge-log-time,
+.knowledge-log-error {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.knowledge-log-time {
+  display: inline-block;
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+}
+
+.knowledge-log-detail-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  max-height: var(--knowledge-log-cell-content-max-height);
+  overflow: hidden;
+  padding-left: 1.1em;
+}
+
+.knowledge-log-detail-list li {
+  padding-left: 2px;
+  min-width: 0;
+}
+
+.knowledge-log-detail-list li::marker {
+  color: var(--text-muted);
 }
 
 .knowledge-log-status {

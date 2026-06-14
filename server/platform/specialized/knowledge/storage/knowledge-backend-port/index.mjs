@@ -4,7 +4,7 @@ import path from "node:path";
 import { ServerConfig } from "../../../../common/config/ServerConfig.mjs";
 import { evaluateKnowledgeAccess } from "../../agent-library/access-policy.mjs";
 
-export const KNOWLEDGE_BACKEND_PORT_PROTOCOL_VERSION = "pact.knowledge-backend-port.v1";
+export const KNOWLEDGE_BACKEND_PORT_PROTOCOL_VERSION = "v0.0.1:knowledge:backend-port-1";
 
 const BACKEND_CONFIG_FILE = path.join("knowledge", "knowledge-backends.json");
 const BACKEND_LEDGER_FILE = path.join("knowledge", "knowledge-backend-ledger.json");
@@ -142,7 +142,7 @@ async function writeJson(filePath, value) {
 
 function defaultProviderConfig() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: KNOWLEDGE_BACKEND_PORT_PROTOCOL_VERSION,
     updatedAt: nowIso(),
     providers: {
@@ -210,7 +210,7 @@ function defaultProviderConfig() {
 
 function emptyLedger() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: KNOWLEDGE_BACKEND_PORT_PROTOCOL_VERSION,
     updatedAt: nowIso(),
     evidence: {},
@@ -245,7 +245,7 @@ function publicManifest(config = {}, configFilePath = "") {
     providers[providerId] = publicProvider(providerId, provider);
   }
   return {
-    schemaVersion: Number(config.schemaVersion || 1),
+    schemaVersion: String(config.schemaVersion || "v0.0.1:schema:definition-1"),
     protocolVersion: KNOWLEDGE_BACKEND_PORT_PROTOCOL_VERSION,
     configPath: configFilePath,
     providers,

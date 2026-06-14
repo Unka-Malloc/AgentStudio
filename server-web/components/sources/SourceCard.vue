@@ -26,7 +26,7 @@ const {
 </script>
 
 <template>
-  <article class="knowledge-source-card surface-card source-card">
+  <article :id="`source-${source.sourceId}`" class="knowledge-source-card surface-card source-card">
     <div class="knowledge-source-card-header source-card-header source-card-title-row">
       <div>
         <h3>{{ source.label }}</h3>

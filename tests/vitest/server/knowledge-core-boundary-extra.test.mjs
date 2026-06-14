@@ -9,7 +9,7 @@ vi.mock("../../../server/platform/specialized/knowledge/preprocessing/domain/kno
     expertVocabularyPath: "/tmp/mock-expert-vocabulary.json",
     emailRulesPath: "/tmp/mock-email-rules.json",
     loadSync: vi.fn(() => ({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       version: "mock",
       source: "mock-taxonomy",
       categories: []
@@ -18,9 +18,9 @@ vi.mock("../../../server/platform/specialized/knowledge/preprocessing/domain/kno
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/retrieval/embedding-runtime/index.mjs", () => ({
-  EMBEDDING_PROTOCOL_VERSION: "pact.embedding.v1",
+  EMBEDDING_PROTOCOL_VERSION: "v0.0.1:knowledge:embedding-1",
   createEmbeddingRuntime: vi.fn(() => ({
-    protocolVersion: "pact.embedding.v1",
+    protocolVersion: "v0.0.1:knowledge:embedding-1",
     embedText: vi.fn((value = "") => ({
       vector: Array.from(value).map(() => 0.01),
       text: String(value),
@@ -40,12 +40,12 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/embedding-runt
       dimension: 8
     })),
     health: vi.fn(() => ({
-      protocolVersion: "pact.embedding.v1",
+      protocolVersion: "v0.0.1:knowledge:embedding-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.embedding.v1",
+      protocolVersion: "v0.0.1:knowledge:embedding-1",
       providers: []
     }))
   }))
@@ -59,12 +59,12 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/vector-store/L
     deleteByTargetIds: vi.fn(),
     search: vi.fn(() => []),
     health: vi.fn(() => ({
-      protocolVersion: "pact.vector.v1",
+      protocolVersion: "v0.0.1:knowledge:vector-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.vector.v1",
+      protocolVersion: "v0.0.1:knowledge:vector-1",
       providers: ["sqlite-vec"]
     })),
     close: vi.fn()
@@ -72,22 +72,22 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/vector-store/L
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runtime/index.mjs", () => ({
-  LEARNING_PROTOCOL_VERSION: "pact.learning.v1",
+  LEARNING_PROTOCOL_VERSION: "v0.0.1:knowledge:learning-1",
   createLearningRuntime: vi.fn(() => ({
-    protocolVersion: "pact.learning.v1",
+    protocolVersion: "v0.0.1:knowledge:learning-1",
     health: vi.fn(async () => ({
-      protocolVersion: "pact.learning.v1",
+      protocolVersion: "v0.0.1:knowledge:learning-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.learning.v1",
+      protocolVersion: "v0.0.1:knowledge:learning-1",
       enabled: true,
       safeAutoApplySuggestionTypes: ["retrievalProfile", "rankingRule", "decay"]
     })),
     fuseCandidatesSync: vi.fn(() => ({ runtime: "mock", degraded: true, candidates: [], explanations: [] })),
     proposeProfile: vi.fn(() => ({
-      protocolVersion: "pact.learning.v1",
+      protocolVersion: "v0.0.1:knowledge:learning-1",
       profileId: "balanced"
     })),
     generateSuggestions: vi.fn(() => [])
@@ -96,9 +96,9 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runti
 
 vi.mock("../../../server/platform/specialized/knowledge/storage/knowledge-core/outline-runtime-loader.mjs", () => ({
   createNoopDocumentOutlineRuntime: vi.fn(() => ({
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     build: vi.fn(() => ({
-      protocolVersion: "pact.document-outline.v1",
+      protocolVersion: "v0.0.1:knowledge:document-outline-1",
       documentId: "",
       nodeCount: 0,
       syntheticNodeCount: 0,
@@ -108,9 +108,9 @@ vi.mock("../../../server/platform/specialized/knowledge/storage/knowledge-core/o
     rangeContainsPosition: vi.fn(() => false)
   })),
   resolveDocumentOutlineRuntime: vi.fn(async () => ({
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     build: vi.fn(() => ({
-      protocolVersion: "pact.document-outline.v1",
+      protocolVersion: "v0.0.1:knowledge:document-outline-1",
       documentId: "",
       nodeCount: 0,
       syntheticNodeCount: 0,
@@ -144,10 +144,10 @@ describe("knowledge-core mount boundary", () => {
     await withTempKnowledgeCore(async ({ mount }) => {
       expect(mount.id).toBe("builtin/knowledge-core");
       expect(mount.kind).toBe("knowledgeBase");
-      expect(mount.protocolVersion).toBe("pact.knowledge.v1");
+      expect(mount.protocolVersion).toBe("v0.0.1:knowledge:core-1");
       expect(mount.enabled).toBe(true);
       expect(typeof mount.capabilities).toBe("function");
-      expect(mount.capabilities().protocolVersion).toBe("pact.knowledge.v1");
+      expect(mount.capabilities().protocolVersion).toBe("v0.0.1:knowledge:core-1");
     });
   });
 
@@ -213,7 +213,7 @@ describe("knowledge-core mount boundary", () => {
     await withTempKnowledgeCore(async ({ mount }) => {
       const health = mount.health();
       expect(health).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         ok: true,
         rootPath: expect.any(String),
         taxonomy: {
@@ -224,7 +224,7 @@ describe("knowledge-core mount boundary", () => {
           source: "mock-taxonomy"
         }
       });
-      expect(health.capabilities.protocolVersion).toBe("pact.knowledge.v1");
+      expect(health.capabilities.protocolVersion).toBe("v0.0.1:knowledge:core-1");
     });
   });
 

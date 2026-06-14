@@ -38,6 +38,12 @@ export const consoleDynamicCountPatternPairs: ConsolePatternPair[] = [
     zhBack: (match) => `${match[1]} 条，滚动查看`,
   },
   {
+    zh: /^已隐藏\s*(\d+)\s*条低频维护项[。.]?$/,
+    en: (match) => `${match[1]} low-frequency maintenance items hidden.`,
+    enPattern: /^(\d+)\s*low-frequency maintenance items hidden\.?$/,
+    zhBack: (match) => `已隐藏 ${match[1]} 条低频维护项。`,
+  },
+  {
     zh: /^运行代次\s*(\d+)，可用\s*(\d+)\/(\d+)$/,
     en: (match) => `Generation ${match[1]}, available ${match[2]}/${match[3]}`,
     enPattern: /^Generation\s*(\d+),\s*available\s*(\d+)\/(\d+)$/,
@@ -104,6 +110,24 @@ export const consoleDynamicCountPatternPairs: ConsolePatternPair[] = [
     zhBack: (match) => `${match[1]} 项严重，${match[2]} 项警告`,
   },
   {
+    zh: /^(\d+)\s*项严重$/,
+    en: (match) => `${match[1]} critical`,
+    enPattern: /^(\d+)\s*critical$/,
+    zhBack: (match) => `${match[1]} 项严重`,
+  },
+  {
+    zh: /^(\d+)\s*项警告$/,
+    en: (match) => `${match[1]} ${Number(match[1]) === 1 ? "warning" : "warnings"}`,
+    enPattern: /^(\d+)\s*warnings?$/,
+    zhBack: (match) => `${match[1]} 项警告`,
+  },
+  {
+    zh: /^(\d+)\s*项已恢复待确认$/,
+    en: (match) => `${match[1]} recovered pending acknowledgment`,
+    enPattern: /^(\d+)\s*recovered pending acknowledgment$/,
+    zhBack: (match) => `${match[1]} 项已恢复待确认`,
+  },
+  {
     zh: /^(\d+)\s*项$/,
     en: (match) => `${match[1]} items`,
     enPattern: /^(\d+)\s*items$/,
@@ -120,6 +144,18 @@ export const consoleDynamicCountPatternPairs: ConsolePatternPair[] = [
     en: (match) => `${match[1]} documents`,
     enPattern: /^(\d+)\s*documents$/,
     zhBack: (match) => `${match[1]} 个文档`,
+  },
+  {
+    zh: /^(\d+)\s*个文件$/,
+    en: (match) => `${match[1]} files`,
+    enPattern: /^(\d+)\s*files$/,
+    zhBack: (match) => `${match[1]} 个文件`,
+  },
+  {
+    zh: /^(\d+)\s*个文件\s*·\s*(.+)$/,
+    en: (match) => `${match[1]} files · ${match[2]}`,
+    enPattern: /^(\d+)\s*files\s*·\s*(.+)$/,
+    zhBack: (match) => `${match[1]} 个文件 · ${match[2]}`,
   },
   {
     zh: /^(\d+)\s*条证据$/,

@@ -1,67 +1,214 @@
 import 'package:flutter/material.dart';
 
-class PactColors {
-  static const background = Color(0xFFF9FAFB); // gray-50
-  static const surface = Color(0xFFFFFFFF);    // gray-0
-  static const surfaceLow = Color(0xFFF3F4F6); // gray-100
-  static const surfaceHigh = Color(0xFFEFF6FF); // blue-50 (brand-subtle)
-  static const surfaceHighest = Color(0xFFDBEAFE); // blue-100
-  static const line = Color(0xFFE5E7EB);       // gray-200
-  static const text = Color(0xFF111827);       // gray-900
-  static const textMuted = Color(0xFF4B5563);  // gray-600
-  static const primary = Color(0xFF2563EB);    // blue-600
-  static const primaryStrong = Color(0xFF1D4ED8); // blue-700
-  static const primaryFixed = Color(0xFFEFF6FF); // blue-50
-  static const success = Color(0xFF16A34A);    // green-600
-  static const warning = Color(0xFFD97706);    // amber-600
-  static const error = Color(0xFFDC2626);      // red-600
+import 'appearance_preset_config.dart';
+
+class PactThemeColors extends ThemeExtension<PactThemeColors> {
+  const PactThemeColors({
+    required this.background,
+    required this.surface,
+    required this.surfaceLow,
+    required this.surfaceHigh,
+    required this.surfaceHighest,
+    required this.line,
+    required this.text,
+    required this.textMuted,
+    required this.primary,
+    required this.primaryStrong,
+    required this.primaryFixed,
+    required this.textOnPrimary,
+    required this.success,
+    required this.warning,
+    required this.error,
+  });
+
+  final Color background;
+  final Color surface;
+  final Color surfaceLow;
+  final Color surfaceHigh;
+  final Color surfaceHighest;
+  final Color line;
+  final Color text;
+  final Color textMuted;
+  final Color primary;
+  final Color primaryStrong;
+  final Color primaryFixed;
+  final Color textOnPrimary;
+  final Color success;
+  final Color warning;
+  final Color error;
+
+  bool get isDark {
+    return ThemeData.estimateBrightnessForColor(background) == Brightness.dark;
+  }
+
+  @override
+  PactThemeColors copyWith({
+    Color? background,
+    Color? surface,
+    Color? surfaceLow,
+    Color? surfaceHigh,
+    Color? surfaceHighest,
+    Color? line,
+    Color? text,
+    Color? textMuted,
+    Color? primary,
+    Color? primaryStrong,
+    Color? primaryFixed,
+    Color? textOnPrimary,
+    Color? success,
+    Color? warning,
+    Color? error,
+  }) {
+    return PactThemeColors(
+      background: background ?? this.background,
+      surface: surface ?? this.surface,
+      surfaceLow: surfaceLow ?? this.surfaceLow,
+      surfaceHigh: surfaceHigh ?? this.surfaceHigh,
+      surfaceHighest: surfaceHighest ?? this.surfaceHighest,
+      line: line ?? this.line,
+      text: text ?? this.text,
+      textMuted: textMuted ?? this.textMuted,
+      primary: primary ?? this.primary,
+      primaryStrong: primaryStrong ?? this.primaryStrong,
+      primaryFixed: primaryFixed ?? this.primaryFixed,
+      textOnPrimary: textOnPrimary ?? this.textOnPrimary,
+      success: success ?? this.success,
+      warning: warning ?? this.warning,
+      error: error ?? this.error,
+    );
+  }
+
+  @override
+  PactThemeColors lerp(ThemeExtension<PactThemeColors>? other, double t) {
+    if (other is! PactThemeColors) {
+      return this;
+    }
+    return PactThemeColors(
+      background: Color.lerp(background, other.background, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      surfaceLow: Color.lerp(surfaceLow, other.surfaceLow, t)!,
+      surfaceHigh: Color.lerp(surfaceHigh, other.surfaceHigh, t)!,
+      surfaceHighest: Color.lerp(surfaceHighest, other.surfaceHighest, t)!,
+      line: Color.lerp(line, other.line, t)!,
+      text: Color.lerp(text, other.text, t)!,
+      textMuted: Color.lerp(textMuted, other.textMuted, t)!,
+      primary: Color.lerp(primary, other.primary, t)!,
+      primaryStrong: Color.lerp(primaryStrong, other.primaryStrong, t)!,
+      primaryFixed: Color.lerp(primaryFixed, other.primaryFixed, t)!,
+      textOnPrimary: Color.lerp(textOnPrimary, other.textOnPrimary, t)!,
+      success: Color.lerp(success, other.success, t)!,
+      warning: Color.lerp(warning, other.warning, t)!,
+      error: Color.lerp(error, other.error, t)!,
+    );
+  }
 }
 
-ThemeData buildPactTheme() {
-  final base = ThemeData.light(useMaterial3: true);
+extension PactThemeContext on BuildContext {
+  PactThemeColors get pactColors {
+    return Theme.of(this).extension<PactThemeColors>() ??
+        pactColorsFor(AppearancePresetIds.geekLightBlue);
+  }
+}
+
+PactThemeColors pactColorsFor(
+  String presetId, {
+  List<AppearancePresetConfig> presets = builtInAppearancePresetConfigs,
+  Brightness platformBrightness = Brightness.light,
+}) {
+  final resolved = resolveAppearancePresetConfig(
+    presetId,
+    presets,
+    platformBrightness,
+  );
+  final tokens = resolved.tokens;
+  return PactThemeColors(
+    background: colorFromAppearanceToken(tokens, 'bg-base', '#f8fafc'),
+    surface: colorFromAppearanceToken(tokens, 'bg-surface', '#ffffff'),
+    surfaceLow: colorFromAppearanceToken(tokens, 'bg-subtle', '#f1f5f9'),
+    surfaceHigh: colorFromAppearanceToken(tokens, 'brand-subtle', '#dbeafe'),
+    surfaceHighest: colorFromAppearanceToken(tokens, 'brand-muted', '#bfdbfe'),
+    line: colorFromAppearanceToken(tokens, 'border-subtle', '#cbd5e1'),
+    text: colorFromAppearanceToken(tokens, 'text-primary', '#0f172a'),
+    textMuted: colorFromAppearanceToken(tokens, 'text-muted', '#475569'),
+    primary: colorFromAppearanceToken(tokens, 'brand', '#2563eb'),
+    primaryStrong: colorFromAppearanceToken(tokens, 'brand-strong', '#1d4ed8'),
+    primaryFixed: colorFromAppearanceToken(tokens, 'brand-subtle', '#dbeafe'),
+    textOnPrimary: colorFromAppearanceToken(tokens, 'text-on-brand', '#ffffff'),
+    success: colorFromAppearanceToken(tokens, 'success', '#15803d'),
+    warning: colorFromAppearanceToken(tokens, 'warning', '#b45309'),
+    error: colorFromAppearanceToken(tokens, 'danger', '#b91c1c'),
+  );
+}
+
+ThemeData buildPactTheme({
+  String presetId = AppearancePresetIds.geekLightBlue,
+  List<AppearancePresetConfig> presets = builtInAppearancePresetConfigs,
+  Brightness platformBrightness = Brightness.light,
+}) {
+  final colors = pactColorsFor(
+    presetId,
+    presets: presets,
+    platformBrightness: platformBrightness,
+  );
+  final base = colors.isDark
+      ? ThemeData.dark(useMaterial3: true)
+      : ThemeData.light(useMaterial3: true);
   final textTheme = base.textTheme.apply(
-    bodyColor: PactColors.text,
-    displayColor: PactColors.text,
+    bodyColor: colors.text,
+    displayColor: colors.text,
   );
 
   return base.copyWith(
-    scaffoldBackgroundColor: PactColors.background,
+    scaffoldBackgroundColor: colors.background,
     textTheme: textTheme,
-    colorScheme: const ColorScheme.light(
-      surface: PactColors.surface,
-      primary: PactColors.primary,
-      onPrimary: Colors.white,
-      secondary: PactColors.primaryStrong,
-      onSecondary: Colors.white,
-      error: PactColors.error,
-      onError: Colors.white,
-      onSurface: PactColors.text,
-      surfaceContainerHighest: PactColors.surfaceHighest,
-    ),
+    colorScheme: colors.isDark
+        ? ColorScheme.dark(
+            surface: colors.surface,
+            primary: colors.primary,
+            onPrimary: colors.textOnPrimary,
+            secondary: colors.primaryStrong,
+            onSecondary: colors.textOnPrimary,
+            error: colors.error,
+            onError: const Color(0xFF111827),
+            onSurface: colors.text,
+            surfaceContainerHighest: colors.surfaceHighest,
+          )
+        : ColorScheme.light(
+            surface: colors.surface,
+            primary: colors.primary,
+            onPrimary: colors.textOnPrimary,
+            secondary: colors.primaryStrong,
+            onSecondary: colors.textOnPrimary,
+            error: colors.error,
+            onError: Colors.white,
+            onSurface: colors.text,
+            surfaceContainerHighest: colors.surfaceHighest,
+          ),
+    extensions: [colors],
     cardTheme: CardThemeData(
-      color: PactColors.surface,
+      color: colors.surface,
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: PactColors.line),
+        side: BorderSide(color: colors.line),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: PactColors.surface,
+      fillColor: colors.surface,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: PactColors.line),
+        borderSide: BorderSide(color: colors.line),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: PactColors.line),
+        borderSide: BorderSide(color: colors.line),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: PactColors.primary, width: 1.5),
+        borderSide: BorderSide(color: colors.primary, width: 1.5),
       ),
     ),
   );

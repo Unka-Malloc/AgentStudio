@@ -94,7 +94,7 @@ describe("storage backup restore", () => {
     const userDataPath = await tempDir("pact-backup-list-missing-");
     const emptyListing = await listStorageBackups({ userDataPath });
     expect(emptyListing).toEqual({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: BACKUP_RESTORE_PROTOCOL_VERSION,
       backups: []
     });
@@ -104,7 +104,7 @@ describe("storage backup restore", () => {
     const invalidDir = path.join(userDataPath, "backups", invalidBackupId);
     await fs.mkdir(invalidDir, { recursive: true });
     await writeFixture(invalidDir, "backup-manifest.json", JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: "other.protocol",
       backupId: invalidBackupId,
       createdAt: "1999-01-01T00:00:00.000Z",

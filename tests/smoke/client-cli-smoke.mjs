@@ -24,6 +24,7 @@ function runClient(args) {
       cwd: repoRoot,
       env: {
         ...process.env,
+        CARGO_TARGET_DIR: path.join(repoRoot, "build", "client-cli", "target"),
         PACT_PORTABLE_DIR: portableDir
       },
       stdio: ["ignore", "pipe", "pipe"]
@@ -61,7 +62,7 @@ try {
   const settings = await runJson(["state", "get", "settings"]);
   assert.equal(settings.ok, true);
   assert.equal(settings.collection, "settings");
-  assert.equal(settings.document?.schemaVersion, 1);
+  assert.equal(settings.document?.schemaVersion, "v0.0.1:schema:definition-1");
 
   const targets = await runJson(["targets", "scan"]);
   assert.equal(targets.ok, true);

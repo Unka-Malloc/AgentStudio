@@ -27,7 +27,7 @@ export type TransactionMergeRules = {
 };
 
 export type EmailRuleSet = {
-  schemaVersion: number;
+  schemaVersion: string;
   updatedAt: string;
   reportSeries: ReportSeriesRule[];
   synonymDictionary: SynonymDictionaryEntry[];
@@ -52,7 +52,7 @@ export type ExpertVocabularyEntry = {
 };
 
 export type ExpertVocabulary = {
-  schemaVersion: number;
+  schemaVersion: string;
   version: number;
   updatedAt: string;
   publishedAt: string;
@@ -92,7 +92,7 @@ export type KnowledgeTaxonomyCategory = {
 };
 
 export type KnowledgeTaxonomy = {
-  schemaVersion: number;
+  schemaVersion: string;
   version: number;
   source: string;
   updatedAt: string;
@@ -113,7 +113,7 @@ export type KnowledgeGuidanceSummary = {
   taxonomyPath: string;
   expertVocabularyPath: string;
   emailRulesPath: string;
-  schemaVersion: number;
+  schemaVersion: string;
   version: number;
   source: string;
   checksum: string;
@@ -152,7 +152,7 @@ export type KnowledgeTaxonomyResponse = {
 export type ExpertVocabularyHistoryResponse = {
   current: {
     path: string;
-    schemaVersion: number;
+    schemaVersion: string;
     version: number;
     updatedAt: string;
     publishedAt: string;

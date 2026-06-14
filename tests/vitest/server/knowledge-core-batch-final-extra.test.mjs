@@ -12,7 +12,7 @@ vi.mock("../../../server/platform/specialized/knowledge/preprocessing/domain/kno
     expertVocabularyPath: "/tmp/mock-expert-vocabulary.json",
     emailRulesPath: "/tmp/mock-email-rules.json",
     loadSync: vi.fn(() => ({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       version: "mock",
       source: "mock-taxonomy",
       categories: []
@@ -21,9 +21,9 @@ vi.mock("../../../server/platform/specialized/knowledge/preprocessing/domain/kno
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/retrieval/embedding-runtime/index.mjs", () => ({
-  EMBEDDING_PROTOCOL_VERSION: "pact.embedding.v1",
+  EMBEDDING_PROTOCOL_VERSION: "v0.0.1:knowledge:embedding-1",
   createEmbeddingRuntime: vi.fn(() => ({
-    protocolVersion: "pact.embedding.v1",
+    protocolVersion: "v0.0.1:knowledge:embedding-1",
     embedText: vi.fn((value = "") => ({
       vector: Array.from(value).map(() => 0.01),
       text: String(value),
@@ -43,12 +43,12 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/embedding-runt
       dimension: 8
     })),
     health: vi.fn(() => ({
-      protocolVersion: "pact.embedding.v1",
+      protocolVersion: "v0.0.1:knowledge:embedding-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.embedding.v1",
+      protocolVersion: "v0.0.1:knowledge:embedding-1",
       providers: []
     }))
   }))
@@ -62,12 +62,12 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/vector-store/L
     deleteByTargetIds: vi.fn(),
     search: vi.fn(() => []),
     health: vi.fn(() => ({
-      protocolVersion: "pact.vector.v1",
+      protocolVersion: "v0.0.1:knowledge:vector-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.vector.v1",
+      protocolVersion: "v0.0.1:knowledge:vector-1",
       providers: ["sqlite-vec"]
     })),
     close: vi.fn()
@@ -75,16 +75,16 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/vector-store/L
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runtime/index.mjs", () => ({
-  LEARNING_PROTOCOL_VERSION: "pact.learning.v1",
+  LEARNING_PROTOCOL_VERSION: "v0.0.1:knowledge:learning-1",
   createLearningRuntime: vi.fn(() => ({
-    protocolVersion: "pact.learning.v1",
+    protocolVersion: "v0.0.1:knowledge:learning-1",
     health: vi.fn(async () => ({
-      protocolVersion: "pact.learning.v1",
+      protocolVersion: "v0.0.1:knowledge:learning-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.learning.v1",
+      protocolVersion: "v0.0.1:knowledge:learning-1",
       enabled: true,
       safeAutoApplySuggestionTypes: ["retrievalProfile", "rankingRule", "decay"]
     })),
@@ -95,7 +95,7 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runti
       explanations: []
     })),
     proposeProfile: vi.fn(() => ({
-      protocolVersion: "pact.learning.v1",
+      protocolVersion: "v0.0.1:knowledge:learning-1",
       profileId: "balanced"
     })),
     generateSuggestions: vi.fn(() => [])
@@ -104,9 +104,9 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runti
 
 vi.mock("../../../server/platform/specialized/knowledge/storage/knowledge-core/outline-runtime-loader.mjs", () => ({
   createNoopDocumentOutlineRuntime: vi.fn(() => ({
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     build: vi.fn(() => ({
-      protocolVersion: "pact.document-outline.v1",
+      protocolVersion: "v0.0.1:knowledge:document-outline-1",
       documentId: "",
       nodeCount: 0,
       syntheticNodeCount: 0,
@@ -116,9 +116,9 @@ vi.mock("../../../server/platform/specialized/knowledge/storage/knowledge-core/o
     rangeContainsPosition: vi.fn(() => false)
   })),
   resolveDocumentOutlineRuntime: vi.fn(async () => ({
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     build: vi.fn(() => ({
-      protocolVersion: "pact.document-outline.v1",
+      protocolVersion: "v0.0.1:knowledge:document-outline-1",
       documentId: "",
       nodeCount: 0,
       syntheticNodeCount: 0,
@@ -427,7 +427,7 @@ describe("batch repository final extra coverage", () => {
       expect(exported).toMatchObject({
         ok: true,
         exportType: "pact.knowledge.word_bags.export",
-        schemaVersion: 1
+        schemaVersion: "v0.0.1:schema:definition-1"
       });
 
       const copied = await repository.importKnowledgeWordCloudSet({
@@ -462,7 +462,7 @@ describe("batch repository final extra coverage", () => {
       });
       expect(cloudState).toMatchObject({
         ok: true,
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         wordBagSet: expect.objectContaining({ wordBagSetId: "cloud-a" })
       });
       expect(repository.listSourceCorpusRawTerms({
@@ -691,7 +691,7 @@ describe("knowledge core final extra coverage", () => {
         ]
       });
       expect(sourceResult).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         batchId: "batch-source",
         mode: "incremental-source"
       });
@@ -705,7 +705,7 @@ describe("knowledge core final extra coverage", () => {
       });
       const upsertResult = mount.upsertDocuments({ documents: [manualDoc] });
       expect(upsertResult).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         documentCount: 1,
         receivedDocumentCount: 1
       });
@@ -725,7 +725,7 @@ describe("knowledge core final extra coverage", () => {
         batchId: "batch-manual",
         limit: 5
       });
-      expect(searchResult.protocolVersion).toBe("pact.knowledge.v1");
+      expect(searchResult.protocolVersion).toBe("v0.0.1:knowledge:core-1");
       expect(searchResult.items.length).toBeGreaterThan(0);
 
       const evidence = mount.getEvidence({ evidenceId: searchResult.items[0].evidenceId });
@@ -738,7 +738,7 @@ describe("knowledge core final extra coverage", () => {
         evidenceId: evidence.evidenceId
       });
       expect(markdown).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         evidenceId: evidence.evidenceId,
         contentType: "text/markdown; charset=utf-8"
       });
@@ -763,7 +763,7 @@ describe("knowledge core final extra coverage", () => {
 
       const structure = mount.getDocumentStructure({ documentId: "manual-doc" });
       expect(structure).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         document: expect.objectContaining({
           documentId: "manual-doc"
         })
@@ -782,7 +782,7 @@ describe("knowledge core final extra coverage", () => {
         taskType: "validate_assets"
       });
       expect(validateRun).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         taskType: "validate_assets",
         status: "completed"
       });
@@ -802,7 +802,7 @@ describe("knowledge core final extra coverage", () => {
         taskType: "not-a-real-task"
       });
       expect(unknownRun).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         taskType: "not_a_real_task",
         status: "completed"
       });
@@ -810,14 +810,14 @@ describe("knowledge core final extra coverage", () => {
 
       expect(mount.listMaintenanceRuns({ limit: 10 }).length).toBeGreaterThanOrEqual(2);
       expect(mount.health()).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         ok: false,
         taxonomy: {
           source: "mock-taxonomy"
         }
       });
       expect(mount.capabilities()).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         outputFormats: ["json", "markdown", "docx"]
       });
 
@@ -887,7 +887,7 @@ describe("knowledge core final extra coverage", () => {
         reason: "promoted-in-test"
       });
       expect(promoted).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         deployment: expect.objectContaining({
           deploymentId: "promo-canary",
           status: "active"
@@ -903,7 +903,7 @@ describe("knowledge core final extra coverage", () => {
         reason: "rolled-back-in-test"
       });
       expect(rolledBack).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         deployment: expect.objectContaining({
           deploymentId: "promo-canary",
           status: "rolled_back"
@@ -917,7 +917,7 @@ describe("knowledge core final extra coverage", () => {
 
       const learningHealth = await mount.learningHealth();
       expect(learningHealth).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         ok: true,
         activeProfile: expect.objectContaining({
           profileId: "promo-profile"

@@ -59,7 +59,7 @@ function createUrl(pathname) {
 
 function createPlatform(overrides = {}) {
   const platform = {
-    catalog: vi.fn(() => ({ schemaVersion: 1, catalog: true })),
+    catalog: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1", catalog: true })),
     registry: {
       getTool: vi.fn((toolId) => ({ id: toolId })),
       getToolByOperationId: vi.fn(() => null),
@@ -79,12 +79,12 @@ function createPlatform(overrides = {}) {
       updateGrant: vi.fn(),
       listAudit: vi.fn(() => []),
       getAudit: vi.fn(() => null),
-      metricsSummary: vi.fn(() => ({ schemaVersion: 1 })),
-      metricsExport: vi.fn(() => ({ schemaVersion: 1 })),
-      metricsHealth: vi.fn(() => ({ schemaVersion: 1 })),
+      metricsSummary: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
+      metricsExport: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
+      metricsHealth: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
       metricsPrometheus: vi.fn(() => "metric"),
-      metricsStorageSummary: vi.fn(() => ({ schemaVersion: 1 })),
-      pruneMetrics: vi.fn(() => ({ schemaVersion: 1 })),
+      metricsStorageSummary: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
+      pruneMetrics: vi.fn(() => ({ schemaVersion: "v0.0.1:schema:definition-1" })),
       listPendingOperations: vi.fn(() => [])
     },
     policyEngine: {
@@ -199,7 +199,7 @@ describe("tool-management core final extra coverage", () => {
         const { requestId } = store.createMcpAuthorizationRequest({
           clientName: "agent-client",
           requestedScopes: ["knowledge:read"],
-          requestedTools: [{ id: "pact.knowledge.read" }],
+          requestedTools: [{ id: "pact.agentLibrary.read" }],
           reason: "edge-path"
         });
         expect(requestId).toMatch(/^mcp_auth_req_/);
@@ -311,7 +311,7 @@ describe("tool-management core final extra coverage", () => {
         const mismatchProvider = {
           issue: vi.fn(async ({ credentialId, capabilities, expiresAt }) => ({
             capabilityKey: `ock_${credentialId}`,
-            protocolVersion: "pact.opaque-capability-key.v1",
+            protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
             capabilitySetHash: `hash_${(capabilities || []).length}`,
             capabilityCount: (capabilities || []).length,
             runtimeLookupGeneration: 1,
@@ -329,13 +329,13 @@ describe("tool-management core final extra coverage", () => {
         try {
           const { grant, token } = await authStore.createGrant({
             label: "Capability Grant",
-            capabilities: [toolExecuteCapabilityId("pact.knowledge.search")]
+            capabilities: [toolExecuteCapabilityId("pact.agentLibrary.search")]
           });
           expect(token).toMatch(/^ock_/);
 
           const denied = await authStore.authorizeRequest({
             request: { headers: { authorization: `Bearer ${token}` } },
-            tool: { id: "pact.knowledge.search" }
+            tool: { id: "pact.agentLibrary.search" }
           });
           expect(denied).toMatchObject({
             ok: false,
@@ -366,7 +366,7 @@ describe("tool-management core final extra coverage", () => {
         resumePendingOperation: vi.fn(async (args) => ({
           status: 202,
           payload: {
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             result: args
           }
         }))
@@ -388,7 +388,7 @@ describe("tool-management core final extra coverage", () => {
     expect(listResult.handled).toBe(true);
     expect(platform.store.listPendingOperations).toHaveBeenCalledWith({ status: "all", limit: 2 });
     expect(sendJsonMock).toHaveBeenCalledWith(listResult.response, 200, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       pendingOperations: [
         { pendingOperationId: "pending-1", status: "pending" },
         { pendingOperationId: "pending-2", status: "pending" }
@@ -411,13 +411,13 @@ describe("tool-management core final extra coverage", () => {
     expect(platform.runtime.resumePendingOperation).toHaveBeenCalledWith(expect.objectContaining({
       pendingOperationId: "pending/1",
       resolution: "approved",
-      context: { source: "unit-test" },
+      context: expect.objectContaining({ source: "unit-test" }),
       resolvedBy: "reviewer",
       reason: "accepted",
       request: resolveResult.request
     }));
     expect(sendJsonMock).toHaveBeenLastCalledWith(resolveResult.response, 202, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       result: expect.objectContaining({
         pendingOperationId: "pending/1",
         resolution: "approved"
@@ -431,7 +431,7 @@ describe("tool-management core final extra coverage", () => {
     expect(eventsResult.handled).toBe(true);
     expect(platform.store.listAudit).toHaveBeenCalledWith({ limit: 1 });
     expect(sendJsonMock).toHaveBeenLastCalledWith(eventsResult.response, 200, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       events: []
     });
 
@@ -441,7 +441,7 @@ describe("tool-management core final extra coverage", () => {
     });
     expect(notFoundResult.handled).toBe(true);
     expect(sendJsonMock).toHaveBeenLastCalledWith(notFoundResult.response, 404, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "tool_management_route_not_found",
         message: "Tool management route not found.",

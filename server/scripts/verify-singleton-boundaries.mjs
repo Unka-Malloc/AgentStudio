@@ -103,7 +103,7 @@ async function verifyStateDispatcherLoggerSingleton() {
 
 function sourceSearchRules() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: "singleton-boundary-test",
     maxFileBytes: 1024 * 1024,
     maxEvidenceBytes: 128 * 1024,
@@ -183,7 +183,7 @@ async function verifySourceSearchCacheIsUserDataScoped() {
 
 function importDictionary(mediaType) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     groups: [
       {
         id: "singleton-test",

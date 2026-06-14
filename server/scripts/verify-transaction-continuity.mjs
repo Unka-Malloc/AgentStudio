@@ -193,43 +193,43 @@ async function main() {
       })
     ],
     [
-      "hsbc-statement-one.eml",
+      "ledger-bank-statement-one.eml",
       eml({
-        from: "HSBC <statements@hsbc.co.uk>",
+        from: "Example Bank <statements@ledger-bank.example>",
         subject: "Your monthly statement is ready",
         date: "Mon, 01 Apr 2024 08:00:00 +0000",
-        messageId: "hsbc-statement-one@example",
-        body: "Your HSBC bank statement is ready."
+        messageId: "ledger-bank-statement-one@example",
+        body: "Your monthly account statement is ready."
       })
     ],
     [
-      "hsbc-statement-two.eml",
+      "ledger-bank-statement-two.eml",
       eml({
-        from: "HSBC <statements@hsbc.co.uk>",
+        from: "Example Bank <statements@ledger-bank.example>",
         subject: "Your monthly statement is ready",
         date: "Wed, 01 May 2024 08:00:00 +0000",
-        messageId: "hsbc-statement-two@example",
-        body: "Your HSBC bank statement is ready."
+        messageId: "ledger-bank-statement-two@example",
+        body: "Your monthly account statement is ready."
       })
     ],
     [
-      "monzo-promo-one.eml",
+      "service-offer-one.eml",
       eml({
-        from: "Monzo <hello@monzo.com>",
-        subject: "A new offer from Monzo",
+        from: "Service Updates <hello@updates.example>",
+        subject: "A new service offer",
         date: "Mon, 06 May 2024 08:00:00 +0000",
-        messageId: "monzo-promo-one@example",
-        body: "New Monzo offer and promotion for customers."
+        messageId: "service-offer-one@example",
+        body: "New service offer and promotion for customers."
       })
     ],
     [
-      "monzo-promo-two.eml",
+      "service-offer-two.eml",
       eml({
-        from: "Monzo <hello@monzo.com>",
-        subject: "Save with this Monzo offer",
+        from: "Service Updates <hello@updates.example>",
+        subject: "Save with this service offer",
         date: "Tue, 07 May 2024 08:00:00 +0000",
-        messageId: "monzo-promo-two@example",
-        body: "Monzo promotional offer continues."
+        messageId: "service-offer-two@example",
+        body: "Service promotional offer continues."
       })
     ]
   ];
@@ -241,7 +241,7 @@ async function main() {
     normalizedManifestPath,
     JSON.stringify(
       {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         packageType: "pact.normalized-documents",
         documents: [
           {
@@ -323,12 +323,16 @@ async function main() {
   const steamPromotion = transactions.find((item) => item.title === "Steam 促销活动");
   assert.ok(steamPromotion, "Steam sale should use source + behavior title");
   assert.equal(steamPromotion.occurrenceCount, 2);
-  const hsbcStatement = transactions.find((item) => item.title === "HSBC 银行账单");
-  assert.ok(hsbcStatement, "HSBC statement should use bank statement title");
-  assert.equal(hsbcStatement.occurrenceCount, 2);
-  const monzoPromotion = transactions.find((item) => item.title === "Monzo 促销活动");
-  assert.ok(monzoPromotion, "Monzo promotion should stay separate from bank statements");
-  assert.equal(monzoPromotion.occurrenceCount, 2);
+  const ledgerBankStatement = transactions.find(
+    (item) => item.senderOrg === "ledger-bank.example" && item.category === "financial-statement"
+  );
+  assert.ok(ledgerBankStatement, "generic bank statement lineage should exist");
+  assert.equal(ledgerBankStatement.occurrenceCount, 2);
+  const servicePromotion = transactions.find(
+    (item) => item.senderOrg === "updates.example" && item.category === "marketing-series"
+  );
+  assert.ok(servicePromotion, "generic service promotion should stay separate from bank statements");
+  assert.equal(servicePromotion.occurrenceCount, 2);
 
   await fs.writeFile(
     path.join(mailRoot, "bank-apr.eml"),
@@ -366,8 +370,8 @@ async function main() {
     payload.businessEntities?.contractIds?.some((value) => value.toLowerCase() === "cn-2024-7788")
   );
   assert.ok(contractPayload, "contract machine-readable payload should exist");
-  assert.equal(contractPayload.schemaVersion, "pact.transaction-knowledge.v2");
-  assert.equal(contractPayload.overview.schemaVersion, "pact.transaction-overview.v1");
+  assert.equal(contractPayload.schemaVersion, "v0.0.1:knowledge:transaction-knowledge-2");
+  assert.equal(contractPayload.overview.schemaVersion, "v0.0.1:transaction:transaction-overview-1");
   assert.equal(contractPayload.overview.occurrence.emailCount, 2);
   assert.equal(contractPayload.messages.length, 2);
   assert.ok(contractPayload.messages.some((message) => /Atlas-SOW-v2.1\.pdf/.test(message.bodyText)));
@@ -380,7 +384,7 @@ async function main() {
   const contractDocxXml = docxXmls.find((xml) => xml.includes("CN-2024-7788") || xml.includes("Atlas SOW v2.1"));
   assert.ok(contractDocxXml, "contract DOCX should contain business content");
   assert.ok(contractDocxXml.includes("事务概览 YAML"), "DOCX should include YAML overview section");
-  assert.ok(contractDocxXml.includes("pact.transaction-overview.v1"), "DOCX should include machine-readable YAML overview");
+  assert.ok(contractDocxXml.includes("v0.0.1:transaction:transaction-overview-1"), "DOCX should include machine-readable YAML overview");
   assert.equal(contractDocxXml.includes("这是一个"), false, "DOCX overview should not use natural-language template");
   assert.ok(contractDocxXml.includes("机器可读 JSON"), "DOCX should include machine-readable JSON appendix");
   process.stdout.write("Transaction continuity verification passed.\n");

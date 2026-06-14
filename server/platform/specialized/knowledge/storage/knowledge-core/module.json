@@ -1,9 +1,9 @@
 {
   "name": "KnowledgeCore",
-  "version": 1,
-  "description": "Built-in pact.knowledge.v1 module for multimodal knowledge storage, retrieval, Markdown evidence rendering, and maintenance.",
+  "version": "v0.0.1:knowledge:knowledge-core-1",
+  "description": "Built-in v0.0.1:knowledge:core-1 module for multimodal knowledge storage, retrieval, Markdown evidence rendering, and maintenance.",
   "defaultLoaded": true,
-  "protocol": "pact.knowledge.v1",
+  "protocol": "v0.0.1:knowledge:core-1",
   "components": {
     "knowledgeBase": {
       "path": "./index.mjs",
@@ -12,12 +12,12 @@
     },
     "vectorFallback": {
       "path": "./index.mjs",
-      "protocol": "pact.vector.v1",
+      "protocol": "v0.0.1:knowledge:vector-1",
       "packaging": "core"
     },
     "embeddingFallback": {
       "path": "./index.mjs",
-      "protocol": "pact.embedding.v1",
+      "protocol": "v0.0.1:knowledge:embedding-1",
       "packaging": "core"
     }
   }

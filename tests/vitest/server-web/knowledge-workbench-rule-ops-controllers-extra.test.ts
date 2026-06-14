@@ -152,7 +152,7 @@ const queueMonitorRun = (overrides: Record<string, unknown> = {}) => ({
     requiresApproval: false,
     source: "default",
     intent: "check",
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     status: "running",
     reason: "",
     steps: [],
@@ -166,7 +166,7 @@ const queueMonitorRun = (overrides: Record<string, unknown> = {}) => ({
   error: "",
   actor: null,
   unifiedRegistration: {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     registrationId: "run:maintenance-1",
     originalType: "task",
     originalId: "maintenance-1",
@@ -706,7 +706,7 @@ describe("console rule authoring controller", () => {
   it("runRuleAuthoringChat 和 publishRuleAuthoringPackage 会走完整调用链", async () => {
     const { error, ...controller } = makeRuleAuthoringController();
     ruleAuthoringClient.chatKnowledgeRuleAuthoring.mockResolvedValue({
-      protocolVersion: "pact.knowledge-rule-authoring.v1",
+      protocolVersion: "v0.0.1:knowledge:rule-authoring-1",
       ok: true,
       status: "draft",
       runId: "rule-run",
@@ -733,7 +733,7 @@ describe("console rule authoring controller", () => {
       manifest: { status: "ok" },
     });
     controller.ruleAuthoringResult.value = {
-      protocolVersion: "pact.knowledge-rule-authoring.v1",
+      protocolVersion: "v0.0.1:knowledge:rule-authoring-1",
       ok: true,
       status: "draft",
       confirmation: {
@@ -761,7 +761,7 @@ describe("console rule authoring controller", () => {
 describe("console ops monitor controller", () => {
   it("状态计算覆盖队列、告警与客户端运行时", async () => {
     opsMonitorClient.getBackgroundProcesses.mockResolvedValue({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       ok: true,
       status: "healthy",
       updatedAt: "2026-01-01T00:00:00Z",
@@ -774,7 +774,7 @@ describe("console ops monitor controller", () => {
     });
     opsMonitorClient.getClientRuntimeStatus.mockResolvedValue({
       protocolVersion: "1",
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       updatedAt: "2026-01-01T00:00:00Z",
       configPath: "/tmp",
       usagePath: "/tmp",
@@ -792,14 +792,14 @@ describe("console ops monitor controller", () => {
       cooledClients: [],
     });
     opsMonitorClient.getMonitorAlerts.mockResolvedValue({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       ok: true,
       status: "ok",
       updatedAt: "2026-01-01T00:00:00Z",
       configPath: "/tmp",
       statePath: "/tmp/state",
       config: {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         enabled: true,
         intervalMs: 1000,
         heartbeatStaleMs: 5000,
@@ -815,7 +815,7 @@ describe("console ops monitor controller", () => {
         historyCount: 3,
       },
       queueMonitor: {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-01-01T00:00:00Z",
         statePath: "/tmp/state",
         eventLogPath: "/tmp/log",
@@ -843,7 +843,7 @@ describe("console ops monitor controller", () => {
           },
         ],
         systemStatus: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           updatedAt: "2026-01-01T00:00:00Z",
           source: "source",
           summary: {
@@ -867,14 +867,14 @@ describe("console ops monitor controller", () => {
       history: [],
     } as any);
     opsMonitorClient.acknowledgeMonitorAlert.mockResolvedValue({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       ok: true,
       status: "ok",
       updatedAt: "2026-01-01T00:00:00Z",
       configPath: "/tmp",
       statePath: "/tmp/state",
       config: {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         enabled: true,
         intervalMs: 1000,
         heartbeatStaleMs: 5000,
@@ -887,14 +887,14 @@ describe("console ops monitor controller", () => {
       history: [],
     } as any);
     opsMonitorClient.saveMonitorAlertConfig.mockResolvedValue({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       ok: true,
       status: "ok",
       updatedAt: "2026-01-01T00:00:00Z",
       configPath: "/tmp",
       statePath: "/tmp/state",
       config: {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         enabled: true,
         intervalMs: 1000,
         heartbeatStaleMs: 5000,
@@ -909,7 +909,7 @@ describe("console ops monitor controller", () => {
     opsMonitorClient.recoverBackgroundSupervisor.mockResolvedValue({
       recovery: { ok: true, attempted: true },
       backgroundProcessStatus: {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         ok: true,
         status: "running",
         updatedAt: "2026-01-01T00:00:00Z",

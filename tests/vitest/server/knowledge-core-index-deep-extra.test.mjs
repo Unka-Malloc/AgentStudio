@@ -408,7 +408,7 @@ describe("knowledge-core index deep coverage", () => {
       blocks: [{ blockId: "blk-1" }],
       assets: [{ assetId: "asset-1" }],
     });
-    expect(noop.protocolVersion).toBe("pact.document-outline.v1");
+    expect(noop.protocolVersion).toBe("v0.0.1:knowledge:document-outline-1");
     expect(noop.rangeContainsPosition({ blockStart: 1, blockEnd: 2 }, 2)).toBe(false);
     expect(outline).toMatchObject({
       documentId: "doc-outline",
@@ -425,7 +425,7 @@ describe("knowledge-core index deep coverage", () => {
     });
 
     const resolvedNoop = await resolveDocumentOutlineRuntime({ enabled: false });
-    expect(resolvedNoop.protocolVersion).toBe("pact.document-outline.v1");
+    expect(resolvedNoop.protocolVersion).toBe("v0.0.1:knowledge:document-outline-1");
     expect(resolvedNoop.build({ document: { documentId: "doc-2" } }).qualityFindings[0].code).toBe(
       "outline_runtime_disabled",
     );
@@ -555,7 +555,7 @@ describe("knowledge-core index deep coverage", () => {
 
       const markdown = mount.renderMarkdown({ evidenceId });
       expect(markdown).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         evidenceId,
         contentType: "text/markdown; charset=utf-8",
       });
@@ -588,7 +588,7 @@ describe("knowledge-core index deep coverage", () => {
       });
       expect(agentSearch.responseProfile).toBe("agent");
       expect(agentSearch.agentMessage).toMatchObject({
-        protocolVersion: "pact.knowledge-search.agent-message.v1",
+        protocolVersion: "v0.0.1:knowledge:search-agent-message-1",
         query: "alpha",
       });
 

@@ -16,7 +16,7 @@ import {
   sourcePublicIdentity
 } from "./acp-source-auth-context.mjs";
 
-const PACT_ACP_AGENT_RELAY_PROTOCOL_VERSION = "pact.acp-agent-relay.v1";
+const PACT_ACP_AGENT_RELAY_PROTOCOL_VERSION = "v0.0.1:agent:acp-agent-relay-1";
 
 const JSON_RPC_PARSE_ERROR = -32700;
 const JSON_RPC_INVALID_REQUEST = -32600;

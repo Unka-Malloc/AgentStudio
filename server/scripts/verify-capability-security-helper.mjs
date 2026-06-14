@@ -44,14 +44,14 @@ async function assertNoPlaintext(filePath, values = []) {
 }
 
 try {
-  const healthCapability = toolExecuteCapabilityId("pact.knowledge.health");
+  const healthCapability = toolExecuteCapabilityId("pact.agentLibrary.health");
   const searchCapability = apiCapabilityId("knowledge.search");
   const issued = await helper.issue({
     credentialId: "credential-helper-a",
     capabilities: [searchCapability, healthCapability],
     expiresAt: "9999-12-31T23:59:59.999Z"
   });
-  assert.equal(issued.protocolVersion, "pact.opaque-capability-key.v1");
+  assert.equal(issued.protocolVersion, "v0.0.1:risk-control:opaque-capability-key-1");
   assert.equal(issued.helperProtocolVersion, CAPABILITY_SECURITY_HELPER_PROTOCOL_VERSION);
   assertOpaque(issued.capabilityKey);
   assert.equal(issued.capabilityCount, 2);
@@ -66,7 +66,7 @@ try {
     },
     expiresAt: "9999-12-31T23:59:59.999Z"
   });
-  assert.equal(binding.protocolVersion, "pact.capability-binding-guard.v1");
+  assert.equal(binding.protocolVersion, "v0.0.1:risk-control:capability-binding-guard-1");
   assert.equal(binding.helperProtocolVersion, CAPABILITY_SECURITY_HELPER_PROTOCOL_VERSION);
   assert.equal(binding.bindingStrength, "user+agent");
 
@@ -101,7 +101,7 @@ try {
   const missingCapability = await helper.verifyCapabilityAndBinding({
     capabilityKey: issued.capabilityKey,
     credentialId: issued.credentialId,
-    requiredCapability: toolExecuteCapabilityId("pact.knowledge.search"),
+    requiredCapability: toolExecuteCapabilityId("pact.agentLibrary.search"),
     context: {
       namespace: "tool-management",
       userId: "user-a",
@@ -230,13 +230,13 @@ try {
         boundUserId: "user-a"
       }
     });
-    assert.equal(grant.grant.credential.protocolVersion, "pact.opaque-capability-key.v1");
-    assert.equal(grant.grant.credential.bindingProtocol, "pact.capability-binding-guard.v1");
+    assert.equal(grant.grant.credential.protocolVersion, "v0.0.1:risk-control:opaque-capability-key-1");
+    assert.equal(grant.grant.credential.bindingProtocol, "v0.0.1:risk-control:capability-binding-guard-1");
     assertOpaque(grant.token);
 
     const correct = await toolStore.authorizeRequest({
       request: { headers: { authorization: `Bearer ${grant.token}` } },
-      tool: { id: "pact.knowledge.health" },
+      tool: { id: "pact.agentLibrary.health" },
       context: {
         userId: "user-a",
         agentId: "agent-a"
@@ -246,7 +246,7 @@ try {
 
     const wrongAgent = await toolStore.authorizeRequest({
       request: { headers: { authorization: `Bearer ${grant.token}` } },
-      tool: { id: "pact.knowledge.health" },
+      tool: { id: "pact.agentLibrary.health" },
       context: {
         userId: "user-a",
         agentId: "agent-b"
@@ -276,11 +276,11 @@ try {
         boundUserId: "user-env"
       }
     });
-    assert.equal(grant.grant.credential.protocolVersion, "pact.opaque-capability-key.v1");
-    assert.equal(grant.grant.credential.bindingProtocol, "pact.capability-binding-guard.v1");
+    assert.equal(grant.grant.credential.protocolVersion, "v0.0.1:risk-control:opaque-capability-key-1");
+    assert.equal(grant.grant.credential.bindingProtocol, "v0.0.1:risk-control:capability-binding-guard-1");
     const authorized = await envToolStore.authorizeRequest({
       request: { headers: { authorization: `Bearer ${grant.token}` } },
-      tool: { id: "pact.knowledge.health" },
+      tool: { id: "pact.agentLibrary.health" },
       context: {
         userId: "user-env",
         agentId: "agent-env"

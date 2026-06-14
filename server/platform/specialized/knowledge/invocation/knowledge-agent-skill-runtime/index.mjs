@@ -3,7 +3,7 @@ import {
   EVIDENCE_GATE_PROTOCOL_VERSION
 } from "../../retrieval/evidence-sufficiency-gate/index.mjs";
 
-export const KNOWLEDGE_AGENT_SKILL_PROTOCOL_VERSION = "pact.knowledge-agent-skill.v1";
+export const KNOWLEDGE_AGENT_SKILL_PROTOCOL_VERSION = "v0.0.1:knowledge:agent-skill-1";
 
 const DEFAULT_TOOL_POLICY = {
   coarseToFineRequired: true,
@@ -114,7 +114,7 @@ function mergeSearchResults(results = [], query = "", limit = 20) {
     .slice(0, limit);
   return {
     ...primary,
-    protocolVersion: primary.protocolVersion || "pact.knowledge.v1",
+    protocolVersion: primary.protocolVersion || "v0.0.1:knowledge:core-1",
     query,
     limit,
     mergedQueryCount: results.length,

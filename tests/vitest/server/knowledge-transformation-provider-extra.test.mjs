@@ -129,7 +129,7 @@ describe("knowledge transformation provider", () => {
       }]
     };
 
-    expect(KNOWLEDGE_TRANSFORMATION_PROTOCOL_VERSION).toBe("pact.knowledge-transformation.v1");
+    expect(KNOWLEDGE_TRANSFORMATION_PROTOCOL_VERSION).toBe("v0.0.1:knowledge:transformation-1");
 
     const markdownResult = await provider.convertRawCorpus({
       ...explicitInput,

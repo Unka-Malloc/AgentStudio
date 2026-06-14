@@ -115,7 +115,7 @@ describe("platform entrypoints final coverage", () => {
   it("registers DevOps platform closures and delegates provider calls", async () => {
     const registry = createPlatformRegistry({ scope: "unit" });
     const provider = {
-      protocolVersion: "pact.devops.test.v1",
+      protocolVersion: "v0.0.1:test:devops-1",
       listCapabilities: vi.fn(() => ({
         capabilities: [{ id: "process-status" }, { id: "monitor-alerts" }]
       })),
@@ -180,7 +180,7 @@ describe("platform entrypoints final coverage", () => {
   it("registers core, data-structure, and module-management platform fallbacks", async () => {
     const coreRegistry = createPlatformRegistry({ scope: "core-unit" });
     const coreProvider = {
-      protocolVersion: "pact.core.test.v1",
+      protocolVersion: "v0.0.1:test:core-1",
       listCapabilities: vi.fn(() => ({ capabilities: [{ id: "operations" }] })),
       describeOperationRegistry: vi.fn((input) => ({ ok: true, input }))
     };

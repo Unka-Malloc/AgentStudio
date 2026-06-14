@@ -74,7 +74,6 @@ describe("system controller runtime and knowledge operations final coverage", ()
         "knowledge.word_bags.add",
         "knowledge.word_bags.update",
         "knowledge.word_bags.delete",
-        "knowledge.word_clouds.propose",
         "storage.doctor",
         "storage.reconcile",
         "storage.backups.list",

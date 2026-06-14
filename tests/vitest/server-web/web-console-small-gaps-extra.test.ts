@@ -2,12 +2,24 @@
 import { mount } from "@vue/test-utils";
 import { computed, defineComponent, h, nextTick, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setConsoleLocaleState } from "../../../server-web/i18n/console";
 
 const shellContextState = vi.hoisted(() => ({
   busyKey: { value: "" },
 }));
 
 const consolePreferencesState = vi.hoisted(() => ({
+  appearanceCycleScheme: { value: "dark" },
+  appearanceCycleSchemeLabel: { value: "深色主题组" },
+  appearanceCycleSchemeOptions: { value: [
+    { label: "深色", value: "dark", icon: "moon" },
+    { label: "浅色", value: "light", icon: "sun" },
+  ] },
+  appearancePresetId: { value: "sunset-ember" },
+  appearancePresetLabel: { value: "落日余烬" },
+  appearancePresetSelectionId: { value: "sunset-ember" },
+  appearancePresetOptions: { value: [{ label: "Sunset Ember", value: "sunset-ember" }] },
+  appearancePresetOptionsForCycleScheme: { value: [{ label: "Sunset Ember", value: "sunset-ember" }] },
   languageMode: { value: "zh-CN" },
   languageOptionBarOptions: { value: [{ label: "中文", value: "zh-CN" }] },
   msg: { value: {
@@ -37,9 +49,17 @@ const consolePreferencesState = vi.hoisted(() => ({
       workspaces: "工作区",
     },
     title: { admin: "管理员", modules: "模块", storage: "存储" },
-    topbar: { serverAvailable: "在线", serverUnavailable: "离线" },
+    topbar: {
+      appearanceCycleSchemeDarkLabel: "深色主题组",
+      appearanceCycleSchemeDarkTitle: "当前：深色主题组（点击切换浅色主题组）",
+      appearanceCycleSchemeLightLabel: "浅色主题组",
+      appearanceCycleSchemeLightTitle: "当前：浅色主题组（点击切换深色主题组）",
+      appearancePresetLabel: "配色",
+      appearancePresetTitle: "配色（点击切换下一个）",
+      serverAvailable: "在线",
+      serverUnavailable: "离线",
+    },
   } },
-  themeMode: { value: "dark" },
 }));
 
 const shellRouteState = vi.hoisted(() => ({
@@ -316,9 +336,12 @@ vi.mock("../../../server-web/composables/console-workspace-session-controller", 
 vi.mock("../../../server-web/composables/console-shell-preferences", () => ({
   useConsoleShellPreferences: vi.fn(() => ({
     ...consolePreferencesState,
-    applyTheme: vi.fn(),
+    applyAppearancePreset: vi.fn(),
     applyLanguage: vi.fn(),
-    cycleTheme: vi.fn(),
+    cycleAppearancePreset: vi.fn(),
+    toggleAppearanceCycleScheme: vi.fn(),
+    setAppearanceCycleScheme: vi.fn(),
+    setAppearancePreset: vi.fn(),
     setLanguage: vi.fn(),
     toggleLanguage: vi.fn(),
     tt: vi.fn((value: string) => value),
@@ -642,6 +665,16 @@ function createExternalServicesController(overrides: Record<string, unknown> = {
     serviceDiscoveryRegistrationTone: (service: { discoveryRegistrationTone?: string }) => service.discoveryRegistrationTone || "success",
     serviceHeartbeatLastAtLabel: (service: { heartbeatText?: string }) => service.heartbeatText || "",
     isServiceHeartbeatRefreshing: (service: { heartbeatRefreshing?: boolean }) => !!service.heartbeatRefreshing,
+    serviceActiveToolReviewRows: (service: { externalMcp?: { tools?: string[] } }) =>
+      (service.externalMcp?.tools || []).map((name) => ({ name })),
+    serviceCandidateToolReviewRows: (service: { candidateTools?: Array<{ name: string }> }) =>
+      service.candidateTools || [],
+    serviceCandidateToolCount: (service: { candidateTools?: unknown[] }) =>
+      service.candidateTools?.length || 0,
+    serviceToolAdoptionLabel: (service: { candidateTools?: unknown[] }) =>
+      service.candidateTools?.length ? `${service.candidateTools.length} 个候选` : "已同步",
+    isServiceToolAdopting: vi.fn(() => false),
+    adoptCandidateTools: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -714,6 +747,8 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  document.documentElement.lang = "";
+  setConsoleLocaleState("zh-CN");
 });
 
 describe("console agent explore presentation", () => {
@@ -891,7 +926,7 @@ describe("useServerConsoleShell", () => {
   it("exposes shell contexts, route labels, and page refresh wiring", () => {
     const shell = mountComposable(() => useServerConsoleShell());
 
-    expect(shell.themeMode.value).toBe("dark");
+    expect(shell.appearancePresetId.value).toBe("sunset-ember");
     expect(shell.languageMode.value).toBe("zh-CN");
     expect(shell.activeRouteView.value).toBe("admin");
     expect(shell.activeRouteAdminView.value).toBe("toolList");
@@ -1101,6 +1136,16 @@ describe("AgentPermissionsView", () => {
 
     await tabs[3].trigger("click");
     expect(wrapper.find(".ToolPolicyPreviewPanel-stub").exists()).toBe(true);
+  });
+
+  it("renders section tabs in English when the console locale is English", () => {
+    document.documentElement.lang = "en";
+    setConsoleLocaleState("en");
+
+    const wrapper = mountAgentPermissionsView();
+
+    const tabLabels = wrapper.findAll(".pact-tab__label").map((tab) => tab.text());
+    expect(tabLabels).toEqual(["Permission Groups", "Tool Tokens", "Governance", "Policy Verification"]);
   });
 });
 

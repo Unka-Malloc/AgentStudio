@@ -493,7 +493,7 @@ describe("authorization system backend coverage", () => {
       alias: "opaque-empty-rotate"
     });
     await expect(emptyStore.keySource.rotateRuntimeLookupKey()).resolves.toMatchObject({
-      protocolVersion: "pact.opaque-capability-key.v1",
+      protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
       provider: "local-file"
     });
     emptyStore.close();
@@ -625,7 +625,7 @@ describe("authorization system backend coverage", () => {
       reason: "coverage"
     });
     expect(recoveryPackage).toMatchObject({
-      protocolVersion: "pact.capability-kernel-recovery.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-kernel-recovery-1",
       alias: "opaque-local"
     });
     await expect(provider.importRecoveryPackage({
@@ -769,7 +769,7 @@ describe("authorization system backend coverage", () => {
       reason: "coverage"
     });
     expect(recoveryPackage).toMatchObject({
-      protocolVersion: "pact.capability-binding-guard-recovery.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-recovery-1",
       alias: "guard-local"
     });
     await expect(guard.importRecoveryPackage({

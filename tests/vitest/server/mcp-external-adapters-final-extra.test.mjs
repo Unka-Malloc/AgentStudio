@@ -44,6 +44,7 @@ import {
 } from "../../../server/platform/common/composition-management/external-service-adapter.mjs";
 import {
   handlePactMcpHttpRequest,
+  MCP_AGENT_LIBRARY_TOOL_NAME,
   MCP_INTERFACE_VERSION,
   MCP_STABLE_TOOL_NAME
 } from "../../../server/platform/common/mcp/http-mcp-adapter.mjs";
@@ -312,7 +313,7 @@ describe("mcp and external service adapter final extras", () => {
           id: 7,
           method: "tools/call",
           params: {
-            name: MCP_STABLE_TOOL_NAME,
+            name: MCP_AGENT_LIBRARY_TOOL_NAME,
             arguments: {
               apiVersion: MCP_INTERFACE_VERSION,
               operation: "knowledge.find",
@@ -409,7 +410,7 @@ describe("mcp and external service adapter final extras", () => {
             },
             binding: {
               mode: "compile",
-              outlet: "pact.skillHub"
+              outlet: "pact.serviceHub"
             }
           })
         }
@@ -455,6 +456,7 @@ describe("mcp and external service adapter final extras", () => {
           displayName: "Saved Service",
           mode: "connected",
           startupPolicy: "external-only",
+          policyPreset: "servicehub.development-local",
           upstream: {
             type: "mcp",
             transport: "streamable-http",
@@ -462,7 +464,7 @@ describe("mcp and external service adapter final extras", () => {
           },
           binding: {
             mode: "passthrough",
-            outlet: "pact.skillHub"
+            outlet: "pact.serviceHub"
           }
         })
       }

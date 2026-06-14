@@ -93,7 +93,7 @@ async function callMcp({ serverUrl, token, toolName = "pact.sharedspace", operat
     body: JSON.stringify(mcpRequest("tools/call", {
       name: toolName,
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation,
         input,
         clientVersion: "verify-mcp-codex-install"

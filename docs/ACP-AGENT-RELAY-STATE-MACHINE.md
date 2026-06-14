@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: ACP Agent Relay State Machine.
-- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-14; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 **Status:** Design contract for ACP agent-to-agent relay  
 **Scope:** Source agent to Pact to target agent ACP interaction through the governed relay.
@@ -480,7 +480,7 @@ The `target_callback_parent_binding` proof requires both fail-closed branches to
 | `pending` | Payload hash mismatch | Approved hash differs from stored hash. | Return `approval_payload_mismatch`; do not write. | `payload_mismatch` |
 | `pending` | Missing session or turn | None | Return `permission_context_missing`. | terminal error |
 | `pending` | Turn cancelled | Turn is cancelled before approval. | Mark request cancelled. | `cancelled` |
-| `pending` | Sensitive payload available | In-memory cache, configured file-backed sensitive payload store, or source-stdio sidecar sensitive payload store can return the referenced prompt/write body. | Validate hash and continue guarded write. | Pending resolve continues. |
+| `pending` | Sensitive payload available | In-memory cache or configured file-backed sensitive payload store can return the referenced prompt/write body. Source-facing stdio sidecars are not allowed. | Validate hash and continue guarded write. | Pending resolve continues. |
 | `pending` | Sensitive payload unavailable | Prompt or write body no longer available. | Return `permission_payload_unavailable`; do not write. | `payload_unavailable` |
 | `pending` | Route re-evaluation denied | Current policy no longer allows resume. | Mark request denied; turn `blocked`. | `denied` |
 | `pending` | Approval write denied by permission bridge | Path, policy, or write guard denies even after approval. | Record denial; mark request denied. | `denied` |

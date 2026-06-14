@@ -1,4 +1,4 @@
-export const EVIDENCE_GATE_PROTOCOL_VERSION = "pact.evidence-gate.v1";
+export const EVIDENCE_GATE_PROTOCOL_VERSION = "v0.0.1:knowledge:evidence-gate-1";
 
 const DEFAULT_THRESHOLDS = {
   minEvidence: 2,

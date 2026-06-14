@@ -9,9 +9,10 @@ import {
 } from "../knowledge-core/index.mjs";
 import { createEmbeddingRuntime } from "../../retrieval/embedding-runtime/index.mjs";
 
-export const EXTERNAL_KNOWLEDGE_ADAPTER_PROTOCOL_VERSION = "pact.external-knowledge-adapter.v1";
+export const EXTERNAL_KNOWLEDGE_ADAPTER_PROTOCOL_VERSION = "v0.0.1:external-service:knowledge-adapter-1";
 export const DEFAULT_EXTERNAL_COLLECTION = "pact_knowledge";
 export const DEFAULT_EXTERNAL_DIMENSION = 128;
+const MAX_EXTERNAL_KNOWLEDGE_RESPONSE_BYTES = 4 * 1024 * 1024;
 
 function nowIso() {
   return new Date().toISOString();
@@ -33,6 +34,31 @@ function parseJson(value, fallback) {
   } catch {
     return fallback;
   }
+}
+
+async function readResponseTextWithLimit(response, maxBytes = MAX_EXTERNAL_KNOWLEDGE_RESPONSE_BYTES) {
+  if (!response?.body?.getReader) {
+    const text = await response.text();
+    if (Buffer.byteLength(text, "utf8") > maxBytes) {
+      throw new Error(`External knowledge backend response exceeded the ${maxBytes} byte limit.`);
+    }
+    return text;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = Buffer.from(value);
+    total += chunk.length;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`External knowledge backend response exceeded the ${maxBytes} byte limit.`);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 function stringifyJson(value, fallback = {}) {
@@ -649,7 +675,7 @@ async function fetchJson(url, options = {}, config = {}) {
       ...options,
       signal: controller.signal
     });
-    const text = await response.text();
+    const text = await readResponseTextWithLimit(response);
     const payload = text.trim() ? parseJson(text, { raw: text }) : {};
     if (!response.ok) {
       const error = new Error(`External knowledge backend request failed: ${response.status} ${response.statusText}`);

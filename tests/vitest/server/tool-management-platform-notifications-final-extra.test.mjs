@@ -7,8 +7,21 @@ const broadcastToolListChangedMock = vi.hoisted(() => vi.fn(() => ({
   method: "notifications/tools/list_changed",
   deliveredConnectionCount: 2
 })));
+const listVirtualOperationsSyncMock = vi.hoisted(() => vi.fn(() => []));
+const invalidateRuntimeStateMock = vi.hoisted(() => vi.fn(() => ({
+  ok: true,
+  serviceId: "svc-1",
+  reasonCode: "external_service_catalog_rolled_back",
+  scopes: ["mcp-tools-list", "upstream-session"],
+  inFlightTrackedCount: 0,
+  inFlightAbortedCount: 0,
+  upstreamSessionInvalidatedCount: 0,
+  runtimeCacheInvalidated: false,
+  healthStateInvalidated: 0
+})));
 const createExternalPassthroughRuntimeMock = vi.hoisted(() => vi.fn(() => ({
-  listVirtualOperationsSync: vi.fn(() => [])
+  listVirtualOperationsSync: listVirtualOperationsSyncMock,
+  invalidateRuntimeState: invalidateRuntimeStateMock
 })));
 
 vi.mock("../../../server/platform/common/mcp/http-mcp-adapter.mjs", () => ({
@@ -115,6 +128,58 @@ describe("tool-management platform notification coverage", () => {
         expect(createExternalPassthroughRuntimeMock).toHaveBeenCalledWith(expect.objectContaining({
           userDataPath,
           logger
+        }));
+
+        broadcastToolListChangedMock.mockClear();
+        listVirtualOperationsSyncMock.mockClear();
+        invalidateRuntimeStateMock.mockClear();
+        const refresh = platform.refreshExternalServiceTools({
+          source: "external-service-registry",
+          type: "external_service_catalog_rolled_back",
+          reasonCode: "external_service_catalog_rolled_back",
+          serviceId: "svc-1",
+          activeVersionId: "active-v2",
+          candidateVersionId: "candidate-v3",
+          manifestFingerprint: "manifest-fp",
+          invalidation: {
+            reasonCode: "rollback_requires_runtime_reprojection",
+            scopes: ["mcp-tools-list", "upstream-session"]
+          }
+        });
+        expect(refresh).toMatchObject({
+          ok: true,
+          fingerprint: expect.any(String),
+          runtimeInvalidation: {
+            ok: true,
+            serviceId: "svc-1",
+            scopes: expect.arrayContaining(["mcp-tools-list", "upstream-session"]),
+            inFlightTrackedCount: 0,
+            healthStateInvalidated: 0
+          }
+        });
+        expect(invalidateRuntimeStateMock).toHaveBeenCalledWith(expect.objectContaining({
+          reasonCode: "external_service_catalog_rolled_back",
+          serviceId: "svc-1",
+          invalidation: expect.objectContaining({
+            reasonCode: "rollback_requires_runtime_reprojection",
+            scopes: expect.arrayContaining(["mcp-tools-list", "upstream-session"])
+          })
+        }));
+        expect(invalidateRuntimeStateMock.mock.invocationCallOrder[0]).toBeLessThan(
+          listVirtualOperationsSyncMock.mock.invocationCallOrder[0]
+        );
+        expect(broadcastToolListChangedMock).toHaveBeenCalledWith(expect.objectContaining({
+          reasonCode: "external_service_catalog_rolled_back",
+          details: expect.objectContaining({
+            serviceId: "svc-1",
+            activeVersionId: "active-v2",
+            candidateVersionId: "candidate-v3",
+            manifestFingerprint: "manifest-fp",
+            invalidation: expect.objectContaining({
+              reasonCode: "rollback_requires_runtime_reprojection",
+              scopes: expect.arrayContaining(["mcp-tools-list", "upstream-session"])
+            })
+          })
         }));
       } finally {
         platform.close();

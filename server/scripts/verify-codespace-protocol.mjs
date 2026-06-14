@@ -63,7 +63,7 @@ async function callCodespaceOperation({ serverUrl, token, operation, input = {} 
     body: JSON.stringify(mcpRequest("tools/call", {
       name: "pact.codespace",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation,
         input,
         clientVersion: "verify-codespace-protocol"
@@ -274,7 +274,7 @@ try {
 
   const registryPath = path.join(userDataPath, "code-management", "codespace-registry.json");
   const registry = JSON.parse(await fs.readFile(registryPath, "utf8"));
-  assert.equal(registry.protocolVersion, "pact.codespace.v1");
+  assert.equal(registry.protocolVersion, "v0.0.1:platform:codespace-1");
   assert.ok(registry.targets[target.target.targetId]);
   assert.ok(registry.changes[prepared.codeChangeId]);
   const eventTypes = registry.events.map((event) => event.type);

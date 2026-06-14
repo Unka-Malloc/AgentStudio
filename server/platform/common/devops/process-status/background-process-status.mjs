@@ -11,7 +11,7 @@ import {
   unifiedRegistrationForProcess
 } from "../unified-registration-core/unified-registration.mjs";
 
-export const BACKGROUND_PROCESS_SCHEMA_VERSION = 1;
+export const BACKGROUND_PROCESS_SCHEMA_VERSION = "v0.0.1:platform:background-process-schema-1";
 const IMPORT_PARSE_ACTIVE_STATUSES = new Set(["queued", "running"]);
 const MAINTENANCE_ACTIVE_STATUSES = new Set(["queued", "running"]);
 const AGENT_WORKER_SUPPORTED_PROVIDERS = new Set([

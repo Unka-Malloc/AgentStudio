@@ -27,18 +27,47 @@ function sanitizeText(value = "", limit = 12000) {
     .slice(0, limit);
 }
 
+function minimalCliEnv(env = process.env) {
+  const allowed = [
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TERM",
+    "TERM_PROGRAM"
+  ];
+  const result = {};
+  for (const key of allowed) {
+    if (env[key] !== undefined) {
+      result[key] = env[key];
+    }
+  }
+  return result;
+}
+
 function randomId(prefix = "codex_exec") {
   return `${prefix}_${Date.now().toString(36)}_${crypto.randomBytes(5).toString("hex")}`;
 }
 
+const MAX_CLI_CAPTURE_BYTES = 256 * 1024;
+
 function resolveCodexConfig({ target = {}, relaySession = {} } = {}) {
   const transport = asObject(target.transport);
   const command = asObject(transport.command);
+  const metadata = asObject(target.metadata?.public || target.metadata?.safe || target.metadata);
+  const degraded = transport.degraded === true || metadata.degraded === true;
   return {
     executable: asText(command.executable || transport.binaryPath || transport.commandPath || process.env.PACT_CODEX_CLI_PATH || "codex"),
     cwd: asText(command.cwd || transport.cwd || relaySession.workspaceRoot || process.cwd()),
     env: {
-      ...process.env,
+      ...(degraded ? minimalCliEnv(process.env) : process.env),
       ...asObject(command.env),
       ...asObject(transport.env)
     },
@@ -51,7 +80,8 @@ function resolveCodexConfig({ target = {}, relaySession = {} } = {}) {
       process.env.PACT_ACP_RELAY_CODEX_CLI_TARGET_BYPASS_SANDBOX === "1",
     ignoreRules: command.ignoreRules === true || transport.ignoreRules === true,
     ignoreUserConfig: command.ignoreUserConfig === true || transport.ignoreUserConfig === true,
-    skipGitRepoCheck: command.skipGitRepoCheck !== false && transport.skipGitRepoCheck !== false
+    skipGitRepoCheck: command.skipGitRepoCheck !== false && transport.skipGitRepoCheck !== false,
+    degraded
   };
 }
 
@@ -101,7 +131,48 @@ function codexExecArgs({ config, prompt, outputPath }) {
 }
 
 async function readFileText(filePath = "") {
-  return fs.readFile(filePath, "utf8").catch(() => "");
+  try {
+    const stat = await fs.stat(filePath);
+    const size = Number(stat.size || 0);
+    const handle = await fs.open(filePath, "r");
+    try {
+      const readSize = Math.min(size, MAX_CLI_CAPTURE_BYTES);
+      const buffer = Buffer.alloc(readSize);
+      const { bytesRead } = await handle.read(buffer, 0, readSize, 0);
+      const suffix = size > MAX_CLI_CAPTURE_BYTES
+        ? `\n...[truncated ${size - MAX_CLI_CAPTURE_BYTES} bytes]`
+        : "";
+      return `${buffer.subarray(0, bytesRead).toString("utf8")}${suffix}`;
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return "";
+  }
+}
+
+function createBoundedCapture(maxBytes = MAX_CLI_CAPTURE_BYTES) {
+  const chunks = [];
+  let capturedBytes = 0;
+  let truncatedBytes = 0;
+  return {
+    push(chunk) {
+      const buffer = Buffer.from(chunk);
+      const remaining = Math.max(0, maxBytes - capturedBytes);
+      if (capturedBytes < maxBytes) {
+        const slice = buffer.subarray(0, remaining);
+        chunks.push(slice);
+        capturedBytes += slice.byteLength;
+      }
+      if (buffer.byteLength > remaining) {
+        truncatedBytes += buffer.byteLength - remaining;
+      }
+    },
+    text() {
+      const suffix = truncatedBytes > 0 ? `\n...[truncated ${truncatedBytes} bytes]` : "";
+      return `${Buffer.concat(chunks).toString("utf8")}${suffix}`;
+    }
+  };
 }
 
 export class CodexCliExecConnection {
@@ -150,7 +221,8 @@ export class CodexCliExecConnection {
       metadata: {
         executable: path.basename(this.config.executable),
         sandbox: this.config.bypassSandbox ? "bypass" : this.config.sandbox,
-        model: this.config.model
+        model: this.config.model,
+        policyDowngrade: this.config.degraded === true
       }
     };
   }
@@ -173,8 +245,8 @@ export class CodexCliExecConnection {
     const args = codexExecArgs({ config: this.config, prompt, outputPath });
     const startedAt = nowIso();
     const startedAtMs = Date.now();
-    const stdoutChunks = [];
-    const stderrChunks = [];
+    const stdoutCapture = createBoundedCapture();
+    const stderrCapture = createBoundedCapture();
     let exitCode = null;
     let signal = "";
     await new Promise((resolve, reject) => {
@@ -190,8 +262,8 @@ export class CodexCliExecConnection {
           code: "codex_cli_target_timeout"
         }));
       }, this.config.timeoutMs);
-      child.stdout.on("data", (chunk) => stdoutChunks.push(Buffer.from(chunk)));
-      child.stderr.on("data", (chunk) => stderrChunks.push(Buffer.from(chunk)));
+      child.stdout.on("data", (chunk) => stdoutCapture.push(chunk));
+      child.stderr.on("data", (chunk) => stderrCapture.push(chunk));
       child.once("error", (error) => {
         clearTimeout(timeout);
         reject(error);
@@ -205,8 +277,8 @@ export class CodexCliExecConnection {
     }).finally(() => {
       this.activeChild = null;
     });
-    const stdout = sanitizeText(Buffer.concat(stdoutChunks).toString("utf8"));
-    const stderr = sanitizeText(Buffer.concat(stderrChunks).toString("utf8"));
+    const stdout = sanitizeText(stdoutCapture.text());
+    const stderr = sanitizeText(stderrCapture.text());
     await fs.writeFile(eventLogPath, stdout, "utf8").catch(() => {});
     const lastMessage = sanitizeText(await readFileText(outputPath));
     const text = lastMessage || stdout || stderr || "Codex CLI target completed without a final message.";

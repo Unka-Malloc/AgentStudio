@@ -63,7 +63,7 @@ await fs.mkdir(path.dirname(oldContextPath), { recursive: true });
 await fs.appendFile(
   oldContextPath,
   `${JSON.stringify({
-    protocolVersion: "pact.context.compaction.v1",
+    protocolVersion: "v0.0.1:agent:context-compaction-1",
     memoryId: "old-context-memory",
     sessionId: "old-context-session",
     profileId: "balanced",

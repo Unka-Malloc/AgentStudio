@@ -392,6 +392,7 @@ export function createJobManager({
   getRuntimeOptions = null,
   protocolEventBus = null,
   processingEnabled = process.env.PACT_IMPORT_WORKER_EXTERNAL !== "1",
+  externalScheduler = process.env.PACT_PLATFORM_WORK_QUEUE === "1",
   logger = getRuntimeLogger()
 }) {
   const jobs = new Map();
@@ -426,7 +427,8 @@ export function createJobManager({
 
   logJob("info", "jobs.manager.created", {
     userDataPath,
-    processingMode: processingEnabled ? "internal" : "external"
+    processingMode: processingEnabled ? "internal" : "external",
+    schedulerMode: externalScheduler ? "platform-work-queue" : "internal-pqueue"
   });
 
   function rememberActiveManifestJob(job) {
@@ -770,11 +772,12 @@ export function createJobManager({
     return true;
   }
 
-  async function runQueuedJob(entry) {
+  async function runQueuedJob(entry, options = {}) {
     if (!processingEnabled || closed || !entry?.jobId) {
       logJob("warn", "jobs.queue.dispatch.skipped", {
         jobId: entry?.jobId || "",
-        reason: !processingEnabled ? "processing_disabled" : closed ? "closed" : "missing_job_id"
+        reason: !processingEnabled ? "processing_disabled" : closed ? "closed" : "missing_job_id",
+        externalSchedulerDispatch: options.externalSchedulerDispatch === true
       });
       removeQueuedEntry(entry?.jobId);
       return false;
@@ -911,13 +914,15 @@ export function createJobManager({
       }
     }
 
-    if (processingEnabled) {
+    if (processingEnabled && !externalScheduler) {
       for (const entry of recoverableEntries) {
         enqueueQueueEntry(entry);
       }
 
       readyComplete = true;
       importQueue.start();
+    } else if (processingEnabled && externalScheduler) {
+      readyComplete = true;
     } else {
       readyComplete = true;
     }
@@ -1801,7 +1806,7 @@ export function createJobManager({
           manifestSha256: manifestKey
         }
       });
-      if (processingEnabled) {
+      if (processingEnabled && !externalScheduler) {
         enqueueQueueEntry({
           jobId: job.id,
           payload
@@ -1948,6 +1953,47 @@ export function createJobManager({
         archiveBatchId
       });
       return job;
+    },
+
+    async dispatchQueuedJob(jobId, options = {}) {
+      await ready;
+      if (!processingEnabled) {
+        throw new Error("后台任务执行器未启用，不能调度业务任务。");
+      }
+      if (closed) {
+        throw new Error("后台任务管理器已经关闭。");
+      }
+      const normalizedJobId = String(jobId || options.jobId || "").trim();
+      if (!normalizedJobId) {
+        throw new Error("jobId is required.");
+      }
+      const currentJob = jobs.get(normalizedJobId) || null;
+      if (!currentJob) {
+        throw new Error(`任务不存在，不能调度：${normalizedJobId}`);
+      }
+      if (currentJob.status !== "queued") {
+        return {
+          dispatched: false,
+          skipped: true,
+          job: cloneJobForApi(currentJob),
+          reason: `status_${currentJob.status || "unknown"}`
+        };
+      }
+      const payload = options.payload || await loadJobPayload(userDataPath, normalizedJobId);
+      if (!payload) {
+        throw new Error(`任务缺少 payload，不能调度：${normalizedJobId}`);
+      }
+      const completed = await runQueuedJob({
+        jobId: normalizedJobId,
+        payload
+      }, {
+        externalSchedulerDispatch: true
+      });
+      return {
+        dispatched: true,
+        completed: Boolean(completed),
+        job: cloneJobForApi(jobs.get(normalizedJobId) || currentJob)
+      };
     },
 
     async getJob(jobId) {
@@ -2147,6 +2193,11 @@ export function createJobManager({
         const payload = await loadJobPayload(userDataPath, job.id);
         if (!payload) {
           await failJob(job.id, "任务缺少 payload，不能由后台 worker 执行。", "任务恢复失败");
+          continue;
+        }
+        if (externalScheduler) {
+          queuedIds.add(job.id);
+          enqueued += 1;
           continue;
         }
         const queued = enqueueQueueEntry({

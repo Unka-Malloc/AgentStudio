@@ -11,3 +11,4 @@
 2. **本地盘调度与垃圾回收**：统管临时缓存文件与垃圾文件的生命周期，实现定时主动清理与安全回收。
 3. **子模块归口管理**：
    - **存储子模块 (`storage`)**：物理存储与元数据持久化设施（如 SQLite、LSM Ingest 管道、CAS 块存储等）作为本模块的核心下属能力，由资源管理层提供统一的资源供给与维护保障。
+   - **工作队列子模块 (`work-queue`)**：平台基建层通用调度队列，拥有 Work Item 调度状态、状态机、journal/projection、worker runtime 合同和 store adapter conformance；不拥有业务 job 状态、payload、结果或 workflow history。

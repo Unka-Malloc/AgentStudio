@@ -56,8 +56,8 @@ const DOCKER_PATH =
   "/pkg/runtime/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
 export const KNOWLEDGE_LICENSE_POLICY = Object.freeze({
-  schemaVersion: 1,
-  id: "pact.offline.knowledge-license.v1",
+  schemaVersion: "v0.0.1:schema:definition-1",
+  id: "v0.0.1:offline:offline-knowledge-license-1",
   policy: "PERMISSIVE_OFFLINE_ONLY",
   allowedLicenses: [
     "MIT",
@@ -510,7 +510,7 @@ export async function applyFeatureSourcePlan(stagingPath, packagingPlan) {
   const staticImportViolations = await collectStaticImportViolations(stagingPath, plannedRoots);
 
   const report = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     generatedAt: new Date().toISOString(),
     edition: packagingPlan.featureProfile?.edition || "",
     requestedPaths: plannedPaths,
@@ -1033,7 +1033,7 @@ async function prepareSourceTree(stagingPath, targetKey, target, nodeVersion, pa
   await fs.writeFile(
     path.join(stagingPath, "feature-profile", "feature-profile.json"),
     `${JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       edition: packagingPlan.featureProfile?.edition || "enterprise",
       features: packagingPlan.featureProfile?.activeFeatureIds || []
     }, null, 2)}\n`,
@@ -1121,7 +1121,7 @@ async function installLinuxNodeModules(stagingPath, target) {
 
 function createOfflineManifest(targetKey, nodeVersion, packagingPlan) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     packageType: "pact.offline-server",
     target: targetKey,
     generatedAt: new Date().toISOString(),
@@ -1210,7 +1210,7 @@ export async function createKnowledgeLicenseManifest({
         bundled: Boolean(packagingPlan.includeKnowledgeCore),
         license: "project-internal",
         status: packagingPlan.includeKnowledgeCore ? "allowed" : "not-bundled",
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         storage: {
           sqlite: "knowledge-core/knowledge.sqlite",
           assets: "knowledge-core/assets"
@@ -1220,7 +1220,7 @@ export async function createKnowledgeLicenseManifest({
       EmbeddingRuntime: {
         included: Boolean(packagingPlan.includeKnowledgeCore),
         bundled: Boolean(packagingPlan.includeKnowledgeCore),
-        protocolVersion: "pact.embedding.v1",
+        protocolVersion: "v0.0.1:knowledge:embedding-1",
         license: "project-internal",
         status: packagingPlan.includeKnowledgeCore ? "allowed" : "not-bundled",
         bundledProviders: [
@@ -1264,7 +1264,7 @@ export async function createKnowledgeLicenseManifest({
       VectorStore: {
         included: Boolean(packagingPlan.includeVectorStore),
         bundled: Boolean(packagingPlan.includeVectorStore),
-        protocolVersion: "pact.vector.v1",
+        protocolVersion: "v0.0.1:knowledge:vector-1",
         license: packagingPlan.includeVectorStore ? "project-internal" : "",
         status: packagingPlan.includeVectorStore ? "allowed" : "not-bundled",
         primaryBackend: packagingPlan.includeVectorStore ? "sqlite-vec" : "not-bundled",

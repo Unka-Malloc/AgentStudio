@@ -5,9 +5,9 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import Database from "better-sqlite3";
 import { getRuntimeLogger } from "../../../common/observability/runtime-logger.mjs";
 
-export const AGENT_WORKSPACE_PROTOCOL_VERSION = "pact.agent-workspace.v1";
-export const AGENT_WORKSPACE_CONTEXT_BUNDLE_VERSION = "pact.workspace-context-bundle.v1";
-export const AGENT_SESSION_THREAD_VERSION = "pact.agent-session-thread.v1";
+export const AGENT_WORKSPACE_PROTOCOL_VERSION = "v0.0.1:workspace:agent-workspace-1";
+export const AGENT_WORKSPACE_CONTEXT_BUNDLE_VERSION = "v0.0.1:workspace:context-bundle-1";
+export const AGENT_SESSION_THREAD_VERSION = "v0.0.1:agent:session-thread-1";
 
 const ACCEPTED_SUBMISSION_TYPES = new Set([
   "evidenceCard",
@@ -1103,7 +1103,7 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
     const createdAt = nowIso();
     const eventHash = stableHash("access-receipt", workspaceId, operationId, receiptPath, action, createdAt);
     return {
-      protocolVersion: "pact.sharedspace.access-receipt.v1",
+      protocolVersion: "v0.0.1:sharedspace:sharedspace-access-receipt-1",
       receiptId: stableId("access_receipt", workspaceId, operationId, receiptPath, action, createdAt),
       operationId,
       workspaceId,
@@ -1117,7 +1117,7 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
 
   function defaultLocalDirectoryMountConfig() {
     return {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       configPath: localDirectoryMountConfigPath,
       mounts: []
     };
@@ -1130,7 +1130,7 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
     try {
       const parsed = JSON.parse(fs.readFileSync(localDirectoryMountConfigPath, "utf8"));
       return {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         configPath: localDirectoryMountConfigPath,
         ...asObject(parsed),
         mounts: asArray(parsed.mounts)
@@ -1142,7 +1142,7 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
 
   function writeLocalDirectoryMountConfig(config = {}) {
     const next = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       configPath: localDirectoryMountConfigPath,
       mounts: asArray(config.mounts)
     };

@@ -53,6 +53,7 @@ export function createConsoleFeatureAccessController(options: ConsoleFeatureAcce
     switch (tab) {
       case "tools":
       case "toolList":
+      case "toolGovernance":
       case "toolStats":
         return hasFeature("agent-gateway") || hasFeature("agent-management");
       case "agentPermissions":

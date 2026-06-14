@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ServerConfig } from "../../../common/config/ServerConfig.mjs";
 
-export const WORKSPACE_GOVERNANCE_PROTOCOL_VERSION = "pact.workspace-governance.v1";
+export const WORKSPACE_GOVERNANCE_PROTOCOL_VERSION = "v0.0.1:workspace:governance-1";
 
 const REGISTRY_FILE = path.join("workspace-governance", "registry.json");
 const DATA_CLASS_RANK = Object.freeze({
@@ -70,7 +70,7 @@ function registryPath(userDataPath = "") {
 
 function emptyRegistry() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: WORKSPACE_GOVERNANCE_PROTOCOL_VERSION,
     updatedAt: nowIso(),
     policies: {},
@@ -110,7 +110,7 @@ export function normalizeWorkspaceGovernancePolicy(input = {}) {
   const workspaceId = text(source.workspaceId || "default");
   const copyPolicy = text(source.copyPolicy || source.sharePolicy?.copyPolicy || "sameProject");
   const normalized = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: WORKSPACE_GOVERNANCE_PROTOCOL_VERSION,
     workspaceId,
     organizationId: text(source.organizationId || source.orgId || "default-org"),

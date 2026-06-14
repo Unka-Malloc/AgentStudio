@@ -137,6 +137,20 @@ export function processRelationText(processItem: BackgroundProcessStatus["proces
   return [services, monitors, alerts].filter(Boolean).join("；") || processItem.description || "无关联说明";
 }
 
+export function processRelationBullets(processItem: BackgroundProcessStatus["processes"][number]) {
+  return [
+    processItem.services?.length
+      ? { label: "服务", text: processItem.services.join(" / ") }
+      : null,
+    processItem.monitors?.length
+      ? { label: "监控", text: processItem.monitors.join(" / ") }
+      : null,
+    processItem.alerts?.length
+      ? { label: "报警", text: processItem.alerts.join(" / ") }
+      : null,
+  ].filter((item): item is { label: string; text: string } => Boolean(item));
+}
+
 export function clientRuntimeCoolingTone(state: string) {
   if (state === "hot") {
     return "running";

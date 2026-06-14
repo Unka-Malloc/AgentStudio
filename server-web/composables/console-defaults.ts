@@ -49,6 +49,12 @@ export const modelLibraryProviderDefinitions: Array<{
   },
 ];
 
+export const knowledgeLogPaginationConfig = {
+  defaultPageSize: 20,
+  maxPageSize: 100,
+  pageSizeOptions: [10, 20, 50, 100],
+};
+
 export type IntelligentModuleDefinition = {
   id: string;
   label: string;
@@ -283,7 +289,7 @@ export const emptyDiscovery: DiscoveryConfig = {
 };
 
 export const emptyExpertVocabulary: ExpertVocabulary = {
-  schemaVersion: 1,
+  schemaVersion: "v0.0.1:schema:definition-1",
   version: 0,
   updatedAt: "",
   publishedAt: "",
@@ -380,10 +386,11 @@ export const externalServiceTabs: Array<{ id: ExternalServiceTab; label: string 
 ];
 
 export const adminViewTitleMap: Partial<Record<AdminView, string>> = {
-  jobs: "任务队列",
+  jobs: "工作队列",
   logs: "日志记录",
   tools: "工具列表",
   toolList: "工具列表",
+  toolGovernance: "工具治理",
   toolStats: "工具统计",
   agentPermissions: "权限组",
   agentConfig: "大模型配置",
@@ -391,10 +398,14 @@ export const adminViewTitleMap: Partial<Record<AdminView, string>> = {
   contextManagement: "上下文管理",
   maintenanceAgent: "智能巡检",
   opsMonitor: "运维监控",
-  runtimeDownloads: "运行时配置",
+  runtimeDownloads: "环境配置",
+  strategyManagement: "策略管理",
+  versionRelease: "版本发布",
+  versionAssembly: "版本装配",
+  productionHealth: "交付门禁",
   clients: "客户端列表",
-  storage: "系统概览",
-  modules: "接入模块",
+  storage: "运行状态",
+  modules: "模块管理",
 };
 
 export const viewTitleMap: Record<AppView, string> = {
@@ -404,7 +415,7 @@ export const viewTitleMap: Record<AppView, string> = {
   sources: "数据源",
   externalServices: "服务",
   knowledge: "知识库",
-  workspaces: "协作空间",
+  workspaces: "工作树",
   debug: "调试",
   admin: "管理",
 };

@@ -120,13 +120,19 @@ const runtime = createContextRuntime({ userDataPath });
 try {
   const defaults = await runtime.listProfiles();
   assert.equal(defaults.protocolVersion, CONTEXT_RUNTIME_PROTOCOL_VERSION);
-  assert.equal(defaults.profiles.some((profile) => profile.profileId === "balanced"), true);
+  assert.deepEqual(
+    defaults.profiles.map((profile) => profile.profileId),
+    ["context-32k", "context-128k", "context-1m"]
+  );
+  assert.equal(defaults.profiles.some((profile) => profile.profileId === "balanced"), false);
+  assert.equal(defaults.profiles.some((profile) => profile.profileId === "small-context"), false);
+  assert.equal(defaults.profiles.some((profile) => profile.profileId === "deepseek-v3-671b"), false);
 
   const saved = await runtime.saveProfiles({
     profiles: [
       {
         profileId: "verify-small",
-        label: "Verify Small Context",
+        label: "Verify Compact Context",
         modelAlias: "qwen-v3-32b",
         contextWindowTokens: 4096,
         outputReserveTokens: 256,
@@ -153,6 +159,7 @@ try {
     ]
   });
   assert.equal(saved.profiles.some((profile) => profile.profileId === "verify-small"), true);
+  assert.equal(saved.profiles.some((profile) => profile.profileId === "context-32k"), false);
 
   const evidence = Array.from({ length: 80 }, (_, index) => ({
     evidenceId: `ev-${index}`,

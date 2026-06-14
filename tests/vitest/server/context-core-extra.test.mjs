@@ -25,7 +25,7 @@ let activeCompactionRuntime = null;
 function createStubCompactionRuntime() {
   return {
     run: vi.fn(async () => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       status: "completed",
       compacted: false,
       triggerReason: "stub",
@@ -35,33 +35,33 @@ function createStubCompactionRuntime() {
       strategy: { id: "session-memory-first", paramKeys: [] },
     })),
     preview: vi.fn(async () => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       status: "preview",
       compacted: false,
       executionMode: "stub",
     })),
     maybeCompact: vi.fn(async () => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       status: "skipped",
       compacted: false,
       triggerReason: "within_budget",
       compactedMessages: [],
     })),
     listRecords: vi.fn(async () => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       path: "",
       records: [],
     })),
     listStrategies: vi.fn(async () => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       strategies: [],
     })),
     listSessionMemory: vi.fn(async () => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       memories: [],
     })),
     clearSessionMemory: vi.fn(async () => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       cleared: 0,
     })),
   };
@@ -238,19 +238,19 @@ describe("context runtime profile resolution and compaction helpers", () => {
     expect(activeCompactionRuntime.listStrategies).toHaveBeenCalledTimes(1);
     expect(activeCompactionRuntime.listSessionMemory).toHaveBeenCalledTimes(1);
     expect(activeCompactionRuntime.clearSessionMemory).toHaveBeenCalledTimes(1);
-    expect(compactResult).toMatchObject({ protocolVersion: "pact.context.compaction.v1" });
+    expect(compactResult).toMatchObject({ protocolVersion: "v0.0.1:agent:context-compaction-1" });
     expect(previewResult).toMatchObject({
       status: "preview",
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
     });
     expect(runResult).toMatchObject({
       status: "completed",
       executionMode: "stub",
     });
-    expect(recordsResult).toMatchObject({ protocolVersion: "pact.context.compaction.v1" });
-    expect(strategyResult).toMatchObject({ protocolVersion: "pact.context.compaction.v1" });
-    expect(sessionMemoryResult).toMatchObject({ protocolVersion: "pact.context.compaction.v1" });
-    expect(clearSessionResult).toMatchObject({ protocolVersion: "pact.context.compaction.v1" });
+    expect(recordsResult).toMatchObject({ protocolVersion: "v0.0.1:agent:context-compaction-1" });
+    expect(strategyResult).toMatchObject({ protocolVersion: "v0.0.1:agent:context-compaction-1" });
+    expect(sessionMemoryResult).toMatchObject({ protocolVersion: "v0.0.1:agent:context-compaction-1" });
+    expect(clearSessionResult).toMatchObject({ protocolVersion: "v0.0.1:agent:context-compaction-1" });
   });
 });
 

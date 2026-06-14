@@ -434,7 +434,7 @@ export function buildAcpAgentRelayProofMatrix({
   const requiredRequirements = requirements.filter((item) => item.required);
   const failedRequired = requiredRequirements.filter((item) => item.status !== "proven");
   return {
-    schemaVersion: "pact.acp-agent-relay.proof-matrix.v1",
+    schemaVersion: "v0.0.1:agent:acp-agent-relay-proof-matrix-1",
     allRequiredProofsMet: failedRequired.length === 0,
     requiredCount: requiredRequirements.length,
     provenRequiredCount: requiredRequirements.length - failedRequired.length,

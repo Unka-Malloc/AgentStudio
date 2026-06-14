@@ -3,10 +3,16 @@ import AgentRetrievalForm from "./AgentRetrievalForm.vue";
 import AgentRetrievalProgressAndHistory from "./AgentRetrievalProgressAndHistory.vue";
 import AgentRetrievalTabStrip from "./AgentRetrievalTabStrip.vue";
 import AgentRetrievalWorkspace from "./AgentRetrievalWorkspace.vue";
+import HistorySessionPanel from "../HistorySessionPanel.vue";
 import { useAgentRetrievalViewContext } from "../../composables/agentRetrievalViewContext";
 
 const {
   agentRetrievalPage: { resetKnowledgeAgentExplore },
+  agentRetrievalProgress: {
+    agentExploreHistoryPanelItems,
+    deleteAgentExploreHistoryItem,
+    selectAgentExploreHistoryItem,
+  },
 } = useAgentRetrievalViewContext();
 </script>
 
@@ -28,4 +34,12 @@ const {
     <AgentRetrievalProgressAndHistory />
     <AgentRetrievalWorkspace />
   </article>
+
+  <HistorySessionPanel
+    title="历史记录"
+    :subtitle="`${agentExploreHistoryPanelItems.length} 条，滚动查看`"
+    :items="agentExploreHistoryPanelItems"
+    @select="selectAgentExploreHistoryItem"
+    @delete="deleteAgentExploreHistoryItem"
+  />
 </template>

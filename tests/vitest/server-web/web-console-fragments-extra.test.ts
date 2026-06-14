@@ -224,16 +224,12 @@ function resetComponentMocks() {
   wordCloudContextMock = {
     addChildWordCloud: vi.fn(),
     addTermActionToCloud: vi.fn(),
-    autoFillCloudWithAgent: vi.fn(),
     collapsedWordBagIds: ref(new Set<string>()),
-    fillingWordBagIds: ref(new Set<string>()),
     jumpToCloud: vi.fn(),
     pinWordCloud: vi.fn(),
     pinnedWordBagIds: ref(new Set<string>()),
     selectWordCloud: vi.fn(),
     selectedWordCloud: ref({ wordBagId: "bag-1" }),
-    selectedWordCloudModel: ref({ enabled: true }),
-    titleFocusedWordBagId: ref<string | null>(null),
     toggleWordCloudActionMenu: vi.fn(),
     toggleWordCloudCollapsed: vi.fn(),
     updateWordCloudField: vi.fn(),
@@ -344,7 +340,7 @@ function createBaseServerState(overrides: Partial<ServerConsoleState> = {}) {
     runtime: { mountModules: { local: "v1" } },
     settings: {
       path: "/etc/settings",
-      value: { schemaVersion: 1, modelLibraryAgents: [] },
+      value: { schemaVersion: "v0.0.1:schema:definition-1", modelLibraryAgents: [] },
     },
     discovery: { path: "/etc/discovery", value: { items: [] }, bootstrap: { default: true } },
     emailRules: { path: "/etc/email", rules: { inbound: true } },
@@ -825,9 +821,6 @@ describe("WordCloudClassCard", () => {
     await titleInput.setValue("重命名");
     expect(wordCloudContextMock.updateWordCloudField).toHaveBeenCalledWith("bag-1", "label", "重命名");
 
-    await wrapper.find(".word-cloud-title-confirm-btn").trigger("click");
-    expect(wordCloudContextMock.autoFillCloudWithAgent).toHaveBeenCalledWith("bag-1");
-
     await wrapper.find(".word-cloud-corner-btn").trigger("click");
     expect(wordCloudContextMock.pinWordCloud).toHaveBeenCalledWith("bag-1");
 
@@ -878,7 +871,7 @@ describe("KnowledgeRecallDebugPanel", () => {
     expect(wrapper.text()).toContain("执行召回");
     expect(wrapper.find("button[type='submit']").attributes("disabled")).toBeDefined();
 
-    debugViewContextMock.knowledgeRecallDebugForm.query = "HSBC 账单";
+    debugViewContextMock.knowledgeRecallDebugForm.query = "Atlas 模块部署记录";
     debugViewContextMock.knowledgeRecallDebugRuns.value = [
       {
         runId: "run-1",

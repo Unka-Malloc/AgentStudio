@@ -40,12 +40,20 @@ export type AdminSection =
   | "clients"
   | "tools"
   | "toolList"
+  | "toolGovernance"
   | "toolStats"
   | "tool-list"
+  | "tool-governance"
   | "tool-stats"
   | "modules"
   | "productionHealth"
   | "runtimeDownloads"
+  | "strategyManagement"
+  | "strategy-management"
+  | "versionRelease"
+  | "version-release"
+  | "versionAssembly"
+  | "version-assembly"
   | "agent-permissions"
   | "agent-config"
   | "agent-assignment"
@@ -85,10 +93,14 @@ export function adminSectionToSlug(section: string): string {
     clients: "clients",
     tools: "tool-list",
     toolList: "tool-list",
+    toolGovernance: "tool-governance",
     toolStats: "tool-stats",
     modules: "modules",
     productionHealth: "production-health",
     runtimeDownloads: "runtime-downloads",
+    strategyManagement: "strategy-management",
+    versionRelease: "version-release",
+    versionAssembly: "version-assembly",
     agentPermissions: "agent-permissions",
     agentConfig: "agent-config",
     agentAssignment: "agent-assignment",
@@ -108,10 +120,14 @@ export function slugToAdminView(slug: string): string {
     clients: "clients",
     tools: "toolList",
     "tool-list": "toolList",
+    "tool-governance": "toolGovernance",
     "tool-stats": "toolStats",
     modules: "modules",
     "production-health": "productionHealth",
     "runtime-downloads": "runtimeDownloads",
+    "strategy-management": "strategyManagement",
+    "version-release": "versionRelease",
+    "version-assembly": "versionAssembly",
     "agent-permissions": "agentPermissions",
     "agent-config": "agentConfig",
     "agent-assignment": "agentAssignment",

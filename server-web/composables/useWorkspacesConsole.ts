@@ -1,5 +1,4 @@
-import { computed, ref, watch } from 'vue';
-import { useServerConsoleShellContext } from './serverConsoleShellContext';
+import { computed, ref, watch, type Ref } from 'vue';
 import { usePageRefreshHandler } from './usePageRefresh';
 import type {
   WsSession,
@@ -22,10 +21,13 @@ import {
 } from './console-workspace-management-controller';
 import { useWorkspaceSessionController } from './console-workspace-session-controller';
 
-export function useWorkspacesConsole() {
-  const {
-    busyKey: globalBusyKey,
-  } = useServerConsoleShellContext();
+type WorkspacesConsoleOptions = {
+  autoload?: boolean;
+  globalBusyKey?: Ref<string>;
+};
+
+export function useWorkspacesConsole(options: WorkspacesConsoleOptions = {}) {
+  const globalBusyKey = options.globalBusyKey ?? ref('');
   const localBusyKey = ref('');
   const busyKey = computed(() => localBusyKey.value || globalBusyKey.value);
 
@@ -290,7 +292,9 @@ export function useWorkspacesConsole() {
     },
   );
 
-  load();
+  if (options.autoload ?? true) {
+    load();
+  }
 
   return {
     busyKey,

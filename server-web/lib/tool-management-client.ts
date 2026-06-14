@@ -20,6 +20,7 @@ export type {
   ToolManagementProfile,
   ToolManagementScope,
   ToolManagementTool,
+  ToolManagementToolGroup,
   ToolManagementToolset,
 } from "./types";
 

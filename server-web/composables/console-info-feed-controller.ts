@@ -61,7 +61,7 @@ export type ConsoleInfoFeedControllerOptions = {
   settingsDraft: Ref<AgentSettings>;
 };
 
-export const INFO_FEED_STORAGE_KEY = "pact.infoFeed.history.v1";
+export const INFO_FEED_STORAGE_KEY = "v0.0.1:frontend:info-feed-history-1";
 
 export function createConsoleInfoFeedController(options: ConsoleInfoFeedControllerOptions) {
   const infoFeedCurrentRun = ref<InfoFeedRunState | null>(null);

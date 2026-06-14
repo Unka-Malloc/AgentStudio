@@ -17,7 +17,7 @@ export type NormalizedDocumentEntry = {
 };
 
 export type NormalizedDocumentsManifest = {
-  schemaVersion: number;
+  schemaVersion: string;
   packageType: "pact.normalized-documents";
   batchId: string;
   generatedAt: string;
@@ -108,7 +108,7 @@ export type DocumentParseChunk = {
 };
 
 export type DocumentParseResponse = {
-  schemaVersion: number;
+  schemaVersion: string;
   generatedAt: string;
   pipelineId: string;
   expectedOutputs: string[];

@@ -73,13 +73,13 @@ describe("production health lib extra coverage", () => {
     const health = {
       gates: [],
       generatedAt: "2026-06-04T10:00:00.000Z",
-      reportType: "pact.production-health.v1",
+      reportType: "v0.0.1:platform:production-health-1",
       sections: [],
       status: "pass",
     };
     const baseline = {
       ok: true,
-      protocolVersion: "pact.v001-baseline.v1",
+      protocolVersion: "v0.0.1:platform:baseline-1",
       status: "pass",
     };
     productionHealthClientMocks.getProductionHealth.mockResolvedValueOnce(health);
@@ -93,7 +93,7 @@ describe("production health lib extra coverage", () => {
   it("returns baseline when the main health request fails", async () => {
     const baseline = {
       ok: false,
-      protocolVersion: "pact.v001-baseline.v1",
+      protocolVersion: "v0.0.1:platform:baseline-1",
       status: "fail",
     };
     productionHealthClientMocks.getProductionHealth.mockRejectedValueOnce(new Error("health unavailable"));

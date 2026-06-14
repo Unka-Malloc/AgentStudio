@@ -1,13 +1,13 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "name": "DownstreamClientAspect",
-  "version": 1,
+  "version": "v0.0.1:agent:downstream-client-aspect-1",
   "category": "agent-client-protocol",
   "agentCommunicationKind": "mcp-acp",
   "applicationSubsystem": "agent-relay",
   "description": "Facing-agent downstream client aspect that assembles independent MCP and ACP framework adapter layers at service startup.",
   "defaultLoaded": true,
-  "protocol": "pact.downstream-client-aspect.v1",
+  "protocol": "v0.0.1:agent:downstream-client-aspect-1",
   "adapterLayers": [
     {
       "layerId": "mcp",

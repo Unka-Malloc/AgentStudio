@@ -175,7 +175,7 @@ describe("golden rule runtime normalization and fallback coverage", () => {
 
       const invalidProtocol = await runtime.validateRulePackage({
         package: {
-          protocolVersion: "pact.golden-rule.v0",
+          protocolVersion: "v0.0.1:knowledge:golden-rule-0",
           packageId: "",
           rules: []
         }

@@ -25,6 +25,26 @@ export function listJobs(limit = 50) {
   return getJson<SplitJobListResponse>(`/api/jobs?limit=${encodeURIComponent(String(limit))}`);
 }
 
+export function inspectWorkQueue(limit = 100) {
+  return getJson<any>(`/api/jobs/work-queue?limit=${encodeURIComponent(String(limit))}`);
+}
+
+export function pauseWorkQueue(reason = "operator_pause") {
+  return postJson<any>("/api/jobs/work-queue/pause", { reason });
+}
+
+export function resumeWorkQueue(reason = "operator_resume") {
+  return postJson<any>("/api/jobs/work-queue/resume", { reason });
+}
+
+export function drainWorkQueue(reason = "operator_drain") {
+  return postJson<any>("/api/jobs/work-queue/drain", { reason });
+}
+
+export function dispatchWorkQueue() {
+  return postJson<any>("/api/jobs/work-queue/dispatch", {});
+}
+
 export function deleteJob(jobId: string) {
   return deleteJson<{ ok: boolean; deletedJob: SplitJob }>(
     `/api/jobs/${encodeURIComponent(jobId)}`,

@@ -42,7 +42,7 @@ const scenarioCatalog = JSON.parse(await fs.readFile(scenarioCatalogPath, "utf8"
 const scenarioStatus = JSON.parse(await fs.readFile(scenarioStatusPath, "utf8"));
 const packageJson = JSON.parse(await fs.readFile(packageJsonPath, "utf8"));
 
-assert.equal(scenarioStatus.schemaVersion, 1, "scenario implementation status schemaVersion must be 1");
+assert.equal(scenarioStatus.schemaVersion, "v0.0.1:schema:definition-1", "scenario implementation status schemaVersion must be v0.0.1:schema:definition-1");
 assert.equal(typeof scenarioStatus.updatedAt, "string", "scenario implementation status updatedAt must be present");
 assert.equal(typeof scenarioStatus.factSource, "string", "scenario implementation status factSource must be present");
 

@@ -407,63 +407,14 @@ describe("acp-agent-relay more coverage", () => {
     assert.equal(transportPrompt.externalCompletionState, "completed");
   });
 
-  it("rejects invalid stdio env JSON and emits ready diagnostics for a bounded serve loop", async () => {
+  it("fails closed for source-facing local stdio server helpers", async () => {
     assert.throws(
-      () => createAcpSourceStdioServerOptionsFromEnv({
-        PACT_ACP_SOURCE_STDIO_RUNTIME_JSON: "{not-json"
-      }),
-      /Invalid JSON environment configuration/
+      () => createAcpSourceStdioServerOptionsFromEnv({}),
+      /Pact no longer exposes local stdio interfaces/
     );
-
-    const runtime = {
-      store: {
-        adapter: {
-          storagePath: "/tmp/acp-source-store.json"
-        }
-      },
-      close: vi.fn()
-    };
-    const service = {
-      serveTransport: vi.fn(async () => {}),
-      close: vi.fn()
-    };
-    const transport = {
-      receive: vi.fn(async () => null),
-      send: vi.fn(async () => true),
-      close: vi.fn()
-    };
-    const diagnostics = {
-      write: vi.fn()
-    };
-    sourceJsonRpcMock.createAcpSourceJsonRpcLineTransport.mockReturnValue(transport);
-    sourceJsonRpcMock.createAcpSourceJsonRpcService.mockReturnValue(service);
-
-    const server = createAcpSourceStdioServer({
-      runtime,
-      context: {
-        sourceId: "source-stdio-1",
-        workspaceId: "workspace-stdio-1"
-      },
-      input: new EventEmitter(),
-      output: {
-        write() {
-          return true;
-        }
-      },
-      diagnostics
-    });
-
-    const result = await server.serve();
-    assert.deepEqual(result, { ok: true });
-    assert.equal(service.serveTransport.mock.calls.length, 1);
-    assert.equal(runtime.close.mock.calls.length, 1);
-    assert.equal(diagnostics.write.mock.calls.length, 1);
-
-    const payload = JSON.parse(diagnostics.write.mock.calls[0][0]);
-    assert.equal(payload.event, "pact.acp.source_stdio.ready");
-    assert.equal(payload.durableStore, true);
-    assert.equal(payload.storagePath, "/tmp/acp-source-store.json");
-    assert.equal(payload.sourceId, "source-stdio-1");
-    assert.equal(payload.workspaceId, "workspace-stdio-1");
+    assert.throws(
+      () => createAcpSourceStdioServer({ runtime: {} }),
+      /Pact no longer exposes local stdio interfaces/
+    );
   });
 });

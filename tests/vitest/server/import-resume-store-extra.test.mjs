@@ -124,7 +124,7 @@ describe("import-resume-store extra coverage", () => {
     });
 
     expect(created).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       entryId,
       batchId,
       inputKind: "mail",
@@ -179,7 +179,7 @@ describe("import-resume-store extra coverage", () => {
 
     const manifest = JSON.parse(await fs.readFile(path.join(checkpointDir, "manifest.json"), "utf8"));
     expect(manifest).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       batchId,
       updatedAt: updated.updatedAt
     });
@@ -227,7 +227,7 @@ describe("import-resume-store extra coverage", () => {
       userDataPath,
       path.join("jobs", batchId, "import-checkpoint", "entries", `${validEntryId}.json`),
       {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         entryId: validEntryId,
         batchId,
         status: "completed",
@@ -240,7 +240,7 @@ describe("import-resume-store extra coverage", () => {
     expect(listed).toHaveLength(1);
     expect(listed[0]).toMatchObject({
       entryId: validEntryId,
-      schemaVersion: 1
+      schemaVersion: "v0.0.1:schema:definition-1"
     });
 
     await writeText(

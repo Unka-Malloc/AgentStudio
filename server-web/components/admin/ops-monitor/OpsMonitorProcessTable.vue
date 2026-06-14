@@ -10,6 +10,7 @@ const {
   backgroundRunningCount,
   formatCompactDate,
   processRelationText,
+  processRelationBullets,
   processTypeLabel,
 } = useOpsMonitorViewContext();
 </script>
@@ -39,9 +40,9 @@ const {
         :key="processItem.role"
         class="job-row"
       >
-        <span>
+        <span class="ops-process-identity">
           <strong>{{ processItem.label }}</strong>
-          <small>{{ processItem.role }} · 重启 {{ processItem.restartCount || 0 }}</small>
+          <small>{{ processItem.role }}</small>
         </span>
         <StatusPill tone="info" :label="processTypeLabel(processItem.processType)" />
         <StatusPill :tone="backgroundProcessTone(processItem.status)" :label="backgroundProcessLabel(processItem.status)" />
@@ -51,9 +52,18 @@ const {
         <span>
           <strong>{{ formatCompactDate(processItem.lastHeartbeatAt || "") }}</strong>
         </span>
-        <span>
+        <span class="ops-process-relations">
           <strong>{{ processItem.responsibility || processItem.description }}</strong>
-          <small>{{ processRelationText(processItem) }}</small>
+          <ul v-if="processRelationBullets(processItem).length > 0">
+            <li
+              v-for="item in processRelationBullets(processItem)"
+              :key="`${processItem.role}:${item.label}`"
+            >
+              <span>{{ item.label }}：</span>
+              <span>{{ item.text }}</span>
+            </li>
+          </ul>
+          <small v-else>{{ processRelationText(processItem) }}</small>
         </span>
       </div>
     </div>

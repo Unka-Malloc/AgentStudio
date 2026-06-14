@@ -33,7 +33,7 @@ async function writeSourceSearchRules(userDataPath, overrides = {}) {
   await fs.writeFile(
     rulesPath,
     `${JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       updatedAt: "2026-06-06T00:00:00.000Z",
       maxFileBytes: 5 * 1024 * 1024,
       maxEvidenceBytes: 512 * 1024,

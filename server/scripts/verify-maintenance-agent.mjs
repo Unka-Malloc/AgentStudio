@@ -263,7 +263,7 @@ async function verifyCoreApiRpcAndCli() {
 
   try {
     const config = await fetchJson(`${server.url}/api/maintenance-agent/config`);
-    assert.equal(config.config.schemaVersion, 1);
+    assert.equal(config.config.schemaVersion, "v0.0.1:schema:definition-1");
     assert.equal(config.config.enabled, false);
     assert.equal(config.config.autoApproveRisk, "safe_write");
     assert.ok(config.config.runbooks.health_smoke);

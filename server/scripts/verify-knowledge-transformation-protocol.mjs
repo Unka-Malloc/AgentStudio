@@ -51,9 +51,9 @@ async function callKnowledgeOperation({ serverUrl, token, operation, input = {} 
     method: "POST",
     headers: mcpHeaders(token),
     body: JSON.stringify(mcpRequest("tools/call", {
-      name: "pact.knowledge",
+      name: "pact.agentLibrary",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation,
         input,
         clientVersion: "verify-knowledge-transformation"
@@ -72,7 +72,7 @@ function assertKnowledgeOk(response, operation) {
   assert.equal(response.payload.result.structuredContent.operation, operation);
   const payload = structuredPayload(response);
   assert.equal(payload?.ok, true, JSON.stringify(payload || {}, null, 2));
-  assert.equal(payload.protocolVersion, "pact.knowledge-transformation.v1");
+  assert.equal(payload.protocolVersion, "v0.0.1:knowledge:transformation-1");
   assert.equal(payload.knowledgeAccessDecision?.allowed, true, JSON.stringify(payload.knowledgeAccessDecision || {}, null, 2));
   assert.ok(payload.contentBase64, `${operation} must return a portable contentBase64 package`);
   assert.ok(payload.byteSize > 0, `${operation} must render non-empty output`);
@@ -93,7 +93,7 @@ try {
   const auth = await installAuthenticatedFetch(server, { safetyConfirm: false });
   const grant = await localMcpGrant(server.url, {
     label: "verify-knowledge-transformation",
-    toolsets: ["pact.knowledge.read", "pact.knowledge.write"],
+    toolsets: ["pact.agentLibrary.read", "pact.agentLibrary.write"],
     grantMode: "write",
     targets: ["knowledge-transformation-verify"]
   }, { "x-pact-safety-confirm": "true" });
@@ -123,7 +123,7 @@ try {
   const dossier = assertKnowledgeOk(await callKnowledgeOperation({
     serverUrl: server.url,
     token,
-    operation: "pact.knowledge.dossier.export",
+    operation: "pact.agentLibrary.dossier.export",
     input: {
       outputFormat: "html",
       query: "customer renewal",
@@ -135,7 +135,7 @@ try {
         }
       ]
     }
-  }), "pact.knowledge.dossier.export");
+  }), "pact.agentLibrary.dossier.export");
   assert.equal(dossier.operationId, "knowledge.dossier.export");
   assert.equal(dossier.outputFormat, "html");
   assert.equal(dossier.sourceDocumentCount, 1);

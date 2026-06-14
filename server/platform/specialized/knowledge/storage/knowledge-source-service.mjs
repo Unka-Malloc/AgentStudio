@@ -189,7 +189,7 @@ async function readSources(userDataPath) {
 async function writeSources(userDataPath, sources) {
   const filePath = sourcesPath(userDataPath);
   await atomicWriteJson(filePath, {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: nowIso(),
     sources
   });
@@ -248,7 +248,7 @@ async function loadHydrationRules(userDataPath) {
     ]
   };
   return {
-    schemaVersion: Number(merged.schemaVersion || 1),
+    schemaVersion: String(merged.schemaVersion || "v0.0.1:schema:definition-1"),
     sampleBytes: normalizeInteger(
       merged.sampleBytes,
       DEFAULT_HYDRATION_SAMPLE_BYTES,
@@ -738,7 +738,7 @@ async function prepareKnowledgeSourceFiles({
     await fs.writeFile(
       fileManifestPath,
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         sourceId: source.sourceId,
         sourceRoot: scanned.root,
         sourceManifestSha256: scanned.manifestSha256,
@@ -813,7 +813,7 @@ export function createKnowledgeSourceService({
       })
     );
     return {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       updatedAt: nowIso(),
 	      summary: {
 	        totalCount: items.length,

@@ -3,27 +3,57 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../models/future_client_models.dart';
+import '../services/appearance_preferences_service.dart';
+import '../services/agent_conversation_service.dart';
 import '../services/agent_service.dart';
+import '../services/mobile_relay_service.dart';
 import '../services/portable_data_root.dart';
+import '../ui/appearance_preset_config.dart';
 
 part 'mcp_plugin_actions.dart';
 part 'model_forwarding_actions.dart';
 part 'skill_hub_actions.dart';
+part 'target_actions.dart';
+part 'agent_conversation_actions.dart';
+part 'mobile_relay_actions.dart';
 
 class FutureClientController extends ChangeNotifier {
   FutureClientController({
     PortableDataRoot? portableData,
     AgentService? agentService,
+    AgentConversationService? conversationService,
+    MobileRelayService? mobileRelayService,
+    AppearancePreferencesService? appearancePreferencesService,
   }) : portableData = portableData ?? PortableDataRoot(),
-       agentService = agentService ?? AgentService(dataDirectory: () async => (portableData ?? PortableDataRoot()).dataDirectory().then((d) => d.path)) {
-    bootstrapController.addListener(notifyListeners);
+       agentService =
+           agentService ??
+           AgentService(
+             dataDirectory: () async => (portableData ?? PortableDataRoot())
+                 .dataDirectory()
+                 .then((d) => d.path),
+           ),
+       conversationService =
+           conversationService ?? const AgentConversationService(),
+       mobileRelayService = mobileRelayService ?? const MobileRelayService(),
+       appearancePreferencesService =
+           appearancePreferencesService ??
+           const AppearancePreferencesService() {
+    bootstrapController.addListener(_notifyStateChanged);
   }
 
   final PortableDataRoot portableData;
   final AgentService agentService;
+  final AgentConversationService conversationService;
+  final MobileRelayService mobileRelayService;
+  final AppearancePreferencesService appearancePreferencesService;
   final TextEditingController bootstrapController = TextEditingController();
 
   FutureClientSection currentSection = FutureClientSection.agents;
+  String appearancePresetId = AppearancePresetIds.defaultSystem;
+  List<AppearancePresetConfig> appearancePresetConfigs =
+      builtInAppearancePresetConfigs;
+  String appearancePresetDirectoryPath = '';
+  List<String> appearancePresetLoadErrors = const [];
   List<TargetCandidate> scannedTargets = const [];
   Map<String, dynamic>? targetInspection;
   Map<String, dynamic>? targetConfigPlan;
@@ -34,23 +64,46 @@ class FutureClientController extends ChangeNotifier {
   List<Map<String, dynamic>> skillHubPairings = const [];
   List<Map<String, dynamic>> skillHubSkills = const [];
   Map<String, dynamic>? skillHubActionResult;
+  MobileRelayConfig mobileRelayConfig = MobileRelayConfig.defaults();
+  Map<String, dynamic>? mobileRelayActionResult;
+  List<MobileRelayCommand> lastMobileRelayCommands = const [];
   Map<String, dynamic>? snapshotRestoreResult;
+  Map<String, List<AgentConversationSession>> conversationSessionsByAgent =
+      const {};
+  String selectedConversationAgentId = '';
+  String selectedConversationSessionId = '';
   bool initialized = false;
   bool isScanningTargets = false;
   bool isAddingTarget = false;
   bool isModelForwardingBusy = false;
   bool isSkillHubBusy = false;
+  bool isMobileRelayBusy = false;
+  bool isMobileRelayPolling = false;
+  bool isLoadingConversations = false;
+  bool isSendingConversationMessage = false;
+  bool _disposed = false;
+  Timer? _mobileRelayTimer;
   final Set<String> _mcpPluginBusyTargets = <String>{};
   String portableDataPath = '';
   String statusMessage = '等待扫描目标适配器。';
   String statusCaption = 'Future client';
   String lastError = '';
 
+  String get appearancePresetLabel {
+    return findAppearancePresetConfig(
+      appearancePresetId,
+      appearancePresetConfigs,
+    ).labelFor();
+  }
+
   bool isMcpPluginBusy(String target) {
     return _mcpPluginBusyTargets.contains(target);
   }
 
   void _notifyStateChanged() {
+    if (_disposed) {
+      return;
+    }
     notifyListeners();
   }
 
@@ -58,15 +111,73 @@ class FutureClientController extends ChangeNotifier {
     try {
       final dataDir = await portableData.dataDirectory();
       portableDataPath = dataDir.path;
+      final catalog = await appearancePreferencesService.loadCatalog(
+        portableData,
+      );
+      _applyAppearancePresetCatalog(catalog);
+      appearancePresetId = await appearancePreferencesService
+          .loadSelectedPresetId(portableData, appearancePresetConfigs);
+      mobileRelayConfig = await mobileRelayService.loadConfig(
+        agentService: agentService,
+      );
       initialized = true;
-      statusMessage = 'Future client 已就绪。';
+      statusMessage = appearancePresetLoadErrors.isEmpty
+          ? 'Future client 已就绪。'
+          : 'Future client 已就绪，部分外观方案配置无效。';
       statusCaption = 'Ready';
+      if (mobileRelayConfig.relayEnabled && mobileRelayConfig.hasPairing) {
+        startMobileRelayPolling();
+      }
     } catch (error) {
       lastError = error.toString();
       statusMessage = '初始化失败。';
       statusCaption = 'Error';
     } finally {
-      notifyListeners();
+      _notifyStateChanged();
+    }
+  }
+
+  Future<void> setAppearancePreset(String presetId) async {
+    if (!hasAppearancePresetConfig(presetId, appearancePresetConfigs)) {
+      presetId = AppearancePresetIds.defaultSystem;
+    }
+    appearancePresetId = presetId;
+    _notifyStateChanged();
+    await appearancePreferencesService.save(portableData, presetId);
+  }
+
+  Future<void> cycleAppearancePreset() {
+    return setAppearancePreset(
+      nextAppearancePresetId(appearancePresetId, appearancePresetConfigs),
+    );
+  }
+
+  Future<void> reloadAppearancePresets() async {
+    try {
+      final catalog = await appearancePreferencesService.loadCatalog(
+        portableData,
+      );
+      _applyAppearancePresetCatalog(catalog);
+      if (!hasAppearancePresetConfig(
+        appearancePresetId,
+        appearancePresetConfigs,
+      )) {
+        appearancePresetId = AppearancePresetIds.defaultSystem;
+        await appearancePreferencesService.save(
+          portableData,
+          appearancePresetId,
+        );
+      }
+      statusMessage = appearancePresetLoadErrors.isEmpty
+          ? '外观方案已重新加载。'
+          : '外观方案已重新加载，部分配置无效。';
+      statusCaption = 'Appearance';
+    } catch (error) {
+      lastError = error.toString();
+      statusMessage = '外观方案重新加载失败。';
+      statusCaption = 'Error';
+    } finally {
+      _notifyStateChanged();
     }
   }
 
@@ -75,129 +186,24 @@ class FutureClientController extends ChangeNotifier {
       return;
     }
     currentSection = section;
-    notifyListeners();
+    _notifyStateChanged();
     if (section == FutureClientSection.agents && scannedTargets.isEmpty) {
       unawaited(scanTargets());
     }
   }
 
-  Future<void> scanTargets() async {
-    if (isScanningTargets) {
-      return;
-    }
-    isScanningTargets = true;
-    lastError = '';
-    statusMessage = '正在扫描目标适配器。';
-    statusCaption = 'Targets';
-    notifyListeners();
-    try {
-      scannedTargets = await agentService.scanTargets();
-      statusMessage = '已扫描 ${scannedTargets.length} 个目标适配器。';
-      statusCaption = 'Targets';
-    } catch (error) {
-      debugPrint('Failed to scan targets: $error');
-      lastError = error.toString();
-      statusMessage = '目标适配器扫描失败。';
-      statusCaption = 'Targets';
-    } finally {
-      isScanningTargets = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> inspectTarget(String target) async {
-    lastError = '';
-    try {
-      targetInspection = await agentService.inspectTarget(target);
-      statusMessage = '已读取 $target 目标适配器。';
-      statusCaption = 'Target inspect';
-    } catch (error) {
-      debugPrint('Failed to inspect target: $error');
-      lastError = error.toString();
-      statusMessage = '$target 目标适配器读取失败。';
-      statusCaption = 'Target inspect';
-    } finally {
-      notifyListeners();
-    }
-  }
-
-  Future<void> addManualTarget({
-    required String target,
-    String configPath = '',
-    String binaryPath = '',
-  }) async {
-    final trimmed = target.trim();
-    if (trimmed.isEmpty || isAddingTarget) {
-      return;
-    }
-    final trimmedConfigPath = configPath.trim();
-    final trimmedBinaryPath = binaryPath.trim();
-    isAddingTarget = true;
-    lastError = '';
-    statusMessage = '正在添加手动目标。';
-    statusCaption = 'Targets';
-    notifyListeners();
-    try {
-      await agentService.addTarget(
-        target: trimmed,
-        configPath: trimmedConfigPath,
-        binaryPath: trimmedBinaryPath,
-      );
-      scannedTargets = await agentService.scanTargets();
-      statusMessage = '已添加 $trimmed 手动目标。';
-      statusCaption = 'Targets';
-    } catch (error) {
-      debugPrint('Failed to add manual target: $error');
-      lastError = error.toString();
-      statusMessage = '$trimmed 手动目标添加失败。';
-      statusCaption = 'Targets';
-    } finally {
-      isAddingTarget = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> planTargetConfig(String target) async {
-    lastError = '';
-    try {
-      targetConfigPlan = await agentService.planTargetConfig(target);
-      statusMessage = '已生成 $target MCP 配置计划。';
-      statusCaption = 'MCP config plan';
-    } catch (error) {
-      debugPrint('Failed to plan target config: $error');
-      lastError = error.toString();
-      statusMessage = '$target MCP 配置计划生成失败。';
-      statusCaption = 'MCP config plan';
-    } finally {
-      notifyListeners();
-    }
-  }
-
-  Future<void> restoreSnapshot(String snapshotId) async {
-    final trimmed = snapshotId.trim();
-    if (trimmed.isEmpty) {
-      return;
-    }
-    lastError = '';
-    statusMessage = '正在恢复配置快照。';
-    statusCaption = 'Snapshots';
-    notifyListeners();
-    try {
-      snapshotRestoreResult = await agentService.restoreSnapshot(trimmed);
-      statusMessage = '已恢复配置快照 $trimmed。';
-      statusCaption = 'Snapshots';
-    } catch (error) {
-      debugPrint('Failed to restore snapshot: $error');
-      lastError = error.toString();
-      statusMessage = '配置快照恢复失败。';
-      statusCaption = 'Snapshots';
-    } finally {
-      notifyListeners();
-    }
+  void _applyAppearancePresetCatalog(
+    AppearancePresetCatalogLoadResult catalog,
+  ) {
+    appearancePresetConfigs = catalog.configs;
+    appearancePresetDirectoryPath = catalog.directory.path;
+    appearancePresetLoadErrors = catalog.errors;
   }
 
   @override
   void dispose() {
+    _disposed = true;
+    _mobileRelayTimer?.cancel();
     bootstrapController.dispose();
     super.dispose();
   }

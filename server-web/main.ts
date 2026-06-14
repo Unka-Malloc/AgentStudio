@@ -8,9 +8,10 @@ import "element-plus/es/components/table/style/css";
 import "element-plus/es/components/table-column/style/css";
 import { router } from "./router/index";
 import ServerConsoleApp from "./ServerConsoleApp.vue";
+import { readInitialConsoleLocale } from "./i18n/console";
 import "./styles/index.css";
 
-document.documentElement.lang = "zh-CN";
+document.documentElement.lang = readInitialConsoleLocale() === "en" ? "en" : "zh-CN";
 document.documentElement.setAttribute("translate", "no");
 document.documentElement.classList.add("notranslate");
 document.body.setAttribute("translate", "no");

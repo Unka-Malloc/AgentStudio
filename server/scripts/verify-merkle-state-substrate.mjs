@@ -10,7 +10,7 @@ try {
   const provider = createDataStructureProvider({ userDataPath });
   const substrate = provider.merkleState;
   assert.ok(substrate, "merkleState provider should be registered");
-  assert.equal(substrate.protocolVersion, "pact.merkle-state-substrate.v1");
+  assert.equal(substrate.protocolVersion, "v0.0.1:storage:merkle-state-substrate-1");
 
   const canonicalA = substrate.canonicalCodec.hash({
     b: "two\r\nlines",

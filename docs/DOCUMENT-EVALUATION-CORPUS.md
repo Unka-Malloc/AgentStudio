@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: Document Evaluation Corpus.
 - Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
@@ -98,7 +98,7 @@ node scripts/split-mbox-corpus.mjs
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "corpusId": "public-documents-smoke",
   "storageRoot": "~/.pact-server-data/evaluation-corpora/public-documents",
   "items": [

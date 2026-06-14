@@ -18,9 +18,9 @@ vi.mock("../../../server/platform/specialized/knowledge/preprocessing/domain/kno
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/retrieval/embedding-runtime/index.mjs", () => ({
-  EMBEDDING_PROTOCOL_VERSION: "pact.embedding.v1",
+  EMBEDDING_PROTOCOL_VERSION: "v0.0.1:knowledge:embedding-1",
   createEmbeddingRuntime: vi.fn(() => ({
-    protocolVersion: "pact.embedding.v1",
+    protocolVersion: "v0.0.1:knowledge:embedding-1",
     embedText: vi.fn((value = "") => ({
       vector: Array.from(String(value)).map(() => 0.01),
       text: String(value),
@@ -40,12 +40,12 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/embedding-runt
       dimension: 8
     })),
     health: vi.fn(() => ({
-      protocolVersion: "pact.embedding.v1",
+      protocolVersion: "v0.0.1:knowledge:embedding-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.embedding.v1",
+      protocolVersion: "v0.0.1:knowledge:embedding-1",
       providers: []
     }))
   }))
@@ -59,12 +59,12 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/vector-store/L
     deleteByTargetIds: vi.fn(),
     search: vi.fn(() => []),
     health: vi.fn(() => ({
-      protocolVersion: "pact.vector.v1",
+      protocolVersion: "v0.0.1:knowledge:vector-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.vector.v1",
+      protocolVersion: "v0.0.1:knowledge:vector-1",
       providers: ["sqlite-vec"]
     })),
     close: vi.fn()
@@ -72,16 +72,16 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/vector-store/L
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runtime/index.mjs", () => ({
-  LEARNING_PROTOCOL_VERSION: "pact.learning.v1",
+  LEARNING_PROTOCOL_VERSION: "v0.0.1:knowledge:learning-1",
   createLearningRuntime: vi.fn(() => ({
-    protocolVersion: "pact.learning.v1",
+    protocolVersion: "v0.0.1:knowledge:learning-1",
     health: vi.fn(async () => ({
-      protocolVersion: "pact.learning.v1",
+      protocolVersion: "v0.0.1:knowledge:learning-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.learning.v1",
+      protocolVersion: "v0.0.1:knowledge:learning-1",
       enabled: true,
       safeAutoApplySuggestionTypes: ["retrievalProfile", "rankingRule", "decay"]
     })),
@@ -92,7 +92,7 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runti
       explanations: []
     })),
     proposeProfile: vi.fn(() => ({
-      protocolVersion: "pact.learning.v1",
+      protocolVersion: "v0.0.1:knowledge:learning-1",
       profileId: "balanced"
     })),
     generateSuggestions: vi.fn(() => [])
@@ -101,12 +101,12 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runti
 
 vi.mock("../../../server/platform/specialized/knowledge/storage/knowledge-core/outline-runtime-loader.mjs", () => ({
   createNoopDocumentOutlineRuntime: vi.fn(() => ({
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     build: outlineBuildMock,
     rangeContainsPosition: vi.fn(() => false)
   })),
   resolveDocumentOutlineRuntime: vi.fn(async () => ({
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     build: outlineBuildMock,
     rangeContainsPosition: vi.fn(() => false)
   }))
@@ -259,7 +259,7 @@ describe("knowledge-core focused extra coverage 2", () => {
         categories: []
       },
       outlineResultFactory: (document) => ({
-        protocolVersion: "pact.document-outline.v1",
+        protocolVersion: "v0.0.1:knowledge:document-outline-1",
         documentId: document.documentId || "",
         nodeCount: 5,
         syntheticNodeCount: 0,
@@ -398,7 +398,7 @@ describe("knowledge-core focused extra coverage 2", () => {
 
         expect(agentSearch.responseProfile).toBe("agent");
         expect(agentSearch.agentMessage).toMatchObject({
-          protocolVersion: "pact.knowledge-search.agent-message.v1",
+          protocolVersion: "v0.0.1:knowledge:search-agent-message-1",
           machineReadable: true,
           responseProfile: "agent",
           query: "sale promo",
@@ -428,7 +428,7 @@ describe("knowledge-core focused extra coverage 2", () => {
           limit: 3
         });
         expect(consoleSearch.responseProfile).toBe("agent");
-        expect(consoleSearch.agentMessage?.protocolVersion).toBe("pact.knowledge-search.agent-message.v1");
+        expect(consoleSearch.agentMessage?.protocolVersion).toBe("v0.0.1:knowledge:search-agent-message-1");
 
         const senderAggregate = mount.aggregate({
           metric: "email_advertising_by_sender",
@@ -515,7 +515,7 @@ describe("knowledge-core focused extra coverage 2", () => {
         ]
       },
       outlineResultFactory: (document) => ({
-        protocolVersion: "pact.document-outline.v1",
+        protocolVersion: "v0.0.1:knowledge:document-outline-1",
         documentId: document.documentId || "",
         nodeCount: 5,
         syntheticNodeCount: 0,

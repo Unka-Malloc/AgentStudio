@@ -273,8 +273,8 @@ function createFetchResponse({
 
 function seedCodespaceConfig(root, providers) {
   seedFile(path.join(root, "code-management", "codespace-providers.json"), `${JSON.stringify({
-    schemaVersion: 1,
-    protocolVersion: "pact.codespace.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    protocolVersion: "v0.0.1:platform:codespace-1",
     updatedAt: "2026-06-05T00:00:00.000Z",
     providers
   }, null, 2)}\n`);
@@ -503,8 +503,8 @@ describe("code capabilities extra coverage", () => {
       }
     });
     seedFile(path.join(root, "code-management", "codespace-registry.json"), `${JSON.stringify({
-      schemaVersion: 1,
-      protocolVersion: "pact.codespace.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:platform:codespace-1",
       updatedAt: "2026-06-05T00:00:00.000Z",
       targets: {},
       changes: {},
@@ -541,7 +541,7 @@ describe("code capabilities extra coverage", () => {
     expect(contractRead).toMatchObject({
       ok: true,
       status: 200,
-      protocolVersion: "pact.codespace.v1",
+      protocolVersion: "v0.0.1:platform:codespace-1",
       operationId: "codespace.repository.status",
       provider: "github",
       adapter: "RepositoryPort",

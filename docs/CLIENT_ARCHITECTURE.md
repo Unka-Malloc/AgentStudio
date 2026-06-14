@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: Pact Client Architecture.
 - Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
@@ -25,11 +25,24 @@ cannot enter product navigation, CLI, build, or package plan.
 
 Pact Client is a lightweight local environment manager. It is responsible for
 visual MCP configuration, local Skill Hub management, model request forwarding,
-and target-specific adapter flows for OpenClaw, Claude Code, Codex, Gemini CLI,
-Antigravity, OpenCode, Copilot, Kilo Code, Cursor, Hermes Agent, and Windsurf.
+mobile pairing relay, and target-specific adapter flows for OpenClaw, Claude Code, Codex,
+Antigravity, OpenCode, Copilot, Kilo Code, Cursor, and Hermes Agent.
 
 Pact Client is not an agent harness, network proxy, permission broker, local
 analysis engine, or universal MCP aggregation gateway.
+
+Runtime ownership is split deliberately:
+
+- `client-cli` / `pact-client` is the native runtime boundary. Local discovery,
+  target adapter IO, portable data reads/writes, activity/snapshot reads,
+  native agent history discovery, model forwarding, and mobile relay network
+  calls must be executable from CLI commands.
+- Flutter is a presentation shell. It may launch `pact-client`, parse returned
+  JSON, keep transient widget/controller state, and render controls. It must
+  not implement mobile relay HTTP calls, conversation file storage, activity
+  parsing, or target adapter business logic directly.
+- Agent integrations should prefer `pact-client` commands over private Flutter
+  APIs, so local agents and the UI share the same behavior and failure modes.
 
 The client keeps the user's local machine understandable without becoming a
 second agent framework. It helps users see and edit what would otherwise be
@@ -68,6 +81,7 @@ The main client should be organized around a small set of first-level modules:
 | MCP Plugins | Manage Pact MCP and other configured MCP entries as peer plugins, including install, version display, update trigger, rollback trigger, and target-specific config fields. |
 | Skill Hub | Store, sync, verify, version, pin, hide, delete, and expose Skills as a passive local repository. |
 | Model Forwarding | Configure model endpoints and forward thin requests through existing MCP/plugin/server capabilities without owning agent orchestration. |
+| Mobile Relay | Pair a phone app with this PC client, use a token-protected relay gateway, and execute a small whitelist of local client commands on the PC. |
 | Activity And Snapshots | Show every configuration write, Skill sync, visibility change, version pin, update trigger, rollback, conflict, and snapshot. |
 | Settings | Configure known paths, manual binaries, local repository location, server profile, and client preferences. |
 
@@ -75,7 +89,7 @@ The client must not retain a server-console-style information architecture as
 the main product. Existing HTTP panels, upload queues, DataConnector pages,
 Mail import flows, knowledge graph pages, checkpoint views, and local daemon
 surfaces are outside the current client boundary. They must be removed unless a
-new explicit design decision reclassifies them into the six-module
+new explicit design decision reclassifies them into the seven-module
 architecture.
 
 ## 4. Out-of-Band MCP Configuration
@@ -98,8 +112,8 @@ Rules:
 
 Pact Client adapts external frameworks. The adapter layer should understand the
 real configuration shape and operational expectations of each first-class target:
-OpenClaw, Claude Code, Codex, Gemini CLI, Antigravity, OpenCode, Copilot,
-Kilo Code, Cursor, Hermes Agent, and Windsurf.
+OpenClaw, Claude Code, Codex, Antigravity, OpenCode, Copilot,
+Kilo Code, Cursor, and Hermes Agent.
 
 This target set is already decided and must not be reopened as a P0 scope
 question. New targets require an explicit implementation decision and verifier
@@ -149,6 +163,33 @@ Rules:
 - Manual entries are first-class and should be tracked with the same snapshot,
   conflict, and activity records as discovered entries.
 
+## 6A. Native Agent History
+
+The Agents workspace may show conversation history, but the source of truth is
+the native history store of each supported agent framework. `pact-client
+conversations list --agent <target>` must scan target-specific known locations
+for Codex, Antigravity, Claude Code, Cursor, OpenCode, OpenClaw, Copilot, Kilo
+Code, and Hermes Agent, then return a read-only `native-history` JSON result
+produced by a target-specific adapter.
+
+Rules:
+
+- Do not create a Pact-local conversation database as a fallback.
+- Each supported target must have an explicit history adapter. Generic JSON,
+  JSONL, text, and SQLite parsers may be shared implementation utilities, but
+  they must run behind the selected target adapter and must return
+  `adapterId`, `nativeSessionId`, `sourceKind`, `sourcePath`, and
+  `importMode: precise-adapter`.
+- Import means a precise read-only Pact JSON projection of the source-agent
+  conversation. The command must not rewrite, delete, or normalize source-agent
+  history files in place.
+- Do not crawl the user's whole home directory. Search only explicit
+  target-known paths and user-provided history roots.
+- Flutter renders the returned sessions and messages only; parsing, path
+  selection, SQLite/JSON/JSONL/text handling, and limits belong in Rust CLI.
+- Target-specific schema adapters can be refined behind this command without
+  changing Flutter's data contract.
+
 ## 7. Thin Model Forwarding
 
 The model configuration in Pact Client exists to forward requests, not to build
@@ -171,6 +212,64 @@ Disallowed behavior:
   or local tool execution chain.
 - No client-side business implementation that should live in a server script,
   MCP plugin, or Skill.
+
+## 7A. Mobile Relay Pairing
+
+Pact Client may pair with a phone app through a lightweight relay gateway. The
+gateway stores pairing state, short-lived pairing codes, token-protected command
+queues, and command results. The PC client remains responsible for local agent
+discovery and local command execution.
+
+Rules:
+
+- Default gateway selection uses the Pact relay URL from client configuration.
+- Users can switch the gateway URL to a private cloud endpoint.
+- PC-side pairing, check-in, polling, command execution, completion, and result
+  handling must be available through `pact-client mobile relay ...` commands.
+- Flutter must call those CLI commands and display their JSON results; it must
+  not call `/api/mobile-relay/*` directly.
+- The relay gateway must not execute local PC actions or connect directly to
+  local intelligent agents.
+- The PC client must only execute whitelisted command types from the relay:
+  target scan, read-only native agent session list, and target-runtime message
+  send.
+- A paired phone can request `agent.sessions.list`; the PC client must execute
+  that command through the same per-agent native history adapters used by the
+  desktop UI and return the precise imported sessions through the relay result.
+- A paired phone can request `agent.message.send`; the PC client must execute
+  that command through `pact-client agent message send` and the selected
+  target-specific runtime adapter. Pact Client may provide a CLI bridge, but it
+  must not become the planner, hidden harness, or approval owner.
+- Pact Client must not create synthetic local conversations to stand in for
+  Codex, Antigravity, Claude Code, Cursor, or other source-agent histories.
+  Runtime responses must come from the target adapter result, not from local
+  history projection.
+- Pairing tokens must be stored under portable client data and must not be
+  printed into logs or UI diagnostics.
+
+## 7B. Runtime Protocol Adapters
+
+Runtime protocol adapters let Pact Client pass a user prompt to an existing
+local intelligent-agent runtime without owning the agent loop. The public CLI is
+`pact-client agent message send --agent <target> --text <prompt>`.
+
+Rules:
+
+- Each supported runtime target must resolve through an explicit adapter id.
+- Default CLI adapters are allowed only when the target has a scriptable
+  non-interactive command. Codex uses `codex exec`, OpenCode uses `opencode
+  run`, and Copilot uses `copilot --prompt`.
+- For targets without a stable scriptable protocol in this client version,
+  the adapter must return a clear configuration-required error unless the user
+  provides an explicit `--command/--args` protocol configuration.
+- Runtime commands must be launched as argv arrays, not shell strings.
+- Default adapters must not enable dangerous auto-approval flags. Tool approval
+  belongs to the target runtime.
+- The desktop conversation composer must call `pact-client agent message send`;
+  the history list remains a read-only projection of native agent history
+  adapters and must not append Pact-local shadow messages.
+- Mobile relay `agent.message.send` must call this same CLI/runtime adapter
+  path and return the adapter result through the relay command completion.
 
 ## 8. Pact MCP Plugin Lifecycle
 

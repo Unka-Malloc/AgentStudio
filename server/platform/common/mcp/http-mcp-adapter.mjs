@@ -8,21 +8,26 @@ import {
 
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
 export const DEFAULT_TIMEOUT_MS = 300_000;
-export const MCP_INTERFACE_VERSION = "pact.mcp.v1";
+export const MCP_INTERFACE_VERSION = "v0.0.1:mcp:interface-1";
 export const MCP_TOOLSET_VERSION = "2026-05-25.1";
-export const MCP_STABLE_TOOL_NAME = "pact.call";
 export const MCP_DISCOVERY_TOOL_NAME = "pact.discovery";
-export const MCP_KNOWLEDGE_TOOL_NAME = "pact.knowledge";
+export const MCP_AGENT_LIBRARY_TOOL_NAME = "pact.agentLibrary";
+export const MCP_KNOWLEDGE_TOOL_NAME = MCP_AGENT_LIBRARY_TOOL_NAME;
 export const MCP_SHAREDSPACE_TOOL_NAME = "pact.sharedspace";
 export const MCP_CODESPACE_TOOL_NAME = "pact.codespace";
 export const MCP_SKILL_HUB_TOOL_NAME = "pact.skillHub";
+export const MCP_AGENT_RELAY_TOOL_NAME = "pact.agentRelay";
+export const MCP_SERVICE_HUB_TOOL_NAME = "pact.serviceHub";
+export const MCP_STABLE_TOOL_NAME = MCP_DISCOVERY_TOOL_NAME;
 
 const CATEGORIZED_TOOL_NAMES = new Set([
   MCP_DISCOVERY_TOOL_NAME,
-  MCP_KNOWLEDGE_TOOL_NAME,
+  MCP_AGENT_LIBRARY_TOOL_NAME,
   MCP_SHAREDSPACE_TOOL_NAME,
   MCP_CODESPACE_TOOL_NAME,
-  MCP_SKILL_HUB_TOOL_NAME
+  MCP_SKILL_HUB_TOOL_NAME,
+  MCP_AGENT_RELAY_TOOL_NAME,
+  MCP_SERVICE_HUB_TOOL_NAME
 ]);
 
 const ACCEPTED_OUTLET_TOOL_NAMES = new Set([
@@ -47,14 +52,12 @@ export const MCP_CLIENT_TARGETS = Object.freeze([
   { target: "openclaw", label: "OpenClaw", priority: true, installMode: "openclaw-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
   { target: "claude-code", label: "Claude Code", priority: true, installMode: "claude-code-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
   { target: "codex", label: "Codex", priority: true, installMode: "codex-release-plugin-and-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
-  { target: "gemini-cli", label: "Gemini CLI", priority: false, installMode: "gemini-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
   { target: "antigravity", label: "Antigravity", priority: false, installMode: "antigravity-release-mcp-config", locations: ["local"] },
   { target: "opencode", label: "OpenCode", priority: true, installMode: "opencode-release-mcp-config", locations: ["local", "orbstack", "remote-linux"] },
   { target: "copilot", label: "Copilot", priority: false, installMode: "copilot-release-mcp-cli", locations: ["local", "orbstack", "remote-linux"] },
   { target: "kilo-code", label: "Kilo Code", priority: false, installMode: "kilo-release-global-kilo-json", locations: ["local", "orbstack", "remote-linux"] },
   { target: "cursor", label: "Cursor", priority: false, installMode: "cursor-release-mcp-config", locations: ["local"] },
-  { target: "hermes", label: "Hermes Agent", priority: false, installMode: "hermes-remote-mcp-cli", locations: ["orbstack", "remote-linux"] },
-  { target: "windsurf", label: "Windsurf", priority: false, installMode: "windsurf-release-mcp-config", locations: ["local"] }
+  { target: "hermes", label: "Hermes Agent", priority: false, installMode: "hermes-remote-mcp-cli", locations: ["orbstack", "remote-linux"] }
 ]);
 export const MCP_PRIORITY_INSTALL_TARGETS = Object.freeze(["claude-code", "codex", "openclaw"]);
 const MCP_PRIORITY_INSTALL_TARGET = MCP_PRIORITY_INSTALL_TARGETS.join(",");
@@ -233,8 +236,8 @@ function relayChildOperationFromMcpCall({
     envelope.traceId
   );
   return {
-    schemaVersion: 1,
-    binding: "pact.acp-agent-relay.child-operation.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    binding: "v0.0.1:agent:acp-agent-relay-child-operation-1",
     relaySessionId: canonical.relaySessionId || requested.relaySessionId,
     relayTurnId: canonical.relayTurnId || requestedRelayTurnId,
     virtualAgentId: canonical.virtualAgentId || requested.virtualAgentId,
@@ -284,6 +287,24 @@ function mcpSubjectFromGrant(grant = null) {
   };
 }
 
+function mcpAuthSessionFromGrant(grant = null) {
+  const subject = mcpSubjectFromGrant(grant);
+  if (subject.type !== "tool-grant" || !subject.subjectId) {
+    return null;
+  }
+  return {
+    user: {
+      type: "tool-grant",
+      roleId: "tool-grant",
+      userId: subject.subjectId,
+      subjectId: subject.subjectId,
+      username: subject.label || subject.subjectId,
+      scopes: subject.scopes,
+      toolsets: subject.toolsets
+    }
+  };
+}
+
 function parseRequestBody(requestBody) {
   if (!requestBody || requestBody.length === 0) {
     return {};
@@ -293,10 +314,12 @@ function parseRequestBody(requestBody) {
 
 const MCP_OUTLET_METADATA = Object.freeze({
   [MCP_DISCOVERY_TOOL_NAME]: { toolName: MCP_DISCOVERY_TOOL_NAME, architectureCategory: "Discovery" },
-  [MCP_KNOWLEDGE_TOOL_NAME]: { toolName: MCP_KNOWLEDGE_TOOL_NAME, architectureCategory: "Knowledge" },
-  [MCP_SHAREDSPACE_TOOL_NAME]: { toolName: MCP_SHAREDSPACE_TOOL_NAME, architectureCategory: "Sharedspace" },
-  [MCP_CODESPACE_TOOL_NAME]: { toolName: MCP_CODESPACE_TOOL_NAME, architectureCategory: "Codespace" },
-  [MCP_SKILL_HUB_TOOL_NAME]: { toolName: MCP_SKILL_HUB_TOOL_NAME, architectureCategory: "Skill Hub" }
+  [MCP_AGENT_LIBRARY_TOOL_NAME]: { toolName: MCP_AGENT_LIBRARY_TOOL_NAME, architectureCategory: "Agent Library" },
+  [MCP_SHAREDSPACE_TOOL_NAME]: { toolName: MCP_SHAREDSPACE_TOOL_NAME, architectureCategory: "Shared Space" },
+  [MCP_CODESPACE_TOOL_NAME]: { toolName: MCP_CODESPACE_TOOL_NAME, architectureCategory: "Code Space" },
+  [MCP_SKILL_HUB_TOOL_NAME]: { toolName: MCP_SKILL_HUB_TOOL_NAME, architectureCategory: "Skill Hub" },
+  [MCP_AGENT_RELAY_TOOL_NAME]: { toolName: MCP_AGENT_RELAY_TOOL_NAME, architectureCategory: "Agent Relay" },
+  [MCP_SERVICE_HUB_TOOL_NAME]: { toolName: MCP_SERVICE_HUB_TOOL_NAME, architectureCategory: "ServiceHub" }
 });
 
 const MCP_SHAREDSPACE_CORE_OPERATIONS = Object.freeze([
@@ -311,9 +334,25 @@ const MCP_SHAREDSPACE_CORE_OPERATIONS = Object.freeze([
   "pact.sharedspace.sync.apply"
 ]);
 
+const MCP_AGENT_RELAY_OPERATION_NAMES = Object.freeze([
+  "pact.agentRelay.templates.list",
+  "pact.agentRelay.virtualAgents.list",
+  "pact.agentRelay.targets.list",
+  "pact.agentRelay.session.create",
+  "pact.agentRelay.prompt",
+  "pact.agentRelay.cancel",
+  "pact.agentRelay.session.close"
+]);
+
+const MCP_AGENT_RELAY_TEMPLATE_IDS = Object.freeze([
+  "custom-cli-target.upsert",
+  "session.create",
+  "prompt.send"
+]);
+
 function sharedspaceExchangeReceiptContract() {
   return {
-    schemaVersion: "pact.mcp.sharedspace-exchange.v1",
+    schemaVersion: "v0.0.1:mcp:sharedspace-exchange-1",
     locations: [
       "structuredContent.exchange",
       "notifications/pact/operation_reply.params.exchange"
@@ -355,8 +394,18 @@ function mcpOutletForTool(tool = {}) {
   if (/^(tool_management\.|knowledge\.skills\.|knowledge\.agent_skill\.|workspace\.skill\.|capability_packages\.)/i.test(id)) {
     return MCP_OUTLET_METADATA[MCP_SKILL_HUB_TOOL_NAME];
   }
-  if (/^external\.mcp\./i.test(id) || aspects.includes("external-mcp-passthrough") || aspects.includes("skill-hub")) {
-    return MCP_OUTLET_METADATA[MCP_SKILL_HUB_TOOL_NAME];
+  if (/^acp_agent_relay\./i.test(id) || /^pact\.agentRelay\./i.test(publicName)) {
+    return MCP_OUTLET_METADATA[MCP_AGENT_RELAY_TOOL_NAME];
+  }
+  if (
+    /^external\.(mcp|http|rpc)\./i.test(id) ||
+    aspects.includes("external-mcp-passthrough") ||
+    aspects.includes("external-http-compile") ||
+    aspects.includes("external-rpc-compile") ||
+    aspects.includes("external-upstream-gateway") ||
+    aspects.includes("service-hub")
+  ) {
+    return MCP_OUTLET_METADATA[MCP_SERVICE_HUB_TOOL_NAME];
   }
   if (/^(repo\.|gerrit\.|github\.|workspace\.code\.)/i.test(id) || /\b(repo|repository|codespace|gerrit|github)\b/.test(text)) {
     return MCP_OUTLET_METADATA[MCP_CODESPACE_TOOL_NAME];
@@ -365,7 +414,7 @@ function mcpOutletForTool(tool = {}) {
     return MCP_OUTLET_METADATA[MCP_SHAREDSPACE_TOOL_NAME];
   }
   if (/^knowledge\./i.test(id) || /\b(knowledge|evidence|asset|dossier|distillation)\b/.test(text)) {
-    return MCP_OUTLET_METADATA[MCP_KNOWLEDGE_TOOL_NAME];
+    return MCP_OUTLET_METADATA[MCP_AGENT_LIBRARY_TOOL_NAME];
   }
   return MCP_OUTLET_METADATA[MCP_DISCOVERY_TOOL_NAME];
 }
@@ -388,6 +437,63 @@ function mcpOutletSummary(operations = []) {
     outlet.operations.push(operation.name);
   }
   return outlets;
+}
+
+function agentRelayCapabilityFamily({ operations = [] } = {}) {
+  const operationNames = new Set(operations.map((operation) => String(operation?.name || "")));
+  const visibleOperations = MCP_AGENT_RELAY_OPERATION_NAMES.filter((name) => operationNames.has(name));
+  const canView = operationNames.has("pact.agentRelay.templates.list") ||
+    operationNames.has("pact.agentRelay.virtualAgents.list");
+  const canOperate = operationNames.has("pact.agentRelay.session.create") &&
+    operationNames.has("pact.agentRelay.prompt");
+  return {
+    id: "agent-relay",
+    title: "Pact ACP Agent Relay",
+    protocol: "v0.0.1:agent:acp-agent-relay-1",
+    mcpOutlet: MCP_AGENT_RELAY_TOOL_NAME,
+    discoveryTool: MCP_DISCOVERY_TOOL_NAME,
+    summary: "Use Pact to delegate a governed prompt turn from this MCP client to another agent framework through native ACP when available, or a read-only local CLI fallback when explicitly registered.",
+    available: visibleOperations.length > 0,
+    canView,
+    canOperate,
+    nativeAcpPreferred: true,
+    cliFallbackPolicy: "degraded-read-only-explicit-target",
+    templateOperation: "pact.agentRelay.templates.list",
+    templateIds: [...MCP_AGENT_RELAY_TEMPLATE_IDS],
+    primaryFlow: [
+      {
+        step: "discover_templates",
+        tool: MCP_AGENT_RELAY_TOOL_NAME,
+        operation: "pact.agentRelay.templates.list",
+        input: {}
+      },
+      {
+        step: "list_virtual_agents",
+        tool: MCP_AGENT_RELAY_TOOL_NAME,
+        operation: "pact.agentRelay.virtualAgents.list",
+        input: {}
+      },
+      {
+        step: "create_session",
+        tool: MCP_AGENT_RELAY_TOOL_NAME,
+        operation: "pact.agentRelay.session.create",
+        inputFromTemplate: "session.create"
+      },
+      {
+        step: "send_prompt",
+        tool: MCP_AGENT_RELAY_TOOL_NAME,
+        operation: "pact.agentRelay.prompt",
+        inputFromTemplate: "prompt.send"
+      }
+    ],
+    visibleOperations
+  };
+}
+
+function mcpCapabilityFamilies({ operations = [] } = {}) {
+  return {
+    agentRelay: agentRelayCapabilityFamily({ operations })
+  };
 }
 
 function mcpOutletForOperation({ operation = "", toolSkillManagementProvider, authorization = null } = {}) {
@@ -547,7 +653,7 @@ function pactCategorizedTools() {
       },
       operation: {
         type: "string",
-        description: "Concrete Pact operation id to execute, for example 'pact.knowledge.health'. Do not use an outlet tool name itself here, such as 'pact.discovery' or 'pact.knowledge'. If unsure, first call tool 'pact.discovery' with operation 'pact.capabilities.list' and then use one returned operations[].name value."
+        description: "Concrete Pact operation id to execute, for example 'pact.agentLibrary.health'. Do not use an outlet tool name itself here, such as 'pact.discovery' or 'pact.agentLibrary'. If unsure, first call tool 'pact.discovery' with operation 'pact.capabilities.list' and then use one returned operations[].name value."
       },
       input: {
         type: "object",
@@ -613,7 +719,7 @@ function pactCategorizedTools() {
     {
       name: MCP_DISCOVERY_TOOL_NAME,
       title: "Pact Discovery",
-      description: "Discovery outlet/router for capability discovery, tool descriptions, doctor checks, available commands, and connection state. Start here with operation='pact.capabilities.list', then use one returned operations[].name as the operation value for a Pact outlet.",
+      description: "Discovery outlet/router for capability discovery, tool descriptions, doctor checks, available commands, connection state, and Pact ACP Agent Relay availability. Start here with operation='pact.capabilities.list', then use one returned operations[].name as the operation value for a Pact outlet.",
       inputSchema: commonSchema,
       annotations: { readOnlyHint: true, destructiveHint: false },
       _meta: {
@@ -622,14 +728,14 @@ function pactCategorizedTools() {
       }
     },
     {
-      name: MCP_KNOWLEDGE_TOOL_NAME,
-      title: "Pact Knowledge",
-      description: "AgentLibrary-governed Knowledge outlet/router for search, evidence, asset, and export operations. Do not call operation='pact.knowledge'. First discover concrete operation ids by calling tool 'pact.discovery' with operation='pact.capabilities.list'.",
+      name: MCP_AGENT_LIBRARY_TOOL_NAME,
+      title: "Pact Agent Library",
+      description: "AgentLibrary outlet/router for governed team assets, search, evidence, asset, and export operations. Do not call operation='pact.agentLibrary'. First discover concrete operation ids by calling tool 'pact.discovery' with operation='pact.capabilities.list'.",
       inputSchema: commonSchema,
       annotations: { readOnlyHint: true, destructiveHint: false },
       _meta: {
         ...toolMeta,
-        architectureCategory: "Knowledge"
+        architectureCategory: "Agent Library"
       }
     },
     {
@@ -640,7 +746,7 @@ function pactCategorizedTools() {
       annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: {
         ...toolMeta,
-        architectureCategory: "Sharedspace"
+        architectureCategory: "Shared Space"
       }
     },
     {
@@ -651,18 +757,40 @@ function pactCategorizedTools() {
       annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: {
         ...toolMeta,
-        architectureCategory: "Codespace"
+        architectureCategory: "Code Space"
       }
     },
     {
       name: MCP_SKILL_HUB_TOOL_NAME,
       title: "Pact Skill Hub",
-      description: "Skill Hub outlet/router for skills, tools, toolsets, grants, risk, policy, and audit operations. Do not call operation='pact.skillHub'. First discover concrete operation ids by calling tool 'pact.discovery' with operation='pact.capabilities.list'.",
+      description: "Skill Hub outlet/router for skills, tools, toolsets, grants, risk, policy, audit, and governed ACP Agent Relay operations. Do not call operation='pact.skillHub'. First discover concrete operation ids by calling tool 'pact.discovery' with operation='pact.capabilities.list'.",
       inputSchema: commonSchema,
       annotations: { readOnlyHint: false, destructiveHint: false },
       _meta: {
         ...toolMeta,
         architectureCategory: "Skill Hub"
+      }
+    },
+    {
+      name: MCP_AGENT_RELAY_TOOL_NAME,
+      title: "Pact Agent Relay",
+      description: "Agent Relay outlet/router for governed ACP relay templates, virtual agents, sessions, prompts, cancellation, and session close operations. Do not call operation='pact.agentRelay'. First discover concrete operation ids by calling tool 'pact.discovery' with operation='pact.capabilities.list'.",
+      inputSchema: commonSchema,
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      _meta: {
+        ...toolMeta,
+        architectureCategory: "Agent Relay"
+      }
+    },
+    {
+      name: MCP_SERVICE_HUB_TOOL_NAME,
+      title: "Pact ServiceHub",
+      description: "ServiceHub outlet/router for invoking governed external services that have already been registered and adopted. It is not a registration surface. Do not call operation='pact.serviceHub'. First discover concrete operation ids by calling tool 'pact.discovery' with operation='pact.capabilities.list'.",
+      inputSchema: commonSchema,
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      _meta: {
+        ...toolMeta,
+        architectureCategory: "ServiceHub"
       }
     }
   ];
@@ -675,7 +803,19 @@ function mcpVersionInfo() {
     serverVersion: MCP_SERVER_VERSION,
     stableToolName: MCP_STABLE_TOOL_NAME,
     categorizedOutlets: Array.from(CATEGORIZED_TOOL_NAMES),
-    capabilitiesSummary: "Pact MCP Plugin capability layer. Outlets: Discovery, Knowledge, Sharedspace, Codespace, and Skill Hub.",
+    capabilitiesSummary: "Pact MCP Plugin capability layer. Outlets: Discovery, Agent Library, Shared Space, Code Space, Skill Hub, Agent Relay, and ServiceHub.",
+    capabilityFamilies: {
+      agentRelay: {
+        id: "agent-relay",
+        title: "Pact ACP Agent Relay",
+        protocol: "v0.0.1:agent:acp-agent-relay-1",
+        discoveryOperation: "pact.capabilities.list",
+        templateOperation: "pact.agentRelay.templates.list",
+        mcpOutlet: MCP_AGENT_RELAY_TOOL_NAME,
+        nativeAcpPreferred: true,
+        cliFallbackPolicy: "degraded-read-only-explicit-target"
+      }
+    },
     listChanged: true,
     upgradeNotification: "notifications/tools/list_changed",
     connector: {
@@ -935,9 +1075,9 @@ export function buildPactMcpDiscovery({ listenUrl = "", discoveryState = null } 
   const clientTargets = mcpClientTargetGuides({ baseUrl, vmBaseUrl, githubOneLineCommand, githubOneLineCommandZhCN });
   const supportedTargets = mcpSupportedTargetDetails();
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     name: "Pact",
-    description: "Pact MCP Plugin capability layer. Provides five architecture outlets for Discovery, Knowledge, Sharedspace, Codespace, and Skill Hub.",
+    description: "Pact MCP Plugin capability layer. Provides seven architecture outlets for Discovery, Agent Library, Shared Space, Code Space, Skill Hub, Agent Relay, and ServiceHub.",
     interfaceVersion: MCP_INTERFACE_VERSION,
     toolsetVersion: MCP_TOOLSET_VERSION,
     serverVersion: MCP_SERVER_VERSION,
@@ -960,7 +1100,7 @@ export function buildPactMcpDiscovery({ listenUrl = "", discoveryState = null } 
       entrypoint: {
         command: discoverCommand,
         registryFile: PACT_MCP_DISCOVERY_FILE,
-        schemaVersion: "pact.mcp.device-hub.v1"
+        schemaVersion: "v0.0.1:mcp:device-hub-1"
       },
       env: {
         [PACT_MCP_URL_ENV]: `${baseUrl}/mcp`,
@@ -1089,30 +1229,6 @@ export function buildPactMcpDiscovery({ listenUrl = "", discoveryState = null } 
         }
       }
     },
-    geminiCli: {
-      mcpServers: {
-        pact: {
-          url: `${baseUrl}/mcp`,
-          type: "http",
-          headers: {
-            "X-Pact-Api-Key": "${PACT_MCP_TOKEN}"
-          },
-          timeout: DEFAULT_TIMEOUT_MS,
-          trust: true
-        }
-      }
-    },
-    geminiExtension: {
-      mcpServers: {
-        pact: {
-          httpUrl: `${baseUrl}/mcp`,
-          headers: {
-            "X-Pact-Api-Key": "${PACT_MCP_TOKEN}"
-          },
-          timeout: DEFAULT_TIMEOUT_MS
-        }
-      }
-    },
     auth: {
       type: "pact_tool_management_token",
       acceptedHeaders: ["Authorization: Bearer <token>", "X-Pact-Api-Key"],
@@ -1122,12 +1238,12 @@ export function buildPactMcpDiscovery({ listenUrl = "", discoveryState = null } 
       ? publicMcpIdentity(discoveryState.mcpIdentity)
       : null,
     handshake: {
-      schemaVersion: "pact.mcp.handshake.v1",
+      schemaVersion: "v0.0.1:mcp:handshake-1",
       method: "POST",
       url: `${baseUrl}/api/mcp/handshake`,
       nonceBytes: 32,
       signatureAlgorithm: "Ed25519",
-      signaturePayloadEncoding: "pact.stable-json.v1"
+      signaturePayloadEncoding: "v0.0.1:platform:stable-json-1"
     }
   };
 }
@@ -1212,13 +1328,14 @@ function mcpToolResult(payload) {
 }
 
 function normalizeMcpSubject(value, authorization) {
+  const authenticatedSubject = mcpSubjectFromGrant(authorization?.grant || null);
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return {
-      ...mcpSubjectFromGrant(authorization?.grant || null),
-      ...value
+      ...authenticatedSubject,
+      declaredSubject: publicMcpEnvelopeValue(value)
     };
   }
-  return mcpSubjectFromGrant(authorization?.grant || null);
+  return authenticatedSubject;
 }
 
 function normalizeMcpOperationEnvelope(input, authorization) {
@@ -1238,7 +1355,7 @@ function normalizeMcpOperationEnvelope(input, authorization) {
   if (!operation) {
     return {
       ok: false,
-      error: jsonRpcError(null, -32602, "pact.call requires arguments.operation.", {
+      error: jsonRpcError(null, -32602, "Pact MCP outlet calls require arguments.operation.", {
         expectedApiVersion: MCP_INTERFACE_VERSION
       })
     };
@@ -1417,7 +1534,7 @@ async function pactMetaResult({
     const skillCatalog = typeof toolSkillManagementProvider.listVisibleSkills === "function"
       ? await toolSkillManagementProvider.listVisibleSkills({ authorization })
       : {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           status: "unavailable",
           summary: { activeSkillCount: 0, visibleSkillCount: 0 },
           skills: []
@@ -1432,11 +1549,13 @@ async function pactMetaResult({
       };
     }
     const runtime = mcpRuntimeMetadata({ listenUrl, discoveryState });
+    const capabilityFamilies = mcpCapabilityFamilies({ operations });
     return mcpToolResult({
       result: {
         ...runtime,
         grant: toolSkillManagementProvider.visibleGrantSummary({ authorization }),
         envelope: mcpEnvelopePublic(envelope),
+        capabilityFamilies,
         outlets,
         skillCatalog,
         operations
@@ -1598,7 +1717,7 @@ function inferMcpTargetReceipt({ operation = "", input = {}, payload = {}, envel
     findFirstDeepString(payload, ["changeRef", "changeId", "changeNumber"])
   ]);
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     targetKind,
     targetProvider: provider,
     targetRef: firstString([
@@ -1696,7 +1815,7 @@ function inferSharedspaceExchangeReceipt({ operation = "", input = {}, payload =
     action = "item-deleted";
   }
   return {
-    schemaVersion: "pact.mcp.sharedspace-exchange.v1",
+    schemaVersion: "v0.0.1:mcp:sharedspace-exchange-1",
     action,
     outlet: MCP_SHAREDSPACE_TOOL_NAME,
     referencePolicy: "use-public-workspace-ref",
@@ -1774,7 +1893,7 @@ export function broadcastMcpToolListChanged({
   const scopedGrantId = String(grantId || "").trim();
   const safeReason = publicMcpEnvelopeString(reason || reasonCode || "Pact MCP tool catalog changed.");
   const change = publicMcpEnvelopeValue({
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     reasonCode: String(reasonCode || "tool_list_changed"),
     grantId: scopedGrantId,
     changedAt: new Date().toISOString(),
@@ -1800,7 +1919,7 @@ function broadcastMcpOperationReply({ envelope, operation, status, target, excha
     ? `已完成 ${operation} 任务`
     : `${operation} 任务执行失败`;
   broadcastMcpNotification(jsonRpcNotification("notifications/pact/operation_reply", {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     status,
     operation,
     message,
@@ -1898,8 +2017,8 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider,
     }
     
     let parsedCall;
-    if (toolName !== MCP_STABLE_TOOL_NAME && !ACCEPTED_OUTLET_TOOL_NAMES.has(toolName)) {
-      return jsonRpcError(id, -32601, `Method not found. Please use the categorized outlets (e.g., '${MCP_DISCOVERY_TOOL_NAME}' or '${MCP_KNOWLEDGE_TOOL_NAME}') for all operations.`, {
+    if (!ACCEPTED_OUTLET_TOOL_NAMES.has(toolName)) {
+      return jsonRpcError(id, -32601, `Method not found. Please use the categorized outlets (e.g., '${MCP_DISCOVERY_TOOL_NAME}' or '${MCP_AGENT_LIBRARY_TOOL_NAME}') for all operations.`, {
         code: "method_not_found",
         stableToolName: MCP_STABLE_TOOL_NAME,
         categorizedOutlets: Array.from(CATEGORIZED_TOOL_NAMES)
@@ -1947,20 +2066,18 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider,
         })
       };
     }
-    if (toolName !== MCP_STABLE_TOOL_NAME) {
-      const expectedOutlet = mcpOutletForOperation({
+    const expectedOutlet = mcpOutletForOperation({
+      operation: parsedCall.operation,
+      toolSkillManagementProvider,
+      authorization
+    });
+    if (expectedOutlet && expectedOutlet.toolName !== toolName) {
+      return operationOutletMismatchError({
+        id,
         operation: parsedCall.operation,
-        toolSkillManagementProvider,
-        authorization
+        requestedTool: toolName,
+        expectedOutlet
       });
-      if (expectedOutlet && expectedOutlet.toolName !== toolName) {
-        return operationOutletMismatchError({
-          id,
-          operation: parsedCall.operation,
-          requestedTool: toolName,
-          expectedOutlet
-        });
-      }
     }
     const metaResult = await pactMetaResult({
       operation: parsedCall.operation,
@@ -2002,6 +2119,7 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider,
       profileId: parsedCall.envelope.agentProfileId,
       agentProfileId: parsedCall.envelope.agentProfileId,
       subject: parsedCall.envelope.subject,
+      authSession: mcpAuthSessionFromGrant(authorization.grant || null),
       workspaceId: parsedCall.envelope.workspaceId,
       intent: parsedCall.envelope.intent,
       idempotencyKey: parsedCall.envelope.idempotencyKey,
@@ -2123,7 +2241,7 @@ async function handleMcpMessage({ message, request, toolSkillManagementProvider,
     }));
   }
 
-  return jsonRpcError(id, -32601, `MCP method not found: ${method}`);
+  return jsonRpcError(id, -32601, "MCP method not found.");
 }
 
 export async function handlePactMcpHttpRequest({

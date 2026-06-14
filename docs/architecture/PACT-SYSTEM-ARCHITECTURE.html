@@ -912,7 +912,7 @@
       </div>
       <div class="meta">
         <span>历史基线：2026-05-19</span>
-        <span>状态：外观层 / 应用层 / 切面层 / 能力层口径已调整</span>
+        <span>状态：外观层 / 应用层 / 切面层 / 能力层口径已调整；基建层版本治理模块已补齐</span>
         <span>范围：Pact 内部结构</span>
       </div>
     </header>
@@ -1402,7 +1402,7 @@
                     <div class="module-tile">
                       <strong>Code Review</strong>
                       <span class="status-pill is-removable">Optional</span>
-                      <code>pact.code-review.v1</code>
+                      <code>v0.0.1:platform:code-review-1</code>
                       <ul>
                         <li>Gerrit route</li>
                         <li>review 状态同步</li>
@@ -1732,6 +1732,63 @@
                       <li>composition graph</li>
                       <li>provider / feature binding</li>
                       <li>fallback resolution / health gate</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="module-tile">
+                <strong>版本治理</strong>
+                <span class="status-pill is-fixed">Essential</span>
+                <code>version-control</code>
+                <div class="module-subgrid">
+                  <div class="module-subtile">
+                    <strong>版本事实源</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>version-registry</code>
+                    <ul>
+                      <li>source singleton registry</li>
+                      <li>version registry schema</li>
+                      <li>format v0.0.1:version-governance:registry-schema-1</li>
+                      <li>platform / protocol / schema version</li>
+                      <li>capability / dependency version</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>迁移路径</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>migration-path-config</code>
+                    <ul>
+                      <li>fromVersion -> toVersion</li>
+                      <li>相邻版本迁移规则</li>
+                      <li>transition lifecycle state machine</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>兼容投影</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>compatibility-projection</code>
+                    <ul>
+                      <li>compatibility table</li>
+                      <li>active / retired version view</li>
+                      <li>compatibility window</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>版本证据</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>version-evidence</code>
+                    <ul>
+                      <li>verifier evidence refs</li>
+                      <li>cutover / rollback receipts</li>
+                    </ul>
+                  </div>
+                  <div class="module-subtile">
+                    <strong>发布边界</strong>
+                    <span class="status-pill is-fixed">Essential</span>
+                    <code>release-boundary</code>
+                    <ul>
+                      <li>不承载 release claim</li>
+                      <li>不替代生产准入门禁</li>
                     </ul>
                   </div>
                 </div>

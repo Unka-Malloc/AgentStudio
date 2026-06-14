@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const dispatchOperationMock = vi.hoisted(() => vi.fn(async ({ response }) => {
   response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     result: { ok: true }
   }));
   return { ok: true };
@@ -124,7 +124,7 @@ function createRuntimeFixture(overrides = {}) {
       grantPolicyRevision: 1,
       grantPolicyState: "active",
       governancePolicyRevision: {
-        protocolVersion: "pact.policy.v1",
+        protocolVersion: "v0.0.1:risk-control:policy-1",
         revision: 1,
         updatedAt: "2026-06-05T00:00:00.000Z"
       }

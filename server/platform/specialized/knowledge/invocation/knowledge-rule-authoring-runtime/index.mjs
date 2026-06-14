@@ -3,8 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const KNOWLEDGE_RULE_AUTHORING_PROTOCOL_VERSION = "pact.knowledge-rule-authoring.v1";
-export const GOLDEN_RULE_TEMPLATE_PROTOCOL_VERSION = "pact.golden-rule-templates.v1";
+export const KNOWLEDGE_RULE_AUTHORING_PROTOCOL_VERSION = "v0.0.1:knowledge:rule-authoring-1";
+export const GOLDEN_RULE_TEMPLATE_PROTOCOL_VERSION = "v0.0.1:knowledge:golden-rule-templates-1";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_TEMPLATE_PATH = path.resolve(MODULE_DIR, "../../../../../config/golden-rule-templates.json");

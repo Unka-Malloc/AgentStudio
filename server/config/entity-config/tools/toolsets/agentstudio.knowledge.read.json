@@ -1,6 +1,6 @@
 {
-  "id": "pact.knowledge.read",
-  "label": "Knowledge read",
+  "id": "pact.agentLibrary.read",
+  "label": "Agent Library read",
   "requiredScopes": [
     "knowledge:read"
   ],

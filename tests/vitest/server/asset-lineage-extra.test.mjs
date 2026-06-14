@@ -93,7 +93,7 @@ describe("asset lineage coverage", () => {
     });
 
     expect(direct).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: ASSET_LINEAGE_PROTOCOL_VERSION,
       assetId: "asset-direct",
       assetType: "figure",
@@ -229,7 +229,7 @@ describe("asset lineage coverage", () => {
   it("coerces malformed stored registry shapes and surfaces invalid JSON", async () => {
     await withTempRoot(async (root) => {
       await writeRegistry(root, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: ASSET_LINEAGE_PROTOCOL_VERSION,
         updatedAt: "2026-06-01T00:00:00.000Z",
         records: [],
@@ -240,7 +240,7 @@ describe("asset lineage coverage", () => {
       const described = await registry.describe();
 
       expect(described).toMatchObject({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: ASSET_LINEAGE_PROTOCOL_VERSION,
         recordCount: 0,
         records: [],
@@ -261,7 +261,7 @@ describe("asset lineage coverage", () => {
   it("records, merges, traces, and plans reparses from stored lineage entries", async () => {
     await withTempRoot(async (root) => {
       await writeRegistry(root, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: ASSET_LINEAGE_PROTOCOL_VERSION,
         updatedAt: "2026-06-01T00:00:00.000Z",
         records: {

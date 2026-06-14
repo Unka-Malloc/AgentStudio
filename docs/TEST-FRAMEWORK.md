@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: Pact Unified Test Framework.
 - Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
@@ -44,6 +44,11 @@ The runner writes machine-readable reports to `build/test-reports/`, including
   credential state stay outside the repository under `~/.pact-server-data/`.
 - Raw agent conversation history and real mail download/import directories are
   external data and must not be kept under the project checkout.
+- Deployment tests run only in fresh containers or equivalent disposable
+  isolated environments. Local developer machines may run syntax checks,
+  unit-level verifiers, and code-path probes, but they do not establish
+  deployability for VPS, Docker image, runtime bootstrap, package-manager
+  install, external service startup, or production entrypoint behavior.
 - Downloaded evaluation corpora, real mailboxes, imported messages, and real
   document sample sets stay outside the repository under
   `~/.pact-server-data/evaluation-corpora/`. Repository tests may keep only
@@ -72,8 +77,9 @@ Coverage is supported by the standard stack. Vitest can collect V8 coverage via
 `@vitest/coverage-v8` for Node.js server modules, Vue composables, and Vue
 component tests. Playwright remains the E2E runner; it should not be the primary
 source of unit coverage, though E2E suites can still be used as release
-confidence gates. Flutter coverage continues to use `flutter test --coverage`,
-and Rust CLI coverage uses `cargo-llvm-cov`.
+confidence gates. Flutter coverage continues to use `flutter test --coverage`
+with Pact's LCOV path under `build/coverage/client-gui/`, and Rust CLI
+coverage uses `cargo-llvm-cov`.
 
 ## Coverage Baseline
 
@@ -83,7 +89,7 @@ Baseline captured on 2026-06-03:
 | --- | --- | --- | --- | --- |
 | `server` | `npm run test:node-vue:coverage` | 0.91% | 387 / 42,684 | `build/coverage/node-vue/lcov.info` filtered to `server/` |
 | `server-web` | `npm run test:node-vue:coverage` | 0.22% | 26 / 12,024 | `build/coverage/node-vue/lcov.info` filtered to `server-web/` |
-| `client-gui` | `npm run client:test:coverage` | 52.40% | 251 / 479 | `client-gui/coverage/lcov.info` |
+| `client-gui` | `npm run client:test:coverage` | 52.40% | 251 / 479 | `build/coverage/client-gui/lcov.info` |
 | `client-cli` | `npm run client:native:test:coverage` | 73.66% | 2,137 / 2,901 | `build/coverage/client-cli/lcov.info` |
 
 The `server` and `server-web` baselines come from the same Vitest LCOV report
@@ -105,7 +111,7 @@ and communication-service protocol work left for the ACP batch:
 | --- | --- | --- | --- | --- |
 | `server` non-ACP | strict non-ACP `vitest --coverage` + `PACT_UNIT_COVERAGE_NODE_VUE_REPORT=build/coverage/node-vue-non-acp-strict/lcov.info npm run test:unit-coverage:scan` | 95.01% | 40,725 / 42,866 | `build/coverage/node-vue-non-acp-strict/lcov.info` filtered to `server/`, excluding ACP relay/downstream/communication-service paths |
 | `server-web` | strict non-ACP `vitest --coverage` + `PACT_UNIT_COVERAGE_NODE_VUE_REPORT=build/coverage/node-vue-non-acp-strict/lcov.info npm run test:unit-coverage:scan` | 95.44% | 11,963 / 12,535 | `build/coverage/node-vue-non-acp-strict/lcov.info` filtered to `server-web/` |
-| `client-gui` | `npm run client:test:coverage` + `npm run test:unit-coverage:scan` | 95.73% | 561 / 586 | `client-gui/coverage/lcov.info` |
+| `client-gui` | `npm run client:test:coverage` + `npm run test:unit-coverage:scan` | 95.73% | 561 / 586 | `build/coverage/client-gui/lcov.info` |
 | `client-cli` | `npm run client:native:test:coverage` + `npm run test:unit-coverage:scan` | 95.11% | 3,696 / 3,886 | `build/coverage/client-cli/lcov.info` |
 
 ## Coverage Gate
@@ -290,6 +296,13 @@ When changing Linux packaging, GUI startup, or sidecar bundling:
 npm run test:full
 ```
 
+When changing deployment behavior, runtime bootstrap, Dockerfiles, external
+service startup, package-manager install paths, downloaded platform
+dependencies, or production entrypoint configuration, run the matching verifier
+inside a newly created container. Do not use the host machine's installed JRE,
+Python, Node.js, package-manager cache, global commands, or historical Pact data
+directory as deployment evidence.
+
 If a change intentionally updates behavior, update the matching unit or contract
 test in the same patch. If no existing suite represents the behavior, add a new
 suite to `tests/run.mjs` and document it here.
@@ -360,7 +373,7 @@ then update this list in the same patch.
   rotate/revoke storage, and MCP local grant delivery.
 - [x] `permission-management-auth-config`: enforced by the production readiness
   tool-permission gate, `npm run server:verify:console-auth`,
-  `npm run server:verify:2-3-5-security-model`,
+  `npm run server:verify:risk-control-model`,
   `npm run server:verify:tool-management`, and
   `npm run server:verify:authorization-governance`; covers client identity,
   role/policy/governance configuration, tool grants, and authorization audit.

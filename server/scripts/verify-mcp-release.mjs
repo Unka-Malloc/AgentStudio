@@ -14,14 +14,12 @@ const EXPECTED_SUPPORTED_TARGETS = Object.freeze([
   "openclaw",
   "claude-code",
   "codex",
-  "gemini-cli",
   "antigravity",
   "opencode",
   "copilot",
   "kilo-code",
   "cursor",
-  "hermes",
-  "windsurf"
+  "hermes"
 ]);
 
 async function run(command, args = [], options = {}) {
@@ -37,6 +35,25 @@ async function run(command, args = [], options = {}) {
     stdout: result.stdout || "",
     stderr: result.stderr || ""
   };
+}
+
+async function removeTempDirWithRetry(dir) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await fs.rm(dir, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100
+      });
+      return;
+    } catch (error) {
+      if (attempt === 4 || !["ENOTEMPTY", "EBUSY", "EPERM"].includes(error?.code)) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+    }
+  }
 }
 
 async function sha256(filePath) {
@@ -204,8 +221,8 @@ try {
 
   const manifest = JSON.parse(await fs.readFile(result.manifestPath, "utf8"));
   const manifestText = JSON.stringify(manifest);
-  assert.equal(manifest.packageType, "pact.mcp-connector-release.v1");
-  assert.equal(manifest.stableToolName, "pact.call");
+  assert.equal(manifest.packageType, "v0.0.1:mcp:connector-release-1");
+  assert.equal(manifest.stableToolName, "pact.discovery");
   assert.doesNotMatch(manifestText, new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.equal(Object.hasOwn(manifest.connector, "tarballPath"), false);
   assert.equal(Object.hasOwn(manifest.portable, "tarballPath"), false);
@@ -214,7 +231,7 @@ try {
   assert.equal(manifest.sharedHub.clientPolicy, "discover-shared-hub-then-opt-in");
   assert.equal(manifest.sharedHub.sharedspace.outlet, "pact.sharedspace");
   assert.equal(manifest.sharedHub.sharedspace.referencePolicy, "use-public-workspace-ref");
-  assert.equal(manifest.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+  assert.equal(manifest.sharedHub.sharedspace.exchangeReceipt.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
   assert.ok(manifest.sharedHub.sharedspace.exchangeReceipt.locations.includes("structuredContent.exchange"));
   assert.ok(manifest.sharedHub.sharedspace.exchangeReceipt.fields.includes("outlet"));
   assert.ok(manifest.sharedHub.sharedspace.exchangeReceipt.fields.includes("referencePolicy"));
@@ -329,7 +346,6 @@ try {
   assert.equal(installTargetDetails.get("codex").priority, true);
   assert.equal(installTargetDetails.get("opencode").priority, true);
   assert.equal(installTargetDetails.get("cursor").installMode, "cursor-release-mcp-config");
-  assert.equal(installTargetDetails.get("windsurf").installMode, "windsurf-release-mcp-config");
   assert.deepEqual(installTargetDetails.get("hermes").locations, ["orbstack", "remote-linux"]);
   assert.deepEqual(manifest.portable.supportedTargetDetails, manifest.install.supportedTargetDetails);
   assert.equal(manifest.upgrade.listChanged, true);
@@ -483,7 +499,7 @@ try {
   const versionPayload = JSON.parse(version.stdout);
   assert.equal(versionPayload.packageName, "pact-mcp-connector");
   assert.equal(versionPayload.packageVersion, expectedVersion);
-  assert.equal(versionPayload.stableToolName, "pact.call");
+  assert.equal(versionPayload.stableToolName, "pact.discovery");
   const help = await run("node", [path.join(extractDir, "package", "bin", "pact-mcp.mjs"), "help"]);
   assert.match(help.stdout, /pact-mcp register/);
   assert.match(help.stdout, /pact-mcp install/);
@@ -564,17 +580,7 @@ try {
   const layeredHome = path.join(tempDir, "layered-home");
   const fixtureNvmBin = path.join(layeredHome, ".nvm", "versions", "node", "v99.0.0", "bin");
   await fs.mkdir(fixtureNvmBin, { recursive: true });
-  const fixtureGemini = path.join(fixtureNvmBin, "gemini");
   const fixtureClaude = path.join(fixtureNvmBin, "claude");
-  await fs.writeFile(fixtureGemini, [
-    "#!/bin/sh",
-    "if [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"--help\" ]; then",
-    "  printf 'Usage: gemini mcp add list remove\\n'",
-    "  exit 0",
-    "fi",
-    "exit 1",
-    ""
-  ].join("\n"), { mode: 0o755 });
   await fs.writeFile(fixtureClaude, [
     "#!/bin/sh",
     "if [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"--help\" ]; then",
@@ -643,23 +649,6 @@ try {
       ""
     ].join("\n"), { mode: 0o755 });
   }
-  const plainAppGemini = path.join(layeredHome, "Applications", "Plain.app", "Contents", "Resources", "gemini");
-  const agentAppGemini = path.join(layeredHome, "Applications", "Gemini Agent.app", "Contents", "Resources", "gemini");
-  const fixtureAppGeminiHelper = path.join(layeredHome, "app-helper-bin", "gemini");
-  await fs.mkdir(path.dirname(fixtureAppGeminiHelper), { recursive: true });
-  await fs.writeFile(fixtureAppGeminiHelper, [
-    "#!/bin/sh",
-    "if [ \"$1\" = \"mcp\" ] && [ \"$2\" = \"--help\" ]; then",
-    "  printf 'Usage: gemini mcp add list remove\\n'",
-    "  exit 0",
-    "fi",
-    "exit 1",
-    ""
-  ].join("\n"), { mode: 0o755 });
-  for (const appGemini of [plainAppGemini, agentAppGemini]) {
-    await fs.mkdir(path.dirname(appGemini), { recursive: true });
-    await fs.symlink(fixtureAppGeminiHelper, appGemini);
-  }
   const layeredScan = await run(process.execPath, [
     path.join(extractDir, "package", "bin", "pact-mcp.mjs"),
     "scan",
@@ -685,9 +674,6 @@ try {
   });
   const layeredScanPayload = JSON.parse(layeredScan.stdout);
   assert.ok(["darwin", "linux", "win32"].includes(layeredScanPayload.hostOs));
-  const layeredGeminiBins = layeredScanPayload.candidates
-    .filter((candidate) => candidate.target === "gemini-cli")
-    .map((candidate) => candidate.optionOverrides?.["gemini-bin"] || "");
   const layeredClaudeBins = layeredScanPayload.candidates
     .filter((candidate) => candidate.target === "claude-code")
     .map((candidate) => candidate.optionOverrides?.["claude-bin"] || "");
@@ -697,14 +683,9 @@ try {
   const layeredCopilotBins = layeredScanPayload.candidates
     .filter((candidate) => candidate.target === "copilot")
     .map((candidate) => candidate.optionOverrides?.["copilot-bin"] || "");
-  assert.equal(layeredGeminiBins.includes(fixtureGemini), true);
   assert.equal(layeredClaudeBins.includes(fixtureClaude), true);
-  assert.equal(layeredGeminiBins.includes(plainAppGemini), false);
   assert.equal(layeredCodexBins.includes(fixtureLocalCodex), false);
   assert.equal(layeredCopilotBins.includes(fixtureVoltaCopilot), true);
-  if (process.platform === "darwin") {
-    assert.equal(layeredGeminiBins.includes(agentAppGemini), true);
-  }
   if (process.platform !== "win32") {
     const packageManagerEnvProbeText = await fs.readFile(packageManagerEnvProbe, "utf8");
     assert.match(
@@ -743,10 +724,6 @@ try {
     "      printf '/usr/local/bin/ironclaw\\n'",
     "      exit 0",
     "    fi",
-    "    if [ \"$vm\" = \"kate\" ] && [ \"$user\" = \"kate\" ] && printf '%s' \"$3\" | grep -q \"command_name='gemini'\"; then",
-    "      printf '/usr/bin/gemini\\n'",
-    "      exit 0",
-    "    fi",
     "    if [ \"$vm\" = \"kate\" ] && [ \"$user\" = \"kate\" ] && printf '%s' \"$3\" | grep -q \"command_name='copilot'\"; then",
     "      printf '/usr/bin/copilot\\n'",
     "      exit 0",
@@ -759,10 +736,6 @@ try {
     "  fi",
     "  if [ \"$vm\" = \"kate\" ] && [ \"$user\" = \"kate\" ] && [ \"$1\" = \"/usr/local/bin/ironclaw\" ] && [ \"$2\" = \"mcp\" ]; then",
     "    printf 'ironclaw mcp help\\n'",
-    "    exit 0",
-    "  fi",
-    "  if [ \"$vm\" = \"kate\" ] && [ \"$user\" = \"kate\" ] && [ \"$1\" = \"/usr/bin/gemini\" ] && [ \"$2\" = \"mcp\" ]; then",
-    "    printf 'gemini mcp help\\n'",
     "    exit 0",
     "  fi",
     "  if [ \"$vm\" = \"kate\" ] && [ \"$user\" = \"kate\" ] && [ \"$1\" = \"/usr/bin/copilot\" ] && [ \"$2\" = \"mcp\" ]; then",
@@ -807,12 +780,6 @@ try {
     assert.equal(candidate.optionOverrides["openclaw-vm"], "kate");
     assert.equal(candidate.optionOverrides["openclaw-user"], "kate");
   }
-  const vmGemini = clawScanPayload.candidates.find((candidate) =>
-    candidate.target === "gemini-cli" && candidate.optionOverrides?.["execution-location"] === "orb"
-  );
-  assert.equal(vmGemini?.optionOverrides?.["gemini-bin"], "/usr/bin/gemini");
-  assert.equal(vmGemini?.optionOverrides?.["orb-vm"], "kate");
-  assert.equal(vmGemini?.optionOverrides?.["orb-user"], "kate");
   const vmCopilot = clawScanPayload.candidates.find((candidate) =>
     candidate.target === "copilot" && candidate.optionOverrides?.["execution-location"] === "orb"
   );
@@ -885,5 +852,5 @@ try {
 
   console.log("mcp-release verification passed");
 } finally {
-  await fs.rm(tempDir, { recursive: true, force: true });
+  await removeTempDirWithRetry(tempDir);
 }

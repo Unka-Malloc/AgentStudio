@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: Workspace Asset Governance.
 - Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
@@ -64,7 +64,7 @@ Pact 不关心智能体之间如何互相协作，也不把智能体当作可信
 
 三个兼容层的治理边界如下：
 
-- `agent-client-mcp-compatibility`：OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf、其它机器人体系或脚本都不是核心抽象；统一通过 Pact MCP service / Workspace API 访问工作空间。
+- `agent-client-mcp-compatibility`：OpenClaw、Claude Code、Codex、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、其它机器人体系或脚本都不是核心抽象；统一通过 Pact MCP service / Workspace API 访问工作空间。
 - `external-service-compatibility`：知识库、网站订阅、文件库、业务系统、人工整理和智能体上传文档都先进入 workspace asset model，再统一治理。
 - `pact-internal-compatibility`：容器、虚拟机、本机、云端、Linux、macOS、Windows 以及内部 mount/module/runtime 差异都只是环境差异；安装 Pact 管理软件后，智能体访问工作空间必须经过 Pact 的权限、路径、快照和审计适配。
 
@@ -345,14 +345,14 @@ rankScoreV0 =
 - OpenClaw
 - Claude Code
 - Codex
-- Gemini CLI
+
 - Antigravity
 - OpenCode
 - Copilot
 - Kilo Code
 - Cursor
 - Hermes Agent
-- Windsurf
+
 
 五阶段演示的首批真实 agent 固定为：
 
@@ -406,14 +406,12 @@ Agent 安装策略：
 - OpenClaw：通过 VM / remote 环境内 `openclaw mcp set` 写入已发现 HTTP endpoint。
 - Claude Code：通过 `claude mcp add-json` 或等价 CLI 配置写入。
 - Codex：通过 `codex mcp add --url --bearer-token-env-var` 安装；如需兼容旧版 CLI，可再尝试 `codex plugin marketplace add` 与 `codex plugin add`（失败不影响主流程）。
-- Gemini CLI：通过 `gemini mcp add --transport http --header X-Pact-Api-Key` 安装，同时生成并校验 Stitch extension 同构 manifest。
 - Antigravity：按官方 `~/.gemini/antigravity/mcp_config.json` 的 `serverUrl` + `headers` 格式结构化写入。
 - OpenCode：按 `~/.config/opencode/opencode.jsonc` 的 remote MCP 配置格式结构化写入。
 - Copilot：通过 `copilot mcp add --transport http --header X-Pact-Api-Key` 安装。
 - Kilo Code：按 Kilo 标准 `~/.config/kilo/kilo.json` 的 remote MCP 配置格式结构化写入。
 - Cursor：按 Cursor MCP settings 的 `mcpServers.pact` 结构化写入。
 - Hermes Agent：通过 VM / remote 环境内 `hermes mcp add --url --auth header` 安装，安装器随后用 Hermes config helper 启用并执行 `hermes mcp test`。
-- Windsurf：按 `~/.codeium/windsurf/mcp_config.json` 的 `mcpServers.pact` 结构化写入。
 - 所有 installer 修改前必须生成目标配置回滚副本，只追加或替换 `pact` 条目，不打印完整 agent config，避免泄漏现有 token、API key 或 bot token。
 
 实现默认约束：
@@ -601,7 +599,7 @@ Base.
 
 第一轮任务按下列 P0 包推进：
 
-- `P0-A Device MCP Hub Shell`：新增 Stitch 形态 HTTP `/mcp`、agent-specific grant/token、统一本机入口 `pact-mcp discover-local`、canonical registry `~/.pact/mcp/servers.json`、`/.well-known/pact/mcp.json` 和 `pact-mcp-connector` release discovery publisher；stdio proxy 仅作为兼容兜底；release 包默认注册共享 Hub，不批量写入客户端；OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf 只有在用户明确 opt-in 时才写入对应配置；对外 MCP tool surface 收敛为单一稳定工具 `pact.call`，内部 operation 通过参数路由。
+- `P0-A Device MCP Hub Shell`：新增 Stitch 形态 HTTP `/mcp`、agent-specific grant/token、统一本机入口 `pact-mcp discover-local`、canonical registry `~/.pact/mcp/servers.json`、`/.well-known/pact/mcp.json` 和 `pact-mcp-connector` release discovery publisher；stdio proxy 仅作为兼容兜底；release 包默认注册共享 Hub，不批量写入客户端；OpenClaw、Claude Code、Codex、Antigravity、OpenCode、Copilot、Kilo Code、Cursor 和 Hermes Agent 只有在用户明确 opt-in 时才写入对应配置；对外 MCP tool surface 收敛为单一稳定工具 `pact.call`，内部 operation 通过参数路由。
 - `P0-B Local Workspace Store`：初始化 demo workspace，建立 asset metadata，文件上传落盘，下载走 asset id。
 - `P0-C Operation Ledger + Checkpoint Node`：每个 MCP operation 写 ledger，文件上传、下载、读取、修改都写 checkpoint node。
 - `P0-D Knowledge Seed + Search`：写入 `Pact 简介` seed knowledge，暴露 knowledge contribution/search/evidence，返回先做硬限制。
@@ -867,7 +865,7 @@ Context Compiler 输入：
 
 ## 本地智能体接入
 
-本地智能体是 workspace operator。它可以是 OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf、脚本型 agent 或人工 CLI。
+本地智能体是 workspace operator。它可以是 OpenClaw、Claude Code、Codex、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、脚本型 agent 或人工 CLI。
 
 允许动作使用当前 operation id：
 

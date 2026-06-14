@@ -197,12 +197,12 @@ function verifyToolCatalogExposure() {
   const planTool = catalog.tools.find((item) => item.id === "pact.clientRuntime.bootstrapPlan");
   assert.ok(planTool, "pact.clientRuntime.bootstrapPlan tool must be exposed");
   assert.ok(planTool.requiredScopes.includes("knowledge:read"));
-  assert.ok(planTool.toolsets.includes("pact.knowledge.read"));
+  assert.ok(planTool.toolsets.includes("pact.agentLibrary.read"));
 
   const pullTool = catalog.tools.find((item) => item.id === "pact.clientRuntime.bootstrapPull");
   assert.ok(pullTool, "pact.clientRuntime.bootstrapPull tool must be exposed");
   assert.ok(pullTool.requiredScopes.includes("knowledge:read"));
-  assert.ok(pullTool.toolsets.includes("pact.knowledge.read"));
+  assert.ok(pullTool.toolsets.includes("pact.agentLibrary.read"));
 }
 
 async function verifyHttpEndpoint() {

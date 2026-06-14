@@ -90,14 +90,14 @@ try {
     collectionId: "collection::outline",
     documents: [buildLongDocument({ sourcePath })]
   });
-  assert.equal(upsert.protocolVersion, "pact.knowledge.v1");
+  assert.equal(upsert.protocolVersion, "v0.0.1:knowledge:core-1");
   assert.equal(upsert.documentCount, 1);
 
   const structure = knowledgeCore.getDocumentStructure({
     documentId: "doc::outline-march-billing",
     maxNodes: 80
   });
-  assert.equal(structure.protocolVersion, "pact.knowledge.v1");
+  assert.equal(structure.protocolVersion, "v0.0.1:knowledge:core-1");
   assert.equal(structure.document.documentId, "doc::outline-march-billing");
   assert.ok(structure.tree.length >= 1);
   assert.ok(structure.sourceStats.outlineNodeCount >= 8);

@@ -35,7 +35,7 @@ export function normalizeMaintenancePlan(plan, toolRegistry, fallback = {}) {
   }
   const risk = maxRisk(value.risk, ...steps.map((step) => step.risk));
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     source: String(value.source || fallback.source || "runbook"),
     intent: String(value.intent || fallback.intent || "health_smoke").trim(),
     summary: String(value.summary || fallback.summary || "执行维护巡检。").trim(),

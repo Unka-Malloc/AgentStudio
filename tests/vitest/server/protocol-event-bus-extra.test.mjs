@@ -34,7 +34,7 @@ describe("protocol event bus extra coverage", () => {
 
       expect([first.offset, second.offset, third.offset]).toEqual([1, 2, 3]);
       expect(first).toMatchObject({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         topic: "alpha",
         type: "created",
         publisher: "unit",

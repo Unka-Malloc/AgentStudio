@@ -11,7 +11,7 @@ import {
   mutateState
 } from "../../../../../common/platform-core/state-coordinator.mjs";
 
-export const EXPERT_VOCABULARY_SCHEMA_VERSION = 1;
+export const EXPERT_VOCABULARY_SCHEMA_VERSION = "v0.0.1:knowledge:expert-vocabulary-schema-1";
 export const DEFAULT_EXPERT_VOCABULARY_ENTRIES = taxonomyToExpertVocabularyEntries(
   loadBundledKnowledgeTaxonomy()
 );

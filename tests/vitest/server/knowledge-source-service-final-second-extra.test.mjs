@@ -455,7 +455,7 @@ describe("knowledge-source service final second extra coverage", () => {
       await fs.mkdir(betaDir);
 
       await writeJson(path.join(root, "knowledge-sources", "sources.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-01-04T00:00:00.000Z",
         sources: [
           {
@@ -498,7 +498,7 @@ describe("knowledge-source service final second extra coverage", () => {
       expect(initial.sources.map((item) => item.sourceId)).toEqual(["source-beta", "source-alpha"]);
 
       await writeJson(path.join(root, "knowledge-sources", "sources.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-01-04T00:00:01.000Z",
         sources: [
           {

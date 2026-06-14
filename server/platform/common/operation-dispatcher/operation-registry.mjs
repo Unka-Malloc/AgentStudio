@@ -175,6 +175,40 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["console:read"]
   },
   {
+    id: "appearance_presets.list",
+    feature: "system",
+    label: "外观方案配置列表",
+    target: { controller: "system", method: "handleAppearancePresets" },
+    http: { method: "GET", path: "/api/appearance-presets", localInForwardMode: true },
+    rpc: { method: "appearance_presets.list" },
+    cli: { command: ["appearance-presets"], usage: "appearance-presets" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: ["appearance-presets", "frontend", "display-preference"],
+    inputSchema: { type: "object", required: [], properties: {} }
+  },
+  {
+    id: "appearance_presets.import",
+    feature: "system",
+    label: "导入外观方案配置",
+    target: { controller: "system", method: "handleImportAppearancePreset" },
+    http: { method: "POST", path: "/api/appearance-presets/import", localInForwardMode: true },
+    rpc: { method: "appearance_presets.import", body: "params" },
+    cli: { command: ["appearance-presets", "import"], usage: "appearance-presets import --body preset.json" },
+    requiredScopes: ["runtime:admin"],
+    aspects: ["appearance-presets", "frontend", "display-preference"],
+    inputSchema: {
+      type: "object",
+      required: [],
+      properties: {
+        config: { type: "object" },
+        text: { type: "string" }
+      }
+    },
+    safety: { risk: "safe_write" }
+  },
+  {
     id: "production.health",
     feature: "production",
     label: "生产健康总览",
@@ -354,6 +388,33 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     aspects: ["external-service-management", "composition-management", "dehydration"]
   },
   {
+    id: "external_services.templates.list",
+    feature: "module_management",
+    label: "外部服务注册模板",
+    target: { controller: "system", method: "handleExternalServiceTemplates" },
+    http: { method: "GET", path: "/api/external-services/templates", localInForwardMode: true },
+    rpc: { method: "external_services.templates.list" },
+    cli: { command: ["external-services", "templates"], usage: "external-services templates" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: ["external-service-management", "composition-management", "dehydration", "servicehub-registration"]
+  },
+  {
+    id: "external_services.templates.draft",
+    feature: "module_management",
+    label: "生成外部服务注册草案",
+    target: { controller: "system", method: "handleExternalServiceTemplateDraft" },
+    http: { method: "POST", path: "/api/external-services/templates/draft", localInForwardMode: true },
+    rpc: { method: "external_services.templates.draft", body: "params" },
+    cli: { command: ["external-services", "templates", "draft"], usage: "external-services templates draft --body template-request.json" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: ["external-service-management", "composition-management", "dehydration", "servicehub-registration"],
+    safety: { risk: "read_only" }
+  },
+  {
     id: "external_services.config.save",
     feature: "module_management",
     label: "保存外部服务配置",
@@ -393,6 +454,75 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     concurrencySafe: false,
     concurrencyGroup: "external-services.runtime",
     aspects: ["external-service-management", "composition-management", "dehydration", "tool-management"],
+    safety: { risk: "safe_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
+    id: "external_services.production.verify",
+    feature: "module_management",
+    label: "生成外部服务生产门禁证据",
+    target: { controller: "system", method: "handleExternalServiceProductionVerify" },
+    http: { method: "POST", path: "/api/external-services/production/verify", localInForwardMode: true },
+    rpc: { method: "external_services.production.verify", body: "params" },
+    cli: { command: ["external-services", "production", "verify"], usage: "external-services production verify --body production-verification.json" },
+    requiredScopes: ["runtime:admin"],
+    concurrencySafe: false,
+    concurrencyGroup: "external-services.runtime",
+    aspects: ["external-service-management", "composition-management", "tool-management", "servicehub-registration", "production-verification"],
+    safety: { risk: "safe_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
+    id: "external_services.tools.adopt",
+    feature: "module_management",
+    label: "采纳外部服务候选工具",
+    target: { controller: "system", method: "handleExternalServiceToolsAdopt" },
+    http: { method: "POST", path: "/api/external-services/tools/adopt", localInForwardMode: true },
+    rpc: { method: "external_services.tools.adopt", body: "params" },
+    cli: { command: ["external-services", "tools", "adopt"], usage: "external-services tools adopt --body adoption.json" },
+    requiredScopes: ["runtime:admin"],
+    concurrencySafe: false,
+    concurrencyGroup: "external-services.runtime",
+    aspects: ["external-service-management", "composition-management", "tool-management", "servicehub-registration"],
+    safety: { risk: "safe_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
+    id: "external_services.versions.promote",
+    feature: "module_management",
+    label: "发布外部服务候选版本",
+    target: { controller: "system", method: "handleExternalServiceToolsPromote" },
+    http: { method: "POST", path: "/api/external-services/versions/promote", localInForwardMode: true },
+    rpc: { method: "external_services.versions.promote", body: "params" },
+    cli: { command: ["external-services", "versions", "promote"], usage: "external-services versions promote --body promotion.json" },
+    requiredScopes: ["runtime:admin"],
+    concurrencySafe: false,
+    concurrencyGroup: "external-services.runtime",
+    aspects: ["external-service-management", "composition-management", "tool-management", "servicehub-registration"],
+    safety: { risk: "safe_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
+    id: "external_services.versions.rollback",
+    feature: "module_management",
+    label: "回滚外部服务版本",
+    target: { controller: "system", method: "handleExternalServiceToolsRollback" },
+    http: { method: "POST", path: "/api/external-services/versions/rollback", localInForwardMode: true },
+    rpc: { method: "external_services.versions.rollback", body: "params" },
+    cli: { command: ["external-services", "versions", "rollback"], usage: "external-services versions rollback --body rollback.json" },
+    requiredScopes: ["runtime:admin"],
+    concurrencySafe: false,
+    concurrencyGroup: "external-services.runtime",
+    aspects: ["external-service-management", "composition-management", "tool-management", "servicehub-registration"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
+    id: "external_services.health.inspect",
+    feature: "module_management",
+    label: "外部服务健康巡检",
+    target: { controller: "system", method: "handleExternalServiceHealthInspect" },
+    http: { method: "POST", path: "/api/external-services/health", localInForwardMode: true },
+    rpc: { method: "external_services.health.inspect", body: "params" },
+    cli: { command: ["external-services", "health"], usage: "external-services health [--service-id id]" },
+    requiredScopes: ["runtime:admin"],
+    concurrencySafe: true,
+    aspects: ["external-service-management", "composition-management", "health", "maintenance"],
     safety: { risk: "safe_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
   },
   {
@@ -720,7 +850,9 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     cli: {
       command: ["agent-sync", "publish"],
       usage: "agent-sync publish --topic answer --body payload.json --header 'Authorization: Bearer ...'"
-    }
+    },
+    externalAuth: true,
+    externalAuthVerifier: { method: "verifyToolSkillExternalAuth", requiredScopes: ["agent_sync:publish"] }
   },
   {
     id: "agent_sync.subscribe",
@@ -1280,10 +1412,25 @@ const SERVER_API_OPERATION_DEFINITIONS = [
         version: { type: "string" },
         root: { type: "string" },
         dryRun: { type: "boolean" },
+        async: { type: "boolean" },
+        background: { type: "boolean" },
+        timeoutMs: { type: "number" },
         confirm: { type: "boolean" }
       }
     },
     safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
+    id: "runtime.dependencies.downloads",
+    feature: "runtime",
+    label: "运行时依赖下载任务",
+    target: { controller: "system", method: "handleListRuntimeDependencyDownloads" },
+    http: { method: "GET", path: "/api/runtime/dependencies/downloads" },
+    rpc: { method: "runtime.dependencies.downloads" },
+    cli: { command: ["runtime", "dependencies", "downloads"], usage: "runtime dependencies downloads" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false }
   },
   {
     id: "runtime.dependencies.configure",
@@ -1445,6 +1592,246 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"]
   },
   {
+    id: "mobile_relay.config",
+    feature: "mobile_relay",
+    label: "读取移动端中转网关配置",
+    target: { controller: "system", method: "handleMobileRelayConfig" },
+    http: { method: "GET", path: "/api/mobile-relay/config", localInForwardMode: true },
+    rpc: { method: "mobile_relay.config" },
+    public: true,
+    readOnly: true,
+    concurrencySafe: true,
+    aspects: ["mobile-relay", "pairing"]
+  },
+  {
+    id: "mobile_relay.pairing.create",
+    feature: "mobile_relay",
+    label: "创建 PC 客户端移动端配对",
+    target: { controller: "system", method: "handleMobileRelayPairingCreate" },
+    http: { method: "POST", path: "/api/mobile-relay/pairings", localInForwardMode: true },
+    rpc: { method: "mobile_relay.pairing.create", body: "params" },
+    public: true,
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["mobile-relay", "pairing"],
+    inputSchema: {
+      type: "object",
+      properties: {
+        pcClientId: { type: "string" },
+        pcClientName: { type: "string" },
+        targets: { type: "array" },
+        capabilities: { type: "object" }
+      }
+    }
+  },
+  {
+    id: "mobile_relay.pairing.claim",
+    feature: "mobile_relay",
+    label: "手机端认领配对码",
+    target: { controller: "system", method: "handleMobileRelayPairingClaim" },
+    http: { method: "POST", path: "/api/mobile-relay/pairings/claim", localInForwardMode: true },
+    rpc: { method: "mobile_relay.pairing.claim", body: "params" },
+    public: true,
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["mobile-relay", "pairing"],
+    inputSchema: {
+      type: "object",
+      required: ["pairingCode"],
+      properties: {
+        pairingCode: { type: "string" },
+        mobileDeviceId: { type: "string" },
+        mobileDeviceName: { type: "string" },
+        platform: { type: "string" }
+      }
+    }
+  },
+  {
+    id: "mobile_relay.pairing.status",
+    feature: "mobile_relay",
+    label: "读取移动端配对状态",
+    target: { controller: "system", method: "handleMobileRelayPairingStatus" },
+    http: { method: "POST", path: "/api/mobile-relay/pairings/status", localInForwardMode: true },
+    rpc: { method: "mobile_relay.pairing.status", body: "params" },
+    externalAuth: true,
+    externalAuthVerifier: { method: "verifyMobileRelayExternalAuth" },
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["mobile-relay", "pairing"],
+    inputSchema: {
+      type: "object",
+      required: ["pairingId"],
+      properties: {
+        pairingId: { type: "string" },
+        pcToken: { type: "string" },
+        mobileToken: { type: "string" },
+        token: { type: "string" }
+      }
+    },
+    log: { recordInput: false },
+    audit: { recordInput: false }
+  },
+  {
+    id: "mobile_relay.pairing.revoke",
+    feature: "mobile_relay",
+    label: "撤销移动端配对",
+    target: { controller: "system", method: "handleMobileRelayPairingRevoke" },
+    http: { method: "POST", path: "/api/mobile-relay/pairings/revoke", localInForwardMode: true },
+    rpc: { method: "mobile_relay.pairing.revoke", body: "params" },
+    externalAuth: true,
+    externalAuthVerifier: { method: "verifyMobileRelayExternalAuth" },
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["mobile-relay", "pairing"],
+    inputSchema: {
+      type: "object",
+      required: ["pairingId"],
+      properties: {
+        pairingId: { type: "string" },
+        pcToken: { type: "string" },
+        mobileToken: { type: "string" },
+        token: { type: "string" }
+      }
+    },
+    log: { recordInput: false },
+    audit: { recordInput: false }
+  },
+  {
+    id: "mobile_relay.pc.check_in",
+    feature: "mobile_relay",
+    label: "PC 客户端移动中转心跳",
+    target: { controller: "system", method: "handleMobileRelayPcCheckIn" },
+    http: { method: "POST", path: "/api/mobile-relay/pc/check-in", localInForwardMode: true },
+    rpc: { method: "mobile_relay.pc.check_in", body: "params" },
+    externalAuth: true,
+    externalAuthVerifier: { method: "verifyMobileRelayExternalAuth" },
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["mobile-relay", "pc-client"],
+    inputSchema: {
+      type: "object",
+      required: ["pairingId"],
+      properties: {
+        pairingId: { type: "string" },
+        pcToken: { type: "string" },
+        targets: { type: "array" },
+        capabilities: { type: "object" },
+        clientVersion: { type: "string" }
+      }
+    },
+    log: { recordInput: false },
+    audit: { recordInput: false }
+  },
+  {
+    id: "mobile_relay.command.create",
+    feature: "mobile_relay",
+    label: "手机端下发 PC 客户端命令",
+    target: { controller: "system", method: "handleMobileRelayCommandCreate" },
+    http: { method: "POST", path: "/api/mobile-relay/commands", localInForwardMode: true },
+    rpc: { method: "mobile_relay.command.create", body: "params" },
+    externalAuth: true,
+    externalAuthVerifier: { method: "verifyMobileRelayExternalAuth" },
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["mobile-relay", "command-queue"],
+    inputSchema: {
+      type: "object",
+      required: ["pairingId", "type"],
+      properties: {
+        pairingId: { type: "string" },
+        mobileToken: { type: "string" },
+        token: { type: "string" },
+        type: { type: "string" },
+        payload: { type: "object" },
+        idempotencyKey: { type: "string" }
+      }
+    },
+    log: { recordInput: false },
+    audit: { recordInput: false }
+  },
+  {
+    id: "mobile_relay.command.poll",
+    feature: "mobile_relay",
+    label: "PC 客户端轮询移动端命令",
+    target: { controller: "system", method: "handleMobileRelayCommandPoll" },
+    http: { method: "POST", path: "/api/mobile-relay/commands/poll", localInForwardMode: true },
+    rpc: { method: "mobile_relay.command.poll", body: "params" },
+    externalAuth: true,
+    externalAuthVerifier: { method: "verifyMobileRelayExternalAuth" },
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["mobile-relay", "command-queue"],
+    inputSchema: {
+      type: "object",
+      required: ["pairingId"],
+      properties: {
+        pairingId: { type: "string" },
+        pcToken: { type: "string" },
+        token: { type: "string" },
+        limit: { type: "number" },
+        leaseMs: { type: "number" }
+      }
+    },
+    log: { recordInput: false },
+    audit: { recordInput: false }
+  },
+  {
+    id: "mobile_relay.command.complete",
+    feature: "mobile_relay",
+    label: "PC 客户端回写移动端命令结果",
+    target: { controller: "system", method: "handleMobileRelayCommandComplete" },
+    http: { method: "POST", path: "/api/mobile-relay/commands/:commandId/complete", localInForwardMode: true },
+    rpc: {
+      method: "mobile_relay.command.complete",
+      syntheticPath: "/api/mobile-relay/commands/:commandId/complete",
+      params: [{ name: "commandId", aliases: ["commandId", "command-id", "id"], required: true }],
+      body: "params"
+    },
+    externalAuth: true,
+    externalAuthVerifier: { method: "verifyMobileRelayExternalAuth" },
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["mobile-relay", "command-queue"],
+    inputSchema: {
+      type: "object",
+      required: ["pairingId", "commandId"],
+      properties: {
+        pairingId: { type: "string" },
+        commandId: { type: "string" },
+        pcToken: { type: "string" },
+        token: { type: "string" },
+        ok: { type: "boolean" },
+        result: { type: "object" },
+        error: { type: "string" }
+      }
+    },
+    log: { recordInput: false },
+    audit: { recordInput: false }
+  },
+  {
+    id: "mobile_relay.command.result",
+    feature: "mobile_relay",
+    label: "手机端读取 PC 客户端命令结果",
+    target: { controller: "system", method: "handleMobileRelayCommandResult" },
+    http: { method: "POST", path: "/api/mobile-relay/commands/:commandId/result", localInForwardMode: true },
+    rpc: {
+      method: "mobile_relay.command.result",
+      syntheticPath: "/api/mobile-relay/commands/:commandId/result",
+      params: [{ name: "commandId", aliases: ["commandId", "command-id", "id"], required: true }],
+      body: "params"
+    },
+    externalAuth: true,
+    externalAuthVerifier: { method: "verifyMobileRelayExternalAuth" },
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["mobile-relay", "command-queue"],
+    inputSchema: {
+      type: "object",
+      required: ["pairingId", "commandId"],
+      properties: {
+        pairingId: { type: "string" },
+        commandId: { type: "string" },
+        mobileToken: { type: "string" },
+        token: { type: "string" }
+      }
+    },
+    log: { recordInput: false },
+    audit: { recordInput: false }
+  },
+  {
     id: "model_routing.health",
     feature: "agent_gateway",
     label: "读取模型路由健康和成本台账",
@@ -1476,7 +1863,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["console:read"],
     readOnly: true,
     concurrencySafe: true,
-    aspects: ["strategy-management", "workflow-policy", "agent-policy"]
+    aspects: ["strategy-management", "workflow-policy", "agent-policy", "queue-policy"]
   },
   {
     id: "strategy.workflow_policy.evaluate",
@@ -1519,6 +1906,20 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     concurrencySafe: true,
     safety: { risk: "read_only", requiresConfirmation: false },
     aspects: ["strategy-management", "route-policy", "upstream-service-aspect", "downstream-client-aspect"]
+  },
+  {
+    id: "strategy.queue_policy.evaluate",
+    feature: "strategy_management",
+    label: "评估队列调度策略",
+    target: { controller: "system", method: "handleStrategyManagement" },
+    http: { method: "POST", path: "/api/strategy/queue-policy/evaluate" },
+    rpc: { method: "strategy.queue_policy.evaluate", body: "params" },
+    cli: { command: ["strategy", "queue-policy", "evaluate"], usage: "strategy queue-policy evaluate --body payload.json" },
+    requiredScopes: ["console:read"],
+    readOnly: true,
+    concurrencySafe: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["strategy-management", "queue-policy", "work-queue"]
   },
   {
     id: "strategy.tool_policy.preview",
@@ -1787,6 +2188,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     http: { method: "POST", path: "/api/tool-management/v1/execute", localInForwardMode: true },
     rpc: {method:"tool_management.execute",syntheticPath:"/api/tool-management/v1/execute",body:"params"},
     cli: { command: ["tools", "execute"], usage: "tools execute --tool-id TOOL_ID --body input.json" },
+    externalAuth: true,
+    externalAuthVerifier: { method: "verifyToolSkillExternalAuth" },
     safety: { risk: "safe_write", requiresConfirmation: false }
   },
   {
@@ -1796,6 +2199,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     target: { controller: "system", method: "handleToolManagementPassthrough" },
     http: { method: "POST", path: "/api/tool-management/v1/batch", localInForwardMode: true },
     rpc: {method:"tool_management.batch",syntheticPath:"/api/tool-management/v1/batch",body:"params"},
+    externalAuth: true,
+    externalAuthVerifier: { method: "verifyToolSkillExternalAuth" },
     safety: { risk: "safe_write", requiresConfirmation: false }
   },
   {
@@ -1806,6 +2211,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     http: { method: "POST", path: "/api/tool-management/v1/dry-run", localInForwardMode: true },
     rpc: {method:"tool_management.dry_run",syntheticPath:"/api/tool-management/v1/dry-run",body:"params"},
     cli: { command: ["tools", "dry-run"], usage: "tools dry-run --tool-id TOOL_ID --body input.json" },
+    externalAuth: true,
+    externalAuthVerifier: { method: "verifyToolSkillExternalAuth" },
     safety: { risk: "read_only", requiresConfirmation: false }
   },
   {
@@ -2067,6 +2474,28 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     cli: { command: ["tools", "pending", "resolve"], usage: "tools pending resolve --id PENDING_OPERATION_ID --body decision.json" },
     requiredScopes: ["runtime:admin"],
     safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+  },
+  {
+    id: "acp_agent_relay.templates.list",
+    feature: "tool_management",
+    label: "读取 ACP 中继调用模板",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "GET",
+      path: "/api/agent-relay/v1/templates",
+      localInForwardMode: true,
+      query: [{ name: "templateId", aliases: ["templateId", "template-id", "id"] }]
+    },
+    rpc: {
+      method: "acp_agent_relay.templates.list",
+      syntheticPath: "/api/agent-relay/v1/templates",
+      query: [{ name: "templateId", aliases: ["templateId", "template-id", "id"] }]
+    },
+    cli: { command: ["agent-relay", "templates", "list"], usage: "agent-relay templates list [--id TEMPLATE_ID]" },
+    requiredScopes: ["agent_relay:view"],
+    readOnly: true,
+    safety: { risk: "read_only", requiresConfirmation: false },
+    aspects: ["tool-management", "agent-relay", "template"]
   },
   {
     id: "acp_agent_relay.virtual_agents.list",
@@ -2520,7 +2949,8 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     http: { method: "POST", path: "/api/mcp/authorization/request", localInForwardMode: true },
     rpc: { method: "tool_management.mcp.request_authorization" },
     cli: { command: ["mcp", "authorization", "request"], usage: "mcp authorization request --body payload.json" },
-    externalAuth: true
+    externalAuth: true,
+    externalAuthVerifier: { method: "verifyToolSkillExternalAuth", recordUse: true }
   },
   {
     id: "tool_management.mcp.list_requests",
@@ -2855,24 +3285,6 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       command: ["knowledge", "word-bags", "delete"],
       usage: "knowledge word-bags delete --id WORD_BAG_ID --word-bag-set-id SET_ID",
       pathParams: { wordBagId: ["word-bag-id", "wordBagId", "id"] }
-    },
-    requiredScopes: ["knowledge:write"],
-    safety: { risk: "content_write" }
-  },
-  {
-    id: "knowledge.word_clouds.propose",
-    feature: "knowledge",
-    label: "智能体生成语料词云",
-    target: { controller: "system", method: "handleProposeKnowledgeWordClouds" },
-    http: { method: "POST", path: "/api/knowledge/word-clouds/propose" },
-    rpc: { method: "knowledge.word_clouds.propose", body: "params" },
-    cli: {
-      command: ["knowledge", "word-clouds", "propose"],
-      usage: "knowledge word-clouds propose --model-alias MODEL --prompt TEXT",
-      bodyParams: [
-        { name: "modelAlias", aliases: ["model-alias", "modelAlias"], type: "string" },
-        { name: "prompt", aliases: ["prompt", "message"], type: "string", required: true }
-      ]
     },
     requiredScopes: ["knowledge:write"],
     safety: { risk: "content_write" }
@@ -6131,6 +6543,69 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["jobs:read"]
   },
   {
+    id: "jobs.work_queue.inspect",
+    feature: "jobs",
+    label: "任务队列状态",
+    target: { controller: "jobs", method: "handleInspectWorkQueue" },
+    http: {
+      method: "GET",
+      path: "/api/jobs/work-queue",
+      localInForwardMode: true,
+      query: [{ name: "limit", aliases: ["limit"] }],
+      coerce: { limit: "number" }
+    },
+    rpc: {
+      method: "jobs.work_queue.inspect",
+      params: [{ name: "limit", aliases: ["limit"], type: "number" }]
+    },
+    cli: { command: ["jobs", "work-queue"], usage: "jobs work-queue [--limit 100]" },
+    requiredScopes: ["jobs:read"]
+  },
+  {
+    id: "jobs.work_queue.pause",
+    feature: "jobs",
+    label: "暂停任务队列",
+    target: { controller: "jobs", method: "handlePauseWorkQueue" },
+    http: { method: "POST", path: "/api/jobs/work-queue/pause", localInForwardMode: true },
+    rpc: { method: "jobs.work_queue.pause", body: "params" },
+    cli: { command: ["jobs", "work-queue", "pause"], usage: "jobs work-queue pause --body reason.json" },
+    requiredScopes: ["jobs:write"],
+    safety: { risk: "safe_write" }
+  },
+  {
+    id: "jobs.work_queue.resume",
+    feature: "jobs",
+    label: "恢复任务队列",
+    target: { controller: "jobs", method: "handleResumeWorkQueue" },
+    http: { method: "POST", path: "/api/jobs/work-queue/resume", localInForwardMode: true },
+    rpc: { method: "jobs.work_queue.resume", body: "params" },
+    cli: { command: ["jobs", "work-queue", "resume"], usage: "jobs work-queue resume --body reason.json" },
+    requiredScopes: ["jobs:write"],
+    safety: { risk: "safe_write" }
+  },
+  {
+    id: "jobs.work_queue.drain",
+    feature: "jobs",
+    label: "排空任务队列",
+    target: { controller: "jobs", method: "handleDrainWorkQueue" },
+    http: { method: "POST", path: "/api/jobs/work-queue/drain", localInForwardMode: true },
+    rpc: { method: "jobs.work_queue.drain", body: "params" },
+    cli: { command: ["jobs", "work-queue", "drain"], usage: "jobs work-queue drain --body reason.json" },
+    requiredScopes: ["jobs:write"],
+    safety: { risk: "safe_write" }
+  },
+  {
+    id: "jobs.work_queue.dispatch",
+    feature: "jobs",
+    label: "触发任务队列调度",
+    target: { controller: "jobs", method: "handleDispatchWorkQueue" },
+    http: { method: "POST", path: "/api/jobs/work-queue/dispatch", localInForwardMode: true },
+    rpc: { method: "jobs.work_queue.dispatch", body: "params" },
+    cli: { command: ["jobs", "work-queue", "dispatch"], usage: "jobs work-queue dispatch" },
+    requiredScopes: ["jobs:write"],
+    safety: { risk: "safe_write" }
+  },
+  {
     id: "jobs.get",
     feature: "jobs",
     label: "任务详情",
@@ -6297,6 +6772,12 @@ export function listInterfaceCatalog(operations = SERVER_API_OPERATIONS) {
     replacementService: operation.replacementService || "",
     replacementOperationPrefix: operation.replacementOperationPrefix || "",
     lifecycle: operation.lifecycle || {},
+    knowledgeLayer: operation.knowledgeLayer || "",
+    knowledgeCapability: operation.knowledgeCapability || "",
+    knowledgeCapabilityLayer: operation.knowledgeCapabilityLayer || null,
+    queueStatus: operation.queueStatus || "",
+    queueLabel: operation.queueLabel || "",
+    taskType: operation.taskType || "",
     inputSchema: operation.inputSchema || {}
   }));
 }

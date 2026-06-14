@@ -1,68 +1,79 @@
-/* ─── Dark mode (logo-matched charcoal + gold palette) ─── */
+/* ─── Dark mode — Engine Room (blued-steel + brass on gunmetal) ─── */
 @media (prefers-color-scheme: dark) {
-  /* ── 1. Semantic token overrides ─────────────────────────────────────── */
   :root {
     color-scheme: dark;
 
-    --bg-base:    #0d0d12;
-    --bg-surface: #16161d;
-    --bg-subtle:  #1c1c24;
-    --bg-inset:   #0d0d12;
-    --border-subtle: #2a2a34;
-    --border-strong: #3a3a46;
+    --bg-base:    #0b0c10;
+    --bg-surface: #141518;
+    --bg-subtle:  #1a1b20;
+    --bg-inset:   #0b0c10;
+    --border-subtle: #2a2620;
+    --border-strong: #3c3630;
 
-    --text-primary:   #ede6d6;
-    --text-secondary: #9a9488;
-    --text-muted:     #6b6560;
-    --text-disabled:  #4a4540;
+    --text-primary:   #e8dcc8;
+    --text-secondary: #9a8e7c;
+    --text-muted:     #6a6054;
+    --text-disabled:  #484038;
 
-    --brand:        #e2b44c;
-    --brand-strong: #f0d28c;
-    --brand-subtle: #1a1508;
-    --brand-muted:  #261f0a;
+    --brand:        #d4952e;
+    --brand-strong: #e8aa40;
+    --brand-subtle: #1a1408;
+    --brand-muted:  #261c0a;
 
-    --info:         #8cb4d4;
-    --info-surface: #0d1520;
-    --info-border:  #1a2a3a;
+    --info:         #5aaa8a;
+    --info-surface: #0c1a14;
+    --info-border:  #1a3028;
 
-    --success:         #3fb950;
-    --success-surface: #0d2619;
-    --success-border:  #14532d;
+    /* Industrial accent palette — dark */
+    --accent-steel:        #6a9ec0;
+    --accent-steel-strong: #80b4d4;
+    --accent-steel-subtle: #0c1420;
+    --accent-rose:         #d86050;
+    --accent-rose-strong:  #e87468;
+    --accent-rose-subtle:  #1e0c0a;
+    --accent-verdigris:        #5aaa8a;
+    --accent-verdigris-strong: #70c0a0;
+    --accent-verdigris-subtle: #0c1a14;
+
+    --success:         #4aaa70;
+    --success-surface: #0c1a12;
+    --success-border:  #1a3822;
 
     --warning:         #d4a020;
-    --warning-text:    #e8c44a;
-    --warning-surface: #1a1508;
-    --warning-border:  #3d2f0e;
+    --warning-text:    #e8ba48;
+    --warning-surface: #1a1408;
+    --warning-border:  #3a2e10;
 
-    --danger:         #f85149;
-    --danger-surface: #2d1013;
-    --danger-border:  #6b1a1e;
+    --danger:         #e85040;
+    --danger-surface: #1e0e0a;
+    --danger-border:  #4a1a14;
 
-    --shadow-xs: 0 1px 2px rgba(0,0,0,.40);
-    --shadow-sm: 0 1px 3px rgba(0,0,0,.48), 0 1px 2px rgba(0,0,0,.32);
-    --shadow-md: 0 4px 12px rgba(0,0,0,.56), 0 2px 4px rgba(0,0,0,.32);
-    --shadow-lg: 0 8px 24px rgba(0,0,0,.64), 0 4px 8px rgba(0,0,0,.32);
-    --shadow-xl: 0 20px 48px rgba(0,0,0,.72), 0 8px 16px rgba(0,0,0,.40);
+    --shadow-xs: 0 1px 2px rgba(0,0,0,.44);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.52), 0 1px 2px rgba(0,0,0,.36);
+    --shadow-md: 0 4px 12px rgba(0,0,0,.58), 0 2px 4px rgba(0,0,0,.36);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,.66), 0 4px 8px rgba(0,0,0,.36);
+    --shadow-xl: 0 20px 48px rgba(0,0,0,.74), 0 8px 16px rgba(0,0,0,.44);
     --shadow-soft: var(--shadow-md);
 
-    --skeleton-base:      #1e1e28;
-    --skeleton-highlight: #24242e;
+    --skeleton-base:      #1e1c18;
+    --skeleton-highlight: #24221e;
 
-    /* Interaction tokens — dark */
-    --brand-ring:    rgba(226, 180, 76, 0.18);
-    --brand-tint:    rgba(226, 180, 76, 0.08);
-    --brand-border:  rgba(226, 180, 76, 0.32);
-    --brand-shadow:  rgba(226, 180, 76, 0.24);
-    --danger-tint:   rgba(248, 81, 73, 0.12);
-    --success-tint:  rgba(63, 185, 80, 0.10);
+    /* Interaction tokens — dark engine-room */
+    --brand-ring:    rgba(212, 149, 46, 0.18);
+    --brand-tint:    rgba(212, 149, 46, 0.08);
+    --brand-border:  rgba(212, 149, 46, 0.42);
+    --brand-glow:    rgba(232, 180, 80, 0.07);
+    --brand-shadow:  rgba(212, 149, 46, 0.26);
+    --danger-tint:   rgba(232, 80, 64, 0.12);
+    --success-tint:  rgba(74, 170, 112, 0.10);
 
-    --backdrop:        rgba(0, 0, 0, 0.55);
-    --backdrop-strong: rgba(0, 0, 0, 0.65);
+    --backdrop:        rgba(0, 0, 0, 0.58);
+    --backdrop-strong: rgba(0, 0, 0, 0.70);
 
-    --border-soft:          rgba(42, 42, 52, 0.60);
-    --scrollbar-thumb:      rgba(107, 101, 96, 0.42);
-    --scrollbar-thumb-hover: rgba(154, 148, 136, 0.58);
+    --border-soft:          rgba(60, 54, 48, 0.60);
+    --scrollbar-thumb:      rgba(106, 96, 84, 0.44);
+    --scrollbar-thumb-hover: rgba(154, 142, 124, 0.56);
 
-    --text-inverse: #0d0d12;
+    --text-inverse: #0b0c10;
   }
 }

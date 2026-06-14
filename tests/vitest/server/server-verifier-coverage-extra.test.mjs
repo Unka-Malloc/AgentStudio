@@ -80,7 +80,7 @@ describe("server verifier coverage harness", () => {
       "../../../server/scripts/verify-authorization-governance.mjs",
       "../../../server/scripts/verify-capability-security-helper.mjs",
       "../../../server/scripts/verify-security-hardening.mjs",
-      "../../../server/scripts/verify-2-3-5-security-model.mjs"
+      "../../../server/scripts/verify-risk-control-model.mjs"
     ]);
 
     expect(true).toBe(true);

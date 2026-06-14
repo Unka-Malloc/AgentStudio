@@ -6,7 +6,7 @@ import {
 } from "../../../common/mcp/http-mcp-adapter.mjs";
 import { ACP_AGENT_RELAY_PROTOCOL_VERSION } from "../agent-relay/acp-agent-relay/index.mjs";
 
-export const COMMUNICATION_SERVICE_PROTOCOL_VERSION = "pact.communication-service.v1";
+export const COMMUNICATION_SERVICE_PROTOCOL_VERSION = "v0.0.1:platform:communication-service-1";
 export const COMMUNICATION_SERVICE_ID = "communication-service";
 
 function asText(value, fallback = "") {
@@ -55,7 +55,7 @@ const DEFAULT_COMMUNICATION_SERVICES = Object.freeze([
       "tools/call",
       "Tool Management projection"
     ],
-    operationBoundary: "pact.tool-management.v1"
+    operationBoundary: "v0.0.1:tool:management-1"
   })
 ]);
 
@@ -115,7 +115,7 @@ export function createCommunicationServiceProvider({ services = DEFAULT_COMMUNIC
 
   function describe() {
     return Object.freeze({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       serviceId: COMMUNICATION_SERVICE_ID,
       protocolVersion: COMMUNICATION_SERVICE_PROTOCOL_VERSION,
       boundary: "platform-capability",

@@ -97,7 +97,7 @@ describe("console mcp authorization controller extra coverage", () => {
         clientName: "Codex",
         requestId: "request-2",
         requestedScopes: ["knowledge:read"],
-        requestedTools: ["pact.knowledge.search"],
+        requestedTools: ["pact.agentLibrary.search"],
         status: "pending",
       },
     ];
@@ -111,7 +111,7 @@ describe("console mcp authorization controller extra coverage", () => {
         clientName: "Codex",
         resolution: "approved",
         scopes: ["knowledge:read"],
-        toolAllow: ["pact.knowledge.search"],
+        toolAllow: ["pact.agentLibrary.search"],
         toolsets: [],
       },
     );

@@ -219,25 +219,25 @@ function createKnowledgeCore({ searchResult = [], evidence = {} } = {}) {
 const commonEvidence = {
   ev_1: {
     evidenceId: "ev_1",
-    title: "账单邮件",
-    snippet: "本期账单金额 123.45。",
+    title: "部署记录",
+    snippet: "部署版本 v1.2.3，回滚窗口 30 分钟。",
     score: 0.93,
     payload: {
       document: {
         documentId: "doc_1",
-        title: "招商银行信用卡电子账单.eml",
-        sourcePath: "fixtures/bill.eml",
+        title: "Atlas 模块部署记录.md",
+        sourcePath: "fixtures/deployment.md",
       },
       blocks: [
         {
           blockId: "block_1",
           title: "正文",
-          text: "账单金额 123.45。",
+          text: "部署版本 v1.2.3，回滚窗口 30 分钟。",
         },
       ],
       assets: [{ assetId: "asset_1" }],
     },
-    markdown: "# 账单",
+    markdown: "# Atlas 模块部署记录",
   },
 };
 
@@ -363,8 +363,8 @@ describe("agent exploration run state and tool orchestration", () => {
       searchResult: [{
         evidenceId: "ev_1",
         documentId: "doc_1",
-        title: "招商银行信用卡电子账单.eml",
-        snippet: "本期账单金额 123.45。",
+        title: "Atlas 模块部署记录.md",
+        snippet: "部署版本 v1.2.3，回滚窗口 30 分钟。",
         score: 0.93,
         hierarchy: {
           source: "mail",
@@ -383,13 +383,13 @@ describe("agent exploration run state and tool orchestration", () => {
 
     const gateway = createGatewaySequence([
       {
-        toolCalls: [makeToolCall("keyword_search", { query: "账单", limit: 2 }, "call_kw")],
+        toolCalls: [makeToolCall("keyword_search", { query: "部署记录", limit: 2 }, "call_kw")],
       },
       {
         toolCalls: [makeToolCall("open_evidence", { evidenceId: "ev_1" }, "call_open")],
       },
       {
-        answer: "已完成：发现 evidence::ev_1 的账单信息。",
+        answer: "已完成：发现 evidence::ev_1 的部署信息。",
       },
     ]);
 
@@ -410,7 +410,7 @@ describe("agent exploration run state and tool orchestration", () => {
 
     const result = await runtime.run({
       workspaceId: workspaceState.workspaceId,
-      query: "帮我找账单",
+      query: "帮我找部署记录",
       maxIterations: 4,
       limit: 2,
       modelAlias: "deepseek",
@@ -426,7 +426,7 @@ describe("agent exploration run state and tool orchestration", () => {
       tool: "keyword_search",
       result: {
         ok: true,
-        query: "账单",
+        query: "部署记录",
       },
     });
     expect(result.toolResults[1]).toMatchObject({
@@ -505,8 +505,8 @@ describe("agent exploration run state and tool orchestration", () => {
       searchResult: [{
         evidenceId: "ev_1",
         documentId: "doc_1",
-        title: "招商银行信用卡电子账单.eml",
-        snippet: "账单金额 123.45。",
+        title: "Atlas 模块部署记录.md",
+        snippet: "部署版本 v1.2.3。",
         score: 0.93,
         hierarchy: null,
         modalities: ["text"],
@@ -519,7 +519,7 @@ describe("agent exploration run state and tool orchestration", () => {
     const gateway = createGatewaySequence([
       {
         answer:
-          '<tool_call>{"name":"keyword_search","arguments":{"query":"账单","limit":1}}</tool_call>',
+          '<tool_call>{"name":"keyword_search","arguments":{"query":"部署记录","limit":1}}</tool_call>',
       },
       {
         answer: "最终找到了 evidence::ev_1。",
@@ -553,8 +553,8 @@ describe("agent exploration run state and tool orchestration", () => {
       searchResult: [{
         evidenceId: "ev_1",
         documentId: "doc_1",
-        title: "招商银行信用卡电子账单.eml",
-        snippet: "账单金额 123.45。",
+        title: "Atlas 模块部署记录.md",
+        snippet: "部署版本 v1.2.3。",
         score: 0.93,
         modalities: ["text"],
         assets: [],
@@ -565,7 +565,7 @@ describe("agent exploration run state and tool orchestration", () => {
 
     const gateway = createGatewaySequence([
       {
-        toolCalls: [makeToolCall("keyword_search", { query: "账单", limit: 1 }, "call_kw_fallback")],
+        toolCalls: [makeToolCall("keyword_search", { query: "部署记录", limit: 1 }, "call_kw_fallback")],
       },
       {
         tool_choice: "none",
@@ -845,7 +845,7 @@ describe("authorization decisions", () => {
       evaluatePolicy: vi.fn(({ tool, dryRun = false, ...input }) => {
         if (tool?.id === "agent-exploration.local_command") {
           return {
-            protocolVersion: "pact.authorization.v1",
+            protocolVersion: "v0.0.1:risk-control:authorization-1",
             decisionId: "decision-deny",
             auditId: "audit-deny",
             toolExecutionId: input.toolExecutionId || "",
@@ -865,7 +865,7 @@ describe("authorization decisions", () => {
           };
         }
         return {
-          protocolVersion: "pact.authorization.v1",
+          protocolVersion: "v0.0.1:risk-control:authorization-1",
           decisionId: "decision-allow",
           auditId: "audit-allow",
           toolExecutionId: input.toolExecutionId || "",

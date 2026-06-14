@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { ServerConfig } from "../../../common/config/ServerConfig.mjs";
 
-export const CLOUD_DRIVE_PORT_PROTOCOL_VERSION = "pact.cloud-drive-port.v1";
+export const CLOUD_DRIVE_PORT_PROTOCOL_VERSION = "v0.0.1:storage:cloud-drive-port-1";
 
 const CLOUD_DRIVE_CONFIG_FILE = path.join("agent-workspaces", "cloud-drive-connections.json");
 const CLOUD_DRIVE_LEDGER_FILE = path.join("agent-workspaces", "cloud-drive-ledger.json");
@@ -22,6 +22,7 @@ const REMOTE_PROVIDER_PATHS = Object.freeze({
   download: "/files/download",
   upload: "/files/upload"
 });
+const MAX_REMOTE_PROVIDER_RESPONSE_BYTES = 4 * 1024 * 1024;
 const SECRET_REF_BY_PROVIDER = Object.freeze({
   onedrive: "secret://pact/drive/onedrive-oauth",
   "google-drive": "secret://pact/drive/google-drive-oauth",
@@ -38,6 +39,31 @@ const SECRET_VALUE_KEYS = new Set([
   "password",
   "authorization"
 ]);
+
+async function readResponseTextWithLimit(response, maxBytes = MAX_REMOTE_PROVIDER_RESPONSE_BYTES) {
+  if (!response?.body?.getReader) {
+    const text = await response.text();
+    if (Buffer.byteLength(text, "utf8") > maxBytes) {
+      throw new Error(`Remote cloud drive provider response exceeded the ${maxBytes} byte limit.`);
+    }
+    return text;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = Buffer.from(value);
+    total += chunk.length;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`Remote cloud drive provider response exceeded the ${maxBytes} byte limit.`);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
 const SECRET_URL_KEYS = /(?:access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|password|authorization|signature|sig|secret)/i;
 
 function nowIso() {
@@ -126,7 +152,7 @@ function defaultLocalProjectionRootPath(provider) {
 
 function defaultConfig() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: CLOUD_DRIVE_PORT_PROTOCOL_VERSION,
     updatedAt: nowIso(),
     connections: {}
@@ -135,7 +161,7 @@ function defaultConfig() {
 
 function defaultLedger() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: CLOUD_DRIVE_PORT_PROTOCOL_VERSION,
     updatedAt: nowIso(),
     events: [],
@@ -277,7 +303,7 @@ function transferTelemetry({ operation = "", status = 0, requestBytes = 0, respo
   const measuredDurationMs = Math.max(1, Math.round(Number(durationMs || 0)));
   const transferBytes = Math.max(0, Number(requestBytes || 0)) + Math.max(0, Number(responseBytes || 0));
   return {
-    protocolVersion: "pact.cloud-drive.transfer-telemetry.v1",
+    protocolVersion: "v0.0.1:storage:cloud-drive-transfer-telemetry-1",
     operation: text(operation),
     adapterMode: "remote-live",
     status: Number(status || 0),
@@ -330,7 +356,7 @@ async function callRemoteProvider(connection = {}, operation = "", payload = {})
       },
       body: requestBody
     });
-    responseText = await response.text();
+    responseText = await readResponseTextWithLimit(response);
   } catch (error) {
     const wrapped = new Error(`Remote cloud drive provider is unavailable: ${error?.message || error}`);
     wrapped.code = "REMOTE_PROVIDER_UNAVAILABLE";
@@ -1033,7 +1059,7 @@ function providerManifest(config = {}, configFilePath = "") {
   });
   return {
     ok: true,
-    schemaVersion: Number(config.schemaVersion || 1),
+    schemaVersion: String(config.schemaVersion || "v0.0.1:schema:definition-1"),
     protocolVersion: CLOUD_DRIVE_PORT_PROTOCOL_VERSION,
     configPath: configFilePath,
     providerCount: providers.length,
@@ -1064,7 +1090,7 @@ function appendEvent(ledger, type, payload = {}) {
 function createAccessReceipt({ operationId, driveRef, drivePath = "", action = "metadata", state = "cached" } = {}) {
   const createdAt = nowIso();
   return {
-    protocolVersion: "pact.cloud-drive.access-receipt.v1",
+    protocolVersion: "v0.0.1:storage:cloud-drive-access-receipt-1",
     receiptId: stableId("cloud_drive_access_receipt", { operationId, driveRef, drivePath, action, createdAt }),
     operationId,
     driveRef,
@@ -1079,7 +1105,7 @@ function createAccessReceipt({ operationId, driveRef, drivePath = "", action = "
 function createCheckpoint({ operationId, driveRef, drivePath = "", action = "", state = "projected" } = {}) {
   const createdAt = nowIso();
   return {
-    protocolVersion: "pact.cloud-drive.checkpoint.v1",
+    protocolVersion: "v0.0.1:storage:cloud-drive-checkpoint-1",
     checkpointId: stableId("cloud_drive_checkpoint", { operationId, driveRef, drivePath, action, createdAt }),
     checkpointRef: stableId("cloud_drive_checkpoint_ref", { operationId, driveRef, drivePath, action }),
     operationId,
@@ -1107,7 +1133,7 @@ function createTransferReceipt({
 } = {}) {
   const createdAt = nowIso();
   return {
-    protocolVersion: "pact.cloud-drive.transfer-receipt.v1",
+    protocolVersion: "v0.0.1:storage:cloud-drive-transfer-receipt-1",
     transferReceiptId: stableId("cloud_drive_transfer", {
       operationId,
       driveRef,
@@ -1274,7 +1300,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
 
   async function loadConfig() {
     const config = await readJson(configFilePath, defaultConfig());
-    config.schemaVersion = 1;
+    config.schemaVersion = "v0.0.1:schema:definition-1";
     config.protocolVersion = CLOUD_DRIVE_PORT_PROTOCOL_VERSION;
     config.connections = asObject(config.connections);
     await fs.mkdir(path.dirname(configFilePath), { recursive: true });
@@ -1748,7 +1774,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
     const content = decodeUploadContent(input);
     const contentSha256 = sha256Buffer(content);
     const policyDecision = {
-      protocolVersion: "pact.cloud-drive.policy-decision.v1",
+      protocolVersion: "v0.0.1:storage:cloud-drive-policy-decision-1",
       decisionId: stableId("cloud_drive_policy", {
         driveRef: connection.driveRef,
         drivePath,
@@ -1948,7 +1974,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       state: connection.contractVerified ? "contractVerified" : isRemoteLiveConnection(connection) ? "remoteLiveVerified" : "projected"
     });
     const syncReceipt = {
-      protocolVersion: "pact.cloud-drive.sync-receipt.v1",
+      protocolVersion: "v0.0.1:storage:cloud-drive-sync-receipt-1",
       syncReceiptId: stableId("cloud_drive_sync", {
         driveRef: connection.driveRef,
         basePath: plan.basePath,

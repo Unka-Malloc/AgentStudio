@@ -3,7 +3,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
-export const VECTOR_PROTOCOL_VERSION = "pact.vector.v1";
+export const VECTOR_PROTOCOL_VERSION = "v0.0.1:knowledge:vector-1";
 export const SQLITE_VEC_PROVIDER_ID = "sqlite-vec";
 export const JSON_FALLBACK_PROVIDER_ID = "builtin:sqlite-json-vector-store";
 export const DEFAULT_VECTOR_PROVIDER_ID = SQLITE_VEC_PROVIDER_ID;

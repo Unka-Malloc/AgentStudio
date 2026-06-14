@@ -1,17 +1,21 @@
 {
   "name": "ExternalKnowledgeBase",
-  "version": 1,
-  "description": "Optional pact.knowledge.v1 mount that mirrors KnowledgeCore records into mature external open-source knowledge backends.",
+  "version": "v0.0.1:knowledge:external-knowledge-base-1",
+  "description": "Optional v0.0.1:knowledge:core-1 mount that mirrors KnowledgeCore records into mature external open-source knowledge backends.",
   "defaultLoaded": false,
-  "protocol": "pact.knowledge.v1",
-  "adapterProtocol": "pact.external-knowledge-adapter.v1",
+  "protocol": "v0.0.1:knowledge:core-1",
+  "adapterProtocol": "v0.0.1:external-service:knowledge-adapter-1",
   "components": {
     "knowledgeBase": {
       "path": "./index.mjs",
       "factory": "createExternalKnowledgeBaseMount",
       "packaging": "operator-configured",
       "readOnlyRuntime": false,
-      "providers": ["qdrant", "opensearch", "pgvector"]
+      "providers": [
+        "qdrant",
+        "opensearch",
+        "pgvector"
+      ]
     }
   }
 }

@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-export const GOLDEN_RULE_PROTOCOL_VERSION = "pact.golden-rule.v1";
+export const GOLDEN_RULE_PROTOCOL_VERSION = "v0.0.1:knowledge:golden-rule-1";
 export const DEFAULT_GOLDEN_RULE_PACKAGE_ID = "default-golden-rules";
 
 function nowIso() {
@@ -136,7 +136,7 @@ function createDefaultPackage() {
   const timestamp = nowIso();
   return {
     protocolVersion: GOLDEN_RULE_PROTOCOL_VERSION,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     packageId: DEFAULT_GOLDEN_RULE_PACKAGE_ID,
     version: 1,
     status: "active",
@@ -420,7 +420,7 @@ function normalizePackage(input = {}, fallback = null) {
   const version = Math.max(1, Number(input.version || base.version || 1));
   return {
     protocolVersion: GOLDEN_RULE_PROTOCOL_VERSION,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     packageId,
     version,
     status: normalizeText(input.status || base.status || "draft") || "draft",
@@ -466,7 +466,7 @@ export function createGoldenRuleRuntime({ userDataPath, knowledgeCore = null } =
     await writeJson(versionPath(rootPath, pkg.packageId, pkg.version), pkg);
     const nextManifest = {
       protocolVersion: GOLDEN_RULE_PROTOCOL_VERSION,
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       packageId: pkg.packageId,
       activeVersion: pkg.version,
       versions: [
@@ -540,7 +540,7 @@ export function createGoldenRuleRuntime({ userDataPath, knowledgeCore = null } =
     await writeJson(versionPath(rootPath, packageId, pkg.version), pkg);
     const nextManifest = {
       protocolVersion: GOLDEN_RULE_PROTOCOL_VERSION,
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       packageId,
       activeVersion: Number(manifest?.activeVersion || 0),
       versions: [
@@ -582,7 +582,7 @@ export function createGoldenRuleRuntime({ userDataPath, knowledgeCore = null } =
     await writeJson(versionPath(rootPath, packageId, version), published);
     const nextManifest = {
       ...manifest,
-      schemaVersion: Number(manifest.schemaVersion || 1),
+      schemaVersion: String(manifest.schemaVersion || "v0.0.1:schema:definition-1"),
       activeVersion: version,
       versions: asArray(manifest.versions).map((item) => ({
         ...item,

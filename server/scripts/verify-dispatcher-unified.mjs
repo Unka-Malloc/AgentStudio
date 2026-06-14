@@ -5,6 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import {
+  findProxyRegisteredApiRequest,
+  shouldProxyRegisteredApiRequest
+} from "../platform/common/operation-dispatcher/operation-dispatcher.mjs";
 import { SERVER_API_OPERATIONS } from "../platform/common/operation-dispatcher/operation-registry.mjs";
 import { createOperationAuditStore } from "../platform/common/security/operation-audit.mjs";
 import { authHeaders, installAuthenticatedFetch } from "./test-auth-helper.mjs";
@@ -45,6 +49,13 @@ async function requestJson(url, options = {}) {
 
 async function assertStaticDispatcherGuard() {
   const dispatcherPath = path.join(repoRoot, "server", "platform", "common", "operation-dispatcher", "operation-dispatcher.mjs");
+  const dispatcherSource = await readText(dispatcherPath);
+  const clientRegistrySource = await readText(
+    path.join(repoRoot, "server", "platform", "common", "storage", "client-registry-repository.mjs")
+  );
+  const mobileRelaySource = await readText(
+    path.join(repoRoot, "server", "platform", "common", "mobile-relay", "index.mjs")
+  );
   const selfPath = fileURLToPath(import.meta.url);
   const offenders = [];
   for await (const filePath of walk(path.join(repoRoot, "server"))) {
@@ -54,6 +65,13 @@ async function assertStaticDispatcherGuard() {
     }
   }
   assert.deepEqual(offenders, [], "invokeRegisteredOperation must stay private to OperationDispatcher");
+  assert.equal(dispatcherSource.includes("createRiskControlOperationEnvelope"), true);
+  assert.equal(dispatcherSource.includes("appendRiskControlGateRecord"), true);
+  assert.equal(dispatcherSource.includes("operation_authorizer_missing"), true);
+  assert.equal(dispatcherSource.includes("findProxyRegisteredApiRequest"), true);
+  assert.equal(dispatcherSource.includes("item.http.method === normalizedMethod"), true);
+  assert.equal(dispatcherSource.includes("operation.externalAuth === true"), true);
+  assert.equal(dispatcherSource.includes("RPC 方法不存在：${payload.method"), false);
 
   const httpServer = await readText(path.join(repoRoot, "server", "services", "server-runtime", "http-server.mjs"));
   assert.equal(
@@ -61,6 +79,46 @@ async function assertStaticDispatcherGuard() {
     false,
     "HTTP server must not route Tool Management around OperationDispatcher"
   );
+  assert.equal(httpServer.includes("registeredCoreProvider.findProxyRegisteredApiRequest"), true);
+  assert.equal(httpServer.includes("securityPermissions.authorizeOperation"), true);
+  assert.equal(httpServer.includes("http.proxy.denied"), true);
+
+  const allowedPublicWrites = new Map([
+    ["auth.login", { method: "POST", path: "/api/auth/login" }],
+    ["discovery.check_in", { method: "POST", path: "/api/discovery/check-in" }],
+    ["mobile_relay.pairing.create", { method: "POST", path: "/api/mobile-relay/pairings" }],
+    ["mobile_relay.pairing.claim", { method: "POST", path: "/api/mobile-relay/pairings/claim" }]
+  ]);
+  const publicWriteOperations = SERVER_API_OPERATIONS.filter(
+    (operation) => operation.public === true && operation.readOnly !== true
+  );
+  assert.deepEqual(
+    publicWriteOperations.map((operation) => operation.id).sort(),
+    [...allowedPublicWrites.keys()].sort(),
+    "public state-changing operations must stay explicitly reviewed"
+  );
+  for (const operation of publicWriteOperations) {
+    const expected = allowedPublicWrites.get(operation.id);
+    assert.equal(operation.http?.method, expected.method, `${operation.id} public write method changed`);
+    assert.equal(operation.http?.path, expected.path, `${operation.id} public write path changed`);
+    assert.equal(operation.safety?.risk, "safe_write", `${operation.id} public write risk must be bounded`);
+    assert.equal(operation.externalAuth, false, `${operation.id} public write must not bypass into external auth`);
+    assert.deepEqual(operation.requiredScopes || [], [], `${operation.id} public write must not fake scoped auth`);
+  }
+  const csrfBypassOperations = SERVER_API_OPERATIONS.filter((operation) => operation.skipCsrf === true);
+  assert.deepEqual(
+    csrfBypassOperations.map((operation) => operation.id).sort(),
+    ["auth.login"],
+    "CSRF bypass must stay limited to the public login admission endpoint"
+  );
+  assert.match(httpServer, /httpRateLimitLoginPerIpPerMinute/, "public login must stay rate limited");
+  assert.match(clientRegistrySource, /MAX_PACT_CLIENT_REGISTRATIONS/, "public client check-in must stay capacity limited");
+  assert.match(clientRegistrySource, /client_registration_capacity_exceeded/, "public client check-in must fail closed on capacity");
+  assert.match(mobileRelaySource, /MAX_PACT_MOBILE_RELAY_PAIRING_TTL_MS/, "public relay pairing TTL must stay capped");
+  assert.match(mobileRelaySource, /MAX_PACT_MOBILE_RELAY_PAIRINGS/, "public relay pairing store must stay capacity limited");
+  assert.match(mobileRelaySource, /mobile_relay_pairing_capacity_exceeded/, "public relay pairing must fail closed on capacity");
+  assert.match(mobileRelaySource, /PAIRING_CODE_PATTERN/, "public relay pairing code must stay format-checked");
+  assert.match(mobileRelaySource, /timingSafeStringEqual/, "public relay pairing secrets must use timing-safe comparison");
 
   const toolRuntime = await readText(
     path.join(repoRoot, "server", "platform", "specialized", "capabilities", "tools", "tool-management-core", "runtime.mjs")
@@ -73,12 +131,39 @@ async function assertStaticDispatcherGuard() {
   );
   assert.equal(maintenanceTools.includes("dispatchOperation({"), true);
   assert.equal(maintenanceTools.includes(".run(input"), false);
+
+  const forwardDiscoveryState = {
+    mode: "forward",
+    advertisedBaseUrl: "http://127.0.0.1:10000",
+    activeServiceUrl: "http://127.0.0.1:10001",
+    forwardBaseUrl: "http://127.0.0.1:10001"
+  };
+  const proxyDecision = findProxyRegisteredApiRequest({
+    method: "GET",
+    pathname: "/api/runtime/info",
+    discoveryState: forwardDiscoveryState,
+    operations: SERVER_API_OPERATIONS
+  });
+  assert.equal(proxyDecision?.operation?.id, "runtime.info");
+  assert.equal(
+    shouldProxyRegisteredApiRequest({
+      method: "POST",
+      pathname: "/api/runtime/info",
+      discoveryState: forwardDiscoveryState,
+      operations: SERVER_API_OPERATIONS
+    }),
+    false,
+    "forward proxy must not match by path without HTTP method"
+  );
 }
 
 async function main() {
   await assertStaticDispatcherGuard();
   for (const operation of SERVER_API_OPERATIONS) {
     assert.ok(operation.log?.redaction, `${operation.id} must declare log redaction policy`);
+    if (operation.externalAuth === true) {
+      assert.ok(operation.externalAuthVerifier?.method, `${operation.id} must declare externalAuthVerifier.method`);
+    }
   }
 
   const migrationDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-operation-audit-migration-"));
@@ -116,6 +201,16 @@ async function main() {
   await fs.rm(migrationDir, { recursive: true, force: true });
 
   const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-dispatcher-unified-"));
+  const originalCapabilityKernelEnv = {
+    PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER,
+    PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER: process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER,
+    PACT_OPAQUE_CAPABILITY_KEY_PROVIDER: process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER,
+    PACT_CAPABILITY_BINDING_GUARD_PROVIDER: process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER
+  };
+  process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
+  process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = "local-file";
   const server = await startHttpServer({
     userDataPath,
     runtimeOptions: { profile: "minimal" }
@@ -139,6 +234,19 @@ async function main() {
     assert.equal(rpcHealth.status, 200);
     assert.equal(rpcHealth.payload.jsonrpc, "2.0");
 
+    const unknownRpc = await requestJson(`${server.url}/api/rpc`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "dispatcher-rpc-unknown",
+        method: "unknown /home/private/report.txt --token rpc_private_token",
+        params: {}
+      })
+    });
+    assert.equal(unknownRpc.status, 404);
+    assert.equal(JSON.stringify(unknownRpc.payload).includes("rpc_private_token"), false);
+
     const grant = await requestJson(`${server.url}/api/tool-management/v1/grants`, {
       method: "POST",
       headers: {
@@ -160,12 +268,12 @@ async function main() {
         Authorization: `Bearer ${grant.payload.token}`
       },
       body: JSON.stringify({
-        toolId: "pact.knowledge.health",
+        toolId: "pact.agentLibrary.health",
         input: {}
       })
     });
     assert.equal(tool.status, 200);
-    assert.equal(tool.payload.schemaVersion, 1);
+    assert.equal(tool.payload.schemaVersion, "v0.0.1:schema:definition-1");
 
     const audit = await requestJson(`${server.url}/api/auth/audit?limit=300`, {
       headers: authHeaders(auth)
@@ -177,10 +285,32 @@ async function main() {
         entries.some((entry) => entry.operationId === operationId && entry.traceId),
         `central audit missing traced ${operationId}`
       );
+      const tracedEntry = entries.find((entry) => entry.operationId === operationId && entry.traceId);
+      assert.ok(
+        tracedEntry?.riskControl?.anchorDigest?.startsWith("sha256:v0.0.1:strategy:risk-control-operation-anchor-1:"),
+        `central audit missing Risk Control anchor for ${operationId}`
+      );
+      assert.ok(
+        tracedEntry?.riskControl?.lastRecordDigest?.startsWith("sha256:v0.0.1:strategy:risk-control-gate-record-1:"),
+        `central audit missing Risk Control hash-chain tail for ${operationId}`
+      );
+      assert.ok(
+        Number(tracedEntry?.riskControl?.gateCount || 0) >= 5,
+        `central audit missing Risk Control lifecycle gates for ${operationId}`
+      );
+      const lastGate = tracedEntry?.riskControl?.envelope?.gateRecords?.at(-1);
+      assert.equal(lastGate?.gate, "audit-recover", `central audit should end ${operationId} with audit-recover`);
     }
   } finally {
     await server.close();
     await fs.rm(userDataPath, { recursive: true, force: true });
+    for (const [key, value] of Object.entries(originalCapabilityKernelEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
   }
 }
 

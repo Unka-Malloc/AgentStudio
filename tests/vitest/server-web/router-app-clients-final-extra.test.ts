@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { router } from "../../../server-web/router";
 import ClientsView from "../../../server-web/views/admin/ClientsView.vue";
 import ServerConsoleApp from "../../../server-web/ServerConsoleApp.vue";
+import { setConsoleLocaleState } from "../../../server-web/i18n/console";
 
 const importClientsMock = vi.fn();
 const exportClientsMock = vi.fn();
@@ -47,6 +48,13 @@ const DrawerMock = {
   name: "ConsoleDrawer",
   setup() {
     return () => h("section", { class: "mock-console-drawer" }, "console-drawer");
+  },
+};
+
+const SideNavDirectoryMock = {
+  name: "ConsoleSideNavDirectory",
+  setup() {
+    return () => h("section", { class: "mock-side-nav-directory" }, "side-nav-directory");
   },
 };
 
@@ -119,6 +127,7 @@ function setServerShellState(overrides: {
 }) {
   jumpToKnowledgeFileImportMock.mockClear();
   serverShellContext = {
+    activeRouteView: ref("dashboard"),
     authBootstrapping: ref(overrides.authBootstrapping ?? false),
     error: overrides.error || null,
     errorNeedsKnowledgeImportAction: ref(overrides.errorNeedsKnowledgeImportAction ?? false),
@@ -136,6 +145,7 @@ function mountServerConsoleApp() {
     global: {
       stubs: {
         ConsoleSideNav: SideNavMock,
+        ConsoleSideNavDirectory: SideNavDirectoryMock,
         ConsoleTopbar: TopbarMock,
         ConsoleDrawer: DrawerMock,
         ConsoleAuthGate: AuthGateMock,
@@ -143,6 +153,7 @@ function mountServerConsoleApp() {
         ServerPathPickerDialog: ServerPathPickerDialogMock,
         RouterView: RouterViewMock,
       },
+      plugins: [router],
     },
   });
 }
@@ -188,6 +199,7 @@ function mountClientsView() {
 
 describe("server-web router/app/clients final extra", () => {
   beforeEach(async () => {
+    setConsoleLocaleState("zh-CN");
     formatCompactDateMock.mockClear();
     importClientsMock.mockClear();
     exportClientsMock.mockClear();
@@ -242,7 +254,7 @@ describe("server-web router/app/clients final extra", () => {
     setServerShellState({ authBootstrapping: true, isAuthenticated: false, error: null });
 
     const bootstrapping = mountServerConsoleApp();
-    expect(bootstrapping.find(".mock-console-auth-gate").exists()).toBe(true);
+    expect(bootstrapping.find(".mock-console-auth-gate").exists()).toBe(false);
     expect(bootstrapping.find(".mock-router-view").exists()).toBe(false);
     expect(bootstrapping.find(".status-strip").exists()).toBe(false);
 
@@ -265,6 +277,22 @@ describe("server-web router/app/clients final extra", () => {
     await errorState.find(".status-strip-action").trigger("click");
     expect(jumpToKnowledgeFileImportMock).toHaveBeenCalledTimes(1);
     expect(errorState.find(".mock-console-auth-gate").exists()).toBe(false);
+  });
+
+  it("localizes the global status-strip error message in English", async () => {
+    setConsoleLocaleState("en");
+    setServerShellState({
+      isAuthenticated: true,
+      error: "接口不存在.",
+      authBootstrapping: false,
+      msg: { error: "Error" },
+    });
+
+    const wrapper = mountServerConsoleApp();
+
+    expect(wrapper.find(".status-strip").text()).toContain("Error");
+    expect(wrapper.find(".status-strip").text()).toContain("Endpoint does not exist.");
+    expect(wrapper.find(".status-strip").text()).not.toContain("接口不存在");
   });
 
   it("renders ClientsView empty state and dispatches import/export actions", async () => {

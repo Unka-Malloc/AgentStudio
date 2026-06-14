@@ -32,7 +32,7 @@ describe("capability binding guard final extra coverage 6", () => {
 
     await fs.promises.mkdir(path.dirname(statePath), { recursive: true });
     await fs.promises.writeFile(statePath, `${JSON.stringify({
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       alias,
       provider: "local-file",
       securityMode: "degraded_file_fallback",
@@ -49,7 +49,7 @@ describe("capability binding guard final extra coverage 6", () => {
 
     const description = await guard.describe();
     expect(description).toMatchObject({
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       provider: "local-file",
       securityMode: "degraded_file_fallback",
       alias: "bad_json_alias",
@@ -90,7 +90,7 @@ describe("capability binding guard final extra coverage 6", () => {
 
     const persisted = JSON.parse(await fs.promises.readFile(statePath, "utf8"));
     expect(persisted).toMatchObject({
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       alias: "bad_json_alias",
       provider: "local-file"
     });

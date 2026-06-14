@@ -253,7 +253,7 @@ try {
       }
     });
     await writeJson(path.join(sourceDemandDataPath, "knowledge-sources", "sources.json"), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       updatedAt: oldIso(1000),
       sources: []
     });
@@ -272,7 +272,7 @@ try {
     );
 
     await writeJson(path.join(sourceDemandDataPath, "knowledge-sources", "sources.json"), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       updatedAt: oldIso(1000),
       sources: [
         {
@@ -330,7 +330,7 @@ try {
     );
 
     await writeJson(path.join(maintenanceDemandDataPath, "maintenance-agent.json"), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       enabled: true,
       scheduler: { tickSeconds: 30 },
       schedules: [
@@ -390,7 +390,7 @@ try {
     );
 
     await writeJson(path.join(agentDemandDataPath, "settings.json"), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       modelLibraryAgents: [
         {
           uid: "agent_verify_unconnected",
@@ -422,7 +422,7 @@ try {
   const legacyAlertDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-monitor-legacy-alerts-"));
   try {
     await writeJson(monitorAlertStatePath(legacyAlertDataPath), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       ok: false,
       status: "alerting",
       activeAlerts: [
@@ -511,7 +511,7 @@ try {
     uploadSessionId: ""
   });
   await writeJson(queueMonitorStatePath(userDataPath), {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: staleAt,
     items: {
       [queueId]: {
@@ -583,6 +583,15 @@ try {
     acknowledged.activeAlerts.some((alert) => alert.alertId === restoredAlerts[0].alertId),
     false,
     "确认恢复信息后应从报警列表关闭"
+  );
+  assert.equal(
+    acknowledged.history.some((alert) =>
+      alert.alertId === restoredAlerts[0].alertId &&
+      alert.ackRequired === true &&
+      alert.acknowledgedAt
+    ),
+    false,
+    "确认关闭后的历史记录不应继续标记为待确认"
   );
 
   const afterAck = await runMonitorAlertCycle(userDataPath, { queueMonitor });

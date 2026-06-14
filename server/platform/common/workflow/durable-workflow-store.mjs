@@ -4,9 +4,9 @@ import path from "node:path";
 import { ServerConfig } from "../config/ServerConfig.mjs";
 import { serverToken } from "../security/client-strings.mjs";
 
-export const DURABLE_WORKFLOW_PROTOCOL_VERSION = "pact.workflow.v1";
+export const DURABLE_WORKFLOW_PROTOCOL_VERSION = "v0.0.1:workflow:core-1";
 
-const WORKFLOW_SCHEMA_VERSION = 1;
+const WORKFLOW_SCHEMA_VERSION = "v0.0.1:workflow:durable-workflow-schema-1";
 const TERMINAL_WORKFLOW_STATUSES = new Set(["completed", "failed", "canceled"]);
 const OPEN_ACTIVITY_STATUSES = new Set(["scheduled", "running", "retrying"]);
 

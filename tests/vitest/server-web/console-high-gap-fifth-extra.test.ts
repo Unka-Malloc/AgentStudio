@@ -26,12 +26,17 @@ const knowledgeWordCloudContextMock = vi.hoisted(() => ({
   current: null as Record<string, unknown> | null,
 }));
 
+const serverShellContextMock = vi.hoisted(() => ({
+  current: null as Record<string, unknown> | null,
+}));
+
 vi.mock("../../../server-web/composables/external-services-view-controller", () => ({
   useExternalServicesViewController: vi.fn(() => externalServicesControllerMock.current),
 }));
 
 vi.mock("../../../server-web/composables/serverConsoleShellContext", () => ({
-  useServerConsoleShellContext: vi.fn(() => ({})),
+  useOptionalServerConsoleShellContext: vi.fn(() => serverShellContextMock.current),
+  useServerConsoleShellContext: vi.fn(() => serverShellContextMock.current || {}),
 }));
 
 vi.mock("../../../server-web/composables/console-browser-effects", () => ({
@@ -261,11 +266,17 @@ function createExternalServicesController(overrides: Record<string, unknown> = {
     requiredScopesText: "knowledge:read",
     riskOptions: [{ value: "read_only", label: "read_only" }],
     saveConfig: vi.fn(),
+    serviceActiveToolReviewRows: vi.fn(() => []),
+    serviceCandidateToolCount: vi.fn(() => 0),
+    serviceCandidateToolReviewRows: vi.fn(() => []),
     serviceDiscoveryLabel: vi.fn(() => "MCP 服务"),
     serviceDiscoveryRegistrationLabel: vi.fn(() => "工具已发现"),
     serviceDiscoveryRegistrationTone: vi.fn(() => "success"),
     serviceDiscoveryTone: vi.fn(() => "success"),
     serviceHeartbeatLastAtLabel: vi.fn(() => "Latest: -"),
+    serviceToolAdoptionLabel: vi.fn(() => "0 tools"),
+    isServiceToolAdopting: vi.fn(() => false),
+    adoptCandidateTools: vi.fn(),
     isServiceHeartbeatRefreshing: vi.fn(() => false),
     serviceSourceDetail: vi.fn(() => "本地 / mcp-docs"),
     services: [createService()],
@@ -447,6 +458,7 @@ beforeEach(() => {
   workspacesContextMock.current = null;
   knowledgeRulesContextMock.current = null;
   knowledgeWordCloudContextMock.current = null;
+  serverShellContextMock.current = null;
   copyConsoleTextWithFeedback.mockReset();
   vi.clearAllMocks();
 });
@@ -625,6 +637,46 @@ describe("ExpertVocabularyPanel", () => {
     await wrapper.get(".vocabulary-footer .table-action").trigger("click");
     const context = knowledgeRulesContextMock.current as any;
     expect(context.showAllVocabularyEntries.value).toBe(false);
+  });
+
+  it("renders controls in English when the shell language is English", async () => {
+    serverShellContextMock.current = {
+      languageMode: ref("en"),
+    };
+    const wrapper = mountExpertVocabularyPanel({
+      hiddenVocabularyEntryCount: ref(0),
+      showAllVocabularyEntries: ref(false),
+      vocabularySearch: ref(""),
+    });
+
+    expect(wrapper.text()).toContain("Add Term");
+    expect(wrapper.text()).toContain("Save and Publish");
+    expect(wrapper.text()).toContain("v2 / 1 items");
+    expect(wrapper.find("input[type='search']").attributes("placeholder")).toBe("Path, keyword, domain, or note");
+    expect(wrapper.text()).not.toContain("保存并发布");
+    expect(wrapper.text()).not.toContain("新增词条");
+  });
+
+  it("renders controls in English when the injected shell language has been unwrapped", async () => {
+    serverShellContextMock.current = {
+      languageMode: "en",
+    };
+    const wrapper = mountExpertVocabularyPanel({
+      hiddenVocabularyEntryCount: ref(15),
+      showAllVocabularyEntries: ref(false),
+      vocabularySearch: ref(""),
+    });
+
+    expect(wrapper.text()).toContain("Add Term");
+    expect(wrapper.text()).toContain("Save and Publish");
+    expect(wrapper.text()).toContain("Hierarchy Path");
+    expect(wrapper.text()).toContain("Sender Domain");
+    expect(wrapper.text()).toContain("15 low-frequency maintenance items hidden.");
+    expect(wrapper.get(".vocabulary-footer .table-action").text()).toBe("Show All");
+    expect(wrapper.find("input[type='search']").attributes("placeholder")).toBe("Path, keyword, domain, or note");
+    expect(wrapper.text()).not.toContain("新增词条");
+    expect(wrapper.text()).not.toContain("已隐藏 15 条低频维护项");
+    expect(wrapper.text()).not.toContain("展开全部");
   });
 });
 

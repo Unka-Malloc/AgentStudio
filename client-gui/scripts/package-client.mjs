@@ -17,7 +17,8 @@ import { fileURLToPath } from "node:url";
 
 const workspaceRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const flutterClientRoot = path.join(workspaceRoot, "client-gui");
-const nativeBackendRoot = path.join(workspaceRoot, "client-cli");
+const clientBuildRoot = path.join(workspaceRoot, "build", "client-gui");
+const nativeTargetRoot = path.join(workspaceRoot, "build", "client-cli", "target");
 const defaultConfigPath = path.join(flutterClientRoot, "packaging.modules.json");
 
 function parseArgs(argv = process.argv.slice(2)) {
@@ -30,6 +31,7 @@ function parseArgs(argv = process.argv.slice(2)) {
     profile: null,
     skipFlutterBuild: false,
     skipNativeBuild: false,
+    keepFlutterBuildCache: process.env.PACT_KEEP_FLUTTER_BUILD_CACHE === "1",
     dryRun: false
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -57,6 +59,8 @@ function parseArgs(argv = process.argv.slice(2)) {
       options.skipFlutterBuild = true;
     } else if (arg === "--skip-native-build") {
       options.skipNativeBuild = true;
+    } else if (arg === "--keep-flutter-build-cache") {
+      options.keepFlutterBuildCache = true;
     } else if (arg === "--dry-run") {
       options.dryRun = true;
       options.skipFlutterBuild = true;
@@ -197,7 +201,7 @@ function cargoProfile(mode) {
 }
 
 function cargoTargetDir(mode) {
-  return path.join(nativeBackendRoot, "target", cargoProfile(mode));
+  return path.join(nativeTargetRoot, cargoProfile(mode));
 }
 
 function binarySuffix(platform) {
@@ -222,7 +226,12 @@ function buildNativeSidecars(selected, options) {
   for (const bin of bins) {
     args.push("--bin", bin);
   }
-  run("cargo", args);
+  run("cargo", args, {
+    env: {
+      ...process.env,
+      CARGO_TARGET_DIR: nativeTargetRoot
+    }
+  });
 }
 
 function buildSwiftSidecars(selected, options) {
@@ -241,12 +250,13 @@ function buildSwiftSidecars(selected, options) {
 
 function buildFlutterApp(options) {
   if (options.skipFlutterBuild || options.dryRun) {
-    return;
+    return false;
   }
   cleanStaleFlutterAppBundle(options);
   run("flutter", ["build", options.platform, `--${options.mode}`], {
     cwd: flutterClientRoot
   });
+  return true;
 }
 
 function cleanStaleFlutterAppBundle(options) {
@@ -265,29 +275,36 @@ function cleanStaleFlutterAppBundle(options) {
   rmSync(appDir, { recursive: true, force: true });
 }
 
-function findLinuxBundle() {
-  const linuxBuildRoot = path.join(flutterClientRoot, "build", "linux");
+function rawFlutterBuildRoot() {
+  return path.join(flutterClientRoot, "build");
+}
+
+function packagedBundleRoot(options) {
+  return path.join(clientBuildRoot, "bundles", options.platform, options.mode, "bundle");
+}
+
+function findLinuxBundleSource(mode) {
+  const linuxBuildRoot = path.join(rawFlutterBuildRoot(), "linux");
   if (!existsSync(linuxBuildRoot)) {
     throw new Error(`Linux build directory does not exist: ${linuxBuildRoot}`);
   }
   const candidates = [];
   for (const arch of readdirSync(linuxBuildRoot)) {
-    const bundleDir = path.join(linuxBuildRoot, arch, "release", "bundle");
+    const bundleDir = path.join(linuxBuildRoot, arch, mode, "bundle");
     if (existsSync(path.join(bundleDir, "flutter_client"))) {
       candidates.push(bundleDir);
     }
   }
   if (candidates.length === 0) {
-    throw new Error("No Flutter Linux release bundle was produced.");
+    throw new Error(`No Flutter Linux ${mode} bundle was produced.`);
   }
   candidates.sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs);
   return candidates[0];
 }
 
-function findMacosBundle(mode) {
+function findMacosBundleSource(mode) {
   const productsDir = path.join(
-    flutterClientRoot,
-    "build",
+    rawFlutterBuildRoot(),
     "macos",
     "Build",
     "Products",
@@ -300,47 +317,79 @@ function findMacosBundle(mode) {
   return productsDir;
 }
 
-function findWindowsBundle() {
+function findWindowsBundleSource(mode) {
+  const modeDir = modeDirectoryName(mode);
   const candidates = [
-    path.join(flutterClientRoot, "build", "windows", "x64", "runner", "Release"),
-    path.join(flutterClientRoot, "build", "windows", "runner", "Release")
+    path.join(rawFlutterBuildRoot(), "windows", "x64", "runner", modeDir),
+    path.join(rawFlutterBuildRoot(), "windows", "runner", modeDir)
   ];
   const bundleDir = candidates.find((item) => existsSync(path.join(item, "flutter_client.exe")));
   if (!bundleDir) {
-    throw new Error("Windows Flutter release bundle was not found.");
+    throw new Error(`Windows Flutter ${mode} bundle was not found.`);
   }
   return bundleDir;
 }
 
-function resolveBundle(options) {
+function findFlutterBundleSource(options) {
   if (options.platform === "linux") {
-    const root = findLinuxBundle();
+    return findLinuxBundleSource(options.mode);
+  }
+  if (options.platform === "macos") {
+    return findMacosBundleSource(options.mode);
+  }
+  return findWindowsBundleSource(options.mode);
+}
+
+function flutterExecutableForRoot(root, platform) {
+  if (platform === "macos") {
+    return path.join(root, "flutter_client.app", "Contents", "MacOS", "flutter_client");
+  }
+  return path.join(root, platform === "windows" ? "flutter_client.exe" : "flutter_client");
+}
+
+function stagedBundleExists(root, platform) {
+  return existsSync(flutterExecutableForRoot(root, platform));
+}
+
+function stageFlutterBundle(options) {
+  const source = findFlutterBundleSource(options);
+  const target = packagedBundleRoot(options);
+  rmSync(target, { recursive: true, force: true });
+  mkdirSync(path.dirname(target), { recursive: true });
+  cpSync(source, target, { recursive: true, dereference: false });
+  return target;
+}
+
+function resolveBundle(options) {
+  let root = packagedBundleRoot(options);
+  if (!stagedBundleExists(root, options.platform)) {
+    root = stageFlutterBundle(options);
+  }
+  if (options.platform === "linux") {
     return {
       root,
       executableDir: root,
       portableDataDir: path.join(root, "portable-data"),
       moduleResourceDir: path.join(root, "modules"),
-      flutterExecutable: path.join(root, "flutter_client")
+      flutterExecutable: flutterExecutableForRoot(root, options.platform)
     };
   }
   if (options.platform === "macos") {
-    const root = findMacosBundle(options.mode);
     const appDir = path.join(root, "flutter_client.app");
     return {
       root,
       executableDir: path.join(appDir, "Contents", "MacOS"),
       portableDataDir: path.join(root, "portable-data"),
       moduleResourceDir: path.join(root, "modules"),
-      flutterExecutable: path.join(appDir, "Contents", "MacOS", "flutter_client")
+      flutterExecutable: flutterExecutableForRoot(root, options.platform)
     };
   }
-  const root = findWindowsBundle();
   return {
     root,
     executableDir: root,
     portableDataDir: path.join(root, "portable-data"),
     moduleResourceDir: path.join(root, "modules"),
-    flutterExecutable: path.join(root, "flutter_client.exe")
+    flutterExecutable: flutterExecutableForRoot(root, options.platform)
   };
 }
 
@@ -508,6 +557,13 @@ function applyPackage(config, selected, skipped, options) {
   return { bundle, copiedArtifacts, manifestPath };
 }
 
+function cleanupFlutterBuildCache(options, flutterBuildRan) {
+  if (!flutterBuildRan || options.keepFlutterBuildCache) {
+    return;
+  }
+  rmSync(rawFlutterBuildRoot(), { recursive: true, force: true });
+}
+
 function printPlan(selected, skipped, options, config) {
   console.log(
     JSON.stringify(
@@ -536,8 +592,12 @@ export function packageClient(argv = process.argv.slice(2)) {
   }
   buildNativeSidecars(selected, options);
   buildSwiftSidecars(selected, options);
-  buildFlutterApp(options);
+  const flutterBuildRan = buildFlutterApp(options);
+  if (flutterBuildRan) {
+    rmSync(packagedBundleRoot(options), { recursive: true, force: true });
+  }
   const result = applyPackage(config, selected, skipped, options);
+  cleanupFlutterBuildCache(options, flutterBuildRan);
   console.log("");
   console.log(`${options.platform} client bundle ready: ${result.bundle.root}`);
   console.log(`Flutter executable: ${result.bundle.flutterExecutable}`);

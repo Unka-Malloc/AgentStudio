@@ -77,7 +77,7 @@ describe("external LLM adapters and MCP identity extra coverage", () => {
     await withTempRoot(async (root) => {
       const identity = await loadOrCreateMcpIdentity(root);
       expect(identity).toMatchObject({
-        schemaVersion: "pact.mcp.identity.v1",
+        schemaVersion: "v0.0.1:mcp:identity-1",
         algorithm: "Ed25519"
       });
       expect(identity.keyId).toMatch(/^ed25519:/);
@@ -85,7 +85,7 @@ describe("external LLM adapters and MCP identity extra coverage", () => {
       const reloaded = await loadOrCreateMcpIdentity(root);
       expect(reloaded.keyId).toBe(identity.keyId);
       expect(publicMcpIdentity(identity)).toEqual({
-        schemaVersion: "pact.mcp.identity.v1",
+        schemaVersion: "v0.0.1:mcp:identity-1",
         algorithm: "Ed25519",
         keyId: identity.keyId,
         publicKeyJwk: identity.publicKeyJwk
@@ -114,7 +114,7 @@ describe("external LLM adapters and MCP identity extra coverage", () => {
       const signature = signMcpHandshake({ identity, payload });
       expect(signature).toMatchObject({
         algorithm: "Ed25519",
-        payloadEncoding: "pact.stable-json.v1"
+        payloadEncoding: "v0.0.1:platform:stable-json-1"
       });
       expect(verifyMcpHandshakeSignature({
         publicKeyJwk: identity.publicKeyJwk,

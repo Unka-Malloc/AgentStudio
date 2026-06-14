@@ -1,6 +1,14 @@
 version: 1
 owner: server-web
 routes:
+  - routePath: /login
+    viewFile: server-web/views/LoginView.vue
+    features:
+      - featureId: auth.console-login
+        actions:
+          - auth.login.view
+          - auth.login.submit
+
   - routePath: /workspaces
     viewFile: server-web/views/WorkspacesView.vue
     features:
@@ -153,6 +161,29 @@ routes:
           - admin.runtime-downloads.list
           - admin.runtime-downloads.prepare
 
+  - routePath: /admin/strategy-management
+    viewFile: server-web/views/admin/StrategyManagementView.vue
+    features:
+      - featureId: admin.strategy-management
+        actions:
+          - admin.strategy-management.index
+          - admin.strategy-management.navigate
+
+  - routePath: /admin/version-release
+    viewFile: server-web/views/admin/VersionReleaseView.vue
+    features:
+      - featureId: admin.version-release
+        actions:
+          - admin.version-release.baseline
+
+  - routePath: /admin/version-assembly
+    viewFile: server-web/views/admin/VersionAssemblyView.vue
+    features:
+      - featureId: admin.version-assembly
+        actions:
+          - admin.version-assembly.plan
+          - admin.version-assembly.promote
+
   - routePath: /admin/production-health
     viewFile: server-web/views/admin/ProductionHealthView.vue
     features:
@@ -177,6 +208,14 @@ routes:
       - featureId: admin.tools-list
         actions:
           - admin.tools.list
+
+  - routePath: /admin/tool-governance
+    viewFile: server-web/views/admin/ToolsView.vue
+    features:
+      - featureId: admin.tools-governance
+        actions:
+          - admin.tools.governance.inspect
+          - admin.tools.governance.manage
 
   - routePath: /admin/tool-stats
     viewFile: server-web/views/admin/ToolsView.vue
@@ -247,14 +286,4 @@ routes:
           - admin.maintenance-agent.runbook
           - admin.maintenance-agent.audit
 
-systemConfigTabs:
-  - tabId: syncDirectories
-    hostFile: server-web/ServerConsoleApp.vue
-    features:
-      - featureId: system.sync-directories
-        actions:
-          - syncDirectories.list
-          - syncDirectories.create
-          - syncDirectories.refresh
-          - syncDirectories.enable-disable
-          - syncDirectories.delete
+systemConfigTabs: []

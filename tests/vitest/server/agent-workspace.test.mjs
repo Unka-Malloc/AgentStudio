@@ -96,7 +96,7 @@ describe("agent workspace path normalization and validation", () => {
       expect(listing.ok).toBe(true);
       expect(listing.exists).toBe(true);
       expect(listing.accessReceipt).toMatchObject({
-        protocolVersion: "pact.sharedspace.access-receipt.v1",
+        protocolVersion: "v0.0.1:sharedspace:sharedspace-access-receipt-1",
         action: "workspace.list",
         workspaceId: workspace.workspaceId,
         path: "/"
@@ -295,7 +295,7 @@ describe("agent workspace permissions and lock governance", () => {
         ownerAgentId: "owner-1"
       });
       expect(forbidden).toMatchObject({
-        protocolVersion: "pact.agent-workspace.v1",
+        protocolVersion: "v0.0.1:workspace:agent-workspace-1",
         ok: false,
         error: "workspace_forbidden"
       });
@@ -307,7 +307,7 @@ describe("agent workspace permissions and lock governance", () => {
       const workspace = runtime.createWorkspace({ title: "Lock Workspace" }).workspace;
       const missingFields = runtime.acquireLock({ workspaceId: workspace.workspaceId });
       expect(missingFields).toMatchObject({
-        protocolVersion: "pact.agent-workspace.v1",
+        protocolVersion: "v0.0.1:workspace:agent-workspace-1",
         ok: false,
         error: "missing_lock_fields"
       });
@@ -327,7 +327,7 @@ describe("agent workspace permissions and lock governance", () => {
         ownerAgentId: "agent-b"
       });
       expect(second).toMatchObject({
-        protocolVersion: "pact.agent-workspace.v1",
+        protocolVersion: "v0.0.1:workspace:agent-workspace-1",
         ok: false,
         error: "lock_held",
         lock: expect.objectContaining({ ownerAgentId: "agent-a" })
@@ -340,7 +340,7 @@ describe("agent workspace permissions and lock governance", () => {
         ownerAgentId: "agent-b"
       });
       expect(releaseByWrongOwner).toMatchObject({
-        protocolVersion: "pact.agent-workspace.v1",
+        protocolVersion: "v0.0.1:workspace:agent-workspace-1",
         ok: false,
         error: "lock_owner_mismatch"
       });
@@ -351,7 +351,7 @@ describe("agent workspace permissions and lock governance", () => {
         targetId: "artifact-1"
       });
       expect(adminRelease).toMatchObject({
-        protocolVersion: "pact.agent-workspace.v1",
+        protocolVersion: "v0.0.1:workspace:agent-workspace-1",
         ok: true,
         released: true
       });
@@ -363,7 +363,7 @@ describe("agent workspace permissions and lock governance", () => {
         ownerAgentId: "agent-a"
       });
       expect(releaseAfterAdmin).toMatchObject({
-        protocolVersion: "pact.agent-workspace.v1",
+        protocolVersion: "v0.0.1:workspace:agent-workspace-1",
         ok: true,
         released: false
       });

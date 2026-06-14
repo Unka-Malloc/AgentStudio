@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-12
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: Documentation and agent entry workflow.
 - Staleness check: Scanned on 2026-06-12; this entry routes documentation tasks and does not change architecture or release/readiness claims.

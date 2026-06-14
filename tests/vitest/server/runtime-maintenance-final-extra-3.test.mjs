@@ -217,7 +217,7 @@ describe("runtime dependencies and maintenance agent final extra coverage", () =
       expect(listed.ok).toBe(true);
       expect(listed.sourceConfigPath).toBe(configPath);
       expect(written.lastReadError).toContain("JSON");
-      expect(written.protocolVersion).toBe("pact.runtime-dependencies.v1");
+      expect(written.protocolVersion).toBe("v0.0.1:platform:runtime-dependencies-1");
 
       const updated = await updateRuntimeDependencyConfiguration({
         userDataPath,

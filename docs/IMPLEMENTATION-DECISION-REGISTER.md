@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: Implementation Decision Register.
-- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Scanned on 2026-06-14; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
 
 审计日期：2026-05-21。本文是实现前的设计决策登记表，用于接下来集中做设计和拍板。
 
@@ -77,14 +77,14 @@
 | `DEC-P0-14` 演示验收 | 四个演示全部作为 P0 验收：文档互通、Skill 贡献、A/B 权限、Checkpoint Tree 恢复。 |
 | `DEC-P0-15` 控制台页面 | 第一版控制台做闭环全量：asset browser、AgentLibrary 权限、contribution/Skill、资产贡献统计报表、Checkpoint Tree、audit/receipt。 |
 | `DEC-P0-16` 存储权威 | Ledger、permission、receipt、loan record、checkpoint metadata 是权威；文件树和索引是 projection。 |
-| `DEC-P0-17` MCP 新五类入口 | MCP outlet 硬切为 discovery/knowledge/sharedspace/codespace/skillHub，外部智能体长链路必须有主动回信。 |
+| `DEC-P0-17` MCP 七类入口 | MCP outlet 硬切为 discovery/agentLibrary/sharedspace/codespace/skillHub/agentRelay/serviceHub，外部智能体长链路必须有主动回信。 |
 | `DEC-P0-18` 2-3-5 安全模型 | 安全模型分为两条边界、三个环境、五个对象：客户端 MCP 入口、服务端 API 出口；终端智能体、平台运行时、应用服务器；身份与准入认证、权限与行为策略、数据与状态语义、流量与资源管理、审计与事实验证。 |
 | `DEC-P0-19` Skill Hub 独立技能库 | `pact.skillHub.upload` 是真实技能包上传入口；技能包必须进入独立 server Skill Hub / skill library，不能混在 workspace contribution 里。 |
 | `DEC-P0-20` 云盘第一批本地投影 provider | 外部云盘 v0.0.1 可运行范围固定为 iCloud + OneDrive 本机目录投影；OAuth / Remote live 作为后续适配目标，Google Drive / Dropbox 暂留 contract-mode，fake provider 只用于 CI 合同测试。 |
 | `DEC-P0-21` 调度内核与统一操作账本 | 所有受管 operation 都必须进入 Operation Scheduling Kernel 和统一 Operation Ledger；非内核操作一律拒绝，模块本地 audit、provider ledger、queue event 和 runtime log 只能作为投影或回执。 |
 | `DEC-P0-22` 统一审批流 | 高危 operation 必须由 Operation Scheduling Kernel 挂起为 `pending_operation`，统一进入独立 `/approval` 页面；批准后恢复原 operation，拒绝或过期不执行。 |
 | `DEC-P0-23` 外部知识蒸馏服务门禁优先 | 外部知识蒸馏默认远程容器部署，必须先通过入站鉴权、非 root、Tika checksum、healthcheck、资源限制和密钥外置门禁；门禁未过前不得继续增加新解析或蒸馏能力。 |
-| `DEC-P0-24` 智能体客户端支持目标 | 第一批一等支持目标固定为 OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf；后续不再作为 P0 反复确认。 |
+| `DEC-P0-24` 智能体客户端支持目标 | 第一批一等支持目标固定为 OpenClaw、Claude Code、Codex、Antigravity、OpenCode、Copilot、Kilo Code、Cursor 和 Hermes Agent；后续不再作为 P0 反复确认。 |
 | `DEC-P0-25` 前端统一接口边界 | 前端页面和组件不得直接访问后端；后端路径、HTTP method、参数和返回类型必须收敛到 `server-web/lib/*-client.ts`，页面只调用对应 controller。 |
 | `DEC-P0-26` 历史报告归档口径 | `docs/reports/history/` 只作为历史证据归档；不重写历史正文，过期或冲突内容通过顶部标注和核心文档回写处理。 |
 | `DEC-P0-27` 安全审计发布阻塞项 | H-1 CSRF 时间安全比较和 H-2 主 Dockerfile 非 root 运行是立即修复的 P0 阻塞项；H-3 CSP 去 `unsafe-inline` 独立批次做。 |
@@ -100,7 +100,7 @@
 | `DEC-P1-02` receipt/loan | 细粒度记录到 section/block/field/info ref；loan record 记录保留范围、过期、撤销和跨 workspace 流转。 |
 | `DEC-P1-03` connector 顺序 | 第一批信息源：本地文件、智能体上传、外部知识库。网站订阅延后。 |
 | `DEC-P1-04` Skill 沙箱 | Skill 可带 manifest 和资源；执行必须通过 Tool Management grant；安装和使用都写事件。 |
-| `DEC-P1-05` durable execution | 语义先行：定义 `pact.workflow.v1`，第一版自研轻量 runner 对齐 workflow/activity/retry/signal/timer/resume。 |
+| `DEC-P1-05` durable execution | 语义先行：定义 `v0.0.1:workflow:core-1`，第一版自研轻量 runner 对齐 workflow/activity/retry/signal/timer/resume。 |
 | `DEC-P1-06` 验收门禁 | 建立统一 production readiness 报告和门禁。 |
 | `DEC-P1-07` 可观测性 | 内部 Trace 是事实源，但字段设计预留 OpenTelemetry 导出映射。 |
 | `DEC-P1-08` 评估基准 | 建立最小真实样例集，覆盖 RAG、蒸馏、Agent、工具调用、权限拒绝、恢复演练。 |
@@ -163,7 +163,7 @@
 
 需要决策：
 
-- OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、Windsurf、脚本型 agent 是否统一通过 Pact MCP service / Workspace API 接入。
+- OpenClaw、Claude Code、Codex、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent、脚本型 agent 是否统一通过 Pact MCP service / Workspace API 接入。
 - REST / OpenAPI / CLI / SDK 是不是只作为同一协议的其它 adapter。
 - 第一版 MCP 工具集是否只覆盖 workspace、asset、knowledge、contribution、checkpoint、permission、audit。
 
@@ -440,7 +440,7 @@
 - workflow、activity、retry、signal、timer、resume、compensation 的最小集合。
 - 文档解析、外部知识库同步、批量恢复、批量导入是否都走 workflow。
 
-默认建议：先定义 `pact.workflow.v1` 语义，第一版自研 runner 对齐接口，后续可替换。
+默认建议：先定义 `v0.0.1:workflow:core-1` 语义，第一版自研 runner 对齐接口，后续可替换。
 
 已决议：语义先行，第一版自研轻量 runner 对齐。
 
@@ -518,7 +518,7 @@
 
 ### DEC-P1-11 安装接入产品化
 
-已决议：安装、发现、配对、配置写入、doctor、回滚和远端接入升级为 P1 产品能力，覆盖 OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf。
+已决议：安装、发现、配对、配置写入、doctor、回滚和远端接入升级为 P1 产品能力，覆盖 OpenClaw、Claude Code、Codex、Antigravity、OpenCode、Copilot、Kilo Code、Cursor 和 Hermes Agent。
 
 最小验收：任意一等支持目标都能输出安装计划、应用配置、运行 doctor、失败回滚；远端安装能回传机器可读状态；配置写入有快照和审计记录。
 
@@ -836,11 +836,11 @@
 - S-10 不作为当前发布阻塞；维护相关文件时收窄输出、添加说明或补审计可见性。
 - 每个安全项关闭时必须补 verifier 或回归检查，并回写 `docs/SECURITY-VULNERABILITY-AUDIT.md` 和 `docs/reports/SECURITY-HARDENING-BACKLOG-2026-06-03.md`。
 
-### DEC-P0-17 MCP 新五类入口和外部智能体回信闭环
+### DEC-P0-17 MCP 七类入口和外部智能体回信闭环
 
 已决议：
 
-- MCP `tools/list` 在 v0.0.1 硬切为 `pact.discovery`、`pact.knowledge`、`pact.sharedspace`、`pact.codespace`、`pact.skillHub`，旧入口 `pact.workspace`、`pact.list`、`pact.skill`、`pact.help` 不保留 alias。
+- MCP `tools/list` 在 v0.0.1 硬切为 `pact.discovery`、`pact.agentLibrary`、`pact.sharedspace`、`pact.codespace`、`pact.skillHub`、`pact.agentRelay`、`pact.serviceHub` 七类语义 outlet，旧入口 `pact.knowledge`、`pact.workspace`、`pact.list`、`pact.skill`、`pact.help` 不保留 alias。
 - MCP 调用全面采用 Intent Operation envelope。外部请求缺省字段可由 adapter 从 grant、目标匹配和请求上下文补齐，但进入 Operation Registry、Tool Management、Workspace API、Audit 和 Checkpoint 前必须形成完整 envelope。
 - `pact.capabilities.list` 只返回当前 grant 权限范围内可见的全部 operation，不返回未授权或被 deny 的 operation。
 - 本机 local grant 必须按目标匹配：无匹配时默认只读；匹配支持目标后自动授予预定义 safe-write agent toolset，并记录 `targetMatch`、`matchedTargets` 和 `agentProfileId`。
@@ -998,15 +998,15 @@
 
 已决议：
 
-- 第一批一等支持目标固定为 OpenClaw、Claude Code、Codex、Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf。
+- 第一批一等支持目标固定为 OpenClaw、Claude Code、Codex、Antigravity、OpenCode、Copilot、Kilo Code、Cursor 和 Hermes Agent。
 - 该目标集适用于桌面客户端 target adapters、`pact-mcp-connector`、server MCP discovery metadata、local grant target match、安装 / 卸载 / doctor、文档和 verifier。
 - 支持目标不是待确认 P0。新增目标只能通过明确实现决策进入，并同步更新 `server:verify:agent-client-support-targets`。
 
 拒绝选项：
 
-- 不接受只覆盖 Codex、OpenClaw、Claude Code、Cursor 或任意子集后宣称完成第一批客户端支持；Gemini CLI、Antigravity、OpenCode、Copilot、Kilo Code、Hermes Agent 和 Windsurf 也必须按一等目标进入同一批。
+- 不接受只覆盖 Codex、OpenClaw、Claude Code、Cursor 或任意子集后宣称完成第一批客户端支持；Antigravity、OpenCode、Copilot、Kilo Code 和 Hermes Agent 也必须按一等目标进入同一批。
 - 不接受文档写全量目标、代码安装器或 grant matcher 只支持部分目标。
-- 不接受把 OpenCode、Hermes Agent 或 Windsurf 留在“以后再确认”的模糊状态。
+- 不接受把 OpenCode 或 Hermes Agent 留在“以后再确认”的模糊状态。
 
 最小验收：
 

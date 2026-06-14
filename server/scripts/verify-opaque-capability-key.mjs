@@ -19,14 +19,14 @@ const execFileAsync = promisify(execFile);
 function assertOpaque(key) {
   assert.equal(key.includes("."), false, "capability key must be a single opaque string");
   assert.equal(key.includes(apiCapabilityId("knowledge.search")), false);
-  assert.equal(key.includes(toolExecuteCapabilityId("pact.knowledge.health")), false);
+  assert.equal(key.includes(toolExecuteCapabilityId("pact.agentLibrary.health")), false);
   assert.match(key, /^ock_[A-Za-z0-9_-]+$/);
 }
 
 const memoryProvider = createMemoryOpaqueCapabilityKeyProvider({ alias: "verify-memory" });
 const memoryIssued = await memoryProvider.issue({
   credentialId: "verify-memory-opaque",
-  capabilities: [apiCapabilityId("knowledge.search"), toolExecuteCapabilityId("pact.knowledge.health")],
+  capabilities: [apiCapabilityId("knowledge.search"), toolExecuteCapabilityId("pact.agentLibrary.health")],
   ttlMs: 60_000
 });
 assertOpaque(memoryIssued.capabilityKey);
@@ -91,7 +91,7 @@ assert.equal(tampered.reasonCode, "capability_key_unknown");
 
 const rotated = await memoryProvider.rotateCapabilityKey({
   capabilityKey: memoryIssued.capabilityKey,
-  capabilities: [apiCapabilityId("knowledge.search"), toolExecuteCapabilityId("pact.knowledge.health")]
+  capabilities: [apiCapabilityId("knowledge.search"), toolExecuteCapabilityId("pact.agentLibrary.health")]
 });
 assert.equal(rotated.ok, true);
 assertOpaque(rotated.capabilityKey);
@@ -231,7 +231,7 @@ try {
     passphrase: "verify recovery package passphrase",
     reason: "verify-recovery"
   });
-  assert.equal(recoveryPackage.protocolVersion, "pact.capability-kernel-recovery.v1");
+  assert.equal(recoveryPackage.protocolVersion, "v0.0.1:risk-control:capability-kernel-recovery-1");
   assert.equal(JSON.stringify(recoveryPackage).includes("runtimeLookupKeyBase64"), false);
   assert.equal(JSON.stringify(recoveryPackage).includes(apiCapabilityId("knowledge.search")), false);
 
@@ -340,9 +340,9 @@ try {
   ], { env: recoveryEnv });
   const cliExportPayload = JSON.parse(cliExport.stdout);
   assert.equal(cliExportPayload.ok, true);
-  assert.equal(cliExportPayload.protocolVersion, "pact.security-recovery.v1");
-  assert.equal(cliExportPayload.components.capabilityKernel.protocolVersion, "pact.capability-kernel-recovery.v1");
-  assert.equal(cliExportPayload.components.capabilityBindingGuard.protocolVersion, "pact.capability-binding-guard-recovery.v1");
+  assert.equal(cliExportPayload.protocolVersion, "v0.0.1:risk-control:recovery-1");
+  assert.equal(cliExportPayload.components.capabilityKernel.protocolVersion, "v0.0.1:risk-control:capability-kernel-recovery-1");
+  assert.equal(cliExportPayload.components.capabilityBindingGuard.protocolVersion, "v0.0.1:risk-control:capability-binding-guard-recovery-1");
   assert.equal(cliExportPayload.outputPath, cliRecoveryPath);
   const cliRecoveryStat = await fs.stat(cliRecoveryPath);
   assert.equal(cliRecoveryStat.mode & 0o077, 0, "recovery package file must not be group/world-readable");
@@ -370,7 +370,7 @@ try {
   ], { env: recoveryEnv });
   const cliImportPayload = JSON.parse(cliImport.stdout);
   assert.equal(cliImportPayload.ok, true);
-  assert.equal(cliImportPayload.protocolVersion, "pact.security-recovery.v1");
+  assert.equal(cliImportPayload.protocolVersion, "v0.0.1:risk-control:recovery-1");
   assert.equal(cliImportPayload.components.capabilityKernel.securityMode, "degraded_file_fallback");
   assert.equal(cliImportPayload.components.capabilityBindingGuard.securityMode, "degraded_file_fallback");
 

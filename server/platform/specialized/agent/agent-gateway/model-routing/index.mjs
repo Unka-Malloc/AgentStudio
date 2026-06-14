@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ServerConfig } from "../../../../common/config/ServerConfig.mjs";
 
-export const MODEL_ROUTING_PROTOCOL_VERSION = "pact.model-routing.v1";
+export const MODEL_ROUTING_PROTOCOL_VERSION = "v0.0.1:strategy:model-routing-1";
 
 const DEFAULT_STATE_FILE = path.join("state", "model-routing-state.json");
 const DEFAULT_LEDGER_FILE = path.join("logs", "model-routing-ledger.jsonl");
@@ -102,7 +102,7 @@ async function readLedger(filePath, limit = 200) {
 
 function normalizeState(value = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: MODEL_ROUTING_PROTOCOL_VERSION,
     updatedAt: String(value.updatedAt || ""),
     circuits: asObject(value.circuits)
@@ -415,7 +415,7 @@ export async function runModelRouting({
           completedAt: nowIso()
         });
         await appendJsonl(ledgerPath(userDataPath), {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           protocolVersion: MODEL_ROUTING_PROTOCOL_VERSION,
           ts: nowIso(),
           ledgerId: crypto.randomUUID(),
@@ -440,7 +440,7 @@ export async function runModelRouting({
       await writeModelRoutingState({ userDataPath, state });
       const ledgerId = crypto.randomUUID();
       await appendJsonl(ledgerPath(userDataPath), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: MODEL_ROUTING_PROTOCOL_VERSION,
         ts: nowIso(),
         ledgerId,
@@ -491,7 +491,7 @@ export async function runModelRouting({
         config: executed?.config || {}
       });
       await appendJsonl(ledgerPath(userDataPath), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: MODEL_ROUTING_PROTOCOL_VERSION,
         ts: nowIso(),
         ledgerId: crypto.randomUUID(),
@@ -543,7 +543,7 @@ export async function inspectModelRouting({ userDataPath = "", limit = 50 } = {}
     estimatedUsdTotal += Number(row.actualEstimatedUsd || row.budget?.estimatedTotalUsd || 0);
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: MODEL_ROUTING_PROTOCOL_VERSION,
     updatedAt: nowIso(),
     statePath: DEFAULT_STATE_FILE,

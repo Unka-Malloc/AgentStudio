@@ -982,7 +982,7 @@ try {
     initialize = await firstSourceServer.request(createRequest(ACP_METHODS.initialize, { virtualAgentId, sourceId }, "codex-init"));
     assert.equal(initialize.id, "codex-init");
     assert.equal(initialize.result.protocolVersion, 1);
-    assert.equal(initialize.result.pactProtocolVersion, "pact.acp-agent-relay.v1");
+    assert.equal(initialize.result.pactProtocolVersion, "v0.0.1:agent:acp-agent-relay-1");
     assert.equal(initialize.result.virtualAgentId, virtualAgentId);
     assert.deepEqual(initialize.result.capabilities?.tools, ["agentapi.sendMessage"]);
     assert.equal(initialize.result.capabilities?.writes, "deny");
@@ -1265,7 +1265,7 @@ try {
     initialize = await secondSourceServer.request(createRequest(ACP_METHODS.initialize, { virtualAgentId, sourceId }, "codex-reinit"));
     assert.equal(initialize.id, "codex-reinit");
     assert.equal(initialize.result.protocolVersion, 1);
-    assert.equal(initialize.result.pactProtocolVersion, "pact.acp-agent-relay.v1");
+    assert.equal(initialize.result.pactProtocolVersion, "v0.0.1:agent:acp-agent-relay-1");
     assert.equal(initialize.result.virtualAgentId, virtualAgentId);
 
     sessionLoad = await secondSourceServer.request(

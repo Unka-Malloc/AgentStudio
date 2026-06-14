@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: Feature Profiles.
 - Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
@@ -17,6 +17,16 @@ Pact maintains two preset build lines:
 | --- | --- | --- |
 | Personal computer lightweight | Single-user local or personal-cloud-oriented use. | Modular monolith, SQLite, local file/object storage, local directory integration, optional gateway. No cluster middleware by default. |
 | Enterprise private deployment | Enterprise-controlled deployment where infrastructure may already exist. | Dehydrated modules selected by profile; middleware is accessed through ports/adapters so Postgres, Redis, S3-compatible storage, KMS, gateways and audit export can be replaced with enterprise-owned services. |
+
+The `client-local` edition is the thinnest personal-computer server profile for
+desktop-client supervision. It keeps the authoritative HTTP MCP entrypoint,
+Tool Management grants/catalog, operation dispatch, audit/checkpoint state,
+sharedspace local-directory operations, and iCloud/OneDrive local projection
+operations. It excludes KnowledgeCore, document parsing, model routing, agent
+gateway, agent exploration, agent memory, codespace, Gerrit, and remote cloud
+API adapters. The desktop client may start and monitor this runtime as a
+sidecar, but it must not reimplement MCP `tools/call` routing or operation
+policy locally.
 
 All additional features must be dehydrated modules: they must declare profile membership, required ports, runtime assets, secret refs, audit behavior and verification commands. Enterprise-only modules must not leak into the personal computer default path.
 
@@ -53,4 +63,13 @@ npm run feature:diff -- --from community --to enterprise
 npm run feature:build:server -- --edition enterprise --target linux-x64
 npm run feature:build:client -- --edition enterprise --platform macos --dry-run
 npm run feature:instantiate:minimal -- --output pact-v1 --force --install
+npm run server:verify:client-local-runtime-profile
+npm run server:start:client-local -- --data-dir "$HOME/.pact-client-local-runtime"
+```
+
+The corresponding composition preset is `client-local-runtime`:
+
+```bash
+node server/scripts/composition-presets.mjs verify --preset client-local-runtime
+node server/scripts/composition-presets.mjs dehydrate --preset client-local-runtime --skip-ui-build
 ```

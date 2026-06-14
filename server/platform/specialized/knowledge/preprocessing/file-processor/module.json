@@ -1,6 +1,6 @@
 {
   "name": "FileProcessor",
-  "version": 1,
+  "version": "v0.0.1:knowledge:file-processor-1",
   "description": "High-coupling server module for file routing, parsing, normalization, and source material preparation.",
   "defaultLoaded": false,
   "routeTable": "./file-routing-table.mjs",
@@ -18,7 +18,9 @@
     "pdfProcessor": {
       "path": "../../../modules/knowledge/file-processor/FileNormalizer/PDFProcessor/index.mjs",
       "packaging": "optional",
-      "uses": ["documentParser"]
+      "uses": [
+        "documentParser"
+      ]
     },
     "normalizedDocuments": {
       "path": "./FileNormalizer/NormalizedDocuments/index.mjs",

@@ -513,7 +513,7 @@ if (args[0] === "insert") {
 
       await expect(provider.verify({
         capabilityKey: issued.capabilityKey,
-        requiredCapability: toolExecuteCapabilityId("pact.knowledge.health")
+        requiredCapability: toolExecuteCapabilityId("pact.agentLibrary.health")
       })).resolves.toMatchObject({
         ok: false,
         reasonCode: "missing_capabilities"

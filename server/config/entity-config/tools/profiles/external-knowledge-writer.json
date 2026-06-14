@@ -3,8 +3,8 @@
   "label": "External Knowledge Writer",
   "agentType": "external",
   "toolsets": [
-    "pact.knowledge.read",
-    "pact.knowledge.write"
+    "pact.agentLibrary.read",
+    "pact.agentLibrary.write"
   ],
   "toolAllow": [],
   "toolDeny": [

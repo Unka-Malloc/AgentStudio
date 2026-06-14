@@ -167,7 +167,7 @@ export type RuntimeInfoResponse = {
 };
 
 export type FeatureRuntimeSummary = {
-  schemaVersion: number;
+  schemaVersion: string;
   edition: string;
   profileName?: string;
   generatedAt?: string;

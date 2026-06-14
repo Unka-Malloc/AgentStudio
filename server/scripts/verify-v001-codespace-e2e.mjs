@@ -68,7 +68,7 @@ async function callCodespaceOperation({ serverUrl, token, operation, input = {} 
     body: JSON.stringify(mcpRequest("tools/call", {
       name: "pact.codespace",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation,
         input,
         clientVersion: "verify-v001-codespace-e2e"
@@ -250,7 +250,7 @@ try {
     body: JSON.stringify(mcpRequest("tools/call", {
       name: "pact.discovery",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation: "pact.capabilities.list",
         input: {}
       }

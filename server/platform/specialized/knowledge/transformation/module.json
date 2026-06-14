@@ -1,12 +1,12 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "name": "KnowledgeTransformation",
-  "version": 1,
+  "version": "v0.0.1:knowledge:knowledge-transformation-1",
   "category": "application-capability",
   "applicationSubsystem": "knowledge-transformation",
-  "description": "Built-in pact.knowledge-transformation.v1 provider for raw corpus conversion and unified dossier export with AgentLibrary access decisions.",
+  "description": "Built-in v0.0.1:knowledge:transformation-1 provider for raw corpus conversion and unified dossier export with AgentLibrary access decisions.",
   "defaultLoaded": true,
-  "protocol": "pact.knowledge-transformation.v1",
+  "protocol": "v0.0.1:knowledge:transformation-1",
   "components": {
     "knowledgeTransformationProvider": {
       "path": "./knowledge-transformation-provider.mjs",
@@ -28,8 +28,8 @@
     }
   },
   "dependsOn": [
-    "pact.knowledge.v1",
-    "pact.knowledge-access.v1"
+    "v0.0.1:knowledge:core-1",
+    "v0.0.1:knowledge:access-1"
   ],
   "verification": [
     "npm run server:verify:knowledge-transformation --silent",

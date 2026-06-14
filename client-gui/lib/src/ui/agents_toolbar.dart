@@ -18,6 +18,7 @@ class AgentsToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.pactColors;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -25,7 +26,7 @@ class AgentsToolbar extends StatelessWidget {
           'Agents',
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: PactColors.text,
+                color: colors.text,
               ),
         ),
         Wrap(
@@ -39,18 +40,18 @@ class AgentsToolbar extends StatelessWidget {
             FilledButton.icon(
               onPressed: scanning ? null : onRescan,
               icon: scanning
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: colors.textOnPrimary,
                       ),
                     )
                   : const Icon(Icons.refresh, size: 18),
               label: Text(scanning ? 'Scanning...' : 'Rescan'),
               style: FilledButton.styleFrom(
-                backgroundColor: PactColors.primary,
+                backgroundColor: colors.primary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),

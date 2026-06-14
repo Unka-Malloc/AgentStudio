@@ -3,6 +3,7 @@
   grid-template-columns: minmax(220px, 0.36fr) minmax(420px, 1fr);
   gap: var(--space-3) 14px;
   align-items: end;
+  min-width: 0;
   padding: 12px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -43,6 +44,7 @@
 .knowledge-source-list {
   display: grid;
   gap: var(--space-3);
+  min-width: 0;
   margin-top: 14px;
 }
 
@@ -77,6 +79,33 @@
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
+}
+
+@container config-drawer (max-width: 860px) {
+  .knowledge-source-form {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .path-field {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .path-field .browse-select-button,
+  .path-field .path-action-button {
+    width: 100%;
+  }
+
+  .source-sync-row {
+    justify-content: stretch;
+  }
+
+  .source-sync-row .binary-checkbox,
+  .source-sync-row .primary-action {
+    flex: 1 1 180px;
+    min-width: 0;
+  }
 }
 
 .source-progress,

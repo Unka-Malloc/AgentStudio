@@ -93,7 +93,7 @@ describe("authorization capability focused extras", () => {
 
     const toolDecision = await provider.verify({
       capabilityKey: "opaque-focused-key",
-      requiredCapability: toolExecuteCapabilityId("pact.knowledge.health")
+      requiredCapability: toolExecuteCapabilityId("pact.agentLibrary.health")
     });
     expect(toolDecision).toMatchObject({
       ok: true,
@@ -103,7 +103,7 @@ describe("authorization capability focused extras", () => {
 
     const detailed = await provider.verify({
       capabilityKey: "opaque-focused-key",
-      requiredCapabilities: [toolExecuteCapabilityId("pact.knowledge.health")],
+      requiredCapabilities: [toolExecuteCapabilityId("pact.agentLibrary.health")],
       includeRecordDetails: true
     });
     expect(detailed).toMatchObject({
@@ -152,7 +152,7 @@ describe("authorization capability focused extras", () => {
       reason: "focused recovery"
     });
     expect(recoveryPackage).toMatchObject({
-      protocolVersion: "pact.capability-kernel-recovery.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-kernel-recovery-1",
       alias: "opaque_recovery_source"
     });
 

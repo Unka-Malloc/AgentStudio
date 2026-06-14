@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "kind": "agent-list",
   "updatedAt": "2026-05-23T18:18:08.846Z",
   "entries": [

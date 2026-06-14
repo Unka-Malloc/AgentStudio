@@ -46,7 +46,6 @@ function createDomainServices(overrides = {}) {
     toPublicDocumentParsingResult: vi.fn(),
     enhanceAffairTaxonomy: vi.fn(),
     executeConsoleDomainOperation: vi.fn(),
-    resumeKnowledgeWordCloudClassificationTasks: vi.fn(async (input) => ({ resumed: input })),
     uploadSessionStore: {
       resolveUploadSessionFiles: vi.fn(),
       deleteUploadSession: vi.fn()
@@ -197,24 +196,13 @@ describe("system controller contexts", () => {
     });
   });
 
-  it("checks feature gates and resumes word cloud tasks with shared runtime dependencies", async () => {
-    const services = createDomainServices();
-    const contexts = createContexts({ consoleDomainServices: services });
+  it("checks feature gates without exposing removed word cloud task recovery", async () => {
+    const contexts = createContexts();
 
     expect(contexts.isFeatureActive("feature.a")).toBe(true);
     expect(contexts.isFeatureActive("feature.b")).toBe(false);
     expect(createContexts({ getFeatureEntries: () => ({ activeFeatureIds: [] }) }).isFeatureActive("anything")).toBe(true);
 
-    await expect(contexts.resumeKnowledgeWordCloudTasks()).resolves.toMatchObject({
-      resumed: {
-        userDataPath: "/unit-data",
-        metadataStore: { name: "metadata" },
-        protocolEventBus: { name: "events" },
-        contextRuntime: { name: "context" },
-        clientRuntimeAllocator: { name: "client-runtime" },
-        queueMonitor: { name: "queue" },
-        agentRuntimeProvider: services.agentRuntimeProvider
-      }
-    });
+    expect("resumeKnowledgeWordCloudTasks" in contexts).toBe(false);
   });
 });

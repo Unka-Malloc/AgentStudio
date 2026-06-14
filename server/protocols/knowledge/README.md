@@ -1,10 +1,28 @@
 # Pact Knowledge Protocol
 
-Protocol version: `pact.knowledge.v1`
+Protocol version: `v0.0.1:knowledge:core-1`
 
 The application layer talks to a knowledge module through this method protocol. It must not depend on the module's database, vector index, embedding runtime, or storage layout.
 
 This protocol is intentionally independent from HTTP, JSON-RPC, CLI, SQLite, and the built-in `KnowledgeCore` implementation. Public interfaces map requests into `knowledge.*` methods through the operation registry; they do not call KnowledgeCore internals.
+
+## Knowledge Capability Layers
+
+This table is the canonical grouping for knowledge-related business capabilities. Keep new knowledge tasks in one of these layers instead of documenting them as unrelated ad hoc jobs.
+Runtime classification is defined in `server/platform/common/operation-dispatcher/knowledge-capability-layers.mjs` and is applied to operation registry entries before Tool Management catalog generation.
+
+| Layer | Capability | Main operations | Runtime ownership | Queue status |
+| --- | --- | --- | --- | --- |
+| Corpus ingestion | Parse uploads, local files, knowledge source refreshes, and reparse requests into normalized documents, evidence, assets, and indexes. | `import_parse_job`, `pact.jobs.import-parse`, `jobs.create`, `jobs.reparse`, `knowledge.ingest.batch` | JobManager owns business history and results; Pact Work Queue owns new scheduling facts. | Connected to Pact Work Queue through `pact.jobs.import-parse`. |
+| Knowledge runtime | Serve search, evidence packs, assets, graph expansion, health, export, sync, maintenance, and reindex surfaces over the active knowledge backend. | `knowledge.search`, `knowledge.evidence`, `knowledge.asset`, `knowledge.graph`, `knowledge.health`, `knowledge.reindex`, `knowledge.maintenance.*` | KnowledgeCore or the configured external knowledge-base adapter owns retrieval, evidence, asset, and maintenance behavior. | Not a queue candidate by itself; these are runtime APIs used by higher-level workflows. |
+| Corpus organization | Build and maintain human-facing corpus organization artifacts such as word clouds and word bags from indexed vocabulary. | `knowledge.word_clouds.get`, `knowledge.word_clouds.save`, `knowledge.word_bags.*` | Metadata store owns word-cloud sets and word-bag JSONL snapshots. | Not connected to Pact Work Queue; word-cloud and word-bag organization is manual metadata maintenance. |
+| Retrieval learning | Turn search and evidence feedback into retrieval profile candidates and reviewable ranking/retrieval suggestions. | `knowledge.feedback`, `knowledge.suggestions`, `knowledge.suggestion_resolve`, `knowledge.learning.jobs`, `knowledge.learning.health` | KnowledgeCore and LearningRuntime own feedback, learning runs, profile candidates, and suggestions. | Not connected to Pact Work Queue. |
+| Evaluation and gates | Replay maintained or generated cases against the knowledge agent and calculate retrieval quality gates. | `knowledge.evaluation.runs.create`, `knowledge.evaluation.runs.list`, `knowledge.evaluation.runs.get`, `knowledge.skills.evaluation.runs.create` | AgentEvaluationRuntime and KnowledgeSkill runtime own run storage and metrics. | Not connected to Pact Work Queue. |
+| Evolution governance | Run the closed loop that collects feedback, attributes failures, proposes candidates, evaluates regressions, publishes canaries, and supports rollback. | `knowledge.evolution.runs.create`, `knowledge.evolution.deployments.*`, `knowledge.hierarchy.audit` | KnowledgeEvolutionRuntime orchestrates KnowledgeCore, evaluation, model decision, distillation, GoldenRule, and Skill runtimes. | Not connected to Pact Work Queue; it is a compound workflow that may call learning, evaluation, and distillation. |
+| Agent production | Use the knowledge base to create answer, exploration, or summary artifacts while preserving evidence refs and review boundaries. | `knowledge.agent_explore.runs.create`, `knowledge.summarization.runs.create`, `knowledge.summarization.runs.approve`, `knowledge.agent_skill.*`, `knowledge.skills.*` | AgentWorkspace, ContextRuntime, Agent Exploration, SummarizationRuntime, and KnowledgeSkillRuntime own runs, artifacts, private state, and proposals. | Not connected to Pact Work Queue; some calls can run local async/background modes. |
+| External distillation | Call the independently deployed distillation service for document, corpus, or project-level route-first parsing, classification, convergence, grounding, graph evidence, and portable artifacts. | `external.knowledge.distillation.runs.create`, `external.knowledge.distillation.runs.get`, `external.knowledge.distillation.evidence.query`, `external.knowledge.distillation.artifacts.export` | External knowledge distillation service owns distillation runtime and artifacts; Pact owns registration, client calls, and protocol adaptation. | Not connected to Pact Work Queue; availability and throughput depend on the external service. |
+
+These layers are intentionally not equal-cost queue candidates. Corpus ingestion is the only knowledge-related business type currently scheduled through Pact Work Queue. Evolution, summarization, exploration, and external distillation are heavier compound or model/service-backed workflows and need their own queue admission policies before mixed-load capacity claims can be made.
 
 ## Methods
 
@@ -48,14 +66,14 @@ Pact separates knowledge management into three layers:
 | Layer | Responsibility |
 | --- | --- |
 | `raw-corpus-construction` | Provide format-conversion-only tools first: every supported raw input format must be exportable to DOCX without chunking, filing, or indexing. Supported inputs include Markdown, HTML, PDF, PPT/PPTX, DOC/DOCX, XLS/XLSX, mail, image-based documents, and plain text; Markdown is only one supported input type. Then parse raw files, mail, attachments, chats, local mirrors, and directories into structure-preserving `sources`, normalized DOCX packages, source ranges, timelines, transaction chains, and raw object references. User-facing export is `raw-corpus.format.convert`, selected by `targetFormat`. |
-| `knowledge-index-construction` | Continue the same corpus-filing business line by filing normalized corpus into callable documents, roughly concatenating multiple sources about the same matter into newest-to-oldest unified dossiers, then parsing and mapping them into the built-in `KnowledgeCore` or an external knowledge-base adapter. This layer owns document/section/block/asset/evidence/embedding/relationship indexing, exposes RAG-safe evidence through `pact.knowledge.v1`, and exports same-matter timeline dossiers through `knowledge.dossier.export`. |
+| `knowledge-index-construction` | Continue the same corpus-filing business line by filing normalized corpus into callable documents, roughly concatenating multiple sources about the same matter into newest-to-oldest unified dossiers, then parsing and mapping them into the built-in `KnowledgeCore` or an external knowledge-base adapter. This layer owns document/section/block/asset/evidence/embedding/relationship indexing, exposes RAG-safe evidence through `v0.0.1:knowledge:core-1`, and exports same-matter timeline dossiers through `knowledge.dossier.export`. |
 | `knowledge-distillation` | Read first-layer raw corpus full text first, cover long sources through batches/steps, then generate self-contained Markdown/DOCX/HTML/PDF-style portable documents. Second-layer evidence is used for validation, citations, remediation, and audit; distillation must not replace `knowledge.search` as the full-query surface. All distillation is now handled by the independently deployed `external.knowledge.distillation` service. Legacy `knowledge.distillation.export` has been removed; use `external.knowledge.distillation.artifacts.export` instead. |
 
 The first and second layers are one business workflow: format conversion, corpus filing, same-matter dossier aggregation, then indexing. The second layer is the external knowledge-base integration point. For that reason raw document parsing is shared across the first two layers: the first layer preserves and normalizes original structure; the second layer parses normalized packages, manifests, source metadata, and asset locators into whichever index backend is active. Same-matter dossier aggregation must work before advanced simplification: emails, back-and-forth messages, document revisions, or related files are first sorted by `capturedAt`, `sourceUpdatedAt`, `sourceCreatedAt`, or `sourceCollectedAt` from newest to oldest and concatenated into an auditable unified document. The protocol has three user-facing export semantics: `raw-corpus.format.convert` for raw format conversion without persistence side effects, `knowledge.dossier.export` for timeline-concatenated documents, and `external.knowledge.distillation.artifacts.export` for refined portable knowledge documents via the external distillation service. Export and distillation responses record `outputFormat` so clients can distinguish portable Markdown, DOCX, HTML, PDF-style, and machine-readable JSON artifacts without inferring from filenames. Export support does not replace the local knowledge-base runtime shape: the local `KnowledgeCore` or external-backend mapping must still retain documents, sections, blocks, structure artifacts, fragments, evidence, assets, hierarchy, embeddings, dossiers, and distillation runs for local agent retrieval. External knowledge-base adapters may call remote ingestion/search APIs internally, but public search, evidence, asset, export, and render behavior must adapt back to this protocol.
 
 ## Industrial Distillation Benchmark Protocol
 
-Industrial knowledge distillation is tracked by `pact.knowledge-distillation-industrial.v1`. It is a benchmark and gate protocol, not a new persistence backend.
+Industrial knowledge distillation is tracked by `v0.0.1:knowledge:distillation-industrial-1`. It is a benchmark and gate protocol, not a new persistence backend.
 
 | Stage | Contract |
 | --- | --- |
@@ -99,7 +117,7 @@ Payload size is a separate budget from knowledge tokens. Requests may pass `payl
 
 ## External Knowledge-Base Adapter Protocol
 
-External knowledge-base adapters implement the `knowledgeBase` mount behind `pact.knowledge.v1`. The first conformance target is mature open-source knowledge-base backends only: PostgreSQL + pgvector, Qdrant, OpenSearch, and optional Weaviate. Product-level RAG apps, orchestration frameworks, proprietary services, and experimental graph/RAG stacks stay outside the required adapter matrix until the mature OSS fixture is stable.
+External knowledge-base adapters implement the `knowledgeBase` mount behind `v0.0.1:knowledge:core-1`. The first conformance target is mature open-source knowledge-base backends only: PostgreSQL + pgvector, Qdrant, OpenSearch, and optional Weaviate. Product-level RAG apps, orchestration frameworks, proprietary services, and experimental graph/RAG stacks stay outside the required adapter matrix until the mature OSS fixture is stable.
 
 Reference conformance backends:
 
@@ -137,8 +155,8 @@ Minimum conformance set:
 
 ```json
 {
-  "protocolVersion": "pact.knowledge.v1",
-  "adapterProtocolVersion": "pact.external-knowledge-adapter.v1",
+  "protocolVersion": "v0.0.1:knowledge:core-1",
+  "adapterProtocolVersion": "v0.0.1:external-service:knowledge-adapter-1",
   "backend": {
     "adapterId": "enterprise-search",
     "backendKind": "external",
@@ -197,7 +215,7 @@ Adapters ingest first-layer corpus packages through `knowledge.ingest.batch` or 
 
 ```json
 {
-  "protocolVersion": "pact.knowledge.v1",
+  "protocolVersion": "v0.0.1:knowledge:core-1",
   "batchId": "job-123",
   "corpus": {
     "packageType": "pact.normalized-documents",
@@ -289,7 +307,7 @@ Ingest response:
 
 ```json
 {
-  "protocolVersion": "pact.knowledge.v1",
+  "protocolVersion": "v0.0.1:knowledge:core-1",
   "batchId": "job-123",
   "backend": {"adapterId": "enterprise-search", "generation": 17},
   "indexedCounts": {"documents": 1, "sections": 1, "blocks": 1, "assets": 1, "relationships": 1},
@@ -357,7 +375,7 @@ Search response must be evidence-first:
 
 ```json
 {
-  "protocolVersion": "pact.knowledge.v1",
+  "protocolVersion": "v0.0.1:knowledge:core-1",
   "queryId": "query-1",
   "backend": {"adapterId": "enterprise-search", "generation": 17},
   "evidence": [
@@ -462,7 +480,7 @@ Mirror responses use the same cursor envelope as summary sync but carry Knowledg
 
 ```json
 {
-  "protocolVersion": "pact.knowledge.v1",
+  "protocolVersion": "v0.0.1:knowledge:core-1",
   "scope": "mirror",
   "cursor": "12",
   "latestCursor": "12",
@@ -536,11 +554,11 @@ Knowledge modules may call internal modules through these protocol names:
 
 | Protocol | Responsibility |
 | --- | --- |
-| `pact.vector.v1` | Vector upsert/search/delete. |
-| `pact.embedding.v1` | Text, image, and joint embedding generation. |
-| `pact.assetStore.v1` | Binary asset persistence, validation, and URL/path policy. |
-| `pact.retrieval.v1` | Retrieval fusion, parent expansion, reranking, and evidence shaping. |
-| `pact.learning.v1` | Feedback aggregation, retrieval profile tuning, suggestion generation, and audited self-evolution. |
+| `v0.0.1:knowledge:vector-1` | Vector upsert/search/delete. |
+| `v0.0.1:knowledge:embedding-1` | Text, image, and joint embedding generation. |
+| `v0.0.1:storage:asset-store-1` | Binary asset persistence, validation, and URL/path policy. |
+| `v0.0.1:knowledge:retrieval-1` | Retrieval fusion, parent expansion, reranking, and evidence shaping. |
+| `v0.0.1:knowledge:learning-1` | Feedback aggregation, retrieval profile tuning, suggestion generation, and audited self-evolution. |
 
 The built-in module currently provides local SQLite/object-storage implementations for these protocols. External implementations can replace them if the method shapes remain compatible.
 
@@ -548,12 +566,12 @@ The built-in module currently provides local SQLite/object-storage implementatio
 
 | Component | Protocol | Bundled status | Notes |
 | --- | --- | --- | --- |
-| `KnowledgeCore` | `pact.knowledge.v1` | bundled by default | Owns `knowledge-core/knowledge.sqlite`, `knowledge-core/assets/`, evidence shaping, and Markdown rendering. |
-| `EmbeddingRuntime` | `pact.embedding.v1` | bundled fallback | Uses project-internal deterministic text/image fallback; it must not download model files at startup. |
-| `VectorStore` | `pact.vector.v1` | optional module plus KnowledgeCore fallback | Built-in local backend uses `sqlite-vec` when available and keeps JSON vectors as deterministic fallback. Native/vector DB adapters must remain behind this protocol. |
-| `assetStore` | `pact.assetStore.v1` | bundled fallback | Stores assets by SHA-256 and enforces URL/path policy. |
-| `retrieval` | `pact.retrieval.v1` | bundled fallback | Handles fusion, parent expansion, rerank, and evidence pack construction. |
-| `LearningRuntime` | `pact.learning.v1` | bundled deterministic JavaScript fallback; external JS adapter optional | Uses feedback to tune retrieval profiles automatically and emits reviewable suggestions for canonical knowledge changes. Optional framework or store integrations must be called through JavaScript and must not download models implicitly. |
+| `KnowledgeCore` | `v0.0.1:knowledge:core-1` | bundled by default | Owns `knowledge-core/knowledge.sqlite`, `knowledge-core/assets/`, evidence shaping, and Markdown rendering. |
+| `EmbeddingRuntime` | `v0.0.1:knowledge:embedding-1` | bundled fallback | Uses project-internal deterministic text/image fallback; it must not download model files at startup. |
+| `VectorStore` | `v0.0.1:knowledge:vector-1` | optional module plus KnowledgeCore fallback | Built-in local backend uses `sqlite-vec` when available and keeps JSON vectors as deterministic fallback. Native/vector DB adapters must remain behind this protocol. |
+| `assetStore` | `v0.0.1:storage:asset-store-1` | bundled fallback | Stores assets by SHA-256 and enforces URL/path policy. |
+| `retrieval` | `v0.0.1:knowledge:retrieval-1` | bundled fallback | Handles fusion, parent expansion, rerank, and evidence pack construction. |
+| `LearningRuntime` | `v0.0.1:knowledge:learning-1` | bundled deterministic JavaScript fallback; external JS adapter optional | Uses feedback to tune retrieval profiles automatically and emits reviewable suggestions for canonical knowledge changes. Optional framework or store integrations must be called through JavaScript and must not download models implicitly. |
 
 ## Offline Package And License Gate
 

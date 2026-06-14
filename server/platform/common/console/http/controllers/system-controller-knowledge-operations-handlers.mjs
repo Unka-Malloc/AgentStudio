@@ -187,15 +187,6 @@ export function createSystemControllerKnowledgeOperationsHandlers({
         errorMessage: "删除词袋失败。"
       });
     },
-    async handleProposeKnowledgeWordClouds({ operation, requestBody, authSession, response }) {
-      await sendConsoleDomainOperation({
-        operationId: operation?.id || "knowledge.word_clouds.propose",
-        input: parseJsonBody(requestBody),
-        response,
-        context: knowledgeWorkflowContext(authSession),
-        errorMessage: "生成知识词云失败。"
-      });
-    },
     async handleStorageDoctor({ operation, response }) {
       await sendConsoleDomainOperation({
         operationId: operation?.id || "storage.doctor",

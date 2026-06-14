@@ -29,8 +29,8 @@ Maintain Pact's runtime KnowledgeSkill system. This is not a Codex local skill f
 ## Workflow
 
 1. Inspect current docs and operation registry before changing behavior; this area moves with Tool Management and knowledge runtime.
-2. For agent Q&A, use `knowledge.agent_skill.plan` or `pact.knowledge.agentSkill.plan` before search so intent, coarse branch, evidence needs, rewrite, and validation are explicit.
-3. List or read skills with `GET /api/knowledge/skills`, `GET /api/knowledge/skills/:skillId`, CLI `knowledge skills`, or Tool Management ids `pact.knowledge.skills.list/get`.
+2. For agent Q&A, use `knowledge.agent_skill.plan` or `pact.agentLibrary.agentSkill.plan` before search so intent, coarse branch, evidence needs, rewrite, and validation are explicit.
+3. List or read skills with `GET /api/knowledge/skills`, `GET /api/knowledge/skills/:skillId`, CLI `knowledge skills`, or Tool Management ids `pact.agentLibrary.skills.list/get`.
 4. Generate corpus-backed skills with `POST /api/knowledge/skills/generate` or `knowledge skills generate --query QUERY`; keep `pending_review` unless review/deployment explicitly approves publishing.
 5. Accept agent-created proposals through `POST /api/knowledge/skills/propose`; require `title`, `summary`, `decisionHeuristics`, `honestBoundaries`, `evidenceRefs`, and a reuse reason.
 6. Resolve lifecycle with `knowledge.skills.resolve` actions: `publish`, `reject`, `archive`, `draft`, or `pending_review`. Do not use `force` unless bypassing the quality gate is the explicit task.
@@ -41,19 +41,19 @@ Maintain Pact's runtime KnowledgeSkill system. This is not a Codex local skill f
 
 External agents should use `/api/tool-management/v1/execute` with grant tokens instead of direct Console `/api/knowledge/*` routes. Useful tool ids include:
 
-- `pact.knowledge.agentSkill`
-- `pact.knowledge.agentSkill.plan`
-- `pact.knowledge.agentSkill.run`
-- `pact.knowledge.skills.list`
-- `pact.knowledge.skills.get`
-- `pact.knowledge.skills.generate`
-- `pact.knowledge.skills.propose`
-- `pact.knowledge.skills.resolve`
-- `pact.knowledge.skillFramework`
-- `pact.knowledge.skillFramework.set`
-- `pact.knowledge.skills.evaluation.runs.create`
-- `pact.knowledge.skills.deployments.create`
-- `pact.knowledge.skills.deployments.rollback`
+- `pact.agentLibrary.agentSkill`
+- `pact.agentLibrary.agentSkill.plan`
+- `pact.agentLibrary.agentSkill.run`
+- `pact.agentLibrary.skills.list`
+- `pact.agentLibrary.skills.get`
+- `pact.agentLibrary.skills.generate`
+- `pact.agentLibrary.skills.propose`
+- `pact.agentLibrary.skills.resolve`
+- `pact.agentLibrary.skillFramework`
+- `pact.agentLibrary.skillFramework.set`
+- `pact.agentLibrary.skills.evaluation.runs.create`
+- `pact.agentLibrary.skills.deployments.create`
+- `pact.agentLibrary.skills.deployments.rollback`
 
 ## Verification
 

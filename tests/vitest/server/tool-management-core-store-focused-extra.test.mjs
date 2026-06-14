@@ -20,19 +20,25 @@ async function withTempUserDataPath(testCase) {
 }
 
 function createCapabilityProvider() {
+  let issueCount = 0;
+  const credentialIdsByToken = new Map();
   return {
-    issue: vi.fn(async ({ credentialId, capabilities, expiresAt }) => ({
-      capabilityKey: `ock_${credentialId}`,
-      credentialId,
-      protocolVersion: "pact.opaque-capability-key.v1",
-      capabilitySetHash: `hash_${(capabilities || []).length}`,
-      capabilityCount: (capabilities || []).length,
-      runtimeLookupGeneration: 3,
-      expiresAt
-    })),
+    issue: vi.fn(async ({ credentialId, capabilities, expiresAt }) => {
+      const capabilityKey = `ock_${credentialId}_${++issueCount}`;
+      credentialIdsByToken.set(capabilityKey, credentialId);
+      return {
+        capabilityKey,
+        credentialId,
+        protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
+        capabilitySetHash: `hash_${(capabilities || []).length}`,
+        capabilityCount: (capabilities || []).length,
+        runtimeLookupGeneration: 3,
+        expiresAt
+      };
+    }),
     verify: vi.fn(async ({ capabilityKey, requiredCapability }) => ({
       ok: true,
-      credentialId: String(capabilityKey || "").replace(/^ock_/, ""),
+      credentialId: credentialIdsByToken.get(capabilityKey) || String(capabilityKey || "").replace(/^ock_/, ""),
       requiredCapability
     })),
     invalidateCredential: vi.fn(async () => undefined)
@@ -43,7 +49,7 @@ function createBindingGuard() {
   return {
     bindCapabilityKey: vi.fn(async ({ credentialId, context }) => ({
       bindingId: `binding-${credentialId}`,
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       bindingStrength: context.agentId ? "strong" : "standard",
       requireUser: true,
       requireAgent: true,
@@ -60,10 +66,10 @@ describe("tool-management core store focused extra coverage", () => {
       const capabilityProvider = createCapabilityProvider();
       const bindingGuard = createBindingGuard();
       const capabilityResolver = vi.fn(() => [
-        toolExecuteCapabilityId("pact.jobs.read")
+        toolExecuteCapabilityId("pact.agentLibrary.search")
       ]);
       const policyRevisionProvider = vi.fn(() => ({
-        protocol_version: "pact.policy.v9",
+        protocol_version: "v0.0.1:risk-control:policy-9",
         policyRevision: 7,
         updated_at: "2026-06-05T00:00:00.000Z"
       }));
@@ -78,12 +84,12 @@ describe("tool-management core store focused extra coverage", () => {
       try {
         const { grant, token } = await store.createGrant({
           label: "Opaque Grant",
-          toolsets: "pact.jobs.read, pact.jobs.read",
+          toolsets: "pact.agentLibrary.read, pact.agentLibrary.read",
           scopes: "knowledge:read,invalid:scope",
           rateLimit: { per_minute: "15" },
           metadata: {
-            capabilities: [toolExecuteCapabilityId("pact.knowledge.search")],
-            capabilityIds: [toolExecuteCapabilityId("pact.knowledge.search")],
+            capabilities: [toolExecuteCapabilityId("pact.agentLibrary.search")],
+            capabilityIds: [toolExecuteCapabilityId("pact.agentLibrary.search")],
             permissions: ["admin"],
             clientId: "client-1",
             clientName: "client-name-1"
@@ -101,7 +107,7 @@ describe("tool-management core store focused extra coverage", () => {
         expect(capabilityProvider.issue).toHaveBeenCalledWith(expect.objectContaining({
           credentialId: grant.id,
           capabilities: expect.arrayContaining([
-            toolExecuteCapabilityId("pact.knowledge.search")
+            toolExecuteCapabilityId("pact.agentLibrary.search")
           ])
         }));
         expect(bindingGuard.bindCapabilityKey).toHaveBeenCalledWith(expect.objectContaining({
@@ -118,7 +124,7 @@ describe("tool-management core store focused extra coverage", () => {
 
         const rawGrant = store.getRawGrant(grant.id);
         expect(rawGrant.rateLimit).toEqual({ perMinute: 15 });
-        expect(rawGrant.toolsets).toEqual(["pact.jobs.read"]);
+        expect(rawGrant.toolsets).toEqual(["pact.agentLibrary.read"]);
         expect(rawGrant.scopes).toEqual(["knowledge:read"]);
         expect(rawGrant.metadata).toMatchObject({
           clientId: "client-1",
@@ -131,8 +137,8 @@ describe("tool-management core store focused extra coverage", () => {
           teamIds: ["team-a", "team-b"],
           policyRevision: 7,
           policyRevisionUpdatedAt: "2026-06-05T00:00:00.000Z",
-          policyRevisionProtocolVersion: "pact.policy.v9",
-          credentialProtocol: "pact.opaque-capability-key.v1",
+          policyRevisionProtocolVersion: "v0.0.1:risk-control:policy-9",
+          credentialProtocol: "v0.0.1:risk-control:opaque-capability-key-1",
           credentialId: grant.id,
           capabilitySetHash: "hash_1",
           capabilityCount: 1,
@@ -149,12 +155,12 @@ describe("tool-management core store focused extra coverage", () => {
           id: grant.id,
           hasToken: true,
           credential: {
-            protocolVersion: "pact.opaque-capability-key.v1",
+            protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
             credentialId: grant.id,
             capabilitySetHash: "hash_1",
             capabilityCount: 1,
             runtimeLookupGeneration: 3,
-            bindingProtocol: "pact.capability-binding-guard.v1",
+            bindingProtocol: "v0.0.1:risk-control:capability-binding-guard-1",
             bindingStrength: "strong",
             bindingRequiredUser: true,
             bindingRequiredAgent: true,
@@ -167,14 +173,15 @@ describe("tool-management core store focused extra coverage", () => {
           request: {
             headers: {
               authorization: `Bearer ${token}`,
-              "x-pact-binding-namespace": "request-ns",
-              "x-pact-agent-id": "request-agent",
-              "x-pact-agent-profile-id": "request-profile",
-              "x-pact-bound-user-id": "request-user",
-              "x-pact-client-name": "request-client"
+              "x-pact-binding-namespace": "tool-management",
+              "x-pact-agent-id": "agent-1",
+              "x-pact-agent-profile-id": "profile-1",
+              "x-pact-bound-user-id": "user-1",
+              "x-pact-client-id": "client-1",
+              "x-pact-client-name": "client-name-1"
             }
           },
-          tool: { id: "pact.knowledge.search" },
+          tool: { id: "pact.agentLibrary.search" },
           context: {}
         });
 
@@ -186,17 +193,17 @@ describe("tool-management core store focused extra coverage", () => {
           capabilityKey: token,
           credentialId: grant.id,
           context: {
-            namespace: "request-ns",
-            agentId: "request-agent",
-            agentProfileId: "request-profile",
-            userId: "request-user",
-            boundUserId: "request-user",
-            clientId: "request-client"
+            namespace: "tool-management",
+            agentId: "agent-1",
+            agentProfileId: "profile-1",
+            userId: "user-1",
+            boundUserId: "user-1",
+            clientId: "client-1"
           }
         }));
 
         const rotated = await store.rotateGrantToken(grant.id);
-        expect(rotated.token).toMatch(/^sat_/);
+        expect(rotated.token).toMatch(/^ock_/);
         expect(rotated.token).not.toBe(token);
         expect(capabilityProvider.invalidateCredential).toHaveBeenCalledWith(expect.objectContaining({
           credentialId: grant.id,
@@ -223,7 +230,7 @@ describe("tool-management core store focused extra coverage", () => {
         }));
         expect(await store.authorizeRequest({
           request: { headers: { authorization: `Bearer ${token}` } },
-          tool: { id: "pact.knowledge.search" }
+          tool: { id: "pact.agentLibrary.search" }
         })).toMatchObject({
           ok: false,
           status: 401,
@@ -310,7 +317,7 @@ describe("tool-management core store focused extra coverage", () => {
         const mcpRequest = store.createMcpAuthorizationRequest({
           clientName: "fallback-client",
           requestedScopes: ["knowledge:read"],
-          requestedTools: [{ id: "pact.knowledge.read" }],
+          requestedTools: [{ id: "pact.agentLibrary.read" }],
           reason: "source-ip-fallback",
           request: {
             connection: {
@@ -324,7 +331,7 @@ describe("tool-management core store focused extra coverage", () => {
             requestId: mcpRequest.requestId,
             sourceIp: "10.0.0.8",
             requestedScopes: ["knowledge:read"],
-            requestedTools: [{ id: "pact.knowledge.read" }]
+            requestedTools: [{ id: "pact.agentLibrary.read" }]
           })
         ]);
         expect(store.resolveMcpAuthorizationRequest({

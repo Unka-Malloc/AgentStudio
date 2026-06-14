@@ -10,8 +10,8 @@ import { createToolCatalog } from "../platform/specialized/capabilities/tools/to
 
 function productionHealth() {
   return {
-    schemaVersion: 1,
-    reportType: "pact.production-health.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    reportType: "v0.0.1:platform:production-health-1",
     generatedAt: "2026-05-22T00:00:00.000Z",
     status: "blocked",
     latestReport: {
@@ -137,7 +137,7 @@ function verifyOperationsAndTools() {
   const catalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
   const generateTool = catalog.tools.find((tool) => tool.id === "pact.executiveReport.generate");
   assert.ok(generateTool, "executive report generate tool must be exposed");
-  assert.ok(generateTool.toolsets.includes("pact.knowledge.maintain"));
+  assert.ok(generateTool.toolsets.includes("pact.agentLibrary.maintain"));
 }
 
 async function main() {

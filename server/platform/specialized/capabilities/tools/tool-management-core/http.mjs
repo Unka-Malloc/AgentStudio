@@ -30,13 +30,127 @@ function queryPayload(url = null) {
   return Object.fromEntries(url.searchParams.entries());
 }
 
+const EXTERNAL_CONTEXT_PROOF_KEYS = new Set([
+  "approval",
+  "pendingOperationApproved",
+  "approvedPendingOperation",
+  "authorizedGrant",
+  "authorization",
+  "authorizationDecision",
+  "policy",
+  "policyDecision",
+  "policyDecisionId",
+  "grant",
+  "grantId",
+  "transport",
+  "requirePendingOperation",
+  "pendingApprovalRequired",
+  "approvalExpiresAt",
+  "expiresAt",
+  "relayChildOperation",
+  "grantBindingVerified",
+  "requestBindingMismatches",
+  "relayMcpGrantId",
+  "relaySessionId",
+  "relayTurnId",
+  "virtualAgentId",
+  "targetId",
+  "parentOperationId",
+  "sourceIp",
+  "userAgent",
+  "toolExecutionId"
+]);
+
+const SAFE_EXTERNAL_CONTEXT_KEYS = new Set([
+  "source",
+  "correlationId",
+  "requestId",
+  "idempotencyKey",
+  "agentId",
+  "agentProfileId",
+  "profileId",
+  "userId",
+  "boundUserId",
+  "subjectId",
+  "clientId",
+  "clientName",
+  "namespace",
+  "bindingNamespace",
+  "batch",
+  "call"
+]);
+
+const AGENT_RELAY_EXTERNAL_SECRET_INPUT_KEYS = new Set([
+  "sourceMcpConfig",
+  "sourceMcpToken",
+  "upstreamToken",
+  "relayMcpToken",
+  "relayMcpAccessToken"
+]);
+
+function plainObject(value = null) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function sanitizeExternalContextScalar(value) {
+  if (typeof value === "string") {
+    const text = value.trim();
+    return text.length > 256 ? text.slice(0, 256) : text;
+  }
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  return undefined;
+}
+
+function sanitizeExternalToolContext(value = {}, serverContext = {}) {
+  const sanitized = {};
+  for (const [key, entry] of Object.entries(plainObject(value))) {
+    if (EXTERNAL_CONTEXT_PROOF_KEYS.has(key) || key.startsWith("__pact") || !SAFE_EXTERNAL_CONTEXT_KEYS.has(key)) {
+      continue;
+    }
+    const scalar = sanitizeExternalContextScalar(entry);
+    if (scalar !== undefined) {
+      sanitized[key] = scalar;
+    }
+  }
+  return {
+    ...sanitized,
+    ...serverContext
+  };
+}
+
+function sanitizeAgentRelayHttpInput(value = {}) {
+  const sanitized = {};
+  for (const [key, entry] of Object.entries(plainObject(value))) {
+    if (AGENT_RELAY_EXTERNAL_SECRET_INPUT_KEYS.has(key)) {
+      continue;
+    }
+    sanitized[key] = entry;
+  }
+  return sanitized;
+}
+
 function routeAcpAgentRelayRequest({ method, suffix, url, requestBody }) {
   const normalizedMethod = String(method || "GET").toUpperCase();
   const body = normalizedMethod === "GET" || normalizedMethod === "HEAD" ? {} : parseJsonBody(requestBody);
-  const input = {
+  const input = sanitizeAgentRelayHttpInput({
     ...queryPayload(url),
     ...body
-  };
+  });
+  if (normalizedMethod === "GET" && suffix === "/templates") {
+    return { operationId: "acp_agent_relay.templates.list", input };
+  }
+  const templateMatch = suffix.match(/^\/templates\/([^/]+)$/);
+  if (normalizedMethod === "GET" && templateMatch) {
+    return {
+      operationId: "acp_agent_relay.templates.list",
+      input: { ...input, templateId: decodeURIComponent(templateMatch[1]) }
+    };
+  }
   if (normalizedMethod === "GET" && suffix === "/virtual-agents") {
     return { operationId: "acp_agent_relay.virtual_agents.list", input };
   }
@@ -158,7 +272,7 @@ async function authorizeConsole({
 
 function sendAuthorizationDenied(response, authorization) {
   sendJson(response, authorization.status || 403, {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     error: {
       code: authorization.status === 401 ? "console_unauthenticated" : "console_forbidden",
       message: authorization.error || "Permission denied.",
@@ -198,7 +312,7 @@ export function createToolManagementHttpRouter({
       requestId: request?.__pactRequestId || ""
     });
     sendJson(response, 403, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "confirmation_required",
         message: "Tool management grant changes require x-pact-safety-confirm: true."
@@ -295,7 +409,7 @@ export function createToolManagementHttpRouter({
       });
       if (!routed) {
         return complete(404, {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           error: {
             code: "agent_relay_route_not_found",
             message: "ACP agent relay route not found.",
@@ -306,7 +420,7 @@ export function createToolManagementHttpRouter({
       const tool = platform.registry.getToolByOperationId?.(routed.operationId);
       if (!tool) {
         return complete(404, {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           error: {
             code: "agent_relay_tool_not_exposed",
             message: "ACP agent relay operation is not exposed as an agent tool."
@@ -341,18 +455,18 @@ export function createToolManagementHttpRouter({
       const tool = platform.registry.getTool(toolId);
       if (!tool) {
         return complete(404, {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           error: { code: "unknown_tool", message: "Tool is not registered.", details: { toolId } }
         });
       }
-      return complete(200, { schemaVersion: 1, tool });
+      return complete(200, { schemaVersion: "v0.0.1:schema:definition-1", tool });
     }
 
     if (normalizedMethod === "GET" && suffix === "/toolsets") {
       if (!(await requireConsole(request, response, normalizedMethod, url, ["console:read"]))) {
         return true;
       }
-      return complete(200, { schemaVersion: 1, toolsets: platform.registry.listToolsets() });
+      return complete(200, { schemaVersion: "v0.0.1:schema:definition-1", toolsets: platform.registry.listToolsets() });
     }
 
     if (normalizedMethod === "POST" && suffix === "/toolsets/resolve") {
@@ -361,7 +475,7 @@ export function createToolManagementHttpRouter({
       }
       const payload = parseJsonBody(requestBody);
       return complete(200, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         result: platform.registry.resolveToolset(payload)
       });
     }
@@ -370,7 +484,7 @@ export function createToolManagementHttpRouter({
       if (!(await requireConsole(request, response, normalizedMethod, url, ["console:read"]))) {
         return true;
       }
-      return complete(200, { schemaVersion: 1, profiles: platform.registry.listProfiles() });
+      return complete(200, { schemaVersion: "v0.0.1:schema:definition-1", profiles: platform.registry.listProfiles() });
     }
 
     if (normalizedMethod === "POST" && (suffix === "/policy/evaluate" || suffix === "/policy/preview")) {
@@ -379,7 +493,7 @@ export function createToolManagementHttpRouter({
       }
       const payload = parseJsonBody(requestBody);
       return complete(200, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         decision: platform.policyEngine.preview(payload)
       });
     }
@@ -390,7 +504,7 @@ export function createToolManagementHttpRouter({
         toolId: payload.toolId,
         input: payload.input || {},
         request,
-        context: payload.context || {},
+        context: sanitizeExternalToolContext(payload.context, { transport: "tool-http" }),
         dryRun: suffix === "/dry-run" || payload.dryRun === true
       });
       return complete(result.status || 500, result.payload);
@@ -406,19 +520,22 @@ export function createToolManagementHttpRouter({
             toolId: call.toolId,
             input: call.input || {},
             request,
-            context: { ...(payload.context || {}), ...(call.context || {}) },
+            context: sanitizeExternalToolContext({
+              ...plainObject(payload.context),
+              ...plainObject(call.context)
+            }, { transport: "tool-http-batch" }),
             dryRun: payload.dryRun === true || call.dryRun === true
           })).payload
         );
       }
-      return complete(200, { schemaVersion: 1, results });
+      return complete(200, { schemaVersion: "v0.0.1:schema:definition-1", results });
     }
 
     if (normalizedMethod === "GET" && suffix === "/grants") {
       if (!(await requireConsole(request, response, normalizedMethod, url))) {
         return true;
       }
-      return complete(200, { schemaVersion: 1, grants: platform.store.listGrants() });
+      return complete(200, { schemaVersion: "v0.0.1:schema:definition-1", grants: platform.store.listGrants() });
     }
 
     if (normalizedMethod === "POST" && suffix === "/grants") {
@@ -430,7 +547,7 @@ export function createToolManagementHttpRouter({
       }
       const result = await platform.store.createGrant(parseJsonBody(requestBody));
       return complete(201, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         grant: result.grant,
         token: result.token
       });
@@ -446,9 +563,9 @@ export function createToolManagementHttpRouter({
       }
       const result = await platform.store.rotateGrantToken(decodeURIComponent(grantRotateMatch[1]));
       if (!result) {
-        return complete(404, { schemaVersion: 1, error: { code: "grant_not_found", message: "Grant not found." } });
+        return complete(404, { schemaVersion: "v0.0.1:schema:definition-1", error: { code: "grant_not_found", message: "Grant not found." } });
       }
-      return complete(200, { schemaVersion: 1, grant: result.grant, token: result.token });
+      return complete(200, { schemaVersion: "v0.0.1:schema:definition-1", grant: result.grant, token: result.token });
     }
 
     const grantRevokeMatch = suffix.match(/^\/grants\/([^/]+)\/revoke$/);
@@ -462,9 +579,9 @@ export function createToolManagementHttpRouter({
       const payload = parseJsonBody(requestBody);
       const grant = await platform.store.revokeGrant(decodeURIComponent(grantRevokeMatch[1]), payload.reason || "");
       if (!grant) {
-        return complete(404, { schemaVersion: 1, error: { code: "grant_not_found", message: "Grant not found." } });
+        return complete(404, { schemaVersion: "v0.0.1:schema:definition-1", error: { code: "grant_not_found", message: "Grant not found." } });
       }
-      return complete(200, { schemaVersion: 1, grant });
+      return complete(200, { schemaVersion: "v0.0.1:schema:definition-1", grant });
     }
 
     const grantUpdateMatch = suffix.match(/^\/grants\/([^/]+)$/);
@@ -477,10 +594,10 @@ export function createToolManagementHttpRouter({
       }
       const grant = platform.store.updateGrant(decodeURIComponent(grantUpdateMatch[1]), parseJsonBody(requestBody));
       if (!grant) {
-        return complete(404, { schemaVersion: 1, error: { code: "grant_not_found", message: "Grant not found." } });
+        return complete(404, { schemaVersion: "v0.0.1:schema:definition-1", error: { code: "grant_not_found", message: "Grant not found." } });
       }
       await platform.store.flushChangeNotifications?.();
-      return complete(200, { schemaVersion: 1, grant });
+      return complete(200, { schemaVersion: "v0.0.1:schema:definition-1", grant });
     }
 
     if (normalizedMethod === "GET" && suffix === "/audit") {
@@ -488,7 +605,7 @@ export function createToolManagementHttpRouter({
         return true;
       }
       return complete(200, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         items: platform.store.listAudit({
           limit: Number(url.searchParams.get("limit") || 100),
           toolId: url.searchParams.get("toolId") || "",
@@ -505,9 +622,9 @@ export function createToolManagementHttpRouter({
       const toolExecutionId = decodeURIComponent(suffix.slice("/audit/".length));
       const audit = platform.store.getAudit(toolExecutionId);
       if (!audit) {
-        return complete(404, { schemaVersion: 1, error: { code: "audit_not_found", message: "Audit record not found." } });
+        return complete(404, { schemaVersion: "v0.0.1:schema:definition-1", error: { code: "audit_not_found", message: "Audit record not found." } });
       }
-      return complete(200, { schemaVersion: 1, audit });
+      return complete(200, { schemaVersion: "v0.0.1:schema:definition-1", audit });
     }
 
     if (normalizedMethod === "GET" && suffix === "/metrics/summary") {
@@ -515,7 +632,7 @@ export function createToolManagementHttpRouter({
         return true;
       }
       return complete(200, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         metrics: platform.store.metricsSummary({
           limit: Number(url.searchParams.get("limit") || 2000),
           since: url.searchParams.get("since") || "",
@@ -538,7 +655,7 @@ export function createToolManagementHttpRouter({
         return true;
       }
       return complete(200, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         export: platform.store.metricsExport({
           limit: Number(url.searchParams.get("limit") || 2000),
           since: url.searchParams.get("since") || "",
@@ -561,7 +678,7 @@ export function createToolManagementHttpRouter({
         return true;
       }
       return complete(200, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         health: platform.store.metricsHealth({
           windowSeconds: Number(url.searchParams.get("windowSeconds") || url.searchParams.get("window-seconds") || 300),
           maxRequestErrorRate: url.searchParams.get("maxRequestErrorRate") ||
@@ -600,7 +717,7 @@ export function createToolManagementHttpRouter({
         return true;
       }
       return complete(200, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         storage: platform.store.metricsStorageSummary()
       });
     }
@@ -614,7 +731,7 @@ export function createToolManagementHttpRouter({
       }
       const payload = parseJsonBody(requestBody);
       return complete(200, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         prune: platform.store.pruneMetrics({
           olderThan: payload.olderThan || payload.older_than || "",
           retentionDays: payload.retentionDays ?? payload.retention_days ?? 0,
@@ -631,7 +748,7 @@ export function createToolManagementHttpRouter({
         return true;
       }
       return complete(200, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         events: platform.store.listAudit({ limit: Number(url.searchParams.get("limit") || 100) })
       });
     }
@@ -641,7 +758,7 @@ export function createToolManagementHttpRouter({
         return true;
       }
       return complete(200, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         pendingOperations: platform.store.listPendingOperations({
           status: url.searchParams.get("status") || "pending",
           limit: Number(url.searchParams.get("limit") || 100)
@@ -659,7 +776,7 @@ export function createToolManagementHttpRouter({
       }
       if (!platform.runtime?.resumePendingOperation) {
         return complete(503, {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           error: {
             code: "pending_operation_runtime_unavailable",
             message: "Pending operation runtime is unavailable."
@@ -671,7 +788,7 @@ export function createToolManagementHttpRouter({
         pendingOperationId: decodeURIComponent(pendingResolveMatch[1]),
         resolution: payload.resolution || payload.decision || "",
         request,
-        context: payload.context || {},
+        context: sanitizeExternalToolContext(payload.context, { transport: "tool-http-approval" }),
         resolvedBy: payload.resolvedBy || payload.reviewer || "console",
         reason: payload.reason || ""
       });
@@ -679,7 +796,7 @@ export function createToolManagementHttpRouter({
     }
 
     return complete(404, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       error: {
         code: "tool_management_route_not_found",
         message: "Tool management route not found.",

@@ -18,6 +18,7 @@ type RuntimeDependencyRunCard = {
 
 type RuntimeDownloadActionOptions = {
   downloadRuntimeDependency: (item: RuntimeDependency) => Promise<RuntimeDependencyActionResult>;
+  refreshRuntimeDependency?: (targetId: string, options?: { silent?: boolean }) => Promise<void>;
   refreshRuntimeDependencies: (options?: { silent?: boolean }) => Promise<void>;
 };
 
@@ -145,6 +146,14 @@ export function createRuntimeDownloadActionController(options: RuntimeDownloadAc
     return actionBusyIds.value.includes(targetId) || isRuntimeDependencyRunActive(latestRunForTarget(targetId)?.status || "");
   }
 
+  function activeRefreshTargets() {
+    const activeRunTargets = downloads.value
+      .filter((run) => isRuntimeDependencyRunActive(run.status))
+      .map((run) => run.targetId)
+      .filter(Boolean);
+    return [...new Set([...activeRunTargets, ...actionBusyIds.value.filter(Boolean)])];
+  }
+
   const actionRunCards = computed<RuntimeDependencyRunCard[]>(() =>
     downloads.value.slice(0, 8).map(runCardFromRun),
   );
@@ -173,6 +182,11 @@ export function createRuntimeDownloadActionController(options: RuntimeDownloadAc
   function startActionPolling() {
     stopActionPolling();
     actionPolling.start(() => {
+      const targetIds = activeRefreshTargets();
+      if (targetIds.length && options.refreshRuntimeDependency) {
+        void Promise.all(targetIds.map((targetId) => options.refreshRuntimeDependency?.(targetId, { silent: true })));
+        return;
+      }
       void options.refreshRuntimeDependencies({ silent: true });
     }, 800);
   }
@@ -202,7 +216,11 @@ export function createRuntimeDownloadActionController(options: RuntimeDownloadAc
           ...downloads.value.filter((run) => run.runId !== queuedRun.runId && run.runId !== result.runId),
         ]);
       }
-      await options.refreshRuntimeDependencies({ silent: true });
+      if (options.refreshRuntimeDependency) {
+        await options.refreshRuntimeDependency(item.id, { silent: true });
+      } else {
+        await options.refreshRuntimeDependencies({ silent: true });
+      }
     } catch (error) {
       actionError.value = error instanceof Error ? error.message : String(error);
       setDownloadRuns([

@@ -426,7 +426,7 @@ describe("authorization capability backend final extra coverage", () => {
         capabilities: [apiCapabilityId("knowledge.search")]
       });
       expect(issued).toMatchObject({
-        protocolVersion: "pact.opaque-capability-key.v1",
+        protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
         credentialId: "opaque-secret-cred"
       });
       expect(await provider.describe()).toMatchObject({
@@ -556,7 +556,7 @@ describe("authorization capability backend final extra coverage", () => {
       alias: "opaque default helper",
       bindingStore: createMemoryCapabilityKeyBindingStore()
     });
-    expect(providerWithDefaultHelper.protocolVersion).toBe("pact.opaque-capability-key.v1");
+    expect(providerWithDefaultHelper.protocolVersion).toBe("v0.0.1:risk-control:opaque-capability-key-1");
     providerWithDefaultHelper.close();
   });
 

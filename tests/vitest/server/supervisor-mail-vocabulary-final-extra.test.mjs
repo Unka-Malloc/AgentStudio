@@ -322,7 +322,7 @@ describe("expert vocabulary final extra coverage", () => {
       const summary = await getExpertVocabularySummary(root);
       expect(summary).toMatchObject({
         path: getExpertVocabularyPath(root),
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         version: saved.version,
         entryCount: 1,
         activeEntryCount: 1,

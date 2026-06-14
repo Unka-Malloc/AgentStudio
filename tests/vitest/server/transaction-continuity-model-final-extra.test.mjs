@@ -62,7 +62,7 @@ async function writeNormalizedManifest(root) {
     manifestPath,
     JSON.stringify(
       {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         packageType: "pact.normalized-documents",
         documents: [
           {
@@ -98,13 +98,13 @@ describe("transaction continuity model final extra coverage", () => {
         mailRoot,
         "edge-entity.eml",
         emlFixture({
-          from: "Ops Alerts <alerts@hsbc.com>",
+          from: "Ops Alerts <alerts@bank.example>",
           to: "alpha@example.local; alpha@example.local, beta@example.local",
           cc: "gamma@example.local, delta@example.local",
           subject: undefined,
           date: "Tue, 06 Jun 2026 09:00:00 +0000",
           messageId: "edge-entity",
-          listId: "< Weekly.Updates.HSBC.com >",
+          listId: "< Weekly.Updates.bank.example >",
           references: "<ref-1> <ref-2>",
           inReplyTo: "<reply-1>",
           extraHeaders: ["X-Campaign-ID: < Spring-2026 >"],
@@ -156,10 +156,10 @@ describe("transaction continuity model final extra coverage", () => {
 
       expect(edgeSummary).toBeTruthy();
       expect(edgeSummary.title).toContain("银行账单");
-      expect(edgeSummary.senderOrg).toBe("hsbc.com");
+      expect(edgeSummary.senderOrg).toBe("bank.example");
       expect(edgeSummary.cadence).toBe("monthly");
       expect(edgeSummary.actionCategories).toEqual(["approval"]);
-      expect(edgeSummary.listIds).toContain("hsbc.com");
+      expect(edgeSummary.listIds).toContain("bank.example");
       expect(edgeSummary.businessEntities.contractIds).toContain("cn-2024-7788");
       expect(edgeSummary.businessEntities.ticketIds).toContain("jira-1234");
       expect(edgeSummary.businessEntities.invoiceIds).toContain("inv-2024-9001");
@@ -222,13 +222,13 @@ describe("transaction continuity model final extra coverage", () => {
 
       await writeMail(
         mailRoot,
-        "hsbc-statement.eml",
+        "bank-statement.eml",
         emlFixture({
-          from: "Statements <alerts@hsbc.com>",
+          from: "Statements <alerts@bank.example>",
           to: "user@example.local",
           subject: "Your monthly statement is ready",
           date: "Fri, 09 Jun 2026 09:00:00 +0000",
-          messageId: "hsbc-statement",
+          messageId: "bank-statement",
           body: "Monthly account statement, bill, payment and receipt details."
         })
       );
@@ -297,7 +297,7 @@ describe("transaction continuity model final extra coverage", () => {
       const byFile = new Map(result.summaries.map((item) => [item.messages[0].filePath, item]));
       const patreonExplicit = byFile.get("patreon-explicit.eml");
       const patreonFallback = byFile.get("patreon-fallback.eml");
-      const hsbcStatement = byFile.get("hsbc-statement.eml");
+      const bankStatement = byFile.get("bank-statement.eml");
       const amazonOrder = byFile.get("amazon-order.eml");
       const githubReport = byFile.get("github-report.eml");
       const blankReminder = byFile.get("blank-reminder.eml");
@@ -312,10 +312,10 @@ describe("transaction continuity model final extra coverage", () => {
       expect(patreonFallback.attention.actorLabel).toBe("Nova Creator");
       expect(patreonFallback.lineageId).not.toBe(patreonExplicit.lineageId);
 
-      expect(hsbcStatement.attention.sourceType).toBe("bank");
-      expect(hsbcStatement.attention.behaviorId).toBe("bank-statement");
-      expect(hsbcStatement.cadence).toBe("monthly");
-      expect(hsbcStatement.attention.sourceLabel).toBe("HSBC");
+      expect(bankStatement.attention.sourceType).toBe("bank");
+      expect(bankStatement.attention.behaviorId).toBe("bank-statement");
+      expect(bankStatement.cadence).toBe("monthly");
+      expect(bankStatement.attention.sourceLabel).toBe("Bank");
 
       expect(amazonOrder.attention.sourceType).toBe("commerce");
       expect(amazonOrder.attention.behaviorId).toBe("shopping-order");
@@ -344,7 +344,7 @@ describe("transaction continuity model final extra coverage", () => {
         mailRoot,
         "bank-jan.eml",
         emlFixture({
-          from: "Statements <alerts@hsbc.com>",
+          from: "Statements <alerts@bank.example>",
           to: "user@example.local",
           subject: "Your January statement is ready",
           date: "Mon, 12 Jun 2026 09:00:00 +0000",
@@ -356,7 +356,7 @@ describe("transaction continuity model final extra coverage", () => {
         mailRoot,
         "bank-feb.eml",
         emlFixture({
-          from: "Statements <alerts@hsbc.com>",
+          from: "Statements <alerts@bank.example>",
           to: "user@example.local",
           subject: "Your February statement is ready",
           date: "Thu, 13 Jun 2026 09:00:00 +0000",
@@ -413,7 +413,7 @@ describe("transaction continuity model final extra coverage", () => {
         reviewEvery: 0
       });
 
-      const bankSummary = second.summaries.find((item) => item.senderOrg === "hsbc.com");
+      const bankSummary = second.summaries.find((item) => item.senderOrg === "bank.example");
       expect(second.manifest.stats.failedFiles).toBe(0);
       expect(second.summaries.length).toBeGreaterThan(0);
       expect(bankSummary.messages.length).toBeGreaterThan(0);

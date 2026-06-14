@@ -110,7 +110,7 @@ function normalizeDecision(decision = {}, operationId = "") {
   const effect = asText(input.effect, input.allowed === true ? "allow" : "deny");
   return {
     ...input,
-    protocolVersion: asText(input.protocolVersion, "pact.authorization.v1"),
+    protocolVersion: asText(input.protocolVersion, "v0.0.1:risk-control:authorization-1"),
     decisionId: asText(input.decisionId, `source_guard_${Date.now().toString(36)}`),
     operationId: asText(input.operationId, operationId),
     effect,

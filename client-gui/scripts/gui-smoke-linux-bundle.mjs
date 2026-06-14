@@ -6,13 +6,12 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const workspaceRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const flutterClientRoot = path.join(workspaceRoot, "client-gui");
+const bundleRoot = path.join(workspaceRoot, "build", "client-gui", "bundles", "linux");
 
 function findLinuxBundle() {
-  const linuxBuildRoot = path.join(flutterClientRoot, "build", "linux");
   const candidates = [];
-  for (const arch of existsSync(linuxBuildRoot) ? readdirSync(linuxBuildRoot) : []) {
-    const bundleDir = path.join(linuxBuildRoot, arch, "release", "bundle");
+  for (const mode of existsSync(bundleRoot) ? readdirSync(bundleRoot) : []) {
+    const bundleDir = path.join(bundleRoot, mode, "bundle");
     if (existsSync(path.join(bundleDir, "flutter_client"))) {
       candidates.push(bundleDir);
     }
@@ -138,7 +137,7 @@ async function main() {
 
   const artifactDir = path.resolve(
     process.env.PACT_GUI_ARTIFACT_DIR ||
-      path.join(flutterClientRoot, "build", "linux-gui-smoke"),
+      path.join(workspaceRoot, "build", "artifacts", "client-gui", "linux-gui-smoke"),
   );
   mkdirSync(artifactDir, { recursive: true });
 

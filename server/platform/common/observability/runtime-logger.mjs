@@ -221,7 +221,7 @@ function normalizeEventRecord({ component, level, event, details }) {
     ...(details || {})
   };
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     ts: nowIso(),
     level,
     component,

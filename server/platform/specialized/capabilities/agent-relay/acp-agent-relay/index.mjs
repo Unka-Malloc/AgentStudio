@@ -7,17 +7,16 @@ import {
   createAcpSourceJsonRpcService,
   createAcpSourceJsonRpcTransportPair
 } from "./acp-source-json-rpc-service.mjs";
-import {
-  createAcpSourceStdioServer,
-  createAcpSourceStdioServerOptionsFromEnv,
-  runAcpSourceStdioServerFromEnv
-} from "./acp-source-stdio-server.mjs";
 import { AcpVirtualAgentRegistry, createFileAcpVirtualAgentRegistryAdapter } from "./acp-virtual-agent-registry.mjs";
 import { AcpTargetRegistry, createFileAcpTargetRegistryAdapter } from "./acp-target-registry.mjs";
 import { RelaySessionStore, createFileRelaySessionAdapter } from "./relay-session-store.mjs";
 import { AcpRelayRouter } from "./acp-relay-router.mjs";
 import { AcpSessionDriver, createAcpTargetConnection } from "./acp-session-driver.mjs";
 import { AcpClientConnection } from "./acp-client-connection.mjs";
+import {
+  AgentCliExecConnection,
+  createAgentCliExecConnection
+} from "./agent-cli-exec-connection.mjs";
 import {
   AntigravityAgentApiClient,
   buildAntigravityCascadeUserInteractionDecision,
@@ -69,7 +68,7 @@ import {
 } from "./acp-source-auth-context.mjs";
 import { RelayOperationExecutor } from "./relay-operation-executor.mjs";
 
-export const ACP_AGENT_RELAY_PROTOCOL_VERSION = "pact.acp-agent-relay.v1";
+export const ACP_AGENT_RELAY_PROTOCOL_VERSION = "v0.0.1:agent:acp-agent-relay-1";
 
 export {
   AcpInboundFacade,
@@ -87,6 +86,8 @@ export {
   AcpSessionDriver,
   createAcpTargetConnection,
   AcpClientConnection,
+  AgentCliExecConnection,
+  createAgentCliExecConnection,
   AntigravityAgentApiClient,
   buildAntigravityCascadeUserInteractionDecision,
   callAntigravityConnectRpc,
@@ -129,10 +130,7 @@ export {
   createAcpSourceJsonRpcBridge,
   createAcpSourceJsonRpcLineTransport,
   createAcpSourceJsonRpcService,
-  createAcpSourceJsonRpcTransportPair,
-  createAcpSourceStdioServer,
-  createAcpSourceStdioServerOptionsFromEnv,
-  runAcpSourceStdioServerFromEnv
+  createAcpSourceJsonRpcTransportPair
 };
 
 function resolveStoreAdapter(options = {}) {

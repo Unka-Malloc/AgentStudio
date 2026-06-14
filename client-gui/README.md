@@ -7,18 +7,19 @@ Pact Desktop Client 是 Pact 本地客户端的 Flutter 桌面壳。客户端产
 ## 产品范围
 
 客户端现在定位为轻量本地环境管理器。它帮助用户查看和编辑目标原生 MCP 配置，
-管理被动本地 Skill Hub，做薄模型转发，并通过 activity 和 snapshot 恢复本地
-配置变更。
+管理被动本地 Skill Hub，做薄模型转发，通过各智能体专属 adapter 精确导入原生
+对话历史，并通过 activity 和 snapshot 恢复本地配置变更。
 
 首批一等 target adapter 固定覆盖 OpenClaw、Claude Code、Codex、Gemini CLI、
 Antigravity、OpenCode、Copilot、Kilo Code、Cursor、Hermes Agent 和 Windsurf。
 
-默认 UI 只有六个一级模块：
+默认 UI 只有七个一级模块：
 
 - Agents
 - MCP Plugins
 - Skill Hub
 - Model Forwarding
+- Mobile Relay
 - Activity And Snapshots
 - Settings
 
@@ -65,7 +66,7 @@ npm run client:verify:ui-new-architecture
 npm run client:verify
 ```
 
-架构和计划 verifier 会守住单版本边界：默认导航必须保持六个模块，已移除的重
+架构和计划 verifier 会守住单版本边界：默认导航必须保持七个模块，已移除的重
 客户端模块不能重新进入构建，deferred 的 Skill Hub 协议工作不能被说成已完成。
 
 ## 打包
@@ -82,12 +83,19 @@ npm run client:package:plan
 npm run client:build:macos
 npm run client:build:windows
 npm run client:build:linux
+npm run client:build:android
 ```
+
+桌面 bundle 会输出到 `build/client-gui/bundles/<platform>/<mode>/bundle/`。
+Android APK 会输出到 `build/client-gui/android/<mode>/`。脚本默认会清理
+Flutter 在 `client-gui/build/` 下生成的临时产物；需要保留 Flutter 缓存做本地
+调试时，可设置 `PACT_KEEP_FLUTTER_BUILD_CACHE=1`。
 
 平台说明：
 
 - Windows bundle 需要在 Windows 环境构建。
 - Linux bundle 需要在 Linux 或 Ubuntu 环境构建。
+- Android APK 需要本机 Flutter Android toolchain、Android SDK 和可用 NDK。
 - macOS 主机可用 `npm run client:ubuntu:verify` 通过 Docker 执行 Ubuntu
   验证路径。
 - 默认 package 只包含当前客户端模块和必要 native sidecar。

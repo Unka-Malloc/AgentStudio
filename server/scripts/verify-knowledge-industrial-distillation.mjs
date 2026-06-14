@@ -77,7 +77,7 @@ const cli = spawnSync(process.execPath, [
 assert.equal(cli.status, 0, cli.stderr || cli.stdout);
 
 const benchmark = await readJson(outputPath);
-assert.equal(benchmark.protocolVersion, "pact.external-knowledge-distillation.industrial-benchmark.v1");
+assert.equal(benchmark.protocolVersion, "v0.0.1:external-service:knowledge-distillation-industrial-benchmark-1");
 assert.equal(benchmark.service, "external.knowledge.distillation");
 assert.equal(benchmark.referenceManifest.frameworkCount >= 8, true);
 assert.equal(benchmark.referenceAudit.strategy, "manifest-pinned-local-source-evidence.v1");

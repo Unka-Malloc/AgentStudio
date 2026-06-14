@@ -84,7 +84,7 @@ vi.mock("../../../server/platform/specialized/knowledge/transformation/knowledge
 
 vi.mock("../../../server/platform/specialized/knowledge/assets/asset-lineage/index.mjs", () => ({
   createAssetLineageRegistry: vi.fn(() => ({
-    describe: vi.fn(async () => ({ protocolVersion: "pact.asset-lineage.v1" })),
+    describe: vi.fn(async () => ({ protocolVersion: "v0.0.1:asset:asset-lineage-1" })),
     record: vi.fn(async (record) => {
       if (record?.fail) throw new Error("record failed");
       return { ok: true, recordId: "lineage-1" };

@@ -234,6 +234,7 @@ describe("server adapter extra coverage", () => {
     const mcpValidation = await validateExternalServiceConfig({
       config: {
         kind: EXTERNAL_SERVICE_CONFIG_KIND,
+        templateId: "external-service.template.raw-mcp-streamable-http",
         serviceId: "mcp-service",
         serviceName: "MCP Service",
         startupPolicy: "with-platform",
@@ -246,13 +247,14 @@ describe("server adapter extra coverage", () => {
       requireKnownPaths: false
     });
     expect(mcpValidation.errors).toEqual(expect.arrayContaining([
-      "External MCP upstream transport is not supported: bogus.",
+      "External MCP upstream transport must be streamable-http or sse; bogus is not allowed for ServiceHub.",
       "External service startupPolicy with-platform requires scripts.start."
     ]));
 
     const mcpStdioValidation = await validateExternalServiceConfig({
       config: {
         kind: EXTERNAL_SERVICE_CONFIG_KIND,
+        templateId: "external-service.template.raw-mcp-streamable-http",
         serviceId: "mcp-stdio",
         serviceName: "MCP Stdio",
         upstream: {
@@ -263,7 +265,52 @@ describe("server adapter extra coverage", () => {
       cwd,
       requireKnownPaths: false
     });
-    expect(mcpStdioValidation.errors).toContain("External MCP stdio upstream requires upstream.command.executable.");
+    expect(mcpStdioValidation.errors).toContain("External MCP upstream transport must be streamable-http or sse; stdio is not allowed for ServiceHub.");
+
+    const mcpCommandValidation = await validateExternalServiceConfig({
+      config: {
+        kind: EXTERNAL_SERVICE_CONFIG_KIND,
+        templateId: "external-service.template.raw-mcp-streamable-http",
+        serviceId: "mcp-command",
+        serviceName: "MCP Command",
+        upstream: {
+          type: "mcp",
+          transport: "streamable-http",
+          url: "https://mcp.example.test:443/mcp",
+          command: { executable: "node", args: ["server.js"] },
+          cwd: "/tmp/mcp",
+          env: { TOKEN: "secret" }
+        }
+      },
+      cwd,
+      requireKnownPaths: false
+    });
+    expect(mcpCommandValidation.errors).toContain("External MCP upstream must not declare command, args, cwd, or env; expose a controlled HTTP/HTTPS MCP endpoint instead.");
+
+    const serviceHubAcpStdioValidation = await validateExternalServiceConfig({
+      config: {
+        kind: EXTERNAL_SERVICE_CONFIG_KIND,
+        serviceId: "servicehub-acp-stdio",
+        serviceName: "ServiceHub ACP stdio",
+        binding: {
+          mode: "passthrough",
+          outlet: "pact.serviceHub",
+          requiredScopes: ["agent_relay:prompt"],
+          risk: "repair_write"
+        },
+        upstream: {
+          type: "acp",
+          transport: "stdio",
+          command: { executable: "node", args: ["server/scripts/local-agent.mjs"] }
+        }
+      },
+      cwd,
+      requireKnownPaths: false
+    });
+    expect(serviceHubAcpStdioValidation.errors).toEqual(expect.arrayContaining([
+      "ServiceHub external services must not expose local stdio or command-backed upstreams; use a controlled HTTP/HTTPS endpoint or the Agent Relay internal adapter instead.",
+      "External ACP stdio upstreams are disabled; Pact does not expose local stdio interfaces. Use an authenticated HTTP/HTTPS Agent Relay endpoint instead."
+    ]));
 
     const cloudValidation = await validateExternalServiceConfig({
       config: {
@@ -368,9 +415,11 @@ describe("server adapter extra coverage", () => {
 
     const config = normalizeExternalServiceConfig({
       serviceId: "artifact-service",
+      templateId: "external-service.template.raw-mcp-streamable-http",
       serviceName: "Artifact Service",
       displayName: "Artifact Service",
       mode: "connected",
+      policyPreset: "servicehub.development-local",
       scripts: {
         prepare: {
           path: "scripts/keep.sh"
@@ -387,7 +436,7 @@ describe("server adapter extra coverage", () => {
       },
       binding: {
         mode: "passthrough",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       }
     });
 
@@ -553,7 +602,7 @@ describe("server adapter extra coverage", () => {
     });
     const toolsListBody = parseBodyJson(toolsListResponse);
     expect(toolsListResponse.statusCode).toBe(200);
-    expect(toolsListBody.result.tools).toHaveLength(5);
+    expect(toolsListBody.result.tools).toHaveLength(7);
     expect(toolsListBody.result.tools[0]).toHaveProperty("name", "pact.discovery");
     expect(toolsListBody.result._meta).toEqual(expect.objectContaining({
       interfaceVersion: MCP_INTERFACE_VERSION
@@ -593,7 +642,7 @@ describe("server adapter extra coverage", () => {
       expect.objectContaining({ name: "knowledge.find" })
     ]));
     expect(metaBody.result.structuredContent.outlets["pact.sharedspace"].operationCount).toBe(1);
-    expect(metaBody.result.structuredContent.outlets["pact.knowledge"].operationCount).toBe(1);
+    expect(metaBody.result.structuredContent.outlets["pact.agentLibrary"].operationCount).toBe(1);
 
     const updateResponse = createHttpResponse();
     await handlePactMcpHttpRequest({
@@ -691,7 +740,7 @@ describe("server adapter extra coverage", () => {
     });
     expect(parseBodyJson(missingOperationResponse).error).toEqual({
       code: -32602,
-      message: "pact.call requires arguments.operation.",
+      message: "Pact MCP outlet calls require arguments.operation.",
       data: {
         expectedApiVersion: MCP_INTERFACE_VERSION
       }
@@ -735,7 +784,7 @@ describe("server adapter extra coverage", () => {
         id: "mismatch",
         method: "tools/call",
         params: {
-          name: "pact.knowledge",
+          name: "pact.agentLibrary",
           arguments: {
             apiVersion: MCP_INTERFACE_VERSION,
             operation: "sharedspace.file.write",
@@ -754,13 +803,13 @@ describe("server adapter extra coverage", () => {
     const mismatchBody = parseBodyJson(mismatchResponse);
     expect(mismatchBody.error).toEqual(expect.objectContaining({
       code: -32602,
-      message: "Operation sharedspace.file.write must be called through pact.sharedspace, not pact.knowledge.",
+      message: "Operation sharedspace.file.write must be called through pact.sharedspace, not pact.agentLibrary.",
       data: expect.objectContaining({
         code: "operation_outlet_mismatch",
         operation: "sharedspace.file.write",
-        requestedTool: "pact.knowledge",
+        requestedTool: "pact.agentLibrary",
         expectedTool: "pact.sharedspace",
-        architectureCategory: "Sharedspace",
+        architectureCategory: "Shared Space",
         discoveryTool: "pact.discovery",
         discoveryOperation: "pact.capabilities.list"
       })
@@ -824,7 +873,7 @@ describe("server adapter extra coverage", () => {
         id: "failure",
         method: "tools/call",
         params: {
-          name: "pact.knowledge",
+          name: "pact.agentLibrary",
           arguments: {
             apiVersion: MCP_INTERFACE_VERSION,
             operation: "knowledge.find",

@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Scenario draft with machine-readable status tracking
 - Scope: Scenario 01: 代码提交.
 - Staleness check: Scanned on 2026-06-11; scenario live/contract/local status must match docs/scenarios/scenario-implementation-status.json and the latest readiness reports.
@@ -93,14 +93,12 @@
 - OpenClaw 类智能体。
 - Claude Code 类 MCP 客户端。
 - Codex 类智能体。
-- Gemini CLI 类 MCP 客户端。
 - Antigravity 类 MCP 客户端。
 - OpenCode 类 MCP 客户端。
 - Copilot 类 MCP 客户端。
 - Kilo Code 类 MCP 客户端。
 - Cursor 类 MCP 客户端。
 - Hermes Agent 类智能体。
-- Windsurf 类 MCP 客户端。
 - 脚本型 MCP 客户端。
 
 验收口径：

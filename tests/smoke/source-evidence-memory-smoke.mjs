@@ -75,7 +75,7 @@ async function prepareFixture() {
     "utf8"
   );
   await writeJson(getSourceSearchRulesPath(userDataPath), {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: new Date().toISOString(),
     maxFileBytes: 2 * 1024 * 1024,
     maxEvidenceBytes: 48 * 1024,
@@ -155,7 +155,7 @@ try {
     maxRssSlopeBytes: 32 * 1024 * 1024
   });
   const report = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     name: "source-evidence-memory-smoke",
     userDataPath,
     samples,

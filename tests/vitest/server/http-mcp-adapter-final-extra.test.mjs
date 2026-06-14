@@ -4,9 +4,9 @@ import {
   buildPactMcpDiscovery,
   broadcastMcpToolListChanged,
   handlePactMcpHttpRequest,
+  MCP_AGENT_LIBRARY_TOOL_NAME,
   MCP_CONNECTOR_PACKAGE_NAME,
   MCP_INTERFACE_VERSION,
-  MCP_KNOWLEDGE_TOOL_NAME,
   MCP_PROTOCOL_VERSION,
   MCP_SERVER_VERSION,
   MCP_STABLE_TOOL_NAME
@@ -435,7 +435,7 @@ describe("http-mcp-adapter final extra coverage", () => {
     const capabilitiesBody = parseBodyJson(capabilitiesResponse);
     expect(capabilitiesResponse.statusCode).toBe(200);
     expect(capabilitiesBody.result.structuredContent.skillCatalog).toEqual({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       status: "unavailable",
       summary: {
         activeSkillCount: 0,
@@ -447,13 +447,13 @@ describe("http-mcp-adapter final extra coverage", () => {
       name: "knowledge.find",
       title: "Knowledge find",
       _meta: {
-        mcpOutlet: "pact.knowledge",
-        architectureCategory: "Knowledge"
+        mcpOutlet: "pact.agentLibrary",
+        architectureCategory: "Agent Library"
       }
     });
-    expect(capabilitiesBody.result.structuredContent.outlets[MCP_KNOWLEDGE_TOOL_NAME]).toMatchObject({
-      toolName: MCP_KNOWLEDGE_TOOL_NAME,
-      architectureCategory: "Knowledge"
+    expect(capabilitiesBody.result.structuredContent.outlets[MCP_AGENT_LIBRARY_TOOL_NAME]).toMatchObject({
+      toolName: MCP_AGENT_LIBRARY_TOOL_NAME,
+      architectureCategory: "Agent Library"
     });
 
     const missingNameResponse = createHttpResponse();

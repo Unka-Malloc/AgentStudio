@@ -40,7 +40,7 @@ describe("protocol event bus final extra coverage", () => {
         "events.jsonl",
         [
           JSON.stringify({
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             offset: 8,
             id: "old-8",
             topic: "seed",
@@ -50,7 +50,7 @@ describe("protocol event bus final extra coverage", () => {
             payload: { old: true }
           }),
           JSON.stringify({
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             offset: 9,
             id: "old-9",
             topic: "seed",
@@ -83,7 +83,7 @@ describe("protocol event bus final extra coverage", () => {
   it("returns oversized persisted JSONL events as metadata-only payloads and stops at the requested limit", async () => {
     await withTempUserData(async (userDataPath) => {
       const oversizedLine = JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         offset: 3,
         id: "huge-3",
         topic: "huge",
@@ -93,7 +93,7 @@ describe("protocol event bus final extra coverage", () => {
         payload: "x".repeat(2_000_020)
       });
       const secondLine = JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         offset: 4,
         id: "huge-4",
         topic: "huge",
@@ -118,7 +118,7 @@ describe("protocol event bus final extra coverage", () => {
       });
       expect(result.events).toHaveLength(1);
       expect(result.events[0]).toMatchObject({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         offset: 3,
         id: "huge-3",
         topic: "huge",

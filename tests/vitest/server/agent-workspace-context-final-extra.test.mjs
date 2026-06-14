@@ -619,7 +619,7 @@ describe("workspace context bundles and restore edges", () => {
       });
 
       expect(exported).toMatchObject({
-        protocolVersion: "pact.agent-workspace.v1",
+        protocolVersion: "v0.0.1:workspace:agent-workspace-1",
         bundleVersion: AGENT_WORKSPACE_CONTEXT_BUNDLE_VERSION,
         compressed: {
           encoding: "gzip+base64"
@@ -843,7 +843,7 @@ describe("context compaction preview records and memory clear", () => {
         reason: "unit-test"
       });
       expect(cleared).toMatchObject({
-        protocolVersion: "pact.agent-memory.v1",
+        protocolVersion: "v0.0.1:agent:memory-1",
         ok: true,
         record: {
           status: "cleared",

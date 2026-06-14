@@ -3,7 +3,7 @@
   "label": "Agent Exploration",
   "agentType": "exploration",
   "toolsets": [
-    "pact.knowledge.read"
+    "pact.agentLibrary.read"
   ],
   "toolAllow": [],
   "toolDeny": [

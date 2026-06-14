@@ -1,3 +1,5 @@
+import { decorateKnowledgeCapabilityOperation } from "./knowledge-capability-layers.mjs";
+
 const MAINTENANCE_AGENT_RISKS = [
   "read_only",
   "safe_write",
@@ -411,6 +413,13 @@ function validateOperation(operation, seen) {
       `Operation registration failed: ${operation.id} has no requiredScopes and is not explicitly public/externalAuth.`
     );
   }
+  if (operation.externalAuth === true) {
+    const verifier = operation.externalAuthVerifier;
+    const verifierMethod = typeof verifier === "string" ? verifier : verifier?.method;
+    if (!verifierMethod || typeof verifierMethod !== "string") {
+      throw new Error(`Operation registration failed: ${operation.id} externalAuth missing externalAuthVerifier.method.`);
+    }
+  }
   if (operation.public === true && operation.externalAuth === true) {
     throw new Error(`Operation registration failed: ${operation.id} cannot be both public and externalAuth.`);
   }
@@ -452,6 +461,7 @@ function decorateOperation(operation) {
     safetyDecorator,
     concurrencyDecorator,
     normalizeOperationContract,
+    decorateKnowledgeCapabilityOperation,
     withAspect(OPERATION_ASPECTS.DISPATCH),
     withAspect(OPERATION_ASPECTS.AUTHORIZATION),
     withAspect(OPERATION_ASPECTS.SAFETY),

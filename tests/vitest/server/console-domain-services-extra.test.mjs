@@ -35,8 +35,7 @@ const dynamicMocks = vi.hoisted(() => ({
   preprocessWordCloudVocabulary: vi.fn(async () => ({ terms: [] })),
   createDocumentParsingRuntime: vi.fn(async () => ({ parser: true })),
   toPublicDocumentParsingResult: vi.fn(() => ({ public: true })),
-  enhanceAffairTaxonomy: vi.fn(async () => ({ enhanced: true })),
-  resumeKnowledgeWordCloudClassificationTasks: vi.fn(async () => ({ resumed: true }))
+  enhanceAffairTaxonomy: vi.fn(async () => ({ enhanced: true }))
 }));
 
 vi.mock("../../../server/platform/specialized/agent/agent-configs/config-registry.mjs", () => ({
@@ -110,10 +109,6 @@ vi.mock("../../../server/platform/specialized/knowledge/preprocessing/domain/kno
   enhanceAffairTaxonomy: dynamicMocks.enhanceAffairTaxonomy
 }));
 
-vi.mock("../../../server/platform/specialized/console/knowledge-word-cloud-operation-executor.mjs", () => ({
-  resumeKnowledgeWordCloudClassificationTasks: dynamicMocks.resumeKnowledgeWordCloudClassificationTasks
-}));
-
 vi.mock("../../../server/platform/specialized/knowledge/preprocessing/file-processor/FileNormalizer/NormalizedDocuments/store.mjs", () => ({
   normalizedStoreModule: true
 }));
@@ -183,7 +178,7 @@ describe("console domain services", () => {
     await expect(services.createDocumentParsingRuntime({ userDataPath: "/data" })).resolves.toEqual({ parser: true });
     expect(await services.toPublicDocumentParsingResult({ ok: true })).toEqual({ public: true });
     await expect(services.enhanceAffairTaxonomy({ subject: "unit" })).resolves.toEqual({ enhanced: true });
-    await expect(services.resumeKnowledgeWordCloudClassificationTasks({ limit: 1 })).resolves.toEqual({ resumed: true });
+    expect("resumeKnowledgeWordCloudClassificationTasks" in services).toBe(false);
 
     expect(dynamicMocks.loadEmailRules).toHaveBeenCalledWith("/rules.json");
     expect(dynamicMocks.saveKnowledgeTaxonomy).toHaveBeenCalledWith("/taxonomy.json", {});

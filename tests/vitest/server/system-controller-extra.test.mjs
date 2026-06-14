@@ -7,7 +7,6 @@ const sendJsonMock = vi.hoisted(() => vi.fn((response, status, payload) => {
 const contentDispositionHeaderMock = vi.hoisted(() => vi.fn((disposition, fileName) => `${disposition}; filename="${fileName}"`));
 const createSecurityPermissionsProviderMock = vi.hoisted(() => vi.fn(({ consoleAuth }) => ({ securityFromAuth: consoleAuth })));
 const executeConsoleDomainOperationMock = vi.hoisted(() => vi.fn());
-const resumeKnowledgeWordCloudTasksMock = vi.hoisted(() => vi.fn(async () => undefined));
 const contextHelpers = vi.hoisted(() => ({
   knowledgeDomainContext: vi.fn((authSession) => ({ kind: "knowledge-domain", authSession })),
   knowledgeWorkflowContext: vi.fn((authSession) => ({ kind: "knowledge-workflow", authSession })),
@@ -19,8 +18,7 @@ const contextHelpers = vi.hoisted(() => ({
 }));
 const createSystemControllerContextsMock = vi.hoisted(() => vi.fn(() => ({
   executeConsoleDomainOperation: executeConsoleDomainOperationMock,
-  ...contextHelpers,
-  resumeKnowledgeWordCloudTasks: resumeKnowledgeWordCloudTasksMock
+  ...contextHelpers
 })));
 const factoryCalls = vi.hoisted(() => ({}));
 const factoryMocks = vi.hoisted(() => ({

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 
 import { AcpClientConnection } from "./acp-client-connection.mjs";
 import { createAcpSourceJsonRpcLineTransport } from "./acp-source-json-rpc-service.mjs";
+import { AgentCliExecConnection } from "./agent-cli-exec-connection.mjs";
 import { AntigravityAgentApiConnection } from "./antigravity-agent-api-connection.mjs";
 import { CodexCliExecConnection } from "./codex-cli-exec-connection.mjs";
 
@@ -29,6 +30,11 @@ function isAntigravityAgentApiTarget(target = {}) {
 function isCodexCliExecTarget(target = {}) {
   const type = asText(target?.transport?.type || target?.transportType).toLowerCase();
   return ["codex-cli-exec", "codex.exec", "codex-cli"].includes(type);
+}
+
+function isAgentCliExecTarget(target = {}) {
+  const type = asText(target?.transport?.type || target?.transportType).toLowerCase();
+  return ["agent-cli-exec", "local-cli-exec", "cli-exec"].includes(type);
 }
 
 function isAcpStdioTarget(target = {}) {
@@ -161,6 +167,9 @@ export function createAcpTargetConnection(options = {}) {
   }
   if (isCodexCliExecTarget(options.target)) {
     return new CodexCliExecConnection(options);
+  }
+  if (isAgentCliExecTarget(options.target)) {
+    return new AgentCliExecConnection(options);
   }
   if (isAcpStdioTarget(options.target)) {
     return new AcpClientConnection({

@@ -20,10 +20,10 @@ describe("console summary and connection services", () => {
     const provider = createJobWorkflowProvider({ jobManager });
 
     expect(Object.isFrozen(provider)).toBe(true);
-    expect(provider.protocolVersion).toBe("pact.job-workflow.v1");
+    expect(provider.protocolVersion).toBe("v0.0.1:workflow:job-workflow-1");
     expect(provider.describe()).toEqual({
-      schemaVersion: 1,
-      protocolVersion: "pact.job-workflow.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:workflow:job-workflow-1",
       capabilities: [
         "jobs.create",
         "jobs.list",

@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
-import { PassThrough } from "node:stream";
 import { afterEach, describe, it, vi } from "vitest";
 
-import { ACP_METHODS } from "../../../server/platform/common/protocols/acp/index.mjs";
 import { AcpRelayRouter } from "../../../server/platform/specialized/capabilities/agent-relay/acp-agent-relay/acp-relay-router.mjs";
 import { AcpSessionDriver } from "../../../server/platform/specialized/capabilities/agent-relay/acp-agent-relay/acp-session-driver.mjs";
-import { AcpSourceJsonRpcBridge } from "../../../server/platform/specialized/capabilities/agent-relay/acp-agent-relay/acp-source-json-rpc-bridge.mjs";
 import { AcpSourceOperationGuard } from "../../../server/platform/specialized/capabilities/agent-relay/acp-agent-relay/acp-source-operation-guard.mjs";
 import {
   createAcpSourceStdioServer
@@ -19,25 +15,6 @@ import { RelaySessionStore } from "../../../server/platform/specialized/capabili
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-function createLineTransportHarness() {
-  const input = new PassThrough();
-  const output = new PassThrough();
-  const outputChunks = [];
-  output.on("data", (chunk) => {
-    outputChunks.push(Buffer.from(chunk).toString("utf8"));
-  });
-  return { input, output, outputChunks };
-}
-
-function parseFrames(outputChunks) {
-  return outputChunks
-    .join("")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
-}
 
 describe("agent relay runtime final extra 4", () => {
   it("covers target registry, router, and relay session status boundaries", async () => {
@@ -313,60 +290,11 @@ describe("agent relay runtime final extra 4", () => {
     assert.equal(closeResult.results[0].result.error, "close failed");
   });
 
-  it("covers stdio server bad frame and unknown method responses", async () => {
-    const runtime = {
-      close: vi.fn(async () => {}),
-      handleSourceAcpMessage: vi.fn()
-    };
-    const bridge = new AcpSourceJsonRpcBridge({
-      executor: {
-        execute: vi.fn(async () => ({
-          ok: true,
-          data: {}
-        }))
-      },
-      logger: {
-        error: vi.fn()
-      }
-    });
-    runtime.handleSourceAcpMessage.mockImplementation((message, context) => bridge.handle(message, context));
-
-    const { input, output, outputChunks } = createLineTransportHarness();
-    const server = createAcpSourceStdioServer({
-      runtime,
-      context: {
-        sourceId: "source-stdio",
-        workspaceId: "workspace-stdio"
-      },
-      input,
-      output,
-      diagnostics: null
-    });
-
-    const served = server.serve();
-    input.write("{not-json}\n");
-    input.write(
-      `${JSON.stringify({
-        jsonrpc: "2.0",
-        id: "unknown-method",
-        method: "acp_agent_relay.not_supported",
-        params: {}
-      })}\n`
+  it("rejects source-facing local stdio server creation", async () => {
+    assert.throws(
+      () => createAcpSourceStdioServer({ runtime: {} }),
+      /Pact no longer exposes local stdio interfaces/
     );
-    input.end();
-
-    const result = await served;
-    assert.deepEqual(result, { ok: true });
-    assert.equal(runtime.close.mock.calls.length, 1);
-
-    const frames = parseFrames(outputChunks);
-    assert.equal(frames.length, 2);
-    assert.equal(frames[0].error.code, -32700);
-    assert.equal(frames[1].id, "unknown-method");
-    assert.equal(frames[1].error.code, -32601);
-    assert.equal(frames[1].error.message, "Unsupported ACP method: acp_agent_relay.not_supported");
-
-    await server.close();
   });
 
   it("covers relay executor unknown, permission, and preflight branches", async () => {

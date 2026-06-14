@@ -120,7 +120,7 @@ describe("model routing storage reads", () => {
     await withTempUserData(async (userDataPath) => {
       const state = await readModelRoutingState({ userDataPath });
       expect(state).toEqual({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: MODEL_ROUTING_PROTOCOL_VERSION,
         updatedAt: "",
         circuits: {}

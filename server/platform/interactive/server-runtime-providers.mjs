@@ -103,8 +103,17 @@ export async function createServerRuntimeProviders({
   isAnyFeatureActive
 }) {
   let strategyManagementProvider = null;
+  const needsContextRuntime = isAnyFeatureActive(
+    "client-runtime-core",
+    "agent-exploration",
+    "knowledge-distillation",
+    "knowledge-evolution",
+    "knowledge-outline-reasoning",
+    "maintenance-agent-runbooks"
+  );
+  const needsAgentMemory = isFeatureActive("agent-memory") || needsContextRuntime;
   const agentMemory = await createProvider(
-    true,
+    needsAgentMemory,
     "../specialized/agent/agent-memory/index.mjs",
     "createAgentMemory",
     [{ userDataPath }]
@@ -123,7 +132,7 @@ export async function createServerRuntimeProviders({
     });
   };
   const contextRuntime = await createProvider(
-    true,
+    needsContextRuntime,
     "../specialized/agent/agent-context/interface/index.mjs",
     "createContextRuntime",
     [{
@@ -169,7 +178,7 @@ export async function createServerRuntimeProviders({
     }]
   );
   const agentWorkspace = await createProvider(
-    isAnyFeatureActive("agent-exploration", "knowledge-distillation"),
+    isAnyFeatureActive("local-sharedspace", "agent-exploration", "knowledge-distillation"),
     "../specialized/agent/agent-workspace/index.mjs",
     "createAgentWorkspace",
     [{

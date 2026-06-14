@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: CI gate tiering, PR gate scope, external dependency reports, and release readiness triggers.
 - Staleness check: Created during the 2026-06-11 CI gate split and checked against `.github/workflows/ci.yml`, `tests/run.mjs`, and `package.json`.

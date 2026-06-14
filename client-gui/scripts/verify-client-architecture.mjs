@@ -14,6 +14,7 @@ const futureModules = [
   "mcp-plugins",
   "skill-hub",
   "model-forwarding",
+  "mobile-relay",
   "activity-snapshots",
   "settings"
 ];
@@ -21,14 +22,12 @@ const firstTargets = [
   "openclaw",
   "claude-code",
   "codex",
-  "gemini-cli",
   "antigravity",
   "opencode",
   "copilot",
   "kilo-code",
   "cursor",
-  "hermes",
-  "windsurf"
+  "hermes"
 ];
 const forbiddenCliScopes = [
   'scope == "daemon"',
@@ -107,13 +106,18 @@ const forbiddenDefaultGuiTokens = [
 const defaultGuiSurfacePaths = [
   "client-gui/lib/app.dart",
   "client-gui/lib/src/controllers/future_client_controller.dart",
+  "client-gui/lib/src/controllers/agent_conversation_actions.dart",
   "client-gui/lib/src/controllers/mcp_plugin_actions.dart",
+  "client-gui/lib/src/controllers/mobile_relay_actions.dart",
   "client-gui/lib/src/controllers/model_forwarding_actions.dart",
   "client-gui/lib/src/controllers/skill_hub_actions.dart",
+  "client-gui/lib/src/controllers/target_actions.dart",
   "client-gui/lib/src/models/future_client_models.dart",
   "client-gui/lib/src/services/activity_snapshot_service.dart",
+  "client-gui/lib/src/services/agent_conversation_service.dart",
   "client-gui/lib/src/services/agent_service.dart",
   "client-gui/lib/src/services/agent_service_actions.dart",
+  "client-gui/lib/src/services/mobile_relay_service.dart",
   "client-gui/lib/src/services/portable_data_root.dart",
   "client-gui/lib/src/ui/agents_empty_state.dart",
   "client-gui/lib/src/ui/agents_toolbar.dart",
@@ -236,6 +240,22 @@ assert(
   !JSON.stringify(packaging).toLowerCase().includes("legacy"),
   "packaging config must not contain legacy module definitions"
 );
+const deferredCapabilities = packaging.deferredCapabilities || {};
+assert(
+  sameSet(Object.keys(deferredCapabilities).sort(), [
+    "client-connectors",
+    "clientd",
+    "knowledge-cache",
+    "mail-import-runtime",
+    "mcp-local-bridge",
+    "upload-queue"
+  ]),
+  "deferred client capabilities must be explicit TODO placeholders, not hidden package modules"
+);
+for (const [capabilityId, capability] of Object.entries(deferredCapabilities)) {
+  assert(capability.status === "todo", `deferred client capability must be status=todo: ${capabilityId}`);
+  assert(!modules[capabilityId], `deferred client capability must not be packaged as an active module: ${capabilityId}`);
+}
 const packagedTargets = modules["target-adapters"]?.targetAdapters || [];
 assert(sameSet([...packagedTargets].sort(), [...firstTargets].sort()), "target-adapters module must list every first-batch target");
 const portableDirs = modules["portable-data"]?.portableDirectories || [];
@@ -265,7 +285,7 @@ const cliSource = await readText("client-cli/src/bin/pact-client.rs");
 for (const token of forbiddenCliScopes) {
   assert(!cliSource.includes(token), `pact-client main CLI must not contain legacy token: ${token}`);
 }
-for (const token of ["targets scan", "mcp config plan", "mcp plugin status", "forward --profile", "agents pair"]) {
+for (const token of ["targets scan", "mcp config plan", "mcp plugin status", "forward --profile", "agents pair", "conversations list|append|delete", "agent message send", "mobile relay"]) {
   assert(cliSource.includes(token), `pact-client usage must expose future command: ${token}`);
 }
 
@@ -277,11 +297,91 @@ assert(
 
 const futureClientModels = await readText("client-gui/lib/src/models/future_client_models.dart");
 const appSections = collectEnumValues(futureClientModels, "FutureClientSection");
-assert(sameSet(appSections, ["agents", "mcpPlugins", "skillHub", "modelForwarding", "activity", "settings"]), "FutureClientSection enum must contain only the six future modules");
+assert(sameSet(appSections, ["agents", "mcpPlugins", "skillHub", "modelForwarding", "mobileRelay", "activity", "settings"]), "FutureClientSection enum must contain only the seven future modules");
 
 const agentServiceActionsSource = await readText("client-gui/lib/src/services/agent_service_actions.dart");
 assert(agentServiceActionsSource.includes("'agents'") && agentServiceActionsSource.includes("'pair'"), "agent_service_actions.dart must contain 'agents' and 'pair' tokens for CLI execution");
 assert(!agentServiceActionsSource.match(/\[\s*'pair'/), "GUI service layer must not use top-level 'pair' command");
+const agentConversationServiceSource = await readText("client-gui/lib/src/services/agent_conversation_service.dart");
+assert(agentConversationServiceSource.includes("'conversations'") && agentConversationServiceSource.includes("agentService.runCli"),
+  "agent_conversation_service.dart must delegate conversation IO to pact-client CLI"
+);
+assert(agentConversationServiceSource.includes("sendRuntimeMessage") &&
+  agentConversationServiceSource.includes("'agent'") &&
+  agentConversationServiceSource.includes("'message'") &&
+  agentConversationServiceSource.includes("'send'"),
+  "agent_conversation_service.dart must delegate message sends to pact-client agent message send"
+);
+for (const token of ["appendLocalMessage", "deleteSession", "'append'", "'delete'"]) {
+  assert(!agentConversationServiceSource.includes(token), `agent_conversation_service.dart must not expose Pact-local write path: ${token}`);
+}
+const conversationsRustSource = await readText("client-cli/src/conversations.rs");
+assert(
+  conversationsRustSource.includes('"native-history"') &&
+    conversationsRustSource.includes('"readOnly": true') &&
+    conversationsRustSource.includes('"precise-adapter"') &&
+    conversationsRustSource.includes("enum HistoryAdapter") &&
+    conversationsRustSource.includes("fn adapter_for_agent") &&
+    conversationsRustSource.includes("unsupported native history adapter") &&
+    conversationsRustSource.includes("ValueRef::Blob") &&
+    conversationsRustSource.includes("native agent history is read-only"),
+  "client-cli conversations.rs must expose per-agent precise native history adapters, not Pact-local conversation storage"
+);
+for (const target of ["codex", "antigravity", "claude-code", "cursor", "opencode", "openclaw", "kilo-code", "copilot", "hermes"]) {
+  assert(conversationsRustSource.includes(`"${target}"`), `native history scanner must include first-batch target: ${target}`);
+}
+const agentConversationActionsSource = await readText("client-gui/lib/src/controllers/agent_conversation_actions.dart");
+assert(!agentConversationActionsSource.includes("conversationService.appendLocalMessage"),
+  "agent_conversation_actions.dart must not append Pact-local messages for native history"
+);
+assert(agentConversationActionsSource.includes("conversationService.sendRuntimeMessage"),
+  "agent_conversation_actions.dart must send through runtime adapters instead of local history"
+);
+const agentConversationWorkspaceSource = await readText("client-gui/lib/src/ui/agent_conversation_workspace.dart");
+assert(agentConversationWorkspaceSource.includes("_RuntimeMessageComposer") &&
+  agentConversationWorkspaceSource.includes("sendConversationMessage") &&
+  agentConversationWorkspaceSource.includes("TextField("),
+  "agent_conversation_workspace.dart must expose runtime message composer while keeping history read-only"
+);
+const mobileRelayRustSource = await readText("client-cli/src/mobile_relay.rs");
+const runtimeAdaptersRustSource = await readText("client-cli/src/runtime_adapters.rs");
+assert(runtimeAdaptersRustSource.includes("enum RuntimeAdapter") &&
+  runtimeAdaptersRustSource.includes('"runtime-adapter"') &&
+  runtimeAdaptersRustSource.includes("codex-cli-exec") &&
+  runtimeAdaptersRustSource.includes("opencode-cli-run") &&
+  runtimeAdaptersRustSource.includes("configured-command") &&
+  runtimeAdaptersRustSource.includes("approvalOwner"),
+  "runtime_adapters.rs must expose per-agent runtime protocol adapters and explicit approval ownership"
+);
+const advertisedRelayCommandBlocks = [...mobileRelayRustSource.matchAll(/"commands":\s*\[[\s\S]*?\]/g)].map((match) => match[0]);
+assert(advertisedRelayCommandBlocks.length >= 1, "mobile_relay.rs must advertise relay command capabilities");
+for (const block of advertisedRelayCommandBlocks) {
+  assert(block.includes('"agent.sessions.list"'), "mobile relay capability block must advertise native session list");
+  assert(block.includes('"agent.message.send"'), "mobile relay capability block must advertise runtime message send");
+}
+assert(mobileRelayRustSource.includes("runtime_adapters::send_message") &&
+  mobileRelayRustSource.includes("fn relay_capabilities") &&
+  mobileRelayRustSource.includes("relayed_agent_sessions_list_executes_native_history_adapter") &&
+  mobileRelayRustSource.includes("relayed_agent_message_send_executes_runtime_adapter"),
+  "mobile_relay.rs must keep phone pairing capabilities, relayed native history, and relayed runtime message send covered by tests"
+);
+const mobileRelayServiceSource = await readText("client-gui/lib/src/services/mobile_relay_service.dart");
+assert(mobileRelayServiceSource.includes("'mobile'") && mobileRelayServiceSource.includes("'relay'") && mobileRelayServiceSource.includes("agentService.runCli"),
+  "mobile_relay_service.dart must delegate relay network/config operations to pact-client CLI"
+);
+const activitySnapshotServiceSource = await readText("client-gui/lib/src/services/activity_snapshot_service.dart");
+assert(activitySnapshotServiceSource.includes("'activity'") && activitySnapshotServiceSource.includes("'snapshots'") && activitySnapshotServiceSource.includes("agentService.runCli"),
+  "activity_snapshot_service.dart must delegate activity/snapshot data reads to pact-client CLI"
+);
+for (const [relativePath, source] of [
+  ["client-gui/lib/src/services/agent_conversation_service.dart", agentConversationServiceSource],
+  ["client-gui/lib/src/services/mobile_relay_service.dart", mobileRelayServiceSource],
+  ["client-gui/lib/src/services/activity_snapshot_service.dart", activitySnapshotServiceSource]
+]) {
+  for (const token of ["HttpClient", "/api/mobile-relay", "readAsString", "writeAsString", "Directory(", "File("]) {
+    assert(!source.includes(token), `${relativePath} must not perform runtime IO/network directly; use pact-client CLI`);
+  }
+}
 
 for (const relativePath of defaultGuiSurfacePaths) {
   const source = await readText(relativePath);
@@ -297,7 +397,7 @@ const shellSource = (await Promise.all(
 for (const label of forbiddenShellLabels) {
   assert(!shellSource.includes(label), `future client shell must not expose old navigation label: ${label}`);
 }
-for (const label of ["Agents", "MCP Plugins", "Skill Hub", "Model Forwarding", "Activity And Snapshots", "Settings"]) {
+for (const label of ["Agents", "MCP Plugins", "Skill Hub", "Model Forwarding", "Mobile Relay", "Activity And Snapshots", "Settings"]) {
   assert(shellSource.includes(label), `future client shell must expose module label: ${label}`);
 }
 
@@ -320,6 +420,9 @@ assert(supportsApplyMatches === null,
 );
 assert(targetsSource.includes("adapter_supports_action") || targetsSource.includes("adapter_capabilities_for"),
   "targets.rs must contain unified adapter capability function"
+);
+assert(targetsSource.includes('"runtime.message.send"') && targetsSource.includes("target_supports_default_runtime"),
+  "targets.rs must advertise runtime.message.send only through the target runtime capability gate"
 );
 
 // 6. mcp_plugins.rs must not unconditionally return status updated

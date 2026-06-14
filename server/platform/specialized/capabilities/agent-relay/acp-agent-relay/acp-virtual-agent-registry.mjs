@@ -107,7 +107,7 @@ export function createFileAcpVirtualAgentRegistryAdapter(options = {}) {
     fs.mkdirSync(path.dirname(storagePath), { recursive: true });
     const tempPath = `${storagePath}.${process.pid}.${Date.now()}.tmp`;
     fs.writeFileSync(tempPath, `${JSON.stringify({
-      schemaVersion: "pact.acp-agent-relay.virtual-agent-registry.v1",
+      schemaVersion: "v0.0.1:agent:acp-agent-relay-virtual-agent-registry-1",
       updatedAt: nowIso(),
       virtualAgents: normalized.virtualAgents
     }, null, 2)}\n`, "utf8");
@@ -133,7 +133,7 @@ const DEFAULT_VIRTUAL_AGENTS = {
     defaultMode: "ask",
     advertisedModalities: ["text"],
     advertisedDataSources: ["workspace.files", "pact.knowledge.local"],
-    advertisedTools: ["pact.knowledge.search", "fs.readTextFile"],
+    advertisedTools: ["pact.agentLibrary.search", "fs.readTextFile"],
     reasoningVisibilityPolicy: "requestable",
     capabilityPolicy: {
       writes: "deny",
@@ -153,7 +153,7 @@ const DEFAULT_VIRTUAL_AGENTS = {
     defaultMode: "agent",
     advertisedModalities: ["text", "image", "screenshot", "document"],
     advertisedDataSources: ["workspace.files", "pact.knowledge.local", "pact.document.runtime"],
-    advertisedTools: ["pact.knowledge.search", "fs.readTextFile", "fs.writeTextFile"],
+    advertisedTools: ["pact.agentLibrary.search", "fs.readTextFile", "fs.writeTextFile"],
     reasoningVisibilityPolicy: "requestable",
     capabilityPolicy: {
       writes: "approval_required",

@@ -37,6 +37,7 @@ import {
 } from "../../platform/common/platform-core/discovery/config.mjs";
 import { createJobManager } from "../client/work-queue-core/jobs/job-manager.mjs";
 import { createJobWorkflowProvider } from "../../platform/specialized/console/job-workflow-provider.mjs";
+import { createQueuedJobWorkflowProvider } from "../../platform/specialized/console/queued-job-workflow-provider.mjs";
 import {
   createRuntimeLogger,
   setRuntimeLogger,
@@ -79,6 +80,55 @@ function resolveServerUserDataPath(inputUserDataPath) {
   return resolved;
 }
 
+function hostnameFromUrl(value = "") {
+  try {
+    return new URL(String(value || "")).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function originFromUrl(value = "") {
+  try {
+    return new URL(String(value || "")).origin.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isLoopbackHostname(hostname = "") {
+  const normalized = String(hostname || "").toLowerCase();
+  return normalized === "localhost" ||
+    normalized === "::1" ||
+    normalized === "0:0:0:0:0:0:0:1" ||
+    normalized.startsWith("127.");
+}
+
+export function proxyShouldForwardCredentials({ targetBaseUrl = "", discoveryState = {} } = {}) {
+  const targetHost = hostnameFromUrl(targetBaseUrl);
+  const targetOrigin = originFromUrl(targetBaseUrl);
+  if (!targetHost || !targetOrigin) {
+    return false;
+  }
+  if (isLoopbackHostname(targetHost)) {
+    return true;
+  }
+  if (!targetOrigin.startsWith("https://")) {
+    return false;
+  }
+  const trustedOrigins = new Set([
+    hostnameFromUrl(discoveryState.advertisedBaseUrl),
+    hostnameFromUrl(discoveryState.bootstrapBaseUrl),
+    hostnameFromUrl(discoveryState.activeServiceUrl)
+  ].filter(Boolean));
+  const trustedOriginValues = new Set([
+    originFromUrl(discoveryState.advertisedBaseUrl),
+    originFromUrl(discoveryState.bootstrapBaseUrl),
+    originFromUrl(discoveryState.activeServiceUrl)
+  ].filter(Boolean));
+  return trustedOrigins.has(targetHost) && trustedOriginValues.has(targetOrigin);
+}
+
 async function proxyApiRequest({
   request,
   response,
@@ -109,6 +159,12 @@ async function proxyApiRequest({
     "x-pact-confirm",
     "x-pact-tool-token"
   ]);
+  const credentialRequestHeaders = new Set([
+    "authorization",
+    "cookie",
+    "x-pact-tool-token"
+  ]);
+  const forwardCredentials = proxyShouldForwardCredentials({ targetBaseUrl, discoveryState });
 
   for (const [name, value] of Object.entries(request.headers || {})) {
     if (!value) {
@@ -117,6 +173,9 @@ async function proxyApiRequest({
 
     const lower = name.toLowerCase();
     if (!allowedRequestHeaders.has(lower)) {
+      continue;
+    }
+    if (credentialRequestHeaders.has(lower) && !forwardCredentials) {
       continue;
     }
 
@@ -198,9 +257,21 @@ async function proxyApiRequest({
     throw error;
   }
   const upstreamHeaders = {};
+  const blockedResponseHeaders = new Set([
+    "connection",
+    "content-length",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "set-cookie",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade"
+  ]);
   for (const [name, value] of Object.entries(upstream.headers || {})) {
     const lower = name.toLowerCase();
-    if (lower === "transfer-encoding" || lower === "content-length") {
+    if (blockedResponseHeaders.has(lower)) {
       continue;
     }
 
@@ -267,14 +338,14 @@ async function handleStaticFallback({
 
   if (path.extname(url.pathname)) {
     sendJson(response, 404, {
-      error: `资源不存在：${url.pathname}`
+      error: "资源不存在。"
     });
     return;
   }
 
   if (!distPath) {
     sendJson(response, 404, {
-      error: `接口不存在：${url.pathname}`
+      error: "接口不存在。"
     });
     return;
   }
@@ -706,6 +777,8 @@ export async function startHttpServer({
       runtimeOptions: runtime.runtimeOptions,
       getRuntimeOptions: () => runtime.runtimeOptions,
       protocolEventBus,
+      externalScheduler: process.env.PACT_PLATFORM_WORK_QUEUE !== "0" &&
+        process.env.PACT_WORK_QUEUE_DISABLED !== "1",
       logger: runtimeLogger
     });
   const ownsJobManager = !incomingJobManager;
@@ -719,7 +792,7 @@ export async function startHttpServer({
     metadataStore: registeredMetadataStore,
     runtime
   });
-  const jobWorkflowProvider = createJobWorkflowProvider({ jobManager });
+  let jobWorkflowProvider = createJobWorkflowProvider({ jobManager });
   const queueMonitorAdapter = {
     registerStarted: (input) => registerQueueStarted(resolvedUserDataPath, input),
     registerHeartbeat: (input) => registerQueueHeartbeat(resolvedUserDataPath, input),
@@ -773,6 +846,14 @@ export async function startHttpServer({
   } = runtimeProviders;
   const exposedMaintenanceAgent = maintenanceAgent;
   const exposedKnowledgeSourceService = knowledgeSourceService;
+  if (process.env.PACT_PLATFORM_WORK_QUEUE !== "0" && process.env.PACT_WORK_QUEUE_DISABLED !== "1") {
+    jobWorkflowProvider = await createQueuedJobWorkflowProvider({
+      userDataPath: resolvedUserDataPath,
+      jobManager,
+      strategyManagementProvider,
+      logger: runtimeLogger
+    });
+  }
 
   const jobsController = createJobsController({
     userDataPath: resolvedUserDataPath,
@@ -1119,18 +1200,49 @@ export async function startHttpServer({
         return;
       }
 
-      if (
-        registeredCoreProvider.shouldProxyRegisteredApiRequest({
-          pathname: url.pathname,
-          discoveryState,
-          operations: activeApiOperations
-        })
-      ) {
+      const proxyDecision = registeredCoreProvider.findProxyRegisteredApiRequest({
+        method,
+        pathname: url.pathname,
+        discoveryState,
+        operations: activeApiOperations
+      });
+      if (proxyDecision) {
+        const proxyOperation = proxyDecision.operation;
+        if (proxyOperation.public !== true) {
+          const authorization = securityPermissions?.authorizeOperation
+            ? await securityPermissions.authorizeOperation({
+                request,
+                operation: proxyOperation,
+                method,
+                url
+              })
+            : {
+                ok: false,
+                status: 503,
+                error: "操作授权器未注册。"
+              };
+          if (!authorization.ok) {
+            runtimeLogger.warn("http.proxy.denied", {
+              traceId: traceContext.traceId,
+              requestId,
+              operationId: proxyOperation.id,
+              method,
+              route: url.pathname,
+              status: authorization.status || 403
+            });
+            sendJson(response, authorization.status || 403, {
+              error: authorization.error || "权限不足。",
+              bootstrap: authorization.bootstrap,
+              traceId: traceContext.traceId
+            });
+            return;
+          }
+        }
         await proxyApiRequest({
           request,
           response,
           requestBody,
-          targetBaseUrl: discoveryState.forwardBaseUrl || discoveryState.activeServiceUrl,
+          targetBaseUrl: proxyDecision.targetBaseUrl,
           discoveryState,
           logger: runtimeLogger
         });
@@ -1180,9 +1292,11 @@ export async function startHttpServer({
         durationMs: Date.now() - startedAt,
         error: summarizeError(error)
       });
-      const message = error instanceof Error ? error.message : "Internal error";
       if (!response.headersSent) {
-        sendJson(response, statusCode, { error: message });
+        sendJson(response, statusCode, {
+          error: statusCode >= 500 ? "服务器处理请求失败。" : "请求处理失败。",
+          traceId: traceContext.traceId
+        });
       }
     }
     });
@@ -1358,6 +1472,9 @@ export async function startHttpServer({
       await waitForDrain(30_000);
 
       try {
+        if (jobWorkflowProvider !== jobManager && typeof jobWorkflowProvider?.close === "function") {
+          await jobWorkflowProvider.close();
+        }
         if (ownsJobManager) {
           await jobManager.close();
         }

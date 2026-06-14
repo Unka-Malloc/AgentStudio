@@ -59,6 +59,31 @@ function startRoutingMockServer() {
   });
 }
 
+function startOversizedGatewayMockServer() {
+  const server = http.createServer(async (request, response) => {
+    for await (const _chunk of request) {
+      // Drain the request body before sending the oversized response.
+    }
+    const body = "x".repeat((4 * 1024 * 1024) + 1);
+    response.writeHead(200, {
+      "Content-Type": "text/plain",
+      "Content-Length": String(Buffer.byteLength(body))
+    });
+    response.end(body);
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.removeListener("error", reject);
+      const address = server.address();
+      resolve({
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        close: () => new Promise((done) => server.close(done))
+      });
+    });
+  });
+}
+
 function routingSettings(mock) {
   return {
     customHttpAdapter: {
@@ -203,6 +228,39 @@ async function verifyGatewayRouting() {
   }
 }
 
+async function verifyGatewayResponseLimit() {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-model-routing-response-limit-"));
+  const mock = await startOversizedGatewayMockServer();
+  try {
+    await assert.rejects(
+      () => callAgentGateway({
+        settings: {
+          customHttpAdapter: {
+            alias: "oversized-agent",
+            label: "Oversized Agent",
+            url: `${mock.baseUrl}/oversized`,
+            token: "oversized-token",
+            tokenHeader: "token",
+            agentName: "oversized",
+            engine: "oversized-engine",
+            timeoutMs: 5000
+          }
+        },
+        userDataPath: tempRoot,
+        input: {
+          alias: "oversized-agent",
+          question: "return too much data"
+        }
+      }),
+      /Agent gateway upstream response exceeded the 4194304 byte response limit/,
+      "agent gateway upstream responses must be size-limited"
+    );
+  } finally {
+    await mock.close();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
 function verifyOperationRegistry() {
   const operation = SERVER_API_OPERATIONS.find((item) => item.id === "model_routing.health");
   assert.ok(operation, "model_routing.health operation must be registered");
@@ -215,6 +273,7 @@ function verifyOperationRegistry() {
 async function main() {
   verifyPolicyNormalization();
   await verifyGatewayRouting();
+  await verifyGatewayResponseLimit();
   verifyOperationRegistry();
   console.log("[model-routing] ok");
 }

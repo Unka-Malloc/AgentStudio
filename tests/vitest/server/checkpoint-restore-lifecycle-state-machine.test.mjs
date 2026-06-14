@@ -19,7 +19,7 @@ import {
 } from "../../../server/platform/common/data-structure/checkpoint-tree-store.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const defPath = path.resolve(__dirname, "../../../server/platform/common/state-machine/definitions/checkpoint.restore.v1.json");
+const defPath = path.resolve(__dirname, "../../../server/platform/common/state-machine/definitions/checkpoint.restore.json");
 const allowPolicyGuardContext = { policyDecision: { allowed: true } };
 const restoreApplyGuardContext = {
   treeState: { status: "active" },
@@ -57,14 +57,14 @@ describe("Checkpoint Restore Lifecycle State Machine", () => {
 
     // C3 Verifier validation
     const verifierReport = verifyMachineDefinition(definition, {
-      relativePath: "checkpoint.restore.v1.json",
+      relativePath: "checkpoint.restore.json",
       throwOnError: true
     });
     expect(verifierReport.ok).toBe(true);
     expect(verifierReport.stateCount).toBe(9);
     expect(verifierReport.eventCount).toBe(9);
     expect(verifierReport.matrixCellCount).toBe(81);
-    expect(definition.machineId).toBe("checkpoint.restore.v1");
+    expect(definition.machineId).toBe("checkpoint.restore");
     expect(definition.initialState).toBe("restore_requested");
   });
 

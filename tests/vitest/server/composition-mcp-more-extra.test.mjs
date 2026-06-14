@@ -77,6 +77,7 @@ describe("composition MCP extras", () => {
       displayName: "MCP Gateway",
       mode: "connected",
       startupPolicy: "external-only",
+      policyPreset: "servicehub.development-local",
       scripts: {
         prepare: { path: "scripts/prepare.sh" },
         start: { path: "scripts/start.sh" }
@@ -89,7 +90,7 @@ describe("composition MCP extras", () => {
       },
       binding: {
         mode: "passthrough",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       }
     };
 
@@ -241,6 +242,7 @@ describe("composition MCP extras", () => {
       serviceId: "mcp-service",
       serviceName: "MCP Service",
       displayName: "MCP Service",
+      policyPreset: "servicehub.development-local",
       upstream: {
         type: "mcp",
         transport: "streamable-http",
@@ -248,7 +250,7 @@ describe("composition MCP extras", () => {
       },
       binding: {
         mode: "passthrough",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       }
     });
 
@@ -286,7 +288,7 @@ describe("composition MCP extras", () => {
     expect(discovery).toMatchObject({
       ok: true,
       serviceId: "mcp-service",
-      protocolVersion: "pact.external-mcp-passthrough.v1",
+      protocolVersion: "v0.0.1:external-service:mcp-passthrough-1",
       tools: [{
         name: "ping.tool",
         title: "Ping Tool",
@@ -306,20 +308,20 @@ describe("composition MCP extras", () => {
       cachePath: externalMcpToolCachePath(userDataPath),
       serviceId: "mcp-service",
       toolCount: 1,
+      activeToolCount: 0,
+      candidateToolCount: 1,
       tools: ["ping.tool"]
     });
 
     const cache = JSON.parse(await fs.readFile(refresh.cachePath, "utf8"));
     expect(cache.kind).toBe("pact.external-mcp.tool-cache");
     expect(cache.services["mcp-service"].tools).toHaveLength(1);
+    expect(cache.services["mcp-service"].adoption).toMatchObject({
+      state: "candidate"
+    });
 
     const runtime = createExternalMcpPassthroughRuntime({ userDataPath });
-    expect(runtime.listVirtualOperationsSync()).toEqual([
-      expect.objectContaining({
-        id: "external.mcp.mcp_service.ping_tool",
-        toolId: "pact.externalMcp.mcp_service.ping_tool"
-      })
-    ]);
+    expect(runtime.listVirtualOperationsSync()).toEqual([]);
 
     fetchMock.mockReset();
     fetchMock
@@ -406,7 +408,7 @@ describe("composition MCP extras", () => {
       },
       binding: {
         mode: "passthrough",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       }
     })).rejects.toMatchObject({
       message: "upstream exploded",
@@ -418,7 +420,7 @@ describe("composition MCP extras", () => {
     });
 
     await writeJson(externalMcpToolCachePath(userDataPath), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       kind: "pact.external-mcp.tool-cache",
       updatedAt: "2026-06-05T00:00:00.000Z",
       services: {
@@ -432,7 +434,7 @@ describe("composition MCP extras", () => {
           },
           binding: {
             mode: "compile",
-            outlet: "pact.skillHub"
+            outlet: "pact.serviceHub"
           },
           tools: [{
             name: "call_item",

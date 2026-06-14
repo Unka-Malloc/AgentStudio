@@ -342,7 +342,7 @@ describe("agent workspace context bundle roundtrip", () => {
 describe("agent workspace merkle-path operations", () => {
   it("invokes provided merkle services for file upload and keeps cache receipts", async () => {
     const merkleState = {
-      protocolVersion: "pact.merkle.test.v1",
+      protocolVersion: "v0.0.1:test:merkle-1",
       cas: {
         putBlock: vi.fn(async (_payload, _metadata) => ({
           cid: "cas-block",

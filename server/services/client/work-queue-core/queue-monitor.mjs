@@ -19,7 +19,7 @@ import {
 } from "../../../platform/interactive/product-api.mjs";
 import { serverToken } from "../../../platform/interactive/product-api.mjs";
 
-const QUEUE_MONITOR_SCHEMA_VERSION = 1;
+const QUEUE_MONITOR_SCHEMA_VERSION = "v0.0.1:workflow:queue-monitor-schema-1";
 const DEFAULT_QUEUE_STALE_MS = 60000;
 const ACTIVE_JOB_STATUSES = new Set(["queued", "running"]);
 const TERMINAL_JOB_STATUSES = new Set(["completed", "failed", "canceled", "cancelled", "deleted"]);

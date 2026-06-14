@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 
-export const KNOWLEDGE_SKILL_PROTOCOL_VERSION = "pact.knowledge-skill.v1";
+export const KNOWLEDGE_SKILL_PROTOCOL_VERSION = "v0.0.1:knowledge:skill-1";
 
 const ENTITY_DEFAULT_FRAMEWORK_PATH = fileURLToPath(
   new URL("../../../../../config/entity-config/skills/knowledge-skill-framework/framework.json", import.meta.url)
@@ -348,7 +348,7 @@ function normalizeFramework(value = {}) {
   const fallbackTemplates = asObject(raw.fallbackTemplates);
   const agentCreation = asObject(raw.agentCreation);
   return {
-    schemaVersion: Number(raw.schemaVersion || 1),
+    schemaVersion: String(raw.schemaVersion || "v0.0.1:schema:definition-1"),
     frameworkId: normalizeText(raw.frameworkId || "pact.default-knowledge-skill-framework"),
     version: Number(raw.version || 1),
     layers: asArray(raw.layers),
@@ -430,7 +430,7 @@ function knowledgeSkillBundleDirectory(rootPath, skillId) {
 
 function knowledgeSkillDependencies(skill = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     dependencyType: "pact.knowledge-skill.dependencies",
     protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
     runtimeModules: [
@@ -440,21 +440,21 @@ function knowledgeSkillDependencies(skill = {}) {
     ],
     requiredTools: [
       {
-        toolId: "pact.knowledge.search",
+        toolId: "pact.agentLibrary.search",
         reason: "Retrieve coarse-to-fine evidence before applying the skill."
       },
       {
-        toolId: "pact.knowledge.evidence",
+        toolId: "pact.agentLibrary.evidence",
         reason: "Open cited evidence references when validating or answering."
       },
       {
-        toolId: "pact.knowledge.renderMarkdown",
+        toolId: "pact.agentLibrary.renderMarkdown",
         reason: "Render evidence packs into readable context when needed."
       }
     ],
     requiredProtocols: [
-      "pact.knowledge.v1",
-      "pact.knowledge-agent-skill.v1",
+      "v0.0.1:knowledge:core-1",
+      "v0.0.1:knowledge:agent-skill-1",
       KNOWLEDGE_SKILL_PROTOCOL_VERSION
     ],
     heavyDependencies: [],
@@ -471,7 +471,7 @@ function writeKnowledgeSkillBundle(rootPath, skill) {
   const bundleDir = knowledgeSkillBundleDirectory(rootPath, skill.skillId);
   const dependencies = knowledgeSkillDependencies(skill);
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     bundleType: "pact.knowledge-skill.bundle",
     protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
     skillId: skill.skillId,

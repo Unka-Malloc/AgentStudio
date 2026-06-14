@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { h, ref } from "vue";
 import { mount } from "@vue/test-utils";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { setConsoleLocaleState } from "../../../server-web/i18n/console";
 import DashboardView from "../../../server-web/views/DashboardView.vue";
 
 const statusPillMock = {
@@ -13,23 +14,12 @@ const statusPillMock = {
   },
 };
 
-const segmentedToggleMock = {
-  name: "SegmentedToggle",
-  props: ["options", "modelValue", "size", "ariaLabel"],
-  setup() {
-    return () => h("section", { class: "mock-segmented-toggle" }, "审批流状态");
-  },
-};
-
-const approvalFlowCardListMock = {
-  name: "ApprovalFlowCardList",
-  setup() {
-    return () => h("section", { class: "mock-approval-flow-card-list" }, "审批流列表");
-  },
-};
-
 let dashboardShellContext: Record<string, unknown>;
 let approvalFlowController: Record<string, unknown>;
+
+afterEach(() => {
+  setConsoleLocaleState("zh-CN");
+});
 
 vi.mock("../../../server-web/composables/serverConsoleShellContext", () => ({
   useServerConsoleShellContext: () => dashboardShellContext,
@@ -89,15 +79,41 @@ function makeDashboardShellContext(overrides: {
 }
 
 function makeApprovalFlowController(count = 0) {
+  const requests = Array.from({ length: count }, (_, index) => ({
+    requestId: `auth-${index}`,
+    status: "pending",
+    clientName: `Client ${index + 1}`,
+    reason: "test approval",
+    requestedTools: ["tool.read"],
+    requestedScopes: ["knowledge:read"],
+  }));
   return {
-    approvalFlowCards: ref(Array.from({ length: count }, (_, index) => ({
-      key: `mock-${index}`,
+    acceptKnowledgeReview: vi.fn(),
+    approvalFlowCards: ref(requests.map((request, index) => ({
+      key: `authorization:${request.requestId}`,
+      kind: "authorization",
+      tone: "warning",
+      label: "MCP 客户端授权",
+      title: request.clientName,
+      summary: `用途说明：${request.reason}`,
+      meta: ["待审批", "工具 1 个", "权限域 1 个"],
+      request,
     }))),
     approvalFlowStatus: ref("pending"),
+    approveAuthorization: vi.fn(),
+    authorizationBusy: vi.fn(() => false),
+    fuseKnowledgeReviewItem: vi.fn(),
+    keepBothKnowledgeReview: vi.fn(),
     mcpAuthorizationStatusOptionBarOptions: [
       { value: "pending", label: "待处理" },
       { value: "approved", label: "已处理" },
     ],
+    rejectAuthorization: vi.fn(),
+    rejectKnowledgeReview: vi.fn(),
+    replaceKnowledgeReview: vi.fn(),
+    reviewBusy: vi.fn(() => false),
+    reviewFusionDisabled: vi.fn(() => false),
+    reviewKeepBothDisabled: vi.fn(() => false),
   };
 }
 
@@ -133,8 +149,6 @@ function mountDashboard(overrides: {
     global: {
       stubs: {
         StatusPill: statusPillMock,
-        SegmentedToggle: segmentedToggleMock,
-        ApprovalFlowCardList: approvalFlowCardListMock,
       },
     },
   });
@@ -192,11 +206,64 @@ describe("DashboardView", () => {
     expect(pills[1].text()).toBe("无客户端");
     expect(pills[2].text()).toBe("空闲");
 
-    expect(wrapper.find(".configuration-alert-empty").text()).toContain("没有报警");
-    expect(wrapper.find(".dashboard-approval-card .mock-status-pill").text()).toBe("已清空");
+    expect(wrapper.find(".dashboard-todo-card .configuration-alert-empty").text()).toContain("没有待办事项");
+    expect(wrapper.find(".dashboard-todo-card .mock-status-pill").text()).toBe("已清空");
+    expect(wrapper.find(".dashboard-approval-card").exists()).toBe(false);
   });
 
-  it("告警分支展示主告警、队列与交互动作", async () => {
+  it("英文模式下待办摘要直接渲染为英文", () => {
+    setConsoleLocaleState("en");
+    const alert = createDashboardAlert({
+      alertId: "english-alert",
+      tone: "danger",
+      source: "monitor",
+    });
+
+    const wrapper = mountDashboard({
+      consoleState: {
+        storage: {
+          emailCount: 0,
+          rawObjectCount: 0,
+          transactionCount: 0,
+          threadCount: 0,
+        },
+        clients: {
+          summary: {
+            totalCount: 0,
+            offlineCount: 0,
+          },
+        },
+        jobs: {
+          summary: {
+            queuedCount: 0,
+            runningCount: 0,
+            completedCount: 0,
+          },
+        },
+      },
+      dashboardAlertSummary: "No alerts",
+      dashboardAlertCounts: {
+        total: 0,
+        danger: 2,
+        warning: 0,
+        success: 0,
+        recovered: 0,
+        configuration: 0,
+        monitor: 0,
+      },
+      dashboardAlerts: [alert],
+      dashboardPrimaryAlert: alert,
+      dashboardConfigurationQueue: [],
+      dashboardMonitorQueue: [],
+      dashboardSecondaryAlerts: [],
+      approvalFlowCardCount: 1,
+    });
+
+    expect(wrapper.find(".dashboard-todo-card .section-header p").text()).toBe("1 alerts · 1 approvals");
+    expect(wrapper.find(".dashboard-todo-card .mock-status-pill").text()).toBe("2 items");
+  });
+
+  it("待办分支合并告警与审批并保留交互动作", async () => {
     const primary = createDashboardAlert({
       alertId: "supervisor.recovered",
       tone: "danger",
@@ -275,23 +342,24 @@ describe("DashboardView", () => {
       approvalFlowCardCount: 1,
     });
 
-    expect(wrapper.find(".dashboard-alert-primary .configuration-alert-action").text()).toBe("拉起中");
-    expect(wrapper.findAll(".dashboard-alert-queue").length).toBe(2);
+    expect(wrapper.findAll(".dashboard-todo-item")).toHaveLength(5);
+    expect(wrapper.find(".dashboard-todo-item .configuration-alert-action").text()).toBe("拉起中");
+    expect(wrapper.text()).toContain("Client 1");
 
-    const configQueueButton = wrapper.findAll(".dashboard-alert-queue .configuration-alert-action")[0];
+    const configQueueButton = wrapper.findAll(".dashboard-todo-item .configuration-alert-action")[2];
     await configQueueButton.trigger("click");
     expect((dashboardShellContext.openDashboardAlert as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(configQueueItem);
 
-    const secondaryOpen = wrapper.find(".dashboard-alert-secondary-list .configuration-alert-actions .configuration-alert-action");
+    const secondaryOpen = wrapper.findAll(".dashboard-todo-item .configuration-alert-action")[6];
     await secondaryOpen.trigger("click");
     expect((dashboardShellContext.openDashboardAlert as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(secondaryItem);
 
-    const primaryDismiss = wrapper.find(".dashboard-alert-primary-actions .danger-action");
+    const primaryDismiss = wrapper.find(".dashboard-todo-item .danger-action");
     await primaryDismiss.trigger("click");
     expect((dashboardShellContext.dismissDashboardAlert as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(primary);
   });
 
-  it("告警队列为空时走已置顶分支并保留主状态", () => {
+  it("没有告警但存在审批时仍显示待办事项", async () => {
     const primary = createDashboardAlert({
       alertId: "monitor.monitor-only",
       tone: "warning",
@@ -322,24 +390,26 @@ describe("DashboardView", () => {
       },
       dashboardAlertSummary: "1项警报",
       dashboardAlertCounts: {
-        total: 1,
+        total: 0,
         danger: 0,
-        warning: 1,
+        warning: 0,
         success: 0,
         recovered: 0,
-        configuration: 1,
-        monitor: 1,
+        configuration: 0,
+        monitor: 0,
       },
-      dashboardAlerts: [primary],
-      dashboardPrimaryAlert: primary,
+      dashboardAlerts: [],
+      dashboardPrimaryAlert: null,
       dashboardConfigurationQueue: [],
       dashboardMonitorQueue: [],
       dashboardSecondaryAlerts: [],
       approvalFlowCardCount: 2,
     });
 
-    expect(wrapper.text()).toContain("首要配置项已置顶。");
-    expect(wrapper.text()).toContain("首要巡检项已置顶。");
-    expect(wrapper.find(".dashboard-approval-card .mock-status-pill").text()).toBe("2 项");
+    expect(primary).toBeTruthy();
+    expect(wrapper.findAll(".dashboard-todo-item")).toHaveLength(2);
+    expect(wrapper.find(".dashboard-todo-card .mock-status-pill").text()).toBe("2 项");
+    await wrapper.find(".dashboard-todo-item .configuration-alert-action").trigger("click");
+    expect(approvalFlowController.approveAuthorization as ReturnType<typeof vi.fn>).toHaveBeenCalled();
   });
 });

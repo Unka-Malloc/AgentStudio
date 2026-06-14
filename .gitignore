@@ -76,6 +76,7 @@ output/
 test-results/
 
 # Local AI assistant skill/runtime artifacts
+.codex-research/
 .gemini/
 .impeccable/
 .github/skills/

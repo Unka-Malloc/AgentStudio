@@ -20,9 +20,9 @@ const props = defineProps<{
 
 const {
   dependencyStatusForRow,
+  isRuntimeDependencyRefreshing,
   loadError,
-  loading,
-  refreshRuntimeDependencies,
+  refreshRuntimeDependency,
 } = useRuntimeDownloadsViewContext();
 
 const panelOpen = ref(false);
@@ -94,13 +94,13 @@ function updateDraft(key: string, value: string) {
 async function refreshDetection() {
   saveError.value = "";
   saveMessage.value = "";
-  await refreshRuntimeDependencies({ silent: true });
+  await refreshRuntimeDependency(props.item.id, { silent: true });
   if (loadError.value) {
     saveError.value = loadError.value;
     return;
   }
   resetDraft();
-  saveMessage.value = "已重新检测运行时配置。";
+  saveMessage.value = "已重新检测环境配置。";
 }
 
 async function saveConfig() {
@@ -116,7 +116,7 @@ async function saveConfig() {
         value: draftValues.value[entry.key] ?? "",
       })),
     );
-    await refreshRuntimeDependencies({ silent: true });
+    await refreshRuntimeDependency(props.item.id, { silent: true });
     if (loadError.value) {
       saveError.value = `配置已保存，但重新检测失败：${loadError.value}`;
     } else {
@@ -151,7 +151,7 @@ watch(() => props.item, () => {
     subtitle="修改平台本地源配置；系统 PATH、环境变量和命令行参数在此展示来源状态。"
     :status-label="configStatusLabel"
     :status-tone="configStatusTone"
-    :verifying="loading"
+    :verifying="isRuntimeDependencyRefreshing(item.id)"
     verify-label="重新检测"
     verifying-label="检测中"
     @close="closePanel"

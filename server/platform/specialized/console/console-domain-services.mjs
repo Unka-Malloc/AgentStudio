@@ -137,11 +137,6 @@ async function enhanceAffairTaxonomy(...args) {
   return module.enhanceAffairTaxonomy(...args);
 }
 
-async function resumeKnowledgeWordCloudClassificationTasks(...args) {
-  const module = await import("./knowledge-word-cloud-operation-executor.mjs");
-  return module.resumeKnowledgeWordCloudClassificationTasks(...args);
-}
-
 async function loadAgentGatewayModule() {
   return import("../agent/agent-gateway/index.mjs");
 }
@@ -199,7 +194,6 @@ export function createConsoleDomainServices() {
     buildKnowledgeConsoleSummary,
     buildRuntimeConsoleSummary,
     executeConsoleDomainOperation,
-    resumeKnowledgeWordCloudClassificationTasks,
     buildToolManagementClientConnectionRows,
     uploadSessionStore,
     loadNormalizedDocumentStore,

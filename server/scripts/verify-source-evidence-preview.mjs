@@ -27,15 +27,15 @@ try {
   await fs.mkdir(sourceRoot, { recursive: true });
   await fs.mkdir(ignoredRoot, { recursive: true });
 
-  const largeBody = "Google billing line\n".repeat(5000);
-  const largeFile = path.join(sourceRoot, "google-billing.eml");
-  const hsbcStatementFile = path.join(sourceRoot, "hsbc-statement.eml");
+  const largeBody = "Example service report line\n".repeat(5000);
+  const largeFile = path.join(sourceRoot, "example-service-report.eml");
+  const encodedReportFile = path.join(sourceRoot, "encoded-report.eml");
   await fs.writeFile(
     largeFile,
     [
       "From: billing@example.test",
       "To: owner@example.test",
-      "Subject: Google 账单",
+      "Subject: Example 服务报告",
       "Date: Fri, 01 May 2026 10:00:00 +0000",
       "Content-Type: text/plain; charset=utf-8",
       "",
@@ -44,20 +44,20 @@ try {
     ].join("\n")
   );
   await fs.writeFile(
-    hsbcStatementFile,
+    encodedReportFile,
     [
-      "From: HSBC Documents <documents@hsbc.example>",
+      "From: Example Docs <documents@example.test>",
       "To: owner@example.test",
-      "Subject: HSBC =?UTF-8?B?6LSm5Y2V?=",
+      "Subject: Example =?UTF-8?B?5oql5ZGK?=",
       "Date: Fri, 01 May 2026 11:00:00 +0000",
-      "Content-Type: multipart/alternative; boundary=hsbc-boundary",
+      "Content-Type: multipart/alternative; boundary=example-boundary",
       "",
-      "--hsbc-boundary",
+      "--example-boundary",
       "Content-Type: text/plain; charset=UTF-8",
       "Content-Transfer-Encoding: quoted-printable",
       "",
-      "Your HSBC statement is ready. =E8=B4=A6=E5=8D=95 =E5=B7=B2=E7=94=9F=E6=88=90.",
-      "--hsbc-boundary--"
+      "Your Example report is ready. =E6=8A=A5=E5=91=8A =E5=B7=B2=E7=94=9F=E6=88=90.",
+      "--example-boundary--"
     ].join("\n")
   );
 
@@ -81,7 +81,7 @@ try {
   }
 
   await writeJson(getSourceSearchRulesPath(userDataPath), {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: new Date().toISOString(),
     maxFileBytes: 2 * 1024 * 1024,
     maxEvidenceBytes: 32 * 1024,
@@ -117,21 +117,21 @@ try {
 
   const search = await searchSourceFiles({
     userDataPath,
-    query: "Google billing",
+    query: "Example service report",
     limit: 10
   });
   assert.ok(search.items.length >= 1, "large source file should be searchable when under maxFileBytes");
   assert.equal(search.items[0].evidenceId, sourceEvidenceIdForPath(userDataPath, largeFile));
 
-  const hsbcSearch = await searchSourceFiles({
+  const encodedReportSearch = await searchSourceFiles({
     userDataPath,
-    query: "HSBC 账单",
+    query: "Example 报告",
     limit: 10
   });
-  assert.ok(hsbcSearch.items.length >= 1, "quoted-printable mail should be searchable as readable text");
-  assert.equal(hsbcSearch.items[0].evidenceId, sourceEvidenceIdForPath(userDataPath, hsbcStatementFile));
-  assert.equal(hsbcSearch.items[0].relevanceTier, "high");
-  assert.ok(hsbcSearch.items[0].snippet.includes("账单"));
+  assert.ok(encodedReportSearch.items.length >= 1, "quoted-printable mail should be searchable as readable text");
+  assert.equal(encodedReportSearch.items[0].evidenceId, sourceEvidenceIdForPath(userDataPath, encodedReportFile));
+  assert.equal(encodedReportSearch.items[0].relevanceTier, "high");
+  assert.ok(encodedReportSearch.items[0].snippet.includes("报告"));
 
   const evidence = await getSourceFileEvidence({
     userDataPath,
@@ -140,7 +140,7 @@ try {
   assert.ok(evidence, "source evidence should resolve");
   assert.equal(evidence.evidenceId, search.items[0].evidenceId);
   assert.equal(evidence.sourceLocator.truncated, true);
-  assert.ok(evidence.payload.blocks[0].text.includes("Google 账单"));
+  assert.ok(evidence.payload.blocks[0].text.includes("Example 服务报告"));
   assert.ok(evidence.payload.blocks[0].text.includes("只显示前"));
   assert.equal(
     evidence.payload.blocks[0].text.includes("END-OF-FILE-SHOULD-NOT-BE-IN-PREVIEW"),

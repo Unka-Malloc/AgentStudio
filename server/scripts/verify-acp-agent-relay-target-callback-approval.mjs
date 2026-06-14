@@ -209,7 +209,7 @@ while (true) {
       jsonrpc: "2.0",
       id: message.id,
       result: {
-        protocolVersion: "target.acp.callback-approval.v1",
+        protocolVersion: "v0.0.1:strategy:target-acp-callback-approval-1",
         capabilities: {
           session: ["new", "resume"],
           fs: ["write_text_file"],
@@ -501,7 +501,7 @@ try {
     { virtualAgentId, sourceId },
     "target-callback-approval-init"
   ));
-  assert.equal(initialize.result?.pactProtocolVersion, "pact.acp-agent-relay.v1");
+  assert.equal(initialize.result?.pactProtocolVersion, "v0.0.1:agent:acp-agent-relay-1");
   assert.equal(initialize.result?.capabilitiesSnapshot?.target?.transportType, "stdio");
 
   const session = await firstSourceServer.request(createRequest(

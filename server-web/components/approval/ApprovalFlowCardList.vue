@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { knowledgeReviewCanResolveWithDocument } from "../../composables/console-knowledge-review-utils";
 import { useApprovalFlowViewContext } from "../../composables/approvalFlowViewContext";
+import { currentConsoleLocale, localizeConsoleText, resolveEffectiveConsoleLocale } from "../../i18n/console";
 
 const {
   acceptKnowledgeReview,
@@ -16,6 +18,12 @@ const {
   reviewFusionDisabled,
   reviewKeepBothDisabled,
 } = useApprovalFlowViewContext();
+
+const approvalFlowLocale = computed(() => resolveEffectiveConsoleLocale(currentConsoleLocale.value));
+const emptyAuthorizationTitle = computed(() => localizeConsoleText("没有待处理的授权请求", approvalFlowLocale.value));
+const emptyApprovalDescription = computed(() =>
+  localizeConsoleText("当前没有需要人工处理的审批事项。", approvalFlowLocale.value),
+);
 </script>
 
 <template>
@@ -23,6 +31,7 @@ const {
     <article
       v-for="card in approvalFlowCards"
       :key="card.key"
+      :id="`approval-${card.key}`"
       class="approval-request-card"
       :data-tone="card.tone"
     >
@@ -111,8 +120,8 @@ const {
     </article>
 
     <article v-if="approvalFlowCards.length === 0" class="approval-request-card approval-request-empty-card">
-      <strong>没有待处理的授权请求</strong>
-      <span>当前没有需要人工处理的审批事项。</span>
+      <strong>{{ emptyAuthorizationTitle }}</strong>
+      <span>{{ emptyApprovalDescription }}</span>
     </article>
   </div>
 </template>

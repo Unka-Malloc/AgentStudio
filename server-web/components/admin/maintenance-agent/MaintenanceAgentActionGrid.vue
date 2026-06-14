@@ -1,17 +1,10 @@
 <script setup lang="ts">
-import AgentModelOptionBar from "../../AgentModelOptionBar.vue";
 import OptionBar from "../../OptionBar.vue";
 import { useMaintenanceAgentViewContext } from "../../../composables/maintenanceAgentViewContext";
 
 const {
-  agentSelectorOptions,
   busyKey,
   canRunMaintenanceAgent,
-  chatMaintenanceAgent,
-  currentAgentModelOptionLabel,
-  maintenanceAgentConfig,
-  maintenanceAgentMessage,
-  maintenanceAgentModelAlias,
   maintenanceAgentRunbook,
   maintenanceAgentRunbookOptionBarOptions,
   maintenanceAgentRunbooks,
@@ -22,32 +15,6 @@ const {
 
 <template>
   <article class="surface-card maintenance-agent-grid">
-    <section class="module-panel">
-      <div class="module-panel-heading">
-        <strong>对话入口</strong>
-        <span>{{ maintenanceAgentConfig?.plannerMode || "fixed_runbook" }} · {{ currentAgentModelOptionLabel(maintenanceAgentModelAlias) || "默认智能体" }}</span>
-      </div>
-      <AgentModelOptionBar
-        v-model="maintenanceAgentModelAlias"
-        class="module-field"
-        label="巡检智能体"
-        include-empty
-        :options="agentSelectorOptions"
-      />
-      <label class="json-editor">
-        <span>指令</span>
-        <textarea v-model="maintenanceAgentMessage" rows="4" />
-      </label>
-      <button
-        class="tool-button"
-        type="button"
-        :disabled="!canRunMaintenanceAgent || busyKey === 'maintenance-agent:chat'"
-        @click="chatMaintenanceAgent"
-      >
-        {{ busyKey === "maintenance-agent:chat" ? "执行中" : "发送" }}
-      </button>
-    </section>
-
     <section class="module-panel">
       <div class="module-panel-heading">
         <strong>Runbook</strong>

@@ -14,14 +14,12 @@ const DECLARED_AGENT_TARGETS = Object.freeze([
   "openclaw",
   "claude-code",
   "codex",
-  "gemini-cli",
   "antigravity",
   "opencode",
   "copilot",
   "kilo-code",
   "cursor",
-  "hermes",
-  "windsurf"
+  "hermes"
 ]);
 const PRIORITY_AGENT_TARGETS = Object.freeze(["codex", "claude-code", "openclaw"]);
 const EXPECTED_AGENT_PROFILES = Object.freeze(Object.fromEntries(
@@ -131,9 +129,6 @@ const fixtureBinDir = path.join(opencodeConfigDir, "bin");
 const fixtureCodexPath = path.join(fixtureBinDir, process.platform === "win32" ? "codex.cmd" : "codex");
 const fixtureClaudePath = path.join(fixtureBinDir, process.platform === "win32" ? "claude.cmd" : "claude");
 const fixtureClaudeHangPath = path.join(fixtureBinDir, process.platform === "win32" ? "claude-hang.cmd" : "claude-hang");
-const fixtureGeminiPath = path.join(fixtureBinDir, process.platform === "win32" ? "gemini.cmd" : "gemini");
-const fixtureGeminiHangPath = path.join(fixtureBinDir, process.platform === "win32" ? "gemini-hang.cmd" : "gemini-hang");
-const fixtureGeminiFailPath = path.join(fixtureBinDir, process.platform === "win32" ? "gemini-fail.cmd" : "gemini-fail");
 const fixtureKiloPath = path.join(fixtureBinDir, process.platform === "win32" ? "kilo.cmd" : "kilo");
 const fixtureKiloHangPath = path.join(fixtureBinDir, process.platform === "win32" ? "kilo-hang.cmd" : "kilo-hang");
 const fixtureCopilotPath = path.join(fixtureBinDir, process.platform === "win32" ? "copilot.cmd" : "copilot");
@@ -264,7 +259,6 @@ async function installFixturePriorityAgentClis() {
   for (const filePath of [
     fixtureCodexPath,
     fixtureClaudePath,
-    fixtureGeminiPath,
     fixtureKiloPath,
     fixtureCopilotPath,
     fixtureOpenClawPath,
@@ -877,29 +871,6 @@ try {
     assert.equal(result.stdout.includes(path.dirname(fixtureOpenClawHangPath)), false, "local OpenClaw timeout output must not expose the agent binary directory");
   });
 
-  await testAsync("cli local gemini install times out stalled mcp command", async () => {
-    await installFixtureAgentCli(fixtureGeminiHangPath);
-    const result = await spawnConnector([
-      "install",
-      "--target", "gemini-cli",
-      "--url", serverUrl,
-      "--token", token,
-      "--gemini-bin", fixtureGeminiHangPath,
-      "--discovery-file", tempRegistryPath,
-      "--no-verify",
-      "--json"
-    ], 10000, {
-      PACT_FIXTURE_AGENT_HANG_MCP: path.basename(fixtureGeminiHangPath, path.extname(fixtureGeminiHangPath)),
-      PACT_MCP_INSTALL_COMMAND_TIMEOUT_MS: "1000"
-    });
-    assert.equal(result.code, 1);
-    assert.equal(result.stdout.includes(token), false, "local Gemini timeout output must not expose the grant token");
-    const payload = JSON.parse(result.stdout);
-    assert.equal(payload.ok, false);
-    assert.equal(payload.installed?.["gemini-cli"]?.status, "failed");
-    assert.match(payload.installed?.["gemini-cli"]?.error, /timed out/);
-  });
-
   await testAsync("cli local copilot install times out stalled mcp command", async () => {
     await installFixtureAgentCli(fixtureCopilotHangPath);
     const result = await spawnConnector([
@@ -948,14 +919,14 @@ try {
     assert.equal(config.mcp?.pact?.url, `${serverUrl}/mcp`);
   });
 
-  await testAsync("cli local gemini failure redacts echoed token arguments", async () => {
-    await installFixtureAgentCli(fixtureGeminiFailPath);
+  await testAsync("cli local copilot failure redacts echoed token arguments", async () => {
+    await installFixtureAgentCli(fixtureCopilotPath);
     const result = await spawnConnector([
       "install",
-      "--target", "gemini-cli",
+      "--target", "copilot",
       "--url", serverUrl,
       "--token", token,
-      "--gemini-bin", fixtureGeminiFailPath,
+      "--copilot-bin", fixtureCopilotPath,
       "--discovery-file", tempRegistryPath,
       "--no-verify",
       "--json"
@@ -963,14 +934,14 @@ try {
       PACT_FIXTURE_AGENT_FAIL_WITH_ARGS: "1"
     });
     assert.equal(result.code, 1);
-    assert.equal(result.stdout.includes(token), false, "local Gemini failure output must not expose echoed token arguments");
+    assert.equal(result.stdout.includes(token), false, "local Copilot failure output must not expose echoed token arguments");
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, false);
-    assert.equal(payload.installed?.["gemini-cli"]?.status, "failed");
-    assert.match(payload.installed?.["gemini-cli"]?.error, /<redacted-token>/);
-    assert.match(payload.installed?.["gemini-cli"]?.error, /<local-path>/);
-    assert.equal(result.stdout.includes(fixtureGeminiFailPath), false, "local Gemini failure output must not expose the agent binary path");
-    assert.equal(result.stdout.includes(path.dirname(fixtureGeminiFailPath)), false, "local Gemini failure output must not expose the agent binary directory");
+    assert.equal(payload.installed?.copilot?.status, "failed");
+    assert.match(payload.installed?.copilot?.error, /<redacted-token>/);
+    assert.match(payload.installed?.copilot?.error, /<local-path>/);
+    assert.equal(result.stdout.includes(fixtureCopilotPath), false, "local Copilot failure output must not expose the agent binary path");
+    assert.equal(result.stdout.includes(path.dirname(fixtureCopilotPath)), false, "local Copilot failure output must not expose the agent binary directory");
   });
 
   // ── SECTION 5: Non-interactive auto install ──
@@ -986,7 +957,6 @@ try {
       "--token-env", autoTokenEnv,
       "--codex-bin", fixtureCodexPath,
       "--claude-bin", fixtureClaudePath,
-      "--gemini-bin", fixtureGeminiPath,
       "--kilo-bin", fixtureKiloPath,
       "--copilot-bin", fixtureCopilotPath,
       "--openclaw-bin", fixtureOpenClawPath,
@@ -1016,7 +986,6 @@ try {
     for (const target of PRIORITY_AGENT_TARGETS) {
       assert.equal(selectedTargets.includes(target), true, `${target} should be selected by auto install: ${selectedTargets.join(", ")}`);
     }
-    assert.equal(payload.selected?.some((item) => item.target === "gemini-cli"), true, "gemini-cli should be selected by auto install");
     assert.equal(payload.selected?.some((item) => item.target === "kilo-code"), true, "kilo-code should be selected by auto install");
     assert.equal(payload.selected?.some((item) => item.target === "copilot"), true, "copilot should be selected by auto install");
     assert.equal(payload.selected?.some((item) => item.target === "antigravity"), true, "antigravity should be selected by auto install");
@@ -1030,7 +999,6 @@ try {
       assert.ok(["supported", "inconclusive"].includes(selected.mcpProbe), `${target} should include explicit-bin probe state`);
       assert.equal(selected.installCommand.includes(token), false, `${target} install command must not expose token values`);
     }
-    assert.equal(payload.installed?.["gemini-cli"]?.status, "installed");
     assert.equal(payload.installed?.["kilo-code"]?.status, "installed");
     assert.equal(payload.installed?.copilot?.status, "installed");
     assert.equal(payload.installed?.antigravity?.status, "installed");
@@ -1091,7 +1059,7 @@ try {
     assert.equal(manifest.servers?.pact?.auth?.tokenEnv, autoTokenEnv);
     assert.equal(manifest.servers?.pact?.sharedHub?.sharedspace?.outlet, "pact.sharedspace");
     assert.equal(manifest.servers?.pact?.sharedHub?.sharedspace?.referencePolicy, "use-public-workspace-ref");
-    assert.equal(manifest.servers?.pact?.sharedHub?.sharedspace?.exchangeReceipt?.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+    assert.equal(manifest.servers?.pact?.sharedHub?.sharedspace?.exchangeReceipt?.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
     assert.ok(manifest.servers?.pact?.sharedHub?.sharedspace?.exchangeReceipt?.fields?.includes("outlet"));
     assert.ok(manifest.servers?.pact?.sharedHub?.sharedspace?.exchangeReceipt?.fields?.includes("referencePolicy"));
     assert.ok(manifest.servers?.pact?.sharedHub?.sharedspace?.coreOperations?.includes("pact.sharedspace.file.write"));
@@ -1180,7 +1148,7 @@ try {
     assert.deepEqual(payload.checks?.initialize?.priorityTargets, ["claude-code", "codex", "openclaw"]);
     assert.deepEqual(payload.checks?.initialize?.supportedTargets, DECLARED_AGENT_TARGETS);
     assert.deepEqual(payload.supportedTargets, DECLARED_AGENT_TARGETS);
-    assert.equal(payload.sharedHub?.sharedspace?.exchangeReceipt?.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+    assert.equal(payload.sharedHub?.sharedspace?.exchangeReceipt?.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
     const expectedDoctorCommand = `pact-mcp doctor --url '${serverUrl}' --token-env '${missingDoctorTokenEnv}' --token-stdin --json`;
     assert.equal(payload.nextCommand, expectedDoctorCommand);
     assert.ok(payload.repairCommands?.includes(expectedDoctorCommand));
@@ -1369,7 +1337,6 @@ try {
     const result = await spawnConnector([]);
     assert.match(result.stdout, /--codex-bin/);
     assert.match(result.stdout, /--claude-bin/);
-    assert.match(result.stdout, /--gemini-bin/);
     assert.match(result.stdout, /--kilo-bin/);
     assert.match(result.stdout, /--copilot-bin/);
     assert.match(result.stdout, /--openclaw-bin/);
@@ -1431,7 +1398,7 @@ try {
     assert.equal(payload.sharedHub?.canonicalMcpUrl, `${serverUrl}/mcp`);
     assert.equal(payload.sharedHub?.sharedspace?.outlet, "pact.sharedspace");
     assert.equal(payload.sharedHub?.sharedspace?.referencePolicy, "use-public-workspace-ref");
-    assert.equal(payload.sharedHub?.sharedspace?.exchangeReceipt?.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+    assert.equal(payload.sharedHub?.sharedspace?.exchangeReceipt?.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
     assert.ok(payload.sharedHub?.sharedspace?.exchangeReceipt?.fields?.includes("referencePolicy"));
     assert.ok(payload.sharedHub?.sharedspace?.coreOperations?.includes("pact.sharedspace.file.write"));
     assert.deepEqual(payload.supportedTargets, DECLARED_AGENT_TARGETS);
@@ -1450,7 +1417,7 @@ try {
     assert.deepEqual(manifest.servers?.pact?.connector?.priorityTargets, ["claude-code", "codex", "openclaw"]);
     assert.deepEqual(manifest.servers?.pact?.connector?.supportedTargets, DECLARED_AGENT_TARGETS);
     assert.deepEqual(manifest.servers?.pact?.connector?.supportedTargetDetails, payload.supportedTargetDetails);
-    assert.equal(manifest.servers?.pact?.sharedHub?.sharedspace?.exchangeReceipt?.schemaVersion, "pact.mcp.sharedspace-exchange.v1");
+    assert.equal(manifest.servers?.pact?.sharedHub?.sharedspace?.exchangeReceipt?.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
     assert.ok(manifest.servers?.pact?.sharedHub?.sharedspace?.exchangeReceipt?.fields?.includes("referencePolicy"));
     assert.ok(manifest.servers?.pact?.sharedHub?.sharedspace?.coreOperations?.includes("pact.sharedspace.file.write"));
     assert.equal(manifest.servers?.pact?.connector?.installCommand, `npx pact-mcp-connector@${payload.packageVersion} install --target <client> --url '${serverUrl}' --token-env '${missingInstallTokenEnv}'`);

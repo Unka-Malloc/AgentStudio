@@ -8,13 +8,12 @@ import {
 } from "../../../server/platform/specialized/capabilities/tools/tool-management-core/store.mjs";
 import { toolExecuteCapabilityId } from "../../../server/platform/common/security/authorization/authorization-engine.mjs";
 
-const toolKnowledgeSearchCapability = toolExecuteCapabilityId("pact.knowledge.search");
+const toolKnowledgeSearchCapability = toolExecuteCapabilityId("pact.agentLibrary.search");
 const toolPolicyEvaluateCapability = toolExecuteCapabilityId("pact.authorization.policy.evaluate");
 
 function createStore(userDataPath) {
   return createToolManagementStore({
     userDataPath,
-    capabilityKeyProvider: {},
     capabilityBindingGuard: false
   });
 }
@@ -35,7 +34,7 @@ function createMockCapabilityKeyProvider({ allowVerify = true } = {}) {
     issue: vi.fn(async ({ credentialId, capabilities, expiresAt }) => ({
       capabilityKey: `ock_${credentialId}`,
       credentialId,
-      protocolVersion: "pact.opaque-capability-key.v1",
+      protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
       capabilitySetHash: `hash_${(capabilities || []).length}`,
       capabilityCount: (capabilities || []).length,
       runtimeLookupGeneration: 1,
@@ -56,7 +55,7 @@ function createMockBindingGuard({
   return {
     bindCapabilityKey: vi.fn(async () => ({
       bindingId: `binding-${boundByDefault ? "bound" : "init"}`,
-      protocolVersion: "pact.capability-binding-guard.v1",
+      protocolVersion: "v0.0.1:risk-control:capability-binding-guard-1",
       bindingStrength: boundByDefault ? "strict" : "standard",
       requireUser: false,
       requireAgent: false
@@ -82,7 +81,6 @@ describe("tool-management store (extra coverage)", () => {
       const changes = [];
       const store = createToolManagementStore({
         userDataPath,
-        capabilityKeyProvider: {},
         capabilityBindingGuard: false,
         changeListener: (event) => {
           changes.push(event);
@@ -98,7 +96,7 @@ describe("tool-management store (extra coverage)", () => {
         await store.revokeGrant(grant.id, "refresh-test-revoke");
         store.saveCatalogSnapshot({
           fingerprint: "catalog-refresh-test",
-          tools: [{ id: "pact.knowledge.search" }]
+          tools: [{ id: "pact.agentLibrary.search" }]
         });
         store.deleteGrant(grant.id);
 
@@ -154,17 +152,17 @@ describe("tool-management store (extra coverage)", () => {
       try {
         const first = store.saveCatalogSnapshot({
           fingerprint: "catalog:v1",
-          tools: [{ id: "pact.knowledge.read" }, { id: "pact.storage.read" }],
+          tools: [{ id: "pact.agentLibrary.read" }, { id: "pact.storage.read" }],
           profiles: ["default"],
           metadata: { source: "unit-test" }
         });
 
         expect(first).toEqual({ fingerprint: "catalog:v1" });
-        expect(store.saveCatalogSnapshot({ tools: [{ id: "pact.knowledge.write" }] })).toBeNull();
+        expect(store.saveCatalogSnapshot({ tools: [{ id: "pact.agentLibrary.write" }] })).toBeNull();
 
         const updated = store.saveCatalogSnapshot({
           fingerprint: "catalog:v1",
-          tools: [{ id: "pact.knowledge.write" }],
+          tools: [{ id: "pact.agentLibrary.write" }],
           metadata: { source: "changed" }
         });
         expect(updated).toEqual({ fingerprint: "catalog:v1" });
@@ -176,7 +174,7 @@ describe("tool-management store (extra coverage)", () => {
         const persisted = JSON.parse(rows[0].catalog_json);
         expect(persisted.fingerprint).toBe("catalog:v1");
         expect(persisted.metadata).toEqual({ source: "unit-test" });
-        expect(persisted.tools).toEqual([{ id: "pact.knowledge.read" }, { id: "pact.storage.read" }]);
+        expect(persisted.tools).toEqual([{ id: "pact.agentLibrary.read" }, { id: "pact.storage.read" }]);
       } finally {
         store.close();
       }
@@ -200,7 +198,7 @@ describe("tool-management store (extra coverage)", () => {
         });
 
         expect(normalizedGrant.scopes).toEqual(["knowledge:read", "storage:read"]);
-        expect(normalizedGrant.toolsets).toEqual(["pact.knowledge.read", "pact.storage.read"]);
+        expect(normalizedGrant.toolsets).toEqual(["pact.agentLibrary.read", "pact.storage.read"]);
         expect(normalizedGrant.toolAllow).toEqual(["tool-a", "tool-b"]);
         expect(normalizedGrant.toolDeny).toEqual(["tool-d"]);
         expect(normalizedGrant.rateLimit).toEqual({ perMinute: 15 });
@@ -237,7 +235,7 @@ describe("tool-management store (extra coverage)", () => {
           expect(loaded).toMatchObject({
             id: normalizedGrant.id,
             scopes: ["knowledge:read", "storage:read"],
-            toolsets: ["pact.knowledge.read", "pact.storage.read"],
+            toolsets: ["pact.agentLibrary.read", "pact.storage.read"],
             toolAllow: ["tool-a", "tool-b"],
             toolDeny: ["tool-d"],
             hasToken: true,
@@ -451,7 +449,7 @@ describe("tool-management store (extra coverage)", () => {
           request: {
             headers: { authorization: `Bearer ${token}` }
           },
-          tool: { id: "pact.knowledge.search" }
+          tool: { id: "pact.agentLibrary.search" }
         });
         expect(allowed).toMatchObject({
           ok: true
@@ -467,7 +465,7 @@ describe("tool-management store (extra coverage)", () => {
           issue: vi.fn(async ({ credentialId, capabilities, expiresAt }) => ({
             capabilityKey: `ock_${credentialId}`,
             credentialId,
-            protocolVersion: "pact.opaque-capability-key.v1",
+            protocolVersion: "v0.0.1:risk-control:opaque-capability-key-1",
             capabilitySetHash: String((capabilities || []).length),
             capabilityCount: (capabilities || []).length,
             runtimeLookupGeneration: 1,
@@ -512,7 +510,7 @@ describe("tool-management store (extra coverage)", () => {
           request: {
             headers: { authorization: `Bearer ${deniedToken}` }
           },
-          tool: { id: "pact.knowledge.search" }
+          tool: { id: "pact.agentLibrary.search" }
         });
         expect(deniedBinding).toMatchObject({
           ok: false,
@@ -536,7 +534,7 @@ describe("tool-management store (extra coverage)", () => {
         });
 
         store.appendMetric({
-          toolId: "pact.knowledge.read",
+          toolId: "pact.agentLibrary.read",
           grantId: grant.id,
           status: "ok",
           risk: "low",
@@ -692,7 +690,7 @@ describe("tool-management store (extra coverage)", () => {
         const { requestId, status } = store.createMcpAuthorizationRequest({
           clientName: "agent-client",
           requestedScopes: ["knowledge:read"],
-          requestedTools: [{ id: "pact.knowledge.read" }],
+          requestedTools: [{ id: "pact.agentLibrary.read" }],
           reason: "tool-request",
           request: {
             headers: {
@@ -817,7 +815,7 @@ describe("tool-management store (extra coverage)", () => {
         expect(prometheus).toContain("pact_tool_management_requests_total");
 
         const storageSummary = store.metricsStorageSummary();
-        expect(storageSummary.schemaVersion).toBe("pact.tool-management.metrics-storage.v1");
+        expect(storageSummary.schemaVersion).toBe("v0.0.1:tool:management-metrics-storage-1");
         expect(storageSummary.tables.toolMetricEvents.rows).toBe(2);
         expect(storageSummary.tables.httpRequestMetricEvents.rows).toBe(2);
 

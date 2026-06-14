@@ -582,7 +582,7 @@ describe("agent-gateway invocation paths", () => {
         request: { question: "路由问题" }
       },
       routing: {
-        protocolVersion: "pact.model-routing.v1",
+        protocolVersion: "v0.0.1:strategy:model-routing-1",
         routeCallId: "route-call",
         routeId: "agent_gateway.default",
         selectedAlias: "unit-http",
@@ -666,8 +666,8 @@ describe("agent-gateway invocation paths", () => {
 
   it("returns model-routing inspect snapshot via passthrough mock", async () => {
     const snapshot = {
-      schemaVersion: 1,
-      protocolVersion: "pact.model-routing.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:strategy:model-routing-1",
       ledgerSummary: { total: 2 }
     };
     inspectModelRoutingMock.mockResolvedValue(snapshot);

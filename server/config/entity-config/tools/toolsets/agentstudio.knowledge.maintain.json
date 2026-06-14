@@ -1,6 +1,6 @@
 {
-  "id": "pact.knowledge.maintain",
-  "label": "Knowledge maintenance",
+  "id": "pact.agentLibrary.maintain",
+  "label": "Agent Library maintenance",
   "requiredScopes": [
     "knowledge:read",
     "knowledge:write",

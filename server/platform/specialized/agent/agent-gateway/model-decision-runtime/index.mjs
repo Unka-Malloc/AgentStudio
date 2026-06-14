@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const MODEL_DECISION_PROTOCOL_VERSION = "pact.model-decision.v1";
+export const MODEL_DECISION_PROTOCOL_VERSION = "v0.0.1:strategy:model-decision-1";
 
 const DEFAULT_ROLE_PROFILES = [
   {

@@ -9,6 +9,7 @@ void main() {
       FutureClientSection.mcpPlugins,
       FutureClientSection.skillHub,
       FutureClientSection.modelForwarding,
+      FutureClientSection.mobileRelay,
       FutureClientSection.activity,
       FutureClientSection.settings,
     ]);

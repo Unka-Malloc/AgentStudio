@@ -176,7 +176,7 @@ function makeAgentResponse(
 
 function makeMaintenanceRun(id: string, status: MaintenanceAgentRun["status"], overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     runId: id,
     status,
     trigger: "manual",
@@ -188,7 +188,7 @@ function makeMaintenanceRun(id: string, status: MaintenanceAgentRun["status"], o
     approvalReason: "",
     planHash: "h1",
     plan: {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       source: "planner",
       intent: "intent",
       summary: "summary",
@@ -217,12 +217,12 @@ function makeConsoleState(overrides: Record<string, unknown> = {}) {
     runtime: { mountModules: {}, info: "", pid: "123" },
     settings: {
       path: "/etc/settings",
-      value: { schemaVersion: 1, openAiModel: "gpt" },
+      value: { schemaVersion: "v0.0.1:schema:definition-1", openAiModel: "gpt" },
     },
     discovery: { path: "/etc/discovery", value: { items: [] }, bootstrap: { default: true } },
     emailRules: { path: "/etc/email-rules", rules: {} },
     expertVocabulary: { path: "/etc/vocab", vocabulary: {} },
-    knowledgeTaxonomy: { schemaVersion: 1, topics: [] },
+    knowledgeTaxonomy: { schemaVersion: "v0.0.1:schema:definition-1", topics: [] },
     storage: { summary: {} },
     jobs: {
       summary: {
@@ -717,7 +717,7 @@ describe("console-maintenance-agent-controller", () => {
     expect(error.value).toBe("请输入维护指令。");
 
     const config = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       enabled: true,
       plannerMode: "gateway",
       autoApproveRisk: "safe_write",

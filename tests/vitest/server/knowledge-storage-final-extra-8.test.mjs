@@ -370,7 +370,7 @@ describe("knowledge storage final extra 8", () => {
     await withTempRoot("pact-knowledge-backend-port-final-extra-8-", async (root) => {
       const configPath = knowledgeBackendConfigPath(root);
       await writeJson(configPath, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: KNOWLEDGE_BACKEND_PORT_PROTOCOL_VERSION,
         updatedAt: "2026-06-05T00:00:00.000Z",
         providers: {

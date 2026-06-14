@@ -74,6 +74,27 @@ fn execute_cli(args: Vec<String>) -> Result<CliExecution> {
                 pact_client_native::client_state::snapshots_restore(snapshot_id)?,
             ))
         }
+        [scope, action, rest @ ..]
+            if scope == "conversations"
+                && matches!(action.as_str(), "list" | "append" | "delete") =>
+        {
+            let params = cli_params(rest);
+            let result = match action.as_str() {
+                "list" => pact_client_native::conversations::conversation_list(&params)?,
+                "append" => pact_client_native::conversations::conversation_append(&params)?,
+                "delete" => pact_client_native::conversations::conversation_delete(&params)?,
+                _ => unreachable!(),
+            };
+            Ok(CliExecution::Json(result))
+        }
+        [scope, area, action, rest @ ..]
+            if scope == "agent" && area == "message" && action == "send" =>
+        {
+            let params = cli_params(rest);
+            Ok(CliExecution::Json(
+                pact_client_native::runtime_adapters::send_message(&params)?,
+            ))
+        }
         [scope, area, action, rest @ ..]
             if scope == "agents"
                 && area == "pair"
@@ -86,6 +107,31 @@ fn execute_cli(args: Vec<String>) -> Result<CliExecution> {
                 "revoke" => pact_client_native::skill_hub::pair_revoke(&params)?,
                 "list" => pact_client_native::skill_hub::pair_list(&params)?,
                 _ => unreachable!(),
+            };
+            Ok(CliExecution::Json(result))
+        }
+        [scope, area, noun, action, rest @ ..] if scope == "mobile" && area == "relay" => {
+            let params = cli_params(rest);
+            let result = match (noun.as_str(), action.as_str()) {
+                ("config", "get") => pact_client_native::mobile_relay::config_get()?,
+                ("config", "set") => pact_client_native::mobile_relay::config_set(&params)?,
+                ("pairing", "create") => pact_client_native::mobile_relay::pairing_create(&params)?,
+                ("pairing", "claim") => pact_client_native::mobile_relay::pairing_claim(&params)?,
+                ("pairing", "status") => pact_client_native::mobile_relay::pairing_status(&params)?,
+                ("pairing", "revoke") => pact_client_native::mobile_relay::pairing_revoke(&params)?,
+                ("pc", "check-in") => pact_client_native::mobile_relay::pc_check_in(&params)?,
+                ("commands", "poll") => pact_client_native::mobile_relay::commands_poll(&params)?,
+                ("commands", "sync") => pact_client_native::mobile_relay::commands_sync(&params)?,
+                ("commands", "complete") => {
+                    pact_client_native::mobile_relay::command_complete(&params)?
+                }
+                ("commands", "create") => {
+                    pact_client_native::mobile_relay::command_create(&params)?
+                }
+                ("commands", "result") => {
+                    pact_client_native::mobile_relay::command_result(&params)?
+                }
+                _ => return Ok(CliExecution::Usage),
             };
             Ok(CliExecution::Json(result))
         }
@@ -240,6 +286,8 @@ fn print_usage() {
   pact-client activity list [--type TYPE] [--target TARGET] [--limit N]
   pact-client snapshots list [--target TARGET]
   pact-client snapshots restore <snapshot-id>
+  pact-client conversations list|append|delete --agent AGENT [--session-id ID] [--text TEXT]
+  pact-client agent message send --agent AGENT --text TEXT [--session-id ID] [--cwd PATH] [--command CMD] [--args JSON]
   pact-client agents pair request|approve|revoke|list --agent AGENT [--target TARGET]
   pact-client skill list --agent AGENT
   pact-client skill get <skill-id> --agent AGENT --json
@@ -248,6 +296,10 @@ fn print_usage() {
   pact-client targets scan [--state-root PATH]
   pact-client targets add --target <target> [--config-path PATH] [--binary-path PATH] [--state-root PATH]
   pact-client targets inspect <target> [--state-root PATH]
+  pact-client mobile relay config get|set [--use-custom-gateway true|false] [--custom-gateway-url URL] [--relay-enabled true|false]
+  pact-client mobile relay pairing create|status|claim|revoke [--pairing-code CODE] [--pairing-id ID] [--mobile-token TOKEN]
+  pact-client mobile relay pc check-in
+  pact-client mobile relay commands poll|sync|complete|create|result [--command-id ID] [--type TYPE] [--payload JSON] [--mobile-token TOKEN]
   pact-client mcp plugin status|update|rollback --target <target> [--config-path PATH] [--discovery-file PATH] [--registry-file PATH] [--state-root PATH]
   pact-client mcp config plan --target <target> [--config-path PATH] [--base-url URL|--discovery-file PATH|--registry-file PATH] [--state-root PATH]
   pact-client mcp config apply --target <target> [--config-path PATH] [--base-url URL|--discovery-file PATH|--registry-file PATH] [--token TOKEN] [--state-root PATH]
@@ -261,6 +313,8 @@ mod tests {
     use rand::RngCore;
     use std::env;
     use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -372,6 +426,56 @@ mod tests {
             ])
             .unwrap();
             assert_eq!(json_payload(&&added)["status"], "accepted");
+
+            let native_history_root = dir.join("native-codex-history");
+            fs::create_dir_all(&native_history_root).unwrap();
+            fs::write(
+                native_history_root.join("history.jsonl"),
+                [
+                    r#"{"role":"user","content":"hello from native codex history"}"#,
+                    r#"{"role":"assistant","content":"native history response"}"#,
+                ]
+                .join("\n"),
+            )
+            .unwrap();
+
+            let conversations = execute_cli(vec![
+                "conversations".into(),
+                "list".into(),
+                "--agent".into(),
+                "codex".into(),
+                "--root".into(),
+                native_history_root.display().to_string(),
+            ])
+            .unwrap();
+            assert_eq!(
+                json_payload(&&conversations)["sessions"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                1
+            );
+            assert_eq!(json_payload(&&conversations)["mode"], "native-history");
+
+            let relay_config = execute_cli(vec![
+                "mobile".into(),
+                "relay".into(),
+                "config".into(),
+                "set".into(),
+                "--use-custom-gateway".into(),
+                "true".into(),
+                "--custom-gateway-url".into(),
+                "https://relay.example.test/".into(),
+            ])
+            .unwrap();
+            assert_eq!(
+                json_payload(&&relay_config)["config"]["useCustomGateway"],
+                true
+            );
+            assert_eq!(
+                json_payload(&&relay_config)["config"]["customGatewayUrl"],
+                "https://relay.example.test"
+            );
         }
     }
 
@@ -667,6 +771,40 @@ mod tests {
             let bad_forward = execute_cli(vec!["forward".into(), "--text".into(), "ping".into()]);
             assert!(bad_forward.is_err());
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cli_dispatches_agent_message_send_runtime_adapter() {
+        let dir = temp_cli_dir("dispatch-runtime");
+        let script = dir.join("echo-agent.sh");
+        fs::write(&script, "#!/bin/sh\nprintf 'cli-runtime:%s' \"$1\"\n").unwrap();
+        let mut permissions = fs::metadata(&script).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script, permissions).unwrap();
+
+        let result = execute_cli(vec![
+            "agent".into(),
+            "message".into(),
+            "send".into(),
+            "--agent".into(),
+            "codex".into(),
+            "--text".into(),
+            "hello-cli-runtime".into(),
+            "--command".into(),
+            script.display().to_string(),
+            "--args".into(),
+            r#"["{prompt}"]"#.into(),
+            "--timeout-ms".into(),
+            "5000".into(),
+        ])
+        .unwrap();
+
+        let payload = json_payload(&result);
+        assert_eq!(payload["ok"], true);
+        assert_eq!(payload["mode"], "runtime-adapter");
+        assert_eq!(payload["runtimeProtocol"], "configured-command");
+        assert_eq!(payload["output"], "cli-runtime:hello-cli-runtime");
     }
 
     #[test]

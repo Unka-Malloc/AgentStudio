@@ -34,12 +34,84 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+const MAX_AGENT_GATEWAY_RESPONSE_BYTES = 4 * 1024 * 1024;
+
 function truncateText(value, maxLength = 4000) {
   const text = String(value ?? "");
   if (text.length <= maxLength) {
     return text;
   }
   return `${text.slice(0, Math.max(0, maxLength - 24))}...[truncated ${text.length}]`;
+}
+
+function gatewayResponseTooLargeError(label, maxBytes = MAX_AGENT_GATEWAY_RESPONSE_BYTES) {
+  const error = new Error(`${label} exceeded the ${maxBytes} byte response limit.`);
+  error.code = "agent_gateway_response_too_large";
+  error.maxBytes = maxBytes;
+  return error;
+}
+
+async function readGatewayResponseTextWithLimit(response, {
+  label = "Agent gateway upstream response",
+  maxBytes = MAX_AGENT_GATEWAY_RESPONSE_BYTES
+} = {}) {
+  const declaredLength = Number(response.headers.get("content-length") || 0);
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try {
+      await response.body?.cancel?.();
+    } catch {
+      // The bounded failure is sufficient for the caller.
+    }
+    throw gatewayResponseTooLargeError(label, maxBytes);
+  }
+  if (!response.body?.getReader) {
+    return "";
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value) {
+        continue;
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // Preserve the size-limit error.
+        }
+        throw gatewayResponseTooLargeError(label, maxBytes);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function readGatewayErrorDetails(response, label) {
+  try {
+    return await readGatewayResponseTextWithLimit(response, { label });
+  } catch (error) {
+    if (error?.code === "agent_gateway_response_too_large") {
+      return error.message;
+    }
+    return "";
+  }
+}
+
+function byteLengthOfChunk(chunk) {
+  if (typeof chunk === "string") {
+    return Buffer.byteLength(chunk);
+  }
+  return chunk?.byteLength || Buffer.byteLength(String(chunk || ""));
 }
 
 function redactSecretText(value) {
@@ -405,7 +477,7 @@ async function appendAgentGatewayAudit({ userDataPath = "", event = {} } = {}) {
       logPath,
       `${JSON.stringify({
         ts: nowIso(),
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         component: "AgentGateway",
         ...sanitizePayload(event)
       })}\n`,
@@ -712,7 +784,7 @@ export function publicAgentGatewayRegistry(settings = {}) {
     agents[0]?.alias ||
     "";
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     provider: "agent-gateway",
     defaultAlias,
     agents
@@ -1064,8 +1136,13 @@ async function readStreamResponse(response) {
   const accumulator = createAgentStreamAccumulator();
   const decoder = new TextDecoder();
   let pending = "";
+  let totalBytes = 0;
 
   for await (const chunk of response.body) {
+    totalBytes += byteLengthOfChunk(chunk);
+    if (totalBytes > MAX_AGENT_GATEWAY_RESPONSE_BYTES) {
+      throw gatewayResponseTooLargeError("Agent gateway stream response");
+    }
     pending += decoder.decode(chunk, { stream: true });
     let lineEndIndex = pending.indexOf("\n");
     while (lineEndIndex >= 0) {
@@ -1097,7 +1174,7 @@ async function readStreamResponse(response) {
 }
 
 async function readJsonOrTextResponse(response) {
-  const text = await response.text();
+  const text = await readGatewayResponseTextWithLimit(response);
   if (text.includes("data:")) {
     return parseAgentGatewayStreamText(text);
   }
@@ -1467,7 +1544,7 @@ function parseDeepSeekJsonPayload(json) {
 }
 
 async function readDeepSeekJsonResponse(response) {
-  const text = await response.text();
+  const text = await readGatewayResponseTextWithLimit(response, { label: "DeepSeek response" });
   if (text.includes("data:")) {
     return parseDeepSeekStreamText(text);
   }
@@ -1595,7 +1672,12 @@ async function readDeepSeekStreamResponse(response) {
   const decoder = new TextDecoder();
   let pending = "";
   let streamText = "";
+  let totalBytes = 0;
   for await (const chunk of response.body) {
+    totalBytes += byteLengthOfChunk(chunk);
+    if (totalBytes > MAX_AGENT_GATEWAY_RESPONSE_BYTES) {
+      throw gatewayResponseTooLargeError("DeepSeek stream response");
+    }
     pending += decoder.decode(chunk, { stream: true });
     let lineEndIndex = pending.indexOf("\n");
     while (lineEndIndex >= 0) {
@@ -1684,7 +1766,8 @@ async function callDeepSeekGateway({
   }
 
   if (!response.ok) {
-    const details = await response.text().catch(() => "");
+    const details = await readGatewayErrorDetails(response, "DeepSeek error response");
+    const publicDetails = truncateText(redactSecretText(details), 8000);
     await appendAgentGatewayAudit({
       userDataPath,
       event: {
@@ -1697,10 +1780,10 @@ async function callDeepSeekGateway({
         errorStage: "http",
         status: response.status,
         contentType: String(response.headers.get("content-type") || ""),
-        error: truncateText(redactSecretText(details), 8000)
+        error: publicDetails
       }
     });
-    throw new Error(`DeepSeek 调用失败：${response.status} ${details}`.trim());
+    throw new Error(`DeepSeek 调用失败：${response.status}${publicDetails ? ` ${publicDetails}` : ""}`.trim());
   }
 
   const contentType = String(response.headers.get("content-type") || "");
@@ -1813,7 +1896,8 @@ async function callOpenAiCompatibleGateway({
   }
 
   if (!response.ok) {
-    const details = await response.text().catch(() => "");
+    const details = await readGatewayErrorDetails(response, `${config.label || provider} error response`);
+    const publicDetails = truncateText(redactSecretText(details), 8000);
     await appendAgentGatewayAudit({
       userDataPath,
       event: {
@@ -1826,10 +1910,10 @@ async function callOpenAiCompatibleGateway({
         errorStage: "http",
         status: response.status,
         contentType: String(response.headers.get("content-type") || ""),
-        error: truncateText(redactSecretText(details), 8000)
+        error: publicDetails
       }
     });
-    throw new Error(`${config.label || provider} 调用失败：${response.status} ${details}`.trim());
+    throw new Error(`${config.label || provider} 调用失败：${response.status}${publicDetails ? ` ${publicDetails}` : ""}`.trim());
   }
 
   const contentType = String(response.headers.get("content-type") || "");
@@ -1943,7 +2027,8 @@ async function executeAgentGatewayCandidate({
   }
 
   if (!response.ok) {
-    const details = await response.text().catch(() => "");
+    const details = await readGatewayErrorDetails(response, "Agent gateway error response");
+    const publicDetails = truncateText(redactSecretText(details), 8000);
     await appendAgentGatewayAudit({
       userDataPath,
       event: {
@@ -1956,10 +2041,10 @@ async function executeAgentGatewayCandidate({
         errorStage: "http",
         status: response.status,
         contentType: String(response.headers.get("content-type") || ""),
-        error: truncateText(redactSecretText(details), 8000)
+        error: publicDetails
       }
     });
-    throw new Error(`智能体调用失败：${response.status} ${details}`.trim());
+    throw new Error(`智能体调用失败：${response.status}${publicDetails ? ` ${publicDetails}` : ""}`.trim());
   }
 
   const contentType = String(response.headers.get("content-type") || "");

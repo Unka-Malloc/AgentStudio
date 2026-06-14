@@ -18,7 +18,7 @@ function loadBundledSourceSearchRules() {
     return JSON.parse(fsSync.readFileSync(BUNDLED_SOURCE_SEARCH_RULES_PATH, "utf8"));
   } catch {
     return {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       updatedAt: "",
       maxFileBytes: 5 * 1024 * 1024,
       maxEvidenceBytes: 512 * 1024,
@@ -115,7 +115,7 @@ function normalizeQueryExpansions(value) {
 
 export function normalizeSourceSearchRules(value = {}) {
   return {
-    schemaVersion: DEFAULT_SOURCE_SEARCH_RULES.schemaVersion || 1,
+    schemaVersion: DEFAULT_SOURCE_SEARCH_RULES.schemaVersion || "v0.0.1:schema:definition-1",
     updatedAt: normalizeText(value.updatedAt),
     maxFileBytes: normalizePositiveInteger(
       value.maxFileBytes,

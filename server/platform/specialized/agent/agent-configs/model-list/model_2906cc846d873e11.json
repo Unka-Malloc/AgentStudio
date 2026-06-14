@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "id": "model_2906cc846d873e11",
   "agentUid": "agent_d8d9176a38ca35c1",
   "provider": "deepseek",

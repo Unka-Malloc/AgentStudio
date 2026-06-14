@@ -24,6 +24,7 @@ type ConsoleShellPageRefreshControllerOptions = {
   activeRouteDebugTab: ComputedRef<string>;
   activeRouteKnowledgeTab: ComputedRef<string>;
   activeRouteView: ComputedRef<string>;
+  busyKey: ComputedRef<string>;
   hasFeature: (featureId: string) => boolean;
   msg: ComputedRef<PageRefreshMessages>;
   refreshAuthAdmin: () => MaybePromise<unknown>;
@@ -56,13 +57,26 @@ async function waitForPageRefreshTasks(tasks: Promise<unknown>[]) {
 }
 
 export function createConsoleShellPageRefreshController(options: ConsoleShellPageRefreshControllerOptions) {
-  const pageRefreshBusy = ref(false);
+  const pageRefreshPendingCount = ref(0);
+  const pageRefreshActionBusy = computed(() => pageRefreshPendingCount.value > 0);
+  const pageRefreshBusy = computed(() =>
+    pageRefreshActionBusy.value || Boolean(options.busyKey.value),
+  );
   const pageRefreshTitle = computed(() =>
     pageRefreshBusy.value ? `${options.msg.value.actions.refreshing}...` : options.msg.value.actions.refreshPage,
   );
   const pageRefreshAriaLabel = computed(() =>
     pageRefreshBusy.value ? options.msg.value.actions.refreshing : options.msg.value.actions.refreshPage,
   );
+
+  async function trackPageRefreshTask<T>(task: MaybePromise<T>): Promise<T> {
+    pageRefreshPendingCount.value += 1;
+    try {
+      return await task;
+    } finally {
+      pageRefreshPendingCount.value = Math.max(0, pageRefreshPendingCount.value - 1);
+    }
+  }
 
   async function refreshAdminRoute() {
     switch (options.activeRouteAdminView.value) {
@@ -98,17 +112,23 @@ export function createConsoleShellPageRefreshController(options: ConsoleShellPag
       case "opsMonitor":
         await Promise.all([
           options.refreshBackgroundProcesses({ silent: true }),
-          options.refreshClientRuntimeStatus({ silent: true }),
           options.refreshMonitorAlerts({ silent: true }),
         ]);
         return;
       case "productionHealth":
+        return;
+      case "strategyManagement":
+        return;
+      case "versionRelease":
+        return;
+      case "versionAssembly":
         return;
       case "clients":
         await options.refreshState({ silent: true });
         return;
       case "tools":
       case "toolList":
+      case "toolGovernance":
       case "toolStats":
         await options.refreshToolManagement();
         return;
@@ -183,11 +203,10 @@ export function createConsoleShellPageRefreshController(options: ConsoleShellPag
   }
 
   async function refreshCurrentPage() {
-    if (pageRefreshBusy.value) {
+    if (pageRefreshActionBusy.value) {
       return;
     }
-    pageRefreshBusy.value = true;
-    try {
+    await trackPageRefreshTask((async () => {
       const pageTasks = collectPageRefreshTasks({
         viewId: options.activeRouteView.value,
         adminView: options.activeRouteAdminView.value,
@@ -199,9 +218,7 @@ export function createConsoleShellPageRefreshController(options: ConsoleShellPag
         Promise.resolve(refreshCurrentRouteDefaults()),
         ...pageTasks,
       ]);
-    } finally {
-      pageRefreshBusy.value = false;
-    }
+    })());
   }
 
   return {
@@ -209,5 +226,6 @@ export function createConsoleShellPageRefreshController(options: ConsoleShellPag
     pageRefreshBusy,
     pageRefreshTitle,
     refreshCurrentPage,
+    trackPageRefreshTask,
   };
 }

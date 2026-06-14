@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "bundleType": "pact.spec.bundle",
   "specId": "pact.import-file-types",
   "sourceSeed": "server/config/default-import-file-types.json",

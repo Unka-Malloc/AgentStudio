@@ -25,7 +25,7 @@ async function tempDir(prefix) {
 function createMerkleState() {
   let rootCalls = 0;
   return {
-    protocolVersion: "pact.test.merkle.v1",
+    protocolVersion: "v0.0.1:test:merkle-1",
     cas: {
       putBlock: vi.fn(async (content) => {
         const buffer = Buffer.isBuffer(content) ? content : Buffer.from(content || "");

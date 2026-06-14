@@ -50,38 +50,40 @@ const advancedOptionsOpen = ref(false);
         :placeholder="infoFeedInputPlaceholder"
       ></textarea>
       <div class="info-feed-input-actions">
-        <BrowseSelectButton
-          kind="local-files"
-          button-class="tool-button tool-button-ghost info-feed-attachment-button"
-          button-text="附件"
-          :multiple="true"
-          @select="handleInfoFeedAttachmentFiles"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 1 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-          </svg>
-          附件
-        </BrowseSelectButton>
-        <button
-          class="tool-button tool-button-ghost info-feed-advanced-button"
-          type="button"
-          @click="advancedOptionsOpen = true"
-        >
-          高级选项
-        </button>
         <AgentModelOptionBar
           v-model="infoFeedForm.modelAlias"
           label="智能体"
           placeholder="未分配智能体"
           :options="infoFeedModelOptions"
         />
-        <button
-          class="primary-action"
-          type="submit"
-          :disabled="!infoFeedForm.query.trim() || !selectedInfoFeedModel.enabled || infoFeedCurrentRun?.summary.status === 'running'"
-        >
-          {{ infoFeedSubmitLabel }}
-        </button>
+        <div class="info-feed-action-tools">
+          <BrowseSelectButton
+            kind="local-files"
+            button-class="tool-button tool-button-ghost info-feed-attachment-button"
+            button-text="附件"
+            :multiple="true"
+            @select="handleInfoFeedAttachmentFiles"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 1 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+            附件
+          </BrowseSelectButton>
+          <button
+            class="tool-button tool-button-ghost info-feed-advanced-button"
+            type="button"
+            @click="advancedOptionsOpen = true"
+          >
+            高级选项
+          </button>
+          <button
+            class="primary-action"
+            type="submit"
+            :disabled="!infoFeedForm.query.trim() || !selectedInfoFeedModel.enabled || infoFeedCurrentRun?.summary.status === 'running'"
+          >
+            {{ infoFeedSubmitLabel }}
+          </button>
+        </div>
       </div>
     </form>
   </div>

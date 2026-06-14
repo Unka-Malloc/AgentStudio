@@ -6,11 +6,41 @@ function getJobDirectory(userDataPath, jobId) {
   return path.join(userDataPath, "jobs", jobId);
 }
 
-async function removePath(targetPath) {
+function pathWithinRoot(candidatePath, rootPath) {
+  const relative = path.relative(path.resolve(rootPath), path.resolve(candidatePath));
+  return relative === "" || (relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+async function realpathOrResolved(candidatePath) {
+  try {
+    return await fs.realpath(candidatePath);
+  } catch {
+    return path.resolve(candidatePath);
+  }
+}
+
+async function assertManagedDeletionPath(targetPath, allowedRoots = []) {
+  const selectedPath = path.resolve(String(targetPath || ""));
+  const roots = allowedRoots
+    .map((root) => String(root || "").trim())
+    .filter(Boolean)
+    .map((root) => path.resolve(root));
+  if (!roots.some((root) => pathWithinRoot(selectedPath, root))) {
+    throw new Error("删除路径不在受管数据目录内，已拒绝。");
+  }
+  const realRoots = await Promise.all(roots.map(realpathOrResolved));
+  const realParent = await realpathOrResolved(path.dirname(selectedPath));
+  if (!realRoots.some((root) => pathWithinRoot(realParent, root))) {
+    throw new Error("删除路径父目录不在受管数据目录内，已拒绝。");
+  }
+}
+
+async function removePath(targetPath, { allowedRoots = [] } = {}) {
   if (!targetPath) {
     return;
   }
 
+  await assertManagedDeletionPath(targetPath, allowedRoots);
   await fs.rm(targetPath, {
     recursive: true,
     force: true
@@ -45,6 +75,9 @@ async function removeRawObjectFiles({ userDataPath, objectRootPath, rawObjectPat
 }
 
 export function createBatchDeletionCoordinator({ userDataPath, jobManager, metadataStore, runtime = null }) {
+  const jobsRootPath = path.join(userDataPath, "jobs");
+  const fallbackObjectRootPath = path.join(userDataPath, "objects");
+
   async function executeOperation(operation) {
     let current = operation;
     const jobId = current.jobId || current.state?.jobId || current.batchId;
@@ -93,8 +126,12 @@ export function createBatchDeletionCoordinator({ userDataPath, jobManager, metad
         objectRootPath: state.objectRootPath,
         rawObjectPaths: state.rawObjectPaths
       });
-      await removePath(state.objectBatchPath);
-      await removePath(state.jobDirectory);
+      await removePath(state.objectBatchPath, {
+        allowedRoots: [state.objectRootPath, fallbackObjectRootPath]
+      });
+      await removePath(state.jobDirectory, {
+        allowedRoots: [jobsRootPath]
+      });
       state.artifactsDeleted = true;
       current = metadataStore.updateDeletionOperation(current.operationId, {
         status: "completed",

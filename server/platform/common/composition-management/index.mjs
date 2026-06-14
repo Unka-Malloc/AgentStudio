@@ -29,6 +29,7 @@ export const DEFAULT_COMPOSITION_PRESET_DIR = "server/platform/common/compositio
 
 const FEATURE_IDS = new Set(FEATURE_MANIFEST.features.map((feature) => feature.featureId));
 const OPERATION_IDS = new Set(SERVER_API_OPERATIONS.map((operation) => operation.id));
+const DISABLED_COMPOSITION_PRESET_STATUSES = new Set(["retired", "disabled", "blocked", "security-disabled"]);
 
 function uniqueStrings(values = []) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))].sort();
@@ -91,6 +92,15 @@ function collectPresetFeatureIds(preset = {}) {
   ]);
 }
 
+function resolvePresetFeatureEdition(preset = {}) {
+  return String(
+    preset.featureEdition ||
+      preset.featureProfile?.edition ||
+      preset.dehydration?.featureEdition ||
+      "custom"
+  ).trim() || "custom";
+}
+
 function operationFeatureCoverage(operationIds = [], featureRuntime = {}) {
   const activeOperations = filterOperationsForFeatures(SERVER_API_OPERATIONS, featureRuntime);
   const activeOperationIds = new Set(activeOperations.map((operation) => operation.id));
@@ -123,7 +133,11 @@ export async function loadCompositionPreset(filePath) {
 
 export async function loadCompositionPresets(options = {}) {
   const files = await listCompositionPresetFiles(options);
-  return Promise.all(files.map(loadCompositionPreset));
+  const records = await Promise.all(files.map(loadCompositionPreset));
+  if (options.includeRetired === true || options.includeDisabled === true) {
+    return records;
+  }
+  return records.filter(({ preset }) => !DISABLED_COMPOSITION_PRESET_STATUSES.has(String(preset?.status || "").trim()));
 }
 
 export async function validateCompositionPreset({
@@ -151,6 +165,10 @@ export async function validateCompositionPreset({
   const missingFeatureIds = featureIds.filter((featureId) => !FEATURE_IDS.has(featureId));
   for (const featureId of missingFeatureIds) {
     errors.push(`Preset references unknown featureId ${featureId}.`);
+  }
+  const featureEdition = resolvePresetFeatureEdition(preset);
+  if (!FEATURE_MANIFEST.editions[featureEdition]) {
+    errors.push(`Preset references unknown featureEdition ${featureEdition}.`);
   }
 
   const operationIds = [...collectOperationIds(preset)].sort();
@@ -198,6 +216,7 @@ export async function validateCompositionPreset({
     presetId: preset.presetId || "",
     errors,
     warnings,
+    featureEdition,
     featureIds,
     operationIds,
     pathRefs,
@@ -225,14 +244,15 @@ export async function createCompositionDehydrationPlan({
   }
 
   const requestedFeatureIds = validation.featureIds;
+  const featureEdition = validation.featureEdition || "custom";
   const featureProfile = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     name: preset.presetId,
-    edition: "custom",
+    edition: featureEdition,
     features: requestedFeatureIds
   };
   const featureRuntime = resolveFeatureRuntime({
-    edition: "custom",
+    edition: featureEdition,
     profile: featureProfile,
     now
   });
@@ -253,7 +273,7 @@ export async function createCompositionDehydrationPlan({
 
   return {
     ok: inactiveRequiredOperations.length === 0,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     generatedAt: now instanceof Date ? now.toISOString() : new Date(now).toISOString(),
     presetId: preset.presetId,
     displayName: preset.displayName || preset.presetId,
@@ -302,7 +322,7 @@ export async function writeCompositionPlanArtifacts({
   await fs.writeFile(
     path.join(outputRoot, "dehydration-report.json"),
     `${JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       presetId: plan.presetId,
       ok: plan.ok,
       generatedAt: plan.generatedAt,

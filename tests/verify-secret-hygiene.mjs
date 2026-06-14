@@ -9,7 +9,10 @@ const scanRoots = [""];
 
 const excludedPathPrefixes = [
   ".git/",
+  ".codex-research/",
   ".kilo/node_modules/",
+  "build/client-cli/target/",
+  "build/client-gui/",
   "build/release/",
   "node_modules/",
   "client-cli/target/",

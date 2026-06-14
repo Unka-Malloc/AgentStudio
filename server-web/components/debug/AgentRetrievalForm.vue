@@ -24,7 +24,7 @@ const {
       <input
         v-model="agentExploreForm.query"
         type="search"
-        placeholder="例如：帮我找最近的账单，并说明哪些证据真正相关"
+        placeholder="例如：帮我找 Atlas 模块最近的部署记录，并说明哪些证据真正相关"
       />
     </label>
     <AgentModelOptionBar

@@ -207,7 +207,7 @@ describe("knowledge-source service extra coverage", () => {
     await withTempDir(async (root) => {
       const sourcesPath = path.join(root, "knowledge-sources", "sources.json");
       await writeJson(sourcesPath, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-01-01T00:00:00.000Z",
         sources: [
           {
@@ -464,7 +464,7 @@ describe("knowledge-source service extra coverage", () => {
       };
 
       await writeJson(path.join(root, "knowledge-sources", "sources.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-01-04T00:00:00.000Z",
         sources: [
           {
@@ -560,7 +560,7 @@ describe("knowledge-source service extra coverage", () => {
     await withTempDir(async (root) => {
       const missingDir = path.join(root, "missing");
       await writeJson(path.join(root, "knowledge-sources", "sources.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-01-05T00:00:00.000Z",
         sources: [
           {

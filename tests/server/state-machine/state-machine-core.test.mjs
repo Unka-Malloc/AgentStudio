@@ -3,7 +3,7 @@ import { transitionState, validateStateMachineDefinition, isTerminalStatus, list
 import { ERROR_CODES } from '../../../server/platform/common/state-machine/state-machine-errors.mjs';
 
 const mockDefinition = {
-  machineId: 'test.machine.v1',
+  machineId: 'v0.0.1:strategy:test-machine-1',
   version: '1.0.0',
   initialState: 'start',
   states: [

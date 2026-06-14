@@ -209,7 +209,7 @@ while (true) {
       jsonrpc: "2.0",
       id: message.id,
       result: {
-        protocolVersion: "target.acp.load-reconnect.v1",
+        protocolVersion: "v0.0.1:strategy:target-acp-load-reconnect-1",
         capabilities: {
           session: ["new", "load"],
           updates: ["progress"]
@@ -401,7 +401,7 @@ try {
     { virtualAgentId, sourceId, workspaceId },
     "target-load-reconnect-init"
   ));
-  assert.equal(initialize.result?.pactProtocolVersion, "pact.acp-agent-relay.v1");
+  assert.equal(initialize.result?.pactProtocolVersion, "v0.0.1:agent:acp-agent-relay-1");
   assert.equal(initialize.result?.virtualAgentId, virtualAgentId);
   assert.equal(initialize.result?.capabilitiesSnapshot?.target?.transportType, "stdio");
   assert.equal(initialize.result?.capabilitiesSnapshot?.target?.protocolStyle, "agent-client-protocol-v1");

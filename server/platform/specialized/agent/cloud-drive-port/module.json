@@ -1,16 +1,21 @@
 {
   "name": "CloudDrivePort",
-  "version": 1,
+  "version": "v0.0.1:agent:cloud-drive-port-1",
   "description": "Internal backing adapter for the upstream Cloud Drive service gateway; iCloud and OneDrive local directory projections plus Google Drive and Dropbox contract-mode adapters are exposed through external.cloudDrive.* operations.",
   "defaultLoaded": false,
-  "protocol": "pact.cloud-drive-port.v1",
+  "protocol": "v0.0.1:storage:cloud-drive-port-1",
   "components": {
     "cloudDrivePort": {
       "path": "./index.mjs",
       "factory": "createCloudDrivePort",
       "packaging": "operator-configured",
       "readOnlyRuntime": false,
-      "providers": ["icloud", "onedrive", "google-drive", "dropbox"],
+      "providers": [
+        "icloud",
+        "onedrive",
+        "google-drive",
+        "dropbox"
+      ],
       "configFile": "agent-workspaces/cloud-drive-connections.json"
     }
   },

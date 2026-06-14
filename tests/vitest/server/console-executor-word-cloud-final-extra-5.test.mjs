@@ -281,7 +281,7 @@ describe("knowledge word cloud executor bad payload handling", () => {
     });
   });
 
-  it("rejects malformed propose payloads with 400 responses", async () => {
+  it("does not handle removed propose operations", async () => {
     const context = createDomainContext({
       metadataStore: createMetadataStore({
         listSourceCorpusRawTerms: vi.fn(() => [{ term: "alpha", frequency: 1 }]),
@@ -295,21 +295,7 @@ describe("knowledge word cloud executor bad payload handling", () => {
         input: { prompt: "按主题分类" },
         context
       })
-    ).resolves.toEqual({
-      status: 400,
-      payload: { ok: false, error: "请选择用于生成词云的智能体。" }
-    });
-
-    await expect(
-      executeKnowledgeWordCloudOperation({
-        operationId: "knowledge.word_clouds.propose",
-        input: { modelAlias: "agent-v1" },
-        context
-      })
-    ).resolves.toEqual({
-      status: 400,
-      payload: { ok: false, error: "请输入词云分组意图。" }
-    });
+    ).resolves.toBeNull();
   });
 });
 
@@ -327,7 +313,7 @@ describe("console client projections and tool management client connections", ()
         value: {}
       },
       agentSelector: expect.objectContaining({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         source: "agent-configs",
         options: []
       }),

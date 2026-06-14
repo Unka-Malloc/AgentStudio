@@ -11,12 +11,12 @@ import {
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-multi-source-"));
 try {
-  const originalBytes = Buffer.from("3 月账单原始文件，不允许服务端追加检索字段。\n", "utf8");
+  const originalBytes = Buffer.from("3 月巡检记录原始文件，不允许服务端追加检索字段。\n", "utf8");
   const rawObject = await persistRawMailObject({
     userDataPath,
     batchId: "client-batch-2026-03",
     buffer: originalBytes,
-    originalRelativePath: "invoice-march.txt",
+    originalRelativePath: "inspection-march.txt",
     mediaType: "text/plain",
     ingestOrigin: "connector-mirror",
     clientUid: "client-a",
@@ -26,12 +26,12 @@ try {
     syncBatchId: "client-batch-2026-03",
     capturedAt: "2026-03-18T09:00:00.000Z",
     sourceMetadata: {
-      originalPath: "/Finance/invoice-march.txt",
-      owner: "billing@example.test"
+      originalPath: "/Ops/inspection-march.txt",
+      owner: "ops@example.test"
     }
   });
   assert.match(rawObject.storageRelativePath, /^objects\/client-a\/file\//);
-  assert.equal(rawObject.originalFileName, "invoice-march.txt");
+  assert.equal(rawObject.originalFileName, "inspection-march.txt");
   assert.deepEqual(
     await fs.readFile(resolveStoredObjectPath(userDataPath, rawObject.storageRelativePath)),
     originalBytes
@@ -45,10 +45,10 @@ try {
       sources: [
         {
           id: "gmail-message-1",
-          name: "Gmail 3 月账单提醒",
+          name: "Gmail 3 月巡检提醒",
           path: "gmail://message/gmail-message-1",
           kind: "mail",
-          text: "3 月账单已经发送，请查看 Drive 中的 invoice-march.txt。",
+          text: "3 月巡检记录已经发送，请查看 Drive 中的 inspection-march.txt。",
           clientUid: "client-a",
           sourceType: "mail",
           providerId: "gmail",
@@ -61,10 +61,10 @@ try {
         },
         {
           id: "drive-file-1",
-          name: "invoice-march.txt",
+          name: "inspection-march.txt",
           path: "drive://files/drive-file-1",
           kind: "file",
-          text: "3 月账单总额 1280 元，付款截止日期为 2026-03-31。",
+          text: "3 月巡检记录包含 12 个检查项，复核截止日期为 2026-03-31。",
           rawObject,
           clientUid: "client-a",
           sourceType: "file",
@@ -73,15 +73,15 @@ try {
           syncBatchId: "client-batch-2026-03",
           capturedAt: "2026-03-18T09:00:00.000Z",
           sourceMetadata: {
-            originalPath: "/Finance/invoice-march.txt"
+            originalPath: "/Ops/inspection-march.txt"
           }
         },
         {
           id: "slack-message-1",
-          name: "Billing channel",
-          path: "slack://workspace-a/billing/slack-message-1",
+          name: "Ops channel",
+          path: "slack://workspace-a/ops/slack-message-1",
           kind: "chat",
-          text: "Alice 在频道里确认：3 月账单已经归档到 Google Drive。",
+          text: "Operator 在频道里确认：3 月巡检记录已经归档到 Google Drive。",
           clientUid: "client-a",
           sourceType: "chat",
           providerId: "slack",
@@ -90,7 +90,7 @@ try {
           capturedAt: "2026-03-18T10:00:00.000Z",
           sourceMetadata: {
             workspaceId: "workspace-a",
-            conversationId: "billing"
+            conversationId: "ops"
           }
         }
       ]
@@ -98,7 +98,7 @@ try {
     assert.equal(ingest.documentCount, 3);
 
     const result = knowledgeCore.search({
-      query: "3 月账单",
+      query: "3 月巡检记录",
       limit: 10,
       keywordOnly: true
     });
@@ -113,7 +113,7 @@ try {
     assert.equal(slackHit.source.syncBatchId, "client-batch-2026-03");
 
     const driveHit = result.items.find((item) => item.source?.providerId === "google-drive");
-    assert.equal(driveHit.source.fileRef.originalFileName, "invoice-march.txt");
+    assert.equal(driveHit.source.fileRef.originalFileName, "inspection-march.txt");
     assert.equal(driveHit.source.fileRef.storageRelativePath, rawObject.storageRelativePath);
 
     const evidence = knowledgeCore.getEvidence({ evidenceId: slackHit.evidenceId });
@@ -121,7 +121,7 @@ try {
     assert.equal(evidence.locator.chatRef.syncBatchId, "client-batch-2026-03");
 
     const fusedSearch = knowledgeCore.search({
-      query: "3 月账单",
+      query: "3 月巡检记录",
       limit: 10,
       keywordOnly: true,
       explain: true,
@@ -133,12 +133,12 @@ try {
             sourceType: "chat",
             providerId: "teams",
             externalId: "teams-message-1",
-            title: "Teams 财务提醒",
-            snippet: "3 月账单的报销审批暂存在 Teams，本地 mirror 尚未上传服务端。",
+            title: "Teams 运维提醒",
+            snippet: "3 月巡检记录的复核任务暂存在 Teams，本地 mirror 尚未上传服务端。",
             timestamp: "2026-03-18T11:00:00.000Z",
             chatRef: {
               workspaceId: "tenant-a",
-              conversationId: "finance",
+              conversationId: "ops",
               messageId: "teams-message-1",
               syncBatchId: "client-batch-2026-03"
             },
@@ -153,7 +153,7 @@ try {
             timestamp: "2026-03-18T10:00:00.000Z",
             chatRef: {
               workspaceId: "workspace-a",
-              conversationId: "billing",
+              conversationId: "ops",
               messageId: "slack-message-1",
               syncBatchId: "client-batch-2026-03"
             },

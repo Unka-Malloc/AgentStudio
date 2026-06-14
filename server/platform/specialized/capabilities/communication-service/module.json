@@ -1,13 +1,13 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "name": "CommunicationService",
-  "version": 1,
+  "version": "v0.0.1:platform:communication-service-1",
   "category": "agent-client-protocol",
   "agentCommunicationKind": "mcp-acp",
   "applicationSubsystem": "communication-service",
   "description": "Platform communication capability directory for ACP Relay and MCP Server Side.",
   "defaultLoaded": true,
-  "protocol": "pact.communication-service.v1",
+  "protocol": "v0.0.1:platform:communication-service-1",
   "services": [
     {
       "serviceId": "acp-agent-relay",

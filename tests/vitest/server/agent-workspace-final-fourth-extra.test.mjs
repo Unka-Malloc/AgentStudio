@@ -140,7 +140,7 @@ describe("agent workspace final fourth extra coverage", () => {
 
       const workspaceContext = runtime.getWorkspaceContext(leafWorkspace.workspaceId);
       expect(workspaceContext).toMatchObject({
-        protocolVersion: "pact.agent-workspace.v1",
+        protocolVersion: "v0.0.1:workspace:agent-workspace-1",
         workspaceId: leafWorkspace.workspaceId,
         currentGeneration: expect.any(Number),
         contextProfileId: "leaf-context",
@@ -349,7 +349,7 @@ describe("agent workspace final fourth extra coverage", () => {
         maxItems: 1
       });
       expect(noBundle).toMatchObject({
-        protocolVersion: "pact.agent-workspace.v1",
+        protocolVersion: "v0.0.1:workspace:agent-workspace-1",
         bundleVersion: AGENT_WORKSPACE_CONTEXT_BUNDLE_VERSION,
         compression: {
           algorithm: "none"

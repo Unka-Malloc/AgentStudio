@@ -16,7 +16,7 @@ const {
   <article class="surface-card">
     <div class="section-header">
       <div>
-        <h3>运行时配置</h3>
+        <h3>环境配置</h3>
         <p>集中查看本机运行时、来源路径、安装进展和关联配置。</p>
       </div>
       <div class="section-tags">

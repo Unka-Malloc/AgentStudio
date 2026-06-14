@@ -249,7 +249,7 @@ describe("agent gateway, model probe, registry, and memory extras", () => {
         limit: -1
       });
 
-      expect(listed.protocolVersion).toBe("pact.agent-memory.v1");
+      expect(listed.protocolVersion).toBe("v0.0.1:agent:memory-1");
       expect(listed.records).toHaveLength(1);
       expect(listed.records[0].memoryId).toBe(newer.memoryId);
 

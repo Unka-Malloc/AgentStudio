@@ -29,7 +29,10 @@ async function listJsonFiles(directory) {
 
 async function assertManifest(filePath, expected = {}) {
   const value = await readJson(filePath);
-  assert.equal(Number(value.schemaVersion || 0) > 0, true, `${filePath} must declare schemaVersion`);
+  const hasSchemaVersion =
+    (typeof value.schemaVersion === "number" && Number.isFinite(value.schemaVersion) && value.schemaVersion > 0) ||
+    (typeof value.schemaVersion === "string" && value.schemaVersion.trim().length > 0);
+  assert.equal(hasSchemaVersion, true, `${filePath} must declare schemaVersion`);
   for (const [key, expectedValue] of Object.entries(expected)) {
     assert.equal(value[key], expectedValue, `${filePath} must declare ${key}=${expectedValue}`);
   }

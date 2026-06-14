@@ -71,7 +71,7 @@ describe("batch repository focused extra coverage 2", () => {
         [
           manifestLine({
             recordType: "wordBagSet",
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             wordBagSetId: staleSetId,
             title: "Stale Manifest",
             updatedAt: FIXED_NOW,
@@ -79,7 +79,7 @@ describe("batch repository focused extra coverage 2", () => {
           }),
           manifestLine({
             recordType: "wordBagIndex",
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             wordBagSetId: staleSetId,
             wordBagId: "seed-root",
             parentWordBagId: "",
@@ -128,7 +128,7 @@ describe("batch repository focused extra coverage 2", () => {
         [
           manifestLine({
             recordType: "wordBagSet",
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             wordBagSetId,
             title: "JSONL Tree",
             updatedAt: FIXED_NOW,
@@ -136,7 +136,7 @@ describe("batch repository focused extra coverage 2", () => {
           }),
           manifestLine({
             recordType: "wordBagIndex",
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             wordBagSetId,
             wordBagId: "root",
             parentWordBagId: "",
@@ -147,7 +147,7 @@ describe("batch repository focused extra coverage 2", () => {
           }),
           manifestLine({
             recordType: "wordBagIndex",
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             wordBagSetId,
             wordBagId: "linked-child",
             parentWordBagId: "root",
@@ -158,7 +158,7 @@ describe("batch repository focused extra coverage 2", () => {
           }),
           manifestLine({
             recordType: "wordBagIndex",
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             wordBagSetId,
             wordBagId: "linked-child",
             parentWordBagId: "root",
@@ -169,7 +169,7 @@ describe("batch repository focused extra coverage 2", () => {
           }),
           manifestLine({
             recordType: "wordBagIndex",
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             wordBagSetId,
             wordBagId: "orphan-child",
             parentWordBagId: "root",
@@ -179,7 +179,7 @@ describe("batch repository focused extra coverage 2", () => {
           }),
           manifestLine({
             recordType: "wordBagIndex",
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             wordBagSetId,
             wordBagId: "missing-file",
             parentWordBagId: "root",
@@ -189,7 +189,7 @@ describe("batch repository focused extra coverage 2", () => {
           }),
           manifestLine({
             recordType: "wordBagIndex",
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             wordBagSetId,
             wordBagId: "ignored",
             parentWordBagId: "root"

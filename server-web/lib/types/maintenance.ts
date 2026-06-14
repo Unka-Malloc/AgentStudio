@@ -17,7 +17,7 @@ export type MaintenanceAgentSchedule = {
 };
 
 export type MaintenanceAgentConfig = {
-  schemaVersion: number;
+  schemaVersion: string;
   enabled: boolean;
   plannerMode: "gateway" | "gateway_fallback" | "fixed_runbook" | string;
   autoApproveRisk: MaintenanceAgentRisk;
@@ -39,7 +39,7 @@ export type MaintenanceAgentPlanStep = {
 };
 
 export type MaintenanceAgentPlan = {
-  schemaVersion: number;
+  schemaVersion: string;
   source: string;
   intent: string;
   summary: string;
@@ -61,7 +61,7 @@ export type MaintenanceAgentRunStep = MaintenanceAgentPlanStep & {
 };
 
 export type MaintenanceAgentRun = {
-  schemaVersion: number;
+  schemaVersion: string;
   runId: string;
   status:
     | "awaiting_approval"

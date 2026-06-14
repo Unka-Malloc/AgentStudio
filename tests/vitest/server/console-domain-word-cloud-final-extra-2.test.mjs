@@ -146,7 +146,7 @@ describe("knowledge word cloud boundary handling", () => {
     );
   });
 
-  it("returns the empty-vocabulary 409 branch without trying to rebuild when no corpus scope is provided", async () => {
+  it("does not handle removed propose operations", async () => {
     const metadataStore = createMetadataStore({
       listSourceCorpusRawTerms: vi.fn(() => []),
       rebuildSourceVocabulary: vi.fn(() => ({ sourceCorpusRawTermCount: 9 }))
@@ -161,13 +161,7 @@ describe("knowledge word cloud boundary handling", () => {
       context: createContext({ metadataStore })
     });
 
-    expect(result).toEqual({
-      status: 409,
-      payload: {
-        ok: false,
-        error: "语料词频表为空，请先完成文档入库并重建语料词频。"
-      }
-    });
+    expect(result).toBeNull();
     expect(metadataStore.rebuildSourceVocabulary).not.toHaveBeenCalled();
   });
 

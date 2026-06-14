@@ -1,4 +1,4 @@
-import { computed } from 'vue';
+import { computed, nextTick, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useConsole } from "./useConsole";
 import { pickServerConsoleShellPublicContext } from "./console-shell-public-context";
@@ -11,16 +11,31 @@ import { createConsoleShellPageRefreshController } from "./console-shell-page-re
 import { useConsoleShellPreferences } from "./console-shell-preferences";
 import { createConsoleShellRouteController } from "./console-shell-route-controller";
 import { pickToolManagementShellContext } from "./console-shell-tool-management-context";
+import { useWorkspacesConsole } from "./useWorkspacesConsole";
 
 export function useServerConsoleShell() {
   const {
-    themeMode,
+    appearancePresetId,
+    appearancePresetCatalogMessage,
+    appearancePresetImporting,
+    appearanceCycleScheme,
+    appearanceCycleSchemeLabel,
+    appearanceCycleSchemeOptions,
+    appearancePresetLabel,
+    appearancePresetSelectionId,
     languageMode,
     languageOptionBarOptions,
+    appearancePresetOptionsForCycleScheme,
+    appearancePresetOptions,
     msg,
-    applyTheme,
-    cycleTheme,
+    applyAppearancePreset,
+    cycleAppearancePreset,
+    toggleAppearanceCycleScheme,
+    importAppearancePresetFileToServer,
+    refreshAppearancePresetConfigs,
     applyLanguage,
+    setAppearanceCycleScheme,
+    setAppearancePreset,
     setLanguage,
     toggleLanguage,
     tt,
@@ -36,11 +51,13 @@ export function useServerConsoleShell() {
   const publicConsoleContext = pickServerConsoleShellPublicContext(consoleContext);
   const {
     adminView,
+    busyKey,
     consoleState,
     currentView,
     debugTab,
     externalServiceTab,
     hasFeature,
+    isAuthenticated,
     knowledgeTab,
     refreshAuthAdmin,
     refreshAuthState,
@@ -62,6 +79,7 @@ export function useServerConsoleShell() {
     reloadModules,
     serverAvailable,
   } = publicConsoleContext;
+  const workspacesConsole = useWorkspacesConsole({ autoload: false, globalBusyKey: busyKey });
 
   const route = useRoute();
   const {
@@ -93,11 +111,13 @@ export function useServerConsoleShell() {
     pageRefreshBusy,
     pageRefreshTitle,
     refreshCurrentPage,
+    trackPageRefreshTask,
   } = createConsoleShellPageRefreshController({
     activeRouteAdminView,
     activeRouteDebugTab,
     activeRouteKnowledgeTab,
     activeRouteView,
+    busyKey,
     hasFeature,
     msg,
     refreshAuthAdmin,
@@ -121,6 +141,47 @@ export function useServerConsoleShell() {
     routeFullPath: activeRouteFullPath,
   });
 
+  let toolListRouteRefreshSequence = 0;
+  const isToolListRoute = computed(() =>
+    activeRouteView.value === "admin" && ["tools", "toolList"].includes(activeRouteAdminView.value),
+  );
+  const toolManagementCatalogLoaded = computed(() => {
+    const catalog = toolManagementConsole.toolManagementCatalogState.value;
+    return Boolean(
+      catalog?.fingerprint ||
+      catalog?.toolGroups?.length ||
+      catalog?.toolsets?.length ||
+      catalog?.tools?.length,
+    );
+  });
+
+  async function refreshToolListRouteOnEntry(sequence: number, routePath: string) {
+    await trackPageRefreshTask(refreshToolManagement({ silent: true }));
+    if (sequence !== toolListRouteRefreshSequence || activeRouteFullPath.value !== routePath) {
+      return;
+    }
+    if (!toolManagementCatalogLoaded.value) {
+      return;
+    }
+    await nextTick();
+    if (sequence !== toolListRouteRefreshSequence || activeRouteFullPath.value !== routePath) {
+      return;
+    }
+    await refreshCurrentPage();
+  }
+
+  watch(
+    [isAuthenticated, isToolListRoute, activeRouteFullPath],
+    ([authenticated, shouldRefresh, routePath]) => {
+      if (!authenticated || !shouldRefresh) {
+        return;
+      }
+      const sequence = ++toolListRouteRefreshSequence;
+      void refreshToolListRouteOnEntry(sequence, routePath);
+    },
+    { immediate: true },
+  );
+
   return {
     ...publicConsoleContext,
     agentRetrievalConsole,
@@ -129,13 +190,28 @@ export function useServerConsoleShell() {
     feedConsole,
     knowledgeDomainConsole,
     toolManagementConsole,
-    themeMode,
+    workspacesConsole,
+    appearancePresetId,
+    appearancePresetCatalogMessage,
+    appearancePresetImporting,
+    appearanceCycleScheme,
+    appearanceCycleSchemeLabel,
+    appearanceCycleSchemeOptions,
+    appearancePresetLabel,
+    appearancePresetSelectionId,
     languageMode,
     languageOptionBarOptions,
+    appearancePresetOptionsForCycleScheme,
+    appearancePresetOptions,
     msg,
-    applyTheme,
-    cycleTheme,
+    applyAppearancePreset,
+    cycleAppearancePreset,
+    toggleAppearanceCycleScheme,
+    importAppearancePresetFileToServer,
+    refreshAppearancePresetConfigs,
     applyLanguage,
+    setAppearanceCycleScheme,
+    setAppearancePreset,
     setLanguage,
     toggleLanguage,
     tt,

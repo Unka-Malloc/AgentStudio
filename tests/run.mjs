@@ -1159,7 +1159,7 @@ async function main() {
   const finishedAt = new Date();
   const summary = summarize(results);
   const report = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     runner: "pact-unified-test-runner",
     profile: options.profile,
     selectedSuites: selectedIds,

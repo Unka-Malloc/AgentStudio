@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Scenario draft with machine-readable status tracking
 - Scope: Scenario 07: 日志记录.
 - Staleness check: Scanned on 2026-06-11; scenario live/contract/local status must match docs/scenarios/scenario-implementation-status.json and the latest readiness reports.

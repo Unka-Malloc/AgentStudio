@@ -71,7 +71,7 @@ function createKnowledgeHarness(overrides = {}) {
       searchCalls.push(input);
       return {
         query: input.query,
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         items: overrides.searchItems || [
           {
             evidenceId: "ev-1",
@@ -98,7 +98,7 @@ function createKnowledgeHarness(overrides = {}) {
     }
   };
   const modelDecisionRuntime = overrides.modelDecisionRuntime || {
-    protocolVersion: "pact.model-decision.v1",
+    protocolVersion: "v0.0.1:strategy:model-decision-1",
     describe: vi.fn(() => ({
       roles: [
         { roleId: "query_rewriter", fallback: "mock-query-rewriter" },
@@ -201,7 +201,7 @@ function createControllerHarness(overrides = {}) {
 
 describe("knowledge agent skill runtime independent coverage", () => {
   it("exposes the protocol version, plans empty input, and falls back when knowledge core is missing", async () => {
-    expect(KNOWLEDGE_AGENT_SKILL_PROTOCOL_VERSION).toBe("pact.knowledge-agent-skill.v1");
+    expect(KNOWLEDGE_AGENT_SKILL_PROTOCOL_VERSION).toBe("v0.0.1:knowledge:agent-skill-1");
 
     const harness = createKnowledgeHarness({
       runtime: { mounts: { knowledgeBase: null } }

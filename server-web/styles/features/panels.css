@@ -157,7 +157,7 @@
 /* ─── Auth gate ──────────────────────────────────────────────────────────── */
 
 .auth-gate {
-  min-height: 100vh;
+  min-height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -209,8 +209,10 @@
   top: 0;
   right: 0;
   height: 100vh;
-  width: 440px;
-  max-width: 90vw;
+  width: min(var(--config-drawer-width, 440px), calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  container-name: config-drawer;
+  container-type: inline-size;
   background: var(--bg-surface);
   border-inline-start: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-xl);
@@ -223,6 +225,57 @@
 
 .config-drawer.open {
   transform: translateX(0);
+}
+
+.config-drawer.is-resizing {
+  transition: none;
+}
+
+.config-drawer-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -6px;
+  width: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 1;
+}
+
+.config-drawer-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 5px;
+  width: 2px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--border-strong) 76%, transparent);
+  opacity: 0.75;
+  transition:
+    background var(--dur-fast) var(--ease-std),
+    opacity var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std);
+}
+
+.config-drawer-resize-handle:hover::before,
+.config-drawer-resize-handle:focus-visible::before,
+.config-drawer.is-resizing .config-drawer-resize-handle::before {
+  background: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 14%, transparent);
+  opacity: 1;
+}
+
+.config-drawer-resize-handle:focus-visible {
+  outline: none;
+}
+
+.config-drawer-resize-handle:disabled {
+  pointer-events: none;
 }
 
 .drawer-backdrop {

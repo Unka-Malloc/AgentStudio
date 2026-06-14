@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-export const AUTHORIZATION_PROTOCOL_VERSION = "pact.authorization.v1";
+export const AUTHORIZATION_PROTOCOL_VERSION = "v0.0.1:risk-control:authorization-1";
 
 function hardcodedCapabilityLines(block) {
   return Object.freeze(
@@ -16,6 +16,16 @@ export const KERNEL_API_OPERATION_IDS = hardcodedCapabilityLines(`
 agent_gateway.call
 agent_gateway.config.get
 agent_gateway.config.set
+mobile_relay.command.complete
+mobile_relay.command.create
+mobile_relay.command.poll
+mobile_relay.command.result
+mobile_relay.config
+mobile_relay.pairing.claim
+mobile_relay.pairing.create
+mobile_relay.pairing.revoke
+mobile_relay.pairing.status
+mobile_relay.pc.check_in
 agent_sessions.archive
 agent_sessions.compare
 agent_sessions.context.get
@@ -42,6 +52,7 @@ acp_agent_relay.sessions.get
 acp_agent_relay.sessions.list
 acp_agent_relay.targets.list
 acp_agent_relay.targets.upsert
+acp_agent_relay.templates.list
 acp_agent_relay.turn.observe
 acp_agent_relay.turns.list
 acp_agent_relay.virtual_agent.initialize
@@ -76,6 +87,8 @@ agents.create
 agents.delete
 agents.list
 agents.update
+appearance_presets.import
+appearance_presets.list
 architecture.live_map
 asset_lineage.describe
 asset_lineage.record
@@ -167,8 +180,15 @@ executive_report.preview
 external_services.config.get
 external_services.config.save
 external_services.config.verify
+external_services.health.inspect
 external_services.list
+external_services.production.verify
 external_services.runtime.refresh
+external_services.templates.draft
+external_services.templates.list
+external_services.tools.adopt
+external_services.versions.promote
+external_services.versions.rollback
 external.cloudDrive.connect
 external.cloudDrive.file.download
 external.cloudDrive.file.upload
@@ -203,6 +223,11 @@ jobs.normalized_document.get
 jobs.normalized_documents
 jobs.reparse
 jobs.result
+jobs.work_queue.drain
+jobs.work_queue.dispatch
+jobs.work_queue.inspect
+jobs.work_queue.pause
+jobs.work_queue.resume
 knowledge.access.denied_request.list
 knowledge.access.evaluate
 knowledge.access.loan_record.list
@@ -300,7 +325,6 @@ knowledge.word_bags.update
 knowledge.word_clouds.export
 knowledge.word_clouds.get
 knowledge.word_clouds.import
-knowledge.word_clouds.propose
 knowledge.word_clouds.save
 knowledge_taxonomy.get
 knowledge_taxonomy.set
@@ -356,6 +380,7 @@ repo.webhook.set
 runtime.info
 runtime.dependencies.list
 runtime.dependencies.download
+runtime.dependencies.downloads
 runtime.dependencies.configure
 runtime.mounts
 runtime.path_browse
@@ -386,6 +411,7 @@ storage.source_vocabulary.rebuild
 storage.summary
 strategy.agent_policy.evaluate
 strategy.describe
+strategy.queue_policy.evaluate
 strategy.route_policy.evaluate
 strategy.tool_policy.preview
 strategy.workflow_policy.evaluate
@@ -518,6 +544,7 @@ pact.agentRelay.sessions.get
 pact.agentRelay.sessions.list
 pact.agentRelay.targets.list
 pact.agentRelay.targets.upsert
+pact.agentRelay.templates.list
 pact.agentRelay.turn.observe
 pact.agentRelay.turns.list
 pact.agentRelay.virtualAgent.initialize
@@ -637,82 +664,82 @@ pact.gerrit.read
 pact.gerrit.write
 pact.jobs.get
 pact.jobs.list
-pact.knowledge.access.deniedRequest.list
-pact.knowledge.access.evaluate
-pact.knowledge.access.loanRecord.list
-pact.knowledge.access.receipt.list
-pact.knowledge.affairTaxonomy
-pact.knowledge.agentSkill
-pact.knowledge.agentSkill.plan
-pact.knowledge.agentSkill.run
-pact.knowledge.asset
-pact.knowledge.backend.connect
-pact.knowledge.capabilities
-pact.knowledge.changes
-pact.knowledge.configSchema
-pact.knowledge.console
-pact.knowledge.contribution.submit
-pact.knowledge.documentStructure
-pact.knowledge.dossier.export
-pact.knowledge.evaluation.runs.create
-pact.knowledge.evaluation.runs.get
-pact.knowledge.evaluation.runs.list
-pact.knowledge.evidence
-pact.knowledge.evidence.get
-pact.knowledge.evidenceGate.evaluate
-pact.knowledge.evolution
-pact.knowledge.evolution.deployments.list
-pact.knowledge.evolution.deployments.promote
-pact.knowledge.evolution.deployments.rollback
-pact.knowledge.evolution.runs.create
-pact.knowledge.evolution.runs.get
-pact.knowledge.evolution.runs.list
-pact.knowledge.export.request
-pact.knowledge.exportDocx
-pact.knowledge.feedback
-pact.knowledge.goldCases.list
-pact.knowledge.goldCases.set
-pact.knowledge.goldenRules.list
-pact.knowledge.goldenRules.publish
-pact.knowledge.goldenRules.rollback
-pact.knowledge.goldenRules.set
-pact.knowledge.graph
-pact.knowledge.health
-pact.knowledge.hierarchy.audit
-pact.knowledge.item
-pact.knowledge.learning.health
-pact.knowledge.learning.jobs
-pact.knowledge.maintenance.get
-pact.knowledge.maintenance.run
-pact.knowledge.maintenance.set
-pact.knowledge.modelDecision
-pact.knowledge.modelRoles
-pact.knowledge.permission.request
-pact.knowledge.reindex
-pact.knowledge.renderMarkdown
-pact.knowledge.reviewItems
-pact.knowledge.reviewResolve
-pact.knowledge.ruleAuthoring.chat
-pact.knowledge.ruleAuthoring.run
-pact.knowledge.search
-pact.knowledge.skillFramework
-pact.knowledge.skillFramework.set
-pact.knowledge.skills.deployments.create
-pact.knowledge.skills.deployments.rollback
-pact.knowledge.skills.evaluation.runs.create
-pact.knowledge.skills.generate
-pact.knowledge.skills.get
-pact.knowledge.skills.list
-pact.knowledge.skills.propose
-pact.knowledge.skills.resolve
-pact.knowledge.space.list
-pact.knowledge.suggestionResolve
-pact.knowledge.suggestions
-pact.knowledge.summarization.runs.approve
-pact.knowledge.summarization.runs.create
-pact.knowledge.summarization.runs.get
-pact.knowledge.sync
-pact.knowledge.trainingSets.export
+pact.agentLibrary.access.deniedRequest.list
+pact.agentLibrary.access.evaluate
+pact.agentLibrary.access.loanRecord.list
+pact.agentLibrary.access.receipt.list
+pact.agentLibrary.affairTaxonomy
+pact.agentLibrary.agentSkill
+pact.agentLibrary.agentSkill.plan
+pact.agentLibrary.agentSkill.run
+pact.agentLibrary.asset
+pact.agentLibrary.backend.connect
+pact.agentLibrary.capabilities
+pact.agentLibrary.changes
+pact.agentLibrary.configSchema
+pact.agentLibrary.console
+pact.agentLibrary.contribution.submit
+pact.agentLibrary.documentStructure
+pact.agentLibrary.dossier.export
+pact.agentLibrary.evaluation.runs.create
+pact.agentLibrary.evaluation.runs.get
+pact.agentLibrary.evaluation.runs.list
+pact.agentLibrary.evidence
+pact.agentLibrary.evidence.get
+pact.agentLibrary.evidenceGate.evaluate
+pact.agentLibrary.evolution
+pact.agentLibrary.evolution.deployments.list
+pact.agentLibrary.evolution.deployments.promote
+pact.agentLibrary.evolution.deployments.rollback
+pact.agentLibrary.evolution.runs.create
+pact.agentLibrary.evolution.runs.get
+pact.agentLibrary.evolution.runs.list
+pact.agentLibrary.export.request
+pact.agentLibrary.exportDocx
+pact.agentLibrary.feedback
+pact.agentLibrary.goldCases.list
+pact.agentLibrary.goldCases.set
+pact.agentLibrary.goldenRules.list
+pact.agentLibrary.goldenRules.publish
+pact.agentLibrary.goldenRules.rollback
+pact.agentLibrary.goldenRules.set
+pact.agentLibrary.graph
+pact.agentLibrary.health
+pact.agentLibrary.hierarchy.audit
+pact.agentLibrary.item
+pact.agentLibrary.learning.health
+pact.agentLibrary.learning.jobs
+pact.agentLibrary.maintenance.get
+pact.agentLibrary.maintenance.run
+pact.agentLibrary.maintenance.set
+pact.agentLibrary.modelDecision
+pact.agentLibrary.modelRoles
+pact.agentLibrary.permission.request
+pact.agentLibrary.reindex
+pact.agentLibrary.renderMarkdown
+pact.agentLibrary.reviewItems
+pact.agentLibrary.reviewResolve
+pact.agentLibrary.ruleAuthoring.chat
+pact.agentLibrary.ruleAuthoring.run
+pact.agentLibrary.search
+pact.agentLibrary.skillFramework
+pact.agentLibrary.skillFramework.set
+pact.agentLibrary.skills.deployments.create
+pact.agentLibrary.skills.deployments.rollback
+pact.agentLibrary.skills.evaluation.runs.create
+pact.agentLibrary.skills.generate
+pact.agentLibrary.skills.get
+pact.agentLibrary.skills.list
+pact.agentLibrary.skills.propose
+pact.agentLibrary.skills.resolve
+pact.agentLibrary.space.list
+pact.agentLibrary.suggestionResolve
+pact.agentLibrary.suggestions
+pact.agentLibrary.summarization.runs.approve
+pact.agentLibrary.summarization.runs.create
+pact.agentLibrary.summarization.runs.get
+pact.agentLibrary.sync
+pact.agentLibrary.trainingSets.export
 pact.modules.contractTest
 pact.modules.plan
 pact.modules.scaffold
@@ -1446,8 +1473,12 @@ export function evaluateAuthorizationPolicy({
     details = effectDetails("deny", "cidr_not_allowed", "Request source address is not allowed by grant.");
   } else if (context?.grantRateLimited === true || context?.rateLimited === true) {
     details = effectDetails("deny", "rate_limited", "Grant rate limit has been exceeded.");
-  } else if (operation?.public === true || operation?.externalAuth === true) {
-    details = effectDetails("allow", "allowed_public_or_external", "Public or externally authenticated operation.");
+  } else if (operation?.externalAuth === true && context?.externalAuthVerified !== true) {
+    details = effectDetails("deny", "external_auth_not_verified", "External authentication has not been verified by the dispatcher.");
+  } else if (operation?.public === true) {
+    details = effectDetails("allow", "allowed_public", "Public operation.");
+  } else if (operation?.externalAuth === true && context?.externalAuthVerified === true) {
+    details = effectDetails("allow", "allowed_external_auth_verified", "Externally authenticated operation.");
   } else if (missingCapabilities.length > 0) {
     details = effectDetails("deny", "missing_capabilities", "Credential is missing required capabilities.");
   } else if (effectiveMissingScopes.length > 0) {

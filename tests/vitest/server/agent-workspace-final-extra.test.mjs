@@ -103,7 +103,7 @@ describe("agent workspace final extra coverage", () => {
         actorUserId: "bundle-builder"
       });
       expect(exported).toMatchObject({
-        protocolVersion: "pact.agent-workspace.v1",
+        protocolVersion: "v0.0.1:workspace:agent-workspace-1",
         bundleVersion: AGENT_WORKSPACE_CONTEXT_BUNDLE_VERSION,
         compressed: {
           encoding: "gzip+base64"

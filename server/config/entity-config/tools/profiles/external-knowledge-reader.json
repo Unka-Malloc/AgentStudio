@@ -3,7 +3,7 @@
   "label": "External Knowledge Reader",
   "agentType": "external",
   "toolsets": [
-    "pact.knowledge.read"
+    "pact.agentLibrary.read"
   ],
   "toolAllow": [],
   "toolDeny": [

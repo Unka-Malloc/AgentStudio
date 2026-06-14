@@ -1,9 +1,9 @@
 export function createNoopDocumentOutlineRuntime() {
   return {
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     build({ document = {}, sections = [], blocks = [], assets = [] } = {}) {
       return {
-        protocolVersion: "pact.document-outline.v1",
+        protocolVersion: "v0.0.1:knowledge:document-outline-1",
         documentId: document.documentId || "",
         nodeCount: 0,
         syntheticNodeCount: 0,

@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "pact.external-knowledge-distillation.parser-strategies.v1",
+  "protocolVersion": "v0.0.1:external-service:knowledge-distillation-parser-strategies-1",
   "strategy": "singleton-parser-strategy-registry.v1",
   "strategyCount": 146,
   "builtInParserCount": 104,
@@ -15,8 +15,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "input.manifest.json",
@@ -27,8 +27,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "content.signature",
@@ -43,8 +43,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "payload.file-ref",
@@ -55,8 +55,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "payload.file-ref-deferred",
@@ -67,8 +67,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "payload.file-ref-binary-profile",
@@ -83,8 +83,8 @@
       "routeRoles": [
         "fallback"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "payload.stream-text",
@@ -95,8 +95,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "text.direct",
@@ -127,8 +127,8 @@
         "fallback",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "text.markdown",
@@ -139,8 +139,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "markdown.frontmatter",
@@ -151,8 +151,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "markdown.structure",
@@ -163,8 +163,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "markup.structure",
@@ -182,8 +182,8 @@
         "fallback",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "structured.json",
@@ -201,8 +201,8 @@
         "fallback",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "structured.json.file-ref-stream",
@@ -213,8 +213,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "config.key-value",
@@ -230,8 +230,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "diagram.structure",
@@ -247,8 +247,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "notebook.cells",
@@ -264,8 +264,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "code.structure",
@@ -281,8 +281,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "diff.unified",
@@ -298,8 +298,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "calendar.ics",
@@ -315,8 +315,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "transcript.cues",
@@ -331,8 +331,8 @@
       "routeRoles": [
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "transcript.webvtt",
@@ -347,8 +347,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "transcript.srt",
@@ -363,8 +363,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "transcript.speaker-turns",
@@ -379,8 +379,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "xbrl.contexts",
@@ -395,8 +395,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "xbrl.facts",
@@ -412,8 +412,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "audio.metadata",
@@ -428,8 +428,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "audio.transcript-sidecar",
@@ -445,8 +445,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.csv",
@@ -457,8 +457,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.tsv",
@@ -469,8 +469,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "email.headers-body",
@@ -481,8 +481,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "email.msg.tika",
@@ -497,8 +497,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "email.msg.tika.file-ref",
@@ -509,8 +509,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "email.mbox",
@@ -521,8 +521,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "email.mbox-route",
@@ -533,8 +533,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "email.attachment-route",
@@ -545,8 +545,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "pdf.text.basic",
@@ -557,8 +557,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "pdf.text.pdftotext",
@@ -569,8 +569,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "pdf.text.file-ref-elements",
@@ -585,8 +585,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "pdf.subtype-route",
@@ -597,8 +597,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "pdf.hyperlinks",
@@ -613,8 +613,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "pdf.outlines",
@@ -629,8 +629,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "pdf.form-fields",
@@ -641,8 +641,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "structured-zip.file-ref",
@@ -653,8 +653,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "structured-zip.structural-entry-plan",
@@ -665,8 +665,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "structured-zip.large-entry-stream",
@@ -677,8 +677,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "zip.manifest",
@@ -689,8 +689,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "archive.expand-route",
@@ -706,8 +706,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "archive.child-file.route",
@@ -718,8 +718,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "archive.file-ref.expand",
@@ -730,8 +730,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "archive.entry-file-ref",
@@ -742,8 +742,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "directory.file-ref.expand",
@@ -759,8 +759,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "directory.entry-file-ref",
@@ -775,8 +775,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "archive.zip.container",
@@ -787,8 +787,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "archive.zip.extract",
@@ -799,8 +799,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "archive.tar.container",
@@ -811,8 +811,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "archive.tar.extract",
@@ -823,8 +823,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "archive.gzip.decompress",
@@ -835,8 +835,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "archive.7z.extract",
@@ -847,8 +847,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.word.structured",
@@ -864,8 +864,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.word.styles",
@@ -880,8 +880,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.word.numbering",
@@ -896,8 +896,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.word.content-controls",
@@ -912,8 +912,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.word.bookmarks",
@@ -928,8 +928,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.word.headers-footers",
@@ -940,8 +940,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.word.hyperlinks",
@@ -956,8 +956,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.word.images",
@@ -972,8 +972,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.word.charts",
@@ -988,8 +988,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.word.revisions",
@@ -1004,8 +1004,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.presentation.slides",
@@ -1021,8 +1021,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.presentation.layouts",
@@ -1037,8 +1037,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.presentation.placeholders",
@@ -1053,8 +1053,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.presentation.tables",
@@ -1069,8 +1069,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.presentation.hyperlinks",
@@ -1085,8 +1085,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.presentation.images",
@@ -1101,8 +1101,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.presentation.charts",
@@ -1117,8 +1117,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.presentation.speaker-notes",
@@ -1133,8 +1133,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.presentation.comments",
@@ -1149,8 +1149,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.visio.pages",
@@ -1166,8 +1166,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.visio.shapes",
@@ -1182,8 +1182,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.visio.connectors",
@@ -1198,8 +1198,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.visio.text",
@@ -1214,8 +1214,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.word.tables",
@@ -1230,8 +1230,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.word.annotations",
@@ -1246,8 +1246,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.sheet.structured",
@@ -1263,8 +1263,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.workbook.sheets",
@@ -1279,8 +1279,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.workbook.defined-names",
@@ -1291,8 +1291,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.sheet.headers",
@@ -1307,8 +1307,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.sheet.cells",
@@ -1323,8 +1323,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.sheet.merged-cells",
@@ -1339,8 +1339,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.sheet.comments",
@@ -1355,8 +1355,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.sheet.date-styles",
@@ -1371,8 +1371,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.sheet.formulas",
@@ -1387,8 +1387,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.sheet.hyperlinks",
@@ -1403,8 +1403,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.sheet.charts",
@@ -1419,8 +1419,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.time-index",
@@ -1431,8 +1431,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "open-document.structured",
@@ -1448,8 +1448,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "open-document.tables",
@@ -1464,8 +1464,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "open-document.hyperlinks",
@@ -1480,8 +1480,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "ebook.epub",
@@ -1497,8 +1497,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "tika.text.app",
@@ -1509,8 +1509,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "tika.text.file-ref",
@@ -1521,8 +1521,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "ocr.image.tesseract",
@@ -1533,8 +1533,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "pdf.ocr.poppler-tesseract",
@@ -1545,8 +1545,8 @@
       "capabilitySurface": "built-in-parser",
       "routeBindings": [],
       "routeRoles": [],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "pdf.text.tika-safe",
@@ -1562,8 +1562,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "pdf.visual.layout",
@@ -1579,8 +1579,8 @@
         "chain",
         "fallback"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "ocr.page",
@@ -1596,8 +1596,8 @@
         "chain",
         "fallback"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "pdf.route",
@@ -1612,8 +1612,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "tika.text",
@@ -1637,8 +1637,8 @@
         "chain",
         "fallback"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "ocr.embedded-images",
@@ -1653,8 +1653,8 @@
       "routeRoles": [
         "fallback"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "office.route",
@@ -1671,8 +1671,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "ocr.slide-images",
@@ -1688,8 +1688,8 @@
         "chain",
         "fallback"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.route",
@@ -1704,8 +1704,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "table.rows.windowed",
@@ -1720,8 +1720,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "open-document.route",
@@ -1736,8 +1736,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "ebook.route",
@@ -1752,8 +1752,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "email.headers-body-attachments",
@@ -1769,8 +1769,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "email.route",
@@ -1785,8 +1785,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "attachment.route",
@@ -1801,8 +1801,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "ocr.image",
@@ -1820,8 +1820,8 @@
         "fallback",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "multimodal.image",
@@ -1837,8 +1837,8 @@
         "chain",
         "fallback"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "image.route",
@@ -1853,8 +1853,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "text.direct.markdown",
@@ -1870,8 +1870,8 @@
         "chain",
         "preferred"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "text.route",
@@ -1887,8 +1887,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "markup.route",
@@ -1903,8 +1903,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "config.route",
@@ -1919,8 +1919,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "structured.route",
@@ -1935,8 +1935,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "notebook.route",
@@ -1951,8 +1951,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "diff.route",
@@ -1967,8 +1967,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "calendar.route",
@@ -1983,8 +1983,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "transcript.route",
@@ -1999,8 +1999,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "transcript.time-index",
@@ -2015,8 +2015,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "financial-report.route",
@@ -2031,8 +2031,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "xbrl.units",
@@ -2047,8 +2047,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "audio.asr.external",
@@ -2064,8 +2064,8 @@
         "chain",
         "fallback"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "metadata.only",
@@ -2080,8 +2080,8 @@
       "routeRoles": [
         "fallback"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "audio.route",
@@ -2096,8 +2096,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "code.route",
@@ -2112,8 +2112,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "diagram.route",
@@ -2128,8 +2128,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "manifest.only",
@@ -2144,8 +2144,8 @@
       "routeRoles": [
         "fallback"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "archive.route",
@@ -2160,8 +2160,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "archive.container-detect",
@@ -2176,8 +2176,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "child-file.route",
@@ -2192,8 +2192,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "directory.child-route",
@@ -2208,8 +2208,8 @@
       "routeRoles": [
         "fallback"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "directory.route",
@@ -2224,8 +2224,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     },
     {
       "id": "route.child-documents",
@@ -2240,8 +2240,8 @@
       "routeRoles": [
         "chain"
       ],
-      "inputContract": "pact.external-kd.parser-input.v1",
-      "outputContract": "pact.normalized-distillation-documents.v1"
+      "inputContract": "v0.0.1:external-service:knowledge-distillation-parser-input-1",
+      "outputContract": "v0.0.1:knowledge:normalized-distillation-documents-1"
     }
   ]
 }

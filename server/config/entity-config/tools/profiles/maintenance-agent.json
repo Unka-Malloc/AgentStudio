@@ -6,7 +6,7 @@
     "pact.runtime.read",
     "pact.storage.read",
     "pact.jobs.read",
-    "pact.knowledge.maintain"
+    "pact.agentLibrary.maintain"
   ],
   "toolAllow": [],
   "toolDeny": [

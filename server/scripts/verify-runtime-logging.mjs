@@ -174,7 +174,7 @@ try {
       Authorization: `Bearer ${grant.payload.token}`
     },
     body: JSON.stringify({
-      toolId: "pact.knowledge.health",
+      toolId: "pact.agentLibrary.health",
       input: {}
     })
   });

@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "pact.external-knowledge-distillation.references.v1",
+  "protocolVersion": "v0.0.1:external-service:knowledge-distillation-references-1",
   "generatedAt": "2026-05-31T09:20:00Z",
   "localRoot": "/Users/unka/.pact-server-data/reference-frameworks/knowledge-distillation",
   "selectionPolicy": {

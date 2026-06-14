@@ -2,7 +2,7 @@
 .auth-gate {
   display: grid;
   place-items: center;
-  min-height: 100vh;
+  min-height: 100%;
   padding: var(--space-6);
   background: var(--bg-base);
 }

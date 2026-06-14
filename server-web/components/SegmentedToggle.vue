@@ -106,6 +106,6 @@ const gridColumns = computed(() => `repeat(${props.options.length}, minmax(0, 1f
 .pact-segmented-toggle-tab.active {
   color: var(--text-on-brand);
   background: var(--brand);
-  box-shadow: 0 2px 8px rgba(15, 98, 254, 0.24);
+  box-shadow: 0 2px 6px var(--brand-shadow);
 }
 </style>

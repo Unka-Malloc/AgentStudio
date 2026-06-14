@@ -67,6 +67,71 @@
   min-width: 0;
 }
 
+.ops-process-identity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ops-process-identity strong,
+.ops-process-identity small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ops-process-identity small {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.35;
+}
+
+.ops-process-relations {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ops-process-relations strong {
+  min-width: 0;
+  color: var(--text-primary);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.ops-process-relations ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ops-process-relations li {
+  display: grid;
+  grid-template-columns: 8px max-content minmax(0, 1fr);
+  column-gap: 6px;
+  align-items: baseline;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.ops-process-relations li::before {
+  content: "•";
+  color: var(--text-muted);
+  font-weight: var(--font-bold);
+}
+
+.ops-process-relations li > span:first-child {
+  color: var(--text-muted);
+  font-weight: var(--font-semibold);
+}
+
+.ops-process-relations li > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .monitor-alert-config-actions {
   display: flex;
   justify-content: flex-end;

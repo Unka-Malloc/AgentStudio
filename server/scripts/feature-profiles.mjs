@@ -166,7 +166,7 @@ function runBusinessChecks({ featureRuntime, activeOperations, clientPackagingCo
   if (featureRuntime.edition === "community") {
     assertCondition(!activeOperationIds.has("knowledge.evolution.runs.create"), "community must not expose knowledge evolution RPC/HTTP/CLI operations", failures);
     assertCondition(!activeOperationIds.has("maintenance_agent.runs.create"), "community must not expose maintenance agent runbooks", failures);
-    assertCondition(!toolIds.has("pact.knowledge.evolution.runs.create"), "community tool catalog must not expose knowledge evolution tool", failures);
+    assertCondition(!toolIds.has("pact.agentLibrary.evolution.runs.create"), "community tool catalog must not expose knowledge evolution tool", failures);
     assertCondition(clientModules["gmail-connector"]?.enabled !== true, "community client package must not enable Gmail connector", failures);
     assertCondition(clientModules["slack-connector"]?.enabled !== true, "community client package must not enable Slack connector", failures);
   }
@@ -174,6 +174,20 @@ function runBusinessChecks({ featureRuntime, activeOperations, clientPackagingCo
   if (featureRuntime.edition === "enterprise") {
     assertCondition(activeOperationIds.has("knowledge.evolution.runs.create"), "enterprise must expose knowledge evolution operations", failures);
     assertCondition(activeOperationIds.has("maintenance_agent.runs.create"), "enterprise must expose maintenance agent runbooks", failures);
+  }
+
+  if (featureRuntime.edition === "client-local") {
+    assertCondition(activeOperationIds.has("sharedspace.localDir.connect"), "client-local must expose local directory connect", failures);
+    assertCondition(activeOperationIds.has("sharedspace.file.read"), "client-local must expose sharedspace file read", failures);
+    assertCondition(activeOperationIds.has("external.cloudDrive.connect"), "client-local must expose cloud drive local projection connect", failures);
+    assertCondition(activeOperationIds.has("tool_management.catalog"), "client-local must expose Tool Management catalog for MCP", failures);
+    assertCondition(!featureRuntime.activeFeatureIds.includes("knowledge-core"), "client-local must not include knowledge-core", failures);
+    assertCondition(!featureRuntime.activeFeatureIds.includes("agent-gateway"), "client-local must not include agent-gateway", failures);
+    assertCondition(!featureRuntime.activeFeatureIds.includes("client-runtime-core"), "client-local must not include client-runtime-core", failures);
+    assertCondition(!featureRuntime.activeFeatureIds.includes("agent-memory"), "client-local must not include agent-memory", failures);
+    assertCondition(!activeOperationIds.has("knowledge.search"), "client-local must not expose knowledge search", failures);
+    assertCondition(!activeOperationIds.has("agent_gateway.invoke"), "client-local must not expose agent gateway operations", failures);
+    assertCondition(clientModules["knowledge-agent"]?.enabled !== true, "client-local client package must not enable knowledge agent", failures);
   }
 
   return {

@@ -5,12 +5,12 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { loadSettings } from "../../../common/platform-core/settings.mjs";
+import { loadSettings, saveSettings } from "../../../common/platform-core/settings.mjs";
 import { cloudDriveConfigPath } from "../../agent/cloud-drive-port/index.mjs";
 import { resolveGatewayRuntimePlan } from "../agent-ingress/traffic-gateway/index.mjs";
 import { knowledgeBackendConfigPath } from "../../knowledge/storage/knowledge-backend-port/index.mjs";
 
-export const RUNTIME_DEPENDENCIES_PROTOCOL_VERSION = "pact.runtime-dependencies.v1";
+export const RUNTIME_DEPENDENCIES_PROTOCOL_VERSION = "v0.0.1:platform:runtime-dependencies-1";
 const TIKA_VERSION = "3.2.3";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
@@ -20,6 +20,13 @@ const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const GERRIT_VERSION = process.env.PACT_GERRIT_VERSION || "3.14.0";
 const PATH_ENV_SOURCE_LABEL = "环境变量: PATH";
 const KNOWLEDGE_MODULE_ROOT = path.join(repoRoot, "server", "platform", "modules", "knowledge");
+const MIN_JAVA_MAJOR = Number(process.env.PACT_MIN_JAVA_MAJOR || 21);
+const MIN_NODE_MAJOR = Number(process.env.PACT_MIN_NODE_MAJOR || 22);
+const MIN_PYTHON_MAJOR = Number(process.env.PACT_MIN_PYTHON_MAJOR || 3);
+const MIN_PYTHON_MINOR = Number(process.env.PACT_MIN_PYTHON_MINOR || 10);
+const DEFAULT_NODE_RUNTIME_VERSION = process.env.PACT_NODE_RUNTIME_VERSION || "24.16.0";
+const DEFAULT_NODE_RUNTIME_FALLBACK_VERSIONS = Object.freeze(["24.16.0", "22.21.1"]);
+const DEFAULT_PYTHON_RUNTIME_VERSION = process.env.PACT_PYTHON_RUNTIME_VERSION || "3.12";
 const KNOWLEDGE_BACKEND_TARGETS = Object.freeze([
   Object.freeze({
     targetId: "dify",
@@ -47,6 +54,7 @@ const TOP_LEVEL_TARGETS = Object.freeze([
   "gerrit"
 ]);
 const SOURCE_CONFIG_RELATIVE_PATH = path.join("runtime", "runtime-dependency-sources.json");
+const DOWNLOAD_RUNS_RELATIVE_DIR = path.join("runtime", "runtime-dependency-download-runs");
 const INSTALL_STATUS = Object.freeze({
   PRESENT: "present",
   INSTALLED: "installed",
@@ -103,6 +111,8 @@ const RUNTIME_DOWNLOAD_STEP_PLANS = Object.freeze({
   ]),
   node: Object.freeze([
     ["detect", "检测"],
+    ["source", "版本管理器"],
+    ["install", "nvm 安装"],
     ["verify", "验证"],
     ["complete", "完成"]
   ]),
@@ -172,6 +182,27 @@ function normalizeTargetId(value = "") {
   return text(value).toLowerCase().replace(/_/g, "-");
 }
 
+function runtimeDependencyTargetValues(value) {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => runtimeDependencyTargetValues(item));
+  }
+  return String(value ?? "")
+    .split(",")
+    .map((item) => normalizeTargetId(item))
+    .filter(Boolean);
+}
+
+function listRuntimeDependencyTargets(input = {}) {
+  const requestedTargets = [
+    ...runtimeDependencyTargetValues(input.targetId),
+    ...runtimeDependencyTargetValues(input.target),
+    ...runtimeDependencyTargetValues(input.id),
+    ...runtimeDependencyTargetValues(input.targets)
+  ];
+  const dedupedTargets = requestedTargets.filter((targetId, index, list) => list.indexOf(targetId) === index);
+  return dedupedTargets.length ? dedupedTargets : TOP_LEVEL_TARGETS;
+}
+
 function dataRoot(input = {}) {
   const explicit = text(input.userDataPath || process.env.PACT_SERVER_DATA_DIR);
   return explicit ? path.resolve(explicit) : path.join(os.homedir(), ".pact-server-data");
@@ -192,6 +223,23 @@ function gatewayRuntimeCacheRoot(input = {}) {
 
 export function runtimeDependencySourceConfigPath(input = {}) {
   return path.join(dataRoot(input), SOURCE_CONFIG_RELATIVE_PATH);
+}
+
+function runtimeDependencyDownloadRunStoreRoot(input = {}) {
+  return path.join(dataRoot(input), DOWNLOAD_RUNS_RELATIVE_DIR);
+}
+
+function sanitizeDownloadRunId(value = "") {
+  const normalized = text(value).replace(/[^a-zA-Z0-9_.-]/g, "");
+  return normalized || `runtime_${randomUUID()}`;
+}
+
+function runtimeDependencyDownloadRunPath(input = {}, runId = "") {
+  return path.join(runtimeDependencyDownloadRunStoreRoot(input), `${sanitizeDownloadRunId(runId)}.json`);
+}
+
+function hasExplicitDownloadRunContext(input = {}) {
+  return Boolean(text(input.userDataPath || process.env.PACT_SERVER_DATA_DIR));
 }
 
 function gatewayCaddyArch() {
@@ -226,10 +274,34 @@ function defaultPythonPackageUrl() {
 }
 
 function defaultJreSourceEntry() {
+  if (platformKey === "linux-x64") {
+    return {
+      fileName: "OpenJDK21U-jre_x64_linux_hotspot_21.0.10_7.tar.gz",
+      url: "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.10%2B7/OpenJDK21U-jre_x64_linux_hotspot_21.0.10_7.tar.gz"
+    };
+  }
+  if (platformKey === "linux-arm64") {
+    return {
+      fileName: "OpenJDK21U-jre_aarch64_linux_hotspot_21.0.10_7.tar.gz",
+      url: "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.10%2B7/OpenJDK21U-jre_aarch64_linux_hotspot_21.0.10_7.tar.gz"
+    };
+  }
   if (platformKey === "darwin-arm64") {
     return {
       fileName: "OpenJDK21U-jre_aarch64_mac_hotspot_21.0.10_7.tar.gz",
       url: "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.10%2B7/OpenJDK21U-jre_aarch64_mac_hotspot_21.0.10_7.tar.gz"
+    };
+  }
+  if (platformKey === "darwin-x64") {
+    return {
+      fileName: "OpenJDK21U-jre_x64_mac_hotspot_21.0.10_7.tar.gz",
+      url: "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.10%2B7/OpenJDK21U-jre_x64_mac_hotspot_21.0.10_7.tar.gz"
+    };
+  }
+  if (platformKey === "win32-x64") {
+    return {
+      fileName: "OpenJDK21U-jre_x64_windows_hotspot_21.0.10_7.zip",
+      url: "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.10%2B7/OpenJDK21U-jre_x64_windows_hotspot_21.0.10_7.zip"
     };
   }
   return {
@@ -252,7 +324,7 @@ function defaultSourceConfig() {
   const dockerUrl = dockerDefaultInstallerUrl();
   const gerritVersion = process.env.PACT_GERRIT_VERSION || GERRIT_VERSION;
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: RUNTIME_DEPENDENCIES_PROTOCOL_VERSION,
     generatedAt: nowIso(),
     note: "User-triggered runtime dependency sources. Edit mirror URLs here when built-in sources are unreachable.",
@@ -291,7 +363,16 @@ function defaultSourceConfig() {
       python: {
         default: {
           url: defaultPythonPackageUrl(),
-          fileName: defaultPythonPackageFileName()
+          fileName: defaultPythonPackageFileName(),
+          version: DEFAULT_PYTHON_RUNTIME_VERSION,
+          uvInstallUrl: "https://astral.sh/uv/install.sh"
+        },
+        mirrors: []
+      },
+      node: {
+        default: {
+          version: DEFAULT_NODE_RUNTIME_VERSION,
+          nvmInstallUrl: "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh"
         },
         mirrors: []
       },
@@ -423,6 +504,54 @@ function pathExists(targetPath = "") {
   }
 }
 
+function fileSize(targetPath = "") {
+  if (!targetPath) return 0;
+  try {
+    return fsSync.statSync(targetPath).size;
+  } catch {
+    return 0;
+  }
+}
+
+function sleepMs(delayMs = 0) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, delayMs)));
+}
+
+function downloadRetryAttempts(options = {}) {
+  const raw = Number(options.downloadRetryAttempts || options.retryAttempts || process.env.PACT_RUNTIME_DOWNLOAD_RETRY_ATTEMPTS || 12);
+  return Number.isFinite(raw) ? Math.max(1, Math.floor(raw)) : 12;
+}
+
+function downloadRetryDelayMs(attemptIndex = 0, options = {}) {
+  const base = Number(options.downloadRetryDelayMs || process.env.PACT_RUNTIME_DOWNLOAD_RETRY_DELAY_MS || 5000);
+  const max = Number(options.downloadRetryMaxDelayMs || process.env.PACT_RUNTIME_DOWNLOAD_RETRY_MAX_DELAY_MS || 60000);
+  const safeBase = Number.isFinite(base) ? Math.max(0, base) : 5000;
+  const safeMax = Number.isFinite(max) ? Math.max(safeBase, max) : 60000;
+  return Math.min(safeMax, safeBase * Math.max(1, 2 ** Math.max(0, attemptIndex)));
+}
+
+function nativeCommandRetryAttempts(options = {}) {
+  const raw = Number(options.nativeRetryAttempts || process.env.PACT_RUNTIME_NATIVE_RETRY_ATTEMPTS || 5);
+  return Number.isFinite(raw) ? Math.max(1, Math.floor(raw)) : 5;
+}
+
+function nativeCommandRetryDelayMs(attemptIndex = 0, options = {}) {
+  const base = Number(options.nativeRetryDelayMs || process.env.PACT_RUNTIME_NATIVE_RETRY_DELAY_MS || 5000);
+  const max = Number(options.nativeRetryMaxDelayMs || process.env.PACT_RUNTIME_NATIVE_RETRY_MAX_DELAY_MS || 60000);
+  const safeBase = Number.isFinite(base) ? Math.max(0, base) : 5000;
+  const safeMax = Number.isFinite(max) ? Math.max(safeBase, max) : 60000;
+  return Math.min(safeMax, safeBase * Math.max(1, 2 ** Math.max(0, attemptIndex)));
+}
+
+function nativeCommandFailureShouldRetry(result = {}) {
+  const output = text([result.stdout, result.stderr, result.error?.message].filter(Boolean).join("\n"));
+  return /Could not get lock|Unable to lock|dpkg frontend lock|dpkg lock|is another process using it|Failed to fetch|Temporary failure resolving|Could not resolve|connection timed out|network is unreachable|try again|TLS connection/i.test(output);
+}
+
+function outputMentionsRangeUnsupported(value = "") {
+  return /cannot resume|does not seem to support byte ranges|range/i.test(String(value || ""));
+}
+
 function detectionSource(kind, label, sourcePath = "", detail = "") {
   return {
     kind,
@@ -485,6 +614,200 @@ function commandVersion(command, args = ["--version"]) {
   }
   const result = runCommand(executablePath, args, { timeoutMs: 5000 });
   return text([result.stdout, result.stderr].filter(Boolean).join("\n")).split(/\r?\n/)[0] || "";
+}
+
+function executableCommandVersion(executablePath = "", args = ["--version"]) {
+  const candidate = text(executablePath);
+  if (!candidate || !(executableExists(candidate) || pathExists(candidate))) {
+    return "";
+  }
+  const result = runCommand(candidate, args, { timeoutMs: 5000 });
+  return text([result.stdout, result.stderr].filter(Boolean).join("\n")).split(/\r?\n/)[0] || "";
+}
+
+function parseJavaMajor(versionOutput = "") {
+  const output = String(versionOutput || "");
+  const quoted = output.match(/version\s+"([^"]+)"/i)?.[1] || "";
+  const version = quoted || output.match(/(?:openjdk|java)\s+([0-9][^\s"]*)/i)?.[1] || "";
+  const majorText = version.startsWith("1.")
+    ? version.split(".")[1]
+    : version.split(/[._+-]/)[0];
+  const major = Number(majorText || 0);
+  return Number.isFinite(major) ? major : 0;
+}
+
+function parseNodeMajor(versionOutput = "") {
+  const match = String(versionOutput || "").match(/v?(\d+)(?:\.|$)/);
+  const major = Number(match?.[1] || 0);
+  return Number.isFinite(major) ? major : 0;
+}
+
+function parsePythonVersion(versionOutput = "") {
+  const match = String(versionOutput || "").match(/Python\s+(\d+)\.(\d+)(?:\.(\d+))?/i);
+  return {
+    major: Number(match?.[1] || 0),
+    minor: Number(match?.[2] || 0),
+    patch: Number(match?.[3] || 0)
+  };
+}
+
+function pythonVersionMeets(versionOutput = "") {
+  const version = parsePythonVersion(versionOutput);
+  return version.major > MIN_PYTHON_MAJOR ||
+    (version.major === MIN_PYTHON_MAJOR && version.minor >= MIN_PYTHON_MINOR);
+}
+
+function nodeVersionMeets(versionOutput = "") {
+  return parseNodeMajor(versionOutput) >= MIN_NODE_MAJOR;
+}
+
+function javaVersionMeets(versionOutput = "") {
+  return parseJavaMajor(versionOutput) >= MIN_JAVA_MAJOR;
+}
+
+function runtimeExecutable(root = "", executableName = "") {
+  return process.platform === "win32"
+    ? path.join(root, "Scripts", `${executableName}.exe`)
+    : path.join(root, "bin", executableName);
+}
+
+function pythonVenvRoot(context = {}) {
+  return path.join(runtimeCacheRoot(context), "python", "venv");
+}
+
+function pythonVenvExecutable(context = {}) {
+  return runtimeExecutable(pythonVenvRoot(context), "python");
+}
+
+function uvInstallRoot(context = {}) {
+  return path.join(runtimeCacheRoot(context), "python", "uv");
+}
+
+function uvExecutable(context = {}) {
+  return process.platform === "win32"
+    ? path.join(uvInstallRoot(context), "uv.exe")
+    : path.join(uvInstallRoot(context), "bin", "uv");
+}
+
+function nvmDir(context = {}) {
+  const configured = text(process.env.NVM_DIR || process.env.PACT_NVM_DIR);
+  if (configured && pathExists(path.join(configured, "nvm.sh"))) {
+    return path.resolve(configured);
+  }
+  return path.join(runtimeCacheRoot(context), "node", "nvm");
+}
+
+function nvmScriptPath(context = {}) {
+  return path.join(nvmDir(context), "nvm.sh");
+}
+
+function nvmManagedNodePath(context = {}) {
+  const version = sourceField(context.sourceConfig, "node", "version") || DEFAULT_NODE_RUNTIME_VERSION;
+  return path.join(nvmDir(context), "versions", "node", `v${version}`, "bin", `node${executableSuffix}`);
+}
+
+function nodeRuntimeVersionCandidates(context = {}) {
+  const configuredVersion = sourceField(context.sourceConfig, "node", "version") || DEFAULT_NODE_RUNTIME_VERSION;
+  const explicitFallbacks = text(process.env.PACT_NODE_RUNTIME_FALLBACK_VERSIONS)
+    .split(",")
+    .map(text)
+    .filter(Boolean);
+  const candidates = [
+    configuredVersion,
+    DEFAULT_NODE_RUNTIME_VERSION,
+    ...explicitFallbacks,
+    ...DEFAULT_NODE_RUNTIME_FALLBACK_VERSIONS
+  ].filter(Boolean);
+  return [...new Set(candidates)];
+}
+
+function parseNvmNodeVersionDir(name = "") {
+  const match = /^v(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(text(name));
+  if (!match) return null;
+  return {
+    major: Number(match[1] || 0),
+    minor: Number(match[2] || 0),
+    patch: Number(match[3] || 0)
+  };
+}
+
+function compareNvmNodeVersionDirsDescending(left, right) {
+  const leftVersion = parseNvmNodeVersionDir(left) || {};
+  const rightVersion = parseNvmNodeVersionDir(right) || {};
+  return (rightVersion.major || 0) - (leftVersion.major || 0) ||
+    (rightVersion.minor || 0) - (leftVersion.minor || 0) ||
+    (rightVersion.patch || 0) - (leftVersion.patch || 0);
+}
+
+function nvmManagedNodePaths(context = {}) {
+  const configuredVersion = sourceField(context.sourceConfig, "node", "version") || DEFAULT_NODE_RUNTIME_VERSION;
+  const versionsRoot = path.join(nvmDir(context), "versions", "node");
+  const candidates = [nvmManagedNodePath(context)];
+  if (!pathExists(versionsRoot)) {
+    return candidates;
+  }
+  const configuredParts = text(configuredVersion).split(".").filter(Boolean);
+  const prefix = `v${configuredParts.join(".")}`;
+  const versionDirs = fsSync.readdirSync(versionsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => {
+      if (name === prefix) return true;
+      if (configuredParts.length === 1) return name.startsWith(`${prefix}.`);
+      if (configuredParts.length === 2) return name.startsWith(`${prefix}.`);
+      return false;
+    })
+    .sort(compareNvmNodeVersionDirsDescending);
+  for (const dirName of versionDirs) {
+    candidates.push(path.join(versionsRoot, dirName, "bin", `node${executableSuffix}`));
+  }
+  return [...new Set(candidates)];
+}
+
+function privilegedCommand(command, args = []) {
+  if (process.platform === "win32") {
+    return { command, args };
+  }
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    return { command, args };
+  }
+  if (commandPath("sudo")) {
+    return { command: "sudo", args: ["-n", command, ...args] };
+  }
+  return { command, args };
+}
+
+function nativePythonInstallPlans() {
+  if (process.env.PACT_DISABLE_NATIVE_RUNTIME_INSTALL === "1") return [];
+  if (process.platform === "darwin" && commandPath("brew")) {
+    return [{ label: "Homebrew python@3.12", commands: [{ command: "brew", args: ["install", "python@3.12"] }] }];
+  }
+  if (process.platform === "linux") {
+    const plans = [];
+    if (commandPath("apt-get")) {
+      plans.push({
+        label: "apt python3-venv",
+        commands: [
+          privilegedCommand("apt-get", ["update"]),
+          privilegedCommand("apt-get", ["install", "-y", "--no-install-recommends", "python3", "python3-venv", "python3-pip"])
+        ]
+      });
+    }
+    if (commandPath("dnf")) plans.push({ label: "dnf python3", commands: [privilegedCommand("dnf", ["install", "-y", "python3", "python3-pip"])] });
+    if (commandPath("yum")) plans.push({ label: "yum python3", commands: [privilegedCommand("yum", ["install", "-y", "python3", "python3-pip"])] });
+    if (commandPath("apk")) plans.push({ label: "apk python3", commands: [privilegedCommand("apk", ["add", "--no-cache", "python3", "py3-pip"])] });
+    if (commandPath("pacman")) plans.push({ label: "pacman python", commands: [privilegedCommand("pacman", ["-Sy", "--noconfirm", "python"])] });
+    if (commandPath("zypper")) plans.push({ label: "zypper python3", commands: [privilegedCommand("zypper", ["--non-interactive", "install", "python3", "python3-pip"])] });
+    return plans;
+  }
+  if (process.platform === "win32") {
+    return [
+      commandPath("winget") ? { label: "winget Python 3.12", commands: [{ command: "winget", args: ["install", "--id", "Python.Python.3.12", "-e", "--accept-package-agreements", "--accept-source-agreements"] }] } : null,
+      commandPath("choco") ? { label: "Chocolatey python", commands: [{ command: "choco", args: ["install", "-y", "python"] }] } : null,
+      commandPath("scoop") ? { label: "Scoop python", commands: [{ command: "scoop", args: ["install", "python"] }] } : null
+    ].filter(Boolean);
+  }
+  return [];
 }
 
 function macosVersionInfo() {
@@ -624,6 +947,7 @@ function setDownloadRunStep(run, stepKey = "", status = DOWNLOAD_STEP_STATUS.RUN
     step.completedAt = at;
   }
   recomputeDownloadRunProgress(run);
+  scheduleDownloadRunPersist(run);
 }
 
 function finishDownloadRunSteps(run, ok) {
@@ -635,6 +959,7 @@ function finishDownloadRunSteps(run, ok) {
       }
     }
     run.progressPercent = 100;
+    scheduleDownloadRunPersist(run);
     return;
   }
   const failed = run.steps.find((step) => step.status === DOWNLOAD_STEP_STATUS.FAILED);
@@ -664,6 +989,7 @@ function appendDownloadRunLog(run, level, message, data = {}) {
   if (data?.stepKey) {
     setDownloadRunStep(run, data.stepKey, data.stepStatus || DOWNLOAD_STEP_STATUS.RUNNING);
   }
+  scheduleDownloadRunPersist(run);
   return entry;
 }
 
@@ -689,9 +1015,167 @@ function publicDownloadRun(run) {
   };
 }
 
-function listPublicDownloadRuns() {
+function serializableDownloadRun(run) {
+  const publicRun = publicDownloadRun(run);
+  return {
+    schemaVersion: "v0.0.1:schema:definition-1",
+    protocolVersion: RUNTIME_DEPENDENCIES_PROTOCOL_VERSION,
+    persistedAt: nowIso(),
+    userDataPath: run.userDataPath || "",
+    pid: process.pid,
+    ...publicRun
+  };
+}
+
+function writeJsonAtomicSync(filePath = "", payload = {}) {
+  fsSync.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  fsSync.writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  fsSync.renameSync(tempPath, filePath);
+}
+
+function persistDownloadRunSync(run) {
+  if (!run?.storePath) return;
+  try {
+    writeJsonAtomicSync(run.storePath, serializableDownloadRun(run));
+    run.persistError = "";
+  } catch (error) {
+    run.persistError = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function scheduleDownloadRunPersist(run) {
+  if (!run?.storePath) return;
+  if (run.persistTimer) return;
+  run.persistTimer = setTimeout(() => {
+    run.persistTimer = null;
+    persistDownloadRunSync(run);
+  }, 0);
+  if (typeof run.persistTimer.unref === "function") {
+    run.persistTimer.unref();
+  }
+}
+
+function flushDownloadRunPersist(run) {
+  if (!run?.storePath) return;
+  if (run.persistTimer) {
+    clearTimeout(run.persistTimer);
+    run.persistTimer = null;
+  }
+  persistDownloadRunSync(run);
+}
+
+function normalizePersistedDownloadRun(record = {}, input = {}) {
+  const targetId = normalizeTargetId(record.targetId || "");
+  const runId = sanitizeDownloadRunId(record.runId || "");
+  const statusValues = new Set(Object.values(DOWNLOAD_RUN_STATUS));
+  const stepStatusValues = new Set(Object.values(DOWNLOAD_STEP_STATUS));
+  const steps = Array.isArray(record.steps) && record.steps.length > 0
+    ? record.steps.map((step, index) => ({
+        key: text(step.key) || `step_${index}`,
+        label: text(step.label) || text(step.key) || `Step ${index + 1}`,
+        index: Number.isFinite(Number(step.index)) ? Number(step.index) : index,
+        status: stepStatusValues.has(step.status) ? step.status : DOWNLOAD_STEP_STATUS.PENDING,
+        startedAt: text(step.startedAt),
+        updatedAt: text(step.updatedAt),
+        completedAt: text(step.completedAt)
+      }))
+    : plannedDownloadSteps(targetId);
+  const run = {
+    runId,
+    targetId,
+    status: statusValues.has(record.status) ? record.status : DOWNLOAD_RUN_STATUS.FAILED,
+    ok: record.ok !== false,
+    startedAt: text(record.startedAt) || nowIso(),
+    updatedAt: text(record.updatedAt) || text(record.startedAt) || nowIso(),
+    completedAt: text(record.completedAt),
+    latestMessage: text(record.latestMessage) || "已读取持久化下载任务。",
+    steps,
+    completedSteps: Number(record.completedSteps || 0),
+    totalSteps: Number(record.totalSteps || steps.length),
+    currentStepKey: text(record.currentStepKey),
+    currentStepIndex: Number(record.currentStepIndex || 0),
+    progressPercent: Number(record.progressPercent || 0),
+    log: Array.isArray(record.log) ? record.log.slice(-MAX_DOWNLOAD_RUN_LOG_LINES).map((entry) => ({
+      at: text(entry.at) || nowIso(),
+      level: text(entry.level) || "info",
+      message: text(entry.message),
+      data: entry.data && typeof entry.data === "object" ? entry.data : {}
+    })) : [],
+    result: record.result && typeof record.result === "object" ? record.result : null,
+    userDataPath: dataRoot(input),
+    storePath: runtimeDependencyDownloadRunPath(input, runId)
+  };
+  recomputeDownloadRunProgress(run);
+  return run;
+}
+
+function isActiveDownloadRunStatus(status = "") {
+  return status === DOWNLOAD_RUN_STATUS.QUEUED || status === DOWNLOAD_RUN_STATUS.RUNNING;
+}
+
+function markPersistedRunInterrupted(run) {
+  if (!run || !isActiveDownloadRunStatus(run.status)) return false;
+  run.status = DOWNLOAD_RUN_STATUS.FAILED;
+  run.ok = false;
+  run.completedAt = nowIso();
+  run.result = {
+    ok: false,
+    targetId: run.targetId,
+    status: INSTALL_STATUS.FAILED,
+    interrupted: true,
+    error: "Server process stopped before the runtime dependency download completed.",
+    generatedAt: nowIso()
+  };
+  finishDownloadRunSteps(run, false);
+  appendDownloadRunLog(run, "error", "服务端进程在安装完成前退出，任务已标记为中断，可重新发起安装。");
+  flushDownloadRunPersist(run);
+  return true;
+}
+
+function loadPersistedDownloadRuns(input = {}) {
+  const storeRoot = runtimeDependencyDownloadRunStoreRoot(input);
+  if (!fsSync.existsSync(storeRoot)) return [];
+  const runs = [];
+  for (const entry of fsSync.readdirSync(storeRoot, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+    const filePath = path.join(storeRoot, entry.name);
+    try {
+      const record = JSON.parse(fsSync.readFileSync(filePath, "utf8"));
+      runs.push(normalizePersistedDownloadRun(record, input));
+    } catch {
+      // Ignore corrupt run records so one bad file cannot hide active downloads.
+    }
+  }
+  return runs;
+}
+
+function liveDownloadRunsFor(input = {}) {
+  if (!hasExplicitDownloadRunContext(input)) {
+    return [...runtimeDependencyDownloadRuns.values()];
+  }
+  const expectedRoot = dataRoot(input);
   return [...runtimeDependencyDownloadRuns.values()]
-    .sort((a, b) => String(b.updatedAt || b.startedAt).localeCompare(String(a.updatedAt || a.startedAt)))
+    .filter((run) => path.resolve(run.userDataPath || "") === expectedRoot);
+}
+
+function listPublicDownloadRuns(input = {}) {
+  const byId = new Map();
+  for (const run of liveDownloadRunsFor(input)) {
+    byId.set(run.runId, run);
+  }
+  if (hasExplicitDownloadRunContext(input)) {
+    for (const run of loadPersistedDownloadRuns(input)) {
+      if (byId.has(run.runId)) continue;
+      if (isActiveDownloadRunStatus(run.status)) {
+        markPersistedRunInterrupted(run);
+      }
+      byId.set(run.runId, run);
+    }
+  }
+  const sorted = [...byId.values()]
+    .sort((a, b) => String(b.updatedAt || b.startedAt).localeCompare(String(a.updatedAt || a.startedAt)));
+  return (hasExplicitDownloadRunContext(input) ? sorted.slice(0, MAX_DOWNLOAD_RUNS) : sorted)
     .map(publicDownloadRun);
 }
 
@@ -1267,6 +1751,12 @@ async function detectJre(context = {}) {
   const settings = await loadSettings(dataRoot(context), { redactSecrets: true }).catch(() => ({}));
   const javaName = `java${executableSuffix}`;
   const configuredJavaPath = safePath(settings.javaBinPath || process.env.PACT_JAVA_BIN_PATH || "");
+  const managedJavaCandidates = [
+    path.join(runtimeCacheRoot(context), "jre", platformKey, "bin", javaName),
+    path.join(runtimeCacheRoot(context), "jre", platformKey, "Contents", "Home", "bin", javaName),
+    path.join(runtimeCacheRoot(context), "jre", platformKey, "Home", "bin", javaName),
+    path.join(runtimeCacheRoot(context), "jre", platformKey, "jre", "bin", javaName)
+  ];
   const platformJavaCandidates = [
     path.join(KNOWLEDGE_MODULE_ROOT, "runtime", "jre", platformKey, "bin", javaName),
     path.join(KNOWLEDGE_MODULE_ROOT, "runtime", "jre", platformKey, "Contents", "Home", "bin", javaName)
@@ -1274,25 +1764,31 @@ async function detectJre(context = {}) {
   const pathJava = commandPath("java");
   const candidates = [
     configuredJavaPath,
+    ...managedJavaCandidates,
     ...platformJavaCandidates,
     pathJava
   ].filter(Boolean);
   const javaPath = candidates.find((candidate) => executableExists(candidate) || candidate === "java" || pathExists(candidate)) || "";
+  const javaVersion = javaPath ? commandVersion(javaPath, ["-version"]) : "";
+  const javaCompatible = javaVersionMeets(javaVersion);
   const tikaJarPath = [
     safePath(settings.tikaJarPath || process.env.PACT_TIKA_JAR_PATH || ""),
+    path.join(runtimeCacheRoot(context), "tika", `tika-app-${TIKA_VERSION}.jar`),
+    path.join(runtimeCacheRoot(context), "tika", "tika-app.jar"),
     path.join(KNOWLEDGE_MODULE_ROOT, "tika", `tika-app-${TIKA_VERSION}.jar`),
     path.join(KNOWLEDGE_MODULE_ROOT, "tika", "tika-app.jar")
   ].find(pathExists) || "";
+  const present = Boolean(javaPath && javaCompatible && tikaJarPath);
   const source = javaPath
     ? detectionSource(
         configuredJavaPath && javaPath === configuredJavaPath
           ? "configured-path"
-          : platformJavaCandidates.includes(javaPath)
+          : managedJavaCandidates.includes(javaPath) || platformJavaCandidates.includes(javaPath)
             ? "platform-runtime"
             : "system-path",
         configuredJavaPath && javaPath === configuredJavaPath
           ? "自定义配置"
-          : platformJavaCandidates.includes(javaPath)
+          : managedJavaCandidates.includes(javaPath) || platformJavaCandidates.includes(javaPath)
             ? "平台本地运行时"
             : PATH_ENV_SOURCE_LABEL,
         javaPath,
@@ -1304,19 +1800,22 @@ async function detectJre(context = {}) {
     label: "Java 环境",
     category: "language-runtime",
     description: "Java runtime for Java-backed document parsing and Gerrit WAR runner.",
-    status: dependencyStatus({ present: Boolean(javaPath) }),
-    present: Boolean(javaPath),
+    status: dependencyStatus({ present }),
+    present,
     downloadable: true,
     detection: {
       javaPath,
-      javaVersion: javaPath ? commandVersion(javaPath, ["-version"]) : "",
+      javaVersion,
+      javaMajor: parseJavaMajor(javaVersion),
+      javaCompatible,
+      minimumJavaMajor: MIN_JAVA_MAJOR,
       tikaJarPath,
       tikaVersion: TIKA_VERSION,
       source,
-      sourcePolicy: "settings -> bundled runtime -> PATH -> local source config"
+      sourcePolicy: "settings -> managed runtime cache -> bundled runtime -> PATH -> local source config"
     },
     actions: {
-      download: javaPath ? "already-present" : "download-temurin-jre"
+      download: present ? "already-present" : javaPath && !javaCompatible ? "upgrade-java" : "install-native-or-download-jre"
     },
     configuration: runtimeConfiguration(
       platformConfigurationGroup(context),
@@ -1357,23 +1856,46 @@ async function detectJre(context = {}) {
 }
 
 async function detectPython(context = {}) {
+  const settings = await loadSettings(dataRoot(context), { redactSecrets: true }).catch(() => ({}));
   const explicitPaths = [
+    settings.ocrPythonPath,
+    settings.pdfVisualPythonPath,
     process.env.PACT_OCR_PYTHON_PATH,
     process.env.PACT_PDF_VISUAL_PYTHON_PATH,
     process.env.PACT_PYTHON_BIN_PATH
   ].map(safePath).filter(Boolean);
   const moduleCandidates = [
+    pythonVenvExecutable(context),
     path.join(KNOWLEDGE_MODULE_ROOT, "ocr", "runtime", platformKey, "bin", `python${executableSuffix}`),
     path.join(KNOWLEDGE_MODULE_ROOT, "pdf", "runtime", platformKey, "bin", `python${executableSuffix}`),
     path.join(repoRoot, ".venv-pdf", "bin", "python"),
     path.join(repoRoot, ".venv", "bin", "python")
   ];
   const pathCandidates = ["python3", "python"].map(commandPath).filter(Boolean);
-  const pythonPath = [...explicitPaths, ...moduleCandidates, ...pathCandidates]
-    .find((candidate) => executableExists(candidate) || pathExists(candidate)) || "";
+  let pythonPath = "";
+  let pythonVersion = "";
+  let rejectedPythonPath = "";
+  let rejectedPythonVersion = "";
+  for (const candidate of [...explicitPaths, ...moduleCandidates, ...pathCandidates]) {
+    if (!(executableExists(candidate) || pathExists(candidate))) {
+      continue;
+    }
+    const version = executableCommandVersion(candidate, ["--version"]);
+    if (pythonVersionMeets(version)) {
+      pythonPath = candidate;
+      pythonVersion = version;
+      break;
+    }
+    if (!rejectedPythonPath) {
+      rejectedPythonPath = candidate;
+      rejectedPythonVersion = version;
+    }
+  }
   const artifactFileName = sourceField(context.sourceConfig, "python", "fileName") || `python-${platformKey}`;
   const artifactPath = path.join(runtimeCacheRoot(context), "python", artifactFileName);
   const pythonDownloadUrl = sourceField(context.sourceConfig, "python", "url") || text(process.env.PACT_PYTHON_RUNTIME_URL || defaultPythonPackageUrl());
+  const venvPath = pythonVenvRoot(context);
+  const uvPath = commandPath("uv") || uvExecutable(context);
   const source = pythonPath
     ? detectionSource(
         explicitPaths.includes(pythonPath)
@@ -1390,7 +1912,9 @@ async function detectPython(context = {}) {
       )
     : pathExists(artifactPath)
       ? detectionSource("platform-cache", "平台缓存安装包", artifactPath)
-      : missingDetectionSource(artifactPath, "平台缓存安装包未生成");
+      : rejectedPythonPath
+        ? missingDetectionSource(rejectedPythonPath, `Python 版本过低：${rejectedPythonVersion || "unknown"}`)
+        : missingDetectionSource(venvPath, "平台 Python venv 未生成");
   return asDependency({
     id: "python",
     label: "Python 环境",
@@ -1402,14 +1926,18 @@ async function detectPython(context = {}) {
     downloadable: true,
     detection: {
       pythonPath,
-      pythonVersion: pythonPath ? commandVersion(pythonPath, ["--version"]) : "",
+      pythonVersion,
+      minimumPythonVersion: `${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR}`,
+      venvPath,
+      venvPythonPath: pythonVenvExecutable(context),
+      uvPath: pathExists(uvPath) || executableExists(uvPath) ? uvPath : "",
       artifactPath,
       artifactCached: pathExists(artifactPath),
       source,
-      sourcePolicy: "env/bundled venv -> PATH -> local source config"
+      sourcePolicy: "settings/env -> managed venv -> bundled venv -> PATH -> pyenv/asdf/uv/native package manager"
     },
     actions: {
-      download: pythonPath ? "already-present" : pathExists(artifactPath) ? "already-installed" : "download-runtime"
+      download: pythonPath ? "already-present" : "create-managed-venv"
     },
     configuration: runtimeConfiguration(
       platformConfigurationGroup(context),
@@ -1421,54 +1949,99 @@ async function detectPython(context = {}) {
         envConfigEntry("PACT_PYTHON_RUNTIME_VERSION", "默认 Python 版本覆盖")
       ]),
       sourceConfigurationGroup(context, "python", [
-        { key: "url", label: "安装包 URL", required: true },
-        { key: "fileName", label: "缓存文件名" }
+        { key: "version", label: "Python 版本" },
+        { key: "url", label: "安装包 URL" },
+        { key: "fileName", label: "缓存文件名" },
+        { key: "uvInstallUrl", label: "uv 安装脚本 URL", inputType: "url" }
       ]),
       configGroup("path", "本地路径", [
         configEntry("path", "pythonPath", "Python 可执行文件", pythonPath, { configured: Boolean(pythonPath) }),
+        configEntry("path", "venvPath", "托管 venv", venvPath, { configured: pathExists(venvPath) }),
+        configEntry("path", "uvPath", "uv/版本管理器", uvPath, { configured: Boolean(pathExists(uvPath) || executableExists(uvPath)) }),
         configEntry("path", "artifactPath", "安装包缓存", artifactPath, { configured: pathExists(artifactPath) })
       ]),
       configGroup("argument", "命令行参数", [
-        configEntry("command", "curl", "下载命令", "curl -L --fail --retry 3 --connect-timeout 20"),
-        configEntry("argument", "-o", "输出文件", artifactPath),
-        configEntry("argument", "url", "下载 URL", pythonDownloadUrl)
+        configEntry("command", "python -m venv", "venv 创建命令", `${pythonPath || "python3"} -m venv ${venvPath}`),
+        configEntry("command", "uv/pyenv/asdf/native", "版本管理器优先级", "uv -> pyenv -> asdf -> system python -> native package manager"),
+        configEntry("argument", "url", "备用下载 URL", pythonDownloadUrl)
       ])
     )
   });
 }
 
 async function detectNode(context = {}) {
-  const nodePathCandidate = commandPath("node");
-  const nodePath = nodePathCandidate || process.execPath;
-  const version = nodePath
-    ? commandVersion(nodePath, ["--version"]) || process.version
-    : "";
+  const managedNodePaths = nvmManagedNodePaths(context);
+  const managedNodePath = managedNodePaths[0] || nvmManagedNodePath(context);
+  const managedNodePathSet = new Set(managedNodePaths.map((candidate) => path.resolve(candidate)));
+  const pathNode = commandPath("node");
+  const nodeCandidates = [
+    ...managedNodePaths,
+    pathNode,
+    process.execPath
+  ].map(text).filter(Boolean);
+  let nodePath = "";
+  let version = "";
+  let rejectedNodePath = "";
+  let rejectedVersion = "";
+  for (const candidate of nodeCandidates) {
+    if (!(executableExists(candidate) || pathExists(candidate))) {
+      continue;
+    }
+    const candidateVersion = executableCommandVersion(candidate, ["--version"]) || (candidate === process.execPath ? process.version : "");
+    if (nodeVersionMeets(candidateVersion)) {
+      nodePath = candidate;
+      version = candidateVersion;
+      break;
+    }
+    if (!rejectedNodePath) {
+      rejectedNodePath = candidate;
+      rejectedVersion = candidateVersion;
+    }
+  }
+  const nvmScript = nvmScriptPath(context);
+  const present = Boolean(nodePath);
   return asDependency({
     id: "node",
     label: "Node.js 环境",
     category: "language-runtime",
     description: "Current server Node.js runtime.",
-    status: dependencyStatus({ present: Boolean(nodePath) }),
-    present: Boolean(nodePath),
-    downloadable: false,
+    status: dependencyStatus({ present }),
+    present,
+    downloadable: true,
     detection: {
       nodePath,
       version,
-      source: nodePathCandidate
-        ? detectionSource("system-path", PATH_ENV_SOURCE_LABEL, nodePathCandidate)
-        : detectionSource("current-process", "当前服务进程", process.execPath)
+      minimumNodeMajor: MIN_NODE_MAJOR,
+      managedNodePath,
+      nvmDir: nvmDir(context),
+      nvmScriptPath: nvmScript,
+      nvmAvailable: pathExists(nvmScript),
+      source: nodePath && managedNodePathSet.has(path.resolve(nodePath))
+          ? detectionSource("platform-runtime", "平台 nvm 托管运行时", nodePath)
+          : nodePath && nodePath === pathNode
+            ? detectionSource("system-path", PATH_ENV_SOURCE_LABEL, pathNode)
+          : nodePath
+            ? detectionSource("current-process", "当前服务进程", nodePath)
+            : missingDetectionSource(rejectedNodePath || managedNodePath, rejectedVersion ? `Node.js 版本过低：${rejectedVersion}` : "Node.js 运行时未安装")
     },
     actions: {
-      download: "skip-current-runtime"
+      download: present ? "already-present" : "install-with-nvm"
     },
     configuration: runtimeConfiguration(
       platformConfigurationGroup(context),
+      sourceConfigurationGroup(context, "node", [
+        { key: "version", label: "Node.js 版本" },
+        { key: "nvmInstallUrl", label: "nvm 安装脚本 URL", inputType: "url" }
+      ]),
       configGroup("path", "本地路径", [
         configEntry("path", "nodePath", "Node.js 可执行文件", nodePath, { configured: Boolean(nodePath) }),
-        configEntry("path", "process.execPath", "当前服务进程 Node", process.execPath)
+        configEntry("path", "process.execPath", "当前服务进程 Node", process.execPath),
+        configEntry("path", "nvmDir", "nvm 目录", nvmDir(context), { configured: pathExists(nvmScript) }),
+        configEntry("path", "managedNodePath", "托管 Node", managedNodePath, { configured: pathExists(managedNodePath) || executableExists(managedNodePath) })
       ]),
       configGroup("argument", "命令行参数", [
-        configEntry("command", "node --version", "版本探测命令", "node --version")
+        configEntry("command", "node --version", "版本探测命令", "node --version"),
+        configEntry("command", "nvm install", "安装命令", `nvm install ${sourceField(context.sourceConfig, "node", "version") || DEFAULT_NODE_RUNTIME_VERSION}`)
       ])
     )
   });
@@ -1664,7 +2237,8 @@ export async function listRuntimeDependencies(context = {}) {
     sourceConfig: sourceState.config,
     sourceConfigPath: sourceState.configPath
   };
-  const dependencies = await Promise.all(TOP_LEVEL_TARGETS.map((targetId) => detectTarget(targetId, dependencyContext)));
+  const selectedTargets = listRuntimeDependencyTargets(context);
+  const dependencies = await Promise.all(selectedTargets.map((targetId) => detectTarget(targetId, dependencyContext)));
   const summary = dependencies.reduce((acc, item) => {
     acc.total += 1;
     acc[item.status] = (acc[item.status] || 0) + 1;
@@ -1672,13 +2246,17 @@ export async function listRuntimeDependencies(context = {}) {
   }, { total: 0 });
   return {
     ok: true,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: RUNTIME_DEPENDENCIES_PROTOCOL_VERSION,
     generatedAt: nowIso(),
     cacheRoot: runtimeCacheRoot(context),
     sourceConfigPath: sourceState.configPath,
     startupDownloads: false,
     triggerMode: "user-requested",
+    targets: TOP_LEVEL_TARGETS,
+    selectedTargets,
+    partial: selectedTargets.length !== TOP_LEVEL_TARGETS.length ||
+      selectedTargets.some((targetId, index) => targetId !== TOP_LEVEL_TARGETS[index]),
     dependencies,
     downloads: listPublicDownloadRuns(),
     summary
@@ -1746,7 +2324,7 @@ export async function updateRuntimeDependencyConfiguration(input = {}) {
   await fs.writeFile(sourceState.configPath, `${JSON.stringify(nextConfig, null, 2)}\n`, "utf8");
   return {
     ok: true,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: RUNTIME_DEPENDENCIES_PROTOCOL_VERSION,
     generatedAt: nowIso(),
     sourceConfigPath: sourceState.configPath,
@@ -1784,24 +2362,75 @@ async function downloadRemoteArtifact(options = {}) {
   }
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   const tempPath = `${targetPath}.download`;
-  await fs.rm(tempPath, { force: true }).catch(() => {});
-  emitStepProgress(options, "download", DOWNLOAD_STEP_STATUS.RUNNING, `开始下载 ${targetId || "runtime"}：${sourceUrl}`);
-  const result = await runCommandAsync("curl", ["-L", "--fail", "--retry", "3", "--connect-timeout", "20", "-o", tempPath, sourceUrl], {
-    ...options,
-    stepKey: "download",
-    timeoutMs
-  });
-  if (result.status !== 0) {
-    await fs.rm(tempPath, { force: true }).catch(() => {});
+  const maxAttempts = downloadRetryAttempts(options);
+  let result = null;
+  let resumedFromBytes = fileSize(tempPath);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const partialBytes = fileSize(tempPath);
+    if (attempt === 1) {
+      resumedFromBytes = partialBytes;
+    }
+    emitStepProgress(
+      options,
+      "download",
+      DOWNLOAD_STEP_STATUS.RUNNING,
+      partialBytes > 0
+        ? `自动断点续传 ${targetId || "runtime"}：${sourceUrl}（第 ${attempt}/${maxAttempts} 次，已下载 ${partialBytes} bytes）`
+        : `开始下载 ${targetId || "runtime"}：${sourceUrl}（第 ${attempt}/${maxAttempts} 次）`
+    );
+    const curlArgs = ["-L", "--fail", "--retry", "3", "--connect-timeout", "20"];
+    if (partialBytes > 0) {
+      curlArgs.push("-C", "-");
+    }
+    curlArgs.push("-o", tempPath, sourceUrl);
+    result = await runCommandAsync("curl", curlArgs, {
+      ...options,
+      stepKey: "download",
+      timeoutMs
+    });
+    if (result.status === 0) {
+      break;
+    }
+    const output = `${result.stdout || ""}\n${result.stderr || ""}`;
+    if (partialBytes > 0 && outputMentionsRangeUnsupported(output)) {
+      await fs.rm(tempPath, { force: true }).catch(() => {});
+      emitStepProgress(options, "download", DOWNLOAD_STEP_STATUS.RUNNING, `${targetId || "runtime"} 下载源不支持断点续传，改为重新下载。`, "warning");
+      result = await runCommandAsync("curl", ["-L", "--fail", "--retry", "3", "--connect-timeout", "20", "-o", tempPath, sourceUrl], {
+        ...options,
+        stepKey: "download",
+        timeoutMs
+      });
+      if (result.status === 0) {
+        break;
+      }
+    }
+    if (attempt < maxAttempts) {
+      const delayMs = downloadRetryDelayMs(attempt - 1, options);
+      emitStepProgress(
+        options,
+        "download",
+        DOWNLOAD_STEP_STATUS.RUNNING,
+        `${targetId || "runtime"} 下载失败，将在 ${delayMs}ms 后自动断点续传（已保留 ${fileSize(tempPath)} bytes）。`,
+        "warning"
+      );
+      await sleepMs(delayMs);
+    }
+  }
+  if (!result || result.status !== 0) {
     emitStepProgress(options, "download", DOWNLOAD_STEP_STATUS.FAILED, `下载失败：${targetId || "runtime"}`, "error");
     return {
       ok: false,
       status: INSTALL_STATUS.FAILED,
       reason: "download_failed",
+      resumable: true,
+      autoResume: true,
+      attempts: maxAttempts,
+      partialPath: pathExists(tempPath) ? tempPath : "",
+      partialBytes: fileSize(tempPath),
       sourceConfigPath: sourceState?.configPath || "",
       mirrorRequired: true,
       mirrorHint: "内置下载源不可达，请在本地下载源配置中配置镜像源后重试。",
-      command: ["curl", "-L", "--fail", "-o", targetPath, sourceUrl],
+      command: ["curl", "-L", "--fail", "-C", "-", "-o", tempPath, sourceUrl],
       commandResult: commandSummary(result)
     };
   }
@@ -1811,7 +2440,10 @@ async function downloadRemoteArtifact(options = {}) {
     ok: true,
     status: INSTALL_STATUS.INSTALLED,
     artifactPath: targetPath,
-    url: sourceUrl
+    url: sourceUrl,
+    autoResume: true,
+    attempts: maxAttempts,
+    resumedFromBytes
   };
 }
 
@@ -1854,14 +2486,14 @@ async function downloadJre(context = {}) {
   const jreFileName = sourceField(context.sourceConfig, "jre", "fileName");
   const tikaUrl = sourceField(context.sourceConfig, "tika", "url");
   const tikaFileName = sourceField(context.sourceConfig, "tika", "fileName");
-  if (!jreUrl || !tikaUrl) {
+  if (!tikaUrl) {
     emitStepProgress(context, "source", DOWNLOAD_STEP_STATUS.FAILED, "JRE/Tika 下载源缺失。", "error");
     return downloadResult("jre", INSTALL_STATUS.FAILED, {
       detection,
-      ...downloadSourceFailure("jre", context.sourceState, !jreUrl ? "builtin_jre_source_missing" : "builtin_tika_source_missing")
+      ...downloadSourceFailure("jre", context.sourceState, "builtin_tika_source_missing")
     });
   }
-  emitStepProgress(context, "source", DOWNLOAD_STEP_STATUS.COMPLETED, "JRE/Tika 下载源已确认。");
+  emitStepProgress(context, "source", DOWNLOAD_STEP_STATUS.COMPLETED, jreUrl ? "JRE/Tika 下载源已确认。" : "Tika 下载源已确认；JRE 将优先使用平台原生安装器。");
   if (context.dryRun === true) {
     emitStepProgress(context, "install", DOWNLOAD_STEP_STATUS.COMPLETED, "计划运行本地 JRE/Tika 准备脚本。");
     emitStepProgress(context, "verify", DOWNLOAD_STEP_STATUS.COMPLETED, "JRE/Tika 计划验证完成。");
@@ -1875,10 +2507,11 @@ async function downloadJre(context = {}) {
   const result = await runCommandAsync(process.execPath, [path.join(repoRoot, "server", "scripts", "setup-local-runtime.mjs")], {
     env: {
       ...(context.userDataPath ? { PACT_SERVER_DATA_DIR: path.resolve(context.userDataPath) } : {}),
-      PACT_JRE_DOWNLOAD_URL: jreUrl,
-      PACT_JRE_DOWNLOAD_FILE: jreFileName,
+      PACT_RUNTIME_DEPENDENCY_CACHE_DIR: runtimeCacheRoot(context),
+      ...(jreUrl ? { PACT_JRE_DOWNLOAD_URL: jreUrl } : {}),
+      ...(jreFileName ? { PACT_JRE_DOWNLOAD_FILE: jreFileName } : {}),
       PACT_TIKA_DOWNLOAD_URL: tikaUrl,
-      PACT_TIKA_DOWNLOAD_FILE: tikaFileName
+      ...(tikaFileName ? { PACT_TIKA_DOWNLOAD_FILE: tikaFileName } : {})
     },
     timeoutMs: Number(context.timeoutMs || 900000),
     stepKey: "install",
@@ -1905,32 +2538,282 @@ async function downloadJre(context = {}) {
   });
 }
 
+async function runInstallPlanCommands(plan, context = {}, stepKey = "install") {
+  const commands = plan.commands || [{ command: plan.command, args: plan.args || [] }];
+  for (const entry of commands) {
+    const attempts = nativeCommandRetryAttempts(context);
+    let lastResult = null;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const result = await runCommandAsync(entry.command, entry.args || [], {
+        ...context,
+        stepKey,
+        timeoutMs: Number(context.timeoutMs || 900000)
+      });
+      if (result.status === 0) {
+        lastResult = null;
+        break;
+      }
+      lastResult = result;
+      if (attempt >= attempts - 1 || !nativeCommandFailureShouldRetry(result)) {
+        return { ok: false, plan: plan.label, commandResult: commandSummary(result) };
+      }
+      const delayMs = nativeCommandRetryDelayMs(attempt, context);
+      emitStepProgress(context, stepKey, DOWNLOAD_STEP_STATUS.RUNNING, `${plan.label} 临时失败，${Math.round(delayMs / 1000)} 秒后重试。`, "warning");
+      await sleepMs(delayMs);
+    }
+    if (lastResult) {
+      return { ok: false, plan: plan.label, commandResult: commandSummary(lastResult) };
+    }
+  }
+  return { ok: true, plan: plan.label };
+}
+
+function firstCompatiblePython(candidates = []) {
+  for (const candidate of candidates.map(text).filter(Boolean)) {
+    if (!(executableExists(candidate) || pathExists(candidate))) {
+      continue;
+    }
+    const version = executableCommandVersion(candidate, ["--version"]);
+    if (pythonVersionMeets(version)) {
+      return { pythonPath: candidate, version };
+    }
+  }
+  return { pythonPath: "", version: "" };
+}
+
+async function resolvePythonFromVersionManagers(context = {}) {
+  const version = sourceField(context.sourceConfig, "python", "version") || DEFAULT_PYTHON_RUNTIME_VERSION;
+  const uvPath = commandPath("uv") || (executableExists(uvExecutable(context)) ? uvExecutable(context) : "");
+  if (uvPath) {
+    const install = await runCommandAsync(uvPath, ["python", "install", version], {
+      ...context,
+      stepKey: "install",
+      timeoutMs: Number(context.timeoutMs || 900000)
+    });
+    if (install.status === 0) {
+      const found = runCommand(uvPath, ["python", "find", version], { timeoutMs: 30000 });
+      const pythonPath = text(found.stdout).split(/\r?\n/).map(text).find(Boolean) || "";
+      const resolved = firstCompatiblePython([pythonPath]);
+      if (resolved.pythonPath) {
+        return { ...resolved, manager: "uv" };
+      }
+    }
+  }
+  if (commandPath("pyenv")) {
+    const install = await runCommandAsync("pyenv", ["install", "-s", version], {
+      ...context,
+      stepKey: "install",
+      timeoutMs: Number(context.timeoutMs || 900000)
+    });
+    if (install.status === 0) {
+      const prefix = runCommand("pyenv", ["prefix", version], { timeoutMs: 30000 });
+      const pythonPath = path.join(text(prefix.stdout), "bin", "python");
+      const resolved = firstCompatiblePython([pythonPath]);
+      if (resolved.pythonPath) {
+        return { ...resolved, manager: "pyenv" };
+      }
+    }
+  }
+  if (commandPath("asdf")) {
+    const install = await runCommandAsync("asdf", ["install", "python", version], {
+      ...context,
+      stepKey: "install",
+      timeoutMs: Number(context.timeoutMs || 900000)
+    });
+    if (install.status === 0 || /already installed/i.test(install.stderr || install.stdout || "")) {
+      const where = runCommand("asdf", ["where", "python", version], { timeoutMs: 30000 });
+      const pythonPath = path.join(text(where.stdout), "bin", "python");
+      const resolved = firstCompatiblePython([pythonPath]);
+      if (resolved.pythonPath) {
+        return { ...resolved, manager: "asdf" };
+      }
+    }
+  }
+  return { pythonPath: "", version: "", manager: "" };
+}
+
+async function installNativePython(context = {}) {
+  const failures = [];
+  for (const plan of nativePythonInstallPlans()) {
+    const result = await runInstallPlanCommands(plan, context, "install");
+    if (result.ok) {
+      const resolved = firstCompatiblePython(["python3", "python"].map(commandPath));
+      if (resolved.pythonPath) {
+        return { ...resolved, manager: plan.label, failures };
+      }
+      failures.push({ plan: plan.label, error: "installed but no compatible Python was detected" });
+    } else {
+      failures.push({ plan: plan.label, error: result.commandResult?.stderr || "install failed" });
+    }
+  }
+  return { pythonPath: "", version: "", manager: "", failures };
+}
+
+function nativeNodeInstallerToolPlans() {
+  if (process.env.PACT_DISABLE_NATIVE_RUNTIME_INSTALL === "1") return [];
+  if (commandPath("curl") || commandPath("wget") || commandPath("git")) {
+    return [];
+  }
+  if (process.platform === "darwin" && commandPath("brew")) {
+    return [{ label: "Homebrew curl", commands: [{ command: "brew", args: ["install", "curl"] }] }];
+  }
+  if (process.platform === "linux") {
+    const plans = [];
+    if (commandPath("apt-get")) {
+      plans.push({
+        label: "apt curl",
+        commands: [
+          privilegedCommand("apt-get", ["update"]),
+          privilegedCommand("apt-get", ["install", "-y", "--no-install-recommends", "ca-certificates", "curl"])
+        ]
+      });
+    }
+    if (commandPath("dnf")) plans.push({ label: "dnf curl", commands: [privilegedCommand("dnf", ["install", "-y", "ca-certificates", "curl"])] });
+    if (commandPath("yum")) plans.push({ label: "yum curl", commands: [privilegedCommand("yum", ["install", "-y", "ca-certificates", "curl"])] });
+    if (commandPath("apk")) plans.push({ label: "apk curl", commands: [privilegedCommand("apk", ["add", "--no-cache", "ca-certificates", "curl", "bash"])] });
+    if (commandPath("pacman")) plans.push({ label: "pacman curl", commands: [privilegedCommand("pacman", ["-Sy", "--noconfirm", "ca-certificates", "curl"])] });
+    if (commandPath("zypper")) plans.push({ label: "zypper curl", commands: [privilegedCommand("zypper", ["--non-interactive", "install", "ca-certificates", "curl"])] });
+    return plans;
+  }
+  if (process.platform === "win32") {
+    return [
+      commandPath("winget") ? { label: "winget Git", commands: [{ command: "winget", args: ["install", "--id", "Git.Git", "-e", "--accept-package-agreements", "--accept-source-agreements"] }] } : null,
+      commandPath("choco") ? { label: "Chocolatey curl", commands: [{ command: "choco", args: ["install", "-y", "curl"] }] } : null,
+      commandPath("scoop") ? { label: "Scoop curl", commands: [{ command: "scoop", args: ["install", "curl"] }] } : null
+    ].filter(Boolean);
+  }
+  return [];
+}
+
+async function ensureNodeInstallerTooling(context = {}) {
+  if (commandPath("curl") || commandPath("wget") || commandPath("git")) {
+    return { ok: true, installed: false };
+  }
+  for (const plan of nativeNodeInstallerToolPlans()) {
+    emitProgress(context, "info", `安装 nvm 所需下载工具：${plan.label}`);
+    const result = await runInstallPlanCommands(plan, context, "install");
+    if (result.ok && (commandPath("curl") || commandPath("wget") || commandPath("git"))) {
+      return { ok: true, installed: true, plan: plan.label };
+    }
+  }
+  return {
+    ok: false,
+    installed: false,
+    reason: "nvm_installer_tool_missing",
+    detail: "nvm installer requires curl, wget, or git."
+  };
+}
+
+async function ensurePythonVenv(context = {}, basePythonPath = "") {
+  const venvRoot = pythonVenvRoot(context);
+  const venvPython = pythonVenvExecutable(context);
+  if (executableExists(venvPython) || pathExists(venvPython)) {
+    const version = executableCommandVersion(venvPython, ["--version"]);
+    if (pythonVersionMeets(version)) {
+      return { ok: true, pythonPath: venvPython, version, venvRoot, reused: true };
+    }
+  }
+  await fs.rm(venvRoot, { recursive: true, force: true }).catch(() => {});
+  await fs.mkdir(path.dirname(venvRoot), { recursive: true });
+  const result = await runCommandAsync(basePythonPath, ["-m", "venv", venvRoot], {
+    ...context,
+    stepKey: "install",
+    timeoutMs: Number(context.timeoutMs || 900000)
+  });
+  if (result.status !== 0) {
+    return { ok: false, commandResult: commandSummary(result), venvRoot };
+  }
+  const version = executableCommandVersion(venvPython, ["--version"]);
+  return {
+    ok: pythonVersionMeets(version),
+    pythonPath: venvPython,
+    version,
+    venvRoot,
+    commandResult: commandSummary(result)
+  };
+}
+
+function pythonVenvFailureNeedsNativeInstall(venvResult = {}) {
+  const commandResult = venvResult.commandResult || {};
+  const output = text([commandResult.stdout, commandResult.stderr].filter(Boolean).join("\n"));
+  return /ensurepip|python3-venv|No module named venv|venv module is not available/i.test(output);
+}
+
 async function downloadPython(context = {}) {
   emitStepProgress(context, "detect", DOWNLOAD_STEP_STATUS.RUNNING, "检测 Python。");
   const detection = await detectPython(context);
   emitStepProgress(context, "detect", DOWNLOAD_STEP_STATUS.COMPLETED, "Python 检测完成。");
-  if (detection.present) {
-    return downloadResult("python", INSTALL_STATUS.PRESENT, { detection, reason: "present" });
+  const managedVenvPresent = detection.present &&
+    detection.detection?.source?.kind === "platform-runtime" &&
+    path.resolve(detection.detection?.pythonPath || "") === path.resolve(pythonVenvExecutable(context));
+  if (managedVenvPresent) {
+    return downloadResult("python", INSTALL_STATUS.PRESENT, { detection, reason: "managed-venv-present" });
   }
-  const url = sourceField(context.sourceConfig, "python", "url") ||
-    text(process.env.PACT_PYTHON_RUNTIME_URL || defaultPythonPackageUrl());
-  const fileName = sourceField(context.sourceConfig, "python", "fileName") || fileNameFromUrl(url, `python-${platformKey}`);
-  const artifactPath = path.join(runtimeCacheRoot(context), "python", fileName);
-  const artifactResult = await downloadRemoteArtifact({
-    url,
-    targetPath: artifactPath,
-    dryRun: context.dryRun === true,
-    timeoutMs: Number(context.timeoutMs || 600000),
-    targetId: "python",
-    sourceState: context.sourceState,
-    onProgress: context.onProgress
-  });
-  if (artifactResult.ok !== false) {
-    emitStepProgress(context, "verify", DOWNLOAD_STEP_STATUS.COMPLETED, "Python 安装包缓存验证完成。");
+  const version = sourceField(context.sourceConfig, "python", "version") || DEFAULT_PYTHON_RUNTIME_VERSION;
+  emitStepProgress(context, "source", DOWNLOAD_STEP_STATUS.COMPLETED, `Python 目标版本：${version}，优先使用 uv/pyenv/asdf 和托管 venv。`);
+  if (context.dryRun === true) {
+    emitStepProgress(context, "download", DOWNLOAD_STEP_STATUS.COMPLETED, "计划创建 Python 托管 venv。");
+    emitStepProgress(context, "verify", DOWNLOAD_STEP_STATUS.COMPLETED, "Python venv 计划验证完成。");
+    return downloadResult("python", INSTALL_STATUS.INSTALLED, {
+      detection,
+      planned: true,
+      venvPath: pythonVenvRoot(context),
+      managers: ["uv", "pyenv", "asdf", "system-python", "native-package-manager"]
+    });
   }
-  return downloadResult("python", artifactResult.status, {
-    detection,
-    ...artifactResult
+  let basePython = await resolvePythonFromVersionManagers(context);
+  if (!basePython.pythonPath) {
+    basePython = firstCompatiblePython(["python3", "python"].map(commandPath));
+    if (basePython.pythonPath) {
+      basePython.manager = "system-python";
+    }
+  }
+  if (!basePython.pythonPath) {
+    basePython = await installNativePython(context);
+  }
+  if (!basePython.pythonPath) {
+    emitStepProgress(context, "install", DOWNLOAD_STEP_STATUS.FAILED, "未找到可用 Python，也无法通过平台工具链安装。", "error");
+    return downloadResult("python", INSTALL_STATUS.FAILED, {
+      detection,
+      reason: "python_runtime_or_version_manager_unavailable",
+      failures: basePython.failures || []
+    });
+  }
+  let venv = await ensurePythonVenv(context, basePython.pythonPath);
+  let nativeFallback = null;
+  if (!venv.ok && pythonVenvFailureNeedsNativeInstall(venv)) {
+    emitStepProgress(context, "install", DOWNLOAD_STEP_STATUS.RUNNING, "系统 Python 缺少 venv 支持，尝试通过平台原生工具链补装。", "warning");
+    nativeFallback = await installNativePython(context);
+    if (nativeFallback.pythonPath) {
+      basePython = {
+        ...nativeFallback,
+        fallbackFrom: basePython
+      };
+      venv = await ensurePythonVenv(context, basePython.pythonPath);
+    }
+  }
+  if (!venv.ok) {
+    emitStepProgress(context, "install", DOWNLOAD_STEP_STATUS.FAILED, "Python venv 创建失败。", "error");
+    return downloadResult("python", INSTALL_STATUS.FAILED, {
+      detection,
+      reason: "python_venv_create_failed",
+      basePython,
+      nativeFallback,
+      ...venv
+    });
+  }
+  await saveSettings(dataRoot(context), {
+    ocrPythonPath: venv.pythonPath,
+    pdfVisualPythonPath: venv.pythonPath
+  }, { redactSecrets: true }).catch(() => null);
+  emitStepProgress(context, "verify", DOWNLOAD_STEP_STATUS.RUNNING, "验证 Python venv。");
+  const nextDetection = await detectPython(context);
+  emitStepProgress(context, "verify", DOWNLOAD_STEP_STATUS.COMPLETED, "Python venv 验证完成。");
+  return downloadResult("python", INSTALL_STATUS.INSTALLED, {
+    before: detection,
+    detection: nextDetection,
+    basePython,
+    venv
   });
 }
 
@@ -2224,10 +3107,113 @@ async function downloadNode(context = {}) {
   emitStepProgress(context, "detect", DOWNLOAD_STEP_STATUS.RUNNING, "检测 Node.js。");
   const detection = await detectNode(context);
   emitStepProgress(context, "detect", DOWNLOAD_STEP_STATUS.COMPLETED, "Node.js 检测完成。");
-  emitStepProgress(context, "verify", detection.present ? DOWNLOAD_STEP_STATUS.COMPLETED : DOWNLOAD_STEP_STATUS.FAILED, "Node.js 验证完成。", detection.present ? "info" : "error");
-  return downloadResult("node", detection.present ? INSTALL_STATUS.PRESENT : INSTALL_STATUS.FAILED, {
-    detection,
-    reason: detection.present ? "present" : "node_runtime_missing"
+  const managedNodePresent = detection.detection?.source?.kind === "platform-runtime" &&
+    pathExists(detection.detection?.nvmScriptPath || "");
+  if (detection.present && managedNodePresent) {
+    emitStepProgress(context, "verify", DOWNLOAD_STEP_STATUS.COMPLETED, "Node.js nvm 托管运行时符合要求。");
+    return downloadResult("node", INSTALL_STATUS.PRESENT, { detection, reason: "managed-present" });
+  }
+  const version = sourceField(context.sourceConfig, "node", "version") || DEFAULT_NODE_RUNTIME_VERSION;
+  const versionCandidates = nodeRuntimeVersionCandidates(context);
+  const installUrl = sourceField(context.sourceConfig, "node", "nvmInstallUrl") ||
+    "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh";
+  emitStepProgress(context, "source", DOWNLOAD_STEP_STATUS.COMPLETED, `Node.js 目标版本：${version}，候选 ${versionCandidates.join(", ")}，nvm 源已确认。`);
+  if (context.dryRun === true) {
+    emitStepProgress(context, "install", DOWNLOAD_STEP_STATUS.COMPLETED, "计划安装/复用 nvm 并安装 Node.js。");
+    emitStepProgress(context, "verify", DOWNLOAD_STEP_STATUS.COMPLETED, "Node.js 计划验证完成。");
+    return downloadResult("node", INSTALL_STATUS.INSTALLED, {
+      detection,
+      planned: true,
+      nvmDir: nvmDir(context),
+      command: ["bash", "-lc", `. ${shellQuote(nvmScriptPath(context))}; nvm install ${shellQuote(versionCandidates[0] || version)}`],
+      versionCandidates
+    });
+  }
+  const nvmRoot = nvmDir(context);
+  const nvmScript = nvmScriptPath(context);
+  if (!pathExists(nvmScript)) {
+    const tooling = await ensureNodeInstallerTooling(context);
+    if (!tooling.ok) {
+      emitStepProgress(context, "install", DOWNLOAD_STEP_STATUS.FAILED, "nvm 安装工具准备失败。", "error");
+      return downloadResult("node", INSTALL_STATUS.FAILED, {
+        detection,
+        reason: tooling.reason,
+        detail: tooling.detail
+      });
+    }
+    await fs.mkdir(nvmRoot, { recursive: true });
+    const installerPath = path.join(runtimeCacheRoot(context), "node", "nvm-install.sh");
+    const artifactResult = await downloadRemoteArtifact({
+      url: installUrl,
+      targetPath: installerPath,
+      dryRun: false,
+      timeoutMs: Number(context.timeoutMs || 600000),
+      targetId: "node",
+      sourceState: context.sourceState,
+      onProgress: context.onProgress
+    });
+    if (artifactResult.ok === false) {
+      emitStepProgress(context, "install", DOWNLOAD_STEP_STATUS.FAILED, "nvm 安装脚本下载失败。", "error");
+      return downloadResult("node", INSTALL_STATUS.FAILED, {
+        detection,
+        reason: "nvm_install_script_download_failed",
+        ...artifactResult
+      });
+    }
+    const installNvm = await runCommandAsync("bash", [installerPath], {
+      ...context,
+      env: { NVM_DIR: nvmRoot },
+      stepKey: "install",
+      timeoutMs: Number(context.timeoutMs || 900000)
+    });
+    if (installNvm.status !== 0) {
+      emitStepProgress(context, "install", DOWNLOAD_STEP_STATUS.FAILED, "nvm 安装失败。", "error");
+      return downloadResult("node", INSTALL_STATUS.FAILED, {
+        detection,
+        reason: "nvm_install_failed",
+        commandResult: commandSummary(installNvm)
+      });
+    }
+  }
+  let installNode = null;
+  let installedVersion = "";
+  for (const candidateVersion of versionCandidates) {
+    emitStepProgress(context, "install", DOWNLOAD_STEP_STATUS.RUNNING, `尝试安装 Node.js ${candidateVersion}。`);
+    installNode = await runCommandAsync("bash", ["-lc", `. ${shellQuote(nvmScript)} && nvm install ${shellQuote(candidateVersion)} && nvm alias default ${shellQuote(candidateVersion)} && nvm which ${shellQuote(candidateVersion)}`], {
+      ...context,
+      env: { NVM_DIR: nvmRoot },
+      stepKey: "install",
+      timeoutMs: Number(context.timeoutMs || 900000)
+    });
+    if (installNode.status === 0) {
+      installedVersion = candidateVersion;
+      break;
+    }
+    emitProgress(context, "warning", `Node.js ${candidateVersion} 安装失败，尝试下一个候选版本。`, {
+      candidateVersion,
+      commandResult: commandSummary(installNode),
+      stepKey: "install",
+      stepStatus: DOWNLOAD_STEP_STATUS.RUNNING
+    });
+  }
+  if (!installNode || installNode.status !== 0) {
+    emitStepProgress(context, "install", DOWNLOAD_STEP_STATUS.FAILED, "Node.js nvm 安装失败。", "error");
+    return downloadResult("node", INSTALL_STATUS.FAILED, {
+      detection,
+      reason: "node_nvm_install_failed",
+      versionCandidates,
+      commandResult: commandSummary(installNode)
+    });
+  }
+  emitStepProgress(context, "verify", DOWNLOAD_STEP_STATUS.RUNNING, "验证 Node.js。");
+  const nextDetection = await detectNode(context);
+  emitStepProgress(context, "verify", nextDetection.present ? DOWNLOAD_STEP_STATUS.COMPLETED : DOWNLOAD_STEP_STATUS.FAILED, "Node.js 验证完成。", nextDetection.present ? "info" : "error");
+  return downloadResult("node", nextDetection.present ? INSTALL_STATUS.INSTALLED : INSTALL_STATUS.FAILED, {
+    before: detection,
+    detection: nextDetection,
+    installedVersion,
+    versionCandidates,
+    commandResult: commandSummary(installNode)
   });
 }
 
@@ -2261,7 +3247,7 @@ function downloadResult(targetId, status, payload = {}) {
   const ok = status !== INSTALL_STATUS.FAILED;
   return {
     ok,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: RUNTIME_DEPENDENCIES_PROTOCOL_VERSION,
     targetId,
     status,
@@ -2272,10 +3258,11 @@ function downloadResult(targetId, status, payload = {}) {
   };
 }
 
-function createDownloadRun(targetId) {
+function createDownloadRun(targetId, input = {}) {
   const now = nowIso();
+  const runId = `runtime_${randomUUID()}`;
   const run = {
-    runId: `runtime_${randomUUID()}`,
+    runId,
     targetId,
     status: DOWNLOAD_RUN_STATUS.QUEUED,
     ok: true,
@@ -2290,11 +3277,14 @@ function createDownloadRun(targetId) {
     currentStepIndex: 0,
     progressPercent: 0,
     log: [],
-    result: null
+    result: null,
+    userDataPath: dataRoot(input),
+    storePath: runtimeDependencyDownloadRunPath(input, runId)
   };
   recomputeDownloadRunProgress(run);
   runtimeDependencyDownloadRuns.set(run.runId, run);
   appendDownloadRunLog(run, "info", `已进入安装队列：${targetId}`);
+  flushDownloadRunPersist(run);
   pruneDownloadRuns();
   return run;
 }
@@ -2303,6 +3293,7 @@ async function runDownloadInBackground(run, input = {}) {
   run.status = DOWNLOAD_RUN_STATUS.RUNNING;
   setDownloadRunStep(run, run.steps?.[0]?.key || "detect", DOWNLOAD_STEP_STATUS.RUNNING);
   appendDownloadRunLog(run, "info", `开始安装：${run.targetId}`);
+  flushDownloadRunPersist(run);
   try {
     const result = await executeRuntimeDependencyDownload({
       ...input,
@@ -2336,17 +3327,18 @@ async function runDownloadInBackground(run, input = {}) {
     appendDownloadRunLog(run, "error", run.result.error);
   } finally {
     run.updatedAt = nowIso();
+    flushDownloadRunPersist(run);
     pruneDownloadRuns();
   }
 }
 
-export function listRuntimeDependencyDownloadRuns() {
+export function listRuntimeDependencyDownloadRuns(input = {}) {
   return {
     ok: true,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: RUNTIME_DEPENDENCIES_PROTOCOL_VERSION,
     generatedAt: nowIso(),
-    downloads: listPublicDownloadRuns()
+    downloads: listPublicDownloadRuns(input)
   };
 }
 
@@ -2355,7 +3347,7 @@ export async function startRuntimeDependencyDownload(input = {}) {
   if (!targetId) {
     throw new Error("Unsupported runtime dependency target: (empty)");
   }
-  const run = createDownloadRun(targetId);
+  const run = createDownloadRun(targetId, input);
   setTimeout(() => {
     void runDownloadInBackground(run, input);
   }, 0);

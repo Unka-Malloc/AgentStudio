@@ -22,7 +22,7 @@ describe("computeHealthFindings", () => {
   it("returns healthy finding when no issues are detected", () => {
     const findings = computeHealthFindings(
       {
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         ok: true,
         counts: {
           documents: 2,
@@ -76,7 +76,7 @@ describe("computeHealthFindings", () => {
   it("collects protocol, settings, license, and run-related findings in deterministic order", () => {
     const findings = computeHealthFindings(
       {
-        protocolVersion: "pact.knowledge.v2",
+        protocolVersion: "v0.0.1:knowledge:core-2",
         ok: false,
         counts: {
           documents: 3,
@@ -132,7 +132,7 @@ describe("computeHealthFindings", () => {
           },
         ],
       },
-      { expectedProtocolVersion: "pact.knowledge.v1", maxWeightSum: 0.5 }
+      { expectedProtocolVersion: "v0.0.1:knowledge:core-1", maxWeightSum: 0.5 }
     );
 
     expect(findings).toEqual(
@@ -152,7 +152,7 @@ describe("computeHealthFindings", () => {
   it("handles high retrieval weight sums and empty license entries", () => {
     const findings = computeHealthFindings(
       {
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         ok: true,
         counts: {
           documents: 2,
@@ -200,7 +200,7 @@ describe("computeHealthFindings", () => {
   it("treats internal licenses as accepted runtime components", () => {
     const findings = computeHealthFindings(
       {
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         ok: true,
         counts: {
           documents: 1,
@@ -294,7 +294,7 @@ describe("buildMaintenancePlan", () => {
         health: {
           ok: true,
           counts: { documents: 1, blocks: 1, assets: 0, embeddings: 1 },
-          protocolVersion: "pact.knowledge.v1",
+          protocolVersion: "v0.0.1:knowledge:core-1",
           settings: {
             maintenance: {
               reindexBatchSize: 32,
@@ -639,7 +639,7 @@ describe("validateKnowledgeQualityAssertions", () => {
           requiredAssetRefs: ["/api/knowledge/assets/missing"],
           expected: {
             metadata: {
-              protocolVersion: "pact.knowledge.v1",
+              protocolVersion: "v0.0.1:knowledge:core-1",
               evidenceId: "expected-evidence",
             },
             assetRefs: ["/api/knowledge/assets/missing"],
@@ -651,7 +651,7 @@ describe("validateKnowledgeQualityAssertions", () => {
       {
         markdown: `---
 pact_knowledge:
-  protocolVersion: pact.knowledge.v1
+  protocolVersion: v0.0.1:knowledge:core-1
 ---
 
 a paragraph with alpha
@@ -659,7 +659,7 @@ a paragraph with alpha
         rendered: {
           markdown: `---
 pact_knowledge:
-  protocolVersion: pact.knowledge.v1
+  protocolVersion: v0.0.1:knowledge:core-1
 ---
 
 a paragraph with alpha

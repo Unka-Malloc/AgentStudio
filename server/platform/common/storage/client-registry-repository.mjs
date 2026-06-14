@@ -1,5 +1,7 @@
 import { asBoolInt } from "./metadata-helpers.mjs";
 
+export const MAX_PACT_CLIENT_REGISTRATIONS = 2000;
+
 function normalizeClientMigrationState(currentState, lastSeenAt, offlineAfterSeconds) {
   const currentServiceUrl = String(currentState?.currentServiceUrl || "").trim();
   const desiredServiceUrl = String(currentState?.desiredServiceUrl || "").trim();
@@ -36,9 +38,23 @@ function normalizeClientMigrationState(currentState, lastSeenAt, offlineAfterSec
   return "unknown";
 }
 
-export function createClientRegistryService({ db }) {
+export function createClientRegistryService({
+  db,
+  maxClientRegistrations = MAX_PACT_CLIENT_REGISTRATIONS
+}) {
+  const maxRegistrations = Math.max(
+    1,
+    Math.floor(Number(maxClientRegistrations || MAX_PACT_CLIENT_REGISTRATIONS) || MAX_PACT_CLIENT_REGISTRATIONS)
+  );
   const selectClientRegistrationStmt = db.prepare(`
     SELECT * FROM client_registrations WHERE client_id = ?
+  `);
+  const countClientRegistrationsStmt = db.prepare(`
+    SELECT COUNT(*) AS count FROM client_registrations
+  `);
+  const pruneOfflineClientRegistrationsStmt = db.prepare(`
+    DELETE FROM client_registrations
+    WHERE last_seen_at < ?
   `);
   const upsertClientRegistrationStmt = db.prepare(`
     INSERT INTO client_registrations (
@@ -91,6 +107,21 @@ export function createClientRegistryService({ db }) {
       const existing = selectClientRegistrationStmt.get(clientId);
       const now = new Date().toISOString();
       const firstSeenAt = existing?.first_seen_at || now;
+      if (!existing) {
+        const offlineCutoff = new Date(
+          Date.now() - Math.max(60, Number(offlineAfterSeconds) || 300) * 1000
+        ).toISOString();
+        pruneOfflineClientRegistrationsStmt.run(offlineCutoff);
+        const count = Number(countClientRegistrationsStmt.get()?.count || 0);
+        if (count >= maxRegistrations) {
+          return {
+            ok: false,
+            statusCode: 429,
+            code: "client_registration_capacity_exceeded",
+            error: "客户端登记容量已满，请等待离线记录过期后重试。"
+          };
+        }
+      }
       const migrationState = normalizeClientMigrationState(
         {
           currentServiceUrl,
@@ -123,6 +154,7 @@ export function createClientRegistryService({ db }) {
       );
 
       return {
+        ok: true,
         clientId,
         migrationState,
         connectionKind: "pact-client",

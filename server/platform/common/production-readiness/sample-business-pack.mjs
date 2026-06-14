@@ -4,7 +4,7 @@ import path from "node:path";
 import { ServerConfig } from "../config/ServerConfig.mjs";
 import { strToU8, zipSync } from "fflate";
 
-export const SAMPLE_BUSINESS_PACK_PROTOCOL_VERSION = "pact.sample-business-pack.v1";
+export const SAMPLE_BUSINESS_PACK_PROTOCOL_VERSION = "v0.0.1:platform:sample-business-pack-1";
 
 const DEFAULT_PACK_ID = "enterprise-knowledge-pilot";
 const SAMPLE_PACK_ROOT = "sample-business-packs";
@@ -339,7 +339,7 @@ function buildAsset(asset) {
 function buildManifest(pack) {
   const assets = pack.assets.map(buildAsset);
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: SAMPLE_BUSINESS_PACK_PROTOCOL_VERSION,
     packId: pack.packId,
     title: pack.title,
@@ -356,7 +356,7 @@ function buildManifest(pack) {
 
 export function listSampleBusinessPacks() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: SAMPLE_BUSINESS_PACK_PROTOCOL_VERSION,
     packs: SAMPLE_PACKS.map((pack) => {
       const manifest = buildManifest(pack);
@@ -454,7 +454,7 @@ export async function materializeSampleBusinessPack(input = {}, options = {}) {
     overwrite
   );
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: SAMPLE_BUSINESS_PACK_PROTOCOL_VERSION,
     packId: manifest.packId,
     targetRoot,

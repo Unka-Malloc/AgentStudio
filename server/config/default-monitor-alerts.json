@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "enabled": true,
   "intervalMs": 5000,
   "heartbeatStaleMs": 15000,

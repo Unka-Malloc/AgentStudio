@@ -22,7 +22,7 @@ vi.mock("../../../server-web/lib/ops-monitor-client", () => ({
 
 function makeBackgroundProcessStatus(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     ok: true,
     status: "running",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -35,14 +35,14 @@ function makeBackgroundProcessStatus(overrides: Record<string, unknown> = {}) {
 
 function makeMonitorAlertState(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     ok: true,
     status: "ok",
     updatedAt: "2026-01-01T00:00:00.000Z",
     configPath: "/tmp/monitor-alerts.json",
     statePath: "/tmp/monitor-alerts-state.json",
     config: {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       enabled: true,
       intervalMs: 1_000,
       heartbeatStaleMs: 5_000,
@@ -115,7 +115,7 @@ function makeMaintenanceRun() {
       status: "running",
     },
     unifiedRegistration: {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       registrationId: "maintenance:run-maint",
       originalType: "task",
       originalId: "run-maint",
@@ -284,7 +284,7 @@ describe("console ops monitor controller", () => {
         } as any,
       ],
       queueMonitor: {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-01-01T00:00:00.000Z",
         statePath: "/tmp/queue-monitor.json",
         eventLogPath: "/tmp/queue-monitor.log",
@@ -521,7 +521,7 @@ describe("console ops monitor controller", () => {
     controller.monitorAlertState.value = {
       ...controller.monitorAlertState.value,
       queueMonitor: {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-01-01T00:00:00.000Z",
         statePath: "/tmp/queue-monitor.json",
         eventLogPath: "/tmp/queue-monitor.log",

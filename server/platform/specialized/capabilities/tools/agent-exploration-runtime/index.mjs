@@ -6,7 +6,7 @@ import { loadSettings } from "../../../../common/platform-core/settings.mjs";
 import { createToolCatalog } from "../tool-management-core/catalog.mjs";
 import { createToolManagementStore } from "../tool-management-core/store.mjs";
 
-export const AGENT_EXPLORATION_PROTOCOL_VERSION = "pact.agent-exploration.v1";
+export const AGENT_EXPLORATION_PROTOCOL_VERSION = "v0.0.1:agent:exploration-1";
 
 const EXPLORER_AGENT_ID = "knowledge-explorer";
 const DEFAULT_MAX_ITERATIONS = 4;
@@ -186,6 +186,7 @@ function resolveLocalCommandTemplate(template = {}, args = {}) {
       ? undefined
       : replaceLocalCommandTemplateVariables(commandTemplate.stdin, resolvedVariables),
     allowExtraArgs: commandTemplate.allowExtraArgs === true,
+    allowCwdOverride: commandTemplate.allowCwdOverride === true,
     allowedVariables: definitions.map((item) => item.name),
     variables: resolvedVariables
   };
@@ -1161,6 +1162,31 @@ function limitTextBytes(value, maxBytes = 65536) {
   return `${buffer.subarray(0, maxBytes).toString("utf8")}\n...[truncated ${buffer.byteLength} bytes]`;
 }
 
+async function readResponseTextWithLimit(response, maxBytes = 65536) {
+  if (!response?.body?.getReader) {
+    const text = await response.text();
+    if (Buffer.byteLength(text, "utf8") > maxBytes) {
+      throw new Error(`HTTP response exceeded the ${maxBytes} byte limit.`);
+    }
+    return text;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = Buffer.from(value);
+    total += chunk.length;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`HTTP response exceeded the ${maxBytes} byte limit.`);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 function appendQuery(url, query = {}) {
   const parsed = new URL(String(url));
   for (const [key, value] of Object.entries(asObject(query))) {
@@ -1213,7 +1239,7 @@ export function createAgentExplorationRuntime({
       return;
     }
     const payload = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: AGENT_EXPLORATION_PROTOCOL_VERSION,
       at: nowIso(),
       ...event
@@ -1322,7 +1348,7 @@ export function createAgentExplorationRuntime({
     effect = "deny"
   } = {}) {
     return {
-      protocolVersion: "pact.authorization.v1",
+      protocolVersion: "v0.0.1:risk-control:authorization-1",
       decisionId: `authz_decision_${crypto.randomUUID()}`,
       auditId: `authz_audit_${crypto.randomUUID()}`,
       toolExecutionId,
@@ -1501,7 +1527,7 @@ export function createAgentExplorationRuntime({
         traceId,
         toolId: toolDefinition?.id || `agent-exploration.${normalizedToolName}`,
         toolVersion: toolDefinition?.version || AGENT_EXPLORATION_PROTOCOL_VERSION,
-        toolsetIds: toolDefinition?.toolsets || ["pact.knowledge.read"],
+        toolsetIds: toolDefinition?.toolsets || ["pact.agentLibrary.read"],
         subjectType: authorizationDecision?.subject?.type || "agent-profile",
         subjectId: authorizationDecision?.subject?.subjectId || EXPLORER_AGENT_ID,
         grantId: authorizationDecision?.grantId || grant?.id || "",
@@ -1840,8 +1866,8 @@ export function createAgentExplorationRuntime({
           : undefined,
         signal: controller.signal
       });
-      const raw = await response.text().catch(() => "");
       const maxBytes = Number(config.maxResponseBytes || 65536);
+      const raw = await readResponseTextWithLimit(response, maxBytes);
       return {
         ok: response.ok,
         method,
@@ -1901,7 +1927,18 @@ export function createAgentExplorationRuntime({
       };
     }
     const finalArgs = template ? [...baseArgs, ...(allowExtraArgs ? incomingArgs : [])] : incomingArgs;
-    const cwd = normalizeText(args.cwd || resolvedTemplate?.cwd || "") || process.cwd();
+    if (template && args.cwd && resolvedTemplate.allowCwdOverride !== true) {
+      return {
+        ok: false,
+        error: "local_command_cwd_override_not_allowed",
+        commandId
+      };
+    }
+    const cwd = normalizeText(
+      template
+        ? (resolvedTemplate.allowCwdOverride === true ? args.cwd || resolvedTemplate?.cwd : resolvedTemplate?.cwd)
+        : args.cwd
+    ) || process.cwd();
     const stdin = args.stdin === undefined && resolvedTemplate?.stdin !== undefined
       ? resolvedTemplate.stdin
       : args.stdin;

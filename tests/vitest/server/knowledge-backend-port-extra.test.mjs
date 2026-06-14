@@ -114,7 +114,7 @@ describe("knowledge-backend port extra coverage", () => {
   it("merges missing providers and filters unsupported provider views", async () => {
     await withTempPort(async ({ port, userDataPath }) => {
       await writeJson(port.configPath, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: KNOWLEDGE_BACKEND_PORT_PROTOCOL_VERSION,
         updatedAt: "2026-06-04T00:00:00.000Z",
         providers: {
@@ -193,7 +193,7 @@ describe("knowledge-backend port extra coverage", () => {
   it("rejects inline secrets and unsupported providers, then records live connections and permissions", async () => {
     await withTempPort(async ({ port }) => {
       await writeJson(port.configPath, {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: KNOWLEDGE_BACKEND_PORT_PROTOCOL_VERSION,
         updatedAt: "2026-06-04T00:00:00.000Z",
         providers: {

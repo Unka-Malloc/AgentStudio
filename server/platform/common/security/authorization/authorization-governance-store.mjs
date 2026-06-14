@@ -596,7 +596,7 @@ export function createAuthorizationGovernanceStore({
       FROM authorization_governance_events
     `).get();
     return {
-      protocolVersion: "pact.authorization.governance.policy-revision.v1",
+      protocolVersion: "v0.0.1:risk-control:governance-policy-revision-1",
       revision: Number(row?.revision || 0),
       updatedAt: row?.updated_at || ""
     };
@@ -854,7 +854,7 @@ export function createAuthorizationGovernanceStore({
       Boolean(agentBound && (policiesMatch(agentBinding?.resourcePolicies || [], request) || policiesMatch(groupPolicies, request) || approvalAllowed));
 
     const snapshot = {
-      protocolVersion: "pact.authorization.governance.v1",
+      protocolVersion: "v0.0.1:risk-control:governance-1",
       policyRevision: getPolicyRevision(),
       request,
       team: {

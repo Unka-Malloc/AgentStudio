@@ -1,5 +1,5 @@
 export const INTERACTIVE_INTERFACE_MANIFEST = Object.freeze({
-  version: 1,
+  version: "v0.0.1:platform:interactive-interface-1",
   layer: "server/platform/interactive",
   intent: "Product and service code should consume platform capabilities through the interactive layer first.",
   productApi: Object.freeze({
