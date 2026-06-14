@@ -384,7 +384,7 @@ describe("checkpoint-tree store extra coverage", () => {
       await expect(loadCheckpointTree({ userDataPath, treeId: brokenId })).rejects.toThrow();
 
       await writeJson(getCheckpointTreePath(userDataPath, cycleId), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         treeId: cycleId,
         kind: "cycle",
         ownerId: "owner-cycle",

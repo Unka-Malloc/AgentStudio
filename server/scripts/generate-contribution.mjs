@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const def = {
-  machineId: "contribution.lifecycle.v1",
+  machineId: "contribution.lifecycle",
   entityType: "contribution",
-  version: "1.0.0",
+  version: "v0.0.1:state-machine:contribution-lifecycle-1",
   description: "Terminal contribution asset lifecycle.",
   initialState: "submitted",
   states: [
@@ -123,4 +123,4 @@ for (const s of def.states) {
   }
 }
 def.totalMatrix = totalMatrix;
-fs.writeFileSync(path.join(process.cwd(), 'server/platform/common/state-machine/definitions/contribution.lifecycle.v1.json'), JSON.stringify(def, null, 2));
+fs.writeFileSync(path.join(process.cwd(), 'server/platform/common/state-machine/definitions/contribution.lifecycle.json'), JSON.stringify(def, null, 2));

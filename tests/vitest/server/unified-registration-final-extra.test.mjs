@@ -117,7 +117,7 @@ describe("unified registration final extra coverage", () => {
       .toThrow("Invalid unified registration record.");
 
     const normalized = normalizeUnifiedRegistration({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       registrationId: "process:manual",
       originalType: ORIGINAL_TYPES.PROCESS,
       originalId: "manual"

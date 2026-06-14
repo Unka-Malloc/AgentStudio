@@ -2,7 +2,7 @@ import { createCloudDrivePort } from "../agent/cloud-drive-port/index.mjs";
 
 export const CLOUD_DRIVE_UPSTREAM_SERVICE_ID = "pact.upstream.cloud-drive";
 export const CLOUD_DRIVE_UPSTREAM_TYPE = "cloud-drive";
-export const CLOUD_DRIVE_UPSTREAM_GATEWAY_PROTOCOL_VERSION = "pact.cloud-drive-upstream-gateway.v1";
+export const CLOUD_DRIVE_UPSTREAM_GATEWAY_PROTOCOL_VERSION = "v0.0.1:storage:cloud-drive-upstream-gateway-1";
 
 const CLOUD_DRIVE_OPERATION_SPECS = Object.freeze({
   "external.cloudDrive.connect": Object.freeze({ method: "connect", status: 200, legacyOperationId: "sharedspace.drive.connect" }),

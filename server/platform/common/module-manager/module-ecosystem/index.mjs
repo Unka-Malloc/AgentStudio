@@ -3,8 +3,8 @@ import path from "node:path";
 import { ServerConfig } from "../../config/ServerConfig.mjs";
 import { pathToFileURL } from "node:url";
 
-export const MODULE_ECOSYSTEM_PROTOCOL_VERSION = "pact.module-ecosystem.v1";
-export const MOUNT_MODULE_PROTOCOL_VERSION = "pact.mount-module.v1";
+export const MODULE_ECOSYSTEM_PROTOCOL_VERSION = "v0.0.1:tool:module-ecosystem-1";
+export const MOUNT_MODULE_PROTOCOL_VERSION = "v0.0.1:tool:mount-module-1";
 
 const MOUNT_TEMPLATE_IDS = new Set([
   "documentParser",
@@ -186,7 +186,7 @@ function normalizeScaffoldRequest(input = {}, { userDataPath = "" } = {}) {
 
 function moduleManifest(request) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: MOUNT_MODULE_PROTOCOL_VERSION,
     ecosystemProtocolVersion: MODULE_ECOSYSTEM_PROTOCOL_VERSION,
     moduleId: request.moduleId,
@@ -219,7 +219,7 @@ function moduleManifest(request) {
 
 function capabilityPackageManifest(request) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     ecosystemProtocolVersion: MODULE_ECOSYSTEM_PROTOCOL_VERSION,
     kind: request.template.packageKind,
     name: request.safeName,

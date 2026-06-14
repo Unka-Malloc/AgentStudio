@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveWithin, serverToken } from "../security/client-strings.mjs";
 
-export const MERKLE_STATE_SUBSTRATE_PROTOCOL_VERSION = "pact.merkle-state-substrate.v1";
+export const MERKLE_STATE_SUBSTRATE_PROTOCOL_VERSION = "v0.0.1:storage:merkle-state-substrate-1";
 
 const EMPTY_INDEX_NAMESPACE = "default";
 
@@ -342,7 +342,7 @@ function createMerkleDag({ cas }) {
         .filter((entry) => entry.key && entry.cid)
         .sort((left, right) => left.key.localeCompare(right.key));
       const manifest = {
-        type: "pact.merkle-dag.manifest.v1",
+        type: "v0.0.1:storage:merkle-dag-manifest-1",
         kind: String(kind || "generic"),
         entries: normalizedEntries,
         refs: uniqueStrings(normalizedEntries.map((entry) => entry.cid)),
@@ -397,7 +397,7 @@ function createMerkleIndex({ cas, codec = createCanonicalCodec() }) {
   async function readIndex(indexRootCid) {
     if (!indexRootCid) {
       return {
-        type: "pact.merkle-index.sorted.v1",
+        type: "v0.0.1:storage:merkle-index-sorted-1",
         namespace: EMPTY_INDEX_NAMESPACE,
         entries: []
       };
@@ -419,7 +419,7 @@ function createMerkleIndex({ cas, codec = createCanonicalCodec() }) {
       .filter((entry) => entry.key)
       .sort((left, right) => left.key.localeCompare(right.key));
     const normalized = {
-      type: "pact.merkle-index.sorted.v1",
+      type: "v0.0.1:storage:merkle-index-sorted-1",
       namespace: String(index.namespace || EMPTY_INDEX_NAMESPACE),
       entries,
       keyRange: {
@@ -786,7 +786,7 @@ function createLsmIngestPort({ userDataPath = "", cas, merkleDag } = {}) {
     const records = recovered.records;
     const keys = records.map(chunkRecordKey).sort();
     const segmentPayload = {
-      type: "pact.lsm-ingest.segment.v1",
+      type: "v0.0.1:storage:lsm-ingest-segment-1",
       uploadSessionId: recovered.uploadSessionId,
       scope: recovered.scope,
       records: records.map((record) => ({
@@ -865,7 +865,7 @@ function createLsmIngestPort({ userDataPath = "", cas, merkleDag } = {}) {
       records.push(...asArray(payload.records));
     }
     const compactedPayload = {
-      type: "pact.lsm-ingest.compacted-segment.v1",
+      type: "v0.0.1:storage:lsm-ingest-compacted-segment-1",
       scope: safePartitionId(scope || segments[0]?.scope || "workspace"),
       records: records.sort((left, right) => String(left.key || chunkRecordKey(left)).localeCompare(String(right.key || chunkRecordKey(right)))),
       sourceSegmentIds: segments.map((segment) => segment.segmentId).sort()

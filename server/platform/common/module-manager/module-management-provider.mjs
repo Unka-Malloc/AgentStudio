@@ -17,7 +17,7 @@ import {
   saveSettings
 } from "../platform-core/settings.mjs";
 
-export const MODULE_MANAGEMENT_PROTOCOL_VERSION = "pact.module-management.v1";
+export const MODULE_MANAGEMENT_PROTOCOL_VERSION = "v0.0.1:tool:module-management-1";
 
 function featureEnabled(features, featureId) {
   const active = Array.isArray(features?.activeFeatureIds) ? features.activeFeatureIds : [];

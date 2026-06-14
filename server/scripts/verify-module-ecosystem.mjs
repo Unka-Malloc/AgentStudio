@@ -43,7 +43,7 @@ async function verifyMountScaffold(tempRoot) {
   assert.ok(scaffold.written.some((file) => file.path === "index.mjs"));
 
   const manifest = JSON.parse(await fs.readFile(path.join(targetDir, "module.json"), "utf8"));
-  assert.equal(manifest.protocolVersion, "pact.mount-module.v1");
+  assert.equal(manifest.protocolVersion, "v0.0.1:tool:mount-module-1");
   assert.equal(manifest.ecosystemProtocolVersion, MODULE_ECOSYSTEM_PROTOCOL_VERSION);
   assert.equal(manifest.mountName, "documentParser");
 

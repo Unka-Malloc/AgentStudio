@@ -978,7 +978,7 @@ describe("console-domain operation edge coverage", () => {
     await withTempDir(async (userDataPath) => {
       const protocolEventBus = { publish: vi.fn(async () => ({ id: "evt-2" })) };
       const agentWorkspace = {
-        protocolVersion: "pact.workspace.v1",
+        protocolVersion: "v0.0.1:workspace:core-1",
         listWorkspaces: vi.fn(() => [{ workspaceId: "ws-1" }]),
         getWorkspace: vi.fn(() => ({ workspaceId: "ws-1", title: "Workspace 1" })),
         createWorkspace: vi.fn(() => ({ workspace: { workspaceId: "ws-2", title: "Workspace 2" } })),
@@ -1840,7 +1840,7 @@ describe("console-domain operation edge coverage", () => {
         generateSkill: vi.fn(async () => ({ ok: true, generated: true })),
         proposeSkill: vi.fn(async () => ({ ok: true, proposed: true })),
         resolveSkill: vi.fn(() => ({ ok: true, action: "publish", skill: { skillId: "skill-1" } })),
-        loadFramework: vi.fn(async () => ({ protocolVersion: "pact.knowledge-skill.v1" })),
+        loadFramework: vi.fn(async () => ({ protocolVersion: "v0.0.1:knowledge:skill-1" })),
         saveFramework: vi.fn(async () => ({ ok: true, saved: true })),
         runSkillEvaluation: vi.fn(async () => ({ ok: true, run: true })),
         createSkillDeployment: vi.fn(async () => ({ ok: true, deploymentId: "dep-1" })),

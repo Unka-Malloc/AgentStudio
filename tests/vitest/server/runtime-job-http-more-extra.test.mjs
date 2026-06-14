@@ -764,7 +764,7 @@ describe("runtime dependency configuration and download boundaries", () => {
     expect(result.url).toContain("python.org");
 
     const written = JSON.parse(await fs.readFile(configPath, "utf8"));
-    expect(written.protocolVersion).toBe("pact.runtime-dependencies.v1");
+    expect(written.protocolVersion).toBe("v0.0.1:platform:runtime-dependencies-1");
     expect(written.lastReadError).toMatch(/Unexpected|Expected property name|JSON input/);
   });
 

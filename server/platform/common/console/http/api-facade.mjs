@@ -10,7 +10,7 @@ function emptyAgentSettingsProjection() {
       value: {}
     },
     agentSelector: {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       source: "agent-configs",
       updatedAt: new Date().toISOString(),
       options: []

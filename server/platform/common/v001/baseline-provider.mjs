@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-export const V001_BASELINE_PROTOCOL_VERSION = "pact.v001.baseline.v1";
+export const V001_BASELINE_PROTOCOL_VERSION = "v0.0.1:platform:baseline-1";
 
 const CONFIG_FILES = Object.freeze({
   modules: "modules.json",
@@ -113,10 +113,10 @@ function createConfigRegistryPort({ rootPath }) {
   }
 
   async function readConfig(kind) {
-    const payload = await readJson(filePath(kind), { schemaVersion: 1, kind, items: [] });
+    const payload = await readJson(filePath(kind), { schemaVersion: "v0.0.1:schema:definition-1", kind, items: [] });
     const items = normalizeConfigList(payload).map(normalizeConfigItem).filter((item) => item.id);
     return {
-      schemaVersion: Number(payload.schemaVersion || 1),
+      schemaVersion: String(payload.schemaVersion || "v0.0.1:schema:definition-1"),
       kind,
       path: filePath(kind),
       items
@@ -126,7 +126,7 @@ function createConfigRegistryPort({ rootPath }) {
   async function writeConfig(kind, payload = {}) {
     const items = normalizeConfigList(payload).map(normalizeConfigItem).filter((item) => item.id);
     const next = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       kind,
       updatedAt: isoNow(),
       items
@@ -201,7 +201,7 @@ function createMetadataStorePort({ rootPath }) {
   const filePath = path.join(rootPath, "metadata-store", "records.json");
 
   async function readAll() {
-    return ensureObject(await readJson(filePath, { schemaVersion: 1, records: {} }), { schemaVersion: 1, records: {} });
+    return ensureObject(await readJson(filePath, { schemaVersion: "v0.0.1:schema:definition-1", records: {} }), { schemaVersion: "v0.0.1:schema:definition-1", records: {} });
   }
 
   async function put(record = {}) {
@@ -249,7 +249,7 @@ function createCachePort({ rootPath }) {
   const filePath = path.join(rootPath, "cache", "cache.json");
 
   async function readAll() {
-    return ensureObject(await readJson(filePath, { schemaVersion: 1, entries: {} }), { schemaVersion: 1, entries: {} });
+    return ensureObject(await readJson(filePath, { schemaVersion: "v0.0.1:schema:definition-1", entries: {} }), { schemaVersion: "v0.0.1:schema:definition-1", entries: {} });
   }
 
   function cacheId({ scope = "default", key = "" } = {}) {
@@ -330,11 +330,11 @@ function createQueuePort({ rootPath }) {
   const filePath = path.join(rootPath, "queue", "tasks.json");
 
   async function readAll() {
-    return ensureObject(await readJson(filePath, { schemaVersion: 1, tasks: [] }), { schemaVersion: 1, tasks: [] });
+    return ensureObject(await readJson(filePath, { schemaVersion: "v0.0.1:schema:definition-1", tasks: [] }), { schemaVersion: "v0.0.1:schema:definition-1", tasks: [] });
   }
 
   async function writeAll(store) {
-    await writeJson(filePath, { schemaVersion: 1, tasks: Array.isArray(store.tasks) ? store.tasks : [] });
+    await writeJson(filePath, { schemaVersion: "v0.0.1:schema:definition-1", tasks: Array.isArray(store.tasks) ? store.tasks : [] });
   }
 
   async function enqueue({ queueName = "default", payload = {}, idempotencyKey = "" } = {}) {
@@ -436,7 +436,7 @@ function createArtifactStorePort({ rootPath }) {
   const manifestPath = path.join(artifactRoot, "manifest.json");
 
   async function readManifest() {
-    return ensureObject(await readJson(manifestPath, { schemaVersion: 1, artifacts: {} }), { schemaVersion: 1, artifacts: {} });
+    return ensureObject(await readJson(manifestPath, { schemaVersion: "v0.0.1:schema:definition-1", artifacts: {} }), { schemaVersion: "v0.0.1:schema:definition-1", artifacts: {} });
   }
 
   async function putArtifact({ bytes, text, json, contentType = "application/octet-stream", metadata = {} } = {}) {
@@ -513,7 +513,7 @@ function createSecretStorePort({ rootPath }) {
   const auditPath = path.join(rootPath, "secret-store", "audit.jsonl");
 
   async function readRegistry() {
-    return ensureObject(await readJson(registryPath, { schemaVersion: 1, refs: {} }), { schemaVersion: 1, refs: {} });
+    return ensureObject(await readJson(registryPath, { schemaVersion: "v0.0.1:schema:definition-1", refs: {} }), { schemaVersion: "v0.0.1:schema:definition-1", refs: {} });
   }
 
   async function createSecretRef({ namespace = "default", name = "", provider = "contract-mode", secretValue = "", metadata = {} } = {}) {
@@ -613,7 +613,7 @@ export function createV001BaselineProvider({ userDataPath = "" } = {}) {
       secretStore.summary()
     ]);
     return {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: V001_BASELINE_PROTOCOL_VERSION,
       status: "ready",
       verificationMode: "verified",
@@ -623,7 +623,15 @@ export function createV001BaselineProvider({ userDataPath = "" } = {}) {
         runtimeConfig: "ServerConfig.getDataDir()/v001-baseline",
         externalState: "contract-mode adapters until real credentials are configured"
       },
-      mcpOutlets: ["pact.discovery", "pact.knowledge", "pact.sharedspace", "pact.codespace", "pact.skillHub"],
+      mcpOutlets: [
+        "pact.discovery",
+        "pact.agentLibrary",
+        "pact.sharedspace",
+        "pact.codespace",
+        "pact.skillHub",
+        "pact.agentRelay",
+        "pact.serviceHub"
+      ],
       storageStates: STORAGE_STATES,
       ports: [config, metadata, cacheSummary, queueSummary, artifact, secret]
     };

@@ -87,7 +87,7 @@ function createRun({ plan, policy, trigger = "manual", actor = null, input = {} 
   const runId = `maintenance_run_${randomUUID()}`;
   const planHashValue = hashPlan(plan);
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     runId,
     status: policy.requiresApproval ? "awaiting_approval" : "queued",
     trigger,
@@ -503,7 +503,7 @@ export function createMaintenanceAgentService({
         toolExecutionId,
         traceId,
         toolId: `maintenance-agent.${rawStep.toolId}`,
-        toolVersion: "pact.maintenance-agent.v1",
+        toolVersion: "v0.0.1:platform:maintenance-agent-1",
         toolsetIds: ["pact.runtime.maintain"],
         subjectType: "agent-profile",
         subjectId: "maintenance-agent",
@@ -571,7 +571,7 @@ export function createMaintenanceAgentService({
         toolExecutionId,
         traceId,
         toolId: `maintenance-agent.${rawStep.toolId}`,
-        toolVersion: "pact.maintenance-agent.v1",
+        toolVersion: "v0.0.1:platform:maintenance-agent-1",
         toolsetIds: ["pact.runtime.maintain"],
         subjectType: "agent-profile",
         subjectId: "maintenance-agent",

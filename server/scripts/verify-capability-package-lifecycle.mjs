@@ -252,7 +252,7 @@ function verifyToolCatalogExposure() {
   assert.ok(toolIds.has("pact.capabilityPackages.lifecycle"));
   const submitTool = catalog.tools.find((tool) => tool.id === "pact.capabilityPackages.submit");
   assert.ok(submitTool.requiredScopes.includes("knowledge:maintain"));
-  assert.ok(submitTool.toolsets.includes("pact.knowledge.maintain"));
+  assert.ok(submitTool.toolsets.includes("pact.agentLibrary.maintain"));
 }
 
 async function main() {

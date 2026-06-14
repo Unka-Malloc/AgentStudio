@@ -7,7 +7,7 @@ import { atomicWriteJsonThroughState } from "../../platform/common/platform-core
 import { getRuntimeLogger, summarizeError, summarizeForLog } from "../../platform/common/observability/runtime-logger.mjs";
 import { traceDetails } from "../../platform/common/observability/trace-context.mjs";
 
-const EVENT_SCHEMA_VERSION = 1;
+const EVENT_SCHEMA_VERSION = "v0.0.1:pubsub:event-schema-1";
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 const MAX_TIMEOUT_MS = 30000;

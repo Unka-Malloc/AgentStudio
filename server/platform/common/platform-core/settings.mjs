@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   atomicWriteJsonThroughState,
   mutateState,
@@ -169,6 +170,10 @@ const DEFAULT_AGENT_TOOL_EXECUTION = {
     ]
   }
 };
+
+const INTERNAL_DEFAULT_SETTINGS_PATH = fileURLToPath(
+  new URL("../../../config/runtime/default-settings.json", import.meta.url)
+);
 
 export const MODEL_USAGE_DEFINITIONS = [
   {
@@ -1527,7 +1532,7 @@ function modelAgentId(model = {}) {
 function serializeModelAgentSettings(model = {}) {
   const uid = modelAgentId(model);
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     ...model,
     uid,
     instanceId: String(model.instanceId || uid).trim(),
@@ -1609,7 +1614,17 @@ function settingsStateKey(userDataPath) {
 
 async function loadSettingsUnlocked(userDataPath, options = {}) {
   const settingsPath = getSettingsPath(userDataPath);
+  let internalDefaults = {};
   let parsed = {};
+
+  try {
+    const content = await fs.readFile(INTERNAL_DEFAULT_SETTINGS_PATH, "utf8");
+    internalDefaults = JSON.parse(content);
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
 
   try {
     const content = await fs.readFile(settingsPath, "utf8");
@@ -1624,6 +1639,7 @@ async function loadSettingsUnlocked(userDataPath, options = {}) {
   const splitModelAgentSettings = await loadSplitModelAgentSettings(userDataPath, parsed);
   const agentToolExecutionSettings = await loadAgentToolExecutionSettings(userDataPath, parsed);
   const normalized = normalizeSettings({
+    ...internalDefaults,
     ...parsed,
     ...splitModelSettings,
     ...splitModelAgentSettings,

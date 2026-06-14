@@ -45,8 +45,8 @@ describe("small platform entrypoints final coverage", () => {
     mocks.loadSettings.mockResolvedValue({ settingsId: "runtime-settings" });
 
     expect(provider.describe()).toMatchObject({
-      schemaVersion: 1,
-      protocolVersion: "pact.agent-runtime.v1"
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:agent:runtime-1"
     });
     expect(provider.describe().capabilities).toContain("agent.gateway.call");
     expect(provider.getAgentConfigRegistry()).toBe(registry);
@@ -103,7 +103,7 @@ describe("small platform entrypoints final coverage", () => {
       objectRootPath: "/tmp/raw"
     };
     const storageProvider = {
-      protocolVersion: "pact.storage.test.v1",
+      protocolVersion: "v0.0.1:test:storage-1",
       getMetadataStore: vi.fn(() => metadataStore),
       listCapabilities: vi.fn(() => ({
         capabilities: [{ id: "metadata" }, { id: "raw-objects" }]
@@ -121,7 +121,7 @@ describe("small platform entrypoints final coverage", () => {
       kind: "provider",
       value: storageProvider,
       metadata: {
-        protocolVersion: "pact.storage.test.v1",
+        protocolVersion: "v0.0.1:test:storage-1",
         capabilityIds: ["metadata", "raw-objects"]
       }
     });
@@ -138,7 +138,7 @@ describe("small platform entrypoints final coverage", () => {
   });
 
   it("creates knowledge builtin providers and domain service factories", async () => {
-    const mount = { protocolVersion: "pact.knowledge.test.v1" };
+    const mount = { protocolVersion: "v0.0.1:test:knowledge-1" };
     mocks.createKnowledgeCoreMount.mockResolvedValue(mount);
     const providers = createKnowledgeBuiltinMountProviders({ userDataPath: "/tmp/pact-knowledge" });
 

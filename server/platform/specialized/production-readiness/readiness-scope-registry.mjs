@@ -56,7 +56,7 @@ export const READINESS_SCOPES = Object.freeze({
       baselineV0_1Required: true,
       productionRequired: true,
       requiredEvidence: [
-        "contribution.lifecycle.v1.json",
+        "contribution.lifecycle.json",
         "contribution-lifecycle-state-machine.test"
       ]
     },
@@ -68,7 +68,7 @@ export const READINESS_SCOPES = Object.freeze({
       baselineV0_1Required: true,
       productionRequired: true,
       requiredEvidence: [
-        "agentlibrary.loan.v1.json",
+        "agentlibrary.loan.json",
         "knowledge-loan-lifecycle-state-machine.test"
       ]
     },
@@ -80,7 +80,7 @@ export const READINESS_SCOPES = Object.freeze({
       baselineV0_1Required: true,
       productionRequired: true,
       requiredEvidence: [
-        "checkpoint.restore.v1.json",
+        "checkpoint.restore.json",
         "checkpoint-restore-lifecycle-state-machine.test"
       ]
     },
@@ -92,7 +92,7 @@ export const READINESS_SCOPES = Object.freeze({
       baselineV0_1Required: true,
       productionRequired: true,
       requiredEvidence: [
-        "operation.narrow.v1.json",
+        "operation.narrow.json",
         "operation-state-machine-integration.test"
       ]
     },
@@ -104,7 +104,7 @@ export const READINESS_SCOPES = Object.freeze({
       baselineV0_1Required: true,
       productionRequired: true,
       requiredEvidence: [
-        "production.readiness.lifecycle.v1.json",
+        "production.readiness.lifecycle.json",
         "production-readiness-lifecycle-state-machine.test",
         "readiness-scope-registry",
         "guard-evaluator"

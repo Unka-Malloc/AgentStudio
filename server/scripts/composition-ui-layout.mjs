@@ -93,6 +93,18 @@ const UI_ROUTE_RULES = Object.freeze([
     panels: ["RuntimeDownloadsPanel"]
   },
   {
+    routeId: "admin.strategyManagement",
+    chunkPrefix: "StrategyManagementView",
+    navItems: ["admin.strategyManagement"],
+    panels: ["StrategyManagementPanel"]
+  },
+  {
+    routeId: "admin.versionRelease",
+    chunkPrefix: "VersionReleaseView",
+    navItems: ["admin.versionRelease"],
+    panels: ["VersionReleasePanel"]
+  },
+  {
     routeId: "admin.productionHealth",
     chunkPrefix: "ProductionHealthView",
     navItems: ["admin.productionHealth"],
@@ -313,7 +325,7 @@ export async function applyFeatureUiPlan(targetRoot, packagingPlan = {}) {
 
   if (!(await pathExists(path.join(distRoot, "index.html")))) {
     const report = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       generatedAt: new Date().toISOString(),
       trimSkipped: true,
       reason: "build/dist/index.html is missing",
@@ -406,7 +418,7 @@ export async function applyFeatureUiPlan(targetRoot, packagingPlan = {}) {
   const activeRoutes = routeReports.filter((route) => route.enabled).map((route) => route.routeId).sort();
   const inactiveRoutes = routeReports.filter((route) => !route.enabled).map((route) => route.routeId).sort();
   const uiManifest = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     generatedAt: new Date().toISOString(),
     activeFeatureIds,
     activeWebNavItems: [...activeNavItems].sort(),
@@ -424,7 +436,7 @@ export async function applyFeatureUiPlan(targetRoot, packagingPlan = {}) {
   );
 
   const report = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     generatedAt: new Date().toISOString(),
     trimSkipped: false,
     ok:

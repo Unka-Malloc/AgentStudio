@@ -119,7 +119,7 @@ export async function loadMonitorAlertConfig(userDataPath) {
   return {
     ...defaults,
     ...override,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     enabled: normalizeBoolean(override.enabled, defaults.enabled !== false),
     intervalMs: normalizeInteger(override.intervalMs ?? defaults.intervalMs, 5000, 1000, 600000),
     heartbeatStaleMs: normalizeInteger(
@@ -171,7 +171,7 @@ async function normalizeMonitorAlertConfig(input = {}) {
     rules[ruleId] = normalizeRule(asObject(merged.rules[ruleId]), asObject(defaults.rules?.[ruleId]));
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     enabled: normalizeBoolean(merged.enabled, true),
     intervalMs: normalizeInteger(merged.intervalMs, 5000, 1000, 600000),
     heartbeatStaleMs: normalizeInteger(merged.heartbeatStaleMs, 15000, 1000, 600000),
@@ -592,7 +592,7 @@ export async function runMonitorAlertCycle(userDataPath, options = {}) {
   const activeProblemCount = active.filter((alert) => alert.active !== false).length;
   const recoveredInfoCount = active.filter((alert) => alert.ackRequired).length;
   const state = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     ok: activeProblemCount === 0,
     status: !config.enabled
       ? "disabled"
@@ -656,6 +656,7 @@ export async function acknowledgeMonitorAlert(userDataPath, alertId, options = {
       alert.alertId === normalizedAlertId
         ? {
             ...alert,
+            ackRequired: false,
             acknowledgedAt,
             active: false
         }
@@ -704,7 +705,7 @@ export async function getMonitorAlertState(userDataPath, options = {}) {
   const activeAlerts = attachAlertRegistrations(Array.isArray(state.activeAlerts) ? state.activeAlerts : []);
   const history = attachAlertRegistrations(dedupeAlertHistory(Array.isArray(state.history) ? state.history : []));
   const result = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     ok: state.ok !== false,
     status: state.status || (config.enabled ? "unknown" : "disabled"),
     updatedAt: state.updatedAt || "",

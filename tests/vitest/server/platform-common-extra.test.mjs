@@ -341,7 +341,7 @@ describe("production readiness report-reader", () => {
 
     await fs.mkdir(reportRoot, { recursive: true });
     await createReportRun(reportRoot, "2026010201", {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       reportType: PRODUCTION_READINESS_REPORT_TYPE,
       runId: "2026010201",
       generatedAt: "2026-01-02T01:00:00.000Z",
@@ -362,7 +362,7 @@ describe("production readiness report-reader", () => {
       ]
     });
     await createReportRun(reportRoot, "2026010301", {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       reportType: PRODUCTION_READINESS_REPORT_TYPE,
       runId: "2026010301",
       generatedAt: "2026-01-03T01:00:00.000Z",
@@ -422,7 +422,7 @@ describe("production readiness report-reader", () => {
 
     await fs.mkdir(reportRoot, { recursive: true });
     await createReportRun(reportRoot, "quick", {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       reportType: PRODUCTION_READINESS_REPORT_TYPE,
       runId: "quick",
       generatedAt: "2026-01-04T00:00:00.000Z",
@@ -438,7 +438,7 @@ describe("production readiness report-reader", () => {
     });
 
     await createReportRun(reportRoot, "full", {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       reportType: PRODUCTION_READINESS_REPORT_TYPE,
       runId: "full",
       generatedAt: "2026-01-04T01:00:00.000Z",

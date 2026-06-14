@@ -9,6 +9,7 @@ import {
   computeRankScoreV0,
   createContributionRegistry
 } from "../platform/specialized/agent/workspace-contribution/index.mjs";
+import { executeConsoleDomainOperation } from "../platform/specialized/console/console-domain-operation-executor.mjs";
 
 function assertCatalogs() {
   for (const state of ["submitted", "scanned", "reviewed", "preview", "published", "adopted", "deprecated", "revoked"]) {
@@ -150,6 +151,60 @@ function assertInvalidTransitionRejected() {
   );
 }
 
+async function assertToolGrantCallerClaimsLocked(userDataPath) {
+  const lockedContext = {
+    userDataPath,
+    transport: "mcp",
+    authSession: {
+      user: {
+        type: "tool-grant",
+        roleId: "tool-grant",
+        userId: "grant-locked",
+        subjectId: "grant-locked",
+        username: "locked grant",
+        scopes: ["knowledge:write"]
+      }
+    },
+    subject: {
+      type: "tool-grant",
+      subjectId: "grant-locked",
+      label: "locked grant",
+      scopes: ["knowledge:write"]
+    }
+  };
+  const submitted = await executeConsoleDomainOperation({
+    operationId: "workspace.contribution.submit",
+    input: {
+      registryWorkspaceId: "locked-claims",
+      workspaceId: "workspace-main",
+      contributorId: "attacker-contributor",
+      contributorKind: "console-user",
+      contributionType: "skill",
+      title: "Locked Caller Claims Skill",
+      skillManifestRef: "workspace/skills/locked/skill.json"
+    },
+    context: lockedContext
+  });
+  assert.equal(submitted.status, 201);
+  assert.equal(submitted.payload.contribution.contributorId, "grant-locked");
+  assert.equal(submitted.payload.contribution.contributorKind, "tool-grant");
+  assert.equal(submitted.payload.contribution.statusHistory[0].actorId, "grant-locked");
+
+  const scanned = await executeConsoleDomainOperation({
+    operationId: "workspace.contribution.scan",
+    input: {
+      registryWorkspaceId: "locked-claims",
+      contributionId: submitted.payload.contribution.contributionId,
+      actorId: "attacker-actor",
+      reason: "locked_claims_regression"
+    },
+    context: lockedContext
+  });
+  assert.equal(scanned.status, 200);
+  assert.equal(scanned.payload.contribution.statusHistory.at(-1).actorId, "grant-locked");
+  assert.equal(scanned.payload.audit.payload.actorId, "grant-locked");
+}
+
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-workspace-contribution-"));
 
 try {
@@ -171,6 +226,7 @@ try {
   assert.ok(canonicalAsset.fixedWorkspaceAssetBuckets.includes(path.join("workspace-contribution", "workspaces", "workspace-main", "skills")));
 
   assertInvalidTransitionRejected();
+  await assertToolGrantCallerClaimsLocked(userDataPath);
 
   console.log("workspace contribution governance verification passed");
 } finally {

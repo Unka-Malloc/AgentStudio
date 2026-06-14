@@ -122,7 +122,7 @@ async function assertHttpServerUsesCoreProvider() {
   assert.equal(source.includes("operation-dispatcher/operation-registry.mjs"), false);
   for (const needle of [
     "registeredCoreProvider.dispatchRpcOperation",
-    "registeredCoreProvider.shouldProxyRegisteredApiRequest",
+    "registeredCoreProvider.findProxyRegisteredApiRequest",
     "registeredCoreProvider.dispatchRegisteredHttpOperation",
     "registeredCoreProvider.dispatchInternalOperation"
   ]) {

@@ -22,7 +22,7 @@ import {
 } from "./text-normalization.mjs";
 import { createMerkleStateSubstrate } from "./merkle-state-substrate.mjs";
 
-export const DATA_STRUCTURE_PROTOCOL_VERSION = "pact.data-structure.v1";
+export const DATA_STRUCTURE_PROTOCOL_VERSION = "v0.0.1:storage:data-structure-1";
 
 function withUserDataPath(userDataPath, input = {}) {
   const next = input || {};

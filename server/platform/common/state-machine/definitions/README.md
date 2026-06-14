@@ -4,9 +4,13 @@
 
 ## 文件列表
 
-- `contribution.lifecycle.v1.json`: 资产贡献全量生命周期管理状态机。
-- `agentlibrary.loan.v1.json`: 知识借阅记录生命周期状态机。
-- `checkpoint.restore.v1.json`: append-only Checkpoint 恢复过程映射状态机。
+- `contribution.lifecycle.json`: 资产贡献全量生命周期管理状态机。
+- `agentlibrary.loan.json`: 知识借阅记录生命周期状态机。
+- `checkpoint.restore.json`: append-only Checkpoint 恢复过程映射状态机。
+- `operation.narrow.json`: Pact Operation 的 policy-before-side-effect 狭窄路径状态机。
+- `production.readiness.lifecycle.json`: Production Readiness Gate 的证据、检查、waiver 和候选发布声明生命周期状态机。
+- `version.artifact.lifecycle.json`: Version Registry 中版本化制品的 draft / candidate / active / deprecated / retired 生命周期状态机。
+- `version.transition.lifecycle.json`: Version Transition 的 planned / dry_run_passed / checkpointed / running / verified / completed / failed / rolled_back / abandoned 生命周期状态机。
 
 ## 设计原则
 

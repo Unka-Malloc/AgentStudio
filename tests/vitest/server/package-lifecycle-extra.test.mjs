@@ -109,9 +109,9 @@ describe("package lifecycle helpers", () => {
     });
 
     expect(normalized).toMatchObject({
-      schemaVersion: 1,
-      protocolVersion: "pact.skill-registry.v1",
-      lifecycleProtocolVersion: "pact.capability-package-lifecycle.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:tool:skill-registry-1",
+      lifecycleProtocolVersion: "v0.0.1:tool:capability-package-lifecycle-1",
       kind: "skill",
       name: "Review Skill",
       version: "1.2.3",
@@ -346,8 +346,8 @@ describe("package lifecycle helpers", () => {
       rollbackOf: ""
     });
     expect(submission.record.library).toMatchObject({
-      schemaVersion: 1,
-      protocolVersion: "pact.skill-registry.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:tool:skill-registry-1",
       storage: "server-skill-library",
       packageId: submission.record.manifest.packageId,
       actor: "legal-ops",
@@ -390,7 +390,7 @@ describe("package lifecycle helpers", () => {
     )).resolves.toContain("\"server-skill-library\"");
 
     const described = await registry.describe();
-    expect(described.protocolVersion).toBe("pact.capability-package-lifecycle.v1");
+    expect(described.protocolVersion).toBe("v0.0.1:tool:capability-package-lifecycle-1");
     expect(described.registryPath).toBe(path.join("capability-packages", "registry.json"));
     expect(described.summary).toMatchObject({
       total: 1,
@@ -406,7 +406,7 @@ describe("package lifecycle helpers", () => {
         kind: "skill",
         name: "persisted-skill",
         version: "3.0.0",
-        protocolVersion: "pact.skill-registry.v1"
+        protocolVersion: "v0.0.1:tool:skill-registry-1"
       },
       library: {
         storage: "server-skill-library",

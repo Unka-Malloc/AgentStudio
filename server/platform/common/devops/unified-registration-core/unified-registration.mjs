@@ -1,4 +1,4 @@
-export const UNIFIED_REGISTRATION_SCHEMA_VERSION = 1;
+export const UNIFIED_REGISTRATION_SCHEMA_VERSION = "v0.0.1:platform:unified-registration-schema-1";
 
 export const ORIGINAL_TYPES = Object.freeze({
   PROCESS: "process",

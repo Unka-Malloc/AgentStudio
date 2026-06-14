@@ -3,9 +3,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ServerConfig } from "../../../common/config/ServerConfig.mjs";
 
-export const CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION = "pact.capability-package-lifecycle.v1";
-export const TOOL_PACKAGE_PROTOCOL_VERSION = "pact.tool-package.v1";
-export const SKILL_REGISTRY_PROTOCOL_VERSION = "pact.skill-registry.v1";
+export const CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION = "v0.0.1:tool:capability-package-lifecycle-1";
+export const TOOL_PACKAGE_PROTOCOL_VERSION = "v0.0.1:tool:package-1";
+export const SKILL_REGISTRY_PROTOCOL_VERSION = "v0.0.1:tool:skill-registry-1";
 
 const REGISTRY_FILE = path.join("capability-packages", "registry.json");
 const SKILL_LIBRARY_DIR = path.join("capability-packages", "skill-library");
@@ -180,7 +180,7 @@ async function writeSkillLibraryBundle({ userDataPath = "", manifest = {}, files
   }));
   const totalBytes = publicFiles.reduce((sum, file) => sum + file.byteLength, 0);
   const descriptor = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: SKILL_REGISTRY_PROTOCOL_VERSION,
     storage: "server-skill-library",
     packageId: manifest.packageId,
@@ -236,7 +236,7 @@ export function normalizeCapabilityPackageManifest(input = {}) {
   const version = normalizeText(value.version);
   const risk = normalizeText(value.risk || "read_only");
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: KIND_PROTOCOL[kind] || "",
     lifecycleProtocolVersion: CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION,
     packageId: normalizeText(value.packageId || "") || packageIdFor({ kind, name, version }),
@@ -325,7 +325,7 @@ function normalizeRecord(record = {}) {
 
 function emptyRegistry() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION,
     updatedAt: nowIso(),
     packages: {},
@@ -538,7 +538,7 @@ export function createCapabilityPackageRegistry({ userDataPath = "" } = {}) {
     const registry = await loadRegistry();
     const records = Object.values(registry.packages).map(publicRecord);
     return {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION,
       toolPackageProtocolVersion: TOOL_PACKAGE_PROTOCOL_VERSION,
       skillRegistryProtocolVersion: SKILL_REGISTRY_PROTOCOL_VERSION,

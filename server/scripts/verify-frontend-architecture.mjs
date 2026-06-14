@@ -295,8 +295,18 @@ async function main() {
   const themeSystemDarkApplicationCssText = await readRequiredFile(
     "server-web/styles/themes/system-dark-application.css",
   );
-  const themeForcedDarkCssText = await readRequiredFile("server-web/styles/themes/forced-dark.css");
-  const themeForcedLightCssText = await readRequiredFile("server-web/styles/themes/forced-light.css");
+  const themeAppearancePresetsCssText = await readRequiredFile(
+    "server-web/styles/themes/appearance-presets.css",
+  );
+  const appearancePresetConfigTexts = new Map([
+    ["default-system", await readRequiredFile("server-web/appearance-presets/default-system.json")],
+    ["geek-light-blue", await readRequiredFile("server-web/appearance-presets/geek-light-blue.json")],
+    ["sunset-ember", await readRequiredFile("server-web/appearance-presets/sunset-ember.json")],
+    ["tokyo-night", await readRequiredFile("server-web/appearance-presets/tokyo-night.json")],
+    ["monokai", await readRequiredFile("server-web/appearance-presets/monokai.json")],
+    ["cyberpunk", await readRequiredFile("server-web/appearance-presets/cyberpunk.json")],
+    ["cappuccino-dark", await readRequiredFile("server-web/appearance-presets/cappuccino-dark.json")],
+  ]);
   const layoutCssText = await readRequiredFile("server-web/styles/layout.css");
   const layoutShellSidebarCssText = await readRequiredFile("server-web/styles/layout/shell-sidebar.css");
   const layoutActionsCssText = await readRequiredFile("server-web/styles/layout/actions.css");
@@ -755,9 +765,6 @@ async function main() {
   const sourceCardText = await readRequiredFile(
     "server-web/components/sources/SourceCard.vue",
   );
-  const consoleSyncDirectoriesPanelText = await readRequiredFile(
-    "server-web/components/shell/ConsoleSyncDirectoriesPanel.vue",
-  );
   const opsMonitorViewControllerText = await readRequiredFile(
     "server-web/composables/console-ops-monitor-view-controller.ts",
   );
@@ -1005,9 +1012,6 @@ async function main() {
   const wordCloudCardBodyText = await readRequiredFile(
     "server-web/components/knowledge/word-cloud/WordCloudCardBody.vue",
   );
-  const wordCloudAgentDialogText = await readRequiredFile(
-    "server-web/components/knowledge/word-cloud/WordCloudAgentDialog.vue",
-  );
   const knowledgeRulesPanelText = await readRequiredFile(
     "server-web/components/knowledge/KnowledgeRulesPanel.vue",
   );
@@ -1147,9 +1151,6 @@ async function main() {
   const consoleSideNavPrimaryLinksText = await readRequiredFile(
     "server-web/components/shell/side-nav/ConsoleSideNavPrimaryLinks.vue",
   );
-  const consoleSideNavTeamSectionText = await readRequiredFile(
-    "server-web/components/shell/side-nav/ConsoleSideNavTeamSection.vue",
-  );
   const consoleSideNavKnowledgeSectionText = await readRequiredFile(
     "server-web/components/shell/side-nav/ConsoleSideNavKnowledgeSection.vue",
   );
@@ -1167,6 +1168,9 @@ async function main() {
   );
   const consoleSideNavDebugSectionText = await readRequiredFile(
     "server-web/components/shell/side-nav/ConsoleSideNavDebugSection.vue",
+  );
+  const consoleSideNavDirectoryText = await readRequiredFile(
+    "server-web/components/shell/side-nav/ConsoleSideNavDirectory.vue",
   );
   const consoleSideNavFooterText = await readRequiredFile(
     "server-web/components/shell/side-nav/ConsoleSideNavFooter.vue",
@@ -1242,12 +1246,18 @@ async function main() {
     "activeRouteKnowledgeTab",
     "activeRouteView",
     "agentRetrievalConsole",
+    "appearancePresetId",
+    "appearancePresetCatalogMessage",
+    "appearancePresetImporting",
+    "appearancePresetLabel",
+    "appearancePresetOptions",
     "approvalFlowConsole",
+    "applyAppearancePreset",
     "applyLanguage",
-    "applyTheme",
-    "cycleTheme",
+    "cycleAppearancePreset",
     "debugConsole",
     "feedConsole",
+    "importAppearancePresetFileToServer",
     "knowledgeDomainConsole",
     "languageMode",
     "languageOptionBarOptions",
@@ -1259,13 +1269,15 @@ async function main() {
     "pageRefreshBusy",
     "pageRefreshTitle",
     "refreshCurrentPage",
+    "refreshAppearancePresetConfigs",
     "serviceStatusLabel",
     "serviceUrl",
+    "setAppearancePreset",
     "setLanguage",
-    "themeMode",
     "toggleLanguage",
     "toolManagementConsole",
     "tt",
+    "workspacesConsole",
   ]);
   const shellConsumerKeys = new Map();
   for (const file of shellContextConsumerFiles) {
@@ -1322,7 +1334,7 @@ async function main() {
   );
   assert.match(
     consoleSideNavText,
-    /createConsoleSideNavContext[\s\S]*provideConsoleSideNavContext[\s\S]*ConsoleSideNavBrand[\s\S]*ConsoleSideNavPrimaryLinks[\s\S]*ConsoleSideNavTeamSection[\s\S]*ConsoleSideNavKnowledgeSection[\s\S]*ConsoleSideNavAgentSection[\s\S]*ConsoleSideNavSkillHubSection[\s\S]*ConsoleSideNavExternalServiceSection[\s\S]*ConsoleSideNavSystemSection[\s\S]*ConsoleSideNavDebugSection[\s\S]*ConsoleSideNavFooter[\s\S]*ConsoleSideNavBackdrop/,
+    /createConsoleSideNavContext[\s\S]*provideConsoleSideNavContext[\s\S]*ConsoleSideNavDirectory[\s\S]*ConsoleSideNavBrand[\s\S]*ConsoleSideNavPrimaryLinks[\s\S]*ConsoleSideNavKnowledgeSection[\s\S]*ConsoleSideNavAgentSection[\s\S]*ConsoleSideNavSkillHubSection[\s\S]*ConsoleSideNavExternalServiceSection[\s\S]*ConsoleSideNavSystemSection[\s\S]*ConsoleSideNavDebugSection[\s\S]*ConsoleSideNavFooter[\s\S]*ConsoleSideNavBackdrop/,
     "ConsoleSideNav.vue must compose the focused side-nav sections through a local context",
   );
   assert.doesNotMatch(
@@ -1331,7 +1343,7 @@ async function main() {
     "ConsoleSideNav.vue must not own individual navigation buttons, feature gates, dynamic tab loops, or brand internals",
   );
   assert.ok(
-    consoleSideNavContextText.trimEnd().split(/\r?\n/).length <= 60,
+    consoleSideNavContextText.trimEnd().split(/\r?\n/).length <= 125,
     "consoleSideNavContext.ts must stay a small side-nav shell projection",
   );
   assert.match(
@@ -1348,13 +1360,13 @@ async function main() {
     consoleSideNavLinkText,
     consoleSideNavBrandText,
     consoleSideNavPrimaryLinksText,
-    consoleSideNavTeamSectionText,
     consoleSideNavKnowledgeSectionText,
     consoleSideNavAgentSectionText,
     consoleSideNavSkillHubSectionText,
     consoleSideNavExternalServiceSectionText,
     consoleSideNavSystemSectionText,
     consoleSideNavDebugSectionText,
+    consoleSideNavDirectoryText,
     consoleSideNavFooterText,
     consoleSideNavBackdropText,
   ];
@@ -1366,14 +1378,14 @@ async function main() {
   [
     ["ConsoleSideNavLink.vue", consoleSideNavLinkText, 35, /class="side-link"[\s\S]*side-link-label/],
     ["ConsoleSideNavBrand.vue", consoleSideNavBrandText, 40, /brand-block[\s\S]*brand-loading-label[\s\S]*brand-progress-bar/],
-    ["ConsoleSideNavPrimaryLinks.vue", consoleSideNavPrimaryLinksText, 75, /switchView\('dashboard'\)[\s\S]*switchView\('feed'\)[\s\S]*switchView\('approval'\)[\s\S]*openAdmin\('agentPermissions'\)[\s\S]*switchView\('sources'\)/],
-    ["ConsoleSideNavTeamSection.vue", consoleSideNavTeamSectionText, 40, /switchView\('workspaces'\)/],
+    ["ConsoleSideNavPrimaryLinks.vue", consoleSideNavPrimaryLinksText, 90, /switchView\('dashboard'\)[\s\S]*switchView\('feed'\)[\s\S]*switchView\('approval'\)[\s\S]*openAdmin\('agentPermissions'\)[\s\S]*switchView\('workspaces'\)[\s\S]*switchView\('sources'\)/],
     ["ConsoleSideNavKnowledgeSection.vue", consoleSideNavKnowledgeSectionText, 60, /hasFeature\('knowledge-core'\)[\s\S]*jumpToKnowledgeFileImport[\s\S]*openDebugTab\('knowledgeDistillation'\)[\s\S]*openKnowledgeManagementPanel\('rules'\)[\s\S]*openKnowledgeTab\('wordCloud'\)[\s\S]*openKnowledgeTab\('maintenance'\)/],
     ["ConsoleSideNavAgentSection.vue", consoleSideNavAgentSectionText, 45, /hasAnyFeature\(\['agent-gateway', 'agent-exploration'\]\)[\s\S]*openAdmin\('agentConfig'\)[\s\S]*openAdmin\('contextManagement'\)/],
     ["ConsoleSideNavSkillHubSection.vue", consoleSideNavSkillHubSectionText, 45, /hasFeature\('agent-gateway'\)[\s\S]*openAdmin\('toolList'\)[\s\S]*openAdmin\('toolStats'\)/],
     ["ConsoleSideNavExternalServiceSection.vue", consoleSideNavExternalServiceSectionText, 45, /v-for="tab[\s\S]*openExternalServiceTab\(tab\.id\)[\s\S]*openAdmin\('clients'\)/],
-    ["ConsoleSideNavSystemSection.vue", consoleSideNavSystemSectionText, 75, /openAdmin\('storage'\)[\s\S]*openAdmin\('modules'\)[\s\S]*openAdmin\('runtimeDownloads'\)[\s\S]*openAdmin\('productionHealth'\)[\s\S]*openAdmin\('logs'\)[\s\S]*openAdmin\('jobs'\)[\s\S]*openAdmin\('opsMonitor'\)[\s\S]*openAdmin\('maintenanceAgent'\)/],
+    ["ConsoleSideNavSystemSection.vue", consoleSideNavSystemSectionText, 95, /openAdmin\('storage'\)[\s\S]*openAdmin\('modules'\)[\s\S]*openAdmin\('runtimeDownloads'\)[\s\S]*openAdmin\('strategyManagement'\)[\s\S]*openAdmin\('versionRelease'\)[\s\S]*openAdmin\('logs'\)[\s\S]*openAdmin\('jobs'\)[\s\S]*openAdmin\('productionHealth'\)[\s\S]*openAdmin\('opsMonitor'\)[\s\S]*openAdmin\('maintenanceAgent'\)/],
     ["ConsoleSideNavDebugSection.vue", consoleSideNavDebugSectionText, 40, /v-for="tab[\s\S]*localizedDebugTabLabel\(tab\)[\s\S]*openDebugTab\(tab\.id\)/],
+    ["ConsoleSideNavDirectory.vue", consoleSideNavDirectoryText, 300, /side-nav-directory[\s\S]*activeSideNavDirectory[\s\S]*returnToPrimarySideNav/],
     ["ConsoleSideNavFooter.vue", consoleSideNavFooterText, 30, /sideNavOpen\.value\s*=\s*false[\s\S]*openDrawer\("preferences"\)[\s\S]*msg\.nav\.systemConfig/],
     ["ConsoleSideNavBackdrop.vue", consoleSideNavBackdropText, 20, /sideNavOpen\.value\s*=\s*false[\s\S]*side-nav-backdrop/],
   ].forEach(([fileName, text, maxLines, sentinel]) => {
@@ -1625,16 +1637,6 @@ async function main() {
     destructuredKeysFromCall(sourceCardText, "useSourcesViewContext").includes("splitJobStatusLabel"),
     false,
     "SourceCard.vue must not receive splitJobStatusLabel through sources context",
-  );
-  assert.match(
-    consoleSyncDirectoriesPanelText,
-    /from\s+["']\.\.\/\.\.\/composables\/console-job-display-utils["']/,
-    "ConsoleSyncDirectoriesPanel.vue must import job status display helpers directly",
-  );
-  assert.equal(
-    destructuredKeysFromCall(consoleSyncDirectoriesPanelText, "useServerConsoleShellContext").includes("splitJobStatusLabel"),
-    false,
-    "ConsoleSyncDirectoriesPanel.vue must not receive splitJobStatusLabel through shell context",
   );
   [
     ["InfoFeedTrackGrid.vue", infoFeedTrackGridText],
@@ -2624,11 +2626,10 @@ async function main() {
     "styles/themes.css must not own theme selectors directly",
   );
   [
-    ["system-dark-tokens.css", themeSystemDarkTokensCssText, /@media\s+\(prefers-color-scheme:\s*dark\)[\s\S]*--bg-base:\s*#0d1117/],
+    ["system-dark-tokens.css", themeSystemDarkTokensCssText, /@media\s+\(prefers-color-scheme:\s*dark\)[\s\S]*--bg-base:\s*#0b0c10/],
     ["system-dark-element-plus.css", themeSystemDarkElementPlusCssText, /@media\s+\(prefers-color-scheme:\s*dark\)[\s\S]*--el-bg-color/],
     ["system-dark-application.css", themeSystemDarkApplicationCssText, /@media\s+\(prefers-color-scheme:\s*dark\)[\s\S]*\.auth-card/],
-    ["forced-dark.css", themeForcedDarkCssText, /html\.theme-dark[\s\S]*--bg-base:\s*#0d1117/],
-    ["forced-light.css", themeForcedLightCssText, /html\.theme-light[\s\S]*--bg-base:\s*#f3f4f6/],
+    ["appearance-presets.css", themeAppearancePresetsCssText, /--el-color-primary:\s*var\(--brand\)/],
   ].forEach(([fileName, text, sentinel]) => {
     assert.match(
       themesCssText,
@@ -2639,6 +2640,21 @@ async function main() {
       text,
       sentinel,
       `${fileName} must own its expected theme CSS slice`,
+    );
+  });
+  [
+    "default-system",
+    "geek-light-blue",
+    "sunset-ember",
+    "tokyo-night",
+    "monokai",
+    "cyberpunk",
+    "cappuccino-dark",
+  ].forEach((presetId) => {
+    assert.match(
+      appearancePresetConfigTexts.get(presetId) || "",
+      new RegExp(`"id"\\s*:\\s*"${escapeRegex(presetId)}"`),
+      `appearance preset config must define ${presetId}`,
     );
   });
   assert.ok(
@@ -4845,7 +4861,7 @@ async function main() {
     );
     assert.doesNotMatch(
       text,
-      /\bbridge\s*\.\s*(getKnowledgeWordClouds|saveKnowledgeWordClouds|exportKnowledgeWordClouds|importKnowledgeWordClouds|addKnowledgeWordBag|updateKnowledgeWordBag|deleteKnowledgeWordBag|getKnowledgeWordBagTerms|proposeKnowledgeWordClouds|rebuildSourceVocabulary)\b/,
+      /\bbridge\s*\.\s*(getKnowledgeWordClouds|saveKnowledgeWordClouds|exportKnowledgeWordClouds|importKnowledgeWordClouds|addKnowledgeWordBag|updateKnowledgeWordBag|deleteKnowledgeWordBag|getKnowledgeWordBagTerms|rebuildSourceVocabulary)\b/,
       `${label} must not call word-cloud APIs through bridge`,
     );
   });
@@ -4897,13 +4913,13 @@ async function main() {
   );
   assert.match(
     knowledgeWordCloudPanelText,
-    /WordCloudStage[\s\S]*WordCloudAgentDialog/,
-    "KnowledgeWordCloudPanel.vue must compose the word-cloud stage and agent dialog",
+    /WordCloudStage/,
+    "KnowledgeWordCloudPanel.vue must compose the word-cloud stage",
   );
   assert.doesNotMatch(
     knowledgeWordCloudPanelText,
     /BrowseSelectButton|AgentModelOptionBar|wordCloudCardRows|wordCloudCorpusPaths|wordCloudVisibleTerms|wordCloudPrompt|wordCloudMessages/,
-    "KnowledgeWordCloudPanel.vue must not own corpus controls, card rendering, terms, or agent dialog state",
+    "KnowledgeWordCloudPanel.vue must not own corpus controls, card rendering, terms, or deleted agent proposal state",
   );
   assert.ok(
     wordCloudStageText.trimEnd().split(/\r?\n/).length <= 40,
@@ -4917,7 +4933,7 @@ async function main() {
   assert.doesNotMatch(
     wordCloudStageText,
     /BrowseSelectButton|AgentModelOptionBar|wordCloudVisibleTerms|wordCloudPrompt|wordCloudMessages|setWordCloudTermInput/,
-    "WordCloudStage.vue must not own corpus controls, term editing, or agent dialog rendering",
+    "WordCloudStage.vue must not own corpus controls, term editing, or deleted agent proposal rendering",
   );
   assert.ok(
     wordCloudStageHeaderText.trimEnd().split(/\r?\n/).length <= 100,
@@ -4931,7 +4947,7 @@ async function main() {
   assert.doesNotMatch(
     wordCloudStageHeaderText,
     /wordCloudVisibleTerms|wordCloudMessages|proposeWordCloud|setWordCloudTermInput|toggleWordCloudActionMenu/,
-    "WordCloudStageHeader.vue must not own card-body term editing or agent dialog workflow",
+    "WordCloudStageHeader.vue must not own card-body term editing or deleted agent proposal workflow",
   );
   assert.ok(
     wordCloudCardListText.trimEnd().split(/\r?\n/).length <= 50,
@@ -4945,7 +4961,7 @@ async function main() {
   assert.doesNotMatch(
     wordCloudCardListText,
     /wordCloudCorpusPaths|wordCloudMessages|formatWordCloudThreshold|setWordCloudTermInput|proposeWordCloud/,
-    "WordCloudCardList.vue must not own corpus controls, card-body fields, or agent dialog workflow",
+    "WordCloudCardList.vue must not own corpus controls, card-body fields, or deleted agent proposal workflow",
   );
   assert.ok(
     wordCloudClassCardText.trimEnd().split(/\r?\n/).length <= 170,
@@ -4953,13 +4969,13 @@ async function main() {
   );
   assert.match(
     wordCloudClassCardText,
-    /WordCloudCardBody[\s\S]*autoFillCloudWithAgent[\s\S]*pinWordCloud[\s\S]*toggleWordCloudActionMenu[\s\S]*wordCloudCardStyle/,
-    "WordCloudClassCard.vue must own card shell, title, hierarchy, pin/collapse, and fill actions",
+    /WordCloudCardBody[\s\S]*pinWordCloud[\s\S]*toggleWordCloudActionMenu[\s\S]*wordCloudCardStyle/,
+    "WordCloudClassCard.vue must own card shell, title, hierarchy, and pin/collapse actions",
   );
   assert.doesNotMatch(
     wordCloudClassCardText,
     /wordCloudCorpusPaths|wordCloudMessages|proposeWordCloud|wordCloudVisibleTerms|formatWordCloudThreshold|setWordCloudTermInput/,
-    "WordCloudClassCard.vue must not own corpus scope, agent dialog, or card-body term editing",
+    "WordCloudClassCard.vue must not own corpus scope, deleted agent proposal workflow, or card-body term editing",
   );
   assert.ok(
     wordCloudCardBodyText.trimEnd().split(/\r?\n/).length <= 140,
@@ -4983,21 +4999,7 @@ async function main() {
   assert.doesNotMatch(
     wordCloudCardBodyText,
     /wordCloudCardStyle|toggleWordCloudActionMenu|pinWordCloud|wordCloudMessages|proposeWordCloud|wordCloudCorpusPaths/,
-    "WordCloudCardBody.vue must not own card shell controls, agent dialog workflow, or corpus scope",
-  );
-  assert.ok(
-    wordCloudAgentDialogText.trimEnd().split(/\r?\n/).length <= 80,
-    "WordCloudAgentDialog.vue must stay focused on the agent proposal dialog",
-  );
-  assert.match(
-    wordCloudAgentDialogText,
-    /AgentModelOptionBar[\s\S]*wordCloudPrompt[\s\S]*proposeWordCloud[\s\S]*wordCloudMessages/,
-    "WordCloudAgentDialog.vue must own model selection, prompt submission, and message rendering",
-  );
-  assert.doesNotMatch(
-    wordCloudAgentDialogText,
-    /wordCloudCardRows|wordCloudCorpusPaths|wordCloudVisibleTerms|setWordCloudTermInput|toggleWordCloudActionMenu|pinWordCloud/,
-    "WordCloudAgentDialog.vue must not own card list, corpus scope, card-body term editing, or card shell controls",
+    "WordCloudCardBody.vue must not own card shell controls, deleted agent proposal workflow, or corpus scope",
   );
   assert.ok(
     knowledgeRulesPanelText.trimEnd().split(/\r?\n/).length <= 30,
@@ -5553,7 +5555,6 @@ async function main() {
     ["WordCloudCardList.vue", wordCloudCardListText],
     ["WordCloudClassCard.vue", wordCloudClassCardText],
     ["WordCloudCardBody.vue", wordCloudCardBodyText],
-    ["WordCloudAgentDialog.vue", wordCloudAgentDialogText],
   ].forEach(([fileName, text]) => {
     assert.match(text, /\buseKnowledgeWordCloudContext\s*\(/, `${fileName} must use the focused word-cloud context`);
     assert.doesNotMatch(
@@ -5562,16 +5563,6 @@ async function main() {
       `${fileName} must not consume the broad knowledge view context`,
     );
   });
-  assert.match(
-    wordCloudAgentDialogText,
-    /from\s+["']\.\.\/\.\.\/\.\.\/composables\/console-format-utils["']/,
-    "WordCloudAgentDialog.vue must import date formatting directly instead of receiving it from knowledge context",
-  );
-  assert.equal(
-    destructuredKeysFromCall(wordCloudAgentDialogText, "useKnowledgeWordCloudContext").includes("formatMachineDate"),
-    false,
-    "WordCloudAgentDialog.vue must not receive stateless date formatting through word-cloud context",
-  );
   assert.ok(
     knowledgeLibraryControllerText.trimEnd().split(/\r?\n/).length <= 240,
     "console-knowledge-library-controller.ts must stay a focused backend connection and refresh coordinator",

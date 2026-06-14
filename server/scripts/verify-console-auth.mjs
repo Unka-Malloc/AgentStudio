@@ -60,6 +60,20 @@ async function getJson(baseUrl, pathName, { cookie = "", headers = {} } = {}) {
   });
 }
 
+async function postRpc(baseUrl, method, params = {}, options = {}) {
+  return postJson(
+    baseUrl,
+    "/api/rpc",
+    {
+      jsonrpc: "2.0",
+      id: method,
+      method,
+      params
+    },
+    options
+  );
+}
+
 async function login(baseUrl, username, password) {
   const response = await postJson(baseUrl, "/api/auth/login", { username, password });
   assert.equal(response.status, 200);
@@ -119,6 +133,17 @@ async function assertConsoleAuthCannotBeDisabled() {
 
 await assertConsoleAuthCannotBeDisabled();
 
+const directConsoleAuthPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-console-auth-direct-"));
+const directConsoleAuth = createConsoleAuth({ userDataPath: directConsoleAuthPath });
+const directExternalAuthDecision = directConsoleAuth.authorizeOperation({
+  request: { headers: {}, method: "POST" },
+  operation: { id: "agent_sync.publish", externalAuth: true },
+  method: "POST",
+  url: new URL("http://127.0.0.1/api/agent-sync/publish")
+});
+assert.equal(directExternalAuthDecision.ok, false);
+assert.equal(directExternalAuthDecision.status, 401);
+
 await assert.rejects(
   startHttpServer({
     userDataPath: await fs.mkdtemp(path.join(os.tmpdir(), "pact-public-listen-blocked-")),
@@ -172,6 +197,29 @@ try {
 
   const consoleBeforeLogin = await getJson(server.url, "/api/knowledge/console");
   assert.equal(consoleBeforeLogin.status, 401);
+
+  const protectedIndexEndpoints = [
+    "/api/agent-workspaces",
+    "/api/knowledge/sources",
+    "/api/authorization/approvals",
+    "/api/jobs"
+  ];
+  for (const endpoint of protectedIndexEndpoints) {
+    const response = await getJson(server.url, endpoint);
+    assert.equal(response.status, 401, `${endpoint} must require console login`);
+  }
+
+  const protectedRpcMethods = [
+    "agent_workspaces.list",
+    "knowledge.sources.list",
+    "authorization.approvals.list",
+    "jobs.list"
+  ];
+  for (const method of protectedRpcMethods) {
+    const response = await postRpc(server.url, method);
+    assert.equal(response.status, 200, `${method} RPC transport should return a JSON-RPC envelope`);
+    assert.equal(response.payload.error?.data?.statusCode || response.payload.error?.code, 401);
+  }
 
   const ownerCredentials = await readInitialOwnerCredentials(server);
   const ownerPassword = ownerCredentials.password;

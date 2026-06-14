@@ -32,8 +32,8 @@ afterEach(async () => {
 
 function sampleHealth(overrides = {}) {
   return {
-    schemaVersion: 1,
-    reportType: "pact.production-health.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    reportType: "v0.0.1:platform:production-health-1",
     generatedAt: "2026-06-01T00:00:00.000Z",
     status: "pass",
     latestReport: {
@@ -57,7 +57,7 @@ describe("sample business pack production-readiness module", () => {
   it("lists the default pack and resolves the manifest for known and unknown ids", () => {
     const list = listSampleBusinessPacks();
     expect(list).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: SAMPLE_BUSINESS_PACK_PROTOCOL_VERSION,
       packs: [
         {
@@ -73,7 +73,7 @@ describe("sample business pack production-readiness module", () => {
 
     const manifest = getSampleBusinessPack();
     expect(manifest).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: SAMPLE_BUSINESS_PACK_PROTOCOL_VERSION,
       packId: "enterprise-knowledge-pilot",
       businessDomain: "enterprise-knowledge-management",
@@ -93,7 +93,7 @@ describe("sample business pack production-readiness module", () => {
     const materialized = await store.materialize({});
 
     expect(materialized).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: SAMPLE_BUSINESS_PACK_PROTOCOL_VERSION,
       packId: "enterprise-knowledge-pilot",
       ingestPlan: expect.any(Array),
@@ -121,7 +121,7 @@ describe("sample business pack production-readiness module", () => {
 
     const manifest = JSON.parse(await fs.readFile(materialized.manifestPath, "utf8"));
     expect(manifest).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: SAMPLE_BUSINESS_PACK_PROTOCOL_VERSION,
       packId: "enterprise-knowledge-pilot"
     });
@@ -161,7 +161,7 @@ describe("executive report production-readiness module", () => {
     expect(buildProductionHealthReportMock).toHaveBeenCalledTimes(1);
     expect(buildProductionHealthReportMock).toHaveBeenCalledWith({ repoRoot: undefined, reportRoot: undefined });
     expect(report).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: EXECUTIVE_REPORT_PROTOCOL_VERSION,
       timeRange: "all",
       status: "pass",
@@ -371,7 +371,7 @@ describe("executive report production-readiness module", () => {
 
     const store = createExecutiveReportStore({ userDataPath });
     expect(await store.list()).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: EXECUTIVE_REPORT_PROTOCOL_VERSION,
       reports: []
     });

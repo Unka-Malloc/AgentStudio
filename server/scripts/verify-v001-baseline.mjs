@@ -47,7 +47,15 @@ async function assertDataDirDoesNotContain(rootPath, forbiddenText) {
   }
 }
 
-const expectedMcpOutlets = ["pact.discovery", "pact.knowledge", "pact.sharedspace", "pact.codespace", "pact.skillHub"];
+const expectedMcpOutlets = [
+  "pact.discovery",
+  "pact.agentLibrary",
+  "pact.sharedspace",
+  "pact.codespace",
+  "pact.skillHub",
+  "pact.agentRelay",
+  "pact.serviceHub"
+];
 const expectedPorts = [
   "ConfigRegistryPort",
   "MetadataStorePort",
@@ -156,7 +164,7 @@ try {
     headers: authHeaders(auth)
   });
   assert.equal(apiStatus.status, 200);
-  assert.equal(apiStatus.payload.protocolVersion, "pact.v001.baseline.v1");
+  assert.equal(apiStatus.payload.protocolVersion, "v0.0.1:platform:baseline-1");
   assert.deepEqual(apiStatus.payload.mcpOutlets, expectedMcpOutlets);
 
   const consoleState = await fetchJson(`${server.url}/api/console/state`, {
@@ -199,7 +207,7 @@ try {
     body: JSON.stringify(mcpRequest("tools/call", {
       name: "pact.discovery",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation: "pact.capabilities.list",
         input: {}
       }
@@ -220,7 +228,7 @@ try {
     body: JSON.stringify(mcpRequest("tools/call", {
       name: "pact.discovery",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation: "pact.v001.baseline.status",
         input: {}
       }

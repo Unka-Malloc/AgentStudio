@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 
-export const STRATEGY_MANAGEMENT_PROTOCOL_VERSION = "pact.strategy-management.v1";
-export const STRATEGY_MANAGEMENT_MODEL_ROUTING_PROTOCOL_VERSION = "pact.model-routing.v1";
-export const STRATEGY_MANAGEMENT_MODEL_DECISION_PROTOCOL_VERSION = "pact.model-decision.v1";
+export const STRATEGY_MANAGEMENT_PROTOCOL_VERSION = "v0.0.1:strategy:strategy-management-1";
+export const STRATEGY_MANAGEMENT_MODEL_ROUTING_PROTOCOL_VERSION = "v0.0.1:strategy:model-routing-1";
+export const STRATEGY_MANAGEMENT_MODEL_DECISION_PROTOCOL_VERSION = "v0.0.1:strategy:model-decision-1";
 
 function nowIso() {
   return new Date().toISOString();
@@ -53,6 +53,30 @@ function workflowEffect(input = {}) {
     effect: "allow",
     reasonCode: "workflow_allowed",
     requiresApproval: false
+  };
+}
+
+function queuePolicyEffect(input = {}) {
+  if (input.blocked === true || input.queue?.blocked === true || input.operation?.safety?.blocked === true) {
+    return {
+      effect: "deny",
+      allowed: false,
+      reasonCode: "queue_policy_blocked"
+    };
+  }
+  const risk = riskFrom(input);
+  const priority = Number(input.priority ?? input.queue?.priority ?? (
+    risk === "repair_write" || risk === "destructive" ? -10 : 0
+  ));
+  const maxAttempts = Number(input.maxAttempts ?? input.queue?.maxAttempts ?? 3);
+  return {
+    effect: "allow",
+    allowed: true,
+    reasonCode: "queue_policy_allowed",
+    priority: Number.isFinite(priority) ? Math.trunc(priority) : 0,
+    maxAttempts: Number.isFinite(maxAttempts) ? Math.max(1, Math.trunc(maxAttempts)) : 3,
+    backpressureStrategy: compactText(input.backpressureStrategy || input.queue?.backpressureStrategy || "peer-first-local-delay"),
+    policyVersion: compactText(input.policyVersion || input.queue?.policyVersion || "v0.0.1:workflow:queue-policy-1")
   };
 }
 
@@ -220,10 +244,11 @@ export function createStrategyManagementProvider({
 } = {}) {
   function describe() {
     return {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: STRATEGY_MANAGEMENT_PROTOCOL_VERSION,
       capabilities: [
         "workflow-policy.evaluate",
+        "queue-policy.evaluate",
         "agent-policy.evaluate",
         "route-policy.evaluate",
         "model-routing.run",
@@ -234,7 +259,7 @@ export function createStrategyManagementProvider({
       delegatedProtocols: {
         modelRouting: STRATEGY_MANAGEMENT_MODEL_ROUTING_PROTOCOL_VERSION,
         modelDecision: modelDecisionRuntime?.protocolVersion || STRATEGY_MANAGEMENT_MODEL_DECISION_PROTOCOL_VERSION,
-        toolPolicy: "pact.authorization.v1"
+        toolPolicy: "v0.0.1:risk-control:authorization-1"
       }
     };
   }
@@ -242,7 +267,7 @@ export function createStrategyManagementProvider({
   function evaluateWorkflowPolicy(input = {}) {
     const effect = workflowEffect(input);
     return {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: STRATEGY_MANAGEMENT_PROTOCOL_VERSION,
       policyType: "workflow-policy",
       decisionId: randomDecisionId("workflow"),
@@ -254,10 +279,28 @@ export function createStrategyManagementProvider({
     };
   }
 
+  function evaluateQueuePolicy(input = {}) {
+    const effect = queuePolicyEffect(input);
+    return {
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: STRATEGY_MANAGEMENT_PROTOCOL_VERSION,
+      policyType: "queue-policy",
+      decisionId: randomDecisionId("queue"),
+      queueDefinitionId: compactText(input.queueDefinitionId || input.queueDefinition?.queueDefinitionId || input.queueId || "queue.default"),
+      queueLabel: compactText(input.queueLabel || input.queueDefinition?.label || input.label || ""),
+      operationId: compactText(input.operationId || input.operation?.id || "queue.evaluate"),
+      payloadKind: compactText(input.payloadKind || input.payloadRef?.kind || input.payload?.kind || ""),
+      risk: riskFrom(input) || "queue_scheduler",
+      evaluatedLayers: ["strategy_management", "queue_policy"],
+      ...effect,
+      createdAt: nowIso()
+    };
+  }
+
   function evaluateAgentPolicy(input = {}) {
     const roleId = compactText(input.roleId || input.routeId || input.agentId || "agent.default");
     return {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: STRATEGY_MANAGEMENT_PROTOCOL_VERSION,
       policyType: "agent-policy",
       decisionId: randomDecisionId("agent"),
@@ -273,7 +316,7 @@ export function createStrategyManagementProvider({
     const route = routeTargetFrom(input);
     const effect = routePolicyEffect(route, input);
     return {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: STRATEGY_MANAGEMENT_PROTOCOL_VERSION,
       policyType: "route-policy",
       decisionId: randomDecisionId("route"),
@@ -378,6 +421,7 @@ export function createStrategyManagementProvider({
     protocolVersion: STRATEGY_MANAGEMENT_PROTOCOL_VERSION,
     describe,
     evaluateWorkflowPolicy,
+    evaluateQueuePolicy,
     evaluateAgentPolicy,
     evaluateRoutePolicy,
     decideWithModel,

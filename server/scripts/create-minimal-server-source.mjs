@@ -309,7 +309,7 @@ async function instantiateMinimalSource(args = {}) {
   await fs.writeFile(
     path.join(targetPath, "feature-profile", "feature-profile.json"),
     `${JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       edition: featureRuntime.edition,
       features: featureRuntime.activeFeatureIds
     }, null, 2)}\n`,
@@ -319,7 +319,7 @@ async function instantiateMinimalSource(args = {}) {
   let sourceLayoutReport;
   if (noSourceTrim) {
     sourceLayoutReport = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       generatedAt: new Date().toISOString(),
       edition: packagingPlan.featureProfile.edition,
       requestedPaths: packagingPlan.featurePackagePlan?.removePaths || [],

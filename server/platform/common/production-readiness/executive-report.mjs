@@ -4,7 +4,7 @@ import path from "node:path";
 import { buildProductionHealthReport } from "./report-reader.mjs";
 import { ServerConfig } from "../config/ServerConfig.mjs";
 
-export const EXECUTIVE_REPORT_PROTOCOL_VERSION = "pact.executive-report.v1";
+export const EXECUTIVE_REPORT_PROTOCOL_VERSION = "v0.0.1:platform:executive-report-1";
 
 const STORE_FILE = path.join("executive-reports", "reports.json");
 
@@ -234,7 +234,7 @@ export async function buildExecutiveReport(input = {}) {
     ...assetRisks(assetValue)
   ].slice(0, 30);
   const report = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: EXECUTIVE_REPORT_PROTOCOL_VERSION,
     reportId: text(input.reportId || stableId("executive_report", {
       generatedAt,
@@ -278,7 +278,7 @@ export function createExecutiveReportStore({ userDataPath = "" } = {}) {
 
   async function readStore() {
     return await readJson(filePath, {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: EXECUTIVE_REPORT_PROTOCOL_VERSION,
       updatedAt: "",
       reports: []
@@ -287,7 +287,7 @@ export function createExecutiveReportStore({ userDataPath = "" } = {}) {
 
   async function writeStore(store) {
     const next = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: EXECUTIVE_REPORT_PROTOCOL_VERSION,
       updatedAt: nowIso(),
       reports: asArray(store.reports)
@@ -301,7 +301,7 @@ export function createExecutiveReportStore({ userDataPath = "" } = {}) {
     async list() {
       const store = await readStore();
       return {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: EXECUTIVE_REPORT_PROTOCOL_VERSION,
         updatedAt: text(store.updatedAt || ""),
         reports: asArray(store.reports).slice().sort((left, right) => text(right.generatedAt).localeCompare(text(left.generatedAt)))

@@ -56,7 +56,7 @@ function printUsageAndExit(code = 0) {
   console.log(`Pact Server
 
 Usage:
-  node server/scripts/start-server.mjs [--host 0.0.0.0] [--port ${DEFAULT_SERVER_PORT}] [--data-dir /path/to/data] [--with-ui] [--profile minimal|default] [--edition community|pro|enterprise|custom]
+  node server/scripts/start-server.mjs [--host 0.0.0.0] [--port ${DEFAULT_SERVER_PORT}] [--data-dir /path/to/data] [--with-ui] [--profile minimal|default] [--edition community|pro|enterprise|client-local|custom]
 
 Options:
   --host                    监听地址，默认读取 PACT_SERVER_HOST，否则使用 127.0.0.1
@@ -65,7 +65,7 @@ Options:
   --data-dir                数据目录，默认读取 PACT_SERVER_DATA_DIR，否则读取 ~/.pact-server.json，最后使用 ~/.pact-server-data
   --with-ui                 同时提供 build/dist 前端页面；build/dist 不存在时会报错
   --profile                 运行档位：default|minimal，默认 default
-  --edition                 功能版本：community|pro|enterprise|custom
+  --edition                 功能版本：community|pro|enterprise|client-local|custom
   --feature-profile         自定义功能 profile JSON 路径
   --server-id               服务实例 ID
   --server-label            服务实例标签

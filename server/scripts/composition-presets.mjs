@@ -145,6 +145,7 @@ function runCapture(command, args, options = {}) {
 }
 
 function dockerfileForPlan(plan) {
+  const featureEdition = plan.featureProfile?.edition || "custom";
   const command = plan.externalService?.startupPolicy === "with-platform"
     ? [
         "node",
@@ -159,7 +160,7 @@ function dockerfileForPlan(plan) {
         "--data-dir",
         "/data",
         "--edition",
-        "custom",
+        featureEdition,
         "--feature-profile",
         "/app/feature-profile/feature-profile.json"
       ]
@@ -177,7 +178,7 @@ function dockerfileForPlan(plan) {
         "--data-dir",
         "/data",
         "--edition",
-        "custom",
+        featureEdition,
         "--feature-profile",
         "/app/feature-profile/feature-profile.json"
       ];
@@ -198,7 +199,7 @@ function dockerfileForPlan(plan) {
     "    PACT_SERVER_WITH_UI=1 \\",
     "    PACT_ALLOW_PUBLIC_CONSOLE=1 \\",
     `    PACT_SERVER_PROFILE=${plan.docker.runtimeProfile || "minimal"} \\`,
-    "    PACT_FEATURE_EDITION=custom \\",
+    `    PACT_FEATURE_EDITION=${featureEdition} \\`,
     "    PACT_FEATURE_PROFILE=/app/feature-profile/feature-profile.json \\",
     "    CODEX_HOME=/codex-home",
     "WORKDIR /app",
@@ -214,6 +215,7 @@ function dockerfileForPlan(plan) {
 
 function composeForPlan(plan) {
   const serviceName = `pact-${plan.presetId}`.replace(/[^a-zA-Z0-9_-]/g, "-");
+  const featureEdition = plan.featureProfile?.edition || "custom";
   return [
     "services:",
     `  ${serviceName}:`,
@@ -228,7 +230,7 @@ function composeForPlan(plan) {
     "      PACT_SERVER_WITH_UI: \"1\"",
     "      PACT_ALLOW_PUBLIC_CONSOLE: \"1\"",
     `      PACT_SERVER_PROFILE: ${plan.docker.runtimeProfile || "minimal"}`,
-    "      PACT_FEATURE_EDITION: custom",
+    `      PACT_FEATURE_EDITION: ${featureEdition}`,
     "      PACT_FEATURE_PROFILE: /app/feature-profile/feature-profile.json",
     "    ports:",
     `      - \"127.0.0.1:\${PACT_COMPOSITION_PORT:-${plan.docker.servicePort}}:${plan.docker.servicePort}\"`,

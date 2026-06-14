@@ -22,7 +22,7 @@ const catalog = JSON.parse(await fs.readFile(catalogPath, "utf8"));
 const readme = await fs.readFile(readmePath, "utf8");
 const implementationGaps = await fs.readFile(implementationGapsPath, "utf8");
 
-assert.equal(catalog.schemaVersion, 1, "unexpected scenario catalog schema version");
+assert.equal(catalog.schemaVersion, "v0.0.1:schema:definition-1", "unexpected scenario catalog schema version");
 assert.equal(catalog.originalDesignScenarioCount, 16, "original design scenario count must remain 16");
 assert.equal(catalog.confirmedScenarioCount, 8, "confirmed scenario count must be 8");
 assert.equal(catalog.confirmedScenarios.length, catalog.confirmedScenarioCount, "confirmed scenario list count mismatch");

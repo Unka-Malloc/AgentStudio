@@ -193,7 +193,7 @@ function storageProvider() {
 function agentWorkspace() {
   const ok = (extra = {}) => ({ ok: true, workspaceId: "ws-1", ...extra });
   return {
-    protocolVersion: "pact.agent-workspace.v1",
+    protocolVersion: "v0.0.1:workspace:agent-workspace-1",
     connectLocalDirectory: vi.fn(() => ok({ mountId: "mount-1" })),
     listLocalDirectoryMounts: vi.fn(() => ok({ items: [] })),
     listLocalDirectoryItems: vi.fn(() => ok({ items: [] })),
@@ -526,7 +526,7 @@ describe("console-domain bulk provider dispatch", () => {
         getRun: vi.fn(async () => ({ runId: "rule-run-1" }))
       },
       knowledgeSkillRuntime: {
-        protocolVersion: "pact.skill.v1",
+        protocolVersion: "v0.0.1:tool:skill-1",
         listSkills: vi.fn(() => ({ items: [{ skillId: "skill-1" }] })),
         getSkill: vi.fn(() => ({ skillId: "skill-1" })),
         generateSkill: vi.fn(async () => ({ skillId: "skill-2" })),

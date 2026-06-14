@@ -106,10 +106,10 @@ function validateBaselineReadinessReport(report) {
   if (!report || typeof report !== "object") {
     return { ok: false, errors: ["Report is not a valid object."] };
   }
-  if (!report.schemaVersion || report.schemaVersion !== 1) {
+  if (!report.schemaVersion || report.schemaVersion !== "v0.0.1:schema:definition-1") {
     errors.push("Report missing or invalid schemaVersion.");
   }
-  if (!report.reportType || report.reportType !== "pact.readiness.report.v0.1") {
+  if (!report.reportType || report.reportType !== "v0.0.1:production-readiness:report-0.1") {
     errors.push("Report missing or invalid reportType.");
   }
   if (!report.runId || typeof report.runId !== "string") {
@@ -341,8 +341,8 @@ describe("Baseline Evidence - evaluateScopeEvidence", () => {
 describe("Baseline Evidence - validateBaselineReadinessReport", () => {
   it("accepts valid report with baselineV0_1ClaimAllowed", () => {
     const report = {
-      schemaVersion: 1,
-      reportType: "pact.readiness.report.v0.1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      reportType: "v0.0.1:production-readiness:report-0.1",
       runId: "test-run",
       commit: "abc123",
       baselineV0_1ClaimAllowed: false,
@@ -356,8 +356,8 @@ describe("Baseline Evidence - validateBaselineReadinessReport", () => {
 
   it("rejects report missing baselineV0_1ClaimAllowed", () => {
     const report = {
-      schemaVersion: 1,
-      reportType: "pact.readiness.report.v0.1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      reportType: "v0.0.1:production-readiness:report-0.1",
       runId: "test-run",
       commit: "abc123",
       scopes: [],

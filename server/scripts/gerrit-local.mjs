@@ -23,6 +23,9 @@ const DEFAULT_SSH_PORT = 29418;
 const DEFAULT_CONTAINER = "pact-local-gerrit";
 const DEFAULT_DOCKER_IMAGE = "gerritcodereview/gerrit";
 const DEFAULT_WAIT_MS = 180000;
+const DEFAULT_DOWNLOAD_RETRY_ATTEMPTS = 12;
+const DEFAULT_DOWNLOAD_RETRY_DELAY_MS = 5000;
+const DEFAULT_DOWNLOAD_RETRY_MAX_DELAY_MS = 60000;
 const EXPECTED_WAR_MD5 = {
   "3.14.0": "1c8b0c204eb4844202f3bec7418179bc"
 };
@@ -106,6 +109,57 @@ function run(commandName, commandArgs = [], options = {}) {
     throw new Error(`${commandName} ${commandArgs.join(" ")} failed${detail ? `:\n${detail}` : ""}`);
   }
   return result;
+}
+
+function numericEnv(name, fallback, minimum = 0) {
+  const value = Number(process.env[name] || "");
+  if (!Number.isFinite(value) || value < minimum) {
+    return fallback;
+  }
+  return value;
+}
+
+function downloadRetryAttempts() {
+  return Math.max(1, Math.floor(numericEnv("PACT_RUNTIME_DOWNLOAD_RETRY_ATTEMPTS", DEFAULT_DOWNLOAD_RETRY_ATTEMPTS, 1)));
+}
+
+function downloadRetryDelayMs() {
+  return Math.floor(numericEnv("PACT_RUNTIME_DOWNLOAD_RETRY_DELAY_MS", DEFAULT_DOWNLOAD_RETRY_DELAY_MS, 0));
+}
+
+function downloadRetryMaxDelayMs() {
+  return Math.max(downloadRetryDelayMs(), Math.floor(numericEnv("PACT_RUNTIME_DOWNLOAD_RETRY_MAX_DELAY_MS", DEFAULT_DOWNLOAD_RETRY_MAX_DELAY_MS, 0)));
+}
+
+function outputMentionsRangeUnsupported(output = "") {
+  return /range|resume|continue/i.test(output) &&
+    /(not supported|not satisfiable|server does not support|416|HTTP server doesn't seem to support byte ranges)/i.test(output);
+}
+
+function runStreaming(commandName, commandArgs = [], options = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(commandName, commandArgs, {
+      cwd: options.cwd || repoRoot,
+      env: { ...process.env, ...(options.env || {}) },
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+      process.stdout.write(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+      process.stderr.write(chunk);
+    });
+    child.on("error", (error) => {
+      resolve({ status: 1, signal: "", stdout, stderr, error });
+    });
+    child.on("close", (status, signal) => {
+      resolve({ status: status ?? 1, signal: signal || "", stdout, stderr });
+    });
+  });
 }
 
 function commandAvailable(name, probeArgs = ["--version"]) {
@@ -206,6 +260,15 @@ async function mkdirp(directory) {
   await fsp.mkdir(directory, { recursive: true });
 }
 
+async function fileSize(targetPath) {
+  try {
+    const stats = await fsp.stat(targetPath);
+    return stats.size;
+  } catch {
+    return 0;
+  }
+}
+
 async function fileMd5(targetPath) {
   return await new Promise((resolve, reject) => {
     const hash = crypto.createHash("md5");
@@ -230,12 +293,47 @@ async function verifyWarFile(targetPath) {
 async function downloadToFile(url, destination) {
   await mkdirp(path.dirname(destination));
   const tempDestination = `${destination}.download`;
-  await fsp.rm(tempDestination, { force: true });
-  run("curl", ["-L", "--fail", "--retry", "3", "--connect-timeout", "20", "-o", tempDestination, url], {
-    stdio: "inherit"
-  });
-  await verifyWarFile(tempDestination);
-  await fsp.rename(tempDestination, destination);
+  const attempts = downloadRetryAttempts();
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const partialBytes = await fileSize(tempDestination);
+    const curlArgs = ["-L", "--fail", "--retry", "3", "--connect-timeout", "20"];
+    if (partialBytes > 0) {
+      curlArgs.push("-C", "-");
+    }
+    curlArgs.push("-o", tempDestination, url);
+    console.log(`[gerrit] Download attempt ${attempt}/${attempts}${partialBytes > 0 ? `, resuming from ${partialBytes} bytes` : ""}`);
+    const result = await runStreaming("curl", curlArgs);
+    if (result.status === 0) {
+      try {
+        await verifyWarFile(tempDestination);
+        await fsp.rename(tempDestination, destination);
+        return;
+      } catch (error) {
+        lastError = error;
+        const invalidPath = `${tempDestination}.invalid-${Date.now()}`;
+        await fsp.rename(tempDestination, invalidPath).catch(async () => {
+          await fsp.rm(tempDestination, { force: true });
+        });
+        console.warn(`[gerrit] Downloaded WAR failed verification: ${error.message}`);
+      }
+    } else {
+      const output = [result.stdout, result.stderr, result.error?.message].filter(Boolean).join("\n");
+      lastError = new Error(`curl ${curlArgs.join(" ")} failed`);
+      if (partialBytes > 0 && outputMentionsRangeUnsupported(output)) {
+        await fsp.rm(tempDestination, { force: true });
+        console.warn("[gerrit] Download source does not support byte-range resume; restarting the download.");
+      }
+    }
+    if (attempt < attempts) {
+      const delay = Math.min(downloadRetryDelayMs() * attempt, downloadRetryMaxDelayMs());
+      if (delay > 0) {
+        console.warn(`[gerrit] Download interrupted; retrying in ${delay}ms.`);
+        await sleep(delay);
+      }
+    }
+  }
+  throw lastError || new Error(`Unable to download ${url}`);
 }
 
 async function ensureWar() {

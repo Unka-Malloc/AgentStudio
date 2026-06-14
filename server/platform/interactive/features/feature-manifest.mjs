@@ -32,7 +32,7 @@ function isLegacyDevOnlyClientModule(module = {}) {
 }
 
 export const FEATURE_MANIFEST = Object.freeze({
-  schemaVersion: 1,
+  schemaVersion: "v0.0.1:schema:definition-1",
   label: "Pact FeatureManifest",
   groups: Object.freeze([
     "core",
@@ -59,6 +59,8 @@ export const FEATURE_MANIFEST = Object.freeze({
         "tool-management-core",
         "strategy-management",
         "work-queue-core",
+        "local-sharedspace",
+        "mobile-relay",
         "client-runtime-core",
         "agent-memory",
         "document-parser",
@@ -73,6 +75,8 @@ export const FEATURE_MANIFEST = Object.freeze({
         "tool-management-core",
         "strategy-management",
         "work-queue-core",
+        "local-sharedspace",
+        "mobile-relay",
         "client-runtime-core",
         "agent-memory",
         "document-parser",
@@ -96,6 +100,8 @@ export const FEATURE_MANIFEST = Object.freeze({
         "tool-management-core",
         "strategy-management",
         "work-queue-core",
+        "local-sharedspace",
+        "mobile-relay",
         "client-runtime-core",
         "agent-memory",
         "document-parser",
@@ -126,6 +132,16 @@ export const FEATURE_MANIFEST = Object.freeze({
         "vector-store-external",
         "graph-store-external",
         "embedded-server"
+      ])
+    }),
+    "client-local": Object.freeze({
+      label: "Client Local Runtime",
+      includes: Object.freeze([
+        "core-platform",
+        "tool-management-core",
+        "work-queue-core",
+        "local-sharedspace",
+        "mobile-relay"
       ])
     }),
     custom: Object.freeze({
@@ -333,7 +349,6 @@ export const FEATURE_MANIFEST = Object.freeze({
       featureId: "client-runtime-core",
       label: "Client runtime allocator and context workspace routing",
       group: "client",
-      required: true,
       defaultEnabled: true,
       dependsOn: ["agent-memory"],
       server: {
@@ -355,7 +370,6 @@ export const FEATURE_MANIFEST = Object.freeze({
       featureId: "agent-memory",
       label: "Agent memory session store",
       group: "agent",
-      required: true,
       defaultEnabled: true,
       server: {
         operationFeatures: ["agent_memory"],
@@ -366,6 +380,62 @@ export const FEATURE_MANIFEST = Object.freeze({
         excludePaths: []
       },
       tests: { suites: ["server:verify:agent-memory"] }
+    },
+    {
+      featureId: "local-sharedspace",
+      label: "Local sharedspace and cloud-drive projection runtime",
+      group: "agent",
+      dependsOn: ["tool-management-core", "data-structure-core", "storage-core"],
+      defaultEnabled: false,
+      server: {
+        operationFeatures: ["agent_workspace", "external"],
+        operationPrefixes: [
+          "agent_workspaces.",
+          "workspace.file.",
+          "sharedspace.",
+          "external.cloudDrive."
+        ],
+        modules: ["AgentWorkspace", "CloudDrivePort"],
+        webPanels: ["local-sharedspace"]
+      },
+      package: {
+        includePaths: [
+          "server/platform/specialized/agent/agent-workspace",
+          "server/platform/specialized/agent/cloud-drive-port",
+          "server/platform/specialized/console/cloud-drive-upstream-gateway.mjs",
+          "server/platform/common/mcp/http-mcp-adapter.mjs",
+          "docs/scenarios/04-workspace-file-transfer.md",
+          "docs/scenarios/06-cloud-drive-sharing.md"
+        ],
+        excludePaths: []
+      },
+      tests: {
+        suites: [
+          "server:verify:v001-local-dir-e2e",
+          "server:verify:v001-cloud-drive-e2e"
+        ]
+      }
+    },
+    {
+      featureId: "mobile-relay",
+      label: "Mobile pairing and command relay gateway",
+      group: "client",
+      dependsOn: ["operation-dispatcher", "console-shell"],
+      defaultEnabled: true,
+      server: {
+        operationFeatures: ["mobile_relay"],
+        operationPrefixes: ["mobile_relay."],
+        eventTopics: ["mobile_relay.pairing", "mobile_relay.command"],
+        webPanels: ["mobile-relay"]
+      },
+      package: {
+        includePaths: [
+          "server/platform/common/mobile-relay",
+          "server/platform/common/console/http/controllers/system-controller-mobile-relay-handlers.mjs"
+        ],
+        excludePaths: []
+      },
+      tests: { suites: ["server:verify:mobile-relay"] }
     },
     {
       featureId: "document-parser",
@@ -387,6 +457,7 @@ export const FEATURE_MANIFEST = Object.freeze({
           "docs/PROTOCOLS.md"
         ],
         removePaths: [
+          "modules/jre",
           "server/platform/specialized/knowledge/preprocessing/file-processor",
           "server/platform/modules/knowledge/file-processor/FileNormalizer/Tika",
           "server/platform/modules/knowledge/tika",
@@ -490,7 +561,6 @@ export const FEATURE_MANIFEST = Object.freeze({
           "knowledge.corpus.significant_terms",
           "knowledge.word_clouds.get",
           "knowledge.word_clouds.save",
-          "knowledge.word_clouds.propose",
           "knowledge.review_items",
           "knowledge.review_resolve",
           "knowledge.feedback",
@@ -538,7 +608,8 @@ export const FEATURE_MANIFEST = Object.freeze({
           "server/platform/specialized/knowledge/retrieval/vector-store",
           "server/platform/specialized/knowledge/storage/knowledge-source-service.mjs",
           "server/services/client/work-queue-core/background-workers/source-watcher-worker.mjs",
-          "server/protocols/knowledge"
+          "server/protocols/knowledge",
+          "server/scripts/distill-existing-knowledge-skills.mjs"
         ]
       },
       tests: { suites: ["server:verify:knowledge"] }
@@ -1092,7 +1163,7 @@ export function resolveFeatureRuntime({
   ]));
 
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     edition: selectedEdition,
     profileName: String(normalizedProfile.name || selectedEdition),
     generatedAt: now instanceof Date ? now.toISOString() : new Date(now).toISOString(),
@@ -1176,6 +1247,29 @@ export function operationFeatureId(operation = {}) {
   const operationId = String(operation.id || "");
   const operationFeature = String(operation.feature || "");
 
+  const localSharedspaceOperationIds = new Set([
+    "agent_workspaces.create",
+    "agent_workspaces.list",
+    "agent_workspaces.get",
+    "agent_workspaces.delete",
+    "agent_workspaces.folder.create",
+    "agent_workspaces.files.list",
+    "agent_workspaces.file.upload",
+    "agent_workspaces.file.stat",
+    "agent_workspaces.file.download",
+    "agent_workspaces.file.write",
+    "agent_workspaces.file.delete",
+    "agent_workspaces.file.move"
+  ]);
+  if (
+    localSharedspaceOperationIds.has(operationId) ||
+    operationId.startsWith("workspace.file.") ||
+    operationId.startsWith("sharedspace.") ||
+    operationId.startsWith("external.cloudDrive.")
+  ) {
+    return "local-sharedspace";
+  }
+
   if (operationId === "knowledge.document_structure" || operationId === "knowledge.hierarchy.audit") {
     return "knowledge-outline-reasoning";
   }
@@ -1225,6 +1319,9 @@ export function operationFeatureId(operation = {}) {
   if (operationId.startsWith("agent_gateway.") || operationId.startsWith("agent_sync.") || operationId.startsWith("oauth.")) {
     return "agent-gateway";
   }
+  if (operationId.startsWith("mobile_relay.")) {
+    return "mobile-relay";
+  }
   if (operationId.startsWith("repo.")) {
     return "code-repository-operations";
   }
@@ -1247,6 +1344,7 @@ export function operationFeatureId(operation = {}) {
     jobs: "work-queue-core",
     uploads: "work-queue-core",
     tool_management: "tool-management-core",
+    mobile_relay: "mobile-relay",
     strategy_management: "strategy-management",
     agent_memory: "agent-memory",
     client_runtime_allocator: "client-runtime-core",
@@ -1285,7 +1383,7 @@ export function filterOperationsForFeatures(operations = [], featureRuntime = nu
 export function publicFeatureRuntime(featureRuntime, operations = []) {
   const activeOperations = filterOperationsForFeatures(operations, featureRuntime);
   return {
-    schemaVersion: featureRuntime?.schemaVersion || 1,
+    schemaVersion: featureRuntime?.schemaVersion || "v0.0.1:schema:definition-1",
     edition: featureRuntime?.edition || DEFAULT_FEATURE_EDITION,
     profileName: featureRuntime?.profileName || "",
     generatedAt: featureRuntime?.generatedAt || "",

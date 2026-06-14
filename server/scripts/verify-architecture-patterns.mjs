@@ -170,7 +170,7 @@ async function assertDataStructureProviderOwnsPorts() {
   const file = "server/platform/common/data-structure/data-structure-provider.mjs";
   const text = await read(file);
   for (const needle of [
-    "pact.data-structure.v1",
+    "v0.0.1:storage:data-structure-1",
     "createDataStructureProvider",
     "checkpointTree",
     "textNormalization",
@@ -189,11 +189,12 @@ async function assertCorePlatformProviderOwnsPorts() {
   const file = "server/platform/common/platform-core/core-platform-provider.mjs";
   const text = await read(file);
   for (const needle of [
-    "pact.core-platform.v1",
+    "v0.0.1:platform:core-1",
     "createCorePlatformProvider",
     "dispatchRegisteredHttpOperation",
     "dispatchRpcOperation",
     "dispatchInternalOperation",
+    "findProxyRegisteredApiRequest",
     "shouldProxyRegisteredApiRequest",
     "describeOperationRegistry",
     "buildSystemInterfaces",
@@ -217,7 +218,7 @@ async function assertStorageProviderOwnsPorts() {
   const file = "server/platform/common/storage/storage-provider.mjs";
   const text = await read(file);
   for (const needle of [
-    "pact.storage.v1",
+    "v0.0.1:storage:core-1",
     "createStorageProvider",
     "getStorageSummary",
     "readRawObjectById",
@@ -244,7 +245,7 @@ async function assertDevopsProviderOwnsPorts() {
   const file = "server/platform/common/devops/devops-provider.mjs";
   const text = await read(file);
   for (const needle of [
-    "pact.devops.v1",
+    "v0.0.1:platform:devops-1",
     "createDevopsProvider",
     "getBackgroundProcessStatus",
     "getMonitorAlertState",
@@ -478,7 +479,7 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
     assertTextIncludes(provider, needle, `${providerFile} must expose console state projection ${needle}`);
   }
   for (const needle of [
-    "pact.job-workflow.v1",
+    "v0.0.1:workflow:job-workflow-1",
     "createJobWorkflowProvider",
     "createJob",
     "getJob",
@@ -490,7 +491,7 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
     assertTextIncludes(jobWorkflowProvider, needle, `${jobWorkflowProviderFile} must own job workflow provider port ${needle}`);
   }
   for (const needle of [
-    "pact.agent-runtime.v1",
+    "v0.0.1:agent:runtime-1",
     "createAgentRuntimeProvider",
     "getAgentConfigRegistry",
     "publicAgentGatewayConfig",
@@ -504,7 +505,6 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
   }
   assertTextIncludes(provider, "agentRuntimeProvider", `${providerFile} must expose agent runtime provider`);
   assertTextIncludes(executor, "agentRuntimeProviderFrom", `${executorFile} must resolve agent operations through agent runtime provider`);
-  assertTextIncludes(wordCloud, "agentRuntimeProvider", `${wordCloudFile} must route word-cloud agent calls through agent runtime provider`);
   assertTextExcludes(
     executor,
     [
@@ -520,6 +520,7 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
     [
       "loadAgentGatewayModule",
       "getAgentConfigRegistry",
+      "agentRuntimeProvider",
       "loadSettings("
     ],
     wordCloudFile
@@ -792,8 +793,6 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
       "mergeSettingsForModelProbe(",
       "normalizeAgentModelPayload(",
       "preprocessWordCloudVocabulary({",
-      "runWordCloudClassificationTask",
-      "resumeWordCloudClassificationTasks",
       "requireDomainService",
       "createAuthorizationEngine",
       "createAuthorizationStore",
@@ -1089,8 +1088,7 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
     "knowledgeWorkflowContext",
     "settingsAgentGatewayContext",
     "authorizationFacadeContext",
-    "accessControlContext",
-    "resumeKnowledgeWordCloudTasks"
+    "accessControlContext"
   ]) {
     assertTextIncludes(contextFactory, needle, `${contextFile} must own console context assembly ${needle}`);
   }
@@ -1224,7 +1222,6 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
     "knowledge.word_bags.add",
     "knowledge.word_bags.update",
     "knowledge.word_bags.delete",
-    "knowledge.word_clouds.propose",
     "storage.doctor",
     "storage.reconcile",
     "storage.backups.list",
@@ -1656,7 +1653,7 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
     assertTextIncludes(executor, needle, `${executorFile} must own specialized console operation ${needle}`);
   }
   for (const needle of [
-    "pact.security-permissions.v1",
+    "v0.0.1:risk-control:permissions-1",
     "createSecurityPermissionsProvider",
     "authorizeOperation",
     "getConsoleSummary",
@@ -1674,7 +1671,7 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
     );
   }
   for (const needle of [
-    "pact.strategy-management.v1",
+    "v0.0.1:strategy:strategy-management-1",
     "createStrategyManagementProvider",
     "evaluateWorkflowPolicy",
     "evaluateAgentPolicy",
@@ -1691,7 +1688,7 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
   }
   for (const needle of [
     "CodespaceManagement",
-    "pact.codespace.v1",
+    "v0.0.1:platform:codespace-1",
     "workspace.code.change.prepare",
     "workspace.code.change.status.sync",
     "code-management/codespace-registry.json"
@@ -1700,7 +1697,7 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
   }
   for (const needle of [
     "KnowledgeTransformation",
-    "pact.knowledge-transformation.v1",
+    "v0.0.1:knowledge:transformation-1",
     "createKnowledgeTransformationProvider",
     "raw-corpus.format.convert",
     "knowledge.dossier.export"
@@ -1715,10 +1712,8 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
     "executeKnowledgeWordCloudOperation",
     "normalizeWordCloudOperationInput",
     "normalizeWordCloudCorpusPaths",
-    "knowledge.word_clouds.propose",
-    "knowledge.word_bags.update",
-    "runWordCloudClassificationTask",
-    "resumeKnowledgeWordCloudClassificationTasks"
+    "knowledge.word_clouds.save",
+    "knowledge.word_bags.update"
   ]) {
     assertTextIncludes(wordCloud, needle, `${wordCloudFile} must own word-cloud operation ${needle}`);
   }
@@ -1783,7 +1778,7 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
     runtimeConsoleSummaryFile
   );
   for (const needle of [
-    "pact.module-management.v1",
+    "v0.0.1:tool:module-management-1",
     "createModuleManagementProvider",
     "buildRuntimeConsoleSummary",
     "getMountsSnapshot",
@@ -1830,11 +1825,6 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
       `${toolSkillManagementProviderFile} must own Tool/Skill provider projection ${needle}`
     );
   }
-  assertTextIncludes(
-    provider,
-    "resumeKnowledgeWordCloudClassificationTasks",
-    `${providerFile} must expose word-cloud task recovery through the specialized console provider`
-  );
   assertTextExcludes(
     contextFactory,
     ["upload-session-store.mjs"],
@@ -1965,13 +1955,13 @@ async function assertCoreArchitectureDocsCoverMainline() {
   }
 
   for (const needle of [
-    "pact.workspace.v1",
-    "pact.operation.v1",
-    "pact.knowledge.v1",
-    "pact.context-bundle.v1",
-    "pact.knowledge-access.v1",
-    "pact.agent-library.v1",
-    "pact.workspace-contribution.v1",
+    "v0.0.1:workspace:core-1",
+    "v0.0.1:operation:core-1",
+    "v0.0.1:knowledge:core-1",
+    "v0.0.1:agent:context-bundle-1",
+    "v0.0.1:knowledge:access-1",
+    "v0.0.1:agent:library-1",
+    "v0.0.1:workspace:contribution-1",
     "Middle Layer Strategy",
     "Compatibility Strategy",
     "两个问题，一个能力，三个兼容",
@@ -1987,7 +1977,7 @@ async function assertCoreArchitectureDocsCoverMainline() {
     "assetContributionReportV0",
     "/api/agent-workspaces",
     "/api/workspace/contributions/report",
-    "pact.checkpoint-tree.v1",
+    "v0.0.1:storage:checkpoint-tree-1",
     "Unified Checkpoint Tree Protocol",
     "checkpointNodeId",
     "effectKind",

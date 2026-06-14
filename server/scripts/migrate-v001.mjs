@@ -8,6 +8,20 @@ import { ServerConfig } from "../platform/common/config/ServerConfig.mjs";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const DEFAULT_COPY_LIMIT_BYTES = 5 * 1024 * 1024;
+const SENSITIVE_RECOVERY_FILE_NAMES = new Set([
+  ".sealing-key",
+  "csrf-hmac-secret.bin",
+  "credentials.json",
+  "token.json",
+  "tokens.json"
+]);
+const SENSITIVE_RECOVERY_FILE_PATTERNS = [
+  /(^|\/)\.env(?:\.[^/]+)?$/iu,
+  /(^|\/)(?:id_rsa|id_dsa|id_ecdsa|id_ed25519)$/iu,
+  /(^|\/)(?:client_secret|service-account|service_account|api-key|apikey|auth-token|access-token|refresh-token)[^/]*\.(?:json|yaml|yml|txt|env)$/iu,
+  /(^|\/)(?:private|secret|client_secret)[^/]*\.pem$/iu,
+  /\.(?:key|p12|pfx|jks|keystore)$/iu
+];
 
 const RUNTIME_AREAS = [
   {
@@ -135,6 +149,24 @@ function shouldSkipRelative(relativePath) {
   return normalized === "migrations" || normalized.startsWith("migrations/");
 }
 
+function sensitiveRecoveryReason(relativePath) {
+  const normalized = relativePath.split(path.sep).join("/");
+  const basename = path.posix.basename(normalized);
+  if (normalized === "secrets/values" || normalized.startsWith("secrets/values/")) {
+    return "secret-store-value";
+  }
+  if (normalized === "agent-relay/acp-sensitive-payloads.json" || /(^|\/)[^/]*sensitive-payloads[^/]*\.json$/iu.test(normalized)) {
+    return "sensitive-payload-store";
+  }
+  if (normalized.endsWith(".sealing-key") || SENSITIVE_RECOVERY_FILE_NAMES.has(basename)) {
+    return "sensitive-recovery-material";
+  }
+  if (SENSITIVE_RECOVERY_FILE_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return "sensitive-recovery-material";
+  }
+  return "";
+}
+
 async function sha256File(filePath) {
   const data = await fs.readFile(filePath);
   return crypto.createHash("sha256").update(data).digest("hex");
@@ -208,6 +240,17 @@ async function writeRecoveryFiles({ dataDir, runDir, files, copyLimitBytes }) {
       skipped.push({ relativePath: file.relativePath, reason: file.kind });
       continue;
     }
+    const sensitivity = sensitiveRecoveryReason(file.relativePath);
+    if (sensitivity) {
+      skipped.push({
+        relativePath: file.relativePath,
+        reason: "sensitive-recovery-material",
+        sensitivity,
+        sizeBytes: file.sizeBytes,
+        sha256: file.sha256
+      });
+      continue;
+    }
     if (file.sizeBytes > copyLimitBytes) {
       skipped.push({ relativePath: file.relativePath, reason: "larger-than-copy-limit", sizeBytes: file.sizeBytes });
       continue;
@@ -230,12 +273,16 @@ function recoveryManifestOnly({ runDir, files, copyLimitBytes }) {
   return {
     recoveryRoot: path.join(runDir, "recovery-files"),
     copied: [],
-    skipped: files.map((file) => ({
-      relativePath: file.relativePath,
-      reason: "copy-disabled-for-report",
-      sizeBytes: file.sizeBytes,
-      sha256: file.sha256
-    })),
+    skipped: files.map((file) => {
+      const sensitivity = sensitiveRecoveryReason(file.relativePath);
+      return {
+        relativePath: file.relativePath,
+        reason: "copy-disabled-for-report",
+        ...(sensitivity ? { sensitivity } : {}),
+        sizeBytes: file.sizeBytes,
+        sha256: file.sha256
+      };
+    }),
     copyLimitBytes
   };
 }
@@ -275,6 +322,7 @@ function buildMarkdownReport(report) {
     `- Runtime bytes scanned: ${report.summary.sizeBytes}`,
     `- Recovery files copied: ${report.recovery.copied.length}`,
     `- Recovery files skipped: ${report.recovery.skipped.length}`,
+    `- Sensitive recovery files skipped: ${report.summary.sensitiveFileCount}`,
     "",
     "## Runtime Areas",
     "",
@@ -297,6 +345,7 @@ function buildMarkdownReport(report) {
   lines.push("- v0.0.1 does not move runtime state back into the repository.");
   lines.push("- Existing data remains in `ServerConfig.getDataDir()` and is retained in place.");
   lines.push("- External provider credentials must remain secret refs; raw token values are not copied into reports.");
+  lines.push("- Secret values, sealing keys, CSRF HMAC secrets, and sensitive payload stores are manifest-only and are not copied into recovery files.");
   lines.push("- The recovery point contains small runtime files only; large files are represented by hash and path.");
   lines.push("");
   lines.push("## Warnings");
@@ -327,8 +376,8 @@ async function main() {
   }
 
   const report = {
-    schemaVersion: 1,
-    reportType: "pact.v001.migration-report.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    reportType: "v0.0.1:platform:migration-report-1",
     runId,
     generatedAt: new Date().toISOString(),
     repoRoot,
@@ -340,7 +389,8 @@ async function main() {
     summary: {
       fileCount: files.filter((file) => file.kind === "file").length,
       symlinkCount: files.filter((file) => file.kind === "symlink").length,
-      sizeBytes: files.reduce((total, file) => total + file.sizeBytes, 0)
+      sizeBytes: files.reduce((total, file) => total + file.sizeBytes, 0),
+      sensitiveFileCount: files.filter((file) => Boolean(sensitiveRecoveryReason(file.relativePath))).length
     },
     areas: summarizeAreas(dataDir, files),
     runtimeFiles: files,

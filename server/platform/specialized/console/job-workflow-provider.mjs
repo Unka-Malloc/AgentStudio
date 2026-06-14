@@ -1,4 +1,4 @@
-export const JOB_WORKFLOW_PROVIDER_PROTOCOL_VERSION = "pact.job-workflow.v1";
+export const JOB_WORKFLOW_PROVIDER_PROTOCOL_VERSION = "v0.0.1:workflow:job-workflow-1";
 
 function requireJobManager(jobManager = null) {
   const required = [
@@ -22,7 +22,7 @@ export function createJobWorkflowProvider({ jobManager } = {}) {
     protocolVersion: JOB_WORKFLOW_PROVIDER_PROTOCOL_VERSION,
     describe() {
       return {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: JOB_WORKFLOW_PROVIDER_PROTOCOL_VERSION,
         capabilities: [
           "jobs.create",

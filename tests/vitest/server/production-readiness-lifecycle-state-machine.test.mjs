@@ -9,7 +9,7 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const defPath = path.resolve(__dirname, "../../../server/platform/common/state-machine/definitions/production.readiness.lifecycle.v1.json");
+const defPath = path.resolve(__dirname, "../../../server/platform/common/state-machine/definitions/production.readiness.lifecycle.json");
 
 describe("Production Readiness Lifecycle State Machine", () => {
   let definition;

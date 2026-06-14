@@ -406,7 +406,7 @@ describe("batch repository final coverage", () => {
 
       await fs.writeFile(manifestPath, JSON.stringify({
         recordType: "wordBagSet",
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         wordBagSetId: "cloud-jsonl-final"
       }) + "\n", "utf8");
       await expectWordCloudError(repository.updateKnowledgeWordBag({

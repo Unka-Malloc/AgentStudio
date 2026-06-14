@@ -192,8 +192,8 @@ describe("runtime dependencies more extra coverage", () => {
     await fs.writeFile(
       configPath,
       JSON.stringify({
-        schemaVersion: 1,
-        protocolVersion: "pact.runtime-dependencies.v1",
+        schemaVersion: "v0.0.1:schema:definition-1",
+        protocolVersion: "v0.0.1:platform:runtime-dependencies-1",
         sources: {
           python: {
             default: {
@@ -229,8 +229,8 @@ describe("runtime dependencies more extra coverage", () => {
     await fs.writeFile(
       configPath,
       JSON.stringify({
-        schemaVersion: 1,
-        protocolVersion: "pact.runtime-dependencies.v1",
+        schemaVersion: "v0.0.1:schema:definition-1",
+        protocolVersion: "v0.0.1:platform:runtime-dependencies-1",
         sources: {
           python: null,
           docker: []

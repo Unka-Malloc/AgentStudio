@@ -10,7 +10,7 @@
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "offset": 1,
   "id": "uuid",
   "topic": "jobs.job",

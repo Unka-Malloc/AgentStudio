@@ -1,23 +1,61 @@
 import { describe, expect, it, vi } from "vitest";
 
 const sendJsonMock = vi.hoisted(() => vi.fn());
+const catalogChange = vi.hoisted(() => (reasonCode, serviceId = "svc-1") => ({
+  schemaVersion: "v0.0.1:schema:definition-1",
+  source: "external-service-registry",
+  type: reasonCode,
+  reasonCode,
+  serviceId
+}));
 const externalServiceMocks = vi.hoisted(() => ({
+  adoptExternalServiceTools: vi.fn(async (input) => ({
+    ok: true,
+    action: "adopt",
+    ...input,
+    catalogChange: catalogChange("external_service_tools_adopted", input.serviceId),
+  })),
   describeExternalServices: vi.fn(async ({ userDataPath }) => ({ ok: true, userDataPath })),
+  promoteExternalServiceTools: vi.fn(async (input) => ({
+    ok: true,
+    action: "promote",
+    ...input,
+    catalogChange: catalogChange("external_service_catalog_promoted", input.serviceId),
+  })),
   refreshExternalServiceRuntime: vi.fn(async ({ userDataPath, serviceId }) => ({
     ok: true,
     userDataPath,
     serviceId,
     refreshedCount: serviceId ? 1 : 3,
+    catalogChange: catalogChange("external_service_catalog_refreshed", serviceId),
+  })),
+  rollbackExternalServiceTools: vi.fn(async (input) => ({
+    ok: true,
+    action: "rollback",
+    ...input,
+    catalogChange: {
+      ...catalogChange("external_service_catalog_rolled_back", input.serviceId),
+      invalidation: {
+        reasonCode: "rollback_requires_runtime_reprojection"
+      }
+    },
   })),
   saveExternalServiceConfig: vi.fn(async ({ userDataPath, payload }) => ({
     ok: payload.ok !== false,
     userDataPath,
     payload,
+    catalogChange: catalogChange("external_service_catalog_refreshed", payload.serviceId || ""),
   })),
   verifyExternalServiceConfigPayload: vi.fn(async ({ payload, requireKnownPaths }) => ({
     ok: true,
     payload,
     requireKnownPaths,
+  })),
+  verifyExternalServiceProductionGates: vi.fn(async (input) => ({
+    ok: true,
+    action: "production-verify",
+    ...input,
+    catalogChange: catalogChange("external_service_production_verified", input.serviceId),
   })),
 }));
 
@@ -341,7 +379,20 @@ describe("system controller thin handlers final extra coverage", () => {
   it("handles external service responses, parse fallbacks, and tool catalog refresh", async () => {
     sendJsonMock.mockClear();
     const parseJsonBody = vi.fn((requestBody) => JSON.parse(Buffer.from(requestBody).toString("utf8") || "{}"));
-    const refreshExternalServiceTools = vi.fn(() => ({ ok: true, toolCount: 2 }));
+    const refreshExternalServiceTools = vi.fn((event = {}) => ({
+      ok: true,
+      toolCount: 2,
+      ...(event?.reasonCode === "external_service_catalog_rolled_back"
+        ? {
+            runtimeInvalidation: {
+              ok: true,
+              serviceId: event.serviceId,
+              inFlightAbortedCount: 1,
+              healthStateInvalidated: 0,
+            },
+          }
+        : {}),
+    }));
     const handlers = createSystemControllerExternalServiceHandlers({
       parseJsonBody,
       userDataPath: "/tmp/user-data",
@@ -374,11 +425,125 @@ describe("system controller thin handlers final extra coverage", () => {
       toolCatalogRefresh: { ok: true, toolCount: 2 },
     });
 
+    await handlers.handleExternalServiceProductionVerify({
+      requestBody: body({
+        serviceId: "svc-1",
+        expectedCandidateVersionId: "candidate-v1",
+        expectedCandidateFingerprint: "candidate-fp",
+        verifiedBy: "operator-1",
+      }),
+      response,
+    });
+    expect(externalServiceMocks.verifyExternalServiceProductionGates).toHaveBeenLastCalledWith({
+      userDataPath: "/tmp/user-data",
+      serviceId: "svc-1",
+      candidateVersionId: "",
+      expectedCandidateVersionId: "candidate-v1",
+      expectedCandidateFingerprint: "candidate-fp",
+      verifierId: "",
+      verifiedBy: "operator-1",
+    });
+    expect(sendJsonMock.mock.calls.at(-1)[2]).toMatchObject({
+      ok: true,
+      action: "production-verify",
+      toolCatalogRefresh: { ok: true, toolCount: 2 },
+    });
+
+    await handlers.handleExternalServiceToolsAdopt({
+      requestBody: body({ serviceId: "svc-1", toolNames: ["search"], expectedFingerprints: { search: "fp" } }),
+      response,
+    });
+    expect(externalServiceMocks.adoptExternalServiceTools).toHaveBeenLastCalledWith({
+      userDataPath: "/tmp/user-data",
+      serviceId: "svc-1",
+      toolNames: ["search"],
+      adoptAll: false,
+      adoptedBy: "operator",
+      expectedFingerprints: { search: "fp" },
+      acknowledgeRisk: false,
+      allowRiskyTools: false,
+    });
+    expect(sendJsonMock.mock.calls.at(-1)[2]).toMatchObject({
+      ok: true,
+      action: "adopt",
+      toolCatalogRefresh: { ok: true, toolCount: 2 },
+    });
+
+    await handlers.handleExternalServiceToolsPromote({
+      requestBody: body({
+        serviceId: "svc-1",
+        adoptAll: true,
+        expectedCandidateVersionId: "candidate-v1",
+        expectedCandidateFingerprint: "candidate-fp",
+        acknowledgeRisk: true,
+      }),
+      response,
+    });
+    expect(externalServiceMocks.promoteExternalServiceTools).toHaveBeenLastCalledWith({
+      userDataPath: "/tmp/user-data",
+      serviceId: "svc-1",
+      toolNames: undefined,
+      adoptAll: true,
+      promotedBy: "operator",
+      expectedFingerprints: {},
+      candidateVersionId: "",
+      expectedCandidateVersionId: "candidate-v1",
+      expectedCandidateFingerprint: "candidate-fp",
+      acknowledgeRisk: true,
+      allowRiskyTools: false,
+    });
+    expect(sendJsonMock.mock.calls.at(-1)[2]).toMatchObject({
+      ok: true,
+      action: "promote",
+      toolCatalogRefresh: { ok: true, toolCount: 2 },
+    });
+
+    await handlers.handleExternalServiceToolsRollback({
+      requestBody: body({ serviceId: "svc-1", targetVersionId: "active-v1", reason: "bad_candidate" }),
+      response,
+    });
+    expect(externalServiceMocks.rollbackExternalServiceTools).toHaveBeenLastCalledWith({
+      userDataPath: "/tmp/user-data",
+      serviceId: "svc-1",
+      targetVersionId: "active-v1",
+      rolledBackBy: "operator",
+      reason: "bad_candidate",
+    });
+    expect(sendJsonMock.mock.calls.at(-1)[2]).toMatchObject({
+      ok: true,
+      action: "rollback",
+      toolCatalogRefresh: {
+        ok: true,
+        toolCount: 2,
+        runtimeInvalidation: {
+          ok: true,
+          serviceId: "svc-1",
+          inFlightAbortedCount: 1,
+          healthStateInvalidated: 0,
+        },
+      },
+    });
+
     await handlers.handleExternalServiceConfigVerify({ requestBody: Buffer.alloc(0), response });
     expect(sendJsonMock).toHaveBeenLastCalledWith(response, 200, {
       ok: true,
       payload: {},
       requireKnownPaths: false,
+    });
+    expect(refreshExternalServiceTools).toHaveBeenCalledTimes(6);
+    expect(refreshExternalServiceTools.mock.calls.map(([event]) => event?.reasonCode)).toEqual([
+      "external_service_catalog_refreshed",
+      "external_service_catalog_refreshed",
+      "external_service_production_verified",
+      "external_service_tools_adopted",
+      "external_service_catalog_promoted",
+      "external_service_catalog_rolled_back",
+    ]);
+    expect(refreshExternalServiceTools.mock.calls.at(-1)?.[0]).toMatchObject({
+      serviceId: "svc-1",
+      invalidation: {
+        reasonCode: "rollback_requires_runtime_reprojection",
+      },
     });
   });
 });

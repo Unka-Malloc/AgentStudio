@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { assertServerToken, resolveWithin, serverToken } from "../security/client-strings.mjs";
 
-const CHECKPOINT_TREE_SCHEMA_VERSION = 1;
+const CHECKPOINT_TREE_SCHEMA_VERSION = "v0.0.1:storage:checkpoint-tree-schema-1";
 const MAX_EVENTS = 500;
 const TERMINAL_STATUSES = new Set(["completed", "failed", "skipped", "canceled"]);
 const VALID_STATUSES = new Set([
@@ -368,7 +368,7 @@ export async function diffCheckpointTree({
   const rightScope = collectNodeScope(rightTree, rightNodeId);
   const changes = compareNodeSnapshots(comparableNode(leftNode), comparableNode(rightNode));
   return {
-    protocolVersion: "pact.workspace-checkpoint.v1",
+    protocolVersion: "v0.0.1:workspace:checkpoint-1",
     treeId: rightTree.treeId,
     from: {
       treeId: leftTree.treeId,
@@ -403,7 +403,7 @@ export async function queryCheckpointScope({ userDataPath, treeId = "", nodeId =
     .filter((event) => !event.nodeId || scopeNodes.some((node) => node.nodeId === event.nodeId))
     .slice(-50);
   return {
-    protocolVersion: "pact.workspace-checkpoint.v1",
+    protocolVersion: "v0.0.1:workspace:checkpoint-1",
     treeId: tree.treeId,
     nodeId: resolvedNodeId,
     path: nodePath(tree, resolvedNodeId),
@@ -430,7 +430,7 @@ function checkpointRestorePlan(tree, nodeId = "", input = {}) {
   const scopeNodes = collectNodeScope(tree, resolvedNodeId);
   const target = nodeFor(tree, resolvedNodeId);
   return {
-    protocolVersion: "pact.workspace-checkpoint.v1",
+    protocolVersion: "v0.0.1:workspace:checkpoint-1",
     treeId: tree.treeId,
     nodeId: resolvedNodeId,
     mode: String(input.mode || "restore-marker"),

@@ -69,13 +69,13 @@ async function executeTool(server, token, toolId, input) {
   });
 }
 
-async function callMcp(server, token, operation, input, id = 1) {
+async function callMcp(server, token, operation, input, id = 1, outlet = "pact.discovery") {
   return fetchJson(`${server.url}/mcp`, {
     method: "POST",
     headers: mcpHeaders(token),
     body: JSON.stringify(mcpRequest("tools/call", {
-      name: "pact.call",
-      arguments: { apiVersion: "pact.mcp.v1", operation, input }
+      name: outlet,
+      arguments: { apiVersion: "v0.0.1:mcp:interface-1", operation, input }
     }, id))
   });
 }
@@ -183,7 +183,7 @@ try {
   const status = await callMcp(server, readGrant.token, "pact.repo.status", {
     repoId: repoPath,
     targetType: "worktree"
-  }, 11);
+  }, 11, "pact.codespace");
   assert.equal(status.status, 200);
   assert.equal(status.payload.result.structuredContent.operation, "pact.repo.status");
   assert.equal(status.payload.result.structuredContent.payload.operationId, "repo.status");

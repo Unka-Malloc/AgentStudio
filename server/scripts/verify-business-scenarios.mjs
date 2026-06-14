@@ -201,7 +201,7 @@ const scenarios = [
             id: "business-config-permission",
             label: "Business Config Permission",
             scopeIds: ["knowledge:read"],
-            toolsetIds: ["pact.knowledge.read"]
+            toolsetIds: ["pact.agentLibrary.read"]
           }
         ]
       });
@@ -264,7 +264,7 @@ const scenarios = [
             id: "business-agent-readers",
             label: "Business Agent Readers",
             scopeIds: ["knowledge:read"],
-            toolsetIds: ["pact.knowledge.read"]
+            toolsetIds: ["pact.agentLibrary.read"]
           },
           {
             id: "business-agent-readers",
@@ -315,14 +315,14 @@ const scenarios = [
         {
           label: "business-scenario-tool-grant",
           scopes: ["knowledge:read"],
-          toolAllow: ["pact.knowledge.health"]
+          toolAllow: ["pact.agentLibrary.health"]
         },
         { auth: state.owner }
       );
       state.previewAllowed = await harness.post(
         "/api/tool-management/v1/policy/preview",
         {
-          toolId: "pact.knowledge.health",
+          toolId: "pact.agentLibrary.health",
           grantId: state.grant.payload.grant.id
         },
         { auth: state.owner }
@@ -338,7 +338,7 @@ const scenarios = [
       state.previewAfterGovernanceUpdate = await harness.post(
         "/api/tool-management/v1/policy/preview",
         {
-          toolId: "pact.knowledge.health",
+          toolId: "pact.agentLibrary.health",
           grantId: state.grant.payload.grant.id
         },
         { auth: state.owner }
@@ -362,7 +362,7 @@ const scenarios = [
       state.executed = await harness.post(
         "/api/tool-management/v1/execute",
         {
-          toolId: "pact.knowledge.health",
+          toolId: "pact.agentLibrary.health",
           input: {}
         },
         {
@@ -372,7 +372,7 @@ const scenarios = [
       state.denied = await harness.post(
         "/api/tool-management/v1/execute",
         {
-          toolId: "pact.knowledge.search",
+          toolId: "pact.agentLibrary.search",
           input: {}
         },
         {
@@ -392,7 +392,7 @@ const scenarios = [
       state.oldTokenAfterRotate = await harness.post(
         "/api/tool-management/v1/execute",
         {
-          toolId: "pact.knowledge.health",
+          toolId: "pact.agentLibrary.health",
           input: {}
         },
         {
@@ -416,7 +416,7 @@ const scenarios = [
       assert.equal([...ids].some((id) => id.startsWith("tool_platform.")), false);
       assert.equal([...ids].some((id) => id.startsWith("agent_tools.")), false);
       expectOk(state.catalog, "tool catalog");
-      assert.ok(state.catalog.payload.tools.some((tool) => tool.id === "pact.knowledge.health"));
+      assert.ok(state.catalog.payload.tools.some((tool) => tool.id === "pact.agentLibrary.health"));
       expectOk(state.initialGovernanceUpdate, "initial authorization governance update");
       expectStatus(state.grant, 201, "create grant");
       assert.equal(

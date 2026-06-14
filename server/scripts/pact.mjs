@@ -42,7 +42,7 @@ const DEFAULT_SERVER_URL = process.env.PACT_SERVER_URL || getDefaultServerUrl();
 const DEFAULT_CHUNK_SIZE = 1024 * 1024;
 const DEFAULT_CAPABILITY_KERNEL_ALIAS = "pact-tool-grants";
 const DEFAULT_CAPABILITY_BINDING_GUARD_ALIAS = "pact-tool-bindings";
-const SECURITY_RECOVERY_PACKAGE_VERSION = "pact.security-recovery.v1";
+const SECURITY_RECOVERY_PACKAGE_VERSION = "v0.0.1:risk-control:recovery-1";
 
 function parseArgs(argv) {
   const args = {
@@ -850,7 +850,7 @@ async function runSecretCommand(args) {
       args,
       result: {
         ok: true,
-        protocolVersion: "pact.local-secret-store.v1",
+        protocolVersion: "v0.0.1:risk-control:local-secret-store-1",
         dataDir: paths.dataDir,
         registryPath: paths.registryPath,
         count: entries.length,
@@ -1077,7 +1077,7 @@ async function importSecurityRecoveryPackage({
     }
     return result;
   }
-  if (recoveryPackage?.protocolVersion === "pact.capability-binding-guard-recovery.v1") {
+  if (recoveryPackage?.protocolVersion === "v0.0.1:risk-control:capability-binding-guard-recovery-1") {
     return {
       ok: true,
       protocolVersion: SECURITY_RECOVERY_PACKAGE_VERSION,
@@ -1332,7 +1332,7 @@ async function runToolsCommand(args) {
         apiPath: command === "dry-run" ? "/api/tool-management/v1/dry-run" : "/api/tool-management/v1/execute",
         headers: readHeaders(args),
         body: {
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           ...body,
           toolId,
           context,

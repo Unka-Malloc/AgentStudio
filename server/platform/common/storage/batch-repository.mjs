@@ -7,12 +7,12 @@ import { asBoolInt, asJson, scopedId } from "./metadata-helpers.mjs";
 
 const SOURCE_VOCABULARY_MAX_TERMS_PER_BATCH = 25000;
 const SOURCE_VOCABULARY_MAX_TERM_LENGTH = 128;
-const SOURCE_VOCABULARY_PROFILE_VERSION = "lexical-signals-v1";
-const SIGNIFICANT_TERMS_PROFILE_VERSION = "foreground-background-v1";
-const DOCUMENT_PROFILE_VERSION = "document-profile-v1";
+const SOURCE_VOCABULARY_PROFILE_VERSION = "v0.0.1:knowledge:source-vocabulary-profile-1";
+const SIGNIFICANT_TERMS_PROFILE_VERSION = "v0.0.1:knowledge:significant-terms-profile-1";
+const DOCUMENT_PROFILE_VERSION = "v0.0.1:knowledge:document-profile-1";
 const SOURCE_VOCABULARY_BM25_K1 = 1.2;
-const WORD_CLOUD_SCHEMA_VERSION = 1;
-const WORD_CLOUD_JSONL_SCHEMA_VERSION = 1;
+const WORD_CLOUD_SCHEMA_VERSION = "v0.0.1:storage:word-cloud-schema-1";
+const WORD_CLOUD_JSONL_SCHEMA_VERSION = "v0.0.1:storage:word-cloud-jsonl-schema-1";
 const WORD_CLOUD_EXPORT_TYPE = "pact.knowledge.word_bags.export";
 const WORD_CLOUD_SOURCE_QUERY_MAX_TERMS = 100000;
 const WORD_CLOUD_STORAGE_MAX_TERMS = Number.MAX_SAFE_INTEGER;

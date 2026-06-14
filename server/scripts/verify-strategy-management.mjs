@@ -21,6 +21,15 @@ function jsonHeaders() {
   return { "Content-Type": "application/json" };
 }
 
+function appendFeatureEnv(...featureIds) {
+  const existing = String(process.env.PACT_FEATURES || "");
+  const values = new Set(existing.split(",").map((item) => item.trim()).filter(Boolean));
+  for (const featureId of featureIds) {
+    values.add(featureId);
+  }
+  return [...values].join(",");
+}
+
 async function fetchJson(url, init = {}) {
   const response = await fetch(url, init);
   const rawText = await response.text();
@@ -133,6 +142,16 @@ async function verifyProviderBoundary() {
   assert.equal(routePolicy.fromAspect, "downstream-client-aspect");
   assert.equal(routePolicy.internalCapabilityId, "acp-agent-relay");
 
+  const queuePolicy = provider.evaluateQueuePolicy({
+    queueDefinitionId: "verify.queue",
+    queueLabel: "verify.jobs",
+    operationId: "jobs.create"
+  });
+  assert.equal(queuePolicy.protocolVersion, STRATEGY_MANAGEMENT_PROTOCOL_VERSION);
+  assert.equal(queuePolicy.policyType, "queue-policy");
+  assert.equal(queuePolicy.effect, "allow");
+  assert.equal(queuePolicy.queueDefinitionId, "verify.queue");
+
   const deniedRoutePolicy = provider.evaluateRoutePolicy({
     routeId: "upstream.external.missing",
     fromAspect: "upstream-service-aspect",
@@ -209,6 +228,8 @@ async function verifyGatewayRoutingBoundary() {
 
 async function verifyHttpOperations() {
   const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-strategy-management-"));
+  const previousFeatures = process.env.PACT_FEATURES;
+  process.env.PACT_FEATURES = appendFeatureEnv("knowledge-distillation");
   const server = await startHttpServer({
     userDataPath,
     distPath: "",
@@ -256,6 +277,20 @@ async function verifyHttpOperations() {
     assert.equal(route.payload.effect, "allow");
     assert.equal(route.payload.internalCapabilityId, "mcp-server-side");
 
+    const queue = await fetchJson(`${server.url}/api/strategy/queue-policy/evaluate`, {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({
+        queueDefinitionId: "verify.queue",
+        queueLabel: "verify.jobs",
+        operationId: "jobs.create"
+      })
+    });
+    assert.equal(queue.status, 200);
+    assert.equal(queue.payload.protocolVersion, STRATEGY_MANAGEMENT_PROTOCOL_VERSION);
+    assert.equal(queue.payload.policyType, "queue-policy");
+    assert.equal(queue.payload.effect, "allow");
+
     const strategyTool = await fetchJson(`${server.url}/api/strategy/tool-policy/preview`, {
       method: "POST",
       headers: jsonHeaders(),
@@ -278,6 +313,11 @@ async function verifyHttpOperations() {
     assert.equal(roles.payload.strategyProtocolVersion, STRATEGY_MANAGEMENT_PROTOCOL_VERSION);
   } finally {
     await server.close();
+    if (previousFeatures === undefined) {
+      delete process.env.PACT_FEATURES;
+    } else {
+      process.env.PACT_FEATURES = previousFeatures;
+    }
     await fs.rm(userDataPath, { recursive: true, force: true });
   }
 }
@@ -288,6 +328,7 @@ function verifyOperationRegistry() {
     "strategy.workflow_policy.evaluate",
     "strategy.agent_policy.evaluate",
     "strategy.route_policy.evaluate",
+    "strategy.queue_policy.evaluate",
     "strategy.tool_policy.preview"
   ];
   const byId = new Map(SERVER_API_OPERATIONS.map((operation) => [operation.id, operation]));

@@ -65,7 +65,7 @@ async function verifyProvider() {
   assert.equal(mcpServer.routeTarget, DOWNSTREAM_CLIENT_ASPECT_ROUTE_TARGETS.mcp);
   assert.equal(mcpServer.serverName, MCP_SERVER_NAME);
   assert.equal(mcpServer.stableToolName, MCP_STABLE_TOOL_NAME);
-  assert.equal(mcpServer.operationBoundary, "pact.tool-management.v1");
+  assert.equal(mcpServer.operationBoundary, "v0.0.1:tool:management-1");
   assert.ok(mcpServer.functions.includes("Tool Management projection"));
 
   assert.equal(provider.resolveService({ protocol: "acp" }).serviceId, "acp-agent-relay");

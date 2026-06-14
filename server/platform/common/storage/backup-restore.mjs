@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ServerConfig } from "../config/ServerConfig.mjs";
 
-export const BACKUP_RESTORE_PROTOCOL_VERSION = "pact.backup-restore.v1";
+export const BACKUP_RESTORE_PROTOCOL_VERSION = "v0.0.1:storage:backup-restore-1";
 
 const BACKUP_ROOT_DIR = "backups";
 const BACKUP_FILES_DIR = "files";
@@ -45,6 +45,44 @@ function backupPath(userDataPath = "", backupId = "") {
 
 function backupFilesRoot(userDataPath = "", backupId = "") {
   return path.join(backupPath(userDataPath, backupId), BACKUP_FILES_DIR);
+}
+
+function pathWithinRoot(candidatePath, rootPath) {
+  const relative = path.relative(path.resolve(rootPath), path.resolve(candidatePath));
+  return relative === "" || (relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+async function realpathOrResolved(candidatePath) {
+  try {
+    return await fs.realpath(candidatePath);
+  } catch {
+    return path.resolve(candidatePath);
+  }
+}
+
+async function pathBoundaryReason({ rootPath, targetPath, allowMissingTarget = true } = {}) {
+  const normalizedRoot = path.resolve(rootPath);
+  const normalizedTarget = path.resolve(targetPath);
+  if (!pathWithinRoot(normalizedTarget, normalizedRoot)) {
+    return "target_outside_root";
+  }
+  const realRoot = await realpathOrResolved(normalizedRoot);
+  const parentPath = path.dirname(normalizedTarget);
+  const realParent = await realpathOrResolved(parentPath);
+  if (!pathWithinRoot(realParent, realRoot)) {
+    return "target_parent_outside_root";
+  }
+  try {
+    const realTarget = await fs.realpath(normalizedTarget);
+    if (!pathWithinRoot(realTarget, realRoot)) {
+      return "target_symlink_outside_root";
+    }
+  } catch (error) {
+    if (!allowMissingTarget || error?.code !== "ENOENT") {
+      return "target_unresolvable";
+    }
+  }
+  return "";
 }
 
 function classifyFile(relativePath = "") {
@@ -167,7 +205,7 @@ export async function createStorageBackup({ userDataPath, label = "" } = {}) {
   const backupId = backupIdFor(label);
   const selectedBackupPath = backupPath(rootPath, backupId);
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: BACKUP_RESTORE_PROTOCOL_VERSION,
     backupId,
     label: String(label || ""),
@@ -191,7 +229,7 @@ export async function listStorageBackups({ userDataPath } = {}) {
   } catch (error) {
     if (error?.code === "ENOENT") {
       return {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: BACKUP_RESTORE_PROTOCOL_VERSION,
         backups: []
       };
@@ -216,7 +254,7 @@ export async function listStorageBackups({ userDataPath } = {}) {
   }
   backups.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: BACKUP_RESTORE_PROTOCOL_VERSION,
     backups
   };
@@ -232,6 +270,36 @@ async function buildRestoreAction({ rootPath, filesRoot, entry }) {
       targetPath,
       action: "blocked",
       reason: "backup_file_missing",
+      expectedSha256: entry.sha256,
+      currentSha256: ""
+    };
+  }
+  const backupBoundaryReason = await pathBoundaryReason({
+    rootPath: filesRoot,
+    targetPath: backupFilePath,
+    allowMissingTarget: false
+  });
+  if (backupBoundaryReason) {
+    return {
+      relativePath,
+      targetPath,
+      action: "blocked",
+      reason: `backup_${backupBoundaryReason}`,
+      expectedSha256: entry.sha256,
+      currentSha256: ""
+    };
+  }
+  const targetBoundaryReason = await pathBoundaryReason({
+    rootPath,
+    targetPath,
+    allowMissingTarget: true
+  });
+  if (targetBoundaryReason) {
+    return {
+      relativePath,
+      targetPath,
+      action: "blocked",
+      reason: targetBoundaryReason,
       expectedSha256: entry.sha256,
       currentSha256: ""
     };
@@ -269,7 +337,7 @@ function filterEntries(entries = [], includePaths = []) {
   );
 }
 
-async function applyRestoreAction({ filesRoot, action }) {
+async function applyRestoreAction({ rootPath, filesRoot, action }) {
   if (action.action === "noop") {
     return;
   }
@@ -277,6 +345,22 @@ async function applyRestoreAction({ filesRoot, action }) {
     throw new Error(`Cannot restore ${action.relativePath}: ${action.reason}`);
   }
   const sourcePath = path.join(filesRoot, safeRelativePath(action.relativePath));
+  const sourceBoundaryReason = await pathBoundaryReason({
+    rootPath: filesRoot,
+    targetPath: sourcePath,
+    allowMissingTarget: false
+  });
+  if (sourceBoundaryReason) {
+    throw new Error(`Cannot restore ${action.relativePath}: backup_${sourceBoundaryReason}`);
+  }
+  const targetBoundaryReason = await pathBoundaryReason({
+    rootPath,
+    targetPath: action.targetPath,
+    allowMissingTarget: true
+  });
+  if (targetBoundaryReason) {
+    throw new Error(`Cannot restore ${action.relativePath}: ${targetBoundaryReason}`);
+  }
   await fs.mkdir(path.dirname(action.targetPath), { recursive: true });
   await fs.copyFile(sourcePath, action.targetPath);
 }
@@ -299,11 +383,11 @@ export async function restoreStorageBackup({
   const shouldApply = dryRun === false && apply === true;
   if (shouldApply) {
     for (const action of plannedActions) {
-      await applyRestoreAction({ filesRoot, action });
+      await applyRestoreAction({ rootPath, filesRoot, action });
     }
   }
   const report = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: BACKUP_RESTORE_PROTOCOL_VERSION,
     backupId: manifest.backupId,
     generatedAt: nowIso(),

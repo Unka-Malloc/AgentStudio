@@ -62,9 +62,9 @@ async function callKnowledgeOperation({ serverUrl, token, operation, input = {} 
     method: "POST",
     headers: mcpHeaders(token),
     body: JSON.stringify(mcpRequest("tools/call", {
-      name: "pact.knowledge",
+      name: "pact.agentLibrary",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation,
         input,
         clientVersion: "verify-v001-knowledge-e2e"
@@ -83,7 +83,7 @@ function assertKnowledgeOk(response, operation) {
   assert.equal(response.payload.result.structuredContent.operation, operation);
   const payload = structuredPayload(response);
   assert.equal(payload?.ok, true, JSON.stringify(payload || {}, null, 2));
-  assert.equal(payload.protocolVersion, "pact.knowledge-backend-port.v1");
+  assert.equal(payload.protocolVersion, "v0.0.1:knowledge:backend-port-1");
   return payload;
 }
 
@@ -111,7 +111,7 @@ for (const operationId of REQUIRED_OPERATIONS) {
   assert.ok(operation.cli?.command?.length, `${operationId} must expose CLI command`);
   const tool = toolsByOperationId.get(operationId);
   assert.ok(tool, `${operationId} must be exposed through Tool Management`);
-  assert.ok(tool.id.startsWith("pact.knowledge."), `${operationId} must map to pact.knowledge namespace`);
+  assert.ok(tool.id.startsWith("pact.agentLibrary."), `${operationId} must map to pact.knowledge namespace`);
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-v001-knowledge-"));
@@ -299,7 +299,7 @@ try {
 
   const grant = await localMcpGrant(server.url, {
     label: "verify-v001-knowledge",
-    toolsets: ["pact.knowledge.read", "pact.knowledge.write", "pact.knowledge.maintain"],
+    toolsets: ["pact.agentLibrary.read", "pact.agentLibrary.write", "pact.agentLibrary.maintain"],
     grantMode: "maintain",
     targets: ["knowledge-v001"]
   }, { "x-pact-safety-confirm": "true" });
@@ -312,7 +312,7 @@ try {
     body: JSON.stringify(mcpRequest("tools/call", {
       name: "pact.discovery",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation: "pact.capabilities.list",
         input: {}
       }
@@ -321,10 +321,10 @@ try {
   assert.equal(capabilities.status, 200);
   const capabilityNames = new Set(capabilities.payload.result.structuredContent.operations.map((tool) => tool.name));
   for (const toolId of [
-    "pact.knowledge.backend.connect",
-    "pact.knowledge.space.list",
-    "pact.knowledge.export.request",
-    "pact.knowledge.permission.request"
+    "pact.agentLibrary.backend.connect",
+    "pact.agentLibrary.space.list",
+    "pact.agentLibrary.export.request",
+    "pact.agentLibrary.permission.request"
   ]) {
     assert.equal(capabilityNames.has(toolId), true, `${toolId} must be visible through MCP capabilities`);
   }
@@ -332,36 +332,36 @@ try {
   const mcpConnect = assertKnowledgeOk(await callKnowledgeOperation({
     serverUrl: server.url,
     token,
-    operation: "pact.knowledge.backend.connect",
+    operation: "pact.agentLibrary.backend.connect",
     input: {
       provider: "ragflow",
       secretRef: "secret://pact/knowledge/ragflow-api-key",
       mode: "contract"
     }
-  }), "pact.knowledge.backend.connect");
+  }), "pact.agentLibrary.backend.connect");
   assert.equal(mcpConnect.provider.provider, "ragflow");
 
   const mcpSpaces = assertKnowledgeOk(await callKnowledgeOperation({
     serverUrl: server.url,
     token,
-    operation: "pact.knowledge.space.list",
+    operation: "pact.agentLibrary.space.list",
     input: {
       provider: "ragflow"
     }
-  }), "pact.knowledge.space.list");
+  }), "pact.agentLibrary.space.list");
   assert.ok(mcpSpaces.spaces.every((space) => space.provider === "ragflow"));
 
   const mcpSearch = assertKnowledgeOk(await callKnowledgeOperation({
     serverUrl: server.url,
     token,
-    operation: "pact.knowledge.search",
+    operation: "pact.agentLibrary.search",
     input: {
       provider: "ragflow",
       knowledgeBackend: true,
       query: "contract policy",
       limit: 1
     }
-  }), "pact.knowledge.search");
+  }), "pact.agentLibrary.search");
   assert.equal(mcpSearch.backendPort, "KnowledgeBasePort");
   assertSafeMetadataOnly(mcpSearch.items[0]);
 } finally {

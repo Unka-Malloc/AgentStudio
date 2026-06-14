@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveWithin } from "../security/client-strings.mjs";
 
-const CHECKPOINT_SCHEMA_VERSION = 1;
+const CHECKPOINT_SCHEMA_VERSION = "v0.0.1:storage:import-resume-checkpoint-schema-1";
 const TMP_ROOT_NAMES = ["tika", "ocr"];
 
 function nowIso() {

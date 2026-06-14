@@ -229,7 +229,7 @@ function assertCommonComponentGovernance(commonText, architectureText) {
     "StatusPill",
     "BrowseSelectButton",
     "ConfigFoldCard",
-    "HistorySessionPanel",
+    "历史记录扩展卡片组件",
     "InfoFeedResultRow"
   ]) {
     assert.ok(
@@ -426,9 +426,13 @@ async function main() {
     assert.ok(seenRoutePaths.has(routePath), `frontend route is missing from registry: ${routePath}`);
   }
 
-  assert.ok(Array.isArray(registry.systemConfigTabs) && registry.systemConfigTabs.length > 0, "systemConfigTabs must not be empty");
-  const drawerHostText = await readVueFileWithLocalImports(drawerHostDefaultFile);
-  const drawerTabIds = parseSystemConfigDrawerTabs(drawerHostText);
+  assert.ok(Array.isArray(registry.systemConfigTabs), "systemConfigTabs must be an array");
+  const drawerHostText = registry.systemConfigTabs.length > 0
+    ? await readVueFileWithLocalImports(drawerHostDefaultFile)
+    : "";
+  const drawerTabIds = registry.systemConfigTabs.length > 0
+    ? parseSystemConfigDrawerTabs(drawerHostText)
+    : new Set();
 
   for (const entry of registry.systemConfigTabs) {
     assert.ok(entry.tabId, "registry tabId must not be empty for systemConfigTabs entry");

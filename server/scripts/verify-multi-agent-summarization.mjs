@@ -80,7 +80,7 @@ async function verifySummarizationWorkspaceContextHotSwap() {
           assert.equal(input.workspaceContext.toolGrantId, "workspace-summary-grant");
           assert.deepEqual(input.knowledgeSourceIds, ["summary-source-a"]);
           return {
-            protocolVersion: "pact.context.v1",
+            protocolVersion: "v0.0.1:agent:context-1",
             profileId: input.contextProfileId,
             roleId: input.roleId,
             budgetReport: { maxInputTokens: 4096, estimatedTokens: 256 },
@@ -97,7 +97,7 @@ async function verifySummarizationWorkspaceContextHotSwap() {
               searchInput = input;
               assert.deepEqual(input.scopeSourceIds, ["summary-source-a"]);
               return {
-                protocolVersion: "pact.knowledge.v1",
+                protocolVersion: "v0.0.1:knowledge:core-1",
                 query: input.query,
                 items: [
                   {
@@ -197,7 +197,7 @@ try {
   );
 
   const profiles = await fetchJson(`${server.url}/api/context/profiles`);
-  assert.equal(profiles.protocolVersion, "pact.context.v1");
+  assert.equal(profiles.protocolVersion, "v0.0.1:agent:context-1");
   assert.equal(profiles.profiles.some((profile) => profile.profileId === "balanced"), true);
 
   const created = await fetchJson(`${server.url}/api/knowledge/summarization/runs`, {
@@ -210,8 +210,8 @@ try {
       includePrivate: true
     })
   });
-  assert.equal(created.protocolVersion, "pact.summarization.v1");
-  assert.equal(created.coordinatorProtocolVersion, "pact.multi-agent.v1");
+  assert.equal(created.protocolVersion, "v0.0.1:knowledge:summarization-1");
+  assert.equal(created.coordinatorProtocolVersion, "v0.0.1:agent:multi-agent-1");
   assert.equal(created.graphRuntime, "langgraph-js");
   assert.equal(created.run.status, "completed");
   assert.ok(created.workspace.workspaceId);

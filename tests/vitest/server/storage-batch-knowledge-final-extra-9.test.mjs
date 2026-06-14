@@ -64,7 +64,7 @@ vi.mock("../../../server/platform/specialized/knowledge/preprocessing/domain/kno
     expertVocabularyPath: "/tmp/mock-expert-vocabulary.json",
     emailRulesPath: "/tmp/mock-email-rules.json",
     loadSync: vi.fn(() => ({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       version: "mock",
       source: "mock-taxonomy",
       categories: []
@@ -82,9 +82,9 @@ vi.mock("../../../server/platform/specialized/knowledge/preprocessing/domain/kno
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/retrieval/embedding-runtime/index.mjs", () => ({
-  EMBEDDING_PROTOCOL_VERSION: "pact.embedding.v1",
+  EMBEDDING_PROTOCOL_VERSION: "v0.0.1:knowledge:embedding-1",
   createEmbeddingRuntime: vi.fn(() => ({
-    protocolVersion: "pact.embedding.v1",
+    protocolVersion: "v0.0.1:knowledge:embedding-1",
     embedText: vi.fn((value = "") => ({
       vector: Array.from(String(value)).map(() => 0.01),
       text: String(value),
@@ -104,12 +104,12 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/embedding-runt
       dimension: 8
     })),
     health: vi.fn(() => ({
-      protocolVersion: "pact.embedding.v1",
+      protocolVersion: "v0.0.1:knowledge:embedding-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.embedding.v1",
+      protocolVersion: "v0.0.1:knowledge:embedding-1",
       providers: []
     }))
   }))
@@ -123,12 +123,12 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/vector-store/L
     deleteByTargetIds: vi.fn(),
     search: vi.fn(() => []),
     health: vi.fn(() => ({
-      protocolVersion: "pact.vector.v1",
+      protocolVersion: "v0.0.1:knowledge:vector-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.vector.v1",
+      protocolVersion: "v0.0.1:knowledge:vector-1",
       providers: ["sqlite-vec"]
     })),
     close: vi.fn()
@@ -136,16 +136,16 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/vector-store/L
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runtime/index.mjs", () => ({
-  LEARNING_PROTOCOL_VERSION: "pact.learning.v1",
+  LEARNING_PROTOCOL_VERSION: "v0.0.1:knowledge:learning-1",
   createLearningRuntime: vi.fn(() => ({
-    protocolVersion: "pact.learning.v1",
+    protocolVersion: "v0.0.1:knowledge:learning-1",
     health: vi.fn(async () => ({
-      protocolVersion: "pact.learning.v1",
+      protocolVersion: "v0.0.1:knowledge:learning-1",
       ok: true,
       degraded: false
     })),
     capabilities: vi.fn(() => ({
-      protocolVersion: "pact.learning.v1",
+      protocolVersion: "v0.0.1:knowledge:learning-1",
       enabled: true,
       safeAutoApplySuggestionTypes: ["retrievalProfile", "rankingRule", "decay"]
     })),
@@ -156,7 +156,7 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runti
       explanations: []
     })),
     proposeProfile: vi.fn(() => ({
-      protocolVersion: "pact.learning.v1",
+      protocolVersion: "v0.0.1:knowledge:learning-1",
       profileId: "balanced"
     })),
     generateSuggestions: vi.fn(() => [])
@@ -165,9 +165,9 @@ vi.mock("../../../server/platform/specialized/knowledge/retrieval/learning-runti
 
 vi.mock("../../../server/platform/specialized/knowledge/storage/knowledge-core/outline-runtime-loader.mjs", () => ({
   createNoopDocumentOutlineRuntime: vi.fn(() => ({
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     build: vi.fn(() => ({
-      protocolVersion: "pact.document-outline.v1",
+      protocolVersion: "v0.0.1:knowledge:document-outline-1",
       documentId: "",
       nodeCount: 0,
       syntheticNodeCount: 0,
@@ -177,9 +177,9 @@ vi.mock("../../../server/platform/specialized/knowledge/storage/knowledge-core/o
     rangeContainsPosition: vi.fn(() => false)
   })),
   resolveDocumentOutlineRuntime: vi.fn(async () => ({
-    protocolVersion: "pact.document-outline.v1",
+    protocolVersion: "v0.0.1:knowledge:document-outline-1",
     build: vi.fn(() => ({
-      protocolVersion: "pact.document-outline.v1",
+      protocolVersion: "v0.0.1:knowledge:document-outline-1",
       documentId: "",
       nodeCount: 0,
       syntheticNodeCount: 0,
@@ -380,7 +380,7 @@ describe("storage batch and knowledge final extra coverage 9", () => {
       const sourceRoot = path.join(root, "source");
       await fs.mkdir(path.join(sourceRoot, "nested", "node_modules"), { recursive: true });
       await writeJson(path.join(root, "rules", "source-search-rules.json"), {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         updatedAt: "2026-06-05T00:00:00.000Z",
         maxFileBytes: 128,
         maxEvidenceBytes: 16 * 1024,
@@ -676,7 +676,7 @@ describe("storage batch and knowledge final extra coverage 9", () => {
         });
 
         expect(ingest).toMatchObject({
-          protocolVersion: "pact.knowledge.v1",
+          protocolVersion: "v0.0.1:knowledge:core-1",
           batchId: "batch-core",
           documentCount: 1,
           receivedDocumentCount: 2
@@ -698,7 +698,7 @@ describe("storage batch and knowledge final extra coverage 9", () => {
 
         expect(search.responseProfile).toBe("agent");
         expect(search.agentMessage).toMatchObject({
-          protocolVersion: "pact.knowledge-search.agent-message.v1",
+          protocolVersion: "v0.0.1:knowledge:search-agent-message-1",
           machineReadable: true,
           responseProfile: "agent",
           query: "Alpha body"

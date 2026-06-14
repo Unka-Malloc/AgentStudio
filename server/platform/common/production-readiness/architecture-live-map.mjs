@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildProductionHealthReport } from "./report-reader.mjs";
 
-export const ARCHITECTURE_LIVE_MAP_PROTOCOL_VERSION = "pact.architecture-live-map.v1";
+export const ARCHITECTURE_LIVE_MAP_PROTOCOL_VERSION = "v0.0.1:platform:architecture-live-map-1";
 
 const defaultRepoRoot = path.resolve(fileURLToPath(new URL("../../../..", import.meta.url)));
 
@@ -60,6 +60,24 @@ const ARCHITECTURE_NODES = Object.freeze([
       "server/platform/common/module-manager/mount-manager.mjs"
     ],
     gateIds: ["module-ecosystem"]
+  },
+  {
+    nodeId: "version-control",
+    label: "Version Governance",
+    docRefs: [
+      "docs/Architecture.md",
+      "docs/CONTEXT.md",
+      "docs/PROTOCOLS.md"
+    ],
+    implementationPaths: [
+      "server/platform/common/version-control/README.md",
+      "server/platform/common/version-control/version-registry.json",
+      "server/platform/common/version-control/version-registry.schema.json",
+      "server/platform/common/version-control/version-scan.mjs",
+      "server/scripts/verify-version-registry.mjs",
+      "server/scripts/verify-version-naming.mjs"
+    ],
+    gateIds: ["architecture", "version-registry", "version-naming"]
   },
   {
     nodeId: "asset-lineage",
@@ -152,7 +170,7 @@ export async function buildArchitectureLiveMap(options = {}) {
     });
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: ARCHITECTURE_LIVE_MAP_PROTOCOL_VERSION,
     generatedAt: new Date().toISOString(),
     productionStatus: text(productionHealth.status || "missing"),

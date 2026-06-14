@@ -17,7 +17,7 @@ import {
   serverToken
 } from "../../platform/common/security/client-strings.mjs";
 
-const SESSION_SCHEMA_VERSION = 1;
+const SESSION_SCHEMA_VERSION = "v0.0.1:storage:checkpoint-upload-session-schema-1";
 
 function nowIso() {
   return new Date().toISOString();

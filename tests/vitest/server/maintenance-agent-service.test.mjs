@@ -595,7 +595,7 @@ describe("maintenance agent service", () => {
       const now = new Date().toISOString();
       const store = createMaintenanceAgentAuditStore({ userDataPath });
       await store.appendRunSnapshot({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         runId: "maintenance_run_recover",
         status: "running",
         trigger: "manual",

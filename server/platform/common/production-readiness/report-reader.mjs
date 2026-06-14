@@ -6,8 +6,8 @@ import {
   describeCapabilityKernelStatus
 } from "../security/authorization/capability-kernel-status.mjs";
 
-export const PRODUCTION_HEALTH_REPORT_TYPE = "pact.production-health.v1";
-export const PRODUCTION_READINESS_REPORT_TYPE = "pact.production-readiness.v1";
+export const PRODUCTION_HEALTH_REPORT_TYPE = "v0.0.1:platform:production-health-1";
+export const PRODUCTION_READINESS_REPORT_TYPE = "v0.0.1:platform:production-readiness-1";
 export const DEFAULT_PRODUCTION_READINESS_REPORT_ROOT = "docs/reports/history/production-readiness";
 
 const defaultRepoRoot = path.resolve(fileURLToPath(new URL("../../../..", import.meta.url)));
@@ -17,7 +17,7 @@ const SECTION_DEFINITIONS = [
     id: "readiness",
     label: "生产准入",
     description: "架构、真实解析、UI smoke 和离线包能否支撑发版。",
-    gateIds: ["architecture", "document-parsing-real-sample", "ui-smoke", "offline-license"]
+    gateIds: ["architecture", "version-registry", "version-naming", "document-parsing-real-sample", "ui-smoke", "offline-license"]
   },
   {
     id: "knowledgeQuality",
@@ -159,7 +159,7 @@ function normalizeReport(report = {}, reportPath = "", repoRoot = defaultRepoRoo
   const gates = Array.isArray(report.gates) ? report.gates.map(normalizeGate) : [];
   const coverage = report.coverage && typeof report.coverage === "object" ? report.coverage : {};
   return {
-    schemaVersion: Number(report.schemaVersion || 1),
+    schemaVersion: String(report.schemaVersion || "v0.0.1:schema:definition-1"),
     reportType: String(report.reportType || PRODUCTION_READINESS_REPORT_TYPE),
     runId: String(report.runId || path.basename(path.dirname(reportPath)) || ""),
     generatedAt: String(report.generatedAt || ""),
@@ -173,6 +173,8 @@ function normalizeReport(report = {}, reportPath = "", repoRoot = defaultRepoRoo
       dirtyFileCount: Number(report.git?.dirtyFileCount || 0)
     },
     overallStatus: String(report.overallStatus || "unknown"),
+    productionClaimAllowed: Boolean(report.productionClaimAllowed),
+    releaseClaim: String(report.releaseClaim || (report.productionClaimAllowed ? "production-ready" : "blocked-by-production-readiness-gate")),
     summary: {
       pass: Number(report.summary?.pass || 0),
       fail: Number(report.summary?.fail || 0),
@@ -227,7 +229,7 @@ export async function readProductionReadinessReports(options = {}) {
       });
     } catch (error) {
       reports.push({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         reportType: PRODUCTION_READINESS_REPORT_TYPE,
         runId: candidate.runId,
         generatedAt: "",
@@ -237,6 +239,8 @@ export async function readProductionReadinessReports(options = {}) {
         repoRoot,
         git: { branch: "", commit: "", dirtyFileCount: 0 },
         overallStatus: "fail",
+        productionClaimAllowed: false,
+        releaseClaim: "blocked-by-report-read-error",
         summary: { pass: 0, fail: 1, timeout: 0, blockedP0: 1 },
         coverage: { required: [], byRequirement: {}, missing: [] },
         gates: [],
@@ -261,7 +265,7 @@ export async function readProductionReadinessReports(options = {}) {
 
 function missingHealth(reportRoot, capabilityKernel = null, capabilityBindingGuard = null) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     reportType: PRODUCTION_HEALTH_REPORT_TYPE,
     generatedAt: new Date().toISOString(),
     status: "missing",
@@ -307,7 +311,7 @@ export async function buildProductionHealthReport(options = {}) {
     tone: gateTone(gate.status)
   }));
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     reportType: PRODUCTION_HEALTH_REPORT_TYPE,
     generatedAt: new Date().toISOString(),
     status,
@@ -321,6 +325,9 @@ export async function buildProductionHealthReport(options = {}) {
       reportPath: latest.reportPath,
       markdownPath: latest.markdownPath,
       readError: latest.readError || "",
+      overallStatus: latest.overallStatus,
+      productionClaimAllowed: latest.productionClaimAllowed,
+      releaseClaim: latest.releaseClaim,
       git: latest.git
     },
     summary: latest.summary,

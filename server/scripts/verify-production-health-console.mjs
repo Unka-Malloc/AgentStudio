@@ -16,14 +16,16 @@ async function writeSampleReport(root, runId, overrides = {}) {
   const reportDir = path.join(root, runId);
   await fs.mkdir(reportDir, { recursive: true });
   const report = {
-    schemaVersion: 1,
-    reportType: "pact.production-readiness.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    reportType: "v0.0.1:platform:production-readiness-1",
     runId,
     generatedAt: overrides.generatedAt || "2026-05-21T00:00:00.000Z",
     mode: overrides.mode || "full",
     repoRoot,
     git: { branch: "main", commit: "0123456789abcdef", dirtyFileCount: 2 },
     overallStatus: overrides.overallStatus || "pass",
+    productionClaimAllowed: overrides.productionClaimAllowed ?? false,
+    releaseClaim: overrides.releaseClaim || "blocked-by-dirty-worktree",
     summary: overrides.summary || { pass: 3, fail: 0, timeout: 0, blockedP0: 0 },
     coverage: overrides.coverage || {
       required: ["architecture", "trace-observability", "backup-restore"],
@@ -148,6 +150,10 @@ async function verifyReportReader() {
     assert.equal(health.reportType, PRODUCTION_HEALTH_REPORT_TYPE);
     assert.equal(health.status, "pass");
     assert.equal(health.latestReport.runId, "20260522T000000Z");
+    assert.equal(health.latestReport.overallStatus, "pass");
+    assert.equal(health.latestReport.productionClaimAllowed, false);
+    assert.equal(health.latestReport.releaseClaim, "blocked-by-dirty-worktree");
+    assert.equal(health.latestReport.git.dirtyFileCount, 2);
     assert.equal(health.summary.pass, 3);
     assert.ok(health.sections.some((section) => section.id === "observability" && section.status === "pass"));
     assert.ok(
@@ -196,9 +202,15 @@ async function verifyFrontendWiring() {
     bridge: await fs.readFile(path.join(repoRoot, "server-web/lib/bridge.ts"), "utf8"),
     productionHealth: await fs.readFile(path.join(repoRoot, "server-web/lib/production-health.ts"), "utf8"),
     productionHealthClient: await fs.readFile(path.join(repoRoot, "server-web/lib/production-health-client.ts"), "utf8"),
+    versionRelease: await fs.readFile(path.join(repoRoot, "server-web/lib/version-release.ts"), "utf8"),
+    versionReleaseView: await fs.readFile(path.join(repoRoot, "server-web/views/admin/VersionReleaseView.vue"), "utf8"),
+    versionReleaseReadinessCard: await fs.readFile(
+      path.join(repoRoot, "server-web/components/admin/version-release/VersionReleaseReadinessCard.vue"),
+      "utf8"
+    ),
     registry: await fs.readFile(path.join(repoRoot, "server/config/frontend-feature-registry.yaml"), "utf8"),
-    nav: await fs.readFile(
-      path.join(repoRoot, "server-web/components/shell/side-nav/ConsoleSideNavSystemSection.vue"),
+    versionNav: await fs.readFile(
+      path.join(repoRoot, "server-web/components/shell/side-nav/ConsoleSideNavVersionSection.vue"),
       "utf8"
     ),
     routeController: await fs.readFile(path.join(repoRoot, "server-web/composables/console-shell-route-controller.ts"), "utf8"),
@@ -217,11 +229,17 @@ async function verifyFrontendWiring() {
   assert.match(files.productionHealth, /loadProductionHealthSnapshot/);
   assert.match(files.productionHealth, /getProductionHealth\(\)/);
   assert.doesNotMatch(files.productionHealth, /from\s+["']\.\/bridge["']/);
+  assert.match(files.versionRelease, /getProductionHealth/);
+  assert.match(files.versionReleaseView, /VersionReleaseReadinessCard/);
+  assert.match(files.versionReleaseReadinessCard, /productionClaimAllowed/);
+  assert.match(files.versionReleaseReadinessCard, /dirtyFileCount/);
+  assert.match(files.versionReleaseReadinessCard, /releaseClaim/);
+  assert.match(files.versionReleaseReadinessCard, /禁止生产声明/);
   assert.match(files.registry, /admin\.production-health/);
-  assert.match(files.nav, /msg\.nav\.productionHealth/);
-  assert.match(files.nav, /openAdmin\('productionHealth'\)/);
+  assert.match(files.versionNav, /msg\.nav\.productionHealth/);
+  assert.match(files.versionNav, /openAdmin\('productionHealth'\)/);
   assert.match(files.routeController, /messages\.nav\.productionHealth/);
-  assert.match(files.i18n, /productionHealth:\s*"生产健康"/);
+  assert.match(files.i18n, /productionHealth:\s*"交付门禁"/);
   assert.match(files.view, /loadProductionHealthSnapshot/);
   assert.match(files.view, /ProductionHealthHeroCard/);
   assert.doesNotMatch(files.view, /bridge\.getProductionHealth/);
