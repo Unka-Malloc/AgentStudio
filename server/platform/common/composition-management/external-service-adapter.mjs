@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { assertExternalServiceEgressAllowed } from "./external-service-egress-policy.mjs";
 import { parseExplicitHttpUrl } from "./external-mcp-passthrough-runtime.mjs";
 
 export const EXTERNAL_SERVICE_CONFIG_KIND = "pact.external-service.config";
@@ -22,6 +23,8 @@ export const EXTERNAL_SERVICE_UPSTREAM_TYPE = Object.freeze({
   CLOUD_DRIVE: "cloud-drive",
   HTTP: "http",
   HTTPS: "https",
+  JSON_RPC: "json-rpc",
+  SSE: "sse",
   OPENAPI: "openapi",
   RPC: "rpc",
   OPENAI: "openai",
@@ -76,10 +79,27 @@ export const EXTERNAL_SERVICE_BINDING_MODE = Object.freeze({
 });
 export const EXTERNAL_SERVICE_BINDING_MODE_VALUES = Object.freeze(Object.values(EXTERNAL_SERVICE_BINDING_MODE));
 export const EXTERNAL_SERVICE_BINDING_OUTLET = Object.freeze({
+  SERVICE_HUB: "pact.serviceHub",
   SKILL_HUB: "pact.skillHub",
   AGENT_RELAY: "pact.agentRelay"
 });
 export const EXTERNAL_SERVICE_BINDING_OUTLET_VALUES = Object.freeze(Object.values(EXTERNAL_SERVICE_BINDING_OUTLET));
+export const EXTERNAL_SERVICE_TEMPLATE_ID = Object.freeze({
+  RAW_MCP_STREAMABLE_HTTP: "external-service.template.raw-mcp-streamable-http",
+  RAW_MCP_SSE: "external-service.template.raw-mcp-sse",
+  HTTP_JSON: "external-service.template.http-json",
+  HTTPS_JSON: "external-service.template.https-json",
+  JSON_RPC: "external-service.template.json-rpc",
+  SSE: "external-service.template.sse",
+  OPENAI_MODEL_GATEWAY: "external-service.template.openai-model-gateway"
+});
+export const EXTERNAL_SERVICE_TEMPLATE_ID_VALUES = Object.freeze(Object.values(EXTERNAL_SERVICE_TEMPLATE_ID));
+export const EXTERNAL_SERVICE_POLICY_PRESET = Object.freeze({
+  PRODUCTION_DEFAULT: "servicehub.production-default",
+  DEVELOPMENT_LOCAL: "servicehub.development-local",
+  READONLY_MINIMAL: "servicehub.readonly-minimal"
+});
+export const EXTERNAL_SERVICE_POLICY_PRESET_VALUES = Object.freeze(Object.values(EXTERNAL_SERVICE_POLICY_PRESET));
 export const EXTERNAL_SERVICE_RISK = Object.freeze({
   READ_ONLY: "read_only",
   SAFE_WRITE: "safe_write",
@@ -136,9 +156,48 @@ function isHttpLikeUpstreamType(value = "") {
     EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTPS,
     EXTERNAL_SERVICE_UPSTREAM_TYPE.OPENAPI,
     EXTERNAL_SERVICE_UPSTREAM_TYPE.RPC,
-    EXTERNAL_SERVICE_UPSTREAM_TYPE.LLM,
-    EXTERNAL_SERVICE_UPSTREAM_TYPE.OPENAI
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.JSON_RPC,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.SSE,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.LLM
   ].includes(String(value || "").trim());
+}
+
+function isCompileTemplateUpstreamType(value = "") {
+  return [
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTP,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTPS,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.OPENAPI,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.RPC,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.JSON_RPC,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.SSE,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.LLM
+  ].includes(String(value || "").trim());
+}
+
+function isSensitiveHeaderName(value = "") {
+  const headerName = String(value || "").trim().toLowerCase();
+  return [
+    "authorization",
+    "proxy-authorization",
+    "cookie",
+    "set-cookie",
+    "x-api-key",
+    "api-key",
+    "apikey",
+    "x-auth-token",
+    "x-access-token"
+  ].includes(headerName);
+}
+
+function isLiteralCredentialHeaderValue(value = "") {
+  const text = String(value || "").trim();
+  if (!text) {
+    return false;
+  }
+  return /^\s*(bearer|basic)\s+\S+/i.test(text) ||
+    /\b(api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|secret)\s*[:=]\s*\S+/i.test(text) ||
+    /\b(sk-[a-z0-9][a-z0-9_-]{12,}|ghp_[a-z0-9_]{16,}|xox[baprs]-[a-z0-9-]{10,})\b/i.test(text) ||
+    /^secret:\/\//i.test(text);
 }
 
 function parseUrl(value = "") {
@@ -317,11 +376,9 @@ function normalizeModelDescriptor(input = {}, rawType = "") {
   const url = parseUrl(urlText);
   const provider = normalizedToken(input.provider || input.vendor || input.metadata?.provider) ||
     inferModelProviderFromHost(url?.hostname.toLowerCase() || "");
-  const legacyModelType = rawType === EXTERNAL_SERVICE_UPSTREAM_TYPE.OPENAI;
-  const isModelType = rawType === EXTERNAL_SERVICE_UPSTREAM_TYPE.LLM || legacyModelType;
+  const isModelType = rawType === EXTERNAL_SERVICE_UPSTREAM_TYPE.LLM;
   const inferredProtocol =
     explicitProtocol ||
-    (legacyModelType ? EXTERNAL_SERVICE_MODEL_PROTOCOL.OPENAI_COMPATIBLE : "") ||
     inferModelProtocolFromUrl(urlText, provider);
   if (!isModelType && !explicitProtocol && !provider && !inferredProtocol) {
     return null;
@@ -399,13 +456,13 @@ function normalizeCloudDriveDescriptor(input = {}) {
 }
 
 function normalizedMode(value) {
-  return enumValue(value, EXTERNAL_SERVICE_MODE_VALUES, EXTERNAL_SERVICE_MODE.ON_DEMAND);
+  return enumValue(value, EXTERNAL_SERVICE_MODE_VALUES, EXTERNAL_SERVICE_MODE.CONNECTED);
 }
 
 function normalizedStartupPolicy(value, mode) {
   const fallback = mode === EXTERNAL_SERVICE_MODE.MANAGED
     ? EXTERNAL_SERVICE_STARTUP_POLICY.WITH_PLATFORM
-    : EXTERNAL_SERVICE_STARTUP_POLICY.ON_DEMAND;
+    : EXTERNAL_SERVICE_STARTUP_POLICY.EXTERNAL_ONLY;
   return enumValue(value, EXTERNAL_SERVICE_STARTUP_POLICY_VALUES, fallback);
 }
 
@@ -446,6 +503,59 @@ function normalizeCommand(value) {
   };
 }
 
+function hasLocalLaunchDescriptor(value = {}) {
+  const upstream = asObject(value);
+  return Boolean(
+    upstream.command?.executable ||
+    asArray(upstream.command?.args).length > 0 ||
+    asArray(upstream.args).length > 0 ||
+    String(upstream.cwd || "").trim() ||
+    Object.keys(asObject(upstream.env)).length > 0
+  );
+}
+
+function upstreamDefaultsForTemplate(templateId = "") {
+  switch (String(templateId || "").trim()) {
+    case EXTERNAL_SERVICE_TEMPLATE_ID.RAW_MCP_STREAMABLE_HTTP:
+      return {
+        type: EXTERNAL_SERVICE_UPSTREAM_TYPE.MCP,
+        transport: EXTERNAL_SERVICE_MCP_TRANSPORT.STREAMABLE_HTTP
+      };
+    case EXTERNAL_SERVICE_TEMPLATE_ID.RAW_MCP_SSE:
+      return {
+        type: EXTERNAL_SERVICE_UPSTREAM_TYPE.MCP,
+        transport: EXTERNAL_SERVICE_MCP_TRANSPORT.SSE
+      };
+    case EXTERNAL_SERVICE_TEMPLATE_ID.HTTP_JSON:
+      return { type: EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTP };
+    case EXTERNAL_SERVICE_TEMPLATE_ID.HTTPS_JSON:
+      return { type: EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTPS };
+    case EXTERNAL_SERVICE_TEMPLATE_ID.JSON_RPC:
+      return { type: EXTERNAL_SERVICE_UPSTREAM_TYPE.JSON_RPC };
+    case EXTERNAL_SERVICE_TEMPLATE_ID.SSE:
+      return { type: EXTERNAL_SERVICE_UPSTREAM_TYPE.SSE };
+    case EXTERNAL_SERVICE_TEMPLATE_ID.OPENAI_MODEL_GATEWAY:
+      return { type: EXTERNAL_SERVICE_UPSTREAM_TYPE.LLM };
+    default:
+      return {};
+  }
+}
+
+function applyTemplateUpstreamDefaults(raw, templateId = "") {
+  const input = asObject(raw, null);
+  if (!input) {
+    return raw;
+  }
+  const defaults = upstreamDefaultsForTemplate(templateId);
+  if (Object.keys(defaults).length === 0) {
+    return input;
+  }
+  return {
+    ...defaults,
+    ...input
+  };
+}
+
 function normalizeUpstream(raw) {
   const input = asObject(raw, null);
   if (!input) {
@@ -453,25 +563,29 @@ function normalizeUpstream(raw) {
   }
   const type = String(input.type || "").trim();
   if (type === EXTERNAL_SERVICE_UPSTREAM_TYPE.MCP) {
-    const transport = enumValue(
-      input.transport,
-      EXTERNAL_SERVICE_MCP_TRANSPORT_VALUES,
-      EXTERNAL_SERVICE_MCP_TRANSPORT.STREAMABLE_HTTP
-    );
+    const rawTransport = String(input.transport || EXTERNAL_SERVICE_MCP_TRANSPORT.STREAMABLE_HTTP).trim();
+    const transport = rawTransport === EXTERNAL_SERVICE_MCP_TRANSPORT.HTTP
+      ? EXTERNAL_SERVICE_MCP_TRANSPORT.STREAMABLE_HTTP
+      : rawTransport;
     return {
       type,
       transport,
       url: String(input.url || "").trim(),
-      command: normalizeCommand(input.command),
-      timeoutMs: input.timeoutMs === undefined ? null : Number(input.timeoutMs),
-      metadata: asObject(input.metadata)
-    };
+	      auth: asObject(input.auth, null),
+	      defaultHeaders: asObject(input.defaultHeaders),
+	      command: normalizeCommand(input.command),
+	      args: asArray(input.args),
+	      cwd: String(input.cwd || "").trim(),
+	      env: asObject(input.env),
+	      timeoutMs: input.timeoutMs === undefined ? null : Number(input.timeoutMs),
+	      metadata: asObject(input.metadata)
+	    };
   }
   if (type === EXTERNAL_SERVICE_UPSTREAM_TYPE.ACP) {
     const transport = enumValue(
       input.transport,
       EXTERNAL_SERVICE_ACP_TRANSPORT_VALUES,
-      EXTERNAL_SERVICE_ACP_TRANSPORT.STDIO
+      EXTERNAL_SERVICE_ACP_TRANSPORT.STREAMABLE_HTTP
     );
     return {
       ...input,
@@ -479,6 +593,19 @@ function normalizeUpstream(raw) {
       url: String(input.url || "").trim(),
       transport,
       command: normalizeCommand(input.command),
+      timeoutMs: input.timeoutMs === undefined ? null : Number(input.timeoutMs),
+      metadata: asObject(input.metadata)
+    };
+  }
+  if (type === EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTP || type === EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTPS) {
+    return {
+      ...input,
+      type,
+      baseUrl: String(input.baseUrl || input.url || "").trim(),
+      url: String(input.url || input.baseUrl || "").trim(),
+      auth: asObject(input.auth, null),
+      defaultHeaders: asObject(input.defaultHeaders),
+      transport: "http",
       timeoutMs: input.timeoutMs === undefined ? null : Number(input.timeoutMs),
       metadata: asObject(input.metadata)
     };
@@ -494,7 +621,41 @@ function normalizeUpstream(raw) {
       endpoints: Array.isArray(input.endpoints || input.rpcEndpoints)
         ? asArray(input.endpoints || input.rpcEndpoints)
         : asObject(input.endpoints || input.rpcEndpoints),
+      auth: asObject(input.auth, null),
+      defaultHeaders: asObject(input.defaultHeaders),
       transport: String(input.transport || "http").trim(),
+      timeoutMs: input.timeoutMs === undefined ? null : Number(input.timeoutMs),
+      metadata: asObject(input.metadata)
+    };
+  }
+  if (type === EXTERNAL_SERVICE_UPSTREAM_TYPE.JSON_RPC) {
+    return {
+      ...input,
+      type,
+      protocol: "json-rpc-2.0",
+      rpcVersion: String(input.rpcVersion || "2.0").trim(),
+      url: String(input.url || input.baseUrl || "").trim(),
+      baseUrl: String(input.baseUrl || "").trim(),
+      path: String(input.path || input.rpcPath || "").trim(),
+      endpoints: Array.isArray(input.endpoints || input.rpcEndpoints)
+        ? asArray(input.endpoints || input.rpcEndpoints)
+        : asObject(input.endpoints || input.rpcEndpoints),
+      auth: asObject(input.auth, null),
+      defaultHeaders: asObject(input.defaultHeaders),
+      transport: String(input.transport || "http").trim(),
+      timeoutMs: input.timeoutMs === undefined ? null : Number(input.timeoutMs),
+      metadata: asObject(input.metadata)
+    };
+  }
+  if (type === EXTERNAL_SERVICE_UPSTREAM_TYPE.SSE) {
+    return {
+      ...input,
+      type,
+      url: String(input.url || "").trim(),
+      eventFormat: String(input.eventFormat || "json-data").trim(),
+      auth: asObject(input.auth, null),
+      defaultHeaders: asObject(input.defaultHeaders),
+      transport: String(input.transport || "sse").trim(),
       timeoutMs: input.timeoutMs === undefined ? null : Number(input.timeoutMs),
       metadata: asObject(input.metadata)
     };
@@ -519,18 +680,57 @@ function normalizeUpstream(raw) {
   };
 }
 
-function normalizeBinding(raw = {}) {
+function normalizeBinding(raw = {}, upstream = null) {
   const input = asObject(raw, null);
+  const defaultMode = upstream?.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.MCP
+    ? EXTERNAL_SERVICE_BINDING_MODE.PASSTHROUGH
+    : isCompileTemplateUpstreamType(upstream?.type)
+      ? EXTERNAL_SERVICE_BINDING_MODE.COMPILE
+      : EXTERNAL_SERVICE_BINDING_MODE.PASSTHROUGH;
   if (!input) {
-    return null;
+    return {
+      mode: defaultMode,
+      outlet: EXTERNAL_SERVICE_BINDING_OUTLET.SERVICE_HUB,
+      requiredScopes: [],
+      risk: EXTERNAL_SERVICE_RISK.READ_ONLY,
+      metadata: {}
+    };
   }
   return {
-    mode: enumValue(input.mode, EXTERNAL_SERVICE_BINDING_MODE_VALUES, EXTERNAL_SERVICE_BINDING_MODE.PASSTHROUGH),
-    outlet: enumValue(input.outlet, EXTERNAL_SERVICE_BINDING_OUTLET_VALUES, EXTERNAL_SERVICE_BINDING_OUTLET.SKILL_HUB),
+    mode: enumValue(input.mode, EXTERNAL_SERVICE_BINDING_MODE_VALUES, defaultMode),
+    outlet: enumValue(input.outlet, EXTERNAL_SERVICE_BINDING_OUTLET_VALUES, EXTERNAL_SERVICE_BINDING_OUTLET.SERVICE_HUB),
     requiredScopes: uniqueStrings(input.requiredScopes || input.scopes),
     risk: enumValue(input.risk, EXTERNAL_SERVICE_RISK_VALUES, EXTERNAL_SERVICE_RISK.READ_ONLY),
     metadata: asObject(input.metadata)
   };
+}
+
+function inferTemplateId(raw = {}, upstream = null) {
+  const explicit = String(raw.templateId || raw.template || "").trim();
+  if (explicit) {
+    return explicit;
+  }
+  if (upstream?.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.MCP) {
+    return upstream.transport === EXTERNAL_SERVICE_MCP_TRANSPORT.SSE
+      ? EXTERNAL_SERVICE_TEMPLATE_ID.RAW_MCP_SSE
+      : EXTERNAL_SERVICE_TEMPLATE_ID.RAW_MCP_STREAMABLE_HTTP;
+  }
+  if (upstream?.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTP) {
+    return EXTERNAL_SERVICE_TEMPLATE_ID.HTTP_JSON;
+  }
+  if (upstream?.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTPS) {
+    return EXTERNAL_SERVICE_TEMPLATE_ID.HTTPS_JSON;
+  }
+  if (upstream?.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.JSON_RPC || upstream?.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.RPC) {
+    return EXTERNAL_SERVICE_TEMPLATE_ID.JSON_RPC;
+  }
+  if (upstream?.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.SSE) {
+    return EXTERNAL_SERVICE_TEMPLATE_ID.SSE;
+  }
+  if (upstream?.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.LLM) {
+    return EXTERNAL_SERVICE_TEMPLATE_ID.OPENAI_MODEL_GATEWAY;
+  }
+  return "";
 }
 
 export function normalizeExternalServiceConfig(raw = {}, fallback = {}) {
@@ -548,9 +748,13 @@ export function normalizeExternalServiceConfig(raw = {}, fallback = {}) {
   }
   const healthCheck = asObject(raw.healthCheck || raw.health);
   const displayName = String(raw.displayName || fallback.displayName || "").trim();
+  const declaredTemplateId = String(raw.templateId || raw.template || "").trim();
+  const upstream = normalizeUpstream(applyTemplateUpstreamDefaults(raw.upstream, declaredTemplateId));
+  const templateId = inferTemplateId(raw, upstream);
   return {
-    schemaVersion: Number(raw.schemaVersion || 1),
+    schemaVersion: String(raw.schemaVersion || "v0.0.1:schema:definition-1"),
     kind: raw.kind || EXTERNAL_SERVICE_CONFIG_KIND,
+    templateId,
     serviceId,
     serviceName: String(raw.serviceName || fallback.serviceName || serviceId).trim(),
     ...(displayName ? { displayName } : {}),
@@ -563,9 +767,11 @@ export function normalizeExternalServiceConfig(raw = {}, fallback = {}) {
     includePaths: uniqueStrings(raw.includePaths || fallback.includePaths),
     scriptRoots: uniqueStrings(raw.scriptRoots),
     scripts,
+    policyPreset: enumValue(raw.policyPreset, EXTERNAL_SERVICE_POLICY_PRESET_VALUES, EXTERNAL_SERVICE_POLICY_PRESET.PRODUCTION_DEFAULT),
+    policies: asObject(raw.policies),
     tools: asArray(raw.tools),
-    upstream: normalizeUpstream(raw.upstream),
-    binding: normalizeBinding(raw.binding),
+    upstream,
+    binding: normalizeBinding(raw.binding, upstream),
     healthCheck: {
       type: enumValue(
         healthCheck.type,
@@ -600,6 +806,209 @@ export function externalServicePathRefs(config = {}) {
   ]);
 }
 
+function effectiveTemplateId(config = {}) {
+  if (config.templateId) {
+    return String(config.templateId || "").trim();
+  }
+  return inferTemplateId(config, normalizeUpstream(config.upstream) || config.upstream);
+}
+
+function requiresServiceHubTemplate(config = {}) {
+  const type = String(config.upstream?.type || "").trim();
+  return [
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.MCP,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTP,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTPS,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.RPC,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.JSON_RPC,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.SSE,
+    EXTERNAL_SERVICE_UPSTREAM_TYPE.LLM
+  ].includes(type);
+}
+
+function isServiceHubTemplateId(templateId = "") {
+  return EXTERNAL_SERVICE_TEMPLATE_ID_VALUES.includes(String(templateId || "").trim());
+}
+
+function upstreamEndpointText(config = {}) {
+  const upstream = asObject(config.upstream);
+  return String(upstream.baseUrl || upstream.url || "").trim();
+}
+
+function validateExplicitEndpoint(errors, value = "", {
+  label = "upstream.url",
+  requiredMessage = "",
+  scheme = ""
+} = {}) {
+  const endpoint = String(value || "").trim();
+  if (!endpoint) {
+    if (requiredMessage) {
+      errors.push(requiredMessage);
+    }
+    return null;
+  }
+  try {
+    const parsed = parseExplicitHttpUrl(endpoint, label);
+    if (scheme && parsed.parsed.protocol !== `${scheme}:`) {
+      errors.push(`${label} must use ${scheme}.`);
+    }
+    return parsed;
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
+function validateServiceHubEgressEndpoint(errors, config = {}, value = "", label = "upstream.url") {
+  const endpoint = String(value || "").trim();
+  if (!endpoint) {
+    return;
+  }
+  try {
+    assertExternalServiceEgressAllowed({
+      url: endpoint,
+      label,
+      policyPreset: config.policyPreset,
+      policies: config.policies
+    });
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
+}
+
+function toolDisplayId(tool = {}, fallback = "unknown") {
+  return String(
+    tool?.name ||
+    tool?.toolId ||
+    tool?.id ||
+    tool?.operationId ||
+    tool?.operation_id ||
+    tool?.method ||
+    tool?.rpc?.method ||
+    fallback
+  ).trim();
+}
+
+function toolStableIdentity(tool = {}) {
+  return String(
+    tool?.name ||
+    tool?.toolId ||
+    tool?.id ||
+    tool?.operationId ||
+    tool?.operation_id ||
+    ""
+  ).trim();
+}
+
+function toolTransport(tool = {}) {
+  return asObject(tool?.transport || tool?.http || tool?.request?.transport);
+}
+
+function validateHttpJsonTools(errors, config = {}, templateLabel = "External HTTP JSON") {
+  const tools = asArray(config.tools);
+  if (tools.length === 0) {
+    errors.push(`${templateLabel} template requires at least one tools[] mapping.`);
+    return;
+  }
+  tools.forEach((tool, index) => {
+    const transport = toolTransport(tool);
+    const displayId = toolDisplayId(tool, `tools[${index}]`);
+    if (!toolStableIdentity(tool)) {
+      errors.push(`${templateLabel} tool at index ${index} requires one of name, toolId, id, or operationId.`);
+    }
+    const method = String(transport.method || tool?.method || "").trim().toUpperCase();
+    if (!method) {
+      errors.push(`${templateLabel} tool ${displayId} requires transport.method.`);
+    } else if (!["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].includes(method)) {
+      errors.push(`${templateLabel} tool ${displayId} has unsupported transport.method: ${method}.`);
+    }
+    const pathText = String(transport.path || tool?.path || tool?.urlPath || "").trim();
+    if (!pathText) {
+      errors.push(`${templateLabel} tool ${displayId} requires transport.path.`);
+    }
+  });
+}
+
+function validateJsonRpcTools(errors, config = {}) {
+  const tools = asArray(config.tools);
+  if (tools.length === 0) {
+    errors.push("JSON-RPC template requires at least one tools[] method mapping.");
+    return;
+  }
+  tools.forEach((tool, index) => {
+    const rpc = asObject(tool?.rpc);
+    const transport = toolTransport(tool);
+    if (!toolStableIdentity(tool)) {
+      errors.push(`JSON-RPC tool at index ${index} requires one of name, toolId, id, or operationId.`);
+    }
+    const method = String(rpc.method || tool?.method || transport.method || "").trim();
+    if (!method) {
+      errors.push(`JSON-RPC tool at index ${index} requires rpc.method or method.`);
+    }
+  });
+}
+
+function validateSseTools(errors, config = {}) {
+  const tools = asArray(config.tools);
+  if (tools.length === 0) {
+    errors.push("SSE template requires at least one tools[] stream mapping.");
+    return;
+  }
+  tools.forEach((tool, index) => {
+    if (!toolStableIdentity(tool)) {
+      errors.push(`SSE tool at index ${index} requires one of name, toolId, id, or operationId.`);
+    }
+    const transport = toolTransport(tool);
+    const transportType = String(transport.type || tool?.type || "").trim();
+    if (transportType && transportType !== "sse") {
+      errors.push(`SSE tool ${toolDisplayId(tool, `tools[${index}]`)} transport.type must be sse when declared.`);
+    }
+  });
+}
+
+function validateHeaderMapDoesNotContainSecrets(errors, headers = {}, label = "headers") {
+  for (const [key, value] of Object.entries(asObject(headers))) {
+    if (isSensitiveHeaderName(key)) {
+      errors.push(`ServiceHub ${label} must not declare literal sensitive header ${key}; use upstream.auth.secretRef.`);
+      continue;
+    }
+    if (isLiteralCredentialHeaderValue(value)) {
+      errors.push(`ServiceHub ${label} must not declare literal credential value for header ${key}; use upstream.auth.secretRef.`);
+    }
+  }
+}
+
+function validateServiceHubSecretRefs(errors, config = {}, templateId = "") {
+  if (!isServiceHubTemplateId(templateId)) {
+    return;
+  }
+  const upstream = asObject(config.upstream);
+  const auth = asObject(upstream.auth, null);
+  if (auth) {
+    const authType = String(auth.type || "").trim();
+    if (!authType) {
+      errors.push("ServiceHub upstream auth must declare upstream.auth.type when auth is used.");
+    }
+    const secretRef = String(auth.secretRef || "").trim();
+    if (!secretRef) {
+      errors.push("ServiceHub upstream auth must use upstream.auth.secretRef; literal credentials are not allowed.");
+    } else if (!secretRef.startsWith("secret://")) {
+      errors.push("ServiceHub upstream auth secretRef must use a secret:// reference.");
+    }
+    for (const key of Object.keys(auth)) {
+      if (key !== "type" && key !== "scheme" && key !== "secretRef" && key !== "headerName" && key !== "metadata") {
+        errors.push(`ServiceHub upstream auth must not contain literal credential field ${key}; use secretRef.`);
+      }
+    }
+  }
+  validateHeaderMapDoesNotContainSecrets(errors, upstream.defaultHeaders, "upstream.defaultHeaders");
+  asArray(config.tools).forEach((tool, index) => {
+    const transport = toolTransport(tool);
+    validateHeaderMapDoesNotContainSecrets(errors, transport.headers, `tools[${index}].transport.headers`);
+    validateHeaderMapDoesNotContainSecrets(errors, tool?.request?.headers, `tools[${index}].request.headers`);
+  });
+}
+
 export async function validateExternalServiceConfig({
   config,
   cwd = process.cwd(),
@@ -616,8 +1025,17 @@ export async function validateExternalServiceConfig({
   if (!config.serviceId) {
     errors.push("External service config is missing serviceId.");
   }
-  if (!config.serviceName) {
+  if (!config.serviceName && !config.serviceId) {
     errors.push("External service config is missing serviceName.");
+  }
+  const templateId = effectiveTemplateId(config);
+  if (!templateId && requiresServiceHubTemplate(config)) {
+    errors.push("External service config is missing templateId or an inferable upstream.type.");
+  } else if (templateId && !EXTERNAL_SERVICE_TEMPLATE_ID_VALUES.includes(templateId)) {
+    errors.push(`External service templateId is not supported: ${templateId}.`);
+  }
+  if (config.policyPreset && !EXTERNAL_SERVICE_POLICY_PRESET_VALUES.includes(config.policyPreset)) {
+    errors.push(`External service policyPreset is not supported: ${config.policyPreset}.`);
   }
   for (const [id, script] of Object.entries(config.scripts || {})) {
     if (!script.path && !script.command?.executable) {
@@ -627,29 +1045,44 @@ export async function validateExternalServiceConfig({
   if (config.startupPolicy === "with-platform" && !config.scripts?.start) {
     errors.push("External service startupPolicy with-platform requires scripts.start.");
   }
+  if (!config.upstream) {
+    errors.push("External service config is missing upstream.");
+  }
   if (config.upstream) {
+    const upstreamTransport = String(config.upstream.transport || "").trim();
+    if (config.upstream.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.OPENAI) {
+      errors.push("External upstream.type=openai is retired; use upstream.type=llm with modelProtocol=openai-compatible or openai-responses.");
+    }
+    if (
+      config.binding?.outlet === EXTERNAL_SERVICE_BINDING_OUTLET.SERVICE_HUB &&
+      (upstreamTransport === EXTERNAL_SERVICE_MCP_TRANSPORT.STDIO ||
+        upstreamTransport === EXTERNAL_SERVICE_ACP_TRANSPORT.STDIO ||
+        hasLocalLaunchDescriptor(config.upstream))
+    ) {
+      errors.push("ServiceHub external services must not expose local stdio or command-backed upstreams; use a controlled HTTP/HTTPS endpoint or the Agent Relay internal adapter instead.");
+    }
     if (config.upstream.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.MCP) {
       const transport = String(config.upstream.transport || "").trim();
-      if (!EXTERNAL_SERVICE_MCP_TRANSPORT_VALUES.includes(transport)) {
-        errors.push(`External MCP upstream transport is not supported: ${transport}.`);
+      if (![EXTERNAL_SERVICE_MCP_TRANSPORT.STREAMABLE_HTTP, EXTERNAL_SERVICE_MCP_TRANSPORT.SSE].includes(transport)) {
+        errors.push(`External MCP upstream transport must be streamable-http or sse; ${transport || "missing"} is not allowed for ServiceHub.`);
       }
-      if (
-        transport === EXTERNAL_SERVICE_MCP_TRANSPORT.STREAMABLE_HTTP ||
-        transport === EXTERNAL_SERVICE_MCP_TRANSPORT.HTTP ||
-        transport === EXTERNAL_SERVICE_MCP_TRANSPORT.SSE
-      ) {
-        if (!config.upstream.url) {
-          errors.push("External MCP upstream requires upstream.url.");
-        } else {
-          try {
-            parseExplicitHttpUrl(config.upstream.url, "upstream.url");
-          } catch (error) {
-            errors.push(error instanceof Error ? error.message : String(error));
-          }
+      if (hasLocalLaunchDescriptor(config.upstream)) {
+        errors.push("External MCP upstream must not declare command, args, cwd, or env; expose a controlled HTTP/HTTPS MCP endpoint instead.");
+      }
+      if (!config.upstream.url) {
+        errors.push("External MCP upstream requires upstream.url.");
+      } else {
+        try {
+          parseExplicitHttpUrl(config.upstream.url, "upstream.url");
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : String(error));
         }
       }
-      if (transport === EXTERNAL_SERVICE_MCP_TRANSPORT.STDIO && !config.upstream.command?.executable) {
-        errors.push("External MCP stdio upstream requires upstream.command.executable.");
+      if (templateId === EXTERNAL_SERVICE_TEMPLATE_ID.RAW_MCP_STREAMABLE_HTTP && transport !== EXTERNAL_SERVICE_MCP_TRANSPORT.STREAMABLE_HTTP) {
+        errors.push("Template external-service.template.raw-mcp-streamable-http requires upstream.transport=streamable-http.");
+      }
+      if (templateId === EXTERNAL_SERVICE_TEMPLATE_ID.RAW_MCP_SSE && transport !== EXTERNAL_SERVICE_MCP_TRANSPORT.SSE) {
+        errors.push("Template external-service.template.raw-mcp-sse requires upstream.transport=sse.");
       }
     } else if (config.upstream.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.ACP) {
       const transport = String(config.upstream.transport || "").trim();
@@ -657,9 +1090,7 @@ export async function validateExternalServiceConfig({
         errors.push(`External ACP upstream transport is not supported: ${transport}.`);
       }
       if (transport === EXTERNAL_SERVICE_ACP_TRANSPORT.STDIO) {
-        if (!config.upstream.command?.executable) {
-          errors.push("External ACP stdio upstream requires upstream.command.executable.");
-        }
+        errors.push("External ACP stdio upstreams are disabled; Pact does not expose local stdio interfaces. Use an authenticated HTTP/HTTPS Agent Relay endpoint instead.");
       } else {
         const upstreamUrl = String(config.upstream.url || "").trim();
         if (!upstreamUrl) {
@@ -732,7 +1163,7 @@ export async function validateExternalServiceConfig({
           errors.push("External OpenAPI upstream requires upstream.spec, upstream.specUrl, or upstream.specFile.");
         }
       }
-      if (config.upstream.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.RPC) {
+      if (config.upstream.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.RPC || config.upstream.type === EXTERNAL_SERVICE_UPSTREAM_TYPE.JSON_RPC) {
         if (!upstreamUrl) {
           errors.push("External RPC upstream requires upstream.url or upstream.baseUrl.");
         }
@@ -752,6 +1183,95 @@ export async function validateExternalServiceConfig({
           }
         }
       }
+    }
+  }
+  if (config.upstream && templateId) {
+    const type = config.upstream.type;
+    const transport = String(config.upstream.transport || "").trim();
+    if (
+      isServiceHubTemplateId(templateId) &&
+      config.binding?.outlet &&
+      config.binding.outlet !== EXTERNAL_SERVICE_BINDING_OUTLET.SERVICE_HUB
+    ) {
+      errors.push("ServiceHub external service templates must bind to pact.serviceHub.");
+    }
+    validateServiceHubSecretRefs(errors, config, templateId);
+    if (isServiceHubTemplateId(templateId)) {
+      validateServiceHubEgressEndpoint(
+        errors,
+        config,
+        upstreamEndpointText(config),
+        templateId === EXTERNAL_SERVICE_TEMPLATE_ID.HTTP_JSON || templateId === EXTERNAL_SERVICE_TEMPLATE_ID.HTTPS_JSON
+          ? "upstream.baseUrl"
+          : "upstream.url"
+      );
+      if (config.upstream.specUrl) {
+        validateServiceHubEgressEndpoint(errors, config, config.upstream.specUrl, "upstream.specUrl");
+      }
+    }
+    if (
+      templateId === EXTERNAL_SERVICE_TEMPLATE_ID.RAW_MCP_STREAMABLE_HTTP &&
+      (type !== EXTERNAL_SERVICE_UPSTREAM_TYPE.MCP || transport !== EXTERNAL_SERVICE_MCP_TRANSPORT.STREAMABLE_HTTP)
+    ) {
+      errors.push("Template external-service.template.raw-mcp-streamable-http requires upstream.type=mcp and upstream.transport=streamable-http.");
+    }
+    if (
+      templateId === EXTERNAL_SERVICE_TEMPLATE_ID.RAW_MCP_SSE &&
+      (type !== EXTERNAL_SERVICE_UPSTREAM_TYPE.MCP || transport !== EXTERNAL_SERVICE_MCP_TRANSPORT.SSE)
+    ) {
+      errors.push("Template external-service.template.raw-mcp-sse requires upstream.type=mcp and upstream.transport=sse.");
+    }
+    if (templateId === EXTERNAL_SERVICE_TEMPLATE_ID.HTTP_JSON && type !== EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTP) {
+      errors.push("Template external-service.template.http-json requires upstream.type=http.");
+    }
+    if (templateId === EXTERNAL_SERVICE_TEMPLATE_ID.HTTPS_JSON && type !== EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTPS) {
+      errors.push("Template external-service.template.https-json requires upstream.type=https.");
+    }
+  if (templateId === EXTERNAL_SERVICE_TEMPLATE_ID.JSON_RPC && ![EXTERNAL_SERVICE_UPSTREAM_TYPE.JSON_RPC, EXTERNAL_SERVICE_UPSTREAM_TYPE.RPC].includes(type)) {
+      errors.push("Template external-service.template.json-rpc requires upstream.type=json-rpc.");
+    }
+    if (templateId === EXTERNAL_SERVICE_TEMPLATE_ID.SSE && type !== EXTERNAL_SERVICE_UPSTREAM_TYPE.SSE) {
+      errors.push("Template external-service.template.sse requires upstream.type=sse.");
+    }
+    if (templateId === EXTERNAL_SERVICE_TEMPLATE_ID.OPENAI_MODEL_GATEWAY && type !== EXTERNAL_SERVICE_UPSTREAM_TYPE.LLM) {
+      errors.push("Template external-service.template.openai-model-gateway requires upstream.type=llm.");
+    }
+    if (templateId === EXTERNAL_SERVICE_TEMPLATE_ID.HTTP_JSON) {
+      validateExplicitEndpoint(errors, upstreamEndpointText(config), {
+        label: "upstream.baseUrl",
+        requiredMessage: "HTTP JSON template requires upstream.baseUrl.",
+        scheme: "http"
+      });
+      validateHttpJsonTools(errors, config, "HTTP JSON");
+    }
+    if (templateId === EXTERNAL_SERVICE_TEMPLATE_ID.HTTPS_JSON) {
+      validateExplicitEndpoint(errors, upstreamEndpointText(config), {
+        label: "upstream.baseUrl",
+        requiredMessage: "HTTPS JSON template requires upstream.baseUrl.",
+        scheme: "https"
+      });
+      validateHttpJsonTools(errors, config, "HTTPS JSON");
+    }
+    if (templateId === EXTERNAL_SERVICE_TEMPLATE_ID.JSON_RPC) {
+      validateExplicitEndpoint(errors, upstreamEndpointText(config), {
+        label: "upstream.url",
+        requiredMessage: "JSON-RPC template requires upstream.url.",
+      });
+      validateJsonRpcTools(errors, config);
+    }
+    if (templateId === EXTERNAL_SERVICE_TEMPLATE_ID.SSE) {
+      validateExplicitEndpoint(errors, upstreamEndpointText(config), {
+        label: "upstream.url",
+        requiredMessage: "SSE template requires upstream.url.",
+      });
+      validateSseTools(errors, config);
+      warnings.push("Generic SSE registration is validated as a separate template; production event streaming still requires the ServiceHub Streaming And Backpressure verifier before promotion.");
+    }
+    if (templateId === EXTERNAL_SERVICE_TEMPLATE_ID.OPENAI_MODEL_GATEWAY) {
+      validateExplicitEndpoint(errors, upstreamEndpointText(config), {
+        label: "upstream.url",
+        requiredMessage: "OpenAI-compatible model gateway template requires upstream.url.",
+      });
     }
   }
   if (config.binding?.mode && !EXTERNAL_SERVICE_BINDING_MODE_VALUES.includes(config.binding.mode)) {
@@ -812,7 +1332,7 @@ export function compositionPresetFromExternalServiceConfig(config, {
   const applicationFeatureIds = uniqueStrings(config.featureIds);
   const scriptPaths = scriptPathRefs(config);
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     kind: "pact.composition.preset",
     presetId: serviceId,
     displayName: config.displayName || serviceId,
@@ -835,11 +1355,11 @@ export function compositionPresetFromExternalServiceConfig(config, {
       policy: "include-platform-core-required-by-external-service",
       featureIds: uniqueStrings(config.coreFeatureIds),
       preserveContracts: [
-        "pact.security-permissions.v1",
-        "pact.operation-dispatcher.v1",
-        "pact.storage.v1",
-        "pact.module-management.v1",
-        "pact.devops.v1"
+        "v0.0.1:risk-control:permissions-1",
+        "v0.0.1:operation:operation-dispatcher-1",
+        "v0.0.1:storage:core-1",
+        "v0.0.1:tool:module-management-1",
+        "v0.0.1:platform:devops-1"
       ]
     },
     applicationDependencyPackage: {

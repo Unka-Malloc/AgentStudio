@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  adoptExternalServiceTools,
   refreshExternalServiceRuntime,
   saveExternalServiceConfig
 } from "../../server/platform/common/composition-management/external-service-registry.mjs";
@@ -138,9 +139,10 @@ function baseExternalConfig({ serviceId, serviceName, upstream, tools = [] }) {
     mode: "connected",
     startupPolicy: "external-only",
     upstream,
+    policyPreset: "servicehub.development-local",
     binding: {
       mode: "compile",
-      outlet: "pact.skillHub",
+      outlet: "pact.serviceHub",
       requiredScopes: ["knowledge:read"],
       risk: "read_only"
     },
@@ -415,9 +417,21 @@ async function main() {
       await saveAndAssert(userDataPath, config);
     }
 
-    const runtimeRefresh = await refreshExternalServiceRuntime({ userDataPath });
+    const runtimeRefresh = await refreshExternalServiceRuntime({ userDataPath, cwd: userDataPath });
     assert.equal(runtimeRefresh.ok, true, JSON.stringify(runtimeRefresh.results));
     assert.equal(runtimeRefresh.refreshedCount, 4);
+    for (const config of configs) {
+      const adopted = await adoptExternalServiceTools({
+        userDataPath,
+        cwd: userDataPath,
+        serviceId: config.serviceId,
+        adoptAll: true,
+        adoptedBy: "verify-external-http-adapters"
+      });
+      assert.equal(adopted.ok, true, adopted.error || `failed to adopt ${config.serviceId}`);
+      assert.equal(adopted.adoptedToolNames.length > 0, true, `expected adopted tools for ${config.serviceId}`);
+      assert.equal(adopted.activeToolCount > 0, true, `expected active tools for ${config.serviceId}`);
+    }
 
     platform = createToolManagementPlatform({
       userDataPath,
@@ -446,7 +460,7 @@ async function main() {
     const grantResult = await platform.store.createGrant({
       label: "verify external HTTP adapters",
       scopes: ["knowledge:read"],
-      toolsets: ["pact.knowledge.read"],
+      toolsets: ["pact.agentLibrary.read"],
       toolAllow: [openApiTool.id, restTool.id, jsonRpcTool.id, rpcTool.id, rpcV2Tool.id],
       reason: "External HTTP adapter verification."
     });
@@ -469,7 +483,7 @@ async function main() {
       }
     });
     assert.equal(openApiResult.ok, true, JSON.stringify(openApiResult.payload?.error || openApiResult.payload));
-    assert.equal(openApiResult.payload.result.protocolVersion, "pact.external-http-compile.v1");
+    assert.equal(openApiResult.payload.result.protocolVersion, "v0.0.1:external-service:http-compile-1");
     assert.deepEqual(openApiResult.payload.result.result, {
       source: "openapi",
       id: "42",
@@ -519,7 +533,7 @@ async function main() {
       }
     });
     assert.equal(rpcResult.ok, true, JSON.stringify(rpcResult.payload?.error || rpcResult.payload));
-    assert.equal(rpcResult.payload.result.protocolVersion, "pact.external-rpc-compile.v1");
+    assert.equal(rpcResult.payload.result.protocolVersion, "v0.0.1:external-service:rpc-compile-1");
     assert.deepEqual(rpcResult.payload.result.result, {
       source: "rpc",
       value: 21,
@@ -536,7 +550,7 @@ async function main() {
       }
     });
     assert.equal(rpcV2Result.ok, true, JSON.stringify(rpcV2Result.payload?.error || rpcV2Result.payload));
-    assert.equal(rpcV2Result.payload.result.protocolVersion, "pact.external-rpc-compile.v1");
+    assert.equal(rpcV2Result.payload.result.protocolVersion, "v0.0.1:external-service:rpc-compile-1");
     assert.deepEqual(rpcV2Result.payload.result.result, {
       source: "rpc",
       version: "v2",

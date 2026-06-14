@@ -1,60 +1,7 @@
 {
-  "schemaVersion": 1,
-  "kind": "pact.external-service.config",
-  "serviceId": "example-external-service",
-  "serviceName": "external.example.service",
-  "displayName": "Example External Service",
-  "mode": "on-demand",
-  "startupPolicy": "on-demand",
-  "description": "Example config for adapting an external service into a Pact composition package.",
-  "coreFeatureIds": [
-    "core-platform",
-    "security-permissions",
-    "operation-dispatcher",
-    "console-shell",
-    "storage-core",
-    "module-management-core",
-    "data-structure-core",
-    "devops-core",
-    "tool-management-core"
-  ],
-  "featureIds": [],
-  "requiredOperations": [],
-  "includePaths": [],
-  "scripts": {
-    "prepare": {
-      "path": "server/platform/common/composition-management/examples/noop-service/prepare.mjs",
-      "args": [],
-      "required": false
-    },
-    "start": {
-      "path": "server/platform/common/composition-management/examples/noop-service/start.mjs",
-      "args": [],
-      "required": true,
-      "longRunning": true
-    },
-    "stop": {
-      "path": "server/platform/common/composition-management/examples/noop-service/stop.mjs",
-      "args": [],
-      "required": false
-    },
-    "doctor": {
-      "path": "server/platform/common/composition-management/examples/noop-service/doctor.mjs",
-      "args": [],
-      "required": false
-    },
-    "smoke": {
-      "path": "server/platform/common/composition-management/examples/noop-service/smoke.mjs",
-      "args": [],
-      "required": false
-    }
-  },
-  "healthCheck": {
-    "type": "http",
-    "host": "127.0.0.1",
-    "port": 18080,
-    "path": "/healthz",
-    "timeoutMs": 60000,
-    "required": false
+  "templateId": "external-service.template.raw-mcp-streamable-http",
+  "serviceId": "example-raw-mcp",
+  "upstream": {
+    "url": "https://mcp.example.com:443/mcp/"
   }
 }

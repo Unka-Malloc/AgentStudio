@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "kind": "pact.composition.preset",
   "presetId": "skill-hosting-repository",
   "displayName": "Pact Skill Hub",
@@ -35,14 +35,14 @@
       "agent-memory"
     ],
     "preserveContracts": [
-      "pact.security-permissions.v1",
-      "pact.operation-dispatcher.v1",
-      "pact.storage.v1",
-      "pact.module-management.v1",
-      "pact.devops.v1",
-      "pact.capability-package-lifecycle.v1",
-      "pact.skill-registry.v1",
-      "pact.client-runtime-bootstrap.v1"
+      "v0.0.1:risk-control:permissions-1",
+      "v0.0.1:operation:operation-dispatcher-1",
+      "v0.0.1:storage:core-1",
+      "v0.0.1:tool:module-management-1",
+      "v0.0.1:platform:devops-1",
+      "v0.0.1:tool:capability-package-lifecycle-1",
+      "v0.0.1:tool:skill-registry-1",
+      "v0.0.1:agent:client-runtime-bootstrap-1"
     ],
     "reason": "The standalone repository still needs authorization, operation dispatch, audit, storage, upload sessions, jobs, client bootstrap planning, module lifecycle, and runtime health."
   },
@@ -67,13 +67,13 @@
       "server/services/client/work-queue-core/jobs/job-worker.mjs"
     ],
     "requiredProtocols": [
-      "pact.capability-package-lifecycle.v1",
-      "pact.skill-registry.v1",
-      "pact.tool-skill-management.v1",
-      "pact.skill-hub-discovery.v1",
-      "pact.agent-traffic-gateway.v1",
-      "pact.client-runtime-allocator.v1",
-      "pact.client-runtime-bootstrap.v1"
+      "v0.0.1:tool:capability-package-lifecycle-1",
+      "v0.0.1:tool:skill-registry-1",
+      "v0.0.1:tool:skill-management-1",
+      "v0.0.1:tool:skill-hub-discovery-1",
+      "v0.0.1:agent:traffic-gateway-1",
+      "v0.0.1:agent:client-runtime-allocator-1",
+      "v0.0.1:agent:client-runtime-bootstrap-1"
     ],
     "requiredOperations": [
       "capability_packages.list",
@@ -116,8 +116,8 @@
     ],
     "serverExecutionPolicy": "never-execute-skill-code-during-hosting",
     "pullModel": {
-      "catalogProtocol": "pact.skill-hub-discovery.v1",
-      "bundleProtocol": "pact.skill-registry.v1",
+      "catalogProtocol": "v0.0.1:tool:skill-hub-discovery-1",
+      "bundleProtocol": "v0.0.1:tool:skill-registry-1",
       "agentTarget": "local-skill-hub",
       "agentRuntime": "local",
       "downloadReceiptRequired": true,
@@ -134,7 +134,7 @@
   "gatewayCooperation": {
     "upstreamServiceAspect": {
       "role": "skill-publisher-and-admin-ingress",
-      "gatewayProtocol": "pact.agent-traffic-gateway.v1",
+      "gatewayProtocol": "v0.0.1:agent:traffic-gateway-1",
       "routes": [
         "/api/capability-packages",
         "/api/upload-sessions",
@@ -151,7 +151,7 @@
     },
     "downstreamClientAspect": {
       "role": "agent-local-pull-and-bootstrap",
-      "gatewayProtocol": "pact.agent-traffic-gateway.v1",
+      "gatewayProtocol": "v0.0.1:agent:traffic-gateway-1",
       "routes": [
         "/mcp",
         "/api/mcp",
@@ -275,27 +275,27 @@
     "enabled": true,
     "bindProviders": [
       {
-        "contract": "pact.capability-package-lifecycle.v1",
+        "contract": "v0.0.1:tool:capability-package-lifecycle-1",
         "provider": "CapabilityPackageLifecycle"
       },
       {
-        "contract": "pact.skill-registry.v1",
+        "contract": "v0.0.1:tool:skill-registry-1",
         "provider": "CapabilityPackageLifecycle.skillLibrary"
       },
       {
-        "contract": "pact.tool-skill-management.v1",
+        "contract": "v0.0.1:tool:skill-management-1",
         "provider": "ToolSkillManagement"
       },
       {
-        "contract": "pact.skill-hub-discovery.v1",
+        "contract": "v0.0.1:tool:skill-hub-discovery-1",
         "provider": "ToolSkillManagement.skillCatalog"
       },
       {
-        "contract": "pact.agent-traffic-gateway.v1",
+        "contract": "v0.0.1:agent:traffic-gateway-1",
         "provider": "AgentTrafficGatewayIngress"
       },
       {
-        "contract": "pact.client-runtime-bootstrap.v1",
+        "contract": "v0.0.1:agent:client-runtime-bootstrap-1",
         "provider": "ClientRuntimeBootstrap"
       }
     ],

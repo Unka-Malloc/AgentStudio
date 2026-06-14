@@ -19,8 +19,9 @@ export const externalServiceUpstreamTypeOptions = [
   { value: "cloud-drive", label: "Cloud Drive Service" },
   { value: "http", label: "HTTP 服务" },
   { value: "https", label: "HTTPS 服务" },
+  { value: "json-rpc", label: "JSON-RPC 服务" },
+  { value: "sse", label: "SSE 服务" },
   { value: "openapi", label: "OpenAPI 服务" },
-  { value: "rpc", label: "RPC 服务" },
   { value: "other", label: "其它服务" },
 ] as const;
 
@@ -40,23 +41,11 @@ export const externalServiceCloudDriveModeOptions = [
 export const externalServiceModelProtocolOptions = [
   { value: "openai-compatible", label: "OpenAI Compatible" },
   { value: "openai-responses", label: "OpenAI Responses" },
-  { value: "anthropic-messages", label: "Anthropic Messages" },
-  { value: "gemini-generate-content", label: "Gemini generateContent" },
-  { value: "bedrock-converse", label: "Bedrock Converse" },
-  { value: "cohere-chat", label: "Cohere Chat" },
-  { value: "ollama-native", label: "Ollama Native" },
-  { value: "dashscope-native", label: "DashScope Native" },
-  { value: "huggingface-tgi", label: "Hugging Face TGI" },
-  { value: "azure-ai-inference", label: "Azure AI Inference" },
-  { value: "vertex-ai-prediction", label: "Vertex AI Prediction" },
-  { value: "custom-json-http", label: "Custom JSON HTTP" },
 ] as const;
 
 export const externalServiceMcpTransportOptions = [
   { value: "streamable-http", label: "streamable-http" },
-  { value: "http", label: "http" },
   { value: "sse", label: "sse" },
-  { value: "stdio", label: "stdio" },
 ] as const;
 
 export const externalServiceBindingModeOptions = [
@@ -65,7 +54,7 @@ export const externalServiceBindingModeOptions = [
 ] as const;
 
 export const externalServiceBindingOutletOptions = [
-  { value: "pact.skillHub", label: "pact.skillHub" },
+  { value: "pact.serviceHub", label: "pact.serviceHub" },
 ] as const;
 
 export const externalServiceRiskOptions = [
@@ -103,13 +92,15 @@ export type ExternalServiceScriptEntry = {
 };
 
 export type ExternalServiceConfig = {
-  schemaVersion?: number;
+  schemaVersion?: string;
   kind?: string;
+  templateId?: string;
+  policyPreset?: string;
   serviceId: string;
-  serviceName: string;
+  serviceName?: string;
   displayName?: string;
-  mode: "managed" | "connected" | "on-demand" | string;
-  startupPolicy: "with-platform" | "on-demand" | "external-only" | string;
+  mode?: "managed" | "connected" | "on-demand" | string;
+  startupPolicy?: "with-platform" | "on-demand" | "external-only" | string;
   description?: string;
   coreFeatureIds?: string[];
   featureIds?: string[];
@@ -127,6 +118,7 @@ export type ExternalServiceConfig = {
     transport?: string;
     url?: string;
     baseUrl?: string;
+    eventFormat?: string;
     path?: string;
     rpcPath?: string;
     protocol?: string;
@@ -139,6 +131,8 @@ export type ExternalServiceConfig = {
     endpointRef?: string;
     rootPath?: string;
     secretRef?: string;
+    auth?: Record<string, unknown> | null;
+    defaultHeaders?: Record<string, unknown>;
     timeoutMs?: number | null;
     metadata?: Record<string, unknown>;
   } | null;
@@ -202,16 +196,223 @@ export type ExternalServiceEntry = {
       outlet?: string;
     } | null;
     toolCount: number;
+    activeToolCount?: number;
+    candidateToolCount?: number;
     tools: unknown[];
+    activeTools?: string[];
+    candidateTools?: string[];
+    activeToolDetails?: ExternalServiceToolReview[];
+    candidateToolDetails?: ExternalServiceToolReview[];
+    tombstoneCount?: number;
+    tombstones?: ExternalServiceToolTombstone[];
+    adoption?: Record<string, unknown> | null;
     discoveredAt: string;
     fingerprint?: string;
   } | null;
   config: ExternalServiceConfig;
 };
 
+export type ExternalServiceToolSchemaSummary = {
+  type?: string;
+  fingerprint?: string;
+  required?: string[];
+  propertyCount?: number;
+  properties?: Array<{
+    name: string;
+    type?: string;
+    required?: boolean;
+    format?: string;
+    enumCount?: number;
+  }>;
+  truncated?: boolean;
+  additionalProperties?: string;
+};
+
+export type ExternalServiceToolReview = {
+  name: string;
+  title?: string;
+  descriptionPreview?: string;
+  fingerprint?: string;
+  previousFingerprint?: string;
+  adoptionState?: string;
+  reasonCode?: string;
+  discoveredAt?: string;
+  adoptedAt?: string;
+  adoptedBy?: string;
+  risk?: string;
+  readOnly?: boolean;
+  requiredScopes?: string[];
+  inputSchema?: ExternalServiceToolSchemaSummary;
+  transport?: {
+    type?: string;
+    method?: string;
+    path?: string;
+    endpointRef?: string;
+    rpcMethod?: string;
+    rpcEndpointRef?: string;
+    openapiOperationId?: string;
+    endpointRedacted?: boolean;
+  };
+  review?: {
+    protocolVersion?: string;
+    state?: string;
+    reasonCode?: string;
+    current?: Record<string, unknown>;
+    previous?: Record<string, unknown> | null;
+    diff?: {
+      changedFields?: string[];
+      currentFingerprint?: string;
+      previousFingerprint?: string;
+    };
+  };
+};
+
+export type ExternalServiceToolTombstone = {
+  protocolVersion?: string;
+  state?: string;
+  name: string;
+  title?: string;
+  toolFingerprint?: string;
+  previousFingerprint?: string;
+  firstMissingAt?: string;
+  lastMissingAt?: string;
+  lastSeenAt?: string;
+  discoveryFingerprint?: string;
+  reasonCode?: string;
+};
+
+export type ExternalServiceTemplateField = {
+  path: string;
+  label: string;
+  value?: unknown;
+  placeholder?: string;
+  note?: string;
+  requiredWhenGroupUsed?: boolean;
+  alternatives?: string[];
+};
+
+export type ExternalServiceTemplateFieldGroup = {
+  id: string;
+  label: string;
+  kind: "required" | "minimum" | "optional" | "defaulted" | "materialized-only" | string;
+  fields: ExternalServiceTemplateField[];
+  mode?: "all-or-none" | "any" | string;
+  hiddenByDefault?: boolean;
+  note?: string;
+};
+
+export type ExternalServiceTemplateFieldModel = {
+  schemaVersion: string;
+  protocolFamily: string;
+  endpointField: string;
+  minimum: ExternalServiceTemplateFieldGroup;
+  requiredGroups: ExternalServiceTemplateFieldGroup[];
+  optionalGroups: ExternalServiceTemplateFieldGroup[];
+  defaultedGroups: ExternalServiceTemplateFieldGroup[];
+  materializedOnlyGroups: ExternalServiceTemplateFieldGroup[];
+};
+
+export type ExternalServiceTemplateCombination = {
+  id: string;
+  allOf?: string[];
+  oneOf?: string[];
+  anyOf?: string[];
+  note?: string;
+};
+
+export type ExternalServiceTemplateMinimumCombination = {
+  mode: "template-selected" | "self-describing-json" | string;
+  fields: string[];
+  draft?: ExternalServiceConfig;
+};
+
+export type ExternalServiceTemplateFieldCategories = {
+  required?: string[];
+  requiredCombinations?: ExternalServiceTemplateCombination[];
+  optionalCombinations?: ExternalServiceTemplateCombination[];
+  optionalFields?: string[];
+  advancedOptionalFields?: string[];
+  defaultedByTemplateFields?: string[];
+  defaultedByNormalizerFields?: string[];
+  materializedOnlyFields?: string[];
+};
+
+export type ExternalServiceTemplate = {
+  templateId: string;
+  label: string;
+  upstreamType: string;
+  bindingMode: string;
+  requiredFields?: string[];
+  requiredCombinations?: ExternalServiceTemplateCombination[];
+  minimalRequiredFields: string[];
+  optionalCombinations?: ExternalServiceTemplateCombination[];
+  optionalGroups: string[];
+  defaultedFields?: string[];
+  productionGates?: string[];
+  draft?: ExternalServiceConfig;
+  minimumDraft?: ExternalServiceConfig;
+  operatorMinimumDraft?: ExternalServiceConfig;
+  materializedDraft?: ExternalServiceConfig;
+  fieldModel?: ExternalServiceTemplateFieldModel;
+  formContract?: {
+    schemaVersion: string;
+    protocolFamily?: string;
+    endpointField?: string;
+    requiredFields?: string[];
+    templateSelectedRequiredFields?: string[];
+    directJsonRequiredFields?: string[];
+    requiredCombinations?: ExternalServiceTemplateCombination[];
+    optionalCombinations?: ExternalServiceTemplateCombination[];
+    optionalFields?: string[];
+    fieldModel?: ExternalServiceTemplateFieldModel;
+    minimumUsableCombination?: ExternalServiceTemplateMinimumCombination;
+    directJsonMinimumCombination?: ExternalServiceTemplateMinimumCombination;
+    fieldCategories?: ExternalServiceTemplateFieldCategories;
+    defaultedFields?: string[];
+    advancedOptionalFields?: string[];
+    materializedOnlyFields?: string[];
+    hiddenByDefaultFields?: string[];
+    minimumDraft?: ExternalServiceConfig;
+    operatorMinimumDraft?: ExternalServiceConfig;
+  };
+};
+
+export type ExternalServiceTemplateCatalog = {
+  ok?: boolean;
+  schemaVersion: string;
+  kind: string;
+  generatedAt: string;
+  defaultPolicyPreset: string;
+  templates: ExternalServiceTemplate[];
+};
+
+export type ExternalServiceMaterializedManifest = {
+  schemaVersion: string;
+  kind: string;
+  manifestId: string;
+  serviceId: string;
+  serviceName: string;
+  templateId: string;
+  policyPreset: string;
+  lifecycle: "invalid" | "draftVerified" | "contractVerified" | string;
+  productionReady: boolean;
+  generatedAt: string;
+  source: string;
+  binding?: Record<string, unknown>;
+  upstream?: Record<string, unknown>;
+  draftConfigHash?: string;
+  redactedConfig?: ExternalServiceConfig;
+  evidence?: Record<string, unknown>;
+  promotion?: {
+    status?: string;
+    reason?: string;
+    missingGateIds?: string[];
+  };
+};
+
 export type ExternalServiceState = {
   ok: boolean;
-  schemaVersion: number;
+  schemaVersion: string;
   generatedAt: string;
   registryKind: string;
   registryPath: string;
@@ -219,6 +420,8 @@ export type ExternalServiceState = {
   activeConfig: ExternalServiceConfig;
   activeConfigText: string;
   activeValidation: ExternalServiceValidation;
+  templateCatalog?: ExternalServiceTemplateCatalog;
+  templates?: ExternalServiceTemplate[];
   templateConfig: ExternalServiceConfig;
   templateConfigText: string;
   externalMcpCache?: {
@@ -236,11 +439,14 @@ export type ExternalServiceVerifyResult = {
   config: ExternalServiceConfig | null;
   configText?: string;
   validation: ExternalServiceValidation;
+  materializedManifest?: ExternalServiceMaterializedManifest | null;
+  manifestText?: string;
 };
 
 export type ExternalServiceSaveResult = ExternalServiceVerifyResult & {
   registryPath?: string;
   activeServiceId?: string;
+  manifestPath?: string;
 };
 
 export type ExternalServiceRuntimeRefreshResult = {
@@ -276,12 +482,43 @@ export type ExternalServiceRuntimeRefreshResult = {
   };
 };
 
+export type ExternalServiceToolAdoptionResult = {
+  ok: boolean;
+  error?: string;
+  code?: string;
+  cachePath?: string;
+  serviceId: string;
+  adoptedAt?: string;
+  adoptedBy?: string;
+  adoptedToolNames?: string[];
+  activeToolCount?: number;
+  candidateToolCount?: number;
+  state?: ExternalServiceState;
+  toolCatalogRefresh?: {
+    ok: boolean;
+    toolCount?: number;
+    externalMcpOperationCount?: number;
+    fingerprint?: string;
+  };
+};
+
 export function getExternalServices() {
   return getJson<ExternalServiceState>("/api/external-services");
 }
 
 export function getExternalServiceConfig() {
   return getJson<ExternalServiceState>("/api/external-services/config");
+}
+
+export function getExternalServiceTemplates() {
+  return getJson<ExternalServiceTemplateCatalog>("/api/external-services/templates");
+}
+
+export function createExternalServiceTemplateDraft(templateId: string, serviceId = "") {
+  return postJson<{ ok: boolean; draft: ExternalServiceConfig; draftText: string }>(
+    "/api/external-services/templates/draft",
+    { templateId, serviceId },
+  );
 }
 
 export function verifyExternalServiceConfig(configText: string, requireKnownPaths = false) {
@@ -303,6 +540,26 @@ export function refreshExternalServiceRuntime(serviceId = "") {
   return postJson<ExternalServiceRuntimeRefreshResult>(
     "/api/external-services/refresh",
     serviceId ? { serviceId } : {},
+    { safetyConfirm: true },
+  );
+}
+
+export function adoptExternalServiceTools({
+  serviceId,
+  toolNames = [],
+  adoptAll = false,
+  adoptedBy = "operator",
+  expectedFingerprints = {},
+}: {
+  serviceId: string;
+  toolNames?: string[];
+  adoptAll?: boolean;
+  adoptedBy?: string;
+  expectedFingerprints?: Record<string, string>;
+}) {
+  return postJson<ExternalServiceToolAdoptionResult>(
+    "/api/external-services/tools/adopt",
+    { serviceId, toolNames, adoptAll, adoptedBy, expectedFingerprints },
     { safetyConfirm: true },
   );
 }

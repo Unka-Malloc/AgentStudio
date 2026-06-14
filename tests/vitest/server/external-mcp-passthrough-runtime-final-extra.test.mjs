@@ -47,6 +47,83 @@ function createResponse({ ok = true, status = 200, body = "", headers = {} } = {
   };
 }
 
+function adoptedCacheService(service = {}) {
+  const adoptedAt = "2026-06-14T00:00:00.000Z";
+  const tools = Array.isArray(service.tools)
+    ? service.tools.map((tool) => ({
+        ...tool,
+        adoption: {
+          protocolVersion: "v0.0.1:external-service:servicehub-tool-adoption-1",
+          state: "adopted",
+          adoptedAt,
+          adoptedBy: "test-operator",
+          fingerprint: `test-fingerprint-${String(tool?.name || "tool").trim() || "unnamed"}`,
+          reasonCode: "test_fixture_adopted"
+        }
+      }))
+    : [];
+	  return {
+	    policyPreset: "servicehub.development-local",
+	    ...service,
+	    adoption: {
+      protocolVersion: "v0.0.1:external-service:servicehub-tool-adoption-1",
+      state: "adopted",
+      adoptedAt,
+      adoptedBy: "test-operator",
+      activeToolCount: tools.filter((tool) => String(tool?.name || "").trim()).length,
+      candidateToolCount: 0,
+      reasonCode: "test_fixture_adopted"
+    },
+    tools,
+    activeToolCount: tools.filter((tool) => String(tool?.name || "").trim()).length,
+    candidateToolCount: 0
+  };
+}
+
+function createStreamingResponse({ ok = true, status = 200, body = "", headers = {} } = {}) {
+  const normalizedHeaders = new Map(
+    Object.entries(headers).map(([key, value]) => [String(key).toLowerCase(), String(value)])
+  );
+  const chunks = Array.isArray(body) ? body : [body];
+  let index = 0;
+  let cancelled = false;
+  return {
+    ok,
+    status,
+    headers: {
+      get(name) {
+        return normalizedHeaders.get(String(name).toLowerCase()) || null;
+      }
+    },
+    get cancelled() {
+      return cancelled;
+    },
+    body: {
+      getReader() {
+        return {
+          async read() {
+            if (cancelled || index >= chunks.length) {
+              return { done: true, value: undefined };
+            }
+            const value = Buffer.from(String(chunks[index++]), "utf8");
+            return { done: false, value };
+          },
+          async cancel() {
+            cancelled = true;
+          },
+          releaseLock() {}
+        };
+      },
+      async cancel() {
+        cancelled = true;
+      }
+    },
+    async text() {
+      return chunks.join("");
+    }
+  };
+}
+
 afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -97,14 +174,14 @@ describe("external mcp passthrough runtime final extras", () => {
       },
       binding: {
         mode: "passthrough",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       }
     }, { timeoutMs: 25 });
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(discovery).toMatchObject({
       ok: true,
-      protocolVersion: "pact.external-mcp-passthrough.v1",
+      protocolVersion: "v0.0.1:external-service:mcp-passthrough-1",
       initializeResult: {
         capabilities: {
           tools: true
@@ -220,11 +297,11 @@ describe("external mcp passthrough runtime final extras", () => {
 
     const userDataPath = await tempDir("pact-external-mcp-json-error-");
     await writeJson(externalMcpToolCachePath(userDataPath), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       kind: EXTERNAL_MCP_CACHE_KIND,
       updatedAt: "2026-06-05T00:00:00.000Z",
       services: {
-        "mcp-json-service": {
+        "mcp-json-service": adoptedCacheService({
           serviceId: "mcp-json-service",
           serviceName: "MCP JSON Service",
           displayName: "MCP JSON Service",
@@ -235,7 +312,7 @@ describe("external mcp passthrough runtime final extras", () => {
           },
           binding: {
             mode: "passthrough",
-            outlet: "pact.skillHub"
+            outlet: "pact.serviceHub"
           },
           tools: [{
             name: "ping.tool",
@@ -245,7 +322,7 @@ describe("external mcp passthrough runtime final extras", () => {
               type: "object"
             }
           }]
-        }
+        })
       }
     });
 
@@ -383,6 +460,16 @@ describe("external mcp passthrough runtime final extras", () => {
           },
           post: {
             operationId: "create thing",
+            parameters: [
+              {
+                name: "id",
+                in: "path",
+                required: true,
+                schema: {
+                  type: "string"
+                }
+              }
+            ],
             requestBody: {
               required: true,
               content: {
@@ -403,7 +490,17 @@ describe("external mcp passthrough runtime final extras", () => {
         },
         "/echo/{name}": {
           get: {
-            operationId: "echo thing"
+            operationId: "echo thing",
+            parameters: [
+              {
+                name: "name",
+                in: "path",
+                required: true,
+                schema: {
+                  type: "string"
+                }
+              }
+            ]
           }
         }
       }
@@ -413,6 +510,7 @@ describe("external mcp passthrough runtime final extras", () => {
       serviceId: "http-file",
       serviceName: "HTTP File",
       displayName: "HTTP File",
+      policyPreset: "servicehub.development-local",
       upstream: {
         type: "openapi",
         baseUrl: "http://127.0.0.1:8787/api",
@@ -420,7 +518,7 @@ describe("external mcp passthrough runtime final extras", () => {
       },
       binding: {
         mode: "compile",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       }
     };
 
@@ -461,8 +559,7 @@ describe("external mcp passthrough runtime final extras", () => {
         filter: {
           kind: "primary"
         },
-        payload: "ignored",
-        extra: "kept"
+        payload: "declared"
       }
     });
 
@@ -504,8 +601,7 @@ describe("external mcp passthrough runtime final extras", () => {
       toolName: "create_thing",
       input: {
         id: "alpha",
-        payload: "hello",
-        extra: "kept"
+        body: "hello"
       }
     });
 
@@ -516,8 +612,7 @@ describe("external mcp passthrough runtime final extras", () => {
         "Content-Type": "application/json"
       }),
       body: JSON.stringify({
-        payload: "hello",
-        extra: "kept"
+        body: "hello"
       })
     });
     expect(postResult.result).toEqual({
@@ -538,12 +633,11 @@ describe("external mcp passthrough runtime final extras", () => {
       serviceId: "http-file",
       toolName: "echo_thing",
       input: {
-        name: "beta",
-        extra: "value"
+        name: "beta"
       }
     });
 
-    expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8787/api/echo/beta?extra=value");
+    expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8787/api/echo/beta");
     expect(echoResult.result).toBe("pong");
 
     const rpcObjectDiscovery = await discoverExternalHttpTools({
@@ -563,7 +657,7 @@ describe("external mcp passthrough runtime final extras", () => {
       },
       binding: {
         mode: "compile",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       },
       tools: [{
         name: "rpc.object",
@@ -611,18 +705,18 @@ describe("external mcp passthrough runtime final extras", () => {
         },
         binding: {
           mode: "compile",
-          outlet: "pact.skillHub"
+          outlet: "pact.serviceHub"
         },
         tools: rpcObjectDiscovery.tools
       },
       discovery: rpcObjectDiscovery
     });
     await writeJson(externalMcpToolCachePath(userDataPath), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       kind: EXTERNAL_MCP_CACHE_KIND,
       updatedAt: "2026-06-04T00:00:00.000Z",
       services: {
-        "rpc-object": {
+        "rpc-object": adoptedCacheService({
           serviceId: "rpc-object",
           serviceName: "RPC Object",
           displayName: "RPC Object",
@@ -632,7 +726,7 @@ describe("external mcp passthrough runtime final extras", () => {
           toolCount: rpcObjectDiscovery.tools.length,
           discoveredAt: rpcObjectDiscovery.discoveredAt,
           fingerprint: rpcObjectDiscovery.fingerprint
-        }
+        })
       }
     });
 
@@ -688,6 +782,141 @@ describe("external mcp passthrough runtime final extras", () => {
       result: 42
     });
 
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(createResponse({
+      headers: {
+        "content-type": "application/json"
+      },
+      body: {
+        jsonrpc: "2.0",
+        id: "pact-error",
+        error: {
+          code: -32602,
+          message: "Invalid params"
+        }
+      }
+    }));
+
+    await expect(rpcRuntime.callTool({
+      serviceId: "rpc-object",
+      toolName: "rpc.object",
+      input: {
+        payload: "bad"
+      }
+    })).rejects.toMatchObject({
+      message: "Invalid params",
+      code: "external_rpc_error",
+      rpcCode: -32602,
+      statusCode: 502,
+      payload: {
+        error: {
+          code: -32602,
+          message: "Invalid params"
+        }
+      }
+    });
+
+    const sseDiscovery = await discoverExternalHttpTools({
+      serviceId: "events",
+      serviceName: "Events",
+      displayName: "Events",
+      upstream: {
+        type: "sse",
+        url: "http://127.0.0.1:8787/events",
+        eventFormat: "json-data"
+      },
+      binding: {
+        mode: "compile",
+        outlet: "pact.serviceHub"
+      },
+      tools: [{
+        name: "watchEvents"
+      }]
+    });
+
+    expect(sseDiscovery).toMatchObject({
+      ok: true,
+      protocolVersion: EXTERNAL_HTTP_COMPILE_PROTOCOL_VERSION,
+      tools: [{
+        name: "watchEvents",
+        transport: {
+          type: "sse",
+          method: "GET"
+        },
+        sse: {
+          eventFormat: "json-data",
+          maxEvents: 1
+        }
+      }]
+    });
+
+    await writeJson(externalMcpToolCachePath(userDataPath), {
+      schemaVersion: "v0.0.1:schema:definition-1",
+      kind: EXTERNAL_MCP_CACHE_KIND,
+      updatedAt: "2026-06-04T00:00:00.000Z",
+      services: {
+        events: adoptedCacheService({
+          serviceId: "events",
+          serviceName: "Events",
+          displayName: "Events",
+          upstream: sseDiscovery.upstream,
+          binding: sseDiscovery.binding,
+          tools: sseDiscovery.tools,
+          toolCount: sseDiscovery.tools.length,
+          discoveredAt: sseDiscovery.discoveredAt,
+          fingerprint: sseDiscovery.fingerprint
+        })
+      }
+    });
+
+    fetchMock.mockReset();
+    const sseResponse = createStreamingResponse({
+      headers: {
+        "content-type": "text/event-stream"
+      },
+      body: [
+        "event: update",
+        "id: evt-1",
+        "data: {\"ok\":true}",
+        "",
+        "event: ignored",
+        "data: {\"ok\":false}",
+        ""
+      ].join("\n")
+    });
+    fetchMock.mockResolvedValueOnce(sseResponse);
+
+    const sseRuntime = createExternalMcpPassthroughRuntime({ userDataPath });
+    const sseResult = await sseRuntime.callTool({
+      serviceId: "events",
+      toolName: "watchEvents",
+      input: {
+        cursor: "latest"
+      }
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8787/events?cursor=latest");
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: "GET"
+    });
+    expect(sseResult).toMatchObject({
+      ok: true,
+      serviceId: "events",
+      upstreamToolName: "watchEvents",
+      result: {
+        events: [
+          {
+            event: "update",
+            id: "evt-1",
+            data: {
+              ok: true
+            }
+          }
+        ]
+      }
+    });
+    expect(sseResponse.cancelled).toBe(true);
+
     const rpcArrayDiscovery = await discoverExternalHttpTools({
       serviceId: "rpc-array",
       serviceName: "RPC Array",
@@ -705,7 +934,7 @@ describe("external mcp passthrough runtime final extras", () => {
       },
       binding: {
         mode: "compile",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       },
       tools: [{
         name: "rpc.array",
@@ -728,7 +957,7 @@ describe("external mcp passthrough runtime final extras", () => {
       },
       binding: {
         mode: "compile",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       },
       tools: [{
         name: "rpc.path",
@@ -821,7 +1050,7 @@ describe("external mcp passthrough runtime final extras", () => {
   it("refreshes cache, preserves prior services, and filters sorted virtual operations", async () => {
     const userDataPath = await tempDir("pact-external-mcp-refresh-");
     await writeJson(externalMcpToolCachePath(userDataPath), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       kind: EXTERNAL_MCP_CACHE_KIND,
       updatedAt: "2026-06-04T00:00:00.000Z",
       services: {
@@ -841,7 +1070,7 @@ describe("external mcp passthrough runtime final extras", () => {
           },
           binding: {
             mode: "compile",
-            outlet: "pact.skillHub"
+            outlet: "pact.serviceHub"
           },
           tools: [
             {
@@ -863,7 +1092,7 @@ describe("external mcp passthrough runtime final extras", () => {
 
     const discovery = {
       ok: true,
-      protocolVersion: "pact.external-mcp-passthrough.v1",
+      protocolVersion: "v0.0.1:external-service:mcp-passthrough-1",
       serviceId: "mcp-runtime",
       serviceName: "MCP Runtime",
       displayName: "MCP Runtime",
@@ -874,7 +1103,7 @@ describe("external mcp passthrough runtime final extras", () => {
       },
       binding: {
         mode: "passthrough",
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       },
       initializeResult: {},
       tools: [{
@@ -903,7 +1132,7 @@ describe("external mcp passthrough runtime final extras", () => {
         },
         binding: {
           mode: "passthrough",
-          outlet: "pact.skillHub"
+          outlet: "pact.serviceHub"
         }
       },
       discovery
@@ -914,6 +1143,8 @@ describe("external mcp passthrough runtime final extras", () => {
       cachePath: externalMcpToolCachePath(userDataPath),
       serviceId: "mcp-runtime",
       toolCount: 1,
+      activeToolCount: 0,
+      candidateToolCount: 1,
       tools: ["ping.tool"]
     });
 
@@ -923,11 +1154,24 @@ describe("external mcp passthrough runtime final extras", () => {
       services: {
         "legacy-http": {
           toolCount: 2,
-          tools: ["legacy.tool"]
+          activeToolCount: 0,
+          candidateToolCount: 1,
+          tools: ["legacy.tool"],
+          activeTools: [],
+          candidateTools: ["legacy.tool"],
+          legacyMigration: {
+            required: true,
+            state: "requires_readoption",
+            reasonCode: "legacy_cache_requires_tool_adoption"
+          }
         },
         "mcp-runtime": {
           toolCount: 1,
-          tools: ["ping.tool"]
+          activeToolCount: 0,
+          candidateToolCount: 1,
+          tools: ["ping.tool"],
+          activeTools: [],
+          candidateTools: ["ping.tool"]
         }
       }
     });
@@ -935,16 +1179,7 @@ describe("external mcp passthrough runtime final extras", () => {
 
     const runtime = createExternalMcpPassthroughRuntime({ userDataPath });
     const operations = runtime.listVirtualOperationsSync();
-    expect(operations).toHaveLength(3);
-    expect(operations.map((operation) => operation.id)).toEqual([
-      "external.http.legacy_http.legacy_tool",
-      "external.http.legacy_http.tool",
-      "external.mcp.mcp_runtime.ping_tool"
-    ]);
-    expect(operations[1]).toMatchObject({
-      toolId: "pact.externalHttp.legacy_http.tool",
-      label: "Legacy HTTP: Skip me"
-    });
+    expect(operations).toEqual([]);
 
     await expect(runtime.callTool({
       serviceId: "missing-service",
@@ -962,6 +1197,16 @@ describe("external mcp passthrough runtime final extras", () => {
     })).rejects.toMatchObject({
       message: "External HTTP tool is not registered: legacy-http/missing.tool",
       code: "external_http_tool_not_registered"
+    });
+
+    await expect(runtime.callTool({
+      serviceId: "legacy-http",
+      toolName: "legacy.tool",
+      input: {}
+    })).rejects.toMatchObject({
+      message: "ServiceHub external tool is not active or adopted: legacy-http/legacy.tool",
+      code: "servicehub_tool_not_active",
+      statusCode: 404
     });
   });
 });

@@ -92,7 +92,7 @@ describe("http-mcp-adapter extra coverage", () => {
       discoveryState: {
         serverId: "server-42",
         mcpIdentity: {
-          schemaVersion: "pact.mcp.identity.v1",
+          schemaVersion: "v0.0.1:mcp:identity-1",
           algorithm: "Ed25519",
           keyId: "test-key",
           publicKeyJwk: keyPair.publicKey.export({ format: "jwk" }),
@@ -103,7 +103,7 @@ describe("http-mcp-adapter extra coverage", () => {
 
     expect(discovery.serverId).toBe("server-42");
     expect(discovery.identity).toEqual({
-      schemaVersion: "pact.mcp.identity.v1",
+      schemaVersion: "v0.0.1:mcp:identity-1",
       algorithm: "Ed25519",
       keyId: "test-key",
       publicKeyJwk: expect.any(Object)
@@ -116,7 +116,6 @@ describe("http-mcp-adapter extra coverage", () => {
     expect(discovery.upgrade.notification).toBe("notifications/tools/list_changed");
     expect(discovery.mcpServers.pact.httpUrl).toBe("http://127.0.0.1:7228/mcp");
     expect(discovery.codex.mcp_servers.pact.bearer_token_env_var).toBe("PACT_MCP_TOKEN");
-    expect(discovery.geminiCli.mcpServers.pact.headers["X-Pact-Api-Key"]).toBe("${PACT_MCP_TOKEN}");
     expect(discovery.installer.supportedTargets.map((item) => item.target)).toEqual(expect.arrayContaining(["codex", "claude-code", "openclaw"]));
   });
 
@@ -187,7 +186,7 @@ describe("http-mcp-adapter extra coverage", () => {
     const notFoundBody = parseBodyJson(notFoundResponse);
     expect(notFoundResponse.statusCode).toBe(200);
     expect(notFoundBody.error.code).toBe(-32601);
-    expect(notFoundBody.error.message).toBe("MCP method not found: unit.unknown");
+    expect(notFoundBody.error.message).toBe("MCP method not found.");
   });
 
   it("streams the SSE version event and only authorizes when a token is present", async () => {
@@ -257,7 +256,7 @@ describe("http-mcp-adapter extra coverage", () => {
       requiredScopes: []
     });
     expect(tokenResponse.body).toContain("notifications/tools/list_changed");
-    expect(tokenResponse.body).toContain("pact.mcp.v1");
+    expect(tokenResponse.body).toContain("v0.0.1:mcp:interface-1");
 
     tokenCloseHandler();
   });
@@ -365,10 +364,12 @@ describe("http-mcp-adapter extra coverage", () => {
     expect(listSuccessBody.result._meta.sharedHub.canonicalMcpUrl).toBe("/mcp");
     expect(listSuccessBody.result.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
       "pact.discovery",
-      "pact.knowledge",
+      "pact.agentLibrary",
       "pact.sharedspace",
       "pact.codespace",
-      "pact.skillHub"
+      "pact.skillHub",
+      "pact.agentRelay",
+      "pact.serviceHub"
     ]));
 
     const callResponse = createHttpResponse();
@@ -384,7 +385,7 @@ describe("http-mcp-adapter extra coverage", () => {
         id: 3,
         method: "tools/call",
         params: {
-          name: MCP_STABLE_TOOL_NAME,
+          name: "pact.sharedspace",
           arguments: {
             apiVersion: MCP_INTERFACE_VERSION,
             operation: "pact.sharedspace.file.read",

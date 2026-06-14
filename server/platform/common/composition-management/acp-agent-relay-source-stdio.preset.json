@@ -1,9 +1,13 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "kind": "pact.composition.preset",
   "presetId": "acp-agent-relay-source-stdio",
-  "displayName": "ACP Agent Relay Source Stdio",
-  "status": "active",
+  "displayName": "ACP Agent Relay Source Stdio (Retired)",
+  "status": "retired",
+  "retirement": {
+    "reason": "Local stdio source-facing interfaces are disabled as a security hardening measure. Use authenticated HTTP/HTTPS relay endpoints instead.",
+    "securityDesign": "docs/security/design/0001-local-stdio-interface-lockdown.md"
+  },
   "compositionClass": "deployment-dependency-package",
   "deploymentTarget": {
     "applicationId": "acp-agent-relay-source-stdio",
@@ -13,7 +17,7 @@
     "outputRoot": "build/composition-packages/acp-agent-relay-source-stdio"
   },
   "intent": {
-    "summary": "Expose Pact as a source-facing ACP stdio agent so one agent can delegate to another through Pact policy, operation, and relay runtime.",
+    "summary": "Retired audit record for the former source-facing ACP stdio agent. This preset must not be loaded into active composition or external service registration.",
     "serviceKind": "agent-relay",
     "protocol": "acp",
     "transport": "stdio",
@@ -29,10 +33,10 @@
       "tool-management-core"
     ],
     "preserveContracts": [
-      "pact.security-permissions.v1",
-      "pact.operation-dispatcher.v1",
-      "pact.storage.v1",
-      "pact.tool-management.v1"
+      "v0.0.1:risk-control:permissions-1",
+      "v0.0.1:operation:operation-dispatcher-1",
+      "v0.0.1:storage:core-1",
+      "v0.0.1:tool:management-1"
     ],
     "reason": "The ACP relay stdio entrypoint still needs authorization, operation dispatch, durable relay state, Tool Management boundaries, and audit receipts."
   },
@@ -51,7 +55,7 @@
       "server/scripts/verify-acp-agent-relay-codex-antigravity.mjs"
     ],
     "requiredProtocols": [
-      "pact.acp-agent-relay.v1"
+      "v0.0.1:agent:acp-agent-relay-1"
     ],
     "requiredOperations": [
       "acp_agent_relay.virtual_agents.list",
@@ -65,7 +69,7 @@
     ]
   },
   "externalService": {
-    "schemaVersion": 1,
+    "schemaVersion": "v0.0.1:schema:definition-1",
     "kind": "pact.external-service.config",
     "serviceId": "acp-agent-relay-source-stdio",
     "serviceName": "external.agent-relay.source-stdio",
@@ -83,7 +87,7 @@
         ]
       },
       "metadata": {
-        "protocol": "pact.acp-agent-relay.v1",
+        "protocol": "v0.0.1:agent:acp-agent-relay-1",
         "entrypoint": "server/scripts/acp-agent-relay-source-stdio.mjs",
         "stdout": "json-rpc-only",
         "diagnostics": "stderr",

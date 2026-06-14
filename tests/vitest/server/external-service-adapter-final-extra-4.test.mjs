@@ -93,7 +93,10 @@ describe("external service adapter final extra coverage", () => {
       upstream: {
         type: EXTERNAL_SERVICE_UPSTREAM_TYPE.HTTP
       },
-      binding: null
+      binding: {
+        mode: "compile",
+        outlet: "pact.serviceHub"
+      }
     });
   });
 

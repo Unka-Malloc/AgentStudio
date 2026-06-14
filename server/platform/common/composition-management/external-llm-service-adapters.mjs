@@ -110,7 +110,7 @@ export function callExternalLlmService(params = {}) {
 
 export function describeExternalLlmServiceAdapters() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     kind: EXTERNAL_LLM_SERVICE_ADAPTER_KIND,
     status: EXTERNAL_LLM_SERVICE_ADAPTER_STATUS,
     protocols: EXTERNAL_SERVICE_MODEL_PROTOCOL_VALUES.map((protocol) => ({

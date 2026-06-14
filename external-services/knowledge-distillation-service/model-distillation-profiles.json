@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "pact.external-knowledge-distillation.model-distillation-profiles.v1",
+  "protocolVersion": "v0.0.1:external-service:knowledge-distillation-model-distillation-profiles-1",
   "strategy": "singleton-model-distillation-profile-registry.v1",
   "profileCount": 1,
   "defaultProfileId": "real-model-grounded-distillation.v1",
@@ -8,7 +8,7 @@
     {
       "id": "real-model-grounded-distillation.v1",
       "label": "Real model grounded knowledge distillation",
-      "moduleBoundary": "external-kd.model-distillation.module.v1",
+      "moduleBoundary": "v0.0.1:external-service:knowledge-distillation-model-distillation-module-1",
       "gatewayStrategy": "required-agent-gateway-real-model-call.v1",
       "taskType": "knowledge_distillation",
       "task": "Knowledge distillation over parsed Pact documents. Preserve source chronology, structure, contradictions, and evidence references.",
@@ -86,8 +86,8 @@
       },
       "requiredOutput": {
         "language": "zh-CN",
-        "format": "strict JSON object matching pact.external-knowledge-distillation.model-output.v1",
-        "machineReadableContract": "pact.external-knowledge-distillation.model-output.v1",
+        "format": "strict JSON object matching v0.0.1:external-service:knowledge-distillation-model-output-1",
+        "machineReadableContract": "v0.0.1:external-service:knowledge-distillation-model-output-1",
         "constraints": [
           "Do not invent source facts.",
           "Flag weak chronology or context loss.",

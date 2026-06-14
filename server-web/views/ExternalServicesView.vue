@@ -7,7 +7,7 @@ import StatusPill from "../components/StatusPill.vue";
 import { copyConsoleTextWithFeedback } from "../composables/console-browser-effects";
 import { useExternalServicesViewController } from "../composables/external-services-view-controller";
 import { useServerConsoleShellContext } from "../composables/serverConsoleShellContext";
-import type { ExternalServiceEntry } from "../lib/external-services-client";
+import type { ExternalServiceEntry, ExternalServiceToolReview } from "../lib/external-services-client";
 
 const externalServicesView = useExternalServicesViewController(useServerConsoleShellContext());
 const serviceTableScroller = ref<HTMLElement | null>(null);
@@ -25,7 +25,10 @@ const upstreamValueBubble = ref({
   y: 0,
 });
 const toolListPopover = ref({
+  activeTools: [] as ExternalServiceToolReview[],
+  candidateTools: [] as ExternalServiceToolReview[],
   placement: "below" as "above" | "below",
+  selectedCandidateToolNames: [] as string[],
   serviceId: "",
   serviceName: "",
   tools: [] as string[],
@@ -81,6 +84,73 @@ function serviceToolNames(service: ExternalServiceEntry) {
   }).filter(Boolean))];
 }
 
+function toolReviewTitle(tool: ExternalServiceToolReview) {
+  return String(tool.title || tool.name || "").trim();
+}
+
+function toolReviewDescription(tool: ExternalServiceToolReview) {
+  return String(tool.descriptionPreview || "").trim();
+}
+
+function toolReviewSchemaLabel(tool: ExternalServiceToolReview) {
+  const schema = tool.inputSchema;
+  if (!schema) return "schema 未提供";
+  const requiredCount = schema.required?.length || 0;
+  const propertyCount = schema.propertyCount ?? schema.properties?.length ?? 0;
+  return `${propertyCount} fields / ${requiredCount} required`;
+}
+
+function toolReviewPropertyLabel(tool: ExternalServiceToolReview) {
+  const properties = tool.inputSchema?.properties || [];
+  if (!properties.length) return "";
+  const label = properties
+    .slice(0, 6)
+    .map((property) => `${property.name}${property.required ? "*" : ""}${property.type ? `:${property.type}` : ""}`)
+    .join(", ");
+  return tool.inputSchema?.truncated ? `${label}, …` : label;
+}
+
+function toolReviewTransportLabel(tool: ExternalServiceToolReview) {
+  const transport = tool.transport || {};
+  if (transport.rpcMethod) return `JSON-RPC ${transport.rpcMethod}`;
+  if (transport.method || transport.path) return `${transport.method || "HTTP"} ${transport.path || ""}`.trim();
+  if (transport.openapiOperationId) return `OpenAPI ${transport.openapiOperationId}`;
+  return transport.type || "transport 未提供";
+}
+
+function toolReviewReasonLabel(tool: ExternalServiceToolReview) {
+  const reason = String(tool.reasonCode || tool.review?.reasonCode || "").trim();
+  if (reason === "fingerprint_changed_requires_readoption") return "指纹变化，需要重新采纳";
+  if (reason === "awaiting_operator_adoption") return "新候选，等待采纳";
+  if (reason === "details_missing") return "详情缺失";
+  return reason || "已采纳";
+}
+
+function toolReviewChangedFields(tool: ExternalServiceToolReview) {
+  return tool.review?.diff?.changedFields || [];
+}
+
+function isCandidateToolSelected(tool: ExternalServiceToolReview) {
+  return toolListPopover.value.selectedCandidateToolNames.includes(tool.name);
+}
+
+function toggleCandidateToolSelection(tool: ExternalServiceToolReview, checked: boolean) {
+  const name = String(tool.name || "").trim();
+  if (!name) return;
+  const selected = new Set(toolListPopover.value.selectedCandidateToolNames);
+  if (checked) {
+    selected.add(name);
+  } else {
+    selected.delete(name);
+  }
+  toolListPopover.value.selectedCandidateToolNames = [...selected].sort();
+}
+
+function handleCandidateToolSelectionChange(tool: ExternalServiceToolReview, event: Event) {
+  const target = event.target;
+  toggleCandidateToolSelection(tool, target instanceof HTMLInputElement && target.checked);
+}
+
 function showUpstreamValueBubble(event: MouseEvent | FocusEvent, value: unknown) {
   const text = fullCopyValue(value);
   const target = event.currentTarget;
@@ -126,7 +196,10 @@ function toggleToolListPopover(event: MouseEvent, service: ExternalServiceEntry)
   const placeAbove = browser.innerHeight - rect.bottom < 220 && rect.top > 240;
   const maxLeft = Math.max(12, browser.innerWidth - 320);
   toolListPopover.value = {
+    activeTools: externalServicesView.serviceActiveToolReviewRows(service),
+    candidateTools: externalServicesView.serviceCandidateToolReviewRows(service),
     placement: placeAbove ? "above" : "below",
+    selectedCandidateToolNames: externalServicesView.serviceCandidateToolReviewRows(service).map((tool) => tool.name),
     serviceId: service.serviceId,
     serviceName: service.displayName || service.serviceName || service.serviceId,
     tools,
@@ -134,6 +207,14 @@ function toggleToolListPopover(event: MouseEvent, service: ExternalServiceEntry)
     x: Math.max(12, Math.min(rect.left, maxLeft)),
     y: placeAbove ? rect.top - 8 : rect.bottom + 8,
   };
+}
+
+async function adoptSelectedToolPopoverCandidates() {
+  const service = externalServicesView.services.find((entry) => entry.serviceId === toolListPopover.value.serviceId);
+  const selected = toolListPopover.value.selectedCandidateToolNames;
+  if (!service || selected.length === 0) return;
+  await externalServicesView.adoptCandidateTools(service, selected);
+  closeToolListPopover();
 }
 
 async function copyExternalServiceValue(event: MouseEvent, value: unknown) {
@@ -280,8 +361,10 @@ const selectHelp: Record<string, SelectHelpItems> = {
     ["ACP 服务", "外部服务使用 Agent Client / Communication Protocol 类协议。"],
     ["LLM Service", "大模型服务，后台会进一步识别模型协议和 provider。"],
     ["Cloud Drive Service", "iCloud、OneDrive、Google Drive、Dropbox 等网盘上游服务。"],
-    ["HTTP / HTTPS 服务", "普通 HTTP endpoint，必须显式写端口。"],
-    ["RPC 服务", "统一用 method + params + result 表达工具调用，最适合封装成 MCP。"],
+    ["HTTP 服务", "普通 HTTP JSON endpoint，必须显式写端口；生产公开服务应优先使用 HTTPS。"],
+    ["HTTPS 服务", "普通 HTTPS JSON endpoint，必须显式写端口，默认启用 TLS 校验。"],
+    ["JSON-RPC 服务", "JSON-RPC 2.0 endpoint，使用 method + params + result 映射为 MCP 工具。"],
+    ["SSE 服务", "普通 Server-Sent Events endpoint，独立于 MCP SSE transport。"],
     ["其它服务", "暂时无法归入内置类型的服务，保留自定义类型。"],
   ],
   cloudDriveProvider: [
@@ -295,26 +378,20 @@ const selectHelp: Record<string, SelectHelpItems> = {
     ["contract", "只验证连接合同、secretRef、receipt 和权限语义，不调用真实远端 API。"],
     ["remote-live", "调用真实上游 provider endpoint，需要显式 endpoint 和 secretRef。"],
   ],
-  modelProtocol: [
-    ["OpenAI Compatible", "兼容 OpenAI Chat Completions 风格的模型 API。"],
-    ["OpenAI Responses", "OpenAI Responses API 风格。"],
-    ["Anthropic Messages", "Anthropic Claude Messages API 风格。"],
-    ["Gemini generateContent", "Google Gemini generateContent 风格。"],
-    ["Bedrock Converse", "AWS Bedrock Converse 风格。"],
-    ["其它协议", "Ollama、DashScope、TGI、Azure、Vertex 或自定义 JSON HTTP。"],
-  ],
+	  modelProtocol: [
+	    ["OpenAI Compatible", "兼容 OpenAI Chat Completions 风格的模型 API。"],
+	    ["OpenAI Responses", "OpenAI Responses API 风格。"],
+	  ],
   transport: [
     ["streamable-http", "MCP Streamable HTTP，推荐用于现代 HTTP MCP 服务。"],
-    ["http", "普通 HTTP 调用。"],
     ["sse", "Server-Sent Events 风格 MCP 连接。"],
-    ["stdio", "通过本地命令的标准输入输出连接 MCP 服务。"],
   ],
   bindingMode: [
     ["passthrough", "将外部 MCP 工具以转发方式挂到 Pact outlet。"],
     ["compile", "将 HTTP、OpenAPI 或 RPC 配置编译成 Pact 工具。"],
   ],
   outlet: [
-    ["pact.skillHub", "把外部服务能力暴露到 Pact Skill Hub outlet。"],
+    ["pact.serviceHub", "把外部服务能力暴露到 Pact ServiceHub outlet。"],
   ],
   risk: [
     ["read_only", "只读操作，不应改变外部系统状态。"],
@@ -374,7 +451,7 @@ const selectHelp: Record<string, SelectHelpItems> = {
             <section class="external-service-form-section">
               <div class="external-service-form-section-header">
                 <h4>服务身份</h4>
-                <span>注册、审计和工具命名使用这些字段。</span>
+                <span>最小注册只要求稳定服务 ID；名称默认跟随服务 ID。</span>
               </div>
               <div class="external-service-form-grid">
                 <label>
@@ -386,59 +463,13 @@ const selectHelp: Record<string, SelectHelpItems> = {
                     @input="externalServicesView.updateRootField('serviceId', ($event.target as HTMLInputElement).value)"
                   />
                 </label>
-                <label>
-                  <span>服务名称</span>
-                  <input
-                    autocomplete="off"
-                    :value="externalServicesView.configDraft.serviceName"
-                    @input="externalServicesView.updateRootField('serviceName', ($event.target as HTMLInputElement).value)"
-                  />
-                </label>
-                <label>
-                  <span class="external-service-field-label">
-                    <span>运行模式</span>
-                    <HelpTooltip aria-label="运行模式选项说明" :items="selectHelp.mode" />
-                  </span>
-                  <select
-                    aria-label="运行模式"
-                    :value="externalServicesView.configDraft.mode"
-                    @change="externalServicesView.updateRootField('mode', ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option v-for="option in externalServicesView.modeOptions" :key="option.value" :value="option.value">
-                      {{ option.label }}
-                    </option>
-                  </select>
-                </label>
-                <label>
-                  <span class="external-service-field-label">
-                    <span>启动策略</span>
-                    <HelpTooltip aria-label="启动策略选项说明" :items="selectHelp.startupPolicy" />
-                  </span>
-                  <select
-                    aria-label="启动策略"
-                    :value="externalServicesView.configDraft.startupPolicy"
-                    @change="externalServicesView.updateRootField('startupPolicy', ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option v-for="option in externalServicesView.startupPolicyOptions" :key="option.value" :value="option.value">
-                      {{ option.label }}
-                    </option>
-                  </select>
-                </label>
-                <label class="external-service-form-wide">
-                  <span>描述</span>
-                  <textarea
-                    rows="3"
-                    :value="externalServicesView.configDraft.description"
-                    @input="externalServicesView.updateRootField('description', ($event.target as HTMLTextAreaElement).value)"
-                  />
-                </label>
               </div>
             </section>
 
         <section class="external-service-form-section">
           <div class="external-service-form-section-header">
             <h4>上游服务</h4>
-            <span>HTTP/S endpoint 必须显式包含端口；MCP 服务会额外执行工具发现。</span>
+            <span>HTTP、HTTPS、JSON-RPC、SSE 和 MCP transport 分开选择；endpoint 必须显式包含端口。</span>
           </div>
           <div class="external-service-form-grid">
             <label>
@@ -465,30 +496,6 @@ const selectHelp: Record<string, SelectHelpItems> = {
                 @input="externalServicesView.updateCustomUpstreamType(($event.target as HTMLInputElement).value)"
               />
             </label>
-            <label v-if="externalServicesView.isLlmServiceDraft">
-              <span class="external-service-field-label">
-                <span>模型协议</span>
-                <HelpTooltip aria-label="模型协议选项说明" :items="selectHelp.modelProtocol" />
-              </span>
-              <select
-                aria-label="模型协议"
-                :value="externalServicesView.modelProtocolSelectValue"
-                @change="externalServicesView.updateModelProtocol(($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="option in externalServicesView.modelProtocolOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
-	            <label v-if="externalServicesView.isLlmServiceDraft">
-	              <span>Provider</span>
-	              <input
-                autocomplete="off"
-                placeholder="anthropic / google / aws-bedrock"
-                :value="externalServicesView.configDraft.upstream?.provider"
-	                @input="externalServicesView.updateModelProvider(($event.target as HTMLInputElement).value)"
-	              />
-	            </label>
             <label v-if="externalServicesView.isCloudDriveServiceDraft">
               <span class="external-service-field-label">
                 <span>网盘 Provider</span>
@@ -519,13 +526,13 @@ const selectHelp: Record<string, SelectHelpItems> = {
                 </option>
               </select>
             </label>
-	            <label v-if="!externalServicesView.isCloudDriveServiceDraft">
+	            <label v-if="externalServicesView.showMcpTransportField">
 	              <span class="external-service-field-label">
-	                <span>协议 / 传输</span>
+	                <span>MCP Transport</span>
                 <HelpTooltip aria-label="协议和传输选项说明" :items="selectHelp.transport" />
               </span>
               <select
-                aria-label="协议 / 传输"
+                aria-label="MCP Transport"
                 :value="externalServicesView.configDraft.upstream?.transport"
                 @change="externalServicesView.updateUpstreamField('transport', ($event.target as HTMLSelectElement).value)"
               >
@@ -534,16 +541,6 @@ const selectHelp: Record<string, SelectHelpItems> = {
 	                </option>
 	              </select>
 	            </label>
-            <label>
-              <span>超时 ms</span>
-              <input
-                inputmode="numeric"
-                type="number"
-                min="1"
-                :value="externalServicesView.configDraft.upstream?.timeoutMs ?? ''"
-                @input="externalServicesView.updateUpstreamField('timeoutMs', ($event.target as HTMLInputElement).value)"
-              />
-            </label>
             <label v-if="externalServicesView.isCloudDriveServiceDraft && externalServicesView.configDraft.upstream?.mode !== 'local'">
               <span>Secret Ref</span>
               <input
@@ -581,11 +578,11 @@ const selectHelp: Record<string, SelectHelpItems> = {
               />
             </label>
 	            <label v-if="!externalServicesView.isCloudDriveServiceDraft" class="external-service-form-wide">
-	              <span>Endpoint URL</span>
+	              <span>{{ externalServicesView.endpointFieldLabel }}</span>
 	              <input
                 autocomplete="off"
-                placeholder="http://127.0.0.1:8787/mcp/"
-                :value="externalServicesView.configDraft.upstream?.url"
+                :placeholder="externalServicesView.endpointFieldPlaceholder"
+                :value="externalServicesView.endpointFieldValue"
                 @input="externalServicesView.updateUpstreamField('url', ($event.target as HTMLInputElement).value)"
 	              />
 	            </label>
@@ -596,6 +593,266 @@ const selectHelp: Record<string, SelectHelpItems> = {
                 placeholder="http://127.0.0.1:8787/cloud-drive/"
                 :value="externalServicesView.configDraft.upstream?.endpointUrl || externalServicesView.configDraft.upstream?.url"
                 @input="externalServicesView.updateUpstreamField('endpointUrl', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+          </div>
+        </section>
+
+        <section v-if="externalServicesView.minimumFieldLabels.length" class="external-service-form-section external-service-field-contract-section">
+          <div class="external-service-form-section-header">
+            <h4>注册字段</h4>
+            <span>{{ externalServicesView.currentTemplateLabel }}</span>
+          </div>
+          <div class="external-service-field-contract-grid">
+            <article>
+              <strong>最小组合</strong>
+              <div class="external-service-field-chip-list">
+                <code v-for="field in externalServicesView.minimumFieldLabels" :key="field">{{ field }}</code>
+              </div>
+            </article>
+            <article>
+              <strong>必填分组</strong>
+              <div class="external-service-field-chip-list">
+                <span
+                  v-for="group in externalServicesView.requiredFieldGroupSummaries"
+                  :key="group.id"
+                  class="external-service-field-group-pill"
+                >
+                  {{ group.label }}
+                </span>
+              </div>
+            </article>
+            <article>
+              <strong>组合可选</strong>
+              <div class="external-service-field-chip-list">
+                <span
+                  v-for="group in externalServicesView.optionalFieldGroupSummaries"
+                  :key="group.id"
+                  class="external-service-field-group-pill"
+                  :title="group.fields.join(', ')"
+                >
+                  {{ group.label }}<small v-if="group.mode"> / {{ group.mode }}</small>
+                </span>
+              </div>
+            </article>
+            <article>
+              <strong>自动默认</strong>
+              <div class="external-service-field-chip-list">
+                <code v-for="field in externalServicesView.defaultedFieldLabels" :key="field">{{ field }}</code>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section v-if="externalServicesView.showToolMappingFields" class="external-service-form-section">
+          <div class="external-service-form-section-header">
+            <h4>工具映射</h4>
+            <span>只填写第一个最小工具；更多映射可在高级 JSON 中追加。</span>
+          </div>
+          <div class="external-service-form-grid">
+            <label>
+              <span>工具名</span>
+              <input
+                autocomplete="off"
+                placeholder="searchItems"
+                :value="externalServicesView.primaryToolName"
+                @input="externalServicesView.updatePrimaryToolField('name', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <label v-if="externalServicesView.isHttpJsonServiceDraft">
+              <span>HTTP Method</span>
+              <select
+                aria-label="HTTP Method"
+                :value="externalServicesView.primaryHttpMethod"
+                @change="externalServicesView.updatePrimaryToolField('method', ($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="method in externalServicesView.httpMethodOptions" :key="method" :value="method">
+                  {{ method }}
+                </option>
+              </select>
+            </label>
+            <label v-if="externalServicesView.isHttpJsonServiceDraft" class="external-service-form-wide">
+              <span>Path</span>
+              <input
+                autocomplete="off"
+                placeholder="/v1/items/{id}"
+                :value="externalServicesView.primaryHttpPath"
+                @input="externalServicesView.updatePrimaryToolField('path', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <label v-if="externalServicesView.isJsonRpcServiceDraft" class="external-service-form-wide">
+              <span>RPC Method</span>
+              <input
+                autocomplete="off"
+                placeholder="ticket.lookup"
+                :value="externalServicesView.primaryRpcMethod"
+                @input="externalServicesView.updatePrimaryToolField('method', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+          </div>
+        </section>
+
+        <details class="external-service-advanced-json">
+          <summary>可选字段</summary>
+
+	        <section v-if="externalServicesView.isLlmServiceDraft" class="external-service-form-section">
+          <div class="external-service-form-section-header">
+            <h4>模型网关 Hint</h4>
+            <span>Provider 是可选提示；默认由 endpoint 和 modelProtocol 推断。</span>
+          </div>
+          <div class="external-service-form-grid">
+            <label>
+              <span class="external-service-field-label">
+                <span>模型协议</span>
+                <HelpTooltip aria-label="模型协议选项说明" :items="selectHelp.modelProtocol" />
+              </span>
+              <select
+                aria-label="模型协议"
+                :value="externalServicesView.modelProtocolSelectValue"
+                @change="externalServicesView.updateModelProtocol(($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="option in externalServicesView.modelProtocolOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span>Provider</span>
+              <input
+                autocomplete="off"
+                placeholder="openai / anthropic / google / aws-bedrock"
+                :value="externalServicesView.configDraft.upstream?.provider"
+                @input="externalServicesView.updateModelProvider(($event.target as HTMLInputElement).value)"
+              />
+            </label>
+          </div>
+	        </section>
+
+        <section
+          v-if="externalServicesView.advancedOptionalFieldRows && externalServicesView.advancedOptionalFieldRows.length"
+          class="external-service-form-section"
+        >
+          <div class="external-service-form-section-header">
+            <h4>组合可选字段</h4>
+            <span>按模板契约填写，留空表示不启用该可选组合。</span>
+          </div>
+          <div class="external-service-form-grid">
+            <label
+              v-for="row in externalServicesView.advancedOptionalFieldRows"
+              :key="row.id"
+              class="external-service-form-wide"
+            >
+              <span class="external-service-field-label">
+                <span>{{ row.groupLabel }} / {{ row.label }}</span>
+                <small>{{ row.path }}</small>
+              </span>
+              <textarea
+                rows="2"
+                spellcheck="false"
+                :placeholder="row.placeholder"
+                :value="row.value"
+                @input="externalServicesView.updateAdvancedOptionalField(row.path, ($event.target as HTMLTextAreaElement).value)"
+              />
+            </label>
+          </div>
+        </section>
+
+	        <section class="external-service-form-section">
+          <div class="external-service-form-section-header">
+            <h4>显示与运行覆盖</h4>
+            <span>这些字段都有默认值；只有需要覆盖时填写。</span>
+          </div>
+          <div class="external-service-form-grid">
+            <label>
+              <span>服务名称</span>
+              <input
+                autocomplete="off"
+                :value="externalServicesView.configDraft.serviceName"
+                @input="externalServicesView.updateRootField('serviceName', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <label>
+              <span>超时 ms</span>
+              <input
+                inputmode="numeric"
+                type="number"
+                min="1"
+                :value="externalServicesView.configDraft.upstream?.timeoutMs ?? ''"
+                @input="externalServicesView.updateUpstreamField('timeoutMs', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <label>
+              <span class="external-service-field-label">
+                <span>运行模式</span>
+                <HelpTooltip aria-label="运行模式选项说明" :items="selectHelp.mode" />
+              </span>
+              <select
+                aria-label="运行模式"
+                :value="externalServicesView.configDraft.mode"
+                @change="externalServicesView.updateRootField('mode', ($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="option in externalServicesView.modeOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span class="external-service-field-label">
+                <span>启动策略</span>
+                <HelpTooltip aria-label="启动策略选项说明" :items="selectHelp.startupPolicy" />
+              </span>
+              <select
+                aria-label="启动策略"
+                :value="externalServicesView.configDraft.startupPolicy"
+                @change="externalServicesView.updateRootField('startupPolicy', ($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="option in externalServicesView.startupPolicyOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+            <label class="external-service-form-wide">
+              <span>描述</span>
+              <textarea
+                rows="3"
+                :value="externalServicesView.configDraft.description"
+                @input="externalServicesView.updateRootField('description', ($event.target as HTMLTextAreaElement).value)"
+              />
+            </label>
+          </div>
+        </section>
+
+        <section class="external-service-form-section">
+          <div class="external-service-form-section-header">
+            <h4>SecretStore Auth</h4>
+            <span>组合可选字段；不鉴权时全部留空，鉴权时必须使用 secret:// 引用。</span>
+          </div>
+          <div class="external-service-form-grid">
+            <label>
+              <span>Auth Type</span>
+              <input
+                autocomplete="off"
+                placeholder="bearer / api-key / basic"
+                :value="externalServicesView.upstreamAuthType"
+                @input="externalServicesView.updateUpstreamAuthField('type', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <label>
+              <span>Secret Ref</span>
+              <input
+                autocomplete="off"
+                placeholder="secret://servicehub/my-service/api-key"
+                :value="externalServicesView.upstreamAuthSecretRef"
+                @input="externalServicesView.updateUpstreamAuthField('secretRef', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <label>
+              <span>Header Name</span>
+              <input
+                autocomplete="off"
+                placeholder="X-API-Key"
+                :value="externalServicesView.upstreamAuthHeaderName"
+                @input="externalServicesView.updateUpstreamAuthField('headerName', ($event.target as HTMLInputElement).value)"
               />
             </label>
           </div>
@@ -729,6 +986,8 @@ const selectHelp: Record<string, SelectHelpItems> = {
             />
           </div>
         </section>
+
+        </details>
 
         <details class="external-service-advanced-json">
           <summary>高级 JSON 配置</summary>
@@ -894,6 +1153,12 @@ const selectHelp: Record<string, SelectHelpItems> = {
                 :tone="service.validationStatus === 'valid' ? 'success' : 'danger'"
                 :label="service.validationStatus === 'valid' ? '有效' : '无效'"
               />
+              <StatusPill
+                v-if="service.externalMcp"
+                :tone="externalServicesView.serviceCandidateToolCount(service) > 0 ? 'warning' : 'success'"
+                :show-dot="false"
+                :label="externalServicesView.serviceToolAdoptionLabel(service)"
+              />
             </div>
             <div class="external-service-pill-stack external-service-time-pill-stack" data-label="心跳记录">
               <StatusPill
@@ -937,6 +1202,16 @@ const selectHelp: Record<string, SelectHelpItems> = {
               >
                 工具列表
               </button>
+              <button
+                v-if="externalServicesView.serviceCandidateToolCount(service) > 0"
+                class="tool-button tool-button-ghost"
+                type="button"
+                :disabled="externalServicesView.isServiceToolAdopting(service)"
+                :aria-label="`采纳 ${service.displayName} 候选工具`"
+                @click="externalServicesView.adoptCandidateTools(service)"
+              >
+                {{ externalServicesView.isServiceToolAdopting(service) ? "采纳中" : "采纳候选" }}
+              </button>
             </div>
           </div>
         </div>
@@ -961,7 +1236,7 @@ const selectHelp: Record<string, SelectHelpItems> = {
       >
         <div class="external-service-tool-popover-header">
           <div>
-            <strong>工具列表</strong>
+            <strong>工具审查</strong>
             <span>{{ toolListPopover.serviceName }}</span>
           </div>
           <button
@@ -973,11 +1248,66 @@ const selectHelp: Record<string, SelectHelpItems> = {
             ×
           </button>
         </div>
-        <ul class="external-service-tool-list">
+        <div class="external-service-tool-popover-body">
+        <div v-if="toolListPopover.candidateTools.length" class="external-service-tool-review-section">
+          <div class="external-service-tool-review-section-header">
+            <strong>Candidate</strong>
+            <button
+              class="tool-button tool-button-ghost"
+              type="button"
+              :disabled="toolListPopover.selectedCandidateToolNames.length === 0 || externalServicesView.isServiceToolAdopting(toolListPopover.serviceId)"
+              @click="adoptSelectedToolPopoverCandidates"
+            >
+              {{ externalServicesView.isServiceToolAdopting(toolListPopover.serviceId) ? "采纳中" : "采纳所选" }}
+            </button>
+          </div>
+          <ul class="external-service-tool-list">
+            <li
+              v-for="tool in toolListPopover.candidateTools"
+              :key="tool.name"
+              class="external-service-tool-item external-service-tool-review-item"
+            >
+              <label class="external-service-tool-review-title">
+                <input
+                  type="checkbox"
+                  :checked="isCandidateToolSelected(tool)"
+                  @change="handleCandidateToolSelectionChange(tool, $event)"
+                />
+                <span>{{ toolReviewTitle(tool) }}</span>
+              </label>
+              <small>{{ tool.name }} · {{ toolReviewReasonLabel(tool) }}</small>
+              <small v-if="toolReviewDescription(tool)">{{ toolReviewDescription(tool) }}</small>
+              <small>{{ toolReviewSchemaLabel(tool) }}<template v-if="toolReviewPropertyLabel(tool)"> · {{ toolReviewPropertyLabel(tool) }}</template></small>
+              <small>{{ toolReviewTransportLabel(tool) }}<template v-if="tool.risk"> · risk {{ tool.risk }}</template></small>
+              <small v-if="toolReviewChangedFields(tool).length">changed {{ toolReviewChangedFields(tool).join(", ") }}</small>
+              <small v-if="tool.fingerprint" class="external-service-code-value">fp {{ tool.fingerprint.slice(0, 12) }}</small>
+              <small v-if="tool.previousFingerprint" class="external-service-code-value">prev {{ tool.previousFingerprint.slice(0, 12) }}</small>
+            </li>
+          </ul>
+        </div>
+        <div v-if="toolListPopover.activeTools.length" class="external-service-tool-review-section">
+          <div class="external-service-tool-review-section-header">
+            <strong>Active</strong>
+          </div>
+          <ul class="external-service-tool-list">
+            <li
+              v-for="tool in toolListPopover.activeTools"
+              :key="tool.name"
+              class="external-service-tool-item external-service-tool-review-item is-active"
+            >
+              <strong>{{ toolReviewTitle(tool) }}</strong>
+              <small>{{ tool.name }} · {{ toolReviewSchemaLabel(tool) }}</small>
+              <small>{{ toolReviewTransportLabel(tool) }}<template v-if="tool.risk"> · risk {{ tool.risk }}</template></small>
+              <small v-if="tool.fingerprint" class="external-service-code-value">fp {{ tool.fingerprint.slice(0, 12) }}</small>
+            </li>
+          </ul>
+        </div>
+        <ul v-if="!toolListPopover.candidateTools.length && !toolListPopover.activeTools.length" class="external-service-tool-list">
           <li v-for="tool in toolListPopover.tools" :key="tool" class="external-service-tool-item">
             {{ tool }}
           </li>
         </ul>
+        </div>
       </div>
       <div v-if="!externalServicesView.loading && externalServicesView.services.length === 0" class="empty-state">
         <strong>暂无外部服务</strong>
@@ -1200,6 +1530,53 @@ const selectHelp: Record<string, SelectHelpItems> = {
 
 .external-service-form-wide {
   grid-column: span 3;
+}
+
+.external-service-field-contract-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.external-service-field-contract-grid article {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.external-service-field-contract-grid strong {
+  color: var(--text-secondary);
+  font-size: var(--text-md);
+}
+
+.external-service-field-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.external-service-field-chip-list code,
+.external-service-field-group-pill {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 2px var(--space-1-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.external-service-field-group-pill small {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
 .external-service-checkbox-row {
@@ -1567,6 +1944,11 @@ const selectHelp: Record<string, SelectHelpItems> = {
   white-space: nowrap;
 }
 
+.external-service-tool-popover-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .external-service-tool-popover-close {
   width: 26px;
   height: 26px;
@@ -1603,6 +1985,30 @@ const selectHelp: Record<string, SelectHelpItems> = {
   list-style: none;
 }
 
+.external-service-tool-review-section {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.external-service-tool-review-section + .external-service-tool-review-section {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.external-service-tool-review-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) 0;
+}
+
+.external-service-tool-review-section-header strong {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
 .external-service-tool-item {
   min-width: 0;
   padding: var(--space-1-5) var(--space-2);
@@ -1616,6 +2022,39 @@ const selectHelp: Record<string, SelectHelpItems> = {
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.external-service-tool-review-item {
+  display: grid;
+  gap: var(--space-0-5);
+  font-family: var(--font-sans);
+  white-space: normal;
+}
+
+.external-service-tool-review-item small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.external-service-tool-review-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--text-primary);
+  font-weight: var(--font-semibold);
+}
+
+.external-service-tool-review-title input {
+  flex: 0 0 auto;
+}
+
+.external-service-tool-review-title span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .external-service-code-value {
@@ -1692,6 +2131,7 @@ const selectHelp: Record<string, SelectHelpItems> = {
 
 @media (max-width: 760px) {
   .external-service-form-grid,
+  .external-service-field-contract-grid,
   .external-service-validation-grid {
     grid-template-columns: 1fr;
   }

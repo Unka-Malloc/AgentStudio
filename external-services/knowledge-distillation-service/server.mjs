@@ -10,7 +10,7 @@ import { promisify } from "node:util";
 import { gunzipSync, inflateRawSync, inflateSync } from "node:zlib";
 
 const execFileAsync = promisify(execFile);
-const PROTOCOL_VERSION = "pact.external-knowledge-distillation.v1";
+const PROTOCOL_VERSION = "v0.0.1:external-service:knowledge-distillation-1";
 const SERVICE_NAME = "external-knowledge-distillation";
 const SERVICE_KIND = "externalKnowledgeDistillation";
 const PORT = Number(process.env.PORT || process.env.SERVICE_PORT || 8799);
@@ -65,15 +65,15 @@ const PROJECT_EVIDENCE_QUERY_STRATEGY = "project-graph-evidence-convergence-quer
 const REFERENCE_GAP_REPORT_STRATEGY = "reference-framework-gap-report.v1";
 const REFERENCE_FRAMEWORK_AUDIT_STRATEGY = "reference-framework-local-checkout-audit.v1";
 const PDF_SUBTYPE_ROUTING_STRATEGY = "pdf-subtype-routing.v1";
-const DISTILLATION_DOCUMENT_INPUT_CONTRACT = "pact.normalized-distillation-documents.v1";
-const DOCUMENT_INGESTION_ADAPTER_STRATEGY = "external-kd.document-ingestion-adapter.v1";
-const DISTILLATION_ALGORITHM_INPUT_CONTRACT = "external-kd.algorithm-input.normalized-documents.v1";
-const DOCUMENT_PARSING_MODULE_BOUNDARY = "external-kd.document-parsing.module.v1";
-const DISTILLATION_ALGORITHM_MODULE_BOUNDARY = "external-kd.distillation-algorithm.module.v1";
-const MODEL_DISTILLATION_MODULE_BOUNDARY = "external-kd.model-distillation.module.v1";
-const FORMAT_CONVERSION_MODULE_BOUNDARY = "external-kd.format-conversion.module.v1";
+const DISTILLATION_DOCUMENT_INPUT_CONTRACT = "v0.0.1:knowledge:normalized-distillation-documents-1";
+const DOCUMENT_INGESTION_ADAPTER_STRATEGY = "v0.0.1:external-service:knowledge-distillation-document-ingestion-adapter-1";
+const DISTILLATION_ALGORITHM_INPUT_CONTRACT = "v0.0.1:external-service:knowledge-distillation-algorithm-input-normalized-documents-1";
+const DOCUMENT_PARSING_MODULE_BOUNDARY = "v0.0.1:external-service:knowledge-distillation-document-parsing-module-1";
+const DISTILLATION_ALGORITHM_MODULE_BOUNDARY = "v0.0.1:external-service:knowledge-distillation-distillation-algorithm-module-1";
+const MODEL_DISTILLATION_MODULE_BOUNDARY = "v0.0.1:external-service:knowledge-distillation-model-distillation-module-1";
+const FORMAT_CONVERSION_MODULE_BOUNDARY = "v0.0.1:external-service:knowledge-distillation-format-conversion-module-1";
 const MODEL_DISTILLATION_GATEWAY_STRATEGY = "required-agent-gateway-real-model-call.v1";
-const MODEL_DISTILLATION_OUTPUT_CONTRACT = "pact.external-knowledge-distillation.model-output.v1";
+const MODEL_DISTILLATION_OUTPUT_CONTRACT = "v0.0.1:external-service:knowledge-distillation-model-output-1";
 const MODEL_DISTILLATION_OUTPUT_VALIDATION_STRATEGY = "model-distillation-machine-readable-contract.v1";
 const MODEL_DISTILLATION_OUTPUT_REPAIR_STRATEGY = "model-distillation-contract-repair-retry.v1";
 const DISTILLATION_WORKFLOW_SCOPE = Object.freeze({
@@ -306,16 +306,16 @@ const SEMANTIC_CONCEPT_INDEX = Object.freeze(
 );
 
 const FORMAT_ROUTES_CONFIG_PATH = path.join(SERVICE_ROOT, "format-routes.json");
-const FORMAT_ROUTES_CONFIG_PROTOCOL_VERSION = "pact.external-knowledge-distillation.format-routes.v1";
+const FORMAT_ROUTES_CONFIG_PROTOCOL_VERSION = "v0.0.1:external-service:knowledge-distillation-format-routes-1";
 const FORMAT_ROUTES_CONFIG_STRATEGY = "singleton-format-route-registry.v1";
 const PARSER_STRATEGIES_CONFIG_PATH = path.join(SERVICE_ROOT, "parser-strategies.json");
-const PARSER_STRATEGIES_CONFIG_PROTOCOL_VERSION = "pact.external-knowledge-distillation.parser-strategies.v1";
+const PARSER_STRATEGIES_CONFIG_PROTOCOL_VERSION = "v0.0.1:external-service:knowledge-distillation-parser-strategies-1";
 const PARSER_STRATEGIES_CONFIG_STRATEGY = "singleton-parser-strategy-registry.v1";
 const FORMAT_CONVERSION_PROFILES_CONFIG_PATH = path.join(SERVICE_ROOT, "format-conversion-profiles.json");
-const FORMAT_CONVERSION_PROFILES_CONFIG_PROTOCOL_VERSION = "pact.external-knowledge-distillation.format-conversion-profiles.v1";
+const FORMAT_CONVERSION_PROFILES_CONFIG_PROTOCOL_VERSION = "v0.0.1:external-service:knowledge-distillation-format-conversion-profiles-1";
 const FORMAT_CONVERSION_PROFILES_CONFIG_STRATEGY = "singleton-format-conversion-profile-registry.v1";
 const MODEL_DISTILLATION_PROFILES_CONFIG_PATH = path.join(SERVICE_ROOT, "model-distillation-profiles.json");
-const MODEL_DISTILLATION_PROFILES_CONFIG_PROTOCOL_VERSION = "pact.external-knowledge-distillation.model-distillation-profiles.v1";
+const MODEL_DISTILLATION_PROFILES_CONFIG_PROTOCOL_VERSION = "v0.0.1:external-service:knowledge-distillation-model-distillation-profiles-1";
 const MODEL_DISTILLATION_PROFILES_CONFIG_STRATEGY = "singleton-model-distillation-profile-registry.v1";
 const COMPONENT_REGISTRY_STRATEGY = "external-kd-configurable-component-registry.v1";
 const COMPONENT_PIPELINE_GRAPH_STRATEGY = "haystack-llamaindex-inspired-component-pipeline-graph.v1";
@@ -1178,7 +1178,7 @@ async function loadReferenceFrameworks() {
   const frameworks = Array.isArray(parsed.frameworks) ? parsed.frameworks : [];
   const localRoot = parsed.localRoot || "";
   return {
-    protocolVersion: parsed.protocolVersion || "pact.external-knowledge-distillation.references.v1",
+    protocolVersion: parsed.protocolVersion || "v0.0.1:external-service:knowledge-distillation-references-1",
     generatedAt: parsed.generatedAt || "",
     localRoot,
     selectionPolicy: parsed.selectionPolicy || {},
@@ -1271,7 +1271,7 @@ function buildReferenceGapReport(referenceFrameworks = null, { run = null, runti
   });
   const openGaps = uniqueOrdered(frameworkReports.flatMap((framework) => framework.openGaps));
   return {
-    protocolVersion: `${PROTOCOL_VERSION}.reference-gap-report`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-reference-gap-report-1",
     strategy: REFERENCE_GAP_REPORT_STRATEGY,
     generatedAt: nowIso(),
     runId: run?.runId || "",
@@ -1569,7 +1569,7 @@ async function runtimeDoctor({ force = false } = {}) {
     archiveExternalAvailable: Boolean(runtimes["archive.7zip"].available)
   };
   const payload = {
-    protocolVersion: `${PROTOCOL_VERSION}.runtime-doctor`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-runtime-doctor-1",
     generatedAt: nowIso(),
     status: summary.ocrAvailable && summary.pdfVisualAvailable ? "ready" : "degraded",
     summary,
@@ -13418,7 +13418,7 @@ function buildStructureWindowRecord(document = {}, index = 0, elements = [], hea
   return {
     ...record,
     offsetUnit: "element-index",
-    semanticChunkStrategy: "unstructured.by-title-element-windowing.v1",
+    semanticChunkStrategy: "v0.0.1:strategy:unstructured-by-title-element-windowing-1",
     boundaryReason,
     headingPath,
     elementRefs: elements.map((element) => ({
@@ -14633,7 +14633,7 @@ function buildFormatConversionPlan({ runId = "", corpusPlan = null } = {}) {
     PROFESSIONAL_FORMAT_ORDER.includes(routeId)
   )));
   return {
-    protocolVersion: `${PROTOCOL_VERSION}.format-conversion-plan`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-format-conversion-plan-1",
     strategy: "office-document-professional-adaptation.v1",
     runId,
     generatedAt: nowIso(),
@@ -17768,7 +17768,7 @@ function componentConfigSources() {
 
 function externalKdComponentRegistry() {
   return {
-    protocolVersion: `${PROTOCOL_VERSION}.component-registry`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-component-registry-1",
     strategy: COMPONENT_REGISTRY_STRATEGY,
     validation: "startup-fail-fast",
     configSources: componentConfigSources(),
@@ -17785,7 +17785,7 @@ function externalKdComponentRegistry() {
         moduleBoundary: DOCUMENT_PARSING_MODULE_BOUNDARY,
         componentType: "source-ingestion",
         configSources: ["formatRoutes", "parserStrategies"],
-        inputContracts: ["pact.external-kd.parser-input.v1"],
+        inputContracts: ["v0.0.1:external-service:knowledge-distillation-parser-input-1"],
         outputContracts: [DISTILLATION_DOCUMENT_INPUT_CONTRACT],
         owns: ["payloadModes", "filePath", "contentRef", "contentBase64", "manifest", "formatRouting", "parserTrace"]
       },
@@ -17889,11 +17889,11 @@ function externalKdComponentRegistry() {
       {
         id: "result-composition",
         label: "Result Composition",
-        moduleBoundary: "external-kd.result-composition.module.v1",
+        moduleBoundary: "v0.0.1:external-service:knowledge-distillation-result-composition-module-1",
         componentType: "composer",
         configSources: [],
         inputContracts: ["distillation-workflow-state", "qualityReport", "formatConversionPlan"],
-        outputContracts: [PROTOCOL_VERSION, "portable.knowledge-distillation.v1"],
+        outputContracts: [PROTOCOL_VERSION, "v0.0.1:strategy:portable-knowledge-distillation-1"],
         owns: ["responseProfileSeparation", "artifactRefs", "portableDocuments"]
       }
     ]
@@ -17996,7 +17996,7 @@ function buildComponentPipelineGraph(context = {}) {
   ]));
   const routeIds = uniqueOrdered(corpusDocuments.map((document) => document.route?.formatId || "unknown"));
   return {
-    protocolVersion: `${PROTOCOL_VERSION}.component-pipeline-graph`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-component-pipeline-graph-1",
     strategy: COMPONENT_PIPELINE_GRAPH_STRATEGY,
     generatedAt: nowIso(),
     runId: context.runId || "",
@@ -18079,7 +18079,7 @@ function buildConsoleSummary(run = {}) {
   const conversionDocuments = new Map((result.formatConversionPlan?.documents || [])
     .map((document) => [document.sourceId, document]));
   return {
-    protocolVersion: `${PROTOCOL_VERSION}.console-summary`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-console-summary-1",
     responseProfile: "console",
     runId: run.runId || "",
     status: run.status || result.status || "unknown",
@@ -18142,7 +18142,7 @@ function buildProfessionalFormatManifest(run = {}) {
     .map((document) => [document.sourceId, document]));
   const plan = result.formatConversionPlan || {};
   return {
-    protocolVersion: `${PROTOCOL_VERSION}.professional-format-manifest`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-professional-format-manifest-1",
     strategy: "professional-format-manifest.v1",
     runId: run.runId || "",
     status: run.status || result.status || "unknown",
@@ -18480,7 +18480,7 @@ function jsonArtifactValidationSpec(artifactId = "") {
   const specs = {
     "console-summary-json": {
       expectedFields: {
-        protocolVersion: `${PROTOCOL_VERSION}.console-summary`,
+        protocolVersion: "v0.0.1:external-service:knowledge-distillation-console-summary-1",
         responseProfile: "console"
       },
       requiredFields: ["protocolVersion", "responseProfile", "runId", "status", "modeSeparation", "summary", "documents", "artifactRefs", "omittedForConsole"],
@@ -18489,7 +18489,7 @@ function jsonArtifactValidationSpec(artifactId = "") {
     },
     "agent-message-json": {
       expectedFields: {
-        protocolVersion: `${PROTOCOL_VERSION}.agent-message`,
+        protocolVersion: "v0.0.1:external-service:knowledge-distillation-agent-message-1",
         responseProfile: "agent"
       },
       requiredFields: ["protocolVersion", "responseProfile", "runId", "workflowScope", "status", "corpusPlan", "classification", "outputs", "graphEvidence", "formatConversionPlan"],
@@ -18516,7 +18516,7 @@ function jsonArtifactValidationSpec(artifactId = "") {
     },
     "evidence-pack-json": {
       expectedFields: {
-        protocolVersion: `${PROTOCOL_VERSION}.graph-evidence`,
+        protocolVersion: "v0.0.1:external-service:knowledge-distillation-graph-evidence-1",
         strategy: GRAPH_EVIDENCE_STRATEGY
       },
       requiredFields: ["protocolVersion", "strategy", "runId", "summary", "text_units", "entities", "relationships", "covariates", "communities", "community_reports"],
@@ -18533,7 +18533,7 @@ function jsonArtifactValidationSpec(artifactId = "") {
     },
     "professional-format-manifest-json": {
       expectedFields: {
-        protocolVersion: `${PROTOCOL_VERSION}.professional-format-manifest`,
+        protocolVersion: "v0.0.1:external-service:knowledge-distillation-professional-format-manifest-1",
         strategy: "professional-format-manifest.v1"
       },
       requiredFields: ["protocolVersion", "strategy", "runId", "modeSeparation", "summary", "outputArtifactValidation", "formatMatrix", "documents"],
@@ -18542,7 +18542,7 @@ function jsonArtifactValidationSpec(artifactId = "") {
     },
     "reference-gap-report-json": {
       expectedFields: {
-        protocolVersion: `${PROTOCOL_VERSION}.reference-gap-report`,
+        protocolVersion: "v0.0.1:external-service:knowledge-distillation-reference-gap-report-1",
         strategy: REFERENCE_GAP_REPORT_STRATEGY
       },
       requiredFields: ["protocolVersion", "strategy", "referenceFrameworks", "absorbedCapabilityMap", "frameworks", "openGaps", "nextActions"],
@@ -18551,7 +18551,7 @@ function jsonArtifactValidationSpec(artifactId = "") {
     },
     [COMPONENT_PIPELINE_GRAPH_ARTIFACT_ID]: {
       expectedFields: {
-        protocolVersion: `${PROTOCOL_VERSION}.component-pipeline-graph`,
+        protocolVersion: "v0.0.1:external-service:knowledge-distillation-component-pipeline-graph-1",
         strategy: COMPONENT_PIPELINE_GRAPH_STRATEGY
       },
       requiredFields: ["protocolVersion", "strategy", "runId", "configSources", "componentRegistry", "nodes", "edges", "routeBindings", "parserStrategyBindings", "rankers", "contracts", "moduleBoundaries", "runObservability"],
@@ -18736,7 +18736,7 @@ function buildWorkspacePackageZip(run = {}) {
     .map((entry) => validationByArtifactId.get(entry.artifactId) || null)
     .filter(Boolean);
   const manifest = {
-    protocolVersion: `${PROTOCOL_VERSION}.workspace-package`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-workspace-package-1",
     runId: run.runId,
     title: run.title,
     generatedAt: nowIso(),
@@ -20460,7 +20460,7 @@ function buildGraphEvidencePack({ runId = "", createdAt = "", documents = [], cl
   });
 
   return {
-    protocolVersion: `${PROTOCOL_VERSION}.graph-evidence`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-graph-evidence-1",
     strategy: GRAPH_EVIDENCE_STRATEGY,
     runId,
     projectId: incrementalPlan.projectId || "",
@@ -20729,7 +20729,7 @@ function buildEvidenceQueryResult({ runId = "", graphEvidence = {}, filters = {}
   };
 
   return {
-    protocolVersion: `${PROTOCOL_VERSION}.evidence-query`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-evidence-query-1",
     strategy: EVIDENCE_QUERY_STRATEGY,
     runId,
     generatedAt: nowIso(),
@@ -20931,7 +20931,7 @@ function mergeProjectGraphEvidence({ projectId = "", selectedRuns = [] } = {}) {
   }
 
   return {
-    protocolVersion: `${PROTOCOL_VERSION}.project-graph-evidence`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-project-graph-evidence-1",
     strategy: GRAPH_EVIDENCE_STRATEGY,
     projectId,
     generatedAt: nowIso(),
@@ -20971,7 +20971,7 @@ function buildProjectEvidenceQueryResult({ projectId = "", runs = [], query = {}
   });
   const latestRun = selectedRuns[selectedRuns.length - 1] || null;
   return {
-    protocolVersion: `${PROTOCOL_VERSION}.project-evidence-query`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-project-evidence-query-1",
     strategy: PROJECT_EVIDENCE_QUERY_STRATEGY,
     evidenceQueryStrategy: evidence.strategy,
     projectId,
@@ -21138,7 +21138,7 @@ function buildAgentMessage({ runId, title, query, workflowScope, scopeSelection,
   const modelDistillationGroups = new Map((modelDistillation?.classificationDistillation?.groups || [])
     .map((group) => [group.groupId, group]));
   return {
-    protocolVersion: `${PROTOCOL_VERSION}.agent-message`,
+    protocolVersion: "v0.0.1:external-service:knowledge-distillation-agent-message-1",
     responseProfile: "agent",
     runId,
     workflowScope,
@@ -23075,7 +23075,7 @@ function evaluateDistillationWorkflow(distillationWorkflow = {}, runtimeStatus =
         windowCount: corpusPlan.windowCount
       },
       result: {
-        algorithmVersion: "external-service.route-window-community-claim-gated-graph-incremental-distillation.v5",
+        algorithmVersion: "v0.0.1:strategy:external-service-route-window-community-claim-gated-graph-incremental-distillation-5",
         classification,
         graphEvidence
       }
@@ -23241,7 +23241,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     failure
   });
   const portableDocument = {
-    protocolVersion: "portable.knowledge-distillation.v1",
+    protocolVersion: "v0.0.1:strategy:portable-knowledge-distillation-1",
     title,
     markdown,
     responseProfile: "human-readable",
@@ -23365,7 +23365,7 @@ function composeDistillationResult(distillationWorkflow = {}, evaluation = {}, r
     },
     result: {
       status: passed ? "completed" : "failed",
-      algorithmVersion: "external-service.route-window-community-claim-gated-graph-incremental-distillation.v5",
+      algorithmVersion: "v0.0.1:strategy:external-service-route-window-community-claim-gated-graph-incremental-distillation-5",
       algorithmInputContract,
       workflowScope,
       scopeSelection,
@@ -23920,7 +23920,7 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
         DISTILLATION_ALGORITHM_MODULE_BOUNDARY,
         MODEL_DISTILLATION_MODULE_BOUNDARY,
         FORMAT_CONVERSION_MODULE_BOUNDARY,
-        "external-kd.result-composition.module.v1"
+        "v0.0.1:external-service:knowledge-distillation-result-composition-module-1"
       ],
       componentCount: externalKdComponentRegistry().components.length,
       parserPayloadFieldsAllowedInAlgorithmCore: false
@@ -23981,11 +23981,11 @@ function capabilities(referenceFrameworks = null, runtimeStatus = null) {
       groundingConflictThreshold: GROUNDING_CONFLICT_THRESHOLD
     },
     algorithms: [
-      "external-service.route-window-embedding-grounded-distillation.v1",
-      "external-service.route-window-community-grounded-distillation.v2",
-      "external-service.route-window-community-claim-gated-distillation.v3",
-      "external-service.route-window-community-claim-gated-incremental-distillation.v4",
-      "external-service.route-window-community-claim-gated-graph-incremental-distillation.v5",
+      "v0.0.1:strategy:external-service-route-window-embedding-grounded-distillation-1",
+      "v0.0.1:strategy:external-service-route-window-community-grounded-distillation-2",
+      "v0.0.1:strategy:external-service-route-window-community-claim-gated-distillation-3",
+      "v0.0.1:strategy:external-service-route-window-community-claim-gated-incremental-distillation-4",
+      "v0.0.1:strategy:external-service-route-window-community-claim-gated-graph-incremental-distillation-5",
       CLASSIFICATION_STRATEGY,
       "semantic-concept-topic-hierarchy.v1",
       "leader-clustering-semantic-concept-rationale.v1",

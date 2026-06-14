@@ -41,13 +41,15 @@ function buildPreset({
   applicationScripts = [],
   moduleDescriptors = [],
   externalService = null,
-  deploymentTarget = null
+  deploymentTarget = null,
+  status = ""
 } = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     kind: COMPOSITION_PRESET_KIND,
     presetId,
     displayName,
+    ...(status ? { status } : {}),
     compositionClass: "deployment-dependency-package",
     ...(deploymentTarget ? { deploymentTarget } : {}),
     applicationDependencyPackage: {
@@ -67,6 +69,7 @@ function buildExternalServiceConfig(serviceId, scriptPrefix) {
     displayName: `${serviceId} service`,
     mode: "connected",
     startupPolicy: "external-only",
+    policyPreset: "servicehub.development-local",
     upstream: {
       type: "mcp",
       transport: "streamable-http",
@@ -74,7 +77,7 @@ function buildExternalServiceConfig(serviceId, scriptPrefix) {
     },
     binding: {
       mode: "passthrough",
-      outlet: "pact.skillHub"
+      outlet: "pact.serviceHub"
     },
     scripts: {
       prepare: {
@@ -106,16 +109,20 @@ describe("composition management extras", () => {
 
     await writeJson(path.join(presetDir, "beta.preset.json"), buildPreset({ presetId: "beta" }));
     await writeJson(path.join(presetDir, "alpha.preset.json"), buildPreset({ presetId: "alpha" }));
+    await writeJson(path.join(presetDir, "retired.preset.json"), buildPreset({ presetId: "retired", status: "retired" }));
     await writeJson(path.join(presetDir, "skip.json"), { ignored: true });
 
     const files = await listCompositionPresetFiles({ cwd, presetDir: "presets" });
     const loaded = await loadCompositionPresets({ cwd, presetDir: "presets" });
+    const loadedWithRetired = await loadCompositionPresets({ cwd, presetDir: "presets", includeRetired: true });
 
     expect(files.map((file) => path.basename(file))).toEqual([
       "alpha.preset.json",
-      "beta.preset.json"
+      "beta.preset.json",
+      "retired.preset.json"
     ]);
     expect(loaded.map((entry) => entry.preset.presetId)).toEqual(["alpha", "beta"]);
+    expect(loadedWithRetired.map((entry) => entry.preset.presetId)).toEqual(["alpha", "beta", "retired"]);
     expect(await loadCompositionPreset(files[0])).toMatchObject({
       filePath: files[0],
       preset: {
@@ -227,7 +234,7 @@ describe("composition management extras", () => {
       serviceId: "external-service-composition",
       serviceName: "external-service-composition.service",
       binding: {
-        outlet: "pact.skillHub"
+        outlet: "pact.serviceHub"
       }
     });
   });
@@ -270,7 +277,7 @@ describe("composition management extras", () => {
     });
 
     const invalidPreset = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       kind: "wrong.kind",
       presetId: "bad-preset",
       compositionClass: "custom",

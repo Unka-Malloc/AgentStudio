@@ -116,7 +116,7 @@ describe("composition and runtime final extra 5", () => {
     });
     await expect(validateExternalServiceConfig({ config: mcp, requireKnownPaths: false }))
       .resolves.toMatchObject({
-        errors: expect.arrayContaining(["External MCP stdio upstream requires upstream.command.executable."])
+        errors: expect.arrayContaining(["External MCP upstream transport must be streamable-http or sse; stdio is not allowed for ServiceHub."])
       });
 
     expect(await writeExternalServiceArtifacts({ config: null })).toBeNull();
@@ -276,7 +276,7 @@ describe("composition and runtime final extra 5", () => {
   it("calls cached compiled HTTP tools with templates, query values, result paths, and errors", async () => {
     const userDataPath = await tempDir("pact-composition-runtime-cache-");
     await writeJson(externalMcpToolCachePath(userDataPath), {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       kind: "pact.external-mcp.tool-cache",
       updatedAt: "2026-06-05T00:00:00.000Z",
       services: {
@@ -454,10 +454,14 @@ describe("composition and runtime final extra 5", () => {
     expect(cache.services.compiled).toMatchObject({
       serviceId: "compiled",
       toolCount: 1,
-      tools: ["okTool"]
+      activeToolCount: 0,
+      candidateToolCount: 1,
+      tools: ["okTool"],
+      activeTools: [],
+      candidateTools: ["okTool"]
     });
     expect(listExternalMcpVirtualOperationsSync({ userDataPath }).map((operation) => operation.id))
-      .toEqual(["external.http.compiled.okTool"]);
+      .toEqual([]);
   });
 
   it("updates runtime dependency source config and returns dry-run download plans", async () => {

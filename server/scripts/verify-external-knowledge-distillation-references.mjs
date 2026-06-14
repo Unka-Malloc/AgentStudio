@@ -22,7 +22,7 @@ function runJson(args = []) {
 }
 
 const audit = runJson(["--audit", "--require-present", "--require-commit-match"]);
-assert.equal(audit.protocolVersion, "pact.external-knowledge-distillation.reference-sync.v1");
+assert.equal(audit.protocolVersion, "v0.0.1:external-service:knowledge-distillation-reference-sync-1");
 assert.equal(audit.strategy, "manifest-pinned-git-reference-sync.v1");
 assert.equal(audit.mode, "audit");
 assert.equal(audit.summary.expectedCount >= 6, true);

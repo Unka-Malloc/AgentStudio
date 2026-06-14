@@ -280,7 +280,7 @@ const formatConversionProfilesConfig = JSON.parse(await fs.readFile(formatConver
 const modelDistillationProfilesConfig = JSON.parse(await fs.readFile(modelDistillationProfilesConfigEntry, "utf8"));
 assert.equal(
   formatRoutesConfig.protocolVersion,
-  "pact.external-knowledge-distillation.format-routes.v1",
+  "v0.0.1:external-service:knowledge-distillation-format-routes-1",
   "external knowledge distillation must keep format routes in a versioned singleton config"
 );
 assert.equal(
@@ -322,7 +322,7 @@ assert.equal(
 );
 assert.equal(
   parserStrategiesConfig.protocolVersion,
-  "pact.external-knowledge-distillation.parser-strategies.v1",
+  "v0.0.1:external-service:knowledge-distillation-parser-strategies-1",
   "external knowledge distillation must keep parser strategies in a versioned singleton config"
 );
 assert.equal(
@@ -515,7 +515,7 @@ assert.equal(
 );
 assert.equal(
   formatConversionProfilesConfig.protocolVersion,
-  "pact.external-knowledge-distillation.format-conversion-profiles.v1",
+  "v0.0.1:external-service:knowledge-distillation-format-conversion-profiles-1",
   "external knowledge distillation must keep format conversion profiles in a versioned singleton config"
 );
 assert.equal(
@@ -552,7 +552,7 @@ assert.equal(
 );
 assert.equal(
   modelDistillationProfilesConfig.protocolVersion,
-  "pact.external-knowledge-distillation.model-distillation-profiles.v1",
+  "v0.0.1:external-service:knowledge-distillation-model-distillation-profiles-1",
   "external knowledge distillation must keep model distillation profiles in a versioned singleton config"
 );
 assert.equal(
@@ -564,7 +564,7 @@ const defaultModelProfile = modelDistillationProfilesConfig.profiles.find((profi
   profile.id === modelDistillationProfilesConfig.defaultProfileId
 ));
 assert.ok(defaultModelProfile, "model distillation default profile must exist");
-assert.equal(defaultModelProfile.moduleBoundary, "external-kd.model-distillation.module.v1");
+assert.equal(defaultModelProfile.moduleBoundary, "v0.0.1:external-service:knowledge-distillation-model-distillation-module-1");
 assert.equal(defaultModelProfile.gatewayStrategy, "required-agent-gateway-real-model-call.v1");
 assert.equal(defaultModelProfile.requiredRealModelCall, true);
 assert.equal(defaultModelProfile.noBuiltinFallback, true);
@@ -575,7 +575,7 @@ assert.equal(defaultModelProfile.requestFields.includes("question"), true);
 assert.equal(defaultModelProfile.systemPromptLines.length >= 3, true);
 assert.equal(defaultModelProfile.parameters.responseProfile, "machine-readable");
 assert.equal(defaultModelProfile.parameters.maxOutputTokens >= 1000, true);
-assert.equal(defaultModelProfile.requiredOutput.machineReadableContract, "pact.external-knowledge-distillation.model-output.v1");
+assert.equal(defaultModelProfile.requiredOutput.machineReadableContract, "v0.0.1:external-service:knowledge-distillation-model-output-1");
 assert.equal(defaultModelProfile.outputRepairPolicy.enabled, true);
 assert.equal(defaultModelProfile.outputRepairPolicy.strategy, "model-distillation-contract-repair-retry.v1");
 assert.equal(defaultModelProfile.outputRepairPolicy.maxAttempts >= 1, true);

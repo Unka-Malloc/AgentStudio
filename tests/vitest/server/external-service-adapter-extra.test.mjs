@@ -33,7 +33,7 @@ afterEach(async () => {
 });
 
 describe("external service adapter", () => {
-  it("normalizes model, cloud-drive, RPC, scripts, health and binding fields", () => {
+  it("normalizes model, cloud-drive, RPC, scripts, health and binding fields", async () => {
     const modelConfig = normalizeExternalServiceConfig({
       id: "deepseek",
       serviceName: "DeepSeek",
@@ -41,12 +41,12 @@ describe("external service adapter", () => {
       displayName: "DeepSeek Gateway",
       startupPolicy: "external-only",
       upstream: {
-        type: "openai",
+        type: "llm",
         url: "https://api.deepseek.com/v1/chat/completions",
       },
       binding: {
         mode: "compile",
-        outlet: "pact.agentRelay",
+        outlet: "pact.serviceHub",
         scopes: ["models:invoke", "models:invoke", ""],
         risk: "safe_write",
       },
@@ -80,7 +80,7 @@ describe("external service adapter", () => {
         modelProtocol: EXTERNAL_SERVICE_MODEL_PROTOCOL.OPENAI_COMPATIBLE,
       },
       binding: {
-        outlet: "pact.agentRelay",
+        outlet: "pact.serviceHub",
         requiredScopes: ["models:invoke"],
         risk: "safe_write",
       },
@@ -137,6 +137,72 @@ describe("external service adapter", () => {
       ],
     });
     expect(rpc.upstream.endpoints.primary).toBe("/primary");
+
+    const jsonRpc = normalizeExternalServiceConfig({
+      serviceId: "json-rpc-service",
+      serviceName: "JSON RPC",
+      upstream: {
+        type: "json-rpc",
+        url: "https://rpc.example.com:443/jsonrpc",
+        auth: {
+          type: "bearer",
+          secretRef: "secret://servicehub/json-rpc/api-key"
+        },
+        defaultHeaders: {
+          "X-Trace": "trace-ok"
+        }
+      },
+      tools: [
+        {
+          name: "lookup",
+          method: "ticket.lookup"
+        }
+      ]
+    });
+    expect(jsonRpc.upstream).toMatchObject({
+      type: "json-rpc",
+      url: "https://rpc.example.com:443/jsonrpc",
+      auth: {
+        type: "bearer",
+        secretRef: "secret://servicehub/json-rpc/api-key"
+      },
+      defaultHeaders: {
+        "X-Trace": "trace-ok"
+      }
+    });
+
+    const apiKeyHeader = normalizeExternalServiceConfig({
+      serviceId: "api-key-header",
+      serviceName: "API Key Header",
+      upstream: {
+        type: "https",
+        baseUrl: "https://api.example.com:443",
+        auth: {
+          type: "api-key",
+          secretRef: "secret://servicehub/api-key-header/api-key",
+          headerName: "X-Custom-Key"
+        }
+      },
+      tools: [
+        {
+          name: "search",
+          method: "GET",
+          path: "/v1/search"
+        }
+      ]
+    });
+    expect(apiKeyHeader.upstream.auth).toMatchObject({
+      type: "api-key",
+      secretRef: "secret://servicehub/api-key-header/api-key",
+      headerName: "X-Custom-Key"
+    });
+    await expect(validateExternalServiceConfig({
+      config: apiKeyHeader,
+      requireKnownPaths: false
+    })).resolves.toMatchObject({
+      ok: true,
+      errors: []
+    });
   });
 
   it("validates upstream-specific errors, missing paths, and warnings", async () => {
@@ -146,6 +212,7 @@ describe("external service adapter", () => {
       serviceId: "valid",
       serviceName: "Valid",
       mode: "managed",
+      policyPreset: "servicehub.development-local",
       scripts: {
         start: {
           path: "scripts/ok.sh",
@@ -219,6 +286,44 @@ describe("external service adapter", () => {
       "External cloud-drive remote-live upstream requires endpointUrl or url.",
       "External cloud-drive OAuth provider secret must use a secret:// secretRef.",
     ]));
+  });
+
+  it("rejects restricted ServiceHub egress by default and requires an explicit local-development preset", async () => {
+    const productionLocal = normalizeExternalServiceConfig({
+      serviceId: "local-mcp-production",
+      upstream: {
+        type: "mcp",
+        transport: "streamable-http",
+        url: "http://127.0.0.1:8787/mcp",
+      },
+    });
+
+    const productionValidation = await validateExternalServiceConfig({
+      config: productionLocal,
+      requireKnownPaths: false,
+    });
+    expect(productionValidation.ok).toBe(false);
+    expect(productionValidation.errors).toEqual(expect.arrayContaining([
+      "ServiceHub egress denied for upstream.url: restricted_address_loopback.",
+    ]));
+
+    const developmentLocal = normalizeExternalServiceConfig({
+      serviceId: "local-mcp-development",
+      policyPreset: "servicehub.development-local",
+      upstream: {
+        type: "mcp",
+        transport: "streamable-http",
+        url: "http://127.0.0.1:8787/mcp",
+      },
+    });
+
+    await expect(validateExternalServiceConfig({
+      config: developmentLocal,
+      requireKnownPaths: false,
+    })).resolves.toMatchObject({
+      ok: true,
+      errors: [],
+    });
   });
 
   it("loads configs, builds composition presets, and writes packaged artifacts", async () => {

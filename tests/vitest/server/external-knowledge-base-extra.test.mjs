@@ -11,7 +11,7 @@ const harness = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../server/platform/specialized/knowledge/storage/knowledge-core/index.mjs", () => ({
-  KNOWLEDGE_PROTOCOL_VERSION: "pact.knowledge.v1",
+  KNOWLEDGE_PROTOCOL_VERSION: "v0.0.1:knowledge:core-1",
   createKnowledgeCoreMount: async (...args) => harness.createCoreMount(...args)
 }));
 
@@ -188,7 +188,7 @@ function buildFakeCore({
     capabilities() {
       calls.capabilities += 1;
       return {
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         supports: {
           knowledgeCoreLocalSearch: true,
           evidenceRead: false,
@@ -211,14 +211,14 @@ function buildFakeCore({
         docs.set(document.documentId, clone(document));
       }
       return {
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         coreUpserted: (input.documents || []).length
       };
     },
     async ingestBatch(input = {}) {
       calls.ingestBatch.push(clone(input));
       return {
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         batchId: String(input.batchId || ""),
         coreIngestedBatch: true
       };
@@ -226,7 +226,7 @@ function buildFakeCore({
     async ingestSources(input = {}) {
       calls.ingestSources.push(clone(input));
       return {
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         batchId: String(input.batchId || ""),
         coreIngestedSources: true
       };
@@ -239,7 +239,7 @@ function buildFakeCore({
         }
       }
       return {
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         ok: true,
         batchId: String(batchId || "")
       };
@@ -248,7 +248,7 @@ function buildFakeCore({
       calls.search.push(clone(input));
       return (
         searchResult || {
-          protocolVersion: "pact.knowledge.v1",
+          protocolVersion: "v0.0.1:knowledge:core-1",
           query: String(input.query || ""),
           retrievalMode: "keyword",
           items: [],
@@ -260,12 +260,12 @@ function buildFakeCore({
       return {
         evidenceId: String(input.evidenceId || "core-evidence"),
         source: "core-fallback",
-        protocolVersion: "pact.knowledge.v1"
+        protocolVersion: "v0.0.1:knowledge:core-1"
       };
     },
     renderMarkdown(input = {}) {
       return {
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         evidenceId: String(input.evidenceId || "core-evidence"),
         contentType: "text/markdown; charset=utf-8",
         markdown: "# core fallback\n"
@@ -274,7 +274,7 @@ function buildFakeCore({
     async reindex(input = {}) {
       calls.reindex.push(clone(input));
       return {
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         coreReindexed: true
       };
     },
@@ -676,7 +676,7 @@ describe("external knowledge base mount", () => {
 
       const capabilities = mount.capabilities();
       expect(capabilities).toMatchObject({
-        adapterProtocolVersion: "pact.external-knowledge-adapter.v1",
+        adapterProtocolVersion: "v0.0.1:external-service:knowledge-adapter-1",
         backend: {
           adapterId: "external-knowledge-base",
           backendKind: "external-disabled",
@@ -729,7 +729,7 @@ describe("external knowledge base mount", () => {
         limit: 5
       });
       expect(search).toMatchObject({
-        protocolVersion: "pact.knowledge.v1",
+        protocolVersion: "v0.0.1:knowledge:core-1",
         query: "renewal budget approval",
         batchId: "batch-local",
         retrievalMode: "hybrid",
