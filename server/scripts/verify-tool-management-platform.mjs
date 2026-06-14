@@ -120,6 +120,11 @@ try {
   const toolsets = await fetchJson(`${server.url}/api/tool-management/v1/toolsets`);
   assert.equal(toolsets.status, 200);
   assert.ok(toolsets.payload.toolsets.some((toolset) => toolset.id === "pact.agentLibrary.read"));
+  assert.ok(toolsets.payload.toolsets.some((toolset) =>
+    toolset.id === "pact.runtime.maintain" && toolset.requiredScopes.includes("runtime:admin")
+  ));
+  const runtimeSetTool = catalog.payload.tools.find((tool) => tool.id === "pact.runtime.mounts.set");
+  assert.deepEqual(runtimeSetTool.requiredScopes, ["runtime:admin"]);
 
   const grantResult = await fetchJson(`${server.url}/api/tool-management/v1/grants`, {
     method: "POST",
@@ -391,6 +396,7 @@ try {
     body: JSON.stringify({
       label: "verify-pending-operation-approval",
       toolsets: ["pact.agent.workspace.maintain"],
+      scopes: ["workspace:maintain"],
       metadata: { maxRisk: "repair_write" }
     })
   });
@@ -1262,7 +1268,7 @@ try {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       label: "verify-runtime-read",
-      scopes: ["storage:read", "jobs:read"]
+      scopes: ["console:read", "storage:read", "jobs:read"]
     })
   });
   assert.equal(runtimeReadGrant.status, 201);
@@ -1298,12 +1304,44 @@ try {
   assert.equal(runtimeSetDeniedForReadGrant.status, 403);
   assert.equal(runtimeSetDeniedForReadGrant.payload.error.code, "missing_capabilities");
 
+  const loweredRuntimeGrant = await fetchJson(`${server.url}/api/tool-management/v1/grants`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      label: "verify-runtime-maintain-lowered-scope-denied",
+      toolsets: ["pact.runtime.maintain"],
+      scopes: ["knowledge:maintain"],
+      metadata: {
+        maxRisk: "repair_write"
+      }
+    })
+  });
+  assert.equal(loweredRuntimeGrant.status, 201);
+  const loweredRuntimeSetDenied = await fetchJson(`${server.url}/api/tool-management/v1/execute`, {
+    method: "POST",
+    headers: bearerHeaders(loweredRuntimeGrant.payload.token),
+    body: JSON.stringify({
+      toolId: "pact.runtime.mounts.set",
+      input: {
+        value: {
+          mountRouting: {
+            extensionRoutes: {
+              ".tmverify-denied": { mountName: "documentParser", action: "extractDocument" }
+            }
+          }
+        }
+      }
+    })
+  });
+  assert.equal(loweredRuntimeSetDenied.status, 403);
+  assert.equal(loweredRuntimeSetDenied.payload.error.code, "missing_scopes");
+
   const runtimeMaintainGrant = await fetchJson(`${server.url}/api/tool-management/v1/grants`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       label: "verify-runtime-maintain",
-      scopes: ["knowledge:maintain"],
+      scopes: ["runtime:admin"],
       metadata: {
         maxRisk: "repair_write"
       }
@@ -1371,7 +1409,7 @@ try {
       reason: "verify set mounts approval"
     })
   });
-  assert.equal(setMounts.status, 200);
+  assert.equal(setMounts.status, 200, JSON.stringify(setMounts.payload, null, 2));
   assert.ok(setMounts.payload.result.runtime.mountGeneration > runtimeMounts.payload.result.runtime.mountGeneration);
   assert.equal(
     setMounts.payload.result.value.mountRouting.extensionRoutes[".tmverify"].mountName,

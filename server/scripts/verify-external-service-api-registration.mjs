@@ -456,6 +456,7 @@ for (const operationId of CLOUD_DRIVE_EXTERNAL_OPERATION_IDS) {
   assert.ok(operation, `${operationId} must be registered as an upstream cloud drive service operation`);
   assert.equal(operation.feature, "external", `${operationId} must use the external feature namespace`);
   assert.equal(operation.aspects?.includes("external-service"), true, `${operationId} must use the external-service aspect`);
+  assert.equal(operation.aspects?.includes("external-upstream-gateway"), true, `${operationId} must use the external upstream gateway aspect`);
   assert.equal(operation.aspects?.includes("cloud-drive-upstream"), true, `${operationId} must use the cloud-drive-upstream aspect`);
   assert.equal(
     String(operation.http?.path || "").startsWith("/api/external/cloud-drive/"),

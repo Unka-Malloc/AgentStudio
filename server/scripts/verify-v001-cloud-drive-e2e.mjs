@@ -55,8 +55,32 @@ function mcpRequest(method, params = {}, id = 1) {
 
 let mcpRequestId = 0;
 
+const originalCapabilityKernelEnv = {
+  PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER,
+  PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER: process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER,
+  PACT_OPAQUE_CAPABILITY_KEY_PROVIDER: process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER,
+  PACT_CAPABILITY_BINDING_GUARD_PROVIDER: process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER
+};
+
+function useIsolatedCapabilityKernelForVerifier() {
+  process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
+  process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = "local-file";
+}
+
+function restoreCapabilityKernelEnv() {
+  for (const [key, value] of Object.entries(originalCapabilityKernelEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
 function defaultMcpToolNameForOperation(operation = "") {
-  return String(operation || "").includes("cloudDrive") ? "pact.skillHub" : "pact.sharedspace";
+  return String(operation || "").includes("cloudDrive") ? "pact.serviceHub" : "pact.sharedspace";
 }
 
 async function callMcpStructured({ serverUrl, token, operation, input = {}, toolName = "" }) {
@@ -284,12 +308,15 @@ for (const operationId of REQUIRED_OPERATIONS) {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-v001-cloud-drive-"));
-const icloudRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-icloud-drive-"));
-const oneDriveRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-onedrive-projection-"));
+const icloudRoot = path.join(userDataPath, "agent-workspaces", "cloud-drive-local-projections", "icloud");
+const oneDriveRoot = path.join(userDataPath, "agent-workspaces", "cloud-drive-local-projections", "onedrive");
 let server = null;
 let fixtureProvider = null;
+const previousRemoteLiveAllowLocal = process.env.PACT_CLOUD_DRIVE_REMOTE_LIVE_ALLOW_LOCAL;
 
 try {
+  useIsolatedCapabilityKernelForVerifier();
+  process.env.PACT_CLOUD_DRIVE_REMOTE_LIVE_ALLOW_LOCAL = "1";
   await fs.mkdir(path.join(icloudRoot, ".pact-data", "owner"), { recursive: true });
   await fs.mkdir(path.join(icloudRoot, ".pact-data", "public"), { recursive: true });
   await fs.mkdir(path.join(icloudRoot, "TeamDocs"), { recursive: true });
@@ -969,6 +996,12 @@ try {
   await fs.rm(userDataPath, { recursive: true, force: true }).catch(() => {});
   await fs.rm(icloudRoot, { recursive: true, force: true }).catch(() => {});
   await fs.rm(oneDriveRoot, { recursive: true, force: true }).catch(() => {});
+  if (previousRemoteLiveAllowLocal === undefined) {
+    delete process.env.PACT_CLOUD_DRIVE_REMOTE_LIVE_ALLOW_LOCAL;
+  } else {
+    process.env.PACT_CLOUD_DRIVE_REMOTE_LIVE_ALLOW_LOCAL = previousRemoteLiveAllowLocal;
+  }
+  restoreCapabilityKernelEnv();
 }
 
 console.log("v0.0.1 cloud drive E2E verification passed");
