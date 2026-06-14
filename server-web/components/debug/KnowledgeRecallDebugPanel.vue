@@ -1,11 +1,14 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import BinaryCheckbox from "../BinaryCheckbox.vue";
 import ConfigFoldCard from "../ConfigFoldCard.vue";
+import HistorySessionPanel from "../HistorySessionPanel.vue";
 import InfoFeedResultRow from "../InfoFeedResultRow.vue";
 import OptionBar from "../OptionBar.vue";
 import { jsonPreview } from "../../composables/console-format-utils";
 import { knowledgeFusionSummary } from "../../composables/console-knowledge-search-utils";
 import { useDebugViewContext } from "../../composables/debugViewContext";
+import type { HistorySessionPanelItem } from "../../types/app";
 
 const {
   busyKey,
@@ -20,6 +23,16 @@ const {
   openAgentEvidencePreview,
   runKnowledgeRecallDebugBatch,
 } = useDebugViewContext();
+
+const knowledgeRecallHistoryItems = computed<HistorySessionPanelItem[]>(() =>
+  knowledgeRecallDebugRuns.value.map((run, index) => ({
+    id: run.runId,
+    title: run.label || run.runId,
+    meta: `${run.status} · ${run.elapsedMs} ms · ${run.items.length} 条`,
+    preview: run.error || knowledgeFusionSummary(run.response) || run.startedAt,
+    active: index === 0,
+  })),
+);
 </script>
 
 <template>
@@ -42,7 +55,7 @@ const {
         <input
           v-model="knowledgeRecallDebugForm.query"
           type="search"
-          placeholder="例如：HSBC 账单"
+          placeholder="例如：Atlas 模块部署记录"
         />
       </label>
       <OptionBar
@@ -112,4 +125,11 @@ const {
       </section>
     </div>
   </article>
+
+  <HistorySessionPanel
+    title="历史记录"
+    :subtitle="`${knowledgeRecallHistoryItems.length} 条`"
+    :items="knowledgeRecallHistoryItems"
+    max-height="220px"
+  />
 </template>

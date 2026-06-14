@@ -417,7 +417,7 @@ function makeService(overrides: Record<string, unknown> = {}) {
 function makeExternalState() {
   return {
     ok: true,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     generatedAt: "2026-06-04T04:00:00.000Z",
     registryKind: "pact.external-service.registry",
     registryPath: "/tmp/pact/external-services.json",
@@ -692,13 +692,13 @@ beforeEach(() => {
     config: {},
     validation: { ok: true, errors: [], warnings: [] },
   });
-  knowledgeRulesClientMock.getEmailRules.mockResolvedValue({ rules: { schemaVersion: 1, updatedAt: "", reportSeries: [], synonymDictionary: [], departmentDictionary: [], keywordStopwords: [], transactionMergeRules: { highSimilarity: 0.32, mediumSimilarity: 0.18, mediumParticipantOverlap: 0.34, highParticipantOverlap: 0.6 } } });
+  knowledgeRulesClientMock.getEmailRules.mockResolvedValue({ rules: { schemaVersion: "v0.0.1:schema:definition-1", updatedAt: "", reportSeries: [], synonymDictionary: [], departmentDictionary: [], keywordStopwords: [], transactionMergeRules: { highSimilarity: 0.32, mediumSimilarity: 0.18, mediumParticipantOverlap: 0.34, highParticipantOverlap: 0.6 } } });
   knowledgeRulesClientMock.getGoldenRules.mockResolvedValue({ packages: [] });
-  knowledgeRulesClientMock.getExpertVocabulary.mockResolvedValue({ vocabulary: { schemaVersion: 1, version: 1, updatedAt: "", publishedAt: "", source: "seed", checksum: "seed", entries: [] } });
+  knowledgeRulesClientMock.getExpertVocabulary.mockResolvedValue({ vocabulary: { schemaVersion: "v0.0.1:schema:definition-1", version: 1, updatedAt: "", publishedAt: "", source: "seed", checksum: "seed", entries: [] } });
   knowledgeRulesClientMock.publishGoldenRules.mockResolvedValue({ ok: true });
-  knowledgeRulesClientMock.saveEmailRules.mockResolvedValue({ rules: { schemaVersion: 1, updatedAt: "", reportSeries: [], synonymDictionary: [], departmentDictionary: [], keywordStopwords: [], transactionMergeRules: { highSimilarity: 0.32, mediumSimilarity: 0.18, mediumParticipantOverlap: 0.34, highParticipantOverlap: 0.6 } } });
+  knowledgeRulesClientMock.saveEmailRules.mockResolvedValue({ rules: { schemaVersion: "v0.0.1:schema:definition-1", updatedAt: "", reportSeries: [], synonymDictionary: [], departmentDictionary: [], keywordStopwords: [], transactionMergeRules: { highSimilarity: 0.32, mediumSimilarity: 0.18, mediumParticipantOverlap: 0.34, highParticipantOverlap: 0.6 } } });
   knowledgeRulesClientMock.saveGoldenRules.mockResolvedValue({ package: { version: 1 } });
-  knowledgeRulesClientMock.saveExpertVocabulary.mockResolvedValue({ vocabulary: { schemaVersion: 1, version: 1, updatedAt: "", publishedAt: "", source: "seed", checksum: "seed", entries: [] } });
+  knowledgeRulesClientMock.saveExpertVocabulary.mockResolvedValue({ vocabulary: { schemaVersion: "v0.0.1:schema:definition-1", version: 1, updatedAt: "", publishedAt: "", source: "seed", checksum: "seed", entries: [] } });
   externalServicesViewControllerMock.current = null;
   feedViewContextMock.current = null;
   workspacesViewContextMock.current = null;
@@ -799,10 +799,10 @@ describe("console expert rules controller extra coverage", () => {
     });
 
     knowledgeRulesClientMock.getEmailRules.mockResolvedValueOnce({
-      rules: { schemaVersion: 1, updatedAt: "", reportSeries: [], synonymDictionary: [], departmentDictionary: [], keywordStopwords: [], transactionMergeRules: { highSimilarity: 0.32, mediumSimilarity: 0.18, mediumParticipantOverlap: 0.34, highParticipantOverlap: 0.6 } },
+      rules: { schemaVersion: "v0.0.1:schema:definition-1", updatedAt: "", reportSeries: [], synonymDictionary: [], departmentDictionary: [], keywordStopwords: [], transactionMergeRules: { highSimilarity: 0.32, mediumSimilarity: 0.18, mediumParticipantOverlap: 0.34, highParticipantOverlap: 0.6 } },
     });
     knowledgeRulesClientMock.getExpertVocabulary.mockResolvedValueOnce({
-      vocabulary: { schemaVersion: 1, version: 1, updatedAt: "", publishedAt: "", source: "seed", checksum: "seed", entries: [] },
+      vocabulary: { schemaVersion: "v0.0.1:schema:definition-1", version: 1, updatedAt: "", publishedAt: "", source: "seed", checksum: "seed", entries: [] },
     });
 
     await controller.refreshExpertRules({ silent: true, forceDrafts: true } as any);

@@ -14,7 +14,7 @@ type ConsoleExpertEmailRulesControllerOptions = {
 
 function parseFallbackEmailRules(): EmailRuleSet {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: "",
     reportSeries: [],
     synonymDictionary: [],

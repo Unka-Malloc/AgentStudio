@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useServerConsoleShellContext } from '../../composables/serverConsoleShellContext';
 import { formatCompactDate, jsonPreview } from '../../composables/console-format-utils';
+import { confirmConsoleAction, notifyConsoleAction } from '../../composables/console-browser-effects';
 import ConfigFoldCard from '../../components/ConfigFoldCard.vue';
 import { saveContextProfiles } from '../../lib/context-compiler-client';
 
@@ -13,57 +14,204 @@ const {
   contextPreviewResult,
   contextPreviewTask,
   contextProfileRows,
+  contextProfilesResponse,
   exportContextBuildRecords,
   highlightedConfigTarget,
   previewContextCompiler,
+  refreshContextCompiler,
   runContextReplayEvaluation,
 } = useServerConsoleShellContext();
 
-const showAddPresetModal = ref(false);
-const newPresetForm = ref({
-  profileId: '',
-  label: '',
-  contextWindowTokens: 64000,
-  knowledgeBudget: 18000,
-  historyBudget: 16000,
-  expertGuidanceRatio: 0.2,
-});
+type ContextProfileRow = (typeof contextProfileRows.value)[number];
+type ContextPresetForm = {
+  profileId: string;
+  label: string;
+  contextWindowTokens: number;
+  knowledgeBudget: number;
+  historyBudget: number;
+  recentTurnBudget: number;
+  expertGuidanceRatio: number;
+};
 
-async function saveNewPreset() {
-  const newProfile = {
-    ...newPresetForm.value,
+const showPresetModal = ref(false);
+const savingPreset = ref(false);
+const editingProfileId = ref("");
+const presetFormError = ref("");
+const presetForm = ref(createPresetForm());
+const presetModalTitle = computed(() => editingProfileId.value ? "编辑上下文配置" : "新增上下文配置");
+
+function createPresetForm(profile: Partial<ContextPresetForm> = {}): ContextPresetForm {
+  return {
+    profileId: profile.profileId || '',
+    label: profile.label || '',
+    contextWindowTokens: Number(profile.contextWindowTokens || 64000),
+    knowledgeBudget: Number(profile.knowledgeBudget || 18000),
+    historyBudget: Number(profile.historyBudget || 16000),
+    recentTurnBudget: Number(profile.recentTurnBudget || 12000),
+    expertGuidanceRatio: Number(profile.expertGuidanceRatio ?? 0.08),
+  };
+}
+
+function profileRecords() {
+  const profiles = contextProfilesResponse.value?.profiles;
+  return Array.isArray(profiles)
+    ? profiles
+      .filter((profile): profile is Record<string, unknown> => !!profile && typeof profile === "object")
+      .filter((profile) => !isDeprecatedProfile(profile))
+    : [];
+}
+
+function isDeprecatedProfile(profile: Record<string, unknown>) {
+  const profileId = String(profile.profileId || profile.id || "").trim();
+  const label = String(profile.label || "").trim();
+  return (
+    ["balanced", "small-context", "deepseek-v3-671b"].includes(profileId) ||
+    ["Balanced Context", "Small Context", "DeepSeek V3 671B"].includes(label)
+  );
+}
+
+function sortProfiles(profiles: Record<string, unknown>[]) {
+  return [...profiles].sort((left, right) => {
+    const tokenCompare = Number(left.contextWindowTokens || 0) - Number(right.contextWindowTokens || 0);
+    if (tokenCompare !== 0) return tokenCompare;
+    return String(left.profileId || "").localeCompare(String(right.profileId || ""));
+  });
+}
+
+function rawProfileFor(profileId: string) {
+  return profileRecords().find((profile) => String(profile.profileId || profile.id || "") === profileId) || {};
+}
+
+function openAddPresetModal() {
+  editingProfileId.value = "";
+  presetFormError.value = "";
+  presetForm.value = createPresetForm({
+    profileId: "",
+    label: "",
+    contextWindowTokens: 128000,
+    knowledgeBudget: 36000,
+    historyBudget: 42000,
+    recentTurnBudget: 24000,
+  });
+  showPresetModal.value = true;
+}
+
+function openEditPresetModal(profile: ContextProfileRow) {
+  editingProfileId.value = profile.profileId;
+  presetFormError.value = "";
+  presetForm.value = createPresetForm(profile);
+  showPresetModal.value = true;
+}
+
+function closePresetModal() {
+  if (savingPreset.value) return;
+  showPresetModal.value = false;
+  presetFormError.value = "";
+}
+
+function boundedNumber(value: unknown, fallback: number, min = 0) {
+  const next = Number(value);
+  return Math.max(min, Number.isFinite(next) ? next : fallback);
+}
+
+function boundedRatio(value: unknown, fallback = 0.08) {
+  const next = Number(value);
+  return Math.max(0, Math.min(1, Number.isFinite(next) ? next : fallback));
+}
+
+function buildProfileFromForm(original: Record<string, unknown> = {}) {
+  const form = presetForm.value;
+  const profileId = form.profileId.trim();
+  const contextWindowTokens = boundedNumber(form.contextWindowTokens, 128000, 4096);
+  const compression = original.compression && typeof original.compression === "object"
+    ? original.compression as Record<string, unknown>
+    : {};
+  const budgetPolicy = original.budgetPolicy && typeof original.budgetPolicy === "object"
+    ? original.budgetPolicy as Record<string, unknown>
+    : {};
+
+  return {
+    ...original,
+    profileId,
+    label: form.label.trim() || profileId,
+    modelAlias: String(original.modelAlias || "default").trim() || "default",
+    contextWindowTokens,
+    outputReserveTokens: boundedNumber(original.outputReserveTokens, Math.round(contextWindowTokens * 0.06), 256),
+    toolReserveTokens: boundedNumber(original.toolReserveTokens, Math.round(contextWindowTokens * 0.08), 0),
+    fixedMemoryBudget: boundedNumber(original.fixedMemoryBudget, Math.round(contextWindowTokens * 0.02), 0),
+    knowledgeBudget: boundedNumber(form.knowledgeBudget, 0),
+    historyBudget: boundedNumber(form.historyBudget, 0),
+    recentTurnBudget: boundedNumber(form.recentTurnBudget, 0),
+    budgetPolicy: {
+      ...budgetPolicy,
+      expertGuidanceRatio: boundedRatio(form.expertGuidanceRatio),
+    },
     compression: {
       enabled: true,
       threshold: 0.6,
       targetRatio: 0.3,
       protectLastNTurns: 8,
       summaryMaxTokens: 8000,
-      strategy: "deterministic-extractive"
-    }
-  };
-
-  // Update UI optimistically
-  contextProfileRows.value.push(newProfile);
-  showAddPresetModal.value = false;
-
-  // Persist to backend
-  try {
-    const allProfiles = contextProfileRows.value;
-    await saveContextProfiles({ profiles: allProfiles });
-  } catch (err) {
-    console.error("Failed to save profiles:", err);
-  }
-
-  // Reset form
-  newPresetForm.value = {
-    profileId: '',
-    label: '',
-    contextWindowTokens: 64000,
-    knowledgeBudget: 18000,
-    historyBudget: 16000,
-    expertGuidanceRatio: 0.2,
+      strategy: "deterministic-extractive",
+      ...compression,
+    },
   };
 }
+
+async function persistProfiles(nextProfiles: Record<string, unknown>[]) {
+  savingPreset.value = true;
+  presetFormError.value = "";
+  try {
+    const response = await saveContextProfiles({ profiles: sortProfiles(nextProfiles) });
+    contextProfilesResponse.value = response;
+    await refreshContextCompiler({ silent: true });
+    showPresetModal.value = false;
+    return true;
+  } catch (err) {
+    presetFormError.value = err instanceof Error ? err.message : "保存上下文配置失败。";
+    return false;
+  } finally {
+    savingPreset.value = false;
+  }
+}
+
+async function savePresetForm() {
+  const profileId = presetForm.value.profileId.trim();
+  if (!profileId) {
+    presetFormError.value = "请填写 Profile ID。";
+    return;
+  }
+  const conflict = profileRecords().some((profile) =>
+    String(profile.profileId || profile.id || "") === profileId &&
+      String(profile.profileId || profile.id || "") !== editingProfileId.value,
+  );
+  if (conflict) {
+    presetFormError.value = "Profile ID 已存在。";
+    return;
+  }
+
+  const original = editingProfileId.value ? rawProfileFor(editingProfileId.value) : {};
+  const nextProfile = buildProfileFromForm(original);
+  const nextProfiles = profileRecords().filter((profile) =>
+    String(profile.profileId || profile.id || "") !== editingProfileId.value,
+  );
+  nextProfiles.push(nextProfile);
+  await persistProfiles(nextProfiles);
+}
+
+async function deletePreset(profile: ContextProfileRow) {
+  const label = profile.label || profile.profileId;
+  if (!confirmConsoleAction(`删除上下文预设“${label}”？`)) {
+    return;
+  }
+  const saved = await persistProfiles(
+    profileRecords().filter((item) => String(item.profileId || item.id || "") !== profile.profileId),
+  );
+  if (!saved) {
+    notifyConsoleAction(presetFormError.value || "删除上下文预设失败。");
+  }
+}
+
 </script>
 
 <template>
@@ -78,7 +226,7 @@ async function saveNewPreset() {
                     <button
                       class="tool-button"
                       type="button"
-                      @click="showAddPresetModal = true"
+                      @click="openAddPresetModal"
                     >
                       新增预设
                     </button>
@@ -91,9 +239,28 @@ async function saveNewPreset() {
                     :key="profile.profileId"
                     class="context-profile-item"
                   >
-                    <header>
-                      <h4 class="profile-title">{{ profile.label || profile.profileId }}</h4>
-                      <span class="profile-mode">{{ profile.compressionMode }} / {{ profile.strategy }}</span>
+                    <header class="context-profile-item-header">
+                      <div class="profile-heading">
+                        <h4 class="profile-title">{{ profile.label || profile.profileId }}</h4>
+                        <span class="profile-mode">{{ profile.profileId }} · {{ profile.compressionMode }} / {{ profile.strategy }}</span>
+                      </div>
+                      <div class="profile-actions">
+                        <button
+                          class="table-action"
+                          type="button"
+                          @click="openEditPresetModal(profile)"
+                        >
+                          编辑
+                        </button>
+                        <button
+                          class="table-action danger-action"
+                          type="button"
+                          :disabled="savingPreset"
+                          @click="deletePreset(profile)"
+                        >
+                          删除
+                        </button>
+                      </div>
                     </header>
                     <div class="profile-budgets">
                       <div class="budget-item">
@@ -206,43 +373,49 @@ async function saveNewPreset() {
                 </ConfigFoldCard>
               </div>
 
-              <!-- Add Preset Modal -->
-              <div v-if="showAddPresetModal" class="pact-modal-overlay" @click.self="showAddPresetModal = false">
-                <div class="pact-modal">
+              <div v-if="showPresetModal" class="pact-modal-overlay" @click.self="closePresetModal">
+                <form class="pact-modal" @submit.prevent="savePresetForm">
                   <header class="pact-modal-header">
-                    <h3>新增上下文配置</h3>
+                    <h3>{{ presetModalTitle }}</h3>
                   </header>
                   <div class="pact-modal-body form-grid">
                     <label class="full-row">
                       <span>配置标识 (Profile ID)</span>
-                      <input v-model="newPresetForm.profileId" placeholder="例如: my-custom-preset" />
+                      <input v-model="presetForm.profileId" placeholder="例如: context-256k" />
                     </label>
                     <label class="full-row">
                       <span>配置名称 (Label)</span>
-                      <input v-model="newPresetForm.label" placeholder="例如: 自定义均衡配置" />
+                      <input v-model="presetForm.label" placeholder="例如: 256K Context" />
                     </label>
                     <label>
                       <span>窗口总量</span>
-                      <input type="number" v-model.number="newPresetForm.contextWindowTokens" />
+                      <input type="number" min="4096" step="1024" v-model.number="presetForm.contextWindowTokens" />
                     </label>
                     <label>
                       <span>知识分配</span>
-                      <input type="number" v-model.number="newPresetForm.knowledgeBudget" />
+                      <input type="number" min="0" step="1024" v-model.number="presetForm.knowledgeBudget" />
                     </label>
                     <label>
                       <span>历史分配</span>
-                      <input type="number" v-model.number="newPresetForm.historyBudget" />
+                      <input type="number" min="0" step="1024" v-model.number="presetForm.historyBudget" />
+                    </label>
+                    <label>
+                      <span>最近轮次</span>
+                      <input type="number" min="0" step="1024" v-model.number="presetForm.recentTurnBudget" />
                     </label>
                     <label>
                       <span>专家介入权重 (0-1)</span>
-                      <input type="number" step="0.1" v-model.number="newPresetForm.expertGuidanceRatio" />
+                      <input type="number" min="0" max="1" step="0.01" v-model.number="presetForm.expertGuidanceRatio" />
                     </label>
+                    <p v-if="presetFormError" class="preset-form-error full-row">{{ presetFormError }}</p>
                   </div>
                   <footer class="pact-modal-footer">
-                    <button class="tool-button tool-button-ghost" type="button" @click="showAddPresetModal = false">取消</button>
-                    <button class="tool-button" type="button" @click="saveNewPreset">保存配置</button>
+                    <button class="tool-button tool-button-ghost" type="button" :disabled="savingPreset" @click="closePresetModal">取消</button>
+                    <button class="tool-button" type="submit" :disabled="savingPreset || !presetForm.profileId.trim()">
+                      {{ savingPreset ? "保存中" : "保存配置" }}
+                    </button>
                   </footer>
-                </div>
+                </form>
               </div>
             </article>
           </section>
@@ -271,12 +444,19 @@ async function saveNewPreset() {
   border-color: var(--el-border-color);
 }
 
-.context-profile-item header {
+.context-profile-item-header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: flex-start;
+  gap: 1rem;
   border-bottom: 1px solid var(--el-border-color-lighter);
   padding-bottom: 0.75rem;
+}
+
+.profile-heading {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
 }
 
 .profile-title {
@@ -284,13 +464,21 @@ async function saveNewPreset() {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--el-text-color-primary);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .profile-mode {
   font-size: 0.875rem;
   color: var(--el-text-color-secondary);
   font-weight: 500;
+}
+
+.profile-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
 }
 
 .profile-budgets {
@@ -383,7 +571,7 @@ async function saveNewPreset() {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--el-text-color-primary);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .pact-modal-body {
@@ -423,6 +611,16 @@ async function saveNewPreset() {
 
 .pact-modal-body input::placeholder {
   color: var(--el-text-color-placeholder);
+}
+
+.preset-form-error {
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  background: var(--danger-surface);
+  color: var(--danger);
+  font-size: 0.875rem;
 }
 
 .pact-modal-footer {
@@ -529,5 +727,22 @@ async function saveNewPreset() {
   height: 24px;
   background: var(--el-border-color-lighter);
   margin: 0 0.5rem;
+}
+
+@media (max-width: 720px) {
+  .context-profile-item-header,
+  .context-action-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .profile-actions,
+  .pact-modal-footer {
+    justify-content: flex-start;
+  }
+
+  .action-divider {
+    display: none;
+  }
 }
 </style>

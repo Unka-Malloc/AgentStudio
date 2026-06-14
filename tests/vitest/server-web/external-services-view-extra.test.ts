@@ -159,6 +159,16 @@ function createService(override: Partial<ServiceFixture> = {}): ServiceFixture {
   };
 }
 
+function serviceToolNames(service: ServiceFixture) {
+  return [...new Set((service.externalMcp?.tools || []).map((tool) => {
+    if (typeof tool === "string") return tool.trim();
+    if (tool && typeof tool === "object") {
+      return String(tool.name || tool.toolId || tool.id || "").trim();
+    }
+    return "";
+  }).filter(Boolean))];
+}
+
 function createController(overrides: Record<string, unknown> = {}) {
   const normalizedOverrides = { ...overrides };
   const servicesOverride = normalizedOverrides.services as ServiceFixture[] | undefined;
@@ -293,8 +303,22 @@ function createController(overrides: Record<string, unknown> = {}) {
     healthCheckTypeOptions: [{ value: "none", label: "none" }],
     riskOptions: [{ value: "read_only", label: "read_only" }],
     isCloudDriveServiceDraft: overrides.isCloudDriveServiceDraft || false,
+    isHttpJsonServiceDraft: overrides.isHttpJsonServiceDraft || false,
+    isJsonRpcServiceDraft: overrides.isJsonRpcServiceDraft || false,
     isLlmServiceDraft: overrides.isLlmServiceDraft || false,
+    isMcpServiceDraft: overrides.isMcpServiceDraft ?? true,
+    isSseServiceDraft: overrides.isSseServiceDraft || false,
+    showToolMappingFields: overrides.showToolMappingFields || false,
+    showMcpTransportField: overrides.showMcpTransportField ?? true,
     showCustomUpstreamType: overrides.showCustomUpstreamType || false,
+    endpointFieldLabel: overrides.endpointFieldLabel || "Endpoint URL",
+    endpointFieldPlaceholder: overrides.endpointFieldPlaceholder || "https://mcp.example.com:443/mcp/",
+    endpointFieldValue: overrides.endpointFieldValue || "",
+    minimumFieldLabels: overrides.minimumFieldLabels || [],
+    requiredFieldGroupSummaries: overrides.requiredFieldGroupSummaries || [],
+    optionalFieldGroupSummaries: overrides.optionalFieldGroupSummaries || [],
+    defaultedFieldLabels: overrides.defaultedFieldLabels || [],
+    currentTemplateLabel: overrides.currentTemplateLabel || "Raw MCP Streamable HTTP",
     upstreamTypeSelectValue: overrides.upstreamTypeSelectValue || "mcp",
     customUpstreamTypeValue: overrides.customUpstreamTypeValue || "",
     activeConfigSummary: overrides.activeConfigSummary || {},
@@ -327,6 +351,22 @@ function createController(overrides: Record<string, unknown> = {}) {
     serviceDiscoveryRegistrationTone: (service: ServiceFixture) => service.discoveryRegistrationTone,
     serviceHeartbeatLastAtLabel: (service: ServiceFixture) => service.heartbeatText,
     isServiceHeartbeatRefreshing: (service: ServiceFixture) => service.heartbeatRefreshing,
+    serviceActiveToolCount: (service: ServiceFixture) => serviceToolNames(service).length,
+    serviceCandidateToolCount: (service: ServiceFixture) => Number((service.externalMcp as any)?.candidateToolCount || 0),
+    serviceToolAdoptionLabel: (service: ServiceFixture) =>
+      Number((service.externalMcp as any)?.candidateToolCount || 0) > 0 ? "候选待采纳" : "工具已采纳",
+    serviceActiveToolReviewRows: (service: ServiceFixture) =>
+      serviceToolNames(service).map((name) => ({
+        name,
+        title: name,
+        descriptionPreview: "",
+        inputSchema: null,
+        transport: {},
+      })),
+    serviceCandidateToolReviewRows: () => [],
+    serviceCandidateToolFingerprintMap: () => ({}),
+    isServiceToolAdopting: () => false,
+    adoptCandidateTools: vi.fn().mockResolvedValue(undefined),
     ...normalizedOverrides,
   };
 }
@@ -420,7 +460,7 @@ describe("ExternalServicesView", () => {
     await toolListButton.trigger("click");
     const popover = wrapper.find(".external-service-tool-popover");
     expect(popover.exists()).toBe(true);
-    expect(popover.text()).toContain("工具列表");
+    expect(popover.text()).toContain("工具审查");
     expect(popover.text()).toContain("search");
     expect(popover.text()).toContain("status");
 

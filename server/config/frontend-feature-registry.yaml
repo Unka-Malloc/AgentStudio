@@ -1,4 +1,4 @@
-version: 1
+version: v0.0.1:frontend:feature-registry-1
 owner: server-web
 routes:
   - routePath: /workspaces
@@ -153,6 +153,21 @@ routes:
           - admin.runtime-downloads.list
           - admin.runtime-downloads.prepare
 
+  - routePath: /admin/strategy-management
+    viewFile: server-web/views/admin/StrategyManagementView.vue
+    features:
+      - featureId: admin.strategy-management
+        actions:
+          - admin.strategy-management.index
+          - admin.strategy-management.navigate
+
+  - routePath: /admin/version-release
+    viewFile: server-web/views/admin/VersionReleaseView.vue
+    features:
+      - featureId: admin.version-release
+        actions:
+          - admin.version-release.baseline
+
   - routePath: /admin/production-health
     viewFile: server-web/views/admin/ProductionHealthView.vue
     features:
@@ -247,14 +262,4 @@ routes:
           - admin.maintenance-agent.runbook
           - admin.maintenance-agent.audit
 
-systemConfigTabs:
-  - tabId: syncDirectories
-    hostFile: server-web/ServerConsoleApp.vue
-    features:
-      - featureId: system.sync-directories
-        actions:
-          - syncDirectories.list
-          - syncDirectories.create
-          - syncDirectories.refresh
-          - syncDirectories.enable-disable
-          - syncDirectories.delete
+systemConfigTabs: []

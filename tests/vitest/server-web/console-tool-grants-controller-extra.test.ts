@@ -44,7 +44,7 @@ function makeGrant(overrides: Partial<Grant> = {}): Grant {
     label: "默认智能体",
     enabled: true,
     scopes: ["knowledge:read"],
-    toolsets: ["pact.knowledge.read"],
+    toolsets: ["pact.agentLibrary.read"],
     toolAllow: [],
     toolDeny: [],
     metadata: {},
@@ -55,14 +55,14 @@ function makeGrant(overrides: Partial<Grant> = {}): Grant {
 function createFixture(overrides: Record<string, unknown> = {}) {
   const error = ref("");
   const toolManagementGrantsState = ref<Grant[]>([
-    makeGrant({ id: "grant-1", label: "Alpha", enabled: true, toolAllow: ["pact.knowledge.read"] }),
+    makeGrant({ id: "grant-1", label: "Alpha", enabled: true, toolAllow: ["pact.agentLibrary.read"] }),
     makeGrant({
       id: "grant-2",
       label: "Beta",
       enabled: false,
       toolsets: [],
       toolAllow: [],
-      toolDeny: ["pact.knowledge.write"],
+      toolDeny: ["pact.agentLibrary.write"],
     }),
   ]);
   const refreshToolManagement = vi.fn().mockResolvedValue(undefined);
@@ -106,11 +106,11 @@ describe("console tool grants controller", () => {
 
     expect(controller.toolGrants.value).toHaveLength(2);
     expect(controller.enabledToolGrantCount.value).toBe(1);
-    expect(controller.grantToolRuleState(toolManagementGrantsState.value[0], "pact.knowledge.read")).toBe("allow");
-    expect(controller.grantToolRuleState(toolManagementGrantsState.value[1], "pact.knowledge.write")).toBe("deny");
+    expect(controller.grantToolRuleState(toolManagementGrantsState.value[0], "pact.agentLibrary.read")).toBe("allow");
+    expect(controller.grantToolRuleState(toolManagementGrantsState.value[1], "pact.agentLibrary.write")).toBe("deny");
     expect(controller.grantToolRuleState(toolManagementGrantsState.value[1], "missing")).toBe("inherit");
     expect(controller.grantHasScope(toolManagementGrantsState.value[0], "knowledge:read")).toBe(true);
-    expect(controller.grantHasToolset(toolManagementGrantsState.value[0], "pact.knowledge.read")).toBe(true);
+    expect(controller.grantHasToolset(toolManagementGrantsState.value[0], "pact.agentLibrary.read")).toBe(true);
 
     toolManagementGrantsState.value.push(makeGrant({ id: "grant-3", enabled: true }));
     expect(controller.toolGrants.value).toHaveLength(3);
@@ -121,15 +121,15 @@ describe("console tool grants controller", () => {
     const { controller } = createFixture();
 
     expect(controller.newGrantScopes.value).toEqual(["knowledge:read"]);
-    expect(controller.newGrantToolsets.value).toEqual(["pact.knowledge.read"]);
+    expect(controller.newGrantToolsets.value).toEqual(["pact.agentLibrary.read"]);
 
     controller.toggleNewGrantScope("knowledge:read");
     controller.toggleNewGrantScope("knowledge:write");
-    controller.toggleNewGrantToolset("pact.knowledge.read");
-    controller.toggleNewGrantToolset("pact.knowledge.write");
+    controller.toggleNewGrantToolset("pact.agentLibrary.read");
+    controller.toggleNewGrantToolset("pact.agentLibrary.write");
 
     expect(controller.newGrantScopes.value).toEqual(["knowledge:write"]);
-    expect(controller.newGrantToolsets.value).toEqual(["pact.knowledge.write"]);
+    expect(controller.newGrantToolsets.value).toEqual(["pact.agentLibrary.write"]);
   });
 
   it("rejects creation when both scopes and toolsets are empty", async () => {
@@ -157,7 +157,7 @@ describe("console tool grants controller", () => {
     expect(toolManagementClientMock.createToolGrant).toHaveBeenCalledWith({
       label: "默认智能体",
       scopes: ["knowledge:read"],
-      toolsets: ["pact.knowledge.read"],
+      toolsets: ["pact.agentLibrary.read"],
     });
     expect(controller.issuedToolToken.value).toBe("issued-token");
     expect(refreshToolManagement).toHaveBeenCalledWith({ silent: true });
@@ -191,9 +191,9 @@ describe("console tool grants controller", () => {
     const { controller, clearAllBusy, error, refreshToolManagement, setBusy, toolManagementGrantsState } = createFixture();
     const grant = toolManagementGrantsState.value[0];
 
-    await controller.setGrantToolRule(grant, "pact.knowledge.write", "allow");
+    await controller.setGrantToolRule(grant, "pact.agentLibrary.write", "allow");
     await controller.toggleGrantScope(grant, "knowledge:write");
-    await controller.toggleGrantToolset(grant, "pact.knowledge.write");
+    await controller.toggleGrantToolset(grant, "pact.agentLibrary.write");
 
     expect(setBusy).toHaveBeenNthCalledWith(1, "grant:grant-1");
     expect(toolManagementClientMock.updateToolGrant).toHaveBeenCalledWith("grant-1", {
@@ -201,7 +201,7 @@ describe("console tool grants controller", () => {
       enabled: undefined,
       scopes: undefined,
       toolsets: undefined,
-      toolAllow: ["pact.knowledge.read", "pact.knowledge.write"],
+      toolAllow: ["pact.agentLibrary.read", "pact.agentLibrary.write"],
       toolDeny: [],
     });
     expect(toolManagementClientMock.updateToolGrant).toHaveBeenCalledWith("grant-1", {
@@ -216,7 +216,7 @@ describe("console tool grants controller", () => {
       label: undefined,
       enabled: undefined,
       scopes: undefined,
-      toolsets: ["pact.knowledge.read", "pact.knowledge.write"],
+      toolsets: ["pact.agentLibrary.read", "pact.agentLibrary.write"],
       toolAllow: undefined,
       toolDeny: undefined,
     });

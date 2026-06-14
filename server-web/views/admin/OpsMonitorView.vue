@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import OpsMonitorAlertsPanel from "../../components/admin/ops-monitor/OpsMonitorAlertsPanel.vue";
-import OpsMonitorClientRuntimeCard from "../../components/admin/ops-monitor/OpsMonitorClientRuntimeCard.vue";
 import OpsMonitorProcessTable from "../../components/admin/ops-monitor/OpsMonitorProcessTable.vue";
 import OpsMonitorSummaryCard from "../../components/admin/ops-monitor/OpsMonitorSummaryCard.vue";
 import { useOpsMonitorViewConsole } from "../../composables/console-ops-monitor-view-controller";
@@ -13,7 +12,6 @@ provideOpsMonitorView(opsMonitorView);
 <template>
   <section class="maintenance-agent-layout ops-monitor-layout">
     <OpsMonitorSummaryCard />
-    <OpsMonitorClientRuntimeCard />
     <OpsMonitorProcessTable />
     <OpsMonitorAlertsPanel />
   </section>

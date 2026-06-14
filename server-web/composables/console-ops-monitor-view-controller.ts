@@ -14,6 +14,7 @@ import {
   monitorAlertSeverityLabel,
   monitorAlertSeverityTone,
   processRelationText,
+  processRelationBullets,
   processTypeLabel,
 } from "./console-status-utils";
 
@@ -43,8 +44,15 @@ function monitorAlertMessageLabel(text: string, index: number) {
   return index === 0 ? "详情" : "补充";
 }
 
-function monitorAlertLifecycleText(alert: MonitorAlertItem, severityLabel: (severity: string) => string) {
+function isRecoveredMonitorAlert(alert: MonitorAlertItem) {
   if (alert.ackRequired || alert.active === false || alert.status === "recovered") {
+    return true;
+  }
+  return false;
+}
+
+function monitorAlertLifecycleText(alert: MonitorAlertItem, severityLabel: (severity: string) => string) {
+  if (isRecoveredMonitorAlert(alert)) {
     return "已恢复";
   }
   return alert.status || severityLabel(alert.severity);
@@ -55,12 +63,31 @@ function monitorAlertMergeKey(alert: MonitorAlertItem) {
     alert.alertId,
     alert.resolvedAt || "",
     alert.acknowledgedAt || "",
-    alert.ackRequired || alert.active === false ? "recovered" : "active",
+    isRecoveredMonitorAlert(alert) ? "recovered" : "active",
   ].join(":");
 }
 
 function shouldIncludeMonitorAlertLifecycle(alert: MonitorAlertItem) {
-  return alert.ackRequired || alert.active === false || alert.status === "recovered";
+  return isRecoveredMonitorAlert(alert);
+}
+
+function isAcknowledgedMonitorAlert(alert: MonitorAlertItem) {
+  return Boolean(alert.acknowledgedAt && isRecoveredMonitorAlert(alert));
+}
+
+function uniqueMonitorAlerts(alerts: MonitorAlertItem[]) {
+  const seen = new Set<string>();
+  return alerts.filter((alert) => {
+    if (isAcknowledgedMonitorAlert(alert)) {
+      return false;
+    }
+    const key = monitorAlertMergeKey(alert);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 export function useOpsMonitorViewConsole() {
@@ -82,17 +109,17 @@ export function useOpsMonitorViewConsole() {
     saveMonitorAlertConfig,
   } = useServerConsoleShellContext();
 
-  const mergedMonitorAlerts = computed(() => {
-    const seen = new Set<string>();
-    return [...activeMonitorAlerts.value, ...recentMonitorAlertHistory.value].filter((alert) => {
-      const key = monitorAlertMergeKey(alert);
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
-  });
+  const monitorAlertRows = computed(() =>
+    uniqueMonitorAlerts([...activeMonitorAlerts.value, ...recentMonitorAlertHistory.value]),
+  );
+
+  const visibleMonitorAlerts = computed(() =>
+    monitorAlertRows.value.filter((alert) => !isRecoveredMonitorAlert(alert)),
+  );
+
+  const monitorAlertHistoryRows = computed(() =>
+    monitorAlertRows.value.filter((alert) => isRecoveredMonitorAlert(alert)),
+  );
 
   function monitorAlertDetailBullets(
     alert: MonitorAlertItem,
@@ -136,17 +163,19 @@ export function useOpsMonitorViewConsole() {
     clientRuntimeSurfaceText,
     clientRuntimeTaskText,
     formatCompactDate,
-    mergedMonitorAlerts,
     monitorAlertConfigText,
     monitorAlertDetailBullets,
+    monitorAlertHistoryRows,
     monitorAlertMergeKey,
     monitorAlertSeverityLabel,
     monitorAlertSeverityTone,
     monitorAlertState,
     monitorAlertSummary,
     processRelationText,
+    processRelationBullets,
     processTypeLabel,
     saveMonitorAlertConfig,
     shouldIncludeMonitorAlertLifecycle,
+    visibleMonitorAlerts,
   };
 }

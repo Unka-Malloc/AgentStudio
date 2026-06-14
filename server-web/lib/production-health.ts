@@ -1,11 +1,9 @@
-import { getProductionHealth, getV001BaselineStatus } from "./production-health-client";
+import { getProductionHealth } from "./production-health-client";
 import type { ProductionHealthGate, ProductionHealthResponse, V001BaselineStatus } from "./types";
 
 type ProductionHealthSnapshot = {
   health?: ProductionHealthResponse;
-  baseline?: V001BaselineStatus;
   loadError?: string;
-  baselineError?: string;
 };
 
 const statusLabels: Record<string, string> = {
@@ -56,21 +54,11 @@ export function elapsedText(gate: ProductionHealthGate) {
 
 export async function loadProductionHealthSnapshot(): Promise<ProductionHealthSnapshot> {
   try {
-    const [health, baseline] = await Promise.all([
-      getProductionHealth(),
-      getV001BaselineStatus(),
-    ]);
-    return { health, baseline };
+    return { health: await getProductionHealth() };
   } catch (error) {
-    const snapshot: ProductionHealthSnapshot = {
+    return {
       loadError: errorMessage(error),
     };
-    try {
-      snapshot.baseline = await getV001BaselineStatus();
-    } catch (baselineLoadError) {
-      snapshot.baselineError = errorMessage(baselineLoadError);
-    }
-    return snapshot;
   }
 }
 

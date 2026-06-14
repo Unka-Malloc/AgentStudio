@@ -16,3 +16,7 @@ export function useServerConsoleShellContext() {
   }
   return shell;
 }
+
+export function useOptionalServerConsoleShellContext() {
+  return inject(serverConsoleShellKey, null);
+}

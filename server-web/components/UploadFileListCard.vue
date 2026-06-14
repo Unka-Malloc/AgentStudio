@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import UploadFileListRow from "./upload/UploadFileListRow.vue";
 import UploadSplitButton from "./upload/UploadSplitButton.vue";
+import { currentConsoleLocale, localizeConsoleText, resolveEffectiveConsoleLocale } from "../i18n/console";
 import type { SplitJob } from "../lib/types";
 import {
   buildUploadFileEntries,
@@ -53,11 +54,15 @@ const emit = defineEmits<{
 
 const fileIconUrl = uploadFileListIcons.file;
 const folderIconUrl = uploadFileListIcons.folder;
-const progressStepLabels = uploadProgressStepLabels;
 const totalProgressSteps = uploadTotalProgressSteps;
+const locale = computed(() => resolveEffectiveConsoleLocale(currentConsoleLocale.value));
+function t(value: string) {
+  return localizeConsoleText(value, locale.value);
+}
 
 const isBusy = computed(() => props.busyKey === "knowledge:ingest");
 const isDownloadMode = computed(() => props.mode === "download");
+const progressStepLabels = computed(() => uploadProgressStepLabels.map((label) => t(label)));
 
 const fileEntries = computed<UploadFileEntry[]>(() =>
   buildUploadFileEntries({
@@ -68,25 +73,32 @@ const fileEntries = computed<UploadFileEntry[]>(() =>
 );
 
 const selectedSummary = computed(() =>
-  summarizeUploadSelection({
-    files: props.files,
-    fileEntries: fileEntries.value,
-    formatBytes: props.formatBytes,
-    mode: props.mode,
-    summary: props.summary,
-  }),
+  t(
+    summarizeUploadSelection({
+      files: props.files,
+      fileEntries: fileEntries.value,
+      formatBytes: props.formatBytes,
+      mode: props.mode,
+      summary: props.summary,
+    }),
+  ),
 );
 
-const progressState = computed<UploadProgressState>(() =>
-  resolveUploadProgressState({
+const progressState = computed<UploadProgressState>(() => {
+  const state = resolveUploadProgressState({
     files: props.files,
     ingestJob: props.ingestJob,
     ingestProgress: props.ingestProgress,
     isBusy: isBusy.value,
     jobStatusLabels: props.jobStatusLabels,
     jobStatusTone: props.jobStatusTone,
-  }),
-);
+  });
+  return {
+    ...state,
+    detail: t(state.detail),
+    label: t(state.label),
+  };
+});
 
 const canStartUpload = computed(() =>
   !isDownloadMode.value &&
@@ -100,10 +112,10 @@ const canChooseFiles = computed(() => props.canWriteJobs && !isBusy.value);
 </script>
 
 <template>
-  <section class="upload-file-list-card" aria-label="文件列表" :data-mode="mode">
+  <section class="upload-file-list-card" :aria-label="t('文件列表')" :data-mode="mode">
     <header class="upload-file-list-header">
       <div class="upload-file-list-title">
-        <h4>{{ title }}</h4>
+        <h4>{{ t(title) }}</h4>
         <span>{{ selectedSummary }}</span>
       </div>
       <UploadSplitButton
@@ -116,7 +128,7 @@ const canChooseFiles = computed(() => props.canWriteJobs && !isBusy.value);
     <div class="upload-file-list-body">
       <div v-if="fileEntries.length === 0" class="upload-file-list-empty">
         <img :src="folderIconUrl" alt="" aria-hidden="true" />
-        <span>暂无文件</span>
+        <span>{{ t("暂无文件") }}</span>
       </div>
       <UploadFileListRow
         v-for="entry in fileEntries"
@@ -133,8 +145,8 @@ const canChooseFiles = computed(() => props.canWriteJobs && !isBusy.value);
 
     <footer v-if="!isDownloadMode" class="upload-file-list-footer">
       <div class="upload-file-job-summary">
-        <span v-if="ingestJob">任务 {{ ingestJob.id }}</span>
-        <span v-else>{{ ingestProgress || "等待开始" }}</span>
+        <span v-if="ingestJob">{{ t("任务") }} {{ ingestJob.id }}</span>
+        <span v-else>{{ t(ingestProgress || "等待开始") }}</span>
       </div>
       <div class="upload-file-actions">
         <button
@@ -143,7 +155,7 @@ const canChooseFiles = computed(() => props.canWriteJobs && !isBusy.value);
           :disabled="!canWriteJobs || files.length === 0 || isBusy"
           @click="emit('preview')"
         >
-          预览解析
+          {{ t("预览解析") }}
         </button>
         <button
           class="primary-action"
@@ -151,7 +163,7 @@ const canChooseFiles = computed(() => props.canWriteJobs && !isBusy.value);
           :disabled="!canStartUpload"
           @click="emit('upload')"
         >
-          {{ isBusy ? "入库中" : "开始入库" }}
+          {{ t(isBusy ? "入库中" : "开始入库") }}
         </button>
       </div>
     </footer>

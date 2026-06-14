@@ -1,23 +1,22 @@
 <script setup lang="ts">
+import { onMounted } from 'vue';
 import BinaryCheckbox from '../components/BinaryCheckbox.vue';
 import StatusPill from '../components/StatusPill.vue';
 import SplitToggleCard from '../components/SplitToggleCard.vue';
-import HistorySessionPanel from '../components/HistorySessionPanel.vue';
 import WorkspaceDetailPanel from '../components/workspaces/WorkspaceDetailPanel.vue';
 import { provideWorkspacesView } from '../composables/workspacesViewContext';
-import { useWorkspacesConsole } from '../composables/useWorkspacesConsole';
+import { useServerConsoleShellContext } from '../composables/serverConsoleShellContext';
 import {
   workspaceKnowledgeContextContract,
   workspaceKnowledgeContextSignature,
 } from '../lib/workspaces-client';
 
-const workspacesView = useWorkspacesConsole();
+const { workspacesConsole: workspacesView } = useServerConsoleShellContext();
 provideWorkspacesView(workspacesView);
 
 const {
   formatCompactDate,
   workspaces,
-  sessions,
   selectedId,
   localError,
   panel,
@@ -28,10 +27,8 @@ const {
   workspaceExpansionSlotId,
   isWorkspaceExpanded,
   toggleWorkspaceCard,
-  sessionItems,
   statusTone,
-  selectSession,
-  forkSession,
+  copyToClipboard,
   deleteWorkspace,
   openProfile,
   openParent,
@@ -40,21 +37,16 @@ const {
   openCodespace,
 } = workspacesView;
 
+onMounted(() => {
+  void workspacesView.load();
+});
+
 const workspaceKnowledgeContextFields = {
   knowledgeScope: workspaceKnowledgeContextContract.profileScopeField,
   knowledgeSourceIds: workspaceKnowledgeContextContract.sourceIdsField,
   knowledgeSessionId: workspaceKnowledgeContextContract.sessionLinkField,
 };
 
-const workspaceKnowledgeContextDebug = {
-  knowledgeScope: "knowledgeScope",
-  knowledgeSourceIds: "knowledgeSourceIds",
-  agentSessionId: "agentSessionId",
-  workspaceEndpoint: "/api/agent-workspaces",
-  contextEndpoint: "/context",
-  sessionsEndpoint: "/api/agent-sessions",
-  forkActionLabel: "分叉",
-};
 </script>
 
 <template>
@@ -64,10 +56,10 @@ const workspaceKnowledgeContextDebug = {
     :data-knowledge-scope="workspaceKnowledgeContextFields.knowledgeScope"
     :data-knowledge-source-ids="workspaceKnowledgeContextFields.knowledgeSourceIds"
     :data-agent-session-id="workspaceKnowledgeContextFields.knowledgeSessionId"
-    :data-workspace-endpoint="workspaceKnowledgeContextDebug.workspaceEndpoint"
-    :data-workspace-context-endpoint="workspaceKnowledgeContextDebug.contextEndpoint"
-    :data-workspace-sessions-endpoint="workspaceKnowledgeContextDebug.sessionsEndpoint"
-    :data-workspace-fork-label="workspaceKnowledgeContextDebug.forkActionLabel"
+    :data-workspace-endpoint="workspaceKnowledgeContextContract.workspaceEndpoint"
+    :data-workspace-context-endpoint="workspaceKnowledgeContextContract.contextEndpoint"
+    :data-workspace-sessions-endpoint="workspaceKnowledgeContextContract.sessionsEndpoint"
+    :data-workspace-fork-label="workspaceKnowledgeContextContract.forkActionLabel"
   >
     <div v-if="localError" class="status-strip danger">
       <strong>错误</strong><span>{{ localError }}</span>
@@ -82,16 +74,6 @@ const workspaceKnowledgeContextDebug = {
       </div>
     </div>
 
-    <HistorySessionPanel
-      :items="sessionItems"
-      title="会话线程"
-      :subtitle="sessions.length ? `${sessions.length} 个可继续会话` : '暂无会话'"
-      max-height="260px"
-      open
-      @select="selectSession"
-      @action="forkSession"
-    />
-
     <!-- ─── Two-column layout ────────────────────────────────────────── -->
     <div class="ws-layout" :class="{ 'ws-layout-expanded-cards': panel === 'list' }">
 
@@ -104,6 +86,7 @@ const workspaceKnowledgeContextDebug = {
         <SplitToggleCard
           v-for="ws in workspaces"
           :key="ws.workspaceId"
+          :id="`workspace-${ws.workspaceId}`"
           as="article"
           class="ws-card"
           :class="{ selected: selectedId === ws.workspaceId, expanded: isWorkspaceExpanded(ws) }"
@@ -113,30 +96,66 @@ const workspaceKnowledgeContextDebug = {
           @toggle="toggleWorkspaceCard(ws)"
         >
           <template #summary>
-            <div class="ws-card-head">
-              <div class="ws-card-title">
-                <strong>{{ ws.title || ws.workspaceId.slice(0, 12) }}</strong>
-                <span v-if="ws.parentWorkspaceId" class="ws-inherited-badge">↳ 继承</span>
+            <div class="ws-card-summary">
+              <div class="section-header ws-card-summary-header">
+                <div class="ws-card-heading">
+                  <div class="ws-card-title-row">
+                    <h3>{{ ws.title || ws.workspaceId.slice(0, 12) }}</h3>
+                    <span v-if="ws.parentWorkspaceId" class="ws-inherited-badge">↳ 继承</span>
+                  </div>
+                  <p v-if="ws.objective" class="module-note">{{ ws.objective }}</p>
+                </div>
+                <div class="workspace-status-row">
+                  <StatusPill :tone="statusTone(ws.status)" :label="ws.status" />
+                </div>
               </div>
-              <div class="ws-card-head-actions">
-                <StatusPill :tone="statusTone(ws.status)" :label="ws.status" />
+
+              <dl class="meta-list ws-card-meta-list">
+                <div>
+                  <dt>工作空间 ID</dt>
+                  <dd>
+                    <div
+                      class="ws-copyable-wrapper"
+                      data-split-toggle-ignore
+                      :data-pact-tooltip="ws.workspaceId"
+                      @click.stop="copyToClipboard($event, ws.workspaceId)"
+                    >
+                      <code class="ws-copyable-code">{{ ws.workspaceId }}</code>
+                    </div>
+                  </dd>
+                </div>
+                <div><dt>版本</dt><dd>Generation {{ ws.currentGeneration }}</dd></div>
+                <div><dt>上级空间</dt><dd>{{ ws.parentWorkspaceId || '（根，无继承）' }}</dd></div>
+                <div v-if="ws.fsPath">
+                  <dt>物理路径</dt>
+                  <dd>
+                    <div
+                      class="ws-copyable-wrapper"
+                      data-split-toggle-ignore
+                      :data-pact-tooltip="ws.fsPath"
+                      @click.stop="copyToClipboard($event, ws.fsPath)"
+                    >
+                      <code class="ws-copyable-code">{{ ws.fsPath }}</code>
+                    </div>
+                  </dd>
+                </div>
+                <div><dt>更新时间</dt><dd>{{ formatCompactDate(ws.updatedAt) }}</dd></div>
+              </dl>
+
+              <div class="ws-card-counts">
+                <span>{{ ws.ownedSourceIds.length }} 个知识源</span>
+                <span>{{ ws.summary?.sessionCount ?? 0 }} 个会话</span>
+                <span v-if="ws.accessibleWorkspaceIds.length">+ {{ ws.accessibleWorkspaceIds.length }} 共享</span>
               </div>
-            </div>
-            <p v-if="ws.objective" class="ws-card-obj">{{ ws.objective }}</p>
-            <div class="ws-card-meta">
-              <span>Gen {{ ws.currentGeneration }}</span>
-              <span>{{ ws.ownedSourceIds.length }} 个知识源</span>
-              <span>{{ ws.summary?.sessionCount ?? 0 }} 个会话</span>
-              <span v-if="ws.accessibleWorkspaceIds.length">+ {{ ws.accessibleWorkspaceIds.length }} 共享</span>
-              <span>{{ formatCompactDate(ws.updatedAt) }}</span>
-            </div>
-            <div class="ws-card-actions">
-              <button class="table-action" type="button" @click.stop="openProfile(ws)">配置 Profile</button>
-              <button class="table-action" type="button" @click.stop="openParent(ws)">设置继承</button>
-              <button class="table-action" type="button" @click.stop="selectedId = ws.workspaceId; openLocalDir()">本机目录</button>
-              <button class="table-action" type="button" @click.stop="selectedId = ws.workspaceId; openCloudDrive()">云盘</button>
-              <button class="table-action" type="button" @click.stop="selectedId = ws.workspaceId; openCodespace()">代码库</button>
-              <button class="table-action" type="button" @click.stop="selectedId = ws.workspaceId; panel = 'share'; shareForm.action = 'share'">共享</button>
+
+              <div class="ws-card-actions">
+                <button class="table-action" type="button" @click.stop="openProfile(ws)">配置 Profile</button>
+                <button class="table-action" type="button" @click.stop="openParent(ws)">设置继承</button>
+                <button class="table-action" type="button" @click.stop="selectedId = ws.workspaceId; openLocalDir()">本机目录</button>
+                <button class="table-action" type="button" @click.stop="selectedId = ws.workspaceId; openCloudDrive()">云盘</button>
+                <button class="table-action" type="button" @click.stop="selectedId = ws.workspaceId; openCodespace()">代码库</button>
+                <button class="table-action" type="button" @click.stop="selectedId = ws.workspaceId; panel = 'share'; shareForm.action = 'share'">共享</button>
+              </div>
             </div>
           </template>
           <div
@@ -228,16 +247,117 @@ const workspaceKnowledgeContextDebug = {
   --split-toggle-card-open-bg: var(--accent-surface);
   z-index: 2;
 }
-.ws-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-.ws-card-title { display: flex; align-items: center; gap: var(--space-2); }
-.ws-card-head-actions { display: flex; align-items: center; gap: var(--space-2); }
+.ws-card-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.ws-card-summary-header {
+  margin-bottom: 0;
+}
+.ws-card-heading {
+  min-width: 0;
+}
+.ws-card-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.ws-card-title-row h3 {
+  margin: 0;
+  color: var(--brand);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.workspace-status-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-shrink: 0;
+}
 .ws-inherited-badge {
   font-size: 0.7rem; color: var(--info); border: 1px solid var(--info);
   padding: 1px 6px; border-radius: 4px;
 }
-.ws-card-obj { font-size: 0.8rem; color: var(--text-secondary); margin: var(--space-1) 0 0; }
-.ws-card-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: 0.75rem; color: var(--text-secondary); margin-top: var(--space-1); }
-.ws-card-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+.ws-card-meta-list {
+  gap: var(--space-2);
+}
+.ws-card-meta-list > div {
+  grid-template-columns: minmax(112px, 160px) minmax(0, 1fr);
+}
+.ws-card-meta-list dd {
+  min-width: 0;
+}
+.ws-card-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.ws-card-actions {
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.ws-card-actions .table-action {
+  height: 34px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+}
+.ws-copyable-wrapper {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  cursor: copy;
+}
+.ws-copyable-wrapper::after {
+  content: attr(data-pact-tooltip);
+  position: absolute;
+  top: -28px;
+  left: 0;
+  background: var(--pact-copy-popover-bg);
+  color: var(--pact-copy-popover-fg);
+  border: 1px solid var(--pact-copy-popover-border);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.1s ease-out, transform 0.1s ease-out;
+  z-index: 100;
+  box-shadow: var(--pact-copy-popover-shadow);
+}
+.ws-copyable-wrapper:hover::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+.ws-copyable-code {
+  user-select: all;
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background-color 0.15s, color 0.15s;
+}
+.ws-copyable-wrapper:active .ws-copyable-code {
+  background: var(--accent);
+  color: var(--bg-surface);
+}
 .ws-card-expanded-slot { margin-top: 0; }
 .pact-modal-overlay {
   position: fixed;

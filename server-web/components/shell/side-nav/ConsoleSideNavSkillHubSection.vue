@@ -27,6 +27,12 @@ const {
       @activate="openAdmin('toolList')"
     />
     <ConsoleSideNavLink
+      :active="activeRouteView === 'admin' && activeRouteAdminView === 'toolGovernance'"
+      :label="msg.nav.toolGovernance"
+      subtle
+      @activate="openAdmin('toolGovernance')"
+    />
+    <ConsoleSideNavLink
       :active="activeRouteView === 'admin' && activeRouteAdminView === 'toolStats'"
       :label="msg.nav.toolStats"
       subtle

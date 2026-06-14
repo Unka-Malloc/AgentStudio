@@ -24,7 +24,7 @@ export function createConsoleToolGrantsController(
 ) {
   const newGrantLabel = ref("默认智能体");
   const newGrantScopes = ref<string[]>(["knowledge:read"]);
-  const newGrantToolsets = ref<string[]>(["pact.knowledge.read"]);
+  const newGrantToolsets = ref<string[]>(["pact.agentLibrary.read"]);
   const issuedToolToken = ref("");
 
   const toolGrants = computed(() => options.toolManagementGrantsState.value);

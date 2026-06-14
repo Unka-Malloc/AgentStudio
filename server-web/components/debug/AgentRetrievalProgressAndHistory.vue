@@ -1,14 +1,10 @@
 <script setup lang="ts">
-import HistorySessionPanel from "../HistorySessionPanel.vue";
 import { useAgentRetrievalViewContext } from "../../composables/agentRetrievalViewContext";
 
 const {
   agentRetrievalProgress: {
-    agentExploreHistoryPanelItems,
     agentExploreProgress,
     agentExploreProgressVisible,
-    deleteAgentExploreHistoryItem,
-    selectAgentExploreHistoryItem,
   },
 } = useAgentRetrievalViewContext();
 </script>
@@ -26,12 +22,4 @@ const {
       <span :style="{ width: `${agentExploreProgress.percent}%` }"></span>
     </div>
   </div>
-
-  <HistorySessionPanel
-    title="历史会话"
-    :subtitle="`${agentExploreHistoryPanelItems.length} 条，滚动查看`"
-    :items="agentExploreHistoryPanelItems"
-    @select="selectAgentExploreHistoryItem"
-    @delete="deleteAgentExploreHistoryItem"
-  />
 </template>

@@ -38,7 +38,8 @@ function applyConsoleSegments(text: string, locale: ConsoleLocale) {
     for (const [zh, en] of phraseSegments) {
       translated = translated.split(zh).join(en);
     }
-    for (const [zh, en] of consoleSegmentPairs) {
+    const segmentPairs = [...consoleSegmentPairs].sort((a, b) => b[0].length - a[0].length);
+    for (const [zh, en] of segmentPairs) {
       translated = translated.split(zh).join(en);
     }
     translated = translated
@@ -57,7 +58,8 @@ function applyConsoleSegments(text: string, locale: ConsoleLocale) {
     for (const [zh, en] of reversePhraseSegments) {
       translated = translated.split(en).join(zh);
     }
-    for (const [zh, en] of consoleSegmentPairs) {
+    const reverseSegmentPairs = [...consoleSegmentPairs].sort((a, b) => b[1].length - a[1].length);
+    for (const [zh, en] of reverseSegmentPairs) {
       translated = translated.split(en).join(zh);
     }
   }

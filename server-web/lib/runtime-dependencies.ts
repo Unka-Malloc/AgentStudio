@@ -2,6 +2,7 @@ import {
   downloadRuntimeDependency as downloadRuntimeDependencyClient,
   listRuntimeDependencies as listRuntimeDependenciesClient,
   saveRuntimeDependencyConfiguration as saveRuntimeDependencyConfigurationClient,
+  type ListRuntimeDependenciesOptions,
   type RuntimeDependency,
   type RuntimeDependencyActionResult,
   type RuntimeDependencyConfigurationEntry,
@@ -29,12 +30,14 @@ export type {
   RuntimeDependencyDownloadRun,
   RuntimeDependencyLogEntry,
   RuntimeDependencyListResponse,
+  ListRuntimeDependenciesOptions,
 } from "./runtime-dependencies-client";
 
 export function statusLabel(status = "") {
   const labels: Record<string, string> = {
     queued: "等待安装",
     running: "安装中",
+    loading: "检测中",
     present: "已存在",
     installed: "安装成功",
     failed: "不可用",
@@ -45,7 +48,7 @@ export function statusLabel(status = "") {
 export function statusTone(status = "") {
   if (status === "present" || status === "installed") return "success";
   if (status === "failed") return "danger";
-  if (status === "running") return "info";
+  if (status === "running" || status === "loading") return "info";
   if (status === "queued") return "warning";
   return "neutral";
 }
@@ -270,7 +273,7 @@ export function runtimeConfigurationGroups(item: RuntimeDependency): RuntimeDepe
 }
 
 export function canTrigger(item: RuntimeDependency) {
-  return item.downloadable !== false && item.status !== "present";
+  return item.downloadable !== false && !["loading", "present"].includes(item.status);
 }
 
 export function dependencyDownloadPayload(item: RuntimeDependency) {
@@ -337,8 +340,10 @@ export function runtimeDependencyRunProgressState(run: RuntimeDependencyDownload
   };
 }
 
-export function listRuntimeDependencies(): Promise<RuntimeDependencyListResponse> {
-  return listRuntimeDependenciesClient();
+export function listRuntimeDependencies(
+  options: ListRuntimeDependenciesOptions = {},
+): Promise<RuntimeDependencyListResponse> {
+  return listRuntimeDependenciesClient(options);
 }
 
 export function downloadRuntimeDependency(item: RuntimeDependency): Promise<RuntimeDependencyActionResult> {

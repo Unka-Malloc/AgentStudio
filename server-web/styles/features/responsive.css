@@ -7,6 +7,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .dashboard-shell.is-locked {
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  }
+
   .side-nav {
     position: fixed;
     top: 0;
@@ -21,6 +25,13 @@
   .side-nav.is-open {
     transform: translateX(0);
     box-shadow: var(--shadow-xl);
+  }
+
+  .dashboard-shell.is-locked .side-nav {
+    position: sticky;
+    transform: none;
+    box-shadow: none;
+    z-index: var(--z-sidebar);
   }
 
   .side-nav-backdrop {

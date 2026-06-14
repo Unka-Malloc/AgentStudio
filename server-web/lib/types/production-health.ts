@@ -47,8 +47,8 @@ export type ProductionHealthSection = {
 };
 
 export type ProductionHealthResponse = {
-  schemaVersion: number;
-  reportType: "pact.production-health.v1" | string;
+  schemaVersion: string;
+  reportType: "v0.0.1:platform:production-health-1" | string;
   generatedAt: string;
   status: ProductionHealthGateStatus;
   tone: string;
@@ -61,6 +61,9 @@ export type ProductionHealthResponse = {
     reportPath: string;
     markdownPath: string;
     readError?: string;
+    overallStatus: string;
+    productionClaimAllowed: boolean;
+    releaseClaim: string;
     git: {
       branch: string;
       commit: string;
@@ -148,7 +151,7 @@ export type V001BaselinePortSummary = {
 };
 
 export type V001BaselineStatus = {
-  schemaVersion: number;
+  schemaVersion: string;
   protocolVersion: string;
   status: string;
   verificationMode: string;

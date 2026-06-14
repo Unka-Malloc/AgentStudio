@@ -45,7 +45,7 @@ function createFixture(overrides: Record<string, any> = {}) {
     },
   ]);
   const backgroundProcessStatus = ref({
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     ok: true,
     status: "running",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -64,7 +64,7 @@ function createFixture(overrides: Record<string, any> = {}) {
   });
   const clientRuntimeHeatRows = ref([]);
   const monitorAlertConfigText = ref(JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     enabled: true,
     intervalMs: 1000,
     heartbeatStaleMs: 5000,

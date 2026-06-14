@@ -1,8 +1,9 @@
 import { ref } from "vue";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { KnowledgeSearchResult } from "../../../server-web/lib/types";
 import type { InfoFeedClarification, InfoFeedRunState } from "../../../server-web/types/app";
 import { createConsoleInfoFeedKeywordController } from "../../../server-web/composables/console-info-feed-keyword-controller";
+import { setConsoleLocaleState } from "../../../server-web/i18n/console";
 
 function makeRun(overrides: Partial<InfoFeedRunState> = {}): InfoFeedRunState {
   return {
@@ -74,6 +75,10 @@ function createController(currentRun = ref<InfoFeedRunState | null>(null)) {
     parentRunSnapshot,
   };
 }
+
+afterEach(() => {
+  setConsoleLocaleState("zh-CN");
+});
 
 describe("console info feed keyword controller extra coverage", () => {
   it("splits keyword items, falls back to results, and preserves the source context report", () => {
@@ -292,5 +297,29 @@ describe("console info feed keyword controller extra coverage", () => {
       },
     });
     expect(controller.infoFeedKeywordProgressLabel.value).toBe("keyword failed");
+  });
+
+  it("localizes the input placeholder when the console locale is English", () => {
+    setConsoleLocaleState("en");
+    const { controller, currentRun } = createController();
+
+    expect(controller.infoFeedInputPlaceholder.value).toBe(
+      "Enter a question. Feed will compare source retrieval and intelligent planning in parallel.",
+    );
+
+    currentRun.value = makeRun({
+      summary: {
+        status: "completed",
+        progress: 100,
+        modelAlias: "",
+        contextProfileId: "",
+        parametersOpen: false,
+        answer: "ready",
+        error: "",
+        fallback: false,
+      },
+    });
+
+    expect(controller.infoFeedInputPlaceholder.value).toBe("Ask a follow-up about the current feed result.");
   });
 });

@@ -4,6 +4,7 @@ import type {
   InfoFeedClarification,
   InfoFeedRunState,
 } from "../types/app";
+import { currentConsoleLocale, localizeConsoleText } from "../i18n/console";
 import { asRecord } from "./console-model-utils";
 
 type SourceContextReport = {
@@ -80,11 +81,12 @@ export function createConsoleInfoFeedKeywordController(
     const run = options.infoFeedCurrentRun.value;
     return Boolean(run?.summary.answer?.trim() && run.summary.status !== "running");
   });
-  const infoFeedInputPlaceholder = computed(() =>
-    infoFeedCanFollowUp.value
+  const infoFeedInputPlaceholder = computed(() => {
+    const label = infoFeedCanFollowUp.value
       ? "继续追问当前信息流结果。"
-      : "输入问题，信息流会并行对比原文检索和智能规划。",
-  );
+      : "输入问题，信息流会并行对比原文检索和智能规划。";
+    return localizeConsoleText(label, currentConsoleLocale.value);
+  });
   const infoFeedSubmitLabel = computed(() => (infoFeedCanFollowUp.value ? "追问" : "开始信息流"));
   const infoFeedClarification = computed<InfoFeedClarification | null>(() => {
     const clarification = options.infoFeedCurrentRun.value?.clarification;

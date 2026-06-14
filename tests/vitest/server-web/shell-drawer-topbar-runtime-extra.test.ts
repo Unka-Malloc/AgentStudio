@@ -16,8 +16,22 @@ const shellState = vi.hoisted(() => {
 
   const shared = {
     authState: {
+      appearanceCycleScheme: vueRef("dark"),
+      appearanceCycleSchemeLabel: vueRef("深色主题组"),
+      appearanceCycleSchemeOptions: vueRef([
+        { label: "深色", value: "dark", icon: "moon" },
+        { label: "浅色", value: "light", icon: "sun" },
+      ]),
+      appearancePresetId: vueRef("default-system"),
+      appearancePresetLabel: vueRef("落日余烬"),
+      appearancePresetSelectionId: vueRef("sunset-ember"),
+      appearancePresetOptionsForCycleScheme: vueRef([{ label: "落日余烬", value: "sunset-ember" }]),
+      appearancePresetCatalogMessage: vueRef(""),
+      appearancePresetImporting: vueRef(false),
+      importAppearancePresetFileToServer: vi.fn(),
+      refreshAppearancePresetConfigs: vi.fn(),
       currentUser: vueRef(null),
-      cycleTheme: vi.fn(),
+      cycleAppearancePreset: vi.fn(),
       closeDrawer: vi.fn(() => {
         shared.authState.drawerOpen.value = false;
       }),
@@ -34,9 +48,18 @@ const shellState = vi.hoisted(() => {
       msg: vueReactive({
         close: "关闭",
         drawer: {
+          appearancePreset: "配色",
           directories: "同步目录",
+          importAppearancePresetToServer: "导入到服务端",
+          language: "语言",
           preferences: "偏好设置",
+          preferencesDescription: "本地显示设置",
+          preferencesTitle: "界面偏好",
+          reloadAppearancePresets: "重新加载配色文件",
           serviceDiscovery: "服务发现",
+          theme: "主题",
+          themeDark: "深色",
+          themeLight: "浅色",
           title: "系统配置",
           users: "控制台用户",
         },
@@ -47,16 +70,16 @@ const shellState = vi.hoisted(() => {
           contextManagement: "上下文管理",
         },
         topbar: {
+          appearanceCycleSchemeDarkLabel: "深色主题组",
+          appearanceCycleSchemeDarkTitle: "当前：深色主题组（点击切换浅色主题组）",
+          appearanceCycleSchemeLightLabel: "浅色主题组",
+          appearanceCycleSchemeLightTitle: "当前：浅色主题组（点击切换深色主题组）",
+          appearancePresetLabel: "配色",
+          appearancePresetTitle: "配色（点击切换下一个）",
           languageEnLabel: "切换到英文",
           languageEnTitle: "English",
           languageZhLabel: "切换到中文",
           languageZhTitle: "中文",
-          themeDarkLabel: "切换暗色",
-          themeDarkTitle: "暗色模式",
-          themeLightLabel: "切换亮色",
-          themeLightTitle: "亮色模式",
-          themeSystemLabel: "跟随系统",
-          themeSystemTitle: "系统主题",
           toggleNav: "切换导航",
         },
       }),
@@ -67,9 +90,14 @@ const shellState = vi.hoisted(() => {
       serverAvailable: true,
       serviceStatusLabel: "服务正常",
       serviceUrl: "http://localhost:8080",
+      setAppearanceCycleScheme: vi.fn(),
+      setAppearancePreset: vi.fn(),
+      setLanguage: vi.fn(),
+      sideNavCollapsed: vueRef(false),
       sideNavOpen: vueRef(false),
-      themeMode: vueRef("system"),
+      toggleAppearanceCycleScheme: vi.fn(),
       toggleLanguage: vi.fn(),
+      tt: vi.fn((value: string) => value),
     },
     moduleState: {
       busyKey: vueRef(""),
@@ -258,8 +286,22 @@ function flush() {
 }
 
 function resetAuthState() {
+  shellState.authState.appearanceCycleScheme.value = "dark";
+  shellState.authState.appearanceCycleSchemeLabel.value = "深色主题组";
+  shellState.authState.appearanceCycleSchemeOptions.value = [
+    { label: "深色", value: "dark", icon: "moon" },
+    { label: "浅色", value: "light", icon: "sun" },
+  ];
+  shellState.authState.appearancePresetId.value = "default-system";
+  shellState.authState.appearancePresetLabel.value = "落日余烬";
+  shellState.authState.appearancePresetSelectionId.value = "sunset-ember";
+  shellState.authState.appearancePresetOptionsForCycleScheme.value = [{ label: "落日余烬", value: "sunset-ember" }];
+  shellState.authState.appearancePresetCatalogMessage.value = "";
+  shellState.authState.appearancePresetImporting.value = false;
+  shellState.authState.importAppearancePresetFileToServer.mockReset();
+  shellState.authState.refreshAppearancePresetConfigs.mockReset();
   shellState.authState.currentUser.value = null;
-  shellState.authState.cycleTheme.mockReset();
+  shellState.authState.cycleAppearancePreset.mockReset();
   shellState.authState.closeDrawer.mockReset();
   shellState.authState.closeDrawer.mockImplementation(() => {
     shellState.authState.drawerOpen.value = false;
@@ -281,9 +323,14 @@ function resetAuthState() {
   shellState.authState.serverAvailable = true;
   shellState.authState.serviceStatusLabel = "服务正常";
   shellState.authState.serviceUrl = "http://localhost:8080";
+  shellState.authState.setAppearanceCycleScheme.mockReset();
+  shellState.authState.setAppearancePreset.mockReset();
+  shellState.authState.setLanguage.mockReset();
+  shellState.authState.sideNavCollapsed.value = false;
   shellState.authState.sideNavOpen.value = false;
-  shellState.authState.themeMode.value = "system";
+  shellState.authState.toggleAppearanceCycleScheme.mockReset();
   shellState.authState.toggleLanguage.mockReset();
+  shellState.authState.tt.mockImplementation((value: string) => value);
 }
 
 function resetModuleState() {
@@ -344,6 +391,15 @@ function resetSideNavState() {
 }
 
 beforeEach(() => {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  });
   resetAuthState();
   resetModuleState();
   resetSideNavState();
@@ -426,12 +482,11 @@ describe("ConsoleDrawer", () => {
 });
 
 describe("ConsoleTopbar", () => {
-  it("renders identity, toggles side nav, refreshes, theme-cycles, and toggles language", async () => {
+  it("renders identity, toggles side nav, refreshes, and shows service state", async () => {
     shellState.authState.currentUser.value = { displayName: "Ada" };
     shellState.authState.serverAvailable = false;
     shellState.authState.serviceStatusLabel = "服务离线";
     shellState.authState.serviceUrl = "http://127.0.0.1:3000";
-    shellState.authState.themeMode.value = "dark";
 
     const wrapper = mountTopbar();
 
@@ -440,19 +495,12 @@ describe("ConsoleTopbar", () => {
     expect(wrapper.get(".service-url-badge").attributes("aria-label")).toBe("服务离线: http://127.0.0.1:3000");
     expect(wrapper.get(".service-url-badge").classes()).toContain("is-unavailable");
     expect(wrapper.get(".tool-button[aria-label='刷新页面']").attributes("title")).toBe("刷新当前页面");
-    expect(wrapper.get(".tool-button[aria-label='切换暗色']").attributes("title")).toBe("暗色模式");
 
-    await wrapper.get(".topbar-hamburger").trigger("click");
-    expect(shellState.authState.sideNavOpen.value).toBe(true);
+    await wrapper.get(".topbar-sidebar-toggle").trigger("click");
+    expect(shellState.authState.sideNavCollapsed.value).toBe(true);
 
     await wrapper.get(".tool-button[aria-label='刷新页面']").trigger("click");
     expect(shellState.authState.refreshCurrentPage).toHaveBeenCalledTimes(1);
-
-    await wrapper.get(".tool-button[aria-label='切换暗色']").trigger("click");
-    expect(shellState.authState.cycleTheme).toHaveBeenCalledTimes(1);
-
-    await wrapper.get(".tool-button[aria-label='切换到英文']").trigger("click");
-    expect(shellState.authState.toggleLanguage).toHaveBeenCalledTimes(1);
   });
 
   it("does not render when unauthenticated", () => {
@@ -460,7 +508,9 @@ describe("ConsoleTopbar", () => {
 
     const wrapper = mountTopbar();
 
-    expect(wrapper.find("header").exists()).toBe(false);
+    expect(wrapper.get("header").classes()).toContain("is-disabled");
+    expect(wrapper.get("header").attributes("aria-disabled")).toBe("true");
+    expect(wrapper.get(".topbar-page-title").text()).toBe("登录");
   });
 });
 

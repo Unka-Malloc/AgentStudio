@@ -17,9 +17,11 @@ const emit = defineEmits<{
     class="side-link"
     :class="{ active, 'side-link-subtle': subtle }"
     type="button"
+    :aria-label="label"
     @click="emit('activate')"
   >
     <slot name="icon"></slot>
     <span class="side-link-label">{{ label }}</span>
+    <slot name="trail"></slot>
   </button>
 </template>

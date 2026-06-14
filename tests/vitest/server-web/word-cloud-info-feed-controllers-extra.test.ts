@@ -22,13 +22,11 @@ import type {
 const wordCloudClient = vi.hoisted(() => ({
   getKnowledgeWordClouds: vi.fn(),
   saveKnowledgeWordClouds: vi.fn(),
-  proposeKnowledgeWordClouds: vi.fn(),
 }));
 
 vi.mock("../../../server-web/lib/knowledge-word-cloud-client", () => ({
   getKnowledgeWordClouds: wordCloudClient.getKnowledgeWordClouds,
   saveKnowledgeWordClouds: wordCloudClient.saveKnowledgeWordClouds,
-  proposeKnowledgeWordClouds: wordCloudClient.proposeKnowledgeWordClouds,
 }));
 
 const executionTrackController = vi.hoisted(() => ({
@@ -89,7 +87,7 @@ function createWordCloudFixture(overrides: Record<string, unknown> = {}) {
     canWriteKnowledge: ref(true),
     clearAllBusy: vi.fn(),
     createDefaultWordCloudSet: (terms: unknown[] = []) => ({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       wordBagSetId: "default-set",
       title: "语料词云",
       status: "draft",
@@ -100,12 +98,7 @@ function createWordCloudFixture(overrides: Record<string, unknown> = {}) {
       corpusPaths: [],
       modelAlias: "",
     }),
-    fillingWordBagIds: ref(new Set<string>()),
-    fillSourceWordBagSetId: ref<string | null>(null),
-    fillTargetWordBagId: ref<string | null>(null),
-    refreshWordCloudCorpusTerms: vi.fn(),
     resolveWordCloudCorpusPathsForQuery: vi.fn(() => [] as Array<{ path: string; type: string }>),
-    selectedWordCloudModel: ref({ value: "m1", enabled: true, disabledReason: "" }),
     setBusy: vi.fn((key: string) => {
       busyKey.value = key;
     }),
@@ -114,7 +107,6 @@ function createWordCloudFixture(overrides: Record<string, unknown> = {}) {
     wordCloudDraft: ref<any>(null),
     wordCloudMessages: ref<any[]>([]),
     wordCloudModelAlias: ref("model-default"),
-    wordCloudPrompt: ref(""),
     wordCloudState: ref<any>(null),
     wordCloudTerms: ref<any[]>([]),
     error: ref(""),
@@ -279,13 +271,11 @@ describe("word cloud workflow controller", () => {
     vi.clearAllMocks();
   });
 
-  it("暴露公开 API 并覆盖词云读取/保存/生成的成功与失败路径", async () => {
+  it("暴露公开 API 并覆盖词云读取/保存的成功与失败路径", async () => {
     const { controller, options } = createWordCloudFixture();
 
     expect(controller).toEqual(expect.objectContaining({
       applyWordCloudEvent: expect.any(Function),
-      autoFillCloudWithAgent: expect.any(Function),
-      proposeWordCloud: expect.any(Function),
       refreshWordCloud: expect.any(Function),
       saveWordCloud: expect.any(Function),
     }));
@@ -345,83 +335,6 @@ describe("word cloud workflow controller", () => {
     wordCloudClient.saveKnowledgeWordClouds.mockRejectedValueOnce(new Error("保存失败"));
     await controller.saveWordCloud();
     expect(options.error.value).toBe("保存失败");
-
-    options.wordCloudPrompt.value = "按主题聚类";
-    options.refreshWordCloudCorpusTerms.mockResolvedValue([{ term: "x", frequency: 1 }]);
-    wordCloudClient.proposeKnowledgeWordClouds.mockResolvedValue({
-      ok: true,
-      run: { runId: "run-123" },
-      wordBagSet: {
-        wordBagSetId: "proposed",
-        title: "proposed",
-        status: "ready",
-        wordBagCount: 1,
-        termsSnapshot: [{ term: "x", frequency: 1 }],
-        wordBags: [{ wordBagId: "w-1", label: "主题1", terms: [] }],
-      },
-    });
-
-    await controller.proposeWordCloud();
-    expect(options.refreshWordCloudCorpusTerms).toHaveBeenCalledWith({
-      silent: true,
-      forceRebuild: true,
-      corpusPaths: [{ path: "/tmp", type: "directory" }],
-    });
-    expect(wordCloudClient.proposeKnowledgeWordClouds).toHaveBeenCalled();
-    expect(options.error.value).toBe("");
-    expect(options.wordCloudMessages.value[0].text).toBe("词云分类后台任务已启动。");
-
-    options.wordCloudPrompt.value = "按主题聚类";
-    options.refreshWordCloudCorpusTerms.mockResolvedValue([{ term: "x", frequency: 1 }]);
-    wordCloudClient.proposeKnowledgeWordClouds.mockRejectedValueOnce(new Error("生成失败"));
-    await controller.proposeWordCloud();
-    expect(options.error.value).toBe("生成失败");
-  });
-
-  it("自动填充链路会更新填充状态并在事件回写后清理进度", async () => {
-    const { controller, options } = createWordCloudFixture();
-
-    options.wordCloudDraft.value = {
-      wordBagSetId: "set-1",
-      title: "base",
-      status: "ready",
-      wordBagCount: 1,
-      termsSnapshot: [],
-      wordBags: [{ wordBagId: "target", label: "目标词云", terms: [] }],
-    };
-    options.refreshWordCloudCorpusTerms.mockResolvedValue([{ term: "a", frequency: 1 }]);
-    options.resolveWordCloudCorpusPathsForQuery.mockReturnValue([{ path: "/tmp", type: "directory" }]);
-    wordCloudClient.proposeKnowledgeWordClouds.mockResolvedValue({
-      ok: true,
-      wordBagSet: {
-        wordBagSetId: "fill-source",
-        title: "auto",
-        status: "draft",
-        wordBagCount: 0,
-        termsSnapshot: [],
-        wordBags: [],
-      },
-    });
-
-    await controller.autoFillCloudWithAgent("target");
-    expect(options.fillingWordBagIds.value.has("target")).toBe(true);
-    expect(options.fillTargetWordBagId.value).toBe("target");
-    expect(options.fillSourceWordBagSetId.value).toBe("fill-source");
-
-    controller.applyWordCloudEvent({
-      wordBagSetId: "fill-source",
-      status: "ready",
-      wordBags: [{
-        wordBagId: "x",
-        label: "x",
-        terms: [{ term: "one", frequency: 1 }, { term: "two", frequency: 2 }],
-      }],
-    } as any);
-
-    expect(options.addTermToCloud).toHaveBeenCalledTimes(2);
-    expect(options.fillingWordBagIds.value.has("target")).toBe(false);
-    expect(options.fillTargetWordBagId.value).toBeNull();
-    expect(options.fillSourceWordBagSetId.value).toBeNull();
   });
 
   it("权限和输入检查会阻断请求并保持错误状态", async () => {
@@ -439,10 +352,8 @@ describe("word cloud workflow controller", () => {
 
     options.canWriteKnowledge.value = true;
     options.canReadKnowledge.value = true;
-    options.selectedWordCloudModel.value = { value: "", enabled: false, disabledReason: "模型不可用" };
-    options.wordCloudPrompt.value = "x";
-    await controller.proposeWordCloud();
-    expect(options.error.value).toBe("模型不可用");
+    expect("proposeWordCloud" in controller).toBe(false);
+    expect("autoFillCloudWithAgent" in controller).toBe(false);
   });
 });
 

@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import { computed, unref } from "vue";
 import AgentModelOptionBar from "../../AgentModelOptionBar.vue";
 import OptionBar from "../../OptionBar.vue";
 import SegmentedToggle from "../../SegmentedToggle.vue";
 import { useKnowledgeRulesContext } from "../../../composables/knowledgeViewContext";
+import { useOptionalServerConsoleShellContext } from "../../../composables/serverConsoleShellContext";
+import { currentConsoleLocale, localizeConsoleText, resolveEffectiveConsoleLocale } from "../../../i18n/console";
+import type { OptionBarOption } from "../../../types/app";
 import RuleAuthoringResultPanel from "./RuleAuthoringResultPanel.vue";
 
 const {
@@ -18,65 +22,105 @@ const {
   ruleScopeOptionBarOptions,
   runRuleAuthoringChat,
 } = useKnowledgeRulesContext();
+
+const shellContext = useOptionalServerConsoleShellContext();
+const locale = computed(() => {
+  const shellLanguageMode = shellContext ? unref(shellContext.languageMode) : null;
+  return resolveEffectiveConsoleLocale(shellLanguageMode || currentConsoleLocale.value);
+});
+
+function t(value: string) {
+  return localizeConsoleText(value, locale.value);
+}
+
+function localizeOptionBarOptions(options: OptionBarOption[]) {
+  return (options || []).map((option) => ({
+    ...option,
+    label: t(String(option.label || option.value || "")),
+  }));
+}
+
+const ruleCreationModeOptions = computed(() => [
+  { value: "chat", label: t("智能对话") },
+  { value: "manual", label: t("人工配置") },
+]);
+const localizedRuleScopeOptionBarOptions = computed(() =>
+  localizeOptionBarOptions(unref(ruleScopeOptionBarOptions)),
+);
+const localizedRuleMatchStrategyOptionBarOptions = computed(() =>
+  localizeOptionBarOptions(unref(ruleMatchStrategyOptionBarOptions)),
+);
+const localizedRuleActionOptionBarOptions = computed(() =>
+  localizeOptionBarOptions(unref(ruleActionOptionBarOptions)),
+);
+const submitLabel = computed(() =>
+  t(
+    unref(busyKey) === "knowledge:rule-authoring"
+      ? "生成中"
+      : unref(ruleCreationMode) === "manual"
+        ? "按配置创建规则"
+        : "生成规则草稿",
+  ),
+);
 </script>
 
 <template>
   <article class="surface-card rule-authoring-card">
     <div class="section-header">
       <div>
-        <h3>创建规则</h3>
+        <h3>{{ t("创建规则") }}</h3>
       </div>
       <SegmentedToggle
         v-model="ruleCreationMode"
-        :options="[{ value: 'chat', label: '智能对话' }, { value: 'manual', label: '人工配置' }]"
-        aria-label="创建规则方式"
+        :options="ruleCreationModeOptions"
+        :aria-label="t('创建规则方式')"
       />
     </div>
     <form class="rule-authoring-form" :data-mode="ruleCreationMode" @submit.prevent="runRuleAuthoringChat">
       <template v-if="ruleCreationMode === 'chat'">
         <label class="full-row">
-          <span>需求</span>
+          <span>{{ t("需求") }}</span>
           <textarea
             v-model="ruleAuthoringForm.message"
             rows="4"
-            placeholder="例如：生成一个黄金规则，完全一样的知识直接跳过"
+            :placeholder="t('例如：生成一个黄金规则，完全一样的知识直接跳过')"
           ></textarea>
         </label>
         <AgentModelOptionBar
           data-config-target="rule-authoring-agent"
           :data-config-highlighted="highlightedConfigTarget === 'rule-authoring-agent'"
           v-model="ruleAuthoringForm.modelAlias"
-          label="智能体"
-          placeholder="未分配智能体"
+          :label="t('智能体')"
+          :placeholder="t('未分配智能体')"
           :options="ruleAuthoringModelOptions"
         />
       </template>
       <template v-else>
         <label>
-          <span>规则名称</span>
+          <span>{{ t("规则名称") }}</span>
           <input
             v-model="ruleAuthoringForm.ruleName"
             type="text"
-            placeholder="例如：重复知识处理规则"
+            :placeholder="t('例如：重复知识处理规则')"
           />
         </label>
         <OptionBar
           v-model="ruleAuthoringForm.scope"
-          label="适用范围"
-          :options="ruleScopeOptionBarOptions"
+          :label="t('适用范围')"
+          :options="localizedRuleScopeOptionBarOptions"
         />
         <OptionBar
           v-model="ruleAuthoringForm.matchStrategy"
-          label="匹配方式"
-          :options="ruleMatchStrategyOptionBarOptions"
+          :label="t('匹配方式')"
+          :options="localizedRuleMatchStrategyOptionBarOptions"
         />
         <OptionBar
           v-model="ruleAuthoringForm.action"
-          label="执行动作"
-          :options="ruleActionOptionBarOptions"
+          :label="t('执行动作')"
+          :options="localizedRuleActionOptionBarOptions"
         />
         <label>
-          <span>最低置信度</span>
+          <span>{{ t("最低置信度") }}</span>
           <input
             v-model.number="ruleAuthoringForm.confidence"
             type="number"
@@ -86,11 +130,11 @@ const {
           />
         </label>
         <label class="full-row">
-          <span>补充说明</span>
+          <span>{{ t("补充说明") }}</span>
           <textarea
             v-model="ruleAuthoringForm.notes"
             rows="3"
-            placeholder="写清楚边界条件、例外情况或需要人工审核的场景"
+            :placeholder="t('写清楚边界条件、例外情况或需要人工审核的场景')"
           ></textarea>
         </label>
       </template>
@@ -99,7 +143,7 @@ const {
         type="submit"
         :disabled="busyKey === 'knowledge:rule-authoring' || !ruleAuthoringCanSubmit"
       >
-        {{ busyKey === "knowledge:rule-authoring" ? "生成中" : (ruleCreationMode === "manual" ? "按配置创建规则" : "生成规则草稿") }}
+        {{ submitLabel }}
       </button>
     </form>
     <RuleAuthoringResultPanel v-if="ruleAuthoringResult" />

@@ -15,7 +15,7 @@ defineProps<{
 
 <template>
   <section class="production-health-bottom-grid">
-    <article class="surface-card">
+    <article class="surface-card production-health-bottom-card">
       <div class="section-header compact-section-header">
         <div>
           <h3>报告历史</h3>
@@ -36,7 +36,7 @@ defineProps<{
       </div>
     </article>
 
-    <article class="surface-card">
+    <article class="surface-card production-health-bottom-card">
       <div class="section-header compact-section-header">
         <div>
           <h3>执行入口</h3>
@@ -56,7 +56,15 @@ defineProps<{
 .production-health-bottom-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
   gap: var(--space-4);
+}
+
+.production-health-bottom-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  margin-top: 0;
 }
 
 .compact-section-header {
@@ -68,6 +76,7 @@ defineProps<{
   display: flex;
   flex-direction: column;
   flex-wrap: wrap;
+  flex: 1;
   gap: var(--space-2);
 }
 

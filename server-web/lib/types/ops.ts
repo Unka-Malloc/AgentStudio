@@ -27,7 +27,7 @@ export type BackgroundProcessItem = {
 export type UnifiedOriginalType = "process" | "queue" | "task" | "monitor" | "alert" | string;
 
 export type UnifiedRegistrationRecord = {
-  schemaVersion: number;
+  schemaVersion: string;
   registrationId: string;
   originalType: UnifiedOriginalType;
   originalId: string;
@@ -47,7 +47,7 @@ export type UnifiedRegistrationRecord = {
 };
 
 export type UnifiedSystemStatus = {
-  schemaVersion: number;
+  schemaVersion: string;
   updatedAt: string;
   source: string;
   summary: {
@@ -92,7 +92,7 @@ export type ClientRuntimeHeatRow = {
 
 export type ClientRuntimeStatus = {
   protocolVersion: string;
-  schemaVersion: number;
+  schemaVersion: string;
   updatedAt: string;
   configPath: string;
   usagePath: string;
@@ -115,7 +115,7 @@ export type ClientRuntimeStatus = {
 };
 
 export type BackgroundProcessStatus = {
-  schemaVersion: number;
+  schemaVersion: string;
   ok: boolean;
   status: string;
   updatedAt: string;
@@ -167,7 +167,7 @@ export type MonitorAlertRule = {
 };
 
 export type MonitorAlertConfig = {
-  schemaVersion: number;
+  schemaVersion: string;
   enabled: boolean;
   intervalMs: number;
   heartbeatStaleMs: number;
@@ -231,7 +231,7 @@ export type QueueMonitorItem = {
 };
 
 export type QueueMonitorState = {
-  schemaVersion: number;
+  schemaVersion: string;
   updatedAt: string;
   statePath: string;
   eventLogPath: string;
@@ -247,7 +247,7 @@ export type QueueMonitorState = {
 };
 
 export type MonitorAlertState = {
-  schemaVersion: number;
+  schemaVersion: string;
   ok: boolean;
   status: string;
   updatedAt: string;

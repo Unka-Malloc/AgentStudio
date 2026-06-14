@@ -26,6 +26,8 @@ function adminRouteTitle(adminView: string, messages: ConsoleShellRouteMessages)
     case "tools":
     case "toolList":
       return messages.nav.toolList;
+    case "toolGovernance":
+      return messages.nav.toolGovernance;
     case "toolStats":
       return messages.nav.toolStats;
     case "agentConfig":
@@ -46,6 +48,12 @@ function adminRouteTitle(adminView: string, messages: ConsoleShellRouteMessages)
       return messages.nav.opsMonitor;
     case "runtimeDownloads":
       return messages.nav.runtimeDownloads;
+    case "strategyManagement":
+      return messages.nav.strategyManagement;
+    case "versionRelease":
+      return messages.nav.versionRelease;
+    case "versionAssembly":
+      return messages.nav.versionAssembly;
     case "productionHealth":
       return messages.nav.productionHealth;
     case "modules":

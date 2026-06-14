@@ -72,7 +72,6 @@ const useConsoleMockState = vi.hoisted(() => {
   const ruleAuthoringForm = ref({ modelAlias: "" });
   const selectedRuleAuthoringModel = ref({ enabled: true, selectable: true, label: "规则编排智能体" });
   const wordCloudModelAlias = ref("");
-  const selectedWordCloudModel = ref({ enabled: true, selectable: true, label: "词云模型" });
   const filteredKnowledgeLogRows = ref([] as any[]);
   const settingsDraft = ref({ agentExploreDefaults: { reviewFusionModelAlias: "" } });
 
@@ -187,7 +186,6 @@ const useConsoleMockState = vi.hoisted(() => {
     settingsDraft,
     selectedInfoFeedModel,
     selectedRuleAuthoringModel,
-    selectedWordCloudModel,
     serverAvailable,
     sideNavOpen,
     syncKnowledgeLogTableScrollLeft,
@@ -664,7 +662,6 @@ vi.mock("../../../server-web/composables/console-tool-management-controller", ()
 vi.mock("../../../server-web/composables/console-word-cloud-controller", () => ({
   createConsoleWordCloudController: vi.fn(() =>
     createLooseController({
-      selectedWordCloudModel: useConsoleMockState.selectedWordCloudModel,
       wordCloudModelAlias: useConsoleMockState.wordCloudModelAlias,
     }),
   ),
@@ -701,7 +698,6 @@ beforeEach(() => {
   useConsoleMockState.ruleAuthoringForm.value = { modelAlias: "" };
   useConsoleMockState.selectedRuleAuthoringModel.value = { enabled: true, selectable: true, label: "规则编排智能体" };
   useConsoleMockState.wordCloudModelAlias.value = "";
-  useConsoleMockState.selectedWordCloudModel.value = { enabled: true, selectable: true, label: "词云模型" };
   useConsoleMockState.filteredKnowledgeLogRows.value = [];
   useConsoleMockState.settingsDraft.value = { agentExploreDefaults: { reviewFusionModelAlias: "" } };
   useConsoleMockState.busyKey.value = "";

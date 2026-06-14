@@ -20,14 +20,14 @@ type ConsoleWordCloudCardControllerOptions = {
 };
 
 const wordCloudPalette = [
-  { accent: "#8c6a1e", fill: "rgba(140, 106, 30, 0.09)" },   // brand gold
-  { accent: "#4a6580", fill: "rgba(74, 101, 128, 0.10)" },   // steel-blue
-  { accent: "#059669", fill: "rgba(5, 150, 105, 0.10)" },    // emerald
-  { accent: "#7c3aed", fill: "rgba(124, 58, 237, 0.09)" },   // violet
-  { accent: "#b45309", fill: "rgba(180, 83, 9, 0.10)" },     // amber
-  { accent: "#0891b2", fill: "rgba(8, 145, 178, 0.10)" },    // cyan
-  { accent: "#4d7c0f", fill: "rgba(77, 124, 15, 0.10)" },    // olive
-  { accent: "#be185d", fill: "rgba(190, 24, 93, 0.08)" },    // rose
+  { accent: "#7a4f0e", fill: "rgba(122, 79, 14, 0.09)" },    // brass (brand)
+  { accent: "#3a5a7a", fill: "rgba(58, 90, 122, 0.10)" },    // blued steel
+  { accent: "#9e2b2b", fill: "rgba(158, 43, 43, 0.09)" },    // industrial rose
+  { accent: "#3d7a66", fill: "rgba(61, 122, 102, 0.10)" },   // verdigris
+  { accent: "#6e4a0a", fill: "rgba(110, 74, 10, 0.10)" },    // dark bronze
+  { accent: "#2c4660", fill: "rgba(44, 70, 96, 0.10)" },     // deep iron-blue
+  { accent: "#2e5c4d", fill: "rgba(46, 92, 77, 0.10)" },     // dark patina
+  { accent: "#7a2020", fill: "rgba(122, 32, 32, 0.08)" },    // deep crimson
 ];
 
 export function createConsoleWordCloudCardController(

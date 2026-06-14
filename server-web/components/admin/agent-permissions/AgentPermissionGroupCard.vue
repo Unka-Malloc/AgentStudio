@@ -3,6 +3,8 @@ import { computed, ref, watch } from "vue";
 import type { AgentPermissionsViewContext } from "../../../composables/agentPermissionsViewContext";
 import { useAgentPermissionsViewContext } from "../../../composables/agentPermissionsViewContext";
 import { toolRiskLabel } from "../../../composables/console-tool-display-utils";
+import { currentConsoleLocale, localizeConsoleText, resolveEffectiveConsoleLocale } from "../../../i18n/console";
+import PactTabs, { type PactTab } from "../../PactTabs.vue";
 import FeatureToggle from "../../FeatureToggle.vue";
 import ScopeSelector from "../../ScopeSelector.vue";
 
@@ -27,12 +29,29 @@ const {
 const activeSection = ref<PermissionGroupSection>("overview");
 const selectedExceptionToolId = ref("");
 const selectedExceptionRule = ref<PermissionToolRule>("deny");
-const groupSections: { id: PermissionGroupSection; label: string }[] = [
-  { id: "overview", label: "概览" },
-  { id: "scopes", label: "权限范围" },
-  { id: "toolsets", label: "工具集" },
-  { id: "exceptions", label: "单工具例外" },
-];
+const locale = computed(() => resolveEffectiveConsoleLocale(currentConsoleLocale.value));
+function t(value: string) {
+  return localizeConsoleText(value, locale.value);
+}
+
+const groupLabelValue = computed({
+  get: () => localizeConsoleText(props.group.label, locale.value),
+  set: (value: string) => {
+    props.group.label = value;
+  },
+});
+const groupDescriptionValue = computed({
+  get: () => localizeConsoleText(props.group.description, locale.value),
+  set: (value: string) => {
+    props.group.description = value;
+  },
+});
+const groupSectionTabs = computed<PactTab[]>(() => [
+  { key: "overview", label: t("概览") },
+  { key: "scopes", label: t("权限范围") },
+  { key: "toolsets", label: t("工具集") },
+  { key: "exceptions", label: t("例外") },
+]);
 
 const grantableToolsets = computed(() =>
   toolManagementToolsets.value.filter((item) => item.grantable !== false),
@@ -96,7 +115,7 @@ function addToolException() {
 }
 
 function ruleLabel(rule: PermissionToolRule) {
-  return rule === "allow" ? "允许" : "未启用";
+  return t(rule === "allow" ? "允许" : "未启用");
 }
 </script>
 
@@ -108,76 +127,63 @@ function ruleLabel(rule: PermissionToolRule) {
     <div class="section-header">
       <div class="form-grid compact-form-grid permission-group-title-grid">
         <label>
-          <span>权限组名称</span>
-          <input v-model="group.label" autocomplete="off" />
+          <span>{{ t("权限组名称") }}</span>
+          <input v-model="groupLabelValue" autocomplete="off" />
         </label>
         <label>
-          <span>权限组 ID</span>
+          <span>{{ t("权限组 ID") }}</span>
           <input v-model="group.id" autocomplete="off" />
         </label>
       </div>
       <div class="permission-actions">
         <FeatureToggle
           :model-value="group.enabled"
-          :aria-label="group.enabled ? '停用权限组' : '启用权限组'"
+          :aria-label="t(group.enabled ? '停用权限组' : '启用权限组')"
           @update:model-value="group.enabled = Boolean($event)"
         />
         <button class="table-action danger-action" type="button" @click="removeAgentPermissionGroup(group)">
-          删除
+          {{ t("删除") }}
         </button>
       </div>
     </div>
     <label class="module-field">
-      <span>说明</span>
-      <input v-model="group.description" autocomplete="off" />
+      <span>{{ t("说明") }}</span>
+      <input v-model="groupDescriptionValue" autocomplete="off" />
     </label>
 
-    <div class="agent-permission-detail-tabs" role="tablist" aria-label="权限组详情">
-      <button
-        v-for="section in groupSections"
-        :key="section.id"
-        class="drawer-tab"
-        :class="{ active: activeSection === section.id }"
-        type="button"
-        role="tab"
-        :aria-selected="activeSection === section.id"
-        @click="activeSection = section.id"
-      >
-        {{ section.label }}
-      </button>
-    </div>
+    <PactTabs v-model="activeSection" :tabs="groupSectionTabs" variant="line" size="small" :aria-label="t('权限组详情')" />
 
     <section v-if="activeSection === 'overview'" class="agent-permission-detail-section">
       <div class="agent-permission-summary-grid">
         <div>
-          <span>权限范围</span>
+          <span>{{ t("权限范围") }}</span>
           <strong>{{ group.scopeIds.length }}</strong>
         </div>
         <div>
-          <span>工具集</span>
+          <span>{{ t("工具集") }}</span>
           <strong>{{ group.toolsetIds.length }}</strong>
         </div>
         <div>
-          <span>允许例外</span>
+          <span>{{ t("允许例外") }}</span>
           <strong>{{ group.toolAllow.length }}</strong>
         </div>
         <div>
-          <span>停用例外</span>
+          <span>{{ t("停用例外") }}</span>
           <strong>{{ group.toolDeny.length }}</strong>
         </div>
       </div>
       <dl class="agent-permission-summary-list">
         <div>
-          <dt>已选权限范围</dt>
-          <dd>{{ selectedScopeLabels.join(" / ") || "未选择" }}</dd>
+          <dt>{{ t("已选权限范围") }}</dt>
+          <dd>{{ selectedScopeLabels.join(" / ") || t("未选择") }}</dd>
         </div>
         <div>
-          <dt>已选工具集</dt>
-          <dd>{{ selectedToolsetLabels.join(" / ") || "未选择" }}</dd>
+          <dt>{{ t("已选工具集") }}</dt>
+          <dd>{{ selectedToolsetLabels.join(" / ") || t("未选择") }}</dd>
         </div>
         <div>
-          <dt>单工具例外</dt>
-          <dd>{{ exceptionRows.length ? `${exceptionRows.length} 项例外` : "无例外，全部继承工具集规则" }}</dd>
+          <dt>{{ t("单工具例外") }}</dt>
+          <dd>{{ exceptionRows.length ? `${exceptionRows.length} ${t("项例外")}` : t("无例外，全部继承工具集规则") }}</dd>
         </div>
       </dl>
     </section>
@@ -209,7 +215,7 @@ function ruleLabel(rule: PermissionToolRule) {
     <section v-else class="agent-permission-detail-section">
       <div class="permission-exception-toolbar">
         <label class="module-field">
-          <span>添加工具例外</span>
+          <span>{{ t("添加工具例外") }}</span>
           <select v-model="selectedExceptionToolId" :disabled="availableExceptionTools.length === 0">
             <option
               v-for="tool in availableExceptionTools"
@@ -221,10 +227,10 @@ function ruleLabel(rule: PermissionToolRule) {
           </select>
         </label>
         <label class="module-field compact-select-field">
-          <span>规则</span>
+          <span>{{ t("规则") }}</span>
           <select v-model="selectedExceptionRule">
-            <option value="deny">未启用</option>
-            <option value="allow">允许</option>
+            <option value="deny">{{ t("未启用") }}</option>
+            <option value="allow">{{ t("允许") }}</option>
           </select>
         </label>
         <button
@@ -233,15 +239,15 @@ function ruleLabel(rule: PermissionToolRule) {
           :disabled="!selectedExceptionToolId"
           @click="addToolException"
         >
-          添加例外
+          {{ t("添加例外") }}
         </button>
       </div>
 
       <div v-if="exceptionRows.length > 0" class="job-table compact-job-table permission-tool-rule-table">
         <div class="job-table-header">
-          <span>工具</span>
-          <span>当前规则</span>
-          <span>操作</span>
+          <span>{{ t("工具") }}</span>
+          <span>{{ t("当前规则") }}</span>
+          <span>{{ t("操作") }}</span>
         </div>
         <div
           v-for="row in exceptionRows"
@@ -259,31 +265,31 @@ function ruleLabel(rule: PermissionToolRule) {
               type="button"
               @click="setPermissionGroupToolRule(group, row.toolId, 'inherit')"
             >
-              继承
+              {{ t("继承") }}
             </button>
             <button
               class="table-action"
               type="button"
               @click="setPermissionGroupToolRule(group, row.toolId, 'allow')"
             >
-              允许
+              {{ t("允许") }}
             </button>
             <button
               class="table-action danger-action"
               type="button"
               @click="setPermissionGroupToolRule(group, row.toolId, 'deny')"
             >
-              未启用
+              {{ t("未启用") }}
             </button>
           </span>
         </div>
       </div>
       <div v-else-if="toolManagementTools.length === 0" class="empty-state compact-empty-state">
-        <strong>尚未加载工具目录</strong>
+        <strong>{{ t("尚未加载工具目录") }}</strong>
       </div>
       <div v-else class="empty-state compact-empty-state">
-        <strong>暂无单工具例外</strong>
-        <span>当前权限组全部继承工具集规则。</span>
+        <strong>{{ t("暂无单工具例外") }}</strong>
+        <span>{{ t("当前权限组全部继承工具集规则。") }}</span>
       </div>
     </section>
   </article>

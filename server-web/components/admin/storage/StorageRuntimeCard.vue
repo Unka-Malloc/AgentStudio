@@ -20,7 +20,7 @@ const {
         type="button"
         @click="openAdmin('modules')"
       >
-        查看接入模块
+        查看模块管理
       </button>
     </div>
 

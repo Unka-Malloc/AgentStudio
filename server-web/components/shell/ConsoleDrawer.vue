@@ -2,7 +2,7 @@
 import ConsoleAuthUsersPanel from "./ConsoleAuthUsersPanel.vue";
 import ConsolePreferencesPanel from "./ConsolePreferencesPanel.vue";
 import ConsoleServiceDiscoveryPanel from "./ConsoleServiceDiscoveryPanel.vue";
-import ConsoleSyncDirectoriesPanel from "./ConsoleSyncDirectoriesPanel.vue";
+import { createConsoleDrawerResizeController } from "../../composables/console-drawer-resize-controller";
 import { useServerConsoleShellContext } from "../../composables/serverConsoleShellContext";
 
 const {
@@ -14,12 +14,42 @@ const {
   msg,
   openDrawer,
 } = useServerConsoleShellContext();
+
+const {
+  drawerResizeDragging,
+  drawerResizeStyle,
+  drawerResizeValueMax,
+  drawerResizeValueMin,
+  drawerWidth,
+  handleDrawerResizeKeydown,
+  startDrawerResize,
+} = createConsoleDrawerResizeController();
 </script>
 
 <template>
   <div v-if="isAuthenticated && drawerOpen" class="drawer-backdrop" @click="closeDrawer()"></div>
 
-  <aside v-if="isAuthenticated" class="config-drawer" :class="{ open: drawerOpen }">
+  <aside
+    v-if="isAuthenticated"
+    class="config-drawer"
+    :class="{ open: drawerOpen, 'is-resizing': drawerResizeDragging }"
+    :style="drawerResizeStyle"
+  >
+    <button
+      class="config-drawer-resize-handle"
+      type="button"
+      role="separator"
+      aria-orientation="vertical"
+      :aria-label="msg.drawer.resizeHandle"
+      :aria-valuemin="drawerResizeValueMin"
+      :aria-valuemax="drawerResizeValueMax"
+      :aria-valuenow="drawerWidth"
+      :disabled="!drawerOpen"
+      :tabindex="drawerOpen ? 0 : -1"
+      @keydown="handleDrawerResizeKeydown"
+      @pointerdown="startDrawerResize"
+    ></button>
+
     <header class="drawer-header">
       <div>
         <h3>{{ msg.drawer.title }}</h3>
@@ -59,22 +89,12 @@ const {
       >
         {{ msg.drawer.users }}
       </button>
-      <button
-        v-if="hasFeature('knowledge-core')"
-        class="drawer-tab"
-        :class="{ active: drawerTab === 'syncDirectories' }"
-        type="button"
-        @click="openDrawer('syncDirectories')"
-      >
-        {{ msg.drawer.directories }}
-      </button>
     </div>
 
     <div class="drawer-content">
       <ConsolePreferencesPanel v-if="drawerTab === 'preferences'" />
       <ConsoleServiceDiscoveryPanel v-else-if="drawerTab === 'discovery'" />
       <ConsoleAuthUsersPanel v-else-if="drawerTab === 'users'" />
-      <ConsoleSyncDirectoriesPanel v-else-if="drawerTab === 'syncDirectories' && hasFeature('knowledge-core')" />
     </div>
   </aside>
 </template>

@@ -50,13 +50,20 @@ defineProps<{
 .production-section-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: minmax(220px, 1fr);
+  align-items: stretch;
   gap: var(--space-4);
+}
+
+.production-section-grid > .production-section-card {
+  margin-top: 0;
 }
 
 .production-section-card {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  height: 100%;
   min-height: 220px;
 }
 

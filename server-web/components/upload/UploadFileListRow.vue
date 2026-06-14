@@ -3,6 +3,7 @@ import { computed } from "vue";
 import BridgeDownloadButton from "../BridgeDownloadButton.vue";
 import SegmentedProgressBar from "../SegmentedProgressBar.vue";
 import StatusPill from "../StatusPill.vue";
+import { currentConsoleLocale, localizeConsoleText, resolveEffectiveConsoleLocale } from "../../i18n/console";
 import {
   uploadFileListIcons,
   uploadProgressStepLabels,
@@ -28,6 +29,11 @@ const props = withDefaults(defineProps<{
 });
 
 const isDownloadMode = computed(() => props.mode === "download");
+const locale = computed(() => resolveEffectiveConsoleLocale(currentConsoleLocale.value));
+function t(value: string) {
+  return localizeConsoleText(value, locale.value);
+}
+
 const activeStepLabel = computed(() => {
   const activeIndex = Math.max(0, Math.min(props.totalProgressSteps - 1, props.progressState.completedSteps - 1));
   return props.progressStepLabels[activeIndex] || "";
@@ -51,37 +57,37 @@ const activeStepLabel = computed(() => {
 
     <div v-if="!isDownloadMode" class="upload-file-progress">
       <div class="upload-file-progress-meta">
-        <span>{{ progressState.detail }}</span>
-        <small>{{ activeStepLabel }}</small>
+        <span>{{ t(progressState.detail) }}</span>
+        <small>{{ t(activeStepLabel) }}</small>
       </div>
       <SegmentedProgressBar
         size="compact"
-        :aria-label="`${entry.name} 处理进度`"
+        :aria-label="`${entry.name} ${t('处理进度')}`"
         :completed-steps="progressState.completedSteps"
         :labels="progressStepLabels"
         :total-steps="totalProgressSteps"
       />
     </div>
     <div v-else class="upload-file-result-meta">
-      <span>{{ entry.detail || "可下载文件" }}</span>
+      <span>{{ t(entry.detail || "可下载文件") }}</span>
       <small v-if="entry.size > 0">{{ formatBytes(entry.size) }}</small>
     </div>
 
     <div v-if="!isDownloadMode" class="upload-file-status">
-      <StatusPill :tone="progressState.tone" :label="progressState.label" />
+      <StatusPill :tone="progressState.tone" :label="t(progressState.label)" />
     </div>
     <div v-else class="upload-file-download-actions">
       <BridgeDownloadButton
         v-if="entry.href"
         :href="entry.href"
         :download-name="entry.downloadName || entry.name"
-        :label="entry.actionLabel || '下载'"
+        :label="t(entry.actionLabel || '下载')"
         button-class="tool-button"
       />
       <StatusPill
         v-else
         :tone="entry.statusTone || 'neutral'"
-        :label="entry.statusLabel || '未生成'"
+        :label="t(entry.statusLabel || '未生成')"
       />
     </div>
   </div>

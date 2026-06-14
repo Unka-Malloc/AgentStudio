@@ -54,7 +54,7 @@ export type KnowledgeSource = {
 };
 
 export type KnowledgeSourceState = {
-  schemaVersion: number;
+  schemaVersion: string;
   updatedAt: string;
   summary: {
     totalCount: number;

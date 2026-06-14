@@ -13,8 +13,7 @@ import type {
 export type DrawerTab =
   | "preferences"
   | "discovery"
-  | "users"
-  | "syncDirectories";
+  | "users";
 export type AppView =
   | "dashboard"
   | "feed"
@@ -33,6 +32,7 @@ export type AdminView =
   | "logs"
   | "tools"
   | "toolList"
+  | "toolGovernance"
   | "toolStats"
   | "agentPermissions"
   | "agentConfig"
@@ -41,6 +41,9 @@ export type AdminView =
   | "maintenanceAgent"
   | "opsMonitor"
   | "runtimeDownloads"
+  | "strategyManagement"
+  | "versionRelease"
+  | "versionAssembly"
   | "productionHealth"
   | "clients"
   | "storage"
@@ -52,6 +55,8 @@ export type OptionBarOption = {
   value: OptionBarValue;
   label: string;
   disabled?: boolean;
+  swatches?: string[];
+  icon?: "moon" | "sun";
 };
 export type KnowledgeLogRow = {
   logId: string;

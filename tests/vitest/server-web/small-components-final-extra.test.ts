@@ -367,7 +367,7 @@ describe("server-web small component final extra coverage", () => {
     await wrapper.find(".info-feed-result-row-stub").trigger("click");
     expect(openAgentEvidencePreview).toHaveBeenCalledWith({ title: "Evidence A", evidenceId: "ev-a" });
 
-    form.value.query = "账单";
+    form.value.query = "部署记录";
     await nextTick();
     await wrapper.get("form").trigger("submit");
     expect(runKnowledgeRecallDebugBatch).toHaveBeenCalled();

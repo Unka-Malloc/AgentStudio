@@ -1,14 +1,20 @@
 <script setup lang="ts">
+import { Moon, Sunny } from "@element-plus/icons-vue";
+import type { Component } from "vue";
+
 type OptionBarValue = string | number | boolean;
 type OptionBarModelValue = OptionBarValue | OptionBarValue[];
+type OptionBarIcon = "moon" | "sun";
 
 type OptionBarOption = {
   value: OptionBarValue;
   label: string;
   disabled?: boolean;
+  swatches?: string[];
+  icon?: OptionBarIcon;
 };
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: OptionBarModelValue;
   options: OptionBarOption[];
   label?: string;
@@ -43,6 +49,20 @@ const emit = defineEmits<{
   change: [value: OptionBarModelValue];
 }>();
 
+const optionIconComponents: Record<OptionBarIcon, Component> = {
+  moon: Moon,
+  sun: Sunny,
+};
+
+function optionIconComponent(icon?: OptionBarIcon) {
+  return icon ? optionIconComponents[icon] : undefined;
+}
+
+function optionIconForValue(value: unknown) {
+  const option = props.options.find((item) => Object.is(item.value, value));
+  return optionIconComponent(option?.icon);
+}
+
 function updateValue(value: OptionBarModelValue) {
   emit("update:modelValue", value);
 }
@@ -72,13 +92,48 @@ function changeValue(value: OptionBarModelValue) {
       @update:model-value="updateValue"
       @change="changeValue"
     >
+      <template #label="{ label: selectedLabel, value: selectedValue }">
+        <span class="option-bar-value-row" :data-has-icon="Boolean(optionIconForValue(selectedValue))">
+          <component
+            :is="optionIconForValue(selectedValue)"
+            v-if="optionIconForValue(selectedValue)"
+            class="option-bar-option-icon"
+            aria-hidden="true"
+          />
+          <span class="option-bar-value-label">{{ selectedLabel }}</span>
+        </span>
+      </template>
       <el-option
         v-for="option in options"
         :key="String(option.value)"
         :label="option.label"
         :value="option.value"
         :disabled="option.disabled"
-      />
+      >
+        <span
+          class="option-bar-option-row"
+          :data-has-icon="Boolean(option.icon)"
+          :data-has-swatches="Boolean(option.swatches?.length)"
+        >
+          <span class="option-bar-option-main">
+            <component
+              :is="optionIconComponent(option.icon)"
+              v-if="optionIconComponent(option.icon)"
+              class="option-bar-option-icon"
+              aria-hidden="true"
+            />
+            <span class="option-bar-option-label">{{ option.label }}</span>
+          </span>
+          <span v-if="option.swatches?.length" class="option-bar-option-swatches" aria-hidden="true">
+            <span
+              v-for="(swatch, index) in option.swatches"
+              :key="`${String(option.value)}-${index}-${swatch}`"
+              class="option-bar-option-swatch"
+              :style="{ backgroundColor: swatch }"
+            />
+          </span>
+        </span>
+      </el-option>
     </el-select>
   </label>
 </template>
@@ -99,4 +154,58 @@ function changeValue(value: OptionBarModelValue) {
 }
 
 .option-bar-select { width: 100%; min-width: 0; }
+
+.option-bar-value-row,
+.option-bar-option-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.option-bar-option-row {
+  justify-content: space-between;
+  width: 100%;
+}
+
+.option-bar-value-row {
+  color: inherit;
+}
+
+.option-bar-option-main {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.option-bar-value-label,
+.option-bar-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.option-bar-option-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: var(--text-secondary);
+}
+
+.option-bar-option-swatches {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.option-bar-option-swatch {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
 </style>

@@ -22,7 +22,7 @@ vi.mock("../../../server-web/lib/knowledge-rules-client", () => ({
 
 function makeEmailRules(overrides: Partial<EmailRuleSet> = {}): EmailRuleSet {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: "2026-06-04T00:00:00.000Z",
     reportSeries: [
       {
@@ -75,7 +75,7 @@ function makeVocabularyEntry(index: number, overrides: Record<string, unknown> =
 function makeVocabulary(overrides: Partial<ExpertVocabulary> = {}): ExpertVocabulary {
   return {
     ...emptyExpertVocabulary,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     version: 7,
     updatedAt: "2026-06-04T00:00:00.000Z",
     publishedAt: "",
@@ -175,7 +175,7 @@ describe("console expert email rules controller extra coverage", () => {
 
     controller.rulesText.value = "{";
     expect(controller.parseEmailRulesDraft()).toEqual({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       updatedAt: "",
       reportSeries: [],
       synonymDictionary: [],

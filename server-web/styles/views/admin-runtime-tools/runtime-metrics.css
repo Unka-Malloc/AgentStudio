@@ -1,7 +1,21 @@
 .queue-status-section {
   display: grid;
   gap: var(--space-3);
-  margin-bottom: 18px;
+}
+
+.compact-section-header {
+  align-items: center;
+}
+
+.queue-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.queue-state-counts {
+  justify-content: flex-start;
 }
 
 .client-runtime-card {

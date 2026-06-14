@@ -307,7 +307,7 @@ export function createDefaultWordCloudSet(
 ): KnowledgeWordCloudSet {
   const now = new Date().toISOString();
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     wordBagSetId: `word-cloud-${Date.now().toString(36)}`,
     title: "语料词云",
     status: "draft",

@@ -24,31 +24,47 @@ function parseRequiredEvidenceIds(value: string) {
     .filter(Boolean);
 }
 
+function isDeprecatedContextProfile(profile: Record<string, unknown>) {
+  const profileId = String(profile.profileId || profile.id || "").trim();
+  const label = String(profile.label || "").trim();
+  return (
+    ["balanced", "small-context", "deepseek-v3-671b"].includes(profileId) ||
+    ["Balanced Context", "Small Context", "DeepSeek V3 671B"].includes(label)
+  );
+}
+
 export function createConsoleContextCompilerController(
   options: ConsoleContextCompilerControllerOptions,
 ) {
   const contextProfilesResponse = ref<Record<string, unknown> | null>(null);
   const contextBuildRecordsResponse = ref<Record<string, unknown> | null>(null);
-  const contextPreviewTask = ref("总结最近一个月邮件中的账单风险，必须保留证据编号。");
+  const contextPreviewTask = ref("Summarize billing risks in emails from the last month; preserve evidence IDs.");
   const contextPreviewRequiredEvidence = ref("");
   const contextPreviewResult = ref<Record<string, unknown> | null>(null);
   const contextEvaluationResult = ref<Record<string, unknown> | null>(null);
 
   const contextProfileRows = computed(() =>
-    ((asRecord(contextProfilesResponse.value)?.profiles || []) as Array<Record<string, unknown>>).map((profile) => ({
-      profileId: String(profile.profileId || profile.id || ""),
-      label: String(profile.label || profile.profileId || ""),
-      contextWindowTokens: Number(profile.contextWindowTokens || 0),
-      compressionMode: String(asRecord(profile.compression)?.mode || "deterministic"),
-      strategy: String(asRecord(profile.compression)?.strategy || ""),
-      knowledgeBudget: Number(profile.knowledgeBudget || 0),
-      historyBudget: Number(profile.historyBudget || 0),
-      recentTurnBudget: Number(profile.recentTurnBudget || 0),
-      expertGuidanceRatio: Number(asRecord(profile.budgetPolicy)?.expertGuidanceRatio || 0),
-      protectedEvidenceFields: ((profile.protectedEvidenceFields || []) as unknown[]).map((item) => String(item)),
-      modelCompressionAlias: String(asRecord(profile.modelCompression)?.alias || ""),
-      modelCompressionEnabled: asRecord(profile.modelCompression)?.enabled === true,
-    })),
+    ((asRecord(contextProfilesResponse.value)?.profiles || []) as Array<Record<string, unknown>>)
+      .filter((profile) => !isDeprecatedContextProfile(profile))
+      .map((profile) => ({
+        profileId: String(profile.profileId || profile.id || ""),
+        label: String(profile.label || profile.profileId || ""),
+        contextWindowTokens: Number(profile.contextWindowTokens || 0),
+        compressionMode: String(asRecord(profile.compression)?.mode || "deterministic"),
+        strategy: String(asRecord(profile.compression)?.strategy || ""),
+        knowledgeBudget: Number(profile.knowledgeBudget || 0),
+        historyBudget: Number(profile.historyBudget || 0),
+        recentTurnBudget: Number(profile.recentTurnBudget || 0),
+        expertGuidanceRatio: Number(asRecord(profile.budgetPolicy)?.expertGuidanceRatio || 0),
+        protectedEvidenceFields: ((profile.protectedEvidenceFields || []) as unknown[]).map((item) => String(item)),
+        modelCompressionAlias: String(asRecord(profile.modelCompression)?.alias || ""),
+        modelCompressionEnabled: asRecord(profile.modelCompression)?.enabled === true,
+      }))
+      .sort((left, right) => {
+        const tokenCompare = left.contextWindowTokens - right.contextWindowTokens;
+        if (tokenCompare !== 0) return tokenCompare;
+        return left.profileId.localeCompare(right.profileId);
+      }),
   );
 
   const contextBuildRecordRows = computed(() =>
@@ -101,7 +117,7 @@ export function createConsoleContextCompilerController(
         {
           feedbackId: "preview-human-guidance",
           label: "人类专家意见",
-          instruction: "证据编号、来源定位、金额、日期和冲突信息必须保留。",
+              instruction: "证据编号、来源定位、时间、版本和冲突信息必须保留。",
           evidenceRefs: requiredEvidenceIds,
           context: {
             gold: true,
@@ -113,7 +129,7 @@ export function createConsoleContextCompilerController(
         ? requiredEvidenceIds.map((evidenceId, index) => ({
             evidenceId,
             title: `预览证据 ${index + 1}`,
-            snippet: `用于验证上下文编译器证据保护的片段：${evidenceId}，日期 2026-04-${String(index + 1).padStart(2, "0")}，金额 123.45。`,
+            snippet: `用于验证上下文编译器证据保护的片段：${evidenceId}，时间 2026-04-${String(index + 1).padStart(2, "0")}，版本 v1.${index + 1}.0。`,
             sourceLocator: `preview/${evidenceId}`,
             confidence: 0.9,
             humanExpert: true,
@@ -121,14 +137,14 @@ export function createConsoleContextCompilerController(
         : [
             {
               evidenceId: "preview-evidence-1",
-              title: "预览账单证据",
-              snippet: "2026-04-20 账单金额 123.45，需要保留 evidenceId、日期和金额。",
-              sourceLocator: "preview/mail/账单.eml",
+              title: "预览部署证据",
+              snippet: "2026-04-20 部署版本 v1.2.3，需要保留 evidenceId、时间和版本。",
+              sourceLocator: "preview/ops/deployment.md",
               confidence: 0.9,
               humanExpert: true,
             },
           ],
-      history: "上一轮用户要求先确认账单主体，再输出风险结论。".repeat(20),
+      history: "上一轮用户要求先确认部署对象，再输出风险结论。".repeat(20),
       recentTurns: options.recentTurns(),
       toolState: {
         iteration: 1,

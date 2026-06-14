@@ -41,7 +41,7 @@ export type KnowledgeWordBag = {
 export type KnowledgeWordCloud = KnowledgeWordBag;
 
 export type KnowledgeWordBagSet = {
-  schemaVersion?: number;
+  schemaVersion?: string;
   wordBagSetId: string;
   title: string;
   status: string;
@@ -60,24 +60,11 @@ export type KnowledgeWordCloudSet = KnowledgeWordBagSet;
 
 export type KnowledgeWordCloudState = {
   ok?: boolean;
-  schemaVersion?: number;
+  schemaVersion?: string;
   terms: KnowledgeWordCloudTerm[];
   corpusPaths?: KnowledgeWordCloudCorpusPath[];
   wordBagSet: KnowledgeWordBagSet | null;
   wordBagSets?: KnowledgeWordBagSet[];
-};
-
-export type KnowledgeWordCloudProposeResponse = {
-  ok: boolean;
-  terms?: KnowledgeWordCloudTerm[];
-  agentResponse?: Record<string, unknown>;
-  wordBagSet: KnowledgeWordBagSet;
-  run?: {
-    runId: string;
-    queueId?: string;
-    status?: string;
-    startedAt?: string;
-  };
 };
 
 export type KnowledgeWordBagMutationResponse = {
@@ -113,7 +100,7 @@ export type KnowledgeWordBagTermsGroup = {
 
 export type KnowledgeWordBagTermsResponse = {
   ok: boolean;
-  schemaVersion?: number;
+  schemaVersion?: string;
   wordBagSetId: string;
   title?: string;
   status?: string;
@@ -129,7 +116,7 @@ export type KnowledgeWordBagTermsResponse = {
 export type KnowledgeWordCloudExportResponse = {
   ok: boolean;
   exportType: "pact.knowledge.word_bags.export" | string;
-  schemaVersion?: number;
+  schemaVersion?: string;
   exportedAt: string;
   wordBagSet: KnowledgeWordBagSet;
 };

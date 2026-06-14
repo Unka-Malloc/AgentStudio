@@ -45,7 +45,7 @@ function makeConsoleState(overrides: Partial<ServerConsoleState> = {}) {
     discovery: { path: "/discovery", value: { items: [] }, bootstrap: { enabled: true } },
     emailRules: { path: "/email-rules", rules: {} },
     expertVocabulary: { path: "/vocabulary", vocabulary: {} },
-    knowledgeTaxonomy: { schemaVersion: 1, topics: [] },
+    knowledgeTaxonomy: { schemaVersion: "v0.0.1:schema:definition-1", topics: [] },
     storage: { summary: {} },
     jobs: {
       summary: {
@@ -76,7 +76,7 @@ function makeKnowledgeConsole(overrides: Partial<KnowledgeConsoleState> = {}) {
 
 function makeSourcesState(overrides: Partial<KnowledgeSourceState> = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: "2026-06-04T00:00:00.000Z",
     summary: {
       totalCount: 0,
@@ -92,7 +92,7 @@ function makeSourcesState(overrides: Partial<KnowledgeSourceState> = {}) {
 
 function makeSchema(): KnowledgeConfigSchema {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     groups: [
       {
         id: "retrieval",

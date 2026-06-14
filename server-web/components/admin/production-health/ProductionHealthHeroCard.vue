@@ -23,7 +23,7 @@ const capabilityBindingGuard = computed(() => props.health?.capabilityBindingGua
   <article class="surface-card production-health-hero">
     <div class="section-header">
       <div>
-        <h3>生产健康</h3>
+        <h3>交付门禁</h3>
         <p>汇总生产准入报告、质量门禁、运行时治理、权限安全、备份恢复和发版连续性状态。</p>
       </div>
       <div class="section-tags">

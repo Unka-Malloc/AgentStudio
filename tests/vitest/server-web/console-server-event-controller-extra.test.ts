@@ -16,7 +16,7 @@ const mockedSubscribeEvents = vi.mocked(subscribeEvents);
 
 function makeEvent(offset: number, overrides: Partial<ProtocolEvent> = {}): ProtocolEvent {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     offset,
     id: `event-${offset}`,
     topic: "console.topic",

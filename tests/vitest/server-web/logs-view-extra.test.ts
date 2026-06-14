@@ -12,20 +12,33 @@ type ShellContext = {
   error: Ref<string | null>;
   exportKnowledgeLogRows: ReturnType<typeof vi.fn>;
   filteredKnowledgeLogRows: Ref<KnowledgeLogRow[]>;
+  goToKnowledgeLogNextPage: ReturnType<typeof vi.fn>;
+  goToKnowledgeLogPreviousPage: ReturnType<typeof vi.fn>;
   handleKnowledgeLogTableScroll: ReturnType<typeof vi.fn>;
   isAuthenticated: Ref<boolean>;
   knowledgeLogAdvancedOpen: Ref<boolean>;
   knowledgeLogColumnWidths: Ref<Record<string, number>>;
+  knowledgeLogCurrentPage: Ref<number>;
+  knowledgeLogDisplayStatusLabel: (row: KnowledgeLogRow) => string;
   knowledgeLogFilters: Ref<{
+    fuzzy: string;
+    kind: string;
     id: string;
     status: string;
     stage: string;
     from: string;
     to: string;
   }>;
+  knowledgeLogKindOptionBarOptions: Ref<Array<{ value: string; label: string }>>;
+  knowledgeLogPageCount: Ref<number>;
+  knowledgeLogPageRange: Ref<{ start: number; end: number }>;
+  knowledgeLogPageSize: Ref<number>;
+  knowledgeLogPageSizeOptionBarOptions: Ref<Array<{ value: number; label: string }>>;
+  knowledgeLogPageTotal: Ref<number>;
   knowledgeLogStatusOptionBarOptions: Ref<Array<{ value: string; label: string }>>;
   knowledgeLogTableShellRef: Ref<HTMLElement | null>;
   monitorAlertSummary: { visibleCount: number; activeCount: number };
+  paginatedKnowledgeLogRows: Ref<KnowledgeLogRow[]>;
   workQueueSummary: { total: number };
   serverLogRows: Ref<KnowledgeLogRow[]>;
 };
@@ -222,9 +235,14 @@ function createShellContext(overrides: Partial<{
   open: boolean;
   visibleCount: number;
   activeCount: number;
+  paginatedRows: KnowledgeLogRow[];
+  pageCount: number;
+  currentPage: number;
+  pageTotal: number;
 }> = {}) {
   const rows = ref(overrides.rows ?? [makeRow()]);
   const filteredRows = ref(overrides.filteredRows ?? rows.value);
+  const paginatedRows = ref(overrides.paginatedRows ?? filteredRows.value);
 
   return {
     adminView: ref("logs"),
@@ -233,6 +251,8 @@ function createShellContext(overrides: Partial<{
     error: ref(null),
     exportKnowledgeLogRows: vi.fn(),
     filteredKnowledgeLogRows: filteredRows,
+    goToKnowledgeLogNextPage: vi.fn(),
+    goToKnowledgeLogPreviousPage: vi.fn(),
     handleKnowledgeLogTableScroll: vi.fn(),
     isAuthenticated: ref(true),
     knowledgeLogAdvancedOpen: ref(overrides.open ?? false),
@@ -246,13 +266,30 @@ function createShellContext(overrides: Partial<{
       detail: 220,
       error: 180,
     }),
+    knowledgeLogCurrentPage: ref(overrides.currentPage ?? 1),
+    knowledgeLogDisplayStatusLabel: (row: KnowledgeLogRow) => row.statusLabel || row.status,
     knowledgeLogFilters: ref({
+      fuzzy: "",
+      kind: "",
       id: "",
       status: "",
       stage: "",
       from: "",
       to: "",
     }),
+    knowledgeLogKindOptionBarOptions: ref([
+      { value: "", label: "全部类型" },
+      { value: "monitor", label: "监控报警" },
+      { value: "process", label: "服务进程" },
+    ]),
+    knowledgeLogPageCount: ref(overrides.pageCount ?? 1),
+    knowledgeLogPageRange: ref({ start: paginatedRows.value.length ? 1 : 0, end: paginatedRows.value.length }),
+    knowledgeLogPageSize: ref(20),
+    knowledgeLogPageSizeOptionBarOptions: ref([
+      { value: 20, label: "20 条" },
+      { value: 50, label: "50 条" },
+    ]),
+    knowledgeLogPageTotal: ref(overrides.pageTotal ?? filteredRows.value.length),
     knowledgeLogStatusOptionBarOptions: ref([
       { value: "", label: "全部状态" },
       { value: "完成", label: "完成" },
@@ -263,6 +300,7 @@ function createShellContext(overrides: Partial<{
       visibleCount: overrides.visibleCount ?? 0,
       activeCount: overrides.activeCount ?? 3,
     },
+    paginatedKnowledgeLogRows: paginatedRows,
     workQueueSummary: { total: 7 },
     serverLogRows: rows,
   } as ShellContext;
@@ -298,7 +336,7 @@ afterEach(() => {
 });
 
 describe("LogsView extra coverage", () => {
-  it("toggles advanced filters, updates bindings, renders log rows, and wires table actions", async () => {
+  it("updates filters, renders paginated log rows, and wires table actions", async () => {
     const row = makeRow({
       logId: "log-42",
       kindLabel: "知识库",
@@ -324,24 +362,24 @@ describe("LogsView extra coverage", () => {
 
     expect(wrapper.get("h3").text()).toBe("日志记录");
     expect(wrapper.get(".section-tags").text()).toContain("总计 1");
-    expect(wrapper.get(".section-tags").text()).toContain("显示 1");
+    expect(wrapper.get(".section-tags").text()).toContain("筛选 1");
+    expect(wrapper.get(".section-tags").text()).toContain("本页 1");
     expect(wrapper.get(".section-tags").text()).toContain("队列 7");
     expect(wrapper.get(".section-tags").text()).toContain("报警 5");
-    expect(wrapper.get(".source-actions button").text()).toBe("高级筛选");
-
-    await wrapper.get(".source-actions button").trigger("click");
-    await flush();
-
-    expect(shellContext.knowledgeLogAdvancedOpen.value).toBe(true);
-    expect(wrapper.get(".source-actions button").text()).toBe("收起筛选");
+    expect(wrapper.get(".source-actions button").text()).toBe("导出 CSV");
     expect(wrapper.find(".knowledge-log-filters").exists()).toBe(true);
 
-    const idInput = wrapper.get('.knowledge-log-filters input[placeholder="筛选 ID / 对象"]');
-    await idInput.setValue("log-42");
+    const fuzzyInput = wrapper.get('.knowledge-log-filters input[placeholder="任意关键词"]');
+    await fuzzyInput.setValue("log-42");
     await flush();
-    expect(shellContext.knowledgeLogFilters.value.id).toBe("log-42");
+    expect(shellContext.knowledgeLogFilters.value.fuzzy).toBe("log-42");
 
-    await wrapper.get(".mock-option-bar-select").setValue("失败");
+    const filterSelects = wrapper.findAll(".knowledge-log-filters .mock-option-bar-select");
+    await filterSelects[0].setValue("monitor");
+    await flush();
+    expect(shellContext.knowledgeLogFilters.value.kind).toBe("monitor");
+
+    await filterSelects[1].setValue("失败");
     await flush();
     expect(shellContext.knowledgeLogFilters.value.status).toBe("失败");
 
@@ -349,13 +387,13 @@ describe("LogsView extra coverage", () => {
     expect(wrapper.get(".knowledge-log-target .mono-compact").text()).toBe("log-42");
     expect(wrapper.get(".knowledge-log-target small").text()).toBe("workspace-42");
     expect(wrapper.get(".knowledge-log-target .mono-compact").attributes("title")).toBe("log-42");
-    expect(wrapper.get(".knowledge-log-time").text()).toBe("06-04 10:03");
+    expect(wrapper.get(".knowledge-log-time").text()).toBe("2026-06-04 10:03:04");
     expect(wrapper.get(".knowledge-log-time").attributes("title")).toBe("2026-06-04 10:03:04");
     expect(wrapper.get(".knowledge-log-status .mock-status-pill").text()).toBe("完成");
     expect(wrapper.get(".knowledge-log-status .mock-status-pill").attributes("data-tone")).toBe("success");
     expect(wrapper.get(".knowledge-log-progress").text()).toBe("77%");
     expect(wrapper.get(".knowledge-log-stage").text()).toBe("review");
-    expect(wrapper.get(".knowledge-log-detail").text()).toBe("ready for export");
+    expect(wrapper.get(".knowledge-log-detail-list").text()).toBe("ready for export");
     expect(wrapper.get(".knowledge-log-error").text()).toBe("timeout");
 
     await wrapper.get(".mock-data-table-scroll").trigger("click");
@@ -364,13 +402,10 @@ describe("LogsView extra coverage", () => {
     await wrapper.get(".mock-data-table-header-dragend").trigger("click");
     expect(shellContext.knowledgeLogColumnWidths.value.target).toBe(256);
 
-    await wrapper.get(".source-actions button:last-child").trigger("click");
+    await wrapper.get(".source-actions button").trigger("click");
     expect(shellContext.exportKnowledgeLogRows).toHaveBeenCalledTimes(1);
 
-    await wrapper.get(".source-actions button").trigger("click");
-    await flush();
-    expect(shellContext.knowledgeLogAdvancedOpen.value).toBe(false);
-    expect(wrapper.find(".knowledge-log-filters").exists()).toBe(false);
+    expect(wrapper.get(".knowledge-log-page-indicator").text()).toContain("1 / 1");
   });
 
   it("renders the empty state when no filtered rows are available", async () => {
@@ -384,8 +419,6 @@ describe("LogsView extra coverage", () => {
     expect(wrapper.get(".mock-data-table-empty").text()).toBe("暂无系统日志");
     expect(wrapper.find(".mock-data-table-row").exists()).toBe(false);
 
-    await wrapper.get(".source-actions button").trigger("click");
-    await flush();
-    expect(shellContext.knowledgeLogAdvancedOpen.value).toBe(false);
+    expect(wrapper.get(".section-tags").text()).toContain("筛选 0");
   });
 });

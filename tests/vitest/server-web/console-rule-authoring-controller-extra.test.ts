@@ -329,7 +329,7 @@ describe("console rule authoring controller", () => {
     expect(knowledgeRuleAuthoringClient.chatKnowledgeRuleAuthoring).not.toHaveBeenCalled();
 
     knowledgeRuleAuthoringClient.chatKnowledgeRuleAuthoring.mockResolvedValue({
-      protocolVersion: "pact.knowledge-rule-authoring.v1",
+      protocolVersion: "v0.0.1:knowledge:rule-authoring-1",
       ok: true,
       status: "draft",
       runId: "run-1",
@@ -352,7 +352,7 @@ describe("console rule authoring controller", () => {
     expect(controller.ruleAuthoringHistory.value).toHaveLength(1);
 
     knowledgeRuleAuthoringClient.chatKnowledgeRuleAuthoring.mockResolvedValue({
-      protocolVersion: "pact.knowledge-rule-authoring.v1",
+      protocolVersion: "v0.0.1:knowledge:rule-authoring-1",
       ok: true,
       status: "draft",
       runId: "run-1",
@@ -380,7 +380,7 @@ describe("console rule authoring controller", () => {
     expect(knowledgeRuleAuthoringClient.publishGoldenRules).not.toHaveBeenCalled();
 
     controller.ruleAuthoringResult.value = {
-      protocolVersion: "pact.knowledge-rule-authoring.v1",
+      protocolVersion: "v0.0.1:knowledge:rule-authoring-1",
       ok: true,
       status: "draft",
       runId: "run-2",
@@ -415,7 +415,7 @@ describe("console rule authoring controller", () => {
   it("manual 模式提交会不传递模型别名与模型可用标记", async () => {
     const { clearAllBusy, setBusy, controller } = createController();
     knowledgeRuleAuthoringClient.chatKnowledgeRuleAuthoring.mockResolvedValue({
-      protocolVersion: "pact.knowledge-rule-authoring.v1",
+      protocolVersion: "v0.0.1:knowledge:rule-authoring-1",
       ok: true,
       status: "draft",
       runId: "run-manual",
@@ -451,7 +451,7 @@ describe("console rule authoring controller", () => {
     const { controller, error } = createController();
 
     controller.ruleAuthoringResult.value = {
-      protocolVersion: "pact.knowledge-rule-authoring.v1",
+      protocolVersion: "v0.0.1:knowledge:rule-authoring-1",
       ok: true,
       status: "draft",
       confirmation: { packageId: "pkg-1", version: 1, publishEndpoint: "/x" },
@@ -490,7 +490,7 @@ describe("console rule authoring controller", () => {
     expect(noPermission.setBusy).not.toHaveBeenCalled();
 
     noPermission.controller.ruleAuthoringResult.value = {
-      protocolVersion: "pact.knowledge-rule-authoring.v1",
+      protocolVersion: "v0.0.1:knowledge:rule-authoring-1",
       ok: true,
       status: "draft",
       confirmation: { packageId: "pkg-1", version: 1, publishEndpoint: "/x" },

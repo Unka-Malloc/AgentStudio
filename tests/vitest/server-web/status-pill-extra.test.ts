@@ -68,4 +68,17 @@ describe("StatusPill extra coverage", () => {
     expect(wrapper.find(".standard-status-pill-label").text()).toBe("Running");
     expect(wrapper.attributes("aria-label")).toBe("Running");
   });
+
+  it("localizes cleared approval status labels", () => {
+    setConsoleLocaleState("en");
+    const wrapper = mount(StatusPill, {
+      props: {
+        label: "已清空",
+        tone: "success",
+      },
+    });
+
+    expect(wrapper.find(".standard-status-pill-label").text()).toBe("Cleared");
+    expect(wrapper.attributes("aria-label")).toBe("Cleared");
+  });
 });

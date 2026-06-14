@@ -1,3 +1,25 @@
+.runtime-dependency-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.runtime-dependency-groups > .surface-card + .surface-card {
+  margin-top: 0;
+}
+
+.runtime-dependency-card {
+  display: grid;
+  gap: 12px;
+}
+
+.runtime-dependency-group-header {
+  margin-bottom: 0;
+}
+
+.runtime-dependency-group-header p {
+  max-width: 620px;
+}
+
 .runtime-dependency-list {
   display: grid;
   gap: 8px;

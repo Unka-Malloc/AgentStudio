@@ -1,41 +1,126 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useServerConsoleShellContext } from '../composables/serverConsoleShellContext';
-import ApprovalFlowCardList from '../components/approval/ApprovalFlowCardList.vue';
-import SegmentedToggle from '../components/SegmentedToggle.vue';
 import StatusPill from '../components/StatusPill.vue';
-import { provideApprovalFlowView } from '../composables/approvalFlowViewContext';
-import { useApprovalFlowViewController } from '../composables/console-approval-flow-view-controller';
+import { knowledgeReviewCanResolveWithDocument } from '../composables/console-knowledge-review-utils';
+import { useApprovalFlowViewController, type ApprovalFlowCard } from '../composables/console-approval-flow-view-controller';
+import { currentConsoleLocale } from '../i18n/console';
 import type { DashboardAlert } from '../types/app';
 
 const {
   busyKey,
   consoleState,
-  dashboardAlertCounts,
   dashboardAlertInboxId,
-  dashboardAlertSummary,
   dashboardAlerts,
-  dashboardConfigurationQueue,
   dismissDashboardAlert,
-  dashboardMonitorQueue,
-  dashboardPrimaryAlert,
-  dashboardSecondaryAlerts,
   knowledgeConsole,
   openDashboardAlert,
 } = useServerConsoleShellContext();
 
 const approvalFlow = useApprovalFlowViewController();
-provideApprovalFlowView(approvalFlow);
 const {
   approvalFlowCards,
-  approvalFlowStatus,
-  mcpAuthorizationStatusOptionBarOptions,
+  acceptKnowledgeReview,
+  approveAuthorization,
+  authorizationBusy,
+  fuseKnowledgeReviewItem,
+  keepBothKnowledgeReview,
+  rejectAuthorization,
+  rejectKnowledgeReview,
+  replaceKnowledgeReview,
+  reviewBusy,
+  reviewFusionDisabled,
+  reviewKeepBothDisabled,
 } = approvalFlow;
 
 const clientTotalCount = computed(() => consoleState.value?.clients?.summary?.totalCount || 0);
 const clientOfflineCount = computed(() => consoleState.value?.clients?.summary?.offlineCount || 0);
 const clientOnlineCount = computed(() => Math.max(0, clientTotalCount.value - clientOfflineCount.value));
 const approvalFlowCount = computed(() => approvalFlowCards.value.length);
+const dashboardAlertCount = computed(() => dashboardAlerts.value.length);
+
+type DashboardTodoItem =
+  | {
+      key: string;
+      kind: "alert";
+      tone: DashboardAlert["tone"];
+      label: string;
+      title: string;
+      summary: string;
+      meta: string[];
+      alert: DashboardAlert;
+    }
+  | {
+      key: string;
+      kind: "approval";
+      tone: string;
+      label: string;
+      title: string;
+      summary: string;
+      meta: string[];
+      card: ApprovalFlowCard;
+    };
+
+function alertSourceLabel(alertItem: DashboardAlert) {
+  return alertItem.source === "configuration" ? "配置待办" : "运维待办";
+}
+
+function alertTodoMeta(alertItem: DashboardAlert) {
+  return [
+    alertItem.status,
+    alertSourceLabel(alertItem),
+    alertItem.live === false ? "待确认" : "",
+  ].filter(Boolean);
+}
+
+const dashboardTodoItems = computed<DashboardTodoItem[]>(() => [
+  ...dashboardAlerts.value.map((alertItem) => ({
+    key: `alert:${dashboardAlertInboxId(alertItem)}`,
+    kind: "alert" as const,
+    tone: alertItem.tone,
+    label: alertItem.category,
+    title: alertItem.title,
+    summary: alertItem.detail,
+    meta: alertTodoMeta(alertItem),
+    alert: alertItem,
+  })),
+  ...approvalFlowCards.value.map((card) => ({
+    key: `approval:${card.key}`,
+    kind: "approval" as const,
+    tone: card.tone,
+    label: card.label,
+    title: card.title,
+    summary: card.summary,
+    meta: card.meta,
+    card,
+  })),
+]);
+
+const dashboardTodoSummary = computed(() => {
+  if (currentConsoleLocale.value === "en") {
+    if (!dashboardTodoItems.value.length) {
+      return "No pending items for this role.";
+    }
+    return [
+      dashboardAlertCount.value ? `${dashboardAlertCount.value} alerts` : "",
+      approvalFlowCount.value ? `${approvalFlowCount.value} approvals` : "",
+    ].filter(Boolean).join(" · ");
+  }
+  if (!dashboardTodoItems.value.length) {
+    return "当前角色没有待办事项。";
+  }
+  return [
+    dashboardAlertCount.value ? `${dashboardAlertCount.value} 个告警` : "",
+    approvalFlowCount.value ? `${approvalFlowCount.value} 个审批` : "",
+  ].filter(Boolean).join(" · ");
+});
+
+const dashboardTodoStatusLabel = computed(() => {
+  if (currentConsoleLocale.value === "en") {
+    return dashboardTodoItems.value.length ? `${dashboardTodoItems.value.length} items` : "Cleared";
+  }
+  return dashboardTodoItems.value.length ? `${dashboardTodoItems.value.length} 项` : "已清空";
+});
 
 function alertBusyKey(alertItem: DashboardAlert) {
   if (alertItem.actionKind === "recover-supervisor") {
@@ -61,6 +146,13 @@ function dashboardAlertActionLabel(alertItem: DashboardAlert) {
     : alertItem.tone === "success"
       ? "确认恢复"
       : "查看巡检");
+}
+
+function isApprovalActionVisible(card: ApprovalFlowCard) {
+  if (card.kind === "authorization") {
+    return card.request.status === "pending";
+  }
+  return card.review.status === "pending";
 }
 </script>
 
@@ -111,173 +203,129 @@ function dashboardAlertActionLabel(alertItem: DashboardAlert) {
         <p>{{ (consoleState?.jobs?.summary?.completedCount || 0).toLocaleString() }} 已完成</p>
       </article>
     </div>
-    <article class="surface-card configuration-alert-card">
+    <article class="surface-card dashboard-todo-card">
       <div class="section-header">
         <div>
-          <h3>报警</h3>
-          <p>{{ dashboardAlertSummary }}</p>
+          <h3>待办事项</h3>
+          <p>{{ dashboardTodoSummary }}</p>
         </div>
         <StatusPill
-          :tone="dashboardAlertCounts.total ? 'warning' : 'success'"
-          :label="dashboardAlertCounts.total ? `${dashboardAlertCounts.total} 项` : '已就绪'"
+          :tone="dashboardTodoItems.length ? 'warning' : 'success'"
+          :label="dashboardTodoStatusLabel"
         />
       </div>
-      <div class="dashboard-alert-counts" role="list" aria-label="报警分类">
-        <span class="dashboard-alert-count" data-tone="danger" role="listitem">
-          <strong>{{ dashboardAlertCounts.danger }}</strong>
-          <span>严重</span>
-        </span>
-        <span class="dashboard-alert-count" data-tone="warning" role="listitem">
-          <strong>{{ dashboardAlertCounts.warning }}</strong>
-          <span>警告</span>
-        </span>
-        <span class="dashboard-alert-count" data-tone="configuration" role="listitem">
-          <strong>{{ dashboardAlertCounts.configuration }}</strong>
-          <span>配置</span>
-        </span>
-        <span class="dashboard-alert-count" data-tone="success" role="listitem">
-          <strong>{{ dashboardAlertCounts.recovered }}</strong>
-          <span>已恢复</span>
-        </span>
-      </div>
-      <div v-if="dashboardAlerts.length" class="dashboard-alert-triage">
+      <div v-if="dashboardTodoItems.length" class="dashboard-todo-list">
         <article
-          v-if="dashboardPrimaryAlert"
-          class="dashboard-alert-primary"
-          :data-tone="dashboardPrimaryAlert.tone"
-          :data-live="dashboardPrimaryAlert.live === false ? 'false' : 'true'"
+          v-for="todo in dashboardTodoItems"
+          :key="todo.key"
+          class="dashboard-todo-item"
+          :data-tone="todo.tone"
+          :data-kind="todo.kind"
+          :data-live="todo.kind === 'alert' && todo.alert.live === false ? 'false' : 'true'"
         >
-          <div class="dashboard-alert-primary-copy">
-            <span class="configuration-alert-category">{{ dashboardPrimaryAlert.category }}</span>
-            <strong>{{ dashboardPrimaryAlert.title }}</strong>
-            <span>{{ dashboardPrimaryAlert.detail }}</span>
-          </div>
-          <em>{{ dashboardPrimaryAlert.status }}</em>
-          <div class="dashboard-alert-primary-actions">
+          <header class="dashboard-todo-item-header">
+            <div>
+              <span class="dashboard-todo-kind">{{ todo.label }}</span>
+              <strong>{{ todo.title }}</strong>
+            </div>
+            <div class="dashboard-todo-meta">
+              <span v-for="item in todo.meta" :key="`${todo.key}:${item}`">{{ item }}</span>
+            </div>
+          </header>
+          <p>{{ todo.summary }}</p>
+          <div v-if="todo.kind === 'alert'" class="dashboard-todo-actions">
             <button
               class="configuration-alert-action"
               type="button"
-              :disabled="isAlertBusy(dashboardPrimaryAlert)"
-              @click="openDashboardAlert(dashboardPrimaryAlert)"
+              :disabled="isAlertBusy(todo.alert)"
+              @click="openDashboardAlert(todo.alert)"
             >
-              {{ dashboardAlertActionLabel(dashboardPrimaryAlert) }}
+              {{ dashboardAlertActionLabel(todo.alert) }}
             </button>
             <button
               class="configuration-alert-action danger-action"
               type="button"
-              :disabled="isDismissBusy(dashboardPrimaryAlert)"
-              @click="dismissDashboardAlert(dashboardPrimaryAlert)"
+              :disabled="isDismissBusy(todo.alert)"
+              @click="dismissDashboardAlert(todo.alert)"
             >
-              {{ isDismissBusy(dashboardPrimaryAlert) ? "确认中" : "确认关闭" }}
+              {{ isDismissBusy(todo.alert) ? "确认中" : "确认关闭" }}
             </button>
           </div>
-        </article>
-        <div class="dashboard-alert-queues">
-          <section v-if="dashboardAlertCounts.configuration" class="dashboard-alert-queue">
-            <header>
-              <strong>配置队列</strong>
-              <span>{{ dashboardAlertCounts.configuration }} 项</span>
-            </header>
-            <ul v-if="dashboardConfigurationQueue.length">
-              <li
-                v-for="alertItem in dashboardConfigurationQueue.slice(0, 3)"
-                :key="dashboardAlertInboxId(alertItem)"
-              >
-                <span>{{ alertItem.title }}</span>
-                <button
-                  class="configuration-alert-action"
-                  type="button"
-                  @click="openDashboardAlert(alertItem)"
-                >
-                  处理
-                </button>
-              </li>
-            </ul>
-            <p v-else>首要配置项已置顶。</p>
-          </section>
-          <section v-if="dashboardAlertCounts.monitor" class="dashboard-alert-queue">
-            <header>
-              <strong>巡检队列</strong>
-              <span>{{ dashboardAlertCounts.monitor }} 项</span>
-            </header>
-            <ul v-if="dashboardMonitorQueue.length">
-              <li
-                v-for="alertItem in dashboardMonitorQueue.slice(0, 3)"
-                :key="dashboardAlertInboxId(alertItem)"
-              >
-                <span>{{ alertItem.title }}</span>
-                <button
-                  class="configuration-alert-action"
-                  type="button"
-                  :disabled="isAlertBusy(alertItem)"
-                  @click="openDashboardAlert(alertItem)"
-                >
-                  {{ dashboardAlertActionLabel(alertItem) }}
-                </button>
-              </li>
-            </ul>
-            <p v-else>首要巡检项已置顶。</p>
-          </section>
-        </div>
-        <div v-if="dashboardSecondaryAlerts.length" class="dashboard-alert-secondary-list">
-          <article
-            v-for="alertItem in dashboardSecondaryAlerts"
-            :key="dashboardAlertInboxId(alertItem)"
-            class="configuration-alert-item"
-            :data-tone="alertItem.tone"
-            :data-live="alertItem.live === false ? 'false' : 'true'"
+          <div
+            v-else-if="isApprovalActionVisible(todo.card)"
+            class="dashboard-todo-actions"
           >
-            <span class="configuration-alert-category">{{ alertItem.category }}</span>
-            <strong>{{ alertItem.title }}</strong>
-            <span>{{ alertItem.detail }}</span>
-            <em>{{ alertItem.status }}</em>
-            <div class="configuration-alert-actions">
+            <template v-if="todo.card.kind === 'authorization'">
               <button
                 class="configuration-alert-action"
                 type="button"
-                :disabled="isAlertBusy(alertItem)"
-                @click="openDashboardAlert(alertItem)"
+                :disabled="authorizationBusy(todo.card.request)"
+                @click="approveAuthorization(todo.card.request)"
               >
-                {{ dashboardAlertActionLabel(alertItem) }}
+                批准
               </button>
               <button
                 class="configuration-alert-action danger-action"
                 type="button"
-                :disabled="isDismissBusy(alertItem)"
-                @click="dismissDashboardAlert(alertItem)"
+                :disabled="authorizationBusy(todo.card.request)"
+                @click="rejectAuthorization(todo.card.request)"
               >
-                {{ isDismissBusy(alertItem) ? "确认中" : "确认关闭" }}
+                拒绝
               </button>
-            </div>
-          </article>
-        </div>
+            </template>
+            <template v-else-if="todo.card.kind === 'review'">
+              <template v-if="knowledgeReviewCanResolveWithDocument(todo.card.review)">
+                <button
+                  v-if="todo.card.review.reason === 'source_path_content_conflict'"
+                  class="configuration-alert-action"
+                  type="button"
+                  :disabled="reviewBusy(todo.card.review)"
+                  @click="replaceKnowledgeReview(todo.card.review)"
+                >
+                  覆盖旧知识
+                </button>
+                <button
+                  class="configuration-alert-action"
+                  type="button"
+                  :disabled="reviewKeepBothDisabled(todo.card.review)"
+                  @click="keepBothKnowledgeReview(todo.card.review)"
+                >
+                  保留两者
+                </button>
+                <button
+                  class="configuration-alert-action"
+                  type="button"
+                  :disabled="reviewFusionDisabled(todo.card.review)"
+                  @click="fuseKnowledgeReviewItem(todo.card.review)"
+                >
+                  知识融合
+                </button>
+              </template>
+              <button
+                v-else
+                class="configuration-alert-action"
+                type="button"
+                :disabled="reviewBusy(todo.card.review)"
+                @click="acceptKnowledgeReview(todo.card.review)"
+              >
+                接受
+              </button>
+              <button
+                class="configuration-alert-action danger-action"
+                type="button"
+                :disabled="reviewBusy(todo.card.review)"
+                @click="rejectKnowledgeReview(todo.card.review)"
+              >
+                放弃
+              </button>
+            </template>
+          </div>
+        </article>
       </div>
-      <div v-else class="configuration-alert-empty">
-        <strong>没有报警</strong>
-        <span>空配置、中断和后台巡检当前都没有需要处理的事项。</span>
+      <div v-else class="configuration-alert-empty dashboard-todo-empty">
+        <strong>没有待办事项</strong>
+        <span>当前角色没有需要处理的告警、配置或审批事项。</span>
       </div>
-    </article>
-    <article class="surface-card configuration-alert-card dashboard-approval-card">
-      <div class="section-header">
-        <div>
-          <h3>审批流</h3>
-          <p>统一处理 MCP 授权、知识入库冲突等需要人工决策的事项。</p>
-        </div>
-        <div class="dashboard-approval-actions">
-          <StatusPill
-            :tone="approvalFlowCount ? 'warning' : 'success'"
-            :label="approvalFlowCount ? `${approvalFlowCount} 项` : '已清空'"
-          />
-          <SegmentedToggle
-            v-model="approvalFlowStatus"
-            :options="mcpAuthorizationStatusOptionBarOptions"
-            aria-label="审批流状态"
-            size="small"
-          />
-        </div>
-      </div>
-
-      <ApprovalFlowCardList />
     </article>
   </section>
 </template>

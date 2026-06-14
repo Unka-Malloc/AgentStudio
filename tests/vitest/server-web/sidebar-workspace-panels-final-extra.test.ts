@@ -86,6 +86,7 @@ function mountWithSideNavContext(component: unknown, overrides: Record<string, u
         processingRules: "处理规则",
         productionHealth: "生产健康",
         runtimeDownloads: "运行时下载",
+        strategyManagement: "策略管理",
         system: "系统",
       },
     },
@@ -188,7 +189,7 @@ describe("server-web sidebar sections final extra coverage", () => {
       "总览",
       "模块",
       "运行时下载",
-      "生产健康",
+      "策略管理",
       "日志",
       "作业",
       "监控",
@@ -260,8 +261,7 @@ describe("server-web workspace panels final extra coverage", () => {
     expect(error.find(".checkpoint-error").text()).toBe("读取失败");
   });
 
-  it("renders selected workspace overview and copyable/session/context/file sections", async () => {
-    const copyToClipboard = vi.fn();
+  it("renders selected workspace expanded overview without repeating summary metadata", async () => {
     const context = {
       chainData: { chain: [{ workspaceId: "root", title: "Root" }, { workspaceId: "ws-1", title: "Current" }] },
       contextData: {
@@ -270,7 +270,6 @@ describe("server-web workspace panels final extra coverage", () => {
         toolGrantId: "grant-1",
         modelAlias: "model-a",
       },
-      copyToClipboard,
       formatCompactDate: vi.fn((value: string) => `date:${value}`),
       selected: {
         workspaceId: "ws-1",
@@ -300,19 +299,15 @@ describe("server-web workspace panels final extra coverage", () => {
     };
     const wrapper = mountWithWorkspaceContext(WorkspaceExpandedOverview, context);
 
-    expect(wrapper.text()).toContain("Workspace");
-    expect(wrapper.text()).toContain("Generation 3");
+    expect(wrapper.text()).not.toContain("Generation 3");
+    expect(wrapper.text()).not.toContain("工作空间 ID");
+    expect(wrapper.text()).not.toContain("/tmp/ws");
     expect(wrapper.text()).toContain("继承链");
+    expect(wrapper.text()).toContain("Current");
     expect(wrapper.text()).toContain("当前会话线程");
     expect(wrapper.text()).toContain("解析后的运行上下文");
     expect(wrapper.text()).toContain("source-1234567");
     expect(wrapper.find(".workspace-file-tree-stub").text()).toContain("README.md");
-
-    await wrapper.findAll(".copyable-wrapper")[0].trigger("click");
-    await wrapper.findAll(".copyable-wrapper")[1].trigger("click");
-    expect(copyToClipboard).toHaveBeenCalledTimes(2);
-    expect(copyToClipboard.mock.calls[0][1]).toBe("ws-1");
-    expect(copyToClipboard.mock.calls[1][1]).toBe("/tmp/ws");
 
     const hidden = mountWithWorkspaceContext(WorkspaceExpandedOverview, {
       ...context,

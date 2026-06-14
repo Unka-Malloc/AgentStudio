@@ -85,6 +85,9 @@ export type RuntimeDependencyListResponse = {
   cacheRoot?: string;
   sourceConfigPath?: string;
   triggerMode?: string;
+  targets?: string[];
+  selectedTargets?: string[];
+  partial?: boolean;
   dependencies?: RuntimeDependency[];
   downloads?: RuntimeDependencyDownloadRun[];
   summary?: Record<string, number>;
@@ -113,13 +116,30 @@ export type RuntimeDependencyConfigurationUpdateResult = {
   ok: boolean;
   generatedAt?: string;
   protocolVersion?: string;
-  schemaVersion?: number;
+  schemaVersion?: string;
   sourceConfigPath?: string;
   updated?: number;
 };
 
-export function listRuntimeDependencies() {
-  return getJson<RuntimeDependencyListResponse>("/api/runtime/dependencies");
+export type ListRuntimeDependenciesOptions = {
+  targetId?: string;
+  targets?: string[];
+};
+
+function runtimeDependencyListUrl(options: ListRuntimeDependenciesOptions = {}) {
+  const query = new URLSearchParams();
+  if (options.targetId) {
+    query.set("targetId", options.targetId);
+  }
+  if (options.targets?.length) {
+    query.set("targets", options.targets.join(","));
+  }
+  const queryString = query.toString();
+  return `/api/runtime/dependencies${queryString ? `?${queryString}` : ""}`;
+}
+
+export function listRuntimeDependencies(options: ListRuntimeDependenciesOptions = {}) {
+  return getJson<RuntimeDependencyListResponse>(runtimeDependencyListUrl(options));
 }
 
 export function downloadRuntimeDependency(payload: Record<string, unknown>) {

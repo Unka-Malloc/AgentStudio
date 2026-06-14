@@ -167,7 +167,6 @@ const mockKnowledgeReviewController = vi.hoisted(() => {
 const mockWordCloudController = vi.hoisted(() => {
   const { ref } = require("vue");
   return {
-    selectedWordCloudModel: ref({ enabled: true, selectable: true, label: "词云模型" }),
     wordCloudModelAlias: ref(""),
   };
 });

@@ -35,10 +35,10 @@ const {
       @activate="openAdmin('runtimeDownloads')"
     />
     <ConsoleSideNavLink
-      :active="activeRouteView === 'admin' && activeRouteAdminView === 'productionHealth'"
-      :label="msg.nav.productionHealth"
+      :active="activeRouteView === 'admin' && activeRouteAdminView === 'strategyManagement'"
+      :label="msg.nav.strategyManagement"
       subtle
-      @activate="openAdmin('productionHealth')"
+      @activate="openAdmin('strategyManagement')"
     />
     <ConsoleSideNavLink
       :active="activeRouteView === 'admin' && activeRouteAdminView === 'logs'"

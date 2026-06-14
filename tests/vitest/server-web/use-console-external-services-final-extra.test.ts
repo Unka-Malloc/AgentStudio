@@ -239,10 +239,10 @@ function createController(overrides: Record<string, unknown> = {}) {
       { value: "其它服务", label: "其它服务" },
     ],
     mcpTransportOptions: [{ value: "streamable-http", label: "streamable-http" }],
-    modelProtocolOptions: [
-      { value: "openai-compatible", label: "OpenAI Compatible" },
-      { value: "anthropic", label: "Anthropic Messages" },
-    ],
+	    modelProtocolOptions: [
+	      { value: "openai-compatible", label: "OpenAI Compatible" },
+	      { value: "openai-responses", label: "OpenAI Responses" },
+	    ],
     modelProtocolSelectValue: overrides.modelProtocolSelectValue || "openai-compatible",
     cloudDriveModeOptions: [{ value: "contract", label: "contract" }],
     cloudDriveProviderOptions: [
@@ -254,8 +254,31 @@ function createController(overrides: Record<string, unknown> = {}) {
     healthCheckTypeOptions: [{ value: "none", label: "none" }],
     riskOptions: [{ value: "read_only", label: "read_only" }],
     isCloudDriveServiceDraft: overrides.isCloudDriveServiceDraft || false,
+    isHttpJsonServiceDraft: overrides.isHttpJsonServiceDraft || false,
+    isJsonRpcServiceDraft: overrides.isJsonRpcServiceDraft || false,
     isLlmServiceDraft: overrides.isLlmServiceDraft || false,
+    isMcpServiceDraft: overrides.isMcpServiceDraft ?? false,
+    isSseServiceDraft: overrides.isSseServiceDraft || false,
+    showToolMappingFields: overrides.showToolMappingFields || false,
+    showMcpTransportField: overrides.showMcpTransportField ?? false,
     showCustomUpstreamType: overrides.showCustomUpstreamType || false,
+    endpointFieldLabel: overrides.endpointFieldLabel || "Endpoint URL",
+    endpointFieldPlaceholder: overrides.endpointFieldPlaceholder || "https://mcp.example.com:443/mcp/",
+    endpointFieldValue: overrides.endpointFieldValue || "",
+    minimumFieldLabels: overrides.minimumFieldLabels || [],
+    requiredFieldGroupSummaries: overrides.requiredFieldGroupSummaries || [],
+    optionalFieldGroupSummaries: overrides.optionalFieldGroupSummaries || [],
+    defaultedFieldLabels: overrides.defaultedFieldLabels || [],
+    advancedOptionalFieldRows: overrides.advancedOptionalFieldRows || [],
+    currentTemplateLabel: overrides.currentTemplateLabel || "Raw MCP Streamable HTTP",
+    httpMethodOptions: overrides.httpMethodOptions || ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    primaryToolName: overrides.primaryToolName || "",
+    primaryHttpMethod: overrides.primaryHttpMethod || "GET",
+    primaryHttpPath: overrides.primaryHttpPath || "/",
+    primaryRpcMethod: overrides.primaryRpcMethod || "",
+    upstreamAuthType: overrides.upstreamAuthType || "none",
+    upstreamAuthHeaderName: overrides.upstreamAuthHeaderName || "",
+    upstreamAuthSecretRef: overrides.upstreamAuthSecretRef || "",
     upstreamTypeSelectValue: overrides.upstreamTypeSelectValue || "Cloud Drive Service",
     customUpstreamTypeValue: overrides.customUpstreamTypeValue || "",
     activeConfigSummary: overrides.activeConfigSummary || {},
@@ -271,6 +294,9 @@ function createController(overrides: Record<string, unknown> = {}) {
     updateCustomUpstreamType: vi.fn(),
     updateModelProtocol: vi.fn(),
     updateModelProvider: vi.fn(),
+    updatePrimaryToolField: vi.fn(),
+    updateAdvancedOptionalField: vi.fn(),
+    updateUpstreamAuthField: vi.fn(),
     updateCloudDriveProvider: vi.fn(),
     updateCloudDriveMode: vi.fn(),
     updateBindingField: vi.fn(),
@@ -288,6 +314,22 @@ function createController(overrides: Record<string, unknown> = {}) {
     serviceDiscoveryRegistrationTone: (service: ServiceFixture) => service.discoveryRegistrationTone,
     serviceHeartbeatLastAtLabel: (service: ServiceFixture) => service.heartbeatText,
     isServiceHeartbeatRefreshing: (service: ServiceFixture) => service.heartbeatRefreshing,
+    serviceActiveToolCount: (service: ServiceFixture) => service.externalMcp?.tools?.length || 0,
+    serviceCandidateToolCount: (service: ServiceFixture) => Number((service.externalMcp as any)?.candidateToolCount || 0),
+    serviceToolAdoptionLabel: (service: ServiceFixture) =>
+      Number((service.externalMcp as any)?.candidateToolCount || 0) > 0 ? "候选待采纳" : "工具已采纳",
+    serviceActiveToolReviewRows: (service: ServiceFixture) =>
+      (service.externalMcp?.tools || []).map((tool: any) => ({
+        name: typeof tool === "string" ? tool : tool.toolId || tool.id || tool.name || "",
+        title: typeof tool === "string" ? tool : tool.title || tool.toolId || tool.id || tool.name || "",
+        descriptionPreview: "",
+        inputSchema: null,
+        transport: {},
+      })),
+    serviceCandidateToolReviewRows: () => [],
+    serviceCandidateToolFingerprintMap: () => ({}),
+    isServiceToolAdopting: () => false,
+    adoptCandidateTools: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -353,8 +395,8 @@ describe("ExternalServicesView", () => {
     await wrapper.get('select[aria-label="运行模式"]').setValue("managed");
     expect(controller.updateRootField).toHaveBeenCalledWith("mode", "managed");
 
-    await wrapper.get('select[aria-label="模型协议"]').setValue("anthropic");
-    expect(controller.updateModelProtocol).toHaveBeenCalledWith("anthropic");
+    await wrapper.get('select[aria-label="模型协议"]').setValue("openai-responses");
+    expect(controller.updateModelProtocol).toHaveBeenCalledWith("openai-responses");
 
     await wrapper.get('select[aria-label="网盘 Provider"]').setValue("onedrive");
     expect(controller.updateCloudDriveProvider).toHaveBeenCalledWith("onedrive");

@@ -8,7 +8,7 @@
 }
 
 .dashboard-shell.is-locked {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
 }
 
 /* ─── Sidebar ────────────────────────────────────────────────────────────── */
@@ -16,6 +16,7 @@
 .side-nav {
   position: sticky;
   top: 0;
+  z-index: var(--z-sidebar);
   height: 100vh;
   padding: var(--space-3);
   display: flex;
@@ -23,8 +24,16 @@
   gap: var(--space-3);
   border-right: 1px solid var(--border-subtle);
   background: var(--bg-surface);
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: visible;
+}
+
+.side-nav-primary {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow: hidden;
 }
 
 .brand-block {
@@ -179,7 +188,7 @@
 .side-link:hover {
   background: color-mix(in srgb, var(--bg-surface) 90%, var(--brand-muted) 10%);
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--brand) 25%, transparent);
+  border-color: var(--border-strong);
   transform: translateX(1px);
 }
 
@@ -187,8 +196,9 @@
   background: color-mix(in srgb, var(--brand-muted) 68%, var(--bg-surface) 32%);
   color: var(--brand-strong);
   font-weight: var(--font-semibold);
-  border-color: color-mix(in srgb, var(--brand) 35%, transparent);
-  box-shadow: 0 6px 14px var(--brand-ring);
+  border-color: var(--brand-border);
+  padding-left: var(--space-4);
+  box-shadow: 0 1px 4px var(--brand-glow);
 }
 
 .side-link.active::before {
@@ -200,7 +210,8 @@
   width: 3px;
   height: 18px;
   border-radius: var(--radius-full);
-  background: var(--brand);
+  background: var(--accent-verdigris);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-verdigris) 24%, transparent);
 }
 
 .side-link-subtle {
@@ -227,8 +238,9 @@
 }
 
 .side-nav-footer {
-  padding: var(--space-2) 0 0;
-  border-top: 0;
+  gap: var(--space-2-5);
+  padding: var(--space-2-5) 0 0;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .side-cta {
@@ -253,7 +265,7 @@
   top: 0;
   z-index: var(--z-sticky);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--space-3);
   align-items: center;
   padding: 0 var(--space-5);

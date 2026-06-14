@@ -3,6 +3,7 @@ import { nextTick, ref } from "vue";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AgentPermissionGroupsPanel from "../../../server-web/components/admin/agent-permissions/AgentPermissionGroupsPanel.vue";
+import { setConsoleLocaleState } from "../../../server-web/i18n/console";
 
 type PermissionGroup = {
   id: string;
@@ -140,6 +141,8 @@ afterEach(() => {
   mockContext.saveAgentPermissionSettings.mockReset();
   mockContext.busyKey.value = "";
   document.body.innerHTML = "";
+  document.documentElement.lang = "";
+  setConsoleLocaleState("zh-CN");
   vi.restoreAllMocks();
 });
 
@@ -148,14 +151,14 @@ describe("AgentPermissionGroupsPanel", () => {
     const wrapper = mountPanel();
     await nextTick();
 
-    const metrics = wrapper.findAll(".knowledge-metrics > div");
-    expect(metrics[0].text()).toContain("权限层级");
+    const metrics = wrapper.findAll(".agent-permission-toolbar-metrics > span");
+    expect(metrics[0].text()).toContain("层级");
     expect(metrics[0].text()).toContain("3");
     expect(metrics[1].text()).toContain("工具集");
     expect(metrics[1].text()).toContain("3");
-    expect(metrics[2].text()).toContain("预设组");
+    expect(metrics[2].text()).toContain("组");
     expect(metrics[2].text()).toContain("2");
-    expect(metrics[3].text()).toContain("启用组");
+    expect(metrics[3].text()).toContain("启用");
     expect(metrics[3].text()).toContain("1");
 
     const items = wrapper.findAll(".agent-permission-group-list-item");
@@ -165,10 +168,45 @@ describe("AgentPermissionGroupsPanel", () => {
     expect(items[0].text()).toContain("启用");
     expect(items[1].text()).toContain("审查组");
     expect(items[1].text()).toContain("停用");
-    expect(items[0].text()).toContain("范围 2");
-    expect(items[0].text()).toContain("工具集 2");
-    expect(items[0].text()).toContain("例外 2");
+    expect(items[0].text()).toContain("2 范围");
+    expect(items[0].text()).toContain("2 工具集");
+    expect(items[0].text()).toContain("2 例外");
     expect(wrapper.find(".agent-permission-group-card-stub").text()).toContain("group-operator");
+  });
+
+  it("renders toolbar and group statistics in English", async () => {
+    document.documentElement.lang = "en";
+    setConsoleLocaleState("en");
+    const wrapper = mountPanel();
+    await nextTick();
+
+    const metrics = wrapper.findAll(".agent-permission-toolbar-metrics > span").map((node) => node.text());
+    expect(metrics).toEqual(["Layers 3", "Toolsets 3", "Groups 2", "Enable 1"]);
+
+    const firstItem = wrapper.find(".agent-permission-group-list-item");
+    expect(firstItem.text()).toContain("Enable");
+    expect(firstItem.text()).toContain("2 Scopes");
+    expect(firstItem.text()).toContain("2 Toolsets");
+    expect(firstItem.text()).toContain("2 Exceptions");
+  });
+
+  it("localizes known preset permission group names in English", async () => {
+    document.documentElement.lang = "en";
+    setConsoleLocaleState("en");
+    mockContext.settingsDraft.value = {
+      agentPermissionGroups: [
+        buildGroup({
+          id: "agent-permission-knowledge-reader",
+          label: "知识读取组",
+          description: "只允许读取知识、执行只读召回和健康检查。",
+        }),
+      ],
+    };
+
+    const wrapper = mountPanel();
+    await nextTick();
+
+    expect(wrapper.find(".agent-permission-group-list-title strong").text()).toBe("Knowledge Reader Group");
   });
 
   it("switches selected group when clicking list entries", async () => {
@@ -242,7 +280,7 @@ describe("AgentPermissionGroupsPanel", () => {
       };
     });
 
-    const addButton = findButton(wrapper, "新增权限组");
+    const addButton = findButton(wrapper, "新增");
     expect(addButton).not.toBeUndefined();
     await addButton?.trigger("click");
     await nextTick();
@@ -260,7 +298,7 @@ describe("AgentPermissionGroupsPanel", () => {
     const emptyState = wrapper.find(".empty-state");
     expect(emptyState.exists()).toBe(true);
     expect(emptyState.text()).toContain("暂无权限组");
-    expect(wrapper.text()).toContain("先生成默认组或新增自定义权限组。");
+    expect(wrapper.text()).toContain('点击"生成默认组"快速创建预设权限配置。');
   });
 
   it("falls back to id when label/description are empty", async () => {
@@ -306,7 +344,7 @@ describe("AgentPermissionGroupsPanel", () => {
 
   it("disables save while busy and calls save when idle", async () => {
     const wrapper = mountPanel();
-    const saveButton = findButton(wrapper, "保存权限组");
+    const saveButton = findButton(wrapper, "保存");
     expect(saveButton).not.toBeUndefined();
     await saveButton?.trigger("click");
     expect(mockContext.saveAgentPermissionSettings).toHaveBeenCalledOnce();

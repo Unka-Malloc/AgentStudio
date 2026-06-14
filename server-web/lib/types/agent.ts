@@ -126,7 +126,7 @@ export type AgentSelectorOption = {
 };
 
 export type AgentSelectorState = {
-  schemaVersion: number;
+  schemaVersion: string;
   source: string;
   updatedAt: string;
   options: AgentSelectorOption[];
@@ -140,7 +140,7 @@ export type AgentConfigManifestEntry = {
 };
 
 export type AgentConfigManifest = {
-  schemaVersion: number;
+  schemaVersion: string;
   kind: string;
   updatedAt: string;
   entries: AgentConfigManifestEntry[];
@@ -261,7 +261,7 @@ export type AgentRegistryItem = {
 };
 
 export type AgentRegistryResponse = {
-  schemaVersion: number;
+  schemaVersion: string;
   provider: string;
   defaultAlias: string;
   agents: AgentRegistryItem[];
@@ -371,7 +371,7 @@ export type AgentSyncTopicRule = {
 };
 
 export type AgentSyncConfig = {
-  schemaVersion: number;
+  schemaVersion: string;
   enabled: boolean;
   defaultTopicEnabled: boolean;
   updatedAt: string;
@@ -424,7 +424,7 @@ export type CodexOAuthLogin = {
 };
 
 export type ProtocolEvent = {
-  schemaVersion: number;
+  schemaVersion: string;
   offset: number;
   id: string;
   topic: string;

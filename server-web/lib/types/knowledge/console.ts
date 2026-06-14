@@ -68,7 +68,7 @@ export type KnowledgeConfigField = {
 };
 
 export type KnowledgeConfigSchema = {
-  schemaVersion: number;
+  schemaVersion: string;
   groups: Array<{
     id: string;
     label: string;

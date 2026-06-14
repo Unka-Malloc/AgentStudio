@@ -22,7 +22,6 @@ import type {
   KnowledgeRuleAuthoringResponse,
   KnowledgeWordCloudExportResponse,
   KnowledgeWordCloudImportResponse,
-  KnowledgeWordCloudProposeResponse,
   KnowledgeWordBag,
   KnowledgeWordBagMutationResponse,
   KnowledgeWordBagSet,
@@ -314,7 +313,6 @@ export type Bridge = {
     wordBagIds?: string[];
     includeChildren?: boolean;
   }) => Promise<KnowledgeWordBagTermsResponse>;
-  proposeKnowledgeWordClouds: (payload: Record<string, unknown>) => Promise<KnowledgeWordCloudProposeResponse>;
   listKnowledgeReviewItems: (params?: { status?: string; limit?: number }) => Promise<KnowledgeReviewItemsResponse>;
   resolveKnowledgeReviewItem: (
     reviewId: string,

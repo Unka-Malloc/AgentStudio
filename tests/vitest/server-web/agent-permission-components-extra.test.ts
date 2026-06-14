@@ -4,6 +4,7 @@ import { mount, type VueWrapper } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AgentPermissionGroupCard from "../../../server-web/components/admin/agent-permissions/AgentPermissionGroupCard.vue";
 import GrantToolRulePanel from "../../../server-web/components/admin/agent-permissions/GrantToolRulePanel.vue";
+import { setConsoleLocaleState } from "../../../server-web/i18n/console";
 
 type MountedWrapper = VueWrapper;
 const mounted: MountedWrapper[] = [];
@@ -143,6 +144,8 @@ afterEach(() => {
   }
   vi.resetAllMocks();
   document.body.innerHTML = "";
+  document.documentElement.lang = "";
+  setConsoleLocaleState("zh-CN");
 });
 
 describe("AgentPermissionGroupCard", () => {
@@ -178,6 +181,28 @@ describe("AgentPermissionGroupCard", () => {
     expect(mockContext.removeAgentPermissionGroup).toHaveBeenCalledWith(group);
   });
 
+  it("localizes preset group name and description fields in English without mutating the draft", async () => {
+    document.documentElement.lang = "en";
+    setConsoleLocaleState("en");
+    const group = makePermissionGroup({
+      id: "agent-permission-knowledge-reader",
+      label: "知识读取组",
+      description: "只允许读取知识、执行只读召回和健康检查。",
+    });
+
+    const wrapper = mountGroupCard(group);
+    await wait();
+
+    const inputs = wrapper.findAll("input");
+    expect(inputs[0].element.value).toBe("Knowledge Reader Group");
+    expect(inputs[2].element.value).toBe("Allows knowledge reads, read-only retrieval, and health checks only.");
+    expect(group.label).toBe("知识读取组");
+    expect(group.description).toBe("只允许读取知识、执行只读召回和健康检查。");
+
+    await inputs[0].setValue("Custom Reader");
+    expect(group.label).toBe("Custom Reader");
+  });
+
   it("switches sections, toggles grantable toolsets, and edits exception entries", async () => {
     const group = makePermissionGroup({
       toolAllow: ["tool.a"],
@@ -188,7 +213,7 @@ describe("AgentPermissionGroupCard", () => {
     const wrapper = mountGroupCard(group);
     await wait();
 
-    const tabs = wrapper.findAll(".drawer-tab");
+    const tabs = wrapper.findAll(".pact-tab");
     await tabs[1].trigger("click");
     await wait();
     expect(wrapper.find(".scope-selector").exists()).toBe(true);
@@ -239,7 +264,7 @@ describe("AgentPermissionGroupCard", () => {
     const wrapper = mountGroupCard(group);
     await wait();
 
-    const tabs = wrapper.findAll(".drawer-tab");
+    const tabs = wrapper.findAll(".pact-tab");
     await tabs[3].trigger("click");
     await wait();
 

@@ -3,7 +3,7 @@ import { useConsoleSideNavContext } from "../../../composables/consoleSideNavCon
 
 defineOptions({ name: "ConsoleSideNavBrand" });
 
-const { consoleState, msg } = useConsoleSideNavContext();
+const { consoleState, msg, tt } = useConsoleSideNavContext();
 </script>
 
 <template>
@@ -33,7 +33,7 @@ const { consoleState, msg } = useConsoleSideNavContext();
             <span></span><span></span><span></span>
           </span>
         </span>
-        <span v-else>Server Console</span>
+        <span v-else>{{ tt("控制面板") }}</span>
       </p>
     </div>
     <div v-if="!consoleState" class="brand-progress-bar" aria-hidden="true">

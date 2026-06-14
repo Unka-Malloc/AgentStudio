@@ -128,6 +128,161 @@
   outline-offset: 2px;
 }
 
+.topbar .tool-button.tool-button-icon,
+.topbar .tool-button.tool-button-icon:hover {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+
+.topbar .tool-button.tool-button-icon:hover {
+  color: var(--brand);
+}
+
+.topbar {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: center;
+  padding: 0 var(--space-5);
+}
+
+.topbar-actions,
+.topbar-status {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.topbar-actions {
+  justify-self: start;
+}
+
+.topbar-heading {
+  min-width: 0;
+  justify-self: center;
+  text-align: center;
+}
+
+.topbar-page-title {
+  margin: 0;
+  text-align: center;
+}
+
+.topbar-status {
+  justify-self: end;
+  justify-content: flex-end;
+}
+
+.topbar-status .identity-chip,
+.topbar-status .service-url-badge {
+  height: 28px;
+  min-height: 28px;
+  align-items: center;
+  padding-block: 0;
+  line-height: 1;
+}
+
+.topbar-status .identity-chip {
+  max-width: 180px;
+  min-width: 0;
+  overflow: hidden;
+  text-transform: none;
+}
+
+.identity-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-status .service-url-badge {
+  max-width: min(380px, 40vw);
+}
+
+/* ─── Button color variants (industrial palette) ────────────────────────── */
+
+/* Steel-blue (blued iron — informational, secondary actions) */
+.tool-button-steel,
+.primary-action-steel {
+  background: var(--accent-steel);
+  color: var(--text-on-brand);
+}
+.tool-button-steel:hover,
+.primary-action-steel:hover {
+  background: var(--accent-steel-strong);
+  box-shadow: 0 1px 3px var(--brand-shadow);
+}
+.tool-button-steel:focus-visible,
+.primary-action-steel:focus-visible {
+  outline-color: var(--accent-steel);
+}
+
+/* Rose-red (heated iron — destructive, critical actions) */
+.tool-button-rose,
+.primary-action-rose {
+  background: var(--accent-rose);
+  color: var(--text-on-brand);
+}
+.tool-button-rose:hover,
+.primary-action-rose:hover {
+  background: var(--accent-rose-strong);
+  box-shadow: 0 1px 3px var(--brand-shadow);
+}
+.tool-button-rose:focus-visible,
+.primary-action-rose:focus-visible {
+  outline-color: var(--accent-rose);
+}
+
+/* Verdigris (oxidized copper — success, confirm actions) */
+.tool-button-verdigris,
+.primary-action-verdigris {
+  background: var(--accent-verdigris);
+  color: var(--text-on-brand);
+}
+.tool-button-verdigris:hover,
+.primary-action-verdigris:hover {
+  background: var(--accent-verdigris-strong);
+  box-shadow: 0 1px 3px var(--brand-shadow);
+}
+.tool-button-verdigris:focus-visible,
+.primary-action-verdigris:focus-visible {
+  outline-color: var(--accent-verdigris);
+}
+
+/* Ghost variants (outlined, transparent background) */
+.tool-button-ghost.tool-button-steel {
+  background: transparent;
+  border: 1px solid var(--accent-steel);
+  color: var(--accent-steel);
+}
+.tool-button-ghost.tool-button-steel:hover {
+  background: var(--accent-steel-subtle);
+  box-shadow: none;
+}
+
+.tool-button-ghost.tool-button-rose {
+  background: transparent;
+  border: 1px solid var(--accent-rose);
+  color: var(--accent-rose);
+}
+.tool-button-ghost.tool-button-rose:hover {
+  background: var(--accent-rose-subtle);
+  box-shadow: none;
+}
+
+.tool-button-ghost.tool-button-verdigris {
+  background: transparent;
+  border: 1px solid var(--accent-verdigris);
+  color: var(--accent-verdigris);
+}
+.tool-button-ghost.tool-button-verdigris:hover {
+  background: var(--accent-verdigris-subtle);
+  box-shadow: none;
+}
+
 /* ─── Inline link button ─────────────────────────────────────────────────── */
 .inline-link {
   display: inline;

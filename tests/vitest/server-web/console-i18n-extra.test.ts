@@ -91,6 +91,34 @@ describe("console dynamic i18n patterns", () => {
     expect(localizeConsoleText("  刷新  ", "en")).toBe("  Refresh  ");
     expect(localizeConsoleText("Pending Approval", "zh-CN")).toBe("待审批");
     expect(localizeConsoleText("待审批 5", "en")).toBe("Pending approvals 5");
+    expect(localizeConsoleText("已恢复", "en")).toBe("Recovered");
+    expect(localizeConsoleText("警告", "en")).toBe("Warning");
+    expect(localizeConsoleText("2 项严重", "en")).toBe("2 critical");
+    expect(localizeConsoleText("1 项警告", "en")).toBe("1 warning");
+    expect(localizeConsoleText("2 项已恢复待确认", "en")).toBe("2 recovered pending acknowledgment");
+    expect(localizeConsoleText("智能对话", "en")).toBe("AI Chat");
+    expect(localizeConsoleText("人工配置", "en")).toBe("Manual Config");
+    expect(localizeConsoleText("展开全部", "en")).toBe("Show All");
+    expect(localizeConsoleText("已隐藏 15 条低频维护项。", "en")).toBe(
+      "15 low-frequency maintenance items hidden.",
+    );
+    expect(localizeConsoleText("已隐藏 15 条低频维护项.", "en")).toBe(
+      "15 low-frequency maintenance items hidden.",
+    );
+    expect(localizeConsoleText("当前没有需要人工处理的审批事项。", "en")).toBe(
+      "No approval items require manual review.",
+    );
+    expect(localizeConsoleText("输入问题，信息流会并行对比原文检索和智能规划。", "en")).toBe(
+      "Enter a question. Feed will compare source retrieval and intelligent planning in parallel.",
+    );
+    expect(localizeConsoleText("继续追问当前信息流结果。", "en")).toBe(
+      "Ask a follow-up about the current feed result.",
+    );
+    expect(localizeConsoleText("production claim 维持阻断状态。", "en")).toBe(
+      "production claim remains blocked.",
+    );
+    expect(localizeConsoleText("missing · 未生成", "en")).toBe("missing · Not Generated");
+    expect(localizeConsoleText("未加载协议能力", "en")).toBe("Protocol capabilities not loaded");
     expect(localizeConsoleText("Running 4, queued 2", "zh-CN")).toBe("运行中 4，排队 2");
     expect(localizeConsoleText("知识库配置：刷新中。", "en")).toBe("Knowledge Settings: 刷新中.");
     expect(localizeConsoleText("Already English", "zh-CN")).toBe("Already English");
@@ -120,12 +148,12 @@ describe("console DOM localizer", () => {
   it("refreshes text nodes and translatable attributes while skipping raw content", () => {
     document.body.innerHTML = `
       <main>
-        <button title="刷新" aria-label="保存" data-tooltip="待审批 2">刷新中</button>
+        <button title="刷新" aria-label="保存" data-tooltip="待审批 2" data-label="状态">刷新中</button>
         <img alt="知识库" />
         <input placeholder="添加目录" />
         <pre>刷新</pre>
         <code>保存</code>
-        <textarea>待审批</textarea>
+        <textarea placeholder="例如：生成一个黄金规则，完全一样的知识直接跳过">待审批</textarea>
         <div data-i18n-skip>知识库</div>
         <p class="markdown-body">保存</p>
       </main>
@@ -139,10 +167,14 @@ describe("console DOM localizer", () => {
     expect(button.getAttribute("title")).toBe("Refresh");
     expect(button.getAttribute("aria-label")).toBe("Save");
     expect(button.getAttribute("data-tooltip")).toBe("Pending approvals 2");
+    expect(button.getAttribute("data-label")).toBe("Status");
     expect(document.querySelector("img")?.getAttribute("alt")).toBe("Knowledge Base");
     expect(document.querySelector("input")?.getAttribute("placeholder")).toBe("Add Directory");
     expect(document.querySelector("pre")?.textContent).toBe("刷新");
     expect(document.querySelector("code")?.textContent).toBe("保存");
+    expect(document.querySelector("textarea")?.getAttribute("placeholder")).toBe(
+      "Example: create a golden rule that skips identical knowledge.",
+    );
     expect(document.querySelector("textarea")?.textContent).toBe("待审批");
     expect(document.querySelector("[data-i18n-skip]")?.textContent).toBe("知识库");
     expect(document.querySelector(".markdown-body")?.textContent).toBe("保存");

@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import ApprovalFlowCardList from '../components/approval/ApprovalFlowCardList.vue';
 import SegmentedToggle from '../components/SegmentedToggle.vue';
 import { provideApprovalFlowView } from '../composables/approvalFlowViewContext';
 import { useApprovalFlowViewController } from '../composables/console-approval-flow-view-controller';
+import { currentConsoleLocale, localizeConsoleText, resolveEffectiveConsoleLocale } from '../i18n/console';
 
 const approvalFlow = useApprovalFlowViewController();
 provideApprovalFlowView(approvalFlow);
@@ -10,6 +12,13 @@ const {
   approvalFlowStatus,
   mcpAuthorizationStatusOptionBarOptions,
 } = approvalFlow;
+
+const approvalFlowLocale = computed(() => resolveEffectiveConsoleLocale(currentConsoleLocale.value));
+const approvalFlowTitle = computed(() => localizeConsoleText('全平台审批流', approvalFlowLocale.value));
+const approvalFlowDescription = computed(() =>
+  localizeConsoleText('统一处理需要人工决策的事项。', approvalFlowLocale.value),
+);
+const approvalFlowStatusLabel = computed(() => localizeConsoleText('审批流状态', approvalFlowLocale.value));
 </script>
 
 <template>
@@ -17,14 +26,14 @@ const {
     <article class="surface-card configuration-alert-card">
       <div class="section-header">
         <div>
-          <h3>全平台审批流</h3>
-          <p>统一处理需要人工决策的事项。</p>
+          <h3>{{ approvalFlowTitle }}</h3>
+          <p>{{ approvalFlowDescription }}</p>
         </div>
         <div class="source-actions">
           <SegmentedToggle
             v-model="approvalFlowStatus"
             :options="mcpAuthorizationStatusOptionBarOptions"
-            aria-label="审批流状态"
+            :aria-label="approvalFlowStatusLabel"
             size="small"
           />
         </div>

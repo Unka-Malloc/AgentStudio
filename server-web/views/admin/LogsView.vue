@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue';
 import { useServerConsoleShellContext } from '../../composables/serverConsoleShellContext';
 import { formatMachineDate } from '../../composables/console-format-utils';
 import DataTable from '../../components/DataTable.vue';
@@ -11,14 +12,24 @@ const {
   error,
   exportKnowledgeLogRows,
   filteredKnowledgeLogRows,
+  goToKnowledgeLogNextPage,
+  goToKnowledgeLogPreviousPage,
   handleKnowledgeLogTableScroll,
   isAuthenticated,
-  knowledgeLogAdvancedOpen,
   knowledgeLogColumnWidths,
+  knowledgeLogCurrentPage,
+  knowledgeLogDisplayStatusLabel,
   knowledgeLogFilters,
+  knowledgeLogKindOptionBarOptions,
+  knowledgeLogPageCount,
+  knowledgeLogPageRange,
+  knowledgeLogPageSize,
+  knowledgeLogPageSizeOptionBarOptions,
+  knowledgeLogPageTotal,
   knowledgeLogStatusOptionBarOptions,
   knowledgeLogTableShellRef,
   monitorAlertSummary,
+  paginatedKnowledgeLogRows,
   workQueueSummary,
   serverLogRows,
 } = useServerConsoleShellContext();
@@ -28,6 +39,13 @@ function handleHeaderDragend(newWidth: number, oldWidth: number, column: any) {
   if (key && key in knowledgeLogColumnWidths.value) {
     knowledgeLogColumnWidths.value[key as keyof typeof knowledgeLogColumnWidths.value] = newWidth;
   }
+}
+
+function knowledgeLogDetailItems(detail: string) {
+  return String(detail || "")
+    .split(/\s+·\s+/u)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 </script>
 
@@ -40,32 +58,44 @@ function handleHeaderDragend(newWidth: number, oldWidth: number, column: any) {
               </div>
               <div class="section-tags">
                 <span>总计 {{ serverLogRows.length }}</span>
-                <span>显示 {{ filteredKnowledgeLogRows.length }}</span>
+                <span>筛选 {{ filteredKnowledgeLogRows.length }}</span>
+                <span>本页 {{ paginatedKnowledgeLogRows.length }}</span>
                 <span>队列 {{ workQueueSummary.total }}</span>
                 <span>报警 {{ monitorAlertSummary.visibleCount || monitorAlertSummary.activeCount }}</span>
               </div>
             </div>
-            <div class="source-actions">
-              <button class="tool-button" type="button" @click="knowledgeLogAdvancedOpen = !knowledgeLogAdvancedOpen">
-                {{ knowledgeLogAdvancedOpen ? "收起筛选" : "高级筛选" }}
-              </button>
+            <div class="source-actions knowledge-log-actions">
               <button class="tool-button" type="button" @click="exportKnowledgeLogRows">
                 导出 CSV
               </button>
             </div>
-            <div v-if="knowledgeLogAdvancedOpen" class="knowledge-log-filters">
-              <input v-model="knowledgeLogFilters.id" type="search" placeholder="筛选 ID / 对象" />
+            <div class="knowledge-log-filters">
+              <label class="knowledge-log-filter-field">
+                <span>模糊匹配</span>
+                <input v-model="knowledgeLogFilters.fuzzy" type="search" placeholder="任意关键词" />
+              </label>
+              <OptionBar
+                v-model="knowledgeLogFilters.kind"
+                label="类型"
+                :options="knowledgeLogKindOptionBarOptions"
+              />
               <OptionBar
                 v-model="knowledgeLogFilters.status"
+                label="状态"
                 :options="knowledgeLogStatusOptionBarOptions"
               />
-              <input v-model="knowledgeLogFilters.stage" type="search" placeholder="阶段 / 详情关键词" />
-              <input v-model="knowledgeLogFilters.from" type="date" />
-              <input v-model="knowledgeLogFilters.to" type="date" />
+              <label class="knowledge-log-filter-field">
+                <span>开始日期</span>
+                <input v-model="knowledgeLogFilters.from" type="date" />
+              </label>
+              <label class="knowledge-log-filter-field">
+                <span>结束日期</span>
+                <input v-model="knowledgeLogFilters.to" type="date" />
+              </label>
             </div>
             <div ref="knowledgeLogTableShellRef" class="knowledge-log-table-shell">
               <DataTable
-                :data="filteredKnowledgeLogRows"
+                :data="paginatedKnowledgeLogRows"
                 row-key="logId"
                 empty-text="暂无系统日志"
                 @scroll="handleKnowledgeLogTableScroll"
@@ -87,14 +117,14 @@ function handleHeaderDragend(newWidth: number, oldWidth: number, column: any) {
                 <el-table-column prop="time" label="时间" :min-width="knowledgeLogColumnWidths.time">
                   <template #default="{ row }">
                     <span class="knowledge-log-time" :title="formatMachineDate(row.occurredAt, 'full')">
-                      {{ formatMachineDate(row.occurredAt, 'compact') }}
+                      {{ formatMachineDate(row.occurredAt, 'full') }}
                     </span>
                   </template>
                 </el-table-column>
                 <el-table-column prop="status" label="状态" :min-width="knowledgeLogColumnWidths.status">
                   <template #default="{ row }">
                     <span class="knowledge-log-status">
-                      <StatusPill :tone="row.tone" :label="row.statusLabel" />
+                      <StatusPill :tone="row.tone" :label="knowledgeLogDisplayStatusLabel(row)" />
                     </span>
                   </template>
                 </el-table-column>
@@ -112,7 +142,14 @@ function handleHeaderDragend(newWidth: number, oldWidth: number, column: any) {
                 </el-table-column>
                 <el-table-column prop="detail" label="详情" :min-width="knowledgeLogColumnWidths.detail">
                   <template #default="{ row }">
-                    <span class="knowledge-log-detail">{{ row.detail }}</span>
+                    <ul class="knowledge-log-detail-list" :title="row.detail">
+                      <li
+                        v-for="(item, index) in knowledgeLogDetailItems(row.detail)"
+                        :key="`${row.logId}:detail:${index}`"
+                      >
+                        {{ item }}
+                      </li>
+                    </ul>
                   </template>
                 </el-table-column>
                 <el-table-column prop="error" label="错误" :min-width="knowledgeLogColumnWidths.error">
@@ -121,6 +158,45 @@ function handleHeaderDragend(newWidth: number, oldWidth: number, column: any) {
                   </template>
                 </el-table-column>
               </DataTable>
+            </div>
+            <div class="knowledge-log-pagination" v-if="knowledgeLogPageTotal > 0">
+              <div class="knowledge-log-page-size-control">
+                <OptionBar
+                  v-model="knowledgeLogPageSize"
+                  class="knowledge-log-page-size"
+                  :options="knowledgeLogPageSizeOptionBarOptions"
+                />
+              </div>
+              <div
+                class="knowledge-log-page-indicator"
+                :title="`${knowledgeLogPageRange.start}-${knowledgeLogPageRange.end} / ${knowledgeLogPageTotal}`"
+              >
+                <span>-</span>
+                <span>·</span>
+                <strong>{{ knowledgeLogCurrentPage }} / {{ knowledgeLogPageCount }}</strong>
+                <span>·</span>
+                <span>-</span>
+              </div>
+              <div class="knowledge-log-pagination-controls">
+                <button
+                  class="tool-button tool-button-ghost knowledge-log-page-button"
+                  type="button"
+                  :disabled="knowledgeLogCurrentPage <= 1"
+                  @click="goToKnowledgeLogPreviousPage"
+                >
+                  <span class="knowledge-log-page-icon" aria-hidden="true"><ArrowLeft /></span>
+                  <span>上一页</span>
+                </button>
+                <button
+                  class="tool-button tool-button-ghost knowledge-log-page-button"
+                  type="button"
+                  :disabled="knowledgeLogCurrentPage >= knowledgeLogPageCount"
+                  @click="goToKnowledgeLogNextPage"
+                >
+                  <span>下一页</span>
+                  <span class="knowledge-log-page-icon" aria-hidden="true"><ArrowRight /></span>
+                </button>
+              </div>
             </div>
           </section>
 </template>

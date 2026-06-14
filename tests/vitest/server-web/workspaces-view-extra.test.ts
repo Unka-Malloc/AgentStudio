@@ -10,6 +10,10 @@ vi.mock("../../../server-web/composables/useWorkspacesConsole", () => ({
   useWorkspacesConsole: () => workspacesViewContext,
 }));
 
+vi.mock("../../../server-web/composables/serverConsoleShellContext", () => ({
+  useServerConsoleShellContext: () => ({ workspacesConsole: workspacesViewContext }),
+}));
+
 const BinaryCheckboxMock = {
   name: "BinaryCheckbox",
   props: ["modelValue", "label", "disabled"],
@@ -181,6 +185,7 @@ function createContext(overrides: {
     openLocalDir: vi.fn(),
     openCloudDrive: vi.fn(),
     openCodespace: vi.fn(),
+    copyToClipboard: vi.fn(),
     load: vi.fn(),
   };
 
@@ -215,7 +220,6 @@ describe("WorkspacesView extra coverage", () => {
     const section = wrapper.get(".workspaces-view");
     expect(section.attributes("data-workspace-knowledge-context")).toContain('"workspaceEndpoint":"/api/agent-workspaces"');
     expect(wrapper.get(".empty-state").text()).toContain("暂无工作空间");
-    expect(wrapper.text()).toContain("暂无会话");
     expect(wrapper.text()).toContain("智能体工作空间");
     expect(wrapper.findAll(".mock-workspace-detail-panel").length).toBe(1);
     expect(wrapper.findAll(".status-strip").length).toBe(0);
@@ -245,11 +249,16 @@ describe("WorkspacesView extra coverage", () => {
       showDeleteModal: false,
     });
 
-    expect(wrapper.text()).toContain("2 个可继续会话");
     expect(wrapper.text()).toContain("主工作区");
     expect(wrapper.text()).toContain("ws-2");
     expect(wrapper.text()).toContain("↳ 继承");
     expect(wrapper.text()).toContain("构建统一指标");
+    expect(wrapper.text()).toContain("工作空间 ID");
+    expect(wrapper.text()).toContain("版本");
+    expect(wrapper.text()).toContain("Generation 3");
+    expect(wrapper.text()).toContain("上级空间");
+    expect(wrapper.text()).toContain("（根，无继承）");
+    expect(wrapper.text()).toContain("/tmp/workspace-1");
     expect(wrapper.text()).toContain("0 个会话");
 
     const pills = wrapper.findAll(".mock-status-pill");
@@ -285,6 +294,12 @@ describe("WorkspacesView extra coverage", () => {
     await nextTick();
     expect(wrapper.findAll(".split-toggle-card[data-open='true']")).toHaveLength(1);
 
+    await cards[0].findAll(".ws-copyable-wrapper")[0].trigger("click");
+    expect(context.copyToClipboard).toHaveBeenCalledWith(expect.any(MouseEvent), "ws-1");
+
+    await cards[0].findAll(".ws-copyable-wrapper")[1].trigger("click");
+    expect(context.copyToClipboard).toHaveBeenCalledWith(expect.any(MouseEvent), "/tmp/workspace-1");
+
     await cards[1].findAll(".table-action")[2].trigger("click");
     expect(context.openLocalDir).toHaveBeenCalledTimes(1);
     expect(context.selectedId.value).toBe("ws-2");
@@ -300,12 +315,6 @@ describe("WorkspacesView extra coverage", () => {
     await cards[1].findAll(".table-action")[5].trigger("click");
     expect(context.panel.value).toBe("share");
     expect(context.shareForm.action).toBe("share");
-
-    await wrapper.get(".history-session-item").trigger("click");
-    expect(context.selectSession).toHaveBeenCalledWith("s-1");
-
-    await wrapper.get(".history-session-action").trigger("click");
-    expect(context.forkSession).toHaveBeenCalledWith("s-1");
 
     expect(context.expandedWorkspaceId.value).toBe("ws-2");
   });
@@ -323,7 +332,7 @@ describe("WorkspacesView extra coverage", () => {
     expect(context.localError.value).toBe("");
 
     await nextTick();
-    expect(wrapper.get("h3").text()).toContain("移除工作空间");
+    expect(wrapper.get(".pact-modal h3").text()).toContain("移除工作空间");
 
     const checkbox = wrapper.get(".mock-binary-checkbox");
     await checkbox.trigger("click");

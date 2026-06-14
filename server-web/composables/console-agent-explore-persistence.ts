@@ -10,7 +10,7 @@ import type {
 } from "./console-agent-explore-utils";
 import { asRecord } from "./console-model-utils";
 
-export const AGENT_EXPLORE_STORAGE_KEY = "pact.agentExplore.sessions.v1";
+export const AGENT_EXPLORE_STORAGE_KEY = "v0.0.1:frontend:agent-explore-sessions-1";
 export const AGENT_EXPLORE_STORAGE_VERSION = 1;
 
 const AGENT_EXPLORE_CACHE_ID_LIMIT = 100;

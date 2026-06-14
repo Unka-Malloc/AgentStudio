@@ -1,104 +1,118 @@
 :root {
   color-scheme: light;
 
-  /* ── Primitive palette ──────────────────────────────────────────────── */
-  /* Brand gold scale (derived from logo #c9a96e gradient) */
-  --gold-50:  #fdf8ef;
-  --gold-100: #f9f0dc;
-  --gold-200: #f0ddb4;
-  --gold-400: #d4a843;
-  --gold-600: #8c6a1e;
-  --gold-700: #6b4f10;
-  --gold-800: #4d3a0c;
+  /* ── Legacy primitive palette — semantic colors are preset-owned ──────── */
+  /* Brass scale (primary action — warm copper/bronze) */
+  --brass-50:  #fdf5e8;
+  --brass-100: #f8e8cc;
+  --brass-200: #ecd4a0;
+  --brass-400: #c89430;
+  --brass-600: #7a4f0e;
+  --brass-700: #5c3a08;
+  --brass-800: #402800;
 
-  /* Steel-blue scale (derived from logo silver #7a8ea8 → #b0c0d4) */
-  --steel-50:  #f0f4f8;
-  --steel-100: #dce6f0;
-  --steel-600: #4a6580;
-  --steel-700: #3a5068;
+  /* Verdigris scale (oxidized copper patina) */
+  --verdigris-50:  #eef7f3;
+  --verdigris-100: #d0ebe0;
+  --verdigris-600: #3d7a66;
+  --verdigris-700: #2e5c4d;
 
-  /* Semantic state colors (functional, not brand) */
-  --green-50:  #f0fdf4;
-  --green-600: #16a34a;
-  --amber-50:  #fffbeb;
-  --amber-400: #fbbf24;
-  --amber-600: #d97706;
-  --amber-800: #92400e;
-  --red-50:  #fef2f2;
-  --red-600: #dc2626;
+  /* Steel-blue scale (blued iron / gun metal) */
+  --steel-50:  #eef3f8;
+  --steel-100: #d4e2f0;
+  --steel-600: #3a5a7a;
+  --steel-700: #2c4660;
 
-  /* Warm neutral scale (replacing cold Tailwind grays) */
-  --neutral-0:   #ffffff;
-  --neutral-50:  #fafaf8;
-  --neutral-100: #f5f4f1;
-  --neutral-200: #e8e4dc;
-  --neutral-300: #d4cfc5;
-  --neutral-400: #a09a8e;
-  --neutral-500: #7a7060;
-  --neutral-600: #5c5549;
-  --neutral-700: #3d3830;
-  --neutral-800: #262320;
-  --neutral-900: #1a1814;
+  /* Rose scale (heated iron / industrial crimson) */
+  --rose-50:  #faf0f0;
+  --rose-100: #f0d8d8;
+  --rose-600: #9e2b2b;
+  --rose-700: #7a2020;
+
+  /* Iron neutral scale (industrial machinery tones) */
+  --iron-0:   #fffdf8;
+  --iron-50:  #f8f4ec;
+  --iron-100: #f0ebe0;
+  --iron-200: #ddd6c8;
+  --iron-300: #c0b6a4;
+  --iron-400: #948a7a;
+  --iron-500: #6e6354;
+  --iron-600: #524840;
+  --iron-700: #3a3028;
+  --iron-800: #241c18;
+  --iron-900: #1a1410;
 
   /* ── Semantic colour tokens ──────────────────────────────────────────── */
-  --bg-base:    var(--neutral-100);
-  --bg-surface: var(--neutral-0);
-  --bg-subtle:  var(--neutral-50);
-  --bg-inset:   var(--neutral-100);
-  --border-subtle: var(--neutral-200);
-  --border-strong: var(--neutral-300);
+  --bg-base:    var(--iron-100);
+  --bg-surface: var(--iron-0);
+  --bg-subtle:  var(--iron-50);
+  --bg-inset:   var(--iron-100);
+  --border-subtle: var(--iron-200);
+  --border-strong: var(--iron-300);
 
-  --text-primary:   var(--neutral-900);
-  --text-secondary: var(--neutral-600);
-  --text-muted:     var(--neutral-500);
-  --text-disabled:  var(--neutral-400);
-  --text-on-brand:  #ffffff;
+  --text-primary:   var(--iron-900);
+  --text-secondary: var(--iron-600);
+  --text-muted:     var(--iron-500);
+  --text-disabled:  var(--iron-400);
+  --text-on-brand:  #fffdf8;
 
-  /* Brand = antique gold (logo primary) */
-  --brand:        var(--gold-600);
-  --brand-strong: var(--gold-700);
-  --brand-subtle: var(--gold-50);
-  --brand-muted:  var(--gold-100);
+  /* Brand = polished brass (primary action) */
+  --brand:        var(--brass-600);
+  --brand-strong: var(--brass-700);
+  --brand-subtle: var(--brass-50);
+  --brand-muted:  var(--brass-100);
   --accent:       var(--brand);
 
-  /* Info = steel-blue (logo secondary, differentiated from brand) */
-  --info:         var(--steel-600);
-  --info-surface: var(--steel-50);
-  --info-border:  var(--steel-100);
+  /* Info = verdigris / oxidized copper (secondary accent) */
+  --info:         var(--verdigris-600);
+  --info-surface: var(--verdigris-50);
+  --info-border:  var(--verdigris-100);
 
-  /* Semantic states */
-  --success: #16a34a;
-  --success-surface: var(--green-50);
-  --success-border: #bbf7d0;
+  /* Industrial accent palette (button variants) */
+  --accent-steel:        var(--steel-600);
+  --accent-steel-strong: var(--steel-700);
+  --accent-steel-subtle: var(--steel-50);
+  --accent-rose:         var(--rose-600);
+  --accent-rose-strong:  var(--rose-700);
+  --accent-rose-subtle:  var(--rose-50);
+  --accent-verdigris:        var(--verdigris-600);
+  --accent-verdigris-strong: var(--verdigris-700);
+  --accent-verdigris-subtle: var(--verdigris-50);
 
-  --warning: #d97706;
-  --warning-text: var(--amber-800);
-  --warning-surface: var(--amber-50);
-  --warning-border: #fde68a;
+  /* Semantic states (industrial machine tones) */
+  --success: #2d7a4a;
+  --success-surface: #eef7f2;
+  --success-border: #b0e0c8;
 
-  --danger: #dc2626;
-  --danger-surface: var(--red-50);
-  --danger-border: #fecaca;
+  --warning: #b87308;
+  --warning-text: #7a4a00;
+  --warning-surface: #fdf5e8;
+  --warning-border: #f0d898;
 
-  /* ── Interaction tokens (derived from brand/neutral for opacity states) ── */
-  --brand-ring:    rgba(140, 106, 30, 0.15);
-  --brand-tint:    rgba(140, 106, 30, 0.08);
-  --brand-border:  rgba(140, 106, 30, 0.28);
-  --brand-shadow:  rgba(140, 106, 30, 0.20);
-  --danger-tint:   rgba(220, 38, 38, 0.10);
-  --success-tint:  rgba(22, 163, 74, 0.10);
+  --danger: #b83a20;
+  --danger-surface: #fdf0ec;
+  --danger-border: #f0c4b8;
+
+  /* ── Interaction tokens ─────────────────────────────────────────────── */
+  --brand-ring:    rgba(122, 79, 14, 0.16);
+  --brand-tint:    rgba(122, 79, 14, 0.07);
+  --brand-border:  rgba(122, 79, 14, 0.40);
+  --brand-glow:    rgba(200, 148, 48, 0.10);
+  --brand-shadow:  rgba(122, 79, 14, 0.22);
+  --danger-tint:   rgba(184, 58, 32, 0.10);
+  --success-tint:  rgba(45, 122, 74, 0.10);
 
   /* Overlay / backdrop */
-  --backdrop:        rgba(26, 24, 20, 0.40);
-  --backdrop-strong: rgba(26, 24, 20, 0.50);
+  --backdrop:        rgba(26, 20, 16, 0.45);
+  --backdrop-strong: rgba(26, 20, 16, 0.58);
 
-  /* Soft borders and scrollbar */
-  --border-soft:          rgba(160, 154, 142, 0.26);
-  --scrollbar-thumb:      rgba(122, 112, 96, 0.42);
-  --scrollbar-thumb-hover: rgba(92, 85, 73, 0.58);
+  /* Soft borders and scrollbar (iron/tarnished metal) */
+  --border-soft:          rgba(148, 138, 122, 0.28);
+  --scrollbar-thumb:      rgba(110, 99, 84, 0.44);
+  --scrollbar-thumb-hover: rgba(82, 72, 64, 0.60);
 
-  /* Inverse text (for use on brand/dark backgrounds) */
-  --text-inverse: #ffffff;
+  /* Inverse text */
+  --text-inverse: #fffdf8;
 
   /* ── Spacing scale (4 px grid) ──────────────────────────────────────── */
   --space-px:  1px;
