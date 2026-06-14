@@ -1,0 +1,195 @@
+{
+  "schemaVersion": "v0.0.1:schema:definition-1",
+  "kind": "pact.deployment.entry-index",
+  "purpose": "Single deployment entry index for agents and scripts. Start here, then open only the referenced file needed for the current deployment question.",
+  "agentDisclosure": {
+    "openOrder": [
+      {
+        "id": "deployment-entry-index",
+        "path": "server/config/deployment/index.json",
+        "why": "Deployment map, Docker presets, runtime dependency locations, and validation commands."
+      },
+      {
+        "id": "main-service-dockerfile",
+        "path": "Dockerfile",
+        "why": "Authoritative Pact server container build and runtime command."
+      },
+      {
+        "id": "runtime-download-service",
+        "path": "server/scripts/start-runtime-download-container.mjs",
+        "why": "Detached container entry for background runtime dependency downloads."
+      },
+      {
+        "id": "runtime-download-example",
+        "path": "server/config/runtime-downloads.example.json",
+        "why": "Declarative target list for runtime dependency download tasks."
+      },
+      {
+        "id": "deployment-container-flow",
+        "path": "server/scripts/verify-deployment-container-flow.mjs",
+        "why": "Fresh-container deployment proof for Pact, runtime bootstrap, and generic external service discovery."
+      }
+    ],
+    "sectionHints": {
+      "docker": "Read dockerPresets first, then open Dockerfile only if image build or runtime command details are needed.",
+      "runtimeDownloads": "Read runtimeDependencies first, then open start-runtime-download-container.mjs or runtime-downloads.example.json.",
+      "externalServices": "Read externalServices first, then open the specific service Dockerfile/config for RAG or knowledge distillation.",
+      "verification": "Read validation first, then run the listed command for the touched surface."
+    },
+    "stopRules": [
+      "Do not scan every Dockerfile by default; use externalServices.services to select the target.",
+      "Do not use local host smoke tests as deployment proof; deployment tests must run in fresh containers.",
+      "Do not add new deployment defaults outside this index without extending server:verify:deployment-index."
+    ]
+  },
+  "dockerPresets": {
+    "baseImages": {
+      "mainService": "node:24-bookworm-slim",
+      "runtimeDownloadService": "node:24-bookworm",
+      "externalHttpService": "node:24-bookworm-slim"
+    },
+    "npmRegistry": "https://registry.npmjs.org/",
+    "mainService": {
+      "dockerfile": "Dockerfile",
+      "imageName": "pact-server",
+      "buildTarget": "runtime",
+      "buildArgs": {
+        "NODE_BASE_IMAGE": "node:24-bookworm-slim",
+        "NPM_REGISTRY": "https://registry.npmjs.org/",
+        "JRE_VERSION": "21.0.10+7",
+        "TIKA_VERSION": "3.2.3"
+      },
+      "runtime": {
+        "host": "0.0.0.0",
+        "port": 7228,
+        "dataPath": "/opt/pact/data",
+        "codexHome": "/codex-home",
+        "user": "pact",
+        "uid": 10001,
+        "gid": 10001,
+        "allowPublicConsole": true,
+        "command": [
+          "node",
+          "server/scripts/start-server.mjs",
+          "--with-ui",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "7228",
+          "--data-dir",
+          "/opt/pact/data",
+          "--allow-public-console"
+        ]
+      },
+      "volumes": [
+        {
+          "id": "server-data",
+          "containerPath": "/opt/pact/data",
+          "purpose": "Persistent Pact server data, runtime dependency metadata, logs, jobs, and external service config imports."
+        }
+      ]
+    }
+  },
+  "runtimeDependencies": {
+    "cache": {
+      "defaultRoot": "${PACT_SERVER_DATA_DIR}/runtime/runtime-dependencies",
+      "overrideEnv": "PACT_RUNTIME_DEPENDENCY_CACHE_DIR",
+      "sourceConfig": "${PACT_SERVER_DATA_DIR}/runtime/runtime-dependency-sources.json",
+      "downloadRuns": "${PACT_SERVER_DATA_DIR}/runtime/runtime-dependency-download-runs"
+    },
+    "service": {
+      "script": "server/scripts/start-runtime-download-container.mjs",
+      "containerDataPath": "/pact-data",
+      "nodeImage": "node:24-bookworm",
+      "statusEndpoints": [
+        "/api/runtime/dependencies",
+        "/api/runtime/dependencies/downloads"
+      ]
+    },
+    "exampleConfig": "server/config/runtime-downloads.example.json",
+    "dockerBaked": {
+      "jrePath": "/app/server/platform/modules/knowledge/runtime/jre/current",
+      "tikaPath": "/app/server/platform/modules/knowledge/tika",
+      "defaultSettingsPath": "server/config/runtime/default-settings.json",
+      "javaBinPath": "/app/server/platform/modules/knowledge/runtime/jre/current/bin/java",
+      "tikaJarPath": "/app/server/platform/modules/knowledge/tika/tika-app-3.2.3.jar"
+    },
+    "targets": [
+      {
+        "id": "jre",
+        "strategy": "native package manager first when available, otherwise managed archive download with automatic resume"
+      },
+      {
+        "id": "python",
+        "strategy": "native package manager plus managed venv"
+      },
+      {
+        "id": "node",
+        "strategy": "nvm-managed Node.js runtime"
+      },
+      {
+        "id": "caddy",
+        "strategy": "native package manager or managed binary"
+      },
+      {
+        "id": "gerrit",
+        "strategy": "published Gerrit WAR download with automatic resume"
+      }
+    ]
+  },
+  "externalServices": {
+    "importDirectoryInServerData": "external-services/configs",
+    "discovery": {
+      "registry": "server/platform/common/composition-management/external-service-registry.mjs",
+      "healthInspection": "inspectExternalServiceHealth"
+    },
+    "services": [
+      {
+        "id": "rag-service",
+        "kind": "pact.external-service.config",
+        "dockerfile": "external-services/rag-service/Dockerfile",
+        "config": "external-services/rag-service/external-service.config.json",
+        "imageName": "pact-rag-service",
+        "host": "0.0.0.0",
+        "port": 8788,
+        "healthPath": "/health",
+        "startupPolicy": "external-only",
+        "dataPath": null
+      },
+      {
+        "id": "knowledge-distillation-service",
+        "kind": "standalone-http-service",
+        "dockerfile": "external-services/knowledge-distillation-service/Dockerfile",
+        "imageName": "pact-knowledge-distillation-service",
+        "host": "0.0.0.0",
+        "port": 8799,
+        "healthPath": "/health",
+        "startupPolicy": "external-only",
+        "dataPath": "/data"
+      }
+    ]
+  },
+  "validation": {
+    "static": [
+      {
+        "id": "deployment-index",
+        "command": "npm run server:verify:deployment-index",
+        "checks": "Index shape, referenced paths, Dockerfile defaults, external service Dockerfile/config drift, and package script wiring."
+      }
+    ],
+    "freshContainer": [
+      {
+        "id": "background-runtime-download-dry-run",
+        "command": "npm run server:verify:runtime-background-download-container -- --dry-run --target jre --poll-timeout-ms 120000"
+      },
+      {
+        "id": "auto-resume-runtime-download",
+        "command": "npm run server:verify:runtime-download-auto-resume-container"
+      },
+      {
+        "id": "deployment-flow",
+        "command": "npm run server:verify:deployment-container-flow"
+      }
+    ]
+  }
+}

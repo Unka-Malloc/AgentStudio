@@ -27,7 +27,7 @@ afterEach(() => {
 describe("v0.0.1 baseline provider extra coverage", () => {
   it("requires a user data path and exposes protocol metadata", () => {
     expect(() => createV001BaselineProvider()).toThrow("userDataPath is required");
-    expect(V001_BASELINE_PROTOCOL_VERSION).toBe("pact.v001.baseline.v1");
+    expect(V001_BASELINE_PROTOCOL_VERSION).toBe("v0.0.1:platform:baseline-1");
   });
 
   it("persists config registry items, normalizes ids, and reports enabled entries", async () => {
@@ -261,7 +261,15 @@ describe("v0.0.1 baseline provider extra coverage", () => {
           runtimeConfig: "ServerConfig.getDataDir()/v001-baseline",
         },
       });
-      expect(status.mcpOutlets).toEqual(["pact.discovery", "pact.knowledge", "pact.sharedspace", "pact.codespace", "pact.skillHub"]);
+      expect(status.mcpOutlets).toEqual([
+        "pact.discovery",
+        "pact.agentLibrary",
+        "pact.sharedspace",
+        "pact.codespace",
+        "pact.skillHub",
+        "pact.agentRelay",
+        "pact.serviceHub"
+      ]);
       expect(status.storageStates).toContain("contractVerified");
       expect(status.ports.map((port) => port.port)).toEqual([
         "ConfigRegistryPort",

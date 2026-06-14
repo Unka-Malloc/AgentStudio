@@ -1,0 +1,4 @@
+{
+  "javaBinPath": "/app/server/platform/modules/knowledge/runtime/jre/current/bin/java",
+  "tikaJarPath": "/app/server/platform/modules/knowledge/tika/tika-app-3.2.3.jar"
+}

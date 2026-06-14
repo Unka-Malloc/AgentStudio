@@ -6,6 +6,8 @@ export { adminSectionToSlug, slugToAdminView, viewToPath } from "./routes";
 const validDebugTabs = new Set(["knowledgeRecall", "agentRetrieval", "knowledgeDistillation"]);
 
 const routes: RouteRecordRaw[] = [
+  { path: "/login", component: () => import("../views/LoginView.vue"), meta: { authView: true } },
+
   // Agent workspace
   { path: "/workspaces", component: () => import("../views/WorkspacesView.vue"), meta: { viewId: "workspaces" } },
 
@@ -56,10 +58,14 @@ const routes: RouteRecordRaw[] = [
   { path: "/admin/logs", component: () => import("../views/admin/LogsView.vue"), meta: { viewId: "admin", adminView: "logs" } },
   { path: "/admin/ops-monitor", component: () => import("../views/admin/OpsMonitorView.vue"), meta: { viewId: "admin", adminView: "opsMonitor" } },
   { path: "/admin/runtime-downloads", component: () => import("../views/admin/RuntimeDownloadsView.vue"), meta: { viewId: "admin", adminView: "runtimeDownloads" } },
+  { path: "/admin/strategy-management", component: () => import("../views/admin/StrategyManagementView.vue"), meta: { viewId: "admin", adminView: "strategyManagement" } },
+  { path: "/admin/version-release", component: () => import("../views/admin/VersionReleaseView.vue"), meta: { viewId: "admin", adminView: "versionRelease" } },
+  { path: "/admin/version-assembly", component: () => import("../views/admin/VersionAssemblyView.vue"), meta: { viewId: "admin", adminView: "versionAssembly" } },
   { path: "/admin/production-health", component: () => import("../views/admin/ProductionHealthView.vue"), meta: { viewId: "admin", adminView: "productionHealth" } },
   { path: "/admin/clients", component: () => import("../views/admin/ClientsView.vue"), meta: { viewId: "admin", adminView: "clients" } },
   { path: "/admin/tools", redirect: "/admin/tool-list" },
   { path: "/admin/tool-list", component: () => import("../views/admin/ToolsView.vue"), meta: { viewId: "admin", adminView: "toolList" } },
+  { path: "/admin/tool-governance", component: () => import("../views/admin/ToolsView.vue"), meta: { viewId: "admin", adminView: "toolGovernance" } },
   { path: "/admin/tool-stats", component: () => import("../views/admin/ToolsView.vue"), meta: { viewId: "admin", adminView: "toolStats" } },
   { path: "/admin/modules", component: () => import("../views/admin/ModulesView.vue"), meta: { viewId: "admin", adminView: "modules" } },
   { path: "/admin/agent-management", redirect: "/admin/agent-config" },
