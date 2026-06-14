@@ -11,6 +11,7 @@ import {
   copyConsoleTextWithFeedback,
 } from './console-browser-effects';
 import { useWorkspaceCloudDriveController } from './console-workspace-cloud-drive-controller';
+import { useWorkspaceAssetController } from './console-workspace-asset-controller';
 import { useWorkspaceCheckpointController } from './console-workspace-checkpoint-controller';
 import { useWorkspaceCodespaceController } from './console-workspace-codespace-controller';
 import { formatCompactDate } from './console-format-utils';
@@ -61,6 +62,27 @@ export function useWorkspacesConsole(options: WorkspacesConsoleOptions = {}) {
     listCloudDrivePermissions,
     openCloudDrive: prepareCloudDrivePanel,
   } = useWorkspaceCloudDriveController({
+    selectedId,
+    localError,
+    setBusy,
+    clearBusy,
+  });
+
+  const {
+    workspaceAssetData,
+    workspaceAssetDetail,
+    workspaceAssetResult,
+    workspaceAssetForm,
+    workspaceAssetItems,
+    selectedWorkspaceAsset,
+    resetWorkspaceAssetState,
+    openWorkspaceAssets: prepareWorkspaceAssetsPanel,
+    refreshWorkspaceAssets,
+    selectWorkspaceAsset,
+    submitWorkspaceAsset,
+    loadWorkspaceAssetReceipts,
+    backfillWorkspaceAssets,
+  } = useWorkspaceAssetController({
     selectedId,
     localError,
     setBusy,
@@ -214,6 +236,7 @@ export function useWorkspacesConsole(options: WorkspacesConsoleOptions = {}) {
 
   async function loadChain(id: string) {
     chainData.value = null; contextData.value = null; workspaceFilesData.value = null; cloudDriveData.value = null; cloudDriveResult.value = null;
+    resetWorkspaceAssetState();
     resetLocalDirectoryState();
     resetCodespaceState();
     resetWorkspaceCheckpoints();
@@ -268,6 +291,10 @@ export function useWorkspacesConsole(options: WorkspacesConsoleOptions = {}) {
     panel.value = prepareCodespacePanel();
   }
 
+  async function openWorkspaceAssets() {
+    panel.value = await prepareWorkspaceAssetsPanel();
+  }
+
   // busyKey helpers (work on the existing string-compat ref)
   function setBusy(k: string)  { localBusyKey.value = k; }
   function clearBusy()         { localBusyKey.value = ''; }
@@ -311,6 +338,12 @@ export function useWorkspacesConsole(options: WorkspacesConsoleOptions = {}) {
     localDirMountData,
     cloudDriveData,
     cloudDriveResult,
+    workspaceAssetData,
+    workspaceAssetDetail,
+    workspaceAssetResult,
+    workspaceAssetForm,
+    workspaceAssetItems,
+    selectedWorkspaceAsset,
     codespaceData,
     codespaceResult,
     workspaceCheckpointTrees,
@@ -373,6 +406,12 @@ export function useWorkspacesConsole(options: WorkspacesConsoleOptions = {}) {
     openParent,
     openLocalDir,
     openCloudDrive,
+    openWorkspaceAssets,
+    refreshWorkspaceAssets,
+    selectWorkspaceAsset,
+    submitWorkspaceAsset,
+    loadWorkspaceAssetReceipts,
+    backfillWorkspaceAssets,
     openCodespace,
     inspectCodespaceStatus,
     prepareCodespaceChange,

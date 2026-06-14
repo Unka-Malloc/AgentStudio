@@ -60,6 +60,16 @@ export type WorkspaceCloudDriveQuery = {
   [key: string]: unknown;
 };
 
+export type WorkspaceAssetQuery = {
+  workspaceId: string;
+  assetRef?: string;
+  targetKind?: string;
+  assetKind?: string;
+  canonicalState?: string;
+  limit?: number;
+  [key: string]: unknown;
+};
+
 export const workspaceKnowledgeContextContract = Object.freeze({
   workspaceEndpoint: "/api/agent-workspaces",
   contextEndpoint: "/context",
@@ -218,6 +228,26 @@ export function applyWorkspaceCloudDriveSync(payload: WorkspaceConsolePayload) {
 
 export function listWorkspaceCloudDrivePermissions(params: WorkspaceCloudDriveQuery) {
   return getJson<WorkspaceConsolePayload>(`/api/external/cloud-drive/permissions?${buildQuery(params)}`);
+}
+
+export function listWorkspaceAssets(params: WorkspaceAssetQuery) {
+  return getJson<WorkspaceConsolePayload>(`/api/workspace/assets?${buildQuery(params)}`);
+}
+
+export function readWorkspaceAsset(params: WorkspaceAssetQuery) {
+  return getJson<WorkspaceConsolePayload>(`/api/workspace/assets/read?${buildQuery(params)}`);
+}
+
+export function submitWorkspaceAsset(payload: WorkspaceConsolePayload) {
+  return postJson<WorkspaceConsolePayload>("/api/workspace/assets/submit", payload);
+}
+
+export function getWorkspaceAssetReceipts(payload: WorkspaceConsolePayload) {
+  return postJson<WorkspaceConsolePayload>("/api/workspace/assets/receipts/get", payload);
+}
+
+export function backfillWorkspaceAssets(payload: WorkspaceConsolePayload) {
+  return postJson<WorkspaceConsolePayload>("/api/workspace/assets/backfill", payload);
 }
 
 export function getCodespaceProvidersManifest() {

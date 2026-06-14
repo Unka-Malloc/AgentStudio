@@ -32,6 +32,7 @@ const {
   deleteWorkspace,
   openProfile,
   openParent,
+  openWorkspaceAssets,
   openLocalDir,
   openCloudDrive,
   openCodespace,
@@ -151,6 +152,7 @@ const workspaceKnowledgeContextFields = {
               <div class="ws-card-actions">
                 <button class="table-action" type="button" @click.stop="openProfile(ws)">配置 Profile</button>
                 <button class="table-action" type="button" @click.stop="openParent(ws)">设置继承</button>
+                <button class="table-action" type="button" @click.stop="selectedId = ws.workspaceId; openWorkspaceAssets()">统一资产</button>
                 <button class="table-action" type="button" @click.stop="selectedId = ws.workspaceId; openLocalDir()">本机目录</button>
                 <button class="table-action" type="button" @click.stop="selectedId = ws.workspaceId; openCloudDrive()">云盘</button>
                 <button class="table-action" type="button" @click.stop="selectedId = ws.workspaceId; openCodespace()">代码库</button>

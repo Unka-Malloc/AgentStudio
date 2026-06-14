@@ -9,6 +9,7 @@ export type WorkspacePanel =
   | "profile"
   | "parent"
   | "share"
+  | "assets"
   | "localDir"
   | "cloudDrive"
   | "codespace";

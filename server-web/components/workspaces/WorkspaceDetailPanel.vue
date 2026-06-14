@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import WorkspaceCloudDrivePanel from "./WorkspaceCloudDrivePanel.vue";
 import WorkspaceExpandedDetail from "./WorkspaceExpandedDetail.vue";
+import WorkspaceAssetPanel from "./detail/WorkspaceAssetPanel.vue";
 import WorkspaceCodespacePanel from "./detail/WorkspaceCodespacePanel.vue";
 import WorkspaceCreatePanel from "./detail/WorkspaceCreatePanel.vue";
 import WorkspaceLocalDirectoryPanel from "./detail/WorkspaceLocalDirectoryPanel.vue";
@@ -25,6 +26,7 @@ const {
     <WorkspaceProfilePanel v-else-if="panel === 'profile' && selected" />
     <WorkspaceParentPanel v-else-if="panel === 'parent' && selected" />
     <WorkspaceSharePanel v-else-if="panel === 'share' && selected" />
+    <WorkspaceAssetPanel v-else-if="panel === 'assets' && selected" />
     <WorkspaceLocalDirectoryPanel v-else-if="panel === 'localDir' && selected" />
     <WorkspaceCloudDrivePanel v-else-if="panel === 'cloudDrive' && selected" />
     <WorkspaceCodespacePanel v-else-if="panel === 'codespace' && selected" />
