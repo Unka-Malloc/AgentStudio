@@ -5,7 +5,7 @@ import OptionBar from "../OptionBar.vue";
 import UploadFileListCard from "../UploadFileListCard.vue";
 import { jobStatusLabels } from "../../composables/console-defaults";
 import { formatBytes, jobStatusTone, jsonPreview } from "../../composables/console-format-utils";
-import { useKnowledgeIngestContext, useKnowledgeViewContext } from "../../composables/knowledgeViewContext";
+import { useKnowledgeIngestContext } from "../../composables/knowledgeViewContext";
 import { currentConsoleLocale, localizeConsoleText, resolveEffectiveConsoleLocale } from "../../i18n/console";
 import { normalizedKnowledgeDocumentUrl, previewKnowledgeDocuments } from "../../lib/knowledge-documents";
 
@@ -14,6 +14,7 @@ const {
   canSubmitKnowledgeIngest,
   canWriteJobs,
   documentPreviewResult,
+  dynamicParsingPreviewConfig,
   ingestFiles,
   ingestJob,
   ingestProgress,
@@ -27,7 +28,6 @@ const {
   setKnowledgeIngestTargetValues,
   uploadFilesToKnowledge,
 } = useKnowledgeIngestContext();
-const knowledgeViewContext = useKnowledgeViewContext();
 
 const locale = computed(() => resolveEffectiveConsoleLocale(currentConsoleLocale.value));
 function t(value: string) {
@@ -87,7 +87,6 @@ const knowledgeIngestReadinessItems = computed(() => [
 ]);
 
 async function previewKnowledgeDocumentParsing() {
-  const dynamicParsingPreviewConfig = knowledgeViewContext.ingest.dynamicParsingPreviewConfig;
   documentPreviewResult.value = await previewKnowledgeDocuments(ingestFiles.value, {
     pipelineId: dynamicParsingPreviewConfig.pipelineId,
     expectedOutputs: ["preprocessResult", "chunks", "structureArtifacts", "granularityFragments"],

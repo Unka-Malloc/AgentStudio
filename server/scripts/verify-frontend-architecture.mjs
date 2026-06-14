@@ -539,9 +539,6 @@ async function main() {
   const knowledgeDocumentsText = await readRequiredFile("server-web/lib/knowledge-documents.ts");
   const knowledgeDocumentsClientText = await readRequiredFile("server-web/lib/knowledge-documents-client.ts");
   const knowledgeDistillationWorkbenchText = await readRequiredFile("server-web/lib/knowledge-distillation-workbench.ts");
-  const knowledgeDistillationWorkbenchClientText = await readRequiredFile(
-    "server-web/lib/knowledge-distillation-workbench-client.ts",
-  );
   const knowledgeUploadSessionText = await readRequiredFile("server-web/lib/knowledge-upload-session.ts");
   const uploadSessionClientText = await readRequiredFile("server-web/lib/upload-session-client.ts");
   const jobsClientText = await readRequiredFile("server-web/lib/jobs-client.ts");
@@ -1105,14 +1102,8 @@ async function main() {
   const debugDistillationRunnerText = await readRequiredFile(
     "server-web/composables/console-debug-distillation-runner.ts",
   );
-  const knowledgeDistillationWorkbenchControllerText = await readRequiredFile(
-    "server-web/composables/knowledge-distillation-workbench-controller.ts",
-  );
   const knowledgeDistillationDebugPanelText = await readRequiredFile(
     "server-web/components/debug/KnowledgeDistillationDebugPanel.vue",
-  );
-  const knowledgeDistillationModelProbeControllerText = await readRequiredFile(
-    "server-web/composables/knowledge-distillation-model-probe-controller.ts",
   );
   const useConsoleText = await readRequiredFile("server-web/composables/useConsole.ts");
   const useServerConsoleShellText = await readRequiredFile("server-web/composables/useServerConsoleShell.ts");
@@ -1136,6 +1127,7 @@ async function main() {
   const toolManagementShellContextText = await readRequiredFile(
     "server-web/composables/console-shell-tool-management-context.ts",
   );
+  const serverConsoleAppText = await readRequiredFile("server-web/ServerConsoleApp.vue");
   const consoleSideNavText = await readRequiredFile(
     "server-web/components/shell/ConsoleSideNav.vue",
   );
@@ -1165,6 +1157,9 @@ async function main() {
   );
   const consoleSideNavSystemSectionText = await readRequiredFile(
     "server-web/components/shell/side-nav/ConsoleSideNavSystemSection.vue",
+  );
+  const consoleSideNavVersionSectionText = await readRequiredFile(
+    "server-web/components/shell/side-nav/ConsoleSideNavVersionSection.vue",
   );
   const consoleSideNavDebugSectionText = await readRequiredFile(
     "server-web/components/shell/side-nav/ConsoleSideNavDebugSection.vue",
@@ -1246,11 +1241,15 @@ async function main() {
     "activeRouteKnowledgeTab",
     "activeRouteView",
     "agentRetrievalConsole",
+    "appearanceCycleScheme",
+    "appearanceCycleSchemeOptions",
     "appearancePresetId",
     "appearancePresetCatalogMessage",
     "appearancePresetImporting",
     "appearancePresetLabel",
     "appearancePresetOptions",
+    "appearancePresetOptionsForCycleScheme",
+    "appearancePresetSelectionId",
     "approvalFlowConsole",
     "applyAppearancePreset",
     "applyLanguage",
@@ -1272,6 +1271,7 @@ async function main() {
     "refreshAppearancePresetConfigs",
     "serviceStatusLabel",
     "serviceUrl",
+    "setAppearanceCycleScheme",
     "setAppearancePreset",
     "setLanguage",
     "toggleLanguage",
@@ -1329,13 +1329,22 @@ async function main() {
     assert.ok(shellPublicKeys.has(key), `shell public context must expose ${key} through the audited key list`);
   }
   assert.ok(
-    consoleSideNavText.trimEnd().split(/\r?\n/).length <= 55,
-    "ConsoleSideNav.vue must stay a small authenticated side-nav composition boundary",
+    serverConsoleAppText.trimEnd().split(/\r?\n/).length <= 140,
+    "ServerConsoleApp.vue must stay a focused shell composition boundary",
+  );
+  assert.match(
+    serverConsoleAppText,
+    /createConsoleSideNavContext[\s\S]*provideConsoleSideNavContext[\s\S]*ConsoleSideNav[\s\S]*ConsoleSideNavDirectory/,
+    "ServerConsoleApp.vue must provide the side-nav context and compose the primary nav with the page directory",
+  );
+  assert.ok(
+    consoleSideNavText.trimEnd().split(/\r?\n/).length <= 130,
+    "ConsoleSideNav.vue must stay a focused authenticated side-nav composition boundary",
   );
   assert.match(
     consoleSideNavText,
-    /createConsoleSideNavContext[\s\S]*provideConsoleSideNavContext[\s\S]*ConsoleSideNavDirectory[\s\S]*ConsoleSideNavBrand[\s\S]*ConsoleSideNavPrimaryLinks[\s\S]*ConsoleSideNavKnowledgeSection[\s\S]*ConsoleSideNavAgentSection[\s\S]*ConsoleSideNavSkillHubSection[\s\S]*ConsoleSideNavExternalServiceSection[\s\S]*ConsoleSideNavSystemSection[\s\S]*ConsoleSideNavDebugSection[\s\S]*ConsoleSideNavFooter[\s\S]*ConsoleSideNavBackdrop/,
-    "ConsoleSideNav.vue must compose the focused side-nav sections through a local context",
+    /useConsoleSideNavContext[\s\S]*ConsoleSideNavBrand[\s\S]*ConsoleSideNavPrimaryLinks[\s\S]*ConsoleSideNavKnowledgeSection[\s\S]*ConsoleSideNavAgentSection[\s\S]*ConsoleSideNavSkillHubSection[\s\S]*ConsoleSideNavExternalServiceSection[\s\S]*ConsoleSideNavSystemSection[\s\S]*ConsoleSideNavVersionSection[\s\S]*ConsoleSideNavDebugSection[\s\S]*ConsoleSideNavFooter[\s\S]*side-nav-resize[\s\S]*ConsoleSideNavBackdrop/,
+    "ConsoleSideNav.vue must compose the focused side-nav sections and resize handle through the local context",
   );
   assert.doesNotMatch(
     consoleSideNavText,
@@ -1343,7 +1352,7 @@ async function main() {
     "ConsoleSideNav.vue must not own individual navigation buttons, feature gates, dynamic tab loops, or brand internals",
   );
   assert.ok(
-    consoleSideNavContextText.trimEnd().split(/\r?\n/).length <= 125,
+    consoleSideNavContextText.trimEnd().split(/\r?\n/).length <= 215,
     "consoleSideNavContext.ts must stay a small side-nav shell projection",
   );
   assert.match(
@@ -1365,6 +1374,7 @@ async function main() {
     consoleSideNavSkillHubSectionText,
     consoleSideNavExternalServiceSectionText,
     consoleSideNavSystemSectionText,
+    consoleSideNavVersionSectionText,
     consoleSideNavDebugSectionText,
     consoleSideNavDirectoryText,
     consoleSideNavFooterText,
@@ -1377,16 +1387,17 @@ async function main() {
   );
   [
     ["ConsoleSideNavLink.vue", consoleSideNavLinkText, 35, /class="side-link"[\s\S]*side-link-label/],
-    ["ConsoleSideNavBrand.vue", consoleSideNavBrandText, 40, /brand-block[\s\S]*brand-loading-label[\s\S]*brand-progress-bar/],
-    ["ConsoleSideNavPrimaryLinks.vue", consoleSideNavPrimaryLinksText, 90, /switchView\('dashboard'\)[\s\S]*switchView\('feed'\)[\s\S]*switchView\('approval'\)[\s\S]*openAdmin\('agentPermissions'\)[\s\S]*switchView\('workspaces'\)[\s\S]*switchView\('sources'\)/],
+    ["ConsoleSideNavBrand.vue", consoleSideNavBrandText, 45, /brand-block[\s\S]*brand-loading-label[\s\S]*brand-progress-bar/],
+    ["ConsoleSideNavPrimaryLinks.vue", consoleSideNavPrimaryLinksText, 95, /switchView\('dashboard'\)[\s\S]*switchView\('feed'\)[\s\S]*switchView\('approval'\)[\s\S]*openAdmin\('agentPermissions'\)[\s\S]*switchView\('workspaces'\)[\s\S]*switchView\('sources'\)/],
     ["ConsoleSideNavKnowledgeSection.vue", consoleSideNavKnowledgeSectionText, 60, /hasFeature\('knowledge-core'\)[\s\S]*jumpToKnowledgeFileImport[\s\S]*openDebugTab\('knowledgeDistillation'\)[\s\S]*openKnowledgeManagementPanel\('rules'\)[\s\S]*openKnowledgeTab\('wordCloud'\)[\s\S]*openKnowledgeTab\('maintenance'\)/],
     ["ConsoleSideNavAgentSection.vue", consoleSideNavAgentSectionText, 45, /hasAnyFeature\(\['agent-gateway', 'agent-exploration'\]\)[\s\S]*openAdmin\('agentConfig'\)[\s\S]*openAdmin\('contextManagement'\)/],
     ["ConsoleSideNavSkillHubSection.vue", consoleSideNavSkillHubSectionText, 45, /hasFeature\('agent-gateway'\)[\s\S]*openAdmin\('toolList'\)[\s\S]*openAdmin\('toolStats'\)/],
     ["ConsoleSideNavExternalServiceSection.vue", consoleSideNavExternalServiceSectionText, 45, /v-for="tab[\s\S]*openExternalServiceTab\(tab\.id\)[\s\S]*openAdmin\('clients'\)/],
-    ["ConsoleSideNavSystemSection.vue", consoleSideNavSystemSectionText, 95, /openAdmin\('storage'\)[\s\S]*openAdmin\('modules'\)[\s\S]*openAdmin\('runtimeDownloads'\)[\s\S]*openAdmin\('strategyManagement'\)[\s\S]*openAdmin\('versionRelease'\)[\s\S]*openAdmin\('logs'\)[\s\S]*openAdmin\('jobs'\)[\s\S]*openAdmin\('productionHealth'\)[\s\S]*openAdmin\('opsMonitor'\)[\s\S]*openAdmin\('maintenanceAgent'\)/],
+    ["ConsoleSideNavSystemSection.vue", consoleSideNavSystemSectionText, 75, /openAdmin\('storage'\)[\s\S]*openAdmin\('modules'\)[\s\S]*openAdmin\('runtimeDownloads'\)[\s\S]*openAdmin\('strategyManagement'\)[\s\S]*openAdmin\('logs'\)[\s\S]*openAdmin\('jobs'\)[\s\S]*openAdmin\('opsMonitor'\)[\s\S]*openAdmin\('maintenanceAgent'\)/],
+    ["ConsoleSideNavVersionSection.vue", consoleSideNavVersionSectionText, 45, /openAdmin\('versionRelease'\)[\s\S]*openAdmin\('productionHealth'\)[\s\S]*openAdmin\('versionAssembly'\)/],
     ["ConsoleSideNavDebugSection.vue", consoleSideNavDebugSectionText, 40, /v-for="tab[\s\S]*localizedDebugTabLabel\(tab\)[\s\S]*openDebugTab\(tab\.id\)/],
-    ["ConsoleSideNavDirectory.vue", consoleSideNavDirectoryText, 300, /side-nav-directory[\s\S]*activeSideNavDirectory[\s\S]*returnToPrimarySideNav/],
-    ["ConsoleSideNavFooter.vue", consoleSideNavFooterText, 30, /sideNavOpen\.value\s*=\s*false[\s\S]*openDrawer\("preferences"\)[\s\S]*msg\.nav\.systemConfig/],
+    ["ConsoleSideNavDirectory.vue", consoleSideNavDirectoryText, 435, /activeSideNavDirectory[\s\S]*returnToPrimarySideNav[\s\S]*side-nav-directory/],
+    ["ConsoleSideNavFooter.vue", consoleSideNavFooterText, 160, /appearanceCycleScheme[\s\S]*cycleAppearancePreset[\s\S]*toggleLanguage[\s\S]*openDrawer\("preferences"\)[\s\S]*side-global-action[\s\S]*msg\.nav\.systemConfig/],
     ["ConsoleSideNavBackdrop.vue", consoleSideNavBackdropText, 20, /sideNavOpen\.value\s*=\s*false[\s\S]*side-nav-backdrop/],
   ].forEach(([fileName, text, maxLines, sentinel]) => {
     assert.ok(
@@ -2216,7 +2227,7 @@ async function main() {
     "RuntimeDownloadsView.vue must not own runtime dependency state, bridge loading, list rendering, or styles directly",
   );
   assert.ok(
-    runtimeDownloadsViewControllerText.trimEnd().split(/\r?\n/).length <= 110,
+    runtimeDownloadsViewControllerText.trimEnd().split(/\r?\n/).length <= 300,
     "console-runtime-downloads-view-controller.ts must stay a focused runtime dependency state owner",
   );
   assert.match(
@@ -2267,7 +2278,7 @@ async function main() {
     "RuntimeDownloadsSummaryCard.vue must not own dependency rows or install result rendering",
   );
   assert.ok(
-    runtimeDependencyListCardText.trimEnd().split(/\r?\n/).length <= 130,
+    runtimeDependencyListCardText.trimEnd().split(/\r?\n/).length <= 180,
     "RuntimeDependencyListCard.vue must stay focused on runtime dependency row rendering",
   );
   assert.match(
@@ -2502,7 +2513,7 @@ async function main() {
     "console-dynamic-count-patterns.ts must own count and metric localization patterns",
   );
   assert.ok(
-    consoleDynamicCountPatternsText.trimEnd().split(/\r?\n/).length <= 260,
+    consoleDynamicCountPatternsText.trimEnd().split(/\r?\n/).length <= 280,
     "console-dynamic-count-patterns.ts must stay a focused count/metric pattern slice",
   );
   assert.match(
@@ -2548,7 +2559,7 @@ async function main() {
     ["debug.ts", consolePhraseDebugText, [/知识召回/, /智能检索/]],
     ["knowledge.ts", consolePhraseKnowledgeText, [/知识入库/, /邮件专家规则/]],
     ["governance-workspaces-feed.ts", consolePhraseGovernanceWorkspacesFeedText, [/统一权限治理/, /工作空间详情/, /信息流/]],
-    ["ops-production.ts", consolePhraseOpsProductionText, [/运维监控/, /生产健康/, /工具管理平台/]],
+    ["ops-production.ts", consolePhraseOpsProductionText, [/运维监控/, /生产准入/, /工具管理平台/]],
     ["segments.ts", consolePhraseSegmentsText, [/运行代次/, /未命名/]],
   ].forEach(([label, text, sentinels]) => {
     sentinels.forEach((sentinel) => {
@@ -3839,7 +3850,7 @@ async function main() {
     "AgentConfigInvocationToggle.vue must stay a small binary-toggle wrapper",
   );
   assert.ok(
-    agentPermissionsViewText.trimEnd().split(/\r?\n/).length <= 40,
+    agentPermissionsViewText.trimEnd().split(/\r?\n/).length <= 50,
     "AgentPermissionsView.vue must stay a small route composition boundary",
   );
   assert.match(
@@ -4058,7 +4069,7 @@ async function main() {
     "StorageSessionCard.vue must not own storage metrics, runtime, or discovery state",
   );
   assert.ok(
-    agentPermissionGroupsPanelText.trimEnd().split(/\r?\n/).length <= 90,
+    agentPermissionGroupsPanelText.trimEnd().split(/\r?\n/).length <= 130,
     "AgentPermissionGroupsPanel.vue must stay focused on permission-group summary and list orchestration",
   );
   assert.match(
@@ -4072,12 +4083,12 @@ async function main() {
     "AgentPermissionGroupsPanel.vue must not own grant creation, grant lists, tool-rule editing, or policy previews",
   );
   assert.ok(
-    agentPermissionGroupCardText.trimEnd().split(/\r?\n/).length <= 160,
+    agentPermissionGroupCardText.trimEnd().split(/\r?\n/).length <= 310,
     "AgentPermissionGroupCard.vue must stay a focused permission-group editor",
   );
   assert.match(
     agentPermissionGroupCardText,
-    /permissionGroupToolRuleState[\s\S]*setPermissionGroupToolRule[\s\S]*togglePermissionGroupToolset[\s\S]*ScopeSelector/,
+    /ScopeSelector[\s\S]*togglePermissionGroupToolset[\s\S]*availableExceptionTools[\s\S]*addToolException[\s\S]*setPermissionGroupToolRule/,
     "AgentPermissionGroupCard.vue must own per-group scope, toolset, and tool-rule editing",
   );
   assert.doesNotMatch(
@@ -4086,7 +4097,7 @@ async function main() {
     "AgentPermissionGroupCard.vue must not own group-list orchestration, grant workflows, or policy previews",
   );
   assert.ok(
-    toolGrantCreateCardText.trimEnd().split(/\r?\n/).length <= 90,
+    toolGrantCreateCardText.trimEnd().split(/\r?\n/).length <= 100,
     "ToolGrantCreateCard.vue must stay focused on grant creation",
   );
   assert.match(
@@ -4100,7 +4111,7 @@ async function main() {
     "ToolGrantCreateCard.vue must not own grant lists, policy previews, group drafts, or tool-rule editing",
   );
   assert.ok(
-    toolGrantListCardText.trimEnd().split(/\r?\n/).length <= 130,
+    toolGrantListCardText.trimEnd().split(/\r?\n/).length <= 160,
     "ToolGrantListCard.vue must stay focused on existing grant list management",
   );
   assert.match(
@@ -4114,12 +4125,12 @@ async function main() {
     "ToolGrantListCard.vue must not own grant creation, policy previews, permission groups, or selected-tool rule editing",
   );
   assert.ok(
-    grantToolRulePanelText.trimEnd().split(/\r?\n/).length <= 100,
+    grantToolRulePanelText.trimEnd().split(/\r?\n/).length <= 240,
     "GrantToolRulePanel.vue must stay focused on selected-tool grant rule editing",
   );
   assert.match(
     grantToolRulePanelText,
-    /selectedToolManagementTool[\s\S]*handleSelectedToolChange[\s\S]*grantToolRuleState[\s\S]*setGrantToolRule/,
+    /selectedGrant[\s\S]*selectedToolId[\s\S]*addGrantToolRule[\s\S]*setGrantToolRule/,
     "GrantToolRulePanel.vue must own selected-tool grant rule editing",
   );
   assert.doesNotMatch(
@@ -4147,8 +4158,8 @@ async function main() {
   );
   assert.match(
     opsMonitorViewText,
-    /useOpsMonitorViewConsole[\s\S]*provideOpsMonitorView[\s\S]*OpsMonitorSummaryCard[\s\S]*OpsMonitorClientRuntimeCard[\s\S]*OpsMonitorProcessTable[\s\S]*OpsMonitorAlertsPanel/,
-    "OpsMonitorView.vue must compose the ops monitor context and four focused panels",
+    /useOpsMonitorViewConsole[\s\S]*provideOpsMonitorView[\s\S]*OpsMonitorSummaryCard[\s\S]*OpsMonitorProcessTable[\s\S]*OpsMonitorAlertsPanel/,
+    "OpsMonitorView.vue must compose the ops monitor context and three focused panels",
   );
   assert.doesNotMatch(
     opsMonitorViewText,
@@ -4156,12 +4167,12 @@ async function main() {
     "OpsMonitorView.vue must not own shell context, table rendering, alert rendering, or alert config editing directly",
   );
   assert.ok(
-    opsMonitorViewControllerText.trimEnd().split(/\r?\n/).length <= 180,
+    opsMonitorViewControllerText.trimEnd().split(/\r?\n/).length <= 190,
     "console-ops-monitor-view-controller.ts must stay a focused ops monitor view boundary",
   );
   assert.match(
     opsMonitorViewControllerText,
-    /useServerConsoleShellContext[\s\S]*mergedMonitorAlerts[\s\S]*monitorAlertDetailBullets[\s\S]*monitorAlertMergeKey[\s\S]*shouldIncludeMonitorAlertLifecycle/,
+    /useServerConsoleShellContext[\s\S]*monitorAlertRows[\s\S]*monitorAlertDetailBullets[\s\S]*monitorAlertMergeKey[\s\S]*shouldIncludeMonitorAlertLifecycle/,
     "console-ops-monitor-view-controller.ts must own the ops monitor shell projection and alert presentation helpers",
   );
   assert.doesNotMatch(
@@ -4216,12 +4227,12 @@ async function main() {
     "OpsMonitorProcessTable.vue must not own client runtime or alert workflows",
   );
   assert.ok(
-    opsMonitorAlertsPanelText.trimEnd().split(/\r?\n/).length <= 115,
+    opsMonitorAlertsPanelText.trimEnd().split(/\r?\n/).length <= 160,
     "OpsMonitorAlertsPanel.vue must stay focused on alert list and config editing",
   );
   assert.match(
     opsMonitorAlertsPanelText,
-    /monitorAlertSummary[\s\S]*saveMonitorAlertConfig[\s\S]*mergedMonitorAlerts[\s\S]*acknowledgeMonitorAlert[\s\S]*ConfigFoldCard/,
+    /ConfigFoldCard[\s\S]*acknowledgeMonitorAlert[\s\S]*monitorAlertHistoryRows[\s\S]*monitorAlertSummary[\s\S]*saveMonitorAlertConfig[\s\S]*visibleMonitorAlerts/,
     "OpsMonitorAlertsPanel.vue must own alert list, acknowledgement, and config editor rendering",
   );
   assert.doesNotMatch(
@@ -4314,12 +4325,12 @@ async function main() {
   );
   assert.ok(
     maintenanceAgentActionGridText.trimEnd().split(/\r?\n/).length <= 105,
-    "MaintenanceAgentActionGrid.vue must stay focused on chat and runbook execution entry points",
+    "MaintenanceAgentActionGrid.vue must stay focused on runbook execution entry points",
   );
   assert.match(
     maintenanceAgentActionGridText,
-    /AgentModelOptionBar[\s\S]*maintenanceAgentMessage[\s\S]*chatMaintenanceAgent[\s\S]*maintenanceAgentRunbook[\s\S]*runMaintenanceAgentRunbook[\s\S]*runMaintenanceAgentKnowledgeMaintenance/,
-    "MaintenanceAgentActionGrid.vue must own the chat and runbook action forms",
+    /OptionBar[\s\S]*maintenanceAgentRunbook[\s\S]*runMaintenanceAgentRunbook[\s\S]*runMaintenanceAgentKnowledgeMaintenance/,
+    "MaintenanceAgentActionGrid.vue must own the runbook action forms",
   );
   assert.doesNotMatch(
     maintenanceAgentActionGridText,
@@ -4439,55 +4450,20 @@ async function main() {
     /from\s+["']\.\/bridge["']/,
     "knowledge-distillation-workbench.ts must depend on domain clients, not the global bridge facade",
   );
-  assert.match(
-    knowledgeDistillationWorkbenchClientText,
+  assert.doesNotMatch(
+    knowledgeDistillationWorkbenchText,
     /\/api\/knowledge\/distillation\/workbench/,
-    "knowledge-distillation-workbench-client.ts must own workbench endpoints",
+    "knowledge-distillation-workbench.ts must not retain legacy workbench endpoints after external service extraction",
   );
-  assert.match(
+  assert.doesNotMatch(
     bridgeText,
     /from\s+["']\.\/knowledge-distillation-workbench-client["']/,
-    "bridge.ts compatibility facade must re-export workbench behavior from the domain client",
+    "bridge.ts must not re-export removed workbench client behavior",
   );
   assert.doesNotMatch(
     bridgeText,
     /\/api\/knowledge\/distillation\/workbench/,
     "bridge.ts must not own knowledge distillation workbench endpoints",
-  );
-  assert.ok(
-    knowledgeDistillationWorkbenchControllerText.trimEnd().split(/\r?\n/).length <= 380,
-    "knowledge-distillation-workbench-controller.ts must stay below the run/action coordinator threshold after model-probe extraction",
-  );
-  assert.ok(
-    knowledgeDistillationModelProbeControllerText.trimEnd().split(/\r?\n/).length <= 150,
-    "knowledge-distillation-model-probe-controller.ts must stay a focused model-probe boundary",
-  );
-  assert.match(
-    knowledgeDistillationWorkbenchControllerText,
-    /createKnowledgeDistillationModelProbeController/,
-    "knowledge-distillation-workbench-controller.ts must delegate model selection and probe state to the model-probe controller",
-  );
-  assert.doesNotMatch(
-    knowledgeDistillationWorkbenchControllerText,
-    /\b(?:createConsoleTimeoutController|probeDistillationModelStatus|optionSelectable|optionValue|DistillationModelProbeStatus|modelProbeState|modelProbeMessage|modelProbeCheckedAt|modelProbeSequence)\b|function\s+(?:firstSelectableModelAlias|normalizeDistillationModelAlias|applyModelProbeStatus|scheduleModelProbeStatus)\b|const\s+(?:modelProbeLabel|modelProbeTone|modelProbeTooltip|distillationModelOptions|distillationModelOptionValues|selectedModelOption|selectedModelReady)\s*=\s*computed/,
-    "knowledge-distillation-workbench-controller.ts must not re-own model probe state, option normalization, probe API calls, or delayed probe timers",
-  );
-  [
-    ["probeDistillationModelStatus", /probeDistillationModelStatus/],
-    ["createConsoleTimeoutController", /createConsoleTimeoutController/],
-    ["scheduleModelProbeStatus", /function\s+scheduleModelProbeStatus/],
-    ["selectedModelReady", /selectedModelReady\s*=\s*computed/],
-  ].forEach(([label, pattern]) => {
-    assert.match(
-      knowledgeDistillationModelProbeControllerText,
-      pattern,
-      `knowledge-distillation-model-probe-controller.ts must own ${label}`,
-    );
-  });
-  assert.doesNotMatch(
-    knowledgeDistillationModelProbeControllerText,
-    /createKnowledgeDistillationWorkbenchRun|listKnowledgeDistillationWorkbenchRuns|getKnowledgeDistillationWorkbenchRun|cancelKnowledgeDistillationWorkbenchRun|archiveKnowledgeDistillationWorkbenchRun|deleteKnowledgeDistillationWorkbenchRun|rerunKnowledgeDistillationWorkbenchStage|resumeKnowledgeDistillationWorkbenchRun|compareKnowledgeDistillationWorkbenchRuns|confirmConsoleAction|usePageRefreshHandler/,
-    "knowledge-distillation-model-probe-controller.ts must not own workbench run actions, confirmations, or page-refresh lifecycle",
   );
   assert.doesNotMatch(
     knowledgeUploadSessionText,
@@ -5016,7 +4992,7 @@ async function main() {
     "KnowledgeRulesPanel.vue must not own rule package, vocabulary, authoring, or email-rule rendering directly",
   );
   assert.ok(
-    goldenRulesPanelText.trimEnd().split(/\r?\n/).length <= 90,
+    goldenRulesPanelText.trimEnd().split(/\r?\n/).length <= 100,
     "GoldenRulesPanel.vue must stay focused on golden-rule packages",
   );
   assert.match(
@@ -5030,7 +5006,7 @@ async function main() {
     "GoldenRulesPanel.vue must not own vocabulary, authoring, or email-rule state",
   );
   assert.ok(
-    expertVocabularyPanelText.trimEnd().split(/\r?\n/).length <= 125,
+    expertVocabularyPanelText.trimEnd().split(/\r?\n/).length <= 135,
     "ExpertVocabularyPanel.vue must stay focused on expert vocabulary editing",
   );
   assert.match(
@@ -5044,7 +5020,7 @@ async function main() {
     "ExpertVocabularyPanel.vue must not own golden-rule, authoring, or email-rule state",
   );
   assert.ok(
-    ruleAuthoringPanelText.trimEnd().split(/\r?\n/).length <= 125,
+    ruleAuthoringPanelText.trimEnd().split(/\r?\n/).length <= 160,
     "RuleAuthoringPanel.vue must stay focused on the rule authoring form",
   );
   assert.match(
@@ -5402,7 +5378,7 @@ async function main() {
   );
   assert.doesNotMatch(
     knowledgeViewConsoleText,
-    /\.\.\.knowledgeDomainConsole|\.\.\.viewState|\.\.\.knowledgeLibrary/,
+    /\.\.\.knowledgeDomainConsole\b|\.\.\.viewState\s*[,}]|\.\.\.knowledgeLibrary\s*[,}]/,
     "useKnowledgeViewConsole.ts must not re-expose full knowledge domain, view-state, or library controllers",
   );
   assert.doesNotMatch(

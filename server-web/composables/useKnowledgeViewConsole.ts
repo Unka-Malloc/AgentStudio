@@ -13,25 +13,6 @@ export function useKnowledgeViewConsole() {
   });
 
   const unifiedKnowledgeIngestPipelineConfig = viewState.unifiedKnowledgeIngestPipelineConfig;
-  const dynamicParsingPreviewPipelineId = "dynamic-parameter-v1";
-  const dynamicParsingProfile = {
-    contextBudget: { knowledgeTokens: 12000 },
-    payloadBudget: { maxResponseBytes: 1048576 },
-    granularity: {
-      secondaryParse: { enabled: false },
-    },
-    secondaryParse: { enabled: false },
-    dynamicParsing: viewState.dynamicParsingPreviewConfig.dynamicParsing,
-    structureArtifacts: "structureArtifacts",
-    granularityFragments: "granularityFragments",
-    parentArtifactId: "structureArtifacts[].metadata.parentArtifactId",
-    pipelineId: dynamicParsingPreviewPipelineId,
-  };
-
-  const dynamicParsingPreviewConfig = {
-    ...viewState.dynamicParsingPreviewConfig,
-    pipelineId: dynamicParsingPreviewPipelineId,
-  };
   const uploadFilesToKnowledge = () =>
     shellContext.ingest.uploadFilesToKnowledge({
       documentParsing: unifiedKnowledgeIngestPipelineConfig,
@@ -64,9 +45,9 @@ export function useKnowledgeViewConsole() {
     ...shellContext.ingest,
     documentPreviewResult: viewState.documentPreviewResult,
     uploadFilesToKnowledge,
-    dynamicParsingPreviewPipelineId,
-    dynamicParsingPreviewConfig,
-    dynamicParsingProfile,
+    dynamicParsingPreviewPipelineId: viewState.dynamicParsingPreviewConfig.pipelineId,
+    dynamicParsingPreviewConfig: viewState.dynamicParsingPreviewConfig,
+    dynamicParsingProfile: viewState.dynamicParsingProfile,
     unifiedKnowledgeIngestPipelineConfig,
     knowledgeIngestTargetDisplaySummary: knowledgeLibrary.knowledgeIngestTargetDisplaySummary,
     knowledgeIngestTargetOptions: knowledgeLibrary.knowledgeIngestTargetOptions,
