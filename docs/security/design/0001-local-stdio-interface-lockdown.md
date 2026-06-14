@@ -1,5 +1,12 @@
 # Security Design 0001: Local Stdio Interfaces Are Disabled As Public Pact Surfaces
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-14
+- Status: Accepted
+- Scope: Local stdio interface lockdown for public Pact MCP and external-service surfaces.
+- Staleness check: Scanned on 2026-06-14; enforcement is owned by `server:verify:security-local-stdio-lockdown`.
+
 ## Status
 
 Accepted

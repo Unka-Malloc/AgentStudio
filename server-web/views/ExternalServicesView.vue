@@ -146,11 +146,6 @@ function toggleCandidateToolSelection(tool: ExternalServiceToolReview, checked: 
   toolListPopover.value.selectedCandidateToolNames = [...selected].sort();
 }
 
-function handleCandidateToolSelectionChange(tool: ExternalServiceToolReview, event: Event) {
-  const target = event.target;
-  toggleCandidateToolSelection(tool, target instanceof HTMLInputElement && target.checked);
-}
-
 function showUpstreamValueBubble(event: MouseEvent | FocusEvent, value: unknown) {
   const text = fullCopyValue(value);
   const target = event.currentTarget;
@@ -1267,14 +1262,13 @@ const selectHelp: Record<string, SelectHelpItems> = {
               :key="tool.name"
               class="external-service-tool-item external-service-tool-review-item"
             >
-              <label class="external-service-tool-review-title">
-                <input
-                  type="checkbox"
-                  :checked="isCandidateToolSelected(tool)"
-                  @change="handleCandidateToolSelectionChange(tool, $event)"
+              <div class="external-service-tool-review-title">
+                <BinaryCheckbox
+                  :model-value="isCandidateToolSelected(tool)"
+                  :label="toolReviewTitle(tool)"
+                  @change="toggleCandidateToolSelection(tool, $event)"
                 />
-                <span>{{ toolReviewTitle(tool) }}</span>
-              </label>
+              </div>
               <small>{{ tool.name }} · {{ toolReviewReasonLabel(tool) }}</small>
               <small v-if="toolReviewDescription(tool)">{{ toolReviewDescription(tool) }}</small>
               <small>{{ toolReviewSchemaLabel(tool) }}<template v-if="toolReviewPropertyLabel(tool)"> · {{ toolReviewPropertyLabel(tool) }}</template></small>

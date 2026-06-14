@@ -2,9 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-13
+- Last updated: 2026-06-14
 - Status: Current maintained design draft
 - Scope: Pact Work Queue infrastructure primitive.
+- Staleness check: Scanned on 2026-06-14; queue contract claims are guarded by `server:verify:work-queue` and `server:verify:job-work-queue`.
 - ADR: `docs/adr/0007-pact-work-queue-primitive-contract.md`
 
 ## Summary

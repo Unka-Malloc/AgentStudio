@@ -1,10 +1,11 @@
 # Pact Security Design
 
-## Metadata
+## Metadata / 元数据
 
 - Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: Security design records, security gates, and security-only threat decisions.
+- Staleness check: Scanned on 2026-06-14; dedicated security gate inventory was checked against current `server:verify:security-*` scripts.
 
 This directory is the home for Pact security design records. Product, protocol, runtime, and capability design records stay in their own documents; security records live here when the decision is primarily about threat reduction, attack-surface closure, credential handling, authorization, or fail-closed behavior.
 

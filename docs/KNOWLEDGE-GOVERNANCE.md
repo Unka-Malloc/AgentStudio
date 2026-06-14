@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-13
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: AgentLibrary Governance.
 - Staleness check: Scanned on 2026-06-13; this update adds the AgentLibrary native capability boundary and normalized knowledge-rule DSL primitive model and does not change release/readiness claims.

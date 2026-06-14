@@ -7,7 +7,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const STATE_SCHEMA_VERSION: u32 = 1;
+const STATE_SCHEMA_VERSION: &str = "v0.0.1:schema:definition-1";
 const CLIENT_STATE_DIR: &str = "future-client";
 const ACTIVITY_FILE: &str = "activity.jsonl";
 const SNAPSHOT_DIR: &str = "snapshots";

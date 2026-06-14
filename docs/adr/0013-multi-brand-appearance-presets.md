@@ -1,5 +1,12 @@
 # ADR 0013: Multi-Brand Appearance Presets
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-14
+- Status: Accepted
+- Scope: Multi-brand appearance preset vocabulary, config sources, local persistence, and frontend theme contract.
+- Staleness check: Scanned on 2026-06-14; appearance preset behavior is guarded by current web and Flutter theme verification gates.
+
 ## Status
 Accepted
 

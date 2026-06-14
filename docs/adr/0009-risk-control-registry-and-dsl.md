@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-13
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: ADR 0009 - Risk Control Registry and DSL.
 - Staleness check: Created on 2026-06-13 during the Risk Control Model design discussion.

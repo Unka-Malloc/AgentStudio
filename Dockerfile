@@ -86,6 +86,7 @@ RUN node -e "const fs=require('node:fs');const url=process.argv[1];const out=pro
 FROM ${NODE_BASE_IMAGE} AS runtime
 
 ENV NODE_ENV=production \
+    PACT_SERVER_PORT=7228 \
     CODEX_HOME=/codex-home \
     PATH=/app/node_modules/.bin:$PATH
 

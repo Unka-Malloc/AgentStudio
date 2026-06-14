@@ -140,6 +140,16 @@ function assertNoMcpInternalLeak(value, label) {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-mcp-http-"));
+const originalCapabilityKernelEnv = {
+  PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER,
+  PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER: process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER,
+  PACT_OPAQUE_CAPABILITY_KEY_PROVIDER: process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER,
+  PACT_CAPABILITY_BINDING_GUARD_PROVIDER: process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER
+};
+process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
+process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
+process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER = "local-file";
+process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = "local-file";
 const server = await startHttpServer({
   userDataPath,
   distPath: "",
@@ -910,7 +920,7 @@ try {
   assert.match(sharedspaceWriteSse.text, /notifications\/pact\/operation_reply/);
   assert.match(sharedspaceWriteSse.text, /pact\.sharedspace\.file\.write/);
   assert.match(sharedspaceWriteSse.text, /"status":"completed"/);
-  assert.match(sharedspaceWriteSse.text, /"exchange":\{"schemaVersion":"pact\.mcp\.sharedspace-exchange\.v1"/);
+  assert.match(sharedspaceWriteSse.text, /"exchange":\{"schemaVersion":"v0\.0\.1:mcp:sharedspace-exchange-1"/);
   assert.match(sharedspaceWriteSse.text, /"action":"file-written"/);
   assert.match(sharedspaceWriteSse.text, /"path":"notes\/hello\.txt"/);
   assert.equal(sharedspaceWrite.status, 200);
@@ -997,7 +1007,7 @@ try {
   assert.equal(failedSharedspaceRead.payload.error.data.exchange.path, "[server-internal-path]");
   assert.equal(failedSharedspaceRead.payload.error.data.target.targetKind, "sharedspace");
   assert.equal(failedSharedspaceRead.payload.error.data.target.workspaceId, "workspace-hidden");
-  assert.match(failedSharedspaceReadSse.text, /"exchange":\{"schemaVersion":"pact\.mcp\.sharedspace-exchange\.v1"/);
+  assert.match(failedSharedspaceReadSse.text, /"exchange":\{"schemaVersion":"v0\.0\.1:mcp:sharedspace-exchange-1"/);
   assert.match(failedSharedspaceReadSse.text, /"action":"file-read"/);
   assert.match(failedSharedspaceReadSse.text, /"path":"\[server-internal-path\]"/);
   assertNoMcpInternalLeak(failedSharedspaceRead.payload, "MCP failed sharedspace response");
@@ -1155,4 +1165,11 @@ try {
 } finally {
   await server.close();
   await fs.rm(userDataPath, { recursive: true, force: true });
+  for (const [key, value] of Object.entries(originalCapabilityKernelEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
 }

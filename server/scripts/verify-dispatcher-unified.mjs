@@ -201,6 +201,16 @@ async function main() {
   await fs.rm(migrationDir, { recursive: true, force: true });
 
   const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-dispatcher-unified-"));
+  const originalCapabilityKernelEnv = {
+    PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER,
+    PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER: process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER,
+    PACT_OPAQUE_CAPABILITY_KEY_PROVIDER: process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER,
+    PACT_CAPABILITY_BINDING_GUARD_PROVIDER: process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER
+  };
+  process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
+  process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = "local-file";
   const server = await startHttpServer({
     userDataPath,
     runtimeOptions: { profile: "minimal" }
@@ -294,6 +304,13 @@ async function main() {
   } finally {
     await server.close();
     await fs.rm(userDataPath, { recursive: true, force: true });
+    for (const [key, value] of Object.entries(originalCapabilityKernelEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
   }
 }
 

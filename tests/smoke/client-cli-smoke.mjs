@@ -24,6 +24,7 @@ function runClient(args) {
       cwd: repoRoot,
       env: {
         ...process.env,
+        CARGO_TARGET_DIR: path.join(repoRoot, "build", "client-cli", "target"),
         PACT_PORTABLE_DIR: portableDir
       },
       stdio: ["ignore", "pipe", "pipe"]

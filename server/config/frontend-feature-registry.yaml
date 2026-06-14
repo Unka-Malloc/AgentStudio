@@ -1,6 +1,14 @@
-version: v0.0.1:frontend:feature-registry-1
+version: 1
 owner: server-web
 routes:
+  - routePath: /login
+    viewFile: server-web/views/LoginView.vue
+    features:
+      - featureId: auth.console-login
+        actions:
+          - auth.login.view
+          - auth.login.submit
+
   - routePath: /workspaces
     viewFile: server-web/views/WorkspacesView.vue
     features:
@@ -168,6 +176,14 @@ routes:
         actions:
           - admin.version-release.baseline
 
+  - routePath: /admin/version-assembly
+    viewFile: server-web/views/admin/VersionAssemblyView.vue
+    features:
+      - featureId: admin.version-assembly
+        actions:
+          - admin.version-assembly.plan
+          - admin.version-assembly.promote
+
   - routePath: /admin/production-health
     viewFile: server-web/views/admin/ProductionHealthView.vue
     features:
@@ -192,6 +208,14 @@ routes:
       - featureId: admin.tools-list
         actions:
           - admin.tools.list
+
+  - routePath: /admin/tool-governance
+    viewFile: server-web/views/admin/ToolsView.vue
+    features:
+      - featureId: admin.tools-governance
+        actions:
+          - admin.tools.governance.inspect
+          - admin.tools.governance.manage
 
   - routePath: /admin/tool-stats
     viewFile: server-web/views/admin/ToolsView.vue

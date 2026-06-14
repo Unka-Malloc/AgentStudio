@@ -1,5 +1,12 @@
 # ADR 0011: ServiceHub Registration Is Control Plane Only
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-14
+- Status: Accepted
+- Scope: ServiceHub registration authority, external-service manifests, egress, secrets, adoption, and runtime invocation boundaries.
+- Staleness check: Scanned on 2026-06-14; ServiceHub production claims are covered by current external-service, security, and MCP verification gates.
+
 ## Status
 Accepted
 

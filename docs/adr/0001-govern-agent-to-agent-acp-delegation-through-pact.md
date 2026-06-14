@@ -7,7 +7,7 @@ date: 2026-06-04
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Accepted ADR
 - Scope: Govern Agent-to-Agent ACP Delegation Through Pact.
 - Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.

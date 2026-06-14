@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-12
+- Last updated: 2026-06-14
 - Status: Current maintained document
 - Scope: Pact Docs.
 - Staleness check: Scanned on 2026-06-12; this update indexes agent-facing documentation entry points and does not change release/readiness claims.

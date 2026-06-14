@@ -1,10 +1,11 @@
 # Design System — Appearance Presets
 
-## Metadata
+## Metadata / 元数据
 
-- Last updated: 2026-06-13
+- Last updated: 2026-06-14
 - Status: **Locked** — preset config schema and semantic token names require explicit product owner approval
 - Scope: Visual identity presets, color tokens, typography, component patterns
+- Staleness check: Scanned on 2026-06-14; design-system claims are enforced by `server:verify:design-system`.
 - Gate: `server:verify:design-system`
 
 ---

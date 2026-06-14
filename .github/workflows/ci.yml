@@ -111,7 +111,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            client-cli/target
+            build/client-cli/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('client-cli/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - name: Install dependencies
@@ -179,7 +179,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            client-cli/target
+            build/client-cli/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('client-cli/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - uses: subosito/flutter-action@v2
@@ -229,7 +229,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            client-cli/target
+            build/client-cli/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('client-cli/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - uses: subosito/flutter-action@v2
@@ -343,7 +343,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            client-cli/target
+            build/client-cli/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('client-cli/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - uses: subosito/flutter-action@v2

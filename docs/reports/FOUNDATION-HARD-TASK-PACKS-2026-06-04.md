@@ -2,7 +2,7 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-11
+- Last updated: 2026-06-14
 - Status: Superseded assessment retained for planning context
 - Scope: Foundation Hard Task Packs (2026-06-04).
 - Staleness check: Scanned on 2026-06-11; older blocked/readiness statements are historical context and are superseded by docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.

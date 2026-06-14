@@ -102,7 +102,7 @@ export const commonComponentRegistry: CommonComponentRegistration[] = [
     usageRule: "页面需要展示或编辑 JSON/配置文件内容时使用；必须传入稳定 fileKey 和保存回调，不在业务页面手写 textarea/pre 保存按钮。",
   },
   {
-    name: "历史记录",
+    name: "历史记录扩展卡片组件",
     file: "server-web/components/HistorySessionPanel.vue",
     category: "history",
     description: "可折叠、可选择、可删除的历史会话和运行记录列表。",

@@ -1,5 +1,12 @@
 # ADR 0012: Risk Control Operation Envelope
 
+## Metadata / 元数据
+
+- Last updated: 2026-06-14
+- Status: Accepted
+- Scope: Risk-control operation envelope, gate records, evidence locators, digest canonicalization, and verification responsibilities.
+- Staleness check: Scanned on 2026-06-14; risk-control contract claims are tracked by current operation-envelope and audit/recovery verification gates.
+
 ## Status
 Accepted
 
