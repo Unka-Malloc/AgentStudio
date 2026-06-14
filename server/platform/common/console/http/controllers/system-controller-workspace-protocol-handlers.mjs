@@ -33,6 +33,150 @@ export function createSystemControllerWorkspaceProtocolHandlers({
         errorMessage: "查询 workspace 操作历史失败。"
       });
     },
+    async handleWorkspaceAssetTargetConnect({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.target.connect",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "连接 workspace 资产目标失败。"
+      });
+    },
+    async handleWorkspaceAssetList({ operation, url, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.list",
+        input: protocolPayload(Buffer.alloc(0), url),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "列出 workspace 统一资产失败。"
+      });
+    },
+    async handleWorkspaceAssetRead({ operation, url, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.read",
+        input: protocolPayload(Buffer.alloc(0), url),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "读取 workspace 统一资产失败。"
+      });
+    },
+    async handleWorkspaceAssetSubmit({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.submit",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "提交 workspace 统一资产失败。"
+      });
+    },
+    async handleWorkspaceAssetMutate({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.mutate",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "变更 workspace 统一资产失败。"
+      });
+    },
+    async handleWorkspaceAssetSyncPlan({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.sync.plan",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "生成 workspace 统一资产同步计划失败。"
+      });
+    },
+    async handleWorkspaceAssetSyncApply({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.sync.apply",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "应用 workspace 统一资产同步计划失败。"
+      });
+    },
+    async handleWorkspaceAssetImport({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.import",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "导入 workspace 统一资产失败。"
+      });
+    },
+    async handleWorkspaceAssetExport({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.export",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "导出 workspace 统一资产失败。"
+      });
+    },
+    async handleWorkspaceAssetReviewComment({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.review.comment",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "评论 workspace 统一资产评审失败。"
+      });
+    },
+    async handleWorkspaceAssetReviewRequestChanges({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.review.requestChanges",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "要求 workspace 统一资产修改失败。"
+      });
+    },
+    async handleWorkspaceAssetReviewApprove({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.review.approve",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "批准 workspace 统一资产评审失败。"
+      });
+    },
+    async handleWorkspaceAssetCheckpoint({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.checkpoint",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "创建 workspace 统一资产 checkpoint 失败。"
+      });
+    },
+    async handleWorkspaceAssetLineage({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.lineage",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "查询 workspace 统一资产血缘失败。"
+      });
+    },
+    async handleWorkspaceAssetReceiptGet({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.receipt.get",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "读取 workspace 统一资产凭证失败。"
+      });
+    },
+    async handleWorkspaceAssetBackfill({ operation, requestBody, response, authSession }) {
+      await sendConsoleDomainOperation({
+        operationId: operation?.id || "workspace.asset.backfill",
+        input: protocolPayload(requestBody),
+        response,
+        context: { agentWorkspace, checkpointTreeApi, operationAuditStore, authSession },
+        errorMessage: "重建 workspace 统一资产目录失败。"
+      });
+    },
     async handleWorkspaceCheckpointTreeList({ operation, url, response }) {
       await sendConsoleDomainOperation({
         operationId: operation?.id || "workspace.checkpoint.tree.list",

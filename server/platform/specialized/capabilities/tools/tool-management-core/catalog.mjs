@@ -145,6 +145,11 @@ const DEFAULT_TOOL_MANAGEMENT_SCOPES = Object.freeze([
     description: "Read console-facing status, interface, and release baseline summaries."
   },
   {
+    id: "runtime:admin",
+    label: "Administer runtime",
+    description: "Manage runtime mounts, modules, backups, capability packages, and other server runtime controls."
+  },
+  {
     id: "agent_sync:publish",
     label: "Publish agent sync",
     description: "Publish policy-filtered agent sync events."
@@ -402,7 +407,7 @@ const DEFAULT_TOOL_MANAGEMENT_TOOLSETS = Object.freeze([
   {
     id: "pact.runtime.read",
     label: "Runtime read",
-    requiredScopes: ["storage:read", "jobs:read"],
+    requiredScopes: ["console:read", "storage:read", "jobs:read"],
     maxRisk: "read_only",
     grantable: true,
     defaultForAgents: false
@@ -410,7 +415,7 @@ const DEFAULT_TOOL_MANAGEMENT_TOOLSETS = Object.freeze([
   {
     id: "pact.runtime.maintain",
     label: "Runtime maintain",
-    requiredScopes: ["knowledge:maintain"],
+    requiredScopes: ["runtime:admin"],
     maxRisk: "repair_write",
     grantable: true,
     defaultForAgents: false
@@ -426,7 +431,7 @@ const DEFAULT_TOOL_MANAGEMENT_TOOLSETS = Object.freeze([
   {
     id: "pact.admin",
     label: "Pact admin",
-    requiredScopes: ["knowledge:admin", "storage:read", "jobs:read", "agent_sync:publish", "auth:admin"],
+    requiredScopes: ["console:read", "knowledge:admin", "storage:read", "jobs:read", "runtime:admin", "agent_sync:publish", "auth:admin"],
     maxRisk: "repair_write",
     grantable: false,
     defaultForAgents: false
@@ -832,6 +837,22 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "workspace.skill.usage.report": "pact.workspace.skill.usage.report",
   "workspace.asset.policy.set": "pact.workspace.asset.policy.set",
   "workspace.asset.permission.check": "pact.workspace.asset.permission.check",
+  "workspace.asset.target.connect": "pact.workspace.asset.target.connect",
+  "workspace.asset.list": "pact.workspace.asset.list",
+  "workspace.asset.read": "pact.workspace.asset.read",
+  "workspace.asset.submit": "pact.workspace.asset.submit",
+  "workspace.asset.mutate": "pact.workspace.asset.mutate",
+  "workspace.asset.sync.plan": "pact.workspace.asset.sync.plan",
+  "workspace.asset.sync.apply": "pact.workspace.asset.sync.apply",
+  "workspace.asset.import": "pact.workspace.asset.import",
+  "workspace.asset.export": "pact.workspace.asset.export",
+  "workspace.asset.review.comment": "pact.workspace.asset.review.comment",
+  "workspace.asset.review.requestChanges": "pact.workspace.asset.review.requestChanges",
+  "workspace.asset.review.approve": "pact.workspace.asset.review.approve",
+  "workspace.asset.checkpoint": "pact.workspace.asset.checkpoint",
+  "workspace.asset.lineage": "pact.workspace.asset.lineage",
+  "workspace.asset.receipt.get": "pact.workspace.asset.receipt.get",
+  "workspace.asset.backfill": "pact.workspace.asset.backfill",
   "workspace.audit.query": "pact.workspace.audit.query",
   "workspace.operation.history": "pact.workspace.operation.history",
   "workspace.checkpoint.tree.list": "pact.workspace.checkpoint.tree.list",
@@ -906,24 +927,24 @@ const SCOPE_BY_OPERATION_ID = Object.freeze({
   "system.health": "storage:read",
   "runtime.info": "storage:read",
   "runtime.mounts": "storage:read",
-  "runtime.set_mounts": "knowledge:maintain",
-  "runtime.reload_mounts": "knowledge:maintain",
+  "runtime.set_mounts": "runtime:admin",
+  "runtime.reload_mounts": "runtime:admin",
   "architecture.live_map": "storage:read",
   "sample_business_pack.list": "storage:read",
   "sample_business_pack.get": "storage:read",
-  "sample_business_pack.materialize": "knowledge:maintain",
+  "sample_business_pack.materialize": "runtime:admin",
   "executive_report.list": "storage:read",
   "executive_report.preview": "storage:read",
-  "executive_report.generate": "knowledge:maintain",
+  "executive_report.generate": "runtime:admin",
   "module_ecosystem.templates": "storage:read",
-  "module_ecosystem.plan": "knowledge:admin",
-  "module_ecosystem.scaffold": "knowledge:admin",
-  "module_ecosystem.contract_test": "knowledge:admin",
+  "module_ecosystem.plan": "runtime:admin",
+  "module_ecosystem.scaffold": "runtime:admin",
+  "module_ecosystem.contract_test": "runtime:admin",
   "storage.summary": "storage:read",
   "storage.backups.list": "storage:read",
-  "storage.backups.create": "knowledge:maintain",
+  "storage.backups.create": "runtime:admin",
   "storage.backups.restore_preview": "storage:read",
-  "storage.backups.restore": "knowledge:maintain",
+  "storage.backups.restore": "runtime:admin",
   "jobs.list": "jobs:read",
   "jobs.get": "jobs:read",
   "knowledge.affair_taxonomy": "knowledge:write",
@@ -1006,7 +1027,7 @@ const SCOPE_BY_OPERATION_ID = Object.freeze({
   "workspace_governance.describe": "workspace:read",
   "workspace_governance.policy.set": "workspace:maintain",
   "workspace_governance.evaluate": "workspace:read",
-  "workspace_governance.share_grant": "workspace:maintain",
+  "workspace_governance.share_grant": "runtime:admin",
   "repo.status": "repo:read",
   "repo.file.read": "repo:read",
   "repo.tree.list": "repo:read",
@@ -1055,9 +1076,9 @@ const SCOPE_BY_OPERATION_ID = Object.freeze({
   "performance.capacity.targets": "knowledge:read",
   "performance.capacity.benchmark": "knowledge:maintain",
   "capability_packages.list": "knowledge:read",
-  "capability_packages.plan": "knowledge:maintain",
-  "capability_packages.submit": "knowledge:maintain",
-  "capability_packages.lifecycle": "knowledge:maintain",
+  "capability_packages.plan": "runtime:admin",
+  "capability_packages.submit": "runtime:admin",
+  "capability_packages.lifecycle": "runtime:admin",
   "authorization.subject.resolve": "auth:admin",
   "authorization.policy.evaluate": "auth:admin",
   "authorization.governance.summary": "auth:admin",
@@ -1118,6 +1139,22 @@ const SCOPE_BY_OPERATION_ID = Object.freeze({
   "workspace.skill.usage.report": "workspace:write",
   "workspace.asset.policy.set": "workspace:maintain",
   "workspace.asset.permission.check": "workspace:read",
+  "workspace.asset.target.connect": "workspace:write",
+  "workspace.asset.list": "workspace:read",
+  "workspace.asset.read": "workspace:read",
+  "workspace.asset.submit": "workspace:write",
+  "workspace.asset.mutate": "workspace:write",
+  "workspace.asset.sync.plan": "workspace:read",
+  "workspace.asset.sync.apply": "workspace:write",
+  "workspace.asset.import": "workspace:write",
+  "workspace.asset.export": "workspace:maintain",
+  "workspace.asset.review.comment": "workspace:write",
+  "workspace.asset.review.requestChanges": "workspace:write",
+  "workspace.asset.review.approve": "workspace:maintain",
+  "workspace.asset.checkpoint": "workspace:write",
+  "workspace.asset.lineage": "workspace:read",
+  "workspace.asset.receipt.get": "workspace:read",
+  "workspace.asset.backfill": "workspace:maintain",
   "workspace.audit.query": "workspace:read",
   "workspace.operation.history": "workspace:read",
   "workspace.checkpoint.tree.list": "workspace:read",
@@ -1169,6 +1206,7 @@ const TOOLSET_BY_SCOPE = Object.freeze({
   "drive:share": "pact.drive.share",
   "jobs:read": "pact.jobs.read",
   "console:read": "pact.console.read",
+  "runtime:admin": "pact.runtime.maintain",
   "agent_sync:publish": "pact.agent.sync.publish",
   "agent_relay:view": "pact.agent.relay.read",
   "agent_relay:operate": "pact.agent.relay",
@@ -1183,6 +1221,7 @@ const RISK_RANK = Object.freeze({
 });
 
 const TOOLSET_BY_ID = new Map(TOOL_MANAGEMENT_TOOLSETS.map((toolset) => [toolset.id, toolset]));
+const NON_LOWERABLE_OPERATION_SCOPES = Object.freeze(new Set(["console:read", "runtime:admin", "auth:admin"]));
 
 function riskRank(risk = "read_only") {
   return RISK_RANK[String(risk || "read_only")] ?? RISK_RANK.read_only;
@@ -1195,6 +1234,10 @@ function toolsetAllowsRisk(toolsetId, risk = "read_only") {
 
 function uniqueStrings(values = []) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function nonLowerableOperationScopes(operation = {}) {
+  return uniqueStrings(operation.requiredScopes || []).filter((scope) => NON_LOWERABLE_OPERATION_SCOPES.has(scope));
 }
 
 function stableJson(value) {
@@ -1465,14 +1508,14 @@ function createInternalToolDefinitions() {
       ["runtime.info", "Runtime info", "pact.runtime.read", "storage:read", "read_only"],
       ["storage.summary", "Storage summary", "pact.storage.read", "storage:read", "read_only"],
       ["storage.doctor", "Storage doctor", "pact.runtime.read", "storage:read", "read_only"],
-      ["storage.reconcile", "Storage reconcile", "pact.runtime.maintain", "knowledge:maintain", "repair_write"],
+      ["storage.reconcile", "Storage reconcile", "pact.runtime.maintain", "runtime:admin", "repair_write"],
       ["jobs.list", "Jobs list", "pact.jobs.read", "jobs:read", "read_only"],
       ["jobs.failed_review", "Failed jobs review", "pact.jobs.read", "jobs:read", "read_only"],
       ["knowledge.health", "Knowledge health", "pact.agentLibrary.read", "knowledge:read", "read_only"],
       ["knowledge.maintenance.settings", "Agent Library maintenance settings", "pact.agentLibrary.maintain", "knowledge:maintain", "read_only"],
       ["knowledge.maintenance.run", "Agent Library maintenance run", "pact.agentLibrary.maintain", "knowledge:maintain", "safe_write"],
       ["knowledge.reindex", "Knowledge reindex", "pact.agentLibrary.maintain", "knowledge:maintain", "repair_write"],
-      ["runtime.reload_mounts", "Runtime reload mounts", "pact.runtime.maintain", "knowledge:maintain", "repair_write"]
+      ["runtime.reload_mounts", "Runtime reload mounts", "pact.runtime.maintain", "runtime:admin", "repair_write"]
     ].map(([toolName, label, toolset, scope, risk]) =>
       createInternalToolDefinition({
         id: `maintenance-agent.${toolName}`,
@@ -1642,7 +1685,12 @@ export function createToolCatalog({ operations = [], activeFeatureIds = null } =
       ? uniqueStrings(operation.requiredScopes || [])
       : [];
     const scope = operationScope(operation);
-    const requiredScopes = explicitScopes.length ? explicitScopes : scope ? [scope] : [];
+    const requiredScopes = explicitScopes.length
+      ? explicitScopes
+      : uniqueStrings([
+          ...(scope ? [scope] : []),
+          ...nonLowerableOperationScopes(operation)
+        ]);
     const { method, endpoint } = normalizeHttpEndpoint(operation);
     const risk = normalizeRisk(operation);
     const requiresApproval = operation.destructive === true || risk === "destructive" || operation.safety?.requiresConfirmation === true;

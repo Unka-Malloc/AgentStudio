@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { createWorkspaceGovernanceRegistry } from "../agent/workspace-governance/index.mjs";
 import { createContributionRegistry } from "../agent/workspace-contribution/index.mjs";
@@ -51,10 +50,15 @@ import {
 import { AUTHORIZATION_PROTOCOL_VERSION } from "../../common/security/authorization/authorization-engine.mjs";
 import { SECURITY_PERMISSIONS_PROTOCOL_VERSION } from "../../common/security/security-permissions-provider.mjs";
 import { ServerConfig } from "../../common/config/ServerConfig.mjs";
+import { createOperationLedger } from "../../common/operation-ledger/index.mjs";
+import { controlledLocalSourceRoots } from "../../common/security/local-path-boundary.mjs";
+import { createWorkspaceAssetRegistry } from "../agent/workspace-asset-registry/index.mjs";
 
 const contributionRegistries = new Map();
 const codespaceRegistries = new Map();
 const cloudDriveUpstreamGateways = new Map();
+const operationLedgers = new Map();
+const workspaceAssetRegistries = new Map();
 const knowledgeBackendPorts = new Map();
 const acpAgentRelayRuntimes = new Map();
 const PATH_BROWSER_MAX_ENTRIES = 600;
@@ -275,41 +279,8 @@ function createPathBrowserRoots({ userDataPath, distPath } = {}) {
   addRoot("当前项目", process.cwd());
   addRoot("Pact 数据目录", userDataPath);
   addRoot("Pact 前端构建", distPath);
-  addRoot("当前用户", os.homedir());
-
-  const cloudStoragePath = path.join(os.homedir(), "Library", "CloudStorage");
-  try {
-    for (const entry of fsSync.readdirSync(cloudStoragePath, { withFileTypes: true })) {
-      if (entry.isDirectory()) {
-        const label = /^OneDrive/i.test(entry.name)
-          ? `OneDrive · ${entry.name.replace(/^OneDrive[- ]?/i, "") || "本机"}`
-          : `云盘 · ${entry.name}`;
-        addRoot(label, path.join(cloudStoragePath, entry.name));
-      }
-    }
-  } catch {
-    // CloudStorage is platform/user dependent; absence should not affect path browsing.
-  }
-  try {
-    for (const entry of fsSync.readdirSync(os.homedir(), { withFileTypes: true })) {
-      if (entry.isDirectory() && /^OneDrive/i.test(entry.name)) {
-        addRoot(`OneDrive · ${entry.name.replace(/^OneDrive[- ]?/i, "") || "本机"}`, path.join(os.homedir(), entry.name));
-      }
-    }
-  } catch {
-    // Ignore unreadable home entries.
-  }
-
-  if (process.platform === "darwin") {
-    try {
-      for (const entry of fsSync.readdirSync("/Volumes", { withFileTypes: true })) {
-        if (entry.isDirectory()) {
-          addRoot(`磁盘 · ${entry.name}`, path.join("/Volumes", entry.name));
-        }
-      }
-    } catch {
-      // Mounted volumes are platform/user dependent.
-    }
+  for (const root of controlledLocalSourceRoots({ userDataPath })) {
+    addRoot("Pact 受控本机来源", root);
   }
 
   return [...roots.values()];
@@ -569,6 +540,10 @@ function resolveKnowledgeSearchResponseProfile(payload = {}, context = {}) {
 
 function subjectFromAuthSession(authSession = null) {
   const user = authSession?.user || {};
+  const scopes = [
+    ...(Array.isArray(user.scopes) ? user.scopes : []),
+    ...(Array.isArray(authSession?.scopes) ? authSession.scopes : [])
+  ].map((scope) => String(scope || "").trim()).filter(Boolean);
   const subjectType = user.type ||
     (user.roleId === "tool-grant" ? "tool-grant" : "") ||
     (user.userId ? "console-user" : "anonymous");
@@ -577,7 +552,7 @@ function subjectFromAuthSession(authSession = null) {
     subjectId: user.userId || user.subjectId || user.username || "",
     username: user.username || "",
     roleId: user.roleId || "",
-    scopes: Array.isArray(user.scopes) ? user.scopes : []
+    scopes
   };
 }
 
@@ -629,11 +604,991 @@ function arrayOfStrings(value) {
 
 function workspaceAccessOptions(authSession = null) {
   const user = authSession?.user || {};
+  const scopes = [
+    ...(Array.isArray(user.scopes) ? user.scopes : []),
+    ...(Array.isArray(authSession?.scopes) ? authSession.scopes : [])
+  ].map((scope) => String(scope || "").trim()).filter(Boolean);
+  const roleId = String(user.roleId || user.role || "").trim();
+  const canAccessAll = (
+    roleId === "owner" ||
+    roleId === "admin" ||
+    scopes.includes("auth:admin") ||
+    scopes.includes("workspace:admin")
+  );
   return {
-    actorUserId: String(user.userId || ""),
-    canAccessAll: true,
-    sharingMode: "team-shared"
+    actorUserId: String(user.userId || user.subjectId || user.username || "").trim(),
+    userId: String(user.userId || "").trim(),
+    subjectId: String(user.subjectId || "").trim(),
+    username: String(user.username || "").trim(),
+    roleId,
+    scopes,
+    allowedWorkspaceIds: arrayOfStrings(user.allowedWorkspaceIds || user.workspaceIds),
+    canAccessAll,
+    sharingMode: canAccessAll ? "admin" : "owner-bound"
   };
+}
+
+const WORKSPACE_ASSET_OPERATION_PROTOCOL_VERSION = "v0.0.1:workspace:asset-operation-1";
+
+function authSessionScopes(context = {}) {
+  const user = context.authSession?.user || {};
+  return new Set([
+    ...(Array.isArray(user.scopes) ? user.scopes : []),
+    ...(Array.isArray(context.authSession?.scopes) ? context.authSession.scopes : [])
+  ].map((scope) => String(scope || "").trim()).filter(Boolean));
+}
+
+function missingWorkspaceAssetScopes(context = {}, requiredScopes = []) {
+  const scopes = authSessionScopes(context);
+  if (scopes.has("auth:admin")) {
+    return [];
+  }
+  return requiredScopes
+    .map((scope) => String(scope || "").trim())
+    .filter(Boolean)
+    .filter((scope) => !scopes.has(scope));
+}
+
+function normalizeWorkspaceAssetTargetKind(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["workspace", "workspace-folder", "workspacefolder", "folder", "file", "files"].includes(normalized)) {
+    return "workspaceFolder";
+  }
+  if (["local", "localdir", "local-dir", "local-directory", "localdirectory"].includes(normalized)) {
+    return "localDirectory";
+  }
+  if (["drive", "cloud", "cloud-drive", "clouddrive"].includes(normalized)) {
+    return "cloudDrive";
+  }
+  if (["code", "code-review", "codereview", "change", "codechange"].includes(normalized)) {
+    return "codeReview";
+  }
+  if (["repo", "repository", "git"].includes(normalized)) {
+    return "repository";
+  }
+  if (["contribution", "workspace-contribution", "workspacecontribution"].includes(normalized)) {
+    return "workspaceContribution";
+  }
+  if (["knowledge", "knowledge-source", "knowledgesource"].includes(normalized)) {
+    return "knowledgeSource";
+  }
+  return value ? String(value).trim() : "";
+}
+
+function inferWorkspaceAssetTargetKind(input = {}, operationId = "") {
+  const target = objectOrNull(input.target) || {};
+  const explicit = normalizeWorkspaceAssetTargetKind(
+    input.targetKind || input["target-kind"] || input.kind || target.kind || target.type || ""
+  );
+  if (explicit) {
+    return explicit;
+  }
+  if (target.driveRef || input.driveRef || input["drive-ref"] || target.provider || input.provider) {
+    return "cloudDrive";
+  }
+  if (target.repoId || input.repoId || input["repo-id"] || target.repositoryRef || input.repositoryRef) {
+    return String(operationId || "").includes(".review.") ? "codeReview" : "repository";
+  }
+  if (target.mountRef || input.mountRef || input["mount-ref"] || target.sourcePath || input.sourcePath) {
+    return "localDirectory";
+  }
+  if (input.contributionId || input["contribution-id"] || target.contributionId) {
+    return "workspaceContribution";
+  }
+  if (input.evidenceId || input.assetId || target.evidenceId || target.assetId) {
+    return "knowledgeSource";
+  }
+  return "workspaceFolder";
+}
+
+function normalizeWorkspaceAssetTarget(input = {}, operationId = "") {
+  const target = objectOrNull(input.target) || {};
+  const kind = inferWorkspaceAssetTargetKind(input, operationId);
+  return {
+    ...target,
+    kind,
+    path: target.path || input.path || input.filePath || input["file-path"] || "",
+    provider: target.provider || input.provider || "",
+    driveRef: target.driveRef || input.driveRef || input["drive-ref"] || "",
+    repoId: target.repoId || input.repoId || input["repo-id"] || "",
+    repositoryRef: target.repositoryRef || input.repositoryRef || input["repository-ref"] || "",
+    branch: target.branch || input.branch || input.baseBranch || input["base-branch"] || "",
+    mountRef: target.mountRef || input.mountRef || input["mount-ref"] || "",
+    sourcePath: target.sourcePath || input.sourcePath || input["source-path"] || ""
+  };
+}
+
+function workspaceAssetSemanticFromOperation(operationId = "") {
+  const id = String(operationId || "");
+  if (id.endsWith(".target.connect") || id.endsWith(".connect")) return "connect";
+  if (id.endsWith(".list")) return "list";
+  if (id.endsWith(".read")) return "read";
+  if (id.endsWith(".submit") || id.endsWith(".file.upload") || id.endsWith(".change.prepare")) return "submit";
+  if (id.endsWith(".mutate") || id.endsWith(".file.write") || id.endsWith(".file.patch") || id.endsWith(".file.delete") || id.endsWith(".file.move")) return "mutate";
+  if (id.endsWith(".sync.plan")) return "sync.plan";
+  if (id.endsWith(".sync.apply") || id.endsWith(".status.sync")) return "sync.apply";
+  if (id.endsWith(".import")) return "import";
+  if (id.endsWith(".export") || id.endsWith(".change.upload")) return "export";
+  if (id.endsWith(".review.comment")) return "review.comment";
+  if (id.endsWith(".review.requestChanges")) return "review.requestChanges";
+  if (id.endsWith(".review.approve")) return "review.approve";
+  if (id.endsWith(".publish") || id.endsWith(".adopt")) return "review.approve";
+  if (id.endsWith(".reject") || id.endsWith(".request_changes")) return "review.requestChanges";
+  if (id.endsWith(".checkpoint")) return "checkpoint";
+  if (id.endsWith(".lineage")) return "lineage";
+  if (id.endsWith(".receipt.get")) return "receipt.get";
+  if (id.endsWith(".backfill")) return "backfill";
+  return "";
+}
+
+function workspaceAssetRef(input = {}, target = {}, semantic = "") {
+  const explicit = String(input.assetRef || input.assetId || input["asset-ref"] || input["asset-id"] || "").trim();
+  if (explicit) {
+    return explicit;
+  }
+  const content = objectOrNull(input.content) || {};
+  const seed = JSON.stringify({
+    workspaceId: workspaceIdFrom(input),
+    semantic,
+    submitKind: input.submitKind || input.kind || "",
+    targetKind: target.kind,
+    path: target.path,
+    driveRef: target.driveRef,
+    repoId: target.repoId,
+    repositoryRef: target.repositoryRef,
+    contentHash: input.contentHash || input.sha256 || content.sha256 || ""
+  });
+  return `workspace_asset_${crypto.createHash("sha256").update(seed).digest("hex").slice(0, 32)}`;
+}
+
+function workspaceAssetDownstreamInput(input = {}, target = {}) {
+  const content = objectOrNull(input.content) || {};
+  return {
+    ...input,
+    ...target,
+    target,
+    workspaceId: workspaceIdFrom(input),
+    path: target.path || input.path || input.filePath || input["file-path"] || "",
+    provider: target.provider || input.provider || "",
+    driveRef: target.driveRef || input.driveRef || input["drive-ref"] || "",
+    repoId: target.repoId || input.repoId || input["repo-id"] || "",
+    repositoryRef: target.repositoryRef || input.repositoryRef || input["repository-ref"] || "",
+    branch: target.branch || input.branch || "",
+    content: content.content ?? input.content,
+    contentBase64: content.contentBase64 ?? input.contentBase64,
+    payloadRefs: content.payloadRefs ?? input.payloadRefs,
+    diff: content.diff ?? input.diff,
+    files: content.files ?? input.files
+  };
+}
+
+function workspaceAssetExtractContentSummary(downstream = {}) {
+  const file = objectOrNull(downstream.file) || objectOrNull(downstream.asset) || objectOrNull(downstream.item) || {};
+  return {
+    byteSize: Number(file.byteSize || file.sizeBytes || file.size || downstream.byteSize || downstream.sizeBytes || downstream.size || 0) || 0,
+    sha256: String(file.sha256 || file.contentSha256 || file.contentHash || downstream.sha256 || downstream.contentSha256 || downstream.contentHash || downstream.hash || ""),
+    mediaType: String(file.mediaType || downstream.mediaType || downstream.contentType || "")
+  };
+}
+
+function workspaceAssetExtractReceipts(downstream = {}) {
+  return {
+    accessReceipt: downstream.accessReceipt || downstream.cacheReceipt || null,
+    transferReceipt: downstream.transferReceipt || null,
+    providerReceipt: downstream.providerReceipt || null,
+    ingestReceipt: downstream.ingestReceipt || null,
+    codeUploadReceipt: downstream.codeUploadReceipt || downstream.uploadReceipt || downstream.receipt || null
+  };
+}
+
+function workspaceAssetExtractState(downstream = {}) {
+  const checkpoint = objectOrNull(downstream.checkpoint) || {};
+  return {
+    stateCommit: downstream.stateCommit?.commitId || downstream.stateCommit || "",
+    checkpointNodeId: checkpoint.nodeId || downstream.checkpointNodeId || downstream.checkpointRef || "",
+    auditId: downstream.auditId || downstream.operationAuditId || "",
+    ledgerEventId: downstream.ledgerEventId || downstream.eventId || ""
+  };
+}
+
+function isWorkspaceAssetReadOnlyOperation(operationId = "") {
+  const id = String(operationId || "");
+  return (
+    id.endsWith(".list") ||
+    id.endsWith(".read") ||
+    id.endsWith(".sync.plan") ||
+    id.endsWith(".lineage") ||
+    id.endsWith(".receipt.get") ||
+    id === "workspace.asset.permission.check" ||
+    id === "workspace.file.list" ||
+    id === "workspace.file.read" ||
+    id === "workspace.file.download" ||
+    id === "agent_workspaces.files.list" ||
+    id === "agent_workspaces.file.stat" ||
+    id === "agent_workspaces.file.download" ||
+    id === "sharedspace.item.list" ||
+    id === "sharedspace.localDir.list" ||
+    id === "sharedspace.file.read" ||
+    id === "external.cloudDrive.item.list" ||
+    id === "external.cloudDrive.file.download" ||
+    id === "external.cloudDrive.sync.plan" ||
+    id === "codespace.tree.list" ||
+    id === "codespace.file.read" ||
+    id === "codespace.diff.read"
+  );
+}
+
+function isManagedWorkspaceAssetWriteOperation(operationId = "") {
+  const id = String(operationId || "");
+  if (isWorkspaceAssetReadOnlyOperation(id)) return false;
+  if (id.startsWith("workspace.asset.")) return id !== "workspace.asset.policy.set";
+  return (
+    id === "workspace.file.upload" ||
+    id === "workspace.file.write" ||
+    id === "workspace.file.patch" ||
+    id === "agent_workspaces.file.upload" ||
+    id === "agent_workspaces.file.write" ||
+    id === "agent_workspaces.file.delete" ||
+    id === "agent_workspaces.file.move" ||
+    id === "sharedspace.file.write" ||
+    id === "sharedspace.item.delete" ||
+    id === "sharedspace.localDir.connect" ||
+    id === "sharedspace.sync.apply" ||
+    id === "external.cloudDrive.connect" ||
+    id === "external.cloudDrive.file.upload" ||
+    id === "external.cloudDrive.sync.apply" ||
+    id === "workspace.code.change.prepare" ||
+    id === "workspace.code.change.upload" ||
+    id === "workspace.code.change.link" ||
+    id === "workspace.code.change.status.sync" ||
+    id === "codespace.change.prepare" ||
+    id === "codespace.change.upload" ||
+    id === "codespace.review.comment" ||
+    id === "codespace.review.requestChanges" ||
+    id === "codespace.review.approve" ||
+    id === "codespace.review.status.sync" ||
+    id === "workspace.contribution.submit" ||
+    id === "knowledge.contribution.submit" ||
+    id === "workspace.contribution.permission.request" ||
+    id === "workspace.contribution.permission.grant" ||
+    id === "workspace.contribution.review" ||
+    id === "workspace.contribution.publish" ||
+    id === "workspace.contribution.adopt" ||
+    id === "workspace.contribution.reject" ||
+    id === "workspace.contribution.request_changes" ||
+    id === "workspace.contribution.revoke"
+  );
+}
+
+function workspaceAssetRiskForOperation(operationId = "", input = {}) {
+  const id = String(operationId || "");
+  if (id.includes(".export") || id.includes(".upload") || id.includes(".publish")) return "controlled_write";
+  if (id.includes(".delete") || id.includes(".move") || input.action === "delete" || input.action === "move") return "destructive_write";
+  if (id.includes(".sync.apply") || id.includes(".import")) return "materialization_write";
+  return "safe_write";
+}
+
+function workspaceAssetKindForOperation(operationId = "", input = {}, target = {}) {
+  const id = String(operationId || "");
+  const explicit = String(input.assetKind || input.submitKind || input.kind || "").trim();
+  if (explicit) {
+    if (["code", "code_change", "codeChange"].includes(explicit)) return "codeChange";
+    if (["contribution", "workspaceContribution"].includes(explicit)) return "workspaceContribution";
+    return explicit;
+  }
+  if (id.includes("code.change") || id.startsWith("codespace.") || target.kind === "repository" || target.kind === "codeReview") {
+    return "codeChange";
+  }
+  if (id.includes("contribution") || target.kind === "workspaceContribution") {
+    return "workspaceContribution";
+  }
+  if (target.kind === "cloudDrive") return "file";
+  return "file";
+}
+
+function workspaceAssetCanonicalStateForOperation(operationId = "", semantic = "", target = {}, downstream = {}) {
+  const id = String(operationId || "");
+  const state = String(downstream.canonicalState || downstream.state || downstream.status || "").trim();
+  if (["canonical", "pending", "review", "projected", "source", "archived"].includes(state)) return state;
+  if (id.includes("code.change") || id.startsWith("codespace.") || target.kind === "repository" || target.kind === "codeReview") {
+    return "review";
+  }
+  if (id === "workspace.contribution.submit" || id === "knowledge.contribution.submit") return "pending";
+  if (id === "workspace.contribution.review" || id === "workspace.contribution.request_changes" || id === "workspace.contribution.reject") return "review";
+  if (id === "workspace.contribution.publish" || id === "workspace.contribution.adopt") return "canonical";
+  if (target.kind === "cloudDrive" || semantic === "export") return "projected";
+  if (target.kind === "localDirectory" || semantic === "sync.apply") return "projected";
+  return "canonical";
+}
+
+function workspaceAssetGovernanceAction(operationId = "", semantic = "", input = {}) {
+  const id = String(operationId || "");
+  if (semantic === "export" || id.includes(".export")) return "export";
+  if (semantic === "import") return "copy";
+  if (semantic === "sync.apply") return "copy";
+  if (id.includes(".publish")) return "share";
+  if (id.includes(".delete")) return "delete";
+  if (id.includes(".upload")) return "upload";
+  if (id.includes(".prepare")) return "prepare";
+  return input.action || semantic || "write";
+}
+
+function workspaceAssetSubject(context = {}, input = {}) {
+  const subject = subjectFromAuthSession(context.authSession);
+  return {
+    ...subject,
+    subjectId: subject.subjectId || actorFrom(context.authSession, input),
+    organizationId: input.organizationId || input.orgId || context.authSession?.user?.orgId || "",
+    projectIds: arrayOfStrings(input.projectIds || input.projectId),
+    clearance: input.clearance || input.dataClassClearance || input.policy?.dataClassClearance || "internal",
+    roles: Array.isArray(context.authSession?.user?.roles) ? context.authSession.user.roles : []
+  };
+}
+
+function workspaceAssetRouteDecision({ target = {}, downstreamOperationId = "", mode = "executed", reason = "", ledgerEntry = null, governance = null } = {}) {
+  return {
+    targetKind: target.kind || "",
+    downstreamOperationId,
+    mode,
+    ...(reason ? { reason } : {}),
+    ...(ledgerEntry?.ledgerEventId ? { ledgerEventId: ledgerEntry.ledgerEventId } : {}),
+    ...(governance ? { governance } : {})
+  };
+}
+
+function workspaceAssetTargetRef(input = {}, target = {}) {
+  return {
+    ...target,
+    path: target.path || input.path || input.filePath || input["file-path"] || input.targetPath || "",
+    filePath: input.filePath || input["file-path"] || "",
+    targetPath: input.targetPath || input["target-path"] || "",
+    contributionId: input.contributionId || input["contribution-id"] || target.contributionId || "",
+    codeChangeId: input.codeChangeId || input.changeId || target.codeChangeId || "",
+    provider: target.provider || input.provider || "",
+    driveRef: target.driveRef || input.driveRef || "",
+    repoId: target.repoId || input.repoId || "",
+    repositoryRef: target.repositoryRef || input.repositoryRef || "",
+    branch: target.branch || input.branch || ""
+  };
+}
+
+function workspaceAssetContentForRegistry(input = {}, downstream = {}) {
+  const content = workspaceAssetExtractContentSummary(downstream);
+  const file = objectOrNull(downstream.file) || {};
+  const contentInput = objectOrNull(input.content) || {};
+  return {
+    contentHash: content.sha256 || file.contentSha256 || file.sha256 || downstream.contentSha256 || contentInput.sha256 || input.contentHash || "",
+    byteSize: content.byteSize || file.sizeBytes || file.byteSize || downstream.sizeBytes || contentInput.byteSize || 0,
+    mediaType: content.mediaType || file.mediaType || downstream.mediaType || contentInput.mediaType || ""
+  };
+}
+
+function workspaceAssetCheckpointRef(downstream = {}) {
+  const checkpoint = objectOrNull(downstream.checkpoint) || {};
+  return checkpoint.nodeId || checkpoint.checkpointNodeId || checkpoint.checkpointId || downstream.checkpointNodeId || downstream.checkpointRef || "";
+}
+
+function workspaceAssetReceiptsForRegistry(downstream = {}, extra = {}) {
+  const receipts = workspaceAssetExtractReceipts(downstream);
+  const items = [];
+  for (const [receiptType, receipt] of Object.entries(receipts)) {
+    if (receipt) items.push({ receiptType, receipt });
+  }
+  if (downstream.checkpoint) items.push({ receiptType: "checkpoint", receipt: downstream.checkpoint });
+  if (downstream.stateCommit) items.push({ receiptType: "stateCommit", receipt: downstream.stateCommit });
+  if (extra.ledgerEntry?.ledgerEventId) {
+    items.push({
+      receiptType: "operationLedger",
+      receipt: {
+        ledgerEventId: extra.ledgerEntry.ledgerEventId,
+        status: extra.ledgerEntry.status
+      }
+    });
+  }
+  if (extra.governance?.warning) {
+    items.push({
+      receiptType: "governanceWarning",
+      receipt: extra.governance.warning
+    });
+  }
+  return items;
+}
+
+function workspaceAssetDownstreamPayload(downstreamResult = null) {
+  return objectOrNull(downstreamResult?.payload) || downstreamResult?.payload || downstreamResult || {};
+}
+
+function workspaceAssetWorkspaceField(workspaceAsset = null) {
+  if (!workspaceAsset) return null;
+  return {
+    protocolVersion: WORKSPACE_ASSET_OPERATION_PROTOCOL_VERSION,
+    assetRef: workspaceAsset.assetRef || "",
+    revisionRef: workspaceAsset.revisionRef || workspaceAsset.currentRevisionRef || "",
+    canonicalState: workspaceAsset.canonicalState || "",
+    ledgerEventId: workspaceAsset.ledgerEventId || "",
+    receiptRefs: Array.isArray(workspaceAsset.receiptRefs) ? workspaceAsset.receiptRefs : [],
+    routeDecision: objectOrNull(workspaceAsset.routeDecision) || {}
+  };
+}
+
+function appendWorkspaceAssetToResult(downstreamResult = null, workspaceAsset = null) {
+  if (!downstreamResult || !workspaceAsset) return downstreamResult;
+  const field = workspaceAssetWorkspaceField(workspaceAsset);
+  if (!field) return downstreamResult;
+  return {
+    ...downstreamResult,
+    payload: {
+      ...(objectOrNull(downstreamResult.payload) || {}),
+      workspaceAsset: field
+    }
+  };
+}
+
+async function evaluateWorkspaceAssetGovernance({ operationId, input = {}, context = {}, semantic = "", target = {} } = {}) {
+  const workspaceId = workspaceIdFrom(input);
+  const action = workspaceAssetGovernanceAction(operationId, semantic, input);
+  const dataClass = input.policy?.dataClass || input.dataClass || "internal";
+  const governance = createWorkspaceGovernanceRegistry({ userDataPath: context.userDataPath });
+  let described = null;
+  try {
+    described = await governance.describe();
+  } catch {
+    return {
+      allowed: true,
+      policyMissing: true,
+      warning: { code: "governance_policy_missing", workspaceId, action, dataClass },
+      evaluation: null
+    };
+  }
+  const policies = Array.isArray(described?.policies) ? described.policies : [];
+  const hasPolicy = policies.some((policy) => policy.workspaceId === workspaceId);
+  if (!hasPolicy) {
+    return {
+      allowed: true,
+      policyMissing: true,
+      warning: { code: "governance_policy_missing", workspaceId, action, dataClass },
+      evaluation: null
+    };
+  }
+  const evaluation = await governance.evaluate({
+    workspaceId,
+    action,
+    subject: workspaceAssetSubject(context, input),
+    targetWorkspaceId: input.targetWorkspaceId || target.targetWorkspaceId || "",
+    targetProjectId: input.targetProjectId || target.targetProjectId || "",
+    approvals: input.approvals || input.approvalIds || [],
+    dataClass
+  });
+  return {
+    allowed: evaluation.allowed !== false,
+    policyMissing: false,
+    warning: null,
+    evaluation
+  };
+}
+
+function workspaceAssetPolicyDecision(governance = {}) {
+  return {
+    allowed: governance.allowed !== false,
+    policyMissing: governance.policyMissing === true,
+    warning: governance.warning || null,
+    evaluation: governance.evaluation || null
+  };
+}
+
+async function startWorkspaceAssetLedger({ operationId, input = {}, context = {}, semantic = "", target = {}, downstreamOperationId = "", routeMode = "executed" } = {}) {
+  const governance = await evaluateWorkspaceAssetGovernance({ operationId, input, context, semantic, target });
+  const warnings = governance.warning ? [governance.warning] : [];
+  const ledger = operationLedgerFor(context);
+  const ledgerEntry = ledger.startEntry({
+    operationId,
+    workspaceId: workspaceIdFrom(input),
+    semantic,
+    assetRef: input.assetRef || input.assetId || "",
+    targetKind: target.kind || "",
+    targetRef: workspaceAssetTargetRef(input, target),
+    subject: workspaceAssetSubject(context, input),
+    risk: workspaceAssetRiskForOperation(operationId, input),
+    idempotencyKey: input.idempotencyKey || input["idempotency-key"] || "",
+    input: {
+      ...input,
+      downstreamOperationId,
+      routeMode
+    },
+    policyDecision: workspaceAssetPolicyDecision(governance),
+    warnings
+  });
+  return { ledger, ledgerEntry, governance, warnings };
+}
+
+function workspaceAssetFailureResult({ operationId, input = {}, target = {}, semantic = "", downstreamOperationId = "", status = 503, error = "", ledgerEntry = null } = {}) {
+  return workspaceAssetEnvelope({
+    operationId,
+    input,
+    target,
+    semantic,
+    status,
+    routeDecision: workspaceAssetRouteDecision({
+      target,
+      downstreamOperationId,
+      mode: "failed",
+      reason: error,
+      ledgerEntry
+    }),
+    downstreamResult: {
+      ok: false,
+      error
+    }
+  });
+}
+
+function buildWorkspaceAssetRegistryInput({ operationId, input = {}, target = {}, semantic = "", downstreamOperationId = "", downstream = {}, ledgerEntry = null, governance = null, routeDecision = {} } = {}) {
+  const assetKind = workspaceAssetKindForOperation(downstreamOperationId || operationId, input, target);
+  const canonicalState = workspaceAssetCanonicalStateForOperation(downstreamOperationId || operationId, semantic, target, downstream);
+  const targetRef = workspaceAssetTargetRef(input, target);
+  const contribution = objectOrNull(downstream.contribution) || {};
+  const codeChange = objectOrNull(downstream.codeChange) || objectOrNull(downstream.change) || {};
+  if (contribution.contributionId) {
+    targetRef.contributionId = contribution.contributionId;
+  }
+  if (downstream.contributionId) {
+    targetRef.contributionId = downstream.contributionId;
+  }
+  if (codeChange.codeChangeId || downstream.codeChangeId) {
+    targetRef.codeChangeId = codeChange.codeChangeId || downstream.codeChangeId;
+  }
+  const file = objectOrNull(downstream.file) || {};
+  if (file.path || file.relativePath) {
+    targetRef.path = file.path || file.relativePath;
+  }
+  return {
+    workspaceId: workspaceIdFrom(input),
+    assetKind,
+    canonicalState,
+    dataClass: input.policy?.dataClass || input.dataClass || (assetKind === "codeChange" ? "codeChange" : "internal"),
+    displayName:
+      input.title ||
+      input.name ||
+      file.path ||
+      file.relativePath ||
+      targetRef.path ||
+      targetRef.contributionId ||
+      targetRef.codeChangeId ||
+      assetKind,
+    targetKind: target.kind || targetRef.kind || assetKind,
+    targetRef,
+    sourceRef: {
+      kind: "operation",
+      operationId,
+      downstreamOperationId,
+      semantic,
+      source: input.source || {}
+    },
+    content: workspaceAssetContentForRegistry(input, downstream),
+    ledgerEventId: ledgerEntry?.ledgerEventId || "",
+    checkpointRef: workspaceAssetCheckpointRef(downstream),
+    downstreamOperationId,
+    receipts: workspaceAssetReceiptsForRegistry(downstream, { ledgerEntry, governance }),
+    routeDecision,
+    metadata: {
+      routeMode: routeDecision.mode || "",
+      governance: workspaceAssetPolicyDecision(governance || {})
+    }
+  };
+}
+
+function finalizeWorkspaceAssetLedger({ ledger, ledgerEntry, workspaceAsset = null, downstreamResult = null, status = "succeeded", error = null, warnings = [] } = {}) {
+  if (!ledgerEntry?.ledgerEventId || !ledger) return null;
+  const receiptRefs = Array.isArray(workspaceAsset?.receiptRefs) ? workspaceAsset.receiptRefs : [];
+  if (error) {
+    return ledger.failEntry(ledgerEntry.ledgerEventId, {
+      status,
+      assetRef: workspaceAsset?.assetRef || "",
+      receiptRefs,
+      warnings,
+      error
+    });
+  }
+  return ledger.completeEntry(ledgerEntry.ledgerEventId, {
+    status,
+    assetRef: workspaceAsset?.assetRef || "",
+    receiptRefs,
+    auditId: workspaceAssetDownstreamPayload(downstreamResult).auditId || "",
+    warnings
+  });
+}
+
+async function recordWorkspaceAssetFromDownstream({ operationId, input = {}, context = {}, target = {}, semantic = "", downstreamOperationId = "", downstreamResult = null, ledgerEntry = null, governance = null, routeMode = "executed" } = {}) {
+  const downstream = workspaceAssetDownstreamPayload(downstreamResult);
+  const routeDecision = workspaceAssetRouteDecision({
+    target,
+    downstreamOperationId,
+    mode: routeMode,
+    ledgerEntry,
+    governance: workspaceAssetPolicyDecision(governance || {})
+  });
+  const registry = workspaceAssetRegistryFor(context);
+  return registry.recordAssetMutation(buildWorkspaceAssetRegistryInput({
+    operationId,
+    input,
+    target,
+    semantic,
+    downstreamOperationId,
+    downstream,
+    ledgerEntry,
+    governance,
+    routeDecision
+  }));
+}
+
+async function runManagedWorkspaceAssetWrite({ operationId, input = {}, context = {}, target = {}, semantic = "", downstreamOperationId = "", routeMode = "executed", run } = {}) {
+  let ledgerContext = null;
+  try {
+    ledgerContext = await startWorkspaceAssetLedger({
+      operationId,
+      input,
+      context,
+      semantic,
+      target,
+      downstreamOperationId,
+      routeMode
+    });
+  } catch (error) {
+    return workspaceAssetFailureResult({
+      operationId,
+      input,
+      target,
+      semantic,
+      downstreamOperationId,
+      status: 503,
+      error: `Operation Ledger 不可用，写操作已关闭：${error instanceof Error ? error.message : String(error)}`
+    });
+  }
+
+  const { ledger, ledgerEntry, governance, warnings } = ledgerContext;
+  if (governance.allowed === false) {
+    finalizeWorkspaceAssetLedger({
+      ledger,
+      ledgerEntry,
+      status: "failed",
+      error: { code: "workspace_asset_governance_denied", evaluation: governance.evaluation },
+      warnings
+    });
+    return workspaceAssetFailureResult({
+      operationId,
+      input,
+      target,
+      semantic,
+      downstreamOperationId,
+      status: 403,
+      error: "统一资产治理策略拒绝该写操作。",
+      ledgerEntry
+    });
+  }
+
+  let downstreamResult = null;
+  try {
+    downstreamResult = await run();
+  } catch (error) {
+    finalizeWorkspaceAssetLedger({
+      ledger,
+      ledgerEntry,
+      status: "failed",
+      error: {
+        message: error instanceof Error ? error.message : String(error)
+      },
+      warnings
+    });
+    throw error;
+  }
+  const downstream = workspaceAssetDownstreamPayload(downstreamResult);
+  const status = downstreamResult?.status || (downstream?.ok === false ? downstream.status || 400 : 200);
+  const ok = Number(status || 200) < 400 && downstream?.ok !== false;
+  if (!ok) {
+    finalizeWorkspaceAssetLedger({
+      ledger,
+      ledgerEntry,
+      status: "failed",
+      error: downstream,
+      warnings
+    });
+    return {
+      ...downstreamResult,
+      payload: {
+        ...(objectOrNull(downstreamResult?.payload) || {}),
+        workspaceAsset: {
+          protocolVersion: WORKSPACE_ASSET_OPERATION_PROTOCOL_VERSION,
+          assetRef: "",
+          revisionRef: "",
+          canonicalState: "failed",
+          ledgerEventId: ledgerEntry.ledgerEventId,
+          receiptRefs: [],
+          routeDecision: workspaceAssetRouteDecision({
+            target,
+            downstreamOperationId,
+            mode: "failed",
+            ledgerEntry,
+            governance: workspaceAssetPolicyDecision(governance)
+          })
+        }
+      }
+    };
+  }
+  let workspaceAsset = null;
+  try {
+    workspaceAsset = await recordWorkspaceAssetFromDownstream({
+      operationId,
+      input,
+      context,
+      target,
+      semantic,
+      downstreamOperationId,
+      downstreamResult,
+      ledgerEntry,
+      governance,
+      routeMode
+    });
+  } catch (error) {
+    finalizeWorkspaceAssetLedger({
+      ledger,
+      ledgerEntry,
+      status: "unknown",
+      error: {
+        code: "workspace_asset_registry_failed_after_downstream_success",
+        message: error instanceof Error ? error.message : String(error)
+      },
+      warnings
+    });
+    return {
+      ...downstreamResult,
+      status: 500,
+      payload: {
+        ...(objectOrNull(downstreamResult?.payload) || {}),
+        ok: false,
+        error: "Workspace Asset Registry 写入失败；下游副作用可能已成功，ledger 已标记 unknown。",
+        registryError: error instanceof Error ? error.message : String(error),
+        workspaceAsset: {
+          protocolVersion: WORKSPACE_ASSET_OPERATION_PROTOCOL_VERSION,
+          assetRef: "",
+          revisionRef: "",
+          canonicalState: "unknown",
+          ledgerEventId: ledgerEntry.ledgerEventId,
+          receiptRefs: [],
+          routeDecision: workspaceAssetRouteDecision({
+            target,
+            downstreamOperationId,
+            mode: "unknown",
+            ledgerEntry,
+            governance: workspaceAssetPolicyDecision(governance)
+          })
+        }
+      }
+    };
+  }
+  finalizeWorkspaceAssetLedger({
+    ledger,
+    ledgerEntry,
+    workspaceAsset,
+    downstreamResult,
+    status: "succeeded",
+    warnings
+  });
+  return appendWorkspaceAssetToResult(downstreamResult, workspaceAsset);
+}
+
+function workspaceAssetEnvelope({ operationId, input = {}, target = {}, semantic = "", routeDecision = {}, downstreamResult = null, status = 200, contract = null }) {
+  const downstream = downstreamResult?.payload ?? downstreamResult ?? {};
+  const workspaceAsset = objectOrNull(downstream.workspaceAsset);
+  const ok = Number(status || 200) < 400 && downstream?.ok !== false;
+  return result(status, {
+    ok,
+    protocolVersion: WORKSPACE_ASSET_OPERATION_PROTOCOL_VERSION,
+    operationId,
+    workspaceRef: workspaceIdFrom(input),
+    assetRef: workspaceAsset?.assetRef || workspaceAssetRef(input, target, semantic),
+    revisionRef: workspaceAsset?.revisionRef || "",
+    canonicalState: workspaceAsset?.canonicalState || "",
+    ledgerEventId: workspaceAsset?.ledgerEventId || routeDecision.ledgerEventId || "",
+    receiptRefs: Array.isArray(workspaceAsset?.receiptRefs) ? workspaceAsset.receiptRefs : [],
+    semantic,
+    routeDecision: workspaceAsset?.routeDecision || routeDecision,
+    workspaceAsset: workspaceAsset || undefined,
+    target,
+    content: workspaceAssetExtractContentSummary(downstream),
+    receipts: workspaceAssetExtractReceipts(downstream),
+    state: workspaceAssetExtractState(downstream),
+    downstream,
+    ...(contract ? { contract } : {})
+  });
+}
+
+function workspaceAssetContract({ operationId, input = {}, target = {}, semantic = "", downstreamOperationId = "", reason = "", status = 200 }) {
+  return workspaceAssetEnvelope({
+    operationId,
+    input,
+    target,
+    semantic,
+    status,
+    routeDecision: {
+      targetKind: target.kind,
+      downstreamOperationId,
+      mode: "contract",
+      reason
+    },
+    contract: {
+      reason,
+      downstreamOperationId,
+      nextRequiredAction: downstreamOperationId ? "implement_downstream_projection" : "define_downstream_route"
+    }
+  });
+}
+
+function workspaceAssetForbidden({ operationId, input = {}, target = {}, semantic = "", downstreamOperationId = "", missingScopes = [] }) {
+  return workspaceAssetEnvelope({
+    operationId,
+    input,
+    target,
+    semantic,
+    status: 403,
+    routeDecision: {
+      targetKind: target.kind,
+      downstreamOperationId,
+      mode: "denied",
+      missingScopes
+    },
+    downstreamResult: {
+      ok: false,
+      error: "统一资产操作缺少下游能力所需的授权 scope。",
+      missingScopes
+    }
+  });
+}
+
+async function executeWorkspaceAssetDownstream({ operationId, input, context, downstreamOperationId, downstreamInput, requiredScopes = [], routeMode = "executed" }) {
+  const target = normalizeWorkspaceAssetTarget(input, operationId);
+  const semantic = workspaceAssetSemanticFromOperation(operationId);
+  const missingScopes = missingWorkspaceAssetScopes(context, requiredScopes);
+  if (missingScopes.length > 0) {
+    return workspaceAssetForbidden({ operationId, input, target, semantic, downstreamOperationId, missingScopes });
+  }
+
+  const runDownstream = async (managedContext = context) => {
+    if (
+      downstreamOperationId.startsWith("workspace.file.") ||
+      downstreamOperationId.startsWith("agent_workspaces.") ||
+      downstreamOperationId.startsWith("sharedspace.")
+    ) {
+      return executeAgentWorkspaceFileOperation({
+        operationId: downstreamOperationId,
+        input: downstreamInput,
+        context: managedContext
+      });
+    }
+    if (downstreamOperationId.startsWith("external.cloudDrive.")) {
+      return executeCloudDriveOperation({
+        operationId: downstreamOperationId,
+        input: downstreamInput,
+        context: managedContext
+      });
+    }
+    if (downstreamOperationId.startsWith("workspace.code.") || downstreamOperationId.startsWith("codespace.")) {
+      return executeCodeManagementOperation({
+        operationId: downstreamOperationId,
+        input: downstreamInput,
+        context: managedContext
+      });
+    }
+    if (downstreamOperationId.startsWith("workspace.contribution.") || downstreamOperationId === "knowledge.contribution.submit") {
+      return executeWorkspaceContributionOperation({
+        operationId: downstreamOperationId,
+        input: downstreamInput,
+        context: managedContext
+      });
+    }
+    if (downstreamOperationId.startsWith("workspace_governance.")) {
+      return executeWorkspaceGovernanceOperation({
+        operationId: downstreamOperationId,
+        input: downstreamInput,
+        context: managedContext
+      });
+    }
+    if (downstreamOperationId.startsWith("asset_lineage.")) {
+      return executeAssetLineageOperation({
+        operationId: downstreamOperationId,
+        input: downstreamInput,
+        context: managedContext
+      });
+    }
+    return null;
+  };
+
+  if (isManagedWorkspaceAssetWriteOperation(downstreamOperationId)) {
+    const managedResult = await runManagedWorkspaceAssetWrite({
+      operationId,
+      input,
+      context,
+      target,
+      semantic,
+      downstreamOperationId,
+      routeMode,
+      run: () => runDownstream({
+        ...context,
+        workspaceAssetManagedWriteActive: true
+      })
+    });
+    if (!managedResult) {
+      return workspaceAssetContract({
+        operationId,
+        input,
+        target,
+        semantic,
+        downstreamOperationId,
+        reason: "downstream_operation_not_available",
+        status: 501
+      });
+    }
+    return workspaceAssetEnvelope({
+      operationId,
+      input,
+      target,
+      semantic,
+      status: managedResult.status || 200,
+      routeDecision: {
+        targetKind: target.kind,
+        downstreamOperationId,
+        mode: routeMode
+      },
+      downstreamResult: managedResult
+    });
+  }
+
+  let downstreamResult = await runDownstream();
+
+  if (!downstreamResult) {
+    return workspaceAssetContract({
+      operationId,
+      input,
+      target,
+      semantic,
+      downstreamOperationId,
+      reason: "downstream_operation_not_available",
+      status: 501
+    });
+  }
+
+  return workspaceAssetEnvelope({
+    operationId,
+    input,
+    target,
+    semantic,
+    status: downstreamResult.status || 200,
+    routeDecision: {
+      targetKind: target.kind,
+      downstreamOperationId,
+      mode: routeMode
+    },
+    downstreamResult
+  });
 }
 
 function objectOrNull(value) {
@@ -840,6 +1795,26 @@ function contributionRegistryFor(input = {}, context = {}) {
     }));
   }
   return contributionRegistries.get(registryKey);
+}
+
+function operationLedgerFor(context = {}) {
+  const key = context.userDataPath || "default";
+  if (!operationLedgers.has(key)) {
+    operationLedgers.set(key, createOperationLedger({
+      userDataPath: context.userDataPath || ""
+    }));
+  }
+  return operationLedgers.get(key);
+}
+
+function workspaceAssetRegistryFor(context = {}) {
+  const key = context.userDataPath || "default";
+  if (!workspaceAssetRegistries.has(key)) {
+    workspaceAssetRegistries.set(key, createWorkspaceAssetRegistry({
+      userDataPath: context.userDataPath || ""
+    }));
+  }
+  return workspaceAssetRegistries.get(key);
 }
 
 function codespaceRegistryFor(context = {}) {
@@ -1563,6 +2538,488 @@ function filterContributionsForWorkspace(items = [], input = {}) {
   return items.filter((item) => item.workspaceId === workspaceId);
 }
 
+async function executeWorkspaceAssetOperation({ operationId, input = {}, context = {} }) {
+  const id = String(operationId || "");
+  if (!id.startsWith("workspace.asset.") || id === "workspace.asset.policy.set" || id === "workspace.asset.permission.check") {
+    return null;
+  }
+
+  const target = normalizeWorkspaceAssetTarget(input, id);
+  const semantic = workspaceAssetSemanticFromOperation(id);
+  const downstreamInput = workspaceAssetDownstreamInput(input, target);
+  const mutation = objectOrNull(input.mutation) || {};
+  const action = String(input.action || mutation.action || input.mutateAction || "").trim().toLowerCase();
+
+  const execute = (downstreamOperationId, requiredScopes = [], extraInput = {}, routeMode = "executed") =>
+    executeWorkspaceAssetDownstream({
+      operationId: id,
+      input,
+      context,
+      downstreamOperationId,
+      downstreamInput: {
+        ...downstreamInput,
+        ...extraInput
+      },
+      requiredScopes,
+      routeMode
+    });
+
+  if (id === "workspace.asset.backfill") {
+    let ledgerContext = null;
+    try {
+      ledgerContext = await startWorkspaceAssetLedger({
+        operationId: id,
+        input,
+        context,
+        semantic: "backfill",
+        target,
+        downstreamOperationId: "workspace.asset.backfill",
+        routeMode: "registry_backfill"
+      });
+    } catch (error) {
+      return workspaceAssetFailureResult({
+        operationId: id,
+        input,
+        target,
+        semantic: "backfill",
+        downstreamOperationId: "workspace.asset.backfill",
+        status: 503,
+        error: `Operation Ledger 不可用，backfill 已关闭：${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+    try {
+      const registry = workspaceAssetRegistryFor(context);
+      const backfillResult = await registry.backfill({
+        ...input,
+        agentWorkspace: context.agentWorkspace,
+        contributionRegistry: contributionRegistryFor(input, context)
+      });
+      finalizeWorkspaceAssetLedger({
+        ledger: ledgerContext.ledger,
+        ledgerEntry: ledgerContext.ledgerEntry,
+        downstreamResult: { payload: backfillResult },
+        status: "succeeded",
+        warnings: ledgerContext.warnings
+      });
+      return workspaceAssetEnvelope({
+        operationId: id,
+        input,
+        target,
+        semantic: "backfill",
+        status: 200,
+        routeDecision: workspaceAssetRouteDecision({
+          target,
+          downstreamOperationId: "workspace.asset.backfill",
+          mode: "registry_backfill",
+          ledgerEntry: ledgerContext.ledgerEntry,
+          governance: workspaceAssetPolicyDecision(ledgerContext.governance)
+        }),
+        downstreamResult: {
+          status: 200,
+          payload: {
+            ...backfillResult,
+            ledgerEventId: ledgerContext.ledgerEntry.ledgerEventId
+          }
+        }
+      });
+    } catch (error) {
+      finalizeWorkspaceAssetLedger({
+        ledger: ledgerContext.ledger,
+        ledgerEntry: ledgerContext.ledgerEntry,
+        status: "failed",
+        error: { message: error instanceof Error ? error.message : String(error) },
+        warnings: ledgerContext.warnings
+      });
+      return workspaceAssetFailureResult({
+        operationId: id,
+        input,
+        target,
+        semantic: "backfill",
+        downstreamOperationId: "workspace.asset.backfill",
+        status: 500,
+        error: `workspace asset backfill failed: ${error instanceof Error ? error.message : String(error)}`,
+        ledgerEntry: ledgerContext.ledgerEntry
+      });
+    }
+  }
+
+  if (semantic === "connect") {
+    if (target.kind === "workspaceFolder") {
+      let ledgerEntry = null;
+      try {
+        const ledgerContext = await startWorkspaceAssetLedger({
+          operationId: id,
+          input,
+          context,
+          semantic,
+          target,
+          downstreamOperationId: "",
+          routeMode: "no_op"
+        });
+        ledgerEntry = ledgerContext.ledgerEntry;
+        finalizeWorkspaceAssetLedger({
+          ledger: ledgerContext.ledger,
+          ledgerEntry: ledgerContext.ledgerEntry,
+          status: "succeeded",
+          warnings: ledgerContext.warnings
+        });
+      } catch (error) {
+        return workspaceAssetFailureResult({
+          operationId: id,
+          input,
+          target,
+          semantic,
+          downstreamOperationId: "",
+          status: 503,
+          error: `Operation Ledger 不可用，写操作已关闭：${error instanceof Error ? error.message : String(error)}`
+        });
+      }
+      return workspaceAssetEnvelope({
+        operationId: id,
+        input,
+        target,
+        semantic,
+        routeDecision: workspaceAssetRouteDecision({
+          target,
+          downstreamOperationId: "",
+          mode: "no_op",
+          ledgerEntry
+        }),
+        downstreamResult: {
+          ok: true,
+          connected: true,
+          reason: "workspaceFolder is the native managed workspace target."
+        }
+      });
+    }
+    if (target.kind === "localDirectory") {
+      return execute("sharedspace.localDir.connect", ["storage:write"], {
+        sourcePath: downstreamInput.sourcePath || target.path,
+        targetPath: input.targetPath || target.targetPath || ""
+      });
+    }
+    if (target.kind === "cloudDrive") {
+      return execute("external.cloudDrive.connect", ["drive:write"]);
+    }
+    return workspaceAssetContract({
+      operationId: id,
+      input,
+      target,
+      semantic,
+      downstreamOperationId: target.kind === "repository" || target.kind === "codeReview" ? "codespace.providers.manifest" : "",
+      reason: "target_connect_adapter_not_implemented"
+    });
+  }
+
+  if (semantic === "list") {
+    const registry = workspaceAssetRegistryFor(context);
+    return workspaceAssetEnvelope({
+      operationId: id,
+      input,
+      target,
+      semantic,
+      routeDecision: workspaceAssetRouteDecision({
+        target,
+        downstreamOperationId: "workspace.asset.registry.list",
+        mode: "registry"
+      }),
+      downstreamResult: {
+        status: 200,
+        payload: registry.listAssets({
+          workspaceId: workspaceIdFrom(input),
+          targetKind: input.targetKind || input["target-kind"] || "",
+          assetKind: input.assetKind || "",
+          canonicalState: input.canonicalState || "",
+          limit: Number(input.limit || 100)
+        })
+      }
+    });
+  }
+
+  if (semantic === "read") {
+    const assetRef = String(input.assetRef || input.assetId || input.id || input["asset-ref"] || input["asset-id"] || "").trim();
+    if (assetRef) {
+      const registry = workspaceAssetRegistryFor(context);
+      const asset = registry.getAsset({ assetRef });
+      return workspaceAssetEnvelope({
+        operationId: id,
+        input,
+        target,
+        semantic,
+        status: asset ? 200 : 404,
+        routeDecision: workspaceAssetRouteDecision({
+          target,
+          downstreamOperationId: "workspace.asset.registry.read",
+          mode: "registry"
+        }),
+        downstreamResult: {
+          status: asset ? 200 : 404,
+          payload: asset || { ok: false, error: "workspace asset 不存在。" }
+        }
+      });
+    }
+    if (target.kind === "cloudDrive") {
+      return execute("external.cloudDrive.file.download", ["drive:read"]);
+    }
+    if (target.kind === "repository" || target.kind === "codeReview") {
+      return execute("codespace.file.read", ["repo:read"]);
+    }
+    if (target.kind === "knowledgeSource") {
+      return workspaceAssetContract({
+        operationId: id,
+        input,
+        target,
+        semantic,
+        downstreamOperationId: "knowledge.evidence.get",
+        reason: "knowledge_asset_read_projection_not_bound_to_workspace_asset_facade"
+      });
+    }
+    return execute("workspace.file.read", ["storage:read"]);
+  }
+
+  if (semantic === "submit") {
+    if (target.kind === "cloudDrive") {
+      return execute("external.cloudDrive.file.upload", ["drive:write"]);
+    }
+    if (target.kind === "repository" || target.kind === "codeReview") {
+      const shouldUpload = Boolean(input.codeChangeId || input.changeId || input.upload === true || input.uploadNow === true);
+      if (shouldUpload) {
+        return workspaceAssetContract({
+          operationId: id,
+          input,
+          target,
+          semantic,
+          downstreamOperationId: "workspace.code.change.upload",
+          reason: "code_upload_requires_explicit_confirmed_downstream_operation"
+        });
+      }
+      return execute(
+        "workspace.code.change.prepare",
+        ["repo:write"]
+      );
+    }
+    if (target.kind === "workspaceContribution") {
+      return execute("workspace.contribution.submit", ["workspace:write"]);
+    }
+    return execute("workspace.file.upload", ["storage:write"]);
+  }
+
+  if (semantic === "mutate") {
+    if (target.kind === "cloudDrive") {
+      if (["delete", "move", "rename", "patch"].includes(action)) {
+        return workspaceAssetContract({
+          operationId: id,
+          input,
+          target,
+          semantic,
+          downstreamOperationId: "external.cloudDrive.file.upload",
+          reason: "cloud_drive_mutation_only_supports_write_upload_in_current_adapter"
+        });
+      }
+      return execute("external.cloudDrive.file.upload", ["drive:write"]);
+    }
+    if (target.kind === "repository" || target.kind === "codeReview") {
+      return execute("workspace.code.change.prepare", ["repo:write"]);
+    }
+    if (action === "delete") {
+      return workspaceAssetContract({
+        operationId: id,
+        input,
+        target,
+        semantic,
+        downstreamOperationId: "sharedspace.item.delete",
+        reason: "delete_requires_explicit_confirmed_downstream_operation"
+      });
+    }
+    if (action === "move" || action === "rename") {
+      return workspaceAssetContract({
+        operationId: id,
+        input,
+        target,
+        semantic,
+        downstreamOperationId: "agent_workspaces.file.move",
+        reason: "move_requires_explicit_confirmed_downstream_operation"
+      });
+    }
+    if (action === "patch") {
+      return execute("workspace.file.patch", ["storage:write"]);
+    }
+    return execute("workspace.file.write", ["storage:write"]);
+  }
+
+  if (semantic === "sync.plan") {
+    if (target.kind === "cloudDrive") {
+      return execute("external.cloudDrive.sync.plan", ["drive:sync"]);
+    }
+    if (target.kind === "localDirectory") {
+      return execute("sharedspace.sync.plan", ["storage:read"], {
+        sourcePath: downstreamInput.sourcePath || target.path
+      });
+    }
+    return workspaceAssetContract({
+      operationId: id,
+      input,
+      target,
+      semantic,
+      reason: "sync_plan_target_not_supported"
+    });
+  }
+
+  if (semantic === "sync.apply") {
+    if (target.kind === "cloudDrive") {
+      return execute("external.cloudDrive.sync.apply", ["drive:sync"]);
+    }
+    if (target.kind === "localDirectory") {
+      return execute("sharedspace.sync.apply", ["storage:write"], {
+        sourcePath: downstreamInput.sourcePath || target.path
+      });
+    }
+    return workspaceAssetContract({
+      operationId: id,
+      input,
+      target,
+      semantic,
+      reason: "sync_apply_target_not_supported"
+    });
+  }
+
+  if (semantic === "import") {
+    if (target.kind === "workspaceFolder" && (downstreamInput.content || downstreamInput.contentBase64 || downstreamInput.payloadRefs)) {
+      return execute("workspace.file.upload", ["storage:write"], {}, "materialized_import");
+    }
+    return workspaceAssetContract({
+      operationId: id,
+      input,
+      target,
+      semantic,
+      downstreamOperationId: target.kind === "cloudDrive" ? "external.cloudDrive.file.download" : "",
+      reason: "import_requires_materialization_bridge"
+    });
+  }
+
+  if (semantic === "export") {
+    if (target.kind === "cloudDrive" && (downstreamInput.content || downstreamInput.contentBase64)) {
+      return execute("external.cloudDrive.file.upload", ["drive:write"], {}, "exported");
+    }
+    if (target.kind === "repository" || target.kind === "codeReview") {
+      return execute("workspace.code.change.prepare", ["repo:write"], {}, "exported_as_code_change");
+    }
+    return workspaceAssetContract({
+      operationId: id,
+      input,
+      target,
+      semantic,
+      downstreamOperationId: target.kind === "cloudDrive" ? "external.cloudDrive.file.upload" : "",
+      reason: "export_requires_source_asset_resolution"
+    });
+  }
+
+  if (semantic === "review.comment") {
+    if (target.kind === "repository" || target.kind === "codeReview") {
+      return execute("codespace.review.comment", ["repo:review"]);
+    }
+    if (target.kind === "workspaceContribution") {
+      return execute("workspace.contribution.review", ["workspace:maintain"]);
+    }
+  }
+
+  if (semantic === "review.requestChanges") {
+    if (target.kind === "repository" || target.kind === "codeReview") {
+      return execute("codespace.review.requestChanges", ["repo:review"]);
+    }
+    if (target.kind === "workspaceContribution") {
+      return execute("workspace.contribution.request_changes", ["workspace:maintain"]);
+    }
+  }
+
+  if (semantic === "review.approve") {
+    if (target.kind === "repository" || target.kind === "codeReview") {
+      return execute("codespace.review.approve", ["repo:approve"]);
+    }
+    if (target.kind === "workspaceContribution") {
+      return workspaceAssetContract({
+        operationId: id,
+        input,
+        target,
+        semantic,
+        downstreamOperationId: "workspace.contribution.publish",
+        reason: "contribution_publish_requires_explicit_lifecycle_confirmation"
+      });
+    }
+  }
+
+  if (semantic === "lineage") {
+    if (input.assetRef || input.assetId || input.id) {
+      const registry = workspaceAssetRegistryFor(context);
+      const lineage = registry.listLineage({
+        workspaceId: workspaceIdFrom(input),
+        assetRef: input.assetRef || input.assetId || input.id,
+        limit: Number(input.limit || 100)
+      });
+      return workspaceAssetEnvelope({
+        operationId: id,
+        input,
+        target,
+        semantic,
+        routeDecision: workspaceAssetRouteDecision({
+          target,
+          downstreamOperationId: "workspace.asset.registry.lineage",
+          mode: "registry"
+        }),
+        downstreamResult: {
+          status: 200,
+          payload: lineage
+        }
+      });
+    }
+    return execute("asset_lineage.trace", ["console:read"], {
+      assetId: input.assetId || input.assetRef || input["asset-ref"] || target.assetId || ""
+    });
+  }
+
+  if (semantic === "receipt.get") {
+    const registry = workspaceAssetRegistryFor(context);
+    return workspaceAssetEnvelope({
+      operationId: id,
+      input,
+      target,
+      semantic,
+      routeDecision: workspaceAssetRouteDecision({
+        target,
+        downstreamOperationId: "workspace.asset.registry.receipts",
+        mode: "registry"
+      }),
+      downstreamResult: {
+        status: 200,
+        payload: registry.listReceipts({
+          workspaceId: workspaceIdFrom(input),
+          assetRef: input.assetRef || input.assetId || input.id || "",
+          limit: Number(input.limit || 100)
+        })
+      }
+    });
+  }
+
+  if (semantic === "checkpoint") {
+    return workspaceAssetContract({
+      operationId: id,
+      input,
+      target,
+      semantic,
+      downstreamOperationId: "workspace.checkpoint.tree.list",
+      reason: "checkpoint_creation_facade_not_bound_yet"
+    });
+  }
+
+  return workspaceAssetContract({
+    operationId: id,
+    input,
+    target,
+    semantic,
+    reason: "workspace_asset_semantic_not_supported"
+  });
+}
+
 async function executeWorkspaceContributionOperation({ operationId, input, context }) {
   if (
     !String(operationId || "").startsWith("workspace.contribution.") &&
@@ -1570,6 +3027,26 @@ async function executeWorkspaceContributionOperation({ operationId, input, conte
     !String(operationId || "").startsWith("workspace.skill.")
   ) {
     return null;
+  }
+  if (isManagedWorkspaceAssetWriteOperation(operationId) && context.workspaceAssetManagedWriteActive !== true) {
+    const target = normalizeWorkspaceAssetTarget(input, operationId);
+    return runManagedWorkspaceAssetWrite({
+      operationId,
+      input,
+      context,
+      target,
+      semantic: workspaceAssetSemanticFromOperation(operationId),
+      downstreamOperationId: operationId,
+      routeMode: "legacy_api",
+      run: () => executeWorkspaceContributionOperation({
+        operationId,
+        input,
+        context: {
+          ...context,
+          workspaceAssetManagedWriteActive: true
+        }
+      })
+    });
   }
   const registry = contributionRegistryFor(input, context);
   const authSubject = subjectFromAuthSession(context.authSession);
@@ -5378,16 +6855,25 @@ function knowledgeBackendSubject(context = {}, input = {}) {
       declaredSubject: requestedSubject || runtimeSubject.declaredSubject || null
     };
   }
-  if (!requestedSubject) {
-    return authSubject;
+  const hasAuthenticatedSubject = Boolean(authSubject.subjectId || authSubject.username) && authSubject.type !== "anonymous";
+  if (hasAuthenticatedSubject) {
+    const declaredSubject = requestedSubject || runtimeSubject.declaredSubject || null;
+    return declaredSubject ? { ...authSubject, declaredSubject } : authSubject;
   }
-  return {
-    ...authSubject,
-    ...requestedSubject,
-    subjectId: requestedSubject.subjectId || requestedSubject.id || requestedSubject.username || authSubject.subjectId,
-    username: requestedSubject.username || authSubject.username,
-    type: requestedSubject.type || authSubject.type
-  };
+  const runtimeSubjectId = runtimeSubject.subjectId || runtimeSubject.id || runtimeSubject.username || "";
+  if (runtimeSubjectId) {
+    const declaredSubject = requestedSubject || runtimeSubject.declaredSubject || null;
+    return {
+      ...runtimeSubject,
+      subjectId: runtimeSubjectId,
+      username: runtimeSubject.username || runtimeSubject.label || runtimeSubjectId,
+      type: runtimeSubject.type || "runtime-subject",
+      scopes: Array.isArray(runtimeSubject.scopes) ? runtimeSubject.scopes : [],
+      ...(declaredSubject ? { declaredSubject } : {})
+    };
+  }
+  const declaredSubject = requestedSubject || runtimeSubject.declaredSubject || null;
+  return declaredSubject ? { ...authSubject, declaredSubject } : authSubject;
 }
 
 function knowledgeBackendProviderRequested(input = {}) {
@@ -5404,6 +6890,110 @@ function knowledgeBackendSearchRequested(input = {}) {
     input.derivedKnowledgeSpace ||
     knowledgeBackendProviderRequested(input)
   );
+}
+
+function localKnowledgeRefFromInput(input = {}, fallback = "") {
+  return String(
+    input.evidenceId ||
+      input["evidence-id"] ||
+      input.assetId ||
+      input["asset-id"] ||
+      input.itemId ||
+      input["item-id"] ||
+      input.documentId ||
+      input["document-id"] ||
+      input.id ||
+      fallback ||
+      ""
+  ).trim();
+}
+
+function localKnowledgeAccessPolicyInput({ input = {}, subject = {}, workspaceId = "", operationId = "", targetRef = "", targetType = "knowledge", requestedAction = "read", requestedEgress = "evidenceRead", requestedAccessMode = "copyToContext" } = {}) {
+  const explicitView = objectOrNull(input.view) || objectOrNull(input.derivedView) || {};
+  const explicitOverlay = {
+    ...objectOrNull(explicitView.authorizationOverlay),
+    ...objectOrNull(input.authorizationOverlay)
+  };
+  const subjectId = String(subject.subjectId || subject.id || subject.username || "").trim();
+  const refs = arrayOfStrings(explicitView.refs).length > 0
+    ? explicitView.refs
+    : targetRef
+      ? [{ ref: targetRef, refType: targetType }]
+      : [];
+  return {
+    ...explicitView,
+    upstreamKnowledgeRef: explicitView.upstreamKnowledgeRef || input.upstreamKnowledgeRef || "local-knowledge-core",
+    derivedViewRef: explicitView.derivedViewRef || `local:${workspaceId || "default"}:${operationId || targetType}:${targetRef || "scope"}`,
+    derivedKnowledgeSpace: explicitView.derivedKnowledgeSpace || workspaceId || "default",
+    workspaceId: workspaceId || "default",
+    workspaceScope: arrayOfStrings(explicitView.workspaceScope).length > 0
+      ? explicitView.workspaceScope
+      : [workspaceId || "default"],
+    allowedSubjects: arrayOfStrings(explicitView.allowedSubjects).length > 0
+      ? explicitView.allowedSubjects
+      : subjectId
+        ? [subjectId]
+        : [],
+    allowedActions: arrayOfStrings(explicitView.allowedActions).length > 0
+      ? explicitView.allowedActions
+      : ["discover", "read"],
+    authorizationOverlay: {
+      defaultAccessMode: requestedAccessMode,
+      defaultActions: [requestedAction],
+      defaultEgress: [requestedEgress],
+      ...explicitOverlay
+    },
+    refs
+  };
+}
+
+async function evaluateLocalKnowledgeAccess({ operationId = "", input = {}, context = {}, targetRef = "", targetType = "knowledge", requestedAction = "read", requestedEgress = "evidenceRead", requestedAccessMode = "copyToContext" } = {}) {
+  const { evaluateKnowledgeAccess } = await loadKnowledgeAccessModule();
+  const subject = knowledgeBackendSubject(context, input);
+  const workspaceId = workspaceIdFrom(input);
+  const ref = targetRef || localKnowledgeRefFromInput(input, operationId || targetType);
+  const decision = evaluateKnowledgeAccess({
+    libraryCardId: String(input.libraryCardId || input["library-card-id"] || `local:${operationId || targetType}`).trim(),
+    subject,
+    operatorId: String(subject.subjectId || subject.username || "").trim(),
+    workspaceId,
+    taskId: String(input.taskId || input["task-id"] || input.runId || "").trim(),
+    requestedAction,
+    requestedEgress,
+    requestedAccessMode,
+    targetRefs: ref ? [{ ref, refType: targetType }] : []
+  }, localKnowledgeAccessPolicyInput({
+    input,
+    subject,
+    workspaceId,
+    operationId,
+    targetRef: ref,
+    targetType,
+    requestedAction,
+    requestedEgress,
+    requestedAccessMode
+  }));
+  appendKnowledgeAccessDecisionArtifacts(context, decision, operationId);
+  return decision;
+}
+
+function localKnowledgeDeniedResult(decision) {
+  return result(403, {
+    error: "知识访问被拒绝。",
+    accessDecision: decision,
+    knowledgeAccessDecision: decision
+  });
+}
+
+function attachKnowledgeAccessDecision(payload, decision) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return payload;
+  }
+  return {
+    ...payload,
+    accessDecision: decision,
+    knowledgeAccessDecision: decision
+  };
 }
 
 async function executeKnowledgeBackendOperation({ operationId, input = {}, context }) {
@@ -5446,6 +7036,26 @@ async function executeCloudDriveOperation({ operationId, input = {}, context }) 
   const id = String(operationId || "");
   if (!isCloudDriveUpstreamGatewayOperation(id)) {
     return null;
+  }
+  if (isManagedWorkspaceAssetWriteOperation(id) && context.workspaceAssetManagedWriteActive !== true) {
+    const target = normalizeWorkspaceAssetTarget(input, id);
+    return runManagedWorkspaceAssetWrite({
+      operationId: id,
+      input,
+      context,
+      target,
+      semantic: workspaceAssetSemanticFromOperation(id),
+      downstreamOperationId: id,
+      routeMode: "legacy_api",
+      run: () => executeCloudDriveOperation({
+        operationId: id,
+        input,
+        context: {
+          ...context,
+          workspaceAssetManagedWriteActive: true
+        }
+      })
+    });
   }
   const gateway = cloudDriveUpstreamGatewayFor(context);
   const operationInput = {
@@ -5782,13 +7392,26 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
   if (id === "knowledge.search" || id === "knowledge.search.get") {
     let payload = normalizeKnowledgeSearchInput(input);
     if (payload.rawSourceSearch === true || payload.sourceSearch === true) {
+      const accessDecision = await evaluateLocalKnowledgeAccess({
+        operationId: id,
+        input: payload,
+        context,
+        targetRef: payload.query || payload.q || "raw-source-search",
+        targetType: "source-search",
+        requestedAction: "discover",
+        requestedEgress: "searchResult",
+        requestedAccessMode: "metadataOnly"
+      });
+      if (!accessDecision.allowed) {
+        return localKnowledgeDeniedResult(accessDecision);
+      }
       const { searchSourceFiles } = await loadSourceFileSearchServiceModule();
-      return result(200, await searchSourceFiles({
+      return result(200, attachKnowledgeAccessDecision(await searchSourceFiles({
         userDataPath: context.userDataPath,
         query: payload.query || payload.q || "",
         limit: payload.limit || 20,
         returnAll: payload.returnAll === true || payload.all === true
-      }));
+      }), accessDecision));
     }
     if (knowledgeBackendSearchRequested(payload)) {
       const port = await knowledgeBackendPortFor(context);
@@ -5817,6 +7440,19 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
         });
       }
       payload = workspaceApplied.input;
+      const accessDecision = await evaluateLocalKnowledgeAccess({
+        operationId: id,
+        input: payload,
+        context,
+        targetRef: payload.batchId || payload.query || payload.q || "local-knowledge-search",
+        targetType: "knowledge-search",
+        requestedAction: "discover",
+        requestedEgress: "searchResult",
+        requestedAccessMode: "metadataOnly"
+      });
+      if (!accessDecision.allowed) {
+        return localKnowledgeDeniedResult(accessDecision);
+      }
       const responseProfile = resolveKnowledgeSearchResponseProfile(payload, context);
       const agentMessageEnabled =
         responseProfile === "agent" &&
@@ -5872,6 +7508,8 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
       if (allocationResult?.allocation) {
         operationResult.clientRuntimeAllocation = allocationResult.allocation;
       }
+      operationResult.accessDecision = accessDecision;
+      operationResult.knowledgeAccessDecision = accessDecision;
       if (workspaceApplied.workspaceContext) {
         operationResult.workspaceContext = workspaceApplied.workspaceContext;
       }
@@ -5880,16 +7518,45 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
         typeof knowledgeCore.renderMarkdown === "function" &&
         operationResult.items?.[0]?.evidenceId
       ) {
+        const renderAccessDecision = await evaluateLocalKnowledgeAccess({
+          operationId: "knowledge.render_markdown",
+          input: {
+            ...payload,
+            evidenceId: operationResult.items[0].evidenceId
+          },
+          context,
+          targetRef: operationResult.items[0].evidenceId,
+          targetType: "evidence",
+          requestedAction: "read",
+          requestedEgress: "evidenceRead",
+          requestedAccessMode: "copyToContext"
+        });
+        if (!renderAccessDecision.allowed) {
+          return localKnowledgeDeniedResult(renderAccessDecision);
+        }
         const rendered = await knowledgeCore.renderMarkdown({
           evidenceId: operationResult.items[0].evidenceId,
           format: "markdown"
         });
         return result(200, {
           ...operationResult,
-          rendered
+          rendered: attachKnowledgeAccessDecision(rendered, renderAccessDecision)
         });
       }
       return result(200, operationResult);
+    }
+    const accessDecision = await evaluateLocalKnowledgeAccess({
+      operationId: id,
+      input: payload,
+      context,
+      targetRef: payload.batchId || payload.query || payload.q || "metadata-store-search",
+      targetType: "knowledge-search",
+      requestedAction: "discover",
+      requestedEgress: "searchResult",
+      requestedAccessMode: "metadataOnly"
+    });
+    if (!accessDecision.allowed) {
+      return localKnowledgeDeniedResult(accessDecision);
     }
     const fallbackResult = metadataStore?.searchKnowledge
       ? metadataStore.searchKnowledge({
@@ -5901,6 +7568,8 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
       : { items: [], count: 0 };
     return result(200, {
       ...fallbackResult,
+      accessDecision,
+      knowledgeAccessDecision: accessDecision,
       modalityPolicy: {
         mode: "multimodal",
         text: true,
@@ -5914,23 +7583,62 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
     if (!knowledgeCore || typeof knowledgeCore.getDocumentStructure !== "function") {
       return result(503, { error: "知识库结构读取不可用。" });
     }
+    const accessDecision = await evaluateLocalKnowledgeAccess({
+      operationId: id,
+      input,
+      context,
+      targetRef: input.documentId || input["document-id"] || input.id || "",
+      targetType: "document",
+      requestedAction: "read",
+      requestedEgress: "evidenceRead",
+      requestedAccessMode: "copyToContext"
+    });
+    if (!accessDecision.allowed) {
+      return localKnowledgeDeniedResult(accessDecision);
+    }
     const operationResult = knowledgeCore.getDocumentStructure({
       documentId: input.documentId || input["document-id"] || input.id || "",
       maxNodes: Number(input.maxNodes || input["max-nodes"] || 120)
     });
     return operationResult
-      ? result(200, operationResult)
+      ? result(200, attachKnowledgeAccessDecision(operationResult, accessDecision))
       : result(404, { error: "知识文档不存在。" });
   }
 
   if (id === "knowledge.item") {
     if (knowledgeCore && typeof knowledgeCore.getItem === "function") {
+      const accessDecision = await evaluateLocalKnowledgeAccess({
+        operationId: id,
+        input,
+        context,
+        targetRef: input.itemId || input["item-id"] || input.id || "",
+        targetType: "knowledge-item",
+        requestedAction: "read",
+        requestedEgress: "evidenceRead",
+        requestedAccessMode: "copyToContext"
+      });
+      if (!accessDecision.allowed) {
+        return localKnowledgeDeniedResult(accessDecision);
+      }
       const item = await knowledgeCore.getItem({
         itemId: input.itemId || input["item-id"] || input.id || ""
       });
       if (item) {
-        return result(200, item);
+        return result(200, attachKnowledgeAccessDecision(item, accessDecision));
       }
+    }
+    const accessDecision = await evaluateLocalKnowledgeAccess({
+      operationId: id,
+      input,
+      context,
+      targetRef: input.itemId || input["item-id"] || input.id || "",
+      targetType: "knowledge-item",
+      requestedAction: "read",
+      requestedEgress: "evidenceRead",
+      requestedAccessMode: "copyToContext"
+    });
+    if (!accessDecision.allowed) {
+      return localKnowledgeDeniedResult(accessDecision);
     }
     const operationResult = metadataStore?.getKnowledgeItem
       ? metadataStore.getKnowledgeItem({
@@ -5938,7 +7646,7 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
         })
       : null;
     return operationResult
-      ? result(200, operationResult)
+      ? result(200, attachKnowledgeAccessDecision(operationResult, accessDecision))
       : result(404, { error: "知识对象不存在。" });
   }
 
@@ -5961,18 +7669,44 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
       }
     }
     if (sourceFileSearchModule.isSourceEvidenceId(evidenceId)) {
+      const accessDecision = await evaluateLocalKnowledgeAccess({
+        operationId: id,
+        input: { ...input, evidenceId },
+        context,
+        targetRef: evidenceId,
+        targetType: "source-evidence",
+        requestedAction: "read",
+        requestedEgress: "evidenceRead",
+        requestedAccessMode: "copyToContext"
+      });
+      if (!accessDecision.allowed) {
+        return localKnowledgeDeniedResult(accessDecision);
+      }
       const operationResult = await sourceFileSearchModule.getSourceFileEvidence({
         userDataPath: context.userDataPath,
         evidenceId
       });
       if (operationResult) {
-        return result(200, operationResult);
+        return result(200, attachKnowledgeAccessDecision(operationResult, accessDecision));
       }
     }
     if (knowledgeCore && typeof knowledgeCore.getEvidence === "function") {
+      const accessDecision = await evaluateLocalKnowledgeAccess({
+        operationId: id,
+        input: { ...input, evidenceId },
+        context,
+        targetRef: evidenceId,
+        targetType: "evidence",
+        requestedAction: "read",
+        requestedEgress: "evidenceRead",
+        requestedAccessMode: "copyToContext"
+      });
+      if (!accessDecision.allowed) {
+        return localKnowledgeDeniedResult(accessDecision);
+      }
       const operationResult = await knowledgeCore.getEvidence({ evidenceId });
       if (operationResult) {
-        return result(200, operationResult);
+        return result(200, attachKnowledgeAccessDecision(operationResult, accessDecision));
       }
     }
     return result(404, { error: "知识证据不存在。" });
@@ -5980,6 +7714,19 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
 
   if (id === "knowledge.asset") {
     if (knowledgeCore && typeof knowledgeCore.getAssetContent === "function") {
+      const accessDecision = await evaluateLocalKnowledgeAccess({
+        operationId: id,
+        input,
+        context,
+        targetRef: input.assetId || input["asset-id"] || input.id || "",
+        targetType: "asset",
+        requestedAction: "read",
+        requestedEgress: "evidenceRead",
+        requestedAccessMode: "copyToContext"
+      });
+      if (!accessDecision.allowed) {
+        return localKnowledgeDeniedResult(accessDecision);
+      }
       const operationResult = await knowledgeCore.getAssetContent({
         assetId: input.assetId || input["asset-id"] || input.id || ""
       });
@@ -5988,7 +7735,9 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
           __binaryResponse: true,
           contentType: operationResult.contentType || "application/octet-stream",
           fileName: operationResult.fileName || "asset.bin",
-          buffer: operationResult.buffer
+          buffer: operationResult.buffer,
+          accessDecision,
+          knowledgeAccessDecision: accessDecision
         });
       }
     }
@@ -5997,9 +7746,22 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
 
   if (id === "knowledge.render_markdown") {
     if (knowledgeCore && typeof knowledgeCore.renderMarkdown === "function") {
+      const accessDecision = await evaluateLocalKnowledgeAccess({
+        operationId: id,
+        input,
+        context,
+        targetRef: input.evidenceId || input["evidence-id"] || input.id || "",
+        targetType: "evidence",
+        requestedAction: "read",
+        requestedEgress: "evidenceRead",
+        requestedAccessMode: "copyToContext"
+      });
+      if (!accessDecision.allowed) {
+        return localKnowledgeDeniedResult(accessDecision);
+      }
       const operationResult = await knowledgeCore.renderMarkdown(input);
       if (operationResult) {
-        return result(200, operationResult);
+        return result(200, attachKnowledgeAccessDecision(operationResult, accessDecision));
       }
     }
     return result(404, { error: "知识证据不存在，无法渲染 Markdown。" });
@@ -6035,6 +7797,26 @@ async function executeAgentWorkspaceFileOperation({ operationId, input, context 
   ]);
   if (!handledOperations.has(id)) {
     return null;
+  }
+  if (isManagedWorkspaceAssetWriteOperation(id) && context.workspaceAssetManagedWriteActive !== true) {
+    const target = normalizeWorkspaceAssetTarget(input, id);
+    return runManagedWorkspaceAssetWrite({
+      operationId: id,
+      input,
+      context,
+      target,
+      semantic: workspaceAssetSemanticFromOperation(id),
+      downstreamOperationId: id,
+      routeMode: "legacy_api",
+      run: () => executeAgentWorkspaceFileOperation({
+        operationId: id,
+        input,
+        context: {
+          ...context,
+          workspaceAssetManagedWriteActive: true
+        }
+      })
+    });
   }
   const agentWorkspace = context.agentWorkspace;
   const workspaceId = workspaceIdFrom(input);
@@ -6875,6 +8657,26 @@ async function executeCodeManagementOperation({ operationId, input = {}, context
   if (!handledOperations.has(id)) {
     return null;
   }
+  if (isManagedWorkspaceAssetWriteOperation(id) && context.workspaceAssetManagedWriteActive !== true) {
+    const target = normalizeWorkspaceAssetTarget(input, id);
+    return runManagedWorkspaceAssetWrite({
+      operationId: id,
+      input,
+      context,
+      target,
+      semantic: workspaceAssetSemanticFromOperation(id),
+      downstreamOperationId: id,
+      routeMode: "legacy_api",
+      run: () => executeCodeManagementOperation({
+        operationId: id,
+        input,
+        context: {
+          ...context,
+          workspaceAssetManagedWriteActive: true
+        }
+      })
+    });
+  }
   const codespace = codespaceRegistryFor(context);
   try {
     if (id === "codespace.providers.manifest") {
@@ -7226,6 +9028,7 @@ async function executeRuntimeDependencyOperation({ operationId, input, context }
 
 export async function executeConsoleDomainOperation({ operationId, input = {}, context = {} } = {}) {
   for (const executor of [
+    executeWorkspaceAssetOperation,
     executeWorkspaceContributionOperation,
     executeKnowledgeAccessOperation,
     executeKnowledgeManagementOperation,

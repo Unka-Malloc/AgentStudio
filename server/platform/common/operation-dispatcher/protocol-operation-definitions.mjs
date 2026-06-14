@@ -133,7 +133,12 @@ const CLOUD_DRIVE_SYNC_SCHEMA = schema(["driveRef"], {
   limit: { type: "number" },
   confirm: { type: "boolean" }
 });
-const CLOUD_DRIVE_UPSTREAM_ASPECTS = Object.freeze(["external-service", "cloud-drive-upstream", "skill-hub"]);
+const CLOUD_DRIVE_UPSTREAM_ASPECTS = Object.freeze([
+  "external-service",
+  "external-upstream-gateway",
+  "cloud-drive-upstream",
+  "service-hub"
+]);
 const CLOUD_DRIVE_LEGACY_ASPECTS = Object.freeze(["cloud-drive-legacy-shim", "internal-deprecated", "external-replaced"]);
 const CLOUD_DRIVE_REPLACEMENT_SERVICE = "external.cloudDrive";
 const CLOUD_DRIVE_REPLACEMENT_PREFIX = "external.cloudDrive.";
@@ -160,6 +165,76 @@ function cloudDriveLegacyOperation(options = {}) {
     replacementOperationPrefix: CLOUD_DRIVE_REPLACEMENT_PREFIX,
     lifecycle: CLOUD_DRIVE_LEGACY_LIFECYCLE,
     aspects: CLOUD_DRIVE_LEGACY_ASPECTS,
+    ...options
+  });
+}
+
+const WORKSPACE_ASSET_OPERATION_ASPECTS = Object.freeze([
+  "workspace-asset-operation",
+  "resource-operation",
+  "mcp"
+]);
+
+const ASSET_QUERY = [
+  ...WORKSPACE_ID_QUERY,
+  { name: "targetKind", aliases: ["target-kind", "targetKind", "kind"] },
+  { name: "assetRef", aliases: ["asset-ref", "assetRef", "assetId", "asset-id"] },
+  { name: "path", aliases: ["path", "filePath", "file-path"] },
+  { name: "provider", aliases: ["provider"] },
+  { name: "driveRef", aliases: ["drive-ref", "driveRef"] },
+  { name: "repoId", aliases: ["repo-id", "repoId"] },
+  { name: "limit", aliases: ["limit"] }
+];
+
+const ASSET_TARGET_SCHEMA = {
+  type: "object",
+  additionalProperties: true,
+  properties: {
+    kind: { type: "string" },
+    provider: { type: "string" },
+    path: { type: "string" },
+    driveRef: { type: "string" },
+    repoId: { type: "string" },
+    repositoryRef: { type: "string" },
+    branch: { type: "string" }
+  }
+};
+
+const ASSET_CONTENT_SCHEMA = {
+  type: "object",
+  additionalProperties: true,
+  properties: {
+    content: { type: "string" },
+    contentBase64: { type: "string" },
+    uploadSessionId: { type: "string" },
+    payloadRefs: { type: "array" },
+    diff: { type: "string" },
+    files: { type: "array" }
+  }
+};
+
+const ASSET_OPERATION_SCHEMA = schema(["workspaceId"], {
+  workspaceId: { type: "string" },
+  semantic: { type: "string" },
+  submitKind: { type: "string" },
+  assetRef: { type: "string" },
+  target: ASSET_TARGET_SCHEMA,
+  content: ASSET_CONTENT_SCHEMA,
+  policy: { type: "object" },
+  source: { type: "object" },
+  mutation: { type: "object" },
+  review: { type: "object" },
+  checkpoint: { type: "object" },
+  receiptRef: { type: "string" },
+  idempotencyKey: { type: "string" },
+  dryRun: { type: "boolean" },
+  confirm: { type: "boolean" }
+});
+
+function workspaceAssetOperation(options = {}) {
+  return protocolOperation({
+    feature: "agent_workspace",
+    aspects: WORKSPACE_ASSET_OPERATION_ASPECTS,
     ...options
   });
 }
@@ -1068,6 +1143,173 @@ export const PROTOCOL_OPERATION_DEFINITIONS = Object.freeze([
     targetMethod: "handleWorkspaceAssetPermissionCheck",
     path: "/api/workspace/assets/permission/check",
     scopes: ["workspace:read"]
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.target.connect",
+    label: "连接 workspace 资产目标",
+    targetMethod: "handleWorkspaceAssetTargetConnect",
+    path: "/api/workspace/assets/targets/connect",
+    scopes: ["workspace:write"],
+    risk: "safe_write",
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.list",
+    label: "列出 workspace 统一资产",
+    targetMethod: "handleWorkspaceAssetList",
+    method: "GET",
+    path: "/api/workspace/assets",
+    query: ASSET_QUERY,
+    scopes: ["workspace:read"],
+    readOnly: true,
+    inputSchema: schema([], {
+      workspaceId: { type: "string" },
+      targetKind: { type: "string" },
+      assetRef: { type: "string" },
+      path: { type: "string" },
+      provider: { type: "string" },
+      driveRef: { type: "string" },
+      repoId: { type: "string" },
+      limit: { type: "number" }
+    })
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.read",
+    label: "读取 workspace 统一资产",
+    targetMethod: "handleWorkspaceAssetRead",
+    method: "GET",
+    path: "/api/workspace/assets/read",
+    query: [
+      ...ASSET_QUERY,
+      { name: "includeText", aliases: ["include-text", "includeText"] },
+      { name: "encoding", aliases: ["encoding"] }
+    ],
+    scopes: ["workspace:read"],
+    readOnly: true
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.submit",
+    label: "提交 workspace 统一资产",
+    targetMethod: "handleWorkspaceAssetSubmit",
+    path: "/api/workspace/assets/submit",
+    scopes: ["workspace:write"],
+    risk: "safe_write",
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.mutate",
+    label: "变更 workspace 统一资产",
+    targetMethod: "handleWorkspaceAssetMutate",
+    path: "/api/workspace/assets/mutate",
+    scopes: ["workspace:write"],
+    risk: "safe_write",
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.sync.plan",
+    label: "生成 workspace 统一资产同步计划",
+    targetMethod: "handleWorkspaceAssetSyncPlan",
+    path: "/api/workspace/assets/sync/plan",
+    scopes: ["workspace:read"],
+    risk: "read_only",
+    readOnly: true,
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.sync.apply",
+    label: "应用 workspace 统一资产同步计划",
+    targetMethod: "handleWorkspaceAssetSyncApply",
+    path: "/api/workspace/assets/sync/apply",
+    scopes: ["workspace:write"],
+    risk: "safe_write",
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.import",
+    label: "导入 workspace 统一资产",
+    targetMethod: "handleWorkspaceAssetImport",
+    path: "/api/workspace/assets/import",
+    scopes: ["workspace:write"],
+    risk: "safe_write",
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.export",
+    label: "导出 workspace 统一资产",
+    targetMethod: "handleWorkspaceAssetExport",
+    path: "/api/workspace/assets/export",
+    scopes: ["workspace:maintain"],
+    risk: "repair_write",
+    requiresConfirmation: true,
+    approvalScope: "workspace:maintain",
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.review.comment",
+    label: "评论 workspace 统一资产评审",
+    targetMethod: "handleWorkspaceAssetReviewComment",
+    path: "/api/workspace/assets/review/comment",
+    scopes: ["workspace:write"],
+    risk: "safe_write",
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.review.requestChanges",
+    label: "要求 workspace 统一资产修改",
+    targetMethod: "handleWorkspaceAssetReviewRequestChanges",
+    path: "/api/workspace/assets/review/request-changes",
+    scopes: ["workspace:write"],
+    risk: "safe_write",
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.review.approve",
+    label: "批准 workspace 统一资产评审",
+    targetMethod: "handleWorkspaceAssetReviewApprove",
+    path: "/api/workspace/assets/review/approve",
+    scopes: ["workspace:maintain"],
+    risk: "safe_write",
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.checkpoint",
+    label: "创建 workspace 统一资产 checkpoint",
+    targetMethod: "handleWorkspaceAssetCheckpoint",
+    path: "/api/workspace/assets/checkpoint",
+    scopes: ["workspace:write"],
+    risk: "safe_write",
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.lineage",
+    label: "查询 workspace 统一资产血缘",
+    targetMethod: "handleWorkspaceAssetLineage",
+    path: "/api/workspace/assets/lineage",
+    scopes: ["workspace:read"],
+    risk: "read_only",
+    readOnly: true,
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.receipt.get",
+    label: "读取 workspace 统一资产凭证",
+    targetMethod: "handleWorkspaceAssetReceiptGet",
+    path: "/api/workspace/assets/receipts/get",
+    scopes: ["workspace:read"],
+    risk: "read_only",
+    readOnly: true,
+    inputSchema: ASSET_OPERATION_SCHEMA
+  }),
+  workspaceAssetOperation({
+    id: "workspace.asset.backfill",
+    label: "重建 workspace 统一资产目录",
+    targetMethod: "handleWorkspaceAssetBackfill",
+    path: "/api/workspace/assets/backfill",
+    scopes: ["workspace:maintain"],
+    risk: "repair_write",
+    requiresConfirmation: true,
+    approvalScope: "workspace:maintain",
+    inputSchema: ASSET_OPERATION_SCHEMA
   }),
   protocolOperation({
     id: "workspace.audit.query",

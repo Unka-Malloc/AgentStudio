@@ -546,9 +546,9 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     http: { method: "POST", path: "/api/workspace-governance/policies", localInForwardMode: true },
     rpc: { method: "workspace_governance.policy.set", body: "params" },
     cli: { command: ["workspace-governance", "policy", "set"], usage: "workspace-governance policy set --body policy.json" },
-    requiredScopes: ["runtime:admin"],
+    requiredScopes: ["workspace:maintain"],
     aspects: ["workspace-governance", "organization-policy"],
-    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "runtime:admin" }
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "workspace:maintain" }
   },
   {
     id: "workspace_governance.evaluate",
@@ -3693,7 +3693,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     http: { method: "GET", path: "/api/knowledge/health" },
     rpc: { method: "knowledge.health" },
     cli: { command: ["knowledge", "health"], usage: "knowledge health" },
-    requiredScopes: ["workspace:read"]
+    requiredScopes: ["knowledge:read"]
   },
   {
     id: "knowledge.maintenance.get",
@@ -4913,7 +4913,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       command: ["agent-workspaces", "create"],
       usage: "agent-workspaces create --body workspace.json"
     },
-    requiredScopes: ["knowledge:write"],
+    requiredScopes: ["workspace:write"],
     inputSchema: {
       type: "object",
       required: ["title"],
@@ -4952,7 +4952,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       command: ["agent-workspaces"],
       usage: "agent-workspaces [--status active] [--limit 50]"
     },
-    requiredScopes: ["knowledge:read"]
+    requiredScopes: ["workspace:read"]
   },
   {
     id: "agent_workspaces.get",
@@ -4974,7 +4974,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
       usage: "agent-workspaces get --id WORKSPACE_ID",
       pathParams: { workspaceId: ["workspace-id", "id"] }
     },
-    requiredScopes: ["knowledge:read"]
+    requiredScopes: ["workspace:read"]
   },
   {
     id: "agent_workspaces.delete",

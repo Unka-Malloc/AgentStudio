@@ -16,6 +16,7 @@
 - [Middle Layer Strategy](#middle-layer-strategy)
 - [Compatibility Strategy](#compatibility-strategy)
 - [Workspace API](#workspace-api)
+- [Workspace Unified Asset Operation Protocol](#workspace-unified-asset-operation-protocol)
 - [Workspace Event](#workspace-event)
 - [Operation Protocol](#operation-protocol)
   - [Unified Checkpoint Tree Protocol](#unified-checkpoint-tree-protocol)
@@ -54,6 +55,7 @@
 | 协议 | 责任 |
 | --- | --- |
 | `v0.0.1:workspace:core-1` | 公共工作空间 context、tasks、observations、artifacts、proposals、decisions、audit events。 |
+| `v0.0.1:workspace:asset-operation-1` | 跨本地目录、云盘、代码库、贡献资产和知识派生空间的统一资产操作语义，定义 connect、list、read、submit、mutate、sync、import/export、review、checkpoint、lineage 和 receipt envelope。 |
 | `v0.0.1:operation:core-1` | idempotency、policy check、dry-run、diff、snapshot boundary、apply、rollback。 |
 | `v0.0.1:knowledge:core-1` | `knowledgeBase` mount、evidence pack、asset、search、export、external knowledge adapter。 |
 | `v0.0.1:agent:context-bundle-1` | 面向本地智能体和短上下文模型的 context compiler / context compression。 |
@@ -210,6 +212,155 @@ GET  /api/workspace/operations/history
 - `resultRef`
 - `snapshotRef`
 - `nextRequiredAction`
+
+## Workspace Unified Asset Operation Protocol
+
+`v0.0.1:workspace:asset-operation-1` 把用户态的“接入空间、浏览对象、读取内容、提交资产、同步、导入导出、评审、恢复和查凭证”统一成稳定协议。它不替代底层 adapter：本机目录仍由 `agent-workspace` 管，云盘仍由 `external.cloudDrive.*` 管，代码评审仍由 `workspace.code.*` / `codespace.*` 管，贡献资产仍由 `workspace.contribution.*` 管。该协议只负责统一用户语义、请求 envelope、响应 envelope、治理前置和路由凭证。
+
+统一 operation id：
+
+```text
+POST /api/workspace/assets/targets/connect
+GET  /api/workspace/assets
+GET  /api/workspace/assets/read
+POST /api/workspace/assets/submit
+POST /api/workspace/assets/mutate
+POST /api/workspace/assets/sync/plan
+POST /api/workspace/assets/sync/apply
+POST /api/workspace/assets/import
+POST /api/workspace/assets/export
+POST /api/workspace/assets/review/comment
+POST /api/workspace/assets/review/request-changes
+POST /api/workspace/assets/review/approve
+POST /api/workspace/assets/checkpoint
+POST /api/workspace/assets/lineage
+POST /api/workspace/assets/receipts/get
+POST /api/workspace/assets/backfill
+```
+
+统一请求 envelope：
+
+```json
+{
+  "workspaceId": "workspace_default",
+  "semantic": "submit",
+  "submitKind": "file",
+  "assetRef": "optional-existing-asset-ref",
+  "target": {
+    "kind": "workspaceFolder",
+    "provider": "",
+    "path": "files/report.md",
+    "driveRef": "",
+    "repoId": "",
+    "repositoryRef": "",
+    "branch": ""
+  },
+  "content": {
+    "content": "plain text when small",
+    "contentBase64": "",
+    "uploadSessionId": "",
+    "payloadRefs": [],
+    "diff": "",
+    "files": []
+  },
+  "policy": {
+    "dataClass": "internal",
+    "requestedActions": ["write"],
+    "requestedEgress": "workspace",
+    "overwrite": false,
+    "retention": ""
+  },
+  "source": {
+    "clientUid": "",
+    "sourceType": "",
+    "providerId": "",
+    "externalId": "",
+    "syncBatchId": "",
+    "contentHash": "",
+    "capturedAt": "",
+    "sourceMetadata": {}
+  },
+  "idempotencyKey": "",
+  "dryRun": false,
+  "confirm": false
+}
+```
+
+`target.kind` 的当前保留值为：
+
+| target.kind | 下游切面 | 当前路由 |
+| --- | --- | --- |
+| `workspaceFolder` | 服务端受管工作空间目录 | `workspace.file.*` |
+| `localDirectory` | 用户本机目录投影 | `sharedspace.localDir.*` / `sharedspace.sync.*` |
+| `cloudDrive` | 上游云盘空间 | `external.cloudDrive.*` |
+| `codeReview` | 代码评审 / 代码变更 | `workspace.code.*` / `codespace.*` |
+| `repository` | 代码库浏览或低层资源操作 | `codespace.tree.list` / `codespace.file.read` / `repo.*` |
+| `workspaceContribution` | 可复用贡献资产 | `workspace.contribution.*` |
+| `knowledgeSource` | 知识派生与索引 | `knowledge.*` / `asset_lineage.*` |
+
+统一响应 envelope：
+
+```json
+{
+  "ok": true,
+  "protocolVersion": "v0.0.1:workspace:asset-operation-1",
+  "operationId": "workspace.asset.submit",
+  "workspaceRef": "workspace_default",
+  "assetRef": "workspace_asset_...",
+  "semantic": "submit",
+  "routeDecision": {
+    "targetKind": "workspaceFolder",
+    "downstreamOperationId": "workspace.file.upload",
+    "mode": "executed"
+  },
+  "target": {},
+  "content": {
+    "byteSize": 0,
+    "sha256": "",
+    "mediaType": ""
+  },
+  "receipts": {
+    "accessReceipt": null,
+    "transferReceipt": null,
+    "providerReceipt": null,
+    "ingestReceipt": null,
+    "codeUploadReceipt": null
+  },
+  "state": {
+    "stateCommit": "",
+    "checkpointNodeId": "",
+    "auditId": "",
+    "ledgerEventId": ""
+  },
+  "downstream": {}
+}
+```
+
+协议层的归一规则：
+
+- `connect` 只接入 target，不把外部空间自动变成 workspace canonical state。
+- `list` / `read` 返回安全元数据或内容视图，不授予后续写入权。
+- `submit` 表示用户把内容提交到一个目标；下游可以是 workspace 文件、云盘文件、代码变更或贡献资产。
+- `mutate` 表示对已有资产做 create/write/patch/delete/move 这类改变；代码库目标默认应转成 codeReview，而不是直接绕过评审。
+- `sync.plan` 必须可只读执行；`sync.apply` 必须写入 receipt/checkpoint，并在跨空间复制时经过 governance。
+- `import` 表示外部对象 materialize 到 workspace 资产；`export` 表示 workspace 资产投影到外部目标。
+- `review.*` 统一承载代码 review、贡献 review 和 proposal review 的用户语义；底层可以仍分开执行。
+- `checkpoint` / `lineage` / `receipt` 是事实查询和恢复边界，不应把接口日志误当作业务事实。
+
+第一阶段实现边界：
+
+- 协议注册、HTTP/RPC/CLI/MCP catalog 发现必须完整。
+- `workspace.asset.*` 是 orchestrator：先评估 governance，再写 Operation Ledger `started`，再调用下游 adapter，最后写 Asset Registry 与 ledger 终态。
+- 可直接路由的 operation 使用现有底层 adapter 执行；旧写 API 继续保持原响应字段，并追加 `workspaceAsset` 投影。
+- `list` / `read` / `receipt.get` / `lineage` 默认读取 Workspace Asset Registry；需要浏览下游空间时继续使用 localDir、cloudDrive、codespace 或显式 `workspace.asset.*` target 语义。
+- 新协议不能降低下游 operation 的 scope、risk 或确认要求；需要显式确认的代码上传、删除、移动和发布类动作在无确认桥时仍返回 contract 或 review/proposal 状态。
+
+统一资产事实源：
+
+- Operation Ledger 存放在服务端数据目录的 `operation-ledger/operation-ledger.sqlite`。所有受管写操作必须在副作用前写入 `started` ledger；ledger 不可用时写操作 fail closed，不调用下游 adapter。下游成功但 registry 写失败时 ledger 标记 `unknown`，调用方必须按不确定副作用处理。
+- Workspace Asset Registry 存放在 `workspace-assets/workspace-assets.sqlite`，管理 `asset`、`revision`、`projection`、`receipt`、`lineage link` 五类记录。`assetRef` 是稳定目录引用；workspace 文件、云盘对象、代码变更、贡献、知识 evidence 均作为 source 或 projection 挂接。
+- 缺少 workspace governance policy 时兼容允许当前 scope 授权行为，同时 ledger warning 记录 `governance_policy_missing`。存在 policy 时按 `workspace_governance.evaluate` 裁决。
+- `workspace.asset.backfill` 是 maintain 级维护操作，只扫描既有 workspace files 与 contribution 记录并补登记，不重放、不上传、不修改原始内容。
 
 ## Workspace Event
 
