@@ -17,12 +17,13 @@ class TargetCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.pactColors;
     return Card(
       elevation: 0,
-      color: PactColors.surface,
+      color: colors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: PactColors.line),
+        side: BorderSide(color: colors.line),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -42,8 +43,8 @@ class TargetCard extends StatelessWidget {
               children: [
                 Text(
                   _targetStatusLabel(target),
-                  style: const TextStyle(
-                    color: PactColors.textMuted,
+                  style: TextStyle(
+                    color: colors.textMuted,
                     fontSize: 12,
                   ),
                 ),
@@ -57,7 +58,7 @@ class TargetCard extends StatelessWidget {
                     FilledButton(
                       onPressed: () => onPlan(target.target),
                       style: FilledButton.styleFrom(
-                        backgroundColor: PactColors.primary,
+                        backgroundColor: colors.primary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(6),
                         ),
@@ -92,16 +93,17 @@ class _TargetIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.pactColors;
     return Container(
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: PactColors.surfaceLow,
+        color: colors.surfaceLow,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Icon(
         manual ? Icons.edit_location_alt_outlined : Icons.smart_toy_outlined,
-        color: PactColors.primary,
+        color: colors.primary,
       ),
     );
   }
@@ -114,6 +116,7 @@ class _TargetTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.pactColors;
     final configured = target.configured;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,14 +134,14 @@ class _TargetTitle extends StatelessWidget {
               height: 8,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: configured ? PactColors.success : PactColors.textMuted,
+                color: configured ? colors.success : colors.textMuted,
               ),
             ),
             const SizedBox(width: 6),
             Text(
               configured ? 'Configured' : 'Not configured',
               style: TextStyle(
-                color: configured ? PactColors.success : PactColors.textMuted,
+                color: configured ? colors.success : colors.textMuted,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),

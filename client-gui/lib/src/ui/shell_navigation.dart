@@ -5,37 +5,51 @@ import '../models/future_client_models.dart';
 import 'theme.dart';
 
 class ShellSidebar extends StatelessWidget {
-  const ShellSidebar({super.key, required this.current, required this.onSelect});
+  const ShellSidebar({
+    super.key,
+    required this.current,
+    required this.onSelect,
+  });
 
   final FutureClientSection current;
   final ValueChanged<FutureClientSection> onSelect;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.pactColors;
     const items = [
       (FutureClientSection.agents, 'Agents', Icons.smart_toy_outlined),
       (FutureClientSection.mcpPlugins, 'MCP Plugins', Icons.extension_outlined),
       (FutureClientSection.skillHub, 'Skill Hub', Icons.library_books_outlined),
-      (FutureClientSection.modelForwarding, 'Model Forwarding', Icons.send_outlined),
+      (
+        FutureClientSection.modelForwarding,
+        'Model Forwarding',
+        Icons.send_outlined,
+      ),
+      (
+        FutureClientSection.mobileRelay,
+        'Mobile Relay',
+        Icons.phone_iphone_outlined,
+      ),
       (FutureClientSection.activity, 'Activity', Icons.history_outlined),
       (FutureClientSection.settings, 'Settings', Icons.settings_outlined),
     ];
     return Container(
       width: 220,
-      decoration: const BoxDecoration(
-        color: PactColors.surfaceLow,
-        border: Border(right: BorderSide(color: PactColors.line)),
+      decoration: BoxDecoration(
+        color: colors.surfaceLow,
+        border: Border(right: BorderSide(color: colors.line)),
       ),
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(8, 8, 8, 18),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 18),
             child: Text(
               'Pact',
               style: TextStyle(
-                color: PactColors.primary,
+                color: colors.primary,
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
               ),
@@ -61,11 +75,13 @@ class ShellTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.pactColors;
     final title = switch (section) {
       FutureClientSection.agents => 'Agents',
       FutureClientSection.mcpPlugins => 'MCP Plugins',
       FutureClientSection.skillHub => 'Skill Hub',
       FutureClientSection.modelForwarding => 'Model Forwarding',
+      FutureClientSection.mobileRelay => 'Mobile Relay',
       FutureClientSection.activity => 'Activity And Snapshots',
       FutureClientSection.settings => 'Settings',
     };
@@ -73,9 +89,9 @@ class ShellTopBar extends StatelessWidget {
       height: 64,
       alignment: Alignment.centerLeft,
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: const BoxDecoration(
-        color: PactColors.background,
-        border: Border(bottom: BorderSide(color: PactColors.line)),
+      decoration: BoxDecoration(
+        color: colors.background,
+        border: Border(bottom: BorderSide(color: colors.line)),
       ),
       child: Text(
         title,
@@ -94,13 +110,14 @@ class ShellStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.pactColors;
     return Container(
       height: 36,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       alignment: Alignment.centerLeft,
-      decoration: const BoxDecoration(
-        color: PactColors.surfaceLow,
-        border: Border(top: BorderSide(color: PactColors.line)),
+      decoration: BoxDecoration(
+        color: colors.surfaceLow,
+        border: Border(top: BorderSide(color: colors.line)),
       ),
       child: Text(
         controller.statusMessage.isEmpty
@@ -129,6 +146,7 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.pactColors;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: TextButton.icon(
@@ -137,9 +155,9 @@ class _NavButton extends StatelessWidget {
         label: Align(alignment: Alignment.centerLeft, child: Text(label)),
         style: TextButton.styleFrom(
           alignment: Alignment.centerLeft,
-          foregroundColor: selected ? PactColors.primary : PactColors.text,
+          foregroundColor: selected ? colors.primary : colors.text,
           backgroundColor: selected
-              ? PactColors.primaryFixed
+              ? colors.primaryFixed
               : Colors.transparent,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           minimumSize: const Size.fromHeight(42),

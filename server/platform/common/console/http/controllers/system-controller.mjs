@@ -3,6 +3,7 @@ import {
   sendJson
 } from "../http-utils.mjs";
 import { createSystemControllerAgentSettingsHandlers } from "./system-controller-agent-settings-handlers.mjs";
+import { createSystemControllerAppearancePresetHandlers } from "./system-controller-appearance-preset-handlers.mjs";
 import { createSystemControllerAuthHandlers } from "./system-controller-auth-handlers.mjs";
 import { createSystemControllerCapabilityEcosystemHandlers } from "./system-controller-capability-ecosystem-handlers.mjs";
 import { createSystemControllerContexts } from "./system-controller-contexts.mjs";
@@ -10,10 +11,12 @@ import { createSystemControllerExternalServiceHandlers } from "./system-controll
 import { createSystemControllerFoundationHandlers } from "./system-controller-foundation-handlers.mjs";
 import { createSystemControllerKnowledgeOperationsHandlers } from "./system-controller-knowledge-operations-handlers.mjs";
 import { createSystemControllerKnowledgeRuntimeHandlers } from "./system-controller-knowledge-runtime-handlers.mjs";
+import { createSystemControllerMobileRelayHandlers } from "./system-controller-mobile-relay-handlers.mjs";
 import { createSystemControllerOpsObservationHandlers } from "./system-controller-ops-observation-handlers.mjs";
 import { createSystemControllerRuntimeHandlers } from "./system-controller-runtime-handlers.mjs";
 import { createSystemControllerWorkspaceProtocolHandlers } from "./system-controller-workspace-protocol-handlers.mjs";
 import { createSystemControllerWorkspaceRuntimeHandlers } from "./system-controller-workspace-runtime-handlers.mjs";
+import { createMobileRelayStore } from "../../../mobile-relay/index.mjs";
 import { createSecurityPermissionsProvider } from "../../../security/security-permissions-provider.mjs";
 
 function parseJsonBody(requestBody) {
@@ -83,8 +86,7 @@ export function createSystemController({
     authorizationFacadeContext,
     accessControlContext,
     appendConsoleOperationLog,
-    isFeatureActive,
-    resumeKnowledgeWordCloudTasks
+    isFeatureActive
   } = createSystemControllerContexts({
     userDataPath,
     runtime,
@@ -139,6 +141,8 @@ export function createSystemController({
   function workspaceIdFrom(input = {}, fallback = "") {
     return String(input.workspaceId || input.workspace || fallback || "default").trim() || "default";
   }
+
+  const mobileRelayStore = createMobileRelayStore({ userDataPath });
 
   async function sendConsoleDomainOperation({
     operationId,
@@ -202,7 +206,43 @@ export function createSystemController({
     });
   }
 
+  async function verifyToolSkillExternalAuth({ request, externalAuth = {} } = {}) {
+    const provider = getToolSkillManagementProvider();
+    if (!provider?.authorizeRequest) {
+      return {
+        ok: false,
+        status: 503,
+        reasonCode: "tool_authorization_unavailable",
+        error: "Tool/Skill management provider is unavailable."
+      };
+    }
+    const authorization = await provider.authorizeRequest({
+      request,
+      requiredScopes: Array.isArray(externalAuth.requiredScopes) ? externalAuth.requiredScopes : [],
+      recordUse: externalAuth.recordUse === true
+    });
+    if (!authorization.ok) {
+      return authorization;
+    }
+    const grant = authorization.grant || {};
+    const actor = {
+      type: "tool-grant",
+      userId: grant.id || "",
+      subjectId: grant.id || "",
+      username: grant.label || grant.id || "tool-grant",
+      roleId: "tool-grant",
+      scopes: Array.isArray(grant.scopes) ? grant.scopes : [],
+      toolsets: Array.isArray(grant.toolsets) ? grant.toolsets : []
+    };
+    return {
+      ...authorization,
+      actor,
+      authSession: { user: actor }
+    };
+  }
+
   const controller = {
+    verifyToolSkillExternalAuth,
     ...createSystemControllerAuthHandlers({
       sendConsoleDomainOperation,
       parseJsonBody,
@@ -250,6 +290,14 @@ export function createSystemController({
       sendConsoleDomainOperation,
       parseJsonBody,
       settingsAgentGatewayContext
+    }),
+    ...createSystemControllerAppearancePresetHandlers({
+      parseJsonBody,
+      userDataPath
+    }),
+    ...createSystemControllerMobileRelayHandlers({
+      parseJsonBody,
+      mobileRelayStore
     }),
     ...createSystemControllerWorkspaceProtocolHandlers({
       sendConsoleDomainOperation,
@@ -316,8 +364,5 @@ export function createSystemController({
       clientRuntimeBootstrap
     }),
   };
-  setImmediate(() => {
-    void resumeKnowledgeWordCloudTasks();
-  });
   return controller;
 }

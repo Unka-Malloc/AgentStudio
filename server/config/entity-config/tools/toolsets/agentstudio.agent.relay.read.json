@@ -1,0 +1,10 @@
+{
+  "id": "pact.agent.relay.read",
+  "label": "Agent Relay Read",
+  "requiredScopes": [
+    "agent_relay:view"
+  ],
+  "maxRisk": "read_only",
+  "grantable": true,
+  "defaultForAgents": false
+}

@@ -19,16 +19,14 @@ const firstTargets = [
   "OpenClaw",
   "Claude Code",
   "Codex",
-  "Gemini CLI",
   "Antigravity",
   "OpenCode",
   "Copilot",
   "Kilo Code",
   "Cursor",
-  "Hermes Agent",
-  "Windsurf"
+  "Hermes Agent"
 ];
-const sixModules = ["Agents", "MCP Plugins", "Skill Hub", "Model Forwarding", "Activity", "Settings"];
+const sevenModules = ["Agents", "MCP Plugins", "Skill Hub", "Model Forwarding", "Mobile Relay", "Activity", "Settings"];
 
 const failures = [];
 
@@ -84,7 +82,7 @@ const testFramework = await readText("docs/TEST-FRAMEWORK.md");
 for (const target of firstTargets) {
   assert(architecture.includes(target), `CLIENT_ARCHITECTURE must include target ${target}`);
 }
-for (const moduleName of sixModules) {
+for (const moduleName of sevenModules) {
   assert(architecture.includes(moduleName), `CLIENT_ARCHITECTURE must include module ${moduleName}`);
 }
 for (const scriptName of requiredVerifierScripts) {
@@ -110,6 +108,6 @@ console.log(JSON.stringify({
   ok: true,
   verifierScripts: requiredVerifierScripts,
   targets: firstTargets,
-  modules: sixModules,
+  modules: sevenModules,
   protocolDeferredReferences: protocolLines.length
 }, null, 2));

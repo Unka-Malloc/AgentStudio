@@ -67,19 +67,17 @@ fn adapter_supports_action(target: &str, action: &str) -> bool {
         "mcp.config.apply" | "mcp.plugin.update" => caps.config_apply == "implemented",
         "mcp.config.rollback" | "mcp.plugin.rollback" => caps.rollback == "implemented",
         "mcp.plugin.status" => true,
+        "runtime.message.send" => target_supports_default_runtime(target),
         _ => false,
     }
 }
 
+fn target_supports_default_runtime(target: &str) -> bool {
+    matches!(target, "codex" | "opencode" | "copilot")
+}
+
 fn adapter_capabilities_for(target: &str) -> AdapterCapabilities {
-    let apply_targets: &[&str] = &[
-        "openclaw",
-        "gemini-cli",
-        "antigravity",
-        "opencode",
-        "windsurf",
-        "cursor",
-    ];
+    let apply_targets: &[&str] = &["openclaw", "antigravity", "opencode", "cursor"];
     let plan_only_targets: &[&str] = &["codex", "kilo-code", "claude-code", "copilot", "hermes"];
 
     if apply_targets.contains(&target) {
@@ -136,13 +134,6 @@ fn target_defs() -> Vec<TargetDef> {
             binary_names: &["codex"],
         },
         TargetDef {
-            id: "gemini-cli",
-            label: "Gemini CLI",
-            kind: "cli",
-            config_hint: "Gemini CLI MCP configuration",
-            binary_names: &["gemini"],
-        },
-        TargetDef {
             id: "antigravity",
             label: "Antigravity",
             kind: "cli",
@@ -176,13 +167,6 @@ fn target_defs() -> Vec<TargetDef> {
             kind: "desktop-agent",
             config_hint: "Cursor MCP configuration",
             binary_names: &["cursor"],
-        },
-        TargetDef {
-            id: "windsurf",
-            label: "Windsurf",
-            kind: "desktop-agent",
-            config_hint: "Windsurf MCP configuration",
-            binary_names: &["windsurf"],
         },
         TargetDef {
             id: "hermes",
@@ -636,6 +620,9 @@ fn scan_target_with_manual(
         supported_actions.push("mcp.config.rollback".to_string());
         supported_actions.push("mcp.plugin.rollback".to_string());
     }
+    if target_supports_default_runtime(def.id) {
+        supported_actions.push("runtime.message.send".to_string());
+    }
 
     Ok(TargetCandidate {
         target: def.id.to_string(),
@@ -789,7 +776,6 @@ fn target_param(params: &Value) -> Result<String> {
 fn normalize_target(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "claude" | "claude_code" | "claudecode" => "claude-code".to_string(),
-        "gemini" | "gemini_cli" => "gemini-cli".to_string(),
         "kilo" | "kilo_code" | "kilocode" => "kilo-code".to_string(),
         "github-copilot" => "copilot".to_string(),
         "open-code" | "open_code" => "opencode".to_string(),
@@ -821,11 +807,6 @@ fn target_fields_with_values(target: &str, base_url: &str, token_ref: &str) -> V
             {"path": "mcp_servers.pact.url", "value": mcp_url},
             {"path": "mcp_servers.pact.bearer_token_env_var", "value": "PACT_MCP_TOKEN"}
         ]),
-        "gemini-cli" => json!([
-            {"path": "mcpServers.pact.transport", "value": "http"},
-            {"path": "mcpServers.pact.url", "value": mcp_url},
-            {"path": "mcpServers.pact.headers.X-Pact-Api-Key", "value": token_ref}
-        ]),
         "claude-code" | "copilot" => json!([
             {"path": "cli.mcp.command", "value": format!("{} mcp add", target)},
             {"path": "cli.mcp.transport", "value": "http"},
@@ -849,7 +830,7 @@ fn target_fields_with_values(target: &str, base_url: &str, token_ref: &str) -> V
             {"path": "hermes.mcp.pact.auth", "value": "header"},
             {"path": "hermes.mcp.pact.headers.X-Pact-Api-Key", "value": token_ref}
         ]),
-        "cursor" | "windsurf" => json!([
+        "cursor" => json!([
             {"path": "mcpServers.pact.command", "value": "pact-mcp"},
             {"path": "mcpServers.pact.args", "value": ["server"]}
         ]),
@@ -864,7 +845,7 @@ fn apply_structured_patch(
     token_ref: &str,
 ) -> Result<String> {
     match target {
-        "opencode" | "antigravity" | "cursor" | "windsurf" | "gemini-cli" | "openclaw" => {
+        "opencode" | "antigravity" | "cursor" | "openclaw" => {
             apply_json_patch(target, current, base_url, token_ref)
         }
         _ => Err(anyhow!("Unsupported target adapter: {}", target)),
@@ -941,14 +922,6 @@ fn json_patch_entries(target: &str, base_url: &str, token_ref: &str) -> Vec<(Str
             ),
             ("mcpServers.pact.disabled".to_string(), json!(false)),
         ],
-        "gemini-cli" => vec![
-            ("mcpServers.pact.transport".to_string(), json!("http")),
-            ("mcpServers.pact.url".to_string(), json!(mcp_url)),
-            (
-                "mcpServers.pact.headers.X-Pact-Api-Key".to_string(),
-                json!(token_ref),
-            ),
-        ],
         "openclaw" => vec![
             ("mcp.pact.type".to_string(), json!("remote")),
             ("mcp.pact.url".to_string(), json!(mcp_url)),
@@ -958,7 +931,7 @@ fn json_patch_entries(target: &str, base_url: &str, token_ref: &str) -> Vec<(Str
             ),
             ("mcp.pact.enabled".to_string(), json!(true)),
         ],
-        "cursor" | "windsurf" => vec![
+        "cursor" => vec![
             ("mcpServers.pact.command".to_string(), json!("pact-mcp")),
             ("mcpServers.pact.args".to_string(), json!(["server"])),
         ],
@@ -1370,12 +1343,6 @@ fn default_config_path(target: &str) -> Option<PathBuf> {
                 Some(home.join(".config/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"))
             }
         }
-        "windsurf" => Some(
-            home.join(".codeium")
-                .join("windsurf")
-                .join("mcp_config.json"),
-        ),
-        "gemini-cli" => Some(home.join(".gemini").join("settings.json")),
         "kilo-code" => Some(home.join(".config").join("kilo").join("kilo.json")),
         "openclaw" => None,
         "claude-code" => None,
@@ -1469,13 +1436,11 @@ mod tests {
                 "openclaw",
                 "claude-code",
                 "codex",
-                "gemini-cli",
                 "antigravity",
                 "opencode",
                 "copilot",
                 "kilo-code",
                 "cursor",
-                "windsurf",
                 "hermes"
             ]
         );
@@ -1592,14 +1557,14 @@ mod tests {
         .unwrap();
 
         let plan = mcp_config_plan(&json!({
-            "target": "gemini-cli",
+            "target": "opencode",
             "registryFile": display_path(registry_file)
         }))
         .unwrap();
         let fields = plan["plan"]["fields"].as_array().unwrap();
         let url = fields
             .iter()
-            .find(|item| item["path"] == "mcpServers.pact.url")
+            .find(|item| item["path"] == "mcp.pact.url")
             .and_then(|item| item["value"].as_str())
             .unwrap();
         assert_eq!(url, "http://orbstack-host.local:7228/mcp");
@@ -1939,14 +1904,6 @@ mod tests {
             .map(|item| item["path"].as_str().unwrap_or_default().to_string())
             .collect::<Vec<_>>();
         assert!(kilo.contains(&"mcp.pact.type".to_string()));
-
-        let gemini = target_fields("gemini-cli")
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|item| item["path"].as_str().unwrap_or_default().to_string())
-            .collect::<Vec<_>>();
-        assert!(gemini.contains(&"mcpServers.pact.transport".to_string()));
 
         let hermes = target_fields("hermes")
             .as_array()
@@ -2303,6 +2260,14 @@ mod tests {
         assert!(!adapter_supports_action("kilo-code", "mcp.config.apply"));
         assert!(adapter_supports_action("codex", "mcp.config.plan"));
         assert!(!adapter_supports_action("codex", "mcp.plugin.update"));
+        assert!(adapter_supports_action("codex", "runtime.message.send"));
+        assert!(adapter_supports_action("opencode", "runtime.message.send"));
+        assert!(adapter_supports_action("copilot", "runtime.message.send"));
+        assert!(!adapter_supports_action(
+            "claude-code",
+            "runtime.message.send"
+        ));
+        assert!(!adapter_supports_action("cursor", "runtime.message.send"));
     }
 
     #[test]
@@ -2347,6 +2312,41 @@ mod tests {
                 .unwrap()
                 .iter()
                 .any(|a| a == "mcp.plugin.update")
+        );
+        assert!(
+            codex["supportedActions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|a| a == "runtime.message.send")
+        );
+
+        let copilot = scan["candidates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["target"] == "copilot")
+            .unwrap();
+        assert!(
+            copilot["supportedActions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|a| a == "runtime.message.send")
+        );
+
+        let cursor = scan["candidates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["target"] == "cursor")
+            .unwrap();
+        assert!(
+            !cursor["supportedActions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|a| a == "runtime.message.send")
         );
     }
 

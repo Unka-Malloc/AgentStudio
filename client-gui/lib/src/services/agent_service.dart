@@ -4,11 +4,12 @@ import 'package:path/path.dart' as p;
 
 part 'agent_service_actions.dart';
 
-typedef _RunCliExecutable = Future<ProcessResult> Function(
-  String executable,
-  List<String> args,
-  Map<String, String>? environment,
-);
+typedef _RunCliExecutable =
+    Future<ProcessResult> Function(
+      String executable,
+      List<String> args,
+      Map<String, String>? environment,
+    );
 typedef _ResolveCliBinary = Future<File?> Function();
 
 class TargetCandidate {
@@ -40,8 +41,8 @@ class TargetCandidate {
     required this.adapterStatus,
     Map<String, dynamic>? adapterCapabilities,
     List<String>? supportedActions,
-  })  : adapterCapabilities = adapterCapabilities ?? const {},
-        supportedActions = supportedActions ?? const [];
+  }) : adapterCapabilities = adapterCapabilities ?? const {},
+       supportedActions = supportedActions ?? const [];
 
   bool supportsAction(String action) {
     return supportedActions.contains(action);
@@ -71,14 +72,36 @@ class TargetCandidate {
           : null,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'target': target,
+      'label': label,
+      'kind': kind,
+      'status': status,
+      'configured': configured,
+      'confidence': confidence,
+      if (detail != null) 'detail': detail,
+      if (configPath != null) 'configPath': configPath,
+      if (binaryPath != null) 'binaryPath': binaryPath,
+      'manual': manual,
+      'adapterStatus': adapterStatus,
+      'adapterCapabilities': adapterCapabilities,
+      'supportedActions': supportedActions,
+    };
+  }
 }
 
 class AgentService with AgentServiceActions {
   AgentService({
     Future<String> Function()? dataDirectory,
     Future<File?> Function()? resolveCliBinary,
-    Future<ProcessResult> Function(String executable, List<String> args, Map<String, String>? environment)?
-        runCliExecutable,
+    Future<ProcessResult> Function(
+      String executable,
+      List<String> args,
+      Map<String, String>? environment,
+    )?
+    runCliExecutable,
   }) : _dataDirectory = dataDirectory,
        _resolveCliBinaryOverride = resolveCliBinary,
        _runCliExecutable = runCliExecutable ?? _defaultRunCliExecutable;
@@ -136,13 +159,13 @@ class AgentService with AgentServiceActions {
 
   Future<Map<String, dynamic>> _runCli(List<String> args) async {
     final cli = await _resolveCliBinary();
-    
+
     Map<String, String>? env;
     if (_dataDirectory != null) {
       final dir = await _dataDirectory();
       env = {'PACT_PORTABLE_DIR': dir};
     }
-    
+
     if (cli == null) {
       try {
         final result = await _runCliExecutable('pact-client', args, env);
@@ -160,6 +183,10 @@ class AgentService with AgentServiceActions {
       throw Exception('pact-client failed: ${result.stderr}');
     }
     return jsonDecode(result.stdout as String) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> runCli(List<String> args) {
+    return _runCli(args);
   }
 
   Future<List<TargetCandidate>> scanTargets() async {

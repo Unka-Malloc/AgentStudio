@@ -9,6 +9,7 @@ import 'activity_panel.dart';
 import 'agents_canvas.dart';
 import 'mcp_plugins_panel.dart';
 import 'model_forwarding_panel.dart';
+import 'mobile_relay_panel.dart';
 import 'settings_panel.dart';
 import 'shell_navigation.dart';
 import 'skill_hub_panel.dart';
@@ -78,10 +79,18 @@ class _ClientShellState extends State<ClientShell> {
 
   Widget _sectionBody() {
     return switch (controller.currentSection) {
-      FutureClientSection.agents => AgentsCanvas(controller: controller, width: 980),
+      FutureClientSection.agents => AgentsCanvas(
+        controller: controller,
+        width: 980,
+      ),
       FutureClientSection.mcpPlugins => McpPluginsPanel(controller: controller),
       FutureClientSection.skillHub => SkillHubPanel(controller: controller),
-      FutureClientSection.modelForwarding => ModelForwardingPanel(controller: controller),
+      FutureClientSection.modelForwarding => ModelForwardingPanel(
+        controller: controller,
+      ),
+      FutureClientSection.mobileRelay => MobileRelayPanel(
+        controller: controller,
+      ),
       FutureClientSection.activity => FutureBuilder<ActivitySnapshotState>(
         future: _activityFuture,
         builder: (context, snapshot) {
@@ -103,7 +112,7 @@ class _ClientShellState extends State<ClientShell> {
   }
 
   Future<ActivitySnapshotState> _loadActivitySnapshotState() {
-    return widget.activitySnapshots.load(controller.portableData);
+    return widget.activitySnapshots.load(controller.agentService);
   }
 
   Future<void> _restoreSnapshot(String snapshotId) async {
