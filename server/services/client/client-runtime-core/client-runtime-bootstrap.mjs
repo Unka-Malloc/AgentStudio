@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const CLIENT_RUNTIME_BOOTSTRAP_PROTOCOL_VERSION = "pact.client-runtime-bootstrap.v1";
+export const CLIENT_RUNTIME_BOOTSTRAP_PROTOCOL_VERSION = "v0.0.1:agent:client-runtime-bootstrap-1";
 
 export const INLINE_TEXT_MAX_BYTES = 256 * 1024;
 export const SCP_SMALL_FILE_MAX_BYTES = 8 * 1024 * 1024;
@@ -411,7 +411,7 @@ export function buildClientRuntimeBootstrapPlan(input = {}) {
   const modules = [...moduleIds].map((moduleId) => plannedModule(moduleId, requestedSet, transportPlan));
   const client = asObject(input.client || input.runtimeClient);
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: CLIENT_RUNTIME_BOOTSTRAP_PROTOCOL_VERSION,
     frameworkVersion: FRAMEWORK_VERSION,
     generatedAt: new Date().toISOString(),
@@ -438,7 +438,7 @@ export function buildClientRuntimeBootstrapPlan(input = {}) {
 
 function buildInlineModuleArtifact({ module, plan, input }) {
   const artifactManifest = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: CLIENT_RUNTIME_BOOTSTRAP_PROTOCOL_VERSION,
     artifactKind: "client-runtime-module-descriptor",
     module: {
@@ -491,7 +491,7 @@ export function buildClientRuntimeBootstrapPull(input = {}) {
   const artifacts = plan.modules.map((module) => buildInlineModuleArtifact({ module, plan, input }));
   const artifactsByModuleId = new Map(artifacts.map((artifact) => [artifact.moduleId, artifact]));
   const bundleManifest = {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: CLIENT_RUNTIME_BOOTSTRAP_PROTOCOL_VERSION,
     artifactKind: "client-runtime-trimmed-bundle",
     frameworkVersion: FRAMEWORK_VERSION,

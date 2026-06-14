@@ -393,7 +393,7 @@ describe("probeModelConnection runtime behavior", () => {
     const description = runtimeProvider.describe();
 
     expect(description).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: AGENT_RUNTIME_PROVIDER_PROTOCOL_VERSION
     });
     expect(description.capabilities).toEqual(expect.arrayContaining(["agent.model.probe"]));

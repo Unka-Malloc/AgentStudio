@@ -217,7 +217,7 @@ describe("agent workspace persistence and boundary coverage", () => {
       const sessionContext = runtime.getSessionContext(sessionId);
       expect(sessionContext).toMatchObject({
         sessionId,
-        sessionProtocolVersion: "pact.agent-session-thread.v1",
+        sessionProtocolVersion: "v0.0.1:agent:session-thread-1",
         sessionContext: expect.objectContaining({
           contextProfileId: "session-profile",
           knowledgeSourceIds: ["session-source"]
@@ -433,7 +433,7 @@ describe("agent gateway registry, config, call, and routing coverage", () => {
     ]));
 
     expect(publicAgentGatewayRegistry(settings)).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       provider: "agent-gateway",
       defaultAlias: "primary-http"
     });
@@ -528,7 +528,7 @@ describe("agent gateway registry, config, call, and routing coverage", () => {
       });
       return {
         routing: {
-          protocolVersion: "pact.model-routing.v1",
+          protocolVersion: "v0.0.1:strategy:model-routing-1",
           routeId: "route-deepseek",
           selectedAlias: dryRun.config.alias,
           fallbackUsed: false
@@ -572,7 +572,7 @@ describe("agent gateway registry, config, call, and routing coverage", () => {
       ok: true,
       answer: "深度回答",
       modelRouting: {
-        protocolVersion: "pact.model-routing.v1",
+        protocolVersion: "v0.0.1:strategy:model-routing-1",
         routeId: "route-deepseek",
         selectedAlias: "deepseek-route"
       }

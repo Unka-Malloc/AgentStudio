@@ -1,7 +1,7 @@
-import { accessSync, constants as fsConstants, existsSync } from "node:fs";
+import { accessSync, constants as fsConstants, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-export const DOWNSTREAM_CLIENT_ASPECT_PROTOCOL_VERSION = "pact.downstream-client-aspect.v1";
+export const DOWNSTREAM_CLIENT_ASPECT_PROTOCOL_VERSION = "v0.0.1:agent:downstream-client-aspect-1";
 export const DOWNSTREAM_CLIENT_ASPECT_SERVICE_KIND = "downstream-client-aspect";
 
 export const DOWNSTREAM_CLIENT_ASPECT_ROUTE_TARGETS = Object.freeze({
@@ -10,6 +10,121 @@ export const DOWNSTREAM_CLIENT_ASPECT_ROUTE_TARGETS = Object.freeze({
 });
 
 const DEFAULT_PRIORITY_FRAMEWORKS = Object.freeze(["claude-code", "codex", "openclaw"]);
+
+function relayCliParticipantAcp({
+  frameworkId = "",
+  label = "",
+  commandNames = [],
+  enabled = false,
+  disabledReason = "operator_cli_command_required",
+  command = {},
+  advertisedTools = [],
+  transportFidelity = "generic_cli_fallback",
+  operatorConfigured = false,
+  knownLimitation = "No verified native ACP transport or stable non-interactive task protocol is declared by default."
+} = {}) {
+  return {
+    adapterId: `${frameworkId}-agent-cli-exec`,
+    profileId: `pact.acp.${frameworkId}.agent-cli-exec`,
+    transport: "agent-cli-exec",
+    commandNames,
+    configurationStrategy: "platform-governed-agent-cli-exec",
+    targetRole: "source-or-target-agent",
+    defaultMode: "ask",
+    advertisedModes: ["ask"],
+    advertisedModalities: ["text"],
+    advertisedDataSources: ["workspace.files"],
+    advertisedTools: advertisedTools.length > 0 ? advertisedTools : [`${frameworkId}.cli.exec`],
+    reasoningVisibilityPolicy: "never",
+    command: {
+      timeoutMs: 240000,
+      promptDelivery: "argument",
+      ...command
+    },
+    target: {
+      targetId: `${frameworkId}.agent-cli-exec:default`,
+      label: `${label} Managed CLI Relay Target`,
+      enabled,
+      disabledReason,
+      capabilityPolicy: {
+        writes: "deny",
+        terminal: "deny",
+        maxRisk: "read_only"
+      }
+    },
+    virtualAgent: {
+      virtualAgentId: `${frameworkId}.agent-cli-exec-agent`,
+      displayName: `${label} Relay Agent`,
+      description: `${label} through Pact's governed local CLI relay participant path.`
+    },
+    metadata: {
+      public: {
+        relayParticipant: true,
+        fallbackPolicy: "platform-governed-read-only-cli",
+        transportFidelity,
+        operatorConfigured,
+        nativeAcpTargetSupported: false,
+        knownLimitation
+      }
+    }
+  };
+}
+
+function nativeAcpStdio({
+  frameworkId = "",
+  label = "",
+  adapterId = "",
+  profileId = "",
+  commandNames = [],
+  args = [],
+  npxPackage = "",
+  configurationStrategy = "",
+  targetRole = "source-or-target-agent",
+  defaultMode = "agent",
+  advertisedTools = [],
+  target = {},
+  virtualAgent = {},
+  metadata = {}
+} = {}) {
+  return {
+    adapterId: asText(adapterId || `${frameworkId}-acp-stdio`),
+    profileId: asText(profileId || `pact.acp.${frameworkId}`),
+    transport: "stdio",
+    protocolStyle: "agent-client-protocol-v1",
+    commandNames,
+    ...(npxPackage ? { npxPackage } : {}),
+    command: {
+      args: asArray(args).map(String)
+    },
+    configurationStrategy: asText(configurationStrategy || `${frameworkId}-native-acp-stdio`),
+    targetRole,
+    defaultMode,
+    advertisedModes: ["ask", "agent"],
+    advertisedModalities: ["text"],
+    advertisedDataSources: ["workspace.files"],
+    advertisedTools: advertisedTools.length > 0 ? advertisedTools : [`${frameworkId}.acp`],
+    reasoningVisibilityPolicy: "never",
+    target: {
+      targetId: `${frameworkId}.acp:default`,
+      label: `${label} ACP Target`,
+      ...asObject(target)
+    },
+    virtualAgent: {
+      virtualAgentId: `${frameworkId}.acp-agent`,
+      displayName: `${label} ACP Agent`,
+      description: `${label} through its Agent Client Protocol stdio interface.`,
+      ...asObject(virtualAgent)
+    },
+    metadata: {
+      public: {
+        relayParticipant: true,
+        nativeAcpTargetSupported: true,
+        transportFidelity: "native_acp_stdio",
+        ...publicMetadata(metadata)
+      }
+    }
+  };
+}
 
 const DEFAULT_FRAMEWORKS = Object.freeze([
   {
@@ -23,7 +138,20 @@ const DEFAULT_FRAMEWORKS = Object.freeze([
       installMode: "openclaw-release-mcp-cli",
       locations: ["local", "orbstack", "remote-linux"],
       configurationStrategy: "cli-mcp-command"
-    }
+    },
+    acp: nativeAcpStdio({
+      frameworkId: "openclaw",
+      label: "OpenClaw",
+      commandNames: ["openclaw", "ironclaw", "zeroclaw"],
+      args: ["acp"],
+      advertisedTools: ["openclaw.acp"],
+      metadata: {
+        public: {
+          nativeOpenClawAcp: true,
+          launchCommand: "openclaw acp"
+        }
+      }
+    })
   },
   {
     frameworkId: "claude-code",
@@ -36,7 +164,23 @@ const DEFAULT_FRAMEWORKS = Object.freeze([
       installMode: "claude-code-release-mcp-cli",
       locations: ["local", "orbstack", "remote-linux"],
       configurationStrategy: "cli-mcp-command"
-    }
+    },
+    acp: nativeAcpStdio({
+      frameworkId: "claude-code",
+      label: "Claude Code",
+      adapterId: "claude-code-acp-stdio",
+      profileId: "pact.acp.claude-code",
+      commandNames: ["claude-code-acp"],
+      npxPackage: "@zed-industries/claude-code-acp",
+      configurationStrategy: "claude-code-acp-adapter",
+      advertisedTools: ["claude-code.session", "claude-code.patch"],
+      metadata: {
+        public: {
+          nativeClaudeCodeAcpAdapter: true,
+          launchCommand: "claude-code-acp"
+        }
+      }
+    })
   },
   {
     frameworkId: "codex",
@@ -64,22 +208,50 @@ const DEFAULT_FRAMEWORKS = Object.freeze([
       advertisedModalities: ["text"],
       advertisedDataSources: ["workspace.files"],
       advertisedTools: ["codex.session", "codex.patch"],
-      reasoningVisibilityPolicy: "never"
+      reasoningVisibilityPolicy: "never",
+      metadata: {
+        public: {
+          relayParticipant: true,
+          nativeCodexAcpAdapter: true
+        }
+      },
+      fallback: {
+        enabled: true,
+        adapterId: "codex-cli-exec-fallback",
+        profileId: "pact.acp.codex.cli-fallback",
+        transport: "codex-cli-exec",
+        configurationStrategy: "codex-cli-exec-fallback",
+        commandNames: ["codex"],
+        targetRole: "target-agent",
+        defaultMode: "ask",
+        advertisedModes: ["ask"],
+        advertisedModalities: ["text"],
+        advertisedDataSources: ["workspace.files"],
+        advertisedTools: ["codex.exec"],
+        reasoningVisibilityPolicy: "never",
+        command: {
+          sandbox: "read-only",
+          timeoutMs: 240000
+        },
+        target: {
+          targetId: "codex.cli-fallback:default",
+          label: "Codex CLI Fallback Target"
+        },
+        virtualAgent: {
+          virtualAgentId: "codex.cli-fallback-agent",
+          displayName: "Codex CLI Fallback Agent",
+          description: "Codex CLI through Pact's governed ACP Relay fallback."
+        },
+        metadata: {
+          public: {
+            relayParticipant: true,
+            fallbackPolicy: "platform-governed-read-only-cli"
+          }
+        }
+      }
     }
   },
-  {
-    frameworkId: "gemini-cli",
-    label: "Gemini CLI",
-    kind: "cli",
-    commandNames: ["gemini"],
-    mcp: {
-      adapterId: "gemini-cli-mcp-cli",
-      profileId: "pact.mcp.gemini-cli",
-      installMode: "gemini-release-mcp-cli",
-      locations: ["local", "orbstack", "remote-linux"],
-      configurationStrategy: "cli-mcp-command"
-    }
-  },
+
   {
     frameworkId: "antigravity",
     label: "Antigravity",
@@ -104,7 +276,14 @@ const DEFAULT_FRAMEWORKS = Object.freeze([
       advertisedDataSources: ["workspace.files"],
       advertisedTools: ["agentapi.sendMessage"],
       reasoningVisibilityPolicy: "never",
-      connectObservationSupported: true
+      connectObservationSupported: true,
+      metadata: {
+        public: {
+          relayParticipant: true,
+          transportFidelity: "agent_api_proxy",
+          nativeAntigravityAcp: false
+        }
+      }
     }
   },
   {
@@ -118,6 +297,40 @@ const DEFAULT_FRAMEWORKS = Object.freeze([
       installMode: "opencode-release-mcp-config",
       locations: ["local", "orbstack", "remote-linux"],
       configurationStrategy: "json-mcp-config"
+    },
+    acp: {
+      adapterId: "opencode-acp-stdio",
+      profileId: "pact.acp.opencode",
+      transport: "stdio",
+      protocolStyle: "agent-client-protocol-v1",
+      commandNames: ["opencode"],
+      command: {
+        args: ["acp"]
+      },
+      configurationStrategy: "opencode-native-acp-stdio",
+      targetRole: "source-or-target-agent",
+      defaultMode: "agent",
+      advertisedModes: ["ask", "agent"],
+      advertisedModalities: ["text"],
+      advertisedDataSources: ["workspace.files"],
+      advertisedTools: ["opencode.acp"],
+      reasoningVisibilityPolicy: "never",
+      target: {
+        targetId: "opencode.acp:default",
+        label: "OpenCode ACP Target"
+      },
+      virtualAgent: {
+        virtualAgentId: "opencode.acp-agent",
+        displayName: "OpenCode ACP Agent",
+        description: "OpenCode through its native Agent Client Protocol stdio server."
+      },
+      metadata: {
+        public: {
+          relayParticipant: true,
+          nativeOpenCodeAcp: true,
+          launchCommand: "opencode acp"
+        }
+      }
     }
   },
   {
@@ -131,7 +344,20 @@ const DEFAULT_FRAMEWORKS = Object.freeze([
       installMode: "copilot-release-mcp-cli",
       locations: ["local", "orbstack", "remote-linux"],
       configurationStrategy: "cli-mcp-command"
-    }
+    },
+    acp: nativeAcpStdio({
+      frameworkId: "copilot",
+      label: "Copilot",
+      commandNames: ["copilot"],
+      args: ["--acp"],
+      advertisedTools: ["copilot.acp"],
+      metadata: {
+        public: {
+          nativeCopilotAcp: true,
+          launchCommand: "copilot --acp"
+        }
+      }
+    })
   },
   {
     frameworkId: "kilo-code",
@@ -144,7 +370,20 @@ const DEFAULT_FRAMEWORKS = Object.freeze([
       installMode: "kilo-release-global-kilo-json",
       locations: ["local", "orbstack", "remote-linux"],
       configurationStrategy: "json-mcp-config"
-    }
+    },
+    acp: nativeAcpStdio({
+      frameworkId: "kilo-code",
+      label: "Kilo Code",
+      commandNames: ["kilo"],
+      args: ["acp"],
+      advertisedTools: ["kilo-code.acp"],
+      metadata: {
+        public: {
+          nativeKiloCodeAcp: true,
+          launchCommand: "kilo acp"
+        }
+      }
+    })
   },
   {
     frameworkId: "cursor",
@@ -157,7 +396,20 @@ const DEFAULT_FRAMEWORKS = Object.freeze([
       installMode: "cursor-release-mcp-config",
       locations: ["local"],
       configurationStrategy: "desktop-mcp-config"
-    }
+    },
+    acp: nativeAcpStdio({
+      frameworkId: "cursor",
+      label: "Cursor",
+      commandNames: ["cursor"],
+      args: ["agent", "acp"],
+      advertisedTools: ["cursor.acp"],
+      metadata: {
+        public: {
+          nativeCursorAcp: true,
+          launchCommand: "cursor agent acp"
+        }
+      }
+    })
   },
   {
     frameworkId: "hermes",
@@ -170,20 +422,20 @@ const DEFAULT_FRAMEWORKS = Object.freeze([
       installMode: "hermes-remote-mcp-cli",
       locations: ["orbstack", "remote-linux"],
       configurationStrategy: "remote-cli-mcp-command"
-    }
-  },
-  {
-    frameworkId: "windsurf",
-    label: "Windsurf",
-    kind: "desktop-agent",
-    commandNames: ["windsurf"],
-    mcp: {
-      adapterId: "windsurf-mcp-config",
-      profileId: "pact.mcp.windsurf",
-      installMode: "windsurf-release-mcp-config",
-      locations: ["local"],
-      configurationStrategy: "desktop-mcp-config"
-    }
+    },
+    acp: nativeAcpStdio({
+      frameworkId: "hermes",
+      label: "Hermes Agent",
+      commandNames: ["hermes"],
+      args: ["acp"],
+      advertisedTools: ["hermes.acp"],
+      metadata: {
+        public: {
+          nativeHermesAcp: true,
+          launchCommand: "hermes acp"
+        }
+      },
+    })
   }
 ]);
 
@@ -211,11 +463,82 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function platformTargetKey({ platform = process.platform, arch = process.arch } = {}) {
+  const os = {
+    darwin: "darwin",
+    linux: "linux",
+    win32: "windows"
+  }[platform] || platform;
+  const cpu = {
+    arm64: "aarch64",
+    x64: "x86_64"
+  }[arch] || arch;
+  return `${os}-${cpu}`;
+}
+
+function hasOwnField(value = {}, field = "") {
+  return Boolean(value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, field));
+}
+
+function mergeCommandConfig(base = {}, override = {}) {
+  const baseCommand = asObject(base);
+  const overrideCommand = asObject(override, null);
+  if (!overrideCommand) {
+    return cloneJson(baseCommand);
+  }
+  const merged = {
+    ...cloneJson(baseCommand),
+    ...cloneJson(overrideCommand)
+  };
+  for (const field of ["args", "promptArgs"]) {
+    if (!hasOwnField(overrideCommand, field) && hasOwnField(baseCommand, field)) {
+      merged[field] = cloneJson(baseCommand[field]);
+    }
+  }
+  if (hasOwnField(baseCommand, "env") || hasOwnField(overrideCommand, "env")) {
+    merged.env = {
+      ...asObject(baseCommand.env),
+      ...asObject(overrideCommand.env)
+    };
+  }
+  return merged;
+}
+
+function normalizeAcpFallbackConfig(raw = null, frameworkId = "") {
+  const fallback = asObject(raw, null);
+  if (!fallback || fallback.enabled === false) {
+    return null;
+  }
+  return Object.freeze({
+    enabled: true,
+    adapterId: asText(fallback.adapterId || `${frameworkId}-cli-exec-fallback`),
+    profileId: asText(fallback.profileId || `pact.acp.${frameworkId}.cli-fallback`),
+    transport: lowerToken(fallback.transport || fallback.transportType || "agent-cli-exec"),
+    protocolStyle: asText(fallback.protocolStyle || fallback.protocolSchema || fallback.protocol || ""),
+    targetRole: asText(fallback.targetRole || "target-agent"),
+    commandNames: uniqueStrings(fallback.commandNames || fallback.commands),
+    configurationStrategy: asText(fallback.configurationStrategy || "agent-cli-exec-fallback"),
+    defaultMode: asText(fallback.defaultMode || "ask"),
+    advertisedModes: uniqueStrings(fallback.advertisedModes || ["ask"]),
+    advertisedModalities: uniqueStrings(fallback.advertisedModalities || ["text"]),
+    advertisedDataSources: uniqueStrings(fallback.advertisedDataSources),
+    advertisedTools: uniqueStrings(fallback.advertisedTools),
+    reasoningVisibilityPolicy: asText(fallback.reasoningVisibilityPolicy || "never"),
+    command: asObject(fallback.command),
+    target: asObject(fallback.target),
+    virtualAgent: asObject(fallback.virtualAgent),
+    metadata: asObject(fallback.metadata),
+    reasonCode: asText(fallback.reasonCode || "acp_adapter_unavailable_cli_fallback")
+  });
+}
+
 function mergeProtocolConfig(base = {}, override = {}) {
   if (!override || typeof override !== "object") {
     return cloneJson(base || {});
   }
-  return {
+  const baseFallback = asObject(base.fallback || base.cliFallback || base.degradedFallback, null);
+  const overrideFallback = asObject(override.fallback || override.cliFallback || override.degradedFallback, null);
+  const merged = {
     ...cloneJson(base || {}),
     ...cloneJson(override),
     commandNames: uniqueStrings([...(base.commandNames || []), ...(override.commandNames || [])]),
@@ -228,6 +551,27 @@ function mergeProtocolConfig(base = {}, override = {}) {
     advertisedTools: uniqueStrings([...(base.advertisedTools || []), ...(override.advertisedTools || [])]),
     locations: uniqueStrings([...(base.locations || []), ...(override.locations || [])])
   };
+  if (baseFallback || overrideFallback) {
+    merged.fallback = {
+      ...cloneJson(baseFallback || {}),
+      ...cloneJson(overrideFallback || {}),
+      commandNames: uniqueStrings([...(baseFallback?.commandNames || []), ...(overrideFallback?.commandNames || [])]),
+      advertisedModes: uniqueStrings([...(baseFallback?.advertisedModes || []), ...(overrideFallback?.advertisedModes || [])]),
+      advertisedModalities: uniqueStrings([
+        ...(baseFallback?.advertisedModalities || []),
+        ...(overrideFallback?.advertisedModalities || [])
+      ]),
+      advertisedDataSources: uniqueStrings([
+        ...(baseFallback?.advertisedDataSources || []),
+        ...(overrideFallback?.advertisedDataSources || [])
+      ]),
+      advertisedTools: uniqueStrings([...(baseFallback?.advertisedTools || []), ...(overrideFallback?.advertisedTools || [])])
+    };
+  }
+  if (base.command || override.command) {
+    merged.command = mergeCommandConfig(base.command, override.command);
+  }
+  return merged;
 }
 
 function mergeFramework(base = {}, override = {}) {
@@ -248,6 +592,184 @@ function mergeFramework(base = {}, override = {}) {
 
 function defaultFrameworkMap() {
   return new Map(DEFAULT_FRAMEWORKS.map((framework) => [framework.frameworkId, cloneJson(framework)]));
+}
+
+function normalizeRegistryAgents(raw = {}) {
+  const registry = asObject(raw, null);
+  if (!registry) {
+    return [];
+  }
+  if (Array.isArray(registry)) {
+    return registry;
+  }
+  if (Array.isArray(registry.agents)) {
+    return registry.agents;
+  }
+  if (Array.isArray(registry.entries)) {
+    return registry.entries;
+  }
+  return [];
+}
+
+function registryDistributionForHost(agent = {}, options = {}) {
+  const distribution = asObject(agent.distribution, null);
+  if (!distribution) {
+    return null;
+  }
+  const key = platformTargetKey(options);
+  const binary = asObject(distribution.binary, null);
+  const binaryTarget = asObject(binary?.[key], null);
+  if (binaryTarget?.cmd) {
+    return {
+      type: "binary",
+      executable: asText(binaryTarget.cmd),
+      args: asArray(binaryTarget.args).map(String),
+      env: asObject(binaryTarget.env),
+      archive: asText(binaryTarget.archive),
+      platformTarget: key
+    };
+  }
+  const npx = asObject(distribution.npx, null);
+  if (npx?.package) {
+    return {
+      type: "npx",
+      packageName: asText(npx.package),
+      executable: "npx",
+      args: ["--yes", asText(npx.package), ...asArray(npx.args).map(String)],
+      env: asObject(npx.env)
+    };
+  }
+  const uvx = asObject(distribution.uvx, null);
+  if (uvx?.package) {
+    return {
+      type: "uvx",
+      packageName: asText(uvx.package),
+      executable: "uvx",
+      args: [asText(uvx.package), ...asArray(uvx.args).map(String)],
+      env: asObject(uvx.env)
+    };
+  }
+  return null;
+}
+
+function frameworkFromAcpRegistryAgent(agent = {}, options = {}) {
+  const id = lowerToken(agent.id || agent.name);
+  const label = asText(agent.name || agent.label || id);
+  if (!id || !label) {
+    return null;
+  }
+  const distribution = registryDistributionForHost(agent, options);
+  if (!distribution) {
+    return null;
+  }
+  const command = {
+    args: distribution.args,
+    ...(Object.keys(distribution.env || {}).length > 0 ? { env: distribution.env } : {})
+  };
+  if (distribution.type === "binary" && path.isAbsolute(distribution.executable)) {
+    command.executable = distribution.executable;
+  }
+  const commandNames = [distribution.executable].filter(Boolean);
+  return {
+    frameworkId: id,
+    label,
+    kind: "acp-registry-agent",
+    commandNames,
+    metadata: {
+      public: {
+        source: "acp-registry",
+        registryAgentId: id,
+        registryVersion: asText(agent.version),
+        registryDistributionType: distribution.type
+      }
+    },
+    acp: {
+      adapterId: `${id}-acp-registry-stdio`,
+      profileId: `pact.acp.registry.${id}`,
+      transport: "stdio",
+      protocolStyle: "agent-client-protocol-v1",
+      commandNames,
+      command,
+      configurationStrategy: "acp-registry-distribution",
+      targetRole: "source-or-target-agent",
+      defaultMode: "agent",
+      advertisedModes: ["ask", "agent"],
+      advertisedModalities: ["text"],
+      advertisedDataSources: ["workspace.files"],
+      advertisedTools: [`${id}.acp`],
+      reasoningVisibilityPolicy: "never",
+      target: {
+        targetId: `${id}.acp-registry:default`,
+        label: `${label} ACP Registry Target`
+      },
+      virtualAgent: {
+        virtualAgentId: `${id}.acp-registry-agent`,
+        displayName: `${label} ACP Agent`,
+        description: `${label} imported from an ACP Registry manifest.`
+      },
+      metadata: {
+        public: {
+          relayParticipant: true,
+          registryImported: true,
+          registryAgentId: id,
+          registryVersion: asText(agent.version),
+          registryDistributionType: distribution.type,
+          nativeAcpTargetSupported: true,
+          transportFidelity: "native_acp_stdio"
+        }
+      }
+    }
+  };
+}
+
+export function downstreamClientFrameworksFromAcpRegistries(registries = [], options = {}) {
+  const frameworks = [];
+  for (const registry of asArray(registries)) {
+    for (const agent of normalizeRegistryAgents(registry)) {
+      const framework = frameworkFromAcpRegistryAgent(agent, options);
+      if (framework) {
+        frameworks.push(framework);
+      }
+    }
+  }
+  return frameworks;
+}
+
+function readJsonFileIfPossible(filePath = "") {
+  const resolved = asText(filePath);
+  if (!resolved) {
+    return null;
+  }
+  try {
+    return JSON.parse(readFileSync(resolved, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function acpRegistryInputsFromEnv(env = process.env) {
+  const registries = [];
+  const inlineJson = asText(env.PACT_ACP_AGENT_REGISTRY_JSON);
+  if (inlineJson) {
+    try {
+      registries.push(JSON.parse(inlineJson));
+    } catch {
+      registries.push({ agents: [] });
+    }
+  }
+  for (const filePath of uniqueStrings([
+    asText(env.PACT_ACP_AGENT_REGISTRY_PATH),
+    ...asText(env.PACT_ACP_AGENT_REGISTRY_PATHS)
+      .split(path.delimiter)
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  ])) {
+    const registry = readJsonFileIfPossible(filePath);
+    if (registry) {
+      registries.push(registry);
+    }
+  }
+  return registries;
 }
 
 export function normalizeFrameworkDefinition(raw = {}) {
@@ -288,13 +810,24 @@ export function normalizeFrameworkDefinition(raw = {}) {
       command: asObject(raw.acp.command),
       target: asObject(raw.acp.target),
       virtualAgent: asObject(raw.acp.virtualAgent),
+      fallback: normalizeAcpFallbackConfig(
+        raw.acp.fallback || raw.acp.cliFallback || raw.acp.degradedFallback,
+        frameworkId
+      ),
       metadata: asObject(raw.acp.metadata)
     }) : null
   });
 }
 
-export function defaultDownstreamClientFrameworks(overrides = []) {
+export function defaultDownstreamClientFrameworks(overrides = [], options = {}) {
   const byId = defaultFrameworkMap();
+  const registryFrameworks = downstreamClientFrameworksFromAcpRegistries(options.acpRegistries, options);
+  for (const framework of registryFrameworks) {
+    if (!framework.frameworkId) {
+      continue;
+    }
+    byId.set(framework.frameworkId, mergeFramework(byId.get(framework.frameworkId) || {}, framework));
+  }
   for (const override of asArray(overrides)) {
     const id = lowerToken(override.frameworkId || override.id);
     if (!id) {
@@ -437,8 +970,8 @@ export class McpAgentFrameworkAdapterLayer {
         canInstall: true,
         canScan: true,
         canRepair: true,
-        toolBoundary: "pact.tool-management.v1",
-        mcpInterfaceVersion: "pact.mcp.v1"
+        toolBoundary: "v0.0.1:tool:management-1",
+        mcpInterfaceVersion: "v0.0.1:mcp:interface-1"
       },
       metadata: publicMetadata(mcp.metadata)
     });
@@ -463,21 +996,62 @@ function acpMissingStatus(acp = {}, commandProbe = {}) {
   return { status: "missing_dependency", reasonCode: "acp_adapter_command_not_found" };
 }
 
+function acpStatusEnabled(status = "") {
+  return ["assembled", "degraded"].includes(asText(status));
+}
+
+function acpCliFallbackConfig(acp = {}) {
+  const fallback = asObject(acp.fallback, null);
+  return fallback?.enabled === true ? fallback : null;
+}
+
+function acpCommandDetails(command = {}, { includeEnv = true } = {}) {
+  const input = asObject(command);
+  const details = {
+    args: asArray(input.args).map(String),
+    ...(includeEnv ? { env: asObject(input.env) } : {}),
+    cwd: asText(input.cwd)
+  };
+  const promptArgs = asArray(input.promptArgs).map(String);
+  if (promptArgs.length > 0) {
+    details.promptArgs = promptArgs;
+  }
+  for (const field of [
+    "promptDelivery",
+    "sandbox",
+    "model"
+  ]) {
+    const value = asText(input[field]);
+    if (value) {
+      details[field] = value;
+    }
+  }
+  for (const field of [
+    "timeoutMs",
+    "bypassSandbox",
+    "ignoreRules",
+    "ignoreUserConfig",
+    "skipGitRepoCheck"
+  ]) {
+    if (input[field] !== undefined) {
+      details[field] = input[field];
+    }
+  }
+  return details;
+}
+
 function acpTransportCommand(acp = {}, commandProbe = {}, { includeEnv = true } = {}) {
+  const details = acpCommandDetails(acp.command, { includeEnv });
   if (acp.command?.executable) {
     return {
       executable: asText(acp.command.executable),
-      args: asArray(acp.command.args).map(String),
-      ...(includeEnv ? { env: asObject(acp.command.env) } : {}),
-      cwd: asText(acp.command.cwd)
+      ...details
     };
   }
   if (commandProbe.found) {
     return {
       executable: commandProbe.path,
-      args: [],
-      ...(includeEnv ? { env: {} } : {}),
-      cwd: ""
+      ...details
     };
   }
   if (acp.npxPackage) {
@@ -491,7 +1065,7 @@ function acpTransportCommand(acp = {}, commandProbe = {}, { includeEnv = true } 
   return null;
 }
 
-function acpRelayTargetDescriptor(framework = {}, acp = {}, status = "", command = null) {
+function acpRelayTargetDescriptor(framework = {}, acp = {}, status = "", command = null, degradation = null) {
   const target = asObject(acp.target);
   const safeMetadata = publicMetadata(acp.metadata);
   const targetId = asText(target.targetId || `${framework.frameworkId}.acp:default`);
@@ -500,19 +1074,26 @@ function acpRelayTargetDescriptor(framework = {}, acp = {}, status = "", command
     ...(acp.protocolStyle ? { protocolStyle: acp.protocolStyle } : {}),
     timeoutMs: Number(target.transport?.timeoutMs || acp.target?.timeoutMs || 0) || 120000
   };
-  if (command && acp.transport === "stdio") {
+  if (command && ["stdio", "codex-cli-exec", "agent-cli-exec", "local-cli-exec", "cli-exec"].includes(acp.transport)) {
     transport.command = command;
   }
   if (acp.transport === "antigravity-agentapi") {
     transport.connectEnabled = acp.connectObservationSupported === true;
+  }
+  if (degradation) {
+    transport.degraded = true;
+    transport.degradedFromTransport = asText(degradation.preferredTransport);
+    transport.degradationReasonCode = asText(degradation.reasonCode);
   }
   return {
     targetId,
     label: asText(target.label || `${framework.label} ACP Target`),
     transport,
     agentProfileId: acp.profileId,
-    enabled: status === "assembled" && target.enabled !== false,
-    disabledReason: status === "assembled" ? "" : status,
+    enabled: acpStatusEnabled(status) && target.enabled !== false,
+    disabledReason: target.enabled === false
+      ? asText(target.disabledReason || target.disabledReasonCode || "target_disabled")
+      : (acpStatusEnabled(status) ? "" : status),
     externalServiceId: asText(target.externalServiceId || `external.agent-framework.${framework.frameworkId}.acp`),
     capabilityPolicy: {
       writes: asText(target.capabilityPolicy?.writes || "deny"),
@@ -528,7 +1109,8 @@ function acpRelayTargetDescriptor(framework = {}, acp = {}, status = "", command
         frameworkId: framework.frameworkId,
         adapterId: acp.adapterId,
         protocol: "acp",
-        ...safeMetadata
+        ...safeMetadata,
+        ...(degradation ? { degraded: true, degradation } : {})
       }
     }
   };
@@ -570,6 +1152,64 @@ function acpRelayVirtualAgentDescriptor(framework = {}, acp = {}, targetDescript
   };
 }
 
+function governedCliFallbackTarget(target = {}, framework = {}) {
+  return {
+    ...asObject(target),
+    targetId: asText(target.targetId || `${framework.frameworkId}.cli-fallback:default`),
+    label: asText(target.label || `${framework.label} CLI Fallback Target`),
+    capabilityPolicy: {
+      writes: "deny",
+      terminal: "deny",
+      maxRisk: "read_only"
+    }
+  };
+}
+
+function acpFallbackEffectiveConfig({ framework = {}, acp = {}, fallback = {}, reasonCode = "" } = {}) {
+  const degradation = {
+    active: true,
+    reasonCode: asText(reasonCode || fallback.reasonCode || "acp_adapter_unavailable_cli_fallback"),
+    preferredAdapterId: asText(acp.adapterId),
+    preferredTransport: asText(acp.transport),
+    fallbackAdapterId: asText(fallback.adapterId),
+    fallbackTransport: asText(fallback.transport),
+    policy: "platform-governed-read-only-cli"
+  };
+  const fallbackMetadata = publicMetadata(fallback.metadata);
+  return {
+    effectiveAcp: {
+      ...fallback,
+      adapterId: fallback.adapterId,
+      profileId: fallback.profileId,
+      transport: fallback.transport,
+      protocolStyle: fallback.protocolStyle,
+      targetRole: fallback.targetRole,
+      commandNames: [...fallback.commandNames],
+      npxPackage: "",
+      configurationStrategy: fallback.configurationStrategy,
+      defaultMode: fallback.defaultMode,
+      advertisedModes: [...fallback.advertisedModes],
+      advertisedModalities: [...fallback.advertisedModalities],
+      advertisedDataSources: [...fallback.advertisedDataSources],
+      advertisedTools: [...fallback.advertisedTools],
+      reasoningVisibilityPolicy: fallback.reasoningVisibilityPolicy,
+      command: asObject(fallback.command),
+      target: governedCliFallbackTarget(fallback.target, framework),
+      virtualAgent: asObject(fallback.virtualAgent),
+      connectObservationSupported: false,
+      metadata: {
+        public: {
+          ...publicMetadata(acp.metadata),
+          ...fallbackMetadata,
+          degraded: true,
+          degradation
+        }
+      }
+    },
+    degradation
+  };
+}
+
 export class AcpAgentFrameworkAdapterLayer {
   constructor({ layerId = "acp", adapterKind = "agent-framework-acp-adapter-layer" } = {}) {
     this.layerId = layerId;
@@ -599,17 +1239,41 @@ export class AcpAgentFrameworkAdapterLayer {
       });
     }
     const commandProbe = resolveCommandCandidate(acp.commandNames, context);
-    const { status, reasonCode } = acpMissingStatus(acp, commandProbe);
-    const internalCommand = acpTransportCommand(acp, commandProbe, { includeEnv: true });
-    const publicCommand = acpTransportCommand(acp, commandProbe, { includeEnv: false });
-    const targetDescriptor = acpRelayTargetDescriptor(framework, acp, status, publicCommand);
-    const internalTargetDescriptor = acpRelayTargetDescriptor(framework, acp, status, internalCommand);
-    const virtualAgentDescriptor = acpRelayVirtualAgentDescriptor(framework, acp, targetDescriptor);
+    const primaryStatus = acpMissingStatus(acp, commandProbe);
+    let status = primaryStatus.status;
+    let reasonCode = primaryStatus.reasonCode;
+    let effectiveAcp = acp;
+    let effectiveCommandProbe = commandProbe;
+    let fallbackProbe = null;
+    let degradation = null;
+    const fallback = acpCliFallbackConfig(acp);
+    if (status !== "assembled" && fallback) {
+      fallbackProbe = resolveCommandCandidate(fallback.commandNames, context);
+      const fallbackStatus = acpMissingStatus(fallback, fallbackProbe);
+      if (fallbackStatus.status === "assembled") {
+        const fallbackEffective = acpFallbackEffectiveConfig({
+          framework,
+          acp,
+          fallback,
+          reasonCode: primaryStatus.reasonCode || fallback.reasonCode
+        });
+        effectiveAcp = fallbackEffective.effectiveAcp;
+        effectiveCommandProbe = fallbackProbe;
+        degradation = fallbackEffective.degradation;
+        status = "degraded";
+        reasonCode = fallback.reasonCode;
+      }
+    }
+    const internalCommand = acpTransportCommand(effectiveAcp, effectiveCommandProbe, { includeEnv: true });
+    const publicCommand = acpTransportCommand(effectiveAcp, effectiveCommandProbe, { includeEnv: false });
+    const targetDescriptor = acpRelayTargetDescriptor(framework, effectiveAcp, status, publicCommand, degradation);
+    const internalTargetDescriptor = acpRelayTargetDescriptor(framework, effectiveAcp, status, internalCommand, degradation);
+    const virtualAgentDescriptor = acpRelayVirtualAgentDescriptor(framework, effectiveAcp, targetDescriptor);
     const record = {
       ...protocolRecordBase({
         layerId: this.layerId,
         framework,
-        protocolConfig: acp,
+        protocolConfig: effectiveAcp,
         sequence: context.sequence || 0,
         assembledAt: context.assembledAt || ""
       }),
@@ -619,27 +1283,36 @@ export class AcpAgentFrameworkAdapterLayer {
       communication: {
         protocol: "acp",
         direction: "agent-to-agent-through-pact",
-        transport: acp.transport,
-        targetRole: acp.targetRole
+        transport: effectiveAcp.transport,
+        targetRole: effectiveAcp.targetRole,
+        ...(degradation ? {
+          degraded: true,
+          preferredTransport: degradation.preferredTransport,
+          fallbackTransport: degradation.fallbackTransport
+        } : {})
       },
-      commandProbe,
+      commandProbe: effectiveCommandProbe,
+      primaryCommandProbe: commandProbe,
+      ...(fallbackProbe ? { fallbackCommandProbe: fallbackProbe } : {}),
       capabilities: {
-        configurationStrategy: acp.configurationStrategy,
-        installPackage: acp.npxPackage || "",
-        modes: [...acp.advertisedModes],
-        defaultMode: acp.defaultMode,
-        modalities: [...acp.advertisedModalities],
-        dataSources: [...acp.advertisedDataSources],
-        tools: [...acp.advertisedTools],
-        reasoningVisibilityPolicy: acp.reasoningVisibilityPolicy,
-        connectObservationSupported: acp.connectObservationSupported === true,
-        protocolBoundary: "pact.acp-agent-relay.v1"
+        configurationStrategy: effectiveAcp.configurationStrategy,
+        installPackage: effectiveAcp.npxPackage || "",
+        modes: [...effectiveAcp.advertisedModes],
+        defaultMode: effectiveAcp.defaultMode,
+        modalities: [...effectiveAcp.advertisedModalities],
+        dataSources: [...effectiveAcp.advertisedDataSources],
+        tools: [...effectiveAcp.advertisedTools],
+        reasoningVisibilityPolicy: effectiveAcp.reasoningVisibilityPolicy,
+        connectObservationSupported: effectiveAcp.connectObservationSupported === true,
+        protocolBoundary: "v0.0.1:agent:acp-agent-relay-1",
+        degraded: degradation?.active === true,
+        ...(degradation ? { degradation } : {})
       },
       acpRelay: {
         target: targetDescriptor,
         virtualAgent: virtualAgentDescriptor
       },
-      metadata: publicMetadata(acp.metadata)
+      metadata: publicMetadata(effectiveAcp.metadata)
     };
     Object.defineProperty(record, "_internalAcpRelay", {
       value: {
@@ -664,6 +1337,10 @@ export class DownstreamClientAspectService {
     serviceId = "pact.downstream-client-aspect",
     frameworks = null,
     frameworkOverrides = [],
+    acpRegistries = [],
+    acpRegistry = null,
+    acpRegistryEntries = [],
+    acpRegistryPaths = [],
     layers = null,
     targetRegistry = null,
     virtualAgentRegistry = null,
@@ -675,7 +1352,18 @@ export class DownstreamClientAspectService {
     logger = null
   } = {}) {
     this.serviceId = serviceId;
-    this.frameworks = (frameworks || defaultDownstreamClientFrameworks(frameworkOverrides)).map(normalizeFrameworkDefinition);
+    const explicitRegistries = [
+      ...(acpRegistry ? [acpRegistry] : []),
+      ...asArray(acpRegistries),
+      ...(asArray(acpRegistryEntries).length > 0 ? [{ agents: acpRegistryEntries }] : []),
+      ...asArray(acpRegistryPaths).map(readJsonFileIfPossible).filter(Boolean),
+      ...acpRegistryInputsFromEnv(env)
+    ];
+    this.frameworks = (frameworks || defaultDownstreamClientFrameworks(frameworkOverrides, {
+      acpRegistries: explicitRegistries,
+      platform: process.platform,
+      arch: process.arch
+    })).map(normalizeFrameworkDefinition);
     this.layers = layers || createDefaultDownstreamClientAspectLayers();
     this.targetRegistry = targetRegistry;
     this.virtualAgentRegistry = virtualAgentRegistry;
@@ -792,7 +1480,7 @@ export class DownstreamClientAspectService {
       },
       executionBoundary: "translate-only",
       authorizationBoundary: "platform-service",
-      operationBoundary: normalizedProtocol === "mcp" ? "pact.tool-management.v1" : "pact.acp-agent-relay.v1"
+      operationBoundary: normalizedProtocol === "mcp" ? "v0.0.1:tool:management-1" : "v0.0.1:agent:acp-agent-relay-1"
     });
   }
 

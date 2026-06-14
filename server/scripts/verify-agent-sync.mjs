@@ -65,6 +65,31 @@ try {
   });
   assert.equal(deniedWithoutToken.status, 401);
 
+  const wrongScopeGrant = await fetchJson(`${server.url}/api/tool-management/v1/grants`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      label: "sync-wrong-scope",
+      scopes: ["knowledge:read"]
+    })
+  });
+  assert.equal(wrongScopeGrant.status, 201);
+  assert.ok(wrongScopeGrant.payload.token);
+
+  const deniedWrongScope = await fetchJson(`${server.url}/api/agent-sync/publish`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${wrongScopeGrant.payload.token}`
+    },
+    body: JSON.stringify({
+      topic: "answer",
+      payload: { text: "wrong grant scope" }
+    })
+  });
+  assert.equal(deniedWrongScope.status, 403);
+  assert.equal(deniedWrongScope.payload.error.code, "missing_scopes");
+
   const published = await fetchJson(`${server.url}/api/agent-sync/publish`, {
     method: "POST",
     headers: {

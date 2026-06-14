@@ -22,7 +22,7 @@ async function tempDir(prefix) {
 function createMerkleState() {
   let rootCalls = 0;
   return {
-    protocolVersion: "pact.test.merkle.v1",
+    protocolVersion: "v0.0.1:test:merkle-1",
     cas: {
       putBlock: vi.fn(async (content) => {
         const buffer = Buffer.isBuffer(content) ? content : Buffer.from(content || "");
@@ -307,13 +307,13 @@ describe("agent workspace final extra 12 filesystem edges", () => {
         });
 
         expect(runtime.listSessions({})).toMatchObject({
-          protocolVersion: "pact.agent-workspace.v1"
+          protocolVersion: "v0.0.1:workspace:agent-workspace-1"
         });
         expect(runtime.listSessions({ workspaceId: workspace.workspaceId })).toMatchObject({
-          protocolVersion: "pact.agent-workspace.v1"
+          protocolVersion: "v0.0.1:workspace:agent-workspace-1"
         });
         expect(runtime.listSessions({ status: "active" })).toMatchObject({
-          protocolVersion: "pact.agent-workspace.v1"
+          protocolVersion: "v0.0.1:workspace:agent-workspace-1"
         });
 
         const missingSource = path.join(root, "missing-source");

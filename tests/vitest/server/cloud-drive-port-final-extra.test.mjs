@@ -75,8 +75,8 @@ describe("cloud drive port final edge coverage", () => {
     expect(await fs.stat(path.join(icloudRoot, "NewDocs"))).toMatchObject({ isDirectory: expect.any(Function) });
 
     await writeJson(cloudDriveLedgerPath(userDataPath), {
-      schemaVersion: 1,
-      protocolVersion: "pact.cloud-drive-port.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:storage:cloud-drive-port-1",
       updatedAt: "legacy",
       events: "legacy-event",
       transfers: null,
@@ -95,8 +95,8 @@ describe("cloud drive port final edge coverage", () => {
     expect(defaultList.paths).toContain(".pact-data/owner/notes.txt");
 
     await writeJson(cloudDriveLedgerPath(userDataPath), {
-      schemaVersion: 1,
-      protocolVersion: "pact.cloud-drive-port.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:storage:cloud-drive-port-1",
       updatedAt: "legacy",
       events: null,
       transfers: {},
@@ -364,8 +364,8 @@ describe("cloud drive port final edge coverage", () => {
   it("wraps remote-live connections that are missing endpointUrl", async () => {
     const userDataPath = await tempDir("pact-cloud-drive-final-broken-remote-");
     await writeJson(cloudDriveConfigPath(userDataPath), {
-      schemaVersion: 1,
-      protocolVersion: "pact.cloud-drive-port.v1",
+      schemaVersion: "v0.0.1:schema:definition-1",
+      protocolVersion: "v0.0.1:storage:cloud-drive-port-1",
       updatedAt: "2026-06-05T00:00:00.000Z",
       connections: {
         broken: {

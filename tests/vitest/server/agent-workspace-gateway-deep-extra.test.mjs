@@ -697,7 +697,7 @@ describe("agent gateway routing and compaction", () => {
       expect.objectContaining({ alias: "local-lib", provider: "local-model" })
     ]));
     expect(publicAgentGatewayRegistry(settings)).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       provider: "agent-gateway",
       defaultAlias: "unit-http"
     });
@@ -797,7 +797,7 @@ describe("agent gateway routing and compaction", () => {
       };
     });
     inspectModelRoutingMock.mockResolvedValue({
-      protocolVersion: "pact.model-routing.v1",
+      protocolVersion: "v0.0.1:strategy:model-routing-1",
       entries: [{ routeId: "route-1" }],
       count: 1
     });
@@ -958,7 +958,7 @@ describe("agent gateway routing and compaction", () => {
 
     const routedResult = await inspectAgentModelRouting({ userDataPath: await tempDir("pact-routing-inspect-"), limit: 1 });
     expect(routedResult).toMatchObject({
-      protocolVersion: "pact.model-routing.v1",
+      protocolVersion: "v0.0.1:strategy:model-routing-1",
       count: 1
     });
 

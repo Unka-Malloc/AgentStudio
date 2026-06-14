@@ -256,7 +256,7 @@ try {
   assert.ok(deterministic.tokenReport.savingsRatio > 0);
   assert.equal(/redaction-test-value-12345/.test(deterministic.summary), false);
   assert.equal(/\/Users\/unka\/private/.test(deterministic.summary), false);
-  assert.equal(deterministic.qualityReport.protocolVersion, "pact.context.compaction.quality.v1");
+  assert.equal(deterministic.qualityReport.protocolVersion, "v0.0.1:agent:context-compaction-quality-1");
   assert.equal(deterministic.qualityReport.passed, true);
   assert.equal(deterministic.qualityReport.requiredAnchorCount, 2);
   assert.equal(deterministic.qualityReport.missingAnchorCount, 0);

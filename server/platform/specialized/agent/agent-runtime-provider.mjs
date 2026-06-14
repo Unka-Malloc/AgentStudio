@@ -1,6 +1,6 @@
 import { loadSettings } from "../../common/platform-core/settings.mjs";
 
-export const AGENT_RUNTIME_PROVIDER_PROTOCOL_VERSION = "pact.agent-runtime.v1";
+export const AGENT_RUNTIME_PROVIDER_PROTOCOL_VERSION = "v0.0.1:agent:runtime-1";
 
 function requireFunction(value, name) {
   if (typeof value !== "function") {
@@ -37,7 +37,7 @@ export function createAgentRuntimeProvider({
     protocolVersion: AGENT_RUNTIME_PROVIDER_PROTOCOL_VERSION,
     describe() {
       return {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         protocolVersion: AGENT_RUNTIME_PROVIDER_PROTOCOL_VERSION,
         capabilities: [
           "agent.settings.read",

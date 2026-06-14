@@ -460,7 +460,7 @@ describe("gerrit, repo-operations, and codespace final extra coverage", () => {
       await fs.writeFile(
         path.join(root, "code-management", "codespace-providers.json"),
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: "v0.0.1:schema:definition-1",
           protocolVersion: CODESPACE_PROTOCOL_VERSION,
           updatedAt: "2026-06-04T00:00:00.000Z",
           providers: {

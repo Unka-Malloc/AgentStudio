@@ -138,7 +138,7 @@ async function callWorkspaceMcp(baseUrl, token, operation, input = {}, id = 1, t
     body: JSON.stringify(mcpRequest("tools/call", {
       name: toolName,
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation,
         input
       }
@@ -444,8 +444,7 @@ try {
       kind: "workspace_files",
       limit: 10
     },
-    13,
-    "pact.call"
+    13
   );
   assert.equal(checkpointTrees.count >= 1, true, JSON.stringify(checkpointTrees, null, 2));
   assert.ok(checkpointTrees.items.some((item) => item.treeId === upload.checkpoint.treeId));
@@ -456,8 +455,7 @@ try {
     {
       limit: 10
     },
-    14,
-    "pact.call"
+    14
   );
   assert.ok(
     allCheckpointTrees.items.some((item) => item.treeId === upload.checkpoint.treeId),
@@ -471,8 +469,7 @@ try {
     {
       treeId: upload.checkpoint.treeId
     },
-    15,
-    "pact.call"
+    15
   );
   const uploadCheckpointNode = checkpointTree.nodes?.[upload.checkpoint.nodeId];
   assert.equal(typeof checkpointTree.kind, "string", JSON.stringify(checkpointTree, null, 2));
@@ -496,8 +493,7 @@ try {
       workspaceId,
       reason: "verify MCP workspace checkpoint restore preview"
     },
-    16,
-    "pact.call"
+    16
   );
   assert.equal(Object.prototype.hasOwnProperty.call(restorePreview, "policy"), false, "restore preview public payload should not expose policy internals");
   if (Object.prototype.hasOwnProperty.call(restorePreview, "ok")) {
@@ -526,8 +522,7 @@ try {
       workspaceId,
       reason: "verify MCP workspace checkpoint restore"
     },
-    17,
-    "pact.call"
+    17
   );
   const restoredActions = [
     ...(Array.isArray(restored.appliedActions) ? restored.appliedActions : []),
@@ -577,7 +572,7 @@ try {
     body: JSON.stringify(mcpRequest("tools/call", {
       name: "pact.sharedspace",
       arguments: {
-        apiVersion: "pact.mcp.v1",
+        apiVersion: "v0.0.1:mcp:interface-1",
         operation: "pact.workspace.file.upload",
         input: {
           workspaceId,

@@ -7,7 +7,7 @@ import {
 } from "../../../../common/platform-core/state-coordinator.mjs";
 import { createAgentMemory } from "../../agent-memory/index.mjs";
 
-export const CONTEXT_COMPACTION_PROTOCOL_VERSION = "pact.context.compaction.v1";
+export const CONTEXT_COMPACTION_PROTOCOL_VERSION = "v0.0.1:agent:context-compaction-1";
 
 const SENSITIVE_KEY_PATTERN =
   /token|secret|password|passwd|authorization|cookie|api[-_]?key|client[-_]?secret|csrf/i;
@@ -668,7 +668,7 @@ function buildCompactionQualityReport({
     ? Number((retained.length / requiredAnchors.length).toFixed(6))
     : 1;
   return {
-    protocolVersion: "pact.context.compaction.quality.v1",
+    protocolVersion: "v0.0.1:agent:context-compaction-quality-1",
     requiredAnchorCount: requiredAnchors.length,
     retainedAnchorCount: retained.length,
     missingAnchorCount: missing.length,

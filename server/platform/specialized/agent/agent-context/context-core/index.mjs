@@ -13,7 +13,7 @@ import {
   atomicWriteJson
 } from "../../../../common/platform-core/state-coordinator.mjs";
 
-export const CONTEXT_RUNTIME_PROTOCOL_VERSION = "pact.context.v1";
+export const CONTEXT_RUNTIME_PROTOCOL_VERSION = "v0.0.1:agent:context-1";
 
 const FALLBACK_CONTEXT_PROFILES = [
   {
@@ -75,68 +75,33 @@ const FALLBACK_CONTEXT_PROFILES = [
       summaryMaxTokens: 64000,
       strategy: "workbench-reconstruction"
     }
-  },
-  {
-    profileId: "balanced",
-    label: "Balanced Context",
-    modelAlias: "default",
-    contextWindowTokens: 64000,
-    outputReserveTokens: 6000,
-    toolReserveTokens: 6000,
-    fixedMemoryBudget: 1800,
-    knowledgeBudget: 18000,
-    historyBudget: 16000,
-    recentTurnBudget: 12000,
-    compression: {
-      enabled: true,
-      threshold: 0.62,
-      targetRatio: 0.35,
-      protectLastNTurns: 8,
-      summaryMaxTokens: 8000,
-      strategy: "deterministic-extractive"
-    }
-  },
-  {
-    profileId: "small-context",
-    label: "Small Context",
-    modelAlias: "qwen-v3-32b",
-    contextWindowTokens: 32000,
-    outputReserveTokens: 4000,
-    toolReserveTokens: 3000,
-    fixedMemoryBudget: 1000,
-    knowledgeBudget: 8000,
-    historyBudget: 7000,
-    recentTurnBudget: 6000,
-    compression: {
-      enabled: true,
-      threshold: 0.5,
-      targetRatio: 0.22,
-      protectLastNTurns: 5,
-      summaryMaxTokens: 4000,
-      strategy: "deterministic-extractive"
-    }
-  },
-  {
-    profileId: "deepseek-v3-671b",
-    label: "DeepSeek V3 671B",
-    modelAlias: "deepseek",
-    contextWindowTokens: 128000,
-    outputReserveTokens: 8000,
-    toolReserveTokens: 12000,
-    fixedMemoryBudget: 2200,
-    knowledgeBudget: 36000,
-    historyBudget: 42000,
-    recentTurnBudget: 24000,
-    compression: {
-      enabled: true,
-      threshold: 0.55,
-      targetRatio: 0.25,
-      protectLastNTurns: 12,
-      summaryMaxTokens: 12000,
-      strategy: "workbench-reconstruction"
-    }
   }
 ];
+
+const DEPRECATED_CONTEXT_PROFILE_IDS = new Set([
+  "balanced",
+  "small-context",
+  "deepseek-v3-671b"
+]);
+
+function isDeprecatedContextProfile(profile = {}) {
+  const profileId = String(profile.profileId || profile.id || "").trim();
+  const label = String(profile.label || "").trim();
+  return (
+    DEPRECATED_CONTEXT_PROFILE_IDS.has(profileId) ||
+    label === "Balanced Context" ||
+    label === "Small Context" ||
+    label === "DeepSeek V3 671B"
+  );
+}
+
+function sortContextProfiles(profiles = []) {
+  return [...profiles].sort((left, right) => {
+    const tokenCompare = Number(left.contextWindowTokens || 0) - Number(right.contextWindowTokens || 0);
+    if (tokenCompare !== 0) return tokenCompare;
+    return String(left.profileId || "").localeCompare(String(right.profileId || ""));
+  });
+}
 
 class ContextProfileManager {
   constructor() {
@@ -164,7 +129,7 @@ class ContextProfileManager {
       }
     }
     const byId = new Map();
-    for (const profile of loaded.filter(Boolean)) {
+    for (const profile of loaded.filter((profile) => profile && !isDeprecatedContextProfile(profile))) {
       if (profile && typeof profile === "object" && profile.profileId) {
         byId.set(String(profile.profileId), profile);
       }
@@ -175,7 +140,7 @@ class ContextProfileManager {
         byId.set(profileId, profile);
       }
     }
-    this.profiles = [...byId.values()];
+    this.profiles = sortContextProfiles([...byId.values()]);
   }
 
   getProfiles() {
@@ -389,12 +354,14 @@ function normalizeProfile(profile = {}) {
 }
 
 function normalizeProfiles(profiles) {
-  const incoming = asArray(profiles).map(normalizeProfile);
-  const byId = new Map(contextProfileManager.getProfiles().map((profile) => [profile.profileId, normalizeProfile(profile)]));
+  const incoming = asArray(profiles)
+    .filter((profile) => profile && !isDeprecatedContextProfile(profile))
+    .map(normalizeProfile);
+  const byId = new Map();
   for (const profile of incoming) {
     byId.set(profile.profileId, profile);
   }
-  return [...byId.values()];
+  return sortContextProfiles([...byId.values()]);
 }
 
 function compactText(value, targetTokens) {
@@ -876,7 +843,7 @@ export function createContextRuntime({
       const parsed = JSON.parse(await fs.readFile(profilesPath, "utf8"));
       return normalizeProfiles(parsed.profiles || parsed);
     } catch {
-      return normalizeProfiles([]);
+      return normalizeProfiles(contextProfileManager.getProfiles());
     }
   }
 
@@ -924,8 +891,9 @@ export function createContextRuntime({
     return (
       profiles.find((profile) => profile.profileId === target) ||
       profiles.find((profile) => profile.modelAlias === target) ||
-      profiles.find((profile) => profile.profileId === "balanced") ||
-      normalizeProfile(contextProfileManager.getProfiles()[0])
+      profiles.find((profile) => profile.profileId === "context-128k") ||
+      profiles[0] ||
+      normalizeProfile(contextProfileManager.getProfiles().find((profile) => profile.profileId === "context-128k") || contextProfileManager.getProfiles()[0])
     );
   }
 

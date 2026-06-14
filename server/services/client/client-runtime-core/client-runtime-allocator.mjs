@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { atomicWriteJson } from "../../../platform/interactive/product-api.mjs";
 
-export const CLIENT_RUNTIME_ALLOCATOR_PROTOCOL_VERSION = "pact.client-runtime-allocator.v1";
+export const CLIENT_RUNTIME_ALLOCATOR_PROTOCOL_VERSION = "v0.0.1:agent:client-runtime-allocator-1";
 
 const DEFAULT_PROFILE = {
   profileId: "default",
@@ -299,7 +299,7 @@ function publicAllocation(allocation = {}) {
 function emptyUsageStats() {
   return {
     protocolVersion: CLIENT_RUNTIME_ALLOCATOR_PROTOCOL_VERSION,
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     updatedAt: new Date().toISOString(),
     totalCalls: 0,
     clients: {},
@@ -811,7 +811,7 @@ export function createClientRuntimeAllocator({ userDataPath }) {
       .slice(0, 100);
     return {
       protocolVersion: CLIENT_RUNTIME_ALLOCATOR_PROTOCOL_VERSION,
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       updatedAt: new Date().toISOString(),
       configPath,
       usagePath,

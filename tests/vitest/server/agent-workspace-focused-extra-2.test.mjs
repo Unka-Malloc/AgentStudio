@@ -322,7 +322,7 @@ describeWithVmModuleSupport("agent workspace helper branches", () => {
   it("covers context bundle decoding, hydration, file metadata, and gate decisions", async () => {
     const helpers = await modulePromise;
     const bundle = {
-      bundleVersion: "pact.workspace-context-bundle.v1",
+      bundleVersion: "v0.0.1:workspace:context-bundle-1",
       context: {
         workspaceId: "ws-1"
       }
@@ -336,7 +336,7 @@ describeWithVmModuleSupport("agent workspace helper branches", () => {
     })).toBe(bundle);
 
     expect(helpers.decodeWorkspaceContextBundle({
-      bundleVersion: "pact.workspace-context-bundle.v1",
+      bundleVersion: "v0.0.1:workspace:context-bundle-1",
       context: { workspaceId: "ws-1" }
     })).toMatchObject({ context: { workspaceId: "ws-1" } });
 

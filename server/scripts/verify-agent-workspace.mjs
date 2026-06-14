@@ -303,7 +303,7 @@ try {
     contentPreviewChars: 12,
     compress: true
   });
-  assert.equal(publicBundle.bundleVersion, "pact.workspace-context-bundle.v1");
+  assert.equal(publicBundle.bundleVersion, "v0.0.1:workspace:context-bundle-1");
   assert.equal(publicBundle.restoreEvidence.artifactCount, 1);
   assert.equal(publicBundle.restoreEvidence.privateStateCount, 0);
   assert.equal(publicBundle.compressed.encoding, "gzip+base64");
@@ -731,7 +731,7 @@ async function verifyHttpWorkspaceRuntimeInjection() {
     const contextBundle = await fetchJson(
       `${server.url}/api/agent-workspaces/${encodeURIComponent(childId)}/context-bundle?maxItems=4&contentPreviewChars=64`
     );
-    assert.equal(contextBundle.bundleVersion, "pact.workspace-context-bundle.v1");
+    assert.equal(contextBundle.bundleVersion, "v0.0.1:workspace:context-bundle-1");
     assert.equal(contextBundle.contextFingerprint, context.contextFingerprint);
     assert.equal(contextBundle.bundle.context.workspaceId, childId);
     assert.equal(contextBundle.bundle.context.contextProfileId, "http-workspace-context");

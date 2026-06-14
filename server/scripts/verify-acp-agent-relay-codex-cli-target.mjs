@@ -234,7 +234,7 @@ try {
     { virtualAgentId, sourceId },
     "codex-cli-target-init"
   ));
-  assert.equal(initialize.result?.pactProtocolVersion, "pact.acp-agent-relay.v1");
+  assert.equal(initialize.result?.pactProtocolVersion, "v0.0.1:agent:acp-agent-relay-1");
   assert.equal(initialize.result?.virtualAgentId, virtualAgentId);
   assert.equal(initialize.result?.capabilitiesSnapshot?.target?.transportType, "codex-cli-exec");
   assert.equal(initialize.result?.capabilitiesSnapshot?.target?.targetCommunicationMode, "codex_cli_exec_proxy");

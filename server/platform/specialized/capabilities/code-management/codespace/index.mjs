@@ -4,7 +4,7 @@ import path from "node:path";
 import { ServerConfig } from "../../../../common/config/ServerConfig.mjs";
 import { executeRepoOperation as defaultExecuteRepoOperation } from "../../code-repository/repo-operations/index.mjs";
 
-export const CODESPACE_PROTOCOL_VERSION = "pact.codespace.v1";
+export const CODESPACE_PROTOCOL_VERSION = "v0.0.1:platform:codespace-1";
 
 const REGISTRY_FILE = path.join("code-management", "codespace-registry.json");
 const PROVIDER_CONFIG_FILE = path.join("code-management", "codespace-providers.json");
@@ -75,7 +75,7 @@ async function writeJson(filePath, value) {
 
 function emptyRegistry() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: CODESPACE_PROTOCOL_VERSION,
     updatedAt: nowIso(),
     targets: {},
@@ -86,7 +86,7 @@ function emptyRegistry() {
 
 function defaultProviderConfig() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: CODESPACE_PROTOCOL_VERSION,
     updatedAt: nowIso(),
     providers: {
@@ -151,7 +151,7 @@ function publicProviderConfig(config = {}, filePath = "") {
     };
   }
   return {
-    schemaVersion: Number(config.schemaVersion || 1),
+    schemaVersion: String(config.schemaVersion || "v0.0.1:schema:definition-1"),
     protocolVersion: CODESPACE_PROTOCOL_VERSION,
     configPath: filePath,
     providers,
@@ -1009,7 +1009,7 @@ export function createCodespaceRegistry({
       return {
         ok: upload.ok,
         status: upload.status || (upload.ok ? 200 : 400),
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         operationId: "workspace.code.change.upload",
         protocolVersion: CODESPACE_PROTOCOL_VERSION,
         ...upload,
@@ -1160,7 +1160,7 @@ export function createCodespaceRegistry({
       return {
         ok: true,
         status: 200,
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         operationId: "codespace.change.upload",
         protocolVersion: CODESPACE_PROTOCOL_VERSION,
         provider: "github",

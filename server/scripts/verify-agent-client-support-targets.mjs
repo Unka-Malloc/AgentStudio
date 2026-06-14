@@ -10,14 +10,12 @@ const CANONICAL_TARGETS = Object.freeze([
   { id: "openclaw", label: "OpenClaw", profile: "pact.mcp.openclaw" },
   { id: "claude-code", label: "Claude Code", profile: "pact.mcp.claude-code" },
   { id: "codex", label: "Codex", profile: "pact.mcp.codex" },
-  { id: "gemini-cli", label: "Gemini CLI", profile: "pact.mcp.gemini-cli" },
   { id: "antigravity", label: "Antigravity", profile: "pact.mcp.antigravity" },
   { id: "opencode", label: "OpenCode", profile: "pact.mcp.opencode" },
   { id: "copilot", label: "Copilot", profile: "pact.mcp.copilot" },
   { id: "kilo-code", label: "Kilo Code", profile: "pact.mcp.kilo-code" },
   { id: "cursor", label: "Cursor", profile: "pact.mcp.cursor" },
-  { id: "hermes", label: "Hermes Agent", profile: "pact.mcp.hermes" },
-  { id: "windsurf", label: "Windsurf", profile: "pact.mcp.windsurf" }
+  { id: "hermes", label: "Hermes Agent", profile: "pact.mcp.hermes" }
 ]);
 
 const CANONICAL_IDS = Object.freeze(CANONICAL_TARGETS.map((target) => target.id));

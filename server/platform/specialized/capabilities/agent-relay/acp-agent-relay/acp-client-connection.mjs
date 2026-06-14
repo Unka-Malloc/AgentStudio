@@ -368,8 +368,8 @@ function targetRelayMcpProxyParams({ params = {}, target = {} } = {}) {
   const traceId = asText(input.traceId || input.relayMcp?.traceId || input.relayMcp?.childOperation?.traceId);
   const parentOperationId = asText(input.operationId || input.relayMcp?.operationId || input.relayMcp?.childOperation?.parentOperationId);
   const childOperation = {
-    schemaVersion: 1,
-    binding: "pact.acp-agent-relay.child-operation.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    binding: "v0.0.1:agent:acp-agent-relay-child-operation-1",
     relaySessionId,
     relayTurnId,
     virtualAgentId,
@@ -410,7 +410,7 @@ function targetRelayMcpProxyParams({ params = {}, target = {} } = {}) {
     }
   };
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocol: "mcp",
     source: "pact.acp-agent-relay",
     relaySessionId,

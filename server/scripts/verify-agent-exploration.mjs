@@ -31,7 +31,7 @@ const fixtureKnowledgeCore = {
     assert.equal(input.keywordOnly, false);
     assert.equal(input.learningEnabled, true);
     return {
-      protocolVersion: "pact.knowledge.v1",
+      protocolVersion: "v0.0.1:knowledge:core-1",
       query: input.query,
       retrievalMode: "hybrid",
       retrievalProfileId: "balanced",
@@ -41,15 +41,15 @@ const fixtureKnowledgeCore = {
         enabled: true,
         policy: "coarse_to_fine",
         selected: {
-          documents: [{ title: "账单邮件", documentId: "doc_1" }]
+          documents: [{ title: "部署记录", documentId: "doc_1" }]
         }
       },
       items: [
         {
           evidenceId: "ev_1",
           documentId: "doc_1",
-          title: "招商银行信用卡电子账单.eml",
-          snippet: "本期账单金额 123.45。",
+          title: "Atlas 模块部署记录.md",
+          snippet: "部署版本 v1.2.3，回滚窗口 30 分钟。",
           score: 0.91,
           hierarchy: { path: "collection:mail > document:doc_1" },
           modalities: ["text", "image"],
@@ -69,7 +69,7 @@ const fixtureKnowledgeCore = {
     assert.equal(input.metric, "email_advertising_by_sender");
     assert.equal(input.groupBy, "senderEmail");
     return {
-      protocolVersion: "pact.knowledge.v1",
+      protocolVersion: "v0.0.1:knowledge:core-1",
       ok: true,
       metric: input.metric,
       groupBy: input.groupBy,
@@ -106,14 +106,14 @@ const fixtureKnowledgeCore = {
     assert.equal(evidenceId, "ev_1");
     return {
       evidenceId,
-      title: "招商银行信用卡电子账单.eml",
-      snippet: "本期账单金额 123.45。",
+      title: "Atlas 模块部署记录.md",
+      snippet: "部署版本 v1.2.3，回滚窗口 30 分钟。",
       score: 0.91,
       locator: { sourcePath: "/fixtures/bill.eml" },
       payload: {
         document: {
           documentId: "doc_1",
-          title: "招商银行信用卡电子账单.eml",
+          title: "Atlas 模块部署记录.md",
           documentType: "email",
           sourcePath: "/fixtures/bill.eml",
           batchId: "batch_1"
@@ -122,12 +122,12 @@ const fixtureKnowledgeCore = {
           {
             blockId: "block_1",
             title: "正文",
-            text: "账单日 2026-04-20，本期账单金额 123.45。"
+            text: "部署时间 2026-04-20，部署版本 v1.2.3，回滚窗口 30 分钟。"
           }
         ],
-        assets: [{ assetId: "asset_1", mediaType: "image/png", title: "账单截图" }]
+        assets: [{ assetId: "asset_1", mediaType: "image/png", title: "部署截图" }]
       },
-      markdown: "# 招商银行信用卡电子账单\n\n本期账单金额 123.45。"
+      markdown: "# Atlas 模块部署记录\n\n部署版本 v1.2.3，回滚窗口 30 分钟。"
     };
   }
 };
@@ -171,7 +171,7 @@ const runtime = createAgentExplorationRuntime({
             type: "function",
             function: {
               name: "keyword_search",
-              arguments: JSON.stringify({ query: "账单", limit: 2 })
+              arguments: JSON.stringify({ query: "部署记录", limit: 2 })
             }
           }
         ]
@@ -247,7 +247,7 @@ const runtime = createAgentExplorationRuntime({
     }
     return {
       ok: true,
-      answer: "找到了账单证据：招商银行信用卡电子账单，金额 123.45。[ev_1]",
+      answer: "找到了部署证据：Atlas 模块部署记录，版本 v1.2.3。[ev_1]",
       finish: true,
       upstream: { provider: "mock", status: 200, contentType: "application/json" }
     };
@@ -256,7 +256,7 @@ const runtime = createAgentExplorationRuntime({
 
 try {
   const result = await runtime.run({
-    query: "帮我找账单",
+    query: "帮我找部署记录",
     modelAlias: "deepseek",
     contextProfileId: "small-context",
     maxIterations: 5,
@@ -272,10 +272,10 @@ try {
   assert.deepEqual(result.toolResults[2].result.args, ["--version"]);
   assert.equal(result.toolResults[3].tool, "http_request");
   assert.equal(result.toolResults[3].result.status, 200);
-  assert.match(result.answer, /123\.45/);
+  assert.match(result.answer, /v1\.2\.3/);
   assert.ok(result.evidenceRefs.includes("ev_1"));
   assert.equal(result.run.coverage.nativeFunctionCalling, true);
-  assert.equal(result.contextPack.profileId, "small-context");
+  assert.equal(result.contextPack.profileId, "context-128k");
   assert.ok(result.contextPack.contextBuildRecordId);
   assert.ok(result.contextPack.criticalEvidenceIndex);
   assert.ok(result.contextPack.toolStateSummary);
@@ -403,7 +403,7 @@ try {
   assert.equal(scopedAllocatorCallCount, 1);
   assert.equal(scopedCallCount, 2);
   assert.deepEqual(scopedSearchInput.scopeSourceIds, ["workspace-source-a"]);
-  assert.equal(scopedResult.contextPack.profileId, "small-context");
+  assert.equal(scopedResult.contextPack.profileId, "context-128k");
   assert.equal(scopedResult.workspaceContext.modelAlias, "workspace-model");
   assert.equal(scopedResult.workspaceContext.toolGrantId, "workspace-tool-grant");
   assert.equal(scopedResult.run.input.modelAlias, "workspace-model");
@@ -491,7 +491,7 @@ try {
         return {
           ok: true,
           answer:
-            '<tool_call>{"name":"keyword_search","arguments":{"query":"账单","limit":2}}</tool_call>',
+            '<tool_call>{"name":"keyword_search","arguments":{"query":"部署记录","limit":2}}</tool_call>',
           finish: true,
           upstream: { provider: "mock-qwen", status: 200, contentType: "application/json" }
         };
@@ -499,7 +499,7 @@ try {
       assert.match(JSON.stringify(input.messages), /tool_call/);
       return {
         ok: true,
-        answer: "Hermes 兜底解析后找到账单证据。\n\n📎 证据来源：evidence::ev_1",
+        answer: "Hermes 兜底解析后找到部署证据。\n\n📎 证据来源：evidence::ev_1",
         finish: true,
         upstream: { provider: "mock-qwen", status: 200, contentType: "application/json" }
       };
@@ -543,7 +543,7 @@ try {
               type: "function",
               function: {
                 name: "keyword_search",
-                arguments: JSON.stringify({ query: "账单", limit: 2 })
+                arguments: JSON.stringify({ query: "部署记录", limit: 2 })
               }
             }
           ]
@@ -553,7 +553,7 @@ try {
       assert.match(input.messages.at(-1).content, /不要再返回 function call/);
       return {
         ok: true,
-        answer: "最终综合：找到账单证据，金额 123.45。[ev_1]",
+        answer: "最终综合：找到部署证据，版本 v1.2.3。[ev_1]",
         finish: true,
         upstream: { provider: "mock", status: 200, contentType: "application/json" }
       };
@@ -688,7 +688,7 @@ try {
       evaluatePolicy(input = {}) {
         if (input.tool?.id === "agent-exploration.local_command") {
           return {
-            protocolVersion: "pact.authorization.v1",
+            protocolVersion: "v0.0.1:risk-control:authorization-1",
             decisionId: "authz_verify_local_command_denied",
             auditId: "authz_audit_verify_local_command_denied",
             toolExecutionId: input.toolExecutionId || "",
@@ -708,7 +708,7 @@ try {
           };
         }
         return {
-          protocolVersion: "pact.authorization.v1",
+          protocolVersion: "v0.0.1:risk-control:authorization-1",
           decisionId: `authz_verify_allow_${input.tool?.id || "tool"}`,
           auditId: "authz_audit_verify_allow",
           toolExecutionId: input.toolExecutionId || "",
@@ -782,9 +782,69 @@ try {
   assert.equal(deniedResult.toolResults[0].result.reasonCode, "risk_exceeds_policy");
   assert.equal(deniedResult.steps[0].toolResults[0].status, "failed");
 
+  let cwdOverrideCallCount = 0;
+  const cwdOverrideRuntime = createAgentExplorationRuntime({
+    userDataPath: tempRoot,
+    runtime: {
+      mounts: {
+        knowledgeBase: fixtureKnowledgeCore
+      }
+    },
+    agentWorkspace,
+    contextRuntime,
+    agentGatewayCall: async (input = {}) => {
+      cwdOverrideCallCount += 1;
+      if (cwdOverrideCallCount === 1) {
+        return {
+          ok: true,
+          answer: "",
+          finish: true,
+          upstream: { provider: "mock", status: 200, contentType: "application/json" },
+          toolCalls: [
+            {
+              id: "call_local_cwd_override",
+              type: "function",
+              function: {
+                name: "local_command",
+                arguments: JSON.stringify({
+                  commandId: "node-version",
+                  variables: { flag: "--version" },
+                  cwd: "/tmp"
+                })
+              }
+            }
+          ]
+        };
+      }
+      assert.match(
+        JSON.stringify(input.messages),
+        /local_command_cwd_override_not_allowed/,
+        "local command cwd override denial must be returned to the model"
+      );
+      return {
+        ok: true,
+        answer: "cwd override rejected",
+        finish: true,
+        upstream: { provider: "mock", status: 200, contentType: "application/json" }
+      };
+    }
+  });
+  const cwdOverrideResult = await cwdOverrideRuntime.run({
+    query: "尝试覆盖本地命令 cwd",
+    modelAlias: "deepseek",
+    contextProfileId: "small-context",
+    maxIterations: 2,
+    limit: 2
+  });
+  assert.equal(cwdOverrideCallCount, 2);
+  assert.equal(cwdOverrideResult.toolResults[0].tool, "local_command");
+  assert.equal(cwdOverrideResult.toolResults[0].result.ok, false);
+  assert.equal(cwdOverrideResult.toolResults[0].result.error, "local_command_cwd_override_not_allowed");
+  assert.equal(cwdOverrideResult.steps[0].toolResults[0].status, "failed");
+
   callCount = 0;
   const asyncResult = await runtime.run({
-    query: "帮我找账单 async",
+    query: "帮我找部署记录 async",
     modelAlias: "deepseek",
     contextProfileId: "small-context",
     maxIterations: 5,
@@ -806,7 +866,7 @@ try {
   }
   assert.equal(asyncLoaded.run.status, "completed");
   assert.equal(asyncLoaded.pending, false);
-  assert.match(asyncLoaded.answer, /123\.45/);
+  assert.match(asyncLoaded.answer, /v1\.2\.3/);
   assert.ok(asyncLoaded.steps[0].events.some((event) => event.type === "tool_result"));
 
   console.log("agent exploration verification passed");

@@ -2,8 +2,8 @@ import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } 
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const IDENTITY_SCHEMA_VERSION = "pact.mcp.identity.v1";
-const HANDSHAKE_SCHEMA_VERSION = "pact.mcp.handshake.v1";
+const IDENTITY_SCHEMA_VERSION = "v0.0.1:mcp:identity-1";
+const HANDSHAKE_SCHEMA_VERSION = "v0.0.1:mcp:handshake-1";
 
 function sortValue(value) {
   if (Array.isArray(value)) {
@@ -126,7 +126,7 @@ export function signMcpHandshake({ identity, payload }) {
   const privateKey = createPrivateKey({ key: identity.privateKeyJwk, format: "jwk" });
   return {
     algorithm: "Ed25519",
-    payloadEncoding: "pact.stable-json.v1",
+    payloadEncoding: "v0.0.1:platform:stable-json-1",
     value: sign(null, Buffer.from(stableStringify(payload)), privateKey).toString("base64url")
   };
 }

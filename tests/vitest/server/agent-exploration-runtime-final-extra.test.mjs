@@ -432,7 +432,7 @@ describe("agent exploration runtime extra coverage", () => {
 
     const securityPermissions = {
       evaluatePolicy: vi.fn(async ({ tool, dryRun, traceId, toolExecutionId, input, context }) => ({
-        protocolVersion: "pact.authorization.v1",
+        protocolVersion: "v0.0.1:risk-control:authorization-1",
         decisionId: `decision-${dryRun ? "preflight" : "allow"}`,
         auditId: `audit-${dryRun ? "preflight" : "allow"}`,
         toolExecutionId,
@@ -865,7 +865,7 @@ describe("agent exploration runtime extra coverage", () => {
         if (tool?.id === "agent-exploration.knowledge_skill_propose") {
           if (dryRun) {
             return {
-              protocolVersion: "pact.authorization.v1",
+              protocolVersion: "v0.0.1:risk-control:authorization-1",
               decisionId: "decision-preflight-deny",
               auditId: "audit-preflight-deny",
               toolExecutionId: "",
@@ -884,7 +884,7 @@ describe("agent exploration runtime extra coverage", () => {
             };
           }
           return {
-            protocolVersion: "pact.authorization.v1",
+            protocolVersion: "v0.0.1:risk-control:authorization-1",
             decisionId: "decision-needs-approval",
             auditId: "audit-needs-approval",
             toolExecutionId: "",
@@ -903,7 +903,7 @@ describe("agent exploration runtime extra coverage", () => {
           };
         }
         return {
-          protocolVersion: "pact.authorization.v1",
+          protocolVersion: "v0.0.1:risk-control:authorization-1",
           decisionId: "decision-allow",
           auditId: "audit-allow",
           toolExecutionId: "",

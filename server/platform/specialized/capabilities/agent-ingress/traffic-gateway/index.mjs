@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 
-export const AGENT_TRAFFIC_GATEWAY_PROTOCOL_VERSION = "pact.agent-traffic-gateway.v1";
+export const AGENT_TRAFFIC_GATEWAY_PROTOCOL_VERSION = "v0.0.1:agent:traffic-gateway-1";
 
 export const DEFAULT_GATEWAY_ADAPTER = "caddy";
 export const DEFAULT_GATEWAY_BASE_URL = "http://127.0.0.1:7330";
@@ -225,7 +225,7 @@ function renderProfileInput(profileInput = {}, adapterId = "") {
 export function buildGatewayRouteManifest(profileInput = {}) {
   const profile = profileInput.schemaVersion ? profileInput : normalizeGatewayIngressProfile(profileInput);
   return Object.freeze({
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocol: AGENT_TRAFFIC_GATEWAY_PROTOCOL_VERSION,
     adapterId: profile.gatewayMode.adapterId,
     publicBaseUrl: profile.gatewayMode.publicBaseUrl,
@@ -254,7 +254,7 @@ export function normalizeGatewayIngressProfile(input = {}) {
   const upstreams = normalizeUpstreams(input.upstreams || input.upstreamUrls || input.upstream, directBaseUrl);
   const routes = normalizeRoutes(input.routes);
   const profile = Object.freeze({
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocol: AGENT_TRAFFIC_GATEWAY_PROTOCOL_VERSION,
     profileId: String(input.profileId || `pact-agent-traffic-gateway-${adapterId}`).trim(),
     directMode: Object.freeze({
@@ -532,7 +532,7 @@ export function resolveGatewayRuntimePlan(input = {}, env = process.env) {
       ""
   ).trim();
   return Object.freeze({
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocol: AGENT_TRAFFIC_GATEWAY_PROTOCOL_VERSION,
     adapterId: adapter.adapterId,
     platform,

@@ -142,7 +142,7 @@ describe("http-mcp-adapter：发现、握手、MCP 通道与入口路由", () =>
 
     const keyPair = generateKeyPairSync("ed25519");
     const discoveryIdentity = {
-      schemaVersion: "pact.mcp.identity.v1",
+      schemaVersion: "v0.0.1:mcp:identity-1",
       algorithm: "Ed25519",
       keyId: "test-key",
       publicKeyJwk: keyPair.publicKey.export({ format: "jwk" }),

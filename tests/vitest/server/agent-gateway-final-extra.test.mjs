@@ -45,7 +45,7 @@ describe("agent-gateway final coverage extras", () => {
     expect(resolveAgentGatewayRegistry({})).toEqual([]);
 
     expect(publicAgentGatewayRegistry({})).toEqual({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       provider: "agent-gateway",
       defaultAlias: "",
       agents: []
@@ -1227,7 +1227,7 @@ describe("agent-gateway final coverage extras", () => {
   it("routes when model routing is enabled even if the caller only supplies a routing policy", async () => {
     runModelRoutingMock.mockResolvedValue({
       routing: {
-        protocolVersion: "pact.model-routing.v1",
+        protocolVersion: "v0.0.1:strategy:model-routing-1",
         routeId: "route-1",
         selectedAlias: "primary-http",
         fallbackUsed: false

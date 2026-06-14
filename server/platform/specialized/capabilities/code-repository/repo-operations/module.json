@@ -1,14 +1,14 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "name": "RepoOperationsCompatibilityRoute",
-  "version": 1,
+  "version": "v0.0.1:platform:repo-operations-compatibility-route-1",
   "category": "pact-internal-compatibility",
   "compatibilityLayer": "pact-internal-compatibility",
   "compatibilityBoundary": "resource-operation",
   "internalCompatibilityKind": "resource-operation",
   "description": "Built-in compatibility component for common repository operations exposed to agents through Pact MCP and Tool Management.",
   "defaultLoaded": true,
-  "protocol": "pact.resource-operation.v1",
+  "protocol": "v0.0.1:operation:resource-operation-1",
   "adapterProtocol": "git-cli.v1+review-provider-plan.v1",
   "maintenanceSkill": "skills/codespace/pact-gerrit-mcp-maintainer/SKILL.md",
   "components": {

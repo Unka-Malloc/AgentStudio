@@ -178,7 +178,7 @@ describe("agent evaluation runtime exports and initialization", () => {
         knowledgeAgentSkill: { run: vi.fn() },
       });
 
-      expect(AGENT_EVALUATION_PROTOCOL_VERSION).toBe("pact.agent-evaluation.v1");
+      expect(AGENT_EVALUATION_PROTOCOL_VERSION).toBe("v0.0.1:agent:evaluation-1");
       expect(createAgentEvaluationRuntimeDefault).toBe(createAgentEvaluationRuntime);
       expect(runtime).toMatchObject({
         protocolVersion: AGENT_EVALUATION_PROTOCOL_VERSION,

@@ -412,83 +412,14 @@ describe("agent relay ACP final extra coverage", () => {
     assert.equal(result.events[2].type, "custom");
   });
 
-  it("parses stdio server env options and closes runtime, service, and transport", async () => {
-    const options = createAcpSourceStdioServerOptionsFromEnv({
-      PACT_ACP_SOURCE_STDIO_RUNTIME_JSON: JSON.stringify({
-        store: {
-          adapter: {
-            storagePath: "/tmp/relay-store.json"
-          }
-        }
-      }),
-      PACT_ACP_SOURCE_STDIO_CONTEXT_JSON: JSON.stringify({
-        sourceId: "source-base",
-        workspaceId: "workspace-base",
-        sourceScopes: ["ctx.scope"],
-        sourceCapabilities: ["ctx.capability"],
-        sourceIdentity: {
-          role: "reader"
-        }
-      }),
-      PACT_ACP_SOURCE_ID: "source-env",
-      PACT_ACP_WORKSPACE_ID: "workspace-env",
-      PACT_ACP_SOURCE_SCOPES: "alpha beta",
-      PACT_ACP_SOURCE_CAPABILITIES: "gamma,delta",
-      PACT_ACP_SOURCE_IDENTITY_JSON: JSON.stringify({
-        role: "writer",
-        traceId: "trace-1"
-      })
-    });
-
-    assert.deepEqual(options.runtimeOptions.store.adapter, {
-      storagePath: "/tmp/relay-store.json"
-    });
-    assert.equal(options.context.sourceId, "source-env");
-    assert.equal(options.context.workspaceId, "workspace-env");
-    assert.equal(options.context.sourceScopes, undefined);
-    assert.equal(options.context.sourceCapabilities, undefined);
-    assert.deepEqual(options.context.sourceIdentity, {
-      role: "writer",
-      traceId: "trace-1"
-    });
-
-    const runtime = {
-      store: {
-        adapter: {
-          storagePath: "/tmp/relay-store.json"
-        }
-      },
-      close: vi.fn(async () => {})
-    };
-    const transport = {
-      close: vi.fn()
-    };
-    const service = {
-      serveTransport: vi.fn(async () => {}),
-      close: vi.fn()
-    };
-    sourceJsonRpcMock.createAcpSourceJsonRpcLineTransport.mockReturnValue(transport);
-    sourceJsonRpcMock.createAcpSourceJsonRpcService.mockReturnValue(service);
-
-    const server = createAcpSourceStdioServer({
-      runtime,
-      context: {
-        sourceId: "source-env",
-        workspaceId: "workspace-env"
-      },
-      input: new EventEmitter(),
-      output: {
-        write() {
-          return true;
-        }
-      },
-      diagnostics: null
-    });
-
-    await server.close();
-
-    assert.equal(service.close.mock.calls.length, 1);
-    assert.equal(transport.close.mock.calls.length, 1);
-    assert.equal(runtime.close.mock.calls.length, 1);
+  it("fails closed for source-facing local stdio server helpers", async () => {
+    assert.throws(
+      () => createAcpSourceStdioServerOptionsFromEnv({}),
+      /Pact no longer exposes local stdio interfaces/
+    );
+    assert.throws(
+      () => createAcpSourceStdioServer({ runtime: {} }),
+      /Pact no longer exposes local stdio interfaces/
+    );
   });
 });

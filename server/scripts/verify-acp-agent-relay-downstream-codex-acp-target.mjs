@@ -252,7 +252,7 @@ try {
     { virtualAgentId, sourceId, workspaceId },
     "downstream-codex-acp-init"
   ));
-  assert.equal(initialize.result?.pactProtocolVersion, "pact.acp-agent-relay.v1");
+  assert.equal(initialize.result?.pactProtocolVersion, "v0.0.1:agent:acp-agent-relay-1");
   assert.equal(initialize.result?.virtualAgentId, virtualAgentId);
   assert.equal(initialize.result?.capabilitiesSnapshot?.target?.targetId, targetId);
   assert.equal(initialize.result?.capabilitiesSnapshot?.target?.transportType, "stdio");

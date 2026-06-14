@@ -84,7 +84,7 @@ describe("agent-gateway compaction and response normalization extras", () => {
       }))
     };
     const runCompaction = vi.fn(async (input) => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       status: "completed",
       compacted: true,
       strategy: "extractive-rewrite",

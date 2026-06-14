@@ -59,7 +59,7 @@ async function withContextRuntime(fn) {
 function createStubCompactionRuntime() {
   return {
     preview: vi.fn(async (input = {}) => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       status: "preview",
       compacted: false,
       executionMode: "stub",
@@ -67,25 +67,25 @@ function createStubCompactionRuntime() {
       inputSource: input.inputSource || ""
     })),
     run: vi.fn(async () => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       status: "completed",
       compacted: false,
       executionMode: "stub"
     })),
     listRecords: vi.fn(async () => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       records: []
     })),
     listStrategies: vi.fn(async () => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       strategies: []
     })),
     listSessionMemory: vi.fn(async () => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       memories: []
     })),
     clearSessionMemory: vi.fn(async () => ({
-      protocolVersion: "pact.context.compaction.v1",
+      protocolVersion: "v0.0.1:agent:context-compaction-1",
       cleared: 0
     }))
   };
@@ -283,7 +283,7 @@ describe("agent workspace lock and bundle edge cases", () => {
         maxItems: 1
       });
       expect(previewOnly).toMatchObject({
-        protocolVersion: "pact.agent-workspace.v1",
+        protocolVersion: "v0.0.1:workspace:agent-workspace-1",
         bundleVersion: AGENT_WORKSPACE_CONTEXT_BUNDLE_VERSION,
         compressed: null,
         bundle: undefined
@@ -423,7 +423,7 @@ describe("context core profile normalization and preview edges", () => {
         text: "preview text"
       });
       expect(preview).toMatchObject({
-        protocolVersion: "pact.context.compaction.v1",
+        protocolVersion: "v0.0.1:agent:context-compaction-1",
         status: "preview",
         profileId: "custom-unit"
       });

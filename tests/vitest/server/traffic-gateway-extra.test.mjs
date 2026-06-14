@@ -84,7 +84,7 @@ describe("traffic gateway registry and normalization", () => {
     });
 
     expect(profile).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocol: AGENT_TRAFFIC_GATEWAY_PROTOCOL_VERSION,
       profileId: "custom-profile",
       directMode: {
@@ -156,7 +156,7 @@ describe("traffic gateway registry and normalization", () => {
       })
     ]);
     expect(profile.routeManifest).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocol: AGENT_TRAFFIC_GATEWAY_PROTOCOL_VERSION,
       adapterId: "caddy",
       publicBaseUrl: "https://gateway.example.invalid:8443",
@@ -368,7 +368,7 @@ describe("traffic gateway runtime planning and validation", () => {
     );
 
     expect(plan).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocol: AGENT_TRAFFIC_GATEWAY_PROTOCOL_VERSION,
       adapterId: "nginx",
       platform: "linux-arm64",
@@ -386,7 +386,7 @@ describe("traffic gateway runtime planning and validation", () => {
 
   it("validates the gateway contract and reports missing route and policy failures", () => {
     const report = validateGatewayIngressPlan({
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocol: AGENT_TRAFFIC_GATEWAY_PROTOCOL_VERSION,
       adapterId: "caddy",
       directMode: {

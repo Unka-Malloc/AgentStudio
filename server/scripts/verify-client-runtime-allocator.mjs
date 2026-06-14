@@ -116,7 +116,7 @@ try {
 
   const applied = await allocator.apply({
     clientUid: "client-a",
-    query: "三月账单"
+    query: "三月巡检记录"
   }, {
     taskType: "knowledge.search",
     surface: "verify"
@@ -176,12 +176,12 @@ try {
   });
   const preview = await contextRuntime.preview({
     clientUid: "client-a",
-    taskBrief: "回答三月账单",
+    taskBrief: "回答三月巡检记录",
     retrievedEvidence: [
       {
         evidenceId: "ev-client-runtime",
-        title: "三月账单",
-        snippet: "三月账单金额 128 元。"
+        title: "三月巡检记录",
+        snippet: "三月巡检记录包含 12 个检查项。"
       }
     ],
     record: false

@@ -195,6 +195,22 @@ async function callAgentRelayHttp({ platform, token, method = "GET", path: reque
   };
 }
 
+async function approveHttpPendingOperation({ platform, token, pendingOperationId, resolvedBy = "acp-agent-relay-verifier" }) {
+  return callAgentRelayHttp({
+    platform,
+    token,
+    method: "POST",
+    path: `/api/tool-management/v1/pending-operations/${encodeURIComponent(pendingOperationId)}/resolve`,
+    headers: {
+      "x-pact-safety-confirm": "true"
+    },
+    body: {
+      resolution: "approved",
+      resolvedBy
+    }
+  });
+}
+
 function assertRuntimeExport(moduleInstance, names) {
   const missing = names.filter((name) => Object.hasOwn(moduleInstance, name) === false);
   if (missing.length > 0) {
@@ -258,14 +274,11 @@ assertRuntimeExport(runtimeModule, [
   "createAcpSourceJsonRpcLineTransport",
   "createAcpSourceJsonRpcService",
   "createAcpSourceJsonRpcTransportPair",
-  "createAcpSourceStdioServer",
-  "createAcpSourceStdioServerOptionsFromEnv",
   "createAcpTargetConnection",
   "createCodexCliExecConnection",
   "createFileRelaySessionAdapter",
   "createAcpRelayRuntime",
-  "executeAcpAgentRelayOperation",
-  "runAcpSourceStdioServerFromEnv"
+  "executeAcpAgentRelayOperation"
 ]);
 
 const acpRelayModuleManifest = JSON.parse(await fs.readFile(new URL(
@@ -273,6 +286,13 @@ const acpRelayModuleManifest = JSON.parse(await fs.readFile(new URL(
   import.meta.url
 ), "utf8"));
 const packageManifest = JSON.parse(await fs.readFile(new URL("../../package.json", import.meta.url), "utf8"));
+function assertForbiddenSourceStdioPackageScript(scriptName) {
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(packageManifest.scripts || {}, scriptName),
+    false,
+    `${scriptName} must not remain as a package script because it depended on the retired source-facing stdio interface.`
+  );
+}
 const ciWorkflowText = await fs.readFile(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
 const codexAntigravityVerifierText = await fs.readFile(new URL(
   "./verify-acp-agent-relay-codex-antigravity.mjs",
@@ -410,19 +430,24 @@ const sourceJsonRpcBridgeText = await fs.readFile(new URL(
   "../platform/specialized/capabilities/agent-relay/acp-agent-relay/acp-source-json-rpc-bridge.mjs",
   import.meta.url
 ), "utf8");
-const sourceStdioServerText = await fs.readFile(new URL(
-  "../platform/specialized/capabilities/agent-relay/acp-agent-relay/acp-source-stdio-server.mjs",
-  import.meta.url
-), "utf8");
 const relayRuntimeTestText = await fs.readFile(new URL(
   "../../tests/vitest/server/acp-agent-relay-runtime.test.mjs",
   import.meta.url
 ), "utf8");
-assert.equal(
-  packageManifest.scripts?.["server:verify:acp-agent-relay-real"],
-  "node server/scripts/verify-acp-agent-relay-real.mjs",
-  "ACP relay real gate must stay available as a hard-fail package script."
-);
+const agentCliExecConnectionText = await fs.readFile(new URL(
+  "../platform/specialized/capabilities/agent-relay/acp-agent-relay/agent-cli-exec-connection.mjs",
+  import.meta.url
+), "utf8");
+const codexCliExecConnectionText = await fs.readFile(new URL(
+  "../platform/specialized/capabilities/agent-relay/acp-agent-relay/codex-cli-exec-connection.mjs",
+  import.meta.url
+), "utf8");
+assert.match(agentCliExecConnectionText, /createBoundedCapture/, "agent-cli-exec must bound captured stdout and stderr");
+assert.doesNotMatch(agentCliExecConnectionText, /stdoutChunks|stderrChunks/, "agent-cli-exec must not use unbounded output chunk arrays");
+assert.match(codexCliExecConnectionText, /createBoundedCapture/, "codex-cli-exec must bound captured stdout and stderr");
+assert.match(codexCliExecConnectionText, /MAX_CLI_CAPTURE_BYTES/, "codex-cli-exec must bound last-message file reads");
+assert.doesNotMatch(codexCliExecConnectionText, /stdoutChunks|stderrChunks/, "codex-cli-exec must not use unbounded output chunk arrays");
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-real");
 assert.equal(
   packageManifest.scripts?.["server:verify:acp-agent-relay-mcp-scope"],
   "node server/scripts/verify-acp-agent-relay-mcp-scope.mjs",
@@ -433,36 +458,12 @@ assert.equal(
   "node server/scripts/verify-acp-agent-relay-tool-management.mjs",
   "ACP relay Tool Management source grant verifier must stay available as a package script."
 );
-assert.equal(
-  packageManifest.scripts?.["server:verify:acp-agent-relay-real:connect"],
-  "node server/scripts/verify-acp-agent-relay-real.mjs --connect",
-  "ACP relay Connect real gate must stay available as a hard-fail package script."
-);
-assert.equal(
-  packageManifest.scripts?.["server:verify:acp-agent-relay-real:codex-cli"],
-  "node server/scripts/verify-acp-agent-relay-real.mjs --codex-cli",
-  "ACP relay top-level real gate must expose a Codex CLI participation variant."
-);
-assert.equal(
-  packageManifest.scripts?.["server:verify:acp-agent-relay-real:connect:codex-cli"],
-  "node server/scripts/verify-acp-agent-relay-real.mjs --connect --codex-cli",
-  "ACP relay top-level Connect real gate must expose a Codex CLI participation variant."
-);
-assert.equal(
-  packageManifest.scripts?.["server:verify:acp-agent-relay-codex-cli-antigravity"],
-  "node server/scripts/verify-acp-agent-relay-codex-cli-antigravity.mjs",
-  "ACP relay Codex CLI participation gate must stay available as a package script."
-);
-assert.equal(
-  packageManifest.scripts?.["server:verify:acp-agent-relay-codex-cli-antigravity:connect"],
-  "node server/scripts/verify-acp-agent-relay-codex-cli-antigravity.mjs --connect",
-  "ACP relay Codex CLI participation Connect gate must stay available as a package script."
-);
-assert.equal(
-  packageManifest.scripts?.["server:verify:acp-agent-relay-codex-cli-target"],
-  "node server/scripts/verify-acp-agent-relay-codex-cli-target.mjs",
-  "ACP relay Codex CLI target gate must stay available as a package script."
-);
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-real:connect");
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-real:codex-cli");
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-real:connect:codex-cli");
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-codex-cli-antigravity");
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-codex-cli-antigravity:connect");
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-codex-cli-target");
 assert.equal(
   packageManifest.scripts?.["server:verify:acp-agent-relay-state-machine"],
   "node server/scripts/verify-acp-agent-relay-state-machine.mjs",
@@ -528,15 +529,10 @@ assert.match(
   /acp-agent-relay-real:[\s\S]*runs-on:\s*\[self-hosted,\s*macOS,\s*antigravity\]/,
   "Real ACP relay CI gate must use a self-hosted macOS Antigravity runner."
 );
-assert.match(
-  ciWorkflowText,
-  /acp-agent-relay-real:[\s\S]*npm run server:verify:acp-agent-relay-real:connect[\s\S]*npm run server:verify:acp-agent-relay-real/,
-  "Real ACP relay CI gate must call the required real verifier scripts."
-);
-assert.match(
-  ciWorkflowText,
-  /acp-agent-relay-real:[\s\S]*npm run server:verify:acp-agent-relay-real:connect:codex-cli[\s\S]*npm run server:verify:acp-agent-relay-real:codex-cli/,
-  "Real ACP relay CI gate must call the top-level Codex CLI real gate so Codex participation and downstream target communication are verified together."
+assert.equal(
+  Object.prototype.hasOwnProperty.call(packageManifest.scripts || {}, "server:verify:acp-agent-relay-real"),
+  false,
+  "Real ACP relay proof must not be exposed as a package script while any source-facing stdio proof path remains in the dev verifier."
 );
 assert.match(
   codexAntigravityVerifierText,
@@ -547,11 +543,6 @@ assert.match(
   codexAntigravityVerifierText,
   /directCodexCliAcpSourceVerified[\s\S]*false/,
   "Codex/Antigravity verifier must not claim direct Codex CLI ACP source proof while using the Pact stdio harness."
-);
-assert.match(
-  codexAntigravityVerifierText,
-  /codex-orchestrated-source-acp-stdio-process-restart/,
-  "Codex/Antigravity verifier proof string must describe the actual Codex-orchestrated Pact source stdio harness."
 );
 assert.match(
   codexCliAntigravityVerifierText,
@@ -705,11 +696,6 @@ assert.match(
 );
 assert.match(
   codexCliTargetVerifierText,
-  /acp-agent-relay-source-stdio\.mjs/,
-  "Codex CLI target verifier must route source-facing ACP stdio through Pact relay into the codex-cli-exec target adapter."
-);
-assert.match(
-  codexCliTargetVerifierText,
   /codex\.cli-exec-real[\s\S]*codex-cli-exec/,
   "Codex CLI target verifier must bind a real Codex CLI exec virtual agent and target adapter."
 );
@@ -734,14 +720,9 @@ assert.match(
   "Codex CLI target verifier must expose operational and restart session-load proof fields."
 );
 assert.match(
-  codexCliTargetVerifierText,
-  /session\/load after source stdio restart must not replay reasoning_trace[\s\S]*reasoningTraceReplaySuppressed/,
-  "Codex CLI target verifier must prove session/load does not replay reasoning_trace when requestReasoning=false."
-);
-assert.match(
   codexAcpTargetVerifierText,
   /@zed-industries\/codex-acp[\s\S]*protocolStyle: "agent-client-protocol-v1"[\s\S]*nativeAcpTargetVerified: true/,
-  "Codex ACP target verifier must route source-facing ACP through Pact into the real codex-acp stdio adapter."
+  "Historical Codex ACP target verifier must identify the real codex-acp stdio target adapter."
 );
 assert.match(
   codexAcpTargetVerifierText,
@@ -758,33 +739,12 @@ assert.match(
   /sourceAcpOperationalMethodsVerified[\s\S]*sourceAcpSessionLoadAfterRestartVerified[\s\S]*operationalDiscoveryProof[\s\S]*restartSessionLoadProof/,
   "Codex ACP target verifier must expose operational and restart session-load proof fields."
 );
-assert.match(
-  codexAcpTargetVerifierText,
-  /session\/load after source stdio restart must not replay reasoning_trace[\s\S]*reasoningTraceReplaySuppressed/,
-  "Codex ACP target verifier must prove session/load does not replay reasoning_trace when requestReasoning=false."
-);
 assert.match(codexAcpTargetVerifierText, /final_response/);
 assert.match(codexAcpTargetVerifierText, /pact-relay-to-real-codex-acp-stdio-target/);
-assert.equal(
-  packageManifest.scripts["server:verify:acp-agent-relay-codex-acp-target"],
-  "node server/scripts/verify-acp-agent-relay-codex-acp-target.mjs",
-  "ACP relay package scripts must expose the Codex ACP target verifier."
-);
-assert.equal(
-  packageManifest.scripts["server:verify:acp-agent-relay-downstream-codex-acp-target"],
-  "node server/scripts/verify-acp-agent-relay-downstream-codex-acp-target.mjs",
-  "ACP relay package scripts must expose the downstream-client-aspect Codex ACP target verifier."
-);
-assert.equal(
-  packageManifest.scripts["server:verify:acp-agent-relay-antigravity-acp-wrapper-target"],
-  "node server/scripts/verify-acp-agent-relay-antigravity-acp-wrapper-target.mjs",
-  "ACP relay package scripts must expose the Antigravity Agent API ACP wrapper target verifier."
-);
-assert.equal(
-  packageManifest.scripts["server:verify:acp-agent-relay-downstream-antigravity-acp-wrapper-target"],
-  "node server/scripts/verify-acp-agent-relay-antigravity-acp-wrapper-target.mjs --downstream-client-aspect",
-  "ACP relay package scripts must expose the downstream-client-aspect Antigravity ACP wrapper verifier."
-);
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-codex-acp-target");
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-downstream-codex-acp-target");
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-antigravity-acp-wrapper-target");
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-downstream-antigravity-acp-wrapper-target");
 assert.match(
   downstreamCodexAcpTargetVerifierText,
   /downstreamClientFrameworkOverrides/,
@@ -858,31 +818,10 @@ assert.match(
   /targetAdapterProvider[\s\S]*targetResponse\?\.targetResponse\?\.provider/,
   "ACP relay target evidence must expose the wrapper adapter provider without leaking the full target response object."
 );
-assert.equal(
-  packageManifest.scripts["server:verify:acp-agent-relay-target-callback-approval"],
-  "node server/scripts/verify-acp-agent-relay-target-callback-approval.mjs",
-  "ACP relay package scripts must expose the target callback approval verifier."
-);
-assert.equal(
-  packageManifest.scripts["server:verify:acp-agent-relay-target-reconnect"],
-  "node server/scripts/verify-acp-agent-relay-target-reconnect.mjs",
-  "ACP relay package scripts must expose the target reconnect verifier."
-);
-assert.equal(
-  packageManifest.scripts["server:verify:acp-agent-relay-target-load-reconnect"],
-  "node server/scripts/verify-acp-agent-relay-target-load-reconnect.mjs",
-  "ACP relay package scripts must expose the target load-only reconnect verifier."
-);
-assert.equal(
-  packageManifest.scripts["server:verify:acp-agent-relay-idempotency"],
-  "node server/scripts/verify-acp-agent-relay-idempotency.mjs",
-  "ACP relay package scripts must expose the source-facing idempotency verifier."
-);
-assert.match(
-  targetCallbackApprovalVerifierText,
-  /acp-agent-relay-source-stdio\.mjs[\s\S]*fs\/write_text_file[\s\S]*approval_pending/,
-  "Target callback approval verifier must use source-facing ACP stdio and trigger a target-originated write approval callback."
-);
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-target-callback-approval");
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-target-reconnect");
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-target-load-reconnect");
+assertForbiddenSourceStdioPackageScript("server:verify:acp-agent-relay-idempotency");
 assert.match(
   targetCallbackApprovalVerifierText,
   /sessionLoad[\s\S]*sessionResume[\s\S]*pactTurnObserve[\s\S]*sessionRequestPermission/,
@@ -936,18 +875,8 @@ assert.match(
 );
 assert.match(
   idempotencyVerifierText,
-  /acp-agent-relay-source-stdio\.mjs[\s\S]*sessionPrompt[\s\S]*idempotencyKey[\s\S]*sessionLoad[\s\S]*idempotencyReplay/,
-  "Idempotency verifier must use source-facing ACP stdio, restart-load the session, and prove duplicate idempotency replay."
-);
-assert.match(
-  idempotencyVerifierText,
   /idempotency_key_conflict[\s\S]*targetNotReawakenedForReplay[\s\S]*targetNotReawakenedForConflict/,
   "Idempotency verifier must prove same-key conflicts fail without re-waking the target."
-);
-assert.match(
-  sourceStdioServerText,
-  /PACT_ACP_SOURCE_STDIO_SENSITIVE_PAYLOAD_STORE_PATH[\s\S]*sensitivePayloadStorePathFromEnv[\s\S]*durableSensitivePayloadStore/,
-  "Source-facing ACP stdio must persist guarded approval payloads in a sensitive sidecar store when a durable relay store is used."
 );
 assert.match(
   relayOperationExecutorText,
@@ -1603,6 +1532,7 @@ assert.match(
 const acpRelayManifestOperations = new Set(acpRelayModuleManifest.components?.acpAgentRelay?.operations || []);
 const operationRegistryIds = new Set(SERVER_API_OPERATIONS.map((operation) => operation.id));
 const publicAcpRelayToolOperationIds = [
+  "acp_agent_relay.templates.list",
   "acp_agent_relay.virtual_agents.list",
   "acp_agent_relay.virtual_agents.upsert",
   "acp_agent_relay.targets.list",
@@ -1622,6 +1552,16 @@ const publicAcpRelayToolOperationIds = [
   "acp_agent_relay.session.cancel",
   "acp_agent_relay.session.close"
 ];
+const readOnlyAcpRelayToolOperationIds = new Set([
+  "acp_agent_relay.templates.list",
+  "acp_agent_relay.virtual_agents.list",
+  "acp_agent_relay.targets.list",
+  "acp_agent_relay.sessions.list",
+  "acp_agent_relay.sessions.get",
+  "acp_agent_relay.turns.list",
+  "acp_agent_relay.turn.observe",
+  "acp_agent_relay.fs.read_text_file"
+]);
 const internalAcpRelayOperationIds = ["acp_agent_relay.permission.resolve"];
 for (const operationId of [...publicAcpRelayToolOperationIds, ...internalAcpRelayOperationIds]) {
   assert.equal(operationRegistryIds.has(operationId), true, `${operationId} must be registered in SERVER_API_OPERATIONS`);
@@ -1701,7 +1641,7 @@ for await (const line of lines) {
   if (!line.trim()) continue;
   const message = JSON.parse(line);
   if (message.method === "initialize") {
-    send({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: "target.acp.verifier.v1", capabilities: { session: ["new", "resume"], updates: ["progress"] } } });
+    send({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: "v0.0.1:strategy:target-acp-verifier-1", capabilities: { session: ["new", "resume"], updates: ["progress"] } } });
   } else if (message.method === "session/new" || message.method === "session/resume") {
     send({ jsonrpc: "2.0", id: message.id, result: { targetSessionId: "verify-stdio-target-session", targetResumeRef: "verify-stdio-target-resume" } });
   } else if (message.method === "session/prompt") {
@@ -1731,7 +1671,7 @@ const stdioTargetConnection = runtimeModule.createAcpTargetConnection({
 });
 const stdioInitialize = await stdioTargetConnection.initialize({ relaySessionId: "verify-stdio-relay-session" });
 assert.equal(stdioInitialize.ok, true);
-assert.equal(stdioInitialize.protocolVersion, "target.acp.verifier.v1");
+assert.equal(stdioInitialize.protocolVersion, "v0.0.1:strategy:target-acp-verifier-1");
 assert.equal(stdioInitialize.targetSessionId, "verify-stdio-target-session");
 const stdioPrompt = await stdioTargetConnection.sendPrompt({
   relaySessionId: "verify-stdio-relay-session",
@@ -1771,293 +1711,6 @@ await assert.rejects(
 assert.equal(missingStdioTargetConnection.initialized, false);
 assert.equal(missingStdioTargetConnection.closed, true);
 
-const sourceToTargetScript = path.join(tempRoot, "verify-source-to-target-acp-stdio.mjs");
-const sourceToTargetExitMarker = path.join(tempRoot, "verify-source-to-target-exited.txt");
-const sourceToTargetStorePath = path.join(tempRoot, "verify-source-to-target-store.json");
-await fs.writeFile(
-  sourceToTargetScript,
-  `
-import fs from "node:fs";
-import readline from "node:readline";
-
-const lines = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
-const exitMarker = process.env.PACT_TARGET_EXIT_MARKER || "";
-
-process.on("SIGTERM", () => {
-  if (exitMarker) {
-    fs.writeFileSync(exitMarker, "sigterm", "utf8");
-  }
-  process.exit(0);
-});
-
-function send(payload) {
-  process.stdout.write(JSON.stringify(payload) + "\\n");
-}
-
-for await (const line of lines) {
-  if (!line.trim()) continue;
-  const message = JSON.parse(line);
-  if (message.method === "initialize") {
-    send({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: "target.acp.full-e2e.v1", capabilities: { session: ["new", "resume"], updates: ["progress"] } } });
-  } else if (message.method === "session/new" || message.method === "session/resume") {
-    send({ jsonrpc: "2.0", id: message.id, result: { targetSessionId: "source-to-target-stdio-session", targetResumeRef: "source-to-target-stdio-resume" } });
-  } else if (message.method === "session/prompt") {
-    send({ jsonrpc: "2.0", method: "session/update", params: { type: "progress", phase: "working", text: "target stdio e2e working" } });
-    send({ jsonrpc: "2.0", id: message.id, result: { stopReason: "completed", output: "source stdio reached target stdio final response" } });
-  } else {
-    send({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "unsupported" } });
-  }
-}
-`,
-  "utf8"
-);
-const sourceToTargetVirtualAgentId = "verify.source-to-target-stdio-agent";
-const sourceToTargetTargetId = "verify.source-to-target-stdio-target";
-const sourceToTargetRuntimeOptions = {
-  defaultVirtualAgentId: sourceToTargetVirtualAgentId,
-  defaultSourceId: "verify-source-stdio",
-  defaultWorkspaceId: workspaceId,
-  virtualAgents: {
-    [sourceToTargetVirtualAgentId]: {
-      virtualAgentId: sourceToTargetVirtualAgentId,
-      targetId: sourceToTargetTargetId,
-      profileId: "pact.acp.verify.source_to_target_stdio",
-      displayName: "Verify Source To Target ACP Stdio",
-      advertisedModes: ["ask"],
-      defaultMode: "ask",
-      advertisedTools: ["target.acp.prompt"],
-      reasoningVisibilityPolicy: "never",
-      capabilityPolicy: {
-        writes: "deny",
-        terminal: "deny",
-        maxRisk: "read_only"
-      },
-      revision: 1
-    }
-  },
-  targets: {
-    [sourceToTargetTargetId]: {
-      targetId: sourceToTargetTargetId,
-      label: "Verify Target ACP Stdio",
-      transport: {
-        type: "stdio",
-        command: {
-          executable: process.execPath,
-          args: [sourceToTargetScript],
-          env: {
-            PACT_TARGET_EXIT_MARKER: sourceToTargetExitMarker
-          }
-        },
-        timeoutMs: 1000
-      },
-      externalServiceId: "external.verify.target-stdio",
-      enabled: true,
-      revision: 1,
-      capabilityPolicy: {
-        writes: "deny",
-        terminal: "deny",
-        maxRisk: "read_only"
-      },
-      advertisedToolsets: ["target.acp.prompt"]
-    }
-  },
-  workspaceRoot
-};
-const sourceToTargetChild = spawn(process.execPath, ["server/scripts/acp-agent-relay-source-stdio.mjs"], {
-  cwd: process.cwd(),
-  stdio: ["pipe", "pipe", "pipe"],
-  env: {
-    ...process.env,
-    PACT_ACP_SOURCE_STDIO_RUNTIME_JSON: JSON.stringify(sourceToTargetRuntimeOptions),
-    PACT_ACP_SOURCE_STDIO_CONTEXT_JSON: JSON.stringify({
-      sourceId: "verify-source-stdio",
-      workspaceId
-    }),
-    PACT_ACP_SOURCE_STDIO_STORE_PATH: sourceToTargetStorePath
-  }
-});
-const sourceToTargetStdout = createOutputLineReader(sourceToTargetChild.stdout);
-const sourceToTargetStderr = createOutputLineReader(sourceToTargetChild.stderr);
-const sendSourceToTarget = (message) => {
-  sourceToTargetChild.stdin.write(`${JSON.stringify(message)}\n`, "utf8");
-};
-let sourceToTargetRelaySessionId = "";
-let sourceToTargetTargetSessionId = "";
-let sourceToTargetTargetResumeRef = "";
-const waitForSourceToTargetExitMarker = async () => {
-  for (let index = 0; index < 40; index += 1) {
-    const marker = await fs.readFile(sourceToTargetExitMarker, "utf8").catch(() => "");
-    if (marker) {
-      return marker;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  throw new Error("Timed out waiting for source-to-target stdio child exit marker.");
-};
-try {
-  const ready = JSON.parse(await sourceToTargetStderr.receiveLine());
-  assert.equal(ready.event, "pact.acp.source_stdio.ready");
-  assert.equal(ready.durableStore, true);
-  sendSourceToTarget(createRequest(ACP_METHODS.initialize, { virtualAgentId: sourceToTargetVirtualAgentId }, "verify-source-target-init"));
-  const sourceInitialize = parseJsonRpcMessage(await sourceToTargetStdout.receiveLine());
-  assert.equal(sourceInitialize.id, "verify-source-target-init");
-  assert.equal(sourceInitialize.result.virtualAgentId, sourceToTargetVirtualAgentId);
-
-  sendSourceToTarget(createRequest(
-    ACP_METHODS.sessionNew,
-    {
-      virtualAgentId: sourceToTargetVirtualAgentId,
-      sourceId: "verify-source-stdio",
-      sourceSessionId: "verify-source-to-target-stdio-session",
-      workspaceId
-    },
-    "verify-source-target-session-new"
-  ));
-  const sourceSessionNew = parseJsonRpcMessage(await sourceToTargetStdout.receiveLine());
-  assert.equal(sourceSessionNew.id, "verify-source-target-session-new");
-  assert.match(sourceSessionNew.result.sessionId, /^relay_session_/);
-  sourceToTargetRelaySessionId = sourceSessionNew.result.sessionId;
-
-  sendSourceToTarget(createRequest(
-    ACP_METHODS.sessionPrompt,
-    {
-      sessionId: sourceSessionNew.result.sessionId,
-      prompt: "verify source stdio to target stdio"
-    },
-    "verify-source-target-prompt"
-  ));
-  const sourceTargetNotifications = [];
-  let sourceTargetPrompt = null;
-  for (let index = 0; index < 20; index += 1) {
-    const parsed = parseJsonRpcMessage(await sourceToTargetStdout.receiveLine());
-    if (parsed.method === ACP_METHODS.sessionUpdate) {
-      sourceTargetNotifications.push(parsed);
-      continue;
-    }
-    sourceTargetPrompt = parsed;
-    break;
-  }
-  assert.ok(sourceTargetPrompt, "source stdio prompt must receive a JSON-RPC response");
-  assert.equal(sourceTargetPrompt.id, "verify-source-target-prompt");
-  assert.equal(sourceTargetPrompt.result.stopReason, "completed");
-  assert.equal(sourceTargetPrompt.result.output, "source stdio reached target stdio final response");
-  assert.equal(sourceTargetPrompt.result.targetEvidence.externalServiceId, "external.verify.target-stdio");
-  assert.equal(sourceTargetPrompt.result.targetEvidence.targetSessionId, "source-to-target-stdio-session");
-  assert.equal(sourceTargetPrompt.result.targetEvidence.targetResumeRef, "source-to-target-stdio-resume");
-  sourceToTargetTargetSessionId = sourceTargetPrompt.result.targetEvidence.targetSessionId;
-  sourceToTargetTargetResumeRef = sourceTargetPrompt.result.targetEvidence.targetResumeRef;
-  assert.equal(sourceTargetPrompt.result.targetEvidence.finalResponseAvailable, true);
-  assert.equal(sourceTargetNotifications.some((notification) => notification.params?.phase === "working"), true);
-  assert.equal(sourceTargetNotifications.some((notification) => notification.params?.type === "completion"), true);
-
-  sendSourceToTarget(createRequest(
-    ACP_METHODS.sessionClose,
-    {
-      sessionId: sourceSessionNew.result.sessionId,
-      sourceId: "verify-source-stdio",
-      workspaceId
-    },
-    "verify-source-target-close"
-  ));
-  const sourceTargetClose = parseJsonRpcMessage(await sourceToTargetStdout.receiveLine());
-  assert.equal(sourceTargetClose.id, "verify-source-target-close");
-  assert.equal(sourceTargetClose.result.lifecycleState, "closed");
-  assert.equal(sourceTargetClose.result.close.ok, true);
-  assert.match(await waitForSourceToTargetExitMarker(), /sigterm/);
-
-  sendSourceToTarget(createRequest(
-    ACP_METHODS.sessionPrompt,
-    {
-      sessionId: sourceSessionNew.result.sessionId,
-      prompt: "should fail after source stdio close"
-    },
-    "verify-source-target-prompt-after-close"
-  ));
-  const sourceTargetAfterClose = parseJsonRpcMessage(await sourceToTargetStdout.receiveLine());
-  assert.equal(sourceTargetAfterClose.id, "verify-source-target-prompt-after-close");
-  assert.equal(sourceTargetAfterClose.error.data.code, "relay_session_closed");
-} finally {
-  const exit = await stopChildProcess(sourceToTargetChild);
-  assert.equal(exit.code === 0 || exit.code === null, true);
-}
-
-const restartedSourceToTargetChild = spawn(process.execPath, ["server/scripts/acp-agent-relay-source-stdio.mjs"], {
-  cwd: process.cwd(),
-  stdio: ["pipe", "pipe", "pipe"],
-  env: {
-    ...process.env,
-    PACT_ACP_SOURCE_STDIO_RUNTIME_JSON: JSON.stringify(sourceToTargetRuntimeOptions),
-    PACT_ACP_SOURCE_STDIO_CONTEXT_JSON: JSON.stringify({
-      sourceId: "verify-source-stdio",
-      workspaceId
-    }),
-    PACT_ACP_SOURCE_STDIO_STORE_PATH: sourceToTargetStorePath
-  }
-});
-const restartedSourceToTargetStdout = createOutputLineReader(restartedSourceToTargetChild.stdout);
-const restartedSourceToTargetStderr = createOutputLineReader(restartedSourceToTargetChild.stderr);
-const sendRestartedSourceToTarget = (message) => {
-  restartedSourceToTargetChild.stdin.write(`${JSON.stringify(message)}\n`, "utf8");
-};
-try {
-  const ready = JSON.parse(await restartedSourceToTargetStderr.receiveLine());
-  assert.equal(ready.event, "pact.acp.source_stdio.ready");
-  assert.equal(ready.durableStore, true);
-
-  sendRestartedSourceToTarget(createRequest(
-    ACP_METHODS.sessionLoad,
-    {
-      virtualAgentId: sourceToTargetVirtualAgentId,
-      sourceId: "verify-source-stdio",
-      sourceSessionId: "verify-source-to-target-stdio-session",
-      workspaceId
-    },
-    "verify-source-target-closed-load-after-restart"
-  ));
-  const sourceTargetClosedLoad = await receiveJsonRpcResponseUntilId(
-    restartedSourceToTargetStdout,
-    "verify-source-target-closed-load-after-restart"
-  );
-  assert.equal(sourceTargetClosedLoad.id, "verify-source-target-closed-load-after-restart");
-  assert.equal(sourceTargetClosedLoad.result.sessionId, sourceToTargetRelaySessionId);
-  assert.equal(sourceTargetClosedLoad.result.lifecycleState, "closed");
-  assert.equal(sourceTargetClosedLoad.result.targetSessionId, sourceToTargetTargetSessionId);
-  assert.equal(sourceTargetClosedLoad.result.targetResumeRef, sourceToTargetTargetResumeRef);
-  assert.equal(sourceTargetClosedLoad.result.replayedUpdateCount, sourceTargetClosedLoad.notifications.length);
-  assert.equal(sourceTargetClosedLoad.notifications.length > 0, true);
-  assert.equal(sourceTargetClosedLoad.notifications.some((notification) => notification.params?.phase === "working"), true);
-  assert.equal(sourceTargetClosedLoad.notifications.some((notification) => notification.params?.type === "completion"), true);
-
-  sendRestartedSourceToTarget(createRequest(
-    ACP_METHODS.sessionResume,
-    {
-      virtualAgentId: sourceToTargetVirtualAgentId,
-      sourceId: "verify-source-stdio",
-      sourceSessionId: "verify-source-to-target-stdio-session",
-      workspaceId
-    },
-    "verify-source-target-closed-resume-after-restart"
-  ));
-  const sourceTargetClosedResume = parseJsonRpcMessage(await restartedSourceToTargetStdout.receiveLine());
-  assert.equal(sourceTargetClosedResume.id, "verify-source-target-closed-resume-after-restart");
-  assert.equal(sourceTargetClosedResume.error?.data?.code, "relay_session_closed");
-
-  sendRestartedSourceToTarget(createRequest(
-    ACP_METHODS.sessionPrompt,
-    {
-      sessionId: sourceToTargetRelaySessionId,
-      prompt: "should fail after source stdio restart of closed session"
-    },
-    "verify-source-target-closed-prompt-after-restart"
-  ));
-  const sourceTargetClosedPrompt = parseJsonRpcMessage(await restartedSourceToTargetStdout.receiveLine());
-  assert.equal(sourceTargetClosedPrompt.id, "verify-source-target-closed-prompt-after-restart");
-  assert.equal(sourceTargetClosedPrompt.error?.data?.code, "relay_session_closed");
-} finally {
-  const exit = await stopChildProcess(restartedSourceToTargetChild);
-  assert.equal(exit.code === 0 || exit.code === null, true);
-}
-
 const initializeInputs = [];
 const connectionFactoryInputs = [];
 const connectionBySession = new Map();
@@ -2071,7 +1724,7 @@ const virtualAgentRegistry = new runtimeModule.AcpVirtualAgentRegistry({
     displayName: "Shared Read-only Relay",
     advertisedModes: ["ask"],
     defaultMode: "ask",
-    advertisedTools: ["pact.knowledge.search", "fs.readTextFile"],
+    advertisedTools: ["pact.agentLibrary.search", "fs.readTextFile"],
     reasoningVisibilityPolicy: "requestable",
     capabilityPolicy: {
       writes: "deny",
@@ -2094,7 +1747,7 @@ const virtualAgentRegistry = new runtimeModule.AcpVirtualAgentRegistry({
     displayName: "Shared Writable Relay",
     advertisedModes: ["ask", "agent", "edit"],
     defaultMode: "agent",
-    advertisedTools: ["pact.knowledge.search", "fs.readTextFile", "fs.writeTextFile"],
+    advertisedTools: ["pact.agentLibrary.search", "fs.readTextFile", "fs.writeTextFile"],
     reasoningVisibilityPolicy: "requestable",
     capabilityPolicy: {
       writes: "approval_required",
@@ -2128,7 +1781,7 @@ const targetRegistry = new runtimeModule.AcpTargetRegistry({
     advertisedToolsets: [
       "fs.readTextFile",
       "fs.writeTextFile",
-      "pact.knowledge.search"
+      "pact.agentLibrary.search"
     ]
   }
 });
@@ -2280,7 +1933,7 @@ assert.equal(routeRead.route.target.targetId, targetId);
 assert.equal(routeWrite.route.target.targetId, targetId);
 assert.notEqual(routeRead.route.decision.writesPolicy.writes, routeWrite.route.decision.writesPolicy.writes);
 assert.deepEqual(routeWrite.route.decision.advertisedTools, [
-  "pact.knowledge.search",
+  "pact.agentLibrary.search",
   "fs.readTextFile",
   "fs.writeTextFile"
 ]);
@@ -2830,7 +2483,10 @@ const toolCatalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
 for (const operationId of publicAcpRelayToolOperationIds) {
   const tool = toolCatalog.tools.find((candidate) => candidate.operationId === operationId);
   assert.equal(Boolean(tool), true, `${operationId} must be exposed through the Pact agent relay toolset`);
-  assert.equal(tool.toolsets.includes("pact.agent.relay"), true, `${operationId} must stay under pact.agent.relay`);
+  const expectedToolset = readOnlyAcpRelayToolOperationIds.has(operationId)
+    ? "pact.agent.relay.read"
+    : "pact.agent.relay";
+  assert.equal(tool.toolsets.includes(expectedToolset), true, `${operationId} must stay under ${expectedToolset}`);
   assert.equal(
     KERNEL_TOOL_IDS.includes(tool.id),
     true,
@@ -2995,7 +2651,7 @@ httpPlatform = createToolManagementPlatform({
         createdAt: nowIso(),
         effectivePolicySnapshot: {
           policyRevision: {
-            protocolVersion: "pact.verifier.authorization.v1",
+            protocolVersion: "v0.0.1:test:authorization-verifier-1",
             revision: 1,
             updatedAt: nowIso()
           }
@@ -3004,7 +2660,7 @@ httpPlatform = createToolManagementPlatform({
     },
     getGovernancePolicyRevision() {
       return {
-        protocolVersion: "pact.verifier.authorization.v1",
+        protocolVersion: "v0.0.1:test:authorization-verifier-1",
         revision: 1,
         updatedAt: nowIso()
       };
@@ -3058,7 +2714,7 @@ assert.equal(httpCreate.payload.result.ok, true);
 const httpRelaySessionId = httpCreate.payload.result.data.session.relaySessionId;
 assert.ok(httpRelaySessionId);
 
-const httpPrompt = await callAgentRelayHttp({
+const httpPromptPending = await callAgentRelayHttp({
   platform: httpPlatform,
   token: httpToken,
   method: "POST",
@@ -3071,8 +2727,23 @@ const httpPrompt = await callAgentRelayHttp({
     requestReasoning: true
   }
 });
+assert.equal(httpPromptPending.status, 202);
+assert.equal(httpPromptPending.payload.status, "pending_approval");
+assert.equal(httpPromptPending.payload.pendingOperation.status, "pending");
+assert.equal(httpPromptPending.payload.pendingOperation.operationId, "acp_agent_relay.prompt.send");
+assert.equal(httpPromptPending.payload.pendingOperation.toolId, "pact.agentRelay.prompt");
+assert.equal(httpPromptPending.payload.pendingOperation.reasonCode, "tool_approval_required");
+assert.equal(Object.hasOwn(httpPromptPending.payload.pendingOperation, "originalInput"), false);
+
+const httpPrompt = await approveHttpPendingOperation({
+  platform: httpPlatform,
+  token: httpToken,
+  pendingOperationId: httpPromptPending.payload.pendingOperation.pendingOperationId
+});
 assert.equal(httpPrompt.status, 200);
 assert.equal(httpPrompt.payload.status, "ok");
+assert.equal(httpPrompt.payload.pendingOperation.status, "completed");
+assert.ok(httpPrompt.payload.pendingOperation.resumedToolExecutionId);
 assert.equal(httpPrompt.payload.result.ok, true);
 assertPromptAuditEvidence(httpPrompt.payload.result);
 assert.equal(httpPrompt.payload.result.data.outputSummary.includes("http delegated prompt"), true);
@@ -3096,7 +2767,18 @@ assert.equal(
 );
 assert.equal(JSON.stringify(httpTargets.payload.result.data.targets).includes("csrf"), false);
 assert.equal(JSON.stringify(httpTargets.payload.result.data.targets).includes("binaryPath"), false);
-assert.equal(JSON.stringify(httpTargets.payload.result.data.targets).includes("command"), false);
+assert.equal(
+  httpTargets.payload.result.data.targets.some((target) =>
+    target.command ||
+    target.commandPath ||
+    target.binaryPath ||
+    target.transport?.command ||
+    target.metadata?.command ||
+    target.metadata?.argv ||
+    target.metadata?.env
+  ),
+  false
+);
 
 const httpSessions = await callAgentRelayHttp({
   platform: httpPlatform,
@@ -3225,11 +2907,24 @@ const httpPendingBeforeClose = await callAgentRelayHttp({
     fileWrites: [{ path: "notes/http-verifier-pending-close.txt", content: "must not be written after close" }]
   }
 });
-assert.equal(httpPendingBeforeClose.status, 200);
-assert.equal(httpPendingBeforeClose.payload.status, "ok");
-assert.equal(httpPendingBeforeClose.payload.result.ok, true);
-assert.equal(httpPendingBeforeClose.payload.result.data.stopReason, "approval_pending");
-const httpPendingBeforeCloseRequest = httpPendingBeforeClose.payload.result.data.pendingPermissionRequests[0];
+assert.equal(httpPendingBeforeClose.status, 202);
+assert.equal(httpPendingBeforeClose.payload.status, "pending_approval");
+assert.equal(httpPendingBeforeClose.payload.pendingOperation.status, "pending");
+assert.equal(httpPendingBeforeClose.payload.pendingOperation.operationId, "acp_agent_relay.prompt.send");
+assert.equal(Object.hasOwn(httpPendingBeforeClose.payload.pendingOperation, "originalInput"), false);
+
+const httpPendingBeforeCloseApproved = await approveHttpPendingOperation({
+  platform: httpPlatform,
+  token: httpToken,
+  pendingOperationId: httpPendingBeforeClose.payload.pendingOperation.pendingOperationId
+});
+assert.equal(httpPendingBeforeCloseApproved.status, 200);
+assert.equal(httpPendingBeforeCloseApproved.payload.status, "ok");
+assert.equal(httpPendingBeforeCloseApproved.payload.pendingOperation.status, "completed");
+assert.ok(httpPendingBeforeCloseApproved.payload.pendingOperation.resumedToolExecutionId);
+assert.equal(httpPendingBeforeCloseApproved.payload.result.ok, true);
+assert.equal(httpPendingBeforeCloseApproved.payload.result.data.stopReason, "approval_pending");
+const httpPendingBeforeCloseRequest = httpPendingBeforeCloseApproved.payload.result.data.pendingPermissionRequests[0];
 assert.equal(httpPendingBeforeCloseRequest.status, "pending");
 await assert.rejects(
   fs.readFile(path.join(workspaceRoot, "notes", "http-verifier-pending-close.txt"), "utf8"),
@@ -3261,11 +2956,23 @@ const httpPromptAfterClose = await callAgentRelayHttp({
     prompt: "must fail after HTTP close"
   }
 });
-assert.equal(httpPromptAfterClose.status, 400);
-assert.equal(httpPromptAfterClose.payload.status, "failed");
-assert.equal(httpPromptAfterClose.payload.result.ok, false);
-assert.equal(httpPromptAfterClose.payload.result.error.code, "relay_session_closed");
-assert.equal(httpPromptAfterClose.payload.result.error.details.lifecycleState, "closed");
+assert.equal(httpPromptAfterClose.status, 202);
+assert.equal(httpPromptAfterClose.payload.status, "pending_approval");
+assert.equal(httpPromptAfterClose.payload.pendingOperation.status, "pending");
+assert.equal(httpPromptAfterClose.payload.pendingOperation.operationId, "acp_agent_relay.prompt.send");
+assert.equal(Object.hasOwn(httpPromptAfterClose.payload.pendingOperation, "originalInput"), false);
+
+const httpPromptAfterCloseApproved = await approveHttpPendingOperation({
+  platform: httpPlatform,
+  token: httpToken,
+  pendingOperationId: httpPromptAfterClose.payload.pendingOperation.pendingOperationId
+});
+assert.equal(httpPromptAfterCloseApproved.status, 400);
+assert.equal(httpPromptAfterCloseApproved.payload.status, "failed");
+assert.equal(httpPromptAfterCloseApproved.payload.pendingOperation.status, "failed");
+assert.equal(httpPromptAfterCloseApproved.payload.result.ok, false);
+assert.equal(httpPromptAfterCloseApproved.payload.result.error.code, "relay_session_closed");
+assert.equal(httpPromptAfterCloseApproved.payload.result.error.details.lifecycleState, "closed");
 
 const httpReadAfterClose = await callAgentRelayHttp({
   platform: httpPlatform,
@@ -3300,11 +3007,23 @@ const httpWriteAfterClose = await callAgentRelayHttp({
     content: "must not be written after close"
   }
 });
-assert.equal(httpWriteAfterClose.status, 400);
-assert.equal(httpWriteAfterClose.payload.status, "failed");
-assert.equal(httpWriteAfterClose.payload.result.ok, false);
-assert.equal(httpWriteAfterClose.payload.result.error.code, "relay_session_closed");
-assert.equal(httpWriteAfterClose.payload.result.error.details.lifecycleState, "closed");
+assert.equal(httpWriteAfterClose.status, 202);
+assert.equal(httpWriteAfterClose.payload.status, "pending_approval");
+assert.equal(httpWriteAfterClose.payload.pendingOperation.status, "pending");
+assert.equal(httpWriteAfterClose.payload.pendingOperation.operationId, "acp_agent_relay.fs.write_text_file");
+assert.equal(Object.hasOwn(httpWriteAfterClose.payload.pendingOperation, "originalInput"), false);
+
+const httpWriteAfterCloseApproved = await approveHttpPendingOperation({
+  platform: httpPlatform,
+  token: httpToken,
+  pendingOperationId: httpWriteAfterClose.payload.pendingOperation.pendingOperationId
+});
+assert.equal(httpWriteAfterCloseApproved.status, 400);
+assert.equal(httpWriteAfterCloseApproved.payload.status, "failed");
+assert.equal(httpWriteAfterCloseApproved.payload.pendingOperation.status, "failed");
+assert.equal(httpWriteAfterCloseApproved.payload.result.ok, false);
+assert.equal(httpWriteAfterCloseApproved.payload.result.error.code, "relay_session_closed");
+assert.equal(httpWriteAfterCloseApproved.payload.result.error.details.lifecycleState, "closed");
 await assert.rejects(
   fs.readFile(path.join(workspaceRoot, "notes", "http-verifier-after-close.txt"), "utf8"),
   /ENOENT/

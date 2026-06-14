@@ -3,7 +3,7 @@ import fsSync from "node:fs";
 import path from "node:path";
 import { ServerConfig } from "../../../common/config/ServerConfig.mjs";
 
-export const WORKSPACE_CONTRIBUTION_PROTOCOL_VERSION = "pact.workspace-contribution.v1";
+export const WORKSPACE_CONTRIBUTION_PROTOCOL_VERSION = "v0.0.1:workspace:contribution-1";
 
 export const CONTRIBUTION_STATES = Object.freeze([
   "submitted",
@@ -165,7 +165,7 @@ function writeJsonSyncAtomic(filePath, value) {
 
 function emptyPersistedState() {
   return {
-    schemaVersion: 1,
+    schemaVersion: "v0.0.1:schema:definition-1",
     protocolVersion: WORKSPACE_CONTRIBUTION_PROTOCOL_VERSION,
     updatedAt: nowIso(),
     contributions: {},
@@ -347,7 +347,7 @@ export function createContributionRegistry({ workspaceId = "default", userDataPa
       return;
     }
     const next = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: WORKSPACE_CONTRIBUTION_PROTOCOL_VERSION,
       updatedAt: nowIso(),
       contributions: Object.fromEntries([...contributions.entries()].map(([id, contribution]) => [id, contribution])),
@@ -372,7 +372,7 @@ export function createContributionRegistry({ workspaceId = "default", userDataPa
     });
     const timestamp = nowIso();
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: "v0.0.1:schema:definition-1",
       protocolVersion: WORKSPACE_CONTRIBUTION_PROTOCOL_VERSION,
       assetKind: "workspace_contribution_asset",
       contributionId: contribution.contributionId,

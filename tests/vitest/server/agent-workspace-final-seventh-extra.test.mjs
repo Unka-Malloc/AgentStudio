@@ -21,7 +21,7 @@ function createMerkleState({
   })
 } = {}) {
   return {
-    protocolVersion: "pact.merkle.test.v1",
+    protocolVersion: "v0.0.1:test:merkle-1",
     cas: {
       putBlock: vi.fn(async (content) => {
         const buffer = Buffer.isBuffer(content) ? content : Buffer.from(content || "");

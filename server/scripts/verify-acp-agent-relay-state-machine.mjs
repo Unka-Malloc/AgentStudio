@@ -71,7 +71,7 @@ const files = {
   mcpScopeVerifier: await fs.readFile(new URL("./verify-acp-agent-relay-mcp-scope.mjs", import.meta.url), "utf8")
 };
 
-assert.equal(spec.schemaVersion, "pact.acp-agent-relay.state-machine.spec.v1");
+assert.equal(spec.schemaVersion, "v0.0.1:agent:acp-agent-relay-state-machine-spec-1");
 assert.equal(spec.documentPath, "docs/ACP-AGENT-RELAY-STATE-MACHINE.md");
 assert.equal(spec.domains.length, 10, "ACP relay state machine must remain a ten-domain composite state tuple.");
 assertNeedles(files.design, ["ACP Agent Relay State Machine", "complete source-to-Pact-to-target transition model"], "design doc");

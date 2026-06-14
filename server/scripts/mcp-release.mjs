@@ -48,7 +48,7 @@ function supportedTargetDetails() {
 
 function sharedspaceExchangeReceiptContract() {
   return {
-    schemaVersion: "pact.mcp.sharedspace-exchange.v1",
+    schemaVersion: "v0.0.1:mcp:sharedspace-exchange-1",
     locations: [
       "structuredContent.exchange",
       "notifications/pact/operation_reply.params.exchange"
@@ -743,8 +743,8 @@ function releaseManifest({ channel, packageJson, tarballName, tarballPath, check
   const fallbackDownload = hasFallbackZip ? portable.zipArchiveName : portable.archiveName;
   const fallbackSizeBytes = hasFallbackZip ? portable.zipSizeBytes : portable.sizeBytes;
   return {
-    schemaVersion: 1,
-    packageType: "pact.mcp-connector-release.v1",
+    schemaVersion: "v0.0.1:schema:definition-1",
+    packageType: "v0.0.1:mcp:connector-release-1",
     generatedAt: new Date().toISOString(),
     channel,
     interfaceVersion: MCP_INTERFACE_VERSION,

@@ -1,12 +1,12 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "name": "CodespaceManagement",
-  "version": 1,
+  "version": "v0.0.1:platform:codespace-management-1",
   "category": "application-capability",
   "applicationSubsystem": "code-management",
   "description": "Persistent Codespace registry for workspace code route target evaluation, change preparation, Gerrit upload receipts, review target links, and status synchronization.",
   "defaultLoaded": true,
-  "protocol": "pact.codespace.v1",
+  "protocol": "v0.0.1:platform:codespace-1",
   "components": {
     "codespaceRegistry": {
       "path": "./index.mjs",

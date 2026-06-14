@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -131,7 +132,7 @@ async function writeActiveGatewayPointer(args = {}, adapterId) {
     activePath,
     `${JSON.stringify(
       {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         activeAdapterId: profile.gatewayMode.adapterId,
         publicBaseUrl: profile.gatewayMode.publicBaseUrl,
         directBaseUrl: profile.directMode.baseUrl,
@@ -156,7 +157,7 @@ async function writeDirectGatewayPointer(args = {}) {
     activePath,
     `${JSON.stringify(
       {
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         activeAdapterId: "direct",
         publicBaseUrl: profile.directMode.baseUrl,
         directBaseUrl: profile.directMode.baseUrl,
@@ -188,23 +189,243 @@ function commandExists(command) {
   return result.status === 0 ? String(result.stdout || "").trim().split(/\r?\n/)[0] : "";
 }
 
-async function downloadFile(url, targetPath) {
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  const tempPath = `${targetPath}.download`;
+function privilegedCommand(command, args = []) {
+  if (process.platform === "win32") {
+    return { command, args };
+  }
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    return { command, args };
+  }
+  if (commandExists("sudo")) {
+    return { command: "sudo", args: ["-n", command, ...args] };
+  }
+  return { command, args };
+}
+
+function nativeGatewayInstallPlans(adapterId) {
+  if (process.env.PACT_DISABLE_NATIVE_RUNTIME_INSTALL === "1") {
+    return [];
+  }
+  const packageName = adapterId === "nginx" ? "nginx" : "caddy";
+  if (process.platform === "darwin") {
+    return commandExists("brew")
+      ? [{ label: `Homebrew ${packageName}`, command: "brew", args: ["install", packageName] }]
+      : [];
+  }
+  if (process.platform === "linux") {
+    const plans = [];
+    if (commandExists("apt-get")) {
+      plans.push({
+        label: `apt ${packageName}`,
+        commands: [
+          privilegedCommand("apt-get", ["update"]),
+          privilegedCommand("apt-get", ["install", "-y", "--no-install-recommends", packageName])
+        ]
+      });
+    }
+    if (commandExists("dnf")) {
+      plans.push({ label: `dnf ${packageName}`, commands: [privilegedCommand("dnf", ["install", "-y", packageName])] });
+    }
+    if (commandExists("yum")) {
+      plans.push({ label: `yum ${packageName}`, commands: [privilegedCommand("yum", ["install", "-y", packageName])] });
+    }
+    if (commandExists("apk")) {
+      plans.push({ label: `apk ${packageName}`, commands: [privilegedCommand("apk", ["add", "--no-cache", packageName])] });
+    }
+    if (commandExists("pacman")) {
+      plans.push({ label: `pacman ${packageName}`, commands: [privilegedCommand("pacman", ["-Sy", "--noconfirm", packageName])] });
+    }
+    if (commandExists("zypper")) {
+      plans.push({ label: `zypper ${packageName}`, commands: [privilegedCommand("zypper", ["--non-interactive", "install", packageName])] });
+    }
+    return plans;
+  }
+  if (process.platform === "win32") {
+    return [
+      commandExists("winget")
+        ? { label: `winget ${packageName}`, command: "winget", args: ["install", "--id", adapterId === "nginx" ? "Nginx.Nginx" : "CaddyServer.Caddy", "-e", "--accept-package-agreements", "--accept-source-agreements"] }
+        : null,
+      commandExists("choco")
+        ? { label: `Chocolatey ${packageName}`, command: "choco", args: ["install", "-y", packageName] }
+        : null,
+      commandExists("scoop")
+        ? { label: `Scoop ${packageName}`, command: "scoop", args: ["install", packageName] }
+        : null
+    ].filter(Boolean);
+  }
+  return [];
+}
+
+async function runInstallCommand(command, args = []) {
   await new Promise((resolve, reject) => {
-    const child = spawn("curl", ["-L", "--fail", "--retry", "3", "--connect-timeout", "20", "-o", tempPath, url], {
-      stdio: "inherit"
-    });
+    const child = spawn(command, args, { stdio: "inherit" });
     child.once("error", reject);
     child.once("exit", (code) => {
       if (code !== 0) {
-        reject(new Error(`Gateway runtime download failed: ${url}`));
+        reject(new Error(`${command} ${args.join(" ")} failed with exit code ${code}`));
         return;
       }
       resolve();
     });
   });
+}
+
+async function tryNativeGatewayInstall(adapterId) {
+  const plans = nativeGatewayInstallPlans(adapterId);
+  const failures = [];
+  for (const plan of plans) {
+    try {
+      const commands = plan.commands || [{ command: plan.command, args: plan.args || [] }];
+      for (const entry of commands) {
+        await runInstallCommand(entry.command, entry.args || []);
+      }
+      const executable = commandExists(adapterId === "nginx" ? "nginx" : "caddy");
+      if (executable) {
+        return { ok: true, sourceType: "native-package-manager", executable, plan };
+      }
+      failures.push({ plan: plan.label, error: "installed but executable was not detected on PATH" });
+    } catch (error) {
+      failures.push({ plan: plan.label, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { ok: false, failures };
+}
+
+async function downloadFile(url, targetPath) {
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  const tempPath = `${targetPath}.download`;
+  const maxAttempts = downloadRetryAttempts();
+  let result = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const partialBytes = await fileSize(tempPath);
+    console.log(
+      partialBytes > 0
+        ? `Auto-resuming gateway runtime download (${attempt}/${maxAttempts}, ${partialBytes} bytes): ${url}`
+        : `Downloading gateway runtime (${attempt}/${maxAttempts}): ${url}`
+    );
+    const args = ["-L", "--fail", "--retry", "3", "--connect-timeout", "20"];
+    if (partialBytes > 0) {
+      args.push("-C", "-");
+    }
+    args.push("-o", tempPath, url);
+    result = await runDownloadCommand("curl", args);
+    if (result.status === 0) {
+      break;
+    }
+    if (partialBytes > 0 && outputMentionsRangeUnsupported(result.output)) {
+      await fs.rm(tempPath, { force: true }).catch(() => {});
+      result = await runDownloadCommand("curl", ["-L", "--fail", "--retry", "3", "--connect-timeout", "20", "-o", tempPath, url]);
+      if (result.status === 0) {
+        break;
+      }
+    }
+    if (attempt < maxAttempts) {
+      const delayMs = downloadRetryDelayMs(attempt - 1);
+      console.warn(`Gateway runtime download failed; auto-resuming in ${delayMs}ms with ${await fileSize(tempPath)} bytes preserved.`);
+      await sleepMs(delayMs);
+    }
+  }
+  if (!result || result.status !== 0) {
+    throw new Error(`Gateway runtime download failed after ${maxAttempts} attempts: ${url}`);
+  }
   await fs.rename(tempPath, targetPath);
+}
+
+async function runDownloadCommand(command, args = []) {
+  return new Promise((resolve, reject) => {
+    let output = "";
+    const child = spawn(command, args, {
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    child.once("error", reject);
+    child.stdout.on("data", (chunk) => {
+      process.stdout.write(chunk);
+      output += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk) => {
+      process.stderr.write(chunk);
+      output += chunk.toString("utf8");
+    });
+    child.once("exit", (code) => {
+      resolve({ status: code ?? 0, output });
+    });
+  });
+}
+
+async function fileSize(targetPath) {
+  try {
+    return (await fs.stat(targetPath)).size;
+  } catch {
+    return 0;
+  }
+}
+
+function sleepMs(delayMs = 0) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, delayMs)));
+}
+
+function downloadRetryAttempts() {
+  const raw = Number(process.env.PACT_RUNTIME_DOWNLOAD_RETRY_ATTEMPTS || 12);
+  return Number.isFinite(raw) ? Math.max(1, Math.floor(raw)) : 12;
+}
+
+function downloadRetryDelayMs(attemptIndex = 0) {
+  const base = Number(process.env.PACT_RUNTIME_DOWNLOAD_RETRY_DELAY_MS || 5000);
+  const max = Number(process.env.PACT_RUNTIME_DOWNLOAD_RETRY_MAX_DELAY_MS || 60000);
+  const safeBase = Number.isFinite(base) ? Math.max(0, base) : 5000;
+  const safeMax = Number.isFinite(max) ? Math.max(safeBase, max) : 60000;
+  return Math.min(safeMax, safeBase * Math.max(1, 2 ** Math.max(0, attemptIndex)));
+}
+
+function outputMentionsRangeUnsupported(value = "") {
+  return /cannot resume|does not seem to support byte ranges|range/i.test(String(value || ""));
+}
+
+async function executableExists(targetPath) {
+  try {
+    await fs.access(targetPath, fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function looksLikeArchive(filePath = "") {
+  return /\.(zip|tar|tgz|tar\.gz|tar\.xz|txz)$/i.test(filePath);
+}
+
+async function findExecutable(root, executableName) {
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const candidate = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      const nested = await findExecutable(candidate, executableName);
+      if (nested) return nested;
+      continue;
+    }
+    if (entry.name === executableName && await executableExists(candidate)) {
+      return candidate;
+    }
+  }
+  return "";
+}
+
+async function extractRuntimeArtifact(artifactPath, targetRoot) {
+  await fs.rm(targetRoot, { recursive: true, force: true });
+  await fs.mkdir(targetRoot, { recursive: true });
+  if (/\.zip$/i.test(artifactPath)) {
+    await runInstallCommand(process.platform === "win32" ? "tar.exe" : "unzip", process.platform === "win32"
+      ? ["-xf", artifactPath, "-C", targetRoot]
+      : ["-q", artifactPath, "-d", targetRoot]);
+    return;
+  }
+  if (/\.(tar\.gz|tgz)$/i.test(artifactPath)) {
+    await runInstallCommand(process.platform === "win32" ? "tar.exe" : "tar", ["-xzf", artifactPath, "-C", targetRoot]);
+    return;
+  }
+  if (/\.(tar\.xz|txz)$/i.test(artifactPath)) {
+    await runInstallCommand(process.platform === "win32" ? "tar.exe" : "tar", ["-xJf", artifactPath, "-C", targetRoot]);
+  }
 }
 
 async function installGatewayRuntime(args = {}) {
@@ -248,16 +469,56 @@ async function installGatewayRuntime(args = {}) {
     };
   }
 
+  const nativeInstall = await tryNativeGatewayInstall(plan.adapterId);
+  if (nativeInstall.ok) {
+    await fs.copyFile(nativeInstall.executable, plan.cachedExecutablePath);
+    await fs.chmod(plan.cachedExecutablePath, 0o755).catch(() => {});
+    return {
+      ...plan,
+      sourceType: nativeInstall.sourceType,
+      nativePlan: nativeInstall.plan?.label || "",
+      executablePath: plan.cachedExecutablePath,
+      installed: true
+    };
+  }
+
   if (plan.runtimeUrl) {
     const archivePath = path.join(plan.runtimeRoot, "downloads", path.basename(new URL(plan.runtimeUrl).pathname) || `${plan.adapterId}-runtime`);
     await downloadFile(plan.runtimeUrl, archivePath);
+    await fs.chmod(archivePath, 0o755).catch(() => {});
+    if (!looksLikeArchive(archivePath)) {
+      await fs.copyFile(archivePath, plan.cachedExecutablePath);
+      await fs.chmod(plan.cachedExecutablePath, 0o755).catch(() => {});
+      return {
+        ...plan,
+        sourceType: "runtime-url-executable",
+        artifactPath: archivePath,
+        executablePath: plan.cachedExecutablePath,
+        installed: true
+      };
+    }
+    const extractedRoot = path.join(plan.runtimeRoot, "extracted");
+    await extractRuntimeArtifact(archivePath, extractedRoot);
+    const extractedExecutable = await findExecutable(extractedRoot, plan.executableName);
+    if (extractedExecutable) {
+      await fs.copyFile(extractedExecutable, plan.cachedExecutablePath);
+      await fs.chmod(plan.cachedExecutablePath, 0o755).catch(() => {});
+      return {
+        ...plan,
+        sourceType: "runtime-url-archive",
+        artifactPath: archivePath,
+        executablePath: plan.cachedExecutablePath,
+        installed: true
+      };
+    }
     return {
       ...plan,
       sourceType: "runtime-url",
       artifactPath: archivePath,
       executablePath: "",
       installed: true,
-      note: "Runtime artifact was cached. Extract it or pass --runtime-binary for executable installation."
+      nativeInstallFailures: nativeInstall.failures || [],
+      note: "Runtime artifact was cached but no executable was found. Use a platform package manager or pass --runtime-binary for executable installation."
     };
   }
 
@@ -266,6 +527,7 @@ async function installGatewayRuntime(args = {}) {
     sourceType: "missing",
     executablePath: "",
     installed: false,
+    nativeInstallFailures: nativeInstall.failures || [],
     note: "No configured binary, cached runtime, PATH binary, or runtime URL was available."
   };
 }

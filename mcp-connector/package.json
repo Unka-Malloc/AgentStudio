@@ -23,7 +23,6 @@
     "pact",
     "mcp",
     "codex",
-    "gemini",
     "copilot",
     "openclaw",
     "hermes",
@@ -31,7 +30,6 @@
     "opencode",
     "kilo-code",
     "cursor",
-    "windsurf",
     "antigravity"
   ],
   "engines": {

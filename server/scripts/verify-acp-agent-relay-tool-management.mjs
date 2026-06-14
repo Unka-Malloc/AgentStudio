@@ -67,7 +67,7 @@ function allowAllSecurityPermissions() {
         },
         effectivePolicySnapshot: {
           policyRevision: {
-            protocolVersion: "pact.verifier.authorization.v1",
+            protocolVersion: "v0.0.1:test:authorization-verifier-1",
             revision: 1,
             updatedAt: nowIso()
           }
@@ -76,7 +76,7 @@ function allowAllSecurityPermissions() {
     },
     getGovernancePolicyRevision() {
       return {
-        protocolVersion: "pact.verifier.authorization.v1",
+        protocolVersion: "v0.0.1:test:authorization-verifier-1",
         revision: 1,
         updatedAt: nowIso()
       };

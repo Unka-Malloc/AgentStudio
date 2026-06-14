@@ -91,6 +91,22 @@ async function callAgentRelayHttp({ platform, token, method = "GET", path: reque
   };
 }
 
+async function approveHttpPendingOperation({ platform, token, pendingOperationId }) {
+  return callAgentRelayHttp({
+    platform,
+    token,
+    method: "POST",
+    path: `/api/tool-management/v1/pending-operations/${encodeURIComponent(pendingOperationId)}/resolve`,
+    headers: {
+      "x-pact-safety-confirm": "true"
+    },
+    body: {
+      resolution: "approved",
+      resolvedBy: "acp-agent-relay-mcp-scope-verifier"
+    }
+  });
+}
+
 async function callMcpTool({ toolSkillManagementProvider, headers = {}, operation, input = {}, relayMcp = null }) {
   const response = createCapturedHttpResponse();
   const normalizedHeaders = {
@@ -153,7 +169,7 @@ function createAllowAllSecurityPermissions() {
         createdAt: nowIso(),
         effectivePolicySnapshot: {
           policyRevision: {
-            protocolVersion: "pact.verifier.authorization.v1",
+            protocolVersion: "v0.0.1:test:authorization-verifier-1",
             revision: 1,
             updatedAt: nowIso()
           }
@@ -162,7 +178,7 @@ function createAllowAllSecurityPermissions() {
     },
     getGovernancePolicyRevision() {
       return {
-        protocolVersion: "pact.verifier.authorization.v1",
+        protocolVersion: "v0.0.1:test:authorization-verifier-1",
         revision: 1,
         updatedAt: nowIso()
       };
@@ -205,7 +221,7 @@ try {
         async handleGetRuntimeInfo({ response }) {
           response.writeHead(200, { "content-type": "application/json" });
           response.end(JSON.stringify({
-            schemaVersion: 1,
+            schemaVersion: "v0.0.1:schema:definition-1",
             result: {
               ok: true,
               runtime: "acp-agent-relay-mcp-scope-verifier"
@@ -327,7 +343,7 @@ try {
   assert.equal(create.payload.result.ok, true);
   const relaySessionId = create.payload.result.data.session.relaySessionId;
 
-  const prompt = await callAgentRelayHttp({
+  const promptPending = await callAgentRelayHttp({
     platform,
     token: sourceGrant.token,
     method: "POST",
@@ -344,8 +360,34 @@ try {
       upstreamToken: "upstream-secret-must-not-reach-target"
     }
   });
+  assert.equal(promptPending.status, 202, JSON.stringify(promptPending.payload));
+  assert.equal(promptPending.payload.status, "pending_approval");
+  assert.equal(promptPending.payload.pendingOperation.status, "pending");
+  assert.equal(promptPending.payload.pendingOperation.operationId, "acp_agent_relay.prompt.send");
+  assert.equal(Object.hasOwn(promptPending.payload.pendingOperation, "originalInput"), false);
+  const promptPendingStored = platform.store.getPendingOperation(
+    promptPending.payload.pendingOperation.pendingOperationId,
+    { includeOriginalInput: true }
+  );
+  const promptPendingOriginalInputJson = JSON.stringify(promptPendingStored.originalInput || {});
+  for (const forbidden of [
+    "sourceMcpToken",
+    "upstreamToken",
+    "source-mcp-secret-must-not-reach-target",
+    "upstream-secret-must-not-reach-target"
+  ]) {
+    assert.equal(promptPendingOriginalInputJson.includes(forbidden), false);
+  }
+
+  const prompt = await approveHttpPendingOperation({
+    platform,
+    token: sourceGrant.token,
+    pendingOperationId: promptPending.payload.pendingOperation.pendingOperationId
+  });
   assert.equal(prompt.status, 200, JSON.stringify(prompt.payload));
   assert.equal(prompt.payload.status, "ok");
+  assert.equal(prompt.payload.pendingOperation.status, "completed");
+  assert.ok(prompt.payload.pendingOperation.resumedToolExecutionId);
   assert.equal(prompt.payload.result.ok, true);
   assert.equal(prompt.payload.result.data.session.relaySessionId, relaySessionId);
 
@@ -424,7 +466,7 @@ try {
   }).find((entry) => entry.resultSummary?.relayChildOperation?.relayTurnId === relayTurnId);
   assert.ok(childAudit, "target MCP tool call audit must be readable");
   const relayChildOperation = childAudit.resultSummary.relayChildOperation;
-  assert.equal(relayChildOperation.binding, "pact.acp-agent-relay.child-operation.v1");
+  assert.equal(relayChildOperation.binding, "v0.0.1:agent:acp-agent-relay-child-operation-1");
   assert.equal(relayChildOperation.relaySessionId, relaySessionId);
   assert.equal(relayChildOperation.relayTurnId, relayTurnId);
   assert.equal(relayChildOperation.virtualAgentId, "antigravity.multimodal-coding");
@@ -480,7 +522,7 @@ try {
   const closedRuntimeConnections = await runtime.close();
   assert.equal(closedRuntimeConnections.ok, true);
 
-  const secondPrompt = await callAgentRelayHttp({
+  const secondPromptPending = await callAgentRelayHttp({
     platform,
     token: sourceGrant.token,
     method: "POST",
@@ -495,8 +537,21 @@ try {
       relayMcpScopes: ["storage:read"]
     }
   });
+  assert.equal(secondPromptPending.status, 202, JSON.stringify(secondPromptPending.payload));
+  assert.equal(secondPromptPending.payload.status, "pending_approval");
+  assert.equal(secondPromptPending.payload.pendingOperation.status, "pending");
+  assert.equal(secondPromptPending.payload.pendingOperation.operationId, "acp_agent_relay.prompt.send");
+  assert.equal(Object.hasOwn(secondPromptPending.payload.pendingOperation, "originalInput"), false);
+
+  const secondPrompt = await approveHttpPendingOperation({
+    platform,
+    token: sourceGrant.token,
+    pendingOperationId: secondPromptPending.payload.pendingOperation.pendingOperationId
+  });
   assert.equal(secondPrompt.status, 200, JSON.stringify(secondPrompt.payload));
   assert.equal(secondPrompt.payload.status, "ok");
+  assert.equal(secondPrompt.payload.pendingOperation.status, "completed");
+  assert.ok(secondPrompt.payload.pendingOperation.resumedToolExecutionId);
   assert.equal(secondPrompt.payload.result.ok, true);
   assert.equal(secondPrompt.payload.result.data.session.relayMcpGrantId, relayGrantId);
 

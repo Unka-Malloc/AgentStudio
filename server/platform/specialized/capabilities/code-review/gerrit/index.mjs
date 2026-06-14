@@ -4,6 +4,7 @@ import path from "node:path";
 
 const DEFAULT_GERRIT_BASE_URL = "http://127.0.0.1:18080";
 const XSSI_PREFIX = ")]}'";
+const MAX_GERRIT_RESPONSE_BYTES = 4 * 1024 * 1024;
 
 const READ_ACTIONS = new Set([
   "server.version",
@@ -50,6 +51,31 @@ const READ_ACTIONS = new Set([
   "changes.included_in",
   "attention_set.get"
 ]);
+
+async function readResponseTextWithLimit(response, maxBytes = MAX_GERRIT_RESPONSE_BYTES) {
+  if (!response?.body?.getReader) {
+    const text = await response.text();
+    if (Buffer.byteLength(text, "utf8") > maxBytes) {
+      throw new Error(`Gerrit response exceeded the ${maxBytes} byte limit.`);
+    }
+    return text;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = Buffer.from(value);
+    total += chunk.length;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`Gerrit response exceeded the ${maxBytes} byte limit.`);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
 
 const WRITE_ACTIONS = new Set([
   "changes.create",
@@ -246,7 +272,7 @@ async function gerritRequest({
     headers,
     body: requestBody
   });
-  const text = await response.text();
+  const text = await readResponseTextWithLimit(response);
   const payload = parseGerritBody(text, response.headers.get("content-type") || "");
   const result = {
     ok: response.ok,

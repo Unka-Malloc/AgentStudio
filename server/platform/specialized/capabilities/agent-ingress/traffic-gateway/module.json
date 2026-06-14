@@ -1,14 +1,14 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": "v0.0.1:schema:definition-1",
   "name": "AgentTrafficGatewayIngress",
-  "version": 1,
+  "version": "v0.0.1:agent:agent-traffic-gateway-ingress-1",
   "category": "agent-client-mcp-compatibility",
   "compatibilityLayer": "agent-client-mcp-compatibility",
   "compatibilityBoundary": "ingress-adapter",
   "clientCompatibilityKind": "traffic-gateway",
   "description": "Optional detachable ingress adapter for placing Pact MCP, HTTP APIs, upload sessions, and client runtime bootstrap behind mature traffic gateways without making the gateway a Pact runtime dependency.",
   "defaultLoaded": false,
-  "protocol": "pact.agent-traffic-gateway.v1",
+  "protocol": "v0.0.1:agent:traffic-gateway-1",
   "adapterProviders": [
     "caddy",
     "nginx"

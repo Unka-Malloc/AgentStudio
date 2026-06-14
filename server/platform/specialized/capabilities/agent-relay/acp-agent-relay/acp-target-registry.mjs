@@ -152,7 +152,7 @@ export function createFileAcpTargetRegistryAdapter(options = {}) {
     fs.mkdirSync(path.dirname(storagePath), { recursive: true });
     const tempPath = `${storagePath}.${process.pid}.${Date.now()}.tmp`;
     fs.writeFileSync(tempPath, `${JSON.stringify({
-      schemaVersion: "pact.acp-agent-relay.target-registry.v1",
+      schemaVersion: "v0.0.1:agent:acp-agent-relay-target-registry-1",
       updatedAt: nowIso(),
       targets: normalized.targets
     }, null, 2)}\n`, "utf8");

@@ -93,7 +93,7 @@ describe("agent workspace final sixth extra coverage", () => {
 
   it("restores snapshot entries from CAS bytes and rebases them under the snapshot base path", async () => {
     const merkleState = {
-      protocolVersion: "pact.merkle.test.v1",
+      protocolVersion: "v0.0.1:test:merkle-1",
       cas: {
         getBlock: vi.fn(async () => ({
           bytes: Buffer.from("restored-from-cas", "utf8")
@@ -205,7 +205,7 @@ describe("agent workspace final sixth extra coverage", () => {
 
   it("starts checkpoint trees when needed and reports null session context after the workspace is removed", async () => {
     const merkleState = {
-      protocolVersion: "pact.merkle.test.v1",
+      protocolVersion: "v0.0.1:test:merkle-1",
       cas: {
         putBlock: vi.fn(async (content) => {
           const buffer = Buffer.isBuffer(content) ? content : Buffer.from(content || "");

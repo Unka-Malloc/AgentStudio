@@ -41,12 +41,12 @@ describe("agent config registry extras", () => {
       const agentManifest = await readJson(path.join(root, "agent-list", "manifest.json"));
 
       expect(modelManifest).toMatchObject({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         kind: "model-list",
         entries: []
       });
       expect(agentManifest).toMatchObject({
-        schemaVersion: 1,
+        schemaVersion: "v0.0.1:schema:definition-1",
         kind: "agent-list",
         entries: []
       });

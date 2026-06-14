@@ -61,42 +61,42 @@ function assertPermissionDenied(result, expectedCapability, label) {
 }
 
 const expectedToolIds = [
-  "pact.knowledge.console",
-  "pact.knowledge.configSchema",
-  "pact.knowledge.capabilities",
-  "pact.knowledge.health",
-  "pact.knowledge.maintenance.get",
-  "pact.knowledge.maintenance.set",
-  "pact.knowledge.reindex",
-  "pact.knowledge.maintenance.run",
-  "pact.knowledge.sync",
-  "pact.knowledge.changes",
-  "pact.knowledge.reviewItems",
-  "pact.knowledge.reviewResolve",
-  "pact.knowledge.feedback",
-  "pact.knowledge.suggestions",
-  "pact.knowledge.suggestionResolve",
-  "pact.knowledge.learning.jobs",
-  "pact.knowledge.learning.health",
-  "pact.knowledge.evidenceGate.evaluate",
-  "pact.knowledge.agentSkill",
-  "pact.knowledge.agentSkill.plan",
-  "pact.knowledge.agentSkill.run",
-  "pact.knowledge.skills.list",
-  "pact.knowledge.skills.get",
-  "pact.knowledge.skills.generate",
-  "pact.knowledge.skills.propose",
-  "pact.knowledge.skills.resolve",
-  "pact.knowledge.skillFramework",
-  "pact.knowledge.skillFramework.set",
-  "pact.knowledge.goldenRules.list",
-  "pact.knowledge.goldenRules.set",
-  "pact.knowledge.goldenRules.publish",
-  "pact.knowledge.goldenRules.rollback",
-  "pact.knowledge.ruleAuthoring.chat",
-  "pact.knowledge.ruleAuthoring.run",
-  "pact.knowledge.goldCases.list",
-  "pact.knowledge.goldCases.set",
+  "pact.agentLibrary.console",
+  "pact.agentLibrary.configSchema",
+  "pact.agentLibrary.capabilities",
+  "pact.agentLibrary.health",
+  "pact.agentLibrary.maintenance.get",
+  "pact.agentLibrary.maintenance.set",
+  "pact.agentLibrary.reindex",
+  "pact.agentLibrary.maintenance.run",
+  "pact.agentLibrary.sync",
+  "pact.agentLibrary.changes",
+  "pact.agentLibrary.reviewItems",
+  "pact.agentLibrary.reviewResolve",
+  "pact.agentLibrary.feedback",
+  "pact.agentLibrary.suggestions",
+  "pact.agentLibrary.suggestionResolve",
+  "pact.agentLibrary.learning.jobs",
+  "pact.agentLibrary.learning.health",
+  "pact.agentLibrary.evidenceGate.evaluate",
+  "pact.agentLibrary.agentSkill",
+  "pact.agentLibrary.agentSkill.plan",
+  "pact.agentLibrary.agentSkill.run",
+  "pact.agentLibrary.skills.list",
+  "pact.agentLibrary.skills.get",
+  "pact.agentLibrary.skills.generate",
+  "pact.agentLibrary.skills.propose",
+  "pact.agentLibrary.skills.resolve",
+  "pact.agentLibrary.skillFramework",
+  "pact.agentLibrary.skillFramework.set",
+  "pact.agentLibrary.goldenRules.list",
+  "pact.agentLibrary.goldenRules.set",
+  "pact.agentLibrary.goldenRules.publish",
+  "pact.agentLibrary.goldenRules.rollback",
+  "pact.agentLibrary.ruleAuthoring.chat",
+  "pact.agentLibrary.ruleAuthoring.run",
+  "pact.agentLibrary.goldCases.list",
+  "pact.agentLibrary.goldCases.set",
   "pact.external.knowledge.distillation.health",
   "pact.external.knowledge.distillation.capabilities",
   "pact.external.knowledge.distillation.runs.list",
@@ -104,23 +104,23 @@ const expectedToolIds = [
   "pact.external.knowledge.distillation.runs.get",
   "pact.external.knowledge.distillation.runs.cancel",
   "pact.external.knowledge.distillation.artifacts.export",
-  "pact.knowledge.skills.evaluation.runs.create",
-  "pact.knowledge.skills.deployments.create",
-  "pact.knowledge.skills.deployments.rollback",
-  "pact.knowledge.trainingSets.export",
-  "pact.knowledge.evaluation.runs.create",
-  "pact.knowledge.evaluation.runs.list",
-  "pact.knowledge.evaluation.runs.get",
-  "pact.knowledge.modelRoles",
-  "pact.knowledge.modelDecision",
-  "pact.knowledge.evolution",
-  "pact.knowledge.evolution.runs.create",
-  "pact.knowledge.evolution.runs.list",
-  "pact.knowledge.evolution.runs.get",
-  "pact.knowledge.hierarchy.audit",
-  "pact.knowledge.evolution.deployments.list",
-  "pact.knowledge.evolution.deployments.promote",
-  "pact.knowledge.evolution.deployments.rollback",
+  "pact.agentLibrary.skills.evaluation.runs.create",
+  "pact.agentLibrary.skills.deployments.create",
+  "pact.agentLibrary.skills.deployments.rollback",
+  "pact.agentLibrary.trainingSets.export",
+  "pact.agentLibrary.evaluation.runs.create",
+  "pact.agentLibrary.evaluation.runs.list",
+  "pact.agentLibrary.evaluation.runs.get",
+  "pact.agentLibrary.modelRoles",
+  "pact.agentLibrary.modelDecision",
+  "pact.agentLibrary.evolution",
+  "pact.agentLibrary.evolution.runs.create",
+  "pact.agentLibrary.evolution.runs.list",
+  "pact.agentLibrary.evolution.runs.get",
+  "pact.agentLibrary.hierarchy.audit",
+  "pact.agentLibrary.evolution.deployments.list",
+  "pact.agentLibrary.evolution.deployments.promote",
+  "pact.agentLibrary.evolution.deployments.rollback",
   "pact.context.profiles",
   "pact.context.profiles.set",
   "pact.clientRuntime.profiles",
@@ -154,16 +154,16 @@ const expectedToolIds = [
   "pact.agentWorkspace.issueResolve",
   "pact.agentWorkspace.locks",
   "pact.agentWorkspace.lock",
-  "pact.knowledge.summarization.runs.create",
-  "pact.knowledge.summarization.runs.get",
-  "pact.knowledge.summarization.runs.approve",
-  "pact.knowledge.search",
-  "pact.knowledge.documentStructure",
-  "pact.knowledge.item",
-  "pact.knowledge.evidence",
-  "pact.knowledge.asset",
-  "pact.knowledge.renderMarkdown",
-  "pact.knowledge.graph"
+  "pact.agentLibrary.summarization.runs.create",
+  "pact.agentLibrary.summarization.runs.get",
+  "pact.agentLibrary.summarization.runs.approve",
+  "pact.agentLibrary.search",
+  "pact.agentLibrary.documentStructure",
+  "pact.agentLibrary.item",
+  "pact.agentLibrary.evidence",
+  "pact.agentLibrary.asset",
+  "pact.agentLibrary.renderMarkdown",
+  "pact.agentLibrary.graph"
 ];
 
 const legacyInternalDistillationOperationIds = [
@@ -185,18 +185,28 @@ const legacyInternalDistillationOperationIds = [
 ];
 
 const legacyInternalDistillationToolIds = [
-  "pact.knowledge.distillation.export",
-  "pact.knowledge.distillation.runs.create",
-  "pact.knowledge.distillation.runs.get",
-  "pact.knowledge.distillation.workbench.runs.create",
-  "pact.knowledge.distillation.workbench.stage.export"
+  "pact.agentLibrary.distillation.export",
+  "pact.agentLibrary.distillation.runs.create",
+  "pact.agentLibrary.distillation.runs.get",
+  "pact.agentLibrary.distillation.workbench.runs.create",
+  "pact.agentLibrary.distillation.workbench.stage.export"
 ];
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-agent-knowledge-tools-"));
+const featureProfilePath = path.join(userDataPath, "feature-profile.json");
+await fs.writeFile(
+  featureProfilePath,
+  `${JSON.stringify({
+    name: "agent-knowledge-tools-verifier",
+    enableFeatures: ["knowledge-distillation"]
+  }, null, 2)}\n`,
+  "utf8"
+);
 const server = await startHttpServer({
   userDataPath,
   runtimeOptions: {
-    profile: "minimal"
+    profile: "minimal",
+    featureProfile: featureProfilePath
   }
 });
 await installAuthenticatedFetch(server);
@@ -204,7 +214,7 @@ await installAuthenticatedFetch(server);
 try {
   const catalog = await fetchJson(`${server.url}/api/tool-management/v1/catalog`);
   assert.equal(catalog.status, 200);
-  assert.equal(catalog.payload.schemaVersion, 1);
+  assert.equal(catalog.payload.schemaVersion, "v0.0.1:schema:definition-1");
 
   const tools = catalog.payload.tools || [];
   const toolIds = new Set(tools.map((tool) => tool.id));
@@ -240,7 +250,7 @@ try {
   const directLegacyDistillation = await executeTool(
     server.url,
     legacyProbeToken,
-    "pact.knowledge.distillation.runs.create",
+    "pact.agentLibrary.distillation.runs.create",
     {}
   );
   assert.equal(directLegacyDistillation.status, 404);
@@ -250,7 +260,7 @@ try {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      toolId: "pact.knowledge.health",
+      toolId: "pact.agentLibrary.health",
       input: {}
     })
   });
@@ -264,7 +274,7 @@ try {
   const health = await executeTool(
     server.url,
     healthGrantToken,
-    "pact.knowledge.health",
+    "pact.agentLibrary.health",
     {}
   );
   assert.equal(health.status, 200);
@@ -280,7 +290,7 @@ try {
   const search = await executeTool(
     server.url,
     searchGrantToken,
-    "pact.knowledge.search",
+    "pact.agentLibrary.search",
     {
       query: "agent knowledge tool verification",
       limit: 3,
@@ -288,12 +298,12 @@ try {
     }
   );
   assert.equal(search.status, 200);
-  assert.equal(search.payload.result.protocolVersion, "pact.knowledge.v1");
+  assert.equal(search.payload.result.protocolVersion, "v0.0.1:knowledge:core-1");
   assert.equal(Array.isArray(search.payload.result.items), true);
   assert.equal(search.payload.result.responseProfile, "agent");
   assert.equal(
     search.payload.result.agentMessage?.protocolVersion,
-    "pact.knowledge-search.agent-message.v1"
+    "v0.0.1:knowledge:search-agent-message-1"
   );
   assert.equal(search.payload.result.agentMessage?.machineReadable, true);
 
@@ -368,7 +378,7 @@ try {
     }
   );
   assert.equal(contextBundle.status, 200);
-  assert.equal(contextBundle.payload.result.bundleVersion, "pact.workspace-context-bundle.v1");
+  assert.equal(contextBundle.payload.result.bundleVersion, "v0.0.1:workspace:context-bundle-1");
   assert.equal(contextBundle.payload.result.compressed.encoding, "gzip+base64");
   assert.ok(contextBundle.payload.result.bundleHash);
 
@@ -418,7 +428,7 @@ try {
   const writeDenied = await executeTool(
     server.url,
     writeDeniedToken,
-    "pact.knowledge.feedback",
+    "pact.agentLibrary.feedback",
     {
       query: "agent knowledge tool verification",
       action: "searchMiss"
@@ -426,7 +436,7 @@ try {
   );
   assertPermissionDenied(
     writeDenied,
-    "cap:tool:pact.knowledge.feedback:execute",
+    "cap:tool:pact.agentLibrary.feedback:execute",
     "knowledge feedback with read grant"
   );
 

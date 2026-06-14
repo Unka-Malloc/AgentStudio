@@ -138,6 +138,37 @@ try {
   assert.equal(runtimePullPayload.sourceType, "configured-binary");
   assert.equal(await fileExists(runtimePullPayload.cachedExecutablePath), true);
 
+  const runtimeUrlRoot = path.join(tempRoot, "runtime-url");
+  await fs.mkdir(runtimeUrlRoot, { recursive: true });
+  const runtimeUrlBin = path.join(runtimeUrlRoot, "download");
+  await fs.writeFile(runtimeUrlBin, "#!/bin/sh\nexit 0\n", "utf8");
+  await fs.chmod(runtimeUrlBin, 0o755);
+  const runtimePullUrl = spawnSync(
+    process.execPath,
+    [
+      "server/scripts/gateway-ingress.mjs",
+      "runtime-pull",
+      "--gateway",
+      "caddy",
+      "--runtime-cache-dir",
+      runtimeUrlRoot,
+      "--runtime-url",
+      `file://${runtimeUrlBin}`
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PACT_DISABLE_NATIVE_RUNTIME_INSTALL: "1",
+        PATH: "/usr/bin:/bin"
+      }
+    }
+  );
+  assert.equal(runtimePullUrl.status, 0, runtimePullUrl.stderr || runtimePullUrl.stdout);
+  const runtimePullUrlPayload = JSON.parse(runtimePullUrl.stdout);
+  assert.equal(runtimePullUrlPayload.sourceType, "runtime-url-executable");
+  assert.equal(await fileExists(runtimePullUrlPayload.cachedExecutablePath), true);
+
   const directSwitch = spawnSync(
     process.execPath,
     [
