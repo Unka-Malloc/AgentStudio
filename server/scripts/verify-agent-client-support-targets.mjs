@@ -90,7 +90,7 @@ await assertTextHasIds("client-gui/scripts/verify-client-architecture.mjs");
 await assertTextHasLabels("client-gui/scripts/verify-client-plan.mjs");
 await assertPackagingManifest();
 
-await assertTextHasIds("mcp-connector/bin/pact-mcp.mjs");
+await assertTextHasIds("server/platform/common/mcp/gateway-installer/bin/pact-mcp.mjs");
 await assertTextHasIds("server/scripts/mcp-install.mjs");
 await assertTextHasIds("server/scripts/verify-mcp-http.mjs");
 await assertTextHasIds("server/scripts/verify-mcp-release.mjs");
@@ -99,19 +99,11 @@ await assertTextHasIds("server/platform/common/mcp/http-mcp-adapter.mjs");
 await assertGrantProfiles("server/platform/specialized/capabilities/skills/tool-skill-management-provider.mjs");
 
 for (const docPath of [
-  "docs/AGENT-CLIENT-SUPPORT-TARGETS.md",
-  "README.md",
-  "README.zh-CN.md",
-  "docs/CLIENT_ARCHITECTURE.md",
-  "docs/PROTOCOLS.md",
-  "docs/Architecture.md",
-  "docs/WORKSPACE-ASSET-GOVERNANCE.md",
-  "docs/boundary/N-2-N-Interfaces.md",
-  "docs/boundary/2-3-5-Security-Model.md",
-  "docs/MCP_INSTALL.md",
-  "docs/MCP_INSTALL.zh-CN.md",
-  "mcp-connector/README.md",
-  "docs/PRODUCT.md"
+  "docs/COMPATIBILITY.md",
+  "docs/functionality/CLIENT-DESKTOP.md",
+  "docs/protocols/PROTOCOLS.md",
+  "docs/USAGES.md",
+  "server/platform/common/mcp/gateway-installer/README.md"
 ]) {
   await assertTextHasLabels(docPath);
 }

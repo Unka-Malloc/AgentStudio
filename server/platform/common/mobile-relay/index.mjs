@@ -9,9 +9,47 @@ const STORE_SCHEMA_VERSION = "v0.0.1:mcp:mobile-relay-store-schema-1";
 const DEFAULT_PAIRING_TTL_MS = 10 * 60 * 1000;
 export const MAX_PACT_MOBILE_RELAY_PAIRING_TTL_MS = 30 * 60 * 1000;
 export const MAX_PACT_MOBILE_RELAY_PAIRINGS = 500;
+export const MAX_PACT_MOBILE_RELAY_PENDING_PAIRINGS_PER_SOURCE = 5;
+export const MAX_PACT_MOBILE_RELAY_PENDING_PAIRINGS_PER_PC_CLIENT = 3;
+export const MAX_PACT_MOBILE_RELAY_CLAIM_FAILURES_PER_SOURCE = 10;
 const DEFAULT_COMMAND_LEASE_MS = 60 * 1000;
 const MAX_COMMAND_HISTORY = 500;
-const PAIRING_CODE_PATTERN = /^\d{4}-\d{4}$/;
+const DEFAULT_CLAIM_FAILURE_WINDOW_MS = 10 * 60 * 1000;
+const MAX_PAIRING_DESCRIPTOR_BYTES = 16 * 1024;
+const MAX_RELAY_TARGETS = 50;
+const PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const PAIRING_CODE_PATTERN = /^[A-Z2-9]{5}-[A-Z2-9]{5}-[A-Z2-9]{5}-[A-Z2-9]{5}$/;
+const SUPPORTED_MOBILE_COMMAND_TYPES = new Set([
+  "targets.scan",
+  "agent.sessions.list",
+  "agent.message.send"
+]);
+const AGENT_MESSAGE_SEND_PAYLOAD_FIELDS = new Set([
+  "agent",
+  "agentId",
+  "target",
+  "text",
+  "message",
+  "prompt",
+  "sessionId",
+  "nativeSessionId",
+  "cwd",
+  "workingDirectory",
+  "timeoutMs",
+  "maxStdoutBytes",
+  "maxStderrBytes"
+]);
+const AGENT_MESSAGE_SEND_LOCAL_RUNTIME_FIELDS = new Set([
+  "command",
+  "args",
+  "stdin",
+  "executable",
+  "binaryPath",
+  "commandPath",
+  "env",
+  "environment",
+  "shell"
+]);
 
 function text(value, fallback = "") {
   return String(value ?? fallback).trim();
@@ -23,6 +61,14 @@ function asObject(value, fallback = {}) {
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function jsonByteLength(value) {
+  try {
+    return Buffer.byteLength(JSON.stringify(value ?? null), "utf8");
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
 }
 
 function nowIso(now = new Date()) {
@@ -51,8 +97,16 @@ function randomToken(bytes = 32) {
 }
 
 function randomCode() {
-  const value = crypto.randomInt(0, 100_000_000).toString().padStart(8, "0");
-  return `${value.slice(0, 4)}-${value.slice(4)}`;
+  let value = "";
+  for (let index = 0; index < 20; index += 1) {
+    value += PAIRING_CODE_ALPHABET[crypto.randomInt(0, PAIRING_CODE_ALPHABET.length)];
+  }
+  return `${value.slice(0, 5)}-${value.slice(5, 10)}-${value.slice(10, 15)}-${value.slice(15)}`;
+}
+
+function hashedPolicyKey(value = "", namespace = "mobile-relay") {
+  const key = text(value);
+  return key ? hashSecret(`${namespace}:${key}`) : "";
 }
 
 function normalizePairingTtlMs(value) {
@@ -62,10 +116,10 @@ function normalizePairingTtlMs(value) {
 }
 
 function normalizePairingCode(value = "") {
-  const compact = text(value).replace(/\s+/g, "").toUpperCase();
-  const normalized = /^\d{8}$/.test(compact)
-    ? `${compact.slice(0, 4)}-${compact.slice(4)}`
-    : compact;
+  const compact = text(value).replace(/[\s-]+/g, "").toUpperCase();
+  const normalized = compact.length === 20
+    ? `${compact.slice(0, 5)}-${compact.slice(5, 10)}-${compact.slice(10, 15)}-${compact.slice(15)}`
+    : text(value).toUpperCase();
   return PAIRING_CODE_PATTERN.test(normalized) ? normalized : "";
 }
 
@@ -108,11 +162,86 @@ function compactPairingStore(store, {
   }
 }
 
+function compactClaimFailureStore(store, { nowMs = Date.now() } = {}) {
+  store.claimFailures = asObject(store.claimFailures);
+  for (const [sourceHash, entry] of Object.entries(store.claimFailures)) {
+    const windowExpiresAt = Date.parse(entry.windowExpiresAt || "");
+    const lockedUntil = Date.parse(entry.lockedUntil || "");
+    if (
+      (!Number.isFinite(windowExpiresAt) || windowExpiresAt <= nowMs) &&
+      (!Number.isFinite(lockedUntil) || lockedUntil <= nowMs)
+    ) {
+      delete store.claimFailures[sourceHash];
+    }
+  }
+}
+
+function sourceClaimFailure(store, sourceHash = "", { nowMs = Date.now() } = {}) {
+  if (!sourceHash) {
+    return null;
+  }
+  store.claimFailures = asObject(store.claimFailures);
+  const entry = asObject(store.claimFailures[sourceHash], null);
+  if (!entry) {
+    return null;
+  }
+  const lockedUntil = Date.parse(entry.lockedUntil || "");
+  if (Number.isFinite(lockedUntil) && lockedUntil > nowMs) {
+    return entry;
+  }
+  return null;
+}
+
+function recordClaimFailure(store, sourceHash = "", {
+  nowMs = Date.now(),
+  nowText = nowIso(new Date(nowMs)),
+  maxFailures = MAX_PACT_MOBILE_RELAY_CLAIM_FAILURES_PER_SOURCE,
+  windowMs = DEFAULT_CLAIM_FAILURE_WINDOW_MS
+} = {}) {
+  if (!sourceHash || maxFailures <= 0) {
+    return { locked: false };
+  }
+  store.claimFailures = asObject(store.claimFailures);
+  const existing = asObject(store.claimFailures[sourceHash], {});
+  const windowExpiresMs = Date.parse(existing.windowExpiresAt || "");
+  const resetWindow = !Number.isFinite(windowExpiresMs) || windowExpiresMs <= nowMs;
+  const count = resetWindow ? 1 : Math.max(0, Number(existing.count || 0)) + 1;
+  const windowExpiresAt = resetWindow
+    ? nowIso(new Date(nowMs + windowMs))
+    : existing.windowExpiresAt;
+  const locked = count >= maxFailures;
+  const entry = {
+    count,
+    firstFailedAt: resetWindow ? nowText : text(existing.firstFailedAt || nowText),
+    lastFailedAt: nowText,
+    windowExpiresAt,
+    lockedUntil: locked ? windowExpiresAt : text(existing.lockedUntil)
+  };
+  store.claimFailures[sourceHash] = entry;
+  return { locked, entry };
+}
+
+function clearClaimFailures(store, sourceHash = "") {
+  if (!sourceHash) {
+    return;
+  }
+  store.claimFailures = asObject(store.claimFailures);
+  delete store.claimFailures[sourceHash];
+}
+
+function pendingPairings(store = {}, nowMs = Date.now()) {
+  return Object.values(asObject(store.pairings)).filter((pairing) => (
+    pairing?.status === "pending" &&
+    (!pairing.expiresAt || Date.parse(pairing.expiresAt) > nowMs)
+  ));
+}
+
 function publicPairing(pairing = {}) {
   const {
     pcTokenHash: _pcTokenHash,
     mobileTokenHash: _mobileTokenHash,
     pairingCodeHash: _pairingCodeHash,
+    createSourceHash: _createSourceHash,
     ...safe
   } = pairing;
   return {
@@ -150,8 +279,48 @@ function emptyStore() {
   return {
     schemaVersion: STORE_SCHEMA_VERSION,
     protocolVersion: MOBILE_RELAY_PROTOCOL_VERSION,
-    pairings: {}
+    pairings: {},
+    claimFailures: {}
   };
+}
+
+function normalizeRelayTargets(value) {
+  return asArray(value).slice(0, MAX_RELAY_TARGETS);
+}
+
+function sanitizeMobileCommandPayload(type = "", value = {}) {
+  const payload = asObject(value);
+  if (!SUPPORTED_MOBILE_COMMAND_TYPES.has(type)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "移动中转命令类型未启用。",
+      code: "mobile_relay_command_type_unsupported"
+    };
+  }
+  if (type === "targets.scan") {
+    return { ok: true, payload: {} };
+  }
+  if (type === "agent.message.send") {
+    for (const key of AGENT_MESSAGE_SEND_LOCAL_RUNTIME_FIELDS) {
+      if (Object.hasOwn(payload, key)) {
+        return {
+          ok: false,
+          status: 400,
+          error: "移动中转消息命令不能携带本地运行时执行字段。",
+          code: "mobile_relay_command_payload_denied"
+        };
+      }
+    }
+    const sanitized = {};
+    for (const [key, nested] of Object.entries(payload)) {
+      if (AGENT_MESSAGE_SEND_PAYLOAD_FIELDS.has(key)) {
+        sanitized[key] = nested;
+      }
+    }
+    return { ok: true, payload: sanitized };
+  }
+  return { ok: true, payload };
 }
 
 function bearerTokenFromHeaders(headers = {}) {
@@ -216,7 +385,12 @@ export function createMobileRelayStore({
   userDataPath,
   storePath = "",
   now = () => new Date(),
-  maxPairings = MAX_PACT_MOBILE_RELAY_PAIRINGS
+  maxPairings = MAX_PACT_MOBILE_RELAY_PAIRINGS,
+  maxPendingPairingsPerSource = MAX_PACT_MOBILE_RELAY_PENDING_PAIRINGS_PER_SOURCE,
+  maxPendingPairingsPerPcClient = MAX_PACT_MOBILE_RELAY_PENDING_PAIRINGS_PER_PC_CLIENT,
+  maxClaimFailuresPerSource = MAX_PACT_MOBILE_RELAY_CLAIM_FAILURES_PER_SOURCE,
+  claimFailureWindowMs = DEFAULT_CLAIM_FAILURE_WINDOW_MS,
+  maxPairingDescriptorBytes = MAX_PAIRING_DESCRIPTOR_BYTES
 } = {}) {
   if (!text(userDataPath) && !text(storePath)) {
     throw new Error("createMobileRelayStore requires userDataPath or storePath.");
@@ -229,6 +403,11 @@ export function createMobileRelayStore({
     1,
     Math.floor(Number(maxPairings || MAX_PACT_MOBILE_RELAY_PAIRINGS) || MAX_PACT_MOBILE_RELAY_PAIRINGS)
   );
+  const sourcePendingLimit = Math.max(0, Math.floor(Number(maxPendingPairingsPerSource || 0) || 0));
+  const pcClientPendingLimit = Math.max(0, Math.floor(Number(maxPendingPairingsPerPcClient || 0) || 0));
+  const sourceClaimFailureLimit = Math.max(0, Math.floor(Number(maxClaimFailuresPerSource || 0) || 0));
+  const claimFailureWindow = Math.max(60_000, Number(claimFailureWindowMs || DEFAULT_CLAIM_FAILURE_WINDOW_MS) || DEFAULT_CLAIM_FAILURE_WINDOW_MS);
+  const pairingDescriptorBytes = Math.max(1024, Number(maxPairingDescriptorBytes || MAX_PAIRING_DESCRIPTOR_BYTES) || MAX_PAIRING_DESCRIPTOR_BYTES);
 
   async function readStore() {
     try {
@@ -237,7 +416,8 @@ export function createMobileRelayStore({
         return {
           ...emptyStore(),
           ...decoded,
-          pairings: asObject(decoded.pairings)
+          pairings: asObject(decoded.pairings),
+          claimFailures: asObject(decoded.claimFailures)
         };
       }
     } catch (error) {
@@ -368,7 +548,16 @@ export function createMobileRelayStore({
       };
     },
 
-    async createPairing(input = {}) {
+    async createPairing(input = {}, context = {}) {
+      if (jsonByteLength({
+        pcClientId: input.pcClientId || input.clientId,
+        pcClientName: input.pcClientName || input.pcLabel || input.deviceName,
+        platform: input.platform,
+        capabilities: input.capabilities,
+        targets: input.targets
+      }) > pairingDescriptorBytes) {
+        return errorResult(413, "移动中转配对描述过大。", "mobile_relay_pairing_descriptor_too_large");
+      }
       const pairingCode = randomCode();
       const pcToken = randomToken();
       const pairingId = `pair_${crypto.randomUUID()}`;
@@ -376,6 +565,7 @@ export function createMobileRelayStore({
       const ttlMs = normalizePairingTtlMs(input.ttlMs);
       const expiresAt = nowIso(new Date(Date.parse(createdAt) + ttlMs));
       const pcClientId = text(input.pcClientId || input.clientId || `pc_${crypto.randomUUID()}`);
+      const createSourceHash = hashedPolicyKey(context.sourceKey, "mobile-relay-pairing-create-source");
       const pairing = {
         pairingId,
         status: "pending",
@@ -386,12 +576,13 @@ export function createMobileRelayStore({
         pairingCodeHash: hashSecret(pairingCode),
         pcTokenHash: hashSecret(pcToken),
         mobileTokenHash: "",
+        createSourceHash,
         pc: {
           clientId: pcClientId,
           label: text(input.pcClientName || input.pcLabel || input.deviceName || "Pact PC Client"),
           platform: text(input.platform || process.platform),
           capabilities: asObject(input.capabilities),
-          targets: asArray(input.targets),
+          targets: normalizeRelayTargets(input.targets),
           lastSeenAt: createdAt
         },
         mobile: null,
@@ -404,6 +595,21 @@ export function createMobileRelayStore({
           maxPairings: maxStoredPairings,
           reserveSlots: 1
         });
+        const activePending = pendingPairings(store, Date.parse(createdAt));
+        if (
+          sourcePendingLimit > 0 &&
+          createSourceHash &&
+          activePending.filter((item) => item.createSourceHash === createSourceHash).length >= sourcePendingLimit
+        ) {
+          return errorResult(429, "移动中转配对创建过于频繁，请稍后再试。", "mobile_relay_pairing_source_quota_exceeded");
+        }
+        if (
+          pcClientPendingLimit > 0 &&
+          pcClientId &&
+          activePending.filter((item) => text(item.pc?.clientId) === pcClientId).length >= pcClientPendingLimit
+        ) {
+          return errorResult(429, "此 PC 客户端已有待认领配对，请先使用或清理旧配对。", "mobile_relay_pairing_client_quota_exceeded");
+        }
         if (Object.keys(store.pairings).length >= maxStoredPairings) {
           return errorResult(429, "移动中转配对容量已满，请先清理或等待旧配对过期。", "mobile_relay_pairing_capacity_exceeded");
         }
@@ -425,7 +631,11 @@ export function createMobileRelayStore({
       });
     },
 
-    async claimPairing(input = {}) {
+    async claimPairing(input = {}, context = {}) {
+      const pairingId = text(input.pairingId || input.pairing_id || input.id);
+      if (!pairingId) {
+        return errorResult(400, "缺少配对 ID。", "missing_pairing_id");
+      }
       const rawPairingCode = text(input.pairingCode || input.code);
       const pairingCode = normalizePairingCode(rawPairingCode);
       if (rawPairingCode && !pairingCode) {
@@ -439,42 +649,67 @@ export function createMobileRelayStore({
       const codeHash = hashSecret(pairingCode);
       const nowText = nowIso(now());
       const nowMs = Date.parse(nowText);
+      const claimSourceHash = hashedPolicyKey(context.sourceKey, "mobile-relay-pairing-claim-source");
       const mutation = await mutate((store) => {
         compactPairingStore(store, {
           nowMs,
           nowText,
           maxPairings: maxStoredPairings
         });
-        for (const pairing of Object.values(store.pairings)) {
-          if (!timingSafeStringEqual(pairing.pairingCodeHash, codeHash)) {
-            continue;
-          }
-          if (pairing.status === "expired") {
-            return errorResult(410, "配对码已过期。", "pairing_code_expired");
-          }
-          if (pairing.status !== "pending") {
-            return errorResult(409, "配对码已被使用。", "pairing_code_used");
-          }
-          if (Date.parse(pairing.expiresAt || "") <= nowMs) {
-            pairing.status = "expired";
-            pairing.updatedAt = nowText;
-            return errorResult(410, "配对码已过期。", "pairing_code_expired");
-          }
-          pairing.status = "paired";
-          pairing.updatedAt = nowText;
-          pairing.pairedAt = nowText;
-          pairing.mobileTokenHash = hashSecret(mobileToken);
-          pairing.mobile = {
-            deviceId: text(input.mobileDeviceId || input.deviceId || `mobile_${crypto.randomUUID()}`),
-            label: text(input.mobileDeviceName || input.mobileLabel || input.deviceName || "Pact Mobile"),
-            platform: text(input.platform || "mobile"),
-            pairedAt: nowText,
-            lastSeenAt: nowText
-          };
-          claimedPairing = pairing;
-          return null;
+        compactClaimFailureStore(store, { nowMs });
+        if (sourceClaimFailure(store, claimSourceHash, { nowMs })) {
+          return errorResult(429, "配对码尝试过于频繁，请稍后再试。", "mobile_relay_pairing_claim_rate_limited");
         }
-        return errorResult(404, "配对码不存在。", "pairing_code_not_found");
+        const pairing = pairingById(store, pairingId);
+        if (!pairing) {
+          const failure = recordClaimFailure(store, claimSourceHash, {
+            nowMs,
+            nowText,
+            maxFailures: sourceClaimFailureLimit,
+            windowMs: claimFailureWindow
+          });
+          if (failure.locked) {
+            return errorResult(429, "配对码尝试过于频繁，请稍后再试。", "mobile_relay_pairing_claim_rate_limited");
+          }
+          return errorResult(404, "配对不存在。", "pairing_not_found");
+        }
+        if (!timingSafeStringEqual(pairing.pairingCodeHash, codeHash)) {
+          const failure = recordClaimFailure(store, claimSourceHash, {
+            nowMs,
+            nowText,
+            maxFailures: sourceClaimFailureLimit,
+            windowMs: claimFailureWindow
+          });
+          if (failure.locked) {
+            return errorResult(429, "配对码尝试过于频繁，请稍后再试。", "mobile_relay_pairing_claim_rate_limited");
+          }
+          return errorResult(404, "配对码不存在。", "pairing_code_not_found");
+        }
+        if (pairing.status === "expired") {
+          return errorResult(410, "配对码已过期。", "pairing_code_expired");
+        }
+        if (pairing.status !== "pending") {
+          return errorResult(409, "配对码已被使用。", "pairing_code_used");
+        }
+        if (Date.parse(pairing.expiresAt || "") <= nowMs) {
+          pairing.status = "expired";
+          pairing.updatedAt = nowText;
+          return errorResult(410, "配对码已过期。", "pairing_code_expired");
+        }
+        pairing.status = "paired";
+        pairing.updatedAt = nowText;
+        pairing.pairedAt = nowText;
+        pairing.mobileTokenHash = hashSecret(mobileToken);
+        pairing.mobile = {
+          deviceId: text(input.mobileDeviceId || input.deviceId || `mobile_${crypto.randomUUID()}`),
+          label: text(input.mobileDeviceName || input.mobileLabel || input.deviceName || "Pact Mobile"),
+          platform: text(input.platform || "mobile"),
+          pairedAt: nowText,
+          lastSeenAt: nowText
+        };
+        clearClaimFailures(store, claimSourceHash);
+        claimedPairing = pairing;
+        return null;
       });
       if (mutation) {
         return mutation;
@@ -555,12 +790,23 @@ export function createMobileRelayStore({
         if (!authorizeMobile(pairing, token)) {
           return errorResult(401, "手机 token 无效。", "invalid_mobile_token");
         }
+        const sanitizedPayload = sanitizeMobileCommandPayload(
+          type,
+          input.payload || input.command?.payload
+        );
+        if (!sanitizedPayload.ok) {
+          return errorResult(
+            sanitizedPayload.status || 400,
+            sanitizedPayload.error || "移动中转命令负载未启用。",
+            sanitizedPayload.code || "mobile_relay_command_payload_denied"
+          );
+        }
         const createdAt = nowIso(now());
         command = {
           commandId: `cmd_${crypto.randomUUID()}`,
           pairingId,
           type,
-          payload: asObject(input.payload || input.command?.payload),
+          payload: sanitizedPayload.payload,
           status: "pending",
           createdAt,
           updatedAt: createdAt,

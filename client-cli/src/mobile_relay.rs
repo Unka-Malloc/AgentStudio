@@ -1,6 +1,6 @@
 use crate::{client_state::ClientStateStore, conversations, runtime_adapters, targets};
 use anyhow::{Result, anyhow};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -8,6 +8,32 @@ use uuid::Uuid;
 
 const CONFIG_SCHEMA_VERSION: u32 = 1;
 const DEFAULT_GATEWAY_URL: &str = "https://relay.pact.run";
+const AGENT_MESSAGE_SEND_PAYLOAD_FIELDS: &[&str] = &[
+    "agent",
+    "agentId",
+    "target",
+    "text",
+    "message",
+    "prompt",
+    "sessionId",
+    "nativeSessionId",
+    "cwd",
+    "workingDirectory",
+    "timeoutMs",
+    "maxStdoutBytes",
+    "maxStderrBytes",
+];
+const AGENT_MESSAGE_SEND_LOCAL_RUNTIME_FIELDS: &[&str] = &[
+    "command",
+    "args",
+    "stdin",
+    "executable",
+    "binaryPath",
+    "commandPath",
+    "env",
+    "environment",
+    "shell",
+];
 
 pub fn config_get() -> Result<Value> {
     let config = load_config()?;
@@ -63,6 +89,15 @@ pub fn pairing_create(params: &Value) -> Result<Value> {
 
 pub fn pairing_claim(params: &Value) -> Result<Value> {
     let config = load_config()?;
+    let pairing_id = text_param(params, &["pairingId", "pairing_id"])
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            config
+                .get("pairingId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .ok_or_else(|| anyhow!("mobile relay pairing claim requires --pairing-id"))?;
     let code = text_param(params, &["pairingCode", "code"])
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| anyhow!("mobile relay pairing claim requires --pairing-code"))?;
@@ -71,6 +106,7 @@ pub fn pairing_claim(params: &Value) -> Result<Value> {
         "/api/mobile-relay/pairings/claim",
         "",
         json!({
+            "pairingId": pairing_id,
             "pairingCode": code,
             "mobileDeviceName": text_param(params, &["mobileDeviceName", "deviceName"]).unwrap_or_else(|| "Pact Mobile CLI".to_string()),
             "mobileDeviceId": text_param(params, &["mobileDeviceId", "deviceId"]).unwrap_or_else(|| format!("mobile_{}", Uuid::new_v4())),
@@ -265,12 +301,35 @@ fn execute_command(command: &Value) -> Result<Value> {
             }
             conversations::conversation_list(&params)
         }
-        "agent.message.send" => runtime_adapters::send_message(&payload),
+        "agent.message.send" => {
+            let safe_payload = relay_agent_message_payload(&payload)?;
+            runtime_adapters::send_message(&safe_payload)
+        }
         _ => Err(anyhow!(
             "unsupported mobile relay command: {}",
             command_type
         )),
     }
+}
+
+fn relay_agent_message_payload(payload: &Value) -> Result<Value> {
+    for key in AGENT_MESSAGE_SEND_LOCAL_RUNTIME_FIELDS {
+        if payload.get(*key).is_some() {
+            return Err(anyhow!(
+                "mobile relay agent.message.send cannot carry local runtime execution field: {}",
+                key
+            ));
+        }
+    }
+    let mut safe = Map::new();
+    if let Some(object) = payload.as_object() {
+        for key in AGENT_MESSAGE_SEND_PAYLOAD_FIELDS {
+            if let Some(value) = object.get(*key) {
+                safe.insert((*key).to_string(), value.clone());
+            }
+        }
+    }
+    Ok(Value::Object(safe))
 }
 
 fn relay_capabilities() -> Value {
@@ -557,6 +616,10 @@ mod tests {
     use super::*;
     use crate::paths::set_portable_data_dir_override;
     use std::env;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    #[cfg(unix)]
+    use std::process::Command as TestCommand;
 
     #[test]
     fn mobile_relay_config_defaults_and_private_gateway() {
@@ -656,10 +719,9 @@ mod tests {
         assert_eq!(result["sessions"][0]["nativeSessionId"], "phone-session");
     }
 
-    #[cfg(unix)]
     #[test]
-    fn relayed_agent_message_send_executes_runtime_adapter() {
-        let result = execute_command(&json!({
+    fn relayed_agent_message_send_rejects_custom_runtime_command() {
+        let error = execute_command(&json!({
             "type": "agent.message.send",
             "payload": {
                 "agentId": "codex",
@@ -669,10 +731,64 @@ mod tests {
                 "timeoutMs": 5_000
             }
         }))
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("cannot carry local runtime execution field")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn relayed_agent_message_send_executes_runtime_adapter() {
+        let dir = temp_dir("mobile-relay-runtime-adapter");
+        let codex = dir.join("codex");
+        fs::write(
+            &codex,
+            "#!/bin/sh\ninput=\"$(cat)\"\nprintf 'relay:%s' \"$input\"\n",
+        )
         .unwrap();
+        let mut permissions = fs::metadata(&codex).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&codex, permissions).unwrap();
+
+        let current_path = env::var("PATH").unwrap_or_default();
+        let test_binary = env::current_exe().unwrap();
+        let status = TestCommand::new(test_binary)
+            .args(["mobile_relay_child_executes_runtime_adapter", "--nocapture"])
+            .env(
+                "PATH",
+                format!("{}:{}", dir.to_string_lossy(), current_path),
+            )
+            .env("PACT_MOBILE_RELAY_CHILD", "1")
+            .env("PACT_MOBILE_RELAY_CWD", dir.to_string_lossy().to_string())
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mobile_relay_child_executes_runtime_adapter() {
+        if env::var("PACT_MOBILE_RELAY_CHILD").ok().as_deref() != Some("1") {
+            return;
+        }
+        let cwd = env::var("PACT_MOBILE_RELAY_CWD").unwrap();
+        let result = execute_command(&json!({
+            "type": "agent.message.send",
+            "payload": {
+                "agentId": "codex",
+                "text": "from-phone",
+                "cwd": cwd,
+                "timeoutMs": 5_000
+            }
+        }))
+        .unwrap();
+        assert_eq!(result["ok"], true);
         assert_eq!(result["mode"], "runtime-adapter");
-        assert_eq!(result["runtimeProtocol"], "configured-command");
-        assert_eq!(result["output"], "phone:from-phone");
+        assert_eq!(result["runtimeProtocol"], "codex-cli-exec");
+        assert_eq!(result["output"], "relay:from-phone");
     }
 
     fn temp_dir(name: &str) -> PathBuf {

@@ -61,11 +61,23 @@ mixin AgentServiceActions {
   }
 
   Future<Map<String, dynamic>> approvePairing({required String agent}) async {
-    return (this as AgentService)._runCli(['agents', 'pair', 'approve', '--agent', agent]);
+    return (this as AgentService)._runCli([
+      'agents',
+      'pair',
+      'approve',
+      '--agent',
+      agent,
+    ]);
   }
 
   Future<Map<String, dynamic>> revokePairing({required String agent}) async {
-    return (this as AgentService)._runCli(['agents', 'pair', 'revoke', '--agent', agent]);
+    return (this as AgentService)._runCli([
+      'agents',
+      'pair',
+      'revoke',
+      '--agent',
+      agent,
+    ]);
   }
 
   Future<List<Map<String, dynamic>>> listSkills({required String agent}) async {
@@ -111,6 +123,63 @@ mixin AgentServiceActions {
       profileId,
       '--text',
       text,
+    ]);
+  }
+
+  Future<Map<String, dynamic>> localRuntimeStatus() async {
+    return (this as AgentService)._runCli(['local-runtime', 'status']);
+  }
+
+  Future<Map<String, dynamic>> ensureLocalRuntime({
+    required String sourceRoot,
+    required String presetConfig,
+    int port = 17328,
+    bool rebuild = false,
+  }) async {
+    final args = [
+      'local-runtime',
+      'ensure',
+      '--source-root',
+      sourceRoot,
+      '--preset-config',
+      presetConfig,
+      '--port',
+      port.toString(),
+    ];
+    if (rebuild) {
+      args.addAll(['--rebuild', 'true']);
+    }
+    return (this as AgentService)._runCli(args);
+  }
+
+  Future<Map<String, dynamic>> startLocalRuntime({int port = 17328}) async {
+    return (this as AgentService)._runCli([
+      'local-runtime',
+      'start',
+      '--port',
+      port.toString(),
+    ]);
+  }
+
+  Future<Map<String, dynamic>> restartLocalRuntime({int port = 17328}) async {
+    return (this as AgentService)._runCli([
+      'local-runtime',
+      'restart',
+      '--port',
+      port.toString(),
+    ]);
+  }
+
+  Future<Map<String, dynamic>> stopLocalRuntime() async {
+    return (this as AgentService)._runCli(['local-runtime', 'stop']);
+  }
+
+  Future<Map<String, dynamic>> localRuntimeLogs({int tail = 200}) async {
+    return (this as AgentService)._runCli([
+      'local-runtime',
+      'logs',
+      '--tail',
+      tail.toString(),
     ]);
   }
 

@@ -15,6 +15,10 @@ const connectRequired = process.argv.includes("--connect") ||
   process.env.PACT_ACP_RELAY_REAL_CONNECT === "1";
 const codexCliRequired = process.argv.includes("--codex-cli") ||
   process.env.PACT_ACP_RELAY_REAL_CODEX_CLI === "1";
+const antigravityAcpWrapperRequested = process.argv.includes("--antigravity-acp-wrapper") ||
+  process.env.PACT_ACP_RELAY_REAL_ANTIGRAVITY_ACP_WRAPPER === "1";
+const targetLifecycleProofsRequested = process.argv.includes("--target-lifecycle") ||
+  process.env.PACT_ACP_RELAY_REAL_TARGET_LIFECYCLE === "1";
 const maxCapturedOutputBytes = Number(process.env.PACT_ACP_RELAY_REAL_CAPTURE_MAX_BYTES || 8 * 1024 * 1024);
 
 function appendCaptured(buffer = "", chunk = "") {
@@ -104,17 +108,27 @@ const codexAcpTargetRun = codexCliRequired
 const downstreamCodexAcpTargetRun = codexCliRequired
   ? await runNodeScript("server/scripts/verify-acp-agent-relay-downstream-codex-acp-target.mjs")
   : null;
-const antigravityAcpWrapperTargetRun = await runNodeScript(
-  "server/scripts/verify-acp-agent-relay-antigravity-acp-wrapper-target.mjs",
-  {
-    ...baseRequiredEnv,
-    PACT_ACP_RELAY_ANTIGRAVITY_WRAPPER_DOWNSTREAM_ASPECT: "1"
-  }
-);
-const targetCallbackApprovalRun = await runNodeScript("server/scripts/verify-acp-agent-relay-target-callback-approval.mjs");
-const targetReconnectRun = await runNodeScript("server/scripts/verify-acp-agent-relay-target-reconnect.mjs");
-const targetLoadReconnectRun = await runNodeScript("server/scripts/verify-acp-agent-relay-target-load-reconnect.mjs");
-const idempotencyRun = await runNodeScript("server/scripts/verify-acp-agent-relay-idempotency.mjs");
+const antigravityAcpWrapperTargetRun = antigravityAcpWrapperRequested
+  ? await runNodeScript(
+      "server/scripts/verify-acp-agent-relay-antigravity-acp-wrapper-target.mjs",
+      {
+        ...baseRequiredEnv,
+        PACT_ACP_RELAY_ANTIGRAVITY_WRAPPER_DOWNSTREAM_ASPECT: "1"
+      }
+    )
+  : null;
+const targetCallbackApprovalRun = targetLifecycleProofsRequested
+  ? await runNodeScript("server/scripts/verify-acp-agent-relay-target-callback-approval.mjs")
+  : null;
+const targetReconnectRun = targetLifecycleProofsRequested
+  ? await runNodeScript("server/scripts/verify-acp-agent-relay-target-reconnect.mjs")
+  : null;
+const targetLoadReconnectRun = targetLifecycleProofsRequested
+  ? await runNodeScript("server/scripts/verify-acp-agent-relay-target-load-reconnect.mjs")
+  : null;
+const idempotencyRun = targetLifecycleProofsRequested
+  ? await runNodeScript("server/scripts/verify-acp-agent-relay-idempotency.mjs")
+  : null;
 
 const antigravityResult = selectVerifierResult(
   antigravityRun.output,
@@ -136,29 +150,44 @@ const codexAcpTargetResult = codexAcpTargetRun
 const downstreamCodexAcpTargetResult = downstreamCodexAcpTargetRun
   ? selectVerifierResult(downstreamCodexAcpTargetRun.output, "acp-agent-relay-downstream-codex-acp-target")
   : null;
-const antigravityAcpWrapperTargetResult = selectVerifierResult(
-  antigravityAcpWrapperTargetRun.output,
-  "acp-agent-relay-antigravity-acp-wrapper-target"
-);
-const targetCallbackApprovalResult = selectVerifierResult(
-  targetCallbackApprovalRun.output,
-  "acp-agent-relay-target-callback-approval"
-);
-const targetReconnectResult = selectVerifierResult(
-  targetReconnectRun.output,
-  "acp-agent-relay-target-reconnect"
-);
-const targetLoadReconnectResult = selectVerifierResult(
-  targetLoadReconnectRun.output,
-  "acp-agent-relay-target-load-reconnect"
-);
-const idempotencyResult = selectVerifierResult(
-  idempotencyRun.output,
-  "acp-agent-relay-idempotency"
-);
+const antigravityAcpWrapperTargetResult = antigravityAcpWrapperTargetRun
+  ? selectVerifierResult(
+      antigravityAcpWrapperTargetRun.output,
+      "acp-agent-relay-antigravity-acp-wrapper-target"
+    )
+  : null;
+const targetCallbackApprovalResult = targetCallbackApprovalRun
+  ? selectVerifierResult(
+      targetCallbackApprovalRun.output,
+      "acp-agent-relay-target-callback-approval"
+    )
+  : null;
+const targetReconnectResult = targetReconnectRun
+  ? selectVerifierResult(
+      targetReconnectRun.output,
+      "acp-agent-relay-target-reconnect"
+    )
+  : null;
+const targetLoadReconnectResult = targetLoadReconnectRun
+  ? selectVerifierResult(
+      targetLoadReconnectRun.output,
+      "acp-agent-relay-target-load-reconnect"
+    )
+  : null;
+const idempotencyResult = idempotencyRun
+  ? selectVerifierResult(
+      idempotencyRun.output,
+      "acp-agent-relay-idempotency"
+    )
+  : null;
 const proofBundle = buildRealRelayProofBundle({
   connectRequired,
   codexCliRequired,
+  antigravityAcpWrapperTargetRequired: antigravityAcpWrapperRequested,
+  targetCallbackApprovalRequired: targetLifecycleProofsRequested,
+  targetReconnectProofRequired: targetLifecycleProofsRequested,
+  targetLoadReconnectProofRequired: targetLifecycleProofsRequested,
+  idempotencyProofRequired: targetLifecycleProofsRequested,
   antigravityResult,
   codexAntigravityResult,
   codexCliResult,
@@ -450,67 +479,82 @@ if (codexCliRequired) {
     "Top-level real proof matrix must include proven downstream-client-aspect Codex ACP target communication."
 	  );
 }
-assert.equal(
-  proofBundle.antigravityAcpWrapperTargetProofAcceptable,
-  true,
-  "Antigravity Agent API ACP wrapper target proof must be acceptable in the top-level real gate."
-);
-assert.equal(
-  proofBundle.antigravityAcpWrapperTarget?.downstreamClientAspectAssemblyUsed,
-  true,
-  "Antigravity wrapper target proof must be assembled by downstream-client-aspect in the top-level real gate."
-);
-assert.equal(
-  proofBundle.antigravityAcpWrapperTarget?.agentDiscoveryProof?.fromAspect,
-  "downstream-client-aspect",
-  "Antigravity wrapper virtual-agent discovery must expose downstream-client-aspect provenance."
-);
-assert.equal(
-  proofBundle.antigravityAcpWrapperTarget?.targetDiscoveryProof?.adapterId,
-  "antigravity-agentapi-acp-stdio-wrapper",
-  "Antigravity wrapper target discovery must expose the wrapper adapter id."
-);
-assert.equal(
-  proofBundle.antigravityAcpWrapperTarget?.sourceFacingTargetCommunicationMode,
-  "native_acp_stdio",
-  "Antigravity wrapper target proof must expose Pact-to-wrapper ACP stdio as the source-facing target mode."
-);
-assert.equal(
-  proofBundle.antigravityAcpWrapperTarget?.targetCommunicationMode,
-  "antigravity_agentapi_acp_stdio_wrapper",
-  "Antigravity wrapper target proof must expose the proof-specific wrapper communication mode."
-);
-assert.equal(
-  proofBundle.antigravityAcpWrapperTarget?.nativeAntigravityAcp,
-  false,
-  "Antigravity wrapper proof must not claim native Antigravity ACP transport."
-);
-assert.equal(
-  proofBundle.antigravityAcpWrapperTarget?.antigravityAgentApiReached,
-  true,
-  "Antigravity wrapper proof must prove the wrapper reached Antigravity Agent API."
-);
-assert.equal(
-  proofBundle.antigravityAcpWrapperTarget?.responseKind,
-  "acknowledgement",
-  "Antigravity wrapper proof must stay accepted-only until a final response is independently observed."
-);
-assert.equal(
-  proofBundle.antigravityAcpWrapperTarget?.restartSessionLoadProof?.reasoningTraceReplaySuppressed,
-  true,
-  "Antigravity wrapper restart-load proof must suppress reasoning traces by default."
-);
-assert.equal(
-  proofBundle.proofMatrix?.requirements?.find((item) =>
-    item.id === "antigravity_agentapi_acp_wrapper_target_communication"
-  )?.status,
-  "proven",
-  "Top-level real proof matrix must include proven Antigravity Agent API ACP wrapper communication."
-);
+if (antigravityAcpWrapperRequested) {
+  assert.equal(
+    proofBundle.antigravityAcpWrapperTarget?.nativeAntigravityAcp,
+    false,
+    "Antigravity ACP wrapper proof must remain classified as a Pact wrapper, not native Antigravity ACP."
+  );
+  assert.equal(
+    proofBundle.antigravityAcpWrapperTargetProofAcceptable,
+    true,
+    "Requested Antigravity ACP wrapper proof must be acceptable."
+  );
+  assert.equal(
+    proofBundle.antigravityAcpWrapperTarget?.downstreamClientAspectAssemblyUsed,
+    true,
+    "Antigravity wrapper target proof must be assembled by downstream-client-aspect in the top-level real gate."
+  );
+  assert.equal(
+    proofBundle.antigravityAcpWrapperTarget?.agentDiscoveryProof?.fromAspect,
+    "downstream-client-aspect",
+    "Antigravity wrapper virtual-agent discovery must expose downstream-client-aspect provenance."
+  );
+  assert.equal(
+    proofBundle.antigravityAcpWrapperTarget?.targetDiscoveryProof?.adapterId,
+    "antigravity-agentapi-acp-stdio-wrapper",
+    "Antigravity wrapper target discovery must expose the wrapper adapter id."
+  );
+  assert.equal(
+    proofBundle.antigravityAcpWrapperTarget?.sourceFacingTargetCommunicationMode,
+    "native_acp_stdio",
+    "Antigravity wrapper target proof must expose Pact-to-wrapper ACP stdio as the source-facing target mode."
+  );
+  assert.equal(
+    proofBundle.antigravityAcpWrapperTarget?.targetCommunicationMode,
+    "antigravity_agentapi_acp_stdio_wrapper",
+    "Antigravity wrapper target proof must expose the proof-specific wrapper communication mode."
+  );
+  assert.equal(
+    proofBundle.antigravityAcpWrapperTarget?.antigravityAgentApiReached,
+    true,
+    "Antigravity wrapper proof must prove the wrapper reached Antigravity Agent API."
+  );
+  assert.equal(
+    proofBundle.antigravityAcpWrapperTarget?.responseKind,
+    "acknowledgement",
+    "Antigravity wrapper proof must stay accepted-only until a final response is independently observed."
+  );
+  assert.equal(
+    proofBundle.antigravityAcpWrapperTarget?.restartSessionLoadProof?.reasoningTraceReplaySuppressed,
+    true,
+    "Antigravity wrapper restart-load proof must suppress reasoning traces by default."
+  );
+  assert.equal(
+    proofBundle.proofMatrix?.requirements?.find((item) =>
+      item.id === "antigravity_agentapi_acp_wrapper_target_communication"
+    )?.status,
+    "proven",
+    "Top-level real proof matrix must include proven Antigravity Agent API ACP wrapper communication when requested."
+  );
+} else {
+  assert.equal(
+    proofBundle.antigravityAcpWrapperTargetRequired,
+    false,
+    "Antigravity ACP wrapper target proof must be optional unless explicitly requested."
+  );
+  assert.equal(
+    proofBundle.proofMatrix?.requirements?.find((item) =>
+      item.id === "antigravity_agentapi_acp_wrapper_target_communication"
+    )?.status,
+    "not_required",
+    "Unrequested Antigravity ACP wrapper target proof must be skipped, not failed."
+  );
+}
 assert.equal(
   proofBundle.antigravityCrossRunBindingProofAcceptable,
   true,
-  "Top-level real proof matrix must prove Antigravity direct, Codex-orchestrated, and wrapper proofs are bound to the same live conversation and endpoint."
+  "Top-level real proof matrix must prove requested Antigravity proofs are bound to the same live conversation and endpoint."
 );
 assert.equal(
   proofBundle.proofMatrix?.requirements?.find((item) =>
@@ -519,6 +563,7 @@ assert.equal(
   "proven",
   "Top-level real proof matrix must include proven Antigravity cross-run binding."
 );
+if (targetLifecycleProofsRequested) {
 assert.equal(
   proofBundle.targetCallbackApprovalProofAcceptable,
   true,
@@ -736,6 +781,23 @@ assert.equal(
   "proven",
   "Top-level real proof matrix must include proven source-facing idempotency replay/conflict safety."
 );
+} else {
+  for (const requirementId of [
+    "target_callback_approval_resume",
+    "target_callback_approval_denial",
+    "target_callback_parent_binding",
+    "source_facing_session_cancel_running_prompt",
+    "target_reconnect_resume_after_process_restart",
+    "target_reconnect_load_only_after_process_restart",
+    "source_facing_idempotency_replay_conflict"
+  ]) {
+    assert.equal(
+      proofBundle.proofMatrix?.requirements?.find((item) => item.id === requirementId)?.status,
+      "not_required",
+      `Unrequested target lifecycle proof ${requirementId} must be skipped, not failed.`
+    );
+  }
+}
 
 if (process.env.PACT_ACP_RELAY_REAL_PROOF_BUNDLE_PATH) {
   await fs.mkdir(path.dirname(process.env.PACT_ACP_RELAY_REAL_PROOF_BUNDLE_PATH), { recursive: true });

@@ -48,8 +48,8 @@ async function main() {
     if (newDescription) json.description = newDescription;
   });
 
-  // 2. Update mcp-connector/package.json
-  await updateJson("mcp-connector/package.json", (json) => {
+  // 2. Update server/platform/common/mcp/gateway-installer/package.json
+  await updateJson("server/platform/common/mcp/gateway-installer/package.json", (json) => {
     if (newVersion) json.version = newVersion;
     if (newDescription) json.description = newDescription;
   });
@@ -79,9 +79,9 @@ async function main() {
     });
   }
 
-  // 5. Update mcp-connector/bin/pact-mcp.mjs (Hardcoded descriptions)
+  // 5. Update server/platform/common/mcp/gateway-installer/bin/pact-mcp.mjs (Hardcoded descriptions)
   if (newDescription) {
-    await updateFile("mcp-connector/bin/pact-mcp.mjs", (content) => {
+    await updateFile("server/platform/common/mcp/gateway-installer/bin/pact-mcp.mjs", (content) => {
       // Find strings like "Pact Unified Agent Workspace MCP. Provides..."
       return content.replace(/"Pact Unified Agent Workspace MCP\. Provides [^"]+"/g, `"${newDescription}"`);
     });

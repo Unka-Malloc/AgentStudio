@@ -86,7 +86,10 @@ for (const filePath of files) {
   assertFetchesUseServiceLayer(filePath, source);
 }
 
-const bridgeSource = await fs.readFile(path.join(managementRoot, "lib", "bridge.ts"), "utf8");
+const serviceLayerFiles = await listFiles(path.join(managementRoot, "lib"));
+const serviceLayerSource = (await Promise.all(
+  serviceLayerFiles.map((filePath) => fs.readFile(filePath, "utf8"))
+)).join("\n");
 for (const required of [
   "/api/settings",
   "/api/console/state",
@@ -96,9 +99,9 @@ for (const required of [
   "/api/knowledge/console"
 ]) {
   assert.equal(
-    bridgeSource.includes(required),
+    serviceLayerSource.includes(required),
     true,
-    `server-web/lib/bridge.ts must expose service-layer route ${required}`
+    `server-web/lib must expose service-layer route ${required}`
   );
 }
 

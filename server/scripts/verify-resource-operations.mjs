@@ -8,6 +8,7 @@ import { SERVER_API_OPERATIONS } from "../platform/common/operation-dispatcher/o
 import { createToolCatalog } from "../platform/specialized/capabilities/tools/tool-management-core/catalog.mjs";
 import { REPO_OPERATION_IDS } from "../platform/specialized/capabilities/code-repository/repo-operations/index.mjs";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -36,7 +37,9 @@ async function fetchJson(url, options = {}) {
 function bearerHeaders(token) {
   return {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`
+    Authorization: `Bearer ${token}`,
+    "X-Pact-Client-Kind": "pact-client",
+    "X-Pact-Client-Id": "pact-client-resource-operations-verifier"
   };
 }
 
@@ -61,12 +64,27 @@ async function createGrant(server, body) {
   return result.payload;
 }
 
-async function executeTool(server, token, toolId, input) {
-  return fetchJson(`${server.url}/api/tool-management/v1/execute`, {
+async function executeTool(server, token, toolId, input, { approvePending = false } = {}) {
+  const executed = await fetchJson(`${server.url}/api/tool-management/v1/execute`, {
     method: "POST",
     headers: bearerHeaders(token),
     body: JSON.stringify({ toolId, input })
   });
+  if (approvePending && executed.status === 202 && executed.payload?.pendingOperation?.pendingOperationId) {
+    return fetchJson(
+      `${server.url}/api/tool-management/v1/pending-operations/${encodeURIComponent(executed.payload.pendingOperation.pendingOperationId)}/resolve`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-pact-safety-confirm": "true" },
+        body: JSON.stringify({
+          resolution: "approved",
+          resolvedBy: "verify-resource-operations",
+          reason: "Verify approved repository dry-run operation."
+        })
+      }
+    );
+  }
+  return executed;
 }
 
 async function callMcp(server, token, operation, input, id = 1, outlet = "pact.discovery") {
@@ -128,6 +146,11 @@ assert.equal(toolsById.get("pact.repo.protection.set")?.requiresApproval, true);
 const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-resource-ops-"));
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-resource-ops-server-"));
 const { repoPath } = await createFixtureRepo(tempRoot);
+const previousRepoOperationRoots = process.env.PACT_REPO_OPERATION_ROOTS || "";
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
+process.env.PACT_REPO_OPERATION_ROOTS = previousRepoOperationRoots
+  ? `${previousRepoOperationRoots}${path.delimiter}${tempRoot}`
+  : tempRoot;
 
 const server = await startHttpServer({
   userDataPath,
@@ -300,7 +323,7 @@ try {
     force: true,
     dryRun: true,
     confirm: true
-  });
+  }, { approvePending: true });
   assert.equal(forcePlan.status, 200);
   assert.equal(forcePlan.payload.result.data.dryRun, true);
 
@@ -351,14 +374,20 @@ try {
     ["pact.repo.webhook.set", { repoId: repoPath, provider: "github", githubRepo: "owner/repo", payload: { name: "web" }, dryRun: true, confirm: true }],
     ["pact.repo.member.set", { repoId: repoPath, provider: "github", githubRepo: "owner/repo", subjectId: "octocat", role: "push", dryRun: true, confirm: true }]
   ]) {
-    const result = await executeTool(server, elevatedGrant.token, toolId, input);
+    const result = await executeTool(server, elevatedGrant.token, toolId, input, { approvePending: true });
     assert.equal(result.status, 200, `${toolId} should support dryRun`);
     assert.equal(result.payload.result.data.dryRun, true);
   }
 
   console.log("resource-operations verification passed");
 } finally {
+  if (previousRepoOperationRoots) {
+    process.env.PACT_REPO_OPERATION_ROOTS = previousRepoOperationRoots;
+  } else {
+    delete process.env.PACT_REPO_OPERATION_ROOTS;
+  }
   await server.close();
   await fs.rm(tempRoot, { recursive: true, force: true });
   await fs.rm(userDataPath, { recursive: true, force: true });
+  restoreCapabilityKernelEnv();
 }

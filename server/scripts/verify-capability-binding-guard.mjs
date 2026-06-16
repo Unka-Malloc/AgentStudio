@@ -19,6 +19,7 @@ const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-capability-binding
 const recoveryDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-capability-binding-guard-recovery-"));
 const cliRecoveryDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-capability-binding-guard-cli-recovery-"));
 const capabilityKey = `ock_${crypto.randomBytes(32).toString("base64url")}`;
+const processCapabilityKey = `ock_${crypto.randomBytes(32).toString("base64url")}`;
 const guard = createCapabilityBindingGuard({
   backend: "local-file",
   dataDir,
@@ -99,6 +100,103 @@ try {
   assert.equal(wrongNamespace.ok, false);
   assert.equal(wrongNamespace.reasonCode, "binding_namespace_mismatch");
 
+  const processBinding = await guard.bindCapabilityKey({
+    capabilityKey: processCapabilityKey,
+    credentialId: "process-credential-a",
+    context: {
+      namespace: "process-identity",
+      clientId: "client-a",
+      serverId: "server-a",
+      packageId: "package-a",
+      processKeyId: "process-key-a",
+      processPublicKeyHash: "sha256:process-public-key-a",
+      fingerprintId: "fp-a",
+      machineInstanceId: "machine-a",
+      appInstanceId: "app-a",
+      runtimeInstanceId: "runtime-a",
+      clientFingerprintHash: "sha256:fingerprint-a",
+      identityGeneration: "1",
+      defaultIdentityHash: "sha256:default-identity-a"
+    },
+    expiresAt: "9999-12-31T23:59:59.999Z"
+  });
+  assert.equal(processBinding.requireServer, true);
+  assert.equal(processBinding.requirePackage, true);
+  assert.equal(processBinding.requireProcessKey, true);
+  assert.equal(processBinding.requireProcessPublicKey, true);
+  assert.equal(processBinding.requireFingerprintId, true);
+  assert.equal(processBinding.requireMachineInstance, true);
+  assert.equal(processBinding.requireAppInstance, true);
+  assert.equal(processBinding.requireRuntimeInstance, true);
+  assert.equal(processBinding.requireClientFingerprint, true);
+  assert.equal(processBinding.requireIdentityGeneration, true);
+  assert.equal(processBinding.requireDefaultIdentity, true);
+
+  const processAllowed = await guard.verifyCapabilityKeyBinding({
+    capabilityKey: processCapabilityKey,
+    credentialId: "process-credential-a",
+    context: {
+      namespace: "process-identity",
+      clientId: "client-a",
+      serverId: "server-a",
+      packageId: "package-a",
+      processKeyId: "process-key-a",
+      processPublicKeyHash: "sha256:process-public-key-a",
+      fingerprintId: "fp-a",
+      machineInstanceId: "machine-a",
+      appInstanceId: "app-a",
+      runtimeInstanceId: "runtime-a",
+      clientFingerprintHash: "sha256:fingerprint-a",
+      identityGeneration: "1",
+      defaultIdentityHash: "sha256:default-identity-a"
+    }
+  });
+  assert.equal(processAllowed.ok, true);
+
+  const wrongProcessKey = await guard.verifyCapabilityKeyBinding({
+    capabilityKey: processCapabilityKey,
+    credentialId: "process-credential-a",
+    context: {
+      namespace: "process-identity",
+      clientId: "client-a",
+      serverId: "server-a",
+      packageId: "package-a",
+      processKeyId: "process-key-b",
+      processPublicKeyHash: "sha256:process-public-key-a",
+      fingerprintId: "fp-a",
+      machineInstanceId: "machine-a",
+      appInstanceId: "app-a",
+      runtimeInstanceId: "runtime-a",
+      clientFingerprintHash: "sha256:fingerprint-a",
+      identityGeneration: "1",
+      defaultIdentityHash: "sha256:default-identity-a"
+    }
+  });
+  assert.equal(wrongProcessKey.ok, false);
+  assert.equal(wrongProcessKey.reasonCode, "binding_process_key_mismatch");
+
+  const wrongFingerprint = await guard.verifyCapabilityKeyBinding({
+    capabilityKey: processCapabilityKey,
+    credentialId: "process-credential-a",
+    context: {
+      namespace: "process-identity",
+      clientId: "client-a",
+      serverId: "server-a",
+      packageId: "package-a",
+      processKeyId: "process-key-a",
+      processPublicKeyHash: "sha256:process-public-key-a",
+      fingerprintId: "fp-a",
+      machineInstanceId: "machine-a",
+      appInstanceId: "app-a",
+      runtimeInstanceId: "runtime-copy",
+      clientFingerprintHash: "sha256:fingerprint-a",
+      identityGeneration: "1",
+      defaultIdentityHash: "sha256:default-identity-a"
+    }
+  });
+  assert.equal(wrongFingerprint.ok, false);
+  assert.equal(wrongFingerprint.reasonCode, "binding_runtime_instance_mismatch");
+
   const unregistered = await guard.verifyCapabilityKeyBinding({
     capabilityKey: `ock_${crypto.randomBytes(32).toString("base64url")}`,
     credentialId: "legacy-credential",
@@ -118,6 +216,7 @@ try {
   assert.equal(stateBytes.includes(capabilityKey), false, "binding guard state must not contain plaintext capability keys");
   assert.equal(stateBytes.includes("user-a"), false, "binding guard state must not contain plaintext user ids");
   assert.equal(stateBytes.includes("agent-a"), false, "binding guard state must not contain plaintext agent ids");
+  assert.equal(stateBytes.includes("process-key-a"), false, "binding guard state must not contain plaintext process key ids");
   assert.equal(stateBytes.includes("bindingLookupKeyBase64"), false, "binding guard file must not expose lookup key plaintext");
   const sealingKeyPath = path.join(path.dirname(statePath), "verify-binding.sealing-key");
   const sealingKeyStat = await fs.stat(sealingKeyPath);
@@ -130,8 +229,8 @@ try {
   );
 
   const description = await guard.describe();
-  assert.equal(description.bindingCount, 1);
-  assert.equal(description.activeBindingCount, 1);
+  assert.equal(description.bindingCount, 2);
+  assert.equal(description.activeBindingCount, 2);
   assert.equal(JSON.stringify(description).includes("bindingLookupKeyBase64"), false);
 
   const concurrentGuard = createCapabilityBindingGuard({

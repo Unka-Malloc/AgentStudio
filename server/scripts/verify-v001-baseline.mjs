@@ -6,6 +6,7 @@ import path from "node:path";
 import { createV001BaselineProvider } from "../platform/common/v001/baseline-provider.mjs";
 import { SERVER_API_OPERATIONS } from "../platform/common/operation-dispatcher/operation-registry.mjs";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 import { authHeaders, installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 async function fetchJson(url, options = {}) {
@@ -74,6 +75,7 @@ assert.deepEqual(operation.requiredScopes, ["console:read"]);
 assert.equal(operation.readOnly, true);
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-v001-baseline-"));
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
 let server = null;
 
 try {
@@ -245,4 +247,5 @@ try {
     await server.close();
   }
   await fs.rm(userDataPath, { recursive: true, force: true }).catch(() => {});
+  restoreCapabilityKernelEnv();
 }

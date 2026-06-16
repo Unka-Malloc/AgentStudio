@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { executeGerritCommonOperation } from "../../code-review/gerrit/index.mjs";
+import { pathIsWithinRoot } from "../../../../common/security/local-path-boundary.mjs";
 
 export const REPO_OPERATION_IDS = Object.freeze([
   "repo.status",
@@ -174,6 +175,65 @@ function normalizeRepoId(repoId) {
   return path.isAbsolute(raw) ? raw : path.resolve(process.cwd(), raw);
 }
 
+function taggedError(code, message, status = 400) {
+  const error = new Error(message);
+  error.code = code;
+  error.status = status;
+  return error;
+}
+
+function configuredRepoOperationRoots() {
+  return text(process.env.PACT_REPO_OPERATION_ROOTS)
+    .split(path.delimiter)
+    .map((item) => text(item))
+    .filter(Boolean)
+    .map((item) => path.resolve(item));
+}
+
+async function gitToplevel(candidatePath) {
+  const result = await runProcess("git", ["-C", candidatePath, "rev-parse", "--show-toplevel"], {
+    allowFailure: true
+  });
+  return result.code === 0 ? path.resolve(result.stdout.trim()) : "";
+}
+
+async function allowedRepoOperationRoots() {
+  const roots = [];
+  const currentRoot = await gitToplevel(process.cwd()).catch(() => "");
+  if (currentRoot) {
+    roots.push(currentRoot);
+  }
+  for (const configuredRoot of configuredRepoOperationRoots()) {
+    const repoRoot = await gitToplevel(configuredRoot).catch(() => "");
+    roots.push(repoRoot || configuredRoot);
+  }
+  return [...new Set(roots.map((item) => path.resolve(item)))];
+}
+
+async function realpathOrResolved(candidatePath) {
+  try {
+    return await fs.realpath(candidatePath);
+  } catch {
+    return path.resolve(candidatePath);
+  }
+}
+
+async function assertRepoRootAllowed(repoRoot) {
+  const repoRealPath = await realpathOrResolved(repoRoot);
+  const allowedRoots = await allowedRepoOperationRoots();
+  for (const allowedRoot of allowedRoots) {
+    const allowedRealPath = await realpathOrResolved(allowedRoot);
+    if (pathIsWithinRoot(repoRealPath, allowedRealPath)) {
+      return;
+    }
+  }
+  throw taggedError(
+    "REPO_ROOT_DENIED",
+    "repoId is outside allowed repository roots.",
+    403
+  );
+}
+
 async function resolveRepo(input = {}) {
   const candidate = normalizeRepoId(input.repoId || input.repository || input.worktreePath);
   const root = await runProcess("git", ["-C", candidate, "rev-parse", "--show-toplevel"], {
@@ -183,6 +243,7 @@ async function resolveRepo(input = {}) {
     throw new Error(`repoId does not resolve to a git worktree: ${candidate}`);
   }
   const repoRoot = root.stdout.trim();
+  await assertRepoRootAllowed(repoRoot);
   const head = await runGit(repoRoot, ["rev-parse", "--verify", "HEAD"], { allowFailure: true });
   const branch = await runGit(repoRoot, ["branch", "--show-current"], { allowFailure: true });
   return {
@@ -218,6 +279,90 @@ function resolveRepoPath(repoRoot, value) {
   return { relativePath, absolutePath };
 }
 
+async function assertExistingRepoPath(repoRoot, target, {
+  label = "Repository path",
+  expectedType = ""
+} = {}) {
+  const stat = await fs.lstat(target.absolutePath);
+  if (stat.isSymbolicLink()) {
+    throw taggedError("REPO_PATH_DENIED", `${label} cannot be a symbolic link.`);
+  }
+  if (expectedType === "file" && !stat.isFile()) {
+    throw taggedError("REPO_PATH_DENIED", `${label} must be a file.`);
+  }
+  if (expectedType === "directory" && !stat.isDirectory()) {
+    throw taggedError("REPO_PATH_DENIED", `${label} must be a directory.`);
+  }
+  const rootRealPath = await fs.realpath(repoRoot);
+  const realPath = await fs.realpath(target.absolutePath);
+  if (!pathIsWithinRoot(realPath, rootRealPath)) {
+    throw taggedError("REPO_PATH_DENIED", `${label} real path escapes repository root.`);
+  }
+  return stat;
+}
+
+async function assertWritableRepoPath(repoRoot, target, { label = "Repository write path" } = {}) {
+  const root = path.resolve(repoRoot);
+  const rootRealPath = await fs.realpath(root);
+  const relative = path.relative(root, target.absolutePath);
+  const segments = relative ? relative.split(path.sep).filter(Boolean) : [];
+  let current = root;
+  for (const segment of segments.slice(0, -1)) {
+    current = path.join(current, segment);
+    try {
+      const stat = await fs.lstat(current);
+      if (stat.isSymbolicLink()) {
+        throw taggedError("REPO_PATH_DENIED", `${label} cannot pass through a symbolic link directory.`);
+      }
+      if (!stat.isDirectory()) {
+        throw taggedError("REPO_PATH_DENIED", `${label} parent path must be a directory.`);
+      }
+      const realPath = await fs.realpath(current);
+      if (!pathIsWithinRoot(realPath, rootRealPath)) {
+        throw taggedError("REPO_PATH_DENIED", `${label} parent real path escapes repository root.`);
+      }
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        break;
+      }
+      throw error;
+    }
+  }
+  let existingParent = path.dirname(target.absolutePath);
+  while (true) {
+    try {
+      const stat = await fs.lstat(existingParent);
+      if (stat.isSymbolicLink()) {
+        throw taggedError("REPO_PATH_DENIED", `${label} parent cannot be a symbolic link.`);
+      }
+      if (!stat.isDirectory()) {
+        throw taggedError("REPO_PATH_DENIED", `${label} parent path must be a directory.`);
+      }
+      const realPath = await fs.realpath(existingParent);
+      if (!pathIsWithinRoot(realPath, rootRealPath)) {
+        throw taggedError("REPO_PATH_DENIED", `${label} parent real path escapes repository root.`);
+      }
+      break;
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        throw error;
+      }
+      const nextParent = path.dirname(existingParent);
+      if (nextParent === existingParent || !pathIsWithinRoot(nextParent, root)) {
+        throw taggedError("REPO_PATH_DENIED", `${label} parent path escapes repository root.`);
+      }
+      existingParent = nextParent;
+    }
+  }
+  try {
+    await assertExistingRepoPath(repoRoot, target, { label });
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
 async function ensureBranch(repoRoot, branch) {
   const branchName = text(branch);
   if (!branchName) {
@@ -243,16 +388,20 @@ async function applyFileChange(repo, change) {
   if (action === "move") {
     const from = resolveRepoPath(repo.root, requireString(payload, "fromPath"));
     const to = resolveRepoPath(repo.root, requireString(payload, "toPath"));
+    await assertExistingRepoPath(repo.root, from, { label: "Repository move source" });
+    await assertWritableRepoPath(repo.root, to, { label: "Repository move target" });
     await fs.mkdir(path.dirname(to.absolutePath), { recursive: true });
     await fs.rename(from.absolutePath, to.absolutePath);
     return { action, fromPath: from.relativePath, toPath: to.relativePath };
   }
   const target = resolveRepoPath(repo.root, requireString(payload, "path"));
   if (action === "delete") {
+    await assertExistingRepoPath(repo.root, target, { label: "Repository delete path" });
     await fs.rm(target.absolutePath, { force: false });
     return { action, path: target.relativePath };
   }
   const content = contentFromInput(payload);
+  await assertWritableRepoPath(repo.root, target, { label: "Repository write path" });
   await fs.mkdir(path.dirname(target.absolutePath), { recursive: true });
   if (action === "create") {
     await fs.writeFile(target.absolutePath, content, { flag: "wx" });
@@ -355,6 +504,7 @@ async function readFile(repo, input) {
     const content = await runGit(repo.root, ["show", `${ref}:${target.relativePath}`]);
     return { path: target.relativePath, ref, content: content.stdout, encoding: "utf8" };
   }
+  await assertExistingRepoPath(repo.root, target, { label: "Repository read path", expectedType: "file" });
   const content = await fs.readFile(target.absolutePath, "utf8");
   return { path: target.relativePath, ref: "", content, encoding: "utf8" };
 }
@@ -370,6 +520,7 @@ async function listTree(repo, input) {
       entries: result.stdout.split("\n").filter(Boolean).map(parseLsTreeLine)
     };
   }
+  await assertExistingRepoPath(repo.root, target, { label: "Repository tree path", expectedType: "directory" });
   const entries = await fs.readdir(target.absolutePath, { withFileTypes: true });
   return {
     path: target.relativePath,
@@ -842,6 +993,12 @@ export async function executeRepoOperation({ operationId, input = {}, authSessio
     }
     return ok(normalizedOperationId, publicRepo(repo), data);
   } catch (error) {
+    if (error?.code === "REPO_ROOT_DENIED") {
+      return fail(error.status || 403, "repo_root_denied", error instanceof Error ? error.message : "Repository root denied.");
+    }
+    if (error?.code === "REPO_PATH_DENIED") {
+      return fail(error.status || 400, "path_denied", error instanceof Error ? error.message : "Repository path denied.");
+    }
     return fail(error?.result?.code ? 502 : 400, "repo_operation_failed", error instanceof Error ? error.message : "Repo operation failed.", {
       command: error?.result?.command,
       args: error?.result?.args,

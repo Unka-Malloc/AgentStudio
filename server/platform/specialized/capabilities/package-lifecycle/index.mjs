@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ServerConfig } from "../../../common/config/ServerConfig.mjs";
+import { pathIsWithinRoot } from "../../../common/security/local-path-boundary.mjs";
 
 export const CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION = "v0.0.1:tool:capability-package-lifecycle-1";
 export const TOOL_PACKAGE_PROTOCOL_VERSION = "v0.0.1:tool:package-1";
@@ -19,6 +20,7 @@ const VALID_KINDS = new Set(Object.keys(KIND_PROTOCOL));
 const VALID_RISKS = new Set(["read_only", "safe_write", "repair_write", "destructive"]);
 const VALID_SANDBOXES = new Set(["none", "knowledge-only", "document-runtime", "server-runtime", "server-admin", "remote-token"]);
 const VALID_STATUSES = new Set(["submitted", "approved", "rejected", "installed", "active", "deprecated", "rolled_back", "archived"]);
+const PACKAGE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 function nowIso() {
   return new Date().toISOString();
@@ -94,8 +96,25 @@ function registryPath(userDataPath = "") {
   return path.join(userDataPath || ServerConfig.getDataDir(), REGISTRY_FILE);
 }
 
+function isSafePackageId(value = "") {
+  const packageId = normalizeText(value);
+  return PACKAGE_ID_PATTERN.test(packageId) &&
+    !packageId.includes("/") &&
+    !packageId.includes("\\") &&
+    !packageId.includes("..");
+}
+
 function skillLibraryRoot(userDataPath = "", packageId = "") {
-  return path.join(userDataPath || ServerConfig.getDataDir(), SKILL_LIBRARY_DIR, normalizeText(packageId));
+  const normalizedPackageId = normalizeText(packageId);
+  if (!isSafePackageId(normalizedPackageId)) {
+    throw new Error("Invalid capability packageId.");
+  }
+  const libraryRoot = path.resolve(userDataPath || ServerConfig.getDataDir(), SKILL_LIBRARY_DIR);
+  const root = path.resolve(libraryRoot, normalizedPackageId);
+  if (!pathIsWithinRoot(root, libraryRoot)) {
+    throw new Error("Capability package library path escapes skill library root.");
+  }
+  return root;
 }
 
 async function readJson(filePath, fallback) {
@@ -276,6 +295,9 @@ function validateManifest(manifest = {}) {
   if (!VALID_KINDS.has(manifest.kind)) {
     issues.push({ field: "kind", message: "kind must be tool or skill" });
   }
+  if (!isSafePackageId(manifest.packageId)) {
+    issues.push({ field: "packageId", message: "packageId must be a single safe identifier" });
+  }
   requireField("name", "name is required");
   requireField("version", "version is required");
   requireField("capabilities", "capabilities are required");
@@ -317,9 +339,33 @@ function normalizeRecord(record = {}) {
     deprecatedAt: normalizeText(record.deprecatedAt),
     rollbackOf: normalizeText(record.rollbackOf),
     library: asObject(record.library),
+    usage: normalizeUsage(record.usage),
     createdAt: normalizeText(record.createdAt || nowIso()),
     updatedAt: normalizeText(record.updatedAt || nowIso()),
     lifecycleEvents: asArray(record.lifecycleEvents)
+  };
+}
+
+function normalizeUsage(value = {}) {
+  const usage = asObject(value);
+  const events = asArray(usage.events).map((event) => ({
+    usageEventId: normalizeText(event.usageEventId),
+    action: normalizeText(event.action || "skill.used"),
+    actorId: normalizeText(event.actorId),
+    workspaceId: normalizeText(event.workspaceId),
+    successful: event.successful !== false,
+    createdAt: normalizeText(event.createdAt)
+  })).filter((event) => event.usageEventId);
+  const workspaceIds = [...new Set(events.map((event) => event.workspaceId).filter(Boolean))];
+  const usageCount = events.length;
+  const successfulUseCount = events.filter((event) => event.successful).length;
+  return {
+    usageCount,
+    successfulUseCount,
+    uniqueWorkspaceAdoptions: workspaceIds.length,
+    successRate: usageCount > 0 ? successfulUseCount / usageCount : 0,
+    lastUsedAt: normalizeText(usage.lastUsedAt || events.at(-1)?.createdAt || ""),
+    events: events.slice(-200)
   };
 }
 
@@ -374,6 +420,32 @@ function addAudit(registry = {}, event = {}) {
     ...registry,
     auditEvents: [...asArray(registry.auditEvents), nextEvent].slice(-1000)
   };
+}
+
+function packageRecordMatchesRef(packageId = "", record = {}, ref = "") {
+  const normalizedRef = normalizeText(ref);
+  if (!normalizedRef) {
+    return false;
+  }
+  const normalized = normalizeRecord(record);
+  const manifest = normalized.manifest;
+  const metadata = asObject(manifest.metadata);
+  return [
+    packageId,
+    manifest.packageId,
+    manifest.name,
+    manifest.title,
+    metadata.legacySkillId,
+    metadata.workspaceSkillId,
+    metadata.workspaceContributionId,
+    metadata.skillId
+  ].map(normalizeText).includes(normalizedRef);
+}
+
+function findPackageEntryByRef(registry = {}, ref = "") {
+  return Object.entries(asObject(registry.packages)).find(([packageId, record]) =>
+    packageRecordMatchesRef(packageId, record, ref)
+  ) || null;
 }
 
 function appendLifecycle(record = {}, event = {}) {
@@ -663,12 +735,62 @@ export function createCapabilityPackageRegistry({ userDataPath = "" } = {}) {
     return lifecycle(targetId, { action: "activate", actor, reason: reason || `rollback_from:${activePackageId}` });
   }
 
+  async function recordUsage(packageRef = "", payload = {}) {
+    const registry = await loadRegistry();
+    const matched = findPackageEntryByRef(registry, packageRef || payload.packageId || payload.skillId || payload.contributionId);
+    if (!matched) {
+      throw new Error(`Capability package not found: ${packageRef || payload.packageId || payload.skillId || payload.contributionId}`);
+    }
+    const [packageId, currentRecord] = matched;
+    const current = normalizeRecord(currentRecord);
+    if (current.manifest.kind !== "skill") {
+      throw new Error(`Capability package is not a skill package: ${packageId}`);
+    }
+    const timestamp = nowIso();
+    const usageEvent = {
+      usageEventId: `cap_pkg_usage_${crypto.randomUUID()}`,
+      action: normalizeText(payload.action || "skill.used"),
+      actorId: normalizeText(payload.actorId || payload.actor || ""),
+      workspaceId: normalizeText(payload.workspaceId || ""),
+      successful: payload.successful !== false,
+      createdAt: timestamp
+    };
+    const nextRecord = {
+      ...current,
+      updatedAt: timestamp,
+      usage: normalizeUsage({
+        ...current.usage,
+        lastUsedAt: timestamp,
+        events: [...asArray(current.usage.events), usageEvent]
+      })
+    };
+    const nextRegistry = addAudit({
+      ...registry,
+      packages: {
+        ...registry.packages,
+        [packageId]: nextRecord
+      }
+    }, {
+      action: "usage.report",
+      packageId,
+      actor: usageEvent.actorId,
+      status: nextRecord.status
+    });
+    await saveRegistry(nextRegistry);
+    return {
+      usageEvent,
+      usage: nextRecord.usage,
+      record: publicRecord(nextRecord)
+    };
+  }
+
   return {
     protocolVersion: CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION,
     describe,
     plan,
     submit,
     lifecycle,
-    rollback
+    rollback,
+    recordUsage
   };
 }

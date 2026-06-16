@@ -106,7 +106,7 @@ const commitShort = computed(() => {
       </div>
       <div>
         <dt>报告路径</dt>
-        <dd>{{ latestReport?.reportPath || health?.reportRoot || "docs/reports/history/production-readiness" }}</dd>
+        <dd>{{ latestReport?.reportPath || health?.reportRoot || "build/reports/production-readiness" }}</dd>
       </div>
       <div>
         <dt>模式</dt>

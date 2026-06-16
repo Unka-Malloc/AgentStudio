@@ -15,7 +15,7 @@ const props = withDefaults(
   },
 );
 
-const markdownSafeTags = new Set(["a", "article", "aside", "b", "blockquote", "br", "caption", "code", "col", "colgroup", "dd", "del", "div", "em", "figcaption", "figure", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "li", "ol", "p", "pre", "section", "span", "strong", "sub", "sup", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul", "iframe", "div"]);
+const markdownSafeTags = new Set(["a", "article", "aside", "b", "blockquote", "br", "caption", "code", "col", "colgroup", "dd", "del", "div", "em", "figcaption", "figure", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "li", "ol", "p", "pre", "section", "span", "strong", "sub", "sup", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul", "iframe"]);
 
 const markdownSafeAttributes = new Set([
   "alt",
@@ -40,15 +40,14 @@ function normalizeIframeElement(element: Element) {
   if (element.tagName.toLowerCase() !== "iframe") {
     return;
   }
+  const generatedEmailFrame = element.classList.contains("rendered-email-frame");
+  if (!generatedEmailFrame || !element.getAttribute("srcdoc")) {
+    element.remove();
+    return;
+  }
+  element.removeAttribute("src");
   element.setAttribute("referrerpolicy", "no-referrer");
-  const sandbox = element.getAttribute("sandbox") || "";
-  const requested = sandbox
-    .split(/\s+/)
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .filter((entry) => !["allow-popups-to-escape-sandbox", "allow-same-origin"].includes(entry));
-  const normalized = [...new Set([...requested, "allow-popups"])];
-  element.setAttribute("sandbox", normalized.join(" "));
+  element.setAttribute("sandbox", "allow-popups");
 }
 
 function sanitizeEvidenceHtml(rawHtml: string) {
@@ -78,12 +77,24 @@ function sanitizeEvidenceHtml(rawHtml: string) {
         continue;
       }
       if (attrName === "src") {
+        if (tagName === "iframe") {
+          element.removeAttribute(attribute.name);
+          continue;
+        }
         const safe = safeMediaSrc(attrValue);
         if (safe) {
           element.setAttribute(attribute.name, safe);
         } else {
           element.removeAttribute(attribute.name);
         }
+        continue;
+      }
+      if (attrName === "srcdoc" && tagName !== "iframe") {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
+      if (attrName === "sandbox" && tagName !== "iframe") {
+        element.removeAttribute(attribute.name);
         continue;
       }
       if (attrName === "width" || attrName === "height") {

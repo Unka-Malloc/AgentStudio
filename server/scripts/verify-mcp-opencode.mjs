@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 async function fetchJson(url, options = {}) {
@@ -23,6 +24,7 @@ function apiKeyHeaders(token) {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-opencode-verify-"));
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
 const opencodeConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-opencode-config-"));
 const opencodeConfigPath = path.join(opencodeConfigDir, "opencode.jsonc");
 
@@ -148,6 +150,7 @@ try {
   }
   await fs.rm(userDataPath, { recursive: true, force: true }).catch(() => {});
   await fs.rm(opencodeConfigDir, { recursive: true, force: true }).catch(() => {});
+  restoreCapabilityKernelEnv();
 }
 
 process.exit(exitCode);

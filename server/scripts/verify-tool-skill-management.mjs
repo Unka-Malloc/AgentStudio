@@ -12,8 +12,10 @@ import {
   TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION,
   createToolSkillManagementProvider
 } from "../platform/specialized/capabilities/skills/tool-skill-management-provider.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
 
 function signedManifest(input) {
   const normalized = normalizeCapabilityPackageManifest(input);
@@ -62,6 +64,15 @@ for (const required of [
 
 const grants = [];
 const updatedGrants = [];
+const grantTokens = new Map();
+
+function tokenFromRequest(request) {
+  const headers = request?.headers || {};
+  const authorization = String(headers.authorization || headers.Authorization || "").trim();
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  return bearer || String(headers["x-pact-tool-token"] || headers["x-pact-api-key"] || "").trim();
+}
+
 const fixturePlatform = {
   securityPermissions: {
     decisions: [],
@@ -115,6 +126,32 @@ const fixturePlatform = {
   },
   store: {
     authorizeRequest({ request, requiredScopes = [] } = {}) {
+      const token = tokenFromRequest(request);
+      if (!token) {
+        return {
+          ok: false,
+          status: 401,
+          reasonCode: "missing_token",
+          error: "Missing tool token."
+        };
+      }
+      const matchedGrant = grantTokens.get(token);
+      if (matchedGrant) {
+        return {
+          ok: true,
+          requiredScopes,
+          grant: matchedGrant,
+          sawApiKeyAlias: request.headers["x-pact-tool-token"] === "ock_test"
+        };
+      }
+      if (token !== "ock_test") {
+        return {
+          ok: false,
+          status: 401,
+          reasonCode: "invalid_token",
+          error: "Invalid tool token."
+        };
+      }
       return {
         ok: true,
         requiredScopes,
@@ -130,6 +167,7 @@ const fixturePlatform = {
       };
     },
     createGrant(input = {}) {
+      const token = `ock_test_token_${grants.length + 1}`;
       const grant = {
         id: input.id || `grant_${grants.length + 1}`,
         label: input.label || "",
@@ -143,7 +181,8 @@ const fixturePlatform = {
         updatedAt: "2026-05-25T00:00:00.000Z"
       };
       grants.push(grant);
-      return { grant, token: "ock_test_token" };
+      grantTokens.set(token, grant);
+      return { grant, token };
     },
     listGrants() {
       return grants;
@@ -196,7 +235,7 @@ const provider = createToolSkillManagementProvider({ toolManagementPlatform: fix
 assert.equal(provider.describe().protocolVersion, TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION);
 
 const request = {
-  headers: { "x-pact-api-key": "ock_test" },
+  headers: { "x-pact-api-key": "ock_test", host: "127.0.0.1" },
   socket: { remoteAddress: "127.0.0.1" },
   __pactRequestId: "verify-tool-skill"
 };
@@ -329,7 +368,7 @@ assert.equal(JSON.stringify(publicPayload).includes("ock_private_password"), fal
 
 const localGrant = await provider.createLocalMcpGrant({
   request,
-  requestBody: Buffer.from(JSON.stringify({ target: "codex", label: "Verify Codex" })),
+  requestBody: Buffer.from(JSON.stringify({ target: "Codex", label: "Verify Codex" })),
   discoveryState: { serverId: "server_1", mcpIdentity: { keyId: "key_1" } },
   url: new URL("http://127.0.0.1/api/mcp/local-grant")
 });
@@ -337,16 +376,35 @@ assert.equal(localGrant.status, 201);
 assert.equal(localGrant.body.targetMatch.matched, true);
 assert.equal(localGrant.body.grant.metadata.agentProfileId, "pact.mcp.codex");
 
+const missingTokenUninstall = await provider.markLocalMcpGrantUninstalled({
+  request: {
+    headers: { host: "127.0.0.1" },
+    socket: { remoteAddress: "127.0.0.1" },
+    __pactRequestId: "verify-tool-skill-missing-uninstall-token"
+  },
+  requestBody: Buffer.from(JSON.stringify({ target: "codex" }))
+});
+assert.equal(missingTokenUninstall.status, 401);
+assert.equal(missingTokenUninstall.body.error.code, "local_uninstall_token_required");
+
 const uninstall = await provider.markLocalMcpGrantUninstalled({
-  request,
+  request: {
+    ...request,
+    headers: {
+      ...request.headers,
+      authorization: `Bearer ${localGrant.body.token}`
+    }
+  },
   requestBody: Buffer.from(JSON.stringify({ target: "codex" }))
 });
 assert.equal(uninstall.status, 200);
+assert.equal(uninstall.body.authorizedGrantId, localGrant.body.grant.id);
 assert.equal(uninstall.body.updatedCount, 1);
 assert.equal(updatedGrants[0].metadata.currentDeviceVisible, false);
 
 assert.equal(provider.listMcpClientConnections({ offlineAfterSeconds: 300 }).length, 0);
 
 await fs.rm(userDataPath, { recursive: true, force: true });
+restoreCapabilityKernelEnv();
 
 console.log("tool-skill-management verification passed");

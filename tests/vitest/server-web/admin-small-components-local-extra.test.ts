@@ -240,7 +240,7 @@ describe("admin small component local extra coverage", () => {
     });
     expect(fallback.text()).toContain("无报告");
     expect(fallback.text()).toContain("unknown");
-    expect(fallback.text()).toContain("docs/reports/history/production-readiness");
+    expect(fallback.text()).toContain("build/reports/production-readiness");
   });
 
   it("renders runtime module groups and config item actions", async () => {

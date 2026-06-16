@@ -13,7 +13,7 @@
 - Start with root `AGENT.md`, then this file.
 - Use `server/platform/README.md` for platform module layout.
 - Use `server/protocols/README.md` for protocol registration and boundary work.
-- Use `docs/SERVER.md` only for startup, runtime, mounts, packaging, or
+- Use `docs/functionality/SERVER-RUNTIME.md` only for startup, runtime, mounts, packaging, or
   operational behavior.
 
 ## Directory Routing

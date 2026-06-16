@@ -158,9 +158,11 @@ assertOperationEnvelopeHashChain();
 await assertNoLegacyRiskControlAuthority();
 await assertRuntimeRiskControlEnvelope();
 
-const contextDoc = await readProjectFile("docs/CONTEXT.md");
+const agentDoc = await readProjectFile("docs/AGENT.md");
+const securityDoc = await readProjectFile("docs/functionality/SECURITY-AUTHORIZATION.md");
 const riskControlAdr = await readProjectFile("docs/adr/0009-risk-control-registry-and-dsl.md");
-assert.match(contextDoc, /Risk Control Model/, "CONTEXT.md must define Risk Control Model terminology");
+assert.match(securityDoc, /Risk Control Model|风险控制模型/i, "Security functionality doc must define Risk Control Model terminology");
+assert.match(agentDoc, /docs\/functionality\/SECURITY-AUTHORIZATION\.md|docs\/functionality\/\*\.md/, "AGENT.md must route security functionality to canonical functionality docs");
 assert.match(riskControlAdr, /server\/platform\/common\/security\/risk-control/, "ADR 0009 must point at the Risk Control implementation home");
 
 console.log("risk-control model verifier passed");

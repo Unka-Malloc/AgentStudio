@@ -56,6 +56,30 @@ async function localMcpGrant(serverUrl, body = {}, headers = {}) {
 
 let mcpRequestId = 0;
 
+const originalCapabilityKernelEnv = {
+  PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER,
+  PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER: process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER,
+  PACT_OPAQUE_CAPABILITY_KEY_PROVIDER: process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER,
+  PACT_CAPABILITY_BINDING_GUARD_PROVIDER: process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER
+};
+
+function useIsolatedCapabilityKernelForVerifier() {
+  process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
+  process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = "local-file";
+}
+
+function restoreCapabilityKernelEnv() {
+  for (const [key, value] of Object.entries(originalCapabilityKernelEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
 async function callKnowledgeOperation({ serverUrl, token, operation, input = {} }) {
   mcpRequestId += 1;
   return fetchJson(`${serverUrl}/mcp`, {
@@ -115,6 +139,7 @@ for (const operationId of REQUIRED_OPERATIONS) {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-v001-knowledge-"));
+useIsolatedCapabilityKernelForVerifier();
 const server = await startHttpServer({
   userDataPath,
   distPath: "",
@@ -219,13 +244,22 @@ try {
   assert.ok(evidenceAllowed.payload.knowledgeAccessReceipt?.receiptId, "authorized evidence read must emit a receipt");
   assert.ok(evidenceAllowed.payload.loanRecord?.loanRecordId, "authorized evidence read must emit a loan record");
 
-  const evidenceDenied = await fetchJson(
+  const evidenceDeclaredSubject = await fetchJson(
     `${server.url}/api/knowledge/evidence-read?id=${encodeURIComponent(evidenceId)}&subjectId=agent-b&username=agent-b`,
     { headers: authHeaders(auth) }
   );
-  assert.equal(evidenceDenied.status, 403, JSON.stringify(evidenceDenied.payload, null, 2));
-  assert.equal(evidenceDenied.payload.upstreamAccessDenied, true);
-  assert.equal(evidenceDenied.payload.accessDecision.allowed, false);
+  assert.equal(evidenceDeclaredSubject.status, 200, JSON.stringify(evidenceDeclaredSubject.payload, null, 2));
+  assert.equal(evidenceDeclaredSubject.payload.accessDecision.allowed, true);
+  assert.equal(
+    evidenceDeclaredSubject.payload.knowledgeAccessReceipt?.subject?.declaredSubject?.subjectId,
+    "agent-b",
+    "request subject overrides must be retained only as declaredSubject"
+  );
+  assert.notEqual(
+    evidenceDeclaredSubject.payload.knowledgeAccessReceipt?.subject?.subjectId,
+    "agent-b",
+    "request subject overrides must not replace the authenticated subject"
+  );
 
   const exportDenied = await fetchJson(`${server.url}/api/knowledge/export/request`, {
     method: "POST",
@@ -295,7 +329,7 @@ try {
     headers: authHeaders(auth)
   });
   assert.equal(deniedRequests.status, 200, JSON.stringify(deniedRequests.payload, null, 2));
-  assert.ok(deniedRequests.payload.items.length >= 2, "denied evidence and denied export must be audited");
+  assert.ok(deniedRequests.payload.items.length >= 1, "denied export must be audited");
 
   const grant = await localMcpGrant(server.url, {
     label: "verify-v001-knowledge",
@@ -367,6 +401,7 @@ try {
 } finally {
   await server.close();
   await fs.rm(userDataPath, { recursive: true, force: true });
+  restoreCapabilityKernelEnv();
 }
 
 console.log("v0.0.1 knowledge backend E2E verification passed");

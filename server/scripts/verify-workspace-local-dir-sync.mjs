@@ -81,6 +81,30 @@ function mcpRequest(method, params = {}, id = 1) {
 
 let mcpId = 100;
 
+const originalCapabilityKernelEnv = {
+  PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER,
+  PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER: process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER,
+  PACT_OPAQUE_CAPABILITY_KEY_PROVIDER: process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER,
+  PACT_CAPABILITY_BINDING_GUARD_PROVIDER: process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER
+};
+
+function useIsolatedCapabilityKernelForVerifier() {
+  process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
+  process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = "local-file";
+}
+
+function restoreCapabilityKernelEnv() {
+  for (const [key, value] of Object.entries(originalCapabilityKernelEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
 async function callMcp(baseUrl, token, operation, input = {}, toolName = "pact.sharedspace") {
   mcpId += 1;
   const response = await callMcpRaw(baseUrl, token, operation, input, mcpId, toolName);
@@ -163,13 +187,16 @@ function assertAuditTrail(payload, operationId, { label, minCount, readOnly, sou
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-local-dir-sync-server-"));
-const sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-local-dir-source-"));
+const sourceDir = path.join(userDataPath, "agent-workspaces", "local-sources", "verify-source");
+const outsideSourceDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-local-dir-source-outside-"));
 let server = null;
 
 try {
+  useIsolatedCapabilityKernelForVerifier();
   await fs.mkdir(path.join(sourceDir, "nested"), { recursive: true });
   await fs.writeFile(path.join(sourceDir, "one.txt"), "local one\n", "utf8");
   await fs.writeFile(path.join(sourceDir, "nested", "two.txt"), "local two\n", "utf8");
+  await fs.writeFile(path.join(outsideSourceDir, "secret.txt"), "outside source must be denied\n", "utf8");
 
   server = await startHttpServer({
     userDataPath,
@@ -199,6 +226,14 @@ try {
   });
   const workspaceId = created.workspace.workspaceRef || created.workspace.workspaceId;
   assert.ok(workspaceId);
+
+  const outsideConnect = await callMcpRaw(server.url, grant.payload.token, "pact.sharedspace.localDir.connect", {
+    workspaceId,
+    sourcePath: outsideSourceDir,
+    targetPath: "outside"
+  }, 1008);
+  assert.equal(outsideConnect.status, 200);
+  assertMcpCallFailed(outsideConnect, 400);
 
   const capabilities = await callMcpRaw(server.url, grant.payload.token, "pact.capabilities.list", {}, "capabilities", "pact.discovery");
   assert.equal(capabilities.status, 200);
@@ -323,7 +358,7 @@ try {
   await fs.rename(path.join(sourceDir, "dot.txt"), path.join(sourceDir, ".dot-file"));
   const dotfilePlan = await callMcpRaw(server.url, grant.payload.token, "pact.sharedspace.sync.plan", {
     workspaceId,
-    sourcePath: sourceDir,
+    mountRef,
     targetPath: "mirror-dot",
     deleteExtraneous: true
   }, 1010);
@@ -334,7 +369,7 @@ try {
 
   const invalidSourcePlan = await callMcpRaw(server.url, grant.payload.token, "pact.sharedspace.sync.plan", {
     workspaceId,
-    sourcePath: path.join(sourceDir, "does-not-exist"),
+    sourcePath: sourceDir,
     targetPath: "mirror-bad",
     deleteExtraneous: true
   }, 1011);
@@ -386,9 +421,15 @@ try {
   const largeSource = path.join(largeDir, "payload.txt");
   await fs.mkdir(largeDir, { recursive: true });
   await fs.writeFile(largeSource, "x".repeat(1024 * 1024 * 2), "utf8");
-  const largePlan = await callMcp(server.url, grant.payload.token, "pact.sharedspace.sync.plan", {
+  const largeConnected = await callMcp(server.url, grant.payload.token, "pact.sharedspace.localDir.connect", {
     workspaceId,
     sourcePath: largeDir,
+    targetPath: "mirror-large"
+  });
+  const largeMountRef = largeConnected.mount.mountRef;
+  const largePlan = await callMcp(server.url, grant.payload.token, "pact.sharedspace.sync.plan", {
+    workspaceId,
+    mountRef: largeMountRef,
     targetPath: "mirror-large",
     deleteExtraneous: true
   });
@@ -396,7 +437,7 @@ try {
   assert.equal(largePlan.summary.create, 1);
   const largeApply = await callMcpWithApproval(server.url, grant.payload.token, "pact.sharedspace.sync.apply", {
     workspaceId,
-    sourcePath: largeDir,
+    mountRef: largeMountRef,
     targetPath: "mirror-large",
     deleteExtraneous: true
   });
@@ -405,7 +446,7 @@ try {
 
   const stalePlan = await callMcp(server.url, grant.payload.token, "pact.sharedspace.sync.plan", {
     workspaceId,
-    sourcePath: largeDir,
+    mountRef: largeMountRef,
     targetPath: "mirror-large",
     deleteExtraneous: true
   });
@@ -413,7 +454,7 @@ try {
   await fs.unlink(largeSource);
   const staleApply = await callMcpRaw(server.url, grant.payload.token, "pact.sharedspace.sync.apply", {
     workspaceId,
-    sourcePath: largeDir,
+    mountRef: largeMountRef,
     targetPath: "mirror-large",
     deleteExtraneous: true
   }, 1003);
@@ -498,7 +539,7 @@ try {
     await fs.symlink(path.join(sourceDir, "one.txt"), path.join(sourceDir, "linked.txt"));
     const symlinkPlan = await callMcpRaw(server.url, grant.payload.token, "pact.sharedspace.sync.plan", {
       workspaceId,
-      sourcePath: sourceDir,
+      mountRef,
       targetPath: "mirror"
     }, 999);
     assert.equal(symlinkPlan.status, 200);
@@ -511,5 +552,6 @@ try {
     await server.close();
   }
   await fs.rm(userDataPath, { recursive: true, force: true }).catch(() => {});
-  await fs.rm(sourceDir, { recursive: true, force: true }).catch(() => {});
+  await fs.rm(outsideSourceDir, { recursive: true, force: true }).catch(() => {});
+  restoreCapabilityKernelEnv();
 }

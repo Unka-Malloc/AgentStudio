@@ -108,7 +108,7 @@ const builtInAppearancePresetConfigs = [
     label: {'en': 'System Default', 'zh-CN': '跟随系统'},
     mode: AppearancePresetMode.system,
     lightPresetId: AppearancePresetIds.geekLightBlue,
-    darkPresetId: AppearancePresetIds.sunsetEmber,
+    darkPresetId: AppearancePresetIds.tokyoNight,
   ),
   AppearancePresetConfig(
     schemaVersion: 1,
@@ -503,7 +503,7 @@ ResolvedAppearancePreset resolveAppearancePresetConfig(
     final resolved = resolveAppearancePresetConfig(
       resolvedId ??
           (platformBrightness == Brightness.dark
-              ? AppearancePresetIds.sunsetEmber
+              ? AppearancePresetIds.tokyoNight
               : AppearancePresetIds.geekLightBlue),
       configs,
       platformBrightness,
@@ -512,7 +512,7 @@ ResolvedAppearancePreset resolveAppearancePresetConfig(
   }
 
   final baseId = selected.mode == AppearancePresetMode.dark
-      ? AppearancePresetIds.sunsetEmber
+      ? AppearancePresetIds.tokyoNight
       : AppearancePresetIds.geekLightBlue;
   final base = selected.id == baseId
       ? null

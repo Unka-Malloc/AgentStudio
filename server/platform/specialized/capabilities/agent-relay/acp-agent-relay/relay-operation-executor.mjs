@@ -22,6 +22,10 @@ function asObject(value, fallback = {}) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : fallback;
 }
 
+function nonEmptyObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0;
+}
+
 function asBoolean(value, fallback = false) {
   if (value === true || value === false) {
     return value;
@@ -51,6 +55,54 @@ function pathDenied(path = "") {
 
 function sanitizeFsPath(value = "") {
   return asText(value).replace(/^file:\/\//, "");
+}
+
+const LOCAL_EXECUTABLE_TARGET_TRANSPORT_TYPES = new Set([
+  "agent-cli-exec",
+  "local-cli-exec",
+  "cli-exec",
+  "codex-cli-exec",
+  "codex.exec",
+  "codex-cli"
+]);
+
+function routeAdvertisesTool(route = {}, toolIds = []) {
+  const tools = Array.isArray(route.decision?.advertisedTools) ? route.decision.advertisedTools : [];
+  return toolIds.some((toolId) => tools.includes(toolId));
+}
+
+function routeAdvertisesFsRead(route = {}) {
+  return routeAdvertisesTool(route, ["fs.readTextFile", "fs/read_text_file"]);
+}
+
+function targetLocalExecutablePolicyError(targetInput = {}) {
+  const transport = asObject(targetInput.transport || targetInput);
+  const type = asText(transport.type || transport.transport || targetInput.transportType).toLowerCase();
+  const command = asObject(transport.command);
+  const hasCommandFields = nonEmptyObject(command) ||
+    Boolean(asText(transport.binaryPath || transport.commandPath || targetInput.binaryPath || targetInput.commandPath));
+  if (LOCAL_EXECUTABLE_TARGET_TRANSPORT_TYPES.has(type)) {
+    return {
+      code: "local_executable_target_denied",
+      message: "ACP target registration through grantable relay operations does not accept local executable transports.",
+      details: { transportType: type || "unknown" }
+    };
+  }
+  if (type === "stdio" && hasCommandFields) {
+    return {
+      code: "local_executable_target_denied",
+      message: "ACP target registration through grantable relay operations does not accept stdio command descriptors.",
+      details: { transportType: "stdio" }
+    };
+  }
+  if (hasCommandFields && asText(command.executable || command.command || command.path)) {
+    return {
+      code: "local_executable_target_denied",
+      message: "ACP target registration through grantable relay operations does not accept local command descriptors.",
+      details: { transportType: type || "unknown" }
+    };
+  }
+  return null;
 }
 
 function hasDirectSessionId(input = {}) {
@@ -123,20 +175,13 @@ function agentRelayRequestTemplates() {
       path: "/api/agent-relay/v1/targets",
       risk: "repair_write",
       requiredScopes: ["agent_relay:operate"],
-      description: "Register a governed local CLI fallback target and an optional source-visible virtual agent.",
+      description: "Register a governed non-local target descriptor and an optional source-visible virtual agent.",
       body: {
-        targetId: "custom.local.example",
-        label: "Local Example CLI",
+        targetId: "custom.remote.example",
+        label: "Remote Example ACP Target",
         enabled: true,
         transport: {
-          type: "agent-cli-exec",
-          command: {
-            executable: "example-cli",
-            args: [],
-            promptArgs: [],
-            promptDelivery: "argument",
-            timeoutMs: 240000
-          }
+          type: "mock"
         },
         capabilityPolicy: {
           writes: "deny",
@@ -144,17 +189,17 @@ function agentRelayRequestTemplates() {
           maxRisk: "read_only"
         },
         virtualAgent: {
-          virtualAgentId: "custom.local.example.agent",
-          displayName: "Example CLI",
-          targetId: "custom.local.example",
+          virtualAgentId: "custom.remote.example.agent",
+          displayName: "Example ACP Target",
+          targetId: "custom.remote.example",
           enabled: true,
           defaultMode: "ask",
           advertisedModes: ["ask"]
         }
       },
       targetCliProjection: {
-        argument: "example-cli <prompt>",
-        stdin: "printf '<prompt>' | example-cli",
+        argument: "",
+        stdin: "",
         hiddenFromTarget: [
           "sourceId",
           "sourceSubjectId",
@@ -273,6 +318,7 @@ function buildTargetEvidence({ route = {}, session = {}, promptResult = {}, audi
     targetCommunicationMode: communication.targetCommunicationMode,
     nativeAcpTargetSupported: communication.nativeAcpTargetSupported,
     nativeAcpTargetVerified: communication.nativeAcpTargetVerified,
+    nativeAcpProofReferences: communication.nativeAcpProofReferences,
     nativeAcpSourceSupported: communication.nativeAcpSourceSupported,
     nativeAcpSourceVerified: communication.nativeAcpSourceVerified,
     communication,
@@ -456,6 +502,60 @@ function targetFinalResponseCapability(target = {}) {
   };
 }
 
+function nativeAcpProofReferences(target = {}) {
+  const input = asObject(target);
+  const transport = asObject(input.transport);
+  const metadata = asObject(input.metadata?.public || input.metadata?.safe || {});
+  const proof = asObject(
+    transport.nativeAcpProof ||
+      transport.nativeAcpProofReferences ||
+      metadata.nativeAcpProof ||
+      metadata.nativeAcpProofReferences
+  );
+  const required = [
+    ["initialize", "initialize"],
+    ["session", "session"],
+    ["prompt", "prompt"],
+    ["resumeClose", "resume-close"]
+  ];
+  const references = {};
+  const missing = [];
+  for (const [key, publicKey] of required) {
+    const value = proof[key] || proof[publicKey] || proof[`${key}Proof`] || proof[`${publicKey}-proof`];
+    const entry = asObject(value);
+    const ref = asText(entry.proofRef || entry.ref || entry.evidenceRef || entry.receiptRef || value);
+    if (!ref) {
+      missing.push(publicKey);
+      continue;
+    }
+    references[publicKey] = {
+      proofRef: ref,
+      verifiedAt: asText(entry.verifiedAt || proof.verifiedAt),
+      verifier: asText(entry.verifier || proof.verifier)
+    };
+  }
+  return {
+    complete: missing.length === 0,
+    missing,
+    references
+  };
+}
+
+function hasUnsafeNativeAcpProofPayload(value = {}, depth = 0) {
+  if (!value || typeof value !== "object" || depth > 4) {
+    return false;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (/(command|cmd|env|environment|secret|token|password|authorization|apiKey|api_key|csrf)/i.test(key)) {
+      return true;
+    }
+    if (child && typeof child === "object" && hasUnsafeNativeAcpProofPayload(child, depth + 1)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function targetCommunicationDescriptor(target = {}) {
   const input = asObject(target);
   const transport = asObject(input.transport);
@@ -468,9 +568,21 @@ function targetCommunicationDescriptor(target = {}) {
   let nativeAcpTargetVerified = false;
   let nativeAcpSourceSupported = asBoolean(transport.nativeAcpSourceSupported ?? metadata.nativeAcpSourceSupported, false);
   let nativeAcpSourceVerified = false;
+  const proof = nativeAcpProofReferences(input);
+  const proofPayloadUnsafe = hasUnsafeNativeAcpProofPayload(
+    transport.nativeAcpProof ||
+      transport.nativeAcpProofReferences ||
+      metadata.nativeAcpProof ||
+      metadata.nativeAcpProofReferences ||
+      {}
+  );
   if (normalizedType === "stdio" && protocolStyle === "agent-client-protocol-v1") {
     targetCommunicationMode = "native_acp_stdio";
     nativeAcpTargetSupported = true;
+    nativeAcpTargetVerified = asBoolean(
+      transport.nativeAcpTargetVerified ?? metadata.nativeAcpTargetVerified,
+      false
+    ) && proof.complete && !proofPayloadUnsafe;
   } else if (normalizedType === "codex-cli-exec") {
     targetCommunicationMode = transport.degraded === true || metadata.degraded === true
       ? "codex_cli_exec_fallback"
@@ -495,8 +607,14 @@ function targetCommunicationDescriptor(target = {}) {
     nativeAcpTargetVerified,
     nativeAcpSourceSupported,
     nativeAcpSourceVerified,
+    nativeAcpProofReferences: proof.references,
+    nativeAcpProofComplete: proof.complete,
+    nativeAcpProofMissing: proof.missing,
+    nativeAcpProofRejected: proofPayloadUnsafe,
     degraded: transport.degraded === true || metadata.degraded === true,
-    degradationReasonCode: asText(transport.degradationReasonCode || metadata.degradation?.reasonCode)
+    degradationReasonCode: proofPayloadUnsafe
+      ? "native_acp_proof_payload_unsafe"
+      : asText(transport.degradationReasonCode || metadata.degradation?.reasonCode)
   };
 }
 
@@ -517,6 +635,7 @@ function targetCapabilityDescriptor(target = {}) {
     targetCommunicationMode: communication.targetCommunicationMode,
     nativeAcpTargetSupported: communication.nativeAcpTargetSupported,
     nativeAcpTargetVerified: communication.nativeAcpTargetVerified,
+    nativeAcpProofReferences: communication.nativeAcpProofReferences,
     nativeAcpSourceSupported: communication.nativeAcpSourceSupported,
     nativeAcpSourceVerified: communication.nativeAcpSourceVerified,
     communication,
@@ -664,6 +783,7 @@ function summarizeWakeResult(session = {}) {
 function sessionMatchesFilters(session = {}, input = {}) {
   const filters = [
     ["sourceId", asText(input.sourceId || input.source_id)],
+    ["sourceSubjectId", asText(input.sourceSubjectId || input.source_subject_id || input.subjectId || input.subject_id)],
     ["workspaceId", asText(input.workspaceId || input.workspace_id)],
     ["virtualAgentId", asText(input.virtualAgentId || input.virtual_agent_id || input.agentId || input.agent_id)],
     ["targetId", asText(input.targetId || input.target_id)],
@@ -717,6 +837,7 @@ function virtualAgentCapabilityDescriptor({ agent = {}, route = null, target = n
       targetCommunicationMode: communication.targetCommunicationMode,
       nativeAcpTargetSupported: communication.nativeAcpTargetSupported,
       nativeAcpTargetVerified: communication.nativeAcpTargetVerified,
+      nativeAcpProofReferences: communication.nativeAcpProofReferences,
       nativeAcpSourceSupported: communication.nativeAcpSourceSupported,
       nativeAcpSourceVerified: communication.nativeAcpSourceVerified,
       communication,
@@ -764,6 +885,7 @@ function sourceRouteSummary(route = {}) {
       targetCommunicationMode: communication.targetCommunicationMode,
       nativeAcpTargetSupported: communication.nativeAcpTargetSupported,
       nativeAcpTargetVerified: communication.nativeAcpTargetVerified,
+      nativeAcpProofReferences: communication.nativeAcpProofReferences,
       nativeAcpSourceSupported: communication.nativeAcpSourceSupported,
       nativeAcpSourceVerified: communication.nativeAcpSourceVerified,
       communication,
@@ -777,10 +899,6 @@ function sourceRouteSummary(route = {}) {
       maxRisk: asText(decision.maxRisk, "read_only")
     }
   };
-}
-
-function nonEmptyObject(value) {
-  return value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0;
 }
 
 function isClosedSession(session = {}) {
@@ -1537,7 +1655,12 @@ export class RelayOperationExecutor {
           targets: this.targetRegistry.listTargets().map((target) => targetCapabilityDescriptor(target))
         });
       case "acp_agent_relay.targets.upsert":
-        return this.upsertTarget(effectiveInput);
+        return this.upsertTarget(effectiveInput, context);
+      case "acp_agent_relay.targets.upsert_local_executable":
+        return this.upsertTarget(effectiveInput, {
+          ...context,
+          allowLocalExecutableTargetRegistration: true
+        });
       case "acp_agent_relay.downstream_clients.refresh":
         return this.refreshDownstreamClients(effectiveInput);
       case "acp_agent_relay.sessions.list":
@@ -1599,7 +1722,7 @@ export class RelayOperationExecutor {
     return descriptors.sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 
-  async upsertTarget(input = {}) {
+  async upsertTarget(input = {}, context = {}) {
     const targetInput = asObject(input.target || input.targetDescriptor || input);
     const targetId = asText(input.targetId || input.target_id || targetInput.targetId || targetInput.id);
     const virtualAgentInput = asObject(input.virtualAgent || input.virtualAgentDescriptor, null);
@@ -1608,6 +1731,10 @@ export class RelayOperationExecutor {
         code: "virtual_agent_descriptor_invalid",
         message: "ACP target registration virtualAgent requires virtualAgentId."
       });
+    }
+    const localExecutablePolicyError = targetLocalExecutablePolicyError(targetInput);
+    if (localExecutablePolicyError && context.allowLocalExecutableTargetRegistration !== true) {
+      return operationResult(false, {}, localExecutablePolicyError);
     }
     const registeredTarget = this.targetRegistry.upsertTarget({
       ...targetInput,
@@ -2516,8 +2643,7 @@ export class RelayOperationExecutor {
       return routed;
     }
     const route = routed.data.route || {};
-    const tools = Array.isArray(route.decision?.advertisedTools) ? route.decision.advertisedTools : [];
-    if (!tools.includes("fs.readTextFile") && !tools.includes("fs/read_text_file")) {
+    if (!routeAdvertisesFsRead(route)) {
       return operationResult(false, {}, {
         code: "source_fs_read_not_advertised",
         message: "Source-facing ACP file read is not allowed for this virtual agent.",
@@ -3103,7 +3229,15 @@ export class RelayOperationExecutor {
       };
     } else if (action === "fs.read_text_file" || action === "fs.readTextFile" || action === "read_text_file") {
       const path = targetPermissionPath(params);
-      receipt = pathDenied(path)
+      receipt = !routeAdvertisesFsRead(route)
+        ? {
+            ok: false,
+            status: "denied",
+            action: "fs.readTextFile",
+            reasonCode: "target_fs_read_not_advertised",
+            path
+          }
+        : pathDenied(path)
         ? {
             ok: false,
             status: "denied",
@@ -3155,16 +3289,25 @@ export class RelayOperationExecutor {
     turn = {},
     audit = {}
   } = {}) {
-    const receipt = await this.permissionBridge.readTextFile({
-      path: targetPermissionPath(params)
-    }).catch((error) => ({
-      ok: false,
-      status: "denied",
-      action: "fs.readTextFile",
-      reasonCode: "read_failed",
-      message: error instanceof Error ? error.message : String(error),
-      path: targetPermissionPath(params)
-    }));
+    const path = targetPermissionPath(params);
+    const receipt = !routeAdvertisesFsRead(route)
+      ? {
+          ok: false,
+          status: "denied",
+          action: "fs.readTextFile",
+          reasonCode: "target_fs_read_not_advertised",
+          path
+        }
+      : await this.permissionBridge.readTextFile({
+          path
+        }).catch((error) => ({
+          ok: false,
+          status: "denied",
+          action: "fs.readTextFile",
+          reasonCode: "read_failed",
+          message: error instanceof Error ? error.message : String(error),
+          path
+        }));
     const auditReceipt = await this.recordTargetAcpCallbackReceipt({
       request,
       receipt,

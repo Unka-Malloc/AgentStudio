@@ -4,6 +4,15 @@ import fsSync from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ServerConfig } from "../../../common/config/ServerConfig.mjs";
+import {
+  evaluateExternalServiceEgressUrl,
+  fetchExternalServiceWithPinnedDns
+} from "../../../common/composition-management/external-service-egress-policy.mjs";
+import {
+  assertExistingLocalDirectoryWithinControlledRoots,
+  assertWritablePathWithinRoot
+} from "../../../common/security/local-path-boundary.mjs";
+import { resolveLocalSecretPayload } from "../../../common/security/secrets/local-secret-store.mjs";
 
 export const CLOUD_DRIVE_PORT_PROTOCOL_VERSION = "v0.0.1:storage:cloud-drive-port-1";
 
@@ -27,6 +36,27 @@ const SECRET_REF_BY_PROVIDER = Object.freeze({
   onedrive: "secret://pact/drive/onedrive-oauth",
   "google-drive": "secret://pact/drive/google-drive-oauth",
   dropbox: "secret://pact/drive/dropbox-oauth"
+});
+const OFFICIAL_REMOTE_ADAPTERS = Object.freeze({
+  onedrive: Object.freeze({
+    adapterId: "microsoft-graph-drive",
+    provider: "onedrive",
+    baseUrl: "https://graph.microsoft.com/v1.0",
+    docs: "https://learn.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0"
+  }),
+  "google-drive": Object.freeze({
+    adapterId: "google-drive-rest-v3",
+    provider: "google-drive",
+    baseUrl: "https://www.googleapis.com",
+    docs: "https://developers.google.com/workspace/drive/api/reference/rest/v3"
+  }),
+  dropbox: Object.freeze({
+    adapterId: "dropbox-http-api-v2",
+    provider: "dropbox",
+    baseUrl: "https://api.dropboxapi.com/2",
+    contentBaseUrl: "https://content.dropboxapi.com/2",
+    docs: "https://www.dropbox.com/developers/documentation/http/documentation"
+  })
 });
 const SECRET_VALUE_KEYS = new Set([
   "apiKey",
@@ -76,6 +106,20 @@ function text(value) {
 
 function asObject(value, fallback = {}) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : fallback;
+}
+
+function envFlag(name, fallback = false) {
+  const value = process.env[name];
+  if (value === undefined) return fallback;
+  return /^(1|true|yes|on)$/i.test(String(value || "").trim());
+}
+
+function remoteLiveEgressPolicies() {
+  return {
+    egress: {
+      allowLocalForDevelopment: envFlag("PACT_CLOUD_DRIVE_REMOTE_LIVE_ALLOW_LOCAL", false)
+    }
+  };
 }
 
 function asArray(value) {
@@ -255,6 +299,17 @@ function normalizeEndpointUrl(value = "") {
     throw error;
   }
   url.hash = "";
+  const egressDecision = evaluateExternalServiceEgressUrl({
+    url: url.toString(),
+    policies: remoteLiveEgressPolicies(),
+    label: "cloudDrive.remoteLive.endpointUrl"
+  });
+  if (!egressDecision.ok) {
+    const error = new Error(`Remote cloud drive endpointUrl is not available for remote-live egress: ${egressDecision.reason}.`);
+    error.code = "REMOTE_ENDPOINT_EGRESS_DENIED";
+    error.decision = egressDecision;
+    throw error;
+  }
   return url.toString().replace(/\/+$/, "");
 }
 
@@ -332,7 +387,506 @@ function remoteEndpointUrl(connection = {}, operation = "") {
   return new URL(route.replace(/^\/+/, ""), `${baseUrl}/`).toString();
 }
 
+function isOfficialRemoteAdapterConnection(connection = {}) {
+  const provider = normalizeProvider(connection.provider);
+  return text(connection.remoteAdapterKind || connection.adapterKind || connection.adapter) === "official" &&
+    Boolean(OFFICIAL_REMOTE_ADAPTERS[provider]);
+}
+
+function extractBearerToken(secretPayload = {}) {
+  const payload = asObject(secretPayload);
+  const oauth = asObject(payload.oauth);
+  return text(
+    payload.accessToken ||
+      payload.access_token ||
+      payload.token ||
+      payload.bearerToken ||
+      payload.bearer_token ||
+      oauth.accessToken ||
+      oauth.access_token ||
+      oauth.token
+  );
+}
+
+async function resolveOfficialBearerToken(connection = {}) {
+  const secretRef = text(connection.secretRef);
+  if (!secretRef.startsWith("secret://")) {
+    const error = new Error("Official cloud drive remote adapter requires a secret:// secretRef.");
+    error.code = "SECRET_REF_REQUIRED";
+    throw error;
+  }
+  const resolved = await resolveLocalSecretPayload({
+    dataDir: dataRoot(connection.userDataPath || ""),
+    secretRef
+  });
+  const token = extractBearerToken(resolved.payload);
+  if (!token) {
+    const error = new Error(`Pact local secret ${secretRef} does not contain an OAuth bearer access token.`);
+    error.code = "OFFICIAL_REMOTE_BEARER_TOKEN_REQUIRED";
+    error.secretRef = secretRef;
+    throw error;
+  }
+  return {
+    token,
+    secretRevision: resolved.revision,
+    secretProvider: resolved.provider || ""
+  };
+}
+
+function encodeProviderPath(value = "") {
+  return text(value)
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "")
+    .split("/")
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+function dropboxPath(value = "") {
+  const normalized = text(value).replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  return normalized ? `/${normalized}` : "";
+}
+
+function providerFileIdFromPayload(payload = {}) {
+  return text(payload.providerFileId || payload.fileId || payload.itemId || payload.id || payload.path || "");
+}
+
+async function readResponseBufferWithLimit(response, maxBytes = MAX_REMOTE_PROVIDER_RESPONSE_BYTES) {
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  if (buffer.length > maxBytes) {
+    throw new Error(`Remote cloud drive provider response exceeded the ${maxBytes} byte limit.`);
+  }
+  return buffer;
+}
+
+async function fetchOfficialProvider({
+  connection = {},
+  operation = "",
+  url = "",
+  method = "GET",
+  headers = {},
+  body = undefined,
+  binary = false
+} = {}) {
+  const auth = await resolveOfficialBearerToken(connection);
+  const requestBytes = body === undefined ? 0 : Buffer.byteLength(Buffer.isBuffer(body) ? body : String(body), "utf8");
+  const startedAt = Date.now();
+  let pinnedFetch = null;
+  let response;
+  let responseBytes = 0;
+  try {
+    pinnedFetch = await fetchExternalServiceWithPinnedDns({
+      url,
+      label: "cloudDrive.officialRemote.request",
+      policies: remoteLiveEgressPolicies(),
+      init: {
+        method,
+        headers: {
+          Authorization: `Bearer ${auth.token}`,
+          ...headers
+        },
+        ...(body === undefined ? {} : { body }),
+        redirect: "manual"
+      }
+    });
+    response = pinnedFetch.response;
+    if (response.status >= 300 && response.status < 400) {
+      const error = new Error("Official cloud drive provider redirects are not followed.");
+      error.code = "REMOTE_PROVIDER_REDIRECT_UNSUPPORTED";
+      throw error;
+    }
+    if (binary) {
+      const buffer = await readResponseBufferWithLimit(response);
+      responseBytes = buffer.length;
+      if (!response.ok) {
+        const error = new Error(`Official cloud drive provider failed with HTTP ${response.status}.`);
+        error.code = "REMOTE_PROVIDER_REQUEST_FAILED";
+        throw error;
+      }
+      return {
+        body: buffer,
+        telemetry: transferTelemetry({
+          operation,
+          status: response.status,
+          requestBytes,
+          responseBytes,
+          durationMs: Date.now() - startedAt,
+          endpointRef: connection.endpointRef
+        }),
+        secretRevision: auth.secretRevision
+      };
+    }
+    const responseText = await readResponseTextWithLimit(response);
+    responseBytes = Buffer.byteLength(responseText, "utf8");
+    let parsed = {};
+    if (responseText.trim()) {
+      parsed = JSON.parse(responseText);
+    }
+    if (!response.ok) {
+      const error = new Error(text(parsed.error?.message || parsed.error_summary || parsed.message) || `Official cloud drive provider failed with HTTP ${response.status}.`);
+      error.code = text(parsed.error?.code || parsed.error || parsed.code) || "REMOTE_PROVIDER_REQUEST_FAILED";
+      throw error;
+    }
+    return {
+      body: parsed,
+      telemetry: transferTelemetry({
+        operation,
+        status: response.status,
+        requestBytes,
+        responseBytes,
+        durationMs: Date.now() - startedAt,
+        endpointRef: connection.endpointRef
+      }),
+      secretRevision: auth.secretRevision
+    };
+  } catch (error) {
+    if (error?.code === "servicehub_egress_denied") {
+      const wrapped = new Error(`Official cloud drive endpoint is not available for remote-live egress: ${error.decision?.reason || error.message}.`);
+      wrapped.code = "REMOTE_ENDPOINT_EGRESS_DENIED";
+      wrapped.decision = error.decision;
+      throw wrapped;
+    }
+    throw error;
+  } finally {
+    await pinnedFetch?.close?.();
+  }
+}
+
+function officialOneDriveItemUrl(adapter, drivePath = "", suffix = "") {
+  const encoded = encodeProviderPath(drivePath);
+  const item = encoded ? `root:/${encoded}:` : "root";
+  return `${adapter.baseUrl}/me/drive/${item}${suffix}`;
+}
+
+function googleFileId(payload = {}) {
+  const id = providerFileIdFromPayload(payload);
+  return id && !id.includes("/") ? id : "root";
+}
+
+function normalizeGoogleItem(item = {}, index = 0) {
+  return {
+    id: text(item.id || `google-drive-${index + 1}`),
+    providerFileId: text(item.id),
+    name: text(item.name || `google-drive-${index + 1}`),
+    path: text(item.id || item.name || ""),
+    mimeType: text(item.mimeType),
+    size: Number(item.size || 0),
+    sha256: text(item.sha256Checksum),
+    revision: text(item.version || item.modifiedTime),
+    webUrl: text(item.webViewLink),
+    isFolder: item.mimeType === "application/vnd.google-apps.folder"
+  };
+}
+
+function normalizeOneDriveItem(item = {}, index = 0) {
+  return {
+    id: text(item.id || `onedrive-${index + 1}`),
+    providerFileId: text(item.id),
+    name: text(item.name || `onedrive-${index + 1}`),
+    path: text(item.parentReference?.path ? `${item.parentReference.path}/${item.name || ""}` : item.name || item.id || ""),
+    mimeType: text(item.file?.mimeType),
+    size: Number(item.size || 0),
+    sha256: text(item.file?.hashes?.sha256Hash || item.file?.hashes?.quickXorHash),
+    revision: text(item.eTag || item.cTag),
+    webUrl: text(item.webUrl),
+    isFolder: Boolean(item.folder)
+  };
+}
+
+function normalizeDropboxItem(item = {}, index = 0) {
+  return {
+    id: text(item.id || `dropbox-${index + 1}`),
+    providerFileId: text(item.id),
+    name: text(item.name || `dropbox-${index + 1}`),
+    path: text(item.path_display || item.path_lower || item.name || ""),
+    mimeType: "",
+    size: Number(item.size || 0),
+    sha256: text(item.content_hash),
+    revision: text(item.rev),
+    webUrl: "",
+    isFolder: text(item[".tag"]) === "folder"
+  };
+}
+
+async function callOfficialRemoteProvider(connection = {}, operation = "", payload = {}) {
+  const provider = normalizeProvider(connection.provider);
+  const adapter = OFFICIAL_REMOTE_ADAPTERS[provider];
+  if (!adapter) {
+    const error = new Error(`Official cloud drive adapter is not available for provider: ${provider}`);
+    error.code = "OFFICIAL_REMOTE_ADAPTER_UNSUPPORTED";
+    throw error;
+  }
+  if (provider === "onedrive") {
+    return callOneDriveGraphProvider({ connection, adapter, operation, payload });
+  }
+  if (provider === "google-drive") {
+    return callGoogleDriveProvider({ connection, adapter, operation, payload });
+  }
+  if (provider === "dropbox") {
+    return callDropboxProvider({ connection, adapter, operation, payload });
+  }
+  const error = new Error(`Official cloud drive adapter is not implemented for provider: ${provider}`);
+  error.code = "OFFICIAL_REMOTE_ADAPTER_UNSUPPORTED";
+  throw error;
+}
+
+async function callOneDriveGraphProvider({ connection, adapter, operation, payload }) {
+  if (operation === "connect") {
+    const result = await fetchOfficialProvider({
+      connection,
+      operation,
+      url: `${adapter.baseUrl}/me/drive`,
+      method: "GET"
+    });
+    return {
+      payload: {
+        connection: {
+          rootId: text(result.body.id),
+          rootName: text(result.body.name || "OneDrive"),
+          accountId: text(result.body.owner?.user?.id || result.body.owner?.user?.displayName),
+          revision: text(result.body.driveType)
+        }
+      },
+      telemetry: result.telemetry
+    };
+  }
+  if (operation === "list") {
+    const url = officialOneDriveItemUrl(adapter, payload.path || "", "/children");
+    const result = await fetchOfficialProvider({ connection, operation, url, method: "GET" });
+    return {
+      payload: { items: asArray(result.body.value).map(normalizeOneDriveItem) },
+      telemetry: result.telemetry
+    };
+  }
+  if (operation === "download") {
+    const result = await fetchOfficialProvider({
+      connection,
+      operation,
+      url: officialOneDriveItemUrl(adapter, payload.path || "", "/content"),
+      method: "GET",
+      binary: true
+    });
+    return {
+      payload: {
+        file: {
+          contentBase64: result.body.toString("base64"),
+          contentSha256: sha256Buffer(result.body),
+          providerFileId: providerFileIdFromPayload(payload)
+        }
+      },
+      telemetry: result.telemetry
+    };
+  }
+  if (operation === "upload") {
+    const content = Buffer.from(String(payload.contentBase64 || ""), "base64");
+    const result = await fetchOfficialProvider({
+      connection,
+      operation,
+      url: officialOneDriveItemUrl(adapter, payload.path || "pact-upload.txt", "/content"),
+      method: "PUT",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: content,
+      binary: false
+    });
+    return {
+      payload: {
+        file: {
+          providerFileId: text(result.body.id),
+          name: text(result.body.name),
+          revision: text(result.body.eTag || result.body.cTag),
+          webUrl: text(result.body.webUrl),
+          contentSha256: sha256Buffer(content)
+        }
+      },
+      telemetry: result.telemetry
+    };
+  }
+  throw new Error(`Unsupported OneDrive Graph cloud drive operation: ${operation}`);
+}
+
+async function callGoogleDriveProvider({ connection, adapter, operation, payload }) {
+  if (operation === "connect") {
+    const url = `${adapter.baseUrl}/drive/v3/about?fields=user,storageQuota`;
+    const result = await fetchOfficialProvider({ connection, operation, url, method: "GET" });
+    return {
+      payload: {
+        connection: {
+          rootId: "root",
+          rootName: "Google Drive",
+          accountId: text(result.body.user?.emailAddress || result.body.user?.permissionId),
+          revision: text(result.body.storageQuota?.usage || "")
+        }
+      },
+      telemetry: result.telemetry
+    };
+  }
+  if (operation === "list") {
+    const folderId = googleFileId(payload);
+    const q = encodeURIComponent(`'${folderId.replace(/'/g, "\\'")}' in parents and trashed = false`);
+    const fields = encodeURIComponent("files(id,name,mimeType,modifiedTime,size,sha256Checksum,webViewLink,version),nextPageToken");
+    const url = `${adapter.baseUrl}/drive/v3/files?q=${q}&pageSize=${Math.max(1, Math.min(Number(payload.limit || 200) || 200, 1000))}&fields=${fields}`;
+    const result = await fetchOfficialProvider({ connection, operation, url, method: "GET" });
+    return {
+      payload: { items: asArray(result.body.files).map(normalizeGoogleItem) },
+      telemetry: result.telemetry
+    };
+  }
+  if (operation === "download") {
+    const fileId = googleFileId(payload);
+    const result = await fetchOfficialProvider({
+      connection,
+      operation,
+      url: `${adapter.baseUrl}/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+      method: "GET",
+      binary: true
+    });
+    return {
+      payload: {
+        file: {
+          providerFileId: fileId,
+          contentBase64: result.body.toString("base64"),
+          contentSha256: sha256Buffer(result.body)
+        }
+      },
+      telemetry: result.telemetry
+    };
+  }
+  if (operation === "upload") {
+    const content = Buffer.from(String(payload.contentBase64 || ""), "base64");
+    const name = path.posix.basename(text(payload.path || "pact-upload.txt")) || "pact-upload.txt";
+    const boundary = `pact-${digest(`${name}:${Date.now()}`, 16)}`;
+    const metadata = JSON.stringify({ name });
+    const multipart = Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`, "utf8"),
+      content,
+      Buffer.from(`\r\n--${boundary}--\r\n`, "utf8")
+    ]);
+    const result = await fetchOfficialProvider({
+      connection,
+      operation,
+      url: `${adapter.baseUrl}/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,version`,
+      method: "POST",
+      headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+      body: multipart
+    });
+    return {
+      payload: {
+        file: {
+          providerFileId: text(result.body.id),
+          name: text(result.body.name),
+          revision: text(result.body.version),
+          webUrl: text(result.body.webViewLink),
+          contentSha256: sha256Buffer(content)
+        }
+      },
+      telemetry: result.telemetry
+    };
+  }
+  throw new Error(`Unsupported Google Drive cloud drive operation: ${operation}`);
+}
+
+async function callDropboxProvider({ connection, adapter, operation, payload }) {
+  if (operation === "connect") {
+    const result = await fetchOfficialProvider({
+      connection,
+      operation,
+      url: `${adapter.baseUrl}/users/get_current_account`,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "null"
+    });
+    return {
+      payload: {
+        connection: {
+          rootId: text(result.body.root_info?.root_namespace_id || result.body.account_id),
+          rootName: "Dropbox",
+          accountId: text(result.body.account_id || result.body.email),
+          revision: text(result.body.root_info?.home_namespace_id)
+        }
+      },
+      telemetry: result.telemetry
+    };
+  }
+  if (operation === "list") {
+    const result = await fetchOfficialProvider({
+      connection,
+      operation,
+      url: `${adapter.baseUrl}/files/list_folder`,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: dropboxPath(payload.path || ""),
+        recursive: payload.recursive === true,
+        limit: Math.max(1, Math.min(Number(payload.limit || 200) || 200, 2000))
+      })
+    });
+    return {
+      payload: { items: asArray(result.body.entries).map(normalizeDropboxItem) },
+      telemetry: result.telemetry
+    };
+  }
+  if (operation === "download") {
+    const result = await fetchOfficialProvider({
+      connection,
+      operation,
+      url: `${adapter.contentBaseUrl}/files/download`,
+      method: "POST",
+      headers: {
+        "Dropbox-API-Arg": JSON.stringify({ path: dropboxPath(payload.path || payload.providerFileId || "") })
+      },
+      binary: true
+    });
+    return {
+      payload: {
+        file: {
+          providerFileId: providerFileIdFromPayload(payload),
+          contentBase64: result.body.toString("base64"),
+          contentSha256: sha256Buffer(result.body)
+        }
+      },
+      telemetry: result.telemetry
+    };
+  }
+  if (operation === "upload") {
+    const content = Buffer.from(String(payload.contentBase64 || ""), "base64");
+    const result = await fetchOfficialProvider({
+      connection,
+      operation,
+      url: `${adapter.contentBaseUrl}/files/upload`,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Dropbox-API-Arg": JSON.stringify({
+          path: dropboxPath(payload.path || "pact-upload.txt"),
+          mode: payload.overwrite ? "overwrite" : "add",
+          autorename: !payload.overwrite,
+          mute: true
+        })
+      },
+      body: content
+    });
+    return {
+      payload: {
+        file: {
+          providerFileId: text(result.body.id),
+          name: text(result.body.name),
+          revision: text(result.body.rev),
+          contentSha256: sha256Buffer(content)
+        }
+      },
+      telemetry: result.telemetry
+    };
+  }
+  throw new Error(`Unsupported Dropbox cloud drive operation: ${operation}`);
+}
+
 async function callRemoteProvider(connection = {}, operation = "", payload = {}) {
+  if (isOfficialRemoteAdapterConnection(connection)) {
+    return callOfficialRemoteProvider(connection, operation, payload);
+  }
+  const endpointUrl = remoteEndpointUrl(connection, operation);
   const requestBody = JSON.stringify({
     protocolVersion: CLOUD_DRIVE_PORT_PROTOCOL_VERSION,
     operation,
@@ -345,22 +899,46 @@ async function callRemoteProvider(connection = {}, operation = "", payload = {})
   const startedAt = Date.now();
   let response;
   let responseText = "";
+  let pinnedFetch = null;
   try {
-    response = await fetch(remoteEndpointUrl(connection, operation), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Pact-Cloud-Drive-Protocol": CLOUD_DRIVE_PORT_PROTOCOL_VERSION,
-        "X-Pact-Drive-Provider": normalizeProvider(connection.provider),
-        "X-Pact-Secret-Ref-Hash": digest(connection.secretRef || "", 32)
-      },
-      body: requestBody
+    pinnedFetch = await fetchExternalServiceWithPinnedDns({
+      url: endpointUrl,
+      label: "cloudDrive.remoteLive.request",
+      policies: remoteLiveEgressPolicies(),
+      init: {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Pact-Cloud-Drive-Protocol": CLOUD_DRIVE_PORT_PROTOCOL_VERSION,
+          "X-Pact-Drive-Provider": normalizeProvider(connection.provider),
+          "X-Pact-Secret-Ref-Hash": digest(connection.secretRef || "", 32)
+        },
+        body: requestBody,
+        redirect: "manual"
+      }
     });
+    response = pinnedFetch.response;
+    if (response.status >= 300 && response.status < 400) {
+      const error = new Error("Remote cloud drive provider redirects are not followed.");
+      error.code = "REMOTE_PROVIDER_REDIRECT_UNSUPPORTED";
+      throw error;
+    }
     responseText = await readResponseTextWithLimit(response);
   } catch (error) {
+    if (error?.code === "servicehub_egress_denied") {
+      const wrapped = new Error(`Remote cloud drive endpoint is not available for remote-live egress: ${error.decision?.reason || error.message}.`);
+      wrapped.code = "REMOTE_ENDPOINT_EGRESS_DENIED";
+      wrapped.decision = error.decision;
+      throw wrapped;
+    }
+    if (error?.code === "REMOTE_PROVIDER_REDIRECT_UNSUPPORTED") {
+      throw error;
+    }
     const wrapped = new Error(`Remote cloud drive provider is unavailable: ${error?.message || error}`);
     wrapped.code = "REMOTE_PROVIDER_UNAVAILABLE";
     throw wrapped;
+  } finally {
+    await pinnedFetch?.close?.();
   }
   const metrics = transferTelemetry({
     operation,
@@ -914,29 +1492,17 @@ async function provisionLocalManagedFolders(rootPath, managed = {}) {
   return provisioned;
 }
 
-async function validateLocalProjectionRoot(provider, rootPath) {
+async function validateLocalProjectionRoot(provider, rootPath, { userDataPath = "" } = {}) {
   const normalizedProvider = normalizeProvider(provider || "icloud");
   const label = normalizedProvider === "icloud" ? "iCloud" : providerLabel(normalizedProvider);
   const rawPath = text(rootPath || defaultLocalProjectionRootPath(normalizedProvider));
   if (!rawPath) {
     throw new Error(`${label} rootPath 不能为空。`);
   }
-  const absolutePath = path.resolve(rawPath);
-  if (absolutePath === path.parse(absolutePath).root) {
-    throw new Error(`不能把文件系统根目录作为 ${label} 受控根目录。`);
-  }
-  const stat = await fs.lstat(absolutePath);
-  if (stat.isSymbolicLink()) {
-    throw new Error(`不允许连接符号链接 ${label} 根目录。`);
-  }
-  if (!stat.isDirectory()) {
-    throw new Error(`${label} rootPath 必须是目录。`);
-  }
-  return {
-    absolutePath,
-    realPath: await fs.realpath(absolutePath),
-    stat
-  };
+  return assertExistingLocalDirectoryWithinControlledRoots(rawPath, {
+    userDataPath,
+    label: `${label} 本机投影根目录`
+  });
 }
 
 function safeJoinLocal(rootPath, drivePath = "", { allowRoot = true } = {}) {
@@ -993,6 +1559,9 @@ function publicConnection(connection = {}, { configFilePath = "" } = {}) {
     authType: text(connection.authType || (isLocalProjectionProvider(provider) ? "localDirectory" : "oauth2")),
     secretRef: text(connection.secretRef || ""),
     endpointRef: text(connection.endpointRef || ""),
+    remoteAdapterKind: text(connection.remoteAdapterKind || ""),
+    officialAdapterId: text(connection.officialAdapterId || ""),
+    officialAdapterDocs: text(connection.officialAdapterDocs || ""),
     rootName: text(connection.rootName || ""),
     rootHash: text(connection.rootHash || ""),
     metadataOnly: true,
@@ -1032,6 +1601,7 @@ function providerManifest(config = {}, configFilePath = "") {
     const hasLocalProjection = providerConnections.some((connection) => connection.localAdapterVerified === true);
     const hasRemoteLive = providerConnections.some((connection) => connection.remoteLiveVerified === true);
     const hasContract = providerConnections.some((connection) => connection.contractVerified === true);
+    const officialAdapter = OFFICIAL_REMOTE_ADAPTERS[provider] || null;
     return {
       provider,
       label: providerLabel(provider),
@@ -1044,6 +1614,17 @@ function providerManifest(config = {}, configFilePath = "") {
       localProjectionSupported,
       localProjectionVerified: hasLocalProjection,
       remoteOAuthTarget: OAUTH_PROVIDERS.has(provider),
+      officialRemoteAdapterSupported: Boolean(officialAdapter),
+      officialRemoteAdapterVerified: providerConnections.some((connection) =>
+        connection.remoteLiveVerified === true && text(connection.remoteAdapterKind) === "official"
+      ),
+      ...(officialAdapter ? {
+        officialRemoteAdapter: {
+          adapterId: officialAdapter.adapterId,
+          docs: officialAdapter.docs,
+          baseUrl: officialAdapter.baseUrl
+        }
+      } : {}),
       releaseSupport: localProjectionSupported ? "localDirectoryProjection" : "contractMode",
       capabilities: [
         "drive.connect",
@@ -1369,7 +1950,9 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
     let connection;
     let connectTelemetry = null;
     if (wantsLocalProjection(provider, input)) {
-      const root = await validateLocalProjectionRoot(provider, input.rootPath || input.sourcePath || input.localPath || input.path);
+      const root = await validateLocalProjectionRoot(provider, input.rootPath || input.sourcePath || input.localPath || input.path, {
+        userDataPath
+      });
       const provisionedMappings = await provisionLocalDirectoryMappings(root.realPath, directoryMappings, managedFolder);
       const driveRef = text(input.driveRef || input.driveId) || stableId("cloud_drive", {
         provider,
@@ -1410,15 +1993,20 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
         throw error;
       }
       const adapterMode = normalizeRemoteAdapterMode(input.mode || input.requestedMode || "contract");
-      const endpointUrl = adapterMode === "remote-live"
-        ? normalizeEndpointUrl(input.endpointUrl || input.remoteEndpointUrl || input.baseUrl || "")
+      const requestedEndpointUrl = text(input.endpointUrl || input.remoteEndpointUrl || input.baseUrl || "");
+      const remoteAdapterKind = adapterMode === "remote-live" && !requestedEndpointUrl && OFFICIAL_REMOTE_ADAPTERS[provider]
+        ? "official"
+        : "servicehub-bridge";
+      const endpointUrl = adapterMode === "remote-live" && remoteAdapterKind !== "official"
+        ? normalizeEndpointUrl(requestedEndpointUrl)
         : "";
       const driveRef = text(input.driveRef || input.driveId) || stableId("cloud_drive", {
         provider,
         secretRef,
         workspaceId: input.workspaceId || "",
         mode: adapterMode,
-        endpointUrl
+        endpointUrl,
+        remoteAdapterKind
       });
       const endpointRef = text(input.endpointRef || `config://pact/drive/${provider}-endpoint`);
       let providerConnection = null;
@@ -1429,7 +2017,10 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
           mode: adapterMode,
           secretRef,
           endpointRef,
-          endpointUrl
+          endpointUrl,
+          remoteAdapterKind,
+          officialAdapterId: OFFICIAL_REMOTE_ADAPTERS[provider]?.adapterId || "",
+          userDataPath
         }, "connect", {
           workspaceId: text(input.workspaceId || ""),
           managedFolder,
@@ -1450,14 +2041,21 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
         secretRef,
         endpointRef,
         ...(endpointUrl ? { endpointUrl } : {}),
+        remoteAdapterKind,
+        ...(OFFICIAL_REMOTE_ADAPTERS[provider] ? {
+          officialAdapterId: OFFICIAL_REMOTE_ADAPTERS[provider].adapterId,
+          officialAdapterDocs: OFFICIAL_REMOTE_ADAPTERS[provider].docs
+        } : {}),
         rootName: text(providerConnection?.rootName || providerConnection?.name || "") || `${provider}-${adapterMode}-root`,
-        rootHash: digest(`${provider}:${endpointUrl || endpointRef}:${secretRef}`, 64),
+        rootHash: digest(`${provider}:${endpointUrl || endpointRef}:${secretRef}:${remoteAdapterKind}`, 64),
         status: "active",
         contractVerified: adapterMode !== "remote-live",
         localAdapterVerified: false,
         remoteLiveVerified: adapterMode === "remote-live",
         ...(providerConnection ? {
           remoteProvider: {
+            adapterKind: remoteAdapterKind,
+            adapterId: OFFICIAL_REMOTE_ADAPTERS[provider]?.adapterId || "servicehub-bridge",
             rootId: text(providerConnection.rootId || providerConnection.id || ""),
             rootName: text(providerConnection.rootName || providerConnection.name || ""),
             revision: text(providerConnection.revision || providerConnection.version || ""),
@@ -1595,7 +2193,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       } else {
         basePath = "/";
       }
-      const remote = await callRemoteProvider(connection, "list", {
+      const remote = await callRemoteProvider({ ...connection, userDataPath }, "list", {
         workspaceId: text(input.workspaceId || ""),
         clientId: subjectForInput(input),
         path: basePath,
@@ -1668,7 +2266,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
     let providerMetadata = null;
     let telemetry = null;
     if (isRemoteLiveConnection(connection)) {
-      const remote = await callRemoteProvider(connection, "download", {
+      const remote = await callRemoteProvider({ ...connection, userDataPath }, "download", {
         workspaceId: text(input.workspaceId || ""),
         clientId: subjectForInput(input),
         path: drivePath,
@@ -1791,7 +2389,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
     let providerMetadata = null;
     let telemetry = null;
     if (isRemoteLiveConnection(connection)) {
-      const remote = await callRemoteProvider(connection, "upload", {
+      const remote = await callRemoteProvider({ ...connection, userDataPath }, "upload", {
         workspaceId: text(input.workspaceId || ""),
         clientId: subjectForInput(input),
         path: drivePath,
@@ -1813,6 +2411,9 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       remoteWriteInvoked = true;
     } else if (isLocalProjectionConnection(connection)) {
       const target = safeJoinLocal(connection.rootPath, drivePath, { allowRoot: false });
+      await assertWritablePathWithinRoot(connection.rootPath, target.absolutePath, {
+        label: "云盘上传目标路径"
+      });
       const exists = fsSync.existsSync(target.absolutePath);
       if (exists && input.overwrite !== true) {
         const error = new Error("云盘目标文件已存在；覆盖需要 overwrite=true。");
@@ -1900,7 +2501,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
       if (isLocalProjectionConnection(connection)) {
         items = await listLocalItems(connection.rootPath, resolved.drivePath, { recursive: true, includeHash: true, limit });
       } else if (isRemoteLiveConnection(connection)) {
-        const remote = await callRemoteProvider(connection, "list", {
+        const remote = await callRemoteProvider({ ...connection, userDataPath }, "list", {
           workspaceId: text(input.workspaceId || ""),
           clientId: subjectForInput(input),
           path: basePath,
@@ -1927,7 +2528,7 @@ export function createCloudDrivePort({ userDataPath = "" } = {}) {
         items.push(...mappedItems);
       }
     } else if (isRemoteLiveConnection(connection)) {
-      const remote = await callRemoteProvider(connection, "list", {
+      const remote = await callRemoteProvider({ ...connection, userDataPath }, "list", {
         workspaceId: text(input.workspaceId || ""),
         clientId: subjectForInput(input),
         path: basePath,

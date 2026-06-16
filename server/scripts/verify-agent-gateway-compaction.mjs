@@ -154,15 +154,7 @@ try {
       customHttpAdapter: {
         provider: "custom-http",
         alias: "direct-gateway",
-        url: "http://pact.local/agent",
-        token: "",
-        agentName: "direct",
-        timeoutMs: 30000
-      },
-      customHttpAdapter: {
-        provider: "custom-http",
-        alias: "direct-gateway",
-        url: "http://pact.local/agent",
+        url: "http://127.0.0.1/agent",
         token: "",
         agentName: "direct",
         timeoutMs: 30000
@@ -195,7 +187,7 @@ try {
       ]
     },
     contextRuntime: gatewayContextRuntime,
-    contextCompactionSource: "verify-direct-agent-gateway",
+    contextCompactionSource: "agent_gateway.call",
     userDataPath: path.join(userDataPath, "gateway-direct"),
     fetchImpl: async (_url, options = {}) => {
       capturedPayloads.push(JSON.parse(String(options.body || "{}")));

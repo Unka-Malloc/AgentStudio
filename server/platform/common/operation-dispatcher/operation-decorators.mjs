@@ -57,6 +57,8 @@ const READ_ONLY_POST_OPERATION_IDS = new Set([
   "knowledge.evidence_gate.evaluate",
   "knowledge.agent_skill.plan",
   "knowledge.agent_skill.run",
+  "knowledge.retrieval_playbook.plan",
+  "knowledge.retrieval_playbook.run",
   "knowledge.model_decision",
   "context.compaction.preview",
   "client_runtime.resolve",

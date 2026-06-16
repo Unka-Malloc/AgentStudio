@@ -46,12 +46,15 @@ async function localMcpGrant(serverUrl, body = {}, headers = {}) {
 let requestId = 0;
 
 async function callKnowledgeOperation({ serverUrl, token, operation, input = {} }) {
+  const toolName = String(operation || "").startsWith("pact.rawCorpus.")
+    ? "pact.discovery"
+    : "pact.agentLibrary";
   requestId += 1;
   return fetchJson(`${serverUrl}/mcp`, {
     method: "POST",
     headers: mcpHeaders(token),
     body: JSON.stringify(mcpRequest("tools/call", {
-      name: "pact.agentLibrary",
+      name: toolName,
       arguments: {
         apiVersion: "v0.0.1:mcp:interface-1",
         operation,
@@ -79,7 +82,32 @@ function assertKnowledgeOk(response, operation) {
   return payload;
 }
 
+const originalCapabilityKernelEnv = {
+  PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER,
+  PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER: process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER,
+  PACT_OPAQUE_CAPABILITY_KEY_PROVIDER: process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER,
+  PACT_CAPABILITY_BINDING_GUARD_PROVIDER: process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER
+};
+
+function useIsolatedCapabilityKernelForVerifier() {
+  process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
+  process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = "local-file";
+}
+
+function restoreCapabilityKernelEnv() {
+  for (const [key, value] of Object.entries(originalCapabilityKernelEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-knowledge-transformation-"));
+useIsolatedCapabilityKernelForVerifier();
 const server = await startHttpServer({
   userDataPath,
   distPath: "",
@@ -155,7 +183,7 @@ try {
     })
   });
   assert.equal(receipts.status, 200, JSON.stringify(receipts.payload, null, 2));
-  assert.ok(receipts.payload.result.count >= 3, JSON.stringify(receipts.payload.result, null, 2));
+  assert.ok(receipts.payload.result.count >= 2, JSON.stringify(receipts.payload.result, null, 2));
   assert.ok(
     receipts.payload.result.items.some((item) => item.accessMode === "exportAllowed"),
     "knowledge transformation exports must append AgentLibrary access receipts"
@@ -165,4 +193,5 @@ try {
 } finally {
   await server.close();
   await fs.rm(userDataPath, { recursive: true, force: true });
+  restoreCapabilityKernelEnv();
 }

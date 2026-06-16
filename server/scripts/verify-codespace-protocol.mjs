@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 function run(command, args, options = {}) {
@@ -139,6 +140,7 @@ async function createGitReviewWorktree(rootPath) {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-codespace-protocol-"));
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
 const server = await startHttpServer({
   userDataPath,
   distPath: "",
@@ -289,4 +291,5 @@ try {
 } finally {
   await server.close();
   await fs.rm(userDataPath, { recursive: true, force: true });
+  restoreCapabilityKernelEnv();
 }

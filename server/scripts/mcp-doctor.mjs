@@ -104,7 +104,7 @@ async function checkOrbStackVm({ vm, user, healthUrl }) {
 
 async function discoverSignedBaseUrl() {
   const explicitUrl = String(argValue("--url", process.env.PACT_MCP_BASE_URL || "")).trim();
-  const args = ["mcp-connector/bin/pact-mcp.mjs", "discover-local", "--json"];
+  const args = ["server/platform/common/mcp/gateway-installer/bin/pact-mcp.mjs", "discover-local", "--json"];
   if (explicitUrl) {
     args.push("--url", explicitUrl);
   }

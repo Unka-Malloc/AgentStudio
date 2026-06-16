@@ -19,7 +19,7 @@ Maintain Pact's runtime KnowledgeSkill system. This is not a Codex local skill f
 
 ## Source Map
 
-- Protocol: `docs/PROTOCOLS.md`, sections for Tool Management, skill management, and `pact.knowledge-agent-skill.v1`.
+- Protocol: `docs/protocols/PROTOCOLS.md`, sections for Tool Management, skill management, and `pact.knowledge-agent-skill.v1`.
 - Runtime: `server/platform/specialized/knowledge/invocation/knowledge-skill-runtime/index.mjs`.
 - Shared skill boundary: `server/platform/specialized/capabilities/skills/README.md`.
 - Operations: `server/platform/common/operation-dispatcher/operation-registry.mjs`.

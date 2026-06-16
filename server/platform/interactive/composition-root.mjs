@@ -7,6 +7,7 @@ import { createDataStructureProvider } from "../common/data-structure/data-struc
 import { registerDataStructurePlatformServices } from "../common/data-structure/register.mjs";
 import { createConsoleAuth } from "../common/security/auth/console-auth.mjs";
 import { createOperationAuditStore } from "../common/security/operation-audit.mjs";
+import { createProcessIdentityService } from "../common/security/process-identity/index.mjs";
 import { registerSecurityPlatformServices } from "../common/security/register.mjs";
 import { createSecurityPermissionsProvider } from "../common/security/security-permissions-provider.mjs";
 import { createModuleManagementProvider } from "../common/module-manager/module-management-provider.mjs";
@@ -18,7 +19,6 @@ import { registerStoragePlatformServices } from "../common/storage/register.mjs"
 import { createStorageProvider } from "../common/storage/storage-provider.mjs";
 import { createDevopsProvider } from "../common/devops/devops-provider.mjs";
 import { registerDevopsPlatformServices } from "../common/devops/register.mjs";
-import { getAgentConfigRegistry } from "../specialized/agent/agent-configs/config-registry.mjs";
 import { createConsoleDomainServices } from "../specialized/console/console-domain-services.mjs";
 import { createPlatformRegistry } from "./platform-registry.mjs";
 
@@ -40,6 +40,16 @@ async function createRuntimeKnowledgeProviders({ userDataPath, featureRuntime })
     metadataStoreDomainServices: metadataModule.createKnowledgeMetadataStoreDomainServices(),
     builtinMountProviders: mountModule.createKnowledgeBuiltinMountProviders({ userDataPath })
   };
+}
+
+async function refreshAgentConfigRegistryIfNeeded({ enabled, userDataPath }) {
+  if (!enabled) {
+    return null;
+  }
+  const { getAgentConfigRegistry } = await import("../specialized/agent/agent-configs/config-registry.mjs");
+  return getAgentConfigRegistry({ rootPath: path.join(userDataPath, "agent-configs") }).refresh({
+    settingsFallback: await loadSettings(userDataPath)
+  });
 }
 
 export async function createServerCompositionRoot({
@@ -75,7 +85,8 @@ export async function createServerCompositionRoot({
     builtinMountProviders: knowledgeProviders.builtinMountProviders
   });
   const consoleAuth = createConsoleAuth({ userDataPath });
-  const securityPermissions = createSecurityPermissionsProvider({ consoleAuth });
+  const processIdentity = createProcessIdentityService({ dataDir: userDataPath });
+  const securityPermissions = createSecurityPermissionsProvider({ consoleAuth, processIdentity });
   const moduleManagement = createModuleManagementProvider({ runtime, userDataPath });
   const dataStructures = createDataStructureProvider({ userDataPath });
   const operationAuditStore = createOperationAuditStore({ userDataPath });
@@ -105,7 +116,8 @@ export async function createServerCompositionRoot({
   registerSecurityPlatformServices(platformRegistry, {
     securityPermissions,
     consoleAuth,
-    operationAuditStore
+    operationAuditStore,
+    processIdentity
   });
   registerModuleManagementPlatformServices(platformRegistry, {
     moduleManagement,
@@ -119,8 +131,9 @@ export async function createServerCompositionRoot({
     metadataStore: runtime.metadataStore,
     userDataPath
   });
-  await getAgentConfigRegistry({ rootPath: path.join(userDataPath, "agent-configs") }).refresh({
-    settingsFallback: await loadSettings(userDataPath)
+  await refreshAgentConfigRegistryIfNeeded({
+    enabled: isAnyFeatureActive("agent-gateway", "agent-management"),
+    userDataPath
   });
 
   return Object.freeze({
@@ -139,6 +152,7 @@ export async function createServerCompositionRoot({
     dataStructures,
     consoleAuth,
     securityPermissions,
+    processIdentity,
     operationAuditStore,
     operationConcurrencyScope,
     protocolEventBus,

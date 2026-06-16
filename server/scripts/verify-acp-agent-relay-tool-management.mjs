@@ -8,6 +8,11 @@ import { SERVER_API_OPERATIONS } from "../platform/common/operation-dispatcher/o
 import { createToolManagementPlatform } from "../platform/specialized/capabilities/tools/tool-management-core/index.mjs";
 import { executeConsoleDomainOperation } from "../platform/specialized/console/console-domain-operation-executor.mjs";
 
+process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
+process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
+process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER = "local-file";
+process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = "local-file";
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -92,6 +97,8 @@ async function callToolManagementHttp({ platform, token = "", method = "POST", p
     __pactRequestId: `verify-acp-relay-tool-management-${Date.now()}`,
     headers: {
       ...(token ? { authorization: `Bearer ${token}` } : {}),
+      "x-pact-client-kind": "pact-client",
+      "x-pact-client-id": "pact-client-acp-relay-tool-management-verifier",
       "user-agent": "pact-acp-agent-relay-tool-management-verifier",
       ...headers
     },
@@ -112,7 +119,20 @@ async function callToolManagementHttp({ platform, token = "", method = "POST", p
   };
 }
 
-async function executeTool({ platform, token, toolId, input = {}, context = {} }) {
+function trustedVerifierRequest(token = "") {
+  return {
+    __pactRequestId: `verify-acp-relay-tool-management-approval-${Date.now()}`,
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      "x-pact-client-kind": "pact-client",
+      "x-pact-client-id": "pact-client-acp-relay-tool-management-verifier",
+      "user-agent": "pact-acp-agent-relay-tool-management-verifier"
+    },
+    socket: { remoteAddress: "127.0.0.1" }
+  };
+}
+
+async function executeTool({ platform, token, toolId, input = {}, context = {}, approvePending = false }) {
   const response = await callToolManagementHttp({
     platform,
     token,
@@ -124,6 +144,20 @@ async function executeTool({ platform, token, toolId, input = {}, context = {} }
       context
     }
   });
+  if (approvePending && response.status === 202 && response.payload?.pendingOperation?.pendingOperationId) {
+    const resumed = await platform.runtime.resumePendingOperation({
+      pendingOperationId: response.payload.pendingOperation.pendingOperationId,
+      resolution: "approved",
+      resolvedBy: "acp-relay-tool-management-verifier",
+      reason: "Verify trusted ACP relay tool approval path.",
+      request: trustedVerifierRequest(token),
+      context
+    });
+    assert.equal(resumed.status, 200, JSON.stringify(resumed.payload));
+    assert.equal(resumed.payload.status, "ok", JSON.stringify(resumed.payload));
+    assert.equal(resumed.payload.toolId, toolId);
+    return resumed.payload;
+  }
   assert.equal(response.status, 200, JSON.stringify(response.payload));
   assert.equal(response.payload.status, "ok", JSON.stringify(response.payload));
   assert.equal(response.payload.toolId, toolId);
@@ -204,6 +238,53 @@ try {
     metadata: trusted
   });
   const { grant, token } = issued;
+  const localExecutableInput = {
+    targetId: "tool-management.local.admin",
+    label: "Tool Management Local Admin Target",
+    confirm: true,
+    transport: {
+      type: "agent-cli-exec",
+      command: {
+        executable: "printf",
+        args: ["hello"]
+      }
+    },
+    capabilityPolicy: {
+      writes: "deny",
+      terminal: "ask",
+      maxRisk: "repair_write"
+    }
+  };
+  const localExecutableDenied = await callToolManagementHttp({
+    platform,
+    token,
+    method: "POST",
+    path: "/api/tool-management/v1/execute",
+    body: {
+      toolId: "pact.agentRelay.targets.upsertLocalExecutable",
+      input: localExecutableInput
+    }
+  });
+  assert.equal(localExecutableDenied.status, 403, JSON.stringify(localExecutableDenied.payload));
+  const adminIssued = await platform.store.createGrant({
+    label: "ACP Relay Runtime Admin Verifier",
+    type: "machine",
+    toolsets: ["pact.runtime.maintain"],
+    scopes: ["runtime:admin"],
+    maxRisk: "repair_write",
+    metadata: trusted
+  });
+  const localExecutableAllowed = await executeTool({
+    platform,
+    token: adminIssued.token,
+    toolId: "pact.agentRelay.targets.upsertLocalExecutable",
+    input: localExecutableInput,
+    context: { profileId: trusted.agentProfileId },
+    approvePending: true
+  });
+  assert.equal(localExecutableAllowed.result.ok, true, JSON.stringify(localExecutableAllowed.result));
+  const localExecutableAudit = platform.store.getAudit(localExecutableAllowed.toolExecutionId);
+  assert.equal(localExecutableAudit.operationId, "acp_agent_relay.targets.upsert_local_executable");
 
   const list = await executeTool({
     platform,
@@ -254,7 +335,8 @@ try {
       requestReasoning: false,
       confirm: true
     },
-    context: { profileId: trusted.agentProfileId }
+    context: { profileId: trusted.agentProfileId },
+    approvePending: true
   });
   assert.equal(prompt.result.ok, true, JSON.stringify(prompt.result));
   assert.equal(prompt.result.data.session.sourceId, trusted.sourceId);

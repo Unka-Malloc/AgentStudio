@@ -57,6 +57,127 @@ fn execute_cli(args: Vec<String>) -> Result<CliExecution> {
                 pact_client_native::client_state::state_set(collection, parse_json_arg(payload))?,
             ))
         }
+        [scope, area, action, rest @ ..]
+            if scope == "process-identity" && area == "bootstrap" && action == "claim" =>
+        {
+            let params = cli_params(rest);
+            Ok(CliExecution::Json(
+                pact_client_native::process_identity::bootstrap_claim(&params)?,
+            ))
+        }
+        [scope, area, action, rest @ ..]
+            if scope == "process-identity" && area == "request" && action == "sign" =>
+        {
+            let params = cli_params(rest);
+            Ok(CliExecution::Json(
+                pact_client_native::process_identity::sign_request(&params)?,
+            ))
+        }
+        [scope, action, rest @ ..] if scope == "process-identity" && action == "status" => {
+            let params = cli_params(rest);
+            Ok(CliExecution::Json(
+                pact_client_native::process_identity::status(&params)?,
+            ))
+        }
+        [scope, action, rest @ ..] if scope == "local-runtime" => {
+            let params = cli_params(rest);
+            let result = match action.as_str() {
+                "ensure" => pact_client_native::local_runtime::ensure(&params)?,
+                "build" => pact_client_native::local_runtime::build(&params)?,
+                "start" => pact_client_native::local_runtime::start(&params)?,
+                "stop" => pact_client_native::local_runtime::stop(&params)?,
+                "restart" => pact_client_native::local_runtime::restart(&params)?,
+                "status" => pact_client_native::local_runtime::status(&params)?,
+                "logs" => pact_client_native::local_runtime::logs(&params)?,
+                _ => return Ok(CliExecution::Usage),
+            };
+            Ok(CliExecution::Json(result))
+        }
+        [scope, action, rest @ ..] if scope == "source-queue" || scope == "upload-queue" => {
+            let params = cli_params(rest);
+            let result = match action.as_str() {
+                "add" => pact_client_native::source_queue::add(&params)?,
+                "list" => pact_client_native::source_queue::list(&params)?,
+                "status" => pact_client_native::source_queue::status(&params)?,
+                "pause" => pact_client_native::source_queue::pause(&params)?,
+                "resume" => pact_client_native::source_queue::resume(&params)?,
+                "retry" => pact_client_native::source_queue::retry(&params)?,
+                "cancel" => pact_client_native::source_queue::cancel(&params)?,
+                "drain" => pact_client_native::source_queue::drain(&params)?,
+                _ => return Ok(CliExecution::Usage),
+            };
+            Ok(CliExecution::Json(result))
+        }
+        [scope, action, rest @ ..]
+            if scope == "connectors" && matches!(action.as_str(), "list" | "sync" | "status") =>
+        {
+            let params = cli_params(rest);
+            let result = match action.as_str() {
+                "list" => pact_client_native::connectors::list(&params)?,
+                "sync" => pact_client_native::connectors::sync(&params)?,
+                "status" => pact_client_native::connectors::status(&params)?,
+                _ => unreachable!(),
+            };
+            Ok(CliExecution::Json(result))
+        }
+        [scope, action, subaction, rest @ ..]
+            if scope == "connectors" && action == "mirror" && subaction == "inspect" =>
+        {
+            let params = cli_params(rest);
+            Ok(CliExecution::Json(
+                pact_client_native::connectors::mirror_inspect(&params)?,
+            ))
+        }
+        [scope, action, rest @ ..]
+            if scope == "knowledge-cache"
+                && matches!(
+                    action.as_str(),
+                    "sync" | "search" | "evidence" | "get" | "status"
+                ) =>
+        {
+            let params = cli_params(rest);
+            let result = match action.as_str() {
+                "sync" => pact_client_native::knowledge_cache::sync(&params)?,
+                "search" => pact_client_native::knowledge_cache::search(&params)?,
+                "evidence" => pact_client_native::knowledge_cache::evidence(&params)?,
+                "get" => pact_client_native::knowledge_cache::get(&params)?,
+                "status" => pact_client_native::knowledge_cache::status(&params)?,
+                _ => unreachable!(),
+            };
+            Ok(CliExecution::Json(result))
+        }
+        [scope, action, rest @ ..]
+            if scope == "mail"
+                && matches!(action.as_str(), "preview" | "enqueue" | "status" | "cancel") =>
+        {
+            let params = cli_params(rest);
+            let result = match action.as_str() {
+                "preview" => pact_client_native::mail::preview(&params)?,
+                "enqueue" => pact_client_native::mail::enqueue(&params)?,
+                "status" => pact_client_native::mail::status(&params)?,
+                "cancel" => pact_client_native::mail::cancel(&params)?,
+                _ => unreachable!(),
+            };
+            Ok(CliExecution::Json(result))
+        }
+        [scope, action, rest @ ..]
+            if scope == "mcp-local-bridge"
+                && matches!(
+                    action.as_str(),
+                    "plan" | "start" | "stop" | "status" | "register"
+                ) =>
+        {
+            let params = cli_params(rest);
+            let result = match action.as_str() {
+                "plan" => pact_client_native::mcp_local_bridge::plan(&params)?,
+                "start" => pact_client_native::mcp_local_bridge::start(&params)?,
+                "stop" => pact_client_native::mcp_local_bridge::stop(&params)?,
+                "status" => pact_client_native::mcp_local_bridge::status(&params)?,
+                "register" => pact_client_native::mcp_local_bridge::register(&params)?,
+                _ => unreachable!(),
+            };
+            Ok(CliExecution::Json(result))
+        }
         [scope, action, rest @ ..] if scope == "activity" && action == "list" => {
             let params = cli_params(rest);
             Ok(CliExecution::Json(
@@ -282,7 +403,20 @@ fn print_usage() {
   pact-client model profiles list
   pact-client model profiles set <profile-id> [--command CMD|--url URL] [--args JSON] [--api-key KEY]
   pact-client forward --profile <profile-id> --text <input>
-  pact-client state get|set <settings|targets|pairings|skills|pins> [json]
+  pact-client state get|set <settings|targets|pairings|skills|pins|identities> [json]
+  pact-client process-identity bootstrap claim --server-url URL --claim-token TOKEN --default-identity-hash HASH [--client-id ID]
+  pact-client process-identity request sign --request-url URL [--method POST] [--body-text JSON]
+  pact-client process-identity status [--server-url URL|--package-id ID]
+  pact-client local-runtime ensure|build --source-root PATH --preset-config PATH [--port 17328] [--rebuild true]
+  pact-client local-runtime start|restart [--port 17328]
+  pact-client local-runtime stop|status|logs [--tail N]
+  pact-client source-queue add|list|status|pause|resume|retry|cancel|drain [--path PATH|--text TEXT] [--server-url URL]
+  pact-client upload-queue add|list|status|pause|resume|retry|cancel|drain (compatibility alias)
+  pact-client connectors list|sync|status [--connector local-directory|icloud-local-projection|onedrive-local-projection] [--path PATH]
+  pact-client connectors mirror inspect [--limit N]
+  pact-client knowledge-cache sync|search|evidence|get|status [--evidence-json JSON|--evidence-file PATH|--query TEXT|--evidence-id ID]
+  pact-client mail preview|enqueue|status|cancel --mailbox NAME [--since DATE|--until DATE|--query TEXT]
+  pact-client mcp-local-bridge plan|start|stop|status|register [--port 17328|--server-url URL]
   pact-client activity list [--type TYPE] [--target TARGET] [--limit N]
   pact-client snapshots list [--target TARGET]
   pact-client snapshots restore <snapshot-id>
@@ -741,6 +875,127 @@ mod tests {
                 let restore = execute_cli(vec!["snapshots".into(), "restore".into(), snapshot_id]);
                 assert!(restore.is_ok());
             }
+        }
+    }
+
+    #[test]
+    fn cli_dispatches_gap_closure_client_surfaces() {
+        let dir = temp_cli_dir("gap-client-surfaces");
+        {
+            let _guard = cli_env_lock().lock().unwrap();
+            let _portable = set_portable_dir(&dir);
+
+            let added = execute_cli(vec![
+                "source-queue".into(),
+                "add".into(),
+                "--text".into(),
+                "source queue text".into(),
+                "--source-type".into(),
+                "manual-text".into(),
+                "--provider-id".into(),
+                "test".into(),
+            ])
+            .unwrap();
+            assert_eq!(json_payload(&&added)["status"], "enqueued");
+
+            let compat_list = execute_cli(vec!["upload-queue".into(), "list".into()]).unwrap();
+            assert_eq!(json_payload(&&compat_list)["ok"], true);
+
+            let paused = execute_cli(vec!["source-queue".into(), "pause".into()]).unwrap();
+            assert_eq!(json_payload(&&paused)["paused"], true);
+            let resumed = execute_cli(vec!["source-queue".into(), "resume".into()]).unwrap();
+            assert_eq!(json_payload(&&resumed)["paused"], false);
+            let drained = execute_cli(vec!["source-queue".into(), "drain".into()]).unwrap();
+            assert_eq!(json_payload(&&drained)["deferred"], 1);
+
+            let source_dir = dir.join("local-source");
+            fs::create_dir_all(&source_dir).unwrap();
+            fs::write(source_dir.join("note.txt"), "connector file").unwrap();
+            let connectors = execute_cli(vec!["connectors".into(), "list".into()]).unwrap();
+            assert_eq!(
+                json_payload(&&connectors)["connectors"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                4
+            );
+            let synced = execute_cli(vec![
+                "connectors".into(),
+                "sync".into(),
+                "--connector".into(),
+                "local-directory".into(),
+                "--path".into(),
+                source_dir.display().to_string(),
+            ])
+            .unwrap();
+            assert_eq!(json_payload(&&synced)["status"], "enqueued");
+            let mirror =
+                execute_cli(vec!["connectors".into(), "mirror".into(), "inspect".into()]).unwrap();
+            assert_eq!(
+                json_payload(&&mirror)["entries"].as_array().unwrap().len(),
+                1
+            );
+
+            let synced_cache = execute_cli(vec![
+                "knowledge-cache".into(),
+                "sync".into(),
+                "--evidence-json".into(),
+                r#"{"id":"ev-1","title":"Queue recovery","text":"Source queue resumes uploads"}"#
+                    .into(),
+            ])
+            .unwrap();
+            assert_eq!(json_payload(&&synced_cache)["upserted"], 1);
+            let searched = execute_cli(vec![
+                "knowledge-cache".into(),
+                "search".into(),
+                "--query".into(),
+                "queue".into(),
+            ])
+            .unwrap();
+            assert_eq!(json_payload(&&searched)["authoritative"], false);
+
+            let mail_preview = execute_cli(vec![
+                "mail".into(),
+                "preview".into(),
+                "--mailbox".into(),
+                "Inbox".into(),
+                "--since".into(),
+                "2026-06-01".into(),
+            ])
+            .unwrap();
+            assert_eq!(json_payload(&&mail_preview)["status"], "preview_ready");
+            let mail_enqueue = execute_cli(vec![
+                "mail".into(),
+                "enqueue".into(),
+                "--mailbox".into(),
+                "Inbox".into(),
+                "--since".into(),
+                "2026-06-01".into(),
+            ])
+            .unwrap();
+            assert_eq!(json_payload(&&mail_enqueue)["status"], "enqueued");
+
+            let bridge_plan = execute_cli(vec!["mcp-local-bridge".into(), "plan".into()]).unwrap();
+            assert_eq!(json_payload(&&bridge_plan)["directServiceHubStdio"], false);
+            let bridge_register =
+                execute_cli(vec!["mcp-local-bridge".into(), "register".into()]).unwrap();
+            assert_eq!(
+                json_payload(&&bridge_register)["status"],
+                "registration_planned"
+            );
+        }
+    }
+
+    #[test]
+    fn cli_dispatches_local_runtime_status_before_start() {
+        let dir = temp_cli_dir("local-runtime-status");
+        {
+            let _guard = cli_env_lock().lock().unwrap();
+            let _portable = set_portable_dir(&dir);
+            let status = execute_cli(vec!["local-runtime".into(), "status".into()]).unwrap();
+            let payload = json_payload(&status);
+            assert_eq!(payload["ok"], true);
+            assert_eq!(payload["status"], "stopped");
         }
     }
 

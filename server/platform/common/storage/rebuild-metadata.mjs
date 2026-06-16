@@ -93,9 +93,34 @@ function toPersistedSource(source = {}, batchId) {
           sourceCreatedAt: source.sourceCreatedAt || "",
           sourceUpdatedAt: source.sourceUpdatedAt || "",
           sourceCollectedAt: source.sourceCollectedAt || "",
-          createdAt: source.sourceCollectedAt || source.sourceUpdatedAt || source.sourceCreatedAt || ""
+          createdAt: source.sourceCollectedAt || source.sourceUpdatedAt || source.sourceCreatedAt || "",
+          jobId: source.jobId || "",
+          ownerSubjectId: source.ownerSubjectId || "",
+          ownerUserId: source.ownerUserId || "",
+          ownerUsername: source.ownerUsername || ""
         }
       : null
+  };
+}
+
+function ownerFromBatch(batch = {}) {
+  const meta = batch.meta || {};
+  const payload = batch.payload || {};
+  const ownerSubjectId = String(
+    meta.ownerSubjectId ||
+      payload.ownerSubjectId ||
+      meta.ownerUserId ||
+      payload.ownerUserId ||
+      meta.ownerUsername ||
+      payload.ownerUsername ||
+      ""
+  ).trim();
+  const ownerUserId = String(meta.ownerUserId || payload.ownerUserId || ownerSubjectId).trim();
+  const ownerUsername = String(meta.ownerUsername || payload.ownerUsername || "").trim();
+  return {
+    ownerSubjectId,
+    ownerUserId,
+    ownerUsername
   };
 }
 
@@ -181,15 +206,22 @@ export async function rebuildMetadataStore({
       });
 
       if (batch.meta.status === "completed" && batch.result) {
+        const owner = ownerFromBatch(batch);
         const sources = (batch.result.sourceFiles || []).map((source) =>
-          toPersistedSource(source, batchId)
+          toPersistedSource({
+            ...source,
+            jobId,
+            ...owner
+          }, batchId)
         );
         const warnings = batch.result.warnings || [];
         metadataStore.persistSources({
           batchId,
           sources,
           warnings,
-          rules
+          rules,
+          jobId,
+          ...owner
         });
         if (batch.result.preprocess) {
           metadataStore.persistPreprocessResult({

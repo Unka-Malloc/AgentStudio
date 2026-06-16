@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 async function fetchJsonResponse(url, options = {}) {
@@ -183,6 +184,7 @@ async function callWorkspaceMcpWithApproval(baseUrl, token, operation, input = {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-agent-workspace-files-"));
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
 const localDownloadPath = path.join(userDataPath, "downloaded-a.txt");
 const server = await startHttpServer({
   userDataPath,
@@ -593,4 +595,5 @@ try {
   }
   await server.close();
   await fs.rm(userDataPath, { recursive: true, force: true });
+  restoreCapabilityKernelEnv();
 }

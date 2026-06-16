@@ -38,7 +38,7 @@ function sampleHealth(overrides = {}) {
     status: "pass",
     latestReport: {
       runId: "20260601T000000Z",
-      reportPath: "docs/reports/history/production-readiness/20260601T000000Z/report.json"
+      reportPath: "build/reports/production-readiness/20260601T000000Z/report.json"
     },
     summary: {
       blockedP0: 0
@@ -169,7 +169,7 @@ describe("executive report production-readiness module", () => {
         headline: "Pact executive report"
       },
       sourceRefs: {
-        productionHealthReport: "docs/reports/history/production-readiness/20260601T000000Z/report.json",
+        productionHealthReport: "build/reports/production-readiness/20260601T000000Z/report.json",
         contributionReportIds: []
       }
     });
@@ -198,7 +198,7 @@ describe("executive report production-readiness module", () => {
       status: "partial",
       latestReport: {
         runId: "20260604T010000Z",
-        reportPath: "docs/reports/history/production-readiness/20260604T010000Z/report.json"
+        reportPath: "build/reports/production-readiness/20260604T010000Z/report.json"
       },
       summary: {
         blockedP0: 1
@@ -383,7 +383,7 @@ describe("executive report production-readiness module", () => {
       productionHealth: sampleHealth({
         latestReport: {
           runId: "run-1",
-          reportPath: "docs/reports/history/production-readiness/run-1/report.json"
+          reportPath: "build/reports/production-readiness/run-1/report.json"
         }
       })
     });
@@ -393,7 +393,7 @@ describe("executive report production-readiness module", () => {
       productionHealth: sampleHealth({
         latestReport: {
           runId: "run-2",
-          reportPath: "docs/reports/history/production-readiness/run-2/report.json"
+          reportPath: "build/reports/production-readiness/run-2/report.json"
         }
       })
     });
@@ -403,7 +403,7 @@ describe("executive report production-readiness module", () => {
       productionHealth: sampleHealth({
         latestReport: {
           runId: "run-3",
-          reportPath: "docs/reports/history/production-readiness/run-3/report.json"
+          reportPath: "build/reports/production-readiness/run-3/report.json"
         }
       })
     });

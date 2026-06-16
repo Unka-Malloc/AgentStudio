@@ -61,6 +61,42 @@ void main() {
     },
   );
 
+  testWidgets('history session panel row fits title meta and preview', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 480,
+            height: 220,
+            child: HistorySessionPanel(
+              title: '原生智能体历史',
+              subtitle: '1 条原生智能体历史',
+              items: const [
+                HistorySessionPanelItem(
+                  id: 'session-1',
+                  title: 'weekly limit 和 codex spark 的 weekly limit 是分开计费吗',
+                  meta:
+                      'codex · codex-prompt-history · 019d952a-5e16-78e0-a627-b887',
+                  preview: '这里是一段很长的历史预览，应当在行内截断而不是撑出底部 overflow。',
+                  deleteLabel: 'Delete native agent history',
+                ),
+              ],
+              onSelect: (String _) {},
+              onDelete: (String _) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('weekly limit'), findsOneWidget);
+  });
+
   testWidgets('history session panel can disable native history delete', (
     WidgetTester tester,
   ) async {

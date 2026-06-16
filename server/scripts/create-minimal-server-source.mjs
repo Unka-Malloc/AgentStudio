@@ -55,7 +55,20 @@ function parseArgs(argv) {
 function usage() {
   return [
     "Usage:",
+    "  # Preferred when building a named runtime from this local checkout:",
+    "  npm run server:build:client-local",
+    "  npm run composition:dehydrate -- --preset-config server/platform/common/composition-management/client-local-runtime.preset.json --skip-ui-build",
+    "",
+    "  # Low-level standalone source-tree instantiation:",
     "  node server/scripts/create-minimal-server-source.mjs [--output pact-v1] [--force]",
+    "",
+    "Build routes:",
+    "  Local source + composition preset:",
+    "    Use composition presets. The preset owns outputRoot, writes build/composition-packages/<preset>/source,",
+    "    and does not run npm install unless another caller explicitly adds that step.",
+    "  Standalone/exported source tree:",
+    "    Use this script directly only when creating an ad hoc source tree or export fixture.",
+    "    --install explicitly runs npm install --omit=dev inside the target tree and may require network access.",
     "",
     "Options:",
     "  --output PATH          Target source tree directory. Default: ./pact-v1",
@@ -64,11 +77,11 @@ function usage() {
     "  --features LIST        Extra feature IDs to enable, comma-separated.",
     "  --without-features LIST Feature IDs to disable, comma-separated.",
     "  --force                Delete the target directory before creating it.",
-    "  --skip-ui-build        Reuse existing build/dist instead of building renderer first.",
+    "  --skip-ui-build        Skip renderer build; omit UI dist when build/dist is absent.",
     "  --no-docs              Do not copy selected docs into the target tree.",
     "  --no-verify           Skip generated tree self-checks.",
     "  --no-source-trim      Keep the full server source tree while still writing the feature profile.",
-    "  --install              Run npm install --omit=dev inside the target tree.",
+    "  --install              Run npm install --omit=dev inside the target tree; may require network access.",
     "  --start                Start the generated server after instantiation.",
     "  --port PORT            Port used with --start. Default: 8791.",
     "  --data-dir PATH        Data dir used with --start. Default: ./data.",
@@ -104,9 +117,9 @@ function packageJsonForTarget({ rootPackage, dependencies, edition }) {
       pact: "server/scripts/pact.mjs"
     },
     scripts: {
-      start: `node server/scripts/start-server.mjs --with-ui --profile minimal --edition ${edition}`,
-      "server:start": `node server/scripts/start-server.mjs --with-ui --profile minimal --edition ${edition}`,
-      "composition:service:start": `node server/scripts/start-composition-service.mjs --profile minimal --edition ${edition}`,
+      start: "node server/scripts/start-server.mjs",
+      "server:start": "node server/scripts/start-server.mjs",
+      "composition:service:start": "node server/scripts/start-composition-service.mjs",
       "composition:external:verify": "node server/scripts/composition-external-service.mjs verify",
       "composition:external:prepare": "node server/scripts/composition-external-service.mjs prepare",
       "composition:external:start": "node server/scripts/composition-external-service.mjs start",
@@ -148,12 +161,10 @@ async function copyDocs(targetPath, docs = DEFAULT_DOCS) {
 async function ensureRendererDist({ skipBuild = false } = {}) {
   const indexPath = path.join(REPO_ROOT, "build", "dist", "index.html");
   if (skipBuild) {
-    if (!(await pathExists(indexPath))) {
-      throw new Error("build/dist/index.html does not exist. Remove --skip-ui-build or run npm run build:renderer:raw first.");
-    }
-    return;
+    return pathExists(indexPath);
   }
   await run("npm", ["run", "build:renderer:raw"], { cwd: REPO_ROOT });
+  return true;
 }
 
 function run(command, args, options = {}) {
@@ -269,7 +280,7 @@ async function instantiateMinimalSource(args = {}) {
     await fs.rm(targetPath, { recursive: true, force: true });
   }
 
-  await ensureRendererDist({ skipBuild: skipUiBuild });
+  const hasRendererDist = await ensureRendererDist({ skipBuild: skipUiBuild });
 
   const profile = args["feature-profile"] ? await readJson(path.resolve(String(args["feature-profile"]))) : {};
   const featureRuntime = resolveFeatureRuntime({
@@ -295,7 +306,9 @@ async function instantiateMinimalSource(args = {}) {
   if (await pathExists(path.join(REPO_ROOT, "modules"))) {
     await copyPath(path.join(REPO_ROOT, "modules"), path.join(targetPath, "modules"));
   }
-  await copyPath(path.join(REPO_ROOT, "build", "dist"), path.join(targetPath, "build", "dist"));
+  if (hasRendererDist) {
+    await copyPath(path.join(REPO_ROOT, "build", "dist"), path.join(targetPath, "build", "dist"));
+  }
   await copyClientPackagingManifest(targetPath);
   if (!noDocs) {
     await copyDocs(targetPath);

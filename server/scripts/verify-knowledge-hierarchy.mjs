@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 async function fetchJson(url, options = {}) {
@@ -13,6 +14,13 @@ async function fetchJson(url, options = {}) {
     throw new Error(`Request failed: ${response.status} ${rawText}`);
   }
   return payload;
+}
+
+function trustedPactClientHeaders() {
+  return {
+    "X-Pact-Client-Kind": "pact-client",
+    "X-Pact-Client-Id": "pact-client-knowledge-hierarchy-verifier"
+  };
 }
 
 async function waitForJob(baseUrl, jobId) {
@@ -45,6 +53,7 @@ async function createKnowledgeJob(baseUrl, title, body) {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-knowledge-hierarchy-"));
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
 const server = await startHttpServer({
   userDataPath,
   runtimeOptions: {
@@ -108,7 +117,8 @@ try {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${grant.token}`
+      Authorization: `Bearer ${grant.token}`,
+      ...trustedPactClientHeaders()
     },
     body: JSON.stringify({
       toolId: "pact.agentLibrary.search",
@@ -125,7 +135,8 @@ try {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${grant.token}`
+      Authorization: `Bearer ${grant.token}`,
+      ...trustedPactClientHeaders()
     },
     body: JSON.stringify({
       toolId: "pact.agentLibrary.documentStructure",
@@ -140,4 +151,5 @@ try {
 } finally {
   await server.close();
   await fs.rm(userDataPath, { recursive: true, force: true });
+  restoreCapabilityKernelEnv();
 }

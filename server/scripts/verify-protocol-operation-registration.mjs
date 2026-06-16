@@ -130,6 +130,17 @@ for (const requiredTool of [
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-protocol-operations-"));
+const previousCapabilityEnv = {
+  PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER,
+  PACT_CAPABILITY_BINDING_GUARD_PROVIDER: process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER,
+  PACT_TOOL_GRANT_CAPABILITY_KEY_ALIAS: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_ALIAS,
+  PACT_TOOL_GRANT_BINDING_GUARD_ALIAS: process.env.PACT_TOOL_GRANT_BINDING_GUARD_ALIAS
+};
+const protocolVerifyAlias = `pact-protocol-operations-${path.basename(userDataPath)}`;
+process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER || "local-file";
+process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER || "local-file";
+process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_ALIAS = process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_ALIAS || protocolVerifyAlias;
+process.env.PACT_TOOL_GRANT_BINDING_GUARD_ALIAS = process.env.PACT_TOOL_GRANT_BINDING_GUARD_ALIAS || `${protocolVerifyAlias}-binding`;
 const server = await startHttpServer({
   userDataPath,
   distPath: "",
@@ -220,6 +231,13 @@ try {
   }
 } finally {
   await server.close();
+  for (const [key, value] of Object.entries(previousCapabilityEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
   await fs.rm(userDataPath, { recursive: true, force: true });
 }
 

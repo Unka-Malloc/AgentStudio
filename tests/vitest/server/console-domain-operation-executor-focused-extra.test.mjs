@@ -127,8 +127,8 @@ describe("console-domain executor focused coverage", () => {
       "ws-search",
       expect.objectContaining({
         actorUserId: "",
-        canAccessAll: true,
-        sharingMode: "team-shared"
+        canAccessAll: false,
+        sharingMode: "owner-bound"
       })
     );
 

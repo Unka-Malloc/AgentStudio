@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { clientIpFromRequest, normalizeIpAddress } from "../trusted-client-ip.mjs";
 
 export const AUTHORIZATION_PROTOCOL_VERSION = "v0.0.1:risk-control:authorization-1";
 
@@ -49,10 +50,11 @@ acp_agent_relay.session.create
 acp_agent_relay.session.resume
 acp_agent_relay.session.wake
 acp_agent_relay.sessions.get
-acp_agent_relay.sessions.list
-acp_agent_relay.targets.list
-acp_agent_relay.targets.upsert
-acp_agent_relay.templates.list
+	acp_agent_relay.sessions.list
+	acp_agent_relay.targets.list
+	acp_agent_relay.targets.upsert
+	acp_agent_relay.targets.upsert_local_executable
+	acp_agent_relay.templates.list
 acp_agent_relay.turn.observe
 acp_agent_relay.turns.list
 acp_agent_relay.virtual_agent.initialize
@@ -142,6 +144,9 @@ client_runtime.profiles.get
 client_runtime.profiles.set
 client_runtime.resolve
 client_runtime.status
+process_identity.bootstrap_claim
+process_identity.package.rotate
+process_identity.package.revoke
 codespace.change.prepare
 codespace.change.upload
 codespace.diff.read
@@ -227,6 +232,8 @@ jobs.work_queue.drain
 jobs.work_queue.dispatch
 jobs.work_queue.inspect
 jobs.work_queue.pause
+jobs.work_queue.rebuild
+jobs.work_queue.retry_dead_letter
 jobs.work_queue.resume
 knowledge.access.denied_request.list
 knowledge.access.evaluate
@@ -457,12 +464,28 @@ tool_management.toolsets_resolve
 tool_management.update_grant
 uploads.create_session
 uploads.get_session
-uploads.upload_chunk
-v001.baseline.status
-workspace.asset.permission.check
-workspace.asset.policy.set
-workspace.audit.query
-workspace.checkpoint.diff
+	uploads.upload_chunk
+	v001.baseline.status
+	workspace.asset.permission.check
+	workspace.asset.policy.set
+	workspace.asset.target.connect
+	workspace.asset.list
+	workspace.asset.read
+	workspace.asset.submit
+	workspace.asset.mutate
+	workspace.asset.sync.plan
+	workspace.asset.sync.apply
+	workspace.asset.import
+	workspace.asset.export
+	workspace.asset.review.comment
+	workspace.asset.review.requestChanges
+	workspace.asset.review.approve
+	workspace.asset.checkpoint
+	workspace.asset.lineage
+	workspace.asset.receipt.get
+	workspace.asset.backfill
+	workspace.audit.query
+	workspace.checkpoint.diff
 workspace.checkpoint.node.get
 workspace.checkpoint.restore
 workspace.checkpoint.restore.preview
@@ -544,6 +567,7 @@ pact.agentRelay.sessions.get
 pact.agentRelay.sessions.list
 pact.agentRelay.targets.list
 pact.agentRelay.targets.upsert
+pact.agentRelay.targets.upsertLocalExecutable
 pact.agentRelay.templates.list
 pact.agentRelay.turn.observe
 pact.agentRelay.turns.list
@@ -801,10 +825,26 @@ pact.storageBackups.list
 pact.storageBackups.restore
 pact.storageBackups.restorePreview
 pact.storageSummary
-pact.v001.baseline.status
-pact.workspace.asset.permission.check
-pact.workspace.asset.policy.set
-pact.workspace.audit.query
+	pact.v001.baseline.status
+	pact.workspace.asset.permission.check
+	pact.workspace.asset.policy.set
+	pact.workspace.asset.target.connect
+	pact.workspace.asset.list
+	pact.workspace.asset.read
+	pact.workspace.asset.submit
+	pact.workspace.asset.mutate
+	pact.workspace.asset.sync.plan
+	pact.workspace.asset.sync.apply
+	pact.workspace.asset.import
+	pact.workspace.asset.export
+	pact.workspace.asset.review.comment
+	pact.workspace.asset.review.requestChanges
+	pact.workspace.asset.review.approve
+	pact.workspace.asset.checkpoint
+	pact.workspace.asset.lineage
+	pact.workspace.asset.receipt.get
+	pact.workspace.asset.backfill
+	pact.workspace.audit.query
 pact.workspace.checkpoint.diff
 pact.workspace.checkpoint.node.get
 pact.workspace.checkpoint.restore
@@ -1038,17 +1078,11 @@ function requestOrigin(request) {
 }
 
 function sourceIpFromRequest(request) {
-  return String(
-    request?.headers?.["x-forwarded-for"] ||
-      request?.socket?.remoteAddress ||
-      request?.connection?.remoteAddress ||
-      ""
-  ).split(",")[0].trim();
+  return clientIpFromRequest(request);
 }
 
 function normalizeIp(value) {
-  const text = String(value || "").trim();
-  return text.startsWith("::ffff:") ? text.slice("::ffff:".length) : text;
+  return normalizeIpAddress(value);
 }
 
 function ipv4ToInt(value) {

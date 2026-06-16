@@ -9,14 +9,9 @@ import 'manual_target_dialog.dart';
 import 'theme.dart';
 
 class AgentsCanvas extends StatefulWidget {
-  const AgentsCanvas({
-    super.key,
-    required this.controller,
-    required this.width,
-  });
+  const AgentsCanvas({super.key, required this.controller});
 
   final FutureClientController controller;
-  final double width;
 
   @override
   State<AgentsCanvas> createState() => _AgentsCanvasState();
@@ -43,37 +38,46 @@ class _AgentsCanvasState extends State<AgentsCanvas> {
 
         return Scaffold(
           backgroundColor: colors.background,
-          body: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AgentsToolbar(
-                  scanning: scanning,
-                  adding: adding,
-                  onRescan: widget.controller.scanTargets,
-                  onAddTarget: _showAddTargetDialog,
+          body: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 720;
+              final pagePadding = compact ? 16.0 : 24.0;
+              return Padding(
+                padding: EdgeInsets.all(pagePadding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AgentsToolbar(
+                      scanning: scanning,
+                      adding: adding,
+                      compact: compact,
+                      onRescan: widget.controller.scanTargets,
+                      onAddTarget: _showAddTargetDialog,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Manage target adapters and MCP configuration plans for local IDEs and AI tools.',
+                      maxLines: compact ? 3 : 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: colors.textMuted, fontSize: 14),
+                    ),
+                    SizedBox(height: compact ? 18 : 24),
+                    Expanded(
+                      child: AgentConversationWorkspace(
+                        controller: widget.controller,
+                        targets: targets,
+                        scanning: scanning,
+                        adding: adding,
+                        onRescan: widget.controller.scanTargets,
+                        onAddTarget: _showAddTargetDialog,
+                        onInspect: widget.controller.inspectTarget,
+                        onPlan: widget.controller.planTargetConfig,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Manage target adapters and MCP configuration plans for local IDEs and AI tools.',
-                  style: TextStyle(color: colors.textMuted, fontSize: 14),
-                ),
-                const SizedBox(height: 32),
-                Expanded(
-                  child: AgentConversationWorkspace(
-                    controller: widget.controller,
-                    targets: targets,
-                    scanning: scanning,
-                    adding: adding,
-                    onRescan: widget.controller.scanTargets,
-                    onAddTarget: _showAddTargetDialog,
-                    onInspect: widget.controller.inspectTarget,
-                    onPlan: widget.controller.planTargetConfig,
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           ),
         );
       },

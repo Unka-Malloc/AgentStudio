@@ -9,7 +9,7 @@ import {
 } from "../platform/common/security/secrets/local-secret-store.mjs";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const DEFAULT_OUTPUT_ROOT = "docs/reports/history/v001-readiness";
+const DEFAULT_OUTPUT_ROOT = "build/reports/v001-readiness";
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
 const EXTERNAL_TARGETS = [
@@ -112,7 +112,7 @@ function printHelp() {
 Run v0.0.1 Phase 0-4 gates and write a readiness report.
 
 Usage:
-  node server/scripts/verify-v001.mjs [--output-root docs/reports/history/v001-readiness] [--timeout-ms N]
+  node server/scripts/verify-v001.mjs [--output-root build/reports/v001-readiness] [--timeout-ms N]
 `);
 }
 

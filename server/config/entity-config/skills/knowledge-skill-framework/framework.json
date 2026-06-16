@@ -6,7 +6,7 @@
     {
       "id": "applicability",
       "label": "适用场景",
-      "description": "这个 Skill 适合处理什么问题，以及不适合处理什么问题。"
+      "description": "这个 Playbook 适合处理什么问题，以及不适合处理什么问题。"
     },
     {
       "id": "core_concepts",
@@ -26,7 +26,7 @@
     {
       "id": "honest_boundaries",
       "label": "诚实边界",
-      "description": "说明 Skill 的证据覆盖、时间范围、未知项和不可自动断言的内容。"
+      "description": "说明 Playbook 的证据覆盖、时间范围、未知项和不可自动断言的内容。"
     }
   ],
   "qualityGates": {
@@ -63,26 +63,26 @@
     ]
   },
   "fallbackTemplates": {
-    "titleTemplate": "{{terms}} 知识技能",
+    "titleTemplate": "{{terms}} AgentLibrary Playbook",
     "summaryParts": [
       "面向“{{query}}”的可复用知识操作单元。",
       "主要证据来自：{{titles}}。",
       "已绑定 {{evidenceCount}} 条 evidenceId。"
     ],
     "useWhen": [
-      "用户问题与“{{query}}”或相关术语匹配时，先用本 Skill 做粗层判断。",
+      "用户问题与“{{query}}”或相关术语匹配时，先用本 Playbook 做粗层判断。",
       "需要把多条证据转化为可执行结论、风险、事项或下一步行动时。"
     ],
     "avoidWhen": [
       "问题需要改写 canonical fact、实体、关系或分类法。",
-      "问题没有命中本 Skill 的核心概念，也缺少可引用证据。"
+      "问题没有命中本 Playbook 的核心概念，也缺少可引用证据。"
     ],
     "decisionHeuristics": [
-      "优先查看 Skill 绑定的 evidenceId；如果证据不足，再用 query rewrites 扩展召回。",
+      "优先查看 Playbook 绑定的 evidenceId；如果证据不足，再用 query rewrites 扩展召回。",
       "回答时先给可读结论，再列证据来源；不能把 evidenceId 之外的内容说成事实。"
     ],
     "honestBoundaries": [
-      "当前 Skill 由 {{evidenceCount}} 条证据蒸馏，可结合这些证据为您提供精准的专属分析能力。",
+      "当前 Playbook 由 {{evidenceCount}} 条证据蒸馏，可结合这些证据为您提供精准的专属分析能力。",
       "{{hierarchyStatus}}"
     ],
     "hierarchyStatus": {
@@ -116,19 +116,19 @@
     "reuseSignals": [
       "同类问题会反复出现，需要复用判断流程。",
       "当前证据能总结出稳定的适用场景、反模式和边界。",
-      "Skill 能减少下一次查询时的粗层误判或无效召回。"
+      "Playbook 能减少下一次查询时的粗层误判或无效召回。"
     ],
     "recommendationMessages": {
-      "blockedCanonicalMutations": "移除 canonical fact/entity/relation/raw evidence 改写字段，Skill 只能沉淀操作经验。",
-      "evidenceRefsResolved": "补齐可打开的 evidenceId，智能体创建 Skill 不能只依赖模型记忆。",
-      "sourceTypeAllowed": "使用框架允许的 sourceType，或先更新外部 skill framework 配置。",
-      "requiredFieldMissing": "补齐 Skill 必填字段后再进入发布审核。"
+      "blockedCanonicalMutations": "移除 canonical fact/entity/relation/raw evidence 改写字段，Playbook 只能沉淀操作经验。",
+      "evidenceRefsResolved": "补齐可打开的 evidenceId，智能体创建 Playbook 不能只依赖模型记忆。",
+      "sourceTypeAllowed": "使用框架允许的 sourceType，或先更新外部 playbook framework 配置。",
+      "requiredFieldMissing": "补齐 Playbook 必填字段后再进入发布审核。"
     },
-    "reviewPolicy": "智能体创建的 Skill 默认进入 pending_review；发布必须通过质量门禁，且不得包含 canonical fact/entity/relation/raw evidence 改写。"
+    "reviewPolicy": "智能体创建的 Playbook 默认进入 pending_review；发布必须通过质量门禁，且不得包含 canonical fact/entity/relation/raw evidence 改写。"
   },
   "defaultHeuristicTemplates": [
     "先识别用户问题属于哪个知识主题，再决定是否下钻到原始证据。",
-    "优先使用已发布 Skill 中的判断规则；Skill 覆盖不足时再进行关键词或混合召回。",
+    "优先使用已发布 Playbook 中的判断规则；Playbook 覆盖不足时再进行关键词或混合召回。",
     "任何结论都必须绑定 evidenceId；无法绑定证据时只作为待验证假设。",
     "遇到冲突证据时，不自动合并事实，生成待审核项或明确标记不确定。"
   ],
@@ -139,10 +139,10 @@
     "用模型补全文档中没有出现的日期、金额、账号、IP 或责任人。"
   ],
   "defaultBoundaryRules": [
-    "Skill 是可复用的知识操作单元，不是 canonical fact 源。",
-    "Skill 发布不会改写原始证据、归一化正文、实体、关系或分类法。",
+    "Playbook 是可复用的知识操作单元，不是 canonical fact 源。",
+    "Playbook 发布不会改写原始证据、归一化正文、实体、关系或分类法。",
     "事实、实体、关系、分类变更仍然必须进入 KnowledgeSuggestion 或 ReviewItem。",
-    "证据不足、覆盖不足或冲突未解决时，Skill 只能保持 draft 或 pending_review。"
+    "证据不足、覆盖不足或冲突未解决时，Playbook 只能保持 draft 或 pending_review。"
   ],
   "verificationQuestionTemplates": [
     "哪些 evidenceId 直接支持“{{title}}”的核心判断？",

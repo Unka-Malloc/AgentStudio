@@ -66,7 +66,7 @@ function defaultRules() {
       ruleId: "golden_rule_no_evidence_auto_reject",
       label: "无证据自动拒绝",
       priority: 100,
-      targetTypes: ["knowledgeSkill", "knowledgeSkillSet", "goldenRulePackage", "taxonomyPackage", "expertVocabularyPackage"],
+      targetTypes: ["knowledgePlaybook", "knowledgePlaybookSet", "knowledgeSkill", "knowledgeSkillSet", "goldenRulePackage", "taxonomyPackage", "expertVocabularyPackage"],
       when: { evidenceCountLessThan: 1 },
       action: "auto_reject",
       reason: "候选没有可解析 evidenceRefs，不能进入自动发布链路。"
@@ -93,7 +93,7 @@ function defaultRules() {
       ruleId: "golden_rule_semantic_unsupported_auto_reject",
       label: "语义不支持自动拒绝",
       priority: 90,
-      targetTypes: ["knowledgeSkill", "knowledgeSkillSet"],
+      targetTypes: ["knowledgePlaybook", "knowledgePlaybookSet", "knowledgeSkill", "knowledgeSkillSet"],
       when: { semanticVerdict: "unsupported" },
       action: "auto_reject",
       reason: "候选结论未被引用证据语义支持。"
@@ -111,23 +111,23 @@ function defaultRules() {
       ruleId: "golden_rule_quality_failed_review",
       label: "质量门禁失败待审",
       priority: 75,
-      targetTypes: ["knowledgeSkill", "knowledgeSkillSet"],
+      targetTypes: ["knowledgePlaybook", "knowledgePlaybookSet", "knowledgeSkill", "knowledgeSkillSet"],
       when: { qualityPassed: false },
       action: "needs_human_review",
       reason: "结构、证据或层级质量不足，不能自动发布。"
     },
     {
       ruleId: "golden_rule_low_risk_skillset_canary",
-      label: "低风险 SkillSet 允许灰度",
+      label: "低风险 PlaybookSet 允许灰度",
       priority: 20,
-      targetTypes: ["knowledgeSkill", "knowledgeSkillSet"],
+      targetTypes: ["knowledgePlaybook", "knowledgePlaybookSet", "knowledgeSkill", "knowledgeSkillSet"],
       when: {
         evidenceGateOk: true,
         qualityPassed: true,
         canonicalMutationAbsent: true
       },
       action: "canary_allowed",
-      reason: "候选只影响可回滚 Skill/检索辅助能力，并通过证据与质量门禁。"
+      reason: "候选只影响可回滚 Playbook/检索辅助能力，并通过证据与质量门禁。"
     }
   ];
 }
@@ -142,7 +142,7 @@ function createDefaultPackage() {
     status: "active",
     source: "builtin-default",
     scope: {
-      targets: ["knowledgeSkill", "knowledgeSkillSet", "retrievalProfile", "taxonomyPackage", "expertVocabularyPackage", "contextProfile"]
+      targets: ["knowledgePlaybook", "knowledgePlaybookSet", "knowledgeSkill", "knowledgeSkillSet", "retrievalProfile", "taxonomyPackage", "expertVocabularyPackage", "contextProfile"]
     },
     automationPolicy: {
       humanReviewIsFinalAuthority: true,
@@ -723,7 +723,11 @@ export function createGoldenRuleRuntime({ userDataPath, knowledgeCore = null } =
       .slice(0, limit);
     return {
       protocolVersion: GOLDEN_RULE_PROTOCOL_VERSION,
-      items,
+      items: items.map((item) => ({
+        ...item,
+        expectedPlaybookId: item.expectedPlaybookId || item.expectedSkillId || "",
+        expectedSkillId: item.expectedSkillId || item.expectedPlaybookId || ""
+      })),
       count: items.length
     };
   }
@@ -736,14 +740,15 @@ export function createGoldenRuleRuntime({ userDataPath, knowledgeCore = null } =
       "gold_case",
       query,
       JSON.stringify(source.requiredEvidenceIds || source.evidenceRefs || []),
-      source.expectedSkillId || ""
+      source.expectedPlaybookId || source.playbookId || source.expectedSkillId || ""
     );
     const item = {
       protocolVersion: GOLDEN_RULE_PROTOCOL_VERSION,
       caseId,
       query,
       expectedCategory: normalizeText(source.expectedCategory || ""),
-      expectedSkillId: normalizeText(source.expectedSkillId || source.skillId || ""),
+      expectedPlaybookId: normalizeText(source.expectedPlaybookId || source.playbookId || source.expectedSkillId || source.skillId || ""),
+      expectedSkillId: normalizeText(source.expectedSkillId || source.skillId || source.expectedPlaybookId || source.playbookId || ""),
       requiredEvidenceIds: uniqueStrings(source.requiredEvidenceIds || source.evidenceRefs || []),
       forbiddenEvidenceIds: uniqueStrings(source.forbiddenEvidenceIds || []),
       answerRubric: normalizeText(source.answerRubric || source.rubric || ""),
@@ -772,6 +777,7 @@ export function createGoldenRuleRuntime({ userDataPath, knowledgeCore = null } =
           humanExpert: true,
           caseId,
           evidenceRefs: item.requiredEvidenceIds,
+          expectedPlaybookId: item.expectedPlaybookId,
           expectedSkillId: item.expectedSkillId
         }
       });
@@ -784,9 +790,11 @@ export function createGoldenRuleRuntime({ userDataPath, knowledgeCore = null } =
 
   async function saveGoldCaseFromSkillResolution(input = {}) {
     const skill = asObject(input.skill);
+    const playbookId = skill.playbookId || input.playbookId || skill.skillId || input.skillId || "";
     return saveGoldCase({
       query: skill.sourceQuery || input.query || skill.title || "",
-      expectedSkillId: skill.skillId || input.skillId || "",
+      expectedPlaybookId: playbookId,
+      expectedSkillId: skill.skillId || input.skillId || playbookId,
       requiredEvidenceIds: asArray(skill.evidenceRefs || skill.skill?.evidenceRefs),
       answerRubric: skill.summary || "",
       source: "skill_review_resolution",
@@ -822,6 +830,7 @@ export function createGoldenRuleRuntime({ userDataPath, knowledgeCore = null } =
             expectedCategory: goldCase.expectedCategory
           },
           output: {
+            expectedPlaybookId: goldCase.expectedPlaybookId || goldCase.expectedSkillId,
             expectedSkillId: goldCase.expectedSkillId,
             requiredEvidenceIds: goldCase.requiredEvidenceIds,
             answerRubric: goldCase.answerRubric

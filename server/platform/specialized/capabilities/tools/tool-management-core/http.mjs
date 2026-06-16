@@ -4,6 +4,12 @@ import {
   summarizeError,
   summarizeForLog
 } from "../../../../interactive/product-api.mjs";
+import {
+  clientIpFromRequest,
+  isLocalHttpHost,
+  isLocalHttpOrigin,
+  isLoopbackAddress
+} from "../../../../common/security/trusted-client-ip.mjs";
 import { TOOL_MANAGEMENT_API_PREFIX } from "./catalog.mjs";
 
 const AGENT_RELAY_API_PREFIX = "/api/agent-relay/v1";
@@ -88,6 +94,64 @@ const AGENT_RELAY_EXTERNAL_SECRET_INPUT_KEYS = new Set([
   "relayMcpAccessToken"
 ]);
 
+const TRUSTED_PACT_CLIENT_KINDS = new Set([
+  "pact-client",
+  "pact-client-cli",
+  "pact-cli",
+  "pact-client-runtime",
+  "client-runtime"
+]);
+
+function headerValue(request, ...names) {
+  const headers = request?.headers || {};
+  for (const name of names) {
+    const value = headers[name] ?? headers[String(name || "").toLowerCase()];
+    const normalized = String(value || "").trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return "";
+}
+
+function trustedPactClientIdentity(request) {
+  const clientKind = headerValue(request, "x-pact-client-kind", "x-pact-client-type");
+  const clientId = headerValue(request, "x-pact-client-id", "x-pact-client-name");
+  if (TRUSTED_PACT_CLIENT_KINDS.has(clientKind.toLowerCase())) {
+    return { ok: true, clientKind, clientId };
+  }
+  if (/^pact-(client|cli|runtime)(?:$|[-_:])/i.test(clientId)) {
+    return { ok: true, clientKind: clientKind || "pact-client", clientId };
+  }
+  return { ok: false, clientKind, clientId };
+}
+
+function isTrustedLocalPactClientRequest(request) {
+  const client = trustedPactClientIdentity(request);
+  if (!client.ok) {
+    return false;
+  }
+  const host = headerValue(request, "host");
+  const origin = headerValue(request, "origin");
+  return isLoopbackAddress(clientIpFromRequest(request)) &&
+    (!host || isLocalHttpHost(host)) &&
+    (!origin || isLocalHttpOrigin(origin));
+}
+
+function trustedPactClientRequiredPayload() {
+  return {
+    schemaVersion: "v0.0.1:schema:definition-1",
+    error: {
+      code: "trusted_pact_client_required",
+      message: "Tool Management HTTP execution only accepts trusted local Pact Client requests.",
+      details: {
+        acceptedEntrypoints: ["Pact Client HTTP/RPC", "MCP Client /mcp"],
+        requiredHeaders: ["X-Pact-Client-Kind: pact-client", "X-Pact-Client-Id: pact-*"]
+      }
+    }
+  };
+}
+
 function plainObject(value = null) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
@@ -166,6 +230,9 @@ function routeAcpAgentRelayRequest({ method, suffix, url, requestBody }) {
   }
   if (normalizedMethod === "GET" && suffix === "/targets") {
     return { operationId: "acp_agent_relay.targets.list", input };
+  }
+  if (normalizedMethod === "POST" && suffix === "/targets/local-executable") {
+    return { operationId: "acp_agent_relay.targets.upsert_local_executable", input };
   }
   if (normalizedMethod === "POST" && suffix === "/targets") {
     return { operationId: "acp_agent_relay.targets.upsert", input };
@@ -499,18 +566,24 @@ export function createToolManagementHttpRouter({
     }
 
     if (normalizedMethod === "POST" && (suffix === "/execute" || suffix === "/dry-run")) {
+      if (!isTrustedLocalPactClientRequest(request)) {
+        return complete(403, trustedPactClientRequiredPayload());
+      }
       const payload = parseJsonBody(requestBody);
       const result = await platform.runtime.executeTool({
         toolId: payload.toolId,
         input: payload.input || {},
         request,
-        context: sanitizeExternalToolContext(payload.context, { transport: "tool-http" }),
+        context: sanitizeExternalToolContext(payload.context, { transport: "pact-client-http" }),
         dryRun: suffix === "/dry-run" || payload.dryRun === true
       });
       return complete(result.status || 500, result.payload);
     }
 
     if (normalizedMethod === "POST" && suffix === "/batch") {
+      if (!isTrustedLocalPactClientRequest(request)) {
+        return complete(403, trustedPactClientRequiredPayload());
+      }
       const payload = parseJsonBody(requestBody);
       const calls = Array.isArray(payload.calls) ? payload.calls : [];
       const results = [];
@@ -523,7 +596,7 @@ export function createToolManagementHttpRouter({
             context: sanitizeExternalToolContext({
               ...plainObject(payload.context),
               ...plainObject(call.context)
-            }, { transport: "tool-http-batch" }),
+            }, { transport: "pact-client-http-batch" }),
             dryRun: payload.dryRun === true || call.dryRun === true
           })).payload
         );

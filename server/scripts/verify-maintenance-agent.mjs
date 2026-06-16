@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONSOLE_ROLES } from "../platform/common/security/auth/console-auth.mjs";
+import { MAINTENANCE_AGENT_SCHEMA_VERSION } from "../services/agent/maintenance-agent/config.mjs";
 import { normalizeMaintenancePlan } from "../services/agent/maintenance-agent/planner.mjs";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
 import { evaluateOperationSafety } from "../platform/common/operation-dispatcher/operation-decorators.mjs";
@@ -263,7 +264,7 @@ async function verifyCoreApiRpcAndCli() {
 
   try {
     const config = await fetchJson(`${server.url}/api/maintenance-agent/config`);
-    assert.equal(config.config.schemaVersion, "v0.0.1:schema:definition-1");
+    assert.equal(config.config.schemaVersion, MAINTENANCE_AGENT_SCHEMA_VERSION);
     assert.equal(config.config.enabled, false);
     assert.equal(config.config.autoApproveRisk, "safe_write");
     assert.ok(config.config.runbooks.health_smoke);

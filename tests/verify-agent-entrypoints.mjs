@@ -29,9 +29,9 @@ const entrypoints = [
     requiredPatterns: [/Server Web Agent Entry/u, /server-web\/components\/common\.ts/u, /Context Budget/u]
   },
   {
-    path: "mcp-connector/AGENT.md",
+    path: "server/platform/common/mcp/gateway-installer/AGENT.md",
     maxLines: 80,
-    requiredPatterns: [/MCP Connector Agent Entry/u, /mcp-connector\/bin\/pact-mcp\.mjs/u, /Context Budget/u]
+    requiredPatterns: [/MCP Gateway Installer Agent Entry/u, /server\/platform\/common\/mcp\/gateway-installer\/bin\/pact-mcp\.mjs/u, /Context Budget/u]
   },
   {
     path: "client-cli/AGENT.md",
@@ -84,11 +84,11 @@ for (const entry of entrypoints) {
 const docsIndex = await readText("docs/README.md");
 assert.match(docsIndex, /\[AGENT\.md\]\(AGENT\.md\)/u, "docs/README.md is expected to index docs/AGENT.md");
 
-const collaborationGuide = await readText("docs/GIT-COLLAB.md");
+const agentGuide = await readText("docs/AGENT.md");
 for (const entry of entrypoints.slice(1)) {
   assert.ok(
-    collaborationGuide.includes(`\`${entry.path}\``),
-    `docs/GIT-COLLAB.md is expected to list ${entry.path}`
+    agentGuide.includes(`\`${entry.path}\``),
+    `docs/AGENT.md is expected to list ${entry.path}`
   );
 }
 

@@ -17,7 +17,7 @@ import { startHttpServer } from "../services/server-runtime/http-server.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const SECURITY_DESIGN_PATH = "docs/security/design/0001-local-stdio-interface-lockdown.md";
+const SECURITY_DESIGN_PATH = "docs/functionality/SECURITY-AUTHORIZATION.md";
 const DISABLED_EXPORTS = Object.freeze([
   "createAcpSourceStdioServer",
   "createAcpSourceStdioServerOptionsFromEnv",
@@ -42,6 +42,30 @@ const FORBIDDEN_SOURCE_STDIO_PACKAGE_SCRIPTS = Object.freeze([
   "server:verify:acp-agent-relay-real:codex-cli",
   "server:verify:acp-agent-relay-real:connect:codex-cli"
 ]);
+
+const originalCapabilityKernelEnv = {
+  PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER,
+  PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER: process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER,
+  PACT_OPAQUE_CAPABILITY_KEY_PROVIDER: process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER,
+  PACT_CAPABILITY_BINDING_GUARD_PROVIDER: process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER
+};
+
+function useIsolatedCapabilityKernelForVerifier() {
+  process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
+  process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = "local-file";
+}
+
+function restoreCapabilityKernelEnv() {
+  for (const [key, value] of Object.entries(originalCapabilityKernelEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
 
 function mcpRequest(method, params = {}, id = 1) {
   return {
@@ -193,9 +217,9 @@ async function assertSecurityDesignSeparation() {
   );
 
   const docsReadme = await fs.readFile(path.join(repoRoot, "docs/README.md"), "utf8");
-  assert.match(docsReadme, /docs\/security|security\/README\.md/, "Docs index must expose the security design area");
+  assert.match(docsReadme, /docs\/functionality\/SECURITY-AUTHORIZATION\.md/, "Docs index must expose the security and authorization functionality document");
 
-  const securityReadme = await fs.readFile(path.join(repoRoot, "docs/security/README.md"), "utf8");
+  const securityReadme = await fs.readFile(path.join(repoRoot, "docs/functionality/SECURITY-AUTHORIZATION.md"), "utf8");
   assert.match(
     securityReadme,
     /server:verify:security-local-stdio-lockdown[\s\S]*local-stdio-interface-lockdown/,
@@ -216,9 +240,9 @@ async function assertSecurityDesignSeparation() {
     "Production readiness must keep local stdio lockdown as a dedicated security gate"
   );
 
-  const context = await fs.readFile(path.join(repoRoot, "docs/CONTEXT.md"), "utf8");
-  assert.match(context, new RegExp(SECURITY_DESIGN_PATH.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.doesNotMatch(context, /docs\/adr\/0014-local-stdio-interface-lockdown\.md/);
+  const agentGuide = await fs.readFile(path.join(repoRoot, "docs/AGENT.md"), "utf8");
+  assert.match(agentGuide, /docs\/functionality\/\*\.md|docs\/functionality\/SECURITY-AUTHORIZATION\.md/);
+  assert.doesNotMatch(agentGuide, /docs\/adr\/0014-local-stdio-interface-lockdown\.md/);
 }
 
 async function assertSecurityGateSeparation() {
@@ -371,6 +395,7 @@ async function assertCompositionAndEntrypointLockdown() {
 
 async function assertMcpPublicPayloadLockdown() {
   const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-security-local-stdio-mcp-"));
+  useIsolatedCapabilityKernelForVerifier();
   const server = await startHttpServer({
     userDataPath,
     distPath: "",
@@ -433,6 +458,7 @@ async function assertMcpPublicPayloadLockdown() {
   } finally {
     await server.close();
     await fs.rm(userDataPath, { recursive: true, force: true });
+    restoreCapabilityKernelEnv();
   }
 }
 

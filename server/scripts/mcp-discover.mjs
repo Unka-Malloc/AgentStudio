@@ -12,7 +12,7 @@ function argValue(name, fallback = "") {
 }
 
 const explicitUrl = String(argValue("--url", process.env.PACT_MCP_BASE_URL || "")).trim();
-const args = ["mcp-connector/bin/pact-mcp.mjs", "discover", "--json"];
+const args = ["server/platform/common/mcp/gateway-installer/bin/pact-mcp.mjs", "discover", "--json"];
 if (explicitUrl) {
   args.push("--url", explicitUrl);
 }

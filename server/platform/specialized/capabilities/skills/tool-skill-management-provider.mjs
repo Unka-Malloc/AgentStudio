@@ -1,11 +1,16 @@
 import {
-  CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION,
-  SKILL_REGISTRY_PROTOCOL_VERSION,
-  createCapabilityPackageRegistry
-} from "../package-lifecycle/index.mjs";
+  clientIpFromRequest,
+  firstForwardedFor,
+  isLocalHttpHost,
+  isLocalHttpOrigin,
+  isLoopbackAddress,
+  originHost
+} from "../../../common/security/trusted-client-ip.mjs";
 
 export const TOOL_SKILL_MANAGEMENT_PROTOCOL_VERSION = "v0.0.1:tool:skill-management-1";
 export const SKILL_HUB_DISCOVERY_PROTOCOL_VERSION = "v0.0.1:tool:skill-hub-discovery-1";
+export const CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION = "v0.0.1:tool:capability-package-lifecycle-1";
+export const SKILL_REGISTRY_PROTOCOL_VERSION = "v0.0.1:tool:skill-registry-1";
 
 const LOCAL_GRANT_MCP_SHAREDSPACE_TOOL_NAME = "pact.sharedspace";
 const LOCAL_GRANT_MCP_CONNECTOR_PACKAGE = "pact-mcp-connector";
@@ -37,8 +42,7 @@ const LOCAL_GRANT_WRITE_TOOLSETS = Object.freeze([
   "pact.agent.workspace",
   "pact.document.parse",
   "pact.result.export",
-  "pact.repo.read",
-  "pact.agent.relay.read"
+  "pact.repo.read"
 ]);
 
 const LOCAL_GRANT_TARGET_MATCH = Object.freeze({
@@ -107,46 +111,26 @@ function parseRequestBody(requestBody) {
   return JSON.parse(requestBody.toString("utf8"));
 }
 
-function normalizeNetworkAddress(value = "") {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/^\[|\]$/g, "")
-    .replace(/^::ffff:/, "");
-}
-
-function isLoopbackAddress(value = "") {
-  const address = normalizeNetworkAddress(value);
-  return address === "127.0.0.1" ||
-    address === "::1" ||
-    address === "localhost" ||
-    address.startsWith("127.");
-}
-
-function firstForwardedFor(request) {
-  return String(request?.headers?.["x-forwarded-for"] || "")
-    .split(",")[0]
-    .trim();
-}
-
 function isSameOriginBrowserRequest(request) {
   const origin = String(request?.headers?.origin || "").trim();
   if (!origin) {
     return true;
   }
-  if (origin === "null") {
+  if (origin === "null" || !isLocalHttpOrigin(origin)) {
     return false;
   }
   const host = String(request?.headers?.host || "").trim();
-  if (!host) {
+  if (!isLocalHttpHost(host)) {
     return false;
   }
-  return origin === `http://${host}` || origin === `https://${host}`;
+  return originHost(origin) === host.toLowerCase();
 }
 
 function isLocalMcpPairingRequest(request) {
   const forwardedFor = firstForwardedFor(request);
-  return isLoopbackAddress(request?.socket?.remoteAddress) &&
+  const host = String(request?.headers?.host || "").trim();
+  return isLoopbackAddress(clientIpFromRequest(request)) &&
+    isLocalHttpHost(host) &&
     (!forwardedFor || isLoopbackAddress(forwardedFor)) &&
     isSameOriginBrowserRequest(request);
 }
@@ -199,6 +183,21 @@ function normalizedTargetKey(value) {
     .trim()
     .toLowerCase()
     .replace(/[_\s]+/g, "-");
+}
+
+function normalizedGrantTargetKeys(value) {
+  return normalizeGrantTargets(value)
+    .map((target) => normalizedTargetKey(target))
+    .filter(Boolean)
+    .filter((target, index, values) => values.indexOf(target) === index);
+}
+
+function localMcpGrantTargetKeys(grant) {
+  const metadata = grantMetadata(grant);
+  return normalizedGrantTargetKeys([
+    ...normalizeGrantTargets(metadata.targets),
+    ...normalizeGrantTargets(metadata.mcpTarget)
+  ]);
 }
 
 function localGrantTargetMatch(targets = []) {
@@ -1053,10 +1052,8 @@ function mcpGrantConnectionState(grant, { offlineAfterSeconds = 300 } = {}) {
 
 function isMcpGrantTargetUninstalled(grant, target) {
   const metadata = grantMetadata(grant);
-  const uninstalledTargets = Array.isArray(metadata.uninstalledTargets)
-    ? metadata.uninstalledTargets.map(compactText).filter(Boolean)
-    : normalizeGrantTargets(metadata.uninstalledTargets);
-  if (uninstalledTargets.includes(compactText(target))) {
+  const uninstalledTargets = normalizedGrantTargetKeys(metadata.uninstalledTargets);
+  if (uninstalledTargets.includes(normalizedTargetKey(target))) {
     return true;
   }
   return metadata.currentDeviceVisible === false && Boolean(compactText(metadata.uninstalledAt));
@@ -1106,11 +1103,24 @@ export function createToolSkillManagementProvider({
   toolManagementPlatform,
   userDataPath = "",
   capabilityPackageRegistry = null,
+  skillHubEnabled = true,
   securityPermissions = toolManagementPlatform?.securityPermissions || null,
   logger = null
 } = {}) {
   const platform = toolManagementPlatform;
-  const skillPackageRegistry = capabilityPackageRegistry || createCapabilityPackageRegistry({ userDataPath });
+  let skillPackageRegistry = capabilityPackageRegistry || null;
+  const skillHubAvailable = skillHubEnabled !== false;
+
+  async function getSkillPackageRegistry() {
+    if (!skillHubAvailable) {
+      return null;
+    }
+    if (!skillPackageRegistry) {
+      const { createCapabilityPackageRegistry } = await import("../package-lifecycle/index.mjs");
+      skillPackageRegistry = createCapabilityPackageRegistry({ userDataPath });
+    }
+    return skillPackageRegistry;
+  }
 
   async function loadMcpWorkspaceDirectory({ request, context = {} }) {
     const result = await executeTool({
@@ -1210,8 +1220,12 @@ export function createToolSkillManagementProvider({
   }
 
   async function listVisibleSkills({ authorization = null } = {}) {
+    if (!skillHubAvailable) {
+      return emptySkillCatalog({ status: "disabled" });
+    }
     try {
-      return skillCatalogFromCapabilityPackages(await skillPackageRegistry.describe(), { authorization });
+      const registry = await getSkillPackageRegistry();
+      return skillCatalogFromCapabilityPackages(await registry.describe(), { authorization });
     } catch (error) {
       logger?.warn?.("tool_skill_management.skill_catalog.failed", {
         error: error?.message || "skill catalog projection failed"
@@ -1383,11 +1397,46 @@ export function createToolSkillManagementProvider({
 
     const body = parseRequestBody(requestBody);
     const targets = normalizeGrantTargets(body.targets || body.target || body.clientId);
+    const targetKeys = normalizedGrantTargetKeys(targets);
     if (targets.length === 0) {
       return denyLocalGrant(
         400,
         "targets_required",
         "MCP local uninstall updates require at least one target."
+      );
+    }
+
+    const authorization = await authorizeRequest({
+      request,
+      requiredScopes: [],
+      recordUse: false
+    });
+    if (!authorization.ok) {
+      return denyLocalGrant(
+        authorization.status || 401,
+        authorization.reasonCode === "missing_token" ? "local_uninstall_token_required" : authorization.reasonCode || "local_uninstall_token_denied",
+        authorization.error || "MCP local uninstall updates require a valid local MCP token."
+      );
+    }
+    const authorizedGrant = authorization.grant || null;
+    if (!isLocalMcpGrant(authorizedGrant)) {
+      return denyLocalGrant(
+        403,
+        "local_uninstall_local_grant_required",
+        "MCP local uninstall updates require a local MCP connector grant."
+      );
+    }
+    const authorizedTargets = localMcpGrantTargetKeys(authorizedGrant);
+    const unauthorizedTargets = targets.filter((target) => !authorizedTargets.includes(normalizedTargetKey(target)));
+    if (unauthorizedTargets.length > 0) {
+      return denyLocalGrant(
+        403,
+        "local_uninstall_target_denied",
+        "MCP local uninstall token is not bound to every requested target.",
+        {
+          unauthorizedTargets,
+          authorizedTargets
+        }
       );
     }
 
@@ -1400,7 +1449,7 @@ export function createToolSkillManagementProvider({
       );
     }
 
-    const targetSet = new Set(targets);
+    const targetSet = new Set(targetKeys);
     const uninstalledAt = nowIso();
     const updated = [];
     const grants = store.listGrants({ includeRevoked: true });
@@ -1409,17 +1458,17 @@ export function createToolSkillManagementProvider({
         continue;
       }
       const grantTargets = localMcpGrantTargets(grant);
-      const matchedTargets = grantTargets.filter((target) => targetSet.has(target));
+      const matchedTargets = grantTargets.filter((target) => targetSet.has(normalizedTargetKey(target)));
       if (matchedTargets.length === 0) {
         continue;
       }
 
       const metadata = grantMetadata(grant);
       const uninstalledTargets = [
-        ...normalizeGrantTargets(metadata.uninstalledTargets),
-        ...matchedTargets
+        ...normalizedGrantTargetKeys(metadata.uninstalledTargets),
+        ...matchedTargets.map((target) => normalizedTargetKey(target))
       ].filter((target, index, values) => values.indexOf(target) === index);
-      const remainingTargets = grantTargets.filter((target) => !uninstalledTargets.includes(target));
+      const remainingTargets = grantTargets.filter((target) => !uninstalledTargets.includes(normalizedTargetKey(target)));
       const nextMetadata = {
         ...metadata,
         uninstalledTargets,
@@ -1453,6 +1502,7 @@ export function createToolSkillManagementProvider({
         ok: true,
         schemaVersion: "v0.0.1:schema:definition-1",
         targets,
+        authorizedGrantId: authorizedGrant.id || "",
         updatedCount: updated.length,
         updated
       }

@@ -17,11 +17,14 @@ import {
   scenario,
   startMockAgentGateway
 } from "./business-scenario-framework.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 
 function bearerHeaders(token, extra = {}) {
   return {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
+    "X-Pact-Client-Kind": "pact-client",
+    "X-Pact-Client-Id": "pact-client-business-scenarios-verifier",
     ...extra
   };
 }
@@ -475,7 +478,8 @@ const scenarios = [
     tags: ["knowledge", "rules", "queue"],
     async setup({ harness, state }) {
       state.owner = await harness.loginOwner();
-      state.sourceDir = await harness.makeFixtureDir("knowledge-source");
+      state.sourceDir = harness.filePath("knowledge-sources", "local-sources", "business-knowledge-source");
+      await fs.mkdir(state.sourceDir, { recursive: true });
       await fs.writeFile(path.join(state.sourceDir, "business-note.md"), "# Business Note\n\nQueue and knowledge fixture.\n", "utf8");
     },
     async run({ harness, state }) {
@@ -893,10 +897,13 @@ const scenarios = [
 ];
 
 const options = parseBusinessScenarioArgs(process.argv.slice(2));
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
 if (options.help) {
   printBusinessScenarioHelp();
+  restoreCapabilityKernelEnv();
   process.exit(0);
 }
 
 const { exitCode } = await runScenarioSuite(scenarios, options);
+restoreCapabilityKernelEnv();
 process.exit(exitCode);

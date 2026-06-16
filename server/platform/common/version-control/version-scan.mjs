@@ -28,7 +28,6 @@ export const GOVERNED_VERSION_PATTERN = /^v[0-9]+\.[0-9]+\.[0-9]+:[a-z][a-z0-9-]
 export const GOVERNED_VERSION_TOKEN_PATTERN = /\bv[0-9]+\.[0-9]+\.[0-9]+:[a-zA-Z][a-zA-Z0-9-]*:[a-zA-Z][a-zA-Z0-9-]*(?:-[0-9]+(?:\.[0-9]+)*)?(?::[a-zA-Z][a-zA-Z0-9-]*(?:-[0-9]+(?:\.[0-9]+)*)?)*/g;
 
 export function shouldSkipVersionScanPath(relativePath) {
-  if (relativePath.startsWith("docs/reports/history/")) return true;
   if (IGNORED_VERSION_SCAN_FILES.includes(path.basename(relativePath))) return true;
   return relativePath.split("/").some((part) => IGNORED_VERSION_SCAN_PATH_PARTS.includes(part));
 }

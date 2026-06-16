@@ -705,6 +705,7 @@ export async function dispatchOperation({
   method = operation?.http?.method || "POST",
   applyHttpQuery = true,
   authorizeOperation = null,
+  verifyProcessIdentity = null,
   operationAuditStore = null,
   concurrencyScope = "default",
   logger = getRuntimeLogger(),
@@ -837,17 +838,110 @@ export async function dispatchOperation({
 	      };
 	    }
 
-	    appendRiskGate({
-	      controlId: DISPATCHER_RISK_CONTROL_IDS.admit,
-	      decision: "allow",
+    appendRiskGate({
+      controlId: DISPATCHER_RISK_CONTROL_IDS.admit,
+      decision: "allow",
 	      reasonCode: "schema_valid",
 	      details: {
 	        schema: "valid"
 	      }
-	    });
+    });
 	    const authEnabled = true;
+    let processIdentityVerification = null;
+    const processIdentityRequired = operation.processIdentity?.required === true;
+    if (!skipAuthorization && processIdentityRequired) {
+      processIdentityVerification = typeof verifyProcessIdentity === "function"
+        ? await verifyProcessIdentity({
+            operation,
+            request,
+            requestBody,
+            url,
+            method,
+            transport,
+            input: operationInput
+          })
+        : {
+            ok: false,
+            status: 503,
+            reasonCode: "process_identity_verifier_missing",
+            error: "Process identity verifier is not registered for this transport."
+          };
+      if (!processIdentityVerification.ok) {
+        const status = Number(processIdentityVerification.status || processIdentityVerification.statusCode || 401) || 401;
+        const error = processIdentityVerification.error || "process identity verification denied";
+        appendRiskGate({
+          controlId: DISPATCHER_RISK_CONTROL_IDS.externalBind,
+          decision: "deny",
+          reasonCode: processIdentityVerification.reasonCode || "process_identity_denied",
+          statusCode: status,
+          details: {
+            requiredCapabilities: processIdentityVerification.requiredCapabilities || []
+          }
+        });
+        writeAuditOperation({
+          operationAuditStore,
+          operation,
+          transport,
+          authSession,
+          actor,
+          input: operationInput,
+          status: "denied",
+          statusCode: status,
+          error
+        });
+        logOperation(logger, "warn", operationEventName(transport, "denied"), {
+          requestId: requestIdFromRequest(request),
+          operationId: operation.id,
+          reason: processIdentityVerification.reasonCode || "process_identity",
+          status
+        });
+        sendOperationDenied(response, status, {
+          error,
+          traceId: traceContext.traceId
+        });
+        notifyNarrowTransition(request, "operation.policy_deny", "policy_denied");
+        return { ok: false, handled: true, statusCode: status, operation, input: operationInput, traceContext, riskControl: riskControlEnvelope };
+      }
+      if (request && typeof request === "object") {
+        request.__pactProcessIdentity = processIdentityVerification;
+      }
+      if (processIdentityVerification.authSession) {
+        authSession = processIdentityVerification.authSession;
+      }
+      if (processIdentityVerification.actor) {
+        actor = processIdentityVerification.actor;
+      }
+      appendRiskGate({
+        controlId: DISPATCHER_RISK_CONTROL_IDS.externalBind,
+        decision: "allow",
+        reasonCode: processIdentityVerification.reasonCode || "process_identity_verified",
+        actor,
+        authSession,
+        details: {
+          packageId: processIdentityVerification.client?.packageId || "",
+          processKeyId: processIdentityVerification.client?.processKeyId || ""
+        }
+      });
+      appendRiskGate({
+        controlId: DISPATCHER_RISK_CONTROL_IDS.platformAuthorize,
+        decision: "allow",
+        reasonCode: "process_identity_capability_authorized",
+        actor,
+        authSession,
+        details: {
+          requiredCapabilities: processIdentityVerification.requiredCapabilities || []
+        }
+      });
+    }
+    const processIdentityAuthorizes =
+      processIdentityRequired &&
+      processIdentityVerification?.ok === true &&
+      operation.processIdentity?.authorizes === true;
     const shouldRunConsoleAuthorization =
-      !skipAuthorization && operation.externalAuth !== true && typeof authorizeOperation === "function";
+      !processIdentityAuthorizes &&
+      !skipAuthorization &&
+      operation.externalAuth !== true &&
+      typeof authorizeOperation === "function";
 
     if (!skipAuthorization && operation.externalAuth === true) {
       const verification = await verifyExternalAuth({
@@ -1024,6 +1118,17 @@ export async function dispatchOperation({
 	          requiredScopes: operation.requiredScopes || []
 	        }
 	      });
+	    } else if (processIdentityAuthorizes) {
+      appendRiskGate({
+        controlId: DISPATCHER_RISK_CONTROL_IDS.operationAuthorize,
+        decision: "allow",
+        reasonCode: "process_identity_authorized",
+        actor,
+        authSession,
+        details: {
+          requiredCapabilities: processIdentityVerification?.requiredCapabilities || []
+        }
+      });
 	    } else if (skipAuthorization) {
       const authorizationDecision = dispatcherAuthorizationEngine.evaluate({
         operation,
@@ -1337,6 +1442,7 @@ export async function dispatchRegisteredHttpOperation({
   response,
   requestBody,
   authorizeOperation = null,
+  verifyProcessIdentity = null,
   operationAuditStore = null,
   concurrencyScope = "default",
   logger = getRuntimeLogger()
@@ -1361,6 +1467,7 @@ export async function dispatchRegisteredHttpOperation({
     transport: "http",
     method,
     authorizeOperation,
+    verifyProcessIdentity,
     operationAuditStore,
     concurrencyScope,
     logger
@@ -1570,6 +1677,7 @@ export async function dispatchRpcOperation({
   response,
   requestBody,
   authorizeOperation = null,
+  verifyProcessIdentity = null,
   operationAuditStore = null,
   concurrencyScope = "default",
   logger = getRuntimeLogger()
@@ -1627,6 +1735,7 @@ export async function dispatchRpcOperation({
       method: "POST",
       applyHttpQuery: false,
       authorizeOperation,
+      verifyProcessIdentity,
       operationAuditStore,
       concurrencyScope,
       logger

@@ -119,7 +119,10 @@ try {
 
   await test("legacy workspace file upload appends workspaceAsset and writes ledger/registry", async () => {
     const agentWorkspace = createAgentWorkspace({ userDataPath });
-    const created = agentWorkspace.createWorkspace({ title: "Unified Asset Workspace" });
+    const created = agentWorkspace.createWorkspace({
+      ownerUserId: "verify-workspace-asset-management",
+      title: "Unified Asset Workspace"
+    });
     const workspaceId = created.workspace.workspaceId;
     const response = await executeConsoleDomainOperation({
       operationId: "workspace.file.upload",
@@ -155,7 +158,10 @@ try {
 
   await test("workspace.asset.submit uses orchestrator envelope and registry projection", async () => {
     const agentWorkspace = createAgentWorkspace({ userDataPath });
-    const created = agentWorkspace.createWorkspace({ title: "Workspace Asset Submit" });
+    const created = agentWorkspace.createWorkspace({
+      ownerUserId: "verify-workspace-asset-management",
+      title: "Workspace Asset Submit"
+    });
     const workspaceId = created.workspace.workspaceId;
     const response = await executeConsoleDomainOperation({
       operationId: "workspace.asset.submit",
@@ -188,9 +194,13 @@ try {
 
   await test("backfill registers existing workspace files without replaying side effects", async () => {
     const agentWorkspace = createAgentWorkspace({ userDataPath });
-    const created = agentWorkspace.createWorkspace({ title: "Backfill Workspace" });
+    const created = agentWorkspace.createWorkspace({
+      ownerUserId: "verify-workspace-asset-management",
+      title: "Backfill Workspace"
+    });
     const workspaceId = created.workspace.workspaceId;
     await agentWorkspace.uploadWorkspaceFile({
+      actorUserId: "verify-workspace-asset-management",
       workspaceId,
       path: "files/backfill.txt",
       contentBase64: b64("backfill\n"),

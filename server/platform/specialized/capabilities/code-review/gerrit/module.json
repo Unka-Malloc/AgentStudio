@@ -13,6 +13,7 @@
   "defaultLoaded": true,
   "protocol": "v0.0.1:platform:code-review-1",
   "adapterProtocol": "v0.0.1:strategy:gerrit-rest-git-review-push-1",
+  "maintenanceRunbook": "skills/codespace/pact-gerrit-mcp-maintainer/SKILL.md",
   "maintenanceSkill": "skills/codespace/pact-gerrit-mcp-maintainer/SKILL.md",
   "components": {
     "gerritMcpRoute": {

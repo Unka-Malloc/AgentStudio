@@ -60,11 +60,13 @@ function authOptions(auth, options = {}) {
 }
 
 async function waitForJob(baseUrl, jobId, auth) {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
+  let lastJob = null;
+  for (let attempt = 0; attempt < 200; attempt += 1) {
     const job = await fetchJson(
       `${baseUrl}/api/jobs/${encodeURIComponent(jobId)}`,
       authOptions(auth)
     );
+    lastJob = job;
     if (job.status === "completed") {
       return job;
     }
@@ -73,7 +75,56 @@ async function waitForJob(baseUrl, jobId, auth) {
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error("Job did not complete in time.");
+  throw new Error(`Job did not complete in time: ${JSON.stringify({
+    jobId,
+    status: lastJob?.status,
+    error: lastJob?.error,
+    queueState: lastJob?.queueState
+  })}`);
+}
+
+async function assertKnowledgeSourceJobState(baseUrl, jobEnvelope, auth, dataPath) {
+  let lastJob = null;
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const job = await fetchJson(
+      `${baseUrl}/api/jobs/${encodeURIComponent(jobEnvelope.id)}`,
+      authOptions(auth)
+    );
+    lastJob = job;
+    if (job.status === "completed") {
+      const jobTree = await waitForCheckpointTreeComplete(dataPath, jobEnvelope.checkpointTreeId);
+      assert.ok(jobTree?.nodes?.["worker-run"]);
+      return job;
+    }
+    if (job.status === "failed") {
+      throw new Error(job.error || "Knowledge source parse job failed.");
+    }
+    if (job.status === "queued") {
+      assert.equal(job.queueState?.schedulerMode, "platform-work-queue");
+      await fetchJson(
+        `${baseUrl}/api/jobs/work-queue/dispatch`,
+        authOptions(auth, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: "{}"
+        })
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  const jobTree = await loadCheckpointTree({
+    userDataPath: dataPath,
+    treeId: jobEnvelope.checkpointTreeId
+  });
+  throw new Error(`Knowledge source job did not complete in time: ${JSON.stringify({
+    jobId: jobEnvelope.id,
+    status: lastJob?.status,
+    queueState: lastJob?.queueState,
+    treeStatus: jobTree?.status
+  })}`);
 }
 
 async function waitForSourceIndex(baseUrl, sourceId, auth) {
@@ -91,6 +142,24 @@ async function waitForSourceIndex(baseUrl, sourceId, auth) {
   throw new Error("Source index did not complete in time.");
 }
 
+async function waitForCheckpointTreeComplete(userDataPath, treeId) {
+  let lastTree = null;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    lastTree = await loadCheckpointTree({ userDataPath, treeId });
+    if (lastTree?.status === "completed") {
+      return lastTree;
+    }
+    if (lastTree?.status === "failed") {
+      throw new Error(`Checkpoint tree failed: ${treeId}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Checkpoint tree did not complete in time: ${JSON.stringify({
+    treeId,
+    status: lastTree?.status
+  })}`);
+}
+
 function buildUploadedText(name, relativePath, text) {
   const buffer = Buffer.from(text, "utf8");
   return {
@@ -103,6 +172,7 @@ function buildUploadedText(name, relativePath, text) {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-knowledge-console-"));
+const controlledSourceRoot = path.join(userDataPath, "knowledge-sources", "local-sources");
 const mockDocumentParserModulePath = fileURLToPath(
   new URL("../../tests/server/mock-structured-document-parser.mjs", import.meta.url)
 );
@@ -186,7 +256,7 @@ try {
   assert.ok(afterIngest.health.counts.documents >= 1);
   assert.ok(afterIngest.health.counts.blocks >= 1);
 
-  const sourceRoot = path.join(userDataPath, "source-conflict-fixture");
+  const sourceRoot = path.join(controlledSourceRoot, "source-conflict-fixture");
   await fs.mkdir(sourceRoot, { recursive: true });
   const sourceFilePath = path.join(sourceRoot, "policy.txt");
   await fs.writeFile(
@@ -217,54 +287,46 @@ try {
       })
     })
   );
-	  assert.equal(sourceCreated.source.lastHydrationFailedCount, 1);
-	  assert.equal(sourceCreated.source.lastHydratedFileCount, 1);
-	  assert.equal(sourceCreated.job.checkpointReceipt.hydration.failedCount, 1);
-		  assert.ok(sourceCreated.job.checkpointReceipt.fileManifestPath);
-		  assert.match(sourceCreated.source.lastSyncCheckpointTreeId || "", /^checkpoint_tree_[a-f0-9]{32}$/);
-		  assert.match(sourceCreated.job.checkpointTreeId || "", /^checkpoint_tree_[a-f0-9]{32}$/);
-		  const indexedSource = await waitForSourceIndex(server.url, sourceCreated.source.sourceId, auth);
-		  assert.equal(indexedSource.indexStatus, "indexed");
-		  assert.ok(indexedSource.lastIndexedFileCount >= 1);
-		  assert.match(indexedSource.lastIndexCheckpointTreeId || "", /^checkpoint_tree_[a-f0-9]{32}$/);
-		  const sourceSyncTree = await loadCheckpointTree({
-		    userDataPath,
-		    treeId: sourceCreated.source.lastSyncCheckpointTreeId
-		  });
-		  assert.equal(sourceSyncTree?.status, "completed");
-		  assert.ok(sourceSyncTree?.nodes?.["create-parse-job"]);
-		  const sourceIndexTree = await loadCheckpointTree({
-		    userDataPath,
-		    treeId: indexedSource.lastIndexCheckpointTreeId
-		  });
-		  assert.equal(sourceIndexTree?.status, "completed");
-		  assert.ok(sourceIndexTree?.nodes?.["write-inverted-index"]);
-		  const rawSourceSearch = await fetchJson(
-	    `${server.url}/api/knowledge/search`,
-	    authOptions(auth, {
-	      method: "POST",
-	      headers: {
-	        "Content-Type": "application/json"
-	      },
-	      body: JSON.stringify({
-	        query: "Original directory source",
-	        sourceSearch: true,
-	        limit: 5
-	      })
-	    })
-		  );
-	  assert.ok(rawSourceSearch.items.length >= 1);
-		  assert.equal(rawSourceSearch.explain?.invertedIndex?.used, true);
-		  assert.match(rawSourceSearch.explain?.candidateSearch || "", /sqlite-inverted-index/);
-		  await waitForJob(server.url, sourceCreated.job.id, auth);
-		  const sourceJobTree = await loadCheckpointTree({
-		    userDataPath,
-		    treeId: sourceCreated.job.checkpointTreeId
-		  });
-		  assert.equal(sourceJobTree?.status, "completed");
-		  assert.ok(sourceJobTree?.nodes?.["worker-run"]);
+  assert.equal(sourceCreated.source.lastHydrationFailedCount, 1);
+  assert.equal(sourceCreated.source.lastHydratedFileCount, 1);
+  assert.equal(sourceCreated.job.checkpointReceipt.hydration.failedCount, 1);
+  assert.ok(sourceCreated.job.checkpointReceipt.fileManifestPath);
+  assert.match(sourceCreated.source.lastSyncCheckpointTreeId || "", /^checkpoint_tree_[a-f0-9]{32}$/);
+  assert.match(sourceCreated.job.checkpointTreeId || "", /^checkpoint_tree_[a-f0-9]{32}$/);
+  const indexedSource = await waitForSourceIndex(server.url, sourceCreated.source.sourceId, auth);
+  assert.equal(indexedSource.indexStatus, "indexed");
+  assert.ok(indexedSource.lastIndexedFileCount >= 1);
+  assert.match(indexedSource.lastIndexCheckpointTreeId || "", /^checkpoint_tree_[a-f0-9]{32}$/);
+  const sourceSyncTree = await waitForCheckpointTreeComplete(
+    userDataPath,
+    sourceCreated.source.lastSyncCheckpointTreeId
+  );
+  assert.ok(sourceSyncTree?.nodes?.["create-parse-job"]);
+  const sourceIndexTree = await waitForCheckpointTreeComplete(
+    userDataPath,
+    indexedSource.lastIndexCheckpointTreeId
+  );
+  assert.ok(sourceIndexTree?.nodes?.["write-inverted-index"]);
+  const rawSourceSearch = await fetchJson(
+    `${server.url}/api/knowledge/search`,
+    authOptions(auth, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        query: "Original directory source",
+        sourceSearch: true,
+        limit: 5
+      })
+    })
+  );
+  assert.ok(rawSourceSearch.items.length >= 1);
+  assert.equal(rawSourceSearch.explain?.invertedIndex?.used, true);
+  assert.match(rawSourceSearch.explain?.candidateSearch || "", /sqlite-inverted-index/);
+  await assertKnowledgeSourceJobState(server.url, sourceCreated.job, auth, userDataPath);
 
-  const hydratedCommandRoot = path.join(userDataPath, "source-hydration-command-fixture");
+  const hydratedCommandRoot = path.join(controlledSourceRoot, "source-hydration-command-fixture");
   const hydrateScriptPath = path.join(userDataPath, "hydrate-command.mjs");
   await fs.mkdir(hydratedCommandRoot, { recursive: true });
   await fs.writeFile(
@@ -307,7 +369,7 @@ try {
   assert.equal(commandHydratedSource.source.lastHydrationFailedCount, 0);
   assert.equal(commandHydratedSource.source.lastHydratedFileCount, 1);
   assert.equal(commandHydratedSource.job.checkpointReceipt.hydration.commandHydratedCount, 1);
-  await waitForJob(server.url, commandHydratedSource.job.id, auth);
+  await assertKnowledgeSourceJobState(server.url, commandHydratedSource.job, auth, userDataPath);
 
   await fs.writeFile(
     sourceFilePath,
@@ -326,7 +388,7 @@ try {
       })
     })
   );
-  await waitForJob(server.url, sourceRefreshed.job.id, auth);
+  await assertKnowledgeSourceJobState(server.url, sourceRefreshed.job, auth, userDataPath);
 
   const reviewItems = await fetchJson(
     `${server.url}/api/knowledge/review-items?status=pending`,

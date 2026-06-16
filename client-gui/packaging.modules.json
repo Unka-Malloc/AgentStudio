@@ -4,7 +4,7 @@
   "packageProfile": "future-client",
   "bundle": {
     "moduleResourceDirectory": "modules",
-    "manifestPath": "portable-data/future-client/packaging-modules.json"
+    "manifestPath": "package-metadata/future-client/packaging-modules.json"
   },
   "modules": {
     "client-gui": {
@@ -53,6 +53,10 @@
         "future-client/mobile-relay",
         "future-client/activity",
         "future-client/snapshots",
+        "future-client/source-queue",
+        "future-client/connectors",
+        "future-client/knowledge-cache",
+        "future-client/mcp-local-bridge",
         "target-config-cache"
       ]
     },
@@ -176,32 +180,92 @@
       "requires": [
         "portable-data"
       ]
+    },
+    "source-queue": {
+      "label": "Source Queue durable upload submission sidecar",
+      "category": "ingestion",
+      "enabled": true,
+      "required": true,
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "packaging": "runtime-capability",
+      "requires": [
+        "client-cli",
+        "portable-data"
+      ]
+    },
+    "client-connectors": {
+      "label": "Built-in local connector host",
+      "category": "connectors",
+      "enabled": true,
+      "required": true,
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "packaging": "runtime-capability",
+      "requires": [
+        "source-queue",
+        "portable-data"
+      ]
+    },
+    "knowledge-cache": {
+      "label": "Authorized KnowledgeCore mirror cache",
+      "category": "knowledge",
+      "enabled": true,
+      "required": true,
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "packaging": "runtime-capability",
+      "requires": [
+        "client-cli",
+        "portable-data"
+      ]
+    },
+    "mail-import-runtime": {
+      "label": "macOS Mail scoped preview and Source Queue handoff",
+      "category": "connectors",
+      "enabled": true,
+      "required": true,
+      "platforms": [
+        "macos"
+      ],
+      "packaging": "swift-sidecar",
+      "artifactName": "pact-mail-helper",
+      "swiftSource": "client-gui/macos/MailHelper/PactMailHelper.swift",
+      "requires": [
+        "source-queue",
+        "client-cli"
+      ]
+    },
+    "mcp-local-bridge": {
+      "label": "Client-local-runtime MCP HTTP bridge registration",
+      "category": "mcp",
+      "enabled": true,
+      "required": true,
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "packaging": "runtime-capability",
+      "requires": [
+        "client-cli",
+        "portable-data"
+      ]
     }
   },
   "deferredCapabilities": {
     "clientd": {
       "status": "todo",
       "reason": "The current client has no background daemon; GUI and pact-client use explicit local commands and portable state."
-    },
-    "upload-queue": {
-      "status": "todo",
-      "reason": "Large-file upload queue is not part of the current future-client package."
-    },
-    "mcp-local-bridge": {
-      "status": "todo",
-      "reason": "The current MCP connector talks to authenticated HTTP/HTTPS Pact endpoints; no local stdio bridge is shipped."
-    },
-    "client-connectors": {
-      "status": "todo",
-      "reason": "Local data connectors are deferred; connector governance remains server-side until a client runtime is implemented."
-    },
-    "knowledge-cache": {
-      "status": "todo",
-      "reason": "The client does not ship a local long-term knowledge cache in the current package."
-    },
-    "mail-import-runtime": {
-      "status": "todo",
-      "reason": "Mail import remains a server ingestion flow; no client-side connector runtime is packaged."
     }
   }
 }

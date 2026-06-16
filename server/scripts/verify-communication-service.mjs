@@ -94,15 +94,15 @@ async function verifyModuleManifest() {
 }
 
 async function verifyDocs() {
-  const html = await read("docs/architecture/PACT-SYSTEM-ARCHITECTURE.html");
+  const html = await read("docs/architecture/ARCHITECTURE.md");
   assert.ok(html.includes("通信服务"));
-  assert.ok(html.includes("<code>communication-service</code>"));
-  assert.ok(html.includes("<strong>ACP Relay</strong>"));
-  assert.ok(html.includes("<strong>MCP Server</strong>"));
+  assert.ok(html.includes("`communication-service`") || html.includes("<code>communication-service</code>"));
+  assert.ok(html.includes("**ACP Relay**") || html.includes("<strong>ACP Relay</strong>"));
+  assert.ok(html.includes("**MCP Server**") || html.includes("<strong>MCP Server</strong>"));
   assert.ok(html.includes("mcp-server-side"));
   assert.ok(html.includes("acp-agent-relay"));
 
-  const architecture = await read("docs/Architecture.md");
+  const architecture = await read("docs/architecture/ARCHITECTURE.md");
   assert.ok(architecture.includes("通信服务归入能力层"));
   assert.ok(architecture.includes("communication service（ACP Relay、MCP Server Side）"));
 }

@@ -3,6 +3,7 @@ import {
   getCodexOAuthStatus
 } from "../../../../common/security/auth/codex-oauth-service.mjs";
 import { callAgentGateway } from "../index.mjs";
+import { assertModelAssistedEgressAllowed } from "../model-egress-policy.mjs";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_MODEL_PROBE_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -441,7 +442,8 @@ async function probeDeepSeek(settings, options) {
         }
       },
       fetchImpl: options.fetchImpl,
-      userDataPath: options.userDataPath
+      userDataPath: options.userDataPath,
+      contextCompactionSource: "settings.model_probe"
     });
     return answeredSuccess({
       provider,
@@ -507,7 +509,8 @@ async function probeCustomHttp(settings, options) {
         parameters: { probe: true }
       },
       fetchImpl: options.fetchImpl,
-      userDataPath: options.userDataPath
+      userDataPath: options.userDataPath,
+      contextCompactionSource: "settings.model_probe"
     });
     return answeredSuccess({
       provider,
@@ -650,9 +653,14 @@ export async function probeModelConnection({
   modelAlias = "",
   userDataPath = "",
   fetchImpl = fetch,
+  contextCompactionSource = "",
   getCodexOAuthStatus: codexStatusProvider = getCodexOAuthStatus,
   callCodexChatGptJson: codexCallProvider = callCodexChatGptJson
 } = {}) {
+  assertModelAssistedEgressAllowed({
+    source: contextCompactionSource,
+    contextCompactionSource
+  });
   const normalizedProvider = String(provider || settings?.defaultModelProvider || "").trim();
   const normalizedSettings = asPlainObject(settings);
   const options = {

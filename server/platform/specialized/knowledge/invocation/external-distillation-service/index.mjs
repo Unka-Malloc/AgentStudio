@@ -82,19 +82,35 @@ function pickConfigValue(input = {}, settings = {}, keys = []) {
   return "";
 }
 
+function pickConfiguredValue(settings = {}, keys = []) {
+  const externalSettings =
+    settings.externalKnowledgeDistillation &&
+    typeof settings.externalKnowledgeDistillation === "object" &&
+    !Array.isArray(settings.externalKnowledgeDistillation)
+      ? settings.externalKnowledgeDistillation
+      : {};
+  for (const key of keys) {
+    const configured = normalizeText(externalSettings[key]);
+    if (configured) {
+      return configured;
+    }
+  }
+  return "";
+}
+
 export function resolveExternalKnowledgeDistillationConfig({
   input = {},
   settings = {},
   env = process.env
 } = {}) {
   const baseUrl = normalizeUrl(
-    pickConfigValue(input, settings, ["baseUrl", "serviceUrl", "endpoint"]) ||
+    pickConfiguredValue(settings, ["baseUrl", "serviceUrl", "endpoint"]) ||
       env.PACT_EXTERNAL_KNOWLEDGE_DISTILLATION_URL ||
       env.PACT_EXTERNAL_DISTILLATION_URL ||
       ""
   );
   const token =
-    pickConfigValue(input, settings, ["token", "apiKey"]) ||
+    pickConfiguredValue(settings, ["token", "apiKey"]) ||
     env.PACT_EXTERNAL_KNOWLEDGE_DISTILLATION_TOKEN ||
     env.PACT_EXTERNAL_DISTILLATION_TOKEN ||
     "";
@@ -340,6 +356,14 @@ export function createExternalKnowledgeDistillationClient({
         token: _token,
         apiKey: _apiKey,
         timeoutMs: _timeoutMs,
+        modelGatewayUrl: _modelGatewayUrl,
+        agentGatewayUrl: _agentGatewayUrl,
+        modelGatewayToken: _modelGatewayToken,
+        agentGatewayToken: _agentGatewayToken,
+        modelGatewayTokenHeader: _modelGatewayTokenHeader,
+        modelGatewayTokenPrefix: _modelGatewayTokenPrefix,
+        agentGatewayTokenHeader: _agentGatewayTokenHeader,
+        agentGatewayTokenPrefix: _agentGatewayTokenPrefix,
         ...body
       } = input || {};
       return request("/v1/distillation/runs", {

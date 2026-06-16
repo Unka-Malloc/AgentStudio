@@ -190,13 +190,35 @@ export function normalizeCapabilityBindingContext(input = {}) {
       source.profile_id
   );
   const clientId = text(source.clientId || source.client_id || source.clientName || source.client_name);
+  const serverId = text(source.serverId || source.server_id);
+  const packageId = text(source.packageId || source.package_id || source.identityPackageId || source.identity_package_id);
+  const processKeyId = text(source.processKeyId || source.process_key_id);
+  const processPublicKeyHash = text(source.processPublicKeyHash || source.process_public_key_hash);
+  const fingerprintId = text(source.fingerprintId || source.fingerprint_id || source.clientFingerprintId || source.client_fingerprint_id);
+  const machineInstanceId = text(source.machineInstanceId || source.machine_instance_id);
+  const appInstanceId = text(source.appInstanceId || source.app_instance_id);
+  const runtimeInstanceId = text(source.runtimeInstanceId || source.runtime_instance_id);
+  const clientFingerprintHash = text(source.clientFingerprintHash || source.client_fingerprint_hash || source.fingerprintHash || source.fingerprint_hash);
+  const identityGeneration = text(source.identityGeneration || source.identity_generation);
+  const defaultIdentityHash = text(source.defaultIdentityHash || source.default_identity_hash);
   return {
     namespace: text(source.namespace || source.bindingNamespace || source.binding_namespace || DEFAULT_NAMESPACE) || DEFAULT_NAMESPACE,
     userId,
     boundUserId: userId,
     agentId,
     agentProfileId: agentId,
-    clientId
+    clientId,
+    serverId,
+    packageId,
+    processKeyId,
+    processPublicKeyHash,
+    fingerprintId,
+    machineInstanceId,
+    appInstanceId,
+    runtimeInstanceId,
+    clientFingerprintHash,
+    identityGeneration,
+    defaultIdentityHash
   };
 }
 
@@ -222,10 +244,32 @@ function publicBindingRecord(record = null) {
     userHash: text(record.userHash),
     agentHash: text(record.agentHash),
     clientHash: text(record.clientHash),
+    serverHash: text(record.serverHash),
+    packageHash: text(record.packageHash),
+    processKeyHash: text(record.processKeyHash),
+    processPublicKeyHashHash: text(record.processPublicKeyHashHash),
+    fingerprintIdHash: text(record.fingerprintIdHash),
+    machineInstanceHash: text(record.machineInstanceHash),
+    appInstanceHash: text(record.appInstanceHash),
+    runtimeInstanceHash: text(record.runtimeInstanceHash),
+    clientFingerprintHashHash: text(record.clientFingerprintHashHash),
+    identityGenerationHash: text(record.identityGenerationHash),
+    defaultIdentityHashHash: text(record.defaultIdentityHashHash),
     requireNamespace: record.requireNamespace !== false,
     requireUser: record.requireUser === true,
     requireAgent: record.requireAgent === true,
     requireClient: record.requireClient === true,
+    requireServer: record.requireServer === true,
+    requirePackage: record.requirePackage === true,
+    requireProcessKey: record.requireProcessKey === true,
+    requireProcessPublicKey: record.requireProcessPublicKey === true,
+    requireFingerprintId: record.requireFingerprintId === true,
+    requireMachineInstance: record.requireMachineInstance === true,
+    requireAppInstance: record.requireAppInstance === true,
+    requireRuntimeInstance: record.requireRuntimeInstance === true,
+    requireClientFingerprint: record.requireClientFingerprint === true,
+    requireIdentityGeneration: record.requireIdentityGeneration === true,
+    requireDefaultIdentity: record.requireDefaultIdentity === true,
     bindingStrength: text(record.bindingStrength || "namespace"),
     issuedAt: text(record.issuedAt),
     expiresAt: text(record.expiresAt),
@@ -250,10 +294,32 @@ function bindingRecordFromContext(lookupKey, {
   const requireUser = Boolean(normalized.userId);
   const requireAgent = Boolean(normalized.agentId);
   const requireClient = Boolean(normalized.clientId);
+  const requireServer = Boolean(normalized.serverId);
+  const requirePackage = Boolean(normalized.packageId);
+  const requireProcessKey = Boolean(normalized.processKeyId);
+  const requireProcessPublicKey = Boolean(normalized.processPublicKeyHash);
+  const requireFingerprintId = Boolean(normalized.fingerprintId);
+  const requireMachineInstance = Boolean(normalized.machineInstanceId);
+  const requireAppInstance = Boolean(normalized.appInstanceId);
+  const requireRuntimeInstance = Boolean(normalized.runtimeInstanceId);
+  const requireClientFingerprint = Boolean(normalized.clientFingerprintHash);
+  const requireIdentityGeneration = Boolean(normalized.identityGeneration);
+  const requireDefaultIdentity = Boolean(normalized.defaultIdentityHash);
   const strengths = [
     requireUser ? "user" : "",
     requireAgent ? "agent" : "",
-    requireClient ? "client" : ""
+    requireClient ? "client" : "",
+    requireServer ? "server" : "",
+    requirePackage ? "package" : "",
+    requireProcessKey ? "process-key" : "",
+    requireProcessPublicKey ? "process-public-key" : "",
+    requireFingerprintId ? "fingerprint-id" : "",
+    requireMachineInstance ? "machine-instance" : "",
+    requireAppInstance ? "app-instance" : "",
+    requireRuntimeInstance ? "runtime-instance" : "",
+    requireClientFingerprint ? "client-fingerprint" : "",
+    requireIdentityGeneration ? "identity-generation" : "",
+    requireDefaultIdentity ? "default-identity" : ""
   ].filter(Boolean);
   const timestamp = nowIso();
   return publicBindingRecord({
@@ -265,10 +331,32 @@ function bindingRecordFromContext(lookupKey, {
     userHash: requireUser ? capabilityBindingSubjectHash(lookupKey, "user", normalized.userId) : "",
     agentHash: requireAgent ? capabilityBindingSubjectHash(lookupKey, "agent", normalized.agentId) : "",
     clientHash: requireClient ? capabilityBindingSubjectHash(lookupKey, "client", normalized.clientId) : "",
+    serverHash: requireServer ? capabilityBindingSubjectHash(lookupKey, "server", normalized.serverId) : "",
+    packageHash: requirePackage ? capabilityBindingSubjectHash(lookupKey, "package", normalized.packageId) : "",
+    processKeyHash: requireProcessKey ? capabilityBindingSubjectHash(lookupKey, "process-key", normalized.processKeyId) : "",
+    processPublicKeyHashHash: requireProcessPublicKey ? capabilityBindingSubjectHash(lookupKey, "process-public-key", normalized.processPublicKeyHash) : "",
+    fingerprintIdHash: requireFingerprintId ? capabilityBindingSubjectHash(lookupKey, "fingerprint-id", normalized.fingerprintId) : "",
+    machineInstanceHash: requireMachineInstance ? capabilityBindingSubjectHash(lookupKey, "machine-instance", normalized.machineInstanceId) : "",
+    appInstanceHash: requireAppInstance ? capabilityBindingSubjectHash(lookupKey, "app-instance", normalized.appInstanceId) : "",
+    runtimeInstanceHash: requireRuntimeInstance ? capabilityBindingSubjectHash(lookupKey, "runtime-instance", normalized.runtimeInstanceId) : "",
+    clientFingerprintHashHash: requireClientFingerprint ? capabilityBindingSubjectHash(lookupKey, "client-fingerprint", normalized.clientFingerprintHash) : "",
+    identityGenerationHash: requireIdentityGeneration ? capabilityBindingSubjectHash(lookupKey, "identity-generation", normalized.identityGeneration) : "",
+    defaultIdentityHashHash: requireDefaultIdentity ? capabilityBindingSubjectHash(lookupKey, "default-identity", normalized.defaultIdentityHash) : "",
     requireNamespace: true,
     requireUser,
     requireAgent,
     requireClient,
+    requireServer,
+    requirePackage,
+    requireProcessKey,
+    requireProcessPublicKey,
+    requireFingerprintId,
+    requireMachineInstance,
+    requireAppInstance,
+    requireRuntimeInstance,
+    requireClientFingerprint,
+    requireIdentityGeneration,
+    requireDefaultIdentity,
     bindingStrength: strengths.length ? strengths.join("+") : "namespace",
     issuedAt,
     expiresAt: expiresAt || (ttlMs ? new Date(parseIso(issuedAt) + Math.max(1, Number(ttlMs || 0))).toISOString() : ""),
@@ -309,6 +397,60 @@ function stateRoot(state = {}) {
     bindingLookupKeyHash: hashBase64Url(text(state.bindingLookupKeyBase64)),
     bindings: Array.isArray(state.bindings)
       ? state.bindings.map(publicBindingRecord).sort((a, b) => `${a.keyHash}:${a.bindingId}`.localeCompare(`${b.keyHash}:${b.bindingId}`))
+      : []
+  };
+  return crypto.createHash("sha256").update(stableJson(normalized), "utf8").digest("base64url");
+}
+
+function legacyPublicBindingRecordV1(record = null) {
+  if (!record) {
+    return null;
+  }
+  return {
+    protocolVersion: CAPABILITY_BINDING_GUARD_PROTOCOL_VERSION,
+    bindingId: text(record.bindingId),
+    keyHash: text(record.keyHash),
+    credentialId: text(record.credentialId),
+    status: normalizeStatus(record.status),
+    namespaceHash: text(record.namespaceHash),
+    userHash: text(record.userHash),
+    agentHash: text(record.agentHash),
+    clientHash: text(record.clientHash),
+    serverHash: text(record.serverHash),
+    packageHash: text(record.packageHash),
+    processKeyHash: text(record.processKeyHash),
+    processPublicKeyHashHash: text(record.processPublicKeyHashHash),
+    identityGenerationHash: text(record.identityGenerationHash),
+    defaultIdentityHashHash: text(record.defaultIdentityHashHash),
+    requireNamespace: record.requireNamespace !== false,
+    requireUser: record.requireUser === true,
+    requireAgent: record.requireAgent === true,
+    requireClient: record.requireClient === true,
+    requireServer: record.requireServer === true,
+    requirePackage: record.requirePackage === true,
+    requireProcessKey: record.requireProcessKey === true,
+    requireProcessPublicKey: record.requireProcessPublicKey === true,
+    requireIdentityGeneration: record.requireIdentityGeneration === true,
+    requireDefaultIdentity: record.requireDefaultIdentity === true,
+    bindingStrength: text(record.bindingStrength || "namespace"),
+    issuedAt: text(record.issuedAt),
+    expiresAt: text(record.expiresAt),
+    invalidatedAt: text(record.invalidatedAt),
+    invalidationReason: text(record.invalidationReason),
+    createdAt: text(record.createdAt),
+    updatedAt: text(record.updatedAt)
+  };
+}
+
+function legacyStateRootV1(state = {}) {
+  const normalized = {
+    stateVersion: Number(state.stateVersion || STATE_VERSION),
+    provider: text(state.provider),
+    securityMode: text(state.securityMode),
+    epoch: Number(state.epoch || 1),
+    bindingLookupKeyHash: hashBase64Url(text(state.bindingLookupKeyBase64)),
+    bindings: Array.isArray(state.bindings)
+      ? state.bindings.map(legacyPublicBindingRecordV1).sort((a, b) => `${a.keyHash}:${a.bindingId}`.localeCompare(`${b.keyHash}:${b.bindingId}`))
       : []
   };
   return crypto.createHash("sha256").update(stableJson(normalized), "utf8").digest("base64url");
@@ -699,7 +841,14 @@ function openState(record = {}) {
     securityMode: record.securityMode
   });
   if (record.stateRoot && state.stateRoot !== record.stateRoot) {
-    throw new Error("Capability binding guard sealed state root mismatch.");
+    const legacyOpened = {
+      ...opened,
+      provider: record.provider,
+      securityMode: record.securityMode
+    };
+    if (legacyStateRootV1(legacyOpened) !== record.stateRoot) {
+      throw new Error("Capability binding guard sealed state root mismatch.");
+    }
   }
   return state;
 }
@@ -984,6 +1133,94 @@ function matchesRecord(lookupKey, record = {}, context = {}, { now = nowIso() } 
       return { ok: false, reasonCode: "binding_client_mismatch", credentialId: record.credentialId };
     }
   }
+  if (record.requireServer) {
+    if (!normalized.serverId) {
+      return { ok: false, reasonCode: "binding_server_missing", credentialId: record.credentialId };
+    }
+    if (record.serverHash !== capabilityBindingSubjectHash(lookupKey, "server", normalized.serverId)) {
+      return { ok: false, reasonCode: "binding_server_mismatch", credentialId: record.credentialId };
+    }
+  }
+  if (record.requirePackage) {
+    if (!normalized.packageId) {
+      return { ok: false, reasonCode: "binding_package_missing", credentialId: record.credentialId };
+    }
+    if (record.packageHash !== capabilityBindingSubjectHash(lookupKey, "package", normalized.packageId)) {
+      return { ok: false, reasonCode: "binding_package_mismatch", credentialId: record.credentialId };
+    }
+  }
+  if (record.requireProcessKey) {
+    if (!normalized.processKeyId) {
+      return { ok: false, reasonCode: "binding_process_key_missing", credentialId: record.credentialId };
+    }
+    if (record.processKeyHash !== capabilityBindingSubjectHash(lookupKey, "process-key", normalized.processKeyId)) {
+      return { ok: false, reasonCode: "binding_process_key_mismatch", credentialId: record.credentialId };
+    }
+  }
+  if (record.requireProcessPublicKey) {
+    if (!normalized.processPublicKeyHash) {
+      return { ok: false, reasonCode: "binding_process_public_key_missing", credentialId: record.credentialId };
+    }
+    if (record.processPublicKeyHashHash !== capabilityBindingSubjectHash(lookupKey, "process-public-key", normalized.processPublicKeyHash)) {
+      return { ok: false, reasonCode: "binding_process_public_key_mismatch", credentialId: record.credentialId };
+    }
+  }
+  if (record.requireFingerprintId) {
+    if (!normalized.fingerprintId) {
+      return { ok: false, reasonCode: "binding_fingerprint_id_missing", credentialId: record.credentialId };
+    }
+    if (record.fingerprintIdHash !== capabilityBindingSubjectHash(lookupKey, "fingerprint-id", normalized.fingerprintId)) {
+      return { ok: false, reasonCode: "binding_fingerprint_id_mismatch", credentialId: record.credentialId };
+    }
+  }
+  if (record.requireMachineInstance) {
+    if (!normalized.machineInstanceId) {
+      return { ok: false, reasonCode: "binding_machine_instance_missing", credentialId: record.credentialId };
+    }
+    if (record.machineInstanceHash !== capabilityBindingSubjectHash(lookupKey, "machine-instance", normalized.machineInstanceId)) {
+      return { ok: false, reasonCode: "binding_machine_instance_mismatch", credentialId: record.credentialId };
+    }
+  }
+  if (record.requireAppInstance) {
+    if (!normalized.appInstanceId) {
+      return { ok: false, reasonCode: "binding_app_instance_missing", credentialId: record.credentialId };
+    }
+    if (record.appInstanceHash !== capabilityBindingSubjectHash(lookupKey, "app-instance", normalized.appInstanceId)) {
+      return { ok: false, reasonCode: "binding_app_instance_mismatch", credentialId: record.credentialId };
+    }
+  }
+  if (record.requireRuntimeInstance) {
+    if (!normalized.runtimeInstanceId) {
+      return { ok: false, reasonCode: "binding_runtime_instance_missing", credentialId: record.credentialId };
+    }
+    if (record.runtimeInstanceHash !== capabilityBindingSubjectHash(lookupKey, "runtime-instance", normalized.runtimeInstanceId)) {
+      return { ok: false, reasonCode: "binding_runtime_instance_mismatch", credentialId: record.credentialId };
+    }
+  }
+  if (record.requireClientFingerprint) {
+    if (!normalized.clientFingerprintHash) {
+      return { ok: false, reasonCode: "binding_client_fingerprint_missing", credentialId: record.credentialId };
+    }
+    if (record.clientFingerprintHashHash !== capabilityBindingSubjectHash(lookupKey, "client-fingerprint", normalized.clientFingerprintHash)) {
+      return { ok: false, reasonCode: "binding_client_fingerprint_mismatch", credentialId: record.credentialId };
+    }
+  }
+  if (record.requireIdentityGeneration) {
+    if (!normalized.identityGeneration) {
+      return { ok: false, reasonCode: "binding_identity_generation_missing", credentialId: record.credentialId };
+    }
+    if (record.identityGenerationHash !== capabilityBindingSubjectHash(lookupKey, "identity-generation", normalized.identityGeneration)) {
+      return { ok: false, reasonCode: "binding_identity_generation_mismatch", credentialId: record.credentialId };
+    }
+  }
+  if (record.requireDefaultIdentity) {
+    if (!normalized.defaultIdentityHash) {
+      return { ok: false, reasonCode: "binding_default_identity_missing", credentialId: record.credentialId };
+    }
+    if (record.defaultIdentityHashHash !== capabilityBindingSubjectHash(lookupKey, "default-identity", normalized.defaultIdentityHash)) {
+      return { ok: false, reasonCode: "binding_default_identity_mismatch", credentialId: record.credentialId };
+    }
+  }
   return {
     ok: true,
     reasonCode: "capability_binding_valid",
@@ -992,7 +1229,18 @@ function matchesRecord(lookupKey, record = {}, context = {}, { now = nowIso() } 
     bindingStrength: record.bindingStrength,
     requireUser: record.requireUser,
     requireAgent: record.requireAgent,
-    requireClient: record.requireClient
+    requireClient: record.requireClient,
+    requireServer: record.requireServer,
+    requirePackage: record.requirePackage,
+    requireProcessKey: record.requireProcessKey,
+    requireProcessPublicKey: record.requireProcessPublicKey,
+    requireFingerprintId: record.requireFingerprintId,
+    requireMachineInstance: record.requireMachineInstance,
+    requireAppInstance: record.requireAppInstance,
+    requireRuntimeInstance: record.requireRuntimeInstance,
+    requireClientFingerprint: record.requireClientFingerprint,
+    requireIdentityGeneration: record.requireIdentityGeneration,
+    requireDefaultIdentity: record.requireDefaultIdentity
   };
 }
 
@@ -1138,6 +1386,17 @@ export function createCapabilityBindingGuard({
         requireUser: nextRecord.requireUser,
         requireAgent: nextRecord.requireAgent,
         requireClient: nextRecord.requireClient,
+        requireServer: nextRecord.requireServer,
+        requirePackage: nextRecord.requirePackage,
+        requireProcessKey: nextRecord.requireProcessKey,
+        requireProcessPublicKey: nextRecord.requireProcessPublicKey,
+        requireFingerprintId: nextRecord.requireFingerprintId,
+        requireMachineInstance: nextRecord.requireMachineInstance,
+        requireAppInstance: nextRecord.requireAppInstance,
+        requireRuntimeInstance: nextRecord.requireRuntimeInstance,
+        requireClientFingerprint: nextRecord.requireClientFingerprint,
+        requireIdentityGeneration: nextRecord.requireIdentityGeneration,
+        requireDefaultIdentity: nextRecord.requireDefaultIdentity,
         expiresAt: nextRecord.expiresAt
       };
     });

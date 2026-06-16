@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-14
+- Last updated: 2026-06-16
 - Status: Current maintained document
 - Scope: ADR 0003 - Terminal State and Side Effect Isolation.
-- Staleness check: Scanned on 2026-06-11; current release/readiness claims were checked against docs/reports/history/v001-readiness/20260606T121950Z/report.md and docs/reports/history/production-readiness/20260606T122049Z/report.md.
+- Staleness check: Checked against current consolidated docs layout and referenced implementation evidence on 2026-06-16.
 
 ## Status
 Accepted

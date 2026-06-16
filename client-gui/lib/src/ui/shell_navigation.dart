@@ -8,10 +8,12 @@ class ShellSidebar extends StatelessWidget {
   const ShellSidebar({
     super.key,
     required this.current,
+    required this.compact,
     required this.onSelect,
   });
 
   final FutureClientSection current;
+  final bool compact;
   final ValueChanged<FutureClientSection> onSelect;
 
   @override
@@ -32,22 +34,26 @@ class ShellSidebar extends StatelessWidget {
         Icons.phone_iphone_outlined,
       ),
       (FutureClientSection.activity, 'Activity', Icons.history_outlined),
+      (FutureClientSection.localRuntime, 'Runtime', Icons.dns_outlined),
       (FutureClientSection.settings, 'Settings', Icons.settings_outlined),
     ];
-    return Container(
-      width: 220,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      width: compact ? 64 : 220,
       decoration: BoxDecoration(
         color: colors.surfaceLow,
         border: Border(right: BorderSide(color: colors.line)),
       ),
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(compact ? 8 : 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 18),
+            padding: EdgeInsets.fromLTRB(8, 8, 8, compact ? 12 : 18),
             child: Text(
-              'Pact',
+              compact ? 'P' : 'Pact',
+              textAlign: compact ? TextAlign.center : TextAlign.start,
               style: TextStyle(
                 color: colors.primary,
                 fontSize: 16,
@@ -60,6 +66,7 @@ class ShellSidebar extends StatelessWidget {
               selected: current == item.$1,
               icon: item.$3,
               label: item.$2,
+              compact: compact,
               onPressed: () => onSelect(item.$1),
             ),
         ],
@@ -81,6 +88,7 @@ class ShellTopBar extends StatelessWidget {
       FutureClientSection.mcpPlugins => 'MCP Plugins',
       FutureClientSection.skillHub => 'Skill Hub',
       FutureClientSection.modelForwarding => 'Model Forwarding',
+      FutureClientSection.localRuntime => 'Runtime',
       FutureClientSection.mobileRelay => 'Mobile Relay',
       FutureClientSection.activity => 'Activity And Snapshots',
       FutureClientSection.settings => 'Settings',
@@ -136,12 +144,14 @@ class _NavButton extends StatelessWidget {
     required this.selected,
     required this.icon,
     required this.label,
+    required this.compact,
     required this.onPressed,
   });
 
   final bool selected;
   final IconData icon;
   final String label;
+  final bool compact;
   final VoidCallback onPressed;
 
   @override
@@ -149,19 +159,49 @@ class _NavButton extends StatelessWidget {
     final colors = context.pactColors;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: TextButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 18),
-        label: Align(alignment: Alignment.centerLeft, child: Text(label)),
-        style: TextButton.styleFrom(
-          alignment: Alignment.centerLeft,
-          foregroundColor: selected ? colors.primary : colors.text,
-          backgroundColor: selected
-              ? colors.primaryFixed
-              : Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          minimumSize: const Size.fromHeight(42),
-        ),
+      child: Tooltip(
+        message: compact ? label : '',
+        waitDuration: const Duration(milliseconds: 450),
+        child: compact
+            ? IconButton(
+                isSelected: selected,
+                tooltip: label,
+                onPressed: onPressed,
+                color: selected ? colors.primary : colors.text,
+                style: IconButton.styleFrom(
+                  backgroundColor: selected
+                      ? colors.primaryFixed
+                      : Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  fixedSize: const Size(44, 42),
+                ),
+                icon: Icon(icon, size: 19),
+              )
+            : TextButton.icon(
+                onPressed: onPressed,
+                icon: Icon(icon, size: 18),
+                label: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  alignment: Alignment.centerLeft,
+                  foregroundColor: selected ? colors.primary : colors.text,
+                  backgroundColor: selected
+                      ? colors.primaryFixed
+                      : Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  minimumSize: const Size.fromHeight(42),
+                ),
+              ),
       ),
     );
   }

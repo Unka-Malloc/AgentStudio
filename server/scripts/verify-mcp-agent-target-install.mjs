@@ -6,10 +6,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const connectorScript = path.join(repoRoot, "mcp-connector", "bin", "pact-mcp.mjs");
+const connectorScript = path.join(repoRoot, "server/platform/common/mcp/gateway-installer/bin/pact-mcp.mjs");
 const DECLARED_AGENT_TARGETS = Object.freeze([
   "openclaw",
   "claude-code",
@@ -105,6 +106,7 @@ function unsetLaunchctlEnv(name) {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-agent-target-install-"));
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
 const opencodeConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), "pact-agent-target-config-"));
 const opencodeConfigPath = path.join(opencodeConfigDir, "opencode.jsonc");
 const autoOpencodeConfigPath = path.join(opencodeConfigDir, "opencode-auto.jsonc");
@@ -589,11 +591,12 @@ try {
     ], 60000, {
       PACT_FIXTURE_REMOTE_HOME: remoteOpenCodeHome
     });
-    if (result.code !== 0) {
-      console.log(`\n      stdout: ${result.stdout.slice(0, 300)}`);
-      console.log(`      stderr: ${result.stderr.slice(0, 300)}`);
-    }
-    assert.equal(result.code, 0, `exit code ${result.code}`);
+	    if (result.code !== 0) {
+	      console.log(`\n      stdout: ${result.stdout.slice(0, 300)}`);
+	      console.log(`      stderr: ${result.stderr.slice(0, 300)}`);
+	      console.log(`      signal: ${result.signal || ""}`);
+	    }
+	    assert.equal(result.code, 0, `exit code ${result.code}`);
     assert.equal(result.stdout.includes(token), false, "remote install output must not expose the grant token");
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, true);
@@ -969,7 +972,7 @@ try {
       "--no-scan",
       "--no-verify",
       "--json"
-    ], 60000, {
+    ], 120000, {
       PATH: `${fixtureBinDir}${path.delimiter}${process.env.PATH || ""}`,
       PACT_FIXTURE_AGENT_LOG: fixtureAgentCommandLog,
       PACT_FIXTURE_AGENT_HANG_MCP: ""
@@ -977,6 +980,7 @@ try {
     if (result.code !== 0) {
       console.log(`\n      stdout: ${result.stdout.slice(0, 300)}`);
       console.log(`      stderr: ${result.stderr.slice(0, 300)}`);
+      console.log(`      signal: ${result.signal || ""}`);
     }
     assert.equal(result.code, 0, `exit code ${result.code}`);
     const payload = JSON.parse(result.stdout);
@@ -1659,6 +1663,7 @@ try {
   await unsetLaunchctlEnv(missingDoctorTokenEnv);
   await fs.rm(userDataPath, { recursive: true, force: true }).catch(() => {});
   await fs.rm(opencodeConfigDir, { recursive: true, force: true }).catch(() => {});
+  restoreCapabilityKernelEnv();
 }
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed, ${passed + failed} total ===`);

@@ -799,6 +799,7 @@ try {
         tool_choice: "auto"
       }
     },
+    contextCompactionSource: "agent_gateway.call",
     userDataPath
   });
   assert.equal(openRouterGatewayResult.ok, true);
@@ -849,6 +850,7 @@ try {
         tool_choice: "auto"
       }
     },
+    contextCompactionSource: "agent_gateway.call",
     userDataPath
   });
   assert.equal(qwenGatewayResult.ok, true);
@@ -914,6 +916,7 @@ try {
       moduleId: "agentTools",
       question: "Layered module call"
     },
+    contextCompactionSource: "agent_gateway.call",
     userDataPath
   });
   assert.equal(mockAgent.requests.length, 9);
@@ -930,6 +933,7 @@ try {
       openRouterBaseUrl: "http://127.0.0.1/mock",
       openRouterModel: "empty-answer-model"
     },
+    contextCompactionSource: "settings.model_probe",
     fetchImpl: async () =>
       new Response(
         JSON.stringify({
@@ -960,6 +964,7 @@ try {
       openRouterBaseUrl: "http://127.0.0.1/mock",
       openRouterModel: "content-array-model"
     },
+    contextCompactionSource: "settings.model_probe",
     fetchImpl: async () =>
       new Response(
         JSON.stringify({
@@ -1127,6 +1132,7 @@ try {
         alias: "deepseek",
         question: "Trigger a DeepSeek error for audit verification"
       },
+      contextCompactionSource: "agent_gateway.call",
       userDataPath,
       fetchImpl: async () =>
         new Response(

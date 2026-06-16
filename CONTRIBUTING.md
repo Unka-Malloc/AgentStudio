@@ -111,7 +111,7 @@ Once running, access the management console in your browser and connect local ag
 
 All code should conform to the standards documented in:
 
-📖 **[Developer Guidelines](docs/DEVELOPER-GUIDELINES.md)**
+📖 **[Development Runbook](docs/runbook/DEVELOPMENT-RUNBOOK.md)**
 
 Key principles:
 
@@ -126,7 +126,7 @@ Key principles:
 
 We follow a structured branching model. Please read the full workflow guide:
 
-📖 **[Git Collaboration Guide](docs/GIT-COLLAB.md)**
+📖 **[Development Runbook](docs/runbook/DEVELOPMENT-RUNBOOK.md)**
 
 In summary:
 
@@ -167,19 +167,19 @@ In summary:
 
 ## Core Design Documents / 核心设计文档
 
-Pact maintains **5 core design documents** that define the project's architecture and philosophy. These are the canonical sources of truth:
+Pact maintains canonical documentation by topic. These are the current sources of truth:
 
 | # | Document | Purpose |
 |---|----------|---------|
-| 1 | [Architecture Overview](docs/Architecture.md) | System-level design and component relationships |
-| 2 | [Workspace Asset Governance](docs/WORKSPACE-ASSET-GOVERNANCE.md) | Asset lifecycle, Operation Ledger, and policy rules |
-| 3 | [Knowledge Governance](docs/KNOWLEDGE-GOVERNANCE.md) | AgentLibrary, knowledge slicing, and access control |
-| 4 | [Protocols](docs/PROTOCOLS.md) | MCP integration and inter-component communication |
-| 5 | [Server](docs/SERVER.md) | Control Plane internals and API surface |
+| 1 | [Architecture](docs/architecture/ARCHITECTURE.md) | System-level design and component relationships |
+| 2 | [Functionality](docs/functionality/) | One maintained document per functional module |
+| 3 | [Protocols](docs/protocols/PROTOCOLS.md) | MCP integration and inter-component communication |
+| 4 | [Usage](docs/USAGES.md) | Server and client commands |
+| 5 | [Development Runbook](docs/runbook/DEVELOPMENT-RUNBOOK.md) | Coding standards, validation, and release gates |
 
 > ⚠️ **Important Rule / 重要规则**:
 >
-> **Do not create new lateral design documents.** All architectural decisions and design rationale must be integrated into one of the 5 core documents listed above. If you believe a new document is necessary, propose it in an issue first and reference [docs/README.md](docs/README.md) for the documentation governance policy.
+> **Documentation governance:** add durable facts to the matching canonical document above. If a new module document is needed, update the module inventory and governance checks together.
 
 ---
 

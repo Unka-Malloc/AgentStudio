@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-14
+- Last updated: 2026-06-16
 - Status: Current maintained document
 - Scope: ADR 0007 - Pact Work Queue Primitive Contract.
-- Staleness check: Created on 2026-06-12 during the NATS JetStream queue capability absorption design discussion.
+- Staleness check: Checked against current consolidated docs layout and referenced implementation evidence on 2026-06-16.
 
 ## Status
 Accepted

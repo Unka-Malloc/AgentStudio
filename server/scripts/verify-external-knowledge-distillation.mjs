@@ -52,7 +52,7 @@ assert.match(
 );
 assert.match(
   serviceSourceText,
-  /const DISTILLATION_ALGORITHM_INPUT_CONTRACT = "external-kd\.algorithm-input\.normalized-documents\.v1"/,
+  /const DISTILLATION_ALGORITHM_INPUT_CONTRACT = "(?:external-kd\.algorithm-input\.normalized-documents\.v1|v0\.0\.1:external-service:knowledge-distillation-algorithm-input-normalized-documents-1)"/,
   "external distillation must name the normalized-document algorithm input contract"
 );
 assert.match(
@@ -320,6 +320,7 @@ function startExternalService({ port, dataDir, modelGatewayUrl = "" }) {
       HOST: "127.0.0.1",
       PORT: String(port),
       SERVICE_DATA_DIR: dataDir,
+      PACT_EXTERNAL_KD_INPUT_ROOTS: dataDir,
       PACT_EXTERNAL_KD_STRUCTURED_ZIP_ENTRY_MAX_BYTES: "25000",
       PACT_EXTERNAL_KD_STREAM_TEXT_CHUNK_BYTES: "4096",
       PACT_EXTERNAL_KD_MODEL_GATEWAY_URL: modelGatewayUrl,
@@ -1482,8 +1483,14 @@ try {
     }
   }
   await waitForService(serviceUrl);
-  const directRuntime = await fetchJson(`${serviceUrl}/v1/runtime/health`);
-  assert.equal(directRuntime.status, 200);
+  const publicRuntime = await fetchJson(`${serviceUrl}/v1/runtime/health`);
+  assert.equal(publicRuntime.status, 200);
+  assert.equal(publicRuntime.payload.protocolVersion, "v0.0.1:external-service:knowledge-distillation-1");
+  assert.equal(Object.hasOwn(publicRuntime.payload, "runtimes"), false);
+  assert.equal(Object.hasOwn(publicRuntime.payload, "summary"), false);
+  const directCapabilities = await fetchJson(`${serviceUrl}/v1/capabilities`);
+  assert.equal(directCapabilities.status, 200);
+  const directRuntime = { status: directCapabilities.status, payload: directCapabilities.payload.runtimeDoctor };
   assert.equal(directRuntime.payload.protocolVersion, "v0.0.1:external-service:knowledge-distillation-runtime-doctor-1");
   assert.ok(directRuntime.payload.runtimes["tika.app"], "runtime doctor must report Tika fallback runtime state");
   assert.ok(directRuntime.payload.runtimes["ocr.tesseract"], "runtime doctor must report image OCR runtime state");
@@ -1526,7 +1533,7 @@ try {
   assert.equal(health.status, 200);
   assert.equal(health.payload.serviceKind, "externalKnowledgeDistillation");
   assert.equal(health.payload.pactRegistration.namespace, "external.knowledge.distillation");
-  assert.ok(health.payload.runtimeDoctor.summary, "health response must expose runtime doctor summary");
+  assert.equal(Object.hasOwn(health.payload, "runtimeDoctor"), false, "health response must not expose runtime doctor details");
   assertExternalGatewayCall(health.payload, {
     serviceUrl,
     method: "GET",
@@ -1537,6 +1544,7 @@ try {
     headers: authHeaders(auth)
   });
   assert.equal(capabilities.status, 200);
+  assert.ok(capabilities.payload.runtimeDoctor.summary, "capabilities response must expose runtime doctor summary");
   assertExternalGatewayCall(capabilities.payload, {
     serviceUrl,
     method: "GET",
@@ -2034,10 +2042,10 @@ try {
     headers: authHeaders(auth)
   });
   assert.equal(runtimeHealth.status, 200);
-  assert.equal(runtimeHealth.payload.protocolVersion, "v0.0.1:external-service:knowledge-distillation-runtime-doctor-1");
+  assert.equal(runtimeHealth.payload.protocolVersion, "v0.0.1:external-service:knowledge-distillation-1");
   assert.equal(runtimeHealth.payload.pactRegistration.namespace, "external.knowledge.distillation");
-  assert.ok(runtimeHealth.payload.runtimes["tika.app"], "platform runtime health must proxy Tika fallback runtime state");
-  assert.ok(runtimeHealth.payload.runtimes["ocr.tesseract"], "platform runtime health must proxy OCR runtime state");
+  assert.equal(Object.hasOwn(runtimeHealth.payload, "runtimes"), false, "platform runtime health must not proxy dependency command paths");
+  assert.equal(Object.hasOwn(runtimeHealth.payload, "summary"), false, "platform runtime health must not proxy dependency inventory details");
   assertExternalGatewayCall(runtimeHealth.payload, {
     serviceUrl,
     method: "GET",
@@ -2706,7 +2714,7 @@ try {
     assert.match(mockModelGateway.calls[0].body.systemPrompt, /Pact external knowledge distillation model worker/);
     assert.equal(mockModelGateway.calls[0].body.parameters.responseProfile, "machine-readable");
     assert.equal(mockModelGateway.calls[0].body.parameters.maxOutputTokens, 1800);
-    assert.match(mockModelGateway.calls[0].body.question, /pact\.external-knowledge-distillation\.model-output\.v1/);
+    assert.match(mockModelGateway.calls[0].body.question, /(?:pact\.external-knowledge-distillation\.model-output\.v1|v0\.0\.1:external-service:knowledge-distillation-model-output-1)/);
     const contractRepairCalls = mockModelGateway.calls.filter((call) => (
       call.body.parameters?.contractRepair === true
     ));
@@ -2724,7 +2732,7 @@ try {
       "classification distillation must call the model gateway once for each core group"
     );
     assert.equal(groupModelGatewayCalls.every((call) => call.body.parameters.distillationScope === "classification-group"), true);
-    assert.equal(groupModelGatewayCalls.every((call) => /pact\.external-knowledge-distillation\.model-output\.v1/.test(call.body.question)), true);
+    assert.equal(groupModelGatewayCalls.every((call) => /(?:pact\.external-knowledge-distillation\.model-output\.v1|v0\.0\.1:external-service:knowledge-distillation-model-output-1)/.test(call.body.question)), true);
     assert.equal(groupModelGatewayCalls.some((call) => call.body.parameters?.contractRepair === true), true);
   }
   assert.equal(createRun.payload.result.referenceGapReport.strategy, "reference-framework-gap-report.v1");

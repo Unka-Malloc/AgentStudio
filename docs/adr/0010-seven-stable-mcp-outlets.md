@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-14
+- Last updated: 2026-06-16
 - Status: Accepted
 - Scope: Stable public MCP outlet naming and legacy outlet retirement.
-- Staleness check: Scanned on 2026-06-14; outlet inventory is guarded by current MCP production verification gates.
+- Staleness check: Checked against current consolidated docs layout and referenced implementation evidence on 2026-06-16.
 
 ## Status
 Accepted

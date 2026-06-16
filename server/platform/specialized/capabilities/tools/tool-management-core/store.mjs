@@ -25,6 +25,7 @@ import {
   scopesToToolsets,
   toolsetsToScopes
 } from "./catalog.mjs";
+import { clientIpFromRequest } from "../../../../common/security/trusted-client-ip.mjs";
 
 const DEFAULT_RATE_LIMIT_PER_MINUTE = 0;
 const DEFAULT_GRANT_CAPABILITIES = Object.freeze(["cap:tool:*"]);
@@ -375,18 +376,19 @@ function bindingContextFromRequest({ request = null, context = {} } = {}) {
 
 function bindingContextMismatch(boundContext = {}, requestContext = {}) {
   const checks = [
-    ["userId", "binding_user_mismatch"],
-    ["boundUserId", "binding_user_mismatch"],
-    ["agentId", "binding_agent_mismatch"],
-    ["agentProfileId", "binding_agent_mismatch"],
-    ["clientId", "binding_client_mismatch"],
-    ["namespace", "binding_namespace_mismatch"]
+    [["boundUserId", "userId"], "binding_user_missing", "binding_user_mismatch"],
+    [["agentId", "agentProfileId"], "binding_agent_missing", "binding_agent_mismatch"],
+    [["clientId"], "binding_client_missing", "binding_client_mismatch"],
+    [["namespace"], "binding_namespace_missing", "binding_namespace_mismatch"]
   ];
-  for (const [key, reasonCode] of checks) {
-    const boundValue = String(boundContext?.[key] || "").trim();
-    const requestValue = String(requestContext?.[key] || "").trim();
+  for (const [keys, missingReasonCode, mismatchReasonCode] of checks) {
+    const boundValue = firstString(...keys.map((key) => boundContext?.[key]));
+    const requestValue = firstString(...keys.map((key) => requestContext?.[key]));
+    if (boundValue && !requestValue) {
+      return { ok: false, reasonCode: missingReasonCode, key: keys[0] };
+    }
     if (boundValue && requestValue && boundValue !== requestValue) {
-      return { ok: false, reasonCode, key };
+      return { ok: false, reasonCode: mismatchReasonCode, key: keys[0] };
     }
   }
   return { ok: true };
@@ -776,12 +778,7 @@ function grantProjectionDescriptor(grant = {}, {
 }
 
 function sourceIpFromRequest(request) {
-  return String(
-    request?.headers?.["x-forwarded-for"] ||
-      request?.socket?.remoteAddress ||
-      request?.connection?.remoteAddress ||
-      ""
-  ).split(",")[0].trim();
+  return clientIpFromRequest(request);
 }
 
 function hashValue(value) {
@@ -2087,7 +2084,7 @@ export function createToolManagementStore({
       const bindingDecision = await resolvedCapabilityBindingGuard.verifyCapabilityKeyBinding({
         capabilityKey: token,
         credentialId: grant.id,
-        context: boundContext
+        context: requestBindingContext
       });
       if (!bindingDecision.ok) {
         return {

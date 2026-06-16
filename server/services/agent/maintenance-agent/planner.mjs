@@ -366,7 +366,8 @@ export function createMaintenancePlanner({ userDataPath, toolRegistry, contextRu
             sessionId: effectiveInput.sessionId || "",
             userId: effectiveInput.userId || ""
           },
-          userDataPath
+          userDataPath,
+          contextCompactionSource: "maintenance-agent.planner"
         });
         const parsed = extractJsonObject(gatewayResult.answer || gatewayResult.text);
         if (!parsed) {

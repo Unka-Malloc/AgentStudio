@@ -119,54 +119,70 @@ function createOutputLineReader(stream, label = "stream") {
 }
 
 function spawnSourceServer({ runtimeOptions, storePath, sourceId, workspaceId }) {
-  const sourceStdioScriptPath = path.join(repoRoot, "server/scripts/acp-agent-relay-source-stdio.mjs");
-  const child = spawn(process.execPath, [sourceStdioScriptPath], {
+  const sourceHttpScriptPath = path.join(repoRoot, "server/scripts/acp-agent-relay-source-http.mjs");
+  const token = `source-http-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const child = spawn(process.execPath, [sourceHttpScriptPath], {
     cwd: repoRoot,
     stdio: ["pipe", "pipe", "pipe"],
     env: {
       ...process.env,
-      PACT_ACP_SOURCE_STDIO_RUNTIME_JSON: JSON.stringify(runtimeOptions),
-      PACT_ACP_SOURCE_STDIO_CONTEXT_JSON: JSON.stringify({
+      PACT_ACP_SOURCE_HTTP_RUNTIME_JSON: JSON.stringify(runtimeOptions),
+      PACT_ACP_SOURCE_HTTP_CONTEXT_JSON: JSON.stringify({
         sourceId,
         workspaceId
       }),
-      PACT_ACP_SOURCE_STDIO_STORE_PATH: storePath,
+      PACT_ACP_SOURCE_HTTP_STORE_PATH: storePath,
+      PACT_ACP_SOURCE_HTTP_TOKEN: token,
       PACT_ACP_SOURCE_ID: sourceId,
       PACT_ACP_WORKSPACE_ID: workspaceId
     }
   });
-  const stdout = createOutputLineReader(child.stdout, "source ACP stdout");
   const stderr = createOutputLineReader(child.stderr, "source ACP stderr");
   return {
     child,
-    stdout,
     stderr,
+    token,
+    url: "",
     async waitUntilReady() {
       const ready = JSON.parse(await stderr.receiveLine(30000));
-      assert.equal(ready.event, "pact.acp.source_stdio.ready");
+      assert.equal(ready.event, "pact.acp.source_http.ready");
       assert.equal(ready.durableStore, true);
       assert.equal(ready.storagePath, storePath);
+      assert.equal(ready.authRequired, true);
+      this.url = ready.url;
       return ready;
     },
     async request(message) {
-      child.stdin.write(`${JSON.stringify(message)}\n`, "utf8");
-      const notifications = [];
-      for (let index = 0; index < 160; index += 1) {
-        const rawResponse = await stdout.receiveLine();
-        assert.ok(rawResponse, "source ACP service must return a JSON-RPC frame.");
-        const parsed = parseJsonRpcMessage(rawResponse);
-        if (parsed.method === ACP_METHODS.sessionUpdate) {
-          notifications.push(parsed);
-          continue;
-        }
-        assert.equal(parsed.id, message.id);
-        Object.defineProperty(parsed, "notifications", {
-          value: notifications,
-          enumerable: false
-        });
-        return parsed;
+      assert.ok(this.url, "source ACP HTTP server must be ready before requests.");
+      const response = await fetch(`${this.url}/acp`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(message)
+      });
+      const payload = await response.json();
+      assert.equal(response.status, 200, `source ACP HTTP request failed: ${JSON.stringify(payload)}`);
+      assert.equal(payload.ok, true);
+      const parsed = parseJsonRpcMessage(payload.response);
+      assert.equal(parsed.id, message.id);
+      Object.defineProperty(parsed, "notifications", {
+        value: Array.isArray(payload.notifications) ? payload.notifications : [],
+        enumerable: false
+      });
+      return parsed;
+    },
+    async shutdown() {
+      if (!this.url) {
+        return;
       }
-      throw new Error(`Timed out waiting for source ACP response ${String(message.id)}.`);
+      await fetch(`${this.url}/shutdown`, {
+        method: "POST",
+        headers: {
+          "authorization": `Bearer ${token}`
+        }
+      }).catch(() => null);
     }
   };
 }
@@ -175,7 +191,7 @@ async function stopSourceServer(handle) {
   if (!handle) {
     return;
   }
-  handle.child.stdin.end();
+  await handle.shutdown?.();
   if (handle.child.exitCode !== null || handle.child.signalCode) {
     return;
   }
@@ -189,7 +205,7 @@ async function stopSourceServer(handle) {
       if (code === 0 || code === null) {
         resolve();
       } else {
-        reject(new Error(`source ACP stdio server exited with code ${code}`));
+        reject(new Error(`source ACP HTTP bridge exited with code ${code}`));
       }
     });
   });
@@ -200,7 +216,7 @@ const codexCliPath = await commandOutput("sh", ["-lc", "command -v codex"]).catc
 assert.ok(codexCliPath, "codex CLI must be available because codex-acp delegates to Codex.");
 const codexCliVersion = await commandOutput(codexCliPath, ["--version"]).catch((error) => asText(error.message));
 const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-acp-downstream-codex-acp-workspace-"));
-const storePath = path.join(workspaceRoot, "source-stdio-store.json");
+const storePath = path.join(workspaceRoot, "source-http-store.json");
 const marker = `PACT_DOWNSTREAM_CODEX_ACP_TARGET_VERIFY_${Date.now()}`;
 const virtualAgentId = "codex.acp-agent";
 const targetId = "codex.acp:default";
@@ -410,7 +426,7 @@ try {
     adapterInstallPackage: adapter.adapterInstallPackage,
     adapterPackageVersion: adapter.adapterPackageVersion || "",
     sourceAcpProtocolVerified: true,
-    sourceAcpTransport: "pact-source-facing-acp-stdio",
+    sourceAcpTransport: "pact-source-facing-acp-http-loopback",
     sourceAcpReady: ready.event,
     restartSourceAcpReady: restartReady.event,
     downstreamClientAspectStarted: true,

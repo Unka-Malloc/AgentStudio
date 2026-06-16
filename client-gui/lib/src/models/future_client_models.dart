@@ -3,6 +3,7 @@ enum FutureClientSection {
   mcpPlugins,
   skillHub,
   modelForwarding,
+  localRuntime,
   mobileRelay,
   activity,
   settings,

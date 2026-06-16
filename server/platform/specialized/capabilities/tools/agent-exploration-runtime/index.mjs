@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { loadSettings } from "../../../../common/platform-core/settings.mjs";
+import { fetchExternalServiceWithPinnedDns } from "../../../../common/composition-management/external-service-egress-policy.mjs";
 import { createToolCatalog } from "../tool-management-core/catalog.mjs";
 import { createToolManagementStore } from "../tool-management-core/store.mjs";
 
@@ -221,32 +222,83 @@ function firstNonEmpty(...values) {
   return "";
 }
 
+function workspaceAccessFromInput(input = {}) {
+  const options = asObject(input);
+  const authUser = asObject(options.authSession?.user);
+  const actorUserId = firstNonEmpty(
+    options.actorUserId,
+    options.userId,
+    options.boundUserId,
+    options.subjectId,
+    options.username,
+    authUser.userId,
+    authUser.username,
+    `agent:${normalizeText(options.agentId || options.agentProfileId || EXPLORER_AGENT_ID)}`
+  );
+  return {
+    actorUserId,
+    userId: actorUserId,
+    subjectId: actorUserId,
+    username: actorUserId
+  };
+}
+
 function toolDefinitions() {
   return [
     {
       type: "function",
       function: {
-        name: "knowledge_skill_search",
+        name: "playbook_search",
         description:
-          "Search published Pact KnowledgeSkills before raw evidence recall. Use this first for broad topics so the agent can apply reusable concepts, heuristics, anti-patterns, and honest boundaries.",
+          "Search published Pact AgentLibrary Playbooks before raw evidence recall. Use this first for broad topics so the agent can apply reusable concepts, heuristics, anti-patterns, and honest boundaries.",
         parameters: {
           type: "object",
           additionalProperties: false,
           properties: {
             query: {
               type: "string",
-              description: "User topic or task to match against published KnowledgeSkills."
+              description: "User topic or task to match against published Playbooks."
             },
             limit: {
               type: "integer",
               minimum: 1,
               maximum: 10,
-              description: "Maximum number of skills to return."
+              description: "Maximum number of Playbooks to return."
             },
             status: {
               type: "string",
               enum: ["published", "pending_review", "draft"],
-              description: "Skill status filter. Defaults to published."
+              description: "Playbook status filter. Defaults to published."
+            }
+          },
+          required: ["query"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "knowledge_skill_search",
+        description:
+          "Legacy alias for playbook_search. Search published Pact AgentLibrary Playbooks before raw evidence recall.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            query: {
+              type: "string",
+              description: "User topic or task to match against published Playbooks."
+            },
+            limit: {
+              type: "integer",
+              minimum: 1,
+              maximum: 10,
+              description: "Maximum number of Playbooks to return."
+            },
+            status: {
+              type: "string",
+              enum: ["published", "pending_review", "draft"],
+              description: "Playbook status filter. Defaults to published."
             }
           },
           required: ["query"]
@@ -366,9 +418,9 @@ function toolDefinitions() {
     {
       type: "function",
       function: {
-        name: "knowledge_skill_propose",
+        name: "playbook_propose",
         description:
-          "Create a pending-review Pact KnowledgeSkill from reusable, evidence-backed reasoning discovered during this run. Use only after local evidence exists; this does not publish or mutate canonical facts.",
+          "Create a pending-review Pact AgentLibrary Playbook from reusable, evidence-backed reasoning discovered during this run. Use only after local evidence exists; this does not publish or mutate canonical facts.",
         parameters: {
           type: "object",
           additionalProperties: false,
@@ -376,11 +428,62 @@ function toolDefinitions() {
             title: { type: "string" },
             sourceQuery: {
               type: "string",
-              description: "The user query or reusable topic this Skill should serve."
+              description: "The user query or reusable topic this Playbook should serve."
             },
             summary: {
               type: "string",
-              description: "Short reusable summary of what the Skill helps decide."
+              description: "Short reusable summary of what the Playbook helps decide."
+            },
+            applicability: {
+              type: "object",
+              properties: {
+                useWhen: { type: "array", items: { type: "string" } },
+                avoidWhen: { type: "array", items: { type: "string" } }
+              }
+            },
+            coreConcepts: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  term: { type: "string" },
+                  weight: { type: "number" },
+                  notes: { type: "string" }
+                }
+              }
+            },
+            decisionHeuristics: { type: "array", items: { type: "string" } },
+            antiPatterns: { type: "array", items: { type: "string" } },
+            honestBoundaries: { type: "array", items: { type: "string" } },
+            evidenceRefs: {
+              type: "array",
+              minItems: 1,
+              items: { type: "string" },
+              description: "Evidence ids that ground this Playbook proposal."
+            }
+          },
+          required: ["title", "summary", "evidenceRefs"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "knowledge_skill_propose",
+        description:
+          "Legacy alias for playbook_propose. Create a pending-review Pact AgentLibrary Playbook from reusable, evidence-backed reasoning discovered during this run.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            title: { type: "string" },
+            sourceQuery: {
+              type: "string",
+              description: "The user query or reusable topic this Playbook should serve."
+            },
+            summary: {
+              type: "string",
+              description: "Short reusable summary of what the Playbook helps decide."
             },
             applicability: {
               type: "object",
@@ -407,11 +510,11 @@ function toolDefinitions() {
             evidenceRefs: {
               type: "array",
               items: { type: "string" },
-              description: "Evidence IDs that directly support the Skill. Required."
+              description: "Evidence IDs that directly support the Playbook. Required."
             },
             reuseReason: {
               type: "string",
-              description: "Why this should become a reusable Skill instead of only a one-off answer."
+              description: "Why this should become a reusable Playbook instead of only a one-off answer."
             },
             confidence: { type: "number", minimum: 0, maximum: 1 }
           },
@@ -778,7 +881,7 @@ function evidenceItemsForContext(toolResults = []) {
         }
       ].filter((item) => item.evidenceId);
     }
-    if (entry.tool === "knowledge_skill_propose") {
+    if (entry.tool === "knowledge_skill_propose" || entry.tool === "playbook_propose") {
       return asArray(entry.result?.evidenceRefs).map((evidenceId) => ({
         evidenceId,
         title: entry.result?.title || "",
@@ -804,7 +907,7 @@ const DEFAULT_EXPLORATION_PROMPT = {
   systemPrompt:
     "You are Pact Knowledge Explorer. You are stateless; use the supplied ContextPack as your only memory.",
   toolPolicyPrompt:
-    "Always search from coarse to fine. For broad topic questions, first inspect KnowledgeSkillContext or call knowledge_skill_search. For counts, totals, rankings, frequency, or 'which has the most' questions, first call knowledge_aggregate. For normal evidence recall, call keyword_search with broad but meaningful keywords, then open_evidence only for promising evidenceId values. If the user asks to create a golden/review/deduplication rule, call golden_rule_authoring. If the run discovers a reusable evidence-backed procedure, call knowledge_skill_propose to create a pending-review Skill.",
+    "Always search from coarse to fine. For broad topic questions, first inspect AgentLibrary Playbook context or call playbook_search. For counts, totals, rankings, frequency, or 'which has the most' questions, first call knowledge_aggregate. For normal evidence recall, call keyword_search with broad but meaningful keywords, then open_evidence only for promising evidenceId values. If the user asks to create a golden/review/deduplication rule, call golden_rule_authoring. If the run discovers a reusable evidence-backed procedure, call playbook_propose to create a pending-review Playbook.",
   continuationPrompt:
     "Continue from the tool results. Call another tool only if more local evidence is needed; otherwise give the final answer with evidenceId citations.",
   answerTemplate:
@@ -855,10 +958,10 @@ function buildSystemMemory({ query, contextPack, toolPolicy, config = {} }) {
   return [
     explorationConfig.systemPrompt,
     "You must use native function calls when you need local data. Do not invent documents, evidence ids, dates, amounts, or claims.",
-    "Before raw evidence recall, inspect the supplied KnowledgeSkillContext. If it contains a matching published Skill, apply its heuristics and boundaries first, then cite original evidence.",
+    "Before raw evidence recall, inspect the supplied AgentLibrary Playbook context. If it contains a matching published Playbook, apply its heuristics and boundaries first, then cite original evidence.",
     explorationConfig.toolPolicyPrompt,
-    "For broad topic questions, prefer knowledge_skill_search before keyword_search. KnowledgeSkills are guidance, not canonical facts; evidenceId citations still decide final claims.",
-    "Only call knowledge_skill_propose when the result is reusable beyond this one answer, includes real evidenceRefs, and does not propose canonical fact/entity/relation/raw evidence changes.",
+    "For broad topic questions, prefer playbook_search before keyword_search. AgentLibrary Playbooks are guidance, not canonical facts; evidenceId citations still decide final claims.",
+    "Only call playbook_propose when the result is reusable beyond this one answer, includes real evidenceRefs, and does not propose canonical fact/entity/relation/raw evidence changes.",
     "Only call golden_rule_authoring when the user asks for a reusable rule or the run clearly needs a reviewable rule. Generated rules must stay draft/pending human confirmation.",
     "For quantity questions, do not estimate from a small search result set. Use knowledge_aggregate and cite its example evidence ids.",
     "If the current evidence is insufficient, call keyword_search again with a better query. If it is sufficient, answer with cited evidence ids.",
@@ -866,7 +969,7 @@ function buildSystemMemory({ query, contextPack, toolPolicy, config = {} }) {
     `Answer template:\n${explorationConfig.answerTemplate}`,
     `User task: ${query}`,
     `Tool policy: ${JSON.stringify(toolPolicy)}`,
-    `KnowledgeSkillContext: ${JSON.stringify(contextPack?.knowledgeSkillContext || {})}`,
+    `AgentLibraryPlaybookContext: ${JSON.stringify(contextPack?.playbookContext || contextPack?.knowledgeSkillContext || {})}`,
     formatContextPackForPrompt(contextPack)
   ].join("\n\n");
 }
@@ -975,7 +1078,7 @@ function compactToolResultForStorage(entry = {}) {
       }
     };
   }
-  if (tool === "knowledge_skill_search") {
+  if (tool === "knowledge_skill_search" || tool === "playbook_search") {
     return {
       ...entry,
       result: {
@@ -1027,8 +1130,14 @@ function normalizeToolName(value) {
   if (["keyword_search", "keywordSearch", "search", "knowledge_search"].includes(name)) {
     return "keyword_search";
   }
+  if (["playbook_search", "playbookSearch", "playbooks"].includes(name)) {
+    return "playbook_search";
+  }
   if (["knowledge_skill_search", "knowledgeSkillSearch", "skill_search", "skills"].includes(name)) {
     return "knowledge_skill_search";
+  }
+  if (["playbook_propose", "playbookPropose", "propose_playbook", "create_playbook"].includes(name)) {
+    return "playbook_propose";
   }
   if (["knowledge_skill_propose", "knowledgeSkillPropose", "skill_propose", "create_skill"].includes(name)) {
     return "knowledge_skill_propose";
@@ -1066,6 +1175,7 @@ const AGENT_EXPLORATION_CATALOG_TOOLS_BY_NAME = new Map(
     ])
 );
 const MANAGED_GRANT_REQUIRED_TOOLS = new Set([
+  "playbook_propose",
   "knowledge_skill_propose",
   "golden_rule_authoring",
   "http_request",
@@ -1265,6 +1375,65 @@ export function createAgentExplorationRuntime({
     }
   }
 
+  function grantBindingValue(grant = null, keys = []) {
+    const metadata = asObject(grant?.metadata);
+    for (const key of keys) {
+      const value = normalizeText(grant?.[key] || metadata[key] || "");
+      if (value) {
+        return value;
+      }
+    }
+    return "";
+  }
+
+  function optionBindingValue(options = {}, keys = []) {
+    const user = options.authSession?.user || {};
+    for (const key of keys) {
+      const value = normalizeText(options[key] || user[key] || "");
+      if (value) {
+        return value;
+      }
+    }
+    return "";
+  }
+
+  function validateGrantBindingForExploration(grant = null, options = {}) {
+    if (!grant) {
+      return { ok: true };
+    }
+    const checks = [
+      {
+        grantKeys: ["boundUserId", "userId"],
+        optionKeys: ["boundUserId", "userId"],
+        missing: "grant_bound_user_missing",
+        mismatch: "grant_bound_user_mismatch"
+      },
+      {
+        grantKeys: ["agentId", "agentProfileId", "profileId"],
+        optionKeys: ["agentId", "agentProfileId", "profileId"],
+        missing: "grant_bound_agent_missing",
+        mismatch: "grant_bound_agent_mismatch"
+      },
+      {
+        grantKeys: ["clientId", "clientName"],
+        optionKeys: ["clientId", "clientName"],
+        missing: "grant_bound_client_missing",
+        mismatch: "grant_bound_client_mismatch"
+      }
+    ];
+    for (const check of checks) {
+      const expected = grantBindingValue(grant, check.grantKeys);
+      const actual = optionBindingValue(options, check.optionKeys);
+      if (expected && !actual) {
+        return { ok: false, reasonCode: check.missing };
+      }
+      if (expected && actual && expected !== actual) {
+        return { ok: false, reasonCode: check.mismatch };
+      }
+    }
+    return { ok: true };
+  }
+
   function buildAuthorizationIdentity(options = {}, grant = null) {
     const authSession = options.authSession || null;
     const user = authSession?.user || {};
@@ -1390,8 +1559,19 @@ export function createAgentExplorationRuntime({
     if (!securityPermissions || typeof securityPermissions.evaluatePolicy !== "function") {
       return { allowed: true, decision: null, tool, grant: null };
     }
-    const requestedGrantId = firstNonEmpty(args.toolGrantId, options.toolGrantId, options.grantId);
+    const requestedGrantId = firstNonEmpty(options.toolGrantId, options.grantId);
     const grant = loadToolGrant(requestedGrantId);
+    const grantBinding = validateGrantBindingForExploration(grant, options);
+    if (!grantBinding.ok) {
+      const decision = buildDeniedAuthorizationDecision({
+        toolName: normalizedToolName,
+        toolExecutionId,
+        traceId,
+        reasonCode: grantBinding.reasonCode || "grant_binding_mismatch",
+        redactedReason: "Tool grant binding does not match the current exploration context."
+      });
+      return { allowed: false, decision, tool, grant };
+    }
     const { subject, agentId, boundUserId } = buildAuthorizationIdentity(options, grant);
     const authorizationInput = buildAuthorizationInput(normalizedToolName, args, options, tool);
     const grantRequired = toolRequiresManagedGrant(normalizedToolName, args, tool) || Boolean(requestedGrantId);
@@ -1516,7 +1696,7 @@ export function createAgentExplorationRuntime({
         ? "needsApproval"
         : "deny";
     const normalizedToolName = normalizeToolName(tool);
-    const fallbackRisk = ["knowledge_skill_propose", "golden_rule_authoring", "http_request"].includes(normalizedToolName)
+    const fallbackRisk = ["playbook_propose", "knowledge_skill_propose", "golden_rule_authoring", "http_request"].includes(normalizedToolName)
       ? "safe_write"
       : normalizedToolName === "local_command"
         ? "repair_write"
@@ -1645,15 +1825,17 @@ export function createAgentExplorationRuntime({
       query,
       count: asArray(result.items).length,
       skills: asArray(result.items).map((skill) => ({
+        playbookId: skill.playbookId || skill.skillId,
+        legacySkillId: skill.legacySkillId || skill.skillId,
         skillId: skill.skillId,
         title: skill.title,
         summary: skill.summary,
         matchScore: skill.matchScore,
-        applicability: skill.skill?.applicability || {},
-        coreConcepts: asArray(skill.skill?.coreConcepts).slice(0, 8),
-        decisionHeuristics: asArray(skill.skill?.decisionHeuristics).slice(0, 8),
-        antiPatterns: asArray(skill.skill?.antiPatterns).slice(0, 6),
-        honestBoundaries: asArray(skill.skill?.honestBoundaries).slice(0, 6),
+        applicability: skill.playbook?.applicability || skill.skill?.applicability || {},
+        coreConcepts: asArray(skill.playbook?.coreConcepts || skill.skill?.coreConcepts).slice(0, 8),
+        decisionHeuristics: asArray(skill.playbook?.decisionHeuristics || skill.skill?.decisionHeuristics).slice(0, 8),
+        antiPatterns: asArray(skill.playbook?.antiPatterns || skill.skill?.antiPatterns).slice(0, 6),
+        honestBoundaries: asArray(skill.playbook?.honestBoundaries || skill.skill?.honestBoundaries).slice(0, 6),
         evidenceRefs: asArray(skill.evidenceRefs).slice(0, 10),
         qualityScore: Number(skill.qualityReport?.score || 0)
       }))
@@ -1851,21 +2033,33 @@ export function createAgentExplorationRuntime({
     const controller = new AbortController();
     const timeoutMs = Math.max(1000, Math.min(Number(args.timeoutMs || config.timeoutMs || 30000), 120000));
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let pinnedFetch = null;
     try {
       const hasBody = !["GET", "HEAD"].includes(method) && args.body !== undefined;
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          ...asObject(args.headers)
+      pinnedFetch = await fetchExternalServiceWithPinnedDns({
+        url: url.toString(),
+        label: "agentExploration.httpRequest",
+        policies: {
+          egress: {
+            allowLocalForDevelopment: config.allowLocalForDevelopment === true
+          }
         },
-        body: hasBody
-          ? typeof args.body === "string"
-            ? args.body
-            : JSON.stringify(args.body)
-          : undefined,
-        signal: controller.signal
+        init: {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            ...asObject(args.headers)
+          },
+          body: hasBody
+            ? typeof args.body === "string"
+              ? args.body
+              : JSON.stringify(args.body)
+            : undefined,
+          signal: controller.signal,
+          redirect: "manual"
+        }
       });
+      const response = pinnedFetch.response;
       const maxBytes = Number(config.maxResponseBytes || 65536);
       const raw = await readResponseTextWithLimit(response, maxBytes);
       return {
@@ -1878,12 +2072,21 @@ export function createAgentExplorationRuntime({
         json: safeJsonParse(raw, null)
       };
     } catch (error) {
+      if (error?.code === "servicehub_egress_denied") {
+        return {
+          ok: false,
+          error: "http_egress_denied",
+          reason: error.decision?.reason || "egress_denied",
+          host: url.hostname
+        };
+      }
       return {
         ok: false,
         error: error instanceof Error ? error.message : String(error)
       };
     } finally {
       clearTimeout(timer);
+      await pinnedFetch?.close?.();
     }
   }
 
@@ -1988,14 +2191,14 @@ export function createAgentExplorationRuntime({
   }
 
   async function runAgentExplorationTool(name, args, options = {}) {
-    if (name === "knowledge_skill_search") {
+    if (name === "knowledge_skill_search" || name === "playbook_search") {
       return {
         tool: name,
         arguments: args,
         result: await executeKnowledgeSkillSearch(args)
       };
     }
-    if (name === "knowledge_skill_propose") {
+    if (name === "knowledge_skill_propose" || name === "playbook_propose") {
       return {
         tool: name,
         arguments: args,
@@ -2148,10 +2351,12 @@ export function createAgentExplorationRuntime({
       defaultAgentId: EXPLORER_AGENT_ID,
       toolPolicy: {
         allowedTools: [
+          "playbook_search",
           "knowledge_skill_search",
           "knowledge_aggregate",
           "keyword_search",
           "open_evidence",
+          "playbook_propose",
           "knowledge_skill_propose",
           "golden_rule_authoring"
         ],
@@ -2213,8 +2418,11 @@ export function createAgentExplorationRuntime({
     const workspaceId =
       normalizeText(input.workspaceId || "") ||
       stableId("workspace", "knowledge-agent-explore", query, timestamp);
-    const workspaceResult = agentWorkspace.getWorkspace({ workspaceId, includePrivate: true }) ||
+    const workspaceAccess = workspaceAccessFromInput(input);
+    const workspaceResult = agentWorkspace.getWorkspace({ ...workspaceAccess, workspaceId, includePrivate: true }) ||
       agentWorkspace.createWorkspace({
+        ...workspaceAccess,
+        ownerUserId: workspaceAccess.actorUserId,
         workspaceId,
         title: `智能探索：${query.slice(0, 42)}`,
         objective: query,
@@ -2226,7 +2434,7 @@ export function createAgentExplorationRuntime({
       });
     const workspace = workspaceResult.workspace || workspaceResult;
     const workspaceContext = typeof agentWorkspace.getWorkspaceContext === "function"
-      ? agentWorkspace.getWorkspaceContext(workspaceId) || null
+      ? agentWorkspace.getWorkspaceContext(workspaceId, workspaceAccess) || null
       : null;
     const callerSelectedWorkspace = Boolean(normalizeText(callerInput.workspaceId || ""));
     const explicitSourceIds = uniqueStrings([
@@ -2260,29 +2468,27 @@ export function createAgentExplorationRuntime({
         effectiveModelAlias ||
         ""
     );
-    const explicitToolGrantId = normalizeText(callerInput.toolGrantId || callerInput.grantId || "");
-    const allocatedToolGrantId = normalizeText(input.toolGrantId || input.grantId || "");
+    const allocatedToolGrantId = allocationResult?.input
+      ? normalizeText(input.toolGrantId || input.grantId || "")
+      : "";
     const workspaceToolGrantId = normalizeText(workspaceContext?.toolGrantId || "");
     const effectiveToolGrantId = normalizeText(
-      explicitToolGrantId ||
-        (callerSelectedWorkspace ? workspaceToolGrantId || allocatedToolGrantId : allocatedToolGrantId || workspaceToolGrantId) ||
+      (callerSelectedWorkspace ? workspaceToolGrantId || allocatedToolGrantId : allocatedToolGrantId || workspaceToolGrantId) ||
         ""
     );
-    const effectiveAuthSession = input.authSession || callerInput.authSession || null;
+    const effectiveAuthSession = input.authSession || null;
     const effectiveAgentId = firstNonEmpty(
-      callerInput.agentId,
-      callerInput.agentProfileId,
-      input.agentId,
-      input.agentProfileId,
+      allocationResult?.input ? input.agentId : "",
+      allocationResult?.input ? input.agentProfileId : "",
+      workspaceContext?.agentId,
+      workspaceContext?.agentProfileId,
       EXPLORER_AGENT_ID
     );
     const effectiveBoundUserId = firstNonEmpty(
-      callerInput.boundUserId,
-      callerInput.userId,
-      input.boundUserId,
-      input.userId,
       effectiveAuthSession?.user?.userId,
-      effectiveAuthSession?.user?.username
+      effectiveAuthSession?.user?.username,
+      allocationResult?.input ? input.boundUserId : "",
+      allocationResult?.input ? input.userId : ""
     );
     const effectiveTeamIds = uniqueStrings([
       ...asArray(callerInput.teamIds),
@@ -2883,7 +3089,7 @@ export function createAgentExplorationRuntime({
               }
             }
           }
-          if (executed.tool === "knowledge_skill_search") {
+          if (executed.tool === "knowledge_skill_search" || executed.tool === "playbook_search") {
             for (const skill of asArray(executed.result?.skills).slice(0, 5)) {
               agentWorkspace.submit({
                 workspaceId,
@@ -2893,6 +3099,7 @@ export function createAgentExplorationRuntime({
                 payload: {
                   title: skill.title,
                   summary: skill.summary,
+                  playbookId: skill.playbookId || skill.skillId,
                   skillId: skill.skillId,
                   decisionHeuristics: skill.decisionHeuristics,
                   honestBoundaries: skill.honestBoundaries
@@ -2902,13 +3109,14 @@ export function createAgentExplorationRuntime({
               });
             }
           }
-          if (executed.tool === "knowledge_skill_propose" && executed.result?.skillId) {
+          if ((executed.tool === "knowledge_skill_propose" || executed.tool === "playbook_propose") && executed.result?.skillId) {
             agentWorkspace.createDecision({
               workspaceId,
               runId,
               agentId: EXPLORER_AGENT_ID,
-              title: `KnowledgeSkill proposal: ${executed.result.title || executed.result.skillId}`,
+              title: `AgentLibrary Playbook proposal: ${executed.result.title || executed.result.skillId}`,
               payload: {
+                playbookId: executed.result.playbookId || executed.result.skillId,
                 skillId: executed.result.skillId,
                 status: executed.result.status,
                 summary: executed.result.summary,
@@ -2950,12 +3158,12 @@ export function createAgentExplorationRuntime({
                 ])
                 .filter(Boolean);
             }
-            if (entry.tool === "knowledge_skill_search") {
+            if (entry.tool === "knowledge_skill_search" || entry.tool === "playbook_search") {
               return asArray(entry.result?.skills)
                 .flatMap((skill) => asArray(skill.evidenceRefs))
                 .filter(Boolean);
             }
-            if (entry.tool === "knowledge_skill_propose") {
+            if (entry.tool === "knowledge_skill_propose" || entry.tool === "playbook_propose") {
               return asArray(entry.result?.evidenceRefs).filter(Boolean);
             }
             if (entry.tool === "golden_rule_authoring") {
@@ -3107,13 +3315,22 @@ export function createAgentExplorationRuntime({
   function getRun(input = {}) {
     const runId = typeof input === "string" ? input : input.runId;
     const workspaceId = typeof input === "object" ? input.workspaceId : "";
+    const workspaceAccess = typeof input === "object" ? workspaceAccessFromInput(input) : {};
     const workspace = workspaceId
-      ? agentWorkspace?.getWorkspace({ workspaceId, includePrivate: Boolean(input.includePrivate) })
+      ? agentWorkspace?.getWorkspace({
+          ...workspaceAccess,
+          workspaceId,
+          includePrivate: Boolean(input.includePrivate)
+        })
       : null;
     const run = workspace
       ? asArray(workspace.runs).find((item) => item.runId === runId)
-      : agentWorkspace?.listWorkspaces({ limit: 200, includeSummary: false }).workspaces
-          .map((item) => agentWorkspace.getWorkspace({ workspaceId: item.workspaceId, includePrivate: Boolean(input.includePrivate) }))
+      : agentWorkspace?.listWorkspaces({ ...workspaceAccess, limit: 200, includeSummary: false }).workspaces
+          .map((item) => agentWorkspace.getWorkspace({
+            ...workspaceAccess,
+            workspaceId: item.workspaceId,
+            includePrivate: Boolean(input.includePrivate)
+          }))
           .flatMap((item) => asArray(item?.runs).map((runItem) => ({ run: runItem, workspace: item?.workspace })))
           .find((item) => item.run.runId === runId);
     if (!run) {

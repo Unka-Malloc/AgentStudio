@@ -49,9 +49,17 @@ async function createKnowledgeJob(baseUrl, title, body) {
 async function verifySummarizationWorkspaceContextHotSwap() {
   const directDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-summarization-direct-"));
   const workspaceId = "verify-summarization-workspace-hot-swap";
+  const actor = {
+    actorUserId: "verify-summarization-owner",
+    userId: "verify-summarization-owner",
+    subjectId: "verify-summarization-owner",
+    username: "verify-summarization-owner"
+  };
   const agentWorkspace = createAgentWorkspace({ userDataPath: directDataPath });
   try {
     agentWorkspace.createWorkspace({
+      ...actor,
+      ownerUserId: actor.actorUserId,
       workspaceId,
       title: "Workspace scoped summarization",
       objective: "Verify summarization runtime consumes workspace context"
@@ -63,7 +71,7 @@ async function verifySummarizationWorkspaceContextHotSwap() {
       knowledgeScope: {
         includeSourceIds: ["summary-source-a"]
       }
-    });
+    }, actor);
 
     let searchInput = null;
     let allocatorCallCount = 0;
@@ -145,6 +153,7 @@ async function verifySummarizationWorkspaceContextHotSwap() {
     });
 
     const result = await summarizationRuntime.startRun({
+      ...actor,
       workspaceId,
       query: "供应商 发票抬头 预算审批",
       limit: 4,
@@ -176,10 +185,20 @@ async function verifySummarizationWorkspaceContextHotSwap() {
 await verifySummarizationWorkspaceContextHotSwap();
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-multi-agent-summarization-"));
+const featureProfilePath = path.join(userDataPath, "feature-profile.json");
+await fs.writeFile(
+  featureProfilePath,
+  `${JSON.stringify({
+    name: "multi-agent-summarization-verifier",
+    enableFeatures: ["knowledge-distillation"]
+  }, null, 2)}\n`,
+  "utf8"
+);
 const server = await startHttpServer({
   userDataPath,
   runtimeOptions: {
-    profile: "minimal"
+    profile: "minimal",
+    featureProfile: featureProfilePath
   }
 });
 await installAuthenticatedFetch(server);
@@ -198,7 +217,7 @@ try {
 
   const profiles = await fetchJson(`${server.url}/api/context/profiles`);
   assert.equal(profiles.protocolVersion, "v0.0.1:agent:context-1");
-  assert.equal(profiles.profiles.some((profile) => profile.profileId === "balanced"), true);
+  assert.equal(profiles.profiles.some((profile) => profile.profileId === "context-128k"), true);
 
   const created = await fetchJson(`${server.url}/api/knowledge/summarization/runs`, {
     method: "POST",

@@ -8,7 +8,7 @@ import {
 
 export const PRODUCTION_HEALTH_REPORT_TYPE = "v0.0.1:platform:production-health-1";
 export const PRODUCTION_READINESS_REPORT_TYPE = "v0.0.1:platform:production-readiness-1";
-export const DEFAULT_PRODUCTION_READINESS_REPORT_ROOT = "docs/reports/history/production-readiness";
+export const DEFAULT_PRODUCTION_READINESS_REPORT_ROOT = "build/reports/production-readiness";
 
 const defaultRepoRoot = path.resolve(fileURLToPath(new URL("../../../..", import.meta.url)));
 

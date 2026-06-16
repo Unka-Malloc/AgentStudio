@@ -6,8 +6,8 @@
  * Allowed paths:
  *   - external-services/knowledge-distillation-service/** (sole algorithm surface)
  *   - server/platform/specialized/knowledge/invocation/external-distillation-service/index.mjs (external KD client, allows external.knowledge.distillation.*)
+ *   - server/platform/common/version-control/version-registry.json (governed historical token registry)
  *   - tests/** (migration regression tests, no-legacy assertions)
- *   - docs/reports/history/** (historical records)
  *   - server/scripts/verify-*.mjs active verification (may reference patterns for checking)
  *   - This script itself (must name what it forbids)
  *
@@ -15,7 +15,7 @@
  *   - server/platform/** (except external-distillation-service)
  *   - server-web/lib/** (production client libraries)
  *   - package.json (active scripts)
- *   - docs/** (active docs, except history)
+ *   - docs/** (active docs)
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -61,8 +61,8 @@ const forbiddenQuotedOperationIds = [
 const allowedPrefixes = [
   "external-services",
   "server/platform/specialized/knowledge/invocation/external-distillation-service",
+  "server/platform/common/version-control/version-registry.json",
   "tests/",
-  "docs/reports/history/",
   "server/scripts/assert-no-legacy-knowledge-distillation",
 ];
 
@@ -113,7 +113,7 @@ function collectJsonFiles(dir) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === "node_modules" || entry.name === ".git") continue;
-      if (fullPath.includes("/tests/") || fullPath.includes("/docs/reports/history/")) continue;
+      if (fullPath.includes("/tests/")) continue;
       results.push(...collectJsonFiles(fullPath));
     } else if (entry.name.endsWith(".json")) {
       results.push(fullPath);

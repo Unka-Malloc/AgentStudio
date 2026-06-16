@@ -1,12 +1,7 @@
 import { loadSettings } from "../common/platform-core/settings.mjs";
-import { createStrategyManagementProvider } from "../specialized/capabilities/strategy-management/strategy-management-provider.mjs";
 import { createToolSkillManagementProvider } from "../specialized/capabilities/skills/tool-skill-management-provider.mjs";
 import { createToolManagementPlatform } from "../specialized/capabilities/tools/tool-management-core/index.mjs";
 import { createToolManagementStore } from "../specialized/capabilities/tools/tool-management-core/store.mjs";
-import {
-  createExternalKnowledgeDistillationClient,
-  resolveExternalKnowledgeDistillationConfig
-} from "../specialized/knowledge/invocation/external-distillation-service/index.mjs";
 
 async function createProvider(enabled, specifier, exportName, args = []) {
   if (!enabled) {
@@ -22,6 +17,10 @@ async function createProvider(enabled, specifier, exportName, args = []) {
 
 function createExternalKnowledgeDistillationService({ userDataPath }) {
   async function clientFor(input = {}) {
+    const {
+      createExternalKnowledgeDistillationClient,
+      resolveExternalKnowledgeDistillationConfig
+    } = await import("../specialized/knowledge/invocation/external-distillation-service/index.mjs");
     const settings = await loadSettings(userDataPath);
     const config = resolveExternalKnowledgeDistillationConfig({ input, settings });
     return createExternalKnowledgeDistillationClient(config);
@@ -72,12 +71,14 @@ export function createServerToolSkillManagementProvider({
   toolManagementPlatform,
   userDataPath,
   securityPermissions,
+  skillHubEnabled = true,
   logger
 }) {
   return createToolSkillManagementProvider({
     toolManagementPlatform,
     userDataPath,
     securityPermissions,
+    skillHubEnabled,
     logger
   });
 }
@@ -98,6 +99,7 @@ export async function createServerRuntimeProviders({
   runtimeLogger,
   clientRuntimeAllocator,
   securityPermissions,
+  getJobWorkflowProvider = () => null,
   getToolManagementPlatform = () => null,
   isFeatureActive,
   isAnyFeatureActive
@@ -140,7 +142,8 @@ export async function createServerRuntimeProviders({
       agentMemory,
       clientRuntimeAllocator,
       agentGatewayCall: async (input = {}) => callAgentGatewayIfAvailable(input, {
-        settings: await loadSettings(userDataPath)
+        settings: await loadSettings(userDataPath),
+        contextCompactionSource: "context-runtime"
       })
     }]
   );
@@ -173,6 +176,7 @@ export async function createServerRuntimeProviders({
     [{
       userDataPath,
       jobManager,
+      getJobWorkflowProvider,
       protocolEventBus,
       watchingEnabled: process.env.PACT_SOURCE_WATCHER_EXTERNAL !== "1"
     }]
@@ -199,12 +203,21 @@ export async function createServerRuntimeProviders({
       })
     }]
   );
-  strategyManagementProvider = createStrategyManagementProvider({
-    userDataPath,
-    modelDecisionRuntime: baseModelDecisionRuntime,
-    getToolManagementPlatform
-  });
-  const modelDecisionRuntime = strategyManagementProvider.createModelDecisionRuntimePort();
+  const needsStrategyManagement = isFeatureActive("strategy-management") || Boolean(baseModelDecisionRuntime);
+  strategyManagementProvider = await createProvider(
+    needsStrategyManagement,
+    "../specialized/capabilities/strategy-management/strategy-management-provider.mjs",
+    "createStrategyManagementProvider",
+    [{
+      userDataPath,
+      modelDecisionRuntime: baseModelDecisionRuntime,
+      getToolManagementPlatform
+    }]
+  );
+  const modelDecisionRuntime =
+    typeof strategyManagementProvider?.createModelDecisionRuntimePort === "function"
+      ? strategyManagementProvider.createModelDecisionRuntimePort()
+      : baseModelDecisionRuntime;
   const evidenceSufficiencyGate = await createProvider(
     isFeatureActive("knowledge-distillation"),
     "../specialized/knowledge/retrieval/evidence-sufficiency-gate/index.mjs",
@@ -259,7 +272,9 @@ export async function createServerRuntimeProviders({
       knowledgeAgentSkill
     }]
   );
-  const knowledgeDistillationService = createExternalKnowledgeDistillationService({ userDataPath });
+  const knowledgeDistillationService = isAnyFeatureActive("external-knowledge-distillation", "knowledge-evolution")
+    ? createExternalKnowledgeDistillationService({ userDataPath })
+    : null;
   const knowledgeEvolutionRuntime = await createProvider(
     isFeatureActive("knowledge-evolution"),
     "../specialized/knowledge/invocation/knowledge-evolution-runtime/index.mjs",

@@ -484,10 +484,10 @@ export function createSystemControllerKnowledgeRuntimeHandlers({
         errorMessage: "读取知识 Skill 列表失败。"
       });
     },
-    async handleKnowledgeSkillGet({ operation, skillId, response, authSession }) {
+    async handleKnowledgeSkillGet({ operation, skillId, playbookId, response, authSession }) {
       await sendConsoleDomainOperation({
         operationId: operation?.id || "knowledge.skills.get",
-        input: { skillId },
+        input: { skillId: skillId || playbookId, playbookId: playbookId || skillId },
         response,
         context: knowledgeWorkflowContext(authSession),
         errorMessage: "读取知识 Skill 失败。"
@@ -511,12 +511,13 @@ export function createSystemControllerKnowledgeRuntimeHandlers({
         errorMessage: "提交知识 Skill 提案失败。"
       });
     },
-    async handleKnowledgeSkillResolve({ operation, requestBody, skillId, response, authSession }) {
+    async handleKnowledgeSkillResolve({ operation, requestBody, skillId, playbookId, response, authSession }) {
       await sendConsoleDomainOperation({
         operationId: operation?.id || "knowledge.skills.resolve",
         input: {
           ...parseJsonBody(requestBody),
-          skillId
+          skillId: skillId || playbookId,
+          playbookId: playbookId || skillId
         },
         response,
         context: knowledgeWorkflowContext(authSession),

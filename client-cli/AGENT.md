@@ -13,7 +13,7 @@
   targets.
 - Use `client-cli/src/lib.rs` as the module map, then open only the relevant
   module.
-- Use `docs/CLIENT_ARCHITECTURE.md` only when the CLI boundary with the desktop
+- Use `docs/functionality/CLIENT-DESKTOP.md` only when the CLI boundary with the desktop
   client or runtime model is unclear.
 
 ## Directory Routing

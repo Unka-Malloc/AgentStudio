@@ -8,11 +8,6 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createBatchDeletionCoordinator } from "../client/work-queue-core/batch-deletion-coordinator.mjs";
 import { resolveArchiveBatchIdentity } from "../client/work-queue-core/archive-batch-id.mjs";
-import { createClientRuntimeAllocator } from "../client/client-runtime-core/client-runtime-allocator.mjs";
-import {
-  buildClientRuntimeBootstrapPlan,
-  buildClientRuntimeBootstrapPull
-} from "../client/client-runtime-core/client-runtime-bootstrap.mjs";
 import {
   acknowledgeQueueMonitorAlert,
   inspectQueueMonitor,
@@ -51,6 +46,7 @@ import {
 import { handlePactMcpHttpRequest } from "../../platform/common/mcp/http-mcp-adapter.mjs";
 import { loadOrCreateMcpIdentity } from "../../platform/common/mcp/identity.mjs";
 import { ServerConfig } from "../../platform/common/config/ServerConfig.mjs";
+import { cleanupImportArtifacts } from "../../platform/common/storage/import-resume-store.mjs";
 import { createJobsController } from "../../platform/common/console/http/controllers/jobs-controller.mjs";
 import { createSystemController } from "../../platform/common/console/http/controllers/system-controller.mjs";
 import { getAcpAgentRelayRuntime } from "../../platform/specialized/console/console-domain-operation-executor.mjs";
@@ -63,6 +59,29 @@ import {
 } from "../../platform/common/console/http/http-utils.mjs";
 
 const sourceCheckoutRoot = path.resolve(fileURLToPath(new URL("../../..", import.meta.url)));
+
+async function createOptionalClientRuntimeSupport({ enabled, userDataPath }) {
+  if (!enabled) {
+    return {
+      clientRuntimeAllocator: null,
+      clientRuntimeBootstrap: null
+    };
+  }
+  const [
+    allocatorModule,
+    bootstrapModule
+  ] = await Promise.all([
+    import("../client/client-runtime-core/client-runtime-allocator.mjs"),
+    import("../client/client-runtime-core/client-runtime-bootstrap.mjs")
+  ]);
+  return {
+    clientRuntimeAllocator: allocatorModule.createClientRuntimeAllocator({ userDataPath }),
+    clientRuntimeBootstrap: {
+      buildPlan: bootstrapModule.buildClientRuntimeBootstrapPlan,
+      buildPull: bootstrapModule.buildClientRuntimeBootstrapPull
+    }
+  };
+}
 
 function isPathInside(parentPath, candidatePath) {
   const relative = path.relative(path.resolve(parentPath), path.resolve(candidatePath));
@@ -104,10 +123,23 @@ function isLoopbackHostname(hostname = "") {
     normalized.startsWith("127.");
 }
 
-export function proxyShouldForwardCredentials({ targetBaseUrl = "", discoveryState = {} } = {}) {
+export function resolveProxyUpstreamUrl({ requestUrl = "/", targetBaseUrl = "" } = {}) {
+  const target = new URL(String(targetBaseUrl || ""));
+  if (target.protocol !== "http:" && target.protocol !== "https:") {
+    throw new Error("Forward proxy targetBaseUrl must use http or https.");
+  }
+  const localRequestUrl = new URL(String(requestUrl || "/"), "http://127.0.0.1");
+  return new URL(`${localRequestUrl.pathname}${localRequestUrl.search}`, `${target.origin}/`);
+}
+
+export function proxyShouldForwardCredentials({ targetBaseUrl = "", upstreamUrl = "", discoveryState = {} } = {}) {
   const targetHost = hostnameFromUrl(targetBaseUrl);
   const targetOrigin = originFromUrl(targetBaseUrl);
   if (!targetHost || !targetOrigin) {
+    return false;
+  }
+  const upstreamOrigin = upstreamUrl ? originFromUrl(upstreamUrl) : targetOrigin;
+  if (upstreamOrigin !== targetOrigin) {
     return false;
   }
   if (isLoopbackHostname(targetHost)) {
@@ -137,7 +169,7 @@ async function proxyApiRequest({
   discoveryState,
   logger = null
 }) {
-  const upstreamUrl = new URL(request.url || "/", targetBaseUrl);
+  const upstreamUrl = resolveProxyUpstreamUrl({ requestUrl: request.url || "/", targetBaseUrl });
   const startedAt = Date.now();
   logger?.info?.("http.proxy.started", {
     requestId: request.__pactRequestId || "",
@@ -164,7 +196,7 @@ async function proxyApiRequest({
     "cookie",
     "x-pact-tool-token"
   ]);
-  const forwardCredentials = proxyShouldForwardCredentials({ targetBaseUrl, discoveryState });
+  const forwardCredentials = proxyShouldForwardCredentials({ targetBaseUrl, upstreamUrl: upstreamUrl.toString(), discoveryState });
 
   for (const [name, value] of Object.entries(request.headers || {})) {
     if (!value) {
@@ -675,6 +707,26 @@ function resolveHttpRateLimits(runtimeOptions = {}) {
   };
 }
 
+function legacyOwnerSubjectFromConsoleAuth(consoleAuth, initialOwner = {}) {
+  const users = typeof consoleAuth?.listUsers === "function" ? consoleAuth.listUsers() : [];
+  const owner =
+    initialOwner?.user ||
+    users.find((user) => user.roleId === "owner") ||
+    users.find((user) => user.roleId === "admin") ||
+    users[0] ||
+    null;
+  if (!owner) {
+    return null;
+  }
+  return {
+    subjectId: owner.userId || owner.subjectId || owner.username || "",
+    userId: owner.userId || owner.subjectId || "",
+    username: owner.username || "",
+    roleId: owner.roleId || owner.role || "",
+    tenantId: owner.tenantId || ""
+  };
+}
+
 export async function startHttpServer({
   userDataPath,
   distPath,
@@ -703,6 +755,23 @@ export async function startHttpServer({
     logDir: runtimeLogger.logDir,
     retentionDays: runtimeLogger.retentionDays
   });
+  try {
+    const cleanupResult = await cleanupImportArtifacts({
+      userDataPath: resolvedUserDataPath,
+      batchId: "",
+      rawObjectBatchId: "",
+      cleanupTemp: runtimeOptions.cleanRuntimeTempOnStart !== false
+    });
+    if (cleanupResult.deletedTempFiles.length > 0) {
+      runtimeLogger.info("server.runtime_temp.cleaned", {
+        deletedTempFiles: cleanupResult.deletedTempFiles.length
+      });
+    }
+  } catch (error) {
+    runtimeLogger.warn("server.runtime_temp.cleanup_failed", {
+      error: summarizeError(error)
+    });
+  }
   const compositionRoot = await createServerCompositionRoot({
     userDataPath: resolvedUserDataPath,
     runtimeOptions,
@@ -723,6 +792,7 @@ export async function startHttpServer({
     dataStructures,
     consoleAuth,
     securityPermissions,
+    processIdentity,
     operationAuditStore,
     operationConcurrencyScope,
     protocolEventBus,
@@ -744,6 +814,7 @@ export async function startHttpServer({
     consoleAuth,
     enabled: consoleAuthEnabled
   });
+  const legacyOwnerSubject = legacyOwnerSubjectFromConsoleAuth(consoleAuth, initialOwner);
   let initialCredentialsPath = "";
   if (initialOwner.created) {
     // H-1: write credentials to a file with mode 0600 instead of printing them to stdout
@@ -779,7 +850,8 @@ export async function startHttpServer({
       protocolEventBus,
       externalScheduler: process.env.PACT_PLATFORM_WORK_QUEUE !== "0" &&
         process.env.PACT_WORK_QUEUE_DISABLED !== "1",
-      logger: runtimeLogger
+      logger: runtimeLogger,
+      legacyOwnerSubject
     });
   const ownsJobManager = !incomingJobManager;
   const registeredMetadataStore = requirePlatformInterface(platformRegistry, "storage.metadataStore").value;
@@ -800,7 +872,13 @@ export async function startHttpServer({
     inspect: (input) => inspectQueueMonitor({ userDataPath: resolvedUserDataPath, ...input }),
     acknowledge: (alertId) => acknowledgeQueueMonitorAlert(resolvedUserDataPath, alertId)
   };
-  const clientRuntimeAllocator = createClientRuntimeAllocator({ userDataPath: resolvedUserDataPath });
+  const {
+    clientRuntimeAllocator,
+    clientRuntimeBootstrap
+  } = await createOptionalClientRuntimeSupport({
+    enabled: isFeatureActive("client-runtime-core"),
+    userDataPath: resolvedUserDataPath
+  });
   let discoveryState = await loadDiscoveryConfig(resolvedUserDataPath);
   let listenUrl = "";
   let controllersRef = null;
@@ -822,6 +900,7 @@ export async function startHttpServer({
     runtimeLogger,
     clientRuntimeAllocator,
     securityPermissions,
+    getJobWorkflowProvider: () => jobWorkflowProvider,
     getToolManagementPlatform: () => toolManagementPlatformRef,
     getToolSkillManagementProvider: () => toolSkillManagementProviderRef,
     isFeatureActive,
@@ -846,6 +925,29 @@ export async function startHttpServer({
   } = runtimeProviders;
   const exposedMaintenanceAgent = maintenanceAgent;
   const exposedKnowledgeSourceService = knowledgeSourceService;
+  if (legacyOwnerSubject && typeof agentWorkspace?.migrateOwnerlessWorkspaces === "function") {
+    const migration = agentWorkspace.migrateOwnerlessWorkspaces(legacyOwnerSubject);
+    if (migration?.migratedCount > 0) {
+      runtimeLogger.info("agent_workspaces.ownerless.migrated", {
+        migratedCount: migration.migratedCount,
+        ownerSubjectId: legacyOwnerSubject.subjectId,
+        ownerRoleId: legacyOwnerSubject.roleId
+      });
+    }
+  }
+  if (
+    typeof jobManager?.listJobOwnerships === "function" &&
+    typeof registeredMetadataStore?.migrateRawObjectOwnershipFromJobs === "function"
+  ) {
+    const rawObjectMigration = registeredMetadataStore.migrateRawObjectOwnershipFromJobs(
+      await jobManager.listJobOwnerships()
+    );
+    if (rawObjectMigration?.migratedCount > 0) {
+      runtimeLogger.info("raw_objects.ownerless.migrated", {
+        migratedCount: rawObjectMigration.migratedCount
+      });
+    }
+  }
   if (process.env.PACT_PLATFORM_WORK_QUEUE !== "0" && process.env.PACT_WORK_QUEUE_DISABLED !== "1") {
     jobWorkflowProvider = await createQueuedJobWorkflowProvider({
       userDataPath: resolvedUserDataPath,
@@ -887,6 +989,7 @@ export async function startHttpServer({
     protocolEventBus,
     consoleAuth,
     securityPermissions,
+    processIdentity,
     operationAuditStore,
     maintenanceAgent: exposedMaintenanceAgent,
     knowledgeSourceService: exposedKnowledgeSourceService,
@@ -904,10 +1007,7 @@ export async function startHttpServer({
     summarizationRuntime,
     agentExplorationRuntime,
     clientRuntimeAllocator,
-    clientRuntimeBootstrap: {
-      buildPlan: buildClientRuntimeBootstrapPlan,
-      buildPull: buildClientRuntimeBootstrapPull
-    },
+    clientRuntimeBootstrap,
     queueMonitor: queueMonitorAdapter,
     checkpointTreeApi: dataStructures.checkpointTree,
     devopsProvider: registeredDevopsProvider,
@@ -959,6 +1059,7 @@ export async function startHttpServer({
     toolManagementPlatform,
     userDataPath: resolvedUserDataPath,
     securityPermissions,
+    skillHubEnabled: isFeatureActive("skill-hub"),
     logger: runtimeLogger
   });
   toolSkillManagementProviderRef = toolSkillManagementProvider;
@@ -1193,6 +1294,7 @@ export async function startHttpServer({
           authorizeOperation: consoleAuthEnabled
             ? (input) => securityPermissions.authorizeOperation(input)
             : null,
+          verifyProcessIdentity: (input) => securityPermissions.verifyProcessIdentity(input),
           operationAuditStore,
           concurrencyScope: operationConcurrencyScope,
           logger: runtimeLogger
@@ -1260,6 +1362,7 @@ export async function startHttpServer({
         authorizeOperation: consoleAuthEnabled
           ? (input) => securityPermissions.authorizeOperation(input)
           : null,
+        verifyProcessIdentity: (input) => securityPermissions.verifyProcessIdentity(input),
         operationAuditStore,
         concurrencyScope: operationConcurrencyScope,
         logger: runtimeLogger

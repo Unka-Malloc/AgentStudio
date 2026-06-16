@@ -199,7 +199,6 @@ const forbiddenProjectRuntimeDefaultPatterns = [
 ];
 
 const placeholderPathPolicyExcludedPaths = new Set([
-  "docs/reports/history",
   "tests/fixtures",
   "tests/verify-root-hygiene.mjs"
 ]);

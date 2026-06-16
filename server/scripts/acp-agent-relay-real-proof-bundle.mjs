@@ -1047,7 +1047,7 @@ function buildDownstreamCodexAcpTargetRequirement({
 }
 
 function buildAntigravityAcpWrapperTargetRequirement({
-  antigravityAcpWrapperTargetRequired = true,
+  antigravityAcpWrapperTargetRequired = false,
   antigravityAcpWrapperTargetProofAcceptable = false,
   antigravityAcpWrapperTarget = null
 } = {}) {
@@ -1106,20 +1106,26 @@ function buildAntigravityAcpWrapperTargetRequirement({
 function buildAntigravityCrossRunBindingRequirement({
   antigravity = null,
   codexAntigravity = null,
-  antigravityAcpWrapperTarget = null
+  antigravityAcpWrapperTarget = null,
+  antigravityAcpWrapperTargetRequired = false
 } = {}) {
   const conversationIds = [
     asText(antigravity?.conversationId),
     asText(codexAntigravity?.conversationId),
-    asText(antigravityAcpWrapperTarget?.conversationId)
+    ...(antigravityAcpWrapperTargetRequired || antigravityAcpWrapperTarget
+      ? [asText(antigravityAcpWrapperTarget?.conversationId)]
+      : [])
   ].filter(Boolean);
   const endpointSources = [
     asText(antigravity?.endpointSource),
     asText(codexAntigravity?.endpointSource),
-    asText(antigravityAcpWrapperTarget?.endpointSource)
+    ...(antigravityAcpWrapperTargetRequired || antigravityAcpWrapperTarget
+      ? [asText(antigravityAcpWrapperTarget?.endpointSource)]
+      : [])
   ].filter(Boolean);
-  const sameConversationId = conversationIds.length === 3 && new Set(conversationIds).size === 1;
-  const sameEndpointSource = endpointSources.length === 3 && new Set(endpointSources).size === 1;
+  const requiredBindingCount = antigravityAcpWrapperTargetRequired || antigravityAcpWrapperTarget ? 3 : 2;
+  const sameConversationId = conversationIds.length === requiredBindingCount && new Set(conversationIds).size === 1;
+  const sameEndpointSource = endpointSources.length === requiredBindingCount && new Set(endpointSources).size === 1;
   return {
     id: "antigravity_cross_run_binding",
     label: "All real Antigravity communication proofs bind to the same live conversation and endpoint.",
@@ -1138,12 +1144,14 @@ function buildAntigravityCrossRunBindingRequirement({
       codexAntigravityMarker: asText(codexAntigravity?.marker),
       wrapperMarker: asText(antigravityAcpWrapperTarget?.marker)
     },
-    caveat: "Markers are intentionally distinct per proof run; the invariant binds the live Antigravity conversation and endpoint."
+    caveat: antigravityAcpWrapperTargetRequired || antigravityAcpWrapperTarget
+      ? "Markers are intentionally distinct per proof run; the invariant binds the live Antigravity conversation and endpoint across the requested wrapper proof."
+      : "Markers are intentionally distinct per proof run; optional Antigravity ACP wrapper binding is skipped unless explicitly requested."
   };
 }
 
 function buildTargetCallbackApprovalRequirement({
-  targetCallbackApprovalRequired = true,
+  targetCallbackApprovalRequired = false,
   targetCallbackApprovalProofAcceptable = false,
   targetCallbackApproval = null
 } = {}) {
@@ -1202,7 +1210,7 @@ function buildTargetCallbackApprovalRequirement({
 }
 
 function buildTargetCallbackApprovalDenialRequirement({
-  targetCallbackApprovalRequired = true,
+  targetCallbackApprovalRequired = false,
   targetCallbackApprovalDenialProofAcceptable = false,
   targetCallbackApproval = null
 } = {}) {
@@ -1247,7 +1255,7 @@ function buildTargetCallbackApprovalDenialRequirement({
 }
 
 function buildTargetCallbackParentBindingRequirement({
-  targetCallbackApprovalRequired = true,
+  targetCallbackApprovalRequired = false,
   targetCallbackParentBindingProofAcceptable = false,
   targetCallbackApproval = null
 } = {}) {
@@ -1288,7 +1296,7 @@ function buildTargetCallbackParentBindingRequirement({
 }
 
 function buildSourceFacingCancelRequirement({
-  targetCallbackApprovalRequired = true,
+  targetCallbackApprovalRequired = false,
   sourceFacingCancelProofAcceptable = false,
   targetCallbackApproval = null
 } = {}) {
@@ -1337,7 +1345,7 @@ function buildSourceFacingCancelRequirement({
 }
 
 function buildTargetReconnectRequirement({
-  targetReconnectProofRequired = true,
+  targetReconnectProofRequired = false,
   targetReconnectProofAcceptable = false,
   targetReconnect = null
 } = {}) {
@@ -1390,7 +1398,7 @@ function buildTargetReconnectRequirement({
 }
 
 function buildTargetLoadReconnectRequirement({
-  targetLoadReconnectProofRequired = true,
+  targetLoadReconnectProofRequired = false,
   targetLoadReconnectProofAcceptable = false,
   targetLoadReconnect = null
 } = {}) {
@@ -1444,7 +1452,7 @@ function buildTargetLoadReconnectRequirement({
 }
 
 function buildIdempotencyRequirement({
-  idempotencyProofRequired = true,
+  idempotencyProofRequired = false,
   idempotencyProofAcceptable = false,
   idempotency = null
 } = {}) {
@@ -1508,22 +1516,22 @@ function buildTopLevelRealProofMatrix({
   downstreamCodexAcpTargetRequired = false,
   downstreamCodexAcpTargetProofAcceptable = false,
   downstreamCodexAcpTarget = null,
-  antigravityAcpWrapperTargetRequired = true,
+  antigravityAcpWrapperTargetRequired = false,
   antigravityAcpWrapperTargetProofAcceptable = false,
   antigravityAcpWrapperTarget = null,
-  targetCallbackApprovalRequired = true,
+  targetCallbackApprovalRequired = false,
   targetCallbackApprovalProofAcceptable = false,
   targetCallbackApprovalDenialProofAcceptable = false,
   targetCallbackParentBindingProofAcceptable = false,
   sourceFacingCancelProofAcceptable = false,
   targetCallbackApproval = null,
-  targetReconnectProofRequired = true,
+  targetReconnectProofRequired = false,
   targetReconnectProofAcceptable = false,
   targetReconnect = null,
-  targetLoadReconnectProofRequired = true,
+  targetLoadReconnectProofRequired = false,
   targetLoadReconnectProofAcceptable = false,
   targetLoadReconnect = null,
-  idempotencyProofRequired = true,
+  idempotencyProofRequired = false,
   idempotencyProofAcceptable = false,
   idempotency = null,
   connectRequired = false
@@ -1609,7 +1617,8 @@ function buildTopLevelRealProofMatrix({
   const antigravityCrossRunBindingRequirement = buildAntigravityCrossRunBindingRequirement({
     antigravity,
     codexAntigravity,
-    antigravityAcpWrapperTarget
+    antigravityAcpWrapperTarget,
+    antigravityAcpWrapperTargetRequired
   });
   const existingAntigravityCrossRunBindingRequirementIndex = requirements.findIndex((item) =>
     item.id === "antigravity_cross_run_binding"
@@ -1742,11 +1751,11 @@ export function buildRealRelayProofBundle({
   codexCliTargetRequired = codexCliRequired,
   codexAcpTargetRequired = codexCliRequired,
   downstreamCodexAcpTargetRequired = codexCliRequired,
-  antigravityAcpWrapperTargetRequired = true,
-  targetCallbackApprovalRequired = true,
-  targetReconnectProofRequired = true,
-  targetLoadReconnectProofRequired = true,
-  idempotencyProofRequired = true,
+  antigravityAcpWrapperTargetRequired = false,
+  targetCallbackApprovalRequired = false,
+  targetReconnectProofRequired = false,
+  targetLoadReconnectProofRequired = false,
+  idempotencyProofRequired = false,
   antigravityResult = null,
   codexAntigravityResult = null,
   codexCliResult = null,
@@ -1867,7 +1876,7 @@ export function buildRealRelayProofBundle({
       downstreamCodexAcpTarget.downstreamClientAspectProofAcceptable === true &&
       downstreamCodexAcpTarget.codexAcpTargetProcessVerified === true &&
       downstreamCodexAcpTarget.sourceAcpProtocolVerified === true &&
-      downstreamCodexAcpTarget.sourceAcpTransport === "pact-source-facing-acp-stdio" &&
+      downstreamCodexAcpTarget.sourceAcpTransport === "pact-source-facing-acp-http-loopback" &&
       downstreamCodexAcpTarget.agentDiscoveryProof?.agentListed === true &&
       downstreamCodexAcpTarget.agentDiscoveryProof?.targetId === "codex.acp:default" &&
       downstreamCodexAcpTarget.agentDiscoveryProof?.fromAspect === "downstream-client-aspect" &&

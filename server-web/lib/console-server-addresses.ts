@@ -111,8 +111,9 @@ export async function probeServerAddressUrl(value: string, timeoutMs = 5_000) {
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const url = new URL("/api/bootstrap", nextUrl).toString();
   try {
-    const response = await fetch(new URL("/api/bootstrap", nextUrl).toString(), {
+    const response = await fetch(url, {
       method: "GET",
       headers: { Accept: "application/json" },
       mode: "no-cors",

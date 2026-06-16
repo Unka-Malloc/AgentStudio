@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "v0.0.1:schema:definition-1",
+  "bundleType": "pact.playbook-framework.bundle",
+  "playbookFrameworkId": "pact.default-agentlibrary-playbook-framework",
+  "legacySkillFrameworkId": "pact.default-knowledge-skill-framework",
+  "version": "v0.0.1:knowledge:playbook-framework-1",
+  "files": {
+    "framework": "framework.json",
+    "dependencies": "dependencies.json",
+    "readme": "README.md"
+  },
+  "lightweightBundle": true
+}

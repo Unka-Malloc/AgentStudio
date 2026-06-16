@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'theme.dart';
 
+const double _historySessionRowHeight = 84;
+
 class HistorySessionPanelItem {
   const HistorySessionPanelItem({
     required this.id,
@@ -33,6 +35,7 @@ class HistorySessionPanel extends StatefulWidget {
     required this.onSelect,
     required this.onDelete,
     this.initiallyExpanded = true,
+    this.maxListHeight = 230,
   });
 
   final String title;
@@ -41,6 +44,7 @@ class HistorySessionPanel extends StatefulWidget {
   final ValueChanged<String> onSelect;
   final ValueChanged<String> onDelete;
   final bool initiallyExpanded;
+  final double maxListHeight;
 
   @override
   State<HistorySessionPanel> createState() => _HistorySessionPanelState();
@@ -106,7 +110,7 @@ class _HistorySessionPanelState extends State<HistorySessionPanel> {
           if (expanded) ...[
             const Divider(height: 1),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 230),
+              constraints: BoxConstraints(maxHeight: widget.maxListHeight),
               child: widget.items.isEmpty
                   ? Padding(
                       padding: const EdgeInsets.all(14),
@@ -164,8 +168,8 @@ class _HistorySessionRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         onTap: item.disabled ? null : () => onSelect(item.id),
         child: Container(
-          height: 74,
-          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+          height: _historySessionRowHeight,
+          padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
           decoration: BoxDecoration(
             border: Border.all(color: borderColor),
             borderRadius: BorderRadius.circular(8),
@@ -191,20 +195,14 @@ class _HistorySessionRow extends StatelessWidget {
                         item.meta,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: colors.textMuted,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: colors.textMuted, fontSize: 12),
                       ),
                     if (item.preview.isNotEmpty)
                       Text(
                         item.preview,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: colors.textMuted,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: colors.textMuted, fontSize: 12),
                       ),
                   ],
                 ),

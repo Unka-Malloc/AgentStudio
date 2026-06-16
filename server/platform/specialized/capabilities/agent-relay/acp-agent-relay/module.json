@@ -58,6 +58,7 @@
         "acp_agent_relay.virtual_agents.upsert",
         "acp_agent_relay.targets.list",
         "acp_agent_relay.targets.upsert",
+        "acp_agent_relay.targets.upsert_local_executable",
         "acp_agent_relay.downstream_clients.refresh",
         "acp_agent_relay.sessions.list",
         "acp_agent_relay.sessions.get",

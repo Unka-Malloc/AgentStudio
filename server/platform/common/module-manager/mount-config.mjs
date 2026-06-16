@@ -1,69 +1,11 @@
-import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   atomicWriteJson,
   queueStateMutation,
   waitForStateIdle
 } from "../platform-core/state-coordinator.mjs";
-
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_IMPORT_FILE_TYPES_PATH = path.resolve(MODULE_DIR, "../../../config/default-import-file-types.json");
-
-function routeTarget(value = {}) {
-  const mountName = String(value?.mountName || value?.mount || "").trim();
-  if (!mountName) {
-    return null;
-  }
-  return {
-    mountName,
-    action: String(value?.action || value?.capability || "extractDocument").trim() || "extractDocument"
-  };
-}
-
-function readDefaultImportRoutes() {
-  try {
-    const raw = JSON.parse(fsSync.readFileSync(
-      path.resolve(process.env.PACT_IMPORT_FILE_TYPES_PATH || DEFAULT_IMPORT_FILE_TYPES_PATH),
-      "utf8"
-    ));
-    const kindRoutes = Object.fromEntries(
-      Object.entries(raw.kindRoutes || {})
-        .map(([kind, route]) => [String(kind || "").trim(), routeTarget(route)])
-        .filter(([kind, route]) => Boolean(kind && route))
-    );
-    const extensionRoutes = {};
-    const mediaTypeRoutes = {};
-    for (const group of Array.isArray(raw.groups) ? raw.groups : []) {
-      for (const entry of Array.isArray(group.entries) ? group.entries : []) {
-        const route = routeTarget(entry.route || group.route || {});
-        if (!route) {
-          continue;
-        }
-        for (const extension of Array.isArray(entry.extensions) ? entry.extensions : []) {
-          const normalizedExtension = String(extension || "").toLowerCase().trim();
-          if (normalizedExtension) {
-            extensionRoutes[normalizedExtension.startsWith(".") ? normalizedExtension : `.${normalizedExtension}`] = route;
-          }
-        }
-        for (const mediaType of [
-          entry.mediaType || group.mediaType || "",
-          ...(Array.isArray(entry.mediaTypes) ? entry.mediaTypes : []),
-          ...(Array.isArray(group.mediaTypes) ? group.mediaTypes : [])
-        ]) {
-          const normalizedMediaType = String(mediaType || "").toLowerCase().trim();
-          if (normalizedMediaType) {
-            mediaTypeRoutes[normalizedMediaType] = route;
-          }
-        }
-      }
-    }
-    return { kindRoutes, extensionRoutes, mediaTypeRoutes };
-  } catch {
-    return { kindRoutes: {}, extensionRoutes: {}, mediaTypeRoutes: {} };
-  }
-}
+import { getImportDefaultRoutingTable } from "./import-file-types.mjs";
 
 export const CORE_MOUNT_NAMES = [
   "analysis",
@@ -113,7 +55,7 @@ export function normalizeMountRouting(value = {}) {
     kindRoutes: defaultKindRouteTargets,
     extensionRoutes: defaultExtensionRouteTargets,
     mediaTypeRoutes: defaultMediaTypeRouteTargets
-  } = readDefaultImportRoutes();
+  } = getImportDefaultRoutingTable();
   const kindRoutes = {
     ...Object.fromEntries(
       Object.entries(defaultKindRouteTargets).map(([kind, route]) => [

@@ -27,8 +27,8 @@ function assertPatterns(text, patterns = [], label = "") {
 }
 
 const files = {
-  document: await fs.readFile(new URL("../../docs/ACP-AGENT-RELAY-STATE-MACHINE.md", import.meta.url), "utf8"),
-  design: await fs.readFile(new URL("../../docs/ACP-AGENT-RELAY-DESIGN.md", import.meta.url), "utf8"),
+  document: await fs.readFile(new URL("../../docs/state-machine/STATE-MACHINES.md", import.meta.url), "utf8"),
+  design: await fs.readFile(new URL("../../docs/functionality/AGENT-COLLABORATION.md", import.meta.url), "utf8"),
   runtimeTest: await fs.readFile(
     new URL("../../tests/vitest/server/acp-agent-relay-runtime.test.mjs", import.meta.url),
     "utf8"
@@ -72,7 +72,7 @@ const files = {
 };
 
 assert.equal(spec.schemaVersion, "v0.0.1:agent:acp-agent-relay-state-machine-spec-1");
-assert.equal(spec.documentPath, "docs/ACP-AGENT-RELAY-STATE-MACHINE.md");
+assert.equal(spec.documentPath, "docs/state-machine/STATE-MACHINES.md");
 assert.equal(spec.domains.length, 10, "ACP relay state machine must remain a ten-domain composite state tuple.");
 assertNeedles(files.design, ["ACP Agent Relay State Machine", "complete source-to-Pact-to-target transition model"], "design doc");
 assertNeedles(

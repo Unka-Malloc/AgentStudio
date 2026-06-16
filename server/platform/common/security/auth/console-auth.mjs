@@ -37,6 +37,7 @@ export const CONSOLE_SCOPES = [
   "repo:approve",
   "repo:maintain",
   "repo:admin",
+  "model:call",
   "drive:read",
   "drive:write",
   "drive:sync",
@@ -76,6 +77,7 @@ export const CONSOLE_ROLES = {
       "repo:review",
       "repo:approve",
       "repo:maintain",
+      "model:call",
       "drive:read",
       "drive:write",
       "drive:sync",
@@ -100,6 +102,7 @@ export const CONSOLE_ROLES = {
       "maintenance:read",
       "maintenance:run",
       "maintenance:approve",
+      "model:call",
       "drive:read",
       "drive:write",
       "drive:sync"

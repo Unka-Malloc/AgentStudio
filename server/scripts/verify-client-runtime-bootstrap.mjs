@@ -152,6 +152,9 @@ function verifySelectivePullBundle() {
 
   assert.equal(pull.operation, "client_runtime.bootstrap.pull");
   assert.equal(pull.installation.artifactStatus, "inline-manifest");
+  assert.equal(pull.installation.requiresProcessIdentityProvisioning, true);
+  assert.equal(pull.installation.processIdentity.privateKeySource, "client-generated-ed25519");
+  assert.equal(pull.installation.processIdentity.claimEndpoint, "/api/process-identity/bootstrap/claim");
   assert.equal(pull.pull.mode, "selective-trimmed-client-runtime");
   assert.equal(pull.pull.completeClient, false);
   assert.equal(pull.pull.includesServerRepository, false);
@@ -190,6 +193,21 @@ function verifyOperationRegistry() {
   assert.equal(pullOperation.http.method, "POST");
   assert.equal(pullOperation.readOnly, true);
   assert.ok(pullOperation.requiredScopes.includes("knowledge:read"));
+
+  const claimOperation = operations.get("process_identity.bootstrap_claim");
+  assert.ok(claimOperation, "process_identity.bootstrap_claim operation must be registered");
+  assert.equal(claimOperation.http.path, "/api/process-identity/bootstrap/claim");
+  assert.equal(claimOperation.public, true);
+
+  const rotateOperation = operations.get("process_identity.package.rotate");
+  assert.ok(rotateOperation, "process_identity.package.rotate operation must be registered");
+  assert.equal(rotateOperation.processIdentity?.required, true);
+  assert.equal(rotateOperation.processIdentity?.authorizes, true);
+
+  const revokeOperation = operations.get("process_identity.package.revoke");
+  assert.ok(revokeOperation, "process_identity.package.revoke operation must be registered");
+  assert.equal(revokeOperation.processIdentity?.required, true);
+  assert.equal(revokeOperation.processIdentity?.authorizes, true);
 }
 
 function verifyToolCatalogExposure() {

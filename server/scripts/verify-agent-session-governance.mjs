@@ -11,22 +11,27 @@ import { SERVER_API_OPERATIONS } from "../platform/common/operation-dispatcher/o
 import { createToolCatalog } from "../platform/specialized/capabilities/tools/tool-management-core/catalog.mjs";
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-session-governance-"));
+const actor = { actorUserId: "session-governance-admin" };
 
 try {
   const workspaceRuntime = createAgentWorkspace({ userDataPath });
   try {
     const workspace = workspaceRuntime.createWorkspace({
+      ...actor,
+      ownerUserId: actor.actorUserId,
       workspaceId: "session-governance-ws",
       title: "Session Governance",
       objective: "Verify compare, merge proposal and archive"
     }).workspace;
     const root = workspaceRuntime.createSession({
+      ...actor,
       sessionId: "session-root",
       workspaceId: workspace.workspaceId,
       title: "Root Session",
       objective: "Root path"
     }).session;
     const shared = workspaceRuntime.appendSessionEvent({
+      ...actor,
       sessionId: root.sessionId,
       type: "artifact_update",
       title: "Shared baseline",
@@ -39,6 +44,7 @@ try {
     assert.equal(shared.sessionProtocolVersion, AGENT_SESSION_THREAD_VERSION);
 
     const forked = workspaceRuntime.forkSession({
+      ...actor,
       sessionId: root.sessionId,
       newSessionId: "session-branch",
       title: "Branch Session"
@@ -47,6 +53,7 @@ try {
     assert.equal(forked.session.parentSessionId, root.sessionId);
 
     workspaceRuntime.appendSessionEvent({
+      ...actor,
       sessionId: root.sessionId,
       type: "artifact_update",
       title: "Root revision",
@@ -57,6 +64,7 @@ try {
       }
     });
     workspaceRuntime.appendSessionEvent({
+      ...actor,
       sessionId: forked.session.sessionId,
       type: "artifact_update",
       title: "Branch revision",
@@ -68,6 +76,7 @@ try {
     });
 
     const comparison = workspaceRuntime.compareSessions({
+      ...actor,
       leftSessionId: root.sessionId,
       rightSessionId: forked.session.sessionId
     });
@@ -78,6 +87,7 @@ try {
     assert.equal(comparison.conflicts[0].targetId, "artifact-1");
 
     const proposal = workspaceRuntime.createSessionMergeProposal({
+      ...actor,
       targetSessionId: root.sessionId,
       sourceSessionId: forked.session.sessionId,
       resolutionHints: {
@@ -91,6 +101,7 @@ try {
     assert.equal(proposal.event.type, "session_merge_proposal");
 
     const archived = workspaceRuntime.archiveSession({
+      ...actor,
       sessionId: forked.session.sessionId,
       reason: "branch merged into review queue"
     });
@@ -99,6 +110,7 @@ try {
     assert.equal(archived.event.type, "session_archived");
 
     const archivedSession = workspaceRuntime.getSession({
+      ...actor,
       sessionId: forked.session.sessionId,
       includeEvents: true,
       eventLimit: 20

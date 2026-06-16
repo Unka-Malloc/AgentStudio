@@ -508,6 +508,47 @@ try {
   assert.equal(crossOriginLocalGrant.status, 403);
   assert.equal(crossOriginLocalGrant.payload.error.code, "local_pairing_required");
 
+  const dnsReboundLocalGrant = await fetchJson(`${server.url}/api/mcp/local-grant`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Host: "rebind.example.test",
+      Origin: "http://rebind.example.test"
+    },
+    body: JSON.stringify({
+      targets: ["codex"],
+      label: "verify-mcp-local-grant-dns-rebind"
+    })
+  });
+  assert.equal(dnsReboundLocalGrant.status, 403);
+  assert.equal(dnsReboundLocalGrant.payload.error.code, "local_pairing_required");
+
+  const dnsReboundLocalUninstall = await fetchJson(`${server.url}/api/mcp/local-uninstall`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Host: "rebind.example.test",
+      Origin: "http://rebind.example.test"
+    },
+    body: JSON.stringify({
+      targets: ["codex"],
+      connectorVersion: "verify"
+    })
+  });
+  assert.equal(dnsReboundLocalUninstall.status, 403);
+  assert.equal(dnsReboundLocalUninstall.payload.error.code, "local_pairing_required");
+
+  const unauthenticatedLocalUninstall = await fetchJson(`${server.url}/api/mcp/local-uninstall`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      targets: ["codex"],
+      connectorVersion: "verify"
+    })
+  });
+  assert.equal(unauthenticatedLocalUninstall.status, 401);
+  assert.equal(unauthenticatedLocalUninstall.payload.error.code, "local_uninstall_token_required");
+
   const localGrant = await fetchJson(`${server.url}/api/mcp/local-grant`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -551,6 +592,45 @@ try {
   assert.equal(localGrant.payload.connector.oneCommandPriorityInstallZhCN, localGrant.payload.connector.githubOneLinePriorityInstallCommandZhCN);
   assert.equal(localGrant.payload.connector.oneCommandClientInstallJson, localGrant.payload.connector.githubOneLineClientInstallJsonCommand);
   assert.equal(localGrant.payload.connector.oneCommandClientInstallJsonZhCN, localGrant.payload.connector.githubOneLineClientInstallJsonCommandZhCN);
+
+  const cursorGrant = await fetchJson(`${server.url}/api/mcp/local-grant`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      targets: ["cursor"],
+      label: "verify-mcp-local-uninstall-cursor",
+      connectorVersion: "verify"
+    })
+  });
+  assert.equal(cursorGrant.status, 201);
+  const targetMismatchLocalUninstall = await fetchJson(`${server.url}/api/mcp/local-uninstall`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Pact-Api-Key": cursorGrant.payload.token
+    },
+    body: JSON.stringify({
+      targets: ["codex"],
+      connectorVersion: "verify"
+    })
+  });
+  assert.equal(targetMismatchLocalUninstall.status, 403);
+  assert.equal(targetMismatchLocalUninstall.payload.error.code, "local_uninstall_target_denied");
+  const authenticatedLocalUninstall = await fetchJson(`${server.url}/api/mcp/local-uninstall`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Pact-Api-Key": cursorGrant.payload.token
+    },
+    body: JSON.stringify({
+      targets: ["cursor"],
+      connectorVersion: "verify"
+    })
+  });
+  assert.equal(authenticatedLocalUninstall.status, 200);
+  assert.equal(authenticatedLocalUninstall.payload.ok, true);
+  assert.equal(authenticatedLocalUninstall.payload.authorizedGrantId, cursorGrant.payload.grant.id);
+  assert.equal(authenticatedLocalUninstall.payload.updatedCount >= 1, true);
   assert.equal(
     localGrant.payload.connector.autoInstallCommand,
     `npx pact-mcp-connector@latest install --target auto --url '${server.url}' --json`
@@ -813,8 +893,8 @@ try {
   assert.equal(operationByName.get("pact.sharedspace.file.write")._meta.exchangeReceipt.schemaVersion, "v0.0.1:mcp:sharedspace-exchange-1");
   assert.ok(operationByName.get("pact.sharedspace.file.write")._meta.exchangeReceipt.locations.includes("structuredContent.exchange"));
   assert.ok(operationByName.get("pact.sharedspace.file.write")._meta.exchangeReceipt.fields.includes("checkpointId"));
-  assert.equal(operationByName.get("pact.agentRelay.templates.list")._meta.mcpOutlet, "pact.agentRelay");
-  assert.equal(operationByName.get("pact.agentRelay.virtualAgents.list")._meta.mcpOutlet, "pact.agentRelay");
+  assert.equal(operationByName.has("pact.agentRelay.templates.list"), false);
+  assert.equal(operationByName.has("pact.agentRelay.virtualAgents.list"), false);
   assert.equal(operationByName.has("pact.agentRelay.prompt"), false);
   assert.equal(operationByName.get("pact.repo.status")._meta.mcpOutlet, "pact.codespace");
   if (operationByName.has("pact.agentLibrary.skills.list")) {
@@ -835,16 +915,16 @@ try {
   assert.ok(localOutlets["pact.codespace"].operations.includes("pact.repo.status"));
   assert.ok(localOutlets["pact.skillHub"]);
   assert.ok(localOutlets["pact.agentRelay"]);
-  assert.ok(localOutlets["pact.agentRelay"].operations.includes("pact.agentRelay.templates.list"));
-  assert.ok(localOutlets["pact.agentRelay"].operations.includes("pact.agentRelay.virtualAgents.list"));
+  assert.equal(localOutlets["pact.agentRelay"].operations.includes("pact.agentRelay.templates.list"), false);
+  assert.equal(localOutlets["pact.agentRelay"].operations.includes("pact.agentRelay.virtualAgents.list"), false);
   if (localOutlets["pact.skillHub"].operations.includes("pact.agentLibrary.skills.list")) {
     assert.equal(operationByName.get("pact.agentLibrary.skills.list")._meta.mcpOutlet, "pact.skillHub");
   }
   assert.equal(localOutlets["pact.skillHub"].skillCatalog.visibleSkillCount, 1);
   assert.ok(localOutlets["pact.agentLibrary"].operations.includes("pact.agentLibrary.search"));
   const agentRelayFamily = localGrantCapabilities.payload.result.structuredContent.capabilityFamilies.agentRelay;
-  assert.equal(agentRelayFamily.available, true);
-  assert.equal(agentRelayFamily.canView, true);
+  assert.equal(agentRelayFamily.available, false);
+  assert.equal(agentRelayFamily.canView, false);
   assert.equal(agentRelayFamily.canOperate, false);
   assert.equal(agentRelayFamily.mcpOutlet, "pact.agentRelay");
   assert.equal(agentRelayFamily.templateOperation, "pact.agentRelay.templates.list");

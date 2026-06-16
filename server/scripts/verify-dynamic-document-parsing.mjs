@@ -353,7 +353,9 @@ async function assertRuntimeDefaultBinding() {
 async function assertMachineReadableFailureReason() {
   const runtime = createDocumentParsingRuntime();
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-dynamic-parse-failure-"));
-  const pdfPath = path.join(tempRoot, "empty.pdf");
+  const sourceRoot = path.join(tempRoot, "knowledge-sources", "local-sources");
+  await fs.mkdir(sourceRoot, { recursive: true });
+  const pdfPath = path.join(sourceRoot, "empty.pdf");
   await fs.writeFile(pdfPath, "%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n", "utf8");
 
   const emptyParserRuntime = {
@@ -401,6 +403,7 @@ async function assertFrontendBinding() {
   const knowledgeView = await read("server-web/views/KnowledgeView.vue");
   const knowledgeIngestPanel = await read("server-web/components/knowledge/KnowledgeIngestPanel.vue");
   const knowledgeViewConsole = await read("server-web/composables/useKnowledgeViewConsole.ts");
+  const knowledgeViewStateController = await read("server-web/composables/console-knowledge-view-state-controller.ts");
   const types = await read("server-web/lib/types.ts");
   const bridge = await read("server-web/lib/bridge.ts");
   const registry = await read("server/platform/common/operation-dispatcher/operation-registry.mjs");
@@ -432,12 +435,15 @@ async function assertFrontendBinding() {
     "granularityFragments",
     "parentArtifactId"
   ]) {
-    assert.ok(knowledgeViewConsole.includes(needle), `useKnowledgeViewConsole.ts must configure ${needle}`);
+    assert.ok(
+      knowledgeViewStateController.includes(needle),
+      `console-knowledge-view-state-controller.ts must configure ${needle}`
+    );
   }
   assert.match(
-    knowledgeViewConsole,
+    knowledgeViewStateController,
     /secondaryParse:\s*{\s*enabled:\s*false/,
-    "useKnowledgeViewConsole.ts must keep secondary parsing disabled by default"
+    "console-knowledge-view-state-controller.ts must keep secondary parsing disabled by default"
   );
 
   for (const [file, text] of [

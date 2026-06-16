@@ -252,13 +252,25 @@ export function createJobPipeline({ userDataPath, payload, runtime, reportProgre
         dynamicParsing: payload.documentParsing?.dynamicParsing || payload.dynamicParsing || {},
         documentParsing: payload.documentParsing || {}
       });
-      context.sources = documentParseResult.sources;
-      context.warnings.push(...(documentParseResult.warnings || []));
-      context.metadataStore.persistSources({
-        batchId: context.archiveBatchId,
-        sources: context.sources,
-        warnings: context.warnings,
-        rules: context.rules
+	      context.sources = documentParseResult.sources;
+	      for (const source of context.sources || []) {
+	        if (source?.rawObject) {
+	          source.rawObject.jobId = jobId;
+	          source.rawObject.ownerSubjectId = firstText(payload.ownerSubjectId, payload.ownerUserId, payload.ownerUsername);
+	          source.rawObject.ownerUserId = firstText(payload.ownerUserId, payload.ownerSubjectId);
+	          source.rawObject.ownerUsername = firstText(payload.ownerUsername);
+	        }
+	      }
+	      context.warnings.push(...(documentParseResult.warnings || []));
+	      context.metadataStore.persistSources({
+	        batchId: context.archiveBatchId,
+	        jobId,
+	        ownerSubjectId: firstText(payload.ownerSubjectId, payload.ownerUserId, payload.ownerUsername),
+	        ownerUserId: firstText(payload.ownerUserId, payload.ownerSubjectId),
+	        ownerUsername: firstText(payload.ownerUsername),
+	        sources: context.sources,
+	        warnings: context.warnings,
+	        rules: context.rules
       });
 
       context.reportProgress({

@@ -14,17 +14,20 @@ const PROTOCOL_VERSION = "v0.0.1:external-service:knowledge-distillation-1";
 const SERVICE_NAME = "external-knowledge-distillation";
 const SERVICE_KIND = "externalKnowledgeDistillation";
 const PORT = Number(process.env.PORT || process.env.SERVICE_PORT || 8799);
-const HOST = String(process.env.HOST || process.env.SERVICE_HOST || "0.0.0.0");
+const HOST = String(process.env.HOST || process.env.SERVICE_HOST || "127.0.0.1");
 const DATA_DIR = path.resolve(process.env.SERVICE_DATA_DIR || "/data");
 const RUNS_PATH = path.join(DATA_DIR, "runs.json");
 const SERVICE_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SERVICE_ROOT, "../..");
 const REFERENCE_FRAMEWORKS_PATH = path.join(SERVICE_ROOT, "reference-frameworks.json");
 const API_TOKEN = String(process.env.PACT_EXTERNAL_KD_API_TOKEN || process.env.SERVICE_API_TOKEN || "").trim();
-const REQUIRE_API_TOKEN = envFlag("PACT_EXTERNAL_KD_REQUIRE_API_TOKEN", process.env.NODE_ENV === "production");
 const ALLOW_UNAUTHENTICATED_DEV = envFlag("PACT_EXTERNAL_KD_ALLOW_UNAUTHENTICATED_DEV", false);
+const REQUIRE_API_TOKEN = envFlag("PACT_EXTERNAL_KD_REQUIRE_API_TOKEN", !ALLOW_UNAUTHENTICATED_DEV);
+const DEFAULT_INPUT_ROOT = path.resolve(process.env.PACT_EXTERNAL_KD_DEFAULT_INPUT_ROOT || "/inputs");
+const ALLOW_DATA_DIR_INPUTS = envFlag("PACT_EXTERNAL_KD_ALLOW_DATA_DIR_INPUTS", false);
 const INPUT_ROOTS = Array.from(new Set([
-  DATA_DIR,
+  DEFAULT_INPUT_ROOT,
+  ...(ALLOW_DATA_DIR_INPUTS ? [DATA_DIR] : []),
   ...String(process.env.PACT_EXTERNAL_KD_INPUT_ROOTS || "")
     .split(path.delimiter)
     .map((item) => item.trim())
@@ -106,6 +109,14 @@ const PDF_TEXT_TIMEOUT_MS = Number(process.env.PACT_EXTERNAL_KD_PDF_TEXT_TIMEOUT
 const ARCHIVE_EXPANSION_MAX_DEPTH = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_ARCHIVE_EXPANSION_MAX_DEPTH || 3));
 const ARCHIVE_EXPANSION_MAX_ENTRIES = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_ARCHIVE_EXPANSION_MAX_ENTRIES || 500));
 const ARCHIVE_ENTRY_MAX_BYTES = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_ARCHIVE_ENTRY_MAX_BYTES || 25 * 1024 * 1024));
+const ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES = Math.max(
+  ARCHIVE_ENTRY_MAX_BYTES,
+  Number(process.env.PACT_EXTERNAL_KD_ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES || 250 * 1024 * 1024)
+);
+const ARCHIVE_PREFLIGHT_MAX_BYTES = Math.max(
+  ARCHIVE_ENTRY_MAX_BYTES,
+  Number(process.env.PACT_EXTERNAL_KD_ARCHIVE_PREFLIGHT_MAX_BYTES || 256 * 1024 * 1024)
+);
 const ARCHIVE_EXTERNAL_TIMEOUT_MS = Number(process.env.PACT_EXTERNAL_KD_ARCHIVE_EXTERNAL_TIMEOUT_MS || 45_000);
 const DIRECTORY_EXPANSION_MAX_DEPTH = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_DIRECTORY_EXPANSION_MAX_DEPTH || 8));
 const DIRECTORY_EXPANSION_MAX_FILES = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_DIRECTORY_EXPANSION_MAX_FILES || 5000));
@@ -117,6 +128,10 @@ const EMAIL_MIME_MAX_DEPTH = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_EMA
 const EMAIL_MBOX_MAX_MESSAGES = Math.max(1, Number(process.env.PACT_EXTERNAL_KD_EMAIL_MBOX_MAX_MESSAGES || 500));
 const EMAIL_MBOX_MESSAGE_MAX_CHARACTERS = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_EMAIL_MBOX_MESSAGE_MAX_CHARACTERS || 25 * 1024 * 1024));
 const STRUCTURED_ZIP_ENTRY_MAX_BYTES = Math.max(1024, Number(process.env.PACT_EXTERNAL_KD_STRUCTURED_ZIP_ENTRY_MAX_BYTES || ARCHIVE_ENTRY_MAX_BYTES));
+const STRUCTURED_ZIP_TOTAL_UNCOMPRESSED_MAX_BYTES = Math.max(
+  STRUCTURED_ZIP_ENTRY_MAX_BYTES,
+  Number(process.env.PACT_EXTERNAL_KD_STRUCTURED_ZIP_TOTAL_UNCOMPRESSED_MAX_BYTES || ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES)
+);
 const MODEL_GATEWAY_TIMEOUT_MS = Math.max(1000, Number(process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_TIMEOUT_MS || 120_000));
 const MODEL_DISTILLATION_PROMPT_MAX_CHARACTERS = Math.max(4096, Number(process.env.PACT_EXTERNAL_KD_MODEL_PROMPT_MAX_CHARACTERS || 48_000));
 const MODEL_DISTILLATION_OUTPUT_REPAIR_MAX_ATTEMPTS = Math.max(0, Number(process.env.PACT_EXTERNAL_KD_MODEL_OUTPUT_REPAIR_MAX_ATTEMPTS || 1));
@@ -1580,6 +1595,23 @@ async function runtimeDoctor({ force = false } = {}) {
     payload
   };
   return payload;
+}
+
+function publicServiceHealthPayload() {
+  return {
+    ok: true,
+    protocolVersion: PROTOCOL_VERSION,
+    serviceName: SERVICE_NAME,
+    serviceKind: SERVICE_KIND
+  };
+}
+
+function publicRuntimeHealthPayload(runtimeStatus = {}) {
+  return {
+    ...publicServiceHealthPayload(),
+    runtimeStatus: runtimeStatus.status || "unknown",
+    generatedAt: runtimeStatus.generatedAt || nowIso()
+  };
 }
 
 function compactRun(run = {}) {
@@ -4612,8 +4644,12 @@ function parseMboxText(text = "") {
 function readZipEntries(buffer) {
   const data = Buffer.from(buffer || []);
   const entries = [];
+  let totalBytes = 0;
   let offset = 0;
   while (offset + 30 <= data.length) {
+    if (entries.length >= ARCHIVE_EXPANSION_MAX_ENTRIES) {
+      break;
+    }
     const signature = data.readUInt32LE(offset);
     if (signature !== 0x04034b50) {
       offset += 1;
@@ -4632,10 +4668,34 @@ function readZipEntries(buffer) {
       break;
     }
     const name = data.slice(nameStart, nameEnd).toString("utf8");
+    const pathCheck = archiveEntryPathSafety(name);
+    if (!pathCheck.ok) {
+      offset = contentStart + Math.max(0, compressedSize);
+      continue;
+    }
+    if (name.replace(/\\/g, "/").endsWith("/")) {
+      offset = contentStart + Math.max(0, compressedSize);
+      continue;
+    }
     const hasDataDescriptor = Boolean(flags & 0x08);
     if (hasDataDescriptor || compressedSize > data.length - contentStart) {
-      entries.push({ name, method, compressedSize, uncompressedSize, data: Buffer.alloc(0), warning: "zip-data-descriptor-not-supported" });
+      entries.push({ name: pathCheck.safeName, method, compressedSize, uncompressedSize, data: Buffer.alloc(0), warning: "zip-data-descriptor-not-supported" });
       offset = contentStart + Math.max(0, compressedSize);
+      continue;
+    }
+    if (
+      uncompressedSize > ARCHIVE_ENTRY_MAX_BYTES ||
+      totalBytes + uncompressedSize > ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES
+    ) {
+      entries.push({
+        name: pathCheck.safeName,
+        method,
+        compressedSize,
+        uncompressedSize,
+        data: Buffer.alloc(0),
+        warning: uncompressedSize > ARCHIVE_ENTRY_MAX_BYTES ? "archive-entry-too-large" : "archive-total-too-large"
+      });
+      offset = contentStart + compressedSize;
       continue;
     }
     const compressed = data.slice(contentStart, contentStart + compressedSize);
@@ -4645,14 +4705,28 @@ function readZipEntries(buffer) {
       if (method === 0) {
         entryData = compressed;
       } else if (method === 8) {
-        entryData = Buffer.from(inflateRawSync(compressed));
+        entryData = Buffer.from(inflateRawSync(compressed, {
+          maxOutputLength: Math.min(
+            ARCHIVE_ENTRY_MAX_BYTES,
+            ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES - totalBytes
+          ) + 1
+        }));
       } else {
         warning = `zip-method-${method}-not-supported`;
       }
     } catch (error) {
-      warning = `zip-inflate-failed:${error instanceof Error ? error.message : String(error)}`;
+      warning = error?.code === "ERR_BUFFER_TOO_LARGE"
+        ? "archive-entry-too-large"
+        : `zip-inflate-failed:${error instanceof Error ? error.message : String(error)}`;
     }
-    entries.push({ name, method, compressedSize, uncompressedSize, data: entryData, warning });
+    if (entryData.length > ARCHIVE_ENTRY_MAX_BYTES || totalBytes + entryData.length > ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES) {
+      warning = entryData.length > ARCHIVE_ENTRY_MAX_BYTES ? "archive-entry-too-large" : "archive-total-too-large";
+      entryData = Buffer.alloc(0);
+    }
+    if (entryData.length) {
+      totalBytes += entryData.length;
+    }
+    entries.push({ name: pathCheck.safeName, method, compressedSize, uncompressedSize, data: entryData, warning });
     offset = contentStart + compressedSize;
   }
   return entries;
@@ -4676,8 +4750,12 @@ function tarEntryName(header) {
 function readTarEntries(buffer) {
   const data = Buffer.from(buffer || []);
   const entries = [];
+  let totalBytes = 0;
   let offset = 0;
   while (offset + 512 <= data.length) {
+    if (entries.length >= ARCHIVE_EXPANSION_MAX_ENTRIES) {
+      break;
+    }
     const header = data.slice(offset, offset + 512);
     if (header.every((byte) => byte === 0)) {
       break;
@@ -4691,8 +4769,26 @@ function readTarEntries(buffer) {
       break;
     }
     if (typeFlag === "0" || typeFlag === "\0" || typeFlag === "") {
+      const pathCheck = archiveEntryPathSafety(name);
+      if (!pathCheck.ok) {
+        offset = dataStart + Math.ceil(size / 512) * 512;
+        continue;
+      }
+      if (size > ARCHIVE_ENTRY_MAX_BYTES || totalBytes + size > ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES) {
+        entries.push({
+          name: pathCheck.safeName,
+          method: "tar",
+          compressedSize: size,
+          uncompressedSize: size,
+          data: Buffer.alloc(0),
+          warning: size > ARCHIVE_ENTRY_MAX_BYTES ? "archive-entry-too-large" : "archive-total-too-large"
+        });
+        offset = dataStart + Math.ceil(size / 512) * 512;
+        continue;
+      }
+      totalBytes += size;
       entries.push({
-        name,
+        name: pathCheck.safeName,
         method: "tar",
         compressedSize: size,
         uncompressedSize: size,
@@ -4764,8 +4860,149 @@ function safeRelativeArchivePath(value = "") {
     .join("/");
 }
 
-function readDirectoryEntries(rootDir, limit = ARCHIVE_EXPANSION_MAX_ENTRIES) {
+function archivePolicyError(message, code = "ARCHIVE_POLICY_REJECTED", details = {}) {
+  const error = new Error(message);
+  error.code = code;
+  error.statusCode = code.includes("QUOTA") ? 413 : 400;
+  error.details = details;
+  return error;
+}
+
+function archiveEntryPathSafety(value = "") {
+  const raw = String(value || "");
+  const normalized = raw.replace(/\\/g, "/");
+  if (!normalized.trim()) {
+    return { ok: false, safeName: "", reason: "empty-name" };
+  }
+  if (normalized.includes("\0")) {
+    return { ok: false, safeName: "", reason: "nul-byte" };
+  }
+  if (normalized.startsWith("/") || /^[A-Za-z]:\//.test(normalized)) {
+    return { ok: false, safeName: "", reason: "absolute-path" };
+  }
+  const parts = normalized.split("/").filter(Boolean);
+  if (!parts.length || parts.some((part) => part === "." || part === "..")) {
+    return { ok: false, safeName: "", reason: "path-traversal" };
+  }
+  return { ok: true, safeName: parts.join("/"), reason: "" };
+}
+
+function archiveEntrySize(entry = {}) {
+  const value = Number(entry.uncompressedSize ?? entry.size ?? 0);
+  return Number.isFinite(value) && value >= 0 ? value : -1;
+}
+
+function preflightArchiveEntries(entries = [], {
+  maxEntries = ARCHIVE_EXPANSION_MAX_ENTRIES,
+  maxEntryBytes = ARCHIVE_ENTRY_MAX_BYTES,
+  maxTotalBytes = ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES,
+  stage = "archive.preflight"
+} = {}) {
+  let entryCount = 0;
+  let totalBytes = 0;
+  for (const entry of entries) {
+    const pathCheck = archiveEntryPathSafety(entry.name);
+    if (!pathCheck.ok) {
+      throw archivePolicyError(`${stage} rejected unsafe archive member path: ${pathCheck.reason}`, "ARCHIVE_UNSAFE_MEMBER_PATH", {
+        name: entry.name,
+        reason: pathCheck.reason
+      });
+    }
+    if (entry.directory) {
+      continue;
+    }
+    if (entry.symlink || entry.hardlink || entry.link) {
+      throw archivePolicyError(`${stage} rejected archive link member: ${entry.name}`, "ARCHIVE_LINK_MEMBER_REJECTED", {
+        name: entry.name
+      });
+    }
+    const size = archiveEntrySize(entry);
+    if (size < 0) {
+      throw archivePolicyError(`${stage} rejected archive member with unknown size: ${entry.name}`, "ARCHIVE_UNKNOWN_MEMBER_SIZE", {
+        name: entry.name
+      });
+    }
+    if (entryCount + 1 > maxEntries) {
+      throw archivePolicyError(`${stage} entry count exceeds limit`, "ARCHIVE_ENTRY_QUOTA_EXCEEDED", {
+        maxEntries
+      });
+    }
+    if (size > maxEntryBytes) {
+      throw archivePolicyError(`${stage} member exceeds per-entry byte limit`, "ARCHIVE_ENTRY_QUOTA_EXCEEDED", {
+        name: entry.name,
+        bytes: size,
+        maxEntryBytes
+      });
+    }
+    if (totalBytes + size > maxTotalBytes) {
+      throw archivePolicyError(`${stage} total uncompressed bytes exceed limit`, "ARCHIVE_TOTAL_QUOTA_EXCEEDED", {
+        bytes: totalBytes + size,
+        maxTotalBytes
+      });
+    }
+    entryCount += 1;
+    totalBytes += size;
+  }
+  return { entryCount, totalBytes, maxEntries, maxEntryBytes, maxTotalBytes };
+}
+
+function archivePreflightTrace(stage, result = {}) {
+  return {
+    stage,
+    status: "completed",
+    entries: result.entryCount || 0,
+    totalUncompressedBytes: result.totalBytes || 0,
+    maxEntries: result.maxEntries || ARCHIVE_EXPANSION_MAX_ENTRIES,
+    maxEntryBytes: result.maxEntryBytes || ARCHIVE_ENTRY_MAX_BYTES,
+    maxTotalBytes: result.maxTotalBytes || ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES
+  };
+}
+
+function validateExtractedDirectoryQuotas(rootDir, {
+  maxEntries = ARCHIVE_EXPANSION_MAX_ENTRIES,
+  maxEntryBytes = ARCHIVE_ENTRY_MAX_BYTES,
+  maxTotalBytes = ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES,
+  stage = "archive.extracted.preflight"
+} = {}) {
+  const root = path.resolve(rootDir);
   const entries = [];
+  const walk = (dir) => {
+    for (const item of fsSync.readdirSync(dir, { withFileTypes: true })) {
+      const absolutePath = path.join(dir, item.name);
+      const relativePath = path.relative(root, absolutePath).replace(/\\/g, "/");
+      const pathCheck = archiveEntryPathSafety(relativePath);
+      if (!pathCheck.ok) {
+        throw archivePolicyError(`${stage} rejected extracted path: ${pathCheck.reason}`, "ARCHIVE_UNSAFE_EXTRACTED_PATH", {
+          path: relativePath,
+          reason: pathCheck.reason
+        });
+      }
+      const stat = fsSync.lstatSync(absolutePath);
+      if (stat.isSymbolicLink()) {
+        throw archivePolicyError(`${stage} rejected extracted symlink`, "ARCHIVE_LINK_MEMBER_REJECTED", {
+          path: relativePath
+        });
+      }
+      if (stat.isDirectory()) {
+        walk(absolutePath);
+        continue;
+      }
+      if (!stat.isFile()) {
+        continue;
+      }
+      entries.push({
+        name: pathCheck.safeName,
+        uncompressedSize: stat.size
+      });
+    }
+  };
+  walk(root);
+  return preflightArchiveEntries(entries, { maxEntries, maxEntryBytes, maxTotalBytes, stage });
+}
+
+function readDirectoryEntries(rootDir, limit = ARCHIVE_EXPANSION_MAX_ENTRIES, maxTotalBytes = ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES) {
+  const entries = [];
+  let totalBytes = 0;
   const walk = (dir, relativeBase = "") => {
     if (entries.length >= limit) {
       return;
@@ -4787,17 +5024,18 @@ function readDirectoryEntries(rootDir, limit = ARCHIVE_EXPANSION_MAX_ENTRIES) {
         continue;
       }
       const stat = fsSync.statSync(absolutePath);
-      if (stat.size > ARCHIVE_ENTRY_MAX_BYTES) {
+      if (stat.size > ARCHIVE_ENTRY_MAX_BYTES || totalBytes + stat.size > maxTotalBytes) {
         entries.push({
           name: relativePath,
           method: "7z-external",
           compressedSize: stat.size,
           uncompressedSize: stat.size,
           data: Buffer.alloc(0),
-          warning: "archive-entry-too-large"
+          warning: stat.size > ARCHIVE_ENTRY_MAX_BYTES ? "archive-entry-too-large" : "archive-total-too-large"
         });
         continue;
       }
+      totalBytes += stat.size;
       entries.push({
         name: relativePath,
         method: "7z-external",
@@ -4812,8 +5050,9 @@ function readDirectoryEntries(rootDir, limit = ARCHIVE_EXPANSION_MAX_ENTRIES) {
   return entries;
 }
 
-function readDirectoryFileRefs(rootDir, limit = ARCHIVE_EXPANSION_MAX_ENTRIES) {
+function readDirectoryFileRefs(rootDir, limit = ARCHIVE_EXPANSION_MAX_ENTRIES, maxTotalBytes = ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES) {
   const entries = [];
+  let totalBytes = 0;
   const walk = (dir, relativeBase = "") => {
     if (entries.length >= limit) {
       return;
@@ -4835,6 +5074,19 @@ function readDirectoryFileRefs(rootDir, limit = ARCHIVE_EXPANSION_MAX_ENTRIES) {
         continue;
       }
       const stat = fsSync.statSync(absolutePath);
+      if (stat.size > ARCHIVE_ENTRY_MAX_BYTES || totalBytes + stat.size > maxTotalBytes) {
+        entries.push({
+          name: relativePath,
+          method: "archive-file-ref",
+          compressedSize: stat.size,
+          uncompressedSize: stat.size,
+          data: Buffer.alloc(0),
+          filePath: "",
+          warning: stat.size > ARCHIVE_ENTRY_MAX_BYTES ? "archive-entry-too-large" : "archive-total-too-large"
+        });
+        continue;
+      }
+      totalBytes += stat.size;
       entries.push({
         name: relativePath,
         method: "archive-file-ref",
@@ -4865,15 +5117,31 @@ function readSevenZipEntries(buffer, metadata = {}, runtimeStatus = null) {
   try {
     fsSync.mkdirSync(outputDir, { recursive: true });
     fsSync.writeFileSync(archivePath, Buffer.from(buffer || []));
+    const preflight = preflightSevenZipFile(archivePath, runtime, {
+      maxEntries: ARCHIVE_EXPANSION_MAX_ENTRIES,
+      maxEntryBytes: ARCHIVE_ENTRY_MAX_BYTES,
+      maxTotalBytes: ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES,
+      stage: "archive.7z.preflight"
+    });
     execFileSync(runtime.command || "7zz", ["x", "-y", `-o${outputDir}`, archivePath], {
       encoding: "utf8",
       timeout: ARCHIVE_EXTERNAL_TIMEOUT_MS,
       maxBuffer: 8 * 1024 * 1024
     });
+    const extracted = validateExtractedDirectoryQuotas(outputDir, {
+      maxEntries: ARCHIVE_EXPANSION_MAX_ENTRIES,
+      maxEntryBytes: ARCHIVE_ENTRY_MAX_BYTES,
+      maxTotalBytes: ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES,
+      stage: "archive.7z.extracted.preflight"
+    });
     const entries = readDirectoryEntries(outputDir);
     return {
       entries,
       parserTrace: [{
+        ...archivePreflightTrace("archive.7z.preflight", preflight)
+      }, {
+        ...archivePreflightTrace("archive.7z.extracted.preflight", extracted)
+      }, {
         stage: "archive.7z.extract",
         status: entries.length ? "completed" : "empty",
         runtime: "archive.7zip",
@@ -4913,20 +5181,205 @@ function runArchiveCommand(command, args = [], stage = "archive.file-ref.extract
   return String(output || "");
 }
 
-function gunzipFileToPath({ gzipCommand = "gzip", inputPath = "", outputPath = "" } = {}) {
-  const outputFd = fsSync.openSync(outputPath, "w");
-  try {
-    const result = spawnSync(gzipCommand, ["-dc", inputPath], {
-      stdio: ["ignore", outputFd, "pipe"],
-      timeout: ARCHIVE_EXTERNAL_TIMEOUT_MS,
-      encoding: "utf8"
+function readZipCentralDirectoryEntries(filePath = "") {
+  const stat = fsSync.statSync(filePath);
+  if (stat.size > ARCHIVE_PREFLIGHT_MAX_BYTES) {
+    throw archivePolicyError("zip preflight file exceeds scan limit", "ARCHIVE_PREFLIGHT_FILE_TOO_LARGE", {
+      bytes: stat.size,
+      maxBytes: ARCHIVE_PREFLIGHT_MAX_BYTES
     });
-    if (result.status !== 0) {
-      throw new Error(String(result.stderr || `gzip exited with ${result.status}`));
+  }
+  const data = fsSync.readFileSync(filePath);
+  const minEocd = 22;
+  const searchStart = Math.max(0, data.length - (0xffff + minEocd));
+  let eocdOffset = -1;
+  for (let offset = data.length - minEocd; offset >= searchStart; offset -= 1) {
+    if (data.readUInt32LE(offset) === 0x06054b50) {
+      eocdOffset = offset;
+      break;
+    }
+  }
+  if (eocdOffset < 0) {
+    throw archivePolicyError("zip preflight could not locate central directory", "ARCHIVE_PREFLIGHT_FAILED");
+  }
+  const entryCount = data.readUInt16LE(eocdOffset + 10);
+  const centralDirectorySize = data.readUInt32LE(eocdOffset + 12);
+  const centralDirectoryOffset = data.readUInt32LE(eocdOffset + 16);
+  if (
+    entryCount === 0xffff ||
+    centralDirectorySize === 0xffffffff ||
+    centralDirectoryOffset === 0xffffffff
+  ) {
+    throw archivePolicyError("zip64 preflight is not supported for mounted archive extraction", "ARCHIVE_ZIP64_UNSUPPORTED");
+  }
+  if (centralDirectoryOffset + centralDirectorySize > data.length) {
+    throw archivePolicyError("zip preflight central directory is truncated", "ARCHIVE_PREFLIGHT_FAILED");
+  }
+  const entries = [];
+  let offset = centralDirectoryOffset;
+  for (let index = 0; index < entryCount && offset + 46 <= data.length; index += 1) {
+    if (data.readUInt32LE(offset) !== 0x02014b50) {
+      throw archivePolicyError("zip preflight central directory entry is malformed", "ARCHIVE_PREFLIGHT_FAILED");
+    }
+    const madeBy = data.readUInt16LE(offset + 4);
+    const compressedSize = data.readUInt32LE(offset + 20);
+    const uncompressedSize = data.readUInt32LE(offset + 24);
+    const fileNameLength = data.readUInt16LE(offset + 28);
+    const extraLength = data.readUInt16LE(offset + 30);
+    const commentLength = data.readUInt16LE(offset + 32);
+    const externalAttributes = data.readUInt32LE(offset + 38);
+    const nameStart = offset + 46;
+    const nameEnd = nameStart + fileNameLength;
+    if (nameEnd > data.length) {
+      throw archivePolicyError("zip preflight entry name is truncated", "ARCHIVE_PREFLIGHT_FAILED");
+    }
+    const name = data.slice(nameStart, nameEnd).toString("utf8");
+    const madeByHost = madeBy >> 8;
+    const unixMode = madeByHost === 3 ? (externalAttributes >>> 16) & 0xffff : 0;
+    const unixType = unixMode & 0o170000;
+    entries.push({
+      name,
+      compressedSize,
+      uncompressedSize,
+      directory: name.endsWith("/") || unixType === 0o040000,
+      symlink: unixType === 0o120000,
+      hardlink: false
+    });
+    offset = nameEnd + extraLength + commentLength;
+  }
+  return entries;
+}
+
+function preflightZipFile(filePath = "", options = {}) {
+  const entries = readZipCentralDirectoryEntries(filePath);
+  return preflightArchiveEntries(entries, {
+    ...options,
+    stage: options.stage || "archive.zip.preflight"
+  });
+}
+
+function preflightTarFile(filePath = "", options = {}) {
+  const fd = fsSync.openSync(filePath, "r");
+  const header = Buffer.alloc(512);
+  const entries = [];
+  let offset = 0;
+  try {
+    while (true) {
+      const bytesRead = fsSync.readSync(fd, header, 0, header.length, offset);
+      if (bytesRead < 512 || header.every((byte) => byte === 0)) {
+        break;
+      }
+      const name = tarEntryName(header);
+      const size = parseTarSize(header, 124, 12);
+      const typeFlag = header.slice(156, 157).toString("ascii") || "0";
+      entries.push({
+        name,
+        uncompressedSize: size,
+        compressedSize: size,
+        directory: typeFlag === "5",
+        symlink: typeFlag === "2",
+        hardlink: typeFlag === "1"
+      });
+      offset += 512 + Math.ceil(size / 512) * 512;
     }
   } finally {
-    fsSync.closeSync(outputFd);
+    fsSync.closeSync(fd);
   }
+  return preflightArchiveEntries(entries, {
+    ...options,
+    stage: options.stage || "archive.tar.preflight"
+  });
+}
+
+function preflightSevenZipFile(filePath = "", runtime = null, options = {}) {
+  if (!runtime) {
+    return null;
+  }
+  const output = runArchiveCommand(runtime.command || "7zz", ["l", "-slt", filePath], "archive.7z.preflight");
+  const entries = [];
+  let current = null;
+  let inEntries = false;
+  const flush = () => {
+    if (current?.name) {
+      entries.push(current);
+    }
+    current = null;
+  };
+  for (const line of output.split(/\r?\n/)) {
+    if (/^-{8,}\s*$/.test(line.trim())) {
+      inEntries = true;
+      flush();
+      continue;
+    }
+    if (!inEntries) {
+      continue;
+    }
+    if (!line.trim()) {
+      flush();
+      continue;
+    }
+    const match = line.match(/^([^=]+)=\s*(.*)$/);
+    if (!match) {
+      continue;
+    }
+    const key = match[1].trim();
+    const value = match[2].trim();
+    if (key === "Path") {
+      flush();
+      current = { name: value, uncompressedSize: 0, compressedSize: 0 };
+    } else if (current && key === "Size") {
+      current.uncompressedSize = Number(value || 0);
+    } else if (current && key === "Packed Size") {
+      current.compressedSize = Number(value || 0);
+    } else if (current && key === "Folder") {
+      current.directory = value === "+";
+    } else if (current && key === "Attributes") {
+      current.symlink = /\bl/.test(value);
+    }
+  }
+  flush();
+  return preflightArchiveEntries(entries, {
+    ...options,
+    stage: options.stage || "archive.7z.preflight"
+  });
+}
+
+function gunzipBuffer(buffer = Buffer.alloc(0), maxBytes = ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES) {
+  try {
+    return Buffer.from(gunzipSync(Buffer.from(buffer || []), { maxOutputLength: maxBytes + 1 }));
+  } catch (error) {
+    if (error?.code === "ERR_BUFFER_TOO_LARGE") {
+      throw archivePolicyError("gzip payload exceeds decompressed byte limit", "ARCHIVE_TOTAL_QUOTA_EXCEEDED", {
+        maxBytes
+      });
+    }
+    throw error;
+  }
+}
+
+function gunzipFileToPath({ gzipCommand = "gzip", inputPath = "", outputPath = "", maxBytes = ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES } = {}) {
+  let output;
+  try {
+    output = execFileSync(gzipCommand, ["-dc", inputPath], {
+      encoding: null,
+      timeout: ARCHIVE_EXTERNAL_TIMEOUT_MS,
+      maxBuffer: maxBytes + 1
+    });
+    if (output.length > maxBytes) {
+      throw archivePolicyError("gzip file exceeds decompressed byte limit", "ARCHIVE_TOTAL_QUOTA_EXCEEDED", {
+        maxBytes
+      });
+    }
+  } catch (error) {
+    if (error?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+      throw archivePolicyError("gzip file exceeds decompressed byte limit", "ARCHIVE_TOTAL_QUOTA_EXCEEDED", {
+        maxBytes
+      });
+    }
+    throw error;
+  }
+  fsSync.writeFileSync(outputPath, output);
+  return output.length;
 }
 
 function extractArchiveFileEntries(filePath = "", metadata = {}, runtimeStatus = null, remainingEntries = ARCHIVE_EXPANSION_MAX_ENTRIES) {
@@ -4940,6 +5393,13 @@ function extractArchiveFileEntries(filePath = "", metadata = {}, runtimeStatus =
     if (kind === "zip") {
       const sevenZip = requireRuntime(runtimeStatus, "archive.7zip");
       const unzip = requireRuntime(runtimeStatus, "archive.unzip");
+      const preflight = preflightZipFile(filePath, {
+        maxEntries: remainingEntries,
+        maxEntryBytes: ARCHIVE_ENTRY_MAX_BYTES,
+        maxTotalBytes: ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES,
+        stage: "archive.zip.preflight"
+      });
+      parserTrace.push(archivePreflightTrace("archive.zip.preflight", preflight));
       if (sevenZip) {
         runArchiveCommand(sevenZip.command || "7zz", ["x", "-y", `-o${outputDir}`, filePath], "archive.zip.extract");
         parserTrace.push({ stage: "archive.zip.extract", status: "completed", runtime: "archive.7zip", command: sevenZip.command || "7zz" });
@@ -4956,6 +5416,13 @@ function extractArchiveFileEntries(filePath = "", metadata = {}, runtimeStatus =
         parserTrace.push(runtimeStageTrace("archive.tar.extract", runtimeStatus, "archive.tar"));
         warnings.push("missing-runtime:archive.tar");
       } else {
+        const preflight = preflightTarFile(filePath, {
+          maxEntries: remainingEntries,
+          maxEntryBytes: ARCHIVE_ENTRY_MAX_BYTES,
+          maxTotalBytes: ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES,
+          stage: "archive.tar.preflight"
+        });
+        parserTrace.push(archivePreflightTrace("archive.tar.preflight", preflight));
         runArchiveCommand(tar.command || "tar", ["-xf", filePath, "-C", outputDir], "archive.tar.extract");
         parserTrace.push({ stage: "archive.tar.extract", status: "completed", runtime: "archive.tar", command: tar.command || "tar" });
       }
@@ -4967,20 +5434,49 @@ function extractArchiveFileEntries(filePath = "", metadata = {}, runtimeStatus =
         if (!tar) {
           parserTrace.push(runtimeStageTrace("archive.tar.extract", runtimeStatus, "archive.tar"));
           warnings.push("missing-runtime:archive.tar");
+        } else if (!gzip) {
+          parserTrace.push(runtimeStageTrace("archive.gzip.decompress", runtimeStatus, "archive.gzip"));
+          warnings.push("missing-runtime:archive.gzip");
         } else {
-          runArchiveCommand(tar.command || "tar", ["-xzf", filePath, "-C", outputDir], "archive.gzip-tar.extract");
-          parserTrace.push({ stage: "archive.gzip.decompress", status: "completed", runtime: "archive.tar", command: tar.command || "tar" });
+          const tarPath = path.join(workDir, "payload.tar");
+          const bytes = gunzipFileToPath({
+            gzipCommand: gzip.command || "gzip",
+            inputPath: filePath,
+            outputPath: tarPath,
+            maxBytes: ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES
+          });
+          parserTrace.push({ stage: "archive.gzip.decompress", status: "completed", runtime: "archive.gzip", command: gzip.command || "gzip", bytes });
+          const preflight = preflightTarFile(tarPath, {
+            maxEntries: remainingEntries,
+            maxEntryBytes: ARCHIVE_ENTRY_MAX_BYTES,
+            maxTotalBytes: ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES,
+            stage: "archive.gzip-tar.preflight"
+          });
+          parserTrace.push(archivePreflightTrace("archive.gzip-tar.preflight", preflight));
+          runArchiveCommand(tar.command || "tar", ["-xf", tarPath, "-C", outputDir], "archive.tar.extract");
           parserTrace.push({ stage: "archive.tar.extract", status: "completed", runtime: "archive.tar", command: tar.command || "tar" });
         }
       } else if (!gzip) {
         parserTrace.push(runtimeStageTrace("archive.gzip.decompress", runtimeStatus, "archive.gzip"));
         warnings.push("missing-runtime:archive.gzip");
       } else {
-        const outputName = safeRelativeArchivePath(stripGzipExtension(metadata.fileName || "payload.gz")) || "payload.inflated";
-        const outputPath = path.join(outputDir, outputName);
+        const outputName = stripGzipExtension(metadata.fileName || "payload.gz") || "payload.inflated";
+        const pathCheck = archiveEntryPathSafety(outputName);
+        if (!pathCheck.ok) {
+          throw archivePolicyError("gzip output path is unsafe", "ARCHIVE_UNSAFE_MEMBER_PATH", {
+            name: outputName,
+            reason: pathCheck.reason
+          });
+        }
+        const outputPath = path.join(outputDir, pathCheck.safeName);
         fsSync.mkdirSync(path.dirname(outputPath), { recursive: true });
-        gunzipFileToPath({ gzipCommand: gzip.command || "gzip", inputPath: filePath, outputPath });
-        parserTrace.push({ stage: "archive.gzip.decompress", status: "completed", runtime: "archive.gzip", command: gzip.command || "gzip" });
+        const bytes = gunzipFileToPath({
+          gzipCommand: gzip.command || "gzip",
+          inputPath: filePath,
+          outputPath,
+          maxBytes: ARCHIVE_ENTRY_MAX_BYTES
+        });
+        parserTrace.push({ stage: "archive.gzip.decompress", status: "completed", runtime: "archive.gzip", command: gzip.command || "gzip", bytes });
       }
     } else if (kind === "7z") {
       const sevenZip = requireRuntime(runtimeStatus, "archive.7zip");
@@ -4988,6 +5484,13 @@ function extractArchiveFileEntries(filePath = "", metadata = {}, runtimeStatus =
         parserTrace.push(runtimeStageTrace("archive.7z.extract", runtimeStatus, "archive.7zip"));
         warnings.push("missing-runtime:archive.7zip");
       } else {
+        const preflight = preflightSevenZipFile(filePath, sevenZip, {
+          maxEntries: remainingEntries,
+          maxEntryBytes: ARCHIVE_ENTRY_MAX_BYTES,
+          maxTotalBytes: ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES,
+          stage: "archive.7z.preflight"
+        });
+        parserTrace.push(archivePreflightTrace("archive.7z.preflight", preflight));
         runArchiveCommand(sevenZip.command || "7zz", ["x", "-y", `-o${outputDir}`, filePath], "archive.7z.extract");
         parserTrace.push({ stage: "archive.7z.extract", status: "completed", runtime: "archive.7zip", command: sevenZip.command || "7zz" });
       }
@@ -4995,6 +5498,13 @@ function extractArchiveFileEntries(filePath = "", metadata = {}, runtimeStatus =
       parserTrace.push({ stage: "archive.file-ref.extract", status: "unsupported", kind });
       warnings.push("archive-container-unsupported");
     }
+    const extracted = validateExtractedDirectoryQuotas(outputDir, {
+      maxEntries: remainingEntries,
+      maxEntryBytes: ARCHIVE_ENTRY_MAX_BYTES,
+      maxTotalBytes: ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES,
+      stage: "archive.file-ref.extracted.preflight"
+    });
+    parserTrace.push(archivePreflightTrace("archive.file-ref.extracted.preflight", extracted));
     const entries = readDirectoryFileRefs(outputDir, remainingEntries);
     parserTrace.push({
       stage: "archive.file-ref.entries",
@@ -5033,6 +5543,13 @@ function extractZipFileToDirectory(filePath = "", runtimeStatus = null, stage = 
   try {
     const sevenZip = requireRuntime(runtimeStatus, "archive.7zip");
     const unzip = requireRuntime(runtimeStatus, "archive.unzip");
+    const preflight = preflightZipFile(filePath, {
+      maxEntries: ARCHIVE_EXPANSION_MAX_ENTRIES,
+      maxEntryBytes: STRUCTURED_ZIP_TOTAL_UNCOMPRESSED_MAX_BYTES,
+      maxTotalBytes: STRUCTURED_ZIP_TOTAL_UNCOMPRESSED_MAX_BYTES,
+      stage: "structured-zip.file-ref.preflight"
+    });
+    parserTrace.push(archivePreflightTrace("structured-zip.file-ref.preflight", preflight));
     if (sevenZip) {
       runArchiveCommand(sevenZip.command || "7zz", ["x", "-y", `-o${outputDir}`, filePath], stage);
       parserTrace.push({ stage, status: "completed", runtime: "archive.7zip", command: sevenZip.command || "7zz" });
@@ -5043,6 +5560,13 @@ function extractZipFileToDirectory(filePath = "", runtimeStatus = null, stage = 
       parserTrace.push(runtimeStageTrace(stage, runtimeStatus, "archive.unzip"));
       warnings.push("missing-runtime:archive.unzip");
     }
+    const extracted = validateExtractedDirectoryQuotas(outputDir, {
+      maxEntries: ARCHIVE_EXPANSION_MAX_ENTRIES,
+      maxEntryBytes: STRUCTURED_ZIP_TOTAL_UNCOMPRESSED_MAX_BYTES,
+      maxTotalBytes: STRUCTURED_ZIP_TOTAL_UNCOMPRESSED_MAX_BYTES,
+      stage: "structured-zip.file-ref.extracted.preflight"
+    });
+    parserTrace.push(archivePreflightTrace("structured-zip.file-ref.extracted.preflight", extracted));
     return {
       outputDir,
       parserTrace,
@@ -5080,7 +5604,7 @@ function extractArchiveEntries(buffer, metadata = {}, runtimeStatus = null) {
       return { entries, parserTrace, warnings };
     }
     if (kind === "gzip") {
-      const inflated = Buffer.from(gunzipSync(Buffer.from(buffer || [])));
+      const inflated = gunzipBuffer(buffer, ARCHIVE_TOTAL_UNCOMPRESSED_MAX_BYTES);
       parserTrace.push({ stage: "archive.gzip.decompress", status: "completed", bytes: inflated.length });
       if (looksLikeTar(inflated) || metadata.extension === ".tgz" || metadata.extension === ".tar.gz" || /\.t(ar\.)?gz$/i.test(metadata.fileName || "")) {
         const entries = readTarEntries(inflated);
@@ -5088,9 +5612,18 @@ function extractArchiveEntries(buffer, metadata = {}, runtimeStatus = null) {
         return { entries, parserTrace, warnings };
       }
       const name = stripGzipExtension(metadata.fileName || "payload.gz");
+      const pathCheck = archiveEntryPathSafety(name);
+      if (!pathCheck.ok) {
+        parserTrace.push({ stage: "archive.gzip.single-file", status: "rejected", reason: pathCheck.reason });
+        return { entries: [], parserTrace, warnings: ["archive-entry-unsafe-path"] };
+      }
+      if (inflated.length > ARCHIVE_ENTRY_MAX_BYTES) {
+        parserTrace.push({ stage: "archive.gzip.single-file", status: "rejected", reason: "entry-too-large", bytes: inflated.length, maxBytes: ARCHIVE_ENTRY_MAX_BYTES });
+        return { entries: [], parserTrace, warnings: ["archive-entry-too-large"] };
+      }
       return {
         entries: [{
-          name,
+          name: pathCheck.safeName,
           method: "gzip",
           compressedSize: Buffer.byteLength(buffer || []),
           uncompressedSize: inflated.length,
@@ -21260,17 +21793,26 @@ function normalizeModelGatewayEndpoint(value = "") {
     return "";
   }
   const parsed = new URL(rawValue);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    const error = new Error("Model gateway endpoint must use http or https.");
+    error.code = "MODEL_GATEWAY_ENDPOINT_INVALID";
+    throw error;
+  }
+  if (parsed.username || parsed.password) {
+    const error = new Error("Model gateway endpoint must not embed credentials.");
+    error.code = "MODEL_GATEWAY_ENDPOINT_SECRET_RISK";
+    throw error;
+  }
   if (!parsed.pathname || parsed.pathname === "/") {
     parsed.pathname = "/api/agent-gateway/call";
   }
+  parsed.hash = "";
   return parsed.toString();
 }
 
 function resolveModelDistillationGatewayConfig(input = {}) {
   const endpoint = normalizeModelGatewayEndpoint(
-    input.modelGatewayUrl ||
-      input.agentGatewayUrl ||
-      process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_URL ||
+    process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_URL ||
       process.env.PACT_AGENT_GATEWAY_URL ||
       ""
   );
@@ -21282,9 +21824,7 @@ function resolveModelDistillationGatewayConfig(input = {}) {
       ""
   ).trim();
   const token = String(
-    input.modelGatewayToken ||
-      input.agentGatewayToken ||
-      process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_TOKEN ||
+    process.env.PACT_EXTERNAL_KD_MODEL_GATEWAY_TOKEN ||
       process.env.PACT_AGENT_GATEWAY_TOKEN ||
       ""
   ).trim();
@@ -24356,14 +24896,7 @@ async function handleRequest(request, response) {
     }
 
     if (request.method === "GET" && (pathname === "/" || pathname === "/health")) {
-      jsonResponse(response, 200, {
-        ok: true,
-        protocolVersion: PROTOCOL_VERSION,
-        serviceName: SERVICE_NAME,
-        serviceKind: SERVICE_KIND,
-        dataDir: DATA_DIR,
-        runtimeDoctor: await runtimeDoctor({ force: url.searchParams.get("refresh") === "1" })
-      });
+      jsonResponse(response, 200, publicServiceHealthPayload());
       return;
     }
 
@@ -24376,7 +24909,9 @@ async function handleRequest(request, response) {
     }
 
     if (request.method === "GET" && pathname === "/v1/runtime/health") {
-      jsonResponse(response, 200, await runtimeDoctor({ force: url.searchParams.get("refresh") === "1" }));
+      jsonResponse(response, 200, publicRuntimeHealthPayload(
+        await runtimeDoctor({ force: url.searchParams.get("refresh") === "1" })
+      ));
       return;
     }
 

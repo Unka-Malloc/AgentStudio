@@ -1,9 +1,6 @@
 import { computed, ref, watch, type Ref } from 'vue';
 import { usePageRefreshHandler } from './usePageRefresh';
-import type {
-  WsSession,
-  WsWorkspace,
-} from '../types/workspaces';
+import type { WsSession, WsWorkspace } from '../types/workspaces';
 import { errorMessage } from '../lib/errors';
 import * as workspacesClient from '../lib/workspaces-client';
 import {
@@ -20,6 +17,7 @@ import {
   useWorkspaceManagementController,
   type WorkspacePanel,
 } from './console-workspace-management-controller';
+import { useWorkspaceSelectionController } from './console-workspace-selection-controller';
 import { useWorkspaceSessionController } from './console-workspace-session-controller';
 
 type WorkspacesConsoleOptions = {
@@ -32,8 +30,6 @@ export function useWorkspacesConsole(options: WorkspacesConsoleOptions = {}) {
   const localBusyKey = ref('');
   const busyKey = computed(() => localBusyKey.value || globalBusyKey.value);
 
-  // ─── State ────────────────────────────────────────────────────────────────────
-
   const workspaces        = ref<WsWorkspace[]>([]);
   const sessions          = ref<WsSession[]>([]);
   const selectedId        = ref('');
@@ -43,6 +39,12 @@ export function useWorkspacesConsole(options: WorkspacesConsoleOptions = {}) {
   const workspaceFilesData = ref<any>(null);
   const localError        = ref('');
   const panel             = ref<WorkspacePanel>('list');
+  const selection = useWorkspaceSelectionController({
+    workspaces,
+    selectedId,
+    panel,
+    expandedWorkspaceId,
+  });
 
   const {
     cloudDriveData,
@@ -88,10 +90,6 @@ export function useWorkspacesConsole(options: WorkspacesConsoleOptions = {}) {
     setBusy,
     clearBusy,
   });
-
-  // ─── Derived ─────────────────────────────────────────────────────────────────
-
-  const selected = computed(() => workspaces.value.find(w => w.workspaceId === selectedId.value) ?? null);
 
   const {
     workspaceCheckpointTrees,
@@ -147,7 +145,7 @@ export function useWorkspacesConsole(options: WorkspacesConsoleOptions = {}) {
     uploadCodespaceChange,
   } = useWorkspaceCodespaceController({
     selectedId,
-    selectedWorkspaceTitle: () => selected.value?.title || "",
+    selectedWorkspaceTitle: () => selection.selected.value?.title || "",
     localError,
     setBusy,
     clearBusy,
@@ -194,31 +192,6 @@ export function useWorkspacesConsole(options: WorkspacesConsoleOptions = {}) {
     clearBusy,
     reloadWorkspaceList: load,
   });
-
-  function workspaceExpansionSlotId(ws: WsWorkspace) {
-    return `workspace-expansion-${ws.workspaceId}`;
-  }
-
-  function isWorkspaceExpanded(ws: WsWorkspace) {
-    return panel.value === 'list' && expandedWorkspaceId.value === ws.workspaceId;
-  }
-
-  function toggleWorkspaceCard(ws: WsWorkspace) {
-    const shouldCollapse = isWorkspaceExpanded(ws);
-    selectedId.value = ws.workspaceId;
-    panel.value = 'list';
-    expandedWorkspaceId.value = shouldCollapse ? '' : ws.workspaceId;
-  }
-
-  const workspaceOptions = computed(() =>
-    workspaces.value.map(w => ({ value: w.workspaceId, label: w.title || w.workspaceId.slice(0, 12) }))
-  );
-
-  function statusTone(status: string) {
-    return status === 'active' ? 'success' : status === 'archived' ? 'neutral' : 'info';
-  }
-
-  // ─── Workspace workflows ─────────────────────────────────────────────────────
 
   async function load() {
     setBusy('ws:load');
@@ -364,16 +337,11 @@ export function useWorkspacesConsole(options: WorkspacesConsoleOptions = {}) {
     codespaceForm,
     showDeleteModal,
     deleteFolderChecked,
-    selected,
-    workspaceExpansionSlotId,
-    isWorkspaceExpanded,
-    toggleWorkspaceCard,
+    ...selection,
     workspaceCheckpointNodes,
     workspaceCheckpointPreviewRestore,
-    workspaceOptions,
     cloudDriveConnectionOptions,
     sessionItems,
-    statusTone,
     checkpointNodeFileCount,
     checkpointNodeBasePath,
     load,

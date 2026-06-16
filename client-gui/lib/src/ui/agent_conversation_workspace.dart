@@ -40,31 +40,46 @@ class _AgentConversationWorkspaceState
     extends State<AgentConversationWorkspace> {
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          width: 300,
-          child: _AgentListPane(
-            targets: widget.targets,
-            selectedTargetId: widget.controller.selectedConversationAgentId,
-            scanning: widget.scanning,
-            adding: widget.adding,
-            onSelect: (targetId) =>
-                unawaited(widget.controller.selectConversationAgent(targetId)),
-            onRescan: widget.onRescan,
-            onAddTarget: widget.onAddTarget,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _ConversationPane(
-            controller: widget.controller,
-            onInspect: widget.onInspect,
-            onPlan: widget.onPlan,
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 760;
+        final agentList = _AgentListPane(
+          targets: widget.targets,
+          selectedTargetId: widget.controller.selectedConversationAgentId,
+          scanning: widget.scanning,
+          adding: widget.adding,
+          onSelect: (targetId) =>
+              unawaited(widget.controller.selectConversationAgent(targetId)),
+          onRescan: widget.onRescan,
+          onAddTarget: widget.onAddTarget,
+        );
+        final conversation = _ConversationPane(
+          controller: widget.controller,
+          onInspect: widget.onInspect,
+          onPlan: widget.onPlan,
+        );
+
+        if (compact) {
+          final listHeight = (constraints.maxHeight * 0.32).clamp(172.0, 236.0);
+          return Column(
+            children: [
+              SizedBox(height: listHeight, child: agentList),
+              const SizedBox(height: 12),
+              Expanded(child: conversation),
+            ],
+          );
+        }
+
+        final listWidth = constraints.maxWidth < 920 ? 260.0 : 300.0;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(width: listWidth, child: agentList),
+            const SizedBox(width: 14),
+            Expanded(child: conversation),
+          ],
+        );
+      },
     );
   }
 }
@@ -195,9 +210,7 @@ class _AgentRow extends StatelessWidget {
           height: 72,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            border: Border.all(
-              color: selected ? colors.primary : colors.line,
-            ),
+            border: Border.all(color: selected ? colors.primary : colors.line),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -206,9 +219,7 @@ class _AgentRow extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: detected
-                      ? colors.primaryFixed
-                      : colors.surfaceLow,
+                  color: detected ? colors.primaryFixed : colors.surfaceLow,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -298,50 +309,62 @@ class _ConversationPane extends StatelessWidget {
     final sessions = controller.selectedConversationSessions;
     final selectedSession = controller.selectedConversationSession;
     return PanelFrame(
-      child: Column(
-        children: [
-          _ConversationHeader(
-            target: target,
-            onInspect: onInspect,
-            onPlan: onPlan,
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: HistorySessionPanel(
-              title: '原生智能体历史',
-              subtitle: '${sessions.length} 条原生智能体历史',
-              items: [
-                for (final session in sessions)
-                  HistorySessionPanelItem(
-                    id: session.id,
-                    title: session.title,
-                    meta: _sessionMeta(session),
-                    preview: session.preview,
-                    active:
-                        session.id == controller.selectedConversationSessionId,
-                    canDelete: false,
-                    deleteLabel: 'Read-only native agent history',
-                  ),
-              ],
-              onSelect: controller.selectConversationSession,
-              onDelete: (_) {},
-            ),
-          ),
-          Expanded(
-            child: _MessageList(
-              loading: controller.isLoadingConversations,
-              session: selectedSession,
-            ),
-          ),
-          const Divider(height: 1),
-          _RuntimeMessageComposer(
-            targetLabel: target.label,
-            busy: controller.isSendingConversationMessage,
-            onSend: (text) =>
-                unawaited(controller.sendConversationMessage(text)),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compactHeight = constraints.maxHeight < 430;
+          final compactWidth = constraints.maxWidth < 440;
+          final historyMaxHeight = compactHeight || compactWidth
+              ? 150.0
+              : 230.0;
+          return Column(
+            children: [
+              _ConversationHeader(
+                target: target,
+                onInspect: onInspect,
+                onPlan: onPlan,
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: HistorySessionPanel(
+                  title: '原生智能体历史',
+                  subtitle: '${sessions.length} 条原生智能体历史',
+                  initiallyExpanded: !compactHeight,
+                  maxListHeight: historyMaxHeight,
+                  items: [
+                    for (final session in sessions)
+                      HistorySessionPanelItem(
+                        id: session.id,
+                        title: session.title,
+                        meta: _sessionMeta(session),
+                        preview: session.preview,
+                        active:
+                            session.id ==
+                            controller.selectedConversationSessionId,
+                        canDelete: false,
+                        deleteLabel: 'Read-only native agent history',
+                      ),
+                  ],
+                  onSelect: controller.selectConversationSession,
+                  onDelete: (_) {},
+                ),
+              ),
+              Expanded(
+                child: _MessageList(
+                  loading: controller.isLoadingConversations,
+                  session: selectedSession,
+                ),
+              ),
+              const Divider(height: 1),
+              _RuntimeMessageComposer(
+                targetLabel: target.label,
+                busy: controller.isSendingConversationMessage,
+                onSend: (text) =>
+                    unawaited(controller.sendConversationMessage(text)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -363,60 +386,83 @@ class _ConversationHeader extends StatelessWidget {
     final colors = context.pactColors;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: colors.primaryFixed,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(Icons.forum_outlined, color: colors.primary),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  target.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: colors.text,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 440;
+          final identity = Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: colors.primaryFixed,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                Text(
-                  '${_statusLabel(target)} · ${target.kind}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: colors.textMuted,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: () => onInspect(target.target),
-            child: const Text('Inspect'),
-          ),
-          const SizedBox(width: 8),
-          FilledButton(
-            onPressed: () => onPlan(target.target),
-            style: FilledButton.styleFrom(
-              backgroundColor: colors.primary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
+                child: Icon(Icons.forum_outlined, color: colors.primary),
               ),
-            ),
-            child: const Text('Plan'),
-          ),
-        ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      target.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.text,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      '${_statusLabel(target)} · ${target.kind}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: colors.textMuted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+          final actions = Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: compact ? WrapAlignment.start : WrapAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => onInspect(target.target),
+                child: const Text('Inspect'),
+              ),
+              FilledButton(
+                onPressed: () => onPlan(target.target),
+                style: FilledButton.styleFrom(
+                  backgroundColor: colors.primary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                child: const Text('Plan'),
+              ),
+            ],
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [identity, const SizedBox(height: 10), actions],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: identity),
+              const SizedBox(width: 12),
+              actions,
+            ],
+          );
+        },
       ),
     );
   }

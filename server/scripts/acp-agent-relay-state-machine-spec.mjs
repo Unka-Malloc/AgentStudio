@@ -1,6 +1,6 @@
 export const ACP_AGENT_RELAY_STATE_MACHINE_SPEC = Object.freeze({
   schemaVersion: "v0.0.1:agent:acp-agent-relay-state-machine-spec-1",
-  documentPath: "docs/ACP-AGENT-RELAY-STATE-MACHINE.md",
+  documentPath: "docs/state-machine/STATE-MACHINES.md",
   domains: [
     {
       id: "FrameState",

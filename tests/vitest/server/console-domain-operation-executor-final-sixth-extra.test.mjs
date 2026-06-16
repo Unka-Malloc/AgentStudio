@@ -197,8 +197,8 @@ describe("console-domain executor coverage for the latest uncovered branches", (
     }));
     expect(agentWorkspace.getSessionContext).toHaveBeenCalledWith("session-1", expect.objectContaining({
       actorUserId: "u-1",
-      canAccessAll: true,
-      sharingMode: "team-shared"
+      canAccessAll: false,
+      sharingMode: "owner-bound"
     }));
 
     const workspacePreview = await runOperation("context.preview", {
@@ -238,8 +238,8 @@ describe("console-domain executor coverage for the latest uncovered branches", (
     }));
     expect(agentWorkspace.getWorkspaceContext).toHaveBeenCalledWith("ws-workspace", expect.objectContaining({
       actorUserId: "u-1",
-      canAccessAll: true,
-      sharingMode: "team-shared"
+      canAccessAll: false,
+      sharingMode: "owner-bound"
     }));
   });
 

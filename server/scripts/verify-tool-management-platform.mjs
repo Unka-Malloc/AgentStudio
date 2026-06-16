@@ -9,8 +9,13 @@ import { startHttpServer } from "../services/server-runtime/http-server.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 import { CONSOLE_ROLES } from "../platform/common/security/auth/console-auth.mjs";
 import { createAuthorizationGovernanceStore } from "../platform/common/security/authorization/authorization-governance-store.mjs";
+import { createToolManagementStore } from "../platform/specialized/capabilities/tools/tool-management-core/store.mjs";
 
 const execFileAsync = promisify(execFile);
+const CLI_EXEC_OPTIONS = {
+  env: process.env,
+  maxBuffer: 16 * 1024 * 1024
+};
 
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
@@ -26,7 +31,17 @@ async function fetchJson(url, options = {}) {
 function bearerHeaders(token) {
   return {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`
+    Authorization: `Bearer ${token}`,
+    "X-Pact-Client-Kind": "pact-client",
+    "X-Pact-Client-Id": "pact-cli"
+  };
+}
+
+function trustedPactClientHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "X-Pact-Client-Kind": "pact-client",
+    "X-Pact-Client-Id": "pact-cli"
   };
 }
 
@@ -94,6 +109,7 @@ const authorizationGovernanceStore = createAuthorizationGovernanceStore({
 
 try {
   await installAuthenticatedFetch(server);
+  const localOrigin = new URL(server.url).origin;
   authorizationGovernanceStore.upsertTeam({
     teamId: "verify-tool-management-policy-revision",
     label: "Verify Tool Management Policy Revision"
@@ -114,7 +130,10 @@ try {
   assert.equal(toolIds.has("pact.runtime.mounts.reload"), true);
   assert.equal(toolIds.has("pact.agentLibrary.health"), true);
   assert.equal(toolIds.has("pact.agentLibrary.search"), true);
+  assert.equal(toolIds.has("pact.agentLibrary.retrievalPlaybook.plan"), true);
+  assert.equal(toolIds.has("pact.agentLibrary.playbooks.list"), true);
   assert.equal(toolIds.has("agent-exploration.keyword_search"), true);
+  assert.equal(toolIds.has("agent-exploration.playbook_search"), true);
   assert.equal(toolIds.has("maintenance-agent.storage.doctor"), true);
 
   const toolsets = await fetchJson(`${server.url}/api/tool-management/v1/toolsets`);
@@ -258,7 +277,7 @@ try {
 
   const noToken = await fetchJson(`${server.url}/api/tool-management/v1/execute`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: trustedPactClientHeaders(),
     body: JSON.stringify({
       toolId: "pact.agentLibrary.health",
       input: {}
@@ -319,7 +338,7 @@ try {
       label: "verify-origin-boundary",
       scopes: ["knowledge:read"],
       toolAllow: ["pact.agentLibrary.health"],
-      allowedOrigins: ["https://allowed.example"]
+      allowedOrigins: [localOrigin]
     })
   });
   assert.equal(originGrant.status, 201);
@@ -337,7 +356,7 @@ try {
     method: "POST",
     headers: {
       ...bearerHeaders(originGrant.payload.token),
-      Origin: "https://allowed.example"
+      Origin: localOrigin
     },
     body: JSON.stringify({
       toolId: "pact.agentLibrary.health",
@@ -345,6 +364,46 @@ try {
     })
   });
   assert.equal(originAllowed.status, 200);
+
+  const cidrGrant = await fetchJson(`${server.url}/api/tool-management/v1/grants`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      label: "verify-cidr-bound-grant",
+      scopes: ["knowledge:read"],
+      allowedCidrs: ["10.0.0.0/8"]
+    })
+  });
+  assert.equal(cidrGrant.status, 201);
+  const cidrStore = createToolManagementStore({ userDataPath });
+  try {
+    const spoofedCidr = await cidrStore.authorizeRequest({
+      request: {
+        headers: {
+          authorization: `Bearer ${cidrGrant.payload.token}`,
+          "x-forwarded-for": "10.1.2.3"
+        },
+        socket: { remoteAddress: "203.0.113.44" }
+      },
+      requiredScopes: ["knowledge:read"],
+      recordUse: false
+    });
+    assert.equal(spoofedCidr.ok, false);
+    assert.equal(spoofedCidr.reasonCode, "cidr_not_allowed");
+    const directCidr = await cidrStore.authorizeRequest({
+      request: {
+        headers: {
+          authorization: `Bearer ${cidrGrant.payload.token}`
+        },
+        socket: { remoteAddress: "10.1.2.3" }
+      },
+      requiredScopes: ["knowledge:read"],
+      recordUse: false
+    });
+    assert.equal(directCidr.ok, true, JSON.stringify(directCidr, null, 2));
+  } finally {
+    cidrStore.close();
+  }
 
   const boundGrant = await fetchJson(`${server.url}/api/tool-management/v1/grants`, {
     method: "POST",
@@ -375,6 +434,16 @@ try {
     })
   });
   assert.equal(boundAllowed.status, 200);
+  const boundMissingContext = await fetchJson(`${server.url}/api/tool-management/v1/execute`, {
+    method: "POST",
+    headers: bearerHeaders(boundGrant.payload.token),
+    body: JSON.stringify({
+      toolId: "pact.agentLibrary.health",
+      input: {}
+    })
+  });
+  assert.equal(boundMissingContext.status, 403);
+  assert.equal(boundMissingContext.payload.error.code, "binding_user_missing");
   const boundWrongUser = await fetchJson(`${server.url}/api/tool-management/v1/execute`, {
     method: "POST",
     headers: bearerHeaders(boundGrant.payload.token),
@@ -436,7 +505,7 @@ try {
   assert.equal(forgedApprovalAttempt.payload.pendingOperation.status, "pending");
   assert.equal(forgedApprovalAttempt.payload.pendingOperation.toolId, "pact.workspaceGovernance.policy.set");
   assert.equal(forgedApprovalAttempt.payload.pendingOperation.context.source, "forged-approval-context");
-  assert.equal(forgedApprovalAttempt.payload.pendingOperation.context.transport, "tool-http");
+  assert.equal(forgedApprovalAttempt.payload.pendingOperation.context.transport, "pact-client-http");
   const forgedPendingContextJson = JSON.stringify(forgedApprovalAttempt.payload.pendingOperation.context);
   assert.equal(forgedPendingContextJson.includes("userDataPath"), false);
   assert.equal(forgedPendingContextJson.includes("workspaceRoot"), false);
@@ -1038,7 +1107,7 @@ try {
   const cliCatalog = await execFileAsync(
     process.execPath,
     [path.resolve("server/scripts/pact.mjs"), "tools", "catalog", "--server-url", server.url],
-    { env: process.env }
+    CLI_EXEC_OPTIONS
   );
   const cliCatalogPayload = JSON.parse(cliCatalog.stdout);
   assert.equal(cliCatalogPayload.schemaVersion, "v0.0.1:schema:definition-1");
@@ -1067,7 +1136,7 @@ try {
       "--bucket-seconds",
       "60"
     ],
-    { env: process.env }
+    CLI_EXEC_OPTIONS
   );
   const cliMetricsPayload = JSON.parse(cliMetrics.stdout);
   assert.equal(cliMetricsPayload.schemaVersion, "v0.0.1:schema:definition-1");
@@ -1096,7 +1165,7 @@ try {
       "--max-tool-p95-ms",
       "1"
     ],
-    { env: process.env }
+    CLI_EXEC_OPTIONS
   );
   const cliHealthPayload = JSON.parse(cliHealth.stdout);
   assert.equal(cliHealthPayload.schemaVersion, "v0.0.1:schema:definition-1");
@@ -1127,7 +1196,7 @@ try {
       "--max-tool-p95-ms",
       "1"
     ],
-    { env: process.env }
+    CLI_EXEC_OPTIONS
   );
   assert.match(cliPrometheus.stdout, /^# HELP pact_tool_management_window_seconds/m);
   assert.match(cliPrometheus.stdout, /^pact_tool_management_tool_calls_total \d+/m);
@@ -1161,7 +1230,7 @@ try {
       "--limit",
       "10"
     ],
-    { env: process.env }
+    CLI_EXEC_OPTIONS
   );
   const cliExportPayload = JSON.parse(cliExport.stdout);
   assert.equal(cliExportPayload.schemaVersion, "v0.0.1:schema:definition-1");
@@ -1190,7 +1259,7 @@ try {
       "--limit",
       "10"
     ],
-    { env: process.env }
+    CLI_EXEC_OPTIONS
   );
   const cliToolExportPayload = JSON.parse(cliToolExport.stdout);
   assert.equal(cliToolExportPayload.export.filters.kind, "tool");
@@ -1205,7 +1274,7 @@ try {
   const cliStorage = await execFileAsync(
     process.execPath,
     [path.resolve("server/scripts/pact.mjs"), "tools", "metrics", "storage", "--server-url", server.url],
-    { env: process.env }
+    CLI_EXEC_OPTIONS
   );
   const cliStoragePayload = JSON.parse(cliStorage.stdout);
   assert.equal(cliStoragePayload.schemaVersion, "v0.0.1:schema:definition-1");
@@ -1228,7 +1297,7 @@ try {
       "--body",
       "{\"olderThan\":\"2001-01-01T00:00:00.000Z\"}"
     ],
-    { env: process.env }
+    CLI_EXEC_OPTIONS
   );
   const cliPrunePayload = JSON.parse(cliPrune.stdout);
   assert.equal(cliPrunePayload.schemaVersion, "v0.0.1:schema:definition-1");

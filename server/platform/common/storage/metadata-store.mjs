@@ -130,10 +130,13 @@ export function createMetadataStore({ userDataPath, domainServices = {} }) {
     markBatchFailed(batchId, errorMessage) {
       return batchRepository.markBatchFailed(batchId, errorMessage);
     },
-    getRawMailObject(objectId) {
-      return batchRepository.getRawMailObject(objectId);
-    },
-    listRawObjectStoragePathsByBatch(batchId) {
+	    getRawMailObject(objectId) {
+	      return batchRepository.getRawMailObject(objectId);
+	    },
+	    migrateRawObjectOwnershipFromJobs(jobs = []) {
+	      return batchRepository.migrateRawObjectOwnershipFromJobs(jobs);
+	    },
+	    listRawObjectStoragePathsByBatch(batchId) {
       return batchRepository.listRawObjectStoragePathsByBatch(batchId);
     },
     hasBatch(batchId) {

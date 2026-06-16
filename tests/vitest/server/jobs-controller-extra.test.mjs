@@ -508,6 +508,129 @@ describe("jobs controller", () => {
     expect(forward.proxyApiRequest).toHaveBeenCalled();
   });
 
+  it("binds job read APIs and raw objects to the authenticated owner", async () => {
+    const jobs = new Map([
+      ["owned-job", {
+        id: "owned-job",
+        status: "completed",
+        ownerSubjectId: "owner-a",
+        ownerUserId: "owner-a",
+        archiveBatchId: "batch-owned"
+      }],
+      ["other-job", {
+        id: "other-job",
+        status: "completed",
+        ownerSubjectId: "owner-b",
+        ownerUserId: "owner-b",
+        archiveBatchId: "batch-other"
+      }]
+    ]);
+    const jobWorkflowProvider = createRequiredJobWorkflow({
+      getJob: vi.fn(async (jobId) => jobs.get(jobId) || null),
+      getJobResult: vi.fn(async (jobId) => ({ jobId, ok: true })),
+      listJobs: vi.fn(async () => ({
+        items: [...jobs.values()],
+        summary: { totalCount: jobs.size, activeJobIds: [] }
+      }))
+    });
+    const storageProvider = {
+      readRawObjectById: vi.fn(async (objectId) => (
+        objectId === "raw-owned"
+          ? {
+              rawObject: { object_id: objectId, batch_id: "batch-owned" },
+              contentType: "text/plain",
+              fileName: "owned.txt",
+              buffer: Buffer.from("owned")
+            }
+          : null
+      ))
+    };
+    const { controller } = createHarness({ jobWorkflowProvider, storageProvider });
+    const ownerAuth = { user: { userId: "owner-a", roleId: "member", scopes: ["jobs:read"] } };
+    const otherAuth = { user: { userId: "owner-b", roleId: "member", scopes: ["jobs:read"] } };
+    const adminAuth = { user: { userId: "admin", roleId: "admin", scopes: ["jobs:read"] } };
+
+    const ownerResult = createResponseCapture();
+    await controller.handleGetJobResult({
+      request: {},
+      requestBody: Buffer.alloc(0),
+      jobId: "owned-job",
+      response: ownerResult,
+      authSession: ownerAuth
+    });
+    expect(ownerResult.statusCode).toBe(200);
+
+    const deniedResult = createResponseCapture();
+    await controller.handleGetJobResult({
+      request: {},
+      requestBody: Buffer.alloc(0),
+      jobId: "owned-job",
+      response: deniedResult,
+      authSession: otherAuth
+    });
+    expect(deniedResult.statusCode).toBe(403);
+
+    const listResponse = createResponseCapture();
+    await controller.handleListJobs({ response: listResponse, authSession: ownerAuth });
+    expect(listResponse.json().items.map((job) => job.id)).toEqual(["owned-job"]);
+
+    const ownerRaw = createResponseCapture();
+    await controller.handleGetRawObject({
+      objectId: "raw-owned",
+      response: ownerRaw,
+      authSession: ownerAuth
+    });
+    expect(ownerRaw.statusCode).toBe(200);
+
+    const deniedRaw = createResponseCapture();
+    await controller.handleGetRawObject({
+      objectId: "raw-owned",
+      response: deniedRaw,
+      authSession: otherAuth
+    });
+    expect(deniedRaw.statusCode).toBe(403);
+
+    const adminRaw = createResponseCapture();
+    await controller.handleGetRawObject({
+      objectId: "raw-owned",
+      response: adminRaw,
+      authSession: adminAuth
+    });
+    expect(adminRaw.statusCode).toBe(200);
+  });
+
+  it("stores authenticated owner claims on created jobs", async () => {
+    const jobWorkflowProvider = createRequiredJobWorkflow();
+    const { controller } = createHarness({ jobWorkflowProvider });
+    const response = createResponseCapture();
+    await controller.handleCreateJob({
+      request: { method: "POST" },
+      requestBody: jsonBody({
+        workspaceId: "ws-owner",
+        uploadedFiles: [uploadedFile("note.txt", "hello")]
+      }),
+      response,
+      authSession: {
+        user: {
+          userId: "owner-a",
+          username: "alice",
+          roleId: "member",
+          tenantId: "tenant-1",
+          scopes: ["jobs:read"]
+        }
+      }
+    });
+    expect(response.statusCode).toBe(202);
+    expect(jobWorkflowProvider.createJob).toHaveBeenCalledWith(expect.objectContaining({
+      ownerSubjectId: "owner-a",
+      ownerUserId: "owner-a",
+      ownerUsername: "alice",
+      ownerRoleId: "member",
+      ownerTenantId: "tenant-1",
+      workspaceId: "ws-owner"
+    }));
+  });
+
   it("serves normalized document manifests, document bytes, and raw objects", async () => {
     const userDataPath = await makeTempRoot();
     const documentPath = path.join(userDataPath, "normalized.txt");

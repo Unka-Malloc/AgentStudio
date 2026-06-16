@@ -77,6 +77,10 @@ export function initializeMetadataSchema(db) {
     CREATE TABLE IF NOT EXISTS raw_mail_objects (
       object_id TEXT PRIMARY KEY,
       batch_id TEXT NOT NULL,
+      job_id TEXT NOT NULL DEFAULT '',
+      owner_subject_id TEXT NOT NULL DEFAULT '',
+      owner_user_id TEXT NOT NULL DEFAULT '',
+      owner_username TEXT NOT NULL DEFAULT '',
       source_ref TEXT NOT NULL,
       ingest_origin TEXT NOT NULL,
       original_file_name TEXT NOT NULL,
@@ -617,6 +621,8 @@ export function initializeMetadataSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_batches_status ON import_batches(status, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_raw_mail_batch ON raw_mail_objects(batch_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_raw_mail_job ON raw_mail_objects(job_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_raw_mail_owner ON raw_mail_objects(owner_subject_id, owner_user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_sources_batch_kind ON source_files(batch_id, kind);
     CREATE INDEX IF NOT EXISTS idx_source_document_profiles_batch ON source_document_profiles(batch_id, source_type, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_source_document_profiles_file_hash ON source_document_profiles(file_hash);
@@ -655,6 +661,10 @@ export function initializeMetadataSchema(db) {
   `);
 
   ensureColumn(db, "transactions", "normalized_subject", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "raw_mail_objects", "job_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "raw_mail_objects", "owner_subject_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "raw_mail_objects", "owner_user_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "raw_mail_objects", "owner_username", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "raw_mail_objects", "client_uid", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "raw_mail_objects", "source_type", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "raw_mail_objects", "provider_id", "TEXT NOT NULL DEFAULT ''");
@@ -664,6 +674,15 @@ export function initializeMetadataSchema(db) {
   ensureColumn(db, "raw_mail_objects", "captured_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "raw_mail_objects", "source_metadata_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "raw_mail_objects", "archive_file_name", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    UPDATE raw_mail_objects
+    SET job_id = COALESCE(
+      NULLIF(job_id, ''),
+      (SELECT job_id FROM import_batches WHERE import_batches.batch_id = raw_mail_objects.batch_id),
+      ''
+    )
+    WHERE job_id = ''
+  `);
   ensureColumn(db, "source_files", "provider_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "source_files", "external_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "source_files", "sync_batch_id", "TEXT NOT NULL DEFAULT ''");

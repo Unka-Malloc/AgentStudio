@@ -271,7 +271,7 @@ try {
     label: "ACP Relay MCP Scope Source",
     type: "machine",
     toolsets: ["pact.agent.relay", "pact.runtime.read"],
-    scopes: ["agent_relay:view", "agent_relay:operate", "storage:read", "jobs:read"],
+    scopes: ["agent_relay:view", "agent_relay:operate", "console:read", "storage:read", "jobs:read"],
     metadata: {
       agentId: "codex-mcp-scope-verifier"
     }
@@ -355,7 +355,7 @@ try {
     body: {
       prompt: "verify relay-scoped MCP child grant",
       relayMcpToolsets: ["pact.runtime.read"],
-      relayMcpScopes: ["storage:read", "runtime:admin"],
+      relayMcpScopes: ["console:read", "storage:read", "runtime:admin"],
       sourceMcpToken: "source-mcp-secret-must-not-reach-target",
       upstreamToken: "upstream-secret-must-not-reach-target"
     }
@@ -433,7 +433,7 @@ try {
       },
       socket: { remoteAddress: "127.0.0.1" }
     },
-    requiredScopes: ["storage:read"]
+    requiredScopes: ["console:read", "storage:read"]
   });
   assert.equal(childAuthorization.ok, true);
   assert.equal(childAuthorization.grant.id, relayGrantId);
@@ -441,6 +441,7 @@ try {
   assert.equal(childAuthorization.grant.toolsets.includes("pact.runtime.read"), true);
   assert.equal(childAuthorization.grant.toolsets.includes("pact.agent.relay"), false);
   assert.equal(childAuthorization.grant.scopes.includes("storage:read"), true);
+  assert.equal(childAuthorization.grant.scopes.includes("console:read"), true);
   assert.equal(childAuthorization.grant.scopes.includes("runtime:admin"), false);
   assert.equal(childAuthorization.grant.metadata.issuedBy, "pact-acp-agent-relay");
   assert.equal(childAuthorization.grant.metadata.sourceGrantId, sourceGrant.grant.id);
@@ -534,7 +535,7 @@ try {
     body: {
       prompt: "verify relay-scoped MCP child grant reissue after connection loss",
       relayMcpToolsets: ["pact.runtime.read"],
-      relayMcpScopes: ["storage:read"]
+      relayMcpScopes: ["console:read", "storage:read"]
     }
   });
   assert.equal(secondPromptPending.status, 202, JSON.stringify(secondPromptPending.payload));
@@ -592,7 +593,7 @@ try {
       },
       socket: { remoteAddress: "127.0.0.1" }
     },
-    requiredScopes: ["storage:read"]
+    requiredScopes: ["console:read", "storage:read"]
   });
   assert.equal(oldChildAfterReissue.ok, false);
   const secondChildAuthorization = await platform.store.authorizeRequest({
@@ -602,7 +603,7 @@ try {
       },
       socket: { remoteAddress: "127.0.0.1" }
     },
-    requiredScopes: ["storage:read"]
+    requiredScopes: ["console:read", "storage:read"]
   });
   assert.equal(secondChildAuthorization.ok, true);
   assert.equal(secondChildAuthorization.grant.id, relayGrantId);

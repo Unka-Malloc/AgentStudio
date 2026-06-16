@@ -31,6 +31,10 @@ import {
   saveImportCheckpointEntry,
   validateImportCheckpointEntry
 } from "../../../../common/storage/import-resume-store.mjs";
+import {
+  assertExistingLocalDirectoryWithinControlledRoots,
+  assertExistingLocalFileWithinControlledRoots
+} from "../../../../common/security/local-path-boundary.mjs";
 
 function normalizeText(value) {
   return String(value || "").replace(/\r\n/g, "\n").trim();
@@ -112,9 +116,100 @@ function looksLikeText(buffer) {
   return suspicious / sample.length < detection.maxControlRatio;
 }
 
+const ARCHIVE_MAX_ENTRIES = 500;
+const ARCHIVE_MAX_ENTRY_BYTES = 64 * 1024 * 1024;
+const ARCHIVE_MAX_TOTAL_BYTES = 256 * 1024 * 1024;
+
+function archiveLimitError(message, context = {}) {
+  const details = Object.entries(context)
+    .filter(([, value]) => value !== undefined && value !== "")
+    .map(([key, value]) => `${key}=${value}`)
+    .join(" ");
+  return new Error(details ? `${message} (${details})` : message);
+}
+
+function archiveEntryByteSize(file = {}) {
+  const originalSize = Number(file.originalSize);
+  if (Number.isFinite(originalSize) && originalSize >= 0) {
+    return originalSize;
+  }
+  const size = Number(file.size);
+  return Number.isFinite(size) && size >= 0 ? size : 0;
+}
+
+function collectZipEntryNames(buffer) {
+  const names = [];
+  unzipSync(new Uint8Array(buffer), {
+    filter(file) {
+      const entryPath = normalizeArchiveEntryPath(file.name || "");
+      if (entryPath) {
+        names.push(entryPath);
+      }
+      return false;
+    }
+  });
+  return names;
+}
+
+function unzipArchiveEntriesWithLimits(buffer, { label = "压缩包" } = {}) {
+  let fileCount = 0;
+  let declaredTotalBytes = 0;
+  const acceptedNames = new Set();
+  const entries = unzipSync(new Uint8Array(buffer), {
+    filter(file) {
+      const rawName = String(file.name || "");
+      const entryPath = normalizeArchiveEntryPath(rawName);
+      if (!entryPath || entryPath.endsWith("/")) {
+        return false;
+      }
+      fileCount += 1;
+      if (fileCount > ARCHIVE_MAX_ENTRIES) {
+        throw archiveLimitError(`${label}条目数量超出上限。`, {
+          entries: fileCount,
+          maxEntries: ARCHIVE_MAX_ENTRIES
+        });
+      }
+      const byteSize = archiveEntryByteSize(file);
+      if (byteSize > ARCHIVE_MAX_ENTRY_BYTES) {
+        throw archiveLimitError(`${label}条目过大，已停止展开。`, {
+          entry: entryPath,
+          bytes: byteSize,
+          maxBytes: ARCHIVE_MAX_ENTRY_BYTES
+        });
+      }
+      declaredTotalBytes += byteSize;
+      if (declaredTotalBytes > ARCHIVE_MAX_TOTAL_BYTES) {
+        throw archiveLimitError(`${label}展开后体积超出上限。`, {
+          bytes: declaredTotalBytes,
+          maxBytes: ARCHIVE_MAX_TOTAL_BYTES
+        });
+      }
+      acceptedNames.add(entryPath);
+      return true;
+    }
+  });
+  let actualTotalBytes = 0;
+  const normalizedEntries = {};
+  for (const [rawEntryPath, entryBuffer] of Object.entries(entries)) {
+    const entryPath = normalizeArchiveEntryPath(rawEntryPath);
+    if (!entryPath || !acceptedNames.has(entryPath)) {
+      continue;
+    }
+    actualTotalBytes += entryBuffer.byteLength || entryBuffer.length || 0;
+    if (actualTotalBytes > ARCHIVE_MAX_TOTAL_BYTES) {
+      throw archiveLimitError(`${label}实际展开体积超出上限。`, {
+        bytes: actualTotalBytes,
+        maxBytes: ARCHIVE_MAX_TOTAL_BYTES
+      });
+    }
+    normalizedEntries[entryPath] = entryBuffer;
+  }
+  return normalizedEntries;
+}
+
 function inferZipDocumentExtension(buffer, fallbackExtension = "") {
   try {
-    const entries = Object.keys(unzipSync(new Uint8Array(buffer)));
+    const entries = collectZipEntryNames(buffer);
     return inferZipContainerExtension(entries.join("\n")) || fallbackExtension;
   } catch {
     const haystack = buffer.toString("latin1");
@@ -902,7 +997,9 @@ async function parseArchiveInput({
   let archiveEntries;
 
   try {
-    archiveEntries = unzipSync(new Uint8Array(buffer));
+    archiveEntries = unzipArchiveEntriesWithLimits(buffer, {
+      label: name || filePath || "压缩包"
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
     throw new Error(`${name || filePath || "压缩包"} 解压失败：${message}`);
@@ -1575,35 +1672,43 @@ async function collectSupportedFilesFromDirectory(
   }
 }
 
-async function expandInputFilePaths(filePaths, runtime = null) {
+async function expandInputFilePaths(filePaths, runtime = null, { userDataPath = "" } = {}) {
   const expandedFileEntries = [];
   const warnings = [];
   const visitedDirectories = new Set();
 
   for (const inputPath of filePaths) {
     try {
-      const stats = await fs.stat(inputPath);
+      const stats = await fs.lstat(inputPath);
 
       if (stats.isDirectory()) {
+        const directory = await assertExistingLocalDirectoryWithinControlledRoots(inputPath, {
+          userDataPath,
+          label: "文档解析输入目录"
+        });
         const filesBefore = expandedFileEntries.length;
         await collectSupportedFilesFromDirectory(
-          inputPath,
+          directory.realPath,
           expandedFileEntries,
           visitedDirectories,
-          inputPath,
+          directory.realPath,
           runtime
         );
 
         if (expandedFileEntries.length === filesBefore) {
-          warnings.push(`${path.basename(inputPath)} 中没有可解析的文件，已跳过。`);
+          warnings.push(`${path.basename(directory.realPath)} 中没有可解析的文件，已跳过。`);
         }
 
         continue;
       }
 
+      const file = await assertExistingLocalFileWithinControlledRoots(inputPath, {
+        userDataPath,
+        label: "文档解析输入文件"
+      });
       expandedFileEntries.push({
-        absolutePath: inputPath,
-        relativePath: path.basename(inputPath)
+        absolutePath: file.realPath,
+        relativePath: path.basename(file.realPath)
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "未知错误";
@@ -1891,7 +1996,7 @@ export async function readInputSources({
     force: true
   });
   const manifestInput = await loadInputFileManifest({ userDataPath, fileManifestPath });
-  const expanded = manifestInput || await expandInputFilePaths(filePaths, runtime);
+  const expanded = manifestInput || await expandInputFilePaths(filePaths, runtime, { userDataPath });
   warnings.push(...expanded.warnings);
   failureReasons.push(...(expanded.failureReasons || []));
   const fileWorkItems = [];

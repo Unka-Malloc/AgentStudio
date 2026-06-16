@@ -164,15 +164,38 @@ function runBusinessChecks({ featureRuntime, activeOperations, clientPackagingCo
   );
 
   if (featureRuntime.edition === "community") {
+    assertCondition(activeOperationIds.has("knowledge.search"), "community must keep Agent Library core search", failures);
+    assertCondition(!activeOperationIds.has("knowledge.playbooks.list"), "community must not expose optional AgentLibrary Playbooks", failures);
+    assertCondition(!activeOperationIds.has("workspace.skill.upload"), "community must not expose Skill Hub workspace skill facade", failures);
+    assertCondition(!activeOperationIds.has("knowledge.agent_explore.runs.create"), "community must not expose agent exploration operations", failures);
+    assertCondition(!activeOperationIds.has("knowledge.summarization.runs.create"), "community must not expose summarization operations", failures);
     assertCondition(!activeOperationIds.has("knowledge.evolution.runs.create"), "community must not expose knowledge evolution RPC/HTTP/CLI operations", failures);
+    assertCondition(!activeOperationIds.has("knowledge.hierarchy.audit"), "community must not expose outline reasoning operations", failures);
+    assertCondition(!activeOperationIds.has("external.knowledge.distillation.runs.create"), "community must not expose external distillation proxy operations", failures);
     assertCondition(!activeOperationIds.has("maintenance_agent.runs.create"), "community must not expose maintenance agent runbooks", failures);
+    assertCondition(!toolIds.has("pact.agentLibrary.playbooks.list"), "community tool catalog must not expose optional Playbook tool", failures);
     assertCondition(!toolIds.has("pact.agentLibrary.evolution.runs.create"), "community tool catalog must not expose knowledge evolution tool", failures);
+    assertCondition(!toolIds.has("pact.capabilityPackages.list"), "community tool catalog must not expose Skill Hub package tools", failures);
     assertCondition(clientModules["gmail-connector"]?.enabled !== true, "community client package must not enable Gmail connector", failures);
     assertCondition(clientModules["slack-connector"]?.enabled !== true, "community client package must not enable Slack connector", failures);
   }
 
+  if (featureRuntime.edition === "pro") {
+    assertCondition(activeOperationIds.has("knowledge.playbooks.list"), "pro must expose optional AgentLibrary Playbooks", failures);
+    assertCondition(activeOperationIds.has("external.knowledge.distillation.runs.create"), "pro must expose external distillation proxy operations", failures);
+    assertCondition(activeOperationIds.has("knowledge.agent_explore.runs.create"), "pro must expose agent exploration operations", failures);
+    assertCondition(!activeOperationIds.has("knowledge.evolution.runs.create"), "pro must keep knowledge evolution independently disabled", failures);
+    assertCondition(!activeOperationIds.has("knowledge.summarization.runs.create"), "pro must keep summarization independently disabled", failures);
+    assertCondition(!activeOperationIds.has("knowledge.hierarchy.audit"), "pro must keep outline reasoning independently disabled", failures);
+  }
+
   if (featureRuntime.edition === "enterprise") {
+    assertCondition(activeOperationIds.has("knowledge.playbooks.list"), "enterprise must expose optional AgentLibrary Playbooks", failures);
+    assertCondition(activeOperationIds.has("knowledge.summarization.runs.create"), "enterprise must expose summarization operations", failures);
     assertCondition(activeOperationIds.has("knowledge.evolution.runs.create"), "enterprise must expose knowledge evolution operations", failures);
+    assertCondition(activeOperationIds.has("knowledge.hierarchy.audit"), "enterprise must expose outline reasoning operations", failures);
+    assertCondition(activeOperationIds.has("external.knowledge.distillation.runs.create"), "enterprise must expose external distillation proxy operations", failures);
+    assertCondition(activeOperationIds.has("workspace.skill.upload"), "enterprise must expose Skill Hub facade operations", failures);
     assertCondition(activeOperationIds.has("maintenance_agent.runs.create"), "enterprise must expose maintenance agent runbooks", failures);
   }
 
@@ -182,10 +205,22 @@ function runBusinessChecks({ featureRuntime, activeOperations, clientPackagingCo
     assertCondition(activeOperationIds.has("external.cloudDrive.connect"), "client-local must expose cloud drive local projection connect", failures);
     assertCondition(activeOperationIds.has("tool_management.catalog"), "client-local must expose Tool Management catalog for MCP", failures);
     assertCondition(!featureRuntime.activeFeatureIds.includes("knowledge-core"), "client-local must not include knowledge-core", failures);
+    assertCondition(!featureRuntime.activeFeatureIds.includes("skill-hub"), "client-local must not include Skill Hub", failures);
+    assertCondition(!featureRuntime.activeFeatureIds.includes("agentlibrary-playbooks"), "client-local must not include AgentLibrary Playbooks", failures);
+    assertCondition(!featureRuntime.activeFeatureIds.includes("agent-exploration"), "client-local must not include agent exploration", failures);
+    assertCondition(!featureRuntime.activeFeatureIds.includes("knowledge-summarization"), "client-local must not include summarization", failures);
+    assertCondition(!featureRuntime.activeFeatureIds.includes("knowledge-evolution"), "client-local must not include knowledge evolution", failures);
+    assertCondition(!featureRuntime.activeFeatureIds.includes("knowledge-outline-reasoning"), "client-local must not include outline reasoning", failures);
+    assertCondition(!featureRuntime.activeFeatureIds.includes("external-knowledge-distillation"), "client-local must not include external distillation", failures);
     assertCondition(!featureRuntime.activeFeatureIds.includes("agent-gateway"), "client-local must not include agent-gateway", failures);
     assertCondition(!featureRuntime.activeFeatureIds.includes("client-runtime-core"), "client-local must not include client-runtime-core", failures);
     assertCondition(!featureRuntime.activeFeatureIds.includes("agent-memory"), "client-local must not include agent-memory", failures);
     assertCondition(!activeOperationIds.has("knowledge.search"), "client-local must not expose knowledge search", failures);
+    assertCondition(!activeOperationIds.has("workspace.skill.upload"), "client-local must not expose Skill Hub operations", failures);
+    assertCondition(!activeOperationIds.has("knowledge.playbooks.list"), "client-local must not expose Playbook operations", failures);
+    assertCondition(!activeOperationIds.has("knowledge.agent_explore.runs.create"), "client-local must not expose agent exploration operations", failures);
+    assertCondition(!activeOperationIds.has("knowledge.summarization.runs.create"), "client-local must not expose summarization operations", failures);
+    assertCondition(!activeOperationIds.has("external.knowledge.distillation.runs.create"), "client-local must not expose external distillation operations", failures);
     assertCondition(!activeOperationIds.has("agent_gateway.invoke"), "client-local must not expose agent gateway operations", failures);
     assertCondition(clientModules["knowledge-agent"]?.enabled !== true, "client-local client package must not enable knowledge agent", failures);
   }

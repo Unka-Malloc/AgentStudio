@@ -88,8 +88,9 @@ function verifyOperationsAndTools() {
   const materializeTool = catalog.tools.find((tool) => tool.id === "pact.sampleBusinessPack.materialize");
   assert.ok(materializeTool, "sample business pack materialize tool must be exposed");
   assert.equal(materializeTool.operationId, "sample_business_pack.materialize");
+  assert.ok(materializeTool.toolsets.includes("pact.runtime.maintain"));
   assert.ok(materializeTool.toolsets.includes("pact.agentLibrary.maintain"));
-  assert.ok(materializeTool.requiredScopes.includes("knowledge:maintain"));
+  assert.ok(materializeTool.requiredScopes.includes("runtime:admin"));
 }
 
 async function main() {

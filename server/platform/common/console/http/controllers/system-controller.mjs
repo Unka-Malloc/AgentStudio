@@ -13,6 +13,7 @@ import { createSystemControllerKnowledgeOperationsHandlers } from "./system-cont
 import { createSystemControllerKnowledgeRuntimeHandlers } from "./system-controller-knowledge-runtime-handlers.mjs";
 import { createSystemControllerMobileRelayHandlers } from "./system-controller-mobile-relay-handlers.mjs";
 import { createSystemControllerOpsObservationHandlers } from "./system-controller-ops-observation-handlers.mjs";
+import { createSystemControllerProcessIdentityHandlers } from "./system-controller-process-identity-handlers.mjs";
 import { createSystemControllerRuntimeHandlers } from "./system-controller-runtime-handlers.mjs";
 import { createSystemControllerWorkspaceProtocolHandlers } from "./system-controller-workspace-protocol-handlers.mjs";
 import { createSystemControllerWorkspaceRuntimeHandlers } from "./system-controller-workspace-runtime-handlers.mjs";
@@ -49,6 +50,7 @@ export function createSystemController({
   protocolEventBus = null,
   consoleAuth = null,
   securityPermissions = null,
+  processIdentity = null,
   operationAuditStore = null,
   maintenanceAgent = null,
   knowledgeSourceService = null,
@@ -78,6 +80,7 @@ export function createSystemController({
   const effectiveSecurityPermissions =
     securityPermissions ||
     (consoleAuth ? createSecurityPermissionsProvider({ consoleAuth }) : null);
+  const effectiveProcessIdentity = processIdentity || effectiveSecurityPermissions?.processIdentity || null;
   const {
     executeConsoleDomainOperation,
     knowledgeDomainContext,
@@ -298,6 +301,10 @@ export function createSystemController({
     ...createSystemControllerMobileRelayHandlers({
       parseJsonBody,
       mobileRelayStore
+    }),
+    ...createSystemControllerProcessIdentityHandlers({
+      parseJsonBody,
+      processIdentity: effectiveProcessIdentity
     }),
     ...createSystemControllerWorkspaceProtocolHandlers({
       sendConsoleDomainOperation,

@@ -2,6 +2,7 @@
   "id": "pact.runtime.read",
   "label": "Runtime read",
   "requiredScopes": [
+    "console:read",
     "storage:read",
     "jobs:read"
   ],

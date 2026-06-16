@@ -26,6 +26,11 @@ import { createToolCatalog } from "../platform/specialized/capabilities/tools/to
 import { createToolManagementPlatform } from "../platform/specialized/capabilities/tools/tool-management-core/index.mjs";
 import { executeConsoleDomainOperation } from "../platform/specialized/console/console-domain-operation-executor.mjs";
 
+process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
+process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
+process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER = "local-file";
+process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = "local-file";
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -371,7 +376,7 @@ const stateMachineVerifierText = await fs.readFile(new URL(
   import.meta.url
 ), "utf8");
 const stateMachineDocumentText = await fs.readFile(new URL(
-  "../../docs/ACP-AGENT-RELAY-STATE-MACHINE.md",
+  "../../docs/state-machine/STATE-MACHINES.md",
   import.meta.url
 ), "utf8");
 const relayOperationExecutorText = await fs.readFile(new URL(
@@ -476,7 +481,7 @@ assert.match(
 );
 assert.match(
   stateMachineSpecText,
-  /pact\.acp-agent-relay\.state-machine\.spec\.v1[\s\S]*FrameState[\s\S]*SourceIdentityState[\s\S]*VisibilityState[\s\S]*source_identity_isolation[\s\S]*accepted_only_observation_final_refresh/,
+  /v0\.0\.1:agent:acp-agent-relay-state-machine-spec-1[\s\S]*FrameState[\s\S]*SourceIdentityState[\s\S]*VisibilityState[\s\S]*source_identity_isolation[\s\S]*accepted_only_observation_final_refresh/,
   "ACP relay state-machine spec must enumerate domains and evidence branches including identity isolation and observation final refresh."
 );
 assert.match(
@@ -940,12 +945,12 @@ assert.match(
 );
 assert.match(
   realProofBundleText,
-  /pact\.acp-agent-relay\.real-proof-bundle\.v1/,
+  /v0\.0\.1:agent:acp-agent-relay-real-proof-bundle-1/,
   "ACP relay real proof bundle must expose a stable schema."
 );
 assert.match(
   realProofBundleText,
-  /pact\.acp-agent-relay\.real-proof-matrix\.v1/,
+  /v0\.0\.1:agent:acp-agent-relay-real-proof-matrix-1/,
   "ACP relay real proof bundle must expose a top-level proof matrix schema."
 );
 assert.match(
@@ -1175,33 +1180,33 @@ assert.match(
 );
 assert.match(
   realVerifierText,
-  /targetCallbackParentBindingProofAcceptable[\s\S]*target_callback_parent_ambiguous[\s\S]*target_callback_parent_not_found[\s\S]*target_callback_parent_binding[\s\S]*proven/,
-  "ACP relay real verifier must explicitly assert target callback parent-binding fail-closed proof."
+  /targetLifecycleProofsRequested[\s\S]*verify-acp-agent-relay-target-callback-approval\.mjs[\s\S]*targetCallbackApprovalResult[\s\S]*targetCallbackApprovalProofAcceptable/,
+  "ACP relay real verifier must only run and consume target callback approval lifecycle proof when requested."
 );
 assert.match(
   realVerifierText,
-  /sourceFacingCancelProofAcceptable[\s\S]*targetCancelObserved[\s\S]*lateTargetCompletionSuppressed[\s\S]*source_facing_session_cancel_running_prompt[\s\S]*proven/,
-  "ACP relay real verifier must explicitly assert source-facing session/cancel running prompt proof."
+  /targetLifecycleProofsRequested[\s\S]*verify-acp-agent-relay-target-reconnect\.mjs[\s\S]*targetReconnectResult[\s\S]*targetReconnectProofAcceptable/,
+  "ACP relay real verifier must only run and consume target reconnect lifecycle proof when requested."
 );
 assert.match(
   realVerifierText,
-  /verify-acp-agent-relay-target-reconnect\.mjs[\s\S]*targetReconnectResult[\s\S]*targetReconnectProofAcceptable/,
-  "ACP relay real verifier must run and consume the target reconnect verifier."
+  /targetLifecycleProofsRequested[\s\S]*verify-acp-agent-relay-target-load-reconnect\.mjs[\s\S]*targetLoadReconnectResult[\s\S]*targetLoadReconnectProofAcceptable/,
+  "ACP relay real verifier must only run and consume target load-reconnect lifecycle proof when requested."
 );
 assert.match(
   realVerifierText,
-  /targetProcessRestartObserved[\s\S]*resumeTargetResumeRefMatchedFirst[\s\S]*sourceRelaySessionStable[\s\S]*target_reconnect_resume_after_process_restart[\s\S]*proven/,
-  "ACP relay real verifier must explicitly assert target reconnect resume after process restart."
+  /targetLifecycleProofsRequested[\s\S]*verify-acp-agent-relay-idempotency\.mjs[\s\S]*idempotencyResult[\s\S]*idempotencyProofAcceptable/,
+  "ACP relay real verifier must only run and consume source-facing idempotency lifecycle proof when requested."
 );
 assert.match(
   realVerifierText,
-  /verify-acp-agent-relay-target-load-reconnect\.mjs[\s\S]*targetLoadReconnectResult[\s\S]*targetLoadReconnectProofAcceptable/,
-  "ACP relay real verifier must run and consume the target load-only reconnect verifier."
+  /if \(targetLifecycleProofsRequested\)[\s\S]*targetCallbackParentBindingProofAcceptable[\s\S]*target_callback_parent_ambiguous[\s\S]*target_callback_parent_not_found[\s\S]*sourceFacingCancelProofAcceptable[\s\S]*targetCancelObserved[\s\S]*lateTargetCompletionSuppressed/,
+  "ACP relay real verifier must assert requested target lifecycle proofs."
 );
 assert.match(
   realVerifierText,
-  /targetSessionLoadUsed[\s\S]*targetSessionResumeNotUsed[\s\S]*reasoningTraceReplaySuppressed[\s\S]*target_reconnect_load_only_after_process_restart[\s\S]*proven/,
-  "ACP relay real verifier must explicitly assert target reconnect load-only after process restart."
+  /else \{[\s\S]*target_callback_approval_resume[\s\S]*target_callback_approval_denial[\s\S]*target_callback_parent_binding[\s\S]*source_facing_session_cancel_running_prompt[\s\S]*target_reconnect_resume_after_process_restart[\s\S]*target_reconnect_load_only_after_process_restart[\s\S]*source_facing_idempotency_replay_conflict[\s\S]*not_required/,
+  "ACP relay real verifier must skip unrequested target lifecycle proofs as not_required."
 );
 assert.match(
   realVerifierText,
@@ -1235,28 +1240,28 @@ assert.match(
 );
 assert.match(
   realVerifierText,
-  /verify-acp-agent-relay-antigravity-acp-wrapper-target\.mjs[\s\S]*PACT_ACP_RELAY_ANTIGRAVITY_WRAPPER_DOWNSTREAM_ASPECT[\s\S]*antigravityAcpWrapperTargetResult[\s\S]*buildRealRelayProofBundle/,
-  "ACP relay real verifier must run and consume the downstream-client-aspect Antigravity Agent API ACP wrapper target verifier."
+  /antigravityAcpWrapperRequested[\s\S]*verify-acp-agent-relay-antigravity-acp-wrapper-target\.mjs[\s\S]*PACT_ACP_RELAY_ANTIGRAVITY_WRAPPER_DOWNSTREAM_ASPECT[\s\S]*antigravityAcpWrapperTargetResult[\s\S]*buildRealRelayProofBundle/,
+  "ACP relay real verifier must only run and consume the downstream-client-aspect Antigravity Agent API ACP wrapper target verifier when requested."
 );
 assert.match(
   realVerifierText,
-  /antigravityAcpWrapperTargetProofAcceptable[\s\S]*downstreamClientAspectAssemblyUsed[\s\S]*agentDiscoveryProof\?\.fromAspect[\s\S]*targetDiscoveryProof\?\.adapterId[\s\S]*sourceFacingTargetCommunicationMode[\s\S]*native_acp_stdio[\s\S]*nativeAntigravityAcp[\s\S]*false[\s\S]*antigravity_agentapi_acp_wrapper_target_communication/,
-  "ACP relay real verifier must assert downstream-client-aspect Antigravity wrapper target proof and top-level matrix status."
+  /if \(antigravityAcpWrapperRequested\)[\s\S]*nativeAntigravityAcp[\s\S]*false[\s\S]*antigravityAcpWrapperTargetProofAcceptable/,
+  "ACP relay real verifier must assert requested Antigravity wrapper target proof."
+);
+assert.match(
+  realVerifierText,
+  /if \(antigravityAcpWrapperRequested\)[\s\S]*downstreamClientAspectAssemblyUsed[\s\S]*agentDiscoveryProof\?\.fromAspect[\s\S]*targetDiscoveryProof\?\.adapterId[\s\S]*sourceFacingTargetCommunicationMode[\s\S]*native_acp_stdio/,
+  "ACP relay real verifier must assert requested Antigravity wrapper discovery metadata."
+);
+assert.match(
+  realVerifierText,
+  /else \{[\s\S]*antigravityAcpWrapperTargetRequired[\s\S]*false[\s\S]*antigravity_agentapi_acp_wrapper_target_communication[\s\S]*not_required/,
+  "ACP relay real verifier must skip unrequested Antigravity wrapper target proof as not_required."
 );
 assert.match(
   realVerifierText,
   /antigravityCrossRunBindingProofAcceptable[\s\S]*antigravity_cross_run_binding[\s\S]*proven/,
   "ACP relay real verifier must assert Antigravity cross-run binding in the top-level matrix."
-);
-assert.match(
-  realVerifierText,
-  /verify-acp-agent-relay-target-callback-approval\.mjs[\s\S]*targetCallbackApprovalResult[\s\S]*targetCallbackApprovalProofAcceptable/,
-  "ACP relay real verifier must run and assert the target callback approval verifier."
-);
-assert.match(
-  realVerifierText,
-  /verify-acp-agent-relay-idempotency\.mjs[\s\S]*idempotencyResult[\s\S]*idempotencyProofAcceptable/,
-  "ACP relay real verifier must run and assert the source-facing idempotency replay/conflict verifier."
 );
 assert.match(
   realVerifierText,
@@ -1412,8 +1417,8 @@ assert.match(
 );
 assert.match(
   relayOperationExecutorText,
-  /acp_agent_relay\.targets\.upsert[\s\S]*upsertTarget[\s\S]*targetCapabilityDescriptor[\s\S]*virtualAgentCapabilityDescriptor/,
-  "ACP relay executor must expose a governed target upsert operation returning source-safe descriptors."
+  /acp_agent_relay\.targets\.upsert[\s\S]*acp_agent_relay\.targets\.upsert_local_executable[\s\S]*allowLocalExecutableTargetRegistration:\s*true[\s\S]*targetCapabilityDescriptor[\s\S]*virtualAgentCapabilityDescriptor/,
+  "ACP relay executor must expose governed target upsert operations and reserve local executable registration for the admin operation."
 );
 assert.match(
   relayOperationExecutorText,
@@ -1432,8 +1437,8 @@ assert.match(
 );
 assert.match(
   toolManagementHttpText,
-  /\/targets[\s\S]*acp_agent_relay\.targets\.upsert/,
-  "ACP relay HTTP facade must route target registration through operation-backed Tool Management."
+  /\/targets\/local-executable[\s\S]*acp_agent_relay\.targets\.upsert_local_executable[\s\S]*\/targets[\s\S]*acp_agent_relay\.targets\.upsert/,
+  "ACP relay HTTP facade must route target registration through operation-backed Tool Management and reserve local executable targets for the admin path."
 );
 assert.match(
   toolManagementHttpText,
@@ -1452,13 +1457,18 @@ assert.match(
 );
 assert.match(
   operationRegistryText,
+  /acp_agent_relay\.targets\.upsert_local_executable[\s\S]*requiredScopes:\s*\["runtime:admin"\]/,
+  "ACP relay local executable target registration must be admin-only."
+);
+assert.match(
+  operationRegistryText,
   /acp_agent_relay\.downstream_clients\.refresh[\s\S]*requiredScopes:\s*\["agent_relay:operate"\]/,
   "ACP relay downstream client refresh operation must be protected by agent_relay:operate."
 );
 assert.match(
   toolManagementCatalogText,
-  /acp_agent_relay\.virtual_agents\.upsert[\s\S]*pact\.agentRelay\.virtualAgents\.upsert[\s\S]*acp_agent_relay\.targets\.upsert[\s\S]*pact\.agentRelay\.targets\.upsert[\s\S]*agent_relay:operate/,
-  "ACP relay target and virtual-agent registration operations must be exposed through the existing Agent Relay toolset scope mapping."
+  /acp_agent_relay\.virtual_agents\.upsert[\s\S]*pact\.agentRelay\.virtualAgents\.upsert[\s\S]*acp_agent_relay\.targets\.upsert[\s\S]*pact\.agentRelay\.targets\.upsert[\s\S]*acp_agent_relay\.targets\.upsert_local_executable[\s\S]*pact\.agentRelay\.targets\.upsertLocalExecutable[\s\S]*runtime:admin/,
+  "ACP relay target registration operations must expose normal and admin-only local executable scope mappings."
 );
 assert.match(
   toolManagementCatalogText,
@@ -1537,6 +1547,7 @@ const publicAcpRelayToolOperationIds = [
   "acp_agent_relay.virtual_agents.upsert",
   "acp_agent_relay.targets.list",
   "acp_agent_relay.targets.upsert",
+  "acp_agent_relay.targets.upsert_local_executable",
   "acp_agent_relay.downstream_clients.refresh",
   "acp_agent_relay.sessions.list",
   "acp_agent_relay.sessions.get",
@@ -1964,6 +1975,69 @@ for (const forbidden of [
 ]) {
   assert.equal(JSON.stringify(virtualAgents.data.virtualAgents).includes(forbidden), false);
 }
+
+const deniedLocalExecutableTarget = await runtime.execute("acp_agent_relay.targets.upsert", {
+  targetId: "custom.local.denied",
+  label: "Denied Local CLI Target",
+  transport: {
+    type: "agent-cli-exec",
+    command: {
+      executable: "printf",
+      args: ["hello"]
+    }
+  }
+});
+assert.equal(deniedLocalExecutableTarget.ok, false);
+assert.equal(deniedLocalExecutableTarget.error.code, "local_executable_target_denied");
+assert.equal(targetRegistry.getTarget("custom.local.denied"), null);
+
+const deniedStdioCommandTarget = await runtime.execute("acp_agent_relay.targets.upsert", {
+  targetId: "custom.stdio.denied",
+  label: "Denied Stdio Command Target",
+  transport: {
+    type: "stdio",
+    command: {
+      executable: "node",
+      args: ["target.mjs"]
+    }
+  }
+});
+assert.equal(deniedStdioCommandTarget.ok, false);
+assert.equal(deniedStdioCommandTarget.error.code, "local_executable_target_denied");
+assert.equal(targetRegistry.getTarget("custom.stdio.denied"), null);
+
+const allowedAdminLocalExecutableTarget = await runtime.execute("acp_agent_relay.targets.upsert_local_executable", {
+  targetId: "custom.local.admin.allowed",
+  label: "Allowed Admin Local CLI Target",
+  transport: {
+    type: "agent-cli-exec",
+    command: {
+      executable: "printf",
+      args: ["hello"]
+    }
+  },
+  capabilityPolicy: {
+    writes: "deny",
+    terminal: "ask",
+    maxRisk: "repair_write"
+  }
+});
+assert.equal(allowedAdminLocalExecutableTarget.ok, true);
+assert.equal(allowedAdminLocalExecutableTarget.data.target.targetId, "custom.local.admin.allowed");
+assert.equal(targetRegistry.getTarget("custom.local.admin.allowed")?.transport?.type, "agent-cli-exec");
+
+const allowedMockTarget = await runtime.execute("acp_agent_relay.targets.upsert", {
+  targetId: "custom.mock.allowed",
+  label: "Allowed Mock Target",
+  transport: { type: "mock" },
+  capabilityPolicy: {
+    writes: "deny",
+    terminal: "deny",
+    maxRisk: "read_only"
+  }
+});
+assert.equal(allowedMockTarget.ok, true);
+assert.equal(allowedMockTarget.data.target.targetId, "custom.mock.allowed");
 
 const initRead = await runtime.execute("acp_agent_relay.virtual_agent.initialize", {
   virtualAgentId: readOnlyVirtualAgentId
@@ -2483,20 +2557,26 @@ const toolCatalog = createToolCatalog({ operations: SERVER_API_OPERATIONS });
 for (const operationId of publicAcpRelayToolOperationIds) {
   const tool = toolCatalog.tools.find((candidate) => candidate.operationId === operationId);
   assert.equal(Boolean(tool), true, `${operationId} must be exposed through the Pact agent relay toolset`);
-  const expectedToolset = readOnlyAcpRelayToolOperationIds.has(operationId)
-    ? "pact.agent.relay.read"
-    : "pact.agent.relay";
+  const expectedToolset = operationId === "acp_agent_relay.targets.upsert_local_executable"
+    ? "pact.runtime.maintain"
+    : readOnlyAcpRelayToolOperationIds.has(operationId)
+      ? "pact.agent.relay.read"
+      : "pact.agent.relay";
   assert.equal(tool.toolsets.includes(expectedToolset), true, `${operationId} must stay under ${expectedToolset}`);
   assert.equal(
     KERNEL_TOOL_IDS.includes(tool.id),
     true,
     `${operationId} must be registered as an Authorization Kernel tool capability`
   );
-  assert.equal(
-    tool.requiredScopes.every((scope) => ["agent_relay:view", "agent_relay:operate"].includes(scope)),
-    true,
-    `${operationId} must not require scopes outside the agent relay boundary`
-  );
+  if (operationId === "acp_agent_relay.targets.upsert_local_executable") {
+    assert.deepEqual(tool.requiredScopes, ["runtime:admin"]);
+  } else {
+    assert.equal(
+      tool.requiredScopes.every((scope) => ["agent_relay:view", "agent_relay:operate"].includes(scope)),
+      true,
+      `${operationId} must not require scopes outside the agent relay boundary`
+    );
+  }
 }
 assert.equal(
   toolCatalog.tools.some((tool) => tool.operationId === "acp_agent_relay.permission.resolve"),
@@ -2546,6 +2626,99 @@ assert.equal(boundaryMcpRoute.ok, true);
 assert.equal(boundaryMcpRoute.route.virtualAgent.advertisedTools.includes("fs.writeTextFile"), true);
 assert.equal(boundaryMcpRoute.route.decision.advertisedTools.includes("fs.writeTextFile"), false);
 assert.deepEqual(boundaryMcpRoute.route.decision.advertisedTools, ["fs.readTextFile"]);
+
+const noReadTargetId = "shared.mock:target-no-read-callback";
+const noReadVirtualAgentId = "agent.shared.no-read-callback";
+targetRegistry.upsertTarget({
+  targetId: noReadTargetId,
+  label: "No Read Callback Target",
+  transport: { type: "mock" },
+  enabled: true,
+  capabilityPolicy: {
+    writes: "deny",
+    terminal: "deny",
+    maxRisk: "read_only"
+  },
+  advertisedToolsets: []
+});
+virtualAgentRegistry.upsertAgent({
+  virtualAgentId: noReadVirtualAgentId,
+  targetId: noReadTargetId,
+  profileId: "pact.acp.shared.no_read_callback",
+  displayName: "No Read Callback",
+  advertisedModes: ["ask"],
+  defaultMode: "ask",
+  advertisedTools: [],
+  reasoningVisibilityPolicy: "never",
+  capabilityPolicy: {
+    writes: "deny",
+    terminal: "deny",
+    maxRisk: "read_only"
+  },
+  revision: 1
+});
+const noReadRoute = await runtime.router.resolveForSourceSession({
+  virtualAgentId: noReadVirtualAgentId,
+  workspaceId,
+  sourceId: "source-no-read",
+  sourceSessionId: "no-read-callback-session"
+});
+assert.equal(noReadRoute.ok, true);
+assert.deepEqual(noReadRoute.route.decision.advertisedTools, []);
+const callbackSession = {
+  relaySessionId: "relay-session-callback-policy",
+  sourceId: "source-no-read",
+  sourceSessionId: "no-read-callback-session",
+  virtualAgentId: noReadVirtualAgentId,
+  targetId: noReadTargetId,
+  workspaceId
+};
+const callbackTurn = await runtime.store.createTurn({
+  relaySessionId: callbackSession.relaySessionId,
+  operationId: "acp_agent_relay.prompt.send",
+  status: "running"
+});
+const deniedTargetCallbackRead = await runtime.executor.handleTargetFsReadTextFile({
+  request: {
+    method: ACP_METHODS.fsReadTextFile,
+    params: { path: "shared-allowed.txt" }
+  },
+  route: noReadRoute.route,
+  session: callbackSession,
+  turn: callbackTurn
+});
+assert.equal(deniedTargetCallbackRead.error?.data?.receipt?.reasonCode, "target_fs_read_not_advertised");
+const deniedTargetCallbackReadPermission = await runtime.executor.handleTargetSessionRequestPermission({
+  request: {
+    method: ACP_METHODS.sessionRequestPermission,
+    params: {
+      permission: {
+        action: "fs.readTextFile",
+        path: "shared-allowed.txt"
+      }
+    }
+  },
+  route: noReadRoute.route,
+  session: callbackSession,
+  turn: callbackTurn
+});
+assert.equal(deniedTargetCallbackReadPermission.result?.allowed, false);
+assert.equal(deniedTargetCallbackReadPermission.result?.reasonCode, "target_fs_read_not_advertised");
+const allowedTargetCallbackRead = await runtime.executor.handleTargetFsReadTextFile({
+  request: {
+    method: ACP_METHODS.fsReadTextFile,
+    params: { path: "shared-allowed.txt" }
+  },
+  route: boundaryMcpRoute.route,
+  session: {
+    ...callbackSession,
+    virtualAgentId: writeVirtualReadOnlyTargetId,
+    targetId: readOnlyBoundaryTargetId
+  },
+  turn: callbackTurn
+});
+assert.equal(allowedTargetCallbackRead.result?.content, await fs.readFile(allowedPathForWrites, "utf8"));
+
 assert.deepEqual(boundaryMcpRoute.route.sourceIdentity, {
   sourceId: "source-boundary",
   sourceSessionId: "boundary-mcp-session",

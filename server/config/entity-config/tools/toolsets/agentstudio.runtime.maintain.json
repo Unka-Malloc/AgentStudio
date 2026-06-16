@@ -2,7 +2,7 @@
   "id": "pact.runtime.maintain",
   "label": "Runtime maintain",
   "requiredScopes": [
-    "knowledge:maintain"
+    "runtime:admin"
   ],
   "maxRisk": "repair_write",
   "grantable": true,

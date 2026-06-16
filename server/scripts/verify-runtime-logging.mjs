@@ -21,6 +21,13 @@ async function requestJson(url, options = {}) {
   };
 }
 
+function trustedPactClientHeaders() {
+  return {
+    "X-Pact-Client-Kind": "pact-client",
+    "X-Pact-Client-Id": "pact-client-runtime-logging-verifier"
+  };
+}
+
 async function readRuntimeLogs(logDir) {
   const entries = await fs.readdir(logDir, { withFileTypes: true });
   const files = entries
@@ -49,6 +56,30 @@ function hasEvent(records, event) {
 function assertHasEvents(records, events) {
   for (const event of events) {
     assert.equal(hasEvent(records, event), true, `runtime log missing event ${event}`);
+  }
+}
+
+const originalCapabilityKernelEnv = {
+  PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER,
+  PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER: process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER,
+  PACT_OPAQUE_CAPABILITY_KEY_PROVIDER: process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER,
+  PACT_CAPABILITY_BINDING_GUARD_PROVIDER: process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER
+};
+
+function useIsolatedCapabilityKernelForVerifier() {
+  process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_TOOL_GRANT_BINDING_GUARD_PROVIDER = "local-file";
+  process.env.PACT_OPAQUE_CAPABILITY_KEY_PROVIDER = "local-file";
+  process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = "local-file";
+}
+
+function restoreCapabilityKernelEnv() {
+  for (const [key, value] of Object.entries(originalCapabilityKernelEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
   }
 }
 
@@ -83,6 +114,7 @@ assert.equal(policyLogger.maxTotalBytes, 2 * 1024 * 1024);
 policyLogger.setLevel("debug");
 assert.equal(policyLogger.level, "debug");
 await policyLogger.close();
+useIsolatedCapabilityKernelForVerifier();
 
 let server = null;
 try {
@@ -167,13 +199,14 @@ try {
   assert.equal(grant.status, 201);
   assert.ok(grant.payload.token);
 
-  const tool = await requestJson(`${server.url}/api/tool-management/v1/execute`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${grant.payload.token}`
-    },
-    body: JSON.stringify({
+	  const tool = await requestJson(`${server.url}/api/tool-management/v1/execute`, {
+	    method: "POST",
+	    headers: {
+	      "Content-Type": "application/json",
+	      Authorization: `Bearer ${grant.payload.token}`,
+	      ...trustedPactClientHeaders()
+	    },
+	    body: JSON.stringify({
       toolId: "pact.agentLibrary.health",
       input: {}
     })
@@ -246,4 +279,5 @@ try {
   }
   await removeTempDir(userDataPath);
   await removeTempDir(logDir);
+  restoreCapabilityKernelEnv();
 }

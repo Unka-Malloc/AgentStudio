@@ -6,6 +6,10 @@ import {
   runModelRouting,
   shouldUseModelRouting
 } from "./model-routing/index.mjs";
+import { assertModelAssistedEgressAllowed } from "./model-egress-policy.mjs";
+import {
+  fetchExternalServiceWithPinnedDns
+} from "../../../common/composition-management/external-service-egress-policy.mjs";
 
 function asPlainObject(value, fallback = {}) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : fallback;
@@ -134,6 +138,32 @@ function safeUrlSummary(value) {
       origin: "",
       pathname: String(value || "").replace(/[?#].*$/, "")
     };
+  }
+}
+
+async function fetchConfiguredModelService({
+  config = {},
+  init = {},
+  fetchImpl = fetch
+} = {}) {
+  return fetchExternalServiceWithPinnedDns({
+    url: config.url,
+    label: `agent-gateway.${config.provider || "custom-http"}.${config.alias || "default"}`,
+    policies: {
+      egress: {
+        allowLocalForConfiguredModelService: true
+      }
+    },
+    init,
+    fetchImpl
+  });
+}
+
+async function closeConfiguredModelFetch(pinnedFetch = null) {
+  try {
+    await pinnedFetch?.close?.();
+  } catch {
+    // Closing a per-call dispatcher is best-effort cleanup.
   }
 }
 
@@ -1739,13 +1769,19 @@ async function callDeepSeekGateway({
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), config.timeoutMs);
   let response;
+  let pinnedFetch = null;
   try {
-    response = await fetchImpl(config.url, {
-      method: "POST",
-      headers: createHeaders(config),
-      body: JSON.stringify(payload),
-      signal: abortController.signal
+    pinnedFetch = await fetchConfiguredModelService({
+      config,
+      fetchImpl,
+      init: {
+        method: "POST",
+        headers: createHeaders(config),
+        body: JSON.stringify(payload),
+        signal: abortController.signal
+      }
     });
+    response = pinnedFetch.response;
   } catch (error) {
     await appendAgentGatewayAudit({
       userDataPath,
@@ -1765,62 +1801,65 @@ async function callDeepSeekGateway({
     clearTimeout(timeout);
   }
 
-  if (!response.ok) {
-    const details = await readGatewayErrorDetails(response, "DeepSeek error response");
-    const publicDetails = truncateText(redactSecretText(details), 8000);
+  try {
+    if (!response.ok) {
+      const details = await readGatewayErrorDetails(response, "DeepSeek error response");
+      const publicDetails = truncateText(redactSecretText(details), 8000);
+      await appendAgentGatewayAudit({
+        userDataPath,
+        event: {
+          event: "request_failed",
+          callId: auditCallId,
+          provider: "deepseek",
+          alias: config.alias,
+          model: payload.model,
+          upstreamTarget,
+          errorStage: "http",
+          status: response.status,
+          contentType: String(response.headers.get("content-type") || ""),
+          error: publicDetails
+        }
+      });
+      throw new Error(`DeepSeek 调用失败：${response.status}${publicDetails ? ` ${publicDetails}` : ""}`.trim());
+    }
+
+    const contentType = String(response.headers.get("content-type") || "");
+    const parsed =
+      /text\/event-stream/i.test(contentType) && response.body
+        ? await readDeepSeekStreamResponse(response)
+        : await readDeepSeekJsonResponse(response);
+    const result = {
+      ok: true,
+      request: {
+        ...request,
+        engine: payload.model
+      },
+      upstream: {
+        provider: "deepseek",
+        status: response.status,
+        contentType,
+        model: payload.model
+      },
+      ...parsed
+    };
     await appendAgentGatewayAudit({
       userDataPath,
       event: {
-        event: "request_failed",
+        event: "request_completed",
         callId: auditCallId,
         provider: "deepseek",
         alias: config.alias,
         model: payload.model,
         upstreamTarget,
-        errorStage: "http",
         status: response.status,
-        contentType: String(response.headers.get("content-type") || ""),
-        error: publicDetails
+        contentType,
+        response: summarizeGatewayResult(result)
       }
     });
-    throw new Error(`DeepSeek 调用失败：${response.status}${publicDetails ? ` ${publicDetails}` : ""}`.trim());
+    return result;
+  } finally {
+    await closeConfiguredModelFetch(pinnedFetch);
   }
-
-  const contentType = String(response.headers.get("content-type") || "");
-  const parsed =
-    /text\/event-stream/i.test(contentType) && response.body
-      ? await readDeepSeekStreamResponse(response)
-      : await readDeepSeekJsonResponse(response);
-  const result = {
-    ok: true,
-    request: {
-      ...request,
-      engine: payload.model
-    },
-    upstream: {
-      provider: "deepseek",
-      status: response.status,
-      contentType,
-      model: payload.model
-    },
-    ...parsed
-  };
-  await appendAgentGatewayAudit({
-    userDataPath,
-    event: {
-      event: "request_completed",
-      callId: auditCallId,
-      provider: "deepseek",
-      alias: config.alias,
-      model: payload.model,
-      upstreamTarget,
-      status: response.status,
-      contentType,
-      response: summarizeGatewayResult(result)
-    }
-  });
-
-  return result;
 }
 
 async function callOpenAiCompatibleGateway({
@@ -1869,13 +1908,19 @@ async function callOpenAiCompatibleGateway({
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), config.timeoutMs);
   let response;
+  let pinnedFetch = null;
   try {
-    response = await fetchImpl(config.url, {
-      method: "POST",
-      headers: createHeaders(config),
-      body: JSON.stringify(payload),
-      signal: abortController.signal
+    pinnedFetch = await fetchConfiguredModelService({
+      config,
+      fetchImpl,
+      init: {
+        method: "POST",
+        headers: createHeaders(config),
+        body: JSON.stringify(payload),
+        signal: abortController.signal
+      }
     });
+    response = pinnedFetch.response;
   } catch (error) {
     await appendAgentGatewayAudit({
       userDataPath,
@@ -1895,62 +1940,65 @@ async function callOpenAiCompatibleGateway({
     clearTimeout(timeout);
   }
 
-  if (!response.ok) {
-    const details = await readGatewayErrorDetails(response, `${config.label || provider} error response`);
-    const publicDetails = truncateText(redactSecretText(details), 8000);
+  try {
+    if (!response.ok) {
+      const details = await readGatewayErrorDetails(response, `${config.label || provider} error response`);
+      const publicDetails = truncateText(redactSecretText(details), 8000);
+      await appendAgentGatewayAudit({
+        userDataPath,
+        event: {
+          event: "request_failed",
+          callId: auditCallId,
+          provider,
+          alias: config.alias,
+          model: payload.model,
+          upstreamTarget,
+          errorStage: "http",
+          status: response.status,
+          contentType: String(response.headers.get("content-type") || ""),
+          error: publicDetails
+        }
+      });
+      throw new Error(`${config.label || provider} 调用失败：${response.status}${publicDetails ? ` ${publicDetails}` : ""}`.trim());
+    }
+
+    const contentType = String(response.headers.get("content-type") || "");
+    const parsed =
+      /text\/event-stream/i.test(contentType) && response.body
+        ? await readDeepSeekStreamResponse(response)
+        : await readDeepSeekJsonResponse(response);
+    const result = {
+      ok: true,
+      request: {
+        ...request,
+        engine: payload.model
+      },
+      upstream: {
+        provider,
+        status: response.status,
+        contentType,
+        model: payload.model
+      },
+      ...parsed
+    };
     await appendAgentGatewayAudit({
       userDataPath,
       event: {
-        event: "request_failed",
+        event: "request_completed",
         callId: auditCallId,
         provider,
         alias: config.alias,
         model: payload.model,
         upstreamTarget,
-        errorStage: "http",
         status: response.status,
-        contentType: String(response.headers.get("content-type") || ""),
-        error: publicDetails
+        contentType,
+        response: summarizeGatewayResult(result)
       }
     });
-    throw new Error(`${config.label || provider} 调用失败：${response.status}${publicDetails ? ` ${publicDetails}` : ""}`.trim());
+    return result;
+  } finally {
+    await closeConfiguredModelFetch(pinnedFetch);
   }
-
-  const contentType = String(response.headers.get("content-type") || "");
-  const parsed =
-    /text\/event-stream/i.test(contentType) && response.body
-      ? await readDeepSeekStreamResponse(response)
-      : await readDeepSeekJsonResponse(response);
-  const result = {
-    ok: true,
-    request: {
-      ...request,
-      engine: payload.model
-    },
-    upstream: {
-      provider,
-      status: response.status,
-      contentType,
-      model: payload.model
-    },
-    ...parsed
-  };
-  await appendAgentGatewayAudit({
-    userDataPath,
-    event: {
-      event: "request_completed",
-      callId: auditCallId,
-      provider,
-      alias: config.alias,
-      model: payload.model,
-      upstreamTarget,
-      status: response.status,
-      contentType,
-      response: summarizeGatewayResult(result)
-    }
-  });
-
-  return result;
 }
 
 async function executeAgentGatewayCandidate({
@@ -2000,13 +2048,19 @@ async function executeAgentGatewayCandidate({
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), config.timeoutMs);
   let response;
+  let pinnedFetch = null;
   try {
-    response = await fetchImpl(config.url, {
-      method: "POST",
-      headers: createHeaders(config),
-      body: JSON.stringify(payload),
-      signal: abortController.signal
+    pinnedFetch = await fetchConfiguredModelService({
+      config,
+      fetchImpl,
+      init: {
+        method: "POST",
+        headers: createHeaders(config),
+        body: JSON.stringify(payload),
+        signal: abortController.signal
+      }
     });
+    response = pinnedFetch.response;
   } catch (error) {
     await appendAgentGatewayAudit({
       userDataPath,
@@ -2026,59 +2080,63 @@ async function executeAgentGatewayCandidate({
     clearTimeout(timeout);
   }
 
-  if (!response.ok) {
-    const details = await readGatewayErrorDetails(response, "Agent gateway error response");
-    const publicDetails = truncateText(redactSecretText(details), 8000);
+  try {
+    if (!response.ok) {
+      const details = await readGatewayErrorDetails(response, "Agent gateway error response");
+      const publicDetails = truncateText(redactSecretText(details), 8000);
+      await appendAgentGatewayAudit({
+        userDataPath,
+        event: {
+          event: "request_failed",
+          callId: auditCallId,
+          provider: config.provider || "custom-http",
+          alias: config.alias,
+          model: config.model || config.alias,
+          upstreamTarget,
+          errorStage: "http",
+          status: response.status,
+          contentType: String(response.headers.get("content-type") || ""),
+          error: publicDetails
+        }
+      });
+      throw new Error(`智能体调用失败：${response.status}${publicDetails ? ` ${publicDetails}` : ""}`.trim());
+    }
+
+    const contentType = String(response.headers.get("content-type") || "");
+    const isStream =
+      /text\/event-stream/i.test(contentType) ||
+      /application\/x-ndjson/i.test(contentType);
+    const parsed = isStream && response.body
+      ? await readStreamResponse(response)
+      : await readJsonOrTextResponse(response);
+
+    const result = {
+      ok: true,
+      request: payload,
+      upstream: {
+        status: response.status,
+        contentType
+      },
+      ...parsed
+    };
     await appendAgentGatewayAudit({
       userDataPath,
       event: {
-        event: "request_failed",
+        event: "request_completed",
         callId: auditCallId,
         provider: config.provider || "custom-http",
         alias: config.alias,
         model: config.model || config.alias,
         upstreamTarget,
-        errorStage: "http",
         status: response.status,
-        contentType: String(response.headers.get("content-type") || ""),
-        error: publicDetails
+        contentType,
+        response: summarizeGatewayResult(result)
       }
     });
-    throw new Error(`智能体调用失败：${response.status}${publicDetails ? ` ${publicDetails}` : ""}`.trim());
+    return { config, input: effectiveInput, result };
+  } finally {
+    await closeConfiguredModelFetch(pinnedFetch);
   }
-
-  const contentType = String(response.headers.get("content-type") || "");
-  const isStream =
-    /text\/event-stream/i.test(contentType) ||
-    /application\/x-ndjson/i.test(contentType);
-  const parsed = isStream && response.body
-    ? await readStreamResponse(response)
-    : await readJsonOrTextResponse(response);
-
-  const result = {
-    ok: true,
-    request: payload,
-    upstream: {
-      status: response.status,
-      contentType
-    },
-    ...parsed
-  };
-  await appendAgentGatewayAudit({
-    userDataPath,
-    event: {
-      event: "request_completed",
-      callId: auditCallId,
-      provider: config.provider || "custom-http",
-      alias: config.alias,
-      model: config.model || config.alias,
-      upstreamTarget,
-      status: response.status,
-      contentType,
-      response: summarizeGatewayResult(result)
-    }
-  });
-  return { config, input: effectiveInput, result };
 }
 
 export async function callAgentGateway({
@@ -2087,21 +2145,26 @@ export async function callAgentGateway({
   fetchImpl = fetch,
   userDataPath = "",
   contextRuntime = null,
-  contextCompactionSource = "agent-gateway",
+  contextCompactionSource = "",
   clientRuntimeAllocator = null,
   strategyProvider = null
 } = {}) {
+  const modelEgressDecision = assertModelAssistedEgressAllowed({
+    source: contextCompactionSource,
+    contextCompactionSource
+  });
+  const modelEgressSource = modelEgressDecision.matchedSource;
   const allocationResult = typeof clientRuntimeAllocator?.apply === "function"
     ? await clientRuntimeAllocator.apply(input, {
         taskType: input.taskType || input.operationId || input.moduleId || "agent_gateway.call",
-        surface: contextCompactionSource || "agent-gateway"
+        surface: modelEgressSource
       })
     : null;
   const allocatedInput = allocationResult?.input || input;
   const prepared = await prepareAgentGatewayInputWithCompaction({
     input: allocatedInput,
     contextRuntime,
-    source: contextCompactionSource
+    source: modelEgressSource
   });
   let effectiveInput = prepared.input;
   const contextCompaction = publicGatewayCompactionResult(prepared.compaction);

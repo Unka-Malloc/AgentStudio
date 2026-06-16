@@ -169,7 +169,8 @@ async function verifyGatewayRouting() {
         parameters: {
           max_tokens: 64
         }
-      }
+      },
+      contextCompactionSource: "agent_gateway.call"
     });
 
     assert.equal(result.ok, true);
@@ -191,7 +192,8 @@ async function verifyGatewayRouting() {
         alias: "primary-agent",
         question: "route again",
         modelRouting: routingPolicy()
-      }
+      },
+      contextCompactionSource: "agent_gateway.call"
     });
     assert.equal(second.modelRouting.selectedAlias, "fallback-agent");
     assert.equal(second.modelRouting.attempts[0].status, "skipped");
@@ -210,7 +212,8 @@ async function verifyGatewayRouting() {
             circuitBreaker: { failureThreshold: 99, openMs: 600000 },
             budget: { maxInputTokens: 1 }
           }
-        }
+        },
+        contextCompactionSource: "agent_gateway.call"
       }),
       /Model routing found no available candidate/
     );
@@ -250,7 +253,8 @@ async function verifyGatewayResponseLimit() {
         input: {
           alias: "oversized-agent",
           question: "return too much data"
-        }
+        },
+        contextCompactionSource: "agent_gateway.call"
       }),
       /Agent gateway upstream response exceeded the 4194304 byte response limit/,
       "agent gateway upstream responses must be size-limited"

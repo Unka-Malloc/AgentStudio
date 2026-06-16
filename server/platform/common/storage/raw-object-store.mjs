@@ -101,9 +101,13 @@ async function resolveArchiveTargetPath({ userDataPath, clientUid, sourceType, f
 }
 
 export async function persistRawMailObject({
-  userDataPath,
-  batchId,
-  buffer,
+	  userDataPath,
+	  batchId,
+	  jobId = "",
+	  ownerSubjectId = "",
+	  ownerUserId = "",
+	  ownerUsername = "",
+	  buffer,
   originalRelativePath,
   originalSourcePath = "",
   sourceContainerPath = "",
@@ -154,8 +158,12 @@ export async function persistRawMailObject({
   const originalFileName = safeArchiveFileName(safeRelativePath);
 
   return {
-    objectId,
-    ingestOrigin,
+	    objectId,
+	    jobId: String(jobId || ""),
+	    ownerSubjectId: String(ownerSubjectId || ownerUserId || ownerUsername || ""),
+	    ownerUserId: String(ownerUserId || ownerSubjectId || ""),
+	    ownerUsername: String(ownerUsername || ""),
+	    ingestOrigin,
     clientUid: normalizedClientUid,
     sourceType: normalizedSourceType,
     archiveFileName: resolvedArchiveFileName,

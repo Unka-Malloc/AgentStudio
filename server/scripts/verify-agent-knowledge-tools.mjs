@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
 import { KERNEL_API_OPERATION_IDS } from "../platform/common/security/authorization/authorization-engine.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 async function fetchJson(url, options = {}) {
@@ -20,7 +21,17 @@ async function fetchJson(url, options = {}) {
 function bearerHeaders(token) {
   return {
     "Content-Type": "application/json",
+    "X-Pact-Client-Kind": "pact-client",
+    "X-Pact-Client-Id": "pact-client-agent-knowledge-tools-verifier",
     Authorization: `Bearer ${token}`
+  };
+}
+
+function trustedPactClientHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "X-Pact-Client-Kind": "pact-client",
+    "X-Pact-Client-Id": "pact-client-agent-knowledge-tools-verifier"
   };
 }
 
@@ -82,6 +93,9 @@ const expectedToolIds = [
   "pact.agentLibrary.agentSkill",
   "pact.agentLibrary.agentSkill.plan",
   "pact.agentLibrary.agentSkill.run",
+  "pact.agentLibrary.retrievalPlaybook",
+  "pact.agentLibrary.retrievalPlaybook.plan",
+  "pact.agentLibrary.retrievalPlaybook.run",
   "pact.agentLibrary.skills.list",
   "pact.agentLibrary.skills.get",
   "pact.agentLibrary.skills.generate",
@@ -89,6 +103,13 @@ const expectedToolIds = [
   "pact.agentLibrary.skills.resolve",
   "pact.agentLibrary.skillFramework",
   "pact.agentLibrary.skillFramework.set",
+  "pact.agentLibrary.playbooks.list",
+  "pact.agentLibrary.playbooks.get",
+  "pact.agentLibrary.playbooks.generate",
+  "pact.agentLibrary.playbooks.propose",
+  "pact.agentLibrary.playbooks.resolve",
+  "pact.agentLibrary.playbookFramework",
+  "pact.agentLibrary.playbookFramework.set",
   "pact.agentLibrary.goldenRules.list",
   "pact.agentLibrary.goldenRules.set",
   "pact.agentLibrary.goldenRules.publish",
@@ -107,6 +128,9 @@ const expectedToolIds = [
   "pact.agentLibrary.skills.evaluation.runs.create",
   "pact.agentLibrary.skills.deployments.create",
   "pact.agentLibrary.skills.deployments.rollback",
+  "pact.agentLibrary.playbookSets.evaluation.runs.create",
+  "pact.agentLibrary.playbookSets.deployments.create",
+  "pact.agentLibrary.playbookSets.deployments.rollback",
   "pact.agentLibrary.trainingSets.export",
   "pact.agentLibrary.evaluation.runs.create",
   "pact.agentLibrary.evaluation.runs.list",
@@ -193,6 +217,7 @@ const legacyInternalDistillationToolIds = [
 ];
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-agent-knowledge-tools-"));
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
 const featureProfilePath = path.join(userDataPath, "feature-profile.json");
 await fs.writeFile(
   featureProfilePath,
@@ -218,8 +243,29 @@ try {
 
   const tools = catalog.payload.tools || [];
   const toolIds = new Set(tools.map((tool) => tool.id));
+  const toolById = new Map(tools.map((tool) => [tool.id, tool]));
   for (const toolId of expectedToolIds) {
     assert.equal(toolIds.has(toolId), true, `${toolId} should be advertised`);
+  }
+  for (const [legacyToolId, replacementToolId] of [
+    ["pact.agentLibrary.agentSkill", "pact.agentLibrary.retrievalPlaybook"],
+    ["pact.agentLibrary.agentSkill.plan", "pact.agentLibrary.retrievalPlaybook.plan"],
+    ["pact.agentLibrary.agentSkill.run", "pact.agentLibrary.retrievalPlaybook.run"],
+    ["pact.agentLibrary.skills.list", "pact.agentLibrary.playbooks.list"],
+    ["pact.agentLibrary.skills.get", "pact.agentLibrary.playbooks.get"],
+    ["pact.agentLibrary.skills.generate", "pact.agentLibrary.playbooks.generate"],
+    ["pact.agentLibrary.skills.propose", "pact.agentLibrary.playbooks.propose"],
+    ["pact.agentLibrary.skills.resolve", "pact.agentLibrary.playbooks.resolve"],
+    ["pact.agentLibrary.skillFramework", "pact.agentLibrary.playbookFramework"],
+    ["pact.agentLibrary.skillFramework.set", "pact.agentLibrary.playbookFramework.set"],
+    ["pact.agentLibrary.skills.evaluation.runs.create", "pact.agentLibrary.playbookSets.evaluation.runs.create"],
+    ["pact.agentLibrary.skills.deployments.create", "pact.agentLibrary.playbookSets.deployments.create"],
+    ["pact.agentLibrary.skills.deployments.rollback", "pact.agentLibrary.playbookSets.deployments.rollback"]
+  ]) {
+    const legacyTool = toolById.get(legacyToolId);
+    assert.equal(legacyTool?.deprecated, true, `${legacyToolId} should be marked deprecated`);
+    assert.equal(legacyTool?.lifecycle?.replacementToolId, replacementToolId);
+    assert.equal(toolById.get(replacementToolId)?.deprecated, false, `${replacementToolId} should be the preferred tool id`);
   }
   for (const operationId of legacyInternalDistillationOperationIds) {
     assert.equal(
@@ -258,7 +304,7 @@ try {
 
   const noTokenHealth = await fetchJson(`${server.url}/api/tool-management/v1/execute`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: trustedPactClientHeaders(),
     body: JSON.stringify({
       toolId: "pact.agentLibrary.health",
       input: {}
@@ -317,7 +363,8 @@ try {
       "knowledge:admin",
       "workspace:read",
       "workspace:write",
-      "workspace:maintain"
+      "workspace:maintain",
+      "auth:admin"
     ]
   );
 
@@ -448,4 +495,5 @@ try {
 } finally {
   await server.close();
   await fs.rm(userDataPath, { recursive: true, force: true });
+  restoreCapabilityKernelEnv();
 }

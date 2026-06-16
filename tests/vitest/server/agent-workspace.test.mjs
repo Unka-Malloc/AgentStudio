@@ -21,6 +21,63 @@ async function withTempUserData(testCase) {
 }
 
 describe("agent workspace path normalization and validation", () => {
+  it("binds owned workspaces to the caller unless admin access is explicit", async () => {
+    await withTempUserData(async (runtime) => {
+      const alpha = runtime.createWorkspace({
+        title: "Alpha Workspace",
+        ownerUserId: "user-alpha"
+      }).workspace;
+      const beta = runtime.createWorkspace({
+        title: "Beta Workspace",
+        ownerUserId: "user-beta"
+      }).workspace;
+      const legacy = runtime.createWorkspace({ title: "Legacy Workspace" }).workspace;
+
+      const alphaList = runtime.listWorkspaces({
+        actorUserId: "user-alpha"
+      });
+      expect(alphaList.sharingMode).toBe("owner-bound");
+      expect(alphaList.workspaces.map((workspace) => workspace.workspaceId)).toEqual(
+        expect.arrayContaining([alpha.workspaceId, legacy.workspaceId])
+      );
+      expect(alphaList.workspaces.map((workspace) => workspace.workspaceId)).not.toContain(beta.workspaceId);
+
+      expect(runtime.getWorkspace({
+        workspaceId: beta.workspaceId,
+        actorUserId: "user-alpha"
+      })).toBeNull();
+      expect(runtime.getWorkspace({
+        workspaceId: beta.workspaceId,
+        actorUserId: "user-alpha",
+        accessibleWorkspaceIds: [beta.workspaceId]
+      })).toBeNull();
+      expect(runtime.getWorkspace({
+        workspaceId: beta.workspaceId,
+        actorUserId: "user-alpha",
+        allowedWorkspaceIds: [beta.workspaceId]
+      })?.workspace?.workspaceId).toBe(beta.workspaceId);
+
+      const deniedFiles = await runtime.listWorkspaceFiles({
+        workspaceId: beta.workspaceId,
+        actorUserId: "user-alpha"
+      });
+      expect(deniedFiles).toMatchObject({
+        ok: false,
+        status: 403,
+        error: "工作空间不可访问。"
+      });
+
+      const adminList = runtime.listWorkspaces({
+        actorUserId: "admin",
+        canAccessAll: true
+      });
+      expect(adminList.sharingMode).toBe("admin");
+      expect(adminList.workspaces.map((workspace) => workspace.workspaceId)).toEqual(
+        expect.arrayContaining([alpha.workspaceId, beta.workspaceId, legacy.workspaceId])
+      );
+    });
+  });
+
   it("normalizes relative paths and rejects absolute/escaping paths", async () => {
     await withTempUserData(async (runtime) => {
       const workspace = runtime.createWorkspace({ title: "Path Workspace" }).workspace;
@@ -473,9 +530,10 @@ describe("agent workspace state projection and context inheritance", () => {
 
 describe("agent workspace local directory sync", () => {
   it("validates host directory mounts and produces sync plan", async () => {
-    await withTempUserData(async (runtime) => {
+    await withTempUserData(async (runtime, root) => {
       const workspace = runtime.createWorkspace({ title: "Local Dir Workspace" }).workspace;
-      const sourceRoot = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "pact-agent-workspace-source-")));
+      const sourceRoot = path.join(root, "agent-workspaces", "local-sources", "valid-source");
+      await fs.mkdir(sourceRoot, { recursive: true });
       await fs.writeFile(path.join(sourceRoot, "visible.txt"), "visible", "utf8");
       await fs.mkdir(path.join(sourceRoot, "sub"));
       await fs.writeFile(path.join(sourceRoot, "sub", "nested.txt"), "nested", "utf8");
@@ -500,8 +558,8 @@ describe("agent workspace local directory sync", () => {
 
       const plan = runtime.localDirectorySyncPlan({
         workspaceId: workspace.workspaceId,
-        sourcePath: sourceRoot,
-        targetPath: "incoming",
+        mountRef: connection.mount.mountRef,
+        targetPath: "incoming"
       });
       expect(plan.ok).toBe(true);
       expect(plan.summary.create).toBe(2);
@@ -539,9 +597,10 @@ describe("agent workspace local directory sync", () => {
   });
 
   it("rejects host directory sync plan when source contains hidden items", async () => {
-    await withTempUserData(async (runtime) => {
+    await withTempUserData(async (runtime, root) => {
       const workspace = runtime.createWorkspace({ title: "Local Dir Hidden Workspace" }).workspace;
-      const sourceRoot = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "pact-agent-workspace-source-")));
+      const sourceRoot = path.join(root, "agent-workspaces", "local-sources", "hidden-source");
+      await fs.mkdir(sourceRoot, { recursive: true });
       await fs.writeFile(path.join(sourceRoot, ".hidden"), "skip", "utf8");
 
       const rejected = runtime.connectLocalDirectory({

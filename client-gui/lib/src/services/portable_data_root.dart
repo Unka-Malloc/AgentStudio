@@ -5,75 +5,27 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-class ClientWorkspaceManifest {
-  const ClientWorkspaceManifest({
-    required this.schemaVersion,
-    required this.appId,
-    required this.workspaceId,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-
-  static const currentSchemaVersion = 1;
-  static const pactClientAppId = 'pact-client';
-
-  final int schemaVersion;
-  final String appId;
-  final String workspaceId;
-  final String createdAt;
-  final String updatedAt;
-
-  factory ClientWorkspaceManifest.create() {
-    final now = DateTime.now().toUtc().toIso8601String();
-    final seed = '$now:$pid:${Directory.current.path}';
-    final workspaceId = sha256.convert(utf8.encode(seed)).toString();
-    return ClientWorkspaceManifest(
-      schemaVersion: currentSchemaVersion,
-      appId: pactClientAppId,
-      workspaceId: workspaceId,
-      createdAt: now,
-      updatedAt: now,
-    );
-  }
-
-  factory ClientWorkspaceManifest.fromJson(Map<String, dynamic> json) {
-    return ClientWorkspaceManifest(
-      schemaVersion: (json['schemaVersion'] as num?)?.toInt() ?? 0,
-      appId: (json['appId'] ?? '').toString(),
-      workspaceId: (json['workspaceId'] ?? '').toString(),
-      createdAt: (json['createdAt'] ?? '').toString(),
-      updatedAt: (json['updatedAt'] ?? '').toString(),
-    );
-  }
-
-  ClientWorkspaceManifest touch() {
-    return ClientWorkspaceManifest(
-      schemaVersion: schemaVersion,
-      appId: appId,
-      workspaceId: workspaceId,
-      createdAt: createdAt,
-      updatedAt: DateTime.now().toUtc().toIso8601String(),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'schemaVersion': schemaVersion,
-      'appId': appId,
-      'workspaceId': workspaceId,
-      'createdAt': createdAt,
-      'updatedAt': updatedAt,
-    };
-  }
-}
+part 'client_workspace_manifest.dart';
 
 class PortableDataRoot {
-  PortableDataRoot({Directory? dataDirectoryOverride})
-    : _dataDirectoryOverride = dataDirectoryOverride;
+  PortableDataRoot({
+    Directory? dataDirectoryOverride,
+    Map<String, String>? environmentOverride,
+    String? resolvedExecutableOverride,
+    Future<Directory> Function()? applicationSupportDirectoryResolver,
+  }) : _dataDirectoryOverride = dataDirectoryOverride,
+       _environmentOverride = environmentOverride,
+       _resolvedExecutableOverride = resolvedExecutableOverride,
+       _applicationSupportDirectoryResolver =
+           applicationSupportDirectoryResolver ??
+           getApplicationSupportDirectory;
 
   static const String _workspaceManifestFileName = '.pact-workspace.json';
 
   final Directory? _dataDirectoryOverride;
+  final Map<String, String>? _environmentOverride;
+  final String? _resolvedExecutableOverride;
+  final Future<Directory> Function() _applicationSupportDirectoryResolver;
   Directory? _cachedDataDir;
 
   Future<Directory> dataDirectory() async {
@@ -86,22 +38,29 @@ class PortableDataRoot {
       return _cachedDataDir!;
     }
 
-    final override = Platform.environment['PACT_PORTABLE_DIR'];
+    final executableDirectory = File(_resolvedExecutable).parent;
+    if (_bundledMacAppDirectory(executableDirectory) != null) {
+      _cachedDataDir = await _prepareDataDirectory(
+        await _systemDataDirectory(),
+      );
+      return _cachedDataDir!;
+    }
+
+    final override = _environment['PACT_PORTABLE_DIR'];
     if (override != null && override.trim().isNotEmpty) {
       _cachedDataDir = await _prepareDataDirectory(Directory(override.trim()));
       return _cachedDataDir!;
     }
 
-    final executableDirectory = File(Platform.resolvedExecutable).parent;
-    final portableDirectory = _portableDirectoryForExecutable(executableDirectory);
+    final portableDirectory = _portableDirectoryForLooseExecutable(
+      executableDirectory,
+    );
     if (await _tryUseDirectory(portableDirectory)) {
       _cachedDataDir = await _prepareDataDirectory(portableDirectory);
       return _cachedDataDir!;
     }
 
-    final appSupport = await getApplicationSupportDirectory();
-    final fallback = Directory(p.join(appSupport.path, 'portable-data'));
-    _cachedDataDir = await _prepareDataDirectory(fallback);
+    _cachedDataDir = await _prepareDataDirectory(await _systemDataDirectory());
     return _cachedDataDir!;
   }
 
@@ -168,7 +127,18 @@ class PortableDataRoot {
     return manifest;
   }
 
-  Directory _portableDirectoryForExecutable(Directory executableDirectory) {
+  Map<String, String> get _environment =>
+      _environmentOverride ?? Platform.environment;
+
+  String get _resolvedExecutable =>
+      _resolvedExecutableOverride ?? Platform.resolvedExecutable;
+
+  Future<Directory> _systemDataDirectory() async {
+    final appSupport = await _applicationSupportDirectoryResolver();
+    return Directory(p.join(appSupport.path, 'portable-data'));
+  }
+
+  Directory? _bundledMacAppDirectory(Directory executableDirectory) {
     final contentsDirectory = executableDirectory.parent;
     final appBundleDirectory = contentsDirectory.parent;
     final isBundledMacExecutable =
@@ -177,9 +147,15 @@ class PortableDataRoot {
         p.extension(appBundleDirectory.path) == '.app';
 
     if (isBundledMacExecutable) {
-      return Directory(p.join(appBundleDirectory.parent.path, 'portable-data'));
+      return appBundleDirectory;
     }
 
+    return null;
+  }
+
+  Directory _portableDirectoryForLooseExecutable(
+    Directory executableDirectory,
+  ) {
     return Directory(p.join(executableDirectory.path, 'portable-data'));
   }
 
@@ -204,7 +180,9 @@ class PortableDataRoot {
 
   Future<void> _writeTextAtomically(File file, String contents) async {
     await file.parent.create(recursive: true);
-    final lock = File(p.join(file.parent.path, '${p.basename(file.path)}.lock'));
+    final lock = File(
+      p.join(file.parent.path, '${p.basename(file.path)}.lock'),
+    );
     final lockHandle = await lock.open(mode: FileMode.write);
     try {
       await lockHandle.lock(FileLock.exclusive);

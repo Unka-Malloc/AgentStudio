@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { knowledgeCapabilityTags } from "../../../../common/operation-dispatcher/knowledge-capability-layers.mjs";
+import { operationFeatureId } from "../../../../common/operation-dispatcher/operation-feature-resolution.mjs";
 
 export const TOOL_MANAGEMENT_API_PREFIX = "/api/tool-management/v1";
 
@@ -140,9 +141,19 @@ const DEFAULT_TOOL_MANAGEMENT_SCOPES = Object.freeze([
     description: "Read job lists and job details."
   },
   {
+    id: "jobs:write",
+    label: "Operate jobs",
+    description: "Operate job scheduling controls such as Work Queue pause, resume, drain, dispatch, retry, and rebuild."
+  },
+  {
     id: "console:read",
     label: "Read console status",
     description: "Read console-facing status, interface, and release baseline summaries."
+  },
+  {
+    id: "model:call",
+    label: "Call configured models",
+    description: "Invoke configured model providers through explicit model-assisted allowlisted functions."
   },
   {
     id: "runtime:admin",
@@ -205,6 +216,14 @@ const DEFAULT_TOOL_MANAGEMENT_TOOLSETS = Object.freeze([
     defaultForAgents: false
   },
   {
+    id: "pact.model.call",
+    label: "Model calls",
+    requiredScopes: ["model:call"],
+    maxRisk: "read_only",
+    grantable: true,
+    defaultForAgents: false
+  },
+  {
     id: "pact.storage.read",
     label: "Storage read",
     requiredScopes: ["storage:read"],
@@ -259,6 +278,14 @@ const DEFAULT_TOOL_MANAGEMENT_TOOLSETS = Object.freeze([
     maxRisk: "read_only",
     grantable: true,
     defaultForAgents: true
+  },
+  {
+    id: "pact.jobs.write",
+    label: "Jobs operate",
+    requiredScopes: ["jobs:read", "jobs:write"],
+    maxRisk: "repair_write",
+    grantable: true,
+    defaultForAgents: false
   },
   {
     id: "pact.console.read",
@@ -567,6 +594,13 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "storage.backups.restore": "pact.storageBackups.restore",
   "jobs.list": "pact.jobs.list",
   "jobs.get": "pact.jobs.get",
+  "jobs.work_queue.inspect": "pact.jobs.workQueue.inspect",
+  "jobs.work_queue.pause": "pact.jobs.workQueue.pause",
+  "jobs.work_queue.resume": "pact.jobs.workQueue.resume",
+  "jobs.work_queue.drain": "pact.jobs.workQueue.drain",
+  "jobs.work_queue.dispatch": "pact.jobs.workQueue.dispatch",
+  "jobs.work_queue.retry_dead_letter": "pact.jobs.workQueue.retryDeadLetter",
+  "jobs.work_queue.rebuild": "pact.jobs.workQueue.rebuild",
   "knowledge.affair_taxonomy": "pact.agentLibrary.affairTaxonomy",
   "knowledge.console": "pact.agentLibrary.console",
   "knowledge.config_schema": "pact.agentLibrary.configSchema",
@@ -590,6 +624,9 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "knowledge.agent_skill.describe": "pact.agentLibrary.agentSkill",
   "knowledge.agent_skill.plan": "pact.agentLibrary.agentSkill.plan",
   "knowledge.agent_skill.run": "pact.agentLibrary.agentSkill.run",
+  "knowledge.retrieval_playbook.describe": "pact.agentLibrary.retrievalPlaybook",
+  "knowledge.retrieval_playbook.plan": "pact.agentLibrary.retrievalPlaybook.plan",
+  "knowledge.retrieval_playbook.run": "pact.agentLibrary.retrievalPlaybook.run",
   "knowledge.skills.list": "pact.agentLibrary.skills.list",
   "knowledge.skills.get": "pact.agentLibrary.skills.get",
   "knowledge.skills.generate": "pact.agentLibrary.skills.generate",
@@ -597,6 +634,13 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "knowledge.skills.resolve": "pact.agentLibrary.skills.resolve",
   "knowledge.skills.framework": "pact.agentLibrary.skillFramework",
   "knowledge.skills.framework_save": "pact.agentLibrary.skillFramework.set",
+  "knowledge.playbooks.list": "pact.agentLibrary.playbooks.list",
+  "knowledge.playbooks.get": "pact.agentLibrary.playbooks.get",
+  "knowledge.playbooks.generate": "pact.agentLibrary.playbooks.generate",
+  "knowledge.playbooks.propose": "pact.agentLibrary.playbooks.propose",
+  "knowledge.playbooks.resolve": "pact.agentLibrary.playbooks.resolve",
+  "knowledge.playbook_framework.get": "pact.agentLibrary.playbookFramework",
+  "knowledge.playbook_framework.save": "pact.agentLibrary.playbookFramework.set",
   "knowledge.golden_rules.list": "pact.agentLibrary.goldenRules.list",
   "knowledge.golden_rules.save": "pact.agentLibrary.goldenRules.set",
   "knowledge.golden_rules.publish": "pact.agentLibrary.goldenRules.publish",
@@ -626,6 +670,9 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "knowledge.skills.evaluation.runs.create": "pact.agentLibrary.skills.evaluation.runs.create",
   "knowledge.skills.deployments.create": "pact.agentLibrary.skills.deployments.create",
   "knowledge.skills.deployments.rollback": "pact.agentLibrary.skills.deployments.rollback",
+  "knowledge.playbook_sets.evaluation.runs.create": "pact.agentLibrary.playbookSets.evaluation.runs.create",
+  "knowledge.playbook_sets.deployments.create": "pact.agentLibrary.playbookSets.deployments.create",
+  "knowledge.playbook_sets.deployments.rollback": "pact.agentLibrary.playbookSets.deployments.rollback",
   "knowledge.training_sets.export": "pact.agentLibrary.trainingSets.export",
   "knowledge.evaluation.runs.create": "pact.agentLibrary.evaluation.runs.create",
   "knowledge.evaluation.runs.list": "pact.agentLibrary.evaluation.runs.list",
@@ -754,6 +801,7 @@ const TOOL_ID_BY_OPERATION_ID = Object.freeze({
   "acp_agent_relay.virtual_agents.upsert": "pact.agentRelay.virtualAgents.upsert",
   "acp_agent_relay.targets.list": "pact.agentRelay.targets.list",
   "acp_agent_relay.targets.upsert": "pact.agentRelay.targets.upsert",
+  "acp_agent_relay.targets.upsert_local_executable": "pact.agentRelay.targets.upsertLocalExecutable",
   "acp_agent_relay.downstream_clients.refresh": "pact.agentRelay.downstreamClients.refresh",
   "acp_agent_relay.sessions.list": "pact.agentRelay.sessions.list",
   "acp_agent_relay.sessions.get": "pact.agentRelay.sessions.get",
@@ -902,12 +950,68 @@ const TOOL_ALIAS_IDS_BY_OPERATION_ID = Object.freeze({
   "agent_workspaces.file.move": ["pact.workspace.file.move"]
 });
 
+const DEPRECATED_TOOL_REPLACEMENT_BY_OPERATION_ID = Object.freeze({
+  "knowledge.agent_skill.describe": {
+    operationId: "knowledge.retrieval_playbook.describe",
+    toolId: "pact.agentLibrary.retrievalPlaybook"
+  },
+  "knowledge.agent_skill.plan": {
+    operationId: "knowledge.retrieval_playbook.plan",
+    toolId: "pact.agentLibrary.retrievalPlaybook.plan"
+  },
+  "knowledge.agent_skill.run": {
+    operationId: "knowledge.retrieval_playbook.run",
+    toolId: "pact.agentLibrary.retrievalPlaybook.run"
+  },
+  "knowledge.skills.list": {
+    operationId: "knowledge.playbooks.list",
+    toolId: "pact.agentLibrary.playbooks.list"
+  },
+  "knowledge.skills.get": {
+    operationId: "knowledge.playbooks.get",
+    toolId: "pact.agentLibrary.playbooks.get"
+  },
+  "knowledge.skills.generate": {
+    operationId: "knowledge.playbooks.generate",
+    toolId: "pact.agentLibrary.playbooks.generate"
+  },
+  "knowledge.skills.propose": {
+    operationId: "knowledge.playbooks.propose",
+    toolId: "pact.agentLibrary.playbooks.propose"
+  },
+  "knowledge.skills.resolve": {
+    operationId: "knowledge.playbooks.resolve",
+    toolId: "pact.agentLibrary.playbooks.resolve"
+  },
+  "knowledge.skills.framework": {
+    operationId: "knowledge.playbook_framework.get",
+    toolId: "pact.agentLibrary.playbookFramework"
+  },
+  "knowledge.skills.framework_save": {
+    operationId: "knowledge.playbook_framework.save",
+    toolId: "pact.agentLibrary.playbookFramework.set"
+  },
+  "knowledge.skills.evaluation.runs.create": {
+    operationId: "knowledge.playbook_sets.evaluation.runs.create",
+    toolId: "pact.agentLibrary.playbookSets.evaluation.runs.create"
+  },
+  "knowledge.skills.deployments.create": {
+    operationId: "knowledge.playbook_sets.deployments.create",
+    toolId: "pact.agentLibrary.playbookSets.deployments.create"
+  },
+  "knowledge.skills.deployments.rollback": {
+    operationId: "knowledge.playbook_sets.deployments.rollback",
+    toolId: "pact.agentLibrary.playbookSets.deployments.rollback"
+  }
+});
+
 const SCOPE_BY_OPERATION_ID = Object.freeze({
   "acp_agent_relay.virtual_agents.list": "agent_relay:view",
   "acp_agent_relay.templates.list": "agent_relay:view",
   "acp_agent_relay.virtual_agents.upsert": "agent_relay:operate",
   "acp_agent_relay.targets.list": "agent_relay:view",
   "acp_agent_relay.targets.upsert": "agent_relay:operate",
+  "acp_agent_relay.targets.upsert_local_executable": "runtime:admin",
   "acp_agent_relay.downstream_clients.refresh": "agent_relay:operate",
   "acp_agent_relay.sessions.list": "agent_relay:view",
   "acp_agent_relay.sessions.get": "agent_relay:view",
@@ -947,19 +1051,32 @@ const SCOPE_BY_OPERATION_ID = Object.freeze({
   "storage.backups.restore": "runtime:admin",
   "jobs.list": "jobs:read",
   "jobs.get": "jobs:read",
+  "jobs.work_queue.inspect": "jobs:read",
+  "jobs.work_queue.pause": "jobs:write",
+  "jobs.work_queue.resume": "jobs:write",
+  "jobs.work_queue.drain": "jobs:write",
+  "jobs.work_queue.dispatch": "jobs:write",
+  "jobs.work_queue.retry_dead_letter": "jobs:write",
+  "jobs.work_queue.rebuild": "jobs:write",
   "knowledge.affair_taxonomy": "knowledge:write",
+  "knowledge.config_schema": "workspace:read",
+  "knowledge.capabilities": "workspace:read",
   "knowledge.maintenance.set": "knowledge:admin",
   "knowledge.reindex": "knowledge:maintain",
   "knowledge.maintenance.run": "knowledge:maintain",
   "knowledge.changes": "knowledge:write",
   "knowledge.review_resolve": "knowledge:maintain",
-  "knowledge.feedback": "knowledge:write",
+  "knowledge.feedback": "workspace:write",
   "knowledge.suggestion_resolve": "knowledge:maintain",
   "knowledge.learning.jobs": "knowledge:maintain",
   "knowledge.skills.generate": "knowledge:maintain",
   "knowledge.skills.propose": "knowledge:write",
   "knowledge.skills.resolve": "knowledge:maintain",
   "knowledge.skills.framework_save": "knowledge:maintain",
+  "knowledge.playbooks.generate": "knowledge:maintain",
+  "knowledge.playbooks.propose": "knowledge:write",
+  "knowledge.playbooks.resolve": "knowledge:maintain",
+  "knowledge.playbook_framework.save": "knowledge:maintain",
   "knowledge.golden_rules.save": "knowledge:maintain",
   "knowledge.golden_rules.publish": "knowledge:maintain",
   "knowledge.golden_rules.rollback": "knowledge:maintain",
@@ -978,6 +1095,9 @@ const SCOPE_BY_OPERATION_ID = Object.freeze({
   "knowledge.skills.evaluation.runs.create": "knowledge:maintain",
   "knowledge.skills.deployments.create": "knowledge:maintain",
   "knowledge.skills.deployments.rollback": "knowledge:maintain",
+  "knowledge.playbook_sets.evaluation.runs.create": "knowledge:maintain",
+  "knowledge.playbook_sets.deployments.create": "knowledge:maintain",
+  "knowledge.playbook_sets.deployments.rollback": "knowledge:maintain",
   "knowledge.training_sets.export": "knowledge:maintain",
   "knowledge.evaluation.runs.create": "knowledge:maintain",
   "knowledge.evolution.runs.create": "knowledge:maintain",
@@ -1189,6 +1309,7 @@ const TOOLSET_BY_SCOPE = Object.freeze({
   "knowledge:write": "pact.agentLibrary.write",
   "knowledge:maintain": "pact.agentLibrary.maintain",
   "knowledge:admin": "pact.agentLibrary.admin",
+  "model:call": "pact.model.call",
   "workspace:read": "pact.agent.workspace.read",
   "workspace:write": "pact.agent.workspace",
   "workspace:maintain": "pact.agent.workspace.maintain",
@@ -1205,6 +1326,7 @@ const TOOLSET_BY_SCOPE = Object.freeze({
   "drive:sync": "pact.drive.sync",
   "drive:share": "pact.drive.share",
   "jobs:read": "pact.jobs.read",
+  "jobs:write": "pact.jobs.write",
   "console:read": "pact.console.read",
   "runtime:admin": "pact.runtime.maintain",
   "agent_sync:publish": "pact.agent.sync.publish",
@@ -1283,6 +1405,14 @@ function operationScope(operation) {
   return "";
 }
 
+function operationFeatureActive(operation = {}, activeFeatureSet = null) {
+  if (!activeFeatureSet) {
+    return true;
+  }
+  const featureId = String(operation.featureId || operationFeatureId(operation) || "").trim();
+  return !featureId || activeFeatureSet.has(featureId);
+}
+
 function normalizeRisk(operation = {}) {
   if (operation.destructive) {
     return "destructive";
@@ -1298,6 +1428,9 @@ function inferToolsets(operation, scopes = [], toolId = "", risk = "read_only") 
   const toolsets = new Set(scopes.map((scope) => TOOLSET_BY_SCOPE[scope]).filter(Boolean));
   if (toolId.startsWith("pact.agentRelay.") && scopes.includes("agent_relay:view")) {
     toolsets.add("pact.agent.relay");
+  }
+  if (toolId.startsWith("pact.agentRelay.") && scopes.includes("runtime:admin")) {
+    toolsets.add("pact.runtime.maintain");
   }
   if (toolId.startsWith("pact.runtime.")) {
     if (operation.id === "runtime.info" || operation.id === "runtime.mounts") {
@@ -1420,9 +1553,19 @@ function createInternalToolDefinition({
 function createInternalToolDefinitions() {
   return [
     createInternalToolDefinition({
+      id: "agent-exploration.playbook_search",
+      label: "Agent exploration playbook search",
+      description: "Search published AgentLibrary Playbooks inside the agent exploration runtime.",
+      handlerId: "AgentExplorationRuntime.playbook_search",
+      toolsets: ["pact.agentLibrary.read"],
+      requiredScopes: ["knowledge:read"],
+      featureId: "agent-exploration",
+      tags: ["agent-exploration"]
+    }),
+    createInternalToolDefinition({
       id: "agent-exploration.knowledge_skill_search",
-      label: "Agent exploration skill search",
-      description: "Search published Pact KnowledgeSkills inside the agent exploration runtime.",
+      label: "Agent exploration playbook search",
+      description: "Search published AgentLibrary Playbooks inside the agent exploration runtime.",
       handlerId: "AgentExplorationRuntime.knowledge_skill_search",
       toolsets: ["pact.agentLibrary.read"],
       requiredScopes: ["knowledge:read"],
@@ -1460,9 +1603,20 @@ function createInternalToolDefinitions() {
       tags: ["agent-exploration"]
     }),
     createInternalToolDefinition({
+      id: "agent-exploration.playbook_propose",
+      label: "Agent exploration playbook proposal",
+      description: "Create a pending-review AgentLibrary Playbook from evidence found by an exploration run.",
+      handlerId: "AgentExplorationRuntime.playbook_propose",
+      toolsets: ["pact.agentLibrary.write", "pact.agent.workspace"],
+      requiredScopes: ["knowledge:read", "knowledge:write"],
+      risk: "safe_write",
+      featureId: "agent-exploration",
+      tags: ["agent-exploration"]
+    }),
+    createInternalToolDefinition({
       id: "agent-exploration.knowledge_skill_propose",
-      label: "Agent exploration skill proposal",
-      description: "Create a pending-review KnowledgeSkill from evidence found by an exploration run.",
+      label: "Agent exploration playbook proposal",
+      description: "Create a pending-review AgentLibrary Playbook from evidence found by an exploration run.",
       handlerId: "AgentExplorationRuntime.knowledge_skill_propose",
       toolsets: ["pact.agentLibrary.write", "pact.agent.workspace"],
       requiredScopes: ["knowledge:read", "knowledge:write"],
@@ -1674,6 +1828,9 @@ export function createToolCatalog({ operations = [], activeFeatureIds = null } =
   const activeFeatureSet = activeFeatureIds?.length ? new Set(activeFeatureIds) : null;
   const tools = [];
   for (const operation of operations) {
+    if (!operationFeatureActive(operation, activeFeatureSet)) {
+      continue;
+    }
     const toolId = operation.toolId || TOOL_ID_BY_OPERATION_ID[operation.id];
     if (!toolId) {
       continue;
@@ -1697,6 +1854,7 @@ export function createToolCatalog({ operations = [], activeFeatureIds = null } =
     const exposeOperationMetadata = operation.externalMcp || operation.aspects?.includes("external-service");
     const operationKnowledgeTags = knowledgeCapabilityTags(operation.knowledgeCapabilityLayer);
     const externalMcp = externalMcpCatalogProjection(operation.externalMcp);
+    const deprecatedReplacement = DEPRECATED_TOOL_REPLACEMENT_BY_OPERATION_ID[operation.id] || null;
     const tool = {
       id: toolId,
       version: "1",
@@ -1712,10 +1870,18 @@ export function createToolCatalog({ operations = [], activeFeatureIds = null } =
       ]),
       operationId: operation.id,
       handlerId: operation.target?.method || "",
-      deprecated: operation.deprecated === true,
+      deprecated: operation.deprecated === true || Boolean(deprecatedReplacement),
       replacementService: operation.replacementService || "",
       replacementOperationPrefix: operation.replacementOperationPrefix || "",
-      lifecycle: operation.lifecycle || {},
+      lifecycle: deprecatedReplacement
+        ? {
+            ...(operation.lifecycle || {}),
+            status: "deprecated",
+            deprecatedReason: "agentlibrary_playbook_rename",
+            replacementOperationId: deprecatedReplacement.operationId,
+            replacementToolId: deprecatedReplacement.toolId
+          }
+        : operation.lifecycle || {},
       transport: {
         http: {
           method,

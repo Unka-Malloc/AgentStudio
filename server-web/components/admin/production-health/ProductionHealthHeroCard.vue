@@ -69,7 +69,7 @@ const capabilityBindingGuard = computed(() => props.health?.capabilityBindingGua
     <dl class="module-status-list production-health-meta">
       <div>
         <dt>报告目录</dt>
-        <dd>{{ health?.reportRoot || "docs/reports/history/production-readiness" }}</dd>
+        <dd>{{ health?.reportRoot || "build/reports/production-readiness" }}</dd>
       </div>
       <div>
         <dt>分支</dt>

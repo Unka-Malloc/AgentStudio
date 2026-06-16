@@ -14,14 +14,14 @@ async function run() {
   const composePath = path.join(repoRoot, "docker-compose.yml");
   const dockerfilePath = path.join(repoRoot, "Dockerfile");
   const packagePath = path.join(repoRoot, "package.json");
-  const serverDocPath = path.join(repoRoot, "docs", "SERVER.md");
+  const usagesDocPath = path.join(repoRoot, "docs", "USAGES.md");
 
   const readmeEn = await fs.readFile(readmeEnPath, "utf8");
   const readmeZh = await fs.readFile(readmeZhPath, "utf8");
   const compose = await fs.readFile(composePath, "utf8");
   const dockerfile = await fs.readFile(dockerfilePath, "utf8");
   const pkg = JSON.parse(await fs.readFile(packagePath, "utf8"));
-  const serverDoc = await fs.readFile(serverDocPath, "utf8");
+  const usagesDoc = await fs.readFile(usagesDocPath, "utf8");
 
   // 1. 验证 docker-compose.yml 端口
   assert.match(compose, /"(?:127\.0\.0\.1:)?7228:7228"/, "docker-compose.yml must map host port 7228 to container port 7228");
@@ -38,11 +38,7 @@ async function run() {
   assert.match(pkg.engines.node, /22/, "engines.node must support Node 22");
   assert.match(pkg.engines.node, /24/, "engines.node must support Node 24");
 
-  // 4. 读取其他校验文件
-  const usageDocPath = path.join(repoRoot, "docs", "USAGE.md");
-  const usageDoc = await fs.readFile(usageDocPath, "utf8");
-
-  // 5. 验证 README.md & README.zh-CN.md 端口及安全警告
+  // 4. 验证 README.md & README.zh-CN.md 端口及安全警告
   assert.match(readmeEn, /127\.0\.0\.1:7228/, "README.md must point to port 7228");
   assert.match(readmeZh, /127\.0\.0\.1:7228/, "README.zh-CN.md must point to port 7228");
 
@@ -57,24 +53,24 @@ async function run() {
     assert.match(readmeZh, regex, `README.zh-CN.md is missing safety hardening requirement: ${regex}`);
   }
 
-  // 检查 docs/SERVER.md 生产安全加固
+  // 检查 docs/USAGES.md 生产安全加固
   const serverHardening = [/HTTPS/, /反向代理/, /受控网段|隔离/, /密钥|凭证/, /审计|Operation Ledger/, /备份/];
   for (const regex of serverHardening) {
-    assert.match(serverDoc, regex, `docs/SERVER.md is missing safety hardening requirement: ${regex}`);
+    assert.match(usagesDoc, regex, `docs/USAGES.md is missing safety hardening requirement: ${regex}`);
   }
 
-  // 6. 验证 docs/SERVER.md 的启动命令与 package.json scripts 的存在性
+  // 5. 验证 docs/USAGES.md 的启动命令与 package.json scripts 的存在性
   const npmRunRegex = /npm run ([a-zA-Z0-9:-]+)/g;
   let match;
   const foundScripts = new Set();
-  while ((match = npmRunRegex.exec(serverDoc)) !== null) {
+  while ((match = npmRunRegex.exec(usagesDoc)) !== null) {
     foundScripts.add(match[1]);
   }
   
   for (const script of foundScripts) {
     // 排除 external-kd 或第三方脚本，如果是本项目中调用的 script 则进行检验
     if (script.startsWith("server:") || script === "start:all" || script === "build:renderer" || script.startsWith("composition:") || script.startsWith("client:") || script.startsWith("mcp:")) {
-      assert.ok(pkg.scripts[script], `docs/SERVER.md references script '${script}' which is missing in package.json`);
+      assert.ok(pkg.scripts[script], `docs/USAGES.md references script '${script}' which is missing in package.json`);
     }
   }
 

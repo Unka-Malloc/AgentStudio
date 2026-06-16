@@ -7,7 +7,7 @@ const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const routerFile = path.join(repoRoot, "server-web", "router", "index.ts");
 const routerRoutesFile = path.join(repoRoot, "server-web", "router", "routes.ts");
 const registryFile = path.join(repoRoot, "server", "config", "frontend-feature-registry.yaml");
-const architectureFile = path.join(repoRoot, "docs", "Architecture.md");
+const architectureFile = path.join(repoRoot, "docs", "architecture", "ARCHITECTURE.md");
 const commonComponentsFile = path.join(repoRoot, "server-web", "components", "common.ts");
 const drawerHostDefaultFile = "server-web/ServerConsoleApp.vue";
 
@@ -218,7 +218,7 @@ function assertCommonComponentGovernance(commonText, architectureText) {
     "能继承就继承",
     "先扩展通用组件"
   ]) {
-    assert.ok(architectureText.includes(snippet), `docs/Architecture.md must document frontend reuse/inheritance rule: ${snippet}`);
+    assert.ok(architectureText.includes(snippet), `docs/architecture/ARCHITECTURE.md must document frontend reuse/inheritance rule: ${snippet}`);
   }
 
   for (const componentName of [

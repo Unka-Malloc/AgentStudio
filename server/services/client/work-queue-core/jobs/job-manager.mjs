@@ -196,6 +196,33 @@ function shouldForceNewJobVersion(payload) {
   );
 }
 
+function jobOwnerIds(jobOrPayload = {}) {
+  const owner = jobOrPayload?.owner || {};
+  return [
+    jobOrPayload?.ownerSubjectId,
+    jobOrPayload?.ownerUserId,
+    jobOrPayload?.ownerUsername,
+    jobOrPayload?.createdBySubjectId,
+    jobOrPayload?.createdByUserId,
+    jobOrPayload?.createdBy,
+    owner.subjectId,
+    owner.userId,
+    owner.username
+  ].map((value) => String(value || "").trim()).filter(Boolean);
+}
+
+function canReuseJobForPayload(existingJob = null, payload = {}) {
+  if (!existingJob) {
+    return false;
+  }
+  const existingOwners = jobOwnerIds(existingJob);
+  const requestedOwners = jobOwnerIds(payload);
+  if (existingOwners.length === 0 || requestedOwners.length === 0) {
+    return true;
+  }
+  return requestedOwners.some((ownerId) => existingOwners.includes(ownerId));
+}
+
 function normalizeVersionGroupId(payloadOrJob, { checkpointId = "", manifestKey = "", archiveBatchId = "" } = {}) {
   const value =
     payloadOrJob && typeof payloadOrJob === "object"
@@ -393,7 +420,8 @@ export function createJobManager({
   protocolEventBus = null,
   processingEnabled = process.env.PACT_IMPORT_WORKER_EXTERNAL !== "1",
   externalScheduler = process.env.PACT_PLATFORM_WORK_QUEUE === "1",
-  logger = getRuntimeLogger()
+  logger = getRuntimeLogger(),
+  legacyOwnerSubject = null
 }) {
   const jobs = new Map();
   const checkpointJobs = new Map();
@@ -411,6 +439,13 @@ export function createJobManager({
   const activeControllers = new Map();
   let readyComplete = false;
   let closed = false;
+  const normalizedLegacyOwnerSubject = {
+    subjectId: String(legacyOwnerSubject?.subjectId || legacyOwnerSubject?.userId || legacyOwnerSubject?.username || "").trim(),
+    userId: String(legacyOwnerSubject?.userId || legacyOwnerSubject?.subjectId || "").trim(),
+    username: String(legacyOwnerSubject?.username || "").trim(),
+    roleId: String(legacyOwnerSubject?.roleId || legacyOwnerSubject?.role || "").trim(),
+    tenantId: String(legacyOwnerSubject?.tenantId || "").trim()
+  };
 
   function logJob(level, event, details = {}) {
     if (!logger || typeof logger[level] !== "function") {
@@ -469,6 +504,35 @@ export function createJobManager({
     return existingJob;
   }
 
+  async function migrateOwnerlessJob(job) {
+    if (!job?.id || jobOwnerIds(job).length > 0 || !normalizedLegacyOwnerSubject.subjectId) {
+      return false;
+    }
+    const now = new Date().toISOString();
+    job.ownerSubjectId = normalizedLegacyOwnerSubject.subjectId;
+    job.ownerUserId = normalizedLegacyOwnerSubject.userId || normalizedLegacyOwnerSubject.subjectId;
+    job.ownerUsername = normalizedLegacyOwnerSubject.username;
+    job.ownerRoleId = normalizedLegacyOwnerSubject.roleId;
+    job.ownerTenantId = normalizedLegacyOwnerSubject.tenantId;
+    job.updatedAt = job.updatedAt || now;
+    await persistJobMeta(userDataPath, job);
+    const payload = await loadJobPayload(userDataPath, job.id);
+    if (payload && jobOwnerIds(payload).length === 0) {
+      payload.ownerSubjectId = job.ownerSubjectId;
+      payload.ownerUserId = job.ownerUserId;
+      payload.ownerUsername = job.ownerUsername;
+      payload.ownerRoleId = job.ownerRoleId;
+      payload.ownerTenantId = job.ownerTenantId;
+      await persistJobPayload(userDataPath, job.id, payload);
+    }
+    logJob("info", "jobs.ownerless.migrated", {
+      jobId: job.id,
+      ownerSubjectId: job.ownerSubjectId,
+      ownerRoleId: job.ownerRoleId
+    });
+    return true;
+  }
+
   function buildQueueState(job) {
     if (!job || !["queued", "running"].includes(job.status)) {
       return null;
@@ -493,6 +557,26 @@ export function createJobManager({
     }
 
     const index = queuedIds.indexOf(job.id);
+    if (externalScheduler && index < 0) {
+      return {
+        workerConcurrency,
+        active: false,
+        activeJobId,
+        activeJobIds,
+        activeSlotCount: activeControllers.size,
+        blockedByJobId: activeControllers.size >= workerConcurrency
+          ? activeJobIds[activeJobIds.length - 1] || activeJobId
+          : "",
+        queuePosition: 1,
+        queuedAhead: 0,
+        queuedBehind: queuedIds.length,
+        schedulerMode: "platform-work-queue",
+        waitingReason: activeControllers.size >= workerConcurrency
+          ? "waiting_for_available_worker"
+          : "ready_to_start",
+        waitingSince: job.createdAt || ""
+      };
+    }
     const queuePosition = index >= 0 ? index + 1 : 0;
     const queuedAhead = index >= 0 ? index : 0;
     const queuedBehind = index >= 0 ? Math.max(0, queuedIds.length - index - 1) : 0;
@@ -685,8 +769,12 @@ export function createJobManager({
   async function refreshPersistedJobs() {
     const persistedJobs = await listPersistedJobMetas(userDataPath);
     const knownIds = new Set(persistedJobs.map((job) => job.id).filter(Boolean));
+    let migratedOwnerlessCount = 0;
 
     for (const job of persistedJobs) {
+      if (await migrateOwnerlessJob(job)) {
+        migratedOwnerlessCount += 1;
+      }
       if (!job.archiveBatchId && job.id) {
         job.archiveBatchId = normalizeArchiveBatchId(job) || serverToken("archive_batch", job.checkpointId || job.id);
         await persistJobMeta(userDataPath, job);
@@ -738,6 +826,11 @@ export function createJobManager({
           source: "function-self-check"
         });
       }
+    }
+    if (migratedOwnerlessCount > 0) {
+      logJob("info", "jobs.ownerless.refresh_migration.completed", {
+        migratedOwnerlessCount
+      });
     }
 
     for (const jobId of [...jobs.keys()]) {
@@ -860,8 +953,12 @@ export function createJobManager({
     const { jobs: persistedJobs, recoverableEntries } = await loadPersistedJobs(userDataPath, {
       recoverActive: processingEnabled
     });
+    let migratedOwnerlessCount = 0;
 
     for (const job of persistedJobs) {
+      if (await migrateOwnerlessJob(job)) {
+        migratedOwnerlessCount += 1;
+      }
       if (!job.archiveBatchId && job.id) {
         job.archiveBatchId = normalizeArchiveBatchId(job) || serverToken("archive_batch", job.checkpointId || job.id);
         await persistJobMeta(userDataPath, job);
@@ -929,7 +1026,8 @@ export function createJobManager({
     logJob("info", "jobs.queue.recovery.completed", {
       persistedJobCount: persistedJobs.length,
       recoverableCount: recoverableEntries.length,
-      recoveredQueuedCount: queuedEntries.length
+      recoveredQueuedCount: queuedEntries.length,
+      migratedOwnerlessCount
     });
   })();
 
@@ -1698,18 +1796,24 @@ export function createJobManager({
       const existingJobId = checkpointId ? checkpointJobs.get(checkpointId) : "";
       if (!forceNewVersion && existingJobId) {
         const existingJob = jobs.get(existingJobId) || null;
-        if (existingJob) {
+        if (canReuseJobForPayload(existingJob, payload)) {
           await publishJobEvent(existingJob, "jobs.job.reused");
+          logJob("info", "jobs.job.create.reused", {
+            jobId: existingJobId,
+            checkpointId,
+            reason: "checkpoint_id"
+          });
+          return cloneJobForApi(existingJob);
         }
         logJob("info", "jobs.job.create.reused", {
           jobId: existingJobId,
           checkpointId,
-          reason: "checkpoint_id"
+          reason: "checkpoint_id_owner_mismatch",
+          reused: false
         });
-        return cloneJobForApi(existingJob);
       }
       const existingManifestJob = getActiveManifestJob(manifestKey, archiveBatchId);
-      if (!forceNewVersion && existingManifestJob) {
+      if (!forceNewVersion && canReuseJobForPayload(existingManifestJob, payload)) {
         if (checkpointId) {
           checkpointJobs.set(checkpointId, existingManifestJob.id);
         }
@@ -1744,6 +1848,12 @@ export function createJobManager({
         parentJobId,
         reparseFromJobId: String(payload?.reparseFromJobId || "")
       };
+      job.ownerSubjectId = String(payload?.ownerSubjectId || payload?.ownerUserId || payload?.ownerUsername || "").trim();
+      job.ownerUserId = String(payload?.ownerUserId || payload?.ownerSubjectId || "").trim();
+      job.ownerUsername = String(payload?.ownerUsername || "").trim();
+      job.ownerRoleId = String(payload?.ownerRoleId || "").trim();
+      job.ownerTenantId = String(payload?.ownerTenantId || "").trim();
+      job.workspaceId = String(payload?.workspaceId || payload?.workspace || "").trim();
       job.queueId = queueIdForJob(job);
       job.checkpointTreeId = checkpointTreeIdForJob(job);
       job.workflowId = workflowIdForJob(job);
@@ -1943,7 +2053,13 @@ export function createJobManager({
         forceNewVersion: true,
         reparseFromJobId: sourceJob.id,
         parentJobId: sourceJob.id,
-        versionGroupId
+        versionGroupId,
+        ownerSubjectId: String(options?.ownerSubjectId || sourceJob.ownerSubjectId || sourcePayload?.ownerSubjectId || "").trim(),
+        ownerUserId: String(options?.ownerUserId || sourceJob.ownerUserId || sourcePayload?.ownerUserId || "").trim(),
+        ownerUsername: String(options?.ownerUsername || sourceJob.ownerUsername || sourcePayload?.ownerUsername || "").trim(),
+        ownerRoleId: String(options?.ownerRoleId || sourceJob.ownerRoleId || sourcePayload?.ownerRoleId || "").trim(),
+        ownerTenantId: String(options?.ownerTenantId || sourceJob.ownerTenantId || sourcePayload?.ownerTenantId || "").trim(),
+        workspaceId: String(options?.workspaceId || sourceJob.workspaceId || sourcePayload?.workspaceId || "").trim()
       };
       const job = await this.createJob(reparsePayload);
       logJob("info", "jobs.job.reparse.created", {
@@ -2024,6 +2140,20 @@ export function createJobManager({
       });
     },
 
+    async listJobOwnerships() {
+      await ready;
+      if (!processingEnabled) {
+        await refreshPersistedJobs();
+      }
+      return [...jobs.values()].map((job) => ({
+        jobId: job.id || "",
+        archiveBatchId: job.archiveBatchId || "",
+        ownerSubjectId: job.ownerSubjectId || job.ownerUserId || job.ownerUsername || "",
+        ownerUserId: job.ownerUserId || job.ownerSubjectId || "",
+        ownerUsername: job.ownerUsername || ""
+      }));
+    },
+
     async listJobs({ limit = 50 } = {}) {
       await ready;
       if (!processingEnabled) {
@@ -2036,6 +2166,9 @@ export function createJobManager({
         .slice(0, safeLimit);
 
       const activeJobIds = [...activeControllers.keys()];
+      const queuedJobIds = externalScheduler
+        ? [...jobs.values()].filter((job) => job.status === "queued").map((job) => job.id)
+        : queuedEntries.map((entry) => entry.jobId);
 
       return {
         summary: {
@@ -2048,7 +2181,8 @@ export function createJobManager({
           activeJobIds,
           workerConcurrency: processingEnabled ? workerConcurrency : 0,
           processingMode: processingEnabled ? "internal" : "external",
-          queuedJobIds: queuedEntries.map((entry) => entry.jobId)
+          schedulerMode: externalScheduler ? "platform-work-queue" : "internal-pqueue",
+          queuedJobIds
         },
         items
       };

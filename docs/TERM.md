@@ -1,0 +1,332 @@
+# Pact Terms
+
+## Metadata / 元数据
+
+- Last updated: 2026-06-16
+- Status: Current maintained document
+- Scope: Controlled terminology for current Pact documentation.
+- Staleness check: Checked against the current `docs/` tree and documentation governance verifier on 2026-06-16.
+
+## 术语治理
+
+本文是 Pact 当前文档的受控术语表。文档中新增专业名词、协议名、组件名、能力名、外部框架名、缩写、字段名或受控标识符前，先在本文登记。未登记的专业名词不进入当前文档。
+
+命令、路径、文件名、功能项编号和普通自然语言词不作为术语管理；协议命名空间、能力命名空间、风险控制字段、授权字段和跨文档反复出现的技术缩写作为术语管理。
+
+## 术语表
+
+### 中文核心术语
+
+- `TERM` — 当前受控术语表。
+- `智能体` — 通过 Pact 访问工具、知识、工作空间或外部能力的 agent 主体。
+- `工作空间` — Pact 管理文件、贡献、权限、checkpoint 和上下文包的协作区域。
+- `知识治理` — 对知识源、证据、检索、导出、访问和维护流程进行统一管理的能力。
+- `权限` — 对主体、工具、知识、资产和外部调用的访问范围。
+- `审计` — 对操作、授权、外部副作用和高风险动作形成可追溯记录。
+- `外部服务` — Pact 之外的模型、代码仓库、云盘、知识后端、RAG 或工具服务。
+- `兼容层` — 约束 agent/client/MCP、external service、Pact internal 三类扩展边界的架构分层。
+- `状态机` — 对会话、贡献、任务、checkpoint、授权或发布流程的状态转移定义。
+- `版本治理` — 对 artifact、协议、兼容行和证据引用的版本管理。
+- `运行时` — Pact 服务端、客户端本机 runtime 或外部服务运行环境。
+- `服务端` — Pact server 进程和其 HTTP/API/operation runtime。
+- `客户端` — Pact desktop client、Rust sidecar 和本机 runtime 管理能力。
+- `控制台` — Pact Server Console，用于配置、观察和治理运行时。
+- `证据包` — Evidence Pack，用于承载知识、资产、来源和访问证据。
+- `能力包` — 可安装、可授权、可版本治理的工具或技能能力集合。
+- `工具管理` — Tool Management，对工具目录、toolset、grant、执行和审计进行治理。
+- `架构` — Pact 服务端、客户端、兼容层和模块边界的长期结构。
+- `协议` — HTTP、RPC、MCP、ACP、Workspace、Knowledge 等交互合同。
+- `功能模块` — `docs/functionality/` 下固定维护的功能域。
+- `实现差距` — 当前实现与目标能力之间仍需跟踪的差距。
+- `文档分布清单` — `docs/Manifest.md`，说明当前文档布局。
+- `术语表` — `docs/TERM.md`，本文。
+
+### 核心英文与缩写术语
+
+- `Pact` — 本项目名称。
+- `ABAC` — Attribute-Based Access Control。
+- `ACP` — Agent Client Protocol。
+- `ADR` — Architecture Decision Record。
+- `ADR-backed` — 由 ADR 支撑的决策或实现。
+- `API` — Application Programming Interface。
+- `APIs` — API 的复数形式。
+- `AgentLibrary` — Pact 面向智能体的知识与技能访问层。
+- `AppIcon` — 客户端应用图标资产。
+- `BinaryCheckbox` — Server Console 通用二元选择组件。
+- `BinaryToggle` — Server Console 通用二元切换组件。
+- `BuildContext` — Flutter build context。
+- `CI` — Continuous Integration。
+- `CLI` — Command Line Interface。
+- `CPU` — Central Processing Unit。
+- `CSRF` — Cross-Site Request Forgery。
+- `CSS` — Cascading Style Sheets。
+- `ClientIdentityPackageV1` — 客户端进程身份包版本。
+- `DNS` — Domain Name System。
+- `DNS-rebinding` — DNS rebinding 攻击模式。
+- `DOCX` — Word 文档格式。
+- `DPAPI` — Windows Data Protection API。
+- `DSL` — Domain-Specific Language。
+- `DataConnector` — 数据连接器。
+- `DataTable` — 数据表组件。
+- `DevOps` — 开发运维实践。
+- `ESM` — ECMAScript Module。
+- `FIFO` — First In First Out。
+- `FTS` — Full-Text Search。
+- `GET` — HTTP GET 方法。
+- `GUI` — Graphical User Interface。
+- `GitHub` — GitHub 平台。
+- `GitLab` — GitLab 平台。
+- `GoldenRule` — Pact 知识治理中的黄金规则运行时对象。
+- `GraphRAG` — Graph-based Retrieval-Augmented Generation。
+- `HEAD` — HTTP HEAD 方法或 Git HEAD。
+- `HMAC-bound` — HMAC 绑定的凭据或令牌。
+- `HMR` — Hot Module Replacement。
+- `HTML` — HyperText Markup Language。
+- `HTTP` — HyperText Transfer Protocol。
+- `HTTPS` — HTTP over TLS。
+- `HTTPS-only` — 仅允许 HTTPS 的策略。
+- `HistorySessionPanel` — 客户端历史会话面板。
+- `ID` — Identifier。
+- `IDE` — Integrated Development Environment。
+- `IPs` — IP addresses。
+- `JRE` — Java Runtime Environment。
+- `JS` — JavaScript。
+- `JSON` — JavaScript Object Notation。
+- `JSON-backed` — 由 JSON 持久化或驱动。
+- `JSONL` — JSON Lines 文本格式。
+- `JWT` — JSON Web Token。
+- `JavaScript` — JavaScript 语言。
+- `JetStream` — NATS JetStream。
+- `JetStream-style` — JetStream 风格。
+- `JobManager` — Pact job manager。
+- `KB` — Knowledge Base。
+- `KnowledgeBackendPort` — 知识后端端口接口。
+- `KnowledgeCore` — Pact 默认本地知识事实源。
+- `KnowledgeSkill` — 基于知识证据的技能。
+- `LanceDB` — 向量数据库。
+- `LangGraph` — LLM workflow graph framework。
+- `LlamaIndex` — LLM data framework。
+- `MCP` — Model Context Protocol。
+- `MinerU` — 文档解析框架。
+- `NATS` — NATS messaging system。
+- `OAuth` — OAuth 授权协议。
+- `OCR` — Optical Character Recognition。
+- `OIDC` — OpenID Connect。
+- `OS` — Operating System。
+- `OneDrive` — Microsoft OneDrive。
+- `OpenAI` — OpenAI 平台。
+- `OpenAI-compatible` — OpenAI API 兼容接口。
+- `OpenClaw` — 一等目标智能体。
+- `OpenCode` — 一等目标智能体。
+- `OpenSearch` — OpenSearch 检索后端。
+- `PACT_*` — Pact 环境变量命名模式。
+- `PC` — Personal Computer。
+- `PDF` — Portable Document Format。
+- `PNG` — Portable Network Graphics。
+- `POST` — HTTP POST 方法。
+- `PUT` — HTTP PUT 方法。
+- `PactThemeColors` — Pact 客户端主题颜色集合。
+- `PaddleOCR` — OCR 框架。
+- `RAG` — Retrieval-Augmented Generation。
+- `RAGFlow` — RAG framework。
+- `RBAC` — Role-Based Access Control。
+- `RPC` — Remote Procedure Call。
+- `REST` — Representational State Transfer。
+- `SDK` — Software Development Kit。
+- `SERVER_API_OPERATIONS` — 服务端注册 operation 列表。
+- `SQLite` — SQLite 数据库。
+- `SSE` — Server-Sent Events。
+- `SSRF` — Server-Side Request Forgery。
+- `SecretStore` — 密钥存储。
+- `SecretStore-only` — 仅使用密钥存储的策略。
+- `SemVer` — Semantic Versioning。
+- `ServerConfig.getDataDir` — 服务端标准数据目录解析入口。
+- `ServiceHub` — Pact 外部服务注册与调用控制面。
+- `SharedSpace` — 共享空间能力。
+- `TLS` — Transport Layer Security。
+- `TPM` — Trusted Platform Module。
+- `TTL` — Time To Live。
+- `ThemeData` — Flutter theme data。
+- `UI` — User Interface。
+- `URL` — Uniform Resource Locator。
+- `URLs` — URL 的复数形式。
+- `UTC` — Coordinated Universal Time。
+- `UUIDv7` — UUID version 7。
+- `WAL` — Write-Ahead Log。
+- `YAML` — YAML 数据格式。
+
+### 核心概念术语
+
+- `ACP Relay` — Pact 管理的 ACP delegation 能力。
+- `Agent Client Protocol` — ACP 全称。
+- `Capability Binding Guard` — capability key 绑定守卫。
+- `Capability Key` — opaque capability key。
+- `Checkpoint Tree` — append-only checkpoint tree。
+- `Client Runtime` — 客户端本机 runtime。
+- `Cloud Drive` — 云盘集成能力。
+- `Context Bundle` — 面向智能体的上下文包。
+- `Evidence Pack` — 证据包。
+- `Knowledge Access Protocol` — 知识访问协议。
+- `Knowledge Evidence API` — 知识证据 API。
+- `MailHelper` — macOS Mail helper 模块名。
+- `Middle Layer Strategy` — Pact 中间层策略。
+- `Model Context Protocol` — MCP 全称。
+- `Mobile Relay` — 手机与 PC 客户端中继能力。
+- `Operation Ledger` — 操作账本。
+- `Operation Registry` — 服务端 operation 注册目录。
+- `Pact MCP service` — Pact 暴露给目标智能体的 MCP 服务。
+- `Risk Control Model` — 风险控制模型。
+- `Server Console` — Pact 服务端控制台。
+- `Skill Hub` — 客户端技能仓库与配对能力。
+- `Tool Adoption Gate` — 外部工具采纳门禁。
+- `Tool Management` — 工具管理能力。
+- `Upload Session` — 上传会话。
+- `Version Registry` — 版本注册表。
+- `Workspace API` — 工作空间 API。
+- `Workspace Asset Governance System` — 工作空间资产治理系统。
+
+### 标识符与受控字段
+
+- `AuthorizationState` — ACP Relay authorization state domain。
+- `CallbackPermissionState` — ACP Relay callback permission state domain。
+- `FrameState` — ACP Relay frame parsing state domain。
+- `RelayState` — ACP Relay composite state tuple。
+- `RouteState` — ACP Relay route state domain。
+- `SessionState` — ACP Relay session state domain。
+- `SourceIdentityState` — ACP Relay source identity state domain。
+- `TurnState` — ACP Relay turn state domain。
+- `VisibilityState` — ACP Relay visibility state domain。
+- `agent.message.send` — 客户端白名单命令。
+- `agent.sessions.list` — 客户端白名单命令。
+- `agentlibrary.loan` — AgentLibrary loan 语义标识。
+- `appInstanceId` — 应用实例标识。
+- `appearancePresetId` — 外观预设标识。
+- `buildPactTheme` — Pact 客户端主题构建函数。
+- `capability.kernel.verify@m1.d1.l1.c1.r3` — capability kernel verifier 标识。
+- `checkoutAllowed` — 知识访问 egress 字段。
+- `checkpoint.restore` — checkpoint restore action。
+- `classificationProfile` — 分类 profile。
+- `client.identity.admit` — 客户端身份 admission operation。
+- `clientFingerprintHash` — 客户端 fingerprint hash。
+- `clientId` — 客户端标识。
+- `com.pact.client` — macOS bundle identifier。
+- `component.capability-kernel` — capability kernel component id。
+- `component.tool-management` — Tool Management component id。
+- `componentDigest` — component digest。
+- `concurrencyKey` — 并发控制键。
+- `context.pactColors` — Flutter context colors extension。
+- `contribution.lifecycle` — contribution lifecycle id。
+- `controlId` — risk control id。
+- `controlId@definitionVersion` — risk control versioned id。
+- `controlRef` — risk control reference。
+- `controlledView` — 受控查看权限。
+- `controlsByObject` — risk control object mapping。
+- `deadLetter` — dead-letter queue 标记。
+- `dedupeKey` — 去重键。
+- `definitionDigest` — definition digest。
+- `definitionVersion` — definition version。
+- `domainMapping` — domain mapping。
+- `enforcedBy` — enforcement component。
+- `enforcedById@componentContractVersion` — enforcement component versioned id。
+- `errorClass` — 错误分类。
+- `errorCode` — 错误码。
+- `evidenceDigest` — evidence digest。
+- `evidenceLocator` — evidence locator。
+- `evidenceLocatorId` — evidence locator id。
+- `evidenceRef` — evidence reference。
+- `expertOpinion` — 专家意见知识项。
+- `external.knowledge.distillation` — 外部知识蒸馏 operation namespace。
+- `external.provider.scope.authorize` — 外部 provider scope 授权 operation。
+- `extractDocument` — 文档提取函数。
+- `extractText` — 文本提取函数。
+- `fact.checkpoint-tree` — checkpoint tree fact id。
+- `fact.operation-ledger` — operation ledger fact id。
+- `factSource` — fact source。
+- `factSourceDigest` — fact source digest。
+- `factSourceId@factContractVersion` — fact source versioned id。
+- `failsClosed` — fail-closed 字段。
+- `fingerprintHash` — fingerprint hash。
+- `fingerprintId` — fingerprint id。
+- `fs.writeTextFile` — 文件写入 API 名称。
+- `goldenRule` — 黄金规则知识项。
+- `idempotencyKey` — 幂等键。
+- `installationId` — 安装标识。
+- `journalEntryId` — journal entry id。
+- `jobs.work_queue.*` — Work Queue management operation namespace。
+- `knowledge.agent_skill.plan` — knowledge agent skill planning operation。
+- `knowledge.skills.*` — legacy knowledge skill alias namespace。
+- `leaseId` — lease id。
+- `localProjectionVerified` — 本地投影验证状态。
+- `localStorage` — local storage。
+- `machineInstanceId` — machine instance id。
+- `manifest.tsv` — Mail export manifest file name。
+- `maxRisk` — 最大风险等级字段。
+- `nativeAcpTargetSupported=false` — native ACP target support false marker。
+- `nativeAcpTargetVerified` — native ACP target verification field。
+- `nativeAcpTargetVerified=false` — native ACP target verification false marker。
+- `opaqueKey` — opaque capability key。
+- `operation.narrow` — operation narrow action。
+- `operationAnchorDigest` — operation anchor digest。
+- `operationId` — operation id。
+- `packageId` — package id。
+- `pact.agentLibrary` — AgentLibrary outlet namespace。
+- `pact.agentLibrary.search` — AgentLibrary search tool namespace。
+- `pact.agentRelay` — agent relay outlet namespace。
+- `pact.call` — Pact call namespace。
+- `pact.codespace` — codespace namespace。
+- `pact.discovery` — discovery namespace。
+- `pact.external-service.config` — external service config kind。
+- `pact.knowledge` — knowledge namespace。
+- `pact.serviceHub` — ServiceHub outlet namespace。
+- `pact.sharedspace` — sharedspace namespace。
+- `pact.skillHub` — Skill Hub namespace。
+- `PactMailHelper.swift` — macOS Mail helper Swift source file。
+- `pathId` — path id。
+- `payloadRef` — payload reference。
+- `platform.capability.verify.authorize` — platform capability authorization verifier operation。
+- `previousRecordDigest` — previous record digest。
+- `previousRecordDigest=operationAnchorDigest` — first record hash-chain invariant。
+- `processKeyId` — process key id。
+- `processPublicKeyHash` — process public key hash。
+- `production.readiness.lifecycle` — production readiness lifecycle id。
+- `profileDigest` — profile digest。
+- `profileId` — profile id。
+- `profileId@profileVersion` — versioned profile id。
+- `profileVersion` — profile version。
+- `queueDefinitionId` — queue definition id。
+- `recordDigest` — record digest。
+- `recordSeq` — record sequence。
+- `recordSeq=0` — first record sequence invariant。
+- `redactionPolicyProfile` — redaction policy profile。
+- `requestedCapability` — requested capability。
+- `retentionProfile` — retention profile。
+- `retryHint` — retry hint。
+- `riskControl` — risk control object。
+- `runtimeInstanceId` — runtime instance id。
+- `secretRef` — secret reference。
+- `serverId` — server id。
+- `serverTrustPin` — server trust pin。
+- `sharedSessionSafe=true` — shared session safety marker。
+- `storeDigest` — store digest。
+- `storeId` — store id。
+- `storeId@storeVersion` — versioned store id。
+- `storeVersion` — store version。
+- `structuredScope` — structured scope。
+- `subscriptionId` — subscription id。
+- `supersededBy` — superseded-by pointer。
+- `tool.grant.admit` — tool grant admission operation。
+- `tool.grant.audit` — tool grant audit operation。
+- `tool.grant.authorize` — tool grant authorization operation。
+- `tool.grant.bind` — tool grant binding operation。
+- `traceId` — trace id。
+- `turn.observe` — ACP Relay source-safe turn observation operation。
+- `verifiedBy` — verified-by field。
+- `verifier.platform-managed-migration.completion` — platform managed migration verifier id。
+- `verifier.risk-control.evidence-locator` — risk control evidence locator verifier id。
+- `verifier.risk-control.registry-integrity` — risk control registry integrity verifier id。
+- `verifierDigest` — verifier digest。
+- `verifierId@verifierContractVersion` — versioned verifier id。
+- `version.artifact.lifecycle` — version artifact lifecycle id。
+- `version.transition.lifecycle` — version transition lifecycle id。
+- `workItemId` — work item id。
+- `workerId` — worker id。

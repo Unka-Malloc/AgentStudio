@@ -214,7 +214,8 @@ async function verifyGatewayRoutingBoundary() {
           fallbackChain: ["verify-agent"],
           budget: { maxInputTokens: 2000, maxOutputTokens: 64 }
         }
-      }
+      },
+      contextCompactionSource: "agent_gateway.call"
     });
     assert.equal(response.ok, true);
     assert.equal(response.modelRouting.strategyProtocolVersion, STRATEGY_MANAGEMENT_PROTOCOL_VERSION);

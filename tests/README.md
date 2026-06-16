@@ -19,4 +19,4 @@ must live outside the repository under `~/.pact-server-data/evaluation-corpora/`
 `tests/` is for small synthetic fixtures, mock modules, and source-controlled
 test code.
 
-See `docs/TEST-FRAMEWORK.md` for the full framework contract.
+See `docs/runbook/DEVELOPMENT-RUNBOOK.md` for the full framework contract.

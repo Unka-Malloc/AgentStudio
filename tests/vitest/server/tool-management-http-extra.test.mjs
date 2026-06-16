@@ -120,10 +120,21 @@ async function callRouter(router, {
   path,
   body = null,
   headers = {},
-  requestId = "req-1"
+  requestId = "req-1",
+  trustedPactClient = true
 }) {
   const response = createResponse();
-  const request = createRequest({ headers, id: requestId });
+  const request = createRequest({
+    headers: {
+      ...(trustedPactClient ? {
+        host: "127.0.0.1:7228",
+        "x-pact-client-kind": "pact-client",
+        "x-pact-client-id": "pact-cli"
+      } : {}),
+      ...headers
+    },
+    id: requestId
+  });
   const requestBody = body === null ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body), "utf8");
   const handled = await router.handleToolManagementHttpRequest({
     request,
@@ -221,7 +232,7 @@ describe("tool-management http router (extra coverage)", () => {
       toolId: "tool.execute",
       input: { alpha: 1 },
       request: executeResult.request,
-      context: expect.objectContaining({ source: "unit-test", transport: "tool-http" }),
+      context: expect.objectContaining({ source: "unit-test", transport: "pact-client-http" }),
       dryRun: true
     }));
     expect(sendJsonMock).toHaveBeenLastCalledWith(executeResult.response, 201, {
@@ -230,7 +241,7 @@ describe("tool-management http router (extra coverage)", () => {
         toolId: "tool.execute",
         input: { alpha: 1 },
         request: executeResult.request,
-        context: expect.objectContaining({ source: "unit-test", transport: "tool-http" }),
+        context: expect.objectContaining({ source: "unit-test", transport: "pact-client-http" }),
         dryRun: true
       })
     });
@@ -253,13 +264,13 @@ describe("tool-management http router (extra coverage)", () => {
     expect(platform.runtime.executeTool).toHaveBeenNthCalledWith(2, expect.objectContaining({
       toolId: "tool.first",
       input: { x: 1 },
-      context: expect.objectContaining({ batch: true, call: 1, transport: "tool-http-batch" }),
+      context: expect.objectContaining({ batch: true, call: 1, transport: "pact-client-http-batch" }),
       dryRun: true
     }));
     expect(platform.runtime.executeTool).toHaveBeenNthCalledWith(3, expect.objectContaining({
       toolId: "tool.second",
       input: { y: 2 },
-      context: expect.objectContaining({ batch: true, transport: "tool-http-batch" }),
+      context: expect.objectContaining({ batch: true, transport: "pact-client-http-batch" }),
       dryRun: true
     }));
     expect(sendJsonMock).toHaveBeenLastCalledWith(batchResult.response, 200, {
@@ -269,6 +280,28 @@ describe("tool-management http router (extra coverage)", () => {
         expect.objectContaining({ schemaVersion: "v0.0.1:schema:definition-1", result: expect.any(Object) })
       ]
     });
+  });
+
+  it("rejects Tool Management HTTP execution from non-Pact clients", async () => {
+    const platform = createPlatform();
+    const router = createToolManagementHttpRouter({ platform, logger: getRuntimeLoggerMock() });
+
+    const result = await callRouter(router, {
+      platform,
+      method: "POST",
+      path: "/api/tool-management/v1/execute",
+      trustedPactClient: false,
+      body: {
+        toolId: "tool.execute",
+        input: { alpha: 1 }
+      }
+    });
+
+    expect(result.handled).toBe(true);
+    expect(platform.runtime.executeTool).not.toHaveBeenCalled();
+    expect(sendJsonMock).toHaveBeenLastCalledWith(result.response, 403, expect.objectContaining({
+      error: expect.objectContaining({ code: "trusted_pact_client_required" })
+    }));
   });
 
   it("requires safety confirmation for grant changes and returns the expected error response", async () => {

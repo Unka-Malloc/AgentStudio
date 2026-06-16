@@ -4,10 +4,21 @@ import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import Database from "better-sqlite3";
 import { getRuntimeLogger } from "../../../common/observability/runtime-logger.mjs";
+import {
+  assertExistingLocalDirectoryWithinControlledRootsSync
+} from "../../../common/security/local-path-boundary.mjs";
 
 export const AGENT_WORKSPACE_PROTOCOL_VERSION = "v0.0.1:workspace:agent-workspace-1";
 export const AGENT_WORKSPACE_CONTEXT_BUNDLE_VERSION = "v0.0.1:workspace:context-bundle-1";
 export const AGENT_SESSION_THREAD_VERSION = "v0.0.1:agent:session-thread-1";
+const CONTEXT_BUNDLE_COMPRESSED_MAX_BYTES = Math.max(
+  1024,
+  Number(process.env.PACT_AGENT_WORKSPACE_CONTEXT_BUNDLE_COMPRESSED_MAX_BYTES || 2 * 1024 * 1024)
+);
+const CONTEXT_BUNDLE_UNCOMPRESSED_MAX_BYTES = Math.max(
+  CONTEXT_BUNDLE_COMPRESSED_MAX_BYTES,
+  Number(process.env.PACT_AGENT_WORKSPACE_CONTEXT_BUNDLE_UNCOMPRESSED_MAX_BYTES || 16 * 1024 * 1024)
+);
 
 const ACCEPTED_SUBMISSION_TYPES = new Set([
   "evidenceCard",
@@ -460,7 +471,25 @@ function decodeWorkspaceContextBundle(input = {}) {
   if (!["gzip+base64", "base64+gzip"].includes(encoding)) {
     throw new Error("工作空间上下文压缩包编码不受支持。");
   }
-  const jsonText = gunzipSync(Buffer.from(encoded, "base64")).toString("utf8");
+  const compressedBuffer = Buffer.from(encoded, "base64");
+  if (compressedBuffer.length > CONTEXT_BUNDLE_COMPRESSED_MAX_BYTES) {
+    throw new Error("工作空间上下文压缩包超过大小上限。");
+  }
+  let decoded;
+  try {
+    decoded = gunzipSync(compressedBuffer, {
+      maxOutputLength: CONTEXT_BUNDLE_UNCOMPRESSED_MAX_BYTES + 1
+    });
+  } catch (error) {
+    if (error?.code === "ERR_BUFFER_TOO_LARGE") {
+      throw new Error("工作空间上下文压缩包超过大小上限。");
+    }
+    throw error;
+  }
+  if (decoded.length > CONTEXT_BUNDLE_UNCOMPRESSED_MAX_BYTES) {
+    throw new Error("工作空间上下文压缩包超过大小上限。");
+  }
+  const jsonText = decoded.toString("utf8");
   return JSON.parse(jsonText);
 }
 
@@ -913,6 +942,11 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
       workspace_id, title, objective, status, owner_user_id, metadata_json, created_at, updated_at, fs_path
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
+  const updateWorkspaceOwnerStmt = db.prepare(`
+    UPDATE aw_workspaces
+    SET owner_user_id = ?, metadata_json = ?, updated_at = ?
+    WHERE workspace_id = ?
+  `);
   const selectWorkspaceStmt = db.prepare("SELECT * FROM aw_workspaces WHERE workspace_id = ?");
   const listWorkspacesStmt = db.prepare("SELECT * FROM aw_workspaces ORDER BY updated_at DESC LIMIT ?");
   const listWorkspacesByStatusStmt = db.prepare("SELECT * FROM aw_workspaces WHERE status = ? ORDER BY updated_at DESC LIMIT ?");
@@ -1046,10 +1080,26 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
   }
 
   function workspaceAccess(input = {}) {
+    const metadata = asObject(input.metadata);
+    const actorIds = uniqueStrings([
+      input.actorUserId,
+      input.userId,
+      input.subjectId,
+      input.username,
+      metadata.actorUserId,
+      metadata.userId,
+      metadata.subjectId,
+      metadata.username
+    ]);
+    const allowedWorkspaceIds = new Set(uniqueStrings([
+      ...asArray(input.allowedWorkspaceIds)
+    ]));
     return {
-      actorUserId: String(input.actorUserId || input.userId || "").trim(),
-      canAccessAll: true,
-      sharingMode: "team-shared"
+      actorUserId: actorIds[0] || "",
+      actorIds,
+      allowedWorkspaceIds,
+      canAccessAll: input.canAccessAll === true,
+      sharingMode: String(input.sharingMode || (input.canAccessAll === true ? "admin" : "owner-bound")).trim()
     };
   }
 
@@ -1057,8 +1107,30 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
     if (!workspace) {
       return false;
     }
-    workspaceAccess(input);
-    return true;
+    const access = workspaceAccess(input);
+    if (access.canAccessAll) {
+      return true;
+    }
+    const workspaceId = String(workspace.workspaceId || "").trim();
+    if (workspaceId && access.allowedWorkspaceIds.has(workspaceId)) {
+      return true;
+    }
+    const metadata = asObject(workspace.metadata);
+    const ownerUserId = String(workspace.ownerUserId || metadata.ownerUserId || "").trim();
+    const allowedUserIds = uniqueStrings([
+      ownerUserId,
+      metadata.defaultAdminUserId,
+      ...asArray(metadata.adminUserIds),
+      ...asArray(metadata.administrators),
+      ...asArray(metadata.allowedUserIds),
+      ...asArray(metadata.allowedUsers),
+      ...asArray(metadata.sharedUserIds),
+      ...asArray(metadata.members)
+    ]);
+    if (allowedUserIds.length === 0) {
+      return false;
+    }
+    return access.actorIds.some((actorId) => allowedUserIds.includes(actorId));
   }
 
   function canAccessWorkspaceId(workspaceId, input = {}) {
@@ -1154,30 +1226,13 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
   }
 
   function validateLocalDirectoryRoot(sourcePath) {
-    const rawPath = String(sourcePath || "").trim();
-    if (!rawPath) {
+    if (!String(sourcePath || "").trim()) {
       throw new Error("sourcePath 不能为空。");
     }
-    const absolutePath = path.resolve(rawPath);
-    const root = path.parse(absolutePath).root;
-    if (absolutePath === root) {
-      throw new Error("不能把文件系统根目录作为受控本机目录。");
-    }
-    if (!fs.existsSync(absolutePath)) {
-      throw new Error("本机目录不存在。");
-    }
-    const stat = fs.lstatSync(absolutePath);
-    if (stat.isSymbolicLink()) {
-      throw new Error("不允许连接符号链接目录。");
-    }
-    if (!stat.isDirectory()) {
-      throw new Error("sourcePath 必须是本机目录。");
-    }
-    return {
-      absolutePath,
-      realPath: fs.realpathSync.native(absolutePath),
-      stat
-    };
+    return assertExistingLocalDirectoryWithinControlledRootsSync(sourcePath, {
+      userDataPath,
+      label: "本机目录"
+    });
   }
 
   function publicLocalDirectoryMount(mount = {}, { includeSourcePath = false } = {}) {
@@ -1204,7 +1259,7 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
     return output;
   }
 
-  function resolveLocalDirectorySource(input = {}, workspace) {
+  function resolveLocalDirectorySource(input = {}, workspace, { allowDirectSourcePath = false } = {}) {
     const mountRef = String(
       input.mountRef ||
         input.mountId ||
@@ -1231,6 +1286,9 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
       };
     }
     const sourcePath = String(input.sourcePath || input.localPath || input.dirPath || "").trim();
+    if (!allowDirectSourcePath) {
+      throw new Error("本机目录访问需要使用已登记的 mountRef。");
+    }
     const root = validateLocalDirectoryRoot(sourcePath);
     return {
       sourcePath: root.realPath,
@@ -1261,7 +1319,7 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
       sourcePath: root.realPath,
       targetPath,
       maxFiles: input.maxFiles || 2000
-    });
+    }, { allowDirectSourcePath: true });
     if (!validationPlan.ok) {
       return validationPlan;
     }
@@ -2216,6 +2274,8 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
       workspaceId: workspace.workspaceId,
       title: `${workspace.title || workspace.workspaceId} / 主会话`,
       objective: workspace.objective || "",
+      actorUserId: workspace.ownerUserId || "",
+      userId: workspace.ownerUserId || "",
       createdBy: workspace.ownerUserId || "",
       createdAt: timestamp,
       metadata: {
@@ -2630,10 +2690,11 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
     const rows = status
       ? listWorkspacesByStatusStmt.all(status, limit)
       : listWorkspacesStmt.all(limit);
-    const workspaces = rows.map(hydrateWorkspace);
+    const access = workspaceAccess(input);
+    const workspaces = rows.map(hydrateWorkspace).filter((workspace) => canAccessWorkspace(workspace, input));
     return {
       protocolVersion: AGENT_WORKSPACE_PROTOCOL_VERSION,
-      sharingMode: "team-shared",
+      sharingMode: access.sharingMode,
       workspaces: workspaces.map((workspace) => ({
         ...workspace,
         summary: includeSummary ? workspaceSummary(workspace.workspaceId) : undefined
@@ -2649,7 +2710,9 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
       stableId("workspace", input.title || "", input.objective || "", timestamp);
     const fsPath = path.join(rootPath, "folders", workspaceId);
     fs.mkdirSync(fsPath, { recursive: true });
-    const ownerUserId = String(input.ownerUserId || input.owner_user_id || input.userId || "").trim();
+    const ownerUserId = String(
+      input.ownerUserId || input.owner_user_id || input.userId || input.actorUserId || input.subjectId || input.username || ""
+    ).trim();
     const defaultAdminUserId = String(input.defaultAdminUserId || input.adminUserId || ownerUserId || "").trim();
     const inputMetadata = asObject(input.metadata);
     const workspace = {
@@ -2688,6 +2751,53 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
     return {
       protocolVersion: AGENT_WORKSPACE_PROTOCOL_VERSION,
       workspace: persisted
+    };
+  }
+
+  function migrateOwnerlessWorkspaces(owner = {}) {
+    const ownerUserId = String(owner.userId || owner.subjectId || owner.username || "").trim();
+    if (!ownerUserId) {
+      return {
+        protocolVersion: AGENT_WORKSPACE_PROTOCOL_VERSION,
+        ok: false,
+        migratedCount: 0,
+        error: "owner_user_id_required"
+      };
+    }
+    const ownerUsername = String(owner.username || ownerUserId).trim();
+    const rows = db.prepare("SELECT * FROM aw_workspaces WHERE owner_user_id = '' OR owner_user_id IS NULL").all();
+    const timestamp = nowIso();
+    let migratedCount = 0;
+    db.transaction(() => {
+      for (const row of rows) {
+        const metadata = asObject(parseJson(row.metadata_json, {}));
+        const adminUserIds = uniqueStrings([
+          ...asArray(metadata.adminUserIds),
+          ...asArray(metadata.administrators),
+          metadata.defaultAdminUserId,
+          ownerUserId,
+          ownerUsername
+        ]);
+        updateWorkspaceOwnerStmt.run(
+          ownerUserId,
+          stringifyJson({
+            ...metadata,
+            ownerUserId,
+            ownerUsername,
+            defaultAdminUserId: metadata.defaultAdminUserId || ownerUserId,
+            adminUserIds
+          }),
+          timestamp,
+          row.workspace_id
+        );
+        migratedCount += 1;
+      }
+    })();
+    return {
+      protocolVersion: AGENT_WORKSPACE_PROTOCOL_VERSION,
+      ok: true,
+      migratedCount,
+      ownerUserId
     };
   }
 
@@ -3560,14 +3670,14 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
     return files;
   }
 
-  function localDirectorySyncPlan(input = {}) {
+  function localDirectorySyncPlan(input = {}, options = {}) {
     const access = workspaceForStorage(input);
     if (!access.ok) {
       return access;
     }
     let source;
     try {
-      source = resolveLocalDirectorySource(input, access.workspace);
+      source = resolveLocalDirectorySource(input, access.workspace, options);
     } catch (error) {
       return { ok: false, status: 400, error: error.message };
     }
@@ -4587,7 +4697,8 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
     if (!targetRow) {
       return { ok: false, error: "工作空间不存在" };
     }
-    if (!canAccessWorkspace(hydrateWorkspace(targetRow), options)) {
+    const targetWorkspace = hydrateWorkspace(targetRow);
+    if (!canAccessWorkspace(targetWorkspace, options)) {
       return { ok: false, error: "工作空间不可访问" };
     }
 
@@ -4619,9 +4730,18 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
     const context = asObject(bundle.context);
     const resolvedProfile = asObject(bundle.resolvedProfile);
     const profileKnowledgeScope = asObject(resolvedProfile.knowledgeScope);
-    const restoredSourceIds = asArray(context.knowledgeSourceIds).length
+    const requestedRestoredSourceIds = uniqueStrings(asArray(context.knowledgeSourceIds).length
       ? asArray(context.knowledgeSourceIds)
-      : asArray(profileKnowledgeScope.includeSourceIds);
+      : asArray(profileKnowledgeScope.includeSourceIds));
+    const currentlyAccessibleSourceIds = new Set(resolveWorkspaceSourceIds(targetWorkspaceId));
+    const targetOwnerUserId = String(targetWorkspace?.ownerUserId || targetWorkspace?.metadata?.ownerUserId || "").trim();
+    const access = workspaceAccess(options);
+    const legacyInternalRestore = !targetOwnerUserId && access.actorIds.length === 0 && access.allowedWorkspaceIds.size === 0;
+    const canImportRequestedSourceIds = options.canAccessAll === true || legacyInternalRestore;
+    const restoredSourceIds = canImportRequestedSourceIds
+      ? requestedRestoredSourceIds
+      : requestedRestoredSourceIds.filter((sourceId) => currentlyAccessibleSourceIds.has(sourceId));
+    const skippedSourceIds = requestedRestoredSourceIds.filter((sourceId) => !restoredSourceIds.includes(sourceId));
     const profilePatch = {
       ...resolvedProfile,
       contextProfileId: context.contextProfileId || resolvedProfile.contextProfileId || "",
@@ -4650,7 +4770,8 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
       input: {
         sourceWorkspaceId: sourceWorkspace.workspaceId || context.workspaceId || "",
         sourceContextFingerprint: context.contextFingerprint || "",
-        bundleHash
+        bundleHash,
+        skippedKnowledgeSourceIds: skippedSourceIds
       },
       steps: [
         {
@@ -4667,6 +4788,7 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
       coverage: {
         restoredProfile: Boolean(profilePatch.contextProfileId || profilePatch.modelAlias || profilePatch.toolGrantId),
         restoredKnowledgeSourceCount: restoredSourceIds.length,
+        skippedKnowledgeSourceCount: skippedSourceIds.length,
         restoredArtifactCount: asArray(bundle.recent?.artifacts).length,
         restoredRunCount: asArray(bundle.recent?.runs).length
       },
@@ -4689,7 +4811,8 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
         bundleHash,
         sourceWorkspaceId: sourceWorkspace.workspaceId || context.workspaceId || "",
         sourceContextFingerprint: context.contextFingerprint || "",
-        restoredKnowledgeSourceCount: restoredSourceIds.length
+        restoredKnowledgeSourceCount: restoredSourceIds.length,
+        skippedKnowledgeSourceCount: skippedSourceIds.length
       },
       status: "accepted",
       createdBy: String(options.actorUserId || "context-bundle-restore")
@@ -4713,7 +4836,8 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
         contextProfileId: profilePatch.contextProfileId,
         toolGrantId: profilePatch.toolGrantId,
         modelAlias: profilePatch.modelAlias,
-        knowledgeSourceCount: restoredSourceIds.length
+        knowledgeSourceCount: restoredSourceIds.length,
+        skippedKnowledgeSourceCount: skippedSourceIds.length
       }
     };
   }
@@ -4899,6 +5023,7 @@ export function createAgentWorkspace({ userDataPath, merkleState = null, checkpo
     protocolVersion: AGENT_WORKSPACE_PROTOCOL_VERSION,
     rootPath,
     createWorkspace,
+    migrateOwnerlessWorkspaces,
     deleteWorkspace,
     listWorkspaces,
     getWorkspace,

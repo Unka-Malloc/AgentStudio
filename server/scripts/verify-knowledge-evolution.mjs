@@ -45,10 +45,20 @@ async function createKnowledgeJob(baseUrl, title, body) {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-knowledge-evolution-"));
+const featureProfilePath = path.join(userDataPath, "feature-profile.json");
+await fs.writeFile(
+  featureProfilePath,
+  `${JSON.stringify({
+    name: "knowledge-evolution-verifier",
+    enableFeatures: ["knowledge-distillation"]
+  }, null, 2)}\n`,
+  "utf8"
+);
 const server = await startHttpServer({
   userDataPath,
   runtimeOptions: {
-    profile: "minimal"
+    profile: "minimal",
+    featureProfile: featureProfilePath
   }
 });
 await installAuthenticatedFetch(server);

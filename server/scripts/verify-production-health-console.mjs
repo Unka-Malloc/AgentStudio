@@ -44,7 +44,7 @@ async function writeSampleReport(root, runId, overrides = {}) {
         owner: "platform-architecture",
         coverage: ["architecture"],
         status: "pass",
-        evidencePath: `docs/reports/history/production-readiness/${runId}/architecture.log`,
+        evidencePath: `build/reports/production-readiness/${runId}/architecture.log`,
         commands: [{ command: "npm run server:verify:architecture-patterns", exitCode: 0, timedOut: false, elapsedMs: 12 }],
         nextStep: "修复架构治理。"
       },
@@ -55,7 +55,7 @@ async function writeSampleReport(root, runId, overrides = {}) {
         owner: "observability",
         coverage: ["trace-observability"],
         status: "pass",
-        evidencePath: `docs/reports/history/production-readiness/${runId}/trace-observability.log`,
+        evidencePath: `build/reports/production-readiness/${runId}/trace-observability.log`,
         commands: [{ command: "npm run server:verify:trace-context", exitCode: 0, timedOut: false, elapsedMs: 15 }],
         nextStep: "补齐 trace。"
       },
@@ -66,7 +66,7 @@ async function writeSampleReport(root, runId, overrides = {}) {
         owner: "ops-runtime",
         coverage: ["backup-restore"],
         status: "pass",
-        evidencePath: `docs/reports/history/production-readiness/${runId}/backup-restore.log`,
+        evidencePath: `build/reports/production-readiness/${runId}/backup-restore.log`,
         commands: [{ command: "npm run server:verify:ops", exitCode: 0, timedOut: false, elapsedMs: 18 }],
         nextStep: "补齐恢复演练。"
       }
@@ -106,7 +106,7 @@ async function verifyReportReader() {
           owner: "platform-architecture",
           coverage: ["architecture"],
           status: "fail",
-          evidencePath: "docs/reports/history/production-readiness/20260521T000000Z/architecture.log",
+          evidencePath: "build/reports/production-readiness/20260521T000000Z/architecture.log",
           commands: [{ command: "npm run server:verify:architecture-patterns", exitCode: 1, timedOut: false, elapsedMs: 9 }],
           nextStep: "修复架构治理。"
         }
@@ -133,7 +133,7 @@ async function verifyReportReader() {
           owner: "platform-architecture",
           coverage: ["architecture"],
           status: "pass",
-          evidencePath: "docs/reports/history/production-readiness/20260523T000000Z/architecture.log",
+          evidencePath: "build/reports/production-readiness/20260523T000000Z/architecture.log",
           commands: [{ command: "npm run server:verify:architecture-patterns", exitCode: 0, timedOut: false, elapsedMs: 9 }],
           nextStep: "修复架构治理。"
         }

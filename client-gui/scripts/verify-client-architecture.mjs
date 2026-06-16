@@ -16,7 +16,12 @@ const futureModules = [
   "model-forwarding",
   "mobile-relay",
   "activity-snapshots",
-  "settings"
+  "settings",
+  "source-queue",
+  "client-connectors",
+  "knowledge-cache",
+  "mail-import-runtime",
+  "mcp-local-bridge"
 ];
 const firstTargets = [
   "openclaw",
@@ -32,9 +37,7 @@ const firstTargets = [
 const forbiddenCliScopes = [
   'scope == "daemon"',
   'scope == "server"',
-  'scope == "mail"',
   'scope == "upload"',
-  'scope == "connectors"',
   'scope == "knowledge"',
   'scope == "events"',
   'scope == "context"',
@@ -52,8 +55,7 @@ const forbiddenShellLabels = [
   "Modules",
   "Data Connectors",
   "Knowledge Graph",
-  "Export",
-  "Logs"
+  "Export"
 ];
 const removedGuiSourcePaths = [
   "client-gui/lib/src/controllers/app_controller.dart",
@@ -80,7 +82,6 @@ const removedClientVersionPaths = [
   "client-cli/src/local_agents.rs",
   "client-cli/src/agent_client.rs",
   "client-cli/src/backend_core.rs",
-  "client-cli/src/connectors.rs",
   "client-cli/src/upload_queue.rs",
   "client-cli/src/bin/pact-clientd.rs",
   ...removedGuiSourcePaths,
@@ -109,11 +110,13 @@ const defaultGuiSurfacePaths = [
   "client-gui/lib/src/controllers/agent_conversation_actions.dart",
   "client-gui/lib/src/controllers/mcp_plugin_actions.dart",
   "client-gui/lib/src/controllers/mobile_relay_actions.dart",
+  "client-gui/lib/src/controllers/local_runtime_actions.dart",
   "client-gui/lib/src/controllers/model_forwarding_actions.dart",
   "client-gui/lib/src/controllers/skill_hub_actions.dart",
   "client-gui/lib/src/controllers/target_actions.dart",
   "client-gui/lib/src/models/future_client_models.dart",
   "client-gui/lib/src/services/activity_snapshot_service.dart",
+  "client-gui/lib/src/services/client_workspace_manifest.dart",
   "client-gui/lib/src/services/agent_conversation_service.dart",
   "client-gui/lib/src/services/agent_service.dart",
   "client-gui/lib/src/services/agent_service_actions.dart",
@@ -242,14 +245,7 @@ assert(
 );
 const deferredCapabilities = packaging.deferredCapabilities || {};
 assert(
-  sameSet(Object.keys(deferredCapabilities).sort(), [
-    "client-connectors",
-    "clientd",
-    "knowledge-cache",
-    "mail-import-runtime",
-    "mcp-local-bridge",
-    "upload-queue"
-  ]),
+  sameSet(Object.keys(deferredCapabilities).sort(), ["clientd"]),
   "deferred client capabilities must be explicit TODO placeholders, not hidden package modules"
 );
 for (const [capabilityId, capability] of Object.entries(deferredCapabilities)) {
@@ -262,7 +258,9 @@ const portableDirs = modules["portable-data"]?.portableDirectories || [];
 for (const legacyDir of ["backend", "logs", "exports", "mail-imports", "knowledge", "chat-index"]) {
   assert(!portableDirs.includes(legacyDir), `portable data must not include legacy directory: ${legacyDir}`);
 }
-assert(!portableDirs.some((item) => String(item).startsWith("connectors/")), "portable data must not include connector directories");
+for (const requiredDir of ["future-client/source-queue", "future-client/connectors", "future-client/knowledge-cache", "future-client/mcp-local-bridge"]) {
+  assert(portableDirs.includes(requiredDir), `portable data must include runtime directory: ${requiredDir}`);
+}
 
 const packagePlan = runJson(process.execPath, ["client-gui/scripts/package-client.mjs", "--dry-run"]);
 if (packagePlan) {
@@ -278,14 +276,14 @@ for (const relativePath of removedClientVersionPaths) {
 const cargoToml = await readText("client-cli/Cargo.toml");
 assert(!cargoToml.includes('name = "pact-clientd"'), "Cargo package must not build pact-clientd by default");
 const libRs = await readText("client-cli/src/lib.rs");
-for (const moduleName of ["backend_core", "connectors", "upload_queue", "local_agents", "agent_client"]) {
+for (const moduleName of ["backend_core", "upload_queue", "local_agents", "agent_client"]) {
   assert(!libRs.includes(`pub mod ${moduleName}`), `client library must not export legacy module ${moduleName}`);
 }
 const cliSource = await readText("client-cli/src/bin/pact-client.rs");
 for (const token of forbiddenCliScopes) {
   assert(!cliSource.includes(token), `pact-client main CLI must not contain legacy token: ${token}`);
 }
-for (const token of ["targets scan", "mcp config plan", "mcp plugin status", "forward --profile", "agents pair", "conversations list|append|delete", "agent message send", "mobile relay"]) {
+for (const token of ["targets scan", "mcp config plan", "mcp plugin status", "forward --profile", "agents pair", "conversations list|append|delete", "agent message send", "mobile relay", "source-queue add|list", "connectors list|sync", "knowledge-cache sync|search", "mail preview|enqueue", "mcp-local-bridge plan|start"]) {
   assert(cliSource.includes(token), `pact-client usage must expose future command: ${token}`);
 }
 
@@ -297,7 +295,7 @@ assert(
 
 const futureClientModels = await readText("client-gui/lib/src/models/future_client_models.dart");
 const appSections = collectEnumValues(futureClientModels, "FutureClientSection");
-assert(sameSet(appSections, ["agents", "mcpPlugins", "skillHub", "modelForwarding", "mobileRelay", "activity", "settings"]), "FutureClientSection enum must contain only the seven future modules");
+assert(sameSet(appSections, ["agents", "mcpPlugins", "skillHub", "modelForwarding", "localRuntime", "mobileRelay", "activity", "settings"]), "FutureClientSection enum must contain only the future client shell modules");
 
 const agentServiceActionsSource = await readText("client-gui/lib/src/services/agent_service_actions.dart");
 assert(agentServiceActionsSource.includes("'agents'") && agentServiceActionsSource.includes("'pair'"), "agent_service_actions.dart must contain 'agents' and 'pair' tokens for CLI execution");
@@ -397,7 +395,7 @@ const shellSource = (await Promise.all(
 for (const label of forbiddenShellLabels) {
   assert(!shellSource.includes(label), `future client shell must not expose old navigation label: ${label}`);
 }
-for (const label of ["Agents", "MCP Plugins", "Skill Hub", "Model Forwarding", "Mobile Relay", "Activity And Snapshots", "Settings"]) {
+for (const label of ["Agents", "MCP Plugins", "Skill Hub", "Model Forwarding", "Runtime", "Mobile Relay", "Activity And Snapshots", "Settings"]) {
   assert(shellSource.includes(label), `future client shell must expose module label: ${label}`);
 }
 

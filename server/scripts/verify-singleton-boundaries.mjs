@@ -62,7 +62,7 @@ async function assertStaticSingletonBoundaries() {
   assert.ok(sourceSearch.includes("scanRoots: sourceRoots.map((root) => ({"));
   assert.ok(sourceSearch.includes("setBoundedMapEntry(SEARCH_CACHE"));
 
-  const importTypes = await readText("server/platform/specialized/knowledge/preprocessing/file-processor/import-file-types.mjs");
+  const importTypes = await readText("server/platform/common/module-manager/import-file-types.mjs");
   assert.ok(importTypes.includes("let cachedRegistry = null;"));
   assert.ok(importTypes.includes("cachedPath === filePath"));
   assert.ok(importTypes.includes("cachedMtimeMs === stat.mtimeMs"));

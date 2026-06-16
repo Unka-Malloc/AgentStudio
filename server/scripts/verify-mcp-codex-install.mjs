@@ -7,10 +7,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const connectorScript = path.join(repoRoot, "mcp-connector", "bin", "pact-mcp.mjs");
+const connectorScript = path.join(repoRoot, "server/platform/common/mcp/gateway-installer/bin/pact-mcp.mjs");
 
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
@@ -135,6 +136,7 @@ async function installCodexConnector({ serverUrl, token, codexBin, codexHome, ma
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-codex-mcp-server-"));
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
 const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "pact-codex-home-"));
 const marketplaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-codex-marketplace-"));
 const discoveryFile = path.join(codexHome, "pact-servers.json");
@@ -271,4 +273,5 @@ try {
   await fs.rm(userDataPath, { recursive: true, force: true }).catch(() => {});
   await fs.rm(codexHome, { recursive: true, force: true }).catch(() => {});
   await fs.rm(marketplaceRoot, { recursive: true, force: true }).catch(() => {});
+  restoreCapabilityKernelEnv();
 }

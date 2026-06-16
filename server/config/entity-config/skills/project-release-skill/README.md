@@ -1,7 +1,9 @@
-# Pact Project Release Automation Skill
+# Pact Project Release Runbook
 
-This skill defines the standard procedure for an AI agent to release a new version of the Pact MCP system.
-It is explicitly prohibited from being exposed to downstream agents (`allowDownstream: false`) in the manifest.
+This built-in runbook defines the standard procedure for an AI agent to release
+a new version of the Pact MCP system. It ships with the platform and is not a
+Skill Hub contributed skill asset. It is explicitly prohibited from being
+exposed to downstream agents (`allowDownstream: false`) in the manifest.
 
 ## Prerequisites
 - Working directory: The root of the Pact repository.
@@ -21,13 +23,13 @@ When the user asks to release the current version (currently `v0.0.1`), the agen
    ```
    The script updates:
    - `package.json` (the root project)
-   - `mcp-connector/package.json`
+   - `server/platform/common/mcp/gateway-installer/package.json`
    - `server/platform/common/mcp/http-mcp-adapter.mjs` (variables `MCP_SERVER_VERSION` and `MCP_CONNECTOR_VERSION`)
 
 3. **Commit and Tag:**
    Run the following terminal commands:
    ```bash
-   git add package.json mcp-connector/package.json server/platform/common/mcp/http-mcp-adapter.mjs
+   git add package.json server/platform/common/mcp/gateway-installer/package.json server/platform/common/mcp/http-mcp-adapter.mjs
    git commit -m "chore: bump version to <VERSION>"
    git tag v<VERSION>
    git push && git push --tags

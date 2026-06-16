@@ -747,16 +747,16 @@ const connectProbeClient = connectEndpoint
     })
   : null;
 
-const sourceStdioScriptPath = path.join(repoRoot, "server/scripts/acp-agent-relay-source-stdio.mjs");
-const actualSourceProcess = `${process.execPath} ${sourceStdioScriptPath}`;
-const actualSourceTransport = "pact-source-facing-acp-stdio";
+const sourceHttpScriptPath = path.join(repoRoot, "server/scripts/acp-agent-relay-source-http.mjs");
+const actualSourceProcess = `${process.execPath} ${sourceHttpScriptPath}`;
+const actualSourceTransport = "pact-source-facing-acp-http-loopback";
 const sourceAgentProof = await discoverCodexCliProof(actualSourceProcess, actualSourceTransport);
 assert.equal(
   sourceAgentProof.directCodexCliAcpSourceVerified,
   false,
-  "This verifier must not claim direct Codex CLI ACP source proof while it starts Pact's source-facing stdio harness."
+  "This verifier must not claim direct Codex CLI ACP source proof while it starts Pact's source-facing HTTP bridge."
 );
-assert.equal(sourceAgentProof.sourceAgentKind, "pact-source-acp-stdio-verifier");
+assert.equal(sourceAgentProof.sourceAgentKind, "pact-source-acp-http-verifier");
 
 const virtualAgentId = "antigravity.codex-source-agentapi-real";
 const targetId = "antigravity.agentapi:codex-source-local";
@@ -766,12 +766,12 @@ const delegatedPrompt = asText(
   process.env.PACT_ACP_RELAY_CODEX_ANTIGRAVITY_PROMPT || process.env.PACT_ACP_RELAY_ANTIGRAVITY_PROMPT
 );
 const sourceSessionId = `codex-source-${marker}`;
-const warmupPromptText = `${marker}: Codex 编排的 Pact source-facing ACP stdio harness 正在建立一个可持久恢复的 relay session。请只回复一句收到，不修改任何文件。`;
+const warmupPromptText = `${marker}: Codex 编排的 Pact source-facing ACP HTTP bridge 正在建立一个可持久恢复的 relay session。请只回复一句收到，不修改任何文件。`;
 const promptText = delegatedPrompt
   ? `${marker}: ${delegatedPrompt}`
   : connectDenyPendingCommandsRequired
     ? `${marker}: Codex 编排的 Pact source-facing ACP harness 已恢复同一个 relay session。为了验证 Pact 对 Antigravity Connect 目标侧命令交互的拒绝回执，请尝试执行只读命令 pwd，并等待权限结果。不要修改任何文件。`
-  : `${marker}: Codex 编排的 Pact source-facing ACP stdio 进程已重启，并通过 session/load 与 session/resume 恢复同一个 relay session 后中转到 Antigravity。请只回复一句收到，不修改任何文件。`;
+  : `${marker}: Codex 编排的 Pact source-facing ACP HTTP bridge 已重启，并通过 session/load 与 session/resume 恢复同一个 relay session 后中转到 Antigravity。请只回复一句收到，不修改任何文件。`;
 const runtimeOptions = {
   defaultVirtualAgentId: virtualAgentId,
   defaultSourceId: sourceId,
@@ -849,7 +849,7 @@ const runtimeOptions = {
 };
 
 const storeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-acp-codex-antigravity-"));
-const storagePath = path.join(storeRoot, "acp-source-stdio-store.json");
+const storagePath = path.join(storeRoot, "acp-source-http-store.json");
 const beforeConversationObservation = await observeAntigravityConversation({
   conversationId: conversation.id,
   maxTranscriptEntries: 1,
@@ -878,63 +878,78 @@ function spawnSourceServer({
   serverSourceId = sourceId,
   serverWorkspaceId = `file:${repoRoot}`
 } = {}) {
-  const child = spawn(process.execPath, [sourceStdioScriptPath], {
+  const token = `source-http-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const child = spawn(process.execPath, [sourceHttpScriptPath], {
     cwd: repoRoot,
     stdio: ["pipe", "pipe", "pipe"],
     env: {
       ...process.env,
-      PACT_ACP_SOURCE_STDIO_RUNTIME_JSON: JSON.stringify(runtimeOptions),
-      PACT_ACP_SOURCE_STDIO_CONTEXT_JSON: JSON.stringify({
+      PACT_ACP_SOURCE_HTTP_RUNTIME_JSON: JSON.stringify(runtimeOptions),
+      PACT_ACP_SOURCE_HTTP_CONTEXT_JSON: JSON.stringify({
         sourceId: serverSourceId,
         workspaceId: serverWorkspaceId
       }),
-      PACT_ACP_SOURCE_STDIO_STORE_PATH: storagePath,
+      PACT_ACP_SOURCE_HTTP_STORE_PATH: storagePath,
+      PACT_ACP_SOURCE_HTTP_TOKEN: token,
       PACT_ACP_SOURCE_ID: serverSourceId,
       PACT_ACP_WORKSPACE_ID: serverWorkspaceId
     }
   });
-  const output = createOutputLineReader(child.stdout);
   const diagnostics = createOutputLineReader(child.stderr);
   return {
     child,
-    output,
     diagnostics,
+    token,
+    url: "",
     async waitUntilReady() {
       const ready = JSON.parse(await diagnostics.receiveLine());
-      assert.equal(ready.event, "pact.acp.source_stdio.ready");
+      assert.equal(ready.event, "pact.acp.source_http.ready");
       assert.equal(ready.durableStore, true);
       assert.equal(ready.storagePath, storagePath);
-      assert.equal(ready.sourceId, serverSourceId);
-      assert.equal(ready.workspaceId, serverWorkspaceId);
+      assert.equal(ready.authRequired, true);
+      this.url = ready.url;
       return ready;
     },
     async request(message) {
-      child.stdin.write(`${JSON.stringify(message)}\n`, "utf8");
-      const notifications = [];
-      for (let index = 0; index < 100; index += 1) {
-        const rawResponse = await output.receiveLine(
-          Number.isFinite(sourceResponseTimeoutMs) ? sourceResponseTimeoutMs : 120000
-        );
-        assert.ok(rawResponse, "source ACP service must return a JSON-RPC response frame");
-        const parsed = parseJsonRpcMessage(rawResponse);
-        if (parsed.method === ACP_METHODS.sessionUpdate) {
-          notifications.push(parsed);
-          continue;
-        }
-        assert.equal(parsed.id, message.id);
-        Object.defineProperty(parsed, "notifications", {
-          value: notifications,
-          enumerable: false
-        });
-        return parsed;
+      assert.ok(this.url, "source ACP HTTP bridge must be ready before requests.");
+      const response = await fetch(`${this.url}/acp`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(message)
+      });
+      const payload = await response.json();
+      assert.equal(response.status, 200, `source ACP HTTP request failed: ${JSON.stringify(payload)}`);
+      assert.equal(payload.ok, true);
+      const parsed = parseJsonRpcMessage(payload.response);
+      assert.equal(parsed.id, message.id);
+      Object.defineProperty(parsed, "notifications", {
+        value: Array.isArray(payload.notifications) ? payload.notifications : [],
+        enumerable: false
+      });
+      return parsed;
+    },
+    async shutdown() {
+      if (!this.url) {
+        return;
       }
-      throw new Error(`Timed out waiting for source ACP response ${String(message.id)}.`);
+      await fetch(`${this.url}/shutdown`, {
+        method: "POST",
+        headers: {
+          "authorization": `Bearer ${token}`
+        }
+      }).catch(() => null);
     }
   };
 }
 
 async function stopSourceServer(handle) {
-  handle.child.stdin.end();
+  if (!handle) {
+    return;
+  }
+  await handle.shutdown?.();
   if (handle.child.exitCode !== null || handle.child.signalCode) {
     return;
   }
@@ -943,7 +958,7 @@ async function stopSourceServer(handle) {
       if (code === 0 || code === null) {
         resolve();
       } else {
-        reject(new Error(`source ACP stdio server exited with code ${code}`));
+        reject(new Error(`source ACP HTTP bridge exited with code ${code}`));
       }
     });
     setTimeout(() => {
@@ -1807,7 +1822,7 @@ if (connectDenyPendingCommandsRequired) {
 
 const proofMatrix = buildAcpAgentRelayProofMatrix({
   sourceAgentProof,
-  sourceImplementation: "pact-source-stdio-server",
+  sourceImplementation: "pact-source-http-bridge",
   sourceMode: sourceAgentProof.sourceMode,
   sessionId: sessionNew.result.sessionId,
   loadedSessionId: sessionLoad.result.sessionId,
@@ -1849,11 +1864,11 @@ console.log(
       endpoint: endpoint.address,
       endpointSource: endpoint.source,
       connectEndpoint: connectEndpoint ? redactAntigravityConnectEndpoint(connectEndpoint) : null,
-      proof: `codex-orchestrated-source-acp-stdio-process-restart-and-${proofResult.proof}`,
+      proof: `codex-orchestrated-source-acp-http-bridge-restart-and-${proofResult.proof}`,
       targetCommunicationMode: prompt.result.targetEvidence?.targetCommunicationMode || "",
       nativeAcpTargetSupported: prompt.result.targetEvidence?.nativeAcpTargetSupported === true,
       nativeAcpTargetVerified: prompt.result.targetEvidence?.nativeAcpTargetVerified === true,
-      sourceImplementation: "pact-source-stdio-server",
+      sourceImplementation: "pact-source-http-bridge",
       sourceMode: sourceAgentProof.sourceMode,
       sourceAgentProof,
       antigravityProofLevel: proofResult.proofLevel,

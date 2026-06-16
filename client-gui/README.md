@@ -1,7 +1,7 @@
 # Pact Desktop Client
 
 Pact Desktop Client 是 Pact 本地客户端的 Flutter 桌面壳。客户端产品边界以
-[`docs/CLIENT_ARCHITECTURE.md`](../docs/CLIENT_ARCHITECTURE.md) 为准。本仓库只
+[`docs/functionality/CLIENT-DESKTOP.md`](../docs/functionality/CLIENT-DESKTOP.md) 为准。本仓库只
 维护当前客户端版本，不保留并行旧版本实现。
 
 ## 产品范围
@@ -51,8 +51,7 @@ npm run client:native:test
 本地启动 Flutter 桌面端：
 
 ```bash
-cd client-gui
-flutter run -d macos
+npm run client:run:macos
 ```
 
 ## 验证
@@ -77,7 +76,7 @@ npm run client:verify
 npm run client:package:plan
 ```
 
-构建 release bundle：
+一键构建可运行 release 客户端：
 
 ```bash
 npm run client:build:macos
@@ -86,10 +85,69 @@ npm run client:build:linux
 npm run client:build:android
 ```
 
-桌面 bundle 会输出到 `build/client-gui/bundles/<platform>/<mode>/bundle/`。
-Android APK 会输出到 `build/client-gui/android/<mode>/`。脚本默认会清理
-Flutter 在 `client-gui/build/` 下生成的临时产物；需要保留 Flutter 缓存做本地
-调试时，可设置 `PACT_KEEP_FLUTTER_BUILD_CACHE=1`。
+macOS 构建会自动从 Banner 提取的黑底 SVG
+`client-gui/assets/brand/pact-app-icon.svg` 渲染 AppIcon PNG。需要只刷新图标时可单独运行
+`npm run client:icon:macos`；不要用截图 PNG 作为长期图标源。
+
+桌面客户端的直接运行入口会输出到
+`build/client-gui/runnable/<platform>/<mode>/`。macOS 默认产物是：
+
+```text
+build/client-gui/runnable/macos/release/PactClient.app
+```
+
+可直接双击 `.app` 或运行：
+
+```bash
+open build/client-gui/runnable/macos/release/PactClient.app
+```
+
+需要让 macOS Applications、Spotlight 或 LaunchServices 能正常发现客户端时，使用
+显式安装命令：
+
+```bash
+npm run client:install:macos
+```
+
+安装器会优先复用已安装的 `Pact Client.app` 位置；识别依据是 macOS bundle id
+`com.pact.client`，会检查当前运行的客户端、`/Applications`、`~/Applications` 和
+Spotlight 结果。
+找不到已有安装时默认安装到 `/Applications/Pact Client.app`。需要强制用户级开发安装
+时可设置 `PACT_CLIENT_INSTALL_DIR="$HOME/Applications"` 或传
+`--install-dir "$HOME/Applications"`。安装时会按 bundle id 请求正在运行的 Pact Client
+退出，再替换 app。
+
+安装型 macOS `.app` 的运行数据默认写入系统 Application Support 下的
+`portable-data` 子目录；不会使用构建目录或 `.app` 同级目录作为默认数据根。
+`PACT_PORTABLE_DIR` 仅用于开发/测试中的 loose executable 或由 GUI 显式传给
+sidecar 的已解析系统数据目录。
+
+本机轻量服务端是客户端内的 Local Runtime 功能。GUI 不直接持有 process identity
+私钥；Local Runtime 页面会调用打包进 `.app` 的 `pact-client` supervisor，配置一次
+源码仓库和 preset config 后即可在客户端内启用、重建、刷新、重启、停止和查看日志。
+底层 CLI 入口仍可用于排障：
+
+```bash
+pact-client local-runtime ensure \
+  --source-root /path/to/Pact \
+  --preset-config /path/to/Pact/server/platform/common/composition-management/client-local-runtime.preset.json \
+  --port 17328
+```
+
+supervisor 会把 `client-local-runtime/source` 安装到客户端数据目录，生成
+runtime instance config 和 `0600` claim token，启动 loopback 服务端，完成健康检查
+和 process identity claim；macOS 上私钥/能力密钥继续走 Keychain。之后可通过
+`pact-client local-runtime status|logs|restart|stop` 查看和管理。
+
+内部打包 bundle 仍保留在 `build/client-gui/bundles/<platform>/<mode>/bundle/`
+用于审计和分发流水线。Android APK 会输出到 `build/client-gui/android/<mode>/`。
+桌面打包会把 Flutter 工程复制到固定 clean build root 后构建，macOS 默认是
+`/private/tmp/pact-client-build/source/client-gui`，Linux 默认是
+`/tmp/pact-client-build/source/client-gui`；可通过 `PACT_CLIENT_CLEAN_BUILD_ROOT`
+覆盖。脚本只把 `pubspec.lock` 锁定的 hosted packages 复制到该 root 下的
+`pub-cache`，并使用 `flutter pub get --offline`，避免构建产物残留开发 checkout
+或用户 Home 下的 pub cache 路径。默认会清理 staged Flutter 工程；需要保留
+Flutter 构建缓存做本地调试时，可设置 `PACT_KEEP_FLUTTER_BUILD_CACHE=1`。
 
 平台说明：
 

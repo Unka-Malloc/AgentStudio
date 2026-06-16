@@ -146,13 +146,21 @@ async function main() {
   assert.equal(sourceLayout.trimSkipped === true, false, "source trim must not be skipped");
   assert.equal((sourceLayout.staticImportViolations || []).length, 0, "source package must have no static import violations");
   assert.equal((sourceLayout.lingeringPaths || []).length, 0, "source package must have no lingering removed paths");
-  assert.equal(uiLayout.ok, true, "ui layout report must be ok");
-  assert.equal(uiLayout.trimSkipped === true, false, "ui trim must not be skipped");
-  assert.equal((uiLayout.missingActiveRouteAssets || []).length, 0, "active UI route assets must remain in this package");
-  assert.equal((uiLayout.inactiveRouteAssetsRemaining || []).length, 0, "inactive UI route assets must be physically removed");
-  assert.equal((uiLayout.missingKeptAssets || []).length, 0, "kept UI assets must exist in this package");
-  assert.equal((uiLayout.unpatchedRoutes || []).length, 0, "inactive UI routes must not keep dynamic imports to removed chunks");
-  assert.ok((uiLayout.removedAssets || []).length > 0, "ui package must remove inactive assets");
+  const uiTrimSkipped = uiLayout.trimSkipped === true;
+  if (uiTrimSkipped) {
+    assert.match(
+      String(uiLayout.reason || ""),
+      /build\/dist\/index\.html is missing/,
+      "ui trim may be skipped only for API-only source packages without build/dist"
+    );
+  } else {
+    assert.equal(uiLayout.ok, true, "ui layout report must be ok");
+    assert.equal((uiLayout.missingActiveRouteAssets || []).length, 0, "active UI route assets must remain in this package");
+    assert.equal((uiLayout.inactiveRouteAssetsRemaining || []).length, 0, "inactive UI route assets must be physically removed");
+    assert.equal((uiLayout.missingKeptAssets || []).length, 0, "kept UI assets must exist in this package");
+    assert.equal((uiLayout.unpatchedRoutes || []).length, 0, "inactive UI routes must not keep dynamic imports to removed chunks");
+    assert.ok((uiLayout.removedAssets || []).length > 0, "ui package must remove inactive assets");
+  }
   assert.equal(
     sameStringSet(featureProfile.features || [], plan.featureRuntime?.activeFeatureIds || []),
     true,
@@ -187,12 +195,18 @@ async function main() {
   for (const relativePath of [
     "Dockerfile",
     "compose.yaml",
-    "build/dist/index.html",
-    "build/dist/composition-ui-manifest.json",
     "feature-profile/active-features.json",
     "feature-profile/disabled-features.json"
   ]) {
     await assertExisting(relativePath);
+  }
+  if (!uiTrimSkipped) {
+    for (const relativePath of [
+      "build/dist/index.html",
+      "build/dist/composition-ui-manifest.json"
+    ]) {
+      await assertExisting(relativePath);
+    }
   }
 
   const operationCoverage = await verifyOperationCoverage(plan);

@@ -66,7 +66,7 @@ node skills/runtime-ops/pact-runtime-dependency-downloader/scripts/pact-runtime-
 - Gateway runtime: `server/scripts/gateway-ingress.mjs`
 - OCR runtime boundary: `server/platform/modules/knowledge/ocr/runtime/README.md`
 - PDF visual runtime boundary: `server/platform/modules/knowledge/file-processor/FileNormalizer/PDFProcessor/pdf-visual.mjs`
-- External service boundary: `docs/PROTOCOLS.md`, `docs/SERVER.md`
+- External service boundary: `docs/protocols/PROTOCOLS.md`, `docs/functionality/SERVER-RUNTIME.md`
 
 ## Dependency Matrix
 

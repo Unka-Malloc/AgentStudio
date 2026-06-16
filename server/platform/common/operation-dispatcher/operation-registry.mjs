@@ -1313,6 +1313,108 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["auth:admin"]
   },
   {
+    id: "process_identity.bootstrap_claim",
+    feature: "auth",
+    label: "认领客户端本地服务端运行时并签发客户端身份包",
+    target: { controller: "system", method: "handleProcessIdentityBootstrapClaim" },
+    http: { method: "POST", path: "/api/process-identity/bootstrap/claim", localInForwardMode: true },
+    rpc: { method: "process_identity.bootstrap_claim", body: "params" },
+    cli: {
+      command: ["process-identity", "bootstrap", "claim"],
+      usage: "process-identity bootstrap claim --body claim.json"
+    },
+    public: true,
+    inputSchema: {
+      type: "object",
+      required: ["defaultIdentityHash"],
+      additionalProperties: true,
+      properties: {
+        claimToken: { type: "string" },
+        clientId: { type: "string" },
+        installationId: { type: "string" },
+        clientFingerprint: {
+          type: "object",
+          properties: {
+            fingerprintId: { type: "string" },
+            machineInstanceId: { type: "string" },
+            appInstanceId: { type: "string" },
+            runtimeInstanceId: { type: "string" },
+            fingerprintHash: { type: "string" }
+          }
+        },
+        processKeyId: { type: "string" },
+        processPublicKeyPem: { type: "string" },
+        processPublicKeySpkiBase64: { type: "string" },
+        defaultIdentityHash: { type: "string" },
+        nonce: { type: "string" },
+        capabilities: { type: "array" }
+      }
+    },
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["security", "process-identity", "bootstrap", "client-local-runtime"],
+    log: { recordInput: false, redaction: "secret" }
+  },
+  {
+    id: "process_identity.package.rotate",
+    feature: "auth",
+    label: "轮换客户端进程身份包",
+    target: { controller: "system", method: "handleProcessIdentityPackageRotate" },
+    http: { method: "POST", path: "/api/process-identity/package/rotate", localInForwardMode: true },
+    rpc: { method: "process_identity.package.rotate", body: "params" },
+    cli: {
+      command: ["process-identity", "package", "rotate"],
+      usage: "process-identity package rotate --body rotation.json"
+    },
+    requiredScopes: ["runtime:admin"],
+    processIdentity: {
+      required: true,
+      authorizes: true,
+      requireBinding: true
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: true,
+      properties: {
+        processKeyId: { type: "string" },
+        processPublicKeyPem: { type: "string" },
+        processPublicKeySpkiBase64: { type: "string" },
+        reason: { type: "string" },
+        nonce: { type: "string" }
+      }
+    },
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["security", "process-identity", "rotation", "client-local-runtime"],
+    log: { recordInput: false, redaction: "secret" }
+  },
+  {
+    id: "process_identity.package.revoke",
+    feature: "auth",
+    label: "撤销客户端进程身份包",
+    target: { controller: "system", method: "handleProcessIdentityPackageRevoke" },
+    http: { method: "POST", path: "/api/process-identity/package/revoke", localInForwardMode: true },
+    rpc: { method: "process_identity.package.revoke", body: "params" },
+    cli: {
+      command: ["process-identity", "package", "revoke"],
+      usage: "process-identity package revoke --body revoke.json"
+    },
+    requiredScopes: ["runtime:admin"],
+    processIdentity: {
+      required: true,
+      authorizes: true,
+      requireBinding: true
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: true,
+      properties: {
+        reason: { type: "string" }
+      }
+    },
+    safety: { risk: "safe_write", requiresConfirmation: false },
+    aspects: ["security", "process-identity", "revocation", "client-local-runtime"],
+    log: { recordInput: false, redaction: "secret" }
+  },
+  {
     id: "discovery.check_in",
     feature: "discovery",
     label: "客户端迁移登记",
@@ -1589,7 +1691,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
         { name: "engine", aliases: ["engine"] }
       ]
     },
-    requiredScopes: ["knowledge:read"]
+    requiredScopes: ["model:call"]
   },
   {
     id: "mobile_relay.config",
@@ -1635,8 +1737,9 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     aspects: ["mobile-relay", "pairing"],
     inputSchema: {
       type: "object",
-      required: ["pairingCode"],
+      required: ["pairingId", "pairingCode"],
       properties: {
+        pairingId: { type: "string" },
         pairingCode: { type: "string" },
         mobileDeviceId: { type: "string" },
         mobileDeviceName: { type: "string" },
@@ -2577,6 +2680,30 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["agent_relay:operate"],
     safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "agent_relay:operate" },
     aspects: ["tool-management", "agent-relay", "internal"]
+  },
+  {
+    id: "acp_agent_relay.targets.upsert_local_executable",
+    feature: "tool_management",
+    label: "注册或更新本地可执行目标 ACP",
+    target: { controller: "system", method: "handleToolManagementPassthrough" },
+    http: {
+      method: "POST",
+      path: "/api/agent-relay/v1/targets/local-executable",
+      localInForwardMode: true,
+      body: "params"
+    },
+    rpc: {
+      method: "acp_agent_relay.targets.upsert_local_executable",
+      syntheticPath: "/api/agent-relay/v1/targets/local-executable",
+      body: "params"
+    },
+    cli: {
+      command: ["agent-relay", "targets", "upsert-local-executable"],
+      usage: "agent-relay targets upsert-local-executable --body target.json"
+    },
+    requiredScopes: ["runtime:admin"],
+    safety: { risk: "repair_write", requiresConfirmation: true, approvalScope: "runtime:admin" },
+    aspects: ["tool-management", "agent-relay", "internal", "admin-only"]
   },
   {
     id: "acp_agent_relay.downstream_clients.refresh",
@@ -3943,7 +4070,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
   {
     id: "knowledge.agent_skill.describe",
     feature: "knowledge",
-    label: "读取知识库智能体技能",
+    label: "读取 AgentLibrary 检索 Playbook",
     target: { controller: "system", method: "handleKnowledgeAgentSkill" },
     http: { method: "GET", path: "/api/knowledge/agent-skill" },
     rpc: { method: "knowledge.agent_skill.describe" },
@@ -3951,9 +4078,19 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"]
   },
   {
+    id: "knowledge.retrieval_playbook.describe",
+    feature: "knowledge",
+    label: "读取 AgentLibrary 检索 Playbook",
+    target: { controller: "system", method: "handleKnowledgeAgentSkill" },
+    http: { method: "GET", path: "/api/knowledge/retrieval-playbook" },
+    rpc: { method: "knowledge.retrieval_playbook.describe" },
+    cli: { command: ["knowledge", "retrieval-playbook"], usage: "knowledge retrieval-playbook" },
+    requiredScopes: ["knowledge:read"]
+  },
+  {
     id: "knowledge.agent_skill.plan",
     feature: "knowledge",
-    label: "规划知识库智能体查询",
+    label: "规划 AgentLibrary 检索查询",
     target: { controller: "system", method: "handleKnowledgeAgentSkillPlan" },
     http: { method: "POST", path: "/api/knowledge/agent-skill/plan" },
     rpc: { method: "knowledge.agent_skill.plan", body: "params" },
@@ -3965,9 +4102,23 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"]
   },
   {
+    id: "knowledge.retrieval_playbook.plan",
+    feature: "knowledge",
+    label: "规划 AgentLibrary 检索查询",
+    target: { controller: "system", method: "handleKnowledgeAgentSkillPlan" },
+    http: { method: "POST", path: "/api/knowledge/retrieval-playbook/plan" },
+    rpc: { method: "knowledge.retrieval_playbook.plan", body: "params" },
+    cli: {
+      command: ["knowledge", "retrieval-playbook", "plan"],
+      usage: "knowledge retrieval-playbook plan --query QUERY",
+      bodyParams: [{ name: "query", aliases: ["query", "q"], required: true }]
+    },
+    requiredScopes: ["knowledge:read"]
+  },
+  {
     id: "knowledge.agent_skill.run",
     feature: "knowledge",
-    label: "执行知识库智能体查询技能",
+    label: "执行 AgentLibrary 检索 Playbook",
     target: { controller: "system", method: "handleKnowledgeAgentSkillRun" },
     http: { method: "POST", path: "/api/knowledge/agent-skill/run" },
     rpc: { method: "knowledge.agent_skill.run", body: "params" },
@@ -3982,9 +4133,26 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"]
   },
   {
+    id: "knowledge.retrieval_playbook.run",
+    feature: "knowledge",
+    label: "执行 AgentLibrary 检索 Playbook",
+    target: { controller: "system", method: "handleKnowledgeAgentSkillRun" },
+    http: { method: "POST", path: "/api/knowledge/retrieval-playbook/run" },
+    rpc: { method: "knowledge.retrieval_playbook.run", body: "params" },
+    cli: {
+      command: ["knowledge", "retrieval-playbook", "run"],
+      usage: "knowledge retrieval-playbook run --query QUERY [--limit 20]",
+      bodyParams: [
+        { name: "query", aliases: ["query", "q"], required: true },
+        { name: "limit", aliases: ["limit"], type: "number" }
+      ]
+    },
+    requiredScopes: ["knowledge:read"]
+  },
+  {
     id: "knowledge.skills.list",
     feature: "knowledge",
-    label: "知识 Skill 列表",
+    label: "AgentLibrary Playbook 列表",
     target: { controller: "system", method: "handleKnowledgeSkills" },
     http: {
       method: "GET",
@@ -4008,9 +4176,35 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"]
   },
   {
+    id: "knowledge.playbooks.list",
+    feature: "knowledge",
+    label: "AgentLibrary Playbook 列表",
+    target: { controller: "system", method: "handleKnowledgeSkills" },
+    http: {
+      method: "GET",
+      path: "/api/knowledge/playbooks",
+      query: [
+        { name: "status", aliases: ["status"] },
+        { name: "query", aliases: ["query", "q"] },
+        { name: "limit", aliases: ["limit"] }
+      ],
+      coerce: { limit: "number" }
+    },
+    rpc: {
+      method: "knowledge.playbooks.list",
+      query: [
+        { name: "status", aliases: ["status"] },
+        { name: "query", aliases: ["query", "q"] },
+        { name: "limit", aliases: ["limit"] }
+      ]
+    },
+    cli: { command: ["knowledge", "playbooks"], usage: "knowledge playbooks [--status published] [--query QUERY]" },
+    requiredScopes: ["knowledge:read"]
+  },
+  {
     id: "knowledge.skills.get",
     feature: "knowledge",
-    label: "读取知识 Skill",
+    label: "读取 AgentLibrary Playbook",
     target: { controller: "system", method: "handleKnowledgeSkillGet" },
     http: { method: "GET", path: "/api/knowledge/skills/:skillId" },
     rpc: {
@@ -4025,9 +4219,26 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"]
   },
   {
+    id: "knowledge.playbooks.get",
+    feature: "knowledge",
+    label: "读取 AgentLibrary Playbook",
+    target: { controller: "system", method: "handleKnowledgeSkillGet" },
+    http: { method: "GET", path: "/api/knowledge/playbooks/:playbookId" },
+    rpc: {
+      method: "knowledge.playbooks.get",
+      params: [{ name: "playbookId", aliases: ["playbook-id", "skill-id", "id"], required: true }]
+    },
+    cli: {
+      command: ["knowledge", "playbook"],
+      usage: "knowledge playbook --id PLAYBOOK_ID",
+      pathParams: { playbookId: ["playbook-id", "skill-id", "id"] }
+    },
+    requiredScopes: ["knowledge:read"]
+  },
+  {
     id: "knowledge.skills.generate",
     feature: "knowledge",
-    label: "蒸馏生成知识 Skill",
+    label: "蒸馏生成 AgentLibrary Playbook",
     target: { controller: "system", method: "handleKnowledgeSkillGenerate" },
     http: { method: "POST", path: "/api/knowledge/skills/generate" },
     rpc: { method: "knowledge.skills.generate", body: "params" },
@@ -4042,9 +4253,26 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:maintain"]
   },
   {
+    id: "knowledge.playbooks.generate",
+    feature: "knowledge",
+    label: "蒸馏生成 AgentLibrary Playbook",
+    target: { controller: "system", method: "handleKnowledgeSkillGenerate" },
+    http: { method: "POST", path: "/api/knowledge/playbooks/generate" },
+    rpc: { method: "knowledge.playbooks.generate", body: "params" },
+    cli: {
+      command: ["knowledge", "playbooks", "generate"],
+      usage: "knowledge playbooks generate --query QUERY [--limit 12]",
+      bodyParams: [
+        { name: "query", aliases: ["query", "q"], required: true },
+        { name: "limit", aliases: ["limit"], type: "number" }
+      ]
+    },
+    requiredScopes: ["knowledge:maintain"]
+  },
+  {
     id: "knowledge.skills.propose",
     feature: "knowledge",
-    label: "提交智能体知识 Skill 提案",
+    label: "提交 AgentLibrary Playbook 提案",
     target: { controller: "system", method: "handleKnowledgeSkillPropose" },
     http: { method: "POST", path: "/api/knowledge/skills/propose" },
     rpc: { method: "knowledge.skills.propose", body: "params" },
@@ -4055,9 +4283,22 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:write"]
   },
   {
+    id: "knowledge.playbooks.propose",
+    feature: "knowledge",
+    label: "提交 AgentLibrary Playbook 提案",
+    target: { controller: "system", method: "handleKnowledgeSkillPropose" },
+    http: { method: "POST", path: "/api/knowledge/playbooks/propose" },
+    rpc: { method: "knowledge.playbooks.propose", body: "params" },
+    cli: {
+      command: ["knowledge", "playbooks", "propose"],
+      usage: "knowledge playbooks propose --body playbook-proposal.json"
+    },
+    requiredScopes: ["knowledge:write"]
+  },
+  {
     id: "knowledge.skills.resolve",
     feature: "knowledge",
-    label: "发布或驳回知识 Skill",
+    label: "发布或驳回 AgentLibrary Playbook",
     target: { controller: "system", method: "handleKnowledgeSkillResolve" },
     http: { method: "POST", path: "/api/knowledge/skills/:skillId/resolve" },
     rpc: {
@@ -4073,9 +4314,27 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:maintain"]
   },
   {
+    id: "knowledge.playbooks.resolve",
+    feature: "knowledge",
+    label: "发布或驳回 AgentLibrary Playbook",
+    target: { controller: "system", method: "handleKnowledgeSkillResolve" },
+    http: { method: "POST", path: "/api/knowledge/playbooks/:playbookId/resolve" },
+    rpc: {
+      method: "knowledge.playbooks.resolve",
+      body: "params",
+      params: [{ name: "playbookId", aliases: ["playbook-id", "skill-id", "id"], required: true }]
+    },
+    cli: {
+      command: ["knowledge", "playbooks", "resolve"],
+      usage: "knowledge playbooks resolve --id PLAYBOOK_ID --body resolution.json",
+      pathParams: { playbookId: ["playbook-id", "skill-id", "id"] }
+    },
+    requiredScopes: ["knowledge:maintain"]
+  },
+  {
     id: "knowledge.skills.framework",
     feature: "knowledge",
-    label: "读取知识 Skill 提炼框架",
+    label: "读取 AgentLibrary Playbook 提炼框架",
     target: { controller: "system", method: "handleKnowledgeSkillFramework" },
     http: { method: "GET", path: "/api/knowledge/skill-framework" },
     rpc: { method: "knowledge.skills.framework" },
@@ -4083,13 +4342,36 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:read"]
   },
   {
+    id: "knowledge.playbook_framework.get",
+    feature: "knowledge",
+    label: "读取 AgentLibrary Playbook 提炼框架",
+    target: { controller: "system", method: "handleKnowledgeSkillFramework" },
+    http: { method: "GET", path: "/api/knowledge/playbook-framework" },
+    rpc: { method: "knowledge.playbook_framework.get" },
+    cli: { command: ["knowledge", "playbook-framework"], usage: "knowledge playbook-framework" },
+    requiredScopes: ["knowledge:read"]
+  },
+  {
     id: "knowledge.skills.framework_save",
     feature: "knowledge",
-    label: "保存知识 Skill 提炼框架",
+    label: "保存 AgentLibrary Playbook 提炼框架",
     target: { controller: "system", method: "handleSaveKnowledgeSkillFramework" },
     http: { method: "POST", path: "/api/knowledge/skill-framework" },
     rpc: { method: "knowledge.skills.framework_save", body: "params" },
     cli: { command: ["knowledge", "skills", "framework-save"], usage: "knowledge skills framework-save --body framework.json" },
+    requiredScopes: ["knowledge:maintain"]
+  },
+  {
+    id: "knowledge.playbook_framework.save",
+    feature: "knowledge",
+    label: "保存 AgentLibrary Playbook 提炼框架",
+    target: { controller: "system", method: "handleSaveKnowledgeSkillFramework" },
+    http: { method: "POST", path: "/api/knowledge/playbook-framework" },
+    rpc: { method: "knowledge.playbook_framework.save", body: "params" },
+    cli: {
+      command: ["knowledge", "playbook-framework", "save"],
+      usage: "knowledge playbook-framework save --body framework.json"
+    },
     requiredScopes: ["knowledge:maintain"]
   },
   {
@@ -4558,7 +4840,7 @@ const SERVER_API_OPERATION_DEFINITIONS = [
   {
     id: "knowledge.skills.evaluation.runs.create",
     feature: "knowledge",
-    label: "创建知识 SkillSet 离线评估",
+    label: "创建 AgentLibrary PlaybookSet 离线评估",
     target: { controller: "system", method: "handleKnowledgeSkillEvaluationRuns" },
     http: { method: "POST", path: "/api/knowledge/skills/evaluation/runs" },
     rpc: { method: "knowledge.skills.evaluation.runs.create", body: "params" },
@@ -4566,9 +4848,22 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:maintain"]
   },
   {
+    id: "knowledge.playbook_sets.evaluation.runs.create",
+    feature: "knowledge",
+    label: "创建 AgentLibrary PlaybookSet 离线评估",
+    target: { controller: "system", method: "handleKnowledgeSkillEvaluationRuns" },
+    http: { method: "POST", path: "/api/knowledge/playbook-sets/evaluation/runs" },
+    rpc: { method: "knowledge.playbook_sets.evaluation.runs.create", body: "params" },
+    cli: {
+      command: ["knowledge", "playbook-sets", "evaluation", "run"],
+      usage: "knowledge playbook-sets evaluation run --body evaluation.json"
+    },
+    requiredScopes: ["knowledge:maintain"]
+  },
+  {
     id: "knowledge.skills.deployments.create",
     feature: "knowledge",
-    label: "发布知识 SkillSet 部署",
+    label: "发布 AgentLibrary PlaybookSet 部署",
     target: { controller: "system", method: "handleKnowledgeSkillDeployments" },
     http: { method: "POST", path: "/api/knowledge/skills/deployments" },
     rpc: { method: "knowledge.skills.deployments.create", body: "params" },
@@ -4576,9 +4871,22 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     requiredScopes: ["knowledge:maintain"]
   },
   {
+    id: "knowledge.playbook_sets.deployments.create",
+    feature: "knowledge",
+    label: "发布 AgentLibrary PlaybookSet 部署",
+    target: { controller: "system", method: "handleKnowledgeSkillDeployments" },
+    http: { method: "POST", path: "/api/knowledge/playbook-sets/deployments" },
+    rpc: { method: "knowledge.playbook_sets.deployments.create", body: "params" },
+    cli: {
+      command: ["knowledge", "playbook-sets", "deployments", "create"],
+      usage: "knowledge playbook-sets deployments create --body deployment.json"
+    },
+    requiredScopes: ["knowledge:maintain"]
+  },
+  {
     id: "knowledge.skills.deployments.rollback",
     feature: "knowledge",
-    label: "回滚知识 SkillSet 部署",
+    label: "回滚 AgentLibrary PlaybookSet 部署",
     target: { controller: "system", method: "handleKnowledgeSkillDeploymentRollback" },
     http: { method: "POST", path: "/api/knowledge/skills/deployments/:deploymentId/rollback" },
     rpc: {
@@ -4589,6 +4897,24 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     cli: {
       command: ["knowledge", "skills", "deployments", "rollback"],
       usage: "knowledge skills deployments rollback --id DEPLOYMENT_ID",
+      pathParams: { deploymentId: ["deployment-id", "id"] }
+    },
+    requiredScopes: ["knowledge:maintain"]
+  },
+  {
+    id: "knowledge.playbook_sets.deployments.rollback",
+    feature: "knowledge",
+    label: "回滚 AgentLibrary PlaybookSet 部署",
+    target: { controller: "system", method: "handleKnowledgeSkillDeploymentRollback" },
+    http: { method: "POST", path: "/api/knowledge/playbook-sets/deployments/:deploymentId/rollback" },
+    rpc: {
+      method: "knowledge.playbook_sets.deployments.rollback",
+      body: "params",
+      params: [{ name: "deploymentId", aliases: ["deployment-id", "id"], required: true }]
+    },
+    cli: {
+      command: ["knowledge", "playbook-sets", "deployments", "rollback"],
+      usage: "knowledge playbook-sets deployments rollback --id DEPLOYMENT_ID",
       pathParams: { deploymentId: ["deployment-id", "id"] }
     },
     requiredScopes: ["knowledge:maintain"]
@@ -6606,6 +6932,28 @@ const SERVER_API_OPERATION_DEFINITIONS = [
     safety: { risk: "safe_write" }
   },
   {
+    id: "jobs.work_queue.retry_dead_letter",
+    feature: "jobs",
+    label: "重试任务队列死信项",
+    target: { controller: "jobs", method: "handleRetryDeadLetterWorkQueue" },
+    http: { method: "POST", path: "/api/jobs/work-queue/retry-dead-letter", localInForwardMode: true },
+    rpc: { method: "jobs.work_queue.retry_dead_letter", body: "params" },
+    cli: { command: ["jobs", "work-queue", "retry-dead-letter"], usage: "jobs work-queue retry-dead-letter [--body request.json]" },
+    requiredScopes: ["jobs:write"],
+    safety: { risk: "safe_write" }
+  },
+  {
+    id: "jobs.work_queue.rebuild",
+    feature: "jobs",
+    label: "重建任务队列投影证明",
+    target: { controller: "jobs", method: "handleRebuildWorkQueue" },
+    http: { method: "POST", path: "/api/jobs/work-queue/rebuild", localInForwardMode: true },
+    rpc: { method: "jobs.work_queue.rebuild", body: "params" },
+    cli: { command: ["jobs", "work-queue", "rebuild"], usage: "jobs work-queue rebuild [--body request.json]" },
+    requiredScopes: ["jobs:write"],
+    safety: { risk: "repair_write" }
+  },
+  {
     id: "jobs.get",
     feature: "jobs",
     label: "任务详情",
@@ -6765,6 +7113,7 @@ export function listInterfaceCatalog(operations = SERVER_API_OPERATIONS) {
     destructive: operation.destructive === true,
     public: operation.public === true,
     externalAuth: operation.externalAuth === true,
+    processIdentity: operation.processIdentity || null,
     concurrencySafe: operation.concurrencySafe === true,
     audit: operation.audit || {},
     log: operation.log || {},

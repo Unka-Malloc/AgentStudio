@@ -1734,12 +1734,13 @@ export function createBatchRepository({ db, userDataPath, textIndexing = null })
   `);
   const persistRawObjectStmt = db.prepare(`
     INSERT INTO raw_mail_objects (
-      object_id, batch_id, source_ref, ingest_origin, original_file_name, original_relative_path,
+      object_id, batch_id, job_id, owner_subject_id, owner_user_id, owner_username,
+      source_ref, ingest_origin, original_file_name, original_relative_path,
       client_uid, source_type, provider_id, external_id, sync_batch_id, content_hash,
       captured_at, source_metadata_json, archive_file_name, original_source_path, source_container_path,
       storage_rel_path, sha256, byte_size, media_type,
       source_created_at, source_updated_at, source_collected_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const persistSourceStmt = db.prepare(`
     INSERT INTO source_files (
@@ -1965,6 +1966,29 @@ export function createBatchRepository({ db, userDataPath, textIndexing = null })
   `);
   const selectRawObjectStmt = db.prepare(`
     SELECT * FROM raw_mail_objects WHERE object_id = ?
+  `);
+  const migrateRawObjectOwnershipByJobStmt = db.prepare(`
+    UPDATE raw_mail_objects
+    SET
+      job_id = CASE WHEN job_id = '' THEN ? ELSE job_id END,
+      owner_subject_id = CASE WHEN owner_subject_id = '' THEN ? ELSE owner_subject_id END,
+      owner_user_id = CASE WHEN owner_user_id = '' THEN ? ELSE owner_user_id END,
+      owner_username = CASE WHEN owner_username = '' THEN ? ELSE owner_username END
+    WHERE
+      job_id = ?
+      AND (job_id = '' OR owner_subject_id = '' OR owner_user_id = '')
+  `);
+  const migrateLegacyRawObjectOwnershipByBatchStmt = db.prepare(`
+    UPDATE raw_mail_objects
+    SET
+      job_id = ?,
+      owner_subject_id = CASE WHEN owner_subject_id = '' THEN ? ELSE owner_subject_id END,
+      owner_user_id = CASE WHEN owner_user_id = '' THEN ? ELSE owner_user_id END,
+      owner_username = CASE WHEN owner_username = '' THEN ? ELSE owner_username END
+    WHERE
+      job_id = ''
+      AND batch_id = ?
+      AND (owner_subject_id = '' OR owner_user_id = '')
   `);
   const listRawObjectStoragePathsByBatchStmt = db.prepare(`
     SELECT storage_rel_path
@@ -3156,12 +3180,33 @@ export function createBatchRepository({ db, userDataPath, textIndexing = null })
     }
   }
 
+  function assertBatchJobBinding(batchId = "", jobId = "") {
+    const normalizedBatchId = String(batchId || "").trim();
+    const normalizedJobId = String(jobId || "").trim();
+    if (!normalizedBatchId || !normalizedJobId) {
+      return;
+    }
+    const existing = selectBatchStmt.get(normalizedBatchId);
+    const existingJobId = String(existing?.job_id || "").trim();
+    if (existingJobId && existingJobId !== normalizedJobId) {
+      const error = new Error("Archive batch id is already bound to another job.");
+      error.code = "archive_batch_conflict";
+      error.status = 409;
+      error.details = {
+        batchId: normalizedBatchId,
+        existingJobId
+      };
+      throw error;
+    }
+  }
+
   return {
     get objectRootPath() {
       return getRawMailObjectRoot(userDataPath);
     },
     beginBatch({ batchId, jobId, generatedAt, settings }) {
       const now = new Date().toISOString();
+      assertBatchJobBinding(batchId, jobId);
       insertBatchStmt.run(
         batchId,
         jobId,
@@ -3175,8 +3220,18 @@ export function createBatchRepository({ db, userDataPath, textIndexing = null })
     updateBatchStatus(batchId, status, error = "") {
       updateBatchStatusStmt.run(status, new Date().toISOString(), String(error || ""), batchId);
     },
-    persistSources({ batchId, sources, warnings, rules }) {
+    persistSources({
+      batchId,
+      sources,
+      warnings,
+      rules,
+      jobId = "",
+      ownerSubjectId = "",
+      ownerUserId = "",
+      ownerUsername = ""
+    }) {
       const now = new Date().toISOString();
+      assertBatchJobBinding(batchId, jobId);
       deleteBatchDataRecords(batchId);
       db.exec("BEGIN");
       try {
@@ -3188,6 +3243,10 @@ export function createBatchRepository({ db, userDataPath, textIndexing = null })
             persistRawObjectStmt.run(
               source.rawObject.objectId,
               batchId,
+              source.rawObject.jobId || jobId || "",
+              source.rawObject.ownerSubjectId || ownerSubjectId || source.rawObject.ownerUserId || ownerUserId || "",
+              source.rawObject.ownerUserId || ownerUserId || source.rawObject.ownerSubjectId || ownerSubjectId || "",
+              source.rawObject.ownerUsername || ownerUsername || "",
               source.id,
               source.rawObject.ingestOrigin,
               source.rawObject.originalFileName,
@@ -3628,6 +3687,48 @@ export function createBatchRepository({ db, userDataPath, textIndexing = null })
     },
     getRawMailObject(objectId) {
       return selectRawObjectStmt.get(objectId) || null;
+    },
+    migrateRawObjectOwnershipFromJobs(jobs = []) {
+      let migratedCount = 0;
+      const jobList = Array.isArray(jobs) ? jobs : [];
+      const archiveBatchCounts = new Map();
+      for (const job of jobList) {
+        const archiveBatchId = String(job?.archiveBatchId || job?.batchId || "").trim();
+        if (archiveBatchId) {
+          archiveBatchCounts.set(archiveBatchId, (archiveBatchCounts.get(archiveBatchId) || 0) + 1);
+        }
+      }
+      db.transaction(() => {
+        for (const job of jobList) {
+          const jobId = String(job?.jobId || job?.id || "").trim();
+          const archiveBatchId = String(job?.archiveBatchId || job?.batchId || "").trim();
+          const ownerSubjectId = String(job?.ownerSubjectId || job?.ownerUserId || job?.ownerUsername || "").trim();
+          const ownerUserId = String(job?.ownerUserId || job?.ownerSubjectId || "").trim();
+          const ownerUsername = String(job?.ownerUsername || "").trim();
+          if (!jobId || !archiveBatchId || !ownerSubjectId) {
+            continue;
+          }
+          const byJobResult = migrateRawObjectOwnershipByJobStmt.run(
+            jobId,
+            ownerSubjectId,
+            ownerUserId,
+            ownerUsername,
+            jobId
+          );
+          migratedCount += Number(byJobResult.changes || 0);
+          if (archiveBatchCounts.get(archiveBatchId) === 1) {
+            const legacyBatchResult = migrateLegacyRawObjectOwnershipByBatchStmt.run(
+              jobId,
+              ownerSubjectId,
+              ownerUserId,
+              ownerUsername,
+              archiveBatchId
+            );
+            migratedCount += Number(legacyBatchResult.changes || 0);
+          }
+        }
+      })();
+      return { ok: true, migratedCount };
     },
     listRawObjectStoragePathsByBatch(batchId) {
       return listRawObjectStoragePathsByBatchStmt

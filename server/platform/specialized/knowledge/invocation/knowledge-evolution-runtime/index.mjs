@@ -42,7 +42,12 @@ function distillationCandidates(distillationRun = null) {
 
 function candidateSkillId(candidate = {}) {
   return normalizeText(
-    candidate.skill?.skillId ||
+    candidate.playbook?.playbookId ||
+      candidate.playbookId ||
+      candidate.candidatePlaybookId ||
+      candidate.generatedPlaybookId ||
+      candidate.skill?.playbookId ||
+      candidate.skill?.skillId ||
       candidate.skill?.skill?.skillId ||
       candidate.skillId ||
       candidate.candidateSkillId ||
@@ -170,7 +175,7 @@ function compactMetrics(metrics = {}) {
 
 function buildMetricTrend(previousRuns = [], evaluationRun = null) {
   const previous = asArray(previousRuns)
-    .filter((run) => run.target === "knowledgeSkillSet")
+    .filter((run) => run.target === "knowledgeSkillSet" || run.target === "knowledgePlaybookSet")
     .slice(-5)
     .map((run) => ({
       runId: run.runId,
@@ -225,19 +230,22 @@ function buildDistillationOptimizationReport({
   const promptVersion = normalizeText(
     input.promptVersion ||
       input.distillation?.promptVersion ||
+      input.playbookPromptVersion ||
       input.skillPromptVersion ||
-      `knowledge-skill-distillation:${input.modelAlias || "default"}`
+      `knowledge-playbook-distillation:${input.modelAlias || "default"}`
   );
   return {
     protocolVersion: KNOWLEDGE_DISTILLATION_OPTIMIZATION_PROTOCOL_VERSION,
     optimizationId: `${runId}-distillation-optimization`,
     promptVersion,
     baseline: {
+      playbookIds: asArray(input.baselinePlaybookIds || input.baselineSkillIds),
       skillIds: asArray(input.baselineSkillIds),
       modelAlias: input.modelAlias || "",
       frameworkVersion: input.frameworkVersion || input.distillation?.frameworkVersion || ""
     },
     candidate: {
+      playbookIds: candidateSkillIds,
       skillIds: candidateSkillIds,
       distillationRunId: distillationRun?.runId || input.distillationRunId || "",
       deploymentId: deployment?.deploymentId || ""
@@ -326,6 +334,7 @@ export function createKnowledgeEvolutionRuntime({
       ],
       targets: [
         "retrievalProfile",
+        "knowledgePlaybookSet",
         "knowledgeSkillSet",
         "goldenRulePackage",
         "taxonomyPackage",
@@ -373,7 +382,7 @@ export function createKnowledgeEvolutionRuntime({
           }
         })
       : null;
-    if (target === "knowledgeSkillSet") {
+    if (target === "knowledgeSkillSet" || target === "knowledgePlaybookSet") {
       let distillationRun = null;
       let distillationServiceError = null;
       if (knowledgeDistillationService && typeof knowledgeDistillationService.createRun === "function") {
@@ -396,9 +405,9 @@ export function createKnowledgeEvolutionRuntime({
         : { items: [] };
       const evaluationRun = knowledgeSkillRuntime && typeof knowledgeSkillRuntime.runSkillEvaluation === "function"
         ? await knowledgeSkillRuntime.runSkillEvaluation({
-            runId: input.skillEvaluationRunId || `${runId}-skill-evaluation`,
+            runId: input.playbookEvaluationRunId || input.skillEvaluationRunId || `${runId}-playbook-evaluation`,
             cases: asArray(input.cases).length ? input.cases : goldCases.items,
-            thresholds: input.skillThresholds || input.thresholds || {}
+            thresholds: input.playbookThresholds || input.skillThresholds || input.thresholds || {}
           })
         : null;
       const candidateSkillIds = [
@@ -410,7 +419,8 @@ export function createKnowledgeEvolutionRuntime({
       ];
       const deployment = evaluationRun?.passed && knowledgeSkillRuntime && typeof knowledgeSkillRuntime.createSkillDeployment === "function" && input.publish !== false
         ? await knowledgeSkillRuntime.createSkillDeployment({
-            deploymentId: input.deploymentId || `${runId}-skillset-canary`,
+            deploymentId: input.deploymentId || `${runId}-playbookset-canary`,
+            playbookIds: candidateSkillIds,
             skillIds: candidateSkillIds,
             status: input.publishMode || "canary",
             trafficPercent: input.canaryTrafficPercent || 10,
@@ -464,8 +474,8 @@ export function createKnowledgeEvolutionRuntime({
           failureAttribution
         },
         recommendations: evaluationRun?.passed
-          ? ["Monitor SkillSet canary feedback, then promote or rollback the deployment."]
-          : ["Do not publish the candidate SkillSet; inspect failed gold cases and distillation candidates."],
+          ? ["Monitor PlaybookSet canary feedback, then promote or rollback the deployment."]
+          : ["Do not publish the candidate PlaybookSet; inspect failed gold cases and distillation candidates."],
         startedAt,
         finishedAt: nowIso()
       });

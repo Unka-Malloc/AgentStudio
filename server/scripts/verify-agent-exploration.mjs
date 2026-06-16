@@ -6,8 +6,28 @@ import assert from "node:assert/strict";
 import { createAgentWorkspace } from "../platform/specialized/agent/agent-workspace/index.mjs";
 import { createContextRuntime } from "../platform/specialized/agent/agent-context/interface/index.mjs";
 import { createAgentExplorationRuntime } from "../platform/specialized/capabilities/tools/agent-exploration-runtime/index.mjs";
+import { saveSettings } from "../platform/common/platform-core/settings.mjs";
+import { evaluateAuthorizationPolicy } from "../platform/common/security/authorization/authorization-engine.mjs";
+import { createToolManagementStore } from "../platform/specialized/capabilities/tools/tool-management-core/store.mjs";
 
 const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-agent-explore-"));
+const actor = {
+  actorUserId: "verify-owner",
+  userId: "verify-owner",
+  subjectId: "verify-owner",
+  username: "verify-owner"
+};
+const previousCapabilityEnv = {
+  PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER,
+  PACT_CAPABILITY_BINDING_GUARD_PROVIDER: process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER,
+  PACT_TOOL_GRANT_CAPABILITY_KEY_ALIAS: process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_ALIAS,
+  PACT_TOOL_GRANT_BINDING_GUARD_ALIAS: process.env.PACT_TOOL_GRANT_BINDING_GUARD_ALIAS
+};
+const capabilityAlias = `pact-agent-explore-${path.basename(tempRoot)}`;
+process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER = process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_PROVIDER || "local-file";
+process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER = process.env.PACT_CAPABILITY_BINDING_GUARD_PROVIDER || "local-file";
+process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_ALIAS = process.env.PACT_TOOL_GRANT_CAPABILITY_KEY_ALIAS || capabilityAlias;
+process.env.PACT_TOOL_GRANT_BINDING_GUARD_ALIAS = process.env.PACT_TOOL_GRANT_BINDING_GUARD_ALIAS || `${capabilityAlias}-binding`;
 const toolServer = await new Promise((resolve, reject) => {
   const server = http.createServer((request, response) => {
     response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
@@ -134,6 +154,15 @@ const fixtureKnowledgeCore = {
 
 const agentWorkspace = createAgentWorkspace({ userDataPath: tempRoot });
 const contextRuntime = createContextRuntime({ userDataPath: tempRoot });
+await saveSettings(tempRoot, {
+  agentToolExecution: {
+    http: {
+      enabled: true,
+      allowedHosts: ["127.0.0.1", "localhost"],
+      allowLocalForDevelopment: true
+    }
+  }
+});
 let callCount = 0;
 const runtime = createAgentExplorationRuntime({
   userDataPath: tempRoot,
@@ -256,6 +285,7 @@ const runtime = createAgentExplorationRuntime({
 
 try {
   const result = await runtime.run({
+    ...actor,
     query: "帮我找部署记录",
     modelAlias: "deepseek",
     contextProfileId: "small-context",
@@ -291,6 +321,7 @@ try {
   assert.match(auditLog, /"reasoningContentReturned":true/);
 
   const loaded = runtime.getRun({
+    ...actor,
     runId: result.run.runId,
     workspaceId: result.workspace.workspaceId
   });
@@ -300,6 +331,8 @@ try {
 
   const scopedWorkspaceId = "verify-exploration-workspace-hot-swap";
   agentWorkspace.createWorkspace({
+    ...actor,
+    ownerUserId: actor.actorUserId,
     workspaceId: scopedWorkspaceId,
     title: "Workspace hot-swap exploration",
     objective: "Verify AgentExplorationRuntime applies workspace context"
@@ -311,7 +344,7 @@ try {
     knowledgeScope: {
       includeSourceIds: ["workspace-source-a"]
     }
-  });
+  }, actor);
   let scopedCallCount = 0;
   let scopedAllocatorCallCount = 0;
   let scopedSearchInput = null;
@@ -395,6 +428,7 @@ try {
     }
   });
   const scopedResult = await scopedRuntime.run({
+    ...actor,
     query: "workspace scoped bill",
     workspaceId: scopedWorkspaceId,
     maxIterations: 2,
@@ -410,6 +444,96 @@ try {
   assert.equal(scopedResult.run.input.toolGrantId, "workspace-tool-grant");
   assert.deepEqual(scopedResult.run.input.scopeSourceIds, ["workspace-source-a"]);
   assert.equal(scopedResult.run.input.clientRuntimeAllocation.profileId, "allocator-defaults");
+
+  const grantProofStore = createToolManagementStore({ userDataPath: tempRoot });
+  const callerControlledGrant = await grantProofStore.createGrant({
+    id: "caller-controlled-agent-explore-grant",
+    label: "caller-controlled-agent-explore-grant",
+    toolsets: ["pact.agentLibrary.write"],
+    scopes: ["knowledge:read", "knowledge:write"],
+    metadata: {
+      boundUserId: "verify-owner",
+      agentId: "knowledge-explorer",
+      maxRisk: "safe_write"
+    }
+  });
+  grantProofStore.close();
+  let grantProofCallCount = 0;
+  const grantProofRuntime = createAgentExplorationRuntime({
+    userDataPath: tempRoot,
+    runtime: {
+      mounts: {
+        knowledgeBase: fixtureKnowledgeCore
+      }
+    },
+    agentWorkspace,
+    contextRuntime,
+    securityPermissions: {
+      evaluatePolicy(input = {}) {
+        return evaluateAuthorizationPolicy(input);
+      }
+    },
+    agentGatewayCall: async (input = {}) => {
+      grantProofCallCount += 1;
+      if (grantProofCallCount === 1) {
+        assert.equal(
+          input.parameters.tools.some((tool) => tool.function?.name === "knowledge_skill_propose"),
+          false,
+          "caller-selected grant ids must not expose write tools"
+        );
+        return {
+          ok: true,
+          answer: "",
+          finish: true,
+          upstream: { provider: "mock", status: 200, contentType: "application/json" },
+          toolCalls: [
+            {
+              id: "call_caller_grant_propose",
+              type: "function",
+              function: {
+                name: "knowledge_skill_propose",
+                arguments: JSON.stringify({
+                  title: "Caller grant should not authorize this",
+                  summary: "Attempted caller-controlled grant proof bypass.",
+                  evidenceRefs: ["ev_1"],
+                  decisionHeuristics: ["Do not trust caller supplied grant ids."],
+                  honestBoundaries: ["Verifier-only proposal."]
+                })
+              }
+            }
+          ]
+        };
+      }
+      assert.match(JSON.stringify(input.messages), /missing_grant|authorization_denied/);
+      return {
+        ok: true,
+        answer: "caller-controlled grant id was rejected",
+        finish: true,
+        upstream: { provider: "mock", status: 200, contentType: "application/json" }
+      };
+    }
+  });
+  const grantProofResult = await grantProofRuntime.run({
+    ...actor,
+    query: "attempt caller grant proof bypass",
+    modelAlias: "deepseek",
+    contextProfileId: "small-context",
+    maxIterations: 2,
+    limit: 2,
+    toolGrantId: callerControlledGrant.grant.id,
+    authSession: {
+      user: {
+        userId: "verify-owner",
+        username: "verify-owner",
+        roleId: "viewer",
+        scopes: ["knowledge:read"]
+      }
+    }
+  });
+  assert.equal(grantProofCallCount, 2);
+  assert.equal(grantProofResult.toolResults[0].tool, "knowledge_skill_propose");
+  assert.equal(grantProofResult.toolResults[0].result.ok, false);
+  assert.equal(grantProofResult.toolResults[0].result.reasonCode, "missing_grant");
 
   let aggregateCallCount = 0;
   const aggregateRuntime = createAgentExplorationRuntime({
@@ -462,6 +586,7 @@ try {
     }
   });
   const aggregateResult = await aggregateRuntime.run({
+    ...actor,
     query: "哪个邮箱的广告数量最多？",
     modelAlias: "deepseek",
     contextProfileId: "small-context",
@@ -506,6 +631,7 @@ try {
     }
   });
   const hermesResult = await hermesRuntime.run({
+    ...actor,
     query: "Qwen3 Hermes 工具调用兜底",
     modelAlias: "qwen3-32b",
     contextProfileId: "small-context",
@@ -560,6 +686,7 @@ try {
     }
   });
   const synthesisResult = await synthesisRuntime.run({
+    ...actor,
     query: "循环耗尽后仍要综合",
     modelAlias: "deepseek",
     contextProfileId: "small-context",
@@ -663,6 +790,7 @@ try {
     }
   });
   const ruleAuthoringResult = await ruleAuthoringRuntime.run({
+    ...actor,
     query: "请创建规则：完全一样的知识直接跳过",
     modelAlias: "deepseek",
     contextProfileId: "small-context",
@@ -761,6 +889,7 @@ try {
     }
   });
   const deniedResult = await deniedRuntime.run({
+    ...actor,
     query: "尝试执行本地命令",
     modelAlias: "deepseek",
     contextProfileId: "small-context",
@@ -830,6 +959,7 @@ try {
     }
   });
   const cwdOverrideResult = await cwdOverrideRuntime.run({
+    ...actor,
     query: "尝试覆盖本地命令 cwd",
     modelAlias: "deepseek",
     contextProfileId: "small-context",
@@ -844,6 +974,7 @@ try {
 
   callCount = 0;
   const asyncResult = await runtime.run({
+    ...actor,
     query: "帮我找部署记录 async",
     modelAlias: "deepseek",
     contextProfileId: "small-context",
@@ -857,6 +988,7 @@ try {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 25));
     asyncLoaded = runtime.getRun({
+      ...actor,
       runId: asyncResult.run.runId,
       workspaceId: asyncResult.workspace.workspaceId
     });
@@ -873,5 +1005,12 @@ try {
 } finally {
   agentWorkspace.close();
   await toolServer.close();
+  for (const [key, value] of Object.entries(previousCapabilityEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
   await fs.rm(tempRoot, { recursive: true, force: true });
 }

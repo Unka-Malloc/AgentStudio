@@ -1833,9 +1833,9 @@ async function assertCommonConsoleDelegatesSpecializedOperations() {
 }
 
 async function assertCoreArchitectureDocsCoverMainline() {
-  const architectureFile = "docs/Architecture.md";
-  const workspaceFile = "docs/WORKSPACE-ASSET-GOVERNANCE.md";
-  const protocolsFile = "docs/PROTOCOLS.md";
+  const architectureFile = "docs/architecture/ARCHITECTURE.md";
+  const workspaceFile = "docs/functionality/WORKSPACE-ASSETS.md";
+  const protocolsFile = "docs/protocols/PROTOCOLS.md";
   const architecture = await read(architectureFile);
   const workspace = await read(workspaceFile);
   const protocols = await read(protocolsFile);

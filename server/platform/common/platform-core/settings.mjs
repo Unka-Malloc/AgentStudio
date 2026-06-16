@@ -147,6 +147,7 @@ const DEFAULT_AGENT_TOOL_EXECUTION = {
   http: {
     enabled: true,
     allowedHosts: ["127.0.0.1", "localhost"],
+    allowLocalForDevelopment: false,
     timeoutMs: 30000,
     maxResponseBytes: 65536
   },
@@ -1022,6 +1023,7 @@ function normalizeAgentToolExecution(value = {}) {
       ...http,
       enabled: http.enabled !== false,
       allowedHosts: normalizeStringList(http.allowedHosts || DEFAULT_AGENT_TOOL_EXECUTION.http.allowedHosts),
+      allowLocalForDevelopment: http.allowLocalForDevelopment === true,
       timeoutMs: Number.isFinite(httpTimeoutMs) && httpTimeoutMs > 0 ? httpTimeoutMs : 30000,
       maxResponseBytes: Number.isFinite(maxResponseBytes) && maxResponseBytes > 0 ? maxResponseBytes : 65536
     },

@@ -7,6 +7,7 @@ import {
   summarizeForLog,
   traceContextFromRequest
 } from "../../../../interactive/product-api.mjs";
+import { clientIpFromRequest } from "../../../../common/security/trusted-client-ip.mjs";
 
 function nowIso() {
   return new Date().toISOString();
@@ -144,12 +145,7 @@ function policyRevisionSummary(policy = {}) {
 }
 
 function sourceIpFromRequest(request) {
-  return String(
-    request?.headers?.["x-forwarded-for"] ||
-      request?.socket?.remoteAddress ||
-      request?.connection?.remoteAddress ||
-      ""
-  ).split(",")[0].trim();
+  return clientIpFromRequest(request);
 }
 
 function buildDirectOperationRequest({ operation, input = {} }) {
@@ -2170,8 +2166,11 @@ export function createToolExecutionRuntime({
       requiredScopes: tool.requiredScopes
     };
     try {
-      const approvalScopes = tool.requiresApproval
-        ? [operation.safety?.approvalScope || tool.approvalScope || ""]
+      const grantScopes = uniqueStrings(authorization.grant.scopes || []);
+      const operationRequiredScopeSet = new Set(operation.requiredScopes || []);
+      const approvedScopes = trustedApproval
+        ? uniqueStrings([trustedApproval.approvalScope, operation.safety?.approvalScope, tool.approvalScope])
+            .filter((scope) => scope && (!operationRequiredScopeSet.has(scope) || grantScopes.includes(scope)))
         : [];
       const toolActor = {
         type: "tool-grant",
@@ -2179,10 +2178,8 @@ export function createToolExecutionRuntime({
         username: authorization.grant.label || authorization.grant.id,
         roleId: "tool-grant",
         scopes: uniqueStrings([
-          ...(authorization.grant.scopes || []),
-          ...(tool.requiredScopes || []),
-          ...(operation.requiredScopes || []),
-          ...approvalScopes
+          ...grantScopes,
+          ...approvedScopes
         ])
       };
       await withToolConcurrency(tool, () =>

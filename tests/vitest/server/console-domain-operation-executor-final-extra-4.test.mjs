@@ -14,7 +14,8 @@ const repoOperationsMock = vi.hoisted(() => ({
 }));
 
 const knowledgeBackendPortMock = vi.hoisted(() => ({
-  createKnowledgeBackendPort: vi.fn()
+  createKnowledgeBackendPort: vi.fn(),
+  isKnowledgeBackendEvidenceId: vi.fn(() => false)
 }));
 
 const cloudDriveMock = vi.hoisted(() => ({
@@ -214,6 +215,95 @@ describe("console-domain executor final extra coverage 4", () => {
         }
       });
     });
+  });
+
+  it("does not let console callers override the authenticated knowledge subject", async () => {
+    await withTempDir(async (userDataPath) => {
+      const authSession = {
+        user: {
+          userId: "u-auth",
+          username: "alice",
+          roleId: "member",
+          scopes: ["knowledge:read"]
+        }
+      };
+
+      const knowledgeResult = await runOperation("knowledge.export.request", {
+        input: {
+          workspaceId: "ws-1",
+          subjectId: "u-spoof",
+          username: "mallory"
+        },
+        context: {
+          userDataPath,
+          authSession
+        }
+      });
+
+      expect(knowledgeResult.status).toBe(202);
+      expect(backendPort.requestExport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceId: "ws-1",
+          subjectId: "u-spoof",
+          username: "mallory"
+        }),
+        {
+          subject: {
+            type: "console-user",
+            subjectId: "u-auth",
+            username: "alice",
+            roleId: "member",
+            scopes: ["knowledge:read"],
+            declaredSubject: {
+              subjectId: "u-spoof",
+              username: "mallory"
+            }
+          },
+          workspaceId: "ws-1"
+        }
+      );
+    });
+  });
+
+  it("enforces AgentLibrary access policy before local knowledge evidence reads", async () => {
+    const knowledgeCore = {
+      enabled: true,
+      getEvidence: vi.fn(async () => ({ evidenceId: "ev-1", text: "secret" }))
+    };
+    const accessResult = await runOperation("knowledge.evidence", {
+      input: {
+        evidenceId: "ev-1",
+        authorizationOverlay: {
+          defaultAccessMode: "deny"
+        }
+      },
+      context: {
+        runtime: {
+          mounts: {
+            knowledgeBase: knowledgeCore
+          }
+        },
+        authSession: {
+          user: {
+            userId: "u-1",
+            username: "alice",
+            scopes: ["knowledge:read"]
+          }
+        }
+      }
+    });
+
+    expect(accessResult).toMatchObject({
+      status: 403,
+      payload: {
+        error: "知识访问被拒绝。",
+        accessDecision: {
+          allowed: false,
+          upstreamAccessDenied: true
+        }
+      }
+    });
+    expect(knowledgeCore.getEvidence).not.toHaveBeenCalled();
   });
 
   it("keeps external distillation working without an event bus and wraps backend or remote failures", async () => {

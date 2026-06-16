@@ -40,6 +40,7 @@
       "v0.0.1:tool:management-1",
       "v0.0.1:operation:operation-dispatcher-1",
       "v0.0.1:risk-control:permissions-1",
+      "v0.0.1:risk-control:process-identity-1",
       "v0.0.1:storage:core-1",
       "v0.0.1:sharedspace:sharedspace-local-directory-1",
       "v0.0.1:storage:cloud-drive-port-1",
@@ -73,6 +74,9 @@
     "requiredOperations": [
       "system.health",
       "discovery.get_config",
+      "process_identity.bootstrap_claim",
+      "process_identity.package.rotate",
+      "process_identity.package.revoke",
       "tool_management.catalog",
       "tool_management.create_grant",
       "tool_management.grants",
@@ -112,6 +116,9 @@
     "clientSupervisorResponsibilities": [
       "start-stop-restart",
       "health-check-/api/healthz",
+      "generate-0600-process-identity-claim-token",
+      "generate-client-local-ed25519-process-key",
+      "claim-local-runtime-and-replace-default-client-identity-package",
       "data-dir-selection",
       "log-tail",
       "mcp-discovery-publication",
@@ -194,6 +201,7 @@
     "healthGates": [
       "system.health",
       "tool_management.catalog",
+      "process_identity.bootstrap_claim",
       "sharedspace.localDir.list",
       "external.cloudDrive.status",
       "mobile_relay.config"

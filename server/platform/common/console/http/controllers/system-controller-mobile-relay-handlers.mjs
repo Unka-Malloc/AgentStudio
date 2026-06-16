@@ -4,6 +4,15 @@ function parseBody(parseJsonBody, requestBody) {
   return requestBody?.length > 0 ? parseJsonBody(requestBody) : {};
 }
 
+function requestSourceKey(request = {}) {
+  return String(
+    request.socket?.remoteAddress ||
+      request.connection?.remoteAddress ||
+      request.info?.remoteAddress ||
+      ""
+  ).trim();
+}
+
 async function sendRelayResult(response, promise) {
   const operationResult = await promise;
   sendJson(response, operationResult.status || 200, operationResult.payload || {});
@@ -26,17 +35,23 @@ export function createSystemControllerMobileRelayHandlers({
       sendJson(response, 200, mobileRelayStore.gatewayConfig());
     },
 
-    async handleMobileRelayPairingCreate({ requestBody, response }) {
+    async handleMobileRelayPairingCreate({ request, requestBody, response }) {
       await sendRelayResult(
         response,
-        mobileRelayStore.createPairing(parseBody(parseJsonBody, requestBody))
+        mobileRelayStore.createPairing(
+          parseBody(parseJsonBody, requestBody),
+          { sourceKey: requestSourceKey(request) }
+        )
       );
     },
 
-    async handleMobileRelayPairingClaim({ requestBody, response }) {
+    async handleMobileRelayPairingClaim({ request, requestBody, response }) {
       await sendRelayResult(
         response,
-        mobileRelayStore.claimPairing(parseBody(parseJsonBody, requestBody))
+        mobileRelayStore.claimPairing(
+          parseBody(parseJsonBody, requestBody),
+          { sourceKey: requestSourceKey(request) }
+        )
       );
     },
 

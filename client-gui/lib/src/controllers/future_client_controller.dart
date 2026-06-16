@@ -6,6 +6,7 @@ import '../models/future_client_models.dart';
 import '../services/appearance_preferences_service.dart';
 import '../services/agent_conversation_service.dart';
 import '../services/agent_service.dart';
+import '../services/local_runtime_preferences_service.dart';
 import '../services/mobile_relay_service.dart';
 import '../services/portable_data_root.dart';
 import '../ui/appearance_preset_config.dart';
@@ -16,6 +17,7 @@ part 'skill_hub_actions.dart';
 part 'target_actions.dart';
 part 'agent_conversation_actions.dart';
 part 'mobile_relay_actions.dart';
+part 'local_runtime_actions.dart';
 
 class FutureClientController extends ChangeNotifier {
   FutureClientController({
@@ -24,6 +26,7 @@ class FutureClientController extends ChangeNotifier {
     AgentConversationService? conversationService,
     MobileRelayService? mobileRelayService,
     AppearancePreferencesService? appearancePreferencesService,
+    LocalRuntimePreferencesService? localRuntimePreferencesService,
   }) : portableData = portableData ?? PortableDataRoot(),
        agentService =
            agentService ??
@@ -36,8 +39,10 @@ class FutureClientController extends ChangeNotifier {
            conversationService ?? const AgentConversationService(),
        mobileRelayService = mobileRelayService ?? const MobileRelayService(),
        appearancePreferencesService =
-           appearancePreferencesService ??
-           const AppearancePreferencesService() {
+           appearancePreferencesService ?? const AppearancePreferencesService(),
+       localRuntimePreferencesService =
+           localRuntimePreferencesService ??
+           const LocalRuntimePreferencesService() {
     bootstrapController.addListener(_notifyStateChanged);
   }
 
@@ -46,6 +51,7 @@ class FutureClientController extends ChangeNotifier {
   final AgentConversationService conversationService;
   final MobileRelayService mobileRelayService;
   final AppearancePreferencesService appearancePreferencesService;
+  final LocalRuntimePreferencesService localRuntimePreferencesService;
   final TextEditingController bootstrapController = TextEditingController();
 
   FutureClientSection currentSection = FutureClientSection.agents;
@@ -66,6 +72,10 @@ class FutureClientController extends ChangeNotifier {
   Map<String, dynamic>? skillHubActionResult;
   MobileRelayConfig mobileRelayConfig = MobileRelayConfig.defaults();
   Map<String, dynamic>? mobileRelayActionResult;
+  LocalRuntimePreferences localRuntimePreferences =
+      LocalRuntimePreferences.defaults();
+  Map<String, dynamic>? localRuntimeState;
+  List<String> localRuntimeLogLines = const [];
   List<MobileRelayCommand> lastMobileRelayCommands = const [];
   Map<String, dynamic>? snapshotRestoreResult;
   Map<String, List<AgentConversationSession>> conversationSessionsByAgent =
@@ -79,6 +89,7 @@ class FutureClientController extends ChangeNotifier {
   bool isSkillHubBusy = false;
   bool isMobileRelayBusy = false;
   bool isMobileRelayPolling = false;
+  bool isLocalRuntimeBusy = false;
   bool isLoadingConversations = false;
   bool isSendingConversationMessage = false;
   bool _disposed = false;
@@ -117,9 +128,13 @@ class FutureClientController extends ChangeNotifier {
       _applyAppearancePresetCatalog(catalog);
       appearancePresetId = await appearancePreferencesService
           .loadSelectedPresetId(portableData, appearancePresetConfigs);
+      localRuntimePreferences = await localRuntimePreferencesService.load(
+        portableData,
+      );
       mobileRelayConfig = await mobileRelayService.loadConfig(
         agentService: agentService,
       );
+      await _refreshLocalRuntimeStatusSilently();
       initialized = true;
       statusMessage = appearancePresetLoadErrors.isEmpty
           ? 'Future client 已就绪。'
@@ -189,6 +204,9 @@ class FutureClientController extends ChangeNotifier {
     _notifyStateChanged();
     if (section == FutureClientSection.agents && scannedTargets.isEmpty) {
       unawaited(scanTargets());
+    }
+    if (section == FutureClientSection.localRuntime) {
+      unawaited(refreshLocalRuntimeStatus());
     }
   }
 

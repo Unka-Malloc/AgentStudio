@@ -3,7 +3,7 @@
 当前 OCR 通过 `server/platform/modules/knowledge/file-processor/FileNormalizer/OCR/paddle-ocr.mjs` 调用这个目录下的 `paddle_ocr_extract.py`。
 
 它不会被打进 Flutter 客户端；应该部署在服务端所在机器。
-在当前方案里，它属于**可选补充能力**，不是主 OCR 方案。云端或外部视觉解析能力应通过 `docs/KNOWLEDGE-GOVERNANCE.md` 中的 parser / evidence 边界接入，而不是让 OCR sidecar 成为公共知识事实源。
+在当前方案里，它属于**可选补充能力**，不是主 OCR 方案。云端或外部视觉解析能力应通过 `docs/functionality/KNOWLEDGE.md` 中的 parser / evidence 边界接入，而不是让 OCR sidecar 成为公共知识事实源。
 
 如果要做带 OCR sidecar 的本地服务部署，本地 Python 运行时需要按 `server/platform/modules/knowledge/ocr/runtime/README.md` 的目录约定预先放好。
 这些运行时二进制默认不进入 GitHub 源码仓。

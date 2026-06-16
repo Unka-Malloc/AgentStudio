@@ -34,7 +34,8 @@ export function createSecurityPermissionsProvider({
   consoleAuth = null,
   authorizationEngine = null,
   authorizationStore = null,
-  authorizationGovernanceStore = null
+  authorizationGovernanceStore = null,
+  processIdentity = null
 } = {}) {
   const workspaceAssetPolicies = new Map();
   const resolvedAuthorizationStore =
@@ -98,12 +99,26 @@ export function createSecurityPermissionsProvider({
         };
   }
 
+  async function verifyProcessIdentity(input = {}) {
+    if (!processIdentity || typeof processIdentity.verifySignedRequest !== "function") {
+      return {
+        ok: false,
+        status: 503,
+        reasonCode: "process_identity_unavailable",
+        error: "Process identity verifier is unavailable."
+      };
+    }
+    return processIdentity.verifySignedRequest(input);
+  }
+
   return Object.freeze({
     protocolVersion: SECURITY_PERMISSIONS_PROTOCOL_VERSION,
     authorizationEngine: resolvedAuthorizationEngine,
     authorizationStore: resolvedAuthorizationStore,
     authorizationGovernanceStore: resolvedAuthorizationGovernanceStore,
+    processIdentity,
     authorizeOperation,
+    verifyProcessIdentity,
     getConsoleSummary(request = null) {
       return typeof consoleAuth?.getSummary === "function"
         ? consoleAuth.getSummary(request)

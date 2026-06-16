@@ -182,6 +182,18 @@ export async function createQueuedJobWorkflowProvider({
       actor: input.actor || { system: "job-workflow-provider" },
       reason: input.reason || "job_workflow_enqueue"
     });
+    if (result.accepted !== false) {
+      logger?.info?.("jobs.queue.enqueued", {
+        schedulerMode: "platform-work-queue",
+        jobId: job.id,
+        workItemId: result.workItem?.workItemId || "",
+        queueDefinitionId: queueDefinition.queueDefinitionId,
+        queueDefinitionVersion: queueDefinition.queueDefinitionVersion,
+        deduped: result.deduped === true,
+        policyVersion: decision.policyVersion || decision.decisionId || "",
+        reason: input.reason || "job_workflow_enqueue"
+      });
+    }
     return {
       enqueued: result.accepted !== false,
       deduped: result.deduped === true,
@@ -404,6 +416,60 @@ export async function createQueuedJobWorkflowProvider({
         scope: defaultQueueScope(),
         ...input
       });
+    },
+    retryDeadLetterWorkQueue(input = {}) {
+      const limit = Math.max(1, asInt(input.limit, 100));
+      const inspected = queueStore.inspect({
+        queueDefinitionId: queueDefinition.queueDefinitionId,
+        scope: defaultQueueScope(),
+        states: ["dead_letter"],
+        limit,
+        ...(input.workItemId ? { workItemId: input.workItemId } : {})
+      });
+      const candidates = input.workItemId
+        ? [inspected.workItem].filter(Boolean)
+        : Array.isArray(inspected.items) ? inspected.items : [];
+      const retried = [];
+      const failed = [];
+      for (const item of candidates) {
+        try {
+          retried.push(queueStore.recover({
+            workItemId: item.workItemId,
+            targetState: "pending",
+            resetAttempts: true,
+            operationId: "jobs.work_queue.retry_dead_letter",
+            actor: input.actor || { system: "job-workflow-provider" },
+            reason: input.reason || "operator_retry_dead_letter"
+          }));
+        } catch (error) {
+          failed.push({
+            workItemId: item.workItemId || "",
+            error: summarizeError(error)
+          });
+        }
+      }
+      return {
+        ok: failed.length === 0,
+        queueDefinitionId: queueDefinition.queueDefinitionId,
+        retriedCount: retried.length,
+        failedCount: failed.length,
+        retried,
+        failed
+      };
+    },
+    rebuildWorkQueueProof(input = {}) {
+      const replay = queueStore.rebuildProjection({
+        queueDefinitionId: queueDefinition.queueDefinitionId,
+        scope: defaultQueueScope(),
+        operationId: "jobs.work_queue.rebuild",
+        actor: input.actor || { system: "job-workflow-provider" },
+        reason: input.reason || "operator_rebuild_projection"
+      });
+      return {
+        ok: replay.ok === true,
+        queueDefinitionId: queueDefinition.queueDefinitionId,
+        proof: replay
+      };
     },
     dispatchWorkQueue: dispatchTick,
     bootstrapWorkQueue: bootstrapQueuedJobs,

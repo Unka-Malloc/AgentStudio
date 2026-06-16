@@ -35,12 +35,13 @@ ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=8799
 ENV SERVICE_DATA_DIR=/data
+ENV PACT_EXTERNAL_KD_INPUT_ROOTS=/inputs
 ENV TIKA_APP_JAR=/opt/tika/tika-app.jar
 ENV PACT_EXTERNAL_KD_REQUIRE_API_TOKEN=1
 ENV PACT_EXTERNAL_KD_ALLOW_UNAUTHENTICATED_DEV=0
 
-RUN mkdir -p /data \
-  && chown -R pactkd:pactkd /data /app
+RUN mkdir -p /data /inputs \
+  && chown -R pactkd:pactkd /data /inputs /app
 
 EXPOSE 8799
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 8799) + '/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"

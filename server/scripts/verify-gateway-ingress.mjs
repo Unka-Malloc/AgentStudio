@@ -50,6 +50,44 @@ assert.match(nginx.config, /proxy_set_header Upgrade \$http_upgrade;/);
 assert.match(nginx.config, /proxy_set_header X-Pact-Gateway nginx;/);
 assert.match(nginx.config, /proxy_set_header X-Pact-Gateway-Request-Id \$request_id;/);
 
+function parseLastJsonPayload(stdout = "") {
+  const text = String(stdout || "").trim();
+  if (!text) {
+    throw new Error("No JSON payload found in empty stdout");
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Runtime download progress can precede the pretty-printed JSON payload.
+  }
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] !== "{" && text[index] !== "[") {
+      continue;
+    }
+    try {
+      return JSON.parse(text.slice(index));
+    } catch {
+      // Keep scanning until the beginning of the final JSON payload is found.
+    }
+  }
+  const lines = String(stdout || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (!line.startsWith("{") && !line.startsWith("[")) {
+      continue;
+    }
+    try {
+      return JSON.parse(line);
+    } catch {
+      // Keep scanning earlier lines; runtime download progress can share stdout.
+    }
+  }
+  throw new Error(`No JSON payload found in stdout: ${stdout}`);
+}
+
 for (const adapterId of ["caddy", "nginx"]) {
   const report = validateGatewayIngressPlan({ ...baseInput, adapterId });
   assert.equal(report.ok, true, `${adapterId} gateway ingress plan must validate`);
@@ -95,7 +133,7 @@ try {
     { encoding: "utf8" }
   );
   assert.equal(writeResult.status, 0, writeResult.stderr || writeResult.stdout);
-  const report = JSON.parse(writeResult.stdout);
+  const report = parseLastJsonPayload(writeResult.stdout);
   assert.equal(report.written.length >= 2, true);
   assert.equal(await fileExists(path.join(tempRoot, "caddy", "Caddyfile")), true);
   assert.equal(await fileExists(path.join(tempRoot, "nginx", "nginx.conf")), true);
@@ -115,7 +153,7 @@ try {
     { encoding: "utf8" }
   );
   assert.equal(runtimePlan.status, 0, runtimePlan.stderr || runtimePlan.stdout);
-  const runtimePlanPayload = JSON.parse(runtimePlan.stdout);
+  const runtimePlanPayload = parseLastJsonPayload(runtimePlan.stdout);
   assert.match(runtimePlanPayload.cacheRoot, /pact-gateway-ingress-/);
   assert.equal(runtimePlanPayload.cached, false);
 
@@ -134,7 +172,7 @@ try {
     { encoding: "utf8" }
   );
   assert.equal(runtimePull.status, 0, runtimePull.stderr || runtimePull.stdout);
-  const runtimePullPayload = JSON.parse(runtimePull.stdout);
+  const runtimePullPayload = parseLastJsonPayload(runtimePull.stdout);
   assert.equal(runtimePullPayload.sourceType, "configured-binary");
   assert.equal(await fileExists(runtimePullPayload.cachedExecutablePath), true);
 
@@ -165,7 +203,7 @@ try {
     }
   );
   assert.equal(runtimePullUrl.status, 0, runtimePullUrl.stderr || runtimePullUrl.stdout);
-  const runtimePullUrlPayload = JSON.parse(runtimePullUrl.stdout);
+  const runtimePullUrlPayload = parseLastJsonPayload(runtimePullUrl.stdout);
   assert.equal(runtimePullUrlPayload.sourceType, "runtime-url-executable");
   assert.equal(await fileExists(runtimePullUrlPayload.cachedExecutablePath), true);
 

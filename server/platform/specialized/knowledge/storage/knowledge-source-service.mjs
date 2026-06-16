@@ -20,6 +20,9 @@ import {
   upsertCheckpointNode
 } from "../../../common/data-structure/checkpoint-tree-store.mjs";
 import { atomicWriteJson } from "../../../common/platform-core/state-coordinator.mjs";
+import {
+  assertExistingLocalDirectoryWithinControlledRootsSync
+} from "../../../common/security/local-path-boundary.mjs";
 
 const CONFIG_DIR = "knowledge-sources";
 const CONFIG_FILE = "sources.json";
@@ -88,13 +91,17 @@ function normalizeStringArray(value) {
     : [];
 }
 
-function normalizeSource(input = {}, previous = {}) {
+function normalizeSource(input = {}, previous = {}, { userDataPath = "" } = {}) {
   const timestamp = nowIso();
   const rawDirectoryPath = String(input.directoryPath || previous.directoryPath || "").trim();
   if (!rawDirectoryPath) {
     throw new Error("请填写服务端可访问的本地目录路径。");
   }
-  const directoryPath = path.resolve(rawDirectoryPath);
+  const root = assertExistingLocalDirectoryWithinControlledRootsSync(rawDirectoryPath, {
+    userDataPath,
+    label: "知识源目录"
+  });
+  const directoryPath = root.realPath;
   const defaultSourceId = `ks_${createHash("sha256").update(directoryPath).digest("hex")}`;
   const sourceId = String(previous.sourceId || input.sourceId || defaultSourceId).trim();
   return {
@@ -157,6 +164,29 @@ function normalizeSource(input = {}, previous = {}) {
   };
 }
 
+function normalizeInvalidPersistedSource(input = {}, error = null) {
+  const rawDirectoryPath = String(input.directoryPath || "").trim();
+  const directoryPath = rawDirectoryPath ? path.resolve(rawDirectoryPath) : "";
+  const defaultSourceId = `ks_${createHash("sha256").update(directoryPath || String(input.sourceId || "")).digest("hex")}`;
+  const sourceId = String(input.sourceId || defaultSourceId).trim();
+  return {
+    ...input,
+    sourceId,
+    label: String(input.label || path.basename(directoryPath) || "本地目录").trim(),
+    directoryPath,
+    enabled: false,
+    autoSync: false,
+    recursive: normalizeBoolean(input.recursive, true),
+    debounceMs: Math.max(300, Math.min(30000, Number(input.debounceMs || DEFAULT_DEBOUNCE_MS))),
+    hydrationEnabled: false,
+    watcherStatus: "stopped",
+    watcherCount: 0,
+    status: "error",
+    error: error instanceof Error ? error.message : "知识源目录不在受控本机来源目录内。",
+    updatedAt: nowIso()
+  };
+}
+
 function publicSource(source, job = null) {
   return {
     ...source,
@@ -173,9 +203,13 @@ async function readSources(userDataPath) {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed.sources)
       ? parsed.sources.map((item) => {
-        const normalized = normalizeSource(item, item);
-        normalized.updatedAt = String(item?.updatedAt || normalized.updatedAt || "");
-        return normalized;
+        try {
+          const normalized = normalizeSource(item, item, { userDataPath });
+          normalized.updatedAt = String(item?.updatedAt || normalized.updatedAt || "");
+          return normalized;
+        } catch (error) {
+          return normalizeInvalidPersistedSource(item, error);
+        }
       })
       : [];
   } catch (error) {
@@ -784,6 +818,7 @@ async function prepareKnowledgeSourceFiles({
 export function createKnowledgeSourceService({
   userDataPath,
   jobManager,
+  getJobWorkflowProvider = null,
   protocolEventBus = null,
   watchingEnabled = process.env.PACT_SOURCE_WATCHER_EXTERNAL !== "1"
 }) {
@@ -797,6 +832,16 @@ export function createKnowledgeSourceService({
   let ready = null;
   let persistChain = Promise.resolve();
 
+  function activeJobWorkflowProvider() {
+    if (typeof getJobWorkflowProvider === "function") {
+      const provider = getJobWorkflowProvider();
+      if (provider && typeof provider.createJob === "function" && typeof provider.getJob === "function") {
+        return provider;
+      }
+    }
+    return jobManager;
+  }
+
   async function persist() {
     const snapshotSources = [...sources.values()].map((source) => ({ ...source }));
     persistChain = persistChain
@@ -806,9 +851,10 @@ export function createKnowledgeSourceService({
   }
 
   async function snapshot() {
+    const jobWorkflowProvider = activeJobWorkflowProvider();
     const items = await Promise.all(
       [...sources.values()].map(async (source) => {
-        const job = source.lastJobId ? await jobManager.getJob(source.lastJobId) : null;
+        const job = source.lastJobId ? await jobWorkflowProvider.getJob(source.lastJobId) : null;
         return publicSource(source, job);
       })
     );
@@ -1407,7 +1453,7 @@ export function createKnowledgeSourceService({
 
             const checkpointId = serverToken("checkpoint", "knowledge-source", sourceId, prepared.manifestSha256);
             const settings = await loadSettings(userDataPath);
-            const job = await jobManager.createJob({
+            const job = await activeJobWorkflowProvider().createJob({
               inputText: "",
               filePaths: prepared.fileManifestPath ? [] : [source.directoryPath],
               fileManifestPath: prepared.fileManifestPath,
@@ -1692,12 +1738,12 @@ export function createKnowledgeSourceService({
     async createSource(input = {}) {
       await ready;
       await refreshInMemorySources();
-      const next = normalizeSource(input);
+      const next = normalizeSource(input, {}, { userDataPath });
       const existing = [...sources.values()].find(
         (source) => path.resolve(source.directoryPath) === next.directoryPath
       );
       if (existing) {
-        const updated = normalizeSource({ ...input, directoryPath: existing.directoryPath }, existing);
+        const updated = normalizeSource({ ...input, directoryPath: existing.directoryPath }, existing, { userDataPath });
 	        sources.set(existing.sourceId, updated);
           fingerprintStore.upsertRegistrySource(updated);
 	        await persist();
@@ -1731,7 +1777,7 @@ export function createKnowledgeSourceService({
         return null;
       }
       const previousFingerprints = fingerprintStore.listBySource(sourceId);
-      const next = normalizeSource({ ...current, ...patch, sourceId }, current);
+      const next = normalizeSource({ ...current, ...patch, sourceId }, current, { userDataPath });
       if (current.directoryPath !== next.directoryPath) {
         fingerprintStore.recordPathAlias({
           sourceId,

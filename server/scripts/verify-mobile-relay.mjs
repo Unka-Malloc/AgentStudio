@@ -7,6 +7,9 @@ import path from "node:path";
 import {
   DEFAULT_PACT_MOBILE_RELAY_GATEWAY_URL,
   MOBILE_RELAY_PROTOCOL_VERSION,
+  MAX_PACT_MOBILE_RELAY_CLAIM_FAILURES_PER_SOURCE,
+  MAX_PACT_MOBILE_RELAY_PENDING_PAIRINGS_PER_PC_CLIENT,
+  MAX_PACT_MOBILE_RELAY_PENDING_PAIRINGS_PER_SOURCE,
   MAX_PACT_MOBILE_RELAY_PAIRING_TTL_MS,
   createMobileRelayStore,
   resolveDefaultMobileRelayGatewayUrl
@@ -81,7 +84,7 @@ const created = await store.createPairing({
 });
 assert.equal(created.status, 200);
 assert.equal(created.payload.ok, true);
-assert.match(created.payload.pairingCode, /^\d{4}-\d{4}$/);
+assert.match(created.payload.pairingCode, /^[A-Z2-9]{5}-[A-Z2-9]{5}-[A-Z2-9]{5}-[A-Z2-9]{5}$/);
 assert.ok(created.payload.pcToken);
 assert.equal(created.payload.pairing.status, "pending");
 assert.equal(created.payload.pairing.pcTokenHash, undefined);
@@ -111,13 +114,98 @@ cappedNow = new Date("2026-01-01T00:02:00.000Z");
 const cappedAfterExpiry = await cappedStore.createPairing({ pcClientId: "pc-cap-3", ttlMs: 60_000 });
 assert.equal(cappedAfterExpiry.status, 200);
 
+const sourceQuotaRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-mobile-relay-source-quota-"));
+const sourceQuotaStore = createMobileRelayStore({
+  userDataPath: sourceQuotaRoot,
+  maxPairings: 10,
+  maxPendingPairingsPerSource: 2,
+  maxPendingPairingsPerPcClient: 0
+});
+assert.equal(MAX_PACT_MOBILE_RELAY_PENDING_PAIRINGS_PER_SOURCE >= 2, true);
+assert.equal((await sourceQuotaStore.createPairing({ pcClientId: "pc-source-1" }, { sourceKey: "198.51.100.10" })).status, 200);
+assert.equal((await sourceQuotaStore.createPairing({ pcClientId: "pc-source-2" }, { sourceKey: "198.51.100.10" })).status, 200);
+const sourceQuotaDenied = await sourceQuotaStore.createPairing(
+  { pcClientId: "pc-source-3" },
+  { sourceKey: "198.51.100.10" }
+);
+assert.equal(sourceQuotaDenied.status, 429);
+assert.equal(sourceQuotaDenied.payload.code, "mobile_relay_pairing_source_quota_exceeded");
+assert.equal((await sourceQuotaStore.createPairing({ pcClientId: "pc-source-4" }, { sourceKey: "198.51.100.11" })).status, 200);
+
+const pcQuotaRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-mobile-relay-pc-quota-"));
+const pcQuotaStore = createMobileRelayStore({
+  userDataPath: pcQuotaRoot,
+  maxPairings: 10,
+  maxPendingPairingsPerSource: 0,
+  maxPendingPairingsPerPcClient: 1
+});
+assert.equal(MAX_PACT_MOBILE_RELAY_PENDING_PAIRINGS_PER_PC_CLIENT >= 1, true);
+assert.equal((await pcQuotaStore.createPairing({ pcClientId: "pc-quota" }, { sourceKey: "198.51.100.20" })).status, 200);
+const pcQuotaDenied = await pcQuotaStore.createPairing({ pcClientId: "pc-quota" }, { sourceKey: "198.51.100.21" });
+assert.equal(pcQuotaDenied.status, 429);
+assert.equal(pcQuotaDenied.payload.code, "mobile_relay_pairing_client_quota_exceeded");
+
+const claimQuotaRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-mobile-relay-claim-quota-"));
+const claimQuotaStore = createMobileRelayStore({
+  userDataPath: claimQuotaRoot,
+  maxPairings: 10,
+  maxPendingPairingsPerSource: 0,
+  maxClaimFailuresPerSource: 2,
+  claimFailureWindowMs: 60_000
+});
+assert.equal(MAX_PACT_MOBILE_RELAY_CLAIM_FAILURES_PER_SOURCE >= 2, true);
+const claimQuotaPairing = await claimQuotaStore.createPairing({ pcClientId: "pc-claim-quota" }, { sourceKey: "198.51.100.30" });
+assert.equal(claimQuotaPairing.status, 200);
+const firstBadClaim = await claimQuotaStore.claimPairing(
+  {
+    pairingId: claimQuotaPairing.payload.pairingId,
+    pairingCode: "AAAAA-AAAAA-AAAAA-AAAAA"
+  },
+  { sourceKey: "198.51.100.31" }
+);
+assert.equal(firstBadClaim.status, 404);
+const secondBadClaim = await claimQuotaStore.claimPairing(
+  {
+    pairingId: claimQuotaPairing.payload.pairingId,
+    pairingCode: "BBBBB-BBBBB-BBBBB-BBBBB"
+  },
+  { sourceKey: "198.51.100.31" }
+);
+assert.equal(secondBadClaim.status, 429);
+assert.equal(secondBadClaim.payload.code, "mobile_relay_pairing_claim_rate_limited");
+const lockedCorrectClaim = await claimQuotaStore.claimPairing(
+  {
+    pairingId: claimQuotaPairing.payload.pairingId,
+    pairingCode: claimQuotaPairing.payload.pairingCode
+  },
+  { sourceKey: "198.51.100.31" }
+);
+assert.equal(lockedCorrectClaim.status, 429);
+const otherSourceClaim = await claimQuotaStore.claimPairing(
+  {
+    pairingId: claimQuotaPairing.payload.pairingId,
+    pairingCode: claimQuotaPairing.payload.pairingCode
+  },
+  { sourceKey: "198.51.100.32" }
+);
+assert.equal(otherSourceClaim.status, 200);
+
+const missingPairingIdClaim = await store.claimPairing({
+  pairingCode: created.payload.pairingCode,
+  mobileDeviceName: "iPhone"
+});
+assert.equal(missingPairingIdClaim.status, 400);
+assert.equal(missingPairingIdClaim.payload.code, "missing_pairing_id");
+
 const rejectedClaim = await store.claimPairing({
-  pairingCode: "0000-0000",
+  pairingId: created.payload.pairingId,
+  pairingCode: "CCCCC-CCCCC-CCCCC-CCCCC",
   mobileDeviceName: "iPhone"
 });
 assert.equal(rejectedClaim.status, 404);
 
 const malformedClaim = await store.claimPairing({
+  pairingId: created.payload.pairingId,
   pairingCode: "0000-0000".repeat(80),
   mobileDeviceName: "iPhone"
 });
@@ -130,13 +218,15 @@ const compactCodePairing = await store.createPairing({
 });
 assert.equal(compactCodePairing.status, 200);
 const compactCodeClaim = await store.claimPairing({
-  pairingCode: compactCodePairing.payload.pairingCode.replace("-", ""),
+  pairingId: compactCodePairing.payload.pairingId,
+  pairingCode: compactCodePairing.payload.pairingCode.replace(/-/g, ""),
   mobileDeviceName: "iPhone Compact"
 });
 assert.equal(compactCodeClaim.status, 200);
 assert.equal(compactCodeClaim.payload.ok, true);
 
 const claimed = await store.claimPairing({
+  pairingId: created.payload.pairingId,
   pairingCode: created.payload.pairingCode,
   mobileDeviceName: "iPhone"
 });
@@ -193,6 +283,41 @@ assert.deepEqual(result.payload.command.result, { sessions: [{ id: "session-1", 
 const secondPoll = await store.pollCommands({ pairingId }, authPc);
 assert.equal(secondPoll.status, 200);
 assert.equal(secondPoll.payload.commands.length, 0);
+
+const deniedRuntimeCommand = await store.enqueueCommand({
+  pairingId,
+  type: "agent.message.send",
+  payload: {
+    agentId: "codex",
+    text: "from phone",
+    command: "printf",
+    args: ["%s", "{prompt}"]
+  }
+}, authMobile);
+assert.equal(deniedRuntimeCommand.status, 400);
+assert.equal(deniedRuntimeCommand.payload.code, "mobile_relay_command_payload_denied");
+
+const deniedUnknownCommand = await store.enqueueCommand({
+  pairingId,
+  type: "agent.local.delete",
+  payload: {}
+}, authMobile);
+assert.equal(deniedUnknownCommand.status, 400);
+assert.equal(deniedUnknownCommand.payload.code, "mobile_relay_command_type_unsupported");
+
+const safeMessageCommand = await store.enqueueCommand({
+  pairingId,
+  type: "agent.message.send",
+  payload: {
+    agentId: "codex",
+    text: "from phone",
+    ignoredLocalField: "not forwarded"
+  }
+}, authMobile);
+assert.equal(safeMessageCommand.status, 200);
+assert.equal(safeMessageCommand.payload.command.payload.agentId, "codex");
+assert.equal(safeMessageCommand.payload.command.payload.text, "from phone");
+assert.equal(safeMessageCommand.payload.command.payload.ignoredLocalField, undefined);
 
 const wrongToken = await store.pollCommands({ pairingId }, { authorization: "Bearer wrong" });
 assert.equal(wrongToken.status, 401);

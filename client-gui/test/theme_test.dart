@@ -56,7 +56,7 @@ void main() {
     }
   });
 
-  test('default-system resolves to geek light blue or sunset ember', () {
+  test('default-system resolves to geek light blue or tokyo night', () {
     expect(
       pactColorsFor(
         AppearancePresetIds.defaultSystem,
@@ -69,7 +69,7 @@ void main() {
         AppearancePresetIds.defaultSystem,
         platformBrightness: Brightness.dark,
       ).primary,
-      pactColorsFor(AppearancePresetIds.sunsetEmber).primary,
+      pactColorsFor(AppearancePresetIds.tokyoNight).primary,
     );
   });
 

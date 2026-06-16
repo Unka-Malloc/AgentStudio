@@ -102,10 +102,11 @@ Pact is built on a **zero-trust architecture** where agents are treated as untru
 
 For a deeper understanding of our security architecture, refer to:
 
-- 📖 [Architecture Overview](docs/Architecture.md)
-- 📖 [Workspace Asset Governance](docs/WORKSPACE-ASSET-GOVERNANCE.md)
-- 📖 [Knowledge Governance & AgentLibrary](docs/KNOWLEDGE-GOVERNANCE.md)
-- 📖 [Protocols](docs/PROTOCOLS.md)
+- 📖 [Architecture](docs/architecture/ARCHITECTURE.md)
+- 📖 [Workspace Assets](docs/functionality/WORKSPACE-ASSETS.md)
+- 📖 [Knowledge](docs/functionality/KNOWLEDGE.md)
+- 📖 [Security and Authorization](docs/functionality/SECURITY-AUTHORIZATION.md)
+- 📖 [Protocols](docs/protocols/PROTOCOLS.md)
 
 ---
 

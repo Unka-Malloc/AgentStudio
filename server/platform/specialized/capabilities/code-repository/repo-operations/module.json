@@ -10,6 +10,7 @@
   "defaultLoaded": true,
   "protocol": "v0.0.1:operation:resource-operation-1",
   "adapterProtocol": "git-cli.v1+review-provider-plan.v1",
+  "maintenanceRunbook": "skills/codespace/pact-gerrit-mcp-maintainer/SKILL.md",
   "maintenanceSkill": "skills/codespace/pact-gerrit-mcp-maintainer/SKILL.md",
   "components": {
     "repoOperationRoute": {

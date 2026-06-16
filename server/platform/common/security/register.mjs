@@ -3,7 +3,8 @@ import { registerPlatformService } from "../../interactive/platform-registry.mjs
 export function registerSecurityPlatformServices(registry, {
   securityPermissions = null,
   consoleAuth = null,
-  operationAuditStore = null
+  operationAuditStore = null,
+  processIdentity = null
 } = {}) {
   return [
     registerPlatformService(registry, {
@@ -29,6 +30,14 @@ export function registerSecurityPlatformServices(registry, {
       kind: "audit",
       ownerFeatureId: "security-permissions",
       value: operationAuditStore
+    }),
+    registerPlatformService(registry, {
+      id: "security.process_identity",
+      platform: "security",
+      label: "Process identity service",
+      kind: "identity-binding",
+      ownerFeatureId: "security-permissions",
+      value: processIdentity
     })
   ];
 }

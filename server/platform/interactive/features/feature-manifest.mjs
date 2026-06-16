@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { operationFeatureId } from "../../common/operation-dispatcher/operation-feature-resolution.mjs";
 
 export const DEFAULT_FEATURE_EDITION = "enterprise";
+export { operationFeatureId };
 
 function uniqueStrings(values = []) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
@@ -21,7 +23,6 @@ const CORE_CLIENT_REQUIRED_MODULE_IDS = new Set([
   "portable-data",
   "target-adapters",
   "mcp-plugins",
-  "skill-hub",
   "model-forwarding",
   "activity-snapshots",
   "settings"
@@ -83,6 +84,8 @@ export const FEATURE_MANIFEST = Object.freeze({
         "pdf-processor",
         "analysis-runtime",
         "knowledge-core",
+        "agentlibrary-playbooks",
+        "skill-hub",
         "external-knowledge-distillation",
         "agent-gateway",
         "agent-management",
@@ -110,7 +113,10 @@ export const FEATURE_MANIFEST = Object.freeze({
         "multimodal-parser",
         "analysis-runtime",
         "knowledge-core",
+        "agentlibrary-playbooks",
+        "skill-hub",
         "external-knowledge-distillation",
+        "knowledge-summarization",
         "knowledge-evolution",
         "knowledge-outline-reasoning",
         "agent-gateway",
@@ -176,7 +182,7 @@ export const FEATURE_MANIFEST = Object.freeze({
         panels: ["ConsoleShell", "StoragePanel", "ClientPanel", "SettingsDrawer", "ModulesDrawer"]
       },
       package: {
-        includePaths: ["server", "server-web", "docs/Architecture.md", "docs/SERVER_WEB.md"],
+        includePaths: ["server", "server-web", "docs/architecture/ARCHITECTURE.md", "docs/DESIGN.md"],
         excludePaths: []
       },
       tests: { suites: ["server:verify:core"] }
@@ -296,10 +302,35 @@ export const FEATURE_MANIFEST = Object.freeze({
         panels: ["ToolManagementPanel", "AgentPermissionPanel"]
       },
       package: {
-        includePaths: ["server/platform/specialized/capabilities/tools/tool-management-core", "server/config/entity-config/tools"],
+        includePaths: [
+          "server/platform/specialized/capabilities/tools/tool-management-core",
+          "server/platform/specialized/capabilities/skills/tool-skill-management-provider.mjs",
+          "server/config/entity-config/tools"
+        ],
         excludePaths: []
       },
       tests: { suites: ["server:verify:tool-management"] }
+    },
+    {
+      featureId: "skill-hub",
+      label: "Skill Hub package lifecycle and discovery",
+      group: "capabilities",
+      dependsOn: ["tool-management-core"],
+      defaultEnabled: false,
+      server: {
+        operationPrefixes: ["capability_packages.", "workspace.skill."],
+        modules: ["CapabilityPackageRegistry", "SkillHubDiscovery"],
+        webPanels: ["skill-hub"]
+      },
+      package: {
+        includePaths: [
+          "server/platform/specialized/capabilities/package-lifecycle",
+          "server/platform/specialized/capabilities/skills/README.md",
+          "docs/protocols/PROTOCOLS.md"
+        ],
+        excludePaths: []
+      },
+      tests: { suites: ["server:verify:tool-skill-management", "server:verify:capability-package-lifecycle"] }
     },
     {
       featureId: "strategy-management",
@@ -314,7 +345,7 @@ export const FEATURE_MANIFEST = Object.freeze({
         webPanels: ["strategy-management"]
       },
       package: {
-        includePaths: ["server/platform/specialized/capabilities/strategy-management", "docs/PROTOCOLS.md"],
+        includePaths: ["server/platform/specialized/capabilities/strategy-management", "docs/protocols/PROTOCOLS.md"],
         excludePaths: []
       },
       tests: { suites: ["server:verify:strategy-management"] }
@@ -404,8 +435,8 @@ export const FEATURE_MANIFEST = Object.freeze({
           "server/platform/specialized/agent/cloud-drive-port",
           "server/platform/specialized/console/cloud-drive-upstream-gateway.mjs",
           "server/platform/common/mcp/http-mcp-adapter.mjs",
-          "docs/scenarios/04-workspace-file-transfer.md",
-          "docs/scenarios/06-cloud-drive-sharing.md"
+          "docs/functionality/WORKSPACE-ASSETS.md",
+          "docs/functionality/EXTERNAL-SERVICES.md"
         ],
         excludePaths: []
       },
@@ -454,7 +485,7 @@ export const FEATURE_MANIFEST = Object.freeze({
           "server/platform/modules/knowledge/file-processor/FileNormalizer/Tika",
           "server/platform/modules/knowledge/tika",
           "server/platform/modules/knowledge/runtime/jre",
-          "docs/PROTOCOLS.md"
+          "docs/protocols/PROTOCOLS.md"
         ],
         removePaths: [
           "modules/jre",
@@ -508,7 +539,7 @@ export const FEATURE_MANIFEST = Object.freeze({
         mounts: ["multimodalParser"]
       },
       package: {
-        includePaths: ["docs/PROTOCOLS.md"],
+        includePaths: ["docs/protocols/PROTOCOLS.md"],
         excludePaths: []
       }
     },
@@ -597,7 +628,7 @@ export const FEATURE_MANIFEST = Object.freeze({
           "server/platform/specialized/knowledge/preprocessing/domain",
           "server/platform/specialized/knowledge/storage/knowledge-core",
           "server/protocols/knowledge/README.md",
-          "docs/PROTOCOLS.md"
+          "docs/protocols/PROTOCOLS.md"
         ],
         removePaths: [
           "server/platform/specialized/knowledge/preprocessing/chunking",
@@ -613,6 +644,53 @@ export const FEATURE_MANIFEST = Object.freeze({
         ]
       },
       tests: { suites: ["server:verify:knowledge"] }
+    },
+    {
+      featureId: "agentlibrary-playbooks",
+      label: "AgentLibrary Playbooks and retrieval playbook",
+      group: "knowledge",
+      dependsOn: ["knowledge-core", "tool-management-core"],
+      defaultEnabled: false,
+      server: {
+        operationPrefixes: [
+          "knowledge.agent_skill.",
+          "knowledge.retrieval_playbook.",
+          "knowledge.skills.",
+          "knowledge.playbooks.",
+          "knowledge.playbook_framework.",
+          "knowledge.golden_rules.",
+          "knowledge.rule_authoring.",
+          "knowledge.gold_cases.",
+          "knowledge.training_sets.",
+          "knowledge.evaluation."
+        ],
+        operations: [
+          "knowledge.evidence_gate.evaluate",
+          "knowledge.model_roles",
+          "knowledge.model_decision"
+        ],
+        modules: ["AgentLibraryPlaybookRuntime", "KnowledgeAgentSkillRuntime", "EvidenceSufficiencyGate"],
+        webPanels: ["agentlibrary-playbooks"]
+      },
+      package: {
+        includePaths: [
+          "server/platform/specialized/knowledge/invocation/knowledge-skill-runtime",
+          "server/platform/specialized/knowledge/invocation/knowledge-agent-skill-runtime",
+          "server/platform/specialized/knowledge/invocation/golden-rule-runtime",
+          "server/config/entity-config/playbooks",
+          "server/config/entity-config/skills/knowledge-skill-framework",
+          "server/scripts/migrate-knowledge-skills-to-playbooks.mjs",
+          "docs/protocols/PROTOCOLS.md"
+        ],
+        removePaths: [
+          "server/platform/specialized/knowledge/invocation/knowledge-skill-runtime",
+          "server/platform/specialized/knowledge/invocation/knowledge-agent-skill-runtime",
+          "server/platform/specialized/knowledge/invocation/golden-rule-runtime",
+          "server/scripts/distill-existing-knowledge-skills.mjs",
+          "server/scripts/migrate-knowledge-skills-to-playbooks.mjs"
+        ]
+      },
+      tests: { suites: ["server:verify:knowledge-skillization"] }
     },
     {
       featureId: "external-knowledge-distillation",
@@ -664,14 +742,32 @@ export const FEATURE_MANIFEST = Object.freeze({
       featureId: "knowledge-distillation",
       label: "Knowledge distillation (migrated to external service)",
       group: "knowledge",
-      dependsOn: ["knowledge-core"],
-      defaultEnabled: true,
+      dependsOn: ["agentlibrary-playbooks"],
+      defaultEnabled: false,
       lifecycle: {
         status: "must-migrate",
-        replacementFeature: "external-knowledge-distillation",
-        note: "Legacy feature marker; all distillation operations are now handled by external.knowledge.distillation"
+        replacementFeature: "agentlibrary-playbooks",
+        optionalExternalFeature: "external-knowledge-distillation",
+        note: "Legacy feature marker; built-in Playbooks use agentlibrary-playbooks and external distillation uses external-knowledge-distillation."
       },
       package: { includePaths: [], removePaths: [] }
+    },
+    {
+      featureId: "knowledge-summarization",
+      label: "Multi-agent knowledge summarization",
+      group: "knowledge",
+      dependsOn: ["knowledge-core", "agent-gateway"],
+      defaultEnabled: false,
+      server: {
+        operationPrefixes: ["knowledge.summarization."],
+        modules: ["KnowledgeSummarizationRuntime"],
+        webPanels: ["knowledge-summarization"]
+      },
+      package: {
+        includePaths: ["server/platform/specialized/knowledge/invocation/knowledge-summarization-runtime"],
+        removePaths: ["server/platform/specialized/knowledge/invocation/knowledge-summarization-runtime"]
+      },
+      tests: { suites: ["server:verify:multi-agent-summarization"] }
     },
     {
       featureId: "knowledge-evolution",
@@ -684,13 +780,15 @@ export const FEATURE_MANIFEST = Object.freeze({
           "knowledge.learning.",
           "knowledge.evolution.",
           "knowledge.skills.evaluation.",
-          "knowledge.skills.deployments."
+          "knowledge.skills.deployments.",
+          "knowledge.playbook_sets.evaluation.",
+          "knowledge.playbook_sets.deployments."
         ],
         modules: ["KnowledgeEvolutionRuntime"],
         webPanels: ["knowledge-evolution"]
       },
       package: {
-        includePaths: ["server/platform/specialized/knowledge/storage/knowledge-core", "docs/PROTOCOLS.md"],
+        includePaths: ["server/platform/specialized/knowledge/storage/knowledge-core", "docs/protocols/PROTOCOLS.md"],
         removePaths: [
           "server/platform/specialized/knowledge/invocation/knowledge-evolution-runtime",
           "server/scripts/verify-knowledge-distillation-optimization.mjs"
@@ -757,9 +855,9 @@ export const FEATURE_MANIFEST = Object.freeze({
           "server/platform/specialized/capabilities/agent-ingress/traffic-gateway",
           "server/scripts/gateway-ingress.mjs",
           "server/scripts/verify-gateway-ingress.mjs",
-          "docs/Architecture.md",
-          "docs/PROTOCOLS.md",
-          "docs/SERVER.md"
+          "docs/architecture/ARCHITECTURE.md",
+          "docs/protocols/PROTOCOLS.md",
+          "docs/functionality/SERVER-RUNTIME.md"
         ],
         removePaths: []
       },
@@ -778,7 +876,7 @@ export const FEATURE_MANIFEST = Object.freeze({
       package: {
         includePaths: [
           "server/platform/specialized/capabilities/code-repository/repo-operations",
-          "docs/PROTOCOLS.md"
+          "docs/protocols/PROTOCOLS.md"
         ]
       },
       tests: { suites: ["server:verify:resource-operations"] }
@@ -796,7 +894,7 @@ export const FEATURE_MANIFEST = Object.freeze({
       package: {
         includePaths: [
           "server/platform/specialized/capabilities/code-management/codespace",
-          "docs/PROTOCOLS.md"
+          "docs/protocols/PROTOCOLS.md"
         ]
       },
       tests: { suites: ["server:verify:codespace", "server:verify:v001-codespace-e2e"] }
@@ -821,7 +919,7 @@ export const FEATURE_MANIFEST = Object.freeze({
           "server/platform/specialized/capabilities/code-review/gerrit",
           "server/platform/specialized/capabilities/runtime-dependencies",
           "server/scripts/gerrit-local.mjs",
-          "docs/PROTOCOLS.md"
+          "docs/protocols/PROTOCOLS.md"
         ]
       },
       tests: { suites: ["server:verify:gerrit-mcp", "server:verify:runtime-dependency-downloads"] }
@@ -997,7 +1095,7 @@ export const FEATURE_MANIFEST = Object.freeze({
       server: { mounts: ["vectorStore"] },
       client: { modules: ["server.VectorStore"] },
       package: {
-        includePaths: ["docs/PROTOCOLS.md"],
+        includePaths: ["docs/protocols/PROTOCOLS.md"],
         excludePaths: []
       }
     },
@@ -1009,7 +1107,7 @@ export const FEATURE_MANIFEST = Object.freeze({
       defaultEnabled: false,
       server: { mounts: ["graphStore"] },
       package: {
-        includePaths: ["docs/PROTOCOLS.md"],
+        includePaths: ["docs/protocols/PROTOCOLS.md"],
         excludePaths: []
       }
     },
@@ -1241,127 +1339,6 @@ export async function resolveFeatureRuntimeFromEnv({
       ...splitFeatureList(env.PACT_DISABLED_FEATURES)
     ]
   });
-}
-
-export function operationFeatureId(operation = {}) {
-  const operationId = String(operation.id || "");
-  const operationFeature = String(operation.feature || "");
-
-  const localSharedspaceOperationIds = new Set([
-    "agent_workspaces.create",
-    "agent_workspaces.list",
-    "agent_workspaces.get",
-    "agent_workspaces.delete",
-    "agent_workspaces.folder.create",
-    "agent_workspaces.files.list",
-    "agent_workspaces.file.upload",
-    "agent_workspaces.file.stat",
-    "agent_workspaces.file.download",
-    "agent_workspaces.file.write",
-    "agent_workspaces.file.delete",
-    "agent_workspaces.file.move"
-  ]);
-  if (
-    localSharedspaceOperationIds.has(operationId) ||
-    operationId.startsWith("workspace.file.") ||
-    operationId.startsWith("sharedspace.") ||
-    operationId.startsWith("external.cloudDrive.")
-  ) {
-    return "local-sharedspace";
-  }
-
-  if (operationId === "knowledge.document_structure" || operationId === "knowledge.hierarchy.audit") {
-    return "knowledge-outline-reasoning";
-  }
-  if (
-    operationId.startsWith("knowledge.learning.") ||
-    operationId.startsWith("knowledge.evolution.") ||
-    operationId.startsWith("knowledge.skills.evaluation.") ||
-    operationId.startsWith("knowledge.skills.deployments.")
-  ) {
-    return "knowledge-evolution";
-  }
-  if (
-    operationId.startsWith("external.knowledge.distillation.")
-  ) {
-    return "external-knowledge-distillation";
-  }
-  if (
-    operationId.startsWith("knowledge.agent_skill.") ||
-    operationId.startsWith("knowledge.skills.") ||
-    operationId.startsWith("knowledge.golden_rules.") ||
-    operationId.startsWith("knowledge.rule_authoring.") ||
-    operationId.startsWith("knowledge.gold_cases.") ||
-    operationId.startsWith("knowledge.summarization.") ||
-    operationId.startsWith("knowledge.training_sets.") ||
-    operationId.startsWith("knowledge.evaluation.") ||
-    operationId === "knowledge.evidence_gate.evaluate" ||
-    operationId === "knowledge.model_roles" ||
-    operationId === "knowledge.model_decision"
-  ) {
-    return "knowledge-distillation";
-  }
-  if (operationId.startsWith("knowledge.agent_explore.") || operationId.startsWith("agent_workspaces.")) {
-    return "agent-exploration";
-  }
-  if (operationId.startsWith("context.session_memory.") || operationId.startsWith("agent_memory.")) {
-    return "agent-memory";
-  }
-  if (operationId.startsWith("maintenance_agent.")) {
-    return "maintenance-agent-runbooks";
-  }
-  if (["agents.list", "agents.create", "agents.update", "agents.delete"].includes(operationId)) {
-    return "agent-management";
-  }
-  if (operationId === "settings.model_probe") {
-    return "agent-gateway";
-  }
-  if (operationId.startsWith("agent_gateway.") || operationId.startsWith("agent_sync.") || operationId.startsWith("oauth.")) {
-    return "agent-gateway";
-  }
-  if (operationId.startsWith("mobile_relay.")) {
-    return "mobile-relay";
-  }
-  if (operationId.startsWith("repo.")) {
-    return "code-repository-operations";
-  }
-  if (operationId.startsWith("codespace.") || operationId.startsWith("workspace.code.")) {
-    return "codespace-management";
-  }
-  if (operationId.startsWith("gerrit.") || operationId.startsWith("runtime.dependencies.")) {
-    return "gerrit-service";
-  }
-
-  const featureByRegistryFeature = {
-    auth: "security-permissions",
-    discovery: "core-platform",
-    events: "core-platform",
-    runtime: "core-platform",
-    settings: "core-platform",
-    storage: "storage-core",
-    system: "core-platform",
-    raw_objects: "storage-core",
-    jobs: "work-queue-core",
-    uploads: "work-queue-core",
-    tool_management: "tool-management-core",
-    mobile_relay: "mobile-relay",
-    strategy_management: "strategy-management",
-    agent_memory: "agent-memory",
-    client_runtime_allocator: "client-runtime-core",
-    context_runtime: "client-runtime-core",
-    knowledge: "knowledge-core",
-    knowledge_taxonomy: "knowledge-core",
-    email_rules: "knowledge-core",
-    expert_vocabulary: "knowledge-core",
-    search: "knowledge-core",
-    custom_http_adapter: "agent-gateway",
-    agent_gateway: "agent-gateway",
-    agent_sync: "agent-gateway",
-    oauth: "agent-gateway",
-    agent_workspace: "agent-exploration",
-    maintenance_agent: "maintenance-agent-runbooks"
-  };
-  return featureByRegistryFeature[operationFeature] || "core-platform";
 }
 
 export function decorateOperationsWithFeatures(operations = []) {

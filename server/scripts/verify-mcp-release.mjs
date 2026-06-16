@@ -8,7 +8,8 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const projectRoot = path.resolve(new URL("../..", import.meta.url).pathname);
-const pkgStr = await fs.readFile(path.join(projectRoot, "mcp-connector", "package.json"), "utf8");
+const gatewayInstallerRoot = path.join(projectRoot, "server/platform/common/mcp/gateway-installer");
+const pkgStr = await fs.readFile(path.join(gatewayInstallerRoot, "package.json"), "utf8");
 const expectedVersion = JSON.parse(pkgStr).version;
 const EXPECTED_SUPPORTED_TARGETS = Object.freeze([
   "openclaw",
@@ -87,7 +88,7 @@ function assertResilientOneLineCommand(command) {
 }
 
 async function assertPublishedInstallDocsUseResilientCurl() {
-  const connectorReadmePath = path.join(projectRoot, "mcp-connector", "README.md");
+  const connectorReadmePath = path.join(gatewayInstallerRoot, "README.md");
   const publishedInstallDocPaths = [
     path.join(projectRoot, "docs", "MCP_INSTALL.md"),
     path.join(projectRoot, "docs", "MCP_INSTALL.zh-CN.md"),

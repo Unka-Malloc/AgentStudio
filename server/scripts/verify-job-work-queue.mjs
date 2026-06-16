@@ -16,6 +16,23 @@ function sha256(text) {
   return createHash("sha256").update(String(text)).digest("hex");
 }
 
+async function removeTempDirectoryWithRetry(directoryPath) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await fs.rm(directoryPath, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!["ENOTEMPTY", "EBUSY", "EPERM"].includes(error?.code)) {
+        throw error;
+      }
+      await sleep(100 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
 async function waitForCompletedJob(provider, jobId, { timeoutMs = 90_000 } = {}) {
   const startedAt = Date.now();
   let lastJob = null;
@@ -89,6 +106,22 @@ async function main() {
       queued.stateCounts.reduce((total, item) => total + Number(item.count || 0), 0) >= 1,
       true
     );
+    const queuedItem = queued.items.find((item) => item.payloadRef?.jobId === job.id);
+    assert.ok(queuedItem?.workItemId, "queued work item should be inspectable before dispatch");
+    const deadLettered = provider.queueStore.deadLetter({
+      workItemId: queuedItem.workItemId,
+      internal: true,
+      operationId: "verify.jobs.work_queue.dead_letter",
+      reason: "verify_dead_letter_retry_path"
+    });
+    assert.equal(deadLettered.deadLettered, true, "work item should enter dead_letter for retry proof");
+    assert.equal((await provider.getJob(job.id)).status, "queued", "dead-lettering scheduler state must not mutate business job state");
+    const retriedDeadLetter = provider.retryDeadLetterWorkQueue({
+      limit: 10,
+      reason: "verify_retry_dead_letter"
+    });
+    assert.equal(retriedDeadLetter.retriedCount, 1, "dead-letter retry should recover one work item");
+    assert.equal(retriedDeadLetter.failedCount, 0, "dead-letter retry should not fail");
 
     const completedJob = await waitForCompletedJob(provider, job.id);
     const result = await provider.getJobResult(job.id);
@@ -98,6 +131,10 @@ async function main() {
     assert.equal(inspected.stateCounts.some((item) => item.state === "acked" && item.count >= 1), true);
     const replay = provider.queueStore.rebuildProjection();
     assert.equal(replay.ok, true, `work queue replay should be stable: ${JSON.stringify(replay)}`);
+    const rebuildProof = provider.rebuildWorkQueueProof({
+      reason: "verify_rebuild_projection"
+    });
+    assert.equal(rebuildProof.ok, true, "provider rebuild proof should be exposed through work queue management");
 
     console.log(JSON.stringify({
       ok: true,
@@ -110,7 +147,7 @@ async function main() {
   } finally {
     await provider.close();
     await jobManager.close();
-    await fs.rm(userDataPath, { recursive: true, force: true });
+    await removeTempDirectoryWithRetry(userDataPath);
   }
 }
 

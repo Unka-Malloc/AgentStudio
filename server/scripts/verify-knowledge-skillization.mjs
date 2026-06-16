@@ -5,7 +5,9 @@ import path from "node:path";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
 import { createAgentWorkspace } from "../platform/specialized/agent/agent-workspace/index.mjs";
 import { createContextRuntime } from "../platform/specialized/agent/agent-context/interface/index.mjs";
+import { createModelDecisionRuntime } from "../platform/specialized/agent/agent-gateway/model-decision-runtime/index.mjs";
 import { createAgentExplorationRuntime } from "../platform/specialized/capabilities/tools/agent-exploration-runtime/index.mjs";
+import { createAgentLibraryPlaybookRuntime } from "../platform/specialized/knowledge/invocation/knowledge-skill-runtime/index.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 async function fetchJson(url, options = {}) {
@@ -48,10 +50,51 @@ async function createKnowledgeJob(baseUrl, title, body) {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-knowledge-skillization-"));
+const modelDecisionRuntime = createModelDecisionRuntime();
+const modelRoleIds = new Set(modelDecisionRuntime.describe().roles.map((role) => role.roleId));
+assert.equal(modelRoleIds.has("knowledge_playbook_distiller"), true);
+assert.equal(modelRoleIds.has("knowledge_skill_distiller"), true);
+const playbookDistillationDecision = await modelDecisionRuntime.decide({
+  roleId: "knowledge_playbook_distiller",
+  input: {
+    query: "contract approval",
+    fallbackSkill: {
+      title: "Contract Approval Playbook",
+      summary: "Check approval evidence before answering.",
+      evidenceRefs: ["ev_contract"]
+    }
+  }
+});
+assert.equal(playbookDistillationDecision.roleId, "knowledge_playbook_distiller");
+assert.equal(playbookDistillationDecision.decision.skill.title, "Contract Approval Playbook");
+const legacyDistillationDecision = await modelDecisionRuntime.decide({
+  roleId: "knowledge_skill_distiller",
+  input: {
+    query: "contract approval",
+    fallbackSkill: {
+      title: "Legacy Contract Skill",
+      summary: "Compatibility role alias.",
+      evidenceRefs: ["ev_contract"]
+    }
+  }
+});
+assert.equal(legacyDistillationDecision.roleId, "knowledge_skill_distiller");
+assert.equal(legacyDistillationDecision.decision.skill.title, "Legacy Contract Skill");
+
+const featureProfilePath = path.join(userDataPath, "feature-profile.json");
+await fs.writeFile(
+  featureProfilePath,
+  `${JSON.stringify({
+    name: "knowledge-skillization-verifier",
+    enableFeatures: ["knowledge-distillation"]
+  }, null, 2)}\n`,
+  "utf8"
+);
 const server = await startHttpServer({
   userDataPath,
   runtimeOptions: {
-    profile: "minimal"
+    profile: "minimal",
+    featureProfile: featureProfilePath
   }
 });
 await installAuthenticatedFetch(server);
@@ -71,6 +114,8 @@ try {
   const framework = await fetchJson(`${server.url}/api/knowledge/skill-framework`);
   assert.equal(framework.framework.frameworkId, "pact.default-knowledge-skill-framework");
   assert.ok(framework.framework.layers.some((layer) => layer.id === "honest_boundaries"));
+  const playbookFramework = await fetchJson(`${server.url}/api/knowledge/playbook-framework`);
+  assert.equal(playbookFramework.framework.frameworkId, framework.framework.frameworkId);
 
   const updatedFramework = await fetchJson(`${server.url}/api/knowledge/skill-framework`, {
     method: "POST",
@@ -85,8 +130,10 @@ try {
     })
   });
   assert.equal(updatedFramework.framework.qualityGates.minEvidence, 1);
+  const updatedPlaybookFramework = await fetchJson(`${server.url}/api/knowledge/playbook-framework`);
+  assert.equal(updatedPlaybookFramework.framework.qualityGates.minEvidence, 1);
 
-  const generated = await fetchJson(`${server.url}/api/knowledge/skills/generate`, {
+  const generated = await fetchJson(`${server.url}/api/knowledge/playbooks/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -104,7 +151,7 @@ try {
   assert.ok(generated.skill.skill.honestBoundaries.length >= 1);
 
   const published = await fetchJson(
-    `${server.url}/api/knowledge/skills/${encodeURIComponent(generated.skill.skillId)}/resolve`,
+    `${server.url}/api/knowledge/playbooks/${encodeURIComponent(generated.skill.skillId)}/resolve`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -146,13 +193,20 @@ try {
     `${server.url}/api/knowledge/skills?status=published&query=${encodeURIComponent("发票抬头")}`
   );
   assert.ok(listed.items.some((item) => item.skillId === skillId));
+  const listedPlaybooks = await fetchJson(
+    `${server.url}/api/knowledge/playbooks?status=published&query=${encodeURIComponent("发票抬头")}`
+  );
+  assert.ok(listedPlaybooks.items.some((item) => item.skillId === skillId));
 
   const fetched = await fetchJson(`${server.url}/api/knowledge/skills/${encodeURIComponent(skillId)}`);
   assert.equal(fetched.skillId, skillId);
   assert.equal(fetched.status, "published");
+  const fetchedPlaybook = await fetchJson(`${server.url}/api/knowledge/playbooks/${encodeURIComponent(skillId)}`);
+  assert.equal(fetchedPlaybook.skillId, skillId);
+  assert.equal(fetchedPlaybook.status, "published");
 
   const rejected = await fetchJson(
-    `${server.url}/api/knowledge/skills/${encodeURIComponent(skillId)}/resolve`,
+    `${server.url}/api/knowledge/playbooks/${encodeURIComponent(skillId)}/resolve`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -162,6 +216,60 @@ try {
   assert.equal(rejected.skill.status, "archived");
 } finally {
   await server.close();
+}
+
+const migrationRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-playbook-storage-migration-"));
+try {
+  const legacyBundleDir = path.join(migrationRoot, "knowledge-skills", "bundles", "legacy_contract");
+  await fs.mkdir(legacyBundleDir, { recursive: true });
+  await fs.writeFile(
+    path.join(legacyBundleDir, "skill.json"),
+    `${JSON.stringify({
+      protocolVersion: "v0.0.1:knowledge:skill-1",
+      skillId: "legacy_contract",
+      version: 1,
+      status: "published",
+      title: "Legacy Contract Skill",
+      sourceQuery: "contract approval",
+      summary: "Historical KnowledgeSkill record.",
+      skill: {
+        decisionHeuristics: ["Check budget approval evidence before answering."],
+        honestBoundaries: ["Do not rewrite canonical facts."]
+      },
+      evidenceRefs: ["ev_contract"],
+      qualityReport: { passed: true },
+      createdAt: "2026-06-14T00:00:00.000Z",
+      updatedAt: "2026-06-14T00:00:00.000Z",
+      publishedAt: "2026-06-14T00:00:00.000Z"
+    }, null, 2)}\n`,
+    "utf8"
+  );
+  const playbookRuntime = createAgentLibraryPlaybookRuntime({
+    userDataPath: migrationRoot,
+    runtime: { mounts: {} }
+  });
+  try {
+    const migration = playbookRuntime.migrateLegacySkillsToPlaybooks();
+    assert.equal(migration.ok, true);
+    assert.equal(migration.migratedCount, 1);
+    const listedPlaybooks = playbookRuntime.listSkills({ status: "published" });
+    assert.equal(listedPlaybooks.playbookProtocolVersion, "v0.0.1:knowledge:playbook-1");
+    assert.ok(listedPlaybooks.items.some((item) =>
+      item.playbookId === "legacy_contract" &&
+      item.legacySkillId === "legacy_contract" &&
+      item.skillId === "legacy_contract"
+    ));
+    const migratedPlaybook = playbookRuntime.getSkill("legacy_contract");
+    assert.equal(migratedPlaybook.playbookId, "legacy_contract");
+    assert.equal(migratedPlaybook.legacySkillId, "legacy_contract");
+    await fs.stat(path.join(migrationRoot, "agentlibrary-playbooks", "agentlibrary-playbooks.sqlite"));
+    await fs.stat(path.join(migrationRoot, "agentlibrary-playbooks", "bundles", "legacy_contract", "playbook.json"));
+    await fs.stat(path.join(migrationRoot, "knowledge-skills", "bundles", "legacy_contract", "skill.json"));
+  } finally {
+    playbookRuntime.close();
+  }
+} finally {
+  await fs.rm(migrationRoot, { recursive: true, force: true });
 }
 
 const agentRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pact-knowledge-skill-agent-"));
@@ -263,10 +371,18 @@ const explorationRuntime = createAgentExplorationRuntime({
   knowledgeSkillRuntime: fixtureKnowledgeSkillRuntime,
   agentGatewayCall: async (input = {}) => {
     callCount += 1;
-    assert.match(input.messages[0].content, /KnowledgeSkillContext/);
+    assert.match(input.messages[0].content, /AgentLibraryPlaybookContext/);
+    assert.ok(
+      input.parameters.tools.some((tool) => tool.function?.name === "playbook_search"),
+      "agent exploration must expose playbook_search"
+    );
     assert.ok(
       input.parameters.tools.some((tool) => tool.function?.name === "knowledge_skill_search"),
       "agent exploration must expose knowledge_skill_search"
+    );
+    assert.ok(
+      input.parameters.tools.some((tool) => tool.function?.name === "playbook_propose"),
+      "agent exploration must expose playbook_propose"
     );
     assert.ok(
       input.parameters.tools.some((tool) => tool.function?.name === "knowledge_skill_propose"),
@@ -281,7 +397,7 @@ const explorationRuntime = createAgentExplorationRuntime({
             id: "call_skill",
             type: "function",
             function: {
-              name: "knowledge_skill_search",
+              name: "playbook_search",
               arguments: JSON.stringify({ query: "合同预算审批", limit: 1 })
             }
           }
@@ -313,7 +429,7 @@ const explorationRuntime = createAgentExplorationRuntime({
             id: "call_skill_propose",
             type: "function",
             function: {
-              name: "knowledge_skill_propose",
+              name: "playbook_propose",
               arguments: JSON.stringify({
                 title: "合同续签审批检查 Skill",
                 sourceQuery: "合同续签需要注意什么？",
@@ -344,9 +460,9 @@ try {
     limit: 1
   });
   assert.equal(result.ok, true);
-  assert.equal(result.toolResults[0].tool, "knowledge_skill_search");
+  assert.equal(result.toolResults[0].tool, "playbook_search");
   assert.equal(result.toolResults[1].tool, "keyword_search");
-  assert.equal(result.toolResults[2].tool, "knowledge_skill_propose");
+  assert.equal(result.toolResults[2].tool, "playbook_propose");
   assert.equal(result.toolResults[2].result.status, "pending_review");
   assert.ok(result.knowledgeSkillContext.skills.length >= 1);
   assert.ok(result.evidenceRefs.includes("ev_contract"));

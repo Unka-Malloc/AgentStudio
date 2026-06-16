@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { pathIsWithinRoot } from "../../../../common/security/local-path-boundary.mjs";
 
 function asText(value, fallback = "") {
   return String(value ?? fallback).trim();
@@ -25,12 +26,93 @@ function normalizeRelativePath(value = "") {
 
 export class AcpPermissionBridge {
   constructor({ workspaceRoot = process.cwd(), fileSystem = null } = {}) {
-    this.workspaceRoot = workspaceRoot;
-    this.fileSystem = fileSystem || {
-      readFile: fs.readFile,
-      writeFile: fs.writeFile,
-      mkdir: fs.mkdir
+    this.workspaceRoot = path.resolve(workspaceRoot);
+    const providedFileSystem = asObject(fileSystem, {});
+    this.fileSystem = {
+      readFile: providedFileSystem.readFile || fs.readFile,
+      writeFile: providedFileSystem.writeFile || fs.writeFile,
+      mkdir: providedFileSystem.mkdir || fs.mkdir,
+      lstat: providedFileSystem.lstat || fs.lstat,
+      realpath: providedFileSystem.realpath || fs.realpath
     };
+  }
+
+  async resolveWorkspacePath(relativePath, { forWrite = false, expectedType = "" } = {}) {
+    const absolutePath = path.resolve(this.workspaceRoot, relativePath);
+    if (!pathIsWithinRoot(absolutePath, this.workspaceRoot)) {
+      throw new Error("Workspace path escapes root.");
+    }
+    const rootStat = await this.fileSystem.lstat(this.workspaceRoot);
+    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+      throw new Error("Workspace root must be a regular directory.");
+    }
+    const rootRealPath = await this.fileSystem.realpath(this.workspaceRoot);
+
+    if (!forWrite) {
+      const stat = await this.fileSystem.lstat(absolutePath);
+      if (stat.isSymbolicLink()) {
+        throw new Error("Workspace path cannot be a symbolic link.");
+      }
+      if (expectedType === "file" && !stat.isFile()) {
+        throw new Error("Workspace path must be a file.");
+      }
+      const realPath = await this.fileSystem.realpath(absolutePath);
+      if (!pathIsWithinRoot(realPath, rootRealPath)) {
+        throw new Error("Workspace real path escapes root.");
+      }
+      return { relativePath, absolutePath };
+    }
+
+    const segments = relativePath ? relativePath.split("/").filter(Boolean) : [];
+    let current = this.workspaceRoot;
+    for (const segment of segments.slice(0, -1)) {
+      current = path.join(current, segment);
+      try {
+        const stat = await this.fileSystem.lstat(current);
+        if (stat.isSymbolicLink()) {
+          throw new Error("Workspace write path cannot pass through a symbolic link directory.");
+        }
+        if (!stat.isDirectory()) {
+          throw new Error("Workspace write parent must be a directory.");
+        }
+        const realPath = await this.fileSystem.realpath(current);
+        if (!pathIsWithinRoot(realPath, rootRealPath)) {
+          throw new Error("Workspace write parent escapes root.");
+        }
+      } catch (error) {
+        if (error?.code === "ENOENT") {
+          break;
+        }
+        throw error;
+      }
+    }
+
+    try {
+      const parentRealPath = await this.fileSystem.realpath(path.dirname(absolutePath));
+      if (!pathIsWithinRoot(parentRealPath, rootRealPath)) {
+        throw new Error("Workspace write parent escapes root.");
+      }
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    try {
+      const stat = await this.fileSystem.lstat(absolutePath);
+      if (stat.isSymbolicLink()) {
+        throw new Error("Workspace write path cannot be a symbolic link.");
+      }
+      const realPath = await this.fileSystem.realpath(absolutePath);
+      if (!pathIsWithinRoot(realPath, rootRealPath)) {
+        throw new Error("Workspace write path escapes root.");
+      }
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        throw error;
+      }
+    }
+    return { relativePath, absolutePath };
   }
 
   denyTerminal(input = {}) {
@@ -54,8 +136,19 @@ export class AcpPermissionBridge {
         reasonCode: "path_denied"
       };
     }
-    const absolutePath = path.join(this.workspaceRoot, relativePath);
-    const content = await this.fileSystem.readFile(absolutePath, "utf8");
+    let resolved;
+    try {
+      resolved = await this.resolveWorkspacePath(relativePath, { expectedType: "file" });
+    } catch {
+      return {
+        ok: false,
+        status: "denied",
+        action: "fs.readTextFile",
+        reasonCode: "path_denied",
+        path: relativePath
+      };
+    }
+    const content = await this.fileSystem.readFile(resolved.absolutePath, "utf8");
     return {
       ok: true,
       status: "completed",
@@ -79,6 +172,19 @@ export class AcpPermissionBridge {
         status: "denied",
         action: "fs.writeTextFile",
         reasonCode: "path_denied",
+        payloadHash
+      };
+    }
+    let resolved;
+    try {
+      resolved = await this.resolveWorkspacePath(relativePath, { forWrite: true });
+    } catch {
+      return {
+        ok: false,
+        status: "denied",
+        action: "fs.writeTextFile",
+        reasonCode: "path_denied",
+        path: relativePath,
         payloadHash
       };
     }
@@ -124,15 +230,14 @@ export class AcpPermissionBridge {
         approvedPayloadHash: approval.payloadHash
       };
     }
-    const absolutePath = path.join(this.workspaceRoot, relativePath);
     let beforeDigest = "";
     try {
-      beforeDigest = sha256(await this.fileSystem.readFile(absolutePath, "utf8"));
+      beforeDigest = sha256(await this.fileSystem.readFile(resolved.absolutePath, "utf8"));
     } catch {
       beforeDigest = "";
     }
-    await this.fileSystem.mkdir(path.dirname(absolutePath), { recursive: true });
-    await this.fileSystem.writeFile(absolutePath, content, "utf8");
+    await this.fileSystem.mkdir(path.dirname(resolved.absolutePath), { recursive: true });
+    await this.fileSystem.writeFile(resolved.absolutePath, content, "utf8");
     return {
       ok: true,
       status: "completed",

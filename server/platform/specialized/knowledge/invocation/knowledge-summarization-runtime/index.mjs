@@ -44,6 +44,37 @@ function normalizeText(value) {
     .trim();
 }
 
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    const text = normalizeText(value);
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+}
+
+function workspaceAccessFromInput(input = {}) {
+  const options = asObject(input);
+  const authUser = asObject(options.authSession?.user);
+  const actorUserId = firstNonEmpty(
+    options.actorUserId,
+    options.userId,
+    options.boundUserId,
+    options.subjectId,
+    options.username,
+    authUser.userId,
+    authUser.username,
+    "agent:knowledge-summarization"
+  );
+  return {
+    actorUserId,
+    userId: actorUserId,
+    subjectId: actorUserId,
+    username: actorUserId
+  };
+}
+
 function truncateText(value, maxLength = 280) {
   const text = normalizeText(value);
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
@@ -413,7 +444,9 @@ export function createSummarizationRuntime({
   }
 
   async function createRoleContext({ roleId, workspaceId, runId, input, evidenceCards = [], toolState = {} }) {
+    const workspaceAccess = workspaceAccessFromInput(input);
     const workspaceState = agentWorkspace.getWorkspace({
+      ...workspaceAccess,
       workspaceId,
       includePrivate: false
     });
@@ -456,13 +489,17 @@ export function createSummarizationRuntime({
     const query = normalizeText(input.query || input.q || input.title || DEFAULT_QUERY) || DEFAULT_QUERY;
     const requestedWorkspaceId = normalizeText(input.workspaceId || "");
     const callerSelectedWorkspace = Boolean(normalizeText(callerInput.workspaceId || ""));
+    const workspaceAccess = workspaceAccessFromInput(input);
     const existingWorkspace = requestedWorkspaceId
       ? agentWorkspace.getWorkspace({
+          ...workspaceAccess,
           workspaceId: requestedWorkspaceId,
           includePrivate: true
         })
       : null;
     const workspaceResult = existingWorkspace || agentWorkspace.createWorkspace({
+      ...workspaceAccess,
+      ownerUserId: workspaceAccess.actorUserId,
       workspaceId: requestedWorkspaceId,
       title: input.title || `Knowledge summarization: ${truncateText(query, 80)}`,
       objective: query,
@@ -477,7 +514,7 @@ export function createSummarizationRuntime({
     });
     const workspace = workspaceResult.workspace || workspaceResult;
     const workspaceContext = typeof agentWorkspace.getWorkspaceContext === "function"
-      ? agentWorkspace.getWorkspaceContext(workspace.workspaceId) || null
+      ? agentWorkspace.getWorkspaceContext(workspace.workspaceId, workspaceAccess) || null
       : null;
     const explicitModelAlias = normalizeText(callerInput.modelAlias || callerInput.alias || "");
     const allocatedModelAlias = normalizeText(input.modelAlias || input.alias || "");
@@ -1012,6 +1049,7 @@ export function createSummarizationRuntime({
     const currentRun = agentWorkspace.getRun(run.runId);
     const artifacts = agentWorkspace.listRunArtifacts(run.runId);
     const workspaceState = agentWorkspace.getWorkspace({
+      ...workspaceAccess,
       workspaceId: workspace.workspaceId,
       includePrivate: Boolean(input.includePrivate)
     });
@@ -1036,8 +1074,10 @@ export function createSummarizationRuntime({
     if (!run) {
       return null;
     }
+    const workspaceAccess = workspaceAccessFromInput(options);
     const artifacts = agentWorkspace.listRunArtifacts(runId);
     const workspace = agentWorkspace.getWorkspace({
+      ...workspaceAccess,
       workspaceId: run.workspaceId,
       includePrivate: Boolean(options.includePrivate)
     });
@@ -1046,7 +1086,7 @@ export function createSummarizationRuntime({
       run,
       workspace: workspace?.workspace || null,
       workspaceContext: typeof agentWorkspace.getWorkspaceContext === "function"
-        ? agentWorkspace.getWorkspaceContext(run.workspaceId) || null
+        ? agentWorkspace.getWorkspaceContext(run.workspaceId, workspaceAccess) || null
         : null,
       workspaceSummary: workspace?.summary || {},
       artifacts,

@@ -95,11 +95,11 @@ describe("console-domain operation edge complements", () => {
         responseProfile: "agent",
         scopeSourceIds: ["source-session"]
       }));
-      expect(context.agentWorkspace.getSessionContext).toHaveBeenCalledWith("session-1", {
+      expect(context.agentWorkspace.getSessionContext).toHaveBeenCalledWith("session-1", expect.objectContaining({
         actorUserId: "u-1",
-        canAccessAll: true,
-        sharingMode: "team-shared"
-      });
+        canAccessAll: false,
+        sharingMode: "owner-bound"
+      }));
     });
   });
 

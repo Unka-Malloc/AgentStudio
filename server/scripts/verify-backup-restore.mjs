@@ -92,7 +92,7 @@ function verifyOperationsAndTools() {
   assert.ok(restoreTool, "storage restore tool must be exposed");
   assert.equal(restoreTool.operationId, "storage.backups.restore");
   assert.ok(restoreTool.toolsets.includes("pact.runtime.maintain"));
-  assert.ok(restoreTool.requiredScopes.includes("knowledge:maintain"));
+  assert.ok(restoreTool.requiredScopes.includes("runtime:admin"));
 }
 
 async function main() {

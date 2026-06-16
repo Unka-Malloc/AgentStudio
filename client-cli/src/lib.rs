@@ -1,10 +1,17 @@
 pub mod client_state;
+pub mod connectors;
 pub mod conversations;
 pub mod forwarding;
+pub mod knowledge_cache;
+pub mod local_runtime;
+pub mod mail;
+pub mod mcp_local_bridge;
 pub mod mcp_plugins;
 pub mod mcp_trust;
 pub mod mobile_relay;
 pub mod paths;
+pub mod process_identity;
 pub mod runtime_adapters;
 pub mod skill_hub;
+pub mod source_queue;
 pub mod targets;

@@ -6,6 +6,7 @@ import path from "node:path";
 import { SERVER_API_OPERATIONS } from "../platform/common/operation-dispatcher/operation-registry.mjs";
 import { createToolCatalog } from "../platform/specialized/capabilities/tools/tool-management-core/catalog.mjs";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 import { authHeaders, installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 const REQUIRED_OPERATIONS = [
@@ -59,6 +60,7 @@ function mcpRequest(method, params = {}, id = 1) {
 }
 
 let mcpRequestId = 0;
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
 
 async function callCodespaceOperation({ serverUrl, token, operation, input = {} }) {
   mcpRequestId += 1;
@@ -176,6 +178,11 @@ for (const operationId of REQUIRED_OPERATIONS) {
 }
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-v001-codespace-"));
+const previousRepoOperationRoots = process.env.PACT_REPO_OPERATION_ROOTS;
+process.env.PACT_REPO_OPERATION_ROOTS = [
+  userDataPath,
+  previousRepoOperationRoots || ""
+].filter(Boolean).join(path.delimiter);
 const server = await startHttpServer({
   userDataPath,
   distPath: "",
@@ -431,4 +438,10 @@ try {
 } finally {
   await server.close();
   await fs.rm(userDataPath, { recursive: true, force: true });
+  if (previousRepoOperationRoots === undefined) {
+    delete process.env.PACT_REPO_OPERATION_ROOTS;
+  } else {
+    process.env.PACT_REPO_OPERATION_ROOTS = previousRepoOperationRoots;
+  }
+  restoreCapabilityKernelEnv();
 }

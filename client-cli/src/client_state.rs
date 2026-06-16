@@ -4,6 +4,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -11,7 +13,14 @@ const STATE_SCHEMA_VERSION: &str = "v0.0.1:schema:definition-1";
 const CLIENT_STATE_DIR: &str = "future-client";
 const ACTIVITY_FILE: &str = "activity.jsonl";
 const SNAPSHOT_DIR: &str = "snapshots";
-const COLLECTIONS: &[&str] = &["settings", "targets", "pairings", "skills", "pins"];
+const COLLECTIONS: &[&str] = &[
+    "settings",
+    "targets",
+    "pairings",
+    "skills",
+    "pins",
+    "identities",
+];
 
 #[derive(Clone, Debug)]
 pub struct ClientStateStore {
@@ -419,7 +428,11 @@ fn atomic_write_text(path: &Path, content: &str) -> Result<()> {
     }
     let tmp = path.with_extension(format!("tmp-{}", timestamp()));
     fs::write(&tmp, content)?;
+    #[cfg(unix)]
+    fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))?;
     fs::rename(tmp, path)?;
+    #[cfg(unix)]
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
     Ok(())
 }
 

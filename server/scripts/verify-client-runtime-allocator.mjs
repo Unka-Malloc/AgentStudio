@@ -206,6 +206,7 @@ try {
       clientUid: "client-a",
       question: "hello"
     },
+    contextCompactionSource: "agent_gateway.call",
     userDataPath,
     clientRuntimeAllocator: allocator
   });

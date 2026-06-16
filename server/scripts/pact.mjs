@@ -311,6 +311,8 @@ async function readRpcParams(args) {
 
 function readHeaders(args) {
   const headers = {
+    "x-pact-client-kind": "pact-client",
+    "x-pact-client-id": process.env.PACT_CLIENT_ID || "pact-cli",
     ...envAuthHeaders()
   };
   for (const entry of args.header || []) {

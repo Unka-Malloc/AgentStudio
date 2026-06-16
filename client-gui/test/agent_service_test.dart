@@ -45,7 +45,17 @@ void main() {
             jsonEncode({
               'ok': true,
               'candidates': [
-                {'target': 'opencode', 'label': 'OpenCode', 'kind': 'cli', 'status': 'detected', 'configured': true, 'confidence': 0.88, 'configPath': '/tmp/opencode', 'adapterStatus': 'implemented', 'manual': true},
+                {
+                  'target': 'opencode',
+                  'label': 'OpenCode',
+                  'kind': 'cli',
+                  'status': 'detected',
+                  'configured': true,
+                  'confidence': 0.88,
+                  'configPath': '/tmp/opencode',
+                  'adapterStatus': 'implemented',
+                  'manual': true,
+                },
               ],
             }),
             '',
@@ -62,20 +72,23 @@ void main() {
     expect(captured.single, contains('targets scan'));
   });
 
-  test('falls back to pact-client in PATH when no binary is discovered', () async {
-    final captured = <String>[];
-    final agentService = AgentService(
-      resolveCliBinary: () async => null,
-      runCliExecutable: (executable, args, env) {
-        captured.add(executable);
-        return Future.value(ProcessResult(1, 0, '{"ok":true}', ''));
-      },
-    );
+  test(
+    'falls back to pact-client in PATH when no binary is discovered',
+    () async {
+      final captured = <String>[];
+      final agentService = AgentService(
+        resolveCliBinary: () async => null,
+        runCliExecutable: (executable, args, env) {
+          captured.add(executable);
+          return Future.value(ProcessResult(1, 0, '{"ok":true}', ''));
+        },
+      );
 
-    await agentService.restoreSnapshot('snapshot-codex-1');
-    expect(captured.single, 'pact-client');
-    expect(captured.length, 1);
-  });
+      await agentService.restoreSnapshot('snapshot-codex-1');
+      expect(captured.single, 'pact-client');
+      expect(captured.length, 1);
+    },
+  );
 
   test('wraps pact-client execution failure as an exception', () async {
     final agentService = AgentService(
@@ -105,16 +118,29 @@ void main() {
           ProcessResult(
             0,
             0,
-            jsonEncode({'ok': true, 'snapshots': [], 'pairings': [], 'skills': [], 'profiles': []}),
+            jsonEncode({
+              'ok': true,
+              'snapshots': [],
+              'pairings': [],
+              'skills': [],
+              'profiles': [],
+            }),
             '',
           ),
         );
       },
     );
 
-    await agentService.mcpPluginStatus(target: 'codex', configPath: ' /tmp/code ');
+    await agentService.mcpPluginStatus(
+      target: 'codex',
+      configPath: ' /tmp/code ',
+    );
     await agentService.updateMcpPlugin(target: 'codex');
-    await agentService.rollbackMcpPlugin(target: 'codex', snapshotId: 'snapshot-1', configPath: ' /tmp/code ');
+    await agentService.rollbackMcpPlugin(
+      target: 'codex',
+      snapshotId: 'snapshot-1',
+      configPath: ' /tmp/code ',
+    );
     await agentService.listSnapshots(target: 'codex');
     await agentService.listPairings(agent: 'codex');
     await agentService.requestPairing(agent: 'codex', target: 'manual');
@@ -122,28 +148,104 @@ void main() {
     await agentService.revokePairing(agent: 'codex');
     await agentService.listSkills(agent: 'codex');
     await agentService.listModelProfiles();
-    await agentService.saveCommandModelProfile(profileId: 'local-echo', command: 'cat');
+    await agentService.saveCommandModelProfile(
+      profileId: 'local-echo',
+      command: 'cat',
+    );
     await agentService.forwardText(profileId: 'local-echo', text: 'hello');
+    await agentService.localRuntimeStatus();
+    await agentService.ensureLocalRuntime(
+      sourceRoot: '/repo',
+      presetConfig:
+          '/repo/server/platform/common/composition-management/client-local-runtime.preset.json',
+      port: 17328,
+      rebuild: true,
+    );
+    await agentService.startLocalRuntime(port: 17328);
+    await agentService.restartLocalRuntime(port: 17328);
+    await agentService.stopLocalRuntime();
+    await agentService.localRuntimeLogs(tail: 50);
 
-    expect(captured[0], ['mcp', 'plugin', 'status', '--target', 'codex', '--config-path', '/tmp/code']);
+    expect(captured[0], [
+      'mcp',
+      'plugin',
+      'status',
+      '--target',
+      'codex',
+      '--config-path',
+      '/tmp/code',
+    ]);
     expect(captured[1], ['mcp', 'plugin', 'update', '--target', 'codex']);
-    expect(captured[2], ['mcp', 'plugin', 'rollback', '--target', 'codex', '--snapshot-id', 'snapshot-1', '--config-path', '/tmp/code']);
+    expect(captured[2], [
+      'mcp',
+      'plugin',
+      'rollback',
+      '--target',
+      'codex',
+      '--snapshot-id',
+      'snapshot-1',
+      '--config-path',
+      '/tmp/code',
+    ]);
     expect(captured[3], ['snapshots', 'list', '--target', 'codex']);
     expect(captured[4], ['agents', 'pair', 'list', '--agent', 'codex']);
-    expect(captured[5], ['agents', 'pair', 'request', '--agent', 'codex', '--target', 'manual']);
+    expect(captured[5], [
+      'agents',
+      'pair',
+      'request',
+      '--agent',
+      'codex',
+      '--target',
+      'manual',
+    ]);
     expect(captured[6], ['agents', 'pair', 'approve', '--agent', 'codex']);
     expect(captured[7], ['agents', 'pair', 'revoke', '--agent', 'codex']);
     expect(captured[8], ['skill', 'list', '--agent', 'codex']);
     expect(captured[9], ['model', 'profiles', 'list']);
-    expect(captured[10], ['model', 'profiles', 'set', 'local-echo', '--command', 'cat']);
-    expect(captured[11], ['forward', '--profile', 'local-echo', '--text', 'hello']);
+    expect(captured[10], [
+      'model',
+      'profiles',
+      'set',
+      'local-echo',
+      '--command',
+      'cat',
+    ]);
+    expect(captured[11], [
+      'forward',
+      '--profile',
+      'local-echo',
+      '--text',
+      'hello',
+    ]);
+    expect(captured[12], ['local-runtime', 'status']);
+    expect(captured[13], [
+      'local-runtime',
+      'ensure',
+      '--source-root',
+      '/repo',
+      '--preset-config',
+      '/repo/server/platform/common/composition-management/client-local-runtime.preset.json',
+      '--port',
+      '17328',
+      '--rebuild',
+      'true',
+    ]);
+    expect(captured[14], ['local-runtime', 'start', '--port', '17328']);
+    expect(captured[15], ['local-runtime', 'restart', '--port', '17328']);
+    expect(captured[16], ['local-runtime', 'stop']);
+    expect(captured[17], ['local-runtime', 'logs', '--tail', '50']);
   });
 
   test('returns empty list when list output is invalid', () async {
     final agentService = AgentService(
       runCliExecutable: (executable, args, env) {
         return Future.value(
-          ProcessResult(0, 0, jsonEncode({'ok': true, 'pairings': 'broken'}), ''),
+          ProcessResult(
+            0,
+            0,
+            jsonEncode({'ok': true, 'pairings': 'broken'}),
+            '',
+          ),
         );
       },
     );

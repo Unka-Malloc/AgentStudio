@@ -14,6 +14,7 @@ import {
 } from "../platform/specialized/capabilities/package-lifecycle/index.mjs";
 import { executeConsoleDomainOperation } from "../platform/specialized/console/console-domain-operation-executor.mjs";
 import { createToolCatalog } from "../platform/specialized/capabilities/tools/tool-management-core/catalog.mjs";
+import { createContributionRegistry } from "../platform/specialized/agent/workspace-contribution/index.mjs";
 
 function signedManifest(input) {
   const normalized = normalizeCapabilityPackageManifest(input);
@@ -184,6 +185,13 @@ async function verifyRegistryLifecycle() {
       actor: "skill-release-manager"
     });
     assert.equal(activeSkill.record.status, "active");
+    const skillUsage = await registry.recordUsage(skillSubmission.record.manifest.packageId, {
+      actorId: "agent-1",
+      workspaceId: "workspace-main",
+      action: "skill.used"
+    });
+    assert.equal(skillUsage.usage.usageCount, 1);
+    assert.equal(skillUsage.usage.successfulUseCount, 1);
 
     const described = await registry.describe();
     assert.equal(described.protocolVersion, CAPABILITY_PACKAGE_LIFECYCLE_PROTOCOL_VERSION);
@@ -228,6 +236,91 @@ async function verifyRegistryLifecycle() {
   }
 }
 
+async function verifyWorkspaceSkillFacade() {
+  const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-workspace-skill-facade-"));
+  try {
+    const upload = await executeConsoleDomainOperation({
+      operationId: "workspace.skill.upload",
+      input: {
+        workspaceId: "workspace-main",
+        skillId: "renewal-review",
+        title: "Renewal Review",
+        description: "Review renewal evidence without mutating canonical facts.",
+        files: [{ path: "SKILL.md", content: "# Renewal Review\n" }]
+      },
+      context: {
+        userDataPath,
+        authSession: { user: { username: "agent-a", type: "agent" } }
+      }
+    });
+    assert.equal(upload.status, 201);
+    assert.equal(upload.payload.skill.ownedBySkillHub, true);
+    assert.equal(upload.payload.skill.contributionId, upload.payload.skill.skillPackageId);
+    assert.equal(upload.payload.contribution.skillManifestRef, `skill-hub:${upload.payload.skill.skillPackageId}`);
+
+    const registry = createCapabilityPackageRegistry({ userDataPath });
+    const described = await registry.describe();
+    const packageRecord = described.packages.find((record) => record.manifest.packageId === upload.payload.skill.skillPackageId);
+    assert.ok(packageRecord, "workspace.skill.upload must create a Skill Hub package record");
+    assert.equal(packageRecord.manifest.kind, "skill");
+    assert.equal(packageRecord.library.storage, "server-skill-library");
+    assert.equal(packageRecord.manifest.metadata.workspaceId, "workspace-main");
+
+    const contributionRegistry = createContributionRegistry({ workspaceId: "workspace-main", userDataPath });
+    const projection = contributionRegistry.getContribution(upload.payload.skill.skillPackageId);
+    assert.equal(projection.skillManifestRef, `skill-hub:${upload.payload.skill.skillPackageId}`);
+    assert.equal(projection.payloadRefs.includes(packageRecord.library.manifestPath), true);
+    assert.equal(Object.prototype.hasOwnProperty.call(projection, "packageVersion"), false);
+
+    const list = await executeConsoleDomainOperation({
+      operationId: "workspace.skill.list",
+      input: { workspaceId: "workspace-main" },
+      context: { userDataPath }
+    });
+    assert.equal(list.status, 200);
+    assert.equal(list.payload.count, 1);
+    assert.equal(list.payload.items[0].skillPackageId, upload.payload.skill.skillPackageId);
+
+    const download = await executeConsoleDomainOperation({
+      operationId: "workspace.skill.download",
+      input: { skillId: upload.payload.skill.contributionId },
+      context: { userDataPath }
+    });
+    assert.equal(download.status, 200);
+    assert.equal(download.payload.skill.ownedBySkillHub, true);
+
+    const missing = await executeConsoleDomainOperation({
+      operationId: "workspace.skill.download",
+      input: { skillId: "missing-skill" },
+      context: { userDataPath }
+    });
+    assert.equal(missing.status, 404);
+
+    const usage = await executeConsoleDomainOperation({
+      operationId: "workspace.skill.usage.report",
+      input: {
+        contributionId: upload.payload.skill.contributionId,
+        workspaceId: "workspace-secondary",
+        action: "skill.used"
+      },
+      context: {
+        userDataPath,
+        authSession: { user: { username: "agent-b", type: "agent" } }
+      }
+    });
+    assert.equal(usage.status, 200);
+    assert.equal(usage.payload.usage.usageCount, 1);
+    assert.equal(usage.payload.skill.skillPackageId, upload.payload.skill.skillPackageId);
+
+    const afterUsage = await registry.describe();
+    const packageAfterUsage = afterUsage.packages.find((record) => record.manifest.packageId === upload.payload.skill.skillPackageId);
+    assert.equal(packageAfterUsage.usage.usageCount, 1);
+    assert.equal(packageAfterUsage.usage.uniqueWorkspaceAdoptions, 1);
+  } finally {
+    await fs.rm(userDataPath, { recursive: true, force: true });
+  }
+}
+
 function verifyOperationRegistry() {
   const operations = new Map(SERVER_API_OPERATIONS.map((operation) => [operation.id, operation]));
   for (const id of [
@@ -251,12 +344,13 @@ function verifyToolCatalogExposure() {
   assert.ok(toolIds.has("pact.capabilityPackages.submit"));
   assert.ok(toolIds.has("pact.capabilityPackages.lifecycle"));
   const submitTool = catalog.tools.find((tool) => tool.id === "pact.capabilityPackages.submit");
-  assert.ok(submitTool.requiredScopes.includes("knowledge:maintain"));
-  assert.ok(submitTool.toolsets.includes("pact.agentLibrary.maintain"));
+  assert.ok(submitTool.requiredScopes.includes("runtime:admin"));
+  assert.ok(submitTool.toolsets.includes("pact.runtime.maintain"));
 }
 
 async function main() {
   await verifyRegistryLifecycle();
+  await verifyWorkspaceSkillFacade();
   verifyOperationRegistry();
   verifyToolCatalogExposure();
   console.log("[capability-package-lifecycle] ok");

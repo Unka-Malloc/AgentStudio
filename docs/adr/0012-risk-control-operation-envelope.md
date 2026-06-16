@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-14
+- Last updated: 2026-06-16
 - Status: Accepted
 - Scope: Risk-control operation envelope, gate records, evidence locators, digest canonicalization, and verification responsibilities.
-- Staleness check: Scanned on 2026-06-14; risk-control contract claims are tracked by current operation-envelope and audit/recovery verification gates.
+- Staleness check: Checked against current consolidated docs layout and referenced implementation evidence on 2026-06-16.
 
 ## Status
 Accepted

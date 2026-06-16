@@ -12,9 +12,9 @@ const ARCHITECTURE_NODES = Object.freeze([
     nodeId: "workspace-asset-governance",
     label: "Workspace Asset Governance",
     docRefs: [
-      "docs/Architecture.md",
-      "docs/WORKSPACE-ASSET-GOVERNANCE.md",
-      "docs/PROTOCOLS.md"
+      "docs/architecture/ARCHITECTURE.md",
+      "docs/functionality/WORKSPACE-ASSETS.md",
+      "docs/protocols/PROTOCOLS.md"
     ],
     implementationPaths: [
       "server/platform/specialized/agent/workspace-contribution/index.mjs",
@@ -26,9 +26,9 @@ const ARCHITECTURE_NODES = Object.freeze([
     nodeId: "agent-library-access",
     label: "AgentLibrary Access",
     docRefs: [
-      "docs/Architecture.md",
-      "docs/KNOWLEDGE-GOVERNANCE.md",
-      "docs/PROTOCOLS.md"
+      "docs/architecture/ARCHITECTURE.md",
+      "docs/functionality/KNOWLEDGE.md",
+      "docs/protocols/PROTOCOLS.md"
     ],
     implementationPaths: [
       "server/platform/specialized/knowledge/agent-library/access-policy.mjs"
@@ -39,8 +39,8 @@ const ARCHITECTURE_NODES = Object.freeze([
     nodeId: "knowledge-core",
     label: "Knowledge Core",
     docRefs: [
-      "docs/KNOWLEDGE-GOVERNANCE.md",
-      "docs/PROTOCOLS.md"
+      "docs/functionality/KNOWLEDGE.md",
+      "docs/protocols/PROTOCOLS.md"
     ],
     implementationPaths: [
       "server/platform/specialized/knowledge/storage/knowledge-core/index.mjs",
@@ -52,8 +52,8 @@ const ARCHITECTURE_NODES = Object.freeze([
     nodeId: "module-ecosystem",
     label: "Module Ecosystem",
     docRefs: [
-      "docs/Architecture.md",
-      "docs/PROTOCOLS.md"
+      "docs/architecture/ARCHITECTURE.md",
+      "docs/protocols/PROTOCOLS.md"
     ],
     implementationPaths: [
       "server/platform/common/module-manager/module-ecosystem/index.mjs",
@@ -65,9 +65,9 @@ const ARCHITECTURE_NODES = Object.freeze([
     nodeId: "version-control",
     label: "Version Governance",
     docRefs: [
-      "docs/Architecture.md",
-      "docs/CONTEXT.md",
-      "docs/PROTOCOLS.md"
+      "docs/architecture/ARCHITECTURE.md",
+      "docs/VERSION.md",
+      "docs/protocols/PROTOCOLS.md"
     ],
     implementationPaths: [
       "server/platform/common/version-control/README.md",
@@ -83,8 +83,8 @@ const ARCHITECTURE_NODES = Object.freeze([
     nodeId: "asset-lineage",
     label: "Multimodal Asset Lineage",
     docRefs: [
-      "docs/KNOWLEDGE-GOVERNANCE.md",
-      "docs/PROTOCOLS.md"
+      "docs/functionality/KNOWLEDGE.md",
+      "docs/protocols/PROTOCOLS.md"
     ],
     implementationPaths: [
       "server/platform/specialized/knowledge/assets/asset-lineage/index.mjs"
@@ -95,8 +95,8 @@ const ARCHITECTURE_NODES = Object.freeze([
     nodeId: "production-readiness",
     label: "Production Readiness",
     docRefs: [
-      "docs/PRODUCTION-CAPABILITY-GAP.md",
-      "docs/PROTOCOLS.md"
+      "docs/IMPLEMENTATION-GAP.md",
+      "docs/protocols/PROTOCOLS.md"
     ],
     implementationPaths: [
       "server/scripts/production-readiness-gate.mjs",

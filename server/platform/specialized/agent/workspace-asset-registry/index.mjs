@@ -693,6 +693,7 @@ export function createWorkspaceAssetRegistry({ userDataPath = "" } = {}) {
     const workspaceIdFilter = text(input.workspaceId || "");
     const limit = Math.max(1, Math.min(Number(input.limit || 500), 5000));
     const timestamp = nowIso();
+    const accessibleWorkspaceIds = new Set();
     const summary = {
       protocolVersion: WORKSPACE_ASSET_OPERATION_PROTOCOL_VERSION,
       registryProtocolVersion: WORKSPACE_ASSET_REGISTRY_PROTOCOL_VERSION,
@@ -706,13 +707,34 @@ export function createWorkspaceAssetRegistry({ userDataPath = "" } = {}) {
 
     if (agentWorkspace && typeof agentWorkspace.listWorkspaces === "function" && typeof agentWorkspace.listWorkspaceFiles === "function") {
       const workspaceList = await maybeCall(() => agentWorkspace.listWorkspaces({
+        actorUserId: input.actorUserId,
+        userId: input.userId,
+        subjectId: input.subjectId,
+        username: input.username,
+        roleId: input.roleId,
+        scopes: input.scopes,
+        allowedWorkspaceIds: input.allowedWorkspaceIds,
+        canAccessAll: input.canAccessAll === true,
         limit: Math.min(limit, 500),
         includeSummary: false
       }), { workspaces: [] });
       const workspaces = asArray(workspaceList?.workspaces)
         .filter((workspace) => !workspaceIdFilter || workspace.workspaceId === workspaceIdFilter);
       for (const workspace of workspaces) {
+        if (workspace?.workspaceId) {
+          accessibleWorkspaceIds.add(workspace.workspaceId);
+        }
+      }
+      for (const workspace of workspaces) {
         const filePayload = await maybeCall(() => agentWorkspace.listWorkspaceFiles({
+          actorUserId: input.actorUserId,
+          userId: input.userId,
+          subjectId: input.subjectId,
+          username: input.username,
+          roleId: input.roleId,
+          scopes: input.scopes,
+          allowedWorkspaceIds: input.allowedWorkspaceIds,
+          canAccessAll: input.canAccessAll === true,
           workspaceId: workspace.workspaceId,
           recursive: true,
           includeDirectories: false,
@@ -763,7 +785,16 @@ export function createWorkspaceAssetRegistry({ userDataPath = "" } = {}) {
 
     if (contributionRegistry && typeof contributionRegistry.listContributions === "function") {
       const contributions = asArray(await maybeCall(() => contributionRegistry.listContributions(), []))
-        .filter((item) => !workspaceIdFilter || item.workspaceId === workspaceIdFilter)
+        .filter((item) => {
+          const contributionWorkspaceId = normalizeWorkspaceId(item);
+          if (!contributionWorkspaceId) {
+            return false;
+          }
+          if (workspaceIdFilter && contributionWorkspaceId !== workspaceIdFilter) {
+            return false;
+          }
+          return input.canAccessAll === true || accessibleWorkspaceIds.has(contributionWorkspaceId);
+        })
         .slice(0, limit);
       for (const contribution of contributions) {
         const contributionId = firstString(contribution.contributionId, contribution.id, contribution.assetId);

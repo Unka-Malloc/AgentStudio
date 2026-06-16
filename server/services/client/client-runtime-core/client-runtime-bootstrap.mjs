@@ -427,6 +427,17 @@ export function buildClientRuntimeBootstrapPlan(input = {}) {
       strategy: "client-pull-signed-runtime-modules",
       rootHint: "~/.pact/client-runtime",
       requiresSignatureVerification: true,
+      requiresProcessIdentityProvisioning: true,
+      processIdentity: {
+        protocolVersion: "v0.0.1:risk-control:process-identity-1",
+        claimEndpoint: "/api/process-identity/bootstrap/claim",
+        rotationEndpoint: "/api/process-identity/package/rotate",
+        revocationEndpoint: "/api/process-identity/package/revoke",
+        privateKeySource: "client-generated-ed25519",
+        serverBinding: "server-signed-client-identity-package",
+        claimTokenTransport: "0600-local-file-or-equivalent-supervisor-secret",
+        defaultIdentityReplacement: true
+      },
       requiresUserApproval: modules.some((module) => module.capabilities.some((capability) => capability.startsWith("transport."))),
       artifactStatus: "manifest-only",
       note: "This endpoint resolves the trimmed client runtime plan. Binary artifact download URLs are filled by the release/package publisher."

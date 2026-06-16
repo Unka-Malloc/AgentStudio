@@ -6,7 +6,7 @@
   "status": "retired",
   "retirement": {
     "reason": "Local stdio source-facing interfaces are disabled as a security hardening measure. Use authenticated HTTP/HTTPS relay endpoints instead.",
-    "securityDesign": "docs/security/design/0001-local-stdio-interface-lockdown.md"
+    "securityDesign": "docs/functionality/SECURITY-AUTHORIZATION.md"
   },
   "compositionClass": "deployment-dependency-package",
   "deploymentTarget": {

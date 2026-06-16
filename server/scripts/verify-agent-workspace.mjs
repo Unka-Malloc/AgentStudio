@@ -119,22 +119,25 @@ function buildUploadedEmail(name, body) {
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-agent-workspace-"));
 const workspace = createAgentWorkspace({ userDataPath });
+const adminAccess = { actorUserId: "verify-owner", canAccessAll: true };
 
 try {
   assert.equal(workspace.protocolVersion, AGENT_WORKSPACE_PROTOCOL_VERSION);
   const created = workspace.createWorkspace({
+    ownerUserId: "verify-owner",
     title: "Verify workspace",
     objective: "Validate shared-space gate"
   }).workspace;
   assert.ok(created.workspaceId);
 
-  const sessionList = workspace.listSessions({ workspaceId: created.workspaceId });
+  const sessionList = workspace.listSessions({ ...adminAccess, workspaceId: created.workspaceId });
   assert.equal(sessionList.sessionProtocolVersion, AGENT_SESSION_THREAD_VERSION);
   assert.equal(sessionList.appendOnly, true);
   const rootSession = sessionList.sessions.find((item) => item.workspaceId === created.workspaceId);
   assert.ok(rootSession?.sessionId);
 
   const appendedSessionEvent = workspace.appendSessionEvent({
+    ...adminAccess,
     sessionId: rootSession.sessionId,
     type: "task_note",
     title: "验证会话加载",
@@ -143,6 +146,7 @@ try {
   assert.equal(appendedSessionEvent.session.eventCount, 2);
 
   const forkedSession = workspace.forkSession({
+    ...adminAccess,
     sessionId: rootSession.sessionId,
     title: "验证会话分叉"
   });
@@ -150,9 +154,9 @@ try {
   assert.equal(forkedSession.appendOnly, true);
   assert.equal(forkedSession.session.parentSessionId, rootSession.sessionId);
   assert.ok(forkedSession.session.eventCount >= appendedSessionEvent.session.eventCount);
-  const parentAfterFork = workspace.getSession(rootSession.sessionId);
+  const parentAfterFork = workspace.getSession({ ...adminAccess, sessionId: rootSession.sessionId });
   assert.equal(parentAfterFork.session.eventCount, appendedSessionEvent.session.eventCount);
-  const forkContext = workspace.getSessionContext(forkedSession.session.sessionId);
+  const forkContext = workspace.getSessionContext(forkedSession.session.sessionId, adminAccess);
   assert.equal(forkContext.agentSessionId, forkedSession.session.sessionId);
   assert.equal(forkContext.workspaceId, created.workspaceId);
   assert.ok(forkContext.contextFingerprint);
@@ -290,6 +294,7 @@ try {
   assert.equal(decision.status, "proposed");
 
   const full = workspace.getWorkspace({
+    ...adminAccess,
     workspaceId: created.workspaceId,
     includePrivate: true
   });
@@ -299,6 +304,7 @@ try {
   assert.equal(full.submissions.some((item) => item.status === "needs_review"), true);
 
   const publicBundle = workspace.exportWorkspaceContextBundle(created.workspaceId, {
+    ...adminAccess,
     maxItems: 5,
     contentPreviewChars: 12,
     compress: true
@@ -316,6 +322,7 @@ try {
   assert.ok(restoredBundle.handoffMarkdown.includes(created.workspaceId));
 
   const privateBundle = workspace.exportWorkspaceContextBundle(created.workspaceId, {
+    ...adminAccess,
     includePrivate: true,
     compress: false
   });
@@ -323,6 +330,7 @@ try {
   assert.deepEqual(privateBundle.bundle.recent.privateStates[0].stateKeys, ["localOnly"]);
 
   const listed = workspace.listWorkspaces({
+    ...adminAccess,
     status: "active",
     includeSummary: true
   });
@@ -348,23 +356,23 @@ try {
     includeSummary: false
   }).workspaces.map((item) => item.workspaceId);
   assert.ok(alphaVisible.includes("verify-tenant-alpha-workspace"));
-  assert.ok(alphaVisible.includes("verify-tenant-beta-workspace"));
+  assert.equal(alphaVisible.includes("verify-tenant-beta-workspace"), false);
   assert.ok(workspace.getWorkspace({
     workspaceId: "verify-tenant-alpha-workspace",
     actorUserId: "user-alpha"
   }));
-  assert.ok(workspace.getWorkspace({
+  assert.equal(workspace.getWorkspace({
     workspaceId: "verify-tenant-beta-workspace",
     actorUserId: "user-alpha"
-  }));
-  assert.ok(workspace.getWorkspaceContext("verify-tenant-beta-workspace", {
+  }), null);
+  assert.equal(workspace.getWorkspaceContext("verify-tenant-beta-workspace", {
     actorUserId: "user-alpha"
-  }));
+  }), null);
   assert.equal(workspace.hotSwapProfile(
     "verify-tenant-beta-workspace",
     { modelAlias: "blocked-cross-tenant-model" },
     { actorUserId: "user-alpha" }
-  ).ok, true);
+  ).ok, false);
   assert.equal(workspace.hotSwapProfile(
     "verify-tenant-beta-workspace",
     { modelAlias: "admin-approved-model" },
@@ -372,6 +380,7 @@ try {
   ).ok, true);
 
   const resolvedSubmission = workspace.resolveSubmission({
+    ...adminAccess,
     workspaceId: created.workspaceId,
     submissionId: canonicalChange.submissionId,
     resolution: "reject",
@@ -382,6 +391,7 @@ try {
   assert.equal(resolvedSubmission.gate.resolvedBy, "Reviewer");
 
   const resolvedIssue = workspace.updateIssue({
+    ...adminAccess,
     workspaceId: created.workspaceId,
     issueId: issue.issueId,
     status: "resolved",
@@ -392,6 +402,7 @@ try {
   assert.equal(resolvedIssue.payload.resolution.resolvedBy, "Reviewer");
 
   const lock = workspace.acquireLock({
+    ...adminAccess,
     workspaceId: created.workspaceId,
     targetType: "artifact",
     targetId: artifact.artifactId,
@@ -402,6 +413,7 @@ try {
   assert.equal(lock.lock.ownerAgentId, "Merger");
 
   const deniedLock = workspace.acquireLock({
+    ...adminAccess,
     workspaceId: created.workspaceId,
     targetType: "artifact",
     targetId: artifact.artifactId,
@@ -410,41 +422,45 @@ try {
   });
   assert.equal(deniedLock.ok, false);
   assert.equal(deniedLock.error, "lock_held");
-  assert.equal(workspace.listLocks({ workspaceId: created.workspaceId }).length, 1);
+  assert.equal(workspace.listLocks({ ...adminAccess, workspaceId: created.workspaceId }).length, 1);
 
   const released = workspace.releaseLock({
+    ...adminAccess,
     workspaceId: created.workspaceId,
     targetType: "artifact",
     targetId: artifact.artifactId,
     ownerAgentId: "Merger"
   });
   assert.equal(released.released, true);
-  assert.equal(workspace.listLocks({ workspaceId: created.workspaceId }).length, 0);
+  assert.equal(workspace.listLocks({ ...adminAccess, workspaceId: created.workspaceId }).length, 0);
 
   const parentWorkspace = workspace.createWorkspace({
     workspaceId: "verify-parent-workspace",
+    ownerUserId: "verify-owner",
     title: "Parent workspace",
     objective: "Shared base context"
   }).workspace;
   const childWorkspace = workspace.createWorkspace({
     workspaceId: "verify-child-workspace",
+    ownerUserId: "verify-owner",
     title: "Child workspace",
     objective: "Hot swapped context"
   }).workspace;
   const sharedWorkspace = workspace.createWorkspace({
     workspaceId: "verify-shared-workspace",
+    ownerUserId: "verify-owner",
     title: "Shared source workspace",
     objective: "Source sharing"
   }).workspace;
   const parentSources = workspace.setOwnedSourceIds(parentWorkspace.workspaceId, [
     "source-parent"
-  ]);
+  ], adminAccess);
   const childSources = workspace.setOwnedSourceIds(childWorkspace.workspaceId, [
     "source-child"
-  ]);
+  ], adminAccess);
   workspace.setOwnedSourceIds(sharedWorkspace.workspaceId, [
     "source-shared"
-  ]);
+  ], adminAccess);
   assert.equal(parentSources.workspace.currentGeneration, parentWorkspace.currentGeneration + 1);
   assert.equal(childSources.workspace.currentGeneration, childWorkspace.currentGeneration + 1);
 
@@ -454,13 +470,14 @@ try {
     knowledgeScope: {
       includeSourceIds: ["source-parent-profile"]
     }
-  });
+  }, adminAccess);
   assert.equal(parentProfile.ok, true);
   assert.equal(parentProfile.newGeneration, parentSources.workspace.currentGeneration + 1);
 
   const parentResult = workspace.setWorkspaceParent(
     childWorkspace.workspaceId,
-    parentWorkspace.workspaceId
+    parentWorkspace.workspaceId,
+    adminAccess
   );
   assert.equal(parentResult.ok, true);
   assert.equal(parentResult.workspace.currentGeneration, childSources.workspace.currentGeneration + 1);
@@ -472,17 +489,18 @@ try {
       includeSourceIds: ["source-child-profile"],
       excludeSourceIds: ["source-parent"]
     }
-  });
+  }, adminAccess);
   assert.equal(profileSwap.ok, true);
   assert.equal(profileSwap.newGeneration, parentResult.workspace.currentGeneration + 1);
 
   const shared = workspace.shareWorkspace(
     sharedWorkspace.workspaceId,
-    childWorkspace.workspaceId
+    childWorkspace.workspaceId,
+    adminAccess
   );
   assert.equal(shared.ok, true);
   assert.equal(shared.workspace.currentGeneration, profileSwap.newGeneration + 1);
-  const resolvedContext = workspace.getWorkspaceContext(childWorkspace.workspaceId);
+  const resolvedContext = workspace.getWorkspaceContext(childWorkspace.workspaceId, adminAccess);
   assert.equal(resolvedContext.contextProfileId, "child-context");
   assert.equal(resolvedContext.toolGrantId, "child-tool-grant");
   assert.equal(resolvedContext.modelAlias, "child-model");
@@ -494,29 +512,31 @@ try {
     new Set(["source-parent-profile", "source-child", "source-child-profile", "source-shared"])
   );
   const childContextBundle = workspace.exportWorkspaceContextBundle(childWorkspace.workspaceId, {
+    ...adminAccess,
     maxItems: 4,
     compress: true
   });
   const restoreTarget = workspace.createWorkspace({
     workspaceId: "verify-restored-workspace",
+    ownerUserId: "verify-owner",
     title: "Restored workspace",
     objective: "Restore compressed context bundle"
   }).workspace;
-  const restoreTargetBefore = workspace.getWorkspaceContext(restoreTarget.workspaceId);
+  const restoreTargetBefore = workspace.getWorkspaceContext(restoreTarget.workspaceId, adminAccess);
   const rejectedRestore = workspace.restoreWorkspaceContextBundle(restoreTarget.workspaceId, {
     compressed: childContextBundle.compressed,
     bundleHash: "tampered-context-bundle-hash"
-  });
+  }, adminAccess);
   assert.equal(rejectedRestore.ok, false);
   assert.match(rejectedRestore.error, /hash/);
   assert.equal(
-    workspace.getWorkspaceContext(restoreTarget.workspaceId).contextFingerprint,
+    workspace.getWorkspaceContext(restoreTarget.workspaceId, adminAccess).contextFingerprint,
     restoreTargetBefore.contextFingerprint
   );
   const restoredContextBundle = workspace.restoreWorkspaceContextBundle(restoreTarget.workspaceId, {
     compressed: childContextBundle.compressed,
     bundleHash: childContextBundle.bundleHash
-  });
+  }, adminAccess);
   assert.equal(restoredContextBundle.ok, true);
   assert.equal(restoredContextBundle.applied.contextProfileId, "child-context");
   assert.equal(restoredContextBundle.restoredContext.modelAlias, "child-model");
@@ -526,6 +546,7 @@ try {
     new Set(resolvedContext.knowledgeSourceIds)
   );
   const restoredSnapshot = workspace.getWorkspace({
+    ...adminAccess,
     workspaceId: restoreTarget.workspaceId
   });
   assert.equal(restoredSnapshot.summary.runCount, 1);
@@ -534,16 +555,18 @@ try {
 
   const rejectedCycle = workspace.setWorkspaceParent(
     parentWorkspace.workspaceId,
-    childWorkspace.workspaceId
+    childWorkspace.workspaceId,
+    adminAccess
   );
   assert.equal(rejectedCycle.ok, false);
 
   const unshared = workspace.unshareWorkspace(
     sharedWorkspace.workspaceId,
-    childWorkspace.workspaceId
+    childWorkspace.workspaceId,
+    adminAccess
   );
   assert.equal(unshared.ok, true);
-  const unsharedContext = workspace.getWorkspaceContext(childWorkspace.workspaceId);
+  const unsharedContext = workspace.getWorkspaceContext(childWorkspace.workspaceId, adminAccess);
   assert.equal(unsharedContext.knowledgeSourceIds.includes("source-shared"), false);
   assert.notEqual(unsharedContext.contextFingerprint, resolvedContext.contextFingerprint);
 
@@ -911,8 +934,8 @@ async function verifyHttpWorkspaceRuntimeInjection() {
     });
     const operatorAVisibleIds = operatorAList.workspaces.map((item) => item.workspaceId);
     assert.ok(operatorAVisibleIds.includes(operatorAWorkspaceId));
-    assert.ok(operatorAVisibleIds.includes(operatorBWorkspaceId));
-    assert.ok(operatorAVisibleIds.includes(childId));
+    assert.equal(operatorAVisibleIds.includes(operatorBWorkspaceId), false);
+    assert.equal(operatorAVisibleIds.includes(childId), false);
 
     const operatorBOwnContext = await fetchJson(
       `${server.url}/api/agent-workspaces/${encodeURIComponent(operatorBWorkspaceId)}/context`,
@@ -957,28 +980,28 @@ async function verifyHttpWorkspaceRuntimeInjection() {
     assert.equal(operatorABundle.bundle, undefined);
     assert.equal(operatorABundle.compressed.encoding, "gzip+base64");
 
-    const sharedOtherOperatorContext = await fetchJson(
+    const deniedOtherOperatorContext = await fetchJsonResponse(
       `${server.url}/api/agent-workspaces/${encodeURIComponent(operatorBWorkspaceId)}/context`,
       { headers: authHeaders(operatorA) }
     );
-    assert.equal(sharedOtherOperatorContext.workspaceId, operatorBWorkspaceId);
+    assert.equal(deniedOtherOperatorContext.status, 404);
 
-    const sharedOwnerWorkspaceContext = await fetchJson(
+    const deniedOwnerWorkspaceContext = await fetchJsonResponse(
       `${server.url}/api/agent-workspaces/${encodeURIComponent(childId)}/context`,
       { headers: authHeaders(operatorA) }
     );
-    assert.equal(sharedOwnerWorkspaceContext.workspaceId, childId);
+    assert.equal(deniedOwnerWorkspaceContext.status, 404);
 
-    const sharedOtherOperatorBundle = await fetchJson(
+    const deniedOtherOperatorBundle = await fetchJsonResponse(
       `${server.url}/api/agent-workspaces/${encodeURIComponent(operatorBWorkspaceId)}/context-bundle`,
       { headers: authHeaders(operatorA) }
     );
-    assert.equal(sharedOtherOperatorBundle.bundle.context.workspaceId, operatorBWorkspaceId);
-    const sharedOperatorABundleToB = await fetchJson(
+    assert.equal(deniedOtherOperatorBundle.status, 404);
+    const deniedOperatorABundleToB = await fetchJsonResponse(
       `${server.url}/api/agent-workspaces/${encodeURIComponent(operatorAWorkspaceId)}/context-bundle`,
       { headers: authHeaders(operatorB) }
     );
-    assert.equal(sharedOperatorABundleToB.bundle.context.workspaceId, operatorAWorkspaceId);
+    assert.equal(deniedOperatorABundleToB.status, 404);
 
     const operatorBBeforeRestore = await fetchJson(
       `${server.url}/api/agent-workspaces/${encodeURIComponent(operatorBWorkspaceId)}/context`,
@@ -1025,12 +1048,11 @@ async function verifyHttpWorkspaceRuntimeInjection() {
     assert.equal(operatorBRestoredFromA.restoredContext.contextProfileId, "operator-a-context");
     assert.equal(operatorBRestoredFromA.restoredContext.modelAlias, "operator-a-model");
     assert.equal(operatorBRestoredFromA.restoredContext.toolGrantId, "operator-a-tools");
-    assert.deepEqual(
-      new Set(operatorBRestoredFromA.restoredContext.knowledgeSourceIds),
-      new Set(["operator-a-owned-source", "operator-a-profile-source"])
-    );
+    assert.deepEqual(operatorBRestoredFromA.restoredContext.knowledgeSourceIds, []);
+    assert.equal(operatorBRestoredFromA.applied.knowledgeSourceCount, 0);
+    assert.equal(operatorBRestoredFromA.applied.skippedKnowledgeSourceCount, 2);
 
-    const sharedOtherWorkspacePreview = await fetchJson(`${server.url}/api/context/preview`, {
+    const deniedOtherWorkspacePreview = await fetchJsonResponse(`${server.url}/api/context/preview`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1042,9 +1064,9 @@ async function verifyHttpWorkspaceRuntimeInjection() {
         record: false
       })
     });
-    assert.equal(sharedOtherWorkspacePreview.contextPack.workspaceContext.workspaceId, operatorBWorkspaceId);
+    assert.equal(deniedOtherWorkspacePreview.status, 404);
 
-    const sharedOtherWorkspaceSearch = await fetchJson(`${server.url}/api/knowledge/search`, {
+    const deniedOtherWorkspaceSearch = await fetchJsonResponse(`${server.url}/api/knowledge/search`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1057,7 +1079,7 @@ async function verifyHttpWorkspaceRuntimeInjection() {
         limit: 10
       })
     });
-    assert.equal(sharedOtherWorkspaceSearch.workspaceContext.workspaceId, operatorBWorkspaceId);
+    assert.equal(deniedOtherWorkspaceSearch.status, 404);
   } finally {
     await server.close();
     await fs.rm(httpUserDataPath, {

@@ -21,7 +21,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 const projectRoot = path.resolve(new URL("../..", import.meta.url).pathname);
-const connectorRoot = path.join(projectRoot, "mcp-connector");
+const connectorRoot = path.join(projectRoot, "server/platform/common/mcp/gateway-installer");
 const BOOTSTRAP_CURL_FLAGS = "-fL --retry 3 --connect-timeout 20 -sS";
 const PRIORITY_INSTALL_TARGET = MCP_PRIORITY_INSTALL_TARGETS.join(",");
 const SHAREDSPACE_CORE_OPERATIONS = Object.freeze([

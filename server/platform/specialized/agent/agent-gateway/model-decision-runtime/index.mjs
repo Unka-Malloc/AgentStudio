@@ -81,10 +81,21 @@ const DEFAULT_ROLE_PROFILES = [
     }
   },
   {
+    roleId: "knowledge_playbook_distiller",
+    modelAlias: "deepseek-v3-671b",
+    fallback: "deterministic-knowledge-playbook-distillation",
+    purpose: "Distill evidence-backed knowledge into reusable AgentLibrary Playbook structure without changing canonical facts.",
+    budget: {
+      maxInputTokens: 10000,
+      maxOutputTokens: 1800,
+      maxCallsPerRun: 2
+    }
+  },
+  {
     roleId: "knowledge_skill_distiller",
     modelAlias: "deepseek-v3-671b",
     fallback: "deterministic-knowledge-skill-distillation",
-    purpose: "Distill evidence-backed knowledge into reusable Skill structure without changing canonical facts.",
+    purpose: "Legacy alias for knowledge_playbook_distiller during the AgentLibrary Playbook migration.",
     budget: {
       maxInputTokens: 10000,
       maxOutputTokens: 1800,
@@ -740,7 +751,7 @@ function fallbackDecision(roleId, input) {
   if (roleId === "hierarchy_tree_router") {
     return deterministicHierarchyTreeRouter(input);
   }
-  if (roleId === "knowledge_skill_distiller") {
+  if (roleId === "knowledge_playbook_distiller" || roleId === "knowledge_skill_distiller") {
     return deterministicKnowledgeSkillDistillation(input);
   }
   if (roleId === "knowledge_raw_batch_extractor") {

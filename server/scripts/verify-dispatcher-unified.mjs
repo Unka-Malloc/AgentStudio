@@ -47,6 +47,13 @@ async function requestJson(url, options = {}) {
   };
 }
 
+function trustedPactClientHeaders() {
+  return {
+    "X-Pact-Client-Kind": "pact-client",
+    "X-Pact-Client-Id": "pact-client-dispatcher-unified-verifier"
+  };
+}
+
 async function assertStaticDispatcherGuard() {
   const dispatcherPath = path.join(repoRoot, "server", "platform", "common", "operation-dispatcher", "operation-dispatcher.mjs");
   const dispatcherSource = await readText(dispatcherPath);
@@ -87,7 +94,8 @@ async function assertStaticDispatcherGuard() {
     ["auth.login", { method: "POST", path: "/api/auth/login" }],
     ["discovery.check_in", { method: "POST", path: "/api/discovery/check-in" }],
     ["mobile_relay.pairing.create", { method: "POST", path: "/api/mobile-relay/pairings" }],
-    ["mobile_relay.pairing.claim", { method: "POST", path: "/api/mobile-relay/pairings/claim" }]
+    ["mobile_relay.pairing.claim", { method: "POST", path: "/api/mobile-relay/pairings/claim" }],
+    ["process_identity.bootstrap_claim", { method: "POST", path: "/api/process-identity/bootstrap/claim" }]
   ]);
   const publicWriteOperations = SERVER_API_OPERATIONS.filter(
     (operation) => operation.public === true && operation.readOnly !== true
@@ -265,7 +273,8 @@ async function main() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${grant.payload.token}`
+        Authorization: `Bearer ${grant.payload.token}`,
+        ...trustedPactClientHeaders()
       },
       body: JSON.stringify({
         toolId: "pact.agentLibrary.health",

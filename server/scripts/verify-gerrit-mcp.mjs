@@ -13,6 +13,7 @@ import {
   uploadGerritGitChange
 } from "../platform/specialized/capabilities/code-review/gerrit/index.mjs";
 import { startHttpServer } from "../services/server-runtime/http-server.mjs";
+import { useIsolatedCapabilityKernelForVerifier } from "./capability-kernel-test-env.mjs";
 import { installAuthenticatedFetch } from "./test-auth-helper.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -192,6 +193,20 @@ function assertMcpToolOk(response, operation) {
   return payload;
 }
 
+function assertMcpToolPendingApproval(response, operation, action) {
+  assert.equal(response.status, 200);
+  assert.equal(response.payload.error, undefined, JSON.stringify(response.payload.error || {}));
+  assert.equal(response.payload.result.structuredContent.operation, operation);
+  const payload = structuredPayload(response);
+  assert.equal(payload?.status, "pending_approval", JSON.stringify(payload || {}));
+  assert.equal(payload.pendingOperation?.toolId, operation);
+  assert.equal(payload.pendingOperation?.reasonCode, "tool_approval_required");
+  if (action !== undefined) {
+    assert.equal(payload.pendingOperation?.redactedInput?.action, action);
+  }
+  return payload;
+}
+
 function sampleGerritInput(mode, action) {
   const input = {
     action,
@@ -250,6 +265,10 @@ async function verifyMcpDryRunActionMatrix({ serverUrl, token, mode, operation, 
       operation,
       input: sampleGerritInput(mode, action)
     });
+    if (mode === "maintain") {
+      assertMcpToolPendingApproval(response, operation, action);
+      continue;
+    }
     const payload = assertMcpToolOk(response, operation);
     assert.equal(payload.action, action);
     assert.equal(payload.mode, mode);
@@ -544,6 +563,7 @@ async function verifyMaintenanceArtifacts() {
   assert.equal(gerritManifest.compatibilityBoundary, "remote-service");
   assert.equal(gerritManifest.serviceProviders.includes("gerrit"), true);
   assert.equal(gerritManifest.protocol, "v0.0.1:platform:code-review-1");
+  assert.equal(gerritManifest.maintenanceRunbook, skillPath);
   assert.equal(gerritManifest.maintenanceSkill, skillPath);
   assert.deepEqual(gerritManifest.components.gerritMcpRoute.operations, [
     "gerrit.read",
@@ -561,6 +581,7 @@ async function verifyMaintenanceArtifacts() {
   assert.equal(repoManifest.compatibilityBoundary, "resource-operation");
   assert.equal(repoManifest.internalCompatibilityKind, "resource-operation");
   assert.equal(repoManifest.protocol, "v0.0.1:operation:resource-operation-1");
+  assert.equal(repoManifest.maintenanceRunbook, skillPath);
   assert.equal(repoManifest.maintenanceSkill, skillPath);
   assert.equal(repoManifest.components.repoOperationRoute.operations.includes("repo.proposal.create"), true);
   assert.equal(repoManifest.components.repoOperationRoute.operations.includes("repo.change.abandon"), true);
@@ -679,6 +700,7 @@ const requireLiveGerrit = process.env.PACT_VERIFY_GERRIT_LIVE === "1";
 const liveVersion = await liveGerritVersion({ required: requireLiveGerrit });
 
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-gerrit-mcp-"));
+const restoreCapabilityKernelEnv = useIsolatedCapabilityKernelForVerifier();
 const server = await startHttpServer({
   userDataPath,
   distPath: "",
@@ -827,7 +849,7 @@ try {
     input: sampleGerritInput("write", "changes.create")
   });
   assert.equal(writeDeniedForReadGrant.status, 403);
-  assert.equal(writeDeniedForReadGrant.payload.error.data.code, "missing_scopes");
+  assert.equal(writeDeniedForReadGrant.payload.error.data.code, "missing_capabilities");
 
   await verifyMcpDryRunActionMatrix({
     serverUrl: server.url,
@@ -885,10 +907,10 @@ try {
     }
   });
   assert.equal(uploadNeedsConfirmation.status, 200);
-  assert.equal(uploadNeedsConfirmation.payload.error.data.code, "confirmation_required");
-  assert.equal(uploadNeedsConfirmation.payload.error.data.status, 409);
+  const uploadApproval = assertMcpToolPendingApproval(uploadNeedsConfirmation, "pact.gerrit.gitUpload");
+  assert.equal(uploadApproval.pendingOperation?.redactedInput?.confirm, undefined);
 
-  const uploadDryRun = assertMcpToolOk(await callMcpOperation({
+  const uploadDryRun = assertMcpToolPendingApproval(await callMcpOperation({
     serverUrl: server.url,
     token: maintainToken,
     operation: "pact.gerrit.gitUpload",
@@ -901,9 +923,7 @@ try {
       confirm: true
     }
   }), "pact.gerrit.gitUpload");
-  assert.equal(uploadDryRun.ok, true);
-  assert.equal(uploadDryRun.dryRun, true);
-  assert.match(uploadDryRun.targetRef, /^HEAD:refs\/for\/main%topic=verify%20gerrit%20mcp/);
+  assert.equal(uploadDryRun.pendingOperation?.redactedInput?.confirm, true);
 
   const readAudit = await fetchJson(`${server.url}/api/tool-management/v1/audit?limit=500`);
   assert.equal(readAudit.status, 200);
@@ -917,11 +937,11 @@ try {
     true
   );
   assert.equal(
-    auditItems.some((item) => item.toolId === "pact.gerrit.write" && item.status === "denied" && item.errorCode === "missing_scopes"),
+    auditItems.some((item) => item.toolId === "pact.gerrit.write" && item.status === "denied" && item.errorCode === "missing_capabilities"),
     true
   );
   assert.equal(
-    auditItems.some((item) => item.toolId === "pact.gerrit.gitUpload" && item.status === "denied" && item.errorCode === "confirmation_required"),
+    auditItems.some((item) => item.toolId === "pact.gerrit.gitUpload" && item.status === "pending_approval" && item.errorCode === "tool_approval_required"),
     true
   );
   const oneGerritAudit = auditItems.find((item) => item.toolId === "pact.gerrit.read");
@@ -938,4 +958,5 @@ try {
 } finally {
   await server.close();
   await fs.rm(userDataPath, { recursive: true, force: true });
+  restoreCapabilityKernelEnv();
 }

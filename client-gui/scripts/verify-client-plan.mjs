@@ -76,8 +76,8 @@ for (const suiteId of [
   assert(testsRunner.includes(`"${suiteId}"`), `tests/run.mjs client profiles must include suite ${suiteId}`);
 }
 
-const architecture = await readText("docs/CLIENT_ARCHITECTURE.md");
-const testFramework = await readText("docs/TEST-FRAMEWORK.md");
+const architecture = await readText("docs/functionality/CLIENT-DESKTOP.md");
+const testFramework = await readText("docs/runbook/DEVELOPMENT-RUNBOOK.md");
 
 for (const target of firstTargets) {
   assert(architecture.includes(target), `CLIENT_ARCHITECTURE must include target ${target}`);

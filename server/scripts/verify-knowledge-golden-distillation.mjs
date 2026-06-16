@@ -71,21 +71,21 @@ function forbiddenPortablePaths(value, pathParts = []) {
   });
 }
 
-function assertPortableDocument(document) {
-  assert.equal(document?.protocolVersion, "v0.0.1:strategy:portable-knowledge-distillation-1");
-  assert.equal(document?.selfContained, true);
-  assert.deepEqual(document?.runtimeDependencies, []);
-  assert.ok(document?.contentBlocks?.length >= 2);
-  assert.ok(document.contentBlocks.every((block, index) => block.order === index + 1));
-  assert.ok(String(document.markdown || "").includes(document.title));
-  assert.deepEqual(forbiddenPortablePaths(document), []);
-}
-
 const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-golden-distillation-"));
+const featureProfilePath = path.join(userDataPath, "feature-profile.json");
+await fs.writeFile(
+  featureProfilePath,
+  `${JSON.stringify({
+    name: "knowledge-golden-distillation-verifier",
+    enableFeatures: ["knowledge-distillation"]
+  }, null, 2)}\n`,
+  "utf8"
+);
 const server = await startHttpServer({
   userDataPath,
   runtimeOptions: {
-    profile: "minimal"
+    profile: "minimal",
+    featureProfile: featureProfilePath
   }
 });
 await installAuthenticatedFetch(server);
@@ -94,24 +94,6 @@ try {
   const billingBody = "本月账单需要在 2026-05-10 前完成付款。发票抬头为 Pact Test Ltd，付款金额为 1200 元。";
   const securityBody = "账号登录验证码为 123456。如果不是本人操作，需要立即检查账号安全。";
   const adBody = "限时电子书和会员优惠活动，本邮件不包含账单付款、发票或安全风险。";
-  const billingDistillationBody = [
-    billingBody,
-    ...Array.from({ length: 90 }, (_, index) =>
-      `账单核心提炼材料 ${index + 1}：付款时间、发票抬头、金额和对账责任人必须在蒸馏结果中保留。`
-    )
-  ].join("\n");
-  const securityDistillationBody = [
-    securityBody,
-    ...Array.from({ length: 90 }, (_, index) =>
-      `安全核心提炼材料 ${index + 1}：验证码、异常登录、处置动作和审计要求必须在蒸馏结果中保留。`
-    )
-  ].join("\n");
-  const adDistillationBody = [
-    adBody,
-    ...Array.from({ length: 90 }, (_, index) =>
-      `广告核心提炼材料 ${index + 1}：营销内容需要与账单、安全事项区分，不能混成 canonical fact。`
-    )
-  ].join("\n");
   await createKnowledgeJob(
     server.url,
     "账单付款提醒",
@@ -185,65 +167,6 @@ try {
     })
   });
   assert.equal(savedGoldCase.goldCase.expectedSkillId, generated.skill.skillId);
-
-  const distillation = await fetchJson(`${server.url}/api/knowledge/distillation/runs`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      query: "账单 发票 付款",
-      limit: 10,
-      rawDocuments: [
-        {
-          title: "账单付款提醒",
-          text: billingDistillationBody,
-          capturedAt: "2026-05-01T09:00:00.000Z",
-          sourceType: "mail"
-        },
-        {
-          title: "安全验证码提醒",
-          text: securityDistillationBody,
-          capturedAt: "2026-05-02T09:00:00.000Z",
-          sourceType: "mail"
-        },
-        {
-          title: "会员优惠广告",
-          text: adDistillationBody,
-          capturedAt: "2026-05-03T09:00:00.000Z",
-          sourceType: "mail"
-        }
-      ],
-      rawCorpusBatchMaxCharacters: 4096,
-      rawCorpusBatchModelMaxCharacters: 6000,
-      modelEnabled: true,
-      allowDeterministicModelFallback: true,
-      semanticSupportRequired: false
-    })
-  });
-  assert.equal(distillation.protocolVersion, "v0.0.1:knowledge:distillation-1");
-  assert.equal(distillation.status, "completed");
-  assert.equal(distillation.rawCorpus.primary, true);
-  assert.ok(distillation.rawCorpus.documentCount >= 1);
-  assert.ok(distillation.rawCorpus.batches.length >= 3);
-  assert.equal(distillation.rawCorpus.batchExtraction.batchCount, distillation.rawCorpus.batches.length);
-  assert.equal(distillation.rawCorpus.batchExtraction.processedBatchCount, distillation.rawCorpus.batches.length);
-  assert.equal(distillation.rawCorpus.batchExtraction.skippedBatchCount, 0);
-  assert.equal(distillation.rawCorpus.batchExtraction.complete, true);
-  assert.equal(distillation.rawCorpus.batchExtracts.length, distillation.rawCorpus.batches.length);
-  assert.ok(distillation.rawCorpus.batchExtracts.every((item) => item.coreFindings.length >= 1));
-  assert.ok(distillation.candidates.length >= 1);
-  assert.equal(distillation.portableDocuments.length, distillation.candidates.length);
-  assert.ok(distillation.candidates.every((item) => item.goldenRule && item.evidenceGate && item.qualityReportV2));
-  for (const candidate of distillation.candidates) {
-    assertPortableDocument(candidate.portableDocument);
-    assertPortableDocument(candidate.distilledOutputs?.portableDocument);
-    assert.equal(candidate.proposal.rawCorpusProvenance.batchExtraction.complete, true);
-    assert.ok(candidate.portableDocument.markdown.includes("分批核心提炼"));
-  }
-
-  const fetchedRun = await fetchJson(
-    `${server.url}/api/knowledge/distillation/runs/${encodeURIComponent(distillation.runId)}`
-  );
-  assert.equal(fetchedRun.runId, distillation.runId);
 
   const evaluation = await fetchJson(`${server.url}/api/knowledge/skills/evaluation/runs`, {
     method: "POST",

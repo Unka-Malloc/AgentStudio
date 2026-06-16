@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const DEFAULT_OUTPUT_ROOT = "docs/reports/history/production-readiness";
+const DEFAULT_OUTPUT_ROOT = "build/reports/production-readiness";
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
 const REQUIRED_COVERAGE = [
@@ -621,7 +621,7 @@ function buildMarkdownReport(report) {
   lines.push("");
   lines.push("- Passing this gate is required before claiming production readiness.");
   lines.push("- A passing command is only counted for the gate it explicitly covers; uncovered design requirements remain blockers.");
-  lines.push("- Reports are append-only run artifacts under `docs/reports/history/production-readiness/<run-id>/`.");
+  lines.push("- Reports are append-only run artifacts under `build/reports/production-readiness/<run-id>/`.");
   return `${lines.join("\n")}\n`;
 }
 

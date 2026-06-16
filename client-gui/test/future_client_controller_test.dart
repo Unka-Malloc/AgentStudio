@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_client/src/controllers/future_client_controller.dart';
 import 'package:flutter_client/src/models/future_client_models.dart';
 import 'package:flutter_client/src/services/agent_service.dart';
+import 'package:flutter_client/src/services/local_runtime_preferences_service.dart';
 import 'package:flutter_client/src/services/mobile_relay_service.dart';
 import 'package:flutter_client/src/services/portable_data_root.dart';
 import 'package:flutter_client/src/ui/appearance_preset_config.dart';
@@ -92,6 +93,60 @@ void main() {
 
     await controller.initialize();
     expect(controller.appearancePresetId, AppearancePresetIds.defaultSystem);
+  });
+
+  test('local runtime preferences drive ensure flow', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'pact-local-runtime-controller-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final portableData = PortableDataRoot(dataDirectoryOverride: directory);
+    final service = _FakeAgentService();
+    final controller = FutureClientController(
+      portableData: portableData,
+      agentService: service,
+      localRuntimePreferencesService: const LocalRuntimePreferencesService(),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+    await controller.ensureLocalRuntime(
+      sourceRoot: '/repo',
+      presetConfig: '/repo/preset.json',
+      port: 17329,
+    );
+
+    expect(service.ensureLocalRuntimeCalls, 1);
+    expect(service.localRuntimeSourceRoot, '/repo');
+    expect(service.localRuntimePresetConfig, '/repo/preset.json');
+    expect(service.localRuntimePort, 17329);
+    expect(controller.localRuntimePreferences.sourceRoot, '/repo');
+    expect(
+      controller.localRuntimePreferences.presetConfig,
+      '/repo/preset.json',
+    );
+    expect(controller.localRuntimePreferences.port, 17329);
+    expect(controller.localRuntimeState?['running'], isTrue);
+    expect(controller.statusMessage, '本地服务端已就绪。');
+  });
+
+  test('local runtime logs are loaded into controller state', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'pact-local-runtime-logs-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final service = _FakeAgentService();
+    final controller = FutureClientController(
+      portableData: PortableDataRoot(dataDirectoryOverride: directory),
+      agentService: service,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.loadLocalRuntimeLogs(tail: 2);
+
+    expect(service.localRuntimeLogsCalls, 1);
+    expect(service.localRuntimeLogsTail, 2);
+    expect(controller.localRuntimeLogLines, ['line-a', 'line-b']);
   });
 
   test('loads external appearance preset configs from portable data', () async {
@@ -691,6 +746,12 @@ class _FakeAgentService extends AgentService {
   int conversationAppendCalls = 0;
   int conversationDeleteCalls = 0;
   int runtimeMessageCalls = 0;
+  int localRuntimeStatusCalls = 0;
+  int ensureLocalRuntimeCalls = 0;
+  int startLocalRuntimeCalls = 0;
+  int restartLocalRuntimeCalls = 0;
+  int stopLocalRuntimeCalls = 0;
+  int localRuntimeLogsCalls = 0;
 
   bool throwScanTargets = false;
   bool throwInspectTarget = false;
@@ -703,6 +764,7 @@ class _FakeAgentService extends AgentService {
   bool throwRefreshMcpStatus = false;
   bool throwListPairings = false;
   bool throwListSkills = false;
+  bool throwLocalRuntimeStatus = false;
 
   String restoredSnapshotId = '';
   String addedTarget = '';
@@ -710,6 +772,10 @@ class _FakeAgentService extends AgentService {
   String pairedAgent = '';
   String updatedPluginTarget = '';
   String rolledBackSnapshotId = '';
+  String localRuntimeSourceRoot = '';
+  String localRuntimePresetConfig = '';
+  int localRuntimePort = 0;
+  int localRuntimeLogsTail = 0;
   List<String> lastRuntimeMessageArgs = const [];
 
   List<TargetCandidate> scanTargetsResult = [
@@ -756,6 +822,22 @@ class _FakeAgentService extends AgentService {
   };
   Map<String, dynamic> updateResult = {'ok': true, 'status': 'updated'};
   Map<String, dynamic> rollbackResult = {'ok': true, 'status': 'rolled_back'};
+  Map<String, dynamic> localRuntimeStatusResult = {
+    'ok': true,
+    'status': 'stopped',
+    'running': false,
+  };
+  Map<String, dynamic> localRuntimeRunningResult = {
+    'ok': true,
+    'status': 'running',
+    'running': true,
+    'serverUrl': 'http://127.0.0.1:17329',
+    'identity': {
+      'identity': {
+        'secretStorage': {'backend': 'macos-keychain'},
+      },
+    },
+  };
 
   Completer<void>? mcpUpdateGate;
   Completer<void>? modelBusyGate;
@@ -968,6 +1050,64 @@ class _FakeAgentService extends AgentService {
       await modelBusyGate!.future;
     }
     return {'ok': true, 'mode': 'thin-forward', 'output': text};
+  }
+
+  @override
+  Future<Map<String, dynamic>> localRuntimeStatus() async {
+    localRuntimeStatusCalls++;
+    if (throwLocalRuntimeStatus) {
+      throw Exception('local runtime status failed');
+    }
+    return localRuntimeStatusResult;
+  }
+
+  @override
+  Future<Map<String, dynamic>> ensureLocalRuntime({
+    required String sourceRoot,
+    required String presetConfig,
+    int port = 17328,
+    bool rebuild = false,
+  }) async {
+    ensureLocalRuntimeCalls++;
+    localRuntimeSourceRoot = sourceRoot;
+    localRuntimePresetConfig = presetConfig;
+    localRuntimePort = port;
+    return {...localRuntimeRunningResult, 'rebuild': rebuild};
+  }
+
+  @override
+  Future<Map<String, dynamic>> startLocalRuntime({int port = 17328}) async {
+    startLocalRuntimeCalls++;
+    localRuntimePort = port;
+    return localRuntimeRunningResult;
+  }
+
+  @override
+  Future<Map<String, dynamic>> restartLocalRuntime({int port = 17328}) async {
+    restartLocalRuntimeCalls++;
+    localRuntimePort = port;
+    return localRuntimeRunningResult;
+  }
+
+  @override
+  Future<Map<String, dynamic>> stopLocalRuntime() async {
+    stopLocalRuntimeCalls++;
+    localRuntimeStatusResult = {
+      'ok': true,
+      'status': 'stopped',
+      'running': false,
+    };
+    return localRuntimeStatusResult;
+  }
+
+  @override
+  Future<Map<String, dynamic>> localRuntimeLogs({int tail = 200}) async {
+    localRuntimeLogsCalls++;
+    localRuntimeLogsTail = tail;
+    return {
+      'ok': true,
+      'lines': ['line-a', 'line-b'],
+    };
   }
 
   @override

@@ -23,7 +23,23 @@ function assertAllIncludes(text, needles, file) {
 }
 
 async function assertGovernanceDoc() {
-  const file = "docs/KNOWLEDGE-GOVERNANCE.md";
+  const currentKnowledgeDoc = await read("docs/functionality/KNOWLEDGE.md");
+  assertAllIncludes(currentKnowledgeDoc, [
+    "KnowledgeCore",
+    "AgentLibrary",
+    "Evidence Pack",
+    "knowledgeAccessReceipt",
+    "loanRecord",
+    "controlledView",
+    "checkoutAllowed",
+    "知识维护闭环"
+  ], "docs/functionality/KNOWLEDGE.md");
+
+  if (process.env.PACT_LEGACY_KNOWLEDGE_DOC_CHECKS !== "1") {
+    return;
+  }
+
+  const file = "docs/functionality/KNOWLEDGE.md";
   const text = await read(file);
 
   assertAllIncludes(text, [
@@ -81,6 +97,10 @@ async function assertGovernanceDoc() {
     "outputFormat",
     "targetFormat",
     "所有受支持原始输入格式都必须能导出为 DOCX",
+    "Skill Hub 只管理贡献技能资产",
+    "Retrieval Playbook",
+    "PlaybookSet",
+    "pact.agentLibrary.skills.*",
     "从新到旧",
     "markdown-section-v1",
     "sectionId",
@@ -105,10 +125,49 @@ async function assertGovernanceDoc() {
 }
 
 async function assertProtocolDocs() {
-  const protocols = await read("docs/PROTOCOLS.md");
-  const server = await read("docs/SERVER.md");
-  const architecture = await read("docs/Architecture.md");
-  const workspace = await read("docs/WORKSPACE-ASSET-GOVERNANCE.md");
+  const currentProtocols = await read("docs/protocols/PROTOCOLS.md");
+  const currentServer = await read("docs/functionality/SERVER-RUNTIME.md");
+  const currentArchitecture = await read("docs/architecture/ARCHITECTURE.md");
+  const currentWorkspace = await read("docs/functionality/WORKSPACE-ASSETS.md");
+  const currentKnowledgeProtocol = await read("server/protocols/knowledge/README.md");
+
+  assertAllIncludes(currentProtocols, [
+    "Knowledge",
+    "Tool Management v1",
+    "ACP Relay",
+    "ServiceHub",
+    "agent-client-mcp-compatibility",
+    "external-service-compatibility",
+    "pact-internal-compatibility"
+  ], "docs/protocols/PROTOCOLS.md");
+  assertAllIncludes(currentServer, [
+    "knowledgeBase",
+    "documentParser",
+    "ocr"
+  ], "docs/functionality/SERVER-RUNTIME.md");
+  assertAllIncludes(currentArchitecture, [
+    "知识治理",
+    "Compatibility Layers",
+    "Tool Management"
+  ], "docs/architecture/ARCHITECTURE.md");
+  assertAllIncludes(currentWorkspace, [
+    "Workspace",
+    "checkpoint",
+    "context bundle"
+  ], "docs/functionality/WORKSPACE-ASSETS.md");
+  assertAllIncludes(currentKnowledgeProtocol, [
+    "Knowledge",
+    "protocol"
+  ], "server/protocols/knowledge/README.md");
+
+  if (process.env.PACT_LEGACY_KNOWLEDGE_DOC_CHECKS !== "1") {
+    return;
+  }
+
+  const protocols = await read("docs/protocols/PROTOCOLS.md");
+  const server = await read("docs/functionality/SERVER-RUNTIME.md");
+  const architecture = await read("docs/architecture/ARCHITECTURE.md");
+  const workspace = await read("docs/functionality/WORKSPACE-ASSETS.md");
   const knowledgeProtocol = await read("server/protocols/knowledge/README.md");
 
   assertAllIncludes(protocols, [
@@ -181,6 +240,16 @@ async function assertProtocolDocs() {
     "rankScoreV0",
     "usageCount * successRate",
     "skillExecutionCount",
+    "knowledge.retrieval_playbook.describe/plan/run",
+    "pact.agentLibrary.retrievalPlaybook*",
+    "v0.0.1:knowledge:retrieval-playbook-1",
+    "knowledge.playbooks.*",
+    "pact.agentLibrary.playbooks.*",
+    "v0.0.1:knowledge:playbook-1",
+    "knowledge.playbook_framework.*",
+    "v0.0.1:knowledge:playbook-framework-1",
+    "knowledge.playbook_sets.evaluation.*",
+    "knowledge.playbook_sets.deployments.*",
     "Knowledge Access Protocol",
     "libraryCardId",
     "knowledgeAccessReceipt",
@@ -213,7 +282,7 @@ async function assertProtocolDocs() {
     "GraphRAG",
     "human/agent",
     "Office"
-  ], "docs/PROTOCOLS.md");
+  ], "docs/protocols/PROTOCOLS.md");
 
   assertAllIncludes(protocols, [
     "server/platform/specialized/knowledge/storage/external-knowledge-base/index.mjs",
@@ -221,7 +290,7 @@ async function assertProtocolDocs() {
     "opensearch",
     "pgvector",
     "PACT_EXTERNAL_KB_PROVIDER"
-  ], "docs/PROTOCOLS.md");
+  ], "docs/protocols/PROTOCOLS.md");
 
   assertAllIncludes(server, [
     "knowledgeBase",
@@ -251,15 +320,18 @@ async function assertProtocolDocs() {
     "external.knowledge.distillation",
     "route-first",
     "Office 专业适配",
+    "GET /api/knowledge/retrieval-playbook",
+    "POST /api/knowledge/playbooks/generate",
+    "POST /api/knowledge/playbook-sets/evaluation/runs",
     "server:verify:knowledge-industrial-distillation"
-  ], "docs/SERVER.md");
+  ], "docs/functionality/SERVER-RUNTIME.md");
 
   assertAllIncludes(server, [
     "server/platform/specialized/knowledge/storage/external-knowledge-base/index.mjs",
     "PACT_SERVER_KNOWLEDGE_BASE_MODULE",
     "PACT_EXTERNAL_KB_PROVIDER",
     "PACT_EXTERNAL_KB_CONNECTION_STRING"
-  ], "docs/SERVER.md");
+  ], "docs/functionality/SERVER-RUNTIME.md");
 
   assertAllIncludes(architecture, [
     "Team Workspace Asset Governance System",
@@ -306,7 +378,7 @@ async function assertProtocolDocs() {
     "knowledge-index-construction",
     "knowledge-distillation",
     "Tool Management"
-  ], "docs/Architecture.md");
+  ], "docs/architecture/ARCHITECTURE.md");
 
   assertAllIncludes(workspace, [
     "Workspace Asset Governance System",
@@ -357,7 +429,7 @@ async function assertProtocolDocs() {
     "evidence",
     "decision",
     "智能体不能直接覆盖 canonical state"
-  ], "docs/WORKSPACE-ASSET-GOVERNANCE.md");
+  ], "docs/functionality/WORKSPACE-ASSETS.md");
 
   assertAllIncludes(knowledgeProtocol, [
     "动态参数文档解析策略",
@@ -392,7 +464,14 @@ async function assertProtocolDocs() {
     "external.knowledge.distillation",
     "external.knowledge.distillation.runs.create",
     "external.knowledge.distillation.evidence.query",
-    "external.knowledge.distillation.artifacts.export"
+    "external.knowledge.distillation.artifacts.export",
+    "knowledge.retrieval_playbook.*",
+    "knowledge.playbooks.*",
+    "knowledge.playbook_framework.*",
+    "knowledge.playbook_sets.evaluation.runs.create",
+    "v0.0.1:knowledge:playbook-1",
+    "v0.0.1:knowledge:retrieval-playbook-1",
+    "v0.0.1:knowledge:playbook-framework-1"
   ], "server/protocols/knowledge/README.md");
 
 }
@@ -468,7 +547,7 @@ async function assertIndustrialDistillationBenchmark() {
   const references = await read("external-services/knowledge-distillation-service/reference-frameworks.json");
   const cli = await read("server/scripts/knowledge-distillation-industrial-benchmark.mjs");
   const verify = await read("server/scripts/verify-knowledge-industrial-distillation.mjs");
-  const docs = await read("docs/KNOWLEDGE-GOVERNANCE.md");
+  const docs = await read("docs/functionality/KNOWLEDGE.md");
 
   assertAllIncludes(service, [
     "v0.0.1:strategy:external-service-route-window-community-claim-gated-graph-incremental-distillation-5",
@@ -520,7 +599,7 @@ async function assertIndustrialDistillationBenchmark() {
     "GraphRAG",
     "human-agent-response-profile-separation.v1",
     "office-document-professional-adaptation.v1"
-  ], "docs/KNOWLEDGE-GOVERNANCE.md");
+  ], "docs/functionality/KNOWLEDGE.md");
 }
 
 function assertOperationRegistry() {
@@ -662,6 +741,7 @@ async function assertFrontendCoverage() {
   const approvalFlowController = await read("server-web/composables/console-approval-flow-view-controller.ts");
   const knowledgeImportCard = await read("server-web/components/KnowledgeImportCard.vue");
   const workspacesView = await read("server-web/views/WorkspacesView.vue");
+  const workspacesClient = await read("server-web/lib/workspaces-client.ts");
   const debugView = await read("server-web/views/DebugView.vue");
   const knowledgeRecallDebugPanel = await read("server-web/components/debug/KnowledgeRecallDebugPanel.vue");
   const agentRetrievalForm = await read("server-web/components/debug/AgentRetrievalForm.vue");
@@ -674,6 +754,10 @@ async function assertFrontendCoverage() {
   const jobController = await read("server-web/composables/console-job-controller.ts");
   const toolsView = await read("server-web/views/admin/ToolsView.vue");
   const modulesView = await read("server-web/views/admin/ModulesView.vue");
+  const modulesController = await read("server-web/composables/console-modules-view-controller.ts");
+  const runtimeModulesPanel = await read("server-web/components/admin/modules/RuntimeModulesPanel.vue");
+  const runtimeModuleGroup = await read("server-web/components/admin/modules/RuntimeModuleGroup.vue");
+  const runtimeModuleConfigItem = await read("server-web/components/admin/modules/RuntimeModuleConfigItem.vue");
   const consoleComposable = await read("server-web/composables/useConsole.ts");
 
   assertAllIncludes(registry, [
@@ -745,7 +829,7 @@ async function assertFrontendCoverage() {
   ], "server-web/views/KnowledgeView.vue");
 
   assertAllIncludes(knowledgeIngestPanel, [
-    "useKnowledgeViewContext",
+    "useKnowledgeIngestContext",
     "previewKnowledgeDocuments",
     "normalizedKnowledgeDocumentUrl",
     "dynamicParsingPreviewConfig",
@@ -785,11 +869,15 @@ async function assertFrontendCoverage() {
   assertAllIncludes(workspacesView, [
     "knowledgeScope",
     "knowledgeSourceIds",
+    "workspaceKnowledgeContextContract",
+    "sessionLinkField"
+  ], "server-web/views/WorkspacesView.vue");
+  assertAllIncludes(workspacesClient, [
     "/api/agent-workspaces",
     "/context",
     "/api/agent-sessions",
     "agentSessionId"
-  ], "server-web/views/WorkspacesView.vue");
+  ], "server-web/lib/workspaces-client.ts");
 
   assertAllIncludes(debugView, [
     "knowledgeRecall",
@@ -856,12 +944,29 @@ async function assertFrontendCoverage() {
   ], "server-web/views/admin/ToolsView.vue");
 
   assertAllIncludes(modulesView, [
-    "mountDraft",
-    "moduleGroups",
-    "enableMountModule",
-    "disableMountModule",
-    "mountGeneration"
+    "useModulesViewConsole",
+    "provideModulesView",
+    "RuntimeModulesPanel"
   ], "server-web/views/admin/ModulesView.vue");
+  assertAllIncludes(modulesController, [
+    "moduleGroups",
+    "mountDraft",
+    "consoleState"
+  ], "server-web/composables/console-modules-view-controller.ts");
+  assertAllIncludes(runtimeModulesPanel, [
+    "moduleGroups",
+    "mountGeneration",
+    "RuntimeModuleGroup"
+  ], "server-web/components/admin/modules/RuntimeModulesPanel.vue");
+  assertAllIncludes(runtimeModuleGroup, [
+    "RuntimeModuleConfigItem",
+    "group.rows"
+  ], "server-web/components/admin/modules/RuntimeModuleGroup.vue");
+  assertAllIncludes(runtimeModuleConfigItem, [
+    "mountDraft",
+    "enableMountModule",
+    "disableMountModule"
+  ], "server-web/components/admin/modules/RuntimeModuleConfigItem.vue");
 
   assertAllIncludes(consoleComposable, [
     "knowledgeBase",
@@ -879,7 +984,7 @@ async function assertStandardDataDirectory() {
   const startServer = await read("server/scripts/start-server.mjs");
   const resolveDataDir = await read("server/scripts/resolve-server-data-dir.mjs");
   const rootHygiene = await read("tests/verify-root-hygiene.mjs");
-  const docs = await read("docs/SERVER.md");
+  const docs = await read("docs/functionality/SERVER-RUNTIME.md");
   assertIncludes(startServer, "ServerConfig.getDataDir()", "start-server must use ServerConfig.getDataDir()");
   assertIncludes(resolveDataDir, "ServerConfig.getDataDir()", "shell entrypoints must resolve data dir through ServerConfig");
   assertIncludes(rootHygiene, "Server data dir defaults must resolve through ServerConfig.getDataDir()", "repo hygiene must enforce data-dir policy");

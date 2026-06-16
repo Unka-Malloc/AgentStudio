@@ -26,23 +26,23 @@ const layerIds = [
   "pact-internal-compatibility"
 ];
 
-const protocols = await read("docs/PROTOCOLS.md");
-assertIncludes(protocols, layerIds, "docs/PROTOCOLS.md");
+const protocols = await read("docs/protocols/PROTOCOLS.md");
+assertIncludes(protocols, layerIds, "docs/protocols/PROTOCOLS.md");
 assertIncludes(protocols, [
   "三个兼容层",
   "任何 adapter、connector、mount、compatibility component 或 runtime bridge 都必须归入以下三层之一",
   "Tool Management、Policy、Operation Ledger、Checkpoint Tree 和 audit 是跨三层的治理面",
   "外部服务 adapter 不放在 Protocol Adapters 下统一描述"
-], "docs/PROTOCOLS.md");
+], "docs/protocols/PROTOCOLS.md");
 
-const architecture = await read("docs/Architecture.md");
-assertIncludes(architecture, layerIds, "docs/Architecture.md");
+const architecture = await read("docs/architecture/ARCHITECTURE.md");
+assertIncludes(architecture, layerIds, "docs/architecture/ARCHITECTURE.md");
 assertIncludes(architecture, [
   "三个兼容层",
   "Compatibility Layers",
   "三大兼容层归口",
   "module contract、resource operation、capability lifecycle、runtime environment 和 state boundary"
-], "docs/Architecture.md");
+], "docs/architecture/ARCHITECTURE.md");
 
 const gerritManifest = await readJson("server/platform/specialized/capabilities/code-review/gerrit/module.json");
 assert.equal(gerritManifest.category, "external-service-compatibility");

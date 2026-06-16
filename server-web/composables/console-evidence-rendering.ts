@@ -38,7 +38,6 @@ const ALLOWED_EMAIL_FRAME_TAGS = new Set([
   "div",
   "em",
   "figure",
-  "iframe",
   "figcaption",
   "font",
   "h1",
@@ -84,9 +83,6 @@ const ALLOWED_EMAIL_FRAME_ATTRIBUTES = new Set([
   "loading",
   "rowspan",
   "src",
-  "srcdoc",
-  "sandbox",
-  "referrerpolicy",
   "style",
   "target",
   "media",
@@ -96,7 +92,6 @@ const ALLOWED_EMAIL_FRAME_ATTRIBUTES = new Set([
   "vlink",
   "link",
   "alink",
-  "allowfullscreen",
   "width",
   "height",
 ]);
@@ -181,26 +176,8 @@ export function sanitizeEmailFrameDocument(rawHtml: string, context: EvidenceRen
         element.removeAttribute(attribute.name);
         continue;
       }
-      if (name === "sandbox") {
-        const requested = value
-          .split(/\s+/)
-          .map((entry) => entry.trim())
-          .filter(Boolean)
-          .filter((entry) => !["allow-same-origin", "allow-popups-to-escape-sandbox"].includes(entry));
-        const keepTopNavigationByActivation = requested.includes("allow-top-navigation-by-user-activation");
-        const normalized = [
-          ...requested.filter((entry) => entry !== "allow-top-navigation-by-user-activation"),
-          ...(keepTopNavigationByActivation ? ["allow-top-navigation-by-user-activation"] : []),
-          "allow-popups"
-        ];
-        const unique = [...new Set(normalized)];
-        element.setAttribute("sandbox", unique.join(" "));
-        continue;
-      }
-      if (name === "referrerpolicy") {
-        if (!value.trim()) {
-          element.setAttribute(attribute.name, "no-referrer");
-        }
+      if (name === "srcdoc" || name === "sandbox" || name === "referrerpolicy") {
+        element.removeAttribute(attribute.name);
         continue;
       }
     }
@@ -210,9 +187,6 @@ export function sanitizeEmailFrameDocument(rawHtml: string, context: EvidenceRen
       if (!element.getAttribute("alt")) {
         element.setAttribute("alt", "");
       }
-    }
-    if (tagName === "iframe" && !element.getAttribute("sandbox")) {
-      element.setAttribute("sandbox", "allow-popups");
     }
   }
   const headStyles = Array.from(doc.head?.querySelectorAll("style") || [])

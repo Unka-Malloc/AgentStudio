@@ -38,23 +38,29 @@ class TargetCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Text(
-                  _targetStatusLabel(target),
-                  style: TextStyle(
-                    color: colors.textMuted,
-                    fontSize: 12,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 220),
+                  child: Text(
+                    _targetStatusLabel(target),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: colors.textMuted, fontSize: 12),
                   ),
                 ),
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     TextButton(
                       onPressed: () => onInspect(target.target),
                       child: const Text('Inspect'),
                     ),
-                    const SizedBox(width: 8),
                     FilledButton(
                       onPressed: () => onPlan(target.target),
                       style: FilledButton.styleFrom(

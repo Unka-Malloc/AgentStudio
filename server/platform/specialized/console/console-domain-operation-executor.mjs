@@ -5,7 +5,11 @@ import path from "node:path";
 import { createWorkspaceGovernanceRegistry } from "../agent/workspace-governance/index.mjs";
 import { createContributionRegistry } from "../agent/workspace-contribution/index.mjs";
 import { createCodespaceRegistry } from "../capabilities/code-management/codespace/index.mjs";
-import { createCapabilityPackageRegistry } from "../capabilities/package-lifecycle/index.mjs";
+import {
+  capabilityPackageDigest,
+  createCapabilityPackageRegistry,
+  normalizeCapabilityPackageManifest
+} from "../capabilities/package-lifecycle/index.mjs";
 import {
   createCloudDriveUpstreamGateway,
   isCloudDriveUpstreamGatewayOperation
@@ -602,6 +606,149 @@ function arrayOfStrings(value) {
     : [];
 }
 
+function workspaceSkillName(input = {}) {
+  return String(input.name || input.skillName || input.skillId || input["skill-id"] || input.title || "workspace-skill")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._:-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96) || "workspace-skill";
+}
+
+function signedWorkspaceSkillManifest(input = {}, {
+  workspaceId = "default",
+  contributorId = "anonymous",
+  contributorKind = "agent"
+} = {}) {
+  const providedManifest = plainObject(input.manifest || input.skillManifest || input.packageManifest, null);
+  const baseManifest = providedManifest || {
+    kind: "skill",
+    name: workspaceSkillName(input),
+    version: String(input.version || "0.0.1").trim() || "0.0.1",
+    title: String(input.title || input.skillTitle || input.skillId || "Workspace Skill").trim() || "Workspace Skill",
+    description: String(input.description || "").trim(),
+    owner: String(input.owner || contributorId || "workspace").trim() || "workspace",
+    source: String(input.source || input.skillManifestRef || "workspace-skill-compatibility").trim() || "workspace-skill-compatibility",
+    capabilities: arrayOfStrings(input.capabilities).length ? arrayOfStrings(input.capabilities) : ["skill.workspace.contributed"],
+    risk: String(input.risk || "read_only").trim() || "read_only",
+    inputSchema: plainObject(input.inputSchema, { type: "object" }),
+    outputSchema: plainObject(input.outputSchema, { type: "object" }),
+    secretRefs: arrayOfStrings(input.secretRefs),
+    dependencies: Array.isArray(input.dependencies) ? input.dependencies : [],
+    compatibility: plainObject(input.compatibility, { featureIds: ["skill-hub"] }),
+    sandbox: plainObject(input.sandbox, { policy: "knowledge-only" }),
+    license: String(input.license || "UNREVIEWED").trim() || "UNREVIEWED",
+    metadata: {
+      ...plainObject(input.metadata),
+      workspaceId,
+      contributorId,
+      contributorKind,
+      legacySkillId: String(input.skillId || input["skill-id"] || input.id || "").trim(),
+      workspaceSkillId: String(input.skillId || input["skill-id"] || input.id || "").trim(),
+      workspaceContributionId: String(input.contributionId || "").trim(),
+      skillManifestRef: String(input.skillManifestRef || "").trim(),
+      sourceOperation: "workspace.skill.upload",
+      workspaceContributionProjection: true
+    }
+  };
+  const normalizedBase = normalizeCapabilityPackageManifest({
+    ...baseManifest,
+    kind: "skill",
+    metadata: {
+      ...plainObject(baseManifest.metadata),
+      workspaceId,
+      contributorId,
+      contributorKind,
+      legacySkillId: String(input.skillId || input["skill-id"] || input.id || baseManifest.metadata?.legacySkillId || "").trim(),
+      workspaceSkillId: String(input.skillId || input["skill-id"] || input.id || baseManifest.metadata?.workspaceSkillId || "").trim(),
+      workspaceContributionId: String(input.contributionId || baseManifest.metadata?.workspaceContributionId || "").trim(),
+      skillManifestRef: String(input.skillManifestRef || baseManifest.metadata?.skillManifestRef || "").trim(),
+      sourceOperation: "workspace.skill.upload",
+      workspaceContributionProjection: true
+    }
+  });
+  const normalized = normalizeCapabilityPackageManifest({
+    ...normalizedBase,
+    metadata: {
+      ...plainObject(normalizedBase.metadata),
+      workspaceContributionId: String(normalizedBase.metadata?.workspaceContributionId || normalizedBase.packageId || "").trim(),
+      legacySkillId: String(normalizedBase.metadata?.legacySkillId || normalizedBase.packageId || "").trim(),
+      workspaceSkillId: String(normalizedBase.metadata?.workspaceSkillId || normalizedBase.packageId || "").trim()
+    }
+  });
+  return normalizeCapabilityPackageManifest({
+    ...normalized,
+    signature: {
+      algorithm: "sha256",
+      digestSha256: capabilityPackageDigest(normalized)
+    }
+  });
+}
+
+function workspaceSkillPackageProjection(record = {}) {
+  const manifest = plainObject(record.manifest);
+  const metadata = plainObject(manifest.metadata);
+  const library = plainObject(record.library);
+  const usage = plainObject(record.usage);
+  const packageId = String(manifest.packageId || metadata.workspaceContributionId || "").trim();
+  const skillId = String(metadata.legacySkillId || metadata.workspaceSkillId || packageId || manifest.name || "").trim();
+  const workspaceId = String(metadata.workspaceId || "").trim();
+  return {
+    protocolVersion: manifest.protocolVersion || "v0.0.1:tool:skill-registry-1",
+    projectionType: "skill-hub-reference",
+    contributionId: metadata.workspaceContributionId || packageId,
+    contributionType: "skill",
+    ownedBySkillHub: true,
+    skillPackageId: packageId,
+    packageId,
+    skillId,
+    workspaceId,
+    title: manifest.title || manifest.name || skillId,
+    name: manifest.name || "",
+    version: manifest.version || "",
+    description: manifest.description || "",
+    status: record.status || "",
+    skillHubStatus: record.status || "",
+    skillManifestRef: metadata.skillManifestRef || `skill-hub:${packageId}`,
+    packageManifestRef: library.manifestPath || "",
+    library,
+    usage,
+    metrics: {
+      usageCount: Number(usage.usageCount || 0),
+      successfulUseCount: Number(usage.successfulUseCount || 0),
+      uniqueWorkspaceAdoptions: Number(usage.uniqueWorkspaceAdoptions || 0),
+      successRate: Number(usage.successRate || 0)
+    },
+    createdAt: record.createdAt || "",
+    updatedAt: record.updatedAt || ""
+  };
+}
+
+function workspaceSkillPackageMatches(record = {}, input = {}) {
+  const projection = workspaceSkillPackageProjection(record);
+  const ref = String(input.skillPackageId || input.packageId || input.contributionId || input.skillId || input["skill-id"] || input.id || "").trim();
+  if (!ref) {
+    return false;
+  }
+  return [
+    projection.skillPackageId,
+    projection.packageId,
+    projection.contributionId,
+    projection.skillId,
+    projection.name,
+    projection.title
+  ].filter(Boolean).includes(ref);
+}
+
+async function listWorkspaceSkillPackages({ registry, input = {} } = {}) {
+  const described = await registry.describe();
+  const workspaceId = String(input.workspaceId || input.workspace || "").trim();
+  return (described.packages || [])
+    .filter((record) => record?.manifest?.kind === "skill")
+    .map(workspaceSkillPackageProjection)
+    .filter((item) => !workspaceId || item.workspaceId === workspaceId || !item.workspaceId);
+}
+
 function workspaceAccessOptions(authSession = null) {
   const user = authSession?.user || {};
   const scopes = [
@@ -632,10 +779,40 @@ const WORKSPACE_ASSET_OPERATION_PROTOCOL_VERSION = "v0.0.1:workspace:asset-opera
 
 function authSessionScopes(context = {}) {
   const user = context.authSession?.user || {};
+  const subject = context.subject && typeof context.subject === "object" && !Array.isArray(context.subject)
+    ? context.subject
+    : {};
   return new Set([
     ...(Array.isArray(user.scopes) ? user.scopes : []),
-    ...(Array.isArray(context.authSession?.scopes) ? context.authSession.scopes : [])
+    ...(Array.isArray(context.authSession?.scopes) ? context.authSession.scopes : []),
+    ...(Array.isArray(subject.scopes) ? subject.scopes : [])
   ].map((scope) => String(scope || "").trim()).filter(Boolean));
+}
+
+function hasConsoleScope(context = {}, scope = "") {
+  const scopes = authSessionScopes(context);
+  return scopes.has(scope) || scopes.has("auth:admin") || scopes.has("runtime:admin");
+}
+
+function modelCallDeniedResult() {
+  return result(403, {
+    ok: false,
+    error: {
+      code: "model_call_scope_required",
+      message: "This operation can call a configured model and requires model:call.",
+      requiredScopes: ["model:call"]
+    }
+  });
+}
+
+function modelCallRequested(input = {}) {
+  const payload = input && typeof input === "object" && !Array.isArray(input)
+    ? input
+    : {};
+  const nested = payload.input && typeof payload.input === "object" && !Array.isArray(payload.input)
+    ? payload.input
+    : {};
+  return payload.modelEnabled === true || nested.modelEnabled === true;
 }
 
 function missingWorkspaceAssetScopes(context = {}, requiredScopes = []) {
@@ -2589,11 +2766,12 @@ async function executeWorkspaceAssetOperation({ operationId, input = {}, context
     }
     try {
       const registry = workspaceAssetRegistryFor(context);
-      const backfillResult = await registry.backfill({
-        ...input,
-        agentWorkspace: context.agentWorkspace,
-        contributionRegistry: contributionRegistryFor(input, context)
-      });
+	      const backfillResult = await registry.backfill({
+	        ...input,
+	        ...workspaceAccessOptions(context.authSession),
+	        agentWorkspace: context.agentWorkspace,
+	        contributionRegistry: contributionRegistryFor(input, context)
+	      });
       finalizeWorkspaceAssetLedger({
         ledger: ledgerContext.ledger,
         ledgerEntry: ledgerContext.ledgerEntry,
@@ -3157,39 +3335,115 @@ async function executeWorkspaceContributionOperation({ operationId, input, conte
       })));
     }
     if (operationId === "workspace.skill.upload") {
-      const resultPayload = registry.submitContribution({
-        ...input,
-        workspaceId: workspaceIdFrom(input),
+      const skillPackageRegistry = createCapabilityPackageRegistry({ userDataPath: context.userDataPath });
+      const workspaceId = workspaceIdFrom(input);
+      const manifest = signedWorkspaceSkillManifest(input, {
+        workspaceId,
         contributorId,
-        contributorKind,
-        contributionType: "skill",
-        title: input.title || input.skillId || "workspace skill"
+        contributorKind
       });
-      return result(201, protocolPayload(resultPayload));
+      const submission = await skillPackageRegistry.submit({
+        manifest,
+        files: Array.isArray(input.files) ? input.files : []
+      }, {
+        submittedBy: contributorId
+      });
+      const skill = workspaceSkillPackageProjection(submission.record);
+      let contributionProjection = skill;
+      try {
+        const projection = registry.submitContribution({
+          contributionId: skill.contributionId,
+          workspaceId,
+          contributorId,
+          contributorKind,
+          contributionType: "skill",
+          title: skill.title,
+          skillManifestRef: `skill-hub:${skill.skillPackageId}`,
+          payloadRefs: [skill.packageManifestRef].filter(Boolean),
+          requestedVisibility: input.requestedVisibility || "workspace",
+          requestedActions: input.requestedActions || ["discover", "download", "install", "execute"],
+          license: manifest.license,
+          risk: manifest.risk,
+          reason: "skill_hub_reference_projection"
+        });
+        contributionProjection = {
+          ...skill,
+          contribution: projection.contribution,
+          assetRecord: projection.assetRecord
+        };
+      } catch {
+        // The Skill Hub package is the source of truth. Workspace contribution
+        // projection failures must not fabricate or block package lifecycle state.
+      }
+      return result(201, protocolPayload({
+        skill,
+        skillPackage: submission.record,
+        contribution: contributionProjection,
+        installPlan: submission.installPlan
+      }));
     }
     if (operationId === "workspace.skill.list") {
-      const items = filterContributionsForWorkspace(registry.listContributions(), input)
-        .filter((item) => item.contributionType === "skill");
+      const skillPackageRegistry = createCapabilityPackageRegistry({ userDataPath: context.userDataPath });
+      const items = await listWorkspaceSkillPackages({ registry: skillPackageRegistry, input });
       return result(200, protocolPayload({ items, count: items.length }));
     }
     if (operationId === "workspace.skill.download") {
-      const skillId = String(input.skillId || input["skill-id"] || input.id || "").trim();
-      const item = registry.listContributions().find((candidate) =>
-        candidate.contributionType === "skill" &&
-        (candidate.contributionId === skillId || candidate.skillManifestRef === skillId || candidate.title === skillId)
-      );
+      const skillPackageRegistry = createCapabilityPackageRegistry({ userDataPath: context.userDataPath });
+      const items = await listWorkspaceSkillPackages({ registry: skillPackageRegistry, input: {} });
+      const item = items.find((candidate) => workspaceSkillPackageMatches({
+        manifest: {
+          packageId: candidate.skillPackageId,
+          name: candidate.name,
+          title: candidate.title,
+          metadata: {
+            legacySkillId: candidate.skillId,
+            workspaceSkillId: candidate.skillId,
+            workspaceContributionId: candidate.contributionId,
+            workspaceId: candidate.workspaceId,
+            skillManifestRef: candidate.skillManifestRef
+          }
+        },
+        status: candidate.status,
+        library: candidate.library,
+        usage: candidate.usage,
+        createdAt: candidate.createdAt,
+        updatedAt: candidate.updatedAt
+      }, input));
       if (!item) {
-        return result(404, { error: "workspace skill 不存在。" });
+        return result(404, { error: "workspace skill 不存在或未进入 Skill Hub。" });
       }
       return result(200, protocolPayload({ skill: item }));
     }
     if (operationId === "workspace.skill.usage.report") {
-      const resultPayload = registry.recordUsage(input.contributionId || input.skillId, {
-        ...input,
-        action: input.action || "skill.used",
-        actorId: callerId
-      });
-      return result(200, protocolPayload(resultPayload));
+      const skillPackageRegistry = createCapabilityPackageRegistry({ userDataPath: context.userDataPath });
+      const packageRef = input.skillPackageId || input.packageId || input.contributionId || input.skillId || input.id || "";
+      let usageResult;
+      try {
+        usageResult = await skillPackageRegistry.recordUsage(packageRef, {
+          ...input,
+          action: input.action || "skill.used",
+          actorId: callerId,
+          workspaceId: workspaceIdFrom(input, context.workspaceId || "")
+        });
+      } catch (error) {
+        return result(404, errorPayload(error, "workspace skill 不存在或未进入 Skill Hub。"));
+      }
+      let contributionUsage = null;
+      try {
+        contributionUsage = registry.recordUsage(usageResult.record.manifest.metadata?.workspaceContributionId || usageResult.record.manifest.packageId, {
+          ...input,
+          action: input.action || "skill.used",
+          actorId: callerId
+        });
+      } catch {
+        contributionUsage = null;
+      }
+      return result(200, protocolPayload({
+        usageEvent: usageResult.usageEvent,
+        usage: usageResult.usage,
+        skill: workspaceSkillPackageProjection(usageResult.record),
+        contributionUsage
+      }));
     }
   } catch (error) {
     return result(400, errorPayload(error, "Workspace contribution operation failed."));
@@ -4691,7 +4945,8 @@ async function executeSettingsAgentGatewayOperation({ operationId, input = {}, c
         provider,
         settings: candidateSettings,
         modelAlias,
-        userDataPath: context.userDataPath
+        userDataPath: context.userDataPath,
+        contextCompactionSource: "settings.model_probe"
       });
     } catch (error) {
       status = "failed";
@@ -6676,6 +6931,18 @@ async function executeGoldenRuleOperation({ operationId, input, context }) {
 
 async function executeKnowledgeSkillOperation({ operationId, input, context }) {
   const id = String(operationId || "");
+  const canonicalId = {
+    "knowledge.playbooks.list": "knowledge.skills.list",
+    "knowledge.playbooks.get": "knowledge.skills.get",
+    "knowledge.playbooks.generate": "knowledge.skills.generate",
+    "knowledge.playbooks.propose": "knowledge.skills.propose",
+    "knowledge.playbooks.resolve": "knowledge.skills.resolve",
+    "knowledge.playbook_framework.get": "knowledge.skills.framework",
+    "knowledge.playbook_framework.save": "knowledge.skills.framework_save",
+    "knowledge.playbook_sets.evaluation.runs.create": "knowledge.skills.evaluation.runs.create",
+    "knowledge.playbook_sets.deployments.create": "knowledge.skills.deployments.create",
+    "knowledge.playbook_sets.deployments.rollback": "knowledge.skills.deployments.rollback"
+  }[id] || id;
   const handledOperations = new Set([
     "knowledge.skills.list",
     "knowledge.skills.get",
@@ -6688,7 +6955,7 @@ async function executeKnowledgeSkillOperation({ operationId, input, context }) {
     "knowledge.skills.deployments.create",
     "knowledge.skills.deployments.rollback"
   ]);
-  if (!handledOperations.has(id)) {
+  if (!handledOperations.has(canonicalId)) {
     return null;
   }
 
@@ -6697,7 +6964,7 @@ async function executeKnowledgeSkillOperation({ operationId, input, context }) {
     return result(503, { error: "知识 Skill 运行时不可用。" });
   }
 
-  if (id === "knowledge.skills.list") {
+  if (canonicalId === "knowledge.skills.list") {
     return result(200, runtime.listSkills({
       status: input.status || "",
       query: input.query || input.q || "",
@@ -6705,26 +6972,26 @@ async function executeKnowledgeSkillOperation({ operationId, input, context }) {
     }));
   }
 
-  if (id === "knowledge.skills.get") {
-    const skill = runtime.getSkill(input.skillId || input["skill-id"] || input.id || "");
+  if (canonicalId === "knowledge.skills.get") {
+    const skill = runtime.getSkill(input.playbookId || input["playbook-id"] || input.skillId || input["skill-id"] || input.id || "");
     if (!skill) {
       return result(404, { error: "知识 Skill 不存在。" });
     }
     return result(200, skill);
   }
 
-  if (id === "knowledge.skills.generate") {
+  if (canonicalId === "knowledge.skills.generate") {
     return result(201, await runtime.generateSkill(input));
   }
 
-  if (id === "knowledge.skills.propose") {
+  if (canonicalId === "knowledge.skills.propose") {
     return result(201, await runtime.proposeSkill(input));
   }
 
-  if (id === "knowledge.skills.resolve") {
+  if (canonicalId === "knowledge.skills.resolve") {
     const operationResult = runtime.resolveSkill({
       ...input,
-      skillId: input.skillId || input["skill-id"] || input.id || ""
+      skillId: input.skillId || input["skill-id"] || input.playbookId || input["playbook-id"] || input.id || ""
     });
     if (!operationResult) {
       return result(404, { error: "知识 Skill 不存在。" });
@@ -6746,22 +7013,22 @@ async function executeKnowledgeSkillOperation({ operationId, input, context }) {
     return result(operationResult.ok === false ? 409 : 200, operationResult);
   }
 
-  if (id === "knowledge.skills.framework") {
+  if (canonicalId === "knowledge.skills.framework") {
     return result(200, {
       protocolVersion: runtime.protocolVersion,
       framework: await runtime.loadFramework()
     });
   }
 
-  if (id === "knowledge.skills.framework_save") {
+  if (canonicalId === "knowledge.skills.framework_save") {
     return result(200, await runtime.saveFramework(input));
   }
 
-  if (id === "knowledge.skills.evaluation.runs.create") {
+  if (canonicalId === "knowledge.skills.evaluation.runs.create") {
     return result(201, await runtime.runSkillEvaluation(input));
   }
 
-  if (id === "knowledge.skills.deployments.create") {
+  if (canonicalId === "knowledge.skills.deployments.create") {
     const operationResult = await runtime.createSkillDeployment(input);
     await publishProtocolEvent(context.protocolEventBus, "knowledge.skill_deployments", operationResult, {
       type: "knowledge.skill_deployment.created"
@@ -6769,7 +7036,7 @@ async function executeKnowledgeSkillOperation({ operationId, input, context }) {
     return result(operationResult?.ok === false ? 409 : 201, operationResult);
   }
 
-  if (id === "knowledge.skills.deployments.rollback") {
+  if (canonicalId === "knowledge.skills.deployments.rollback") {
     const operationResult = await runtime.rollbackSkillDeployment({
       ...input,
       deploymentId: input.deploymentId || input["deployment-id"] || input.id || ""
@@ -6788,17 +7055,22 @@ async function executeKnowledgeSkillOperation({ operationId, input, context }) {
 
 async function executeKnowledgeAgentSupportOperation({ operationId, input, context }) {
   const id = String(operationId || "");
+  const canonicalId = {
+    "knowledge.retrieval_playbook.describe": "knowledge.agent_skill.describe",
+    "knowledge.retrieval_playbook.plan": "knowledge.agent_skill.plan",
+    "knowledge.retrieval_playbook.run": "knowledge.agent_skill.run"
+  }[id] || id;
   const handledOperations = new Set([
     "knowledge.evidence_gate.evaluate",
     "knowledge.agent_skill.describe",
     "knowledge.agent_skill.plan",
     "knowledge.agent_skill.run"
   ]);
-  if (!handledOperations.has(id)) {
+  if (!handledOperations.has(canonicalId)) {
     return null;
   }
 
-  if (id === "knowledge.evidence_gate.evaluate") {
+  if (canonicalId === "knowledge.evidence_gate.evaluate") {
     const gate = context.evidenceSufficiencyGate;
     if (!gate || typeof gate.evaluate !== "function") {
       return result(503, { error: "证据充分性门禁不可用。" });
@@ -6810,13 +7082,16 @@ async function executeKnowledgeAgentSupportOperation({ operationId, input, conte
   if (!runtime) {
     return result(503, { error: "知识库智能体技能不可用。" });
   }
-  if (id === "knowledge.agent_skill.describe") {
+  if (canonicalId === "knowledge.agent_skill.describe") {
     return result(200, runtime.describe());
   }
-  if (id === "knowledge.agent_skill.plan") {
+  if (canonicalId === "knowledge.agent_skill.plan") {
     return result(200, runtime.plan(input));
   }
-  if (id === "knowledge.agent_skill.run") {
+  if (canonicalId === "knowledge.agent_skill.run") {
+    if (modelCallRequested(input) && !hasConsoleScope(context, "model:call")) {
+      return modelCallDeniedResult();
+    }
     return result(200, await runtime.run(input));
   }
   return null;
@@ -7094,6 +7369,9 @@ async function executeKnowledgeEvaluationOperation({ operationId, input, context
     }
     if (id === "knowledge.model_roles") {
       return result(200, runtime.describe());
+    }
+    if (modelCallRequested(input) && !hasConsoleScope(context, "model:call")) {
+      return modelCallDeniedResult();
     }
     return result(200, await runtime.decide(input));
   }
@@ -7464,6 +7742,9 @@ async function executeKnowledgeRetrievalOperation({ operationId, input, context 
         payload.retrievalProfile?.hierarchyReasoningEnabled === true ||
         payload.retrieval?.hierarchyReasoningEnabled === true ||
         payload.profile?.retrieval?.hierarchyReasoningEnabled === true;
+      if (hierarchyReasoning && payload.modelEnabled === true && !hasConsoleScope(context, "model:call")) {
+        return modelCallDeniedResult();
+      }
       const hierarchyReasoningDecision =
         hierarchyReasoning && typeof knowledgeCore.prepareHierarchyReasoning === "function"
           ? await knowledgeCore.prepareHierarchyReasoning({

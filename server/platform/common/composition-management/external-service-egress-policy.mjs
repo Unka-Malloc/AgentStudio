@@ -140,7 +140,8 @@ export function serviceHubLocalEgressAllowed({
 } = {}) {
   const egress = asObject(asObject(policies).egress);
   return String(policyPreset || "").trim() === SERVICEHUB_DEVELOPMENT_LOCAL_POLICY_PRESET ||
-    egress.allowLocalForDevelopment === true;
+    egress.allowLocalForDevelopment === true ||
+    egress.allowLocalForConfiguredModelService === true;
 }
 
 export function evaluateExternalServiceEgressUrl({
@@ -162,6 +163,7 @@ export function evaluateExternalServiceEgressUrl({
     };
   }
   const host = classifyExternalServiceHost(parsed.hostname);
+  const egress = asObject(asObject(policies).egress);
   const allowLocal = serviceHubLocalEgressAllowed({ policyPreset, policies });
   const blocked = host.restricted && !allowLocal;
   return {
@@ -175,6 +177,7 @@ export function evaluateExternalServiceEgressUrl({
     hostKind: host.kind,
     addressCategory: host.category,
     allowLocalForDevelopment: allowLocal,
+    allowLocalForConfiguredModelService: egress.allowLocalForConfiguredModelService === true,
     reason: blocked ? `restricted_address_${host.category}` : "allowed"
   };
 }

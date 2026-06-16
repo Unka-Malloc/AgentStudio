@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   createCompositionDehydrationPlan,
+  loadCompositionPreset,
   loadCompositionPresets,
   writeCompositionPlanArtifacts
 } from "../platform/common/composition-management/index.mjs";
@@ -50,9 +51,9 @@ function usage() {
     "Usage:",
     "  node server/scripts/composition-presets.mjs list",
     "  node server/scripts/composition-presets.mjs verify [--preset ID]",
-    "  node server/scripts/composition-presets.mjs dehydrate [--preset ID] [--skip-ui-build] [--no-source-trim]",
-    "  node server/scripts/composition-presets.mjs docker-verify [--preset ID] [--skip-ui-build] [--no-source-trim] [--port-base 18880]",
-    "  node server/scripts/composition-presets.mjs regression [--preset ID] [--skip-ui-build] [--port-base 18880]",
+    "  node server/scripts/composition-presets.mjs dehydrate --preset-config PATH [--skip-ui-build] [--no-source-trim]",
+    "  node server/scripts/composition-presets.mjs docker-verify --preset-config PATH [--skip-ui-build] [--no-source-trim] [--port-base 18880]",
+    "  node server/scripts/composition-presets.mjs regression --preset-config PATH [--skip-ui-build] [--port-base 18880]",
     "  node server/scripts/composition-presets.mjs regression --external-service-config service.json",
     "",
     "Commands:",
@@ -60,7 +61,11 @@ function usage() {
     "  verify         Validate preset feature IDs, operations, paths, and dehydration operation coverage.",
     "  dehydrate      Generate physically trimmed source package, feature profile, Dockerfile, compose.yaml, and reports.",
     "  docker-verify  Build each generated Docker image, run it, and require /api/healthz to pass.",
-    "  regression     Run each generated source package's own regression script, then Docker verify it."
+    "  regression     Run each generated source package's own regression script, then Docker verify it.",
+    "",
+    "Common local-source builds:",
+    "  npm run server:build:client-local",
+    "  npm run composition:dehydrate -- --preset-config server/platform/common/composition-management/client-local-runtime.preset.json --skip-ui-build"
   ].join("\n");
 }
 
@@ -71,6 +76,23 @@ function splitList(value = "") {
     .filter(Boolean);
 }
 
+function explicitPresetConfigPaths(args = {}) {
+  return splitList(args["preset-config"] || args["config"] || args["config-path"]);
+}
+
+function withOutputRootOverride(preset, args = {}) {
+  if (!args["output-root"]) {
+    return preset;
+  }
+  return {
+    ...preset,
+    deploymentTarget: {
+      ...(preset.deploymentTarget || {}),
+      outputRoot: String(args["output-root"])
+    }
+  };
+}
+
 async function selectPresets(args = {}) {
   if (args["external-service-config"]) {
     const loaded = await loadExternalServiceConfig(String(args["external-service-config"]), { cwd: REPO_ROOT });
@@ -79,6 +101,24 @@ async function selectPresets(args = {}) {
       outputRoot: args["output-root"] ? String(args["output-root"]) : ""
     });
     return [{ preset, filePath: loaded.filePath }];
+  }
+  const explicitConfigPaths = explicitPresetConfigPaths(args);
+  if (explicitConfigPaths.length > 0) {
+    const selectedIds = new Set(splitList(args.preset || args.presets));
+    const records = await Promise.all(
+      explicitConfigPaths.map(async (configPath) => {
+        const loaded = await loadCompositionPreset(path.resolve(REPO_ROOT, configPath));
+        return {
+          preset: withOutputRootOverride(loaded.preset, args),
+          filePath: loaded.filePath
+        };
+      })
+    );
+    const selected = records.filter(({ preset }) => selectedIds.size === 0 || selectedIds.has(preset.presetId));
+    if (selected.length === 0) {
+      throw new Error(`No explicit preset config matched --preset ${[...selectedIds].join(",") || "<none>"}.`);
+    }
+    return selected;
   }
   const loaded = await loadCompositionPresets({ cwd: REPO_ROOT });
   const selectedIds = new Set(splitList(args.preset || args.presets));
@@ -488,6 +528,9 @@ async function main() {
   }
 
   if (command === "dehydrate" || command === "docker-verify" || command === "regression") {
+    if (!args["external-service-config"] && explicitPresetConfigPaths(args).length === 0) {
+      throw new Error(`${command} requires an explicit --preset-config PATH. Default preset discovery is allowed for list/verify only.`);
+    }
     const dehydrated = [];
     for (const item of selected) {
       dehydrated.push(await dehydratePreset({ ...item, args }));

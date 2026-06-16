@@ -6,7 +6,7 @@
 - 根 `README.md` 和 `README.zh-CN.md` 是产品宣传页，默认不作为工程事实源；只有产品定位、对外文案或用户明确要求时才读取或修改。
 - 工程任务优先从本文件、目标子目录最近的 `AGENT.md`、`docs/README.md` 或局部说明建立上下文。
 - 代码修改先按任务路由缩小到一个子系统，再在候选目录内搜索；文档修改先看 `docs/README.md` 的索引和维护规则，再打开目标文档。
-- `build/`、`node_modules/`、`client-cli/target/`、`client-gui/build/`、`client-gui/coverage/` 和 `docs/reports/history/` 默认视为生成物、依赖缓存或历史材料；只有任务明确指向、验证输出指向，或需要核对历史事实时再进入。
+- `build/`、`node_modules/`、`client-cli/target/`、`client-gui/build/` 和 `client-gui/coverage/` 默认视为生成物、依赖缓存或历史材料；只有任务明确指向或验证输出指向时再进入。
 - 扩大到全仓库搜索前，先说明当前入口无法回答的问题，并尽量限定文件类型或目录前缀，减少无关上下文进入会话。
 - 开始修改前先运行 `git status --short`，区分当前任务改动和用户已有改动；无关改动保持原样。
 - 搜索优先使用 `rg` 或 `rg --files`，避免把整段生成物、大型历史报告或依赖目录读入上下文。
@@ -14,19 +14,19 @@
 ## 任务路由
 
 - 前端控制台任务从 `server-web/` 开始，只打开相关的 `components/`、`views/`、`lib/` 和样式文件。
-- 服务端或运行时任务从 `server/` 开始；只有涉及启动、挂载、运行行为或运维语义时再查阅 `docs/SERVER.md`。
-- MCP connector 任务从 `mcp-connector/` 开始；安装和注册行为再查阅 `mcp-connector/README.md` 与 `docs/MCP_INSTALL.md`。
+- 服务端或运行时任务从 `server/` 开始；只有涉及启动、挂载、运行行为或运维语义时再查阅 `docs/architecture/ARCHITECTURE.md`、`docs/functionality/SERVER-RUNTIME.md` 与 `docs/USAGES.md`。
+- MCP gateway installer 任务从 `server/platform/common/mcp/gateway-installer/` 开始；安装和注册行为再查阅同目录 `README.md` 与 `docs/USAGES.md`。
 - 架构、策略或治理类任务先看 `docs/README.md`，再打开与主题对应的核心文档。
-- 测试任务先从失败测试或 verifier 本身开始；只有测试契约不清楚时再查阅 `docs/TEST-FRAMEWORK.md`。
-- Skill 或知识工具任务从 `skills/README.md` 或目标 skill 目录开始，避免默认展开完整 `docs/reports/history/`。
-- 子系统目录入口已放在 `server/AGENT.md`、`server-web/AGENT.md`、`mcp-connector/AGENT.md`、`client-cli/AGENT.md`、`client-gui/AGENT.md` 和 `docs/AGENT.md`。
+- 测试任务先从失败测试或 verifier 本身开始；只有测试契约不清楚时再查阅 `docs/runbook/DEVELOPMENT-RUNBOOK.md`。
+- Skill 或知识工具任务从 `skills/README.md` 或目标 skill 目录开始，再按主题查阅 `docs/AGENT.md` 和 `docs/functionality/KNOWLEDGE.md`。
+- 子系统目录入口已放在 `server/AGENT.md`、`server-web/AGENT.md`、`server/platform/common/mcp/gateway-installer/AGENT.md`、`client-cli/AGENT.md`、`client-gui/AGENT.md` 和 `docs/AGENT.md`。
 
 ## 工作树协作
 
 - 默认把主工作树作为集成和手动产品文案维护区，不在其中混入大范围实验性改动。
 - 子系统工作优先使用独立 worktree：服务端、Web Console、MCP connector、CLI、GUI、文档/智能体规则分别建分支维护。
 - 跨子系统契约变更使用单独集成 worktree 完成，避免服务端接口、前端调用和文档在多个分支中漂移。
-- 具体拆分、目录归属和建树命令见 `docs/GIT-COLLAB.md`。
+- 具体拆分、目录归属和建树命令见 `docs/runbook/DEVELOPMENT-RUNBOOK.md`。
 
 ## 任务启动流程
 

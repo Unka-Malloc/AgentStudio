@@ -3,7 +3,7 @@
   "schemaVersion": "v0.0.1:version-governance:registry-schema-1",
   "registryId": "pact.version-registry",
   "protocolVersion": "v0.0.1:version-governance:protocol-1",
-  "updatedAt": "2026-06-14",
+  "updatedAt": "2026-06-16",
   "authority": {
     "mode": "source-controlled-singleton",
     "artifactStoreRoot": ".pact-server-data/artifacts",
@@ -30,7 +30,7 @@
             {
               "evidenceId": "pact.version-source.agent-library.core-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -55,7 +55,7 @@
             {
               "evidenceId": "pact.version-source.agent.acp-agent-relay-1",
               "kind": "doc",
-              "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+              "uri": "docs/functionality/AGENT-COLLABORATION.md"
             }
           ]
         }
@@ -105,7 +105,7 @@
             {
               "evidenceId": "pact.version-source.agent.acp-agent-relay-proof-matrix-1",
               "kind": "doc",
-              "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+              "uri": "docs/functionality/AGENT-COLLABORATION.md"
             }
           ]
         }
@@ -130,7 +130,7 @@
             {
               "evidenceId": "pact.version-source.agent.acp-agent-relay-real-proof-bundle-1",
               "kind": "doc",
-              "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+              "uri": "docs/functionality/AGENT-COLLABORATION.md"
             }
           ]
         }
@@ -155,7 +155,7 @@
             {
               "evidenceId": "pact.version-source.agent.acp-agent-relay-real-proof-matrix-1",
               "kind": "doc",
-              "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+              "uri": "docs/functionality/AGENT-COLLABORATION.md"
             }
           ]
         }
@@ -255,7 +255,7 @@
             {
               "evidenceId": "pact.version-source.agent.acp-relay-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -330,7 +330,7 @@
             {
               "evidenceId": "pact.version-source.agent.client-runtime-bootstrap-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -405,7 +405,7 @@
             {
               "evidenceId": "pact.version-source.agent.context-bundle-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -480,7 +480,7 @@
             {
               "evidenceId": "pact.version-source.agent.downstream-client-aspect-1",
               "kind": "doc",
-              "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+              "uri": "docs/functionality/AGENT-COLLABORATION.md"
             }
           ]
         }
@@ -555,7 +555,7 @@
             {
               "evidenceId": "pact.version-source.agent.library-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -655,7 +655,7 @@
             {
               "evidenceId": "pact.version-source.agent.runtime-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -680,7 +680,7 @@
             {
               "evidenceId": "pact.version-source.agent.session-thread-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -755,7 +755,7 @@
             {
               "evidenceId": "pact.version-source.architecture.live-map-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -780,7 +780,7 @@
             {
               "evidenceId": "pact.version-source.asset.asset-lineage-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -805,7 +805,7 @@
             {
               "evidenceId": "pact.version-source.asset.lineage-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -830,7 +830,37 @@
             {
               "evidenceId": "pact.version-source.client-runtime.bootstrap-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactId": "pact.client.fingerprint-1",
+      "kind": "other",
+      "description": "Registered governed version v0.0.1:client:fingerprint-1 for client installation fingerprinting used by process identity.",
+      "activeVersion": "v0.0.1:client:fingerprint-1",
+      "versions": [
+        {
+          "version": "v0.0.1:client:fingerprint-1",
+          "ref": "pact.client.fingerprint-1@v0.0.1:client:fingerprint-1",
+          "lifecycle": "active",
+          "compatibility": {
+            "newBindingsAllowed": true,
+            "historicalResolutionAllowed": true
+          },
+          "artifactRefs": [],
+          "evidenceRefs": [
+            {
+              "evidenceId": "pact.version-source.client.fingerprint-1.impl",
+              "kind": "other",
+              "uri": "server/platform/common/security/process-identity/index.mjs"
+            },
+            {
+              "evidenceId": "pact.version-source.client.fingerprint-1.docs",
+              "kind": "doc",
+              "uri": "docs/functionality/CLIENT-DESKTOP.md"
             }
           ]
         }
@@ -855,7 +885,7 @@
             {
               "evidenceId": "pact.version-source.codespace.code-review-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -880,7 +910,7 @@
             {
               "evidenceId": "pact.version-source.codespace.core-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -905,7 +935,7 @@
             {
               "evidenceId": "pact.version-source.context.bundle-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -930,7 +960,7 @@
             {
               "evidenceId": "pact.version-source.devops.core-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -955,7 +985,7 @@
             {
               "evidenceId": "pact.version-source.external-service.api-registry-1",
               "kind": "doc",
-              "uri": "docs/boundary/N-2-N-Interfaces.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -1005,7 +1035,7 @@
             {
               "evidenceId": "pact.version-source.external-service.knowledge-adapter-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -1430,7 +1460,7 @@
             {
               "evidenceId": "pact.version-source.external-service.knowledge-distillation-industrial-benchmark-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -1780,7 +1810,7 @@
             {
               "evidenceId": "pact.version-source.external-service.knowledge-distillation-service-gates-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -2230,7 +2260,7 @@
             {
               "evidenceId": "pact.version-source.knowledge.access-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -2238,8 +2268,8 @@
     },
     {
       "artifactId": "pact.knowledge.agent-skill-1",
-      "kind": "other",
-      "description": "Registered governed version v0.0.1:knowledge:agent-skill-1.",
+      "kind": "compatibility_projection",
+      "description": "Registered governed version v0.0.1:knowledge:agent-skill-1 Compatibility projection retained for legacy AgentLibrary callers; new product semantics use Playbook and Retrieval Playbook artifacts.",
       "activeVersion": "v0.0.1:knowledge:agent-skill-1",
       "versions": [
         {
@@ -2248,7 +2278,8 @@
           "lifecycle": "active",
           "compatibility": {
             "newBindingsAllowed": true,
-            "historicalResolutionAllowed": true
+            "historicalResolutionAllowed": true,
+            "notes": "Compatibility projection only. New public callers should bind to AgentLibrary Playbook, Retrieval Playbook, or Playbook Framework names."
           },
           "artifactRefs": [],
           "evidenceRefs": [
@@ -2280,7 +2311,7 @@
             {
               "evidenceId": "pact.version-source.knowledge.backend-port-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -2430,7 +2461,7 @@
             {
               "evidenceId": "pact.version-source.knowledge.distillation-optimization-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -2505,7 +2536,7 @@
             {
               "evidenceId": "pact.version-source.knowledge.embedding-1",
               "kind": "doc",
-              "uri": "docs/SERVER.md"
+              "uri": "docs/functionality/SERVER-RUNTIME.md"
             }
           ]
         }
@@ -2912,6 +2943,66 @@
       ]
     },
     {
+      "artifactId": "pact.knowledge.playbook-1",
+      "kind": "schema",
+      "description": "AgentLibrary Playbook runtime and storage schema. Replaces product-facing KnowledgeSkill naming while keeping legacy projections readable.",
+      "activeVersion": "v0.0.1:knowledge:playbook-1",
+      "versions": [
+        {
+          "version": "v0.0.1:knowledge:playbook-1",
+          "ref": "pact.knowledge.playbook-1@v0.0.1:knowledge:playbook-1",
+          "lifecycle": "active",
+          "compatibility": {
+            "newBindingsAllowed": true,
+            "historicalResolutionAllowed": true
+          },
+          "artifactRefs": [],
+          "evidenceRefs": [
+            {
+              "evidenceId": "pact.version-source.knowledge.playbook-1.runtime",
+              "kind": "other",
+              "uri": "server/platform/specialized/knowledge/invocation/knowledge-skill-runtime/index.mjs"
+            },
+            {
+              "evidenceId": "pact.version-source.knowledge.playbook-1.adr",
+              "kind": "doc",
+              "uri": "docs/adr/0001-govern-agent-to-agent-acp-delegation-through-pact.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactId": "pact.knowledge.playbook-framework-1",
+      "kind": "schema",
+      "description": "AgentLibrary Playbook Framework entity-config schema and quality policy for built-in Playbook generation.",
+      "activeVersion": "v0.0.1:knowledge:playbook-framework-1",
+      "versions": [
+        {
+          "version": "v0.0.1:knowledge:playbook-framework-1",
+          "ref": "pact.knowledge.playbook-framework-1@v0.0.1:knowledge:playbook-framework-1",
+          "lifecycle": "active",
+          "compatibility": {
+            "newBindingsAllowed": true,
+            "historicalResolutionAllowed": true
+          },
+          "artifactRefs": [],
+          "evidenceRefs": [
+            {
+              "evidenceId": "pact.version-source.knowledge.playbook-framework-1",
+              "kind": "manifest",
+              "uri": "server/config/entity-config/playbooks/knowledge-playbook-framework/framework.json"
+            },
+            {
+              "evidenceId": "pact.version-source.knowledge.playbook-framework-1.manifest",
+              "kind": "manifest",
+              "uri": "server/config/entity-config/playbooks/knowledge-playbook-framework/manifest.json"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "artifactId": "pact.knowledge.preprocess-result-schema-1",
       "kind": "other",
       "description": "Registered governed version v0.0.1:knowledge:preprocess-result-schema-1.",
@@ -2955,7 +3046,37 @@
             {
               "evidenceId": "pact.version-source.knowledge.retrieval-1",
               "kind": "doc",
-              "uri": "docs/SERVER.md"
+              "uri": "docs/functionality/SERVER-RUNTIME.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactId": "pact.knowledge.retrieval-playbook-1",
+      "kind": "protocol",
+      "description": "Retrieval Playbook public operation protocol for coarse-to-fine Agent Library planning and execution.",
+      "activeVersion": "v0.0.1:knowledge:retrieval-playbook-1",
+      "versions": [
+        {
+          "version": "v0.0.1:knowledge:retrieval-playbook-1",
+          "ref": "pact.knowledge.retrieval-playbook-1@v0.0.1:knowledge:retrieval-playbook-1",
+          "lifecycle": "active",
+          "compatibility": {
+            "newBindingsAllowed": true,
+            "historicalResolutionAllowed": true
+          },
+          "artifactRefs": [],
+          "evidenceRefs": [
+            {
+              "evidenceId": "pact.version-source.knowledge.retrieval-playbook-1.operations",
+              "kind": "other",
+              "uri": "server/platform/common/operation-dispatcher/operation-registry.mjs"
+            },
+            {
+              "evidenceId": "pact.version-source.knowledge.retrieval-playbook-1.adr",
+              "kind": "doc",
+              "uri": "docs/adr/0001-govern-agent-to-agent-acp-delegation-through-pact.md"
             }
           ]
         }
@@ -3005,7 +3126,7 @@
             {
               "evidenceId": "pact.version-source.knowledge.rule-1",
               "kind": "doc",
-              "uri": "docs/CONTEXT.md"
+              "uri": "docs/AGENT.md"
             }
           ]
         }
@@ -3030,7 +3151,7 @@
             {
               "evidenceId": "pact.version-source.knowledge.rule-authoring-1",
               "kind": "doc",
-              "uri": "docs/KNOWLEDGE-GOVERNANCE.md"
+              "uri": "docs/functionality/KNOWLEDGE.md"
             }
           ]
         }
@@ -3088,8 +3209,8 @@
     },
     {
       "artifactId": "pact.knowledge.skill-1",
-      "kind": "other",
-      "description": "Registered governed version v0.0.1:knowledge:skill-1.",
+      "kind": "compatibility_projection",
+      "description": "Registered governed version v0.0.1:knowledge:skill-1 Compatibility projection retained for legacy AgentLibrary callers; new product semantics use Playbook and Retrieval Playbook artifacts.",
       "activeVersion": "v0.0.1:knowledge:skill-1",
       "versions": [
         {
@@ -3098,7 +3219,8 @@
           "lifecycle": "active",
           "compatibility": {
             "newBindingsAllowed": true,
-            "historicalResolutionAllowed": true
+            "historicalResolutionAllowed": true,
+            "notes": "Compatibility projection only. New public callers should bind to AgentLibrary Playbook, Retrieval Playbook, or Playbook Framework names."
           },
           "artifactRefs": [],
           "evidenceRefs": [
@@ -3113,8 +3235,8 @@
     },
     {
       "artifactId": "pact.knowledge.skill-distillation-1",
-      "kind": "other",
-      "description": "Registered governed version v0.0.1:knowledge:skill-distillation-1.",
+      "kind": "compatibility_projection",
+      "description": "Registered governed version v0.0.1:knowledge:skill-distillation-1 Compatibility projection retained for legacy AgentLibrary callers; new product semantics use Playbook and Retrieval Playbook artifacts.",
       "activeVersion": "v0.0.1:knowledge:skill-distillation-1",
       "versions": [
         {
@@ -3123,7 +3245,8 @@
           "lifecycle": "active",
           "compatibility": {
             "newBindingsAllowed": true,
-            "historicalResolutionAllowed": true
+            "historicalResolutionAllowed": true,
+            "notes": "Compatibility projection only. New public callers should bind to AgentLibrary Playbook, Retrieval Playbook, or Playbook Framework names."
           },
           "artifactRefs": [],
           "evidenceRefs": [
@@ -3138,8 +3261,8 @@
     },
     {
       "artifactId": "pact.knowledge.skill-framework-1",
-      "kind": "other",
-      "description": "Registered governed version v0.0.1:knowledge:skill-framework-1.",
+      "kind": "compatibility_projection",
+      "description": "Registered governed version v0.0.1:knowledge:skill-framework-1 Compatibility projection retained for legacy AgentLibrary callers; new product semantics use Playbook and Retrieval Playbook artifacts.",
       "activeVersion": "v0.0.1:knowledge:skill-framework-1",
       "versions": [
         {
@@ -3148,7 +3271,8 @@
           "lifecycle": "active",
           "compatibility": {
             "newBindingsAllowed": true,
-            "historicalResolutionAllowed": true
+            "historicalResolutionAllowed": true,
+            "notes": "Compatibility projection only. New public callers should bind to AgentLibrary Playbook, Retrieval Playbook, or Playbook Framework names."
           },
           "artifactRefs": [],
           "evidenceRefs": [
@@ -3305,7 +3429,7 @@
             {
               "evidenceId": "pact.version-source.knowledge.transformation-1",
               "kind": "doc",
-              "uri": "docs/KNOWLEDGE-GOVERNANCE.md"
+              "uri": "docs/functionality/KNOWLEDGE.md"
             }
           ]
         }
@@ -3330,7 +3454,7 @@
             {
               "evidenceId": "pact.version-source.knowledge.vector-1",
               "kind": "doc",
-              "uri": "docs/SERVER.md"
+              "uri": "docs/functionality/SERVER-RUNTIME.md"
             }
           ]
         }
@@ -3380,7 +3504,7 @@
             {
               "evidenceId": "pact.version-source.mcp.connector-package-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -3430,7 +3554,7 @@
             {
               "evidenceId": "pact.version-source.mcp.device-discovery-schema-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -3455,7 +3579,7 @@
             {
               "evidenceId": "pact.version-source.mcp.device-hub-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -3480,7 +3604,7 @@
             {
               "evidenceId": "pact.version-source.mcp.handshake-1",
               "kind": "other",
-              "uri": "mcp-connector/bin/pact-mcp.mjs"
+              "uri": "server/platform/common/mcp/gateway-installer/bin/pact-mcp.mjs"
             }
           ]
         }
@@ -3531,31 +3655,6 @@
               "evidenceId": "pact.version-source.mcp.identity-1",
               "kind": "other",
               "uri": "server/platform/common/mcp/identity.mjs"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "artifactId": "pact.protocol.mcp",
-      "kind": "protocol",
-      "description": "Registered governed version v0.0.1:mcp:interface-1.",
-      "activeVersion": "v0.0.1:mcp:interface-1",
-      "versions": [
-        {
-          "version": "v0.0.1:mcp:interface-1",
-          "ref": "pact.protocol.mcp@v0.0.1:mcp:interface-1",
-          "lifecycle": "active",
-          "compatibility": {
-            "newBindingsAllowed": true,
-            "historicalResolutionAllowed": true
-          },
-          "artifactRefs": [],
-          "evidenceRefs": [
-            {
-              "evidenceId": "pact.version-source.mcp.interface-1",
-              "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
             }
           ]
         }
@@ -3630,7 +3729,7 @@
             {
               "evidenceId": "pact.version-source.mcp.sharedspace-exchange-1",
               "kind": "other",
-              "uri": "mcp-connector/bin/pact-mcp.mjs"
+              "uri": "server/platform/common/mcp/gateway-installer/bin/pact-mcp.mjs"
             }
           ]
         }
@@ -3655,7 +3754,7 @@
             {
               "evidenceId": "pact.version-source.module.ecosystem-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -3680,7 +3779,7 @@
             {
               "evidenceId": "pact.version-source.module.mount-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -3730,7 +3829,32 @@
             {
               "evidenceId": "pact.version-source.operation.core-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactId": "pact.operation.ledger-1",
+      "kind": "protocol",
+      "description": "Registered governed version v0.0.1:operation:ledger-1.",
+      "activeVersion": "v0.0.1:operation:ledger-1",
+      "versions": [
+        {
+          "version": "v0.0.1:operation:ledger-1",
+          "ref": "pact.operation.ledger-1@v0.0.1:operation:ledger-1",
+          "lifecycle": "active",
+          "compatibility": {
+            "newBindingsAllowed": true,
+            "historicalResolutionAllowed": true
+          },
+          "artifactRefs": [],
+          "evidenceRefs": [
+            {
+              "evidenceId": "pact.version-source.operation.ledger-1",
+              "kind": "other",
+              "uri": "server/platform/common/operation-ledger/index.mjs"
             }
           ]
         }
@@ -3780,7 +3904,7 @@
             {
               "evidenceId": "pact.version-source.operation.reply-schema-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -3805,7 +3929,7 @@
             {
               "evidenceId": "pact.version-source.operation.reply-target-schema-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -3855,7 +3979,7 @@
             {
               "evidenceId": "pact.version-source.organization.model-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -3880,32 +4004,7 @@
             {
               "evidenceId": "pact.version-source.performance.capacity-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "artifactId": "pact.platform.architecture-live-map-1",
-      "kind": "platform",
-      "description": "Registered governed version v0.0.1:platform:architecture-live-map-1.",
-      "activeVersion": "v0.0.1:platform:architecture-live-map-1",
-      "versions": [
-        {
-          "version": "v0.0.1:platform:architecture-live-map-1",
-          "ref": "pact.platform.architecture-live-map-1@v0.0.1:platform:architecture-live-map-1",
-          "lifecycle": "active",
-          "compatibility": {
-            "newBindingsAllowed": true,
-            "historicalResolutionAllowed": true
-          },
-          "artifactRefs": [],
-          "evidenceRefs": [
-            {
-              "evidenceId": "pact.version-source.platform.architecture-live-map-1",
-              "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -3930,7 +4029,32 @@
             {
               "evidenceId": "pact.version-source.platform.assembly-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactId": "pact.platform.architecture-live-map-1",
+      "kind": "platform",
+      "description": "Registered governed version v0.0.1:platform:architecture-live-map-1.",
+      "activeVersion": "v0.0.1:platform:architecture-live-map-1",
+      "versions": [
+        {
+          "version": "v0.0.1:platform:architecture-live-map-1",
+          "ref": "pact.platform.architecture-live-map-1@v0.0.1:platform:architecture-live-map-1",
+          "lifecycle": "active",
+          "compatibility": {
+            "newBindingsAllowed": true,
+            "historicalResolutionAllowed": true
+          },
+          "artifactRefs": [],
+          "evidenceRefs": [
+            {
+              "evidenceId": "pact.version-source.platform.architecture-live-map-1",
+              "kind": "doc",
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -3955,7 +4079,7 @@
             {
               "evidenceId": "pact.version-source.platform.audit-export-1",
               "kind": "doc",
-              "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+              "uri": "docs/functionality/AGENT-COLLABORATION.md"
             }
           ]
         }
@@ -3980,7 +4104,7 @@
             {
               "evidenceId": "pact.version-source.platform.audit-retention-1",
               "kind": "doc",
-              "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+              "uri": "docs/functionality/AGENT-COLLABORATION.md"
             }
           ]
         }
@@ -4055,7 +4179,7 @@
             {
               "evidenceId": "pact.version-source.platform.code-review-1",
               "kind": "doc",
-              "uri": "docs/architecture/PACT-SYSTEM-ARCHITECTURE.html"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -4080,7 +4204,7 @@
             {
               "evidenceId": "pact.version-source.platform.codespace-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -4180,7 +4304,7 @@
             {
               "evidenceId": "pact.version-source.platform.devops-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -4205,7 +4329,7 @@
             {
               "evidenceId": "pact.version-source.platform.executive-report-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -4355,7 +4479,7 @@
             {
               "evidenceId": "pact.version-source.platform.organization-model-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -4380,7 +4504,7 @@
             {
               "evidenceId": "pact.version-source.platform.performance-capacity-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -4405,7 +4529,7 @@
             {
               "evidenceId": "pact.version-source.platform.production-health-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -4437,9 +4561,39 @@
       ]
     },
     {
+      "artifactId": "pact.platform.project-release-runbook-1",
+      "kind": "other",
+      "description": "Project release runbook bundle shipped with the platform. Replaces the project-release-skill product-facing name while keeping the legacy bundle readable.",
+      "activeVersion": "v0.0.1:platform:project-release-runbook-1",
+      "versions": [
+        {
+          "version": "v0.0.1:platform:project-release-runbook-1",
+          "ref": "pact.platform.project-release-runbook-1@v0.0.1:platform:project-release-runbook-1",
+          "lifecycle": "active",
+          "compatibility": {
+            "newBindingsAllowed": true,
+            "historicalResolutionAllowed": true
+          },
+          "artifactRefs": [],
+          "evidenceRefs": [
+            {
+              "evidenceId": "pact.version-source.platform.project-release-runbook-1",
+              "kind": "manifest",
+              "uri": "server/config/entity-config/runbooks/project-release-runbook/manifest.json"
+            },
+            {
+              "evidenceId": "pact.version-source.platform.project-release-runbook-1.readme",
+              "kind": "doc",
+              "uri": "server/config/entity-config/runbooks/project-release-runbook/README.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "artifactId": "pact.platform.project-release-skill-1",
-      "kind": "platform",
-      "description": "Registered governed version v0.0.1:platform:project-release-skill-1.",
+      "kind": "compatibility_projection",
+      "description": "Registered governed version v0.0.1:platform:project-release-skill-1. Compatibility projection retained for the legacy project-release-skill bundle; new product semantics use project-release-runbook.",
       "activeVersion": "v0.0.1:platform:project-release-skill-1",
       "versions": [
         {
@@ -4448,7 +4602,8 @@
           "lifecycle": "active",
           "compatibility": {
             "newBindingsAllowed": true,
-            "historicalResolutionAllowed": true
+            "historicalResolutionAllowed": true,
+            "notes": "Compatibility projection only. New bindings should use pact.platform.project-release-runbook-1."
           },
           "artifactRefs": [],
           "evidenceRefs": [
@@ -4505,7 +4660,7 @@
             {
               "evidenceId": "pact.version-source.platform.runtime-dependencies-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -4530,7 +4685,7 @@
             {
               "evidenceId": "pact.version-source.platform.sample-business-pack-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -4580,7 +4735,7 @@
             {
               "evidenceId": "pact.version-source.platform.trace-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -4637,6 +4792,31 @@
       ]
     },
     {
+      "artifactId": "pact.process-identity.client-package-1",
+      "kind": "policy",
+      "description": "Registered governed version v0.0.1:process-identity:client-package-1.",
+      "activeVersion": "v0.0.1:process-identity:client-package-1",
+      "versions": [
+        {
+          "version": "v0.0.1:process-identity:client-package-1",
+          "ref": "pact.process-identity.client-package-1@v0.0.1:process-identity:client-package-1",
+          "lifecycle": "active",
+          "compatibility": {
+            "newBindingsAllowed": true,
+            "historicalResolutionAllowed": true
+          },
+          "artifactRefs": [],
+          "evidenceRefs": [
+            {
+              "evidenceId": "pact.version-source.process-identity.client-package-1",
+              "kind": "other",
+              "uri": "server/platform/common/security/process-identity/index.mjs"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "artifactId": "pact.production-readiness.readiness-report-1",
       "kind": "platform",
       "description": "Registered governed version v0.0.1:production-readiness:readiness-report-1.",
@@ -4687,6 +4867,31 @@
       ]
     },
     {
+      "artifactId": "pact.protocol.mcp",
+      "kind": "protocol",
+      "description": "Registered governed version v0.0.1:mcp:interface-1.",
+      "activeVersion": "v0.0.1:mcp:interface-1",
+      "versions": [
+        {
+          "version": "v0.0.1:mcp:interface-1",
+          "ref": "pact.protocol.mcp@v0.0.1:mcp:interface-1",
+          "lifecycle": "active",
+          "compatibility": {
+            "newBindingsAllowed": true,
+            "historicalResolutionAllowed": true
+          },
+          "artifactRefs": [],
+          "evidenceRefs": [
+            {
+              "evidenceId": "pact.version-source.mcp.interface-1",
+              "kind": "doc",
+              "uri": "docs/protocols/PROTOCOLS.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "artifactId": "pact.pubsub.event-schema-1",
       "kind": "protocol",
       "description": "Registered governed version v0.0.1:pubsub:event-schema-1.",
@@ -4730,7 +4935,7 @@
             {
               "evidenceId": "pact.version-source.report.executive-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -4905,7 +5110,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.capability-security-helper-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -4930,7 +5135,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.core-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -4955,7 +5160,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.definition-digest-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -4980,7 +5185,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.definition.model-1.dsl-1.lifecycle-1.control-1.revision-1",
               "kind": "doc",
-              "uri": "docs/boundary/2-3-5-Security-Model.md"
+              "uri": "docs/functionality/SECURITY-AUTHORIZATION.md"
             }
           ]
         }
@@ -5005,7 +5210,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.evidence-digest-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5030,7 +5235,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.evidence-locator-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5055,7 +5260,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.evidence-locator-digest-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5080,7 +5285,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.evidence-profile-digest-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5105,7 +5310,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.evidence-profile.profile-schema-1.lifecycle-1.contract-1.revision-1",
               "kind": "doc",
-              "uri": "docs/boundary/2-3-5-Security-Model.md"
+              "uri": "docs/functionality/SECURITY-AUTHORIZATION.md"
             }
           ]
         }
@@ -5130,7 +5335,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.evidence-store-digest-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5155,7 +5360,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.evidence-store.schema-1.lifecycle-1.contract-1.revision-1",
               "kind": "doc",
-              "uri": "docs/boundary/2-3-5-Security-Model.md"
+              "uri": "docs/functionality/SECURITY-AUTHORIZATION.md"
             }
           ]
         }
@@ -5180,7 +5385,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.gate-record-digest-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5330,7 +5535,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.operation-anchor-digest-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5355,7 +5560,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.permissions-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -5412,6 +5617,31 @@
       ]
     },
     {
+      "artifactId": "pact.risk-control.process-identity-1",
+      "kind": "policy",
+      "description": "Registered governed version v0.0.1:risk-control:process-identity-1.",
+      "activeVersion": "v0.0.1:risk-control:process-identity-1",
+      "versions": [
+        {
+          "version": "v0.0.1:risk-control:process-identity-1",
+          "ref": "pact.risk-control.process-identity-1@v0.0.1:risk-control:process-identity-1",
+          "lifecycle": "active",
+          "compatibility": {
+            "newBindingsAllowed": true,
+            "historicalResolutionAllowed": true
+          },
+          "artifactRefs": [],
+          "evidenceRefs": [
+            {
+              "evidenceId": "pact.version-source.risk-control.process-identity-1",
+              "kind": "other",
+              "uri": "server/platform/common/security/process-identity/index.mjs"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "artifactId": "pact.risk-control.recovery-1",
       "kind": "policy",
       "description": "Registered governed version v0.0.1:risk-control:recovery-1.",
@@ -5430,7 +5660,7 @@
             {
               "evidenceId": "pact.version-source.risk-control.recovery-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -5455,7 +5685,7 @@
             {
               "evidenceId": "pact.version-source.runtime.dependencies-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5480,7 +5710,7 @@
             {
               "evidenceId": "pact.version-source.sample.business-pack-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5505,7 +5735,7 @@
             {
               "evidenceId": "pact.version-source.schema.definition-1",
               "kind": "doc",
-              "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+              "uri": "docs/functionality/AGENT-COLLABORATION.md"
             }
           ]
         }
@@ -5530,7 +5760,7 @@
             {
               "evidenceId": "pact.version-source.security.capability-helper-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5555,7 +5785,7 @@
             {
               "evidenceId": "pact.version-source.security.core-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5580,7 +5810,7 @@
             {
               "evidenceId": "pact.version-source.security.permissions-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5655,7 +5885,7 @@
             {
               "evidenceId": "pact.version-source.skill.registry-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5805,7 +6035,7 @@
             {
               "evidenceId": "pact.version-source.state-machine.version-artifact-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5830,7 +6060,7 @@
             {
               "evidenceId": "pact.version-source.state-machine.version-transition-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5855,7 +6085,7 @@
             {
               "evidenceId": "pact.version-source.state.checkpoint-tree-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -5880,7 +6110,7 @@
             {
               "evidenceId": "pact.version-source.storage.asset-store-1",
               "kind": "doc",
-              "uri": "docs/SERVER.md"
+              "uri": "docs/functionality/SERVER-RUNTIME.md"
             }
           ]
         }
@@ -5905,7 +6135,7 @@
             {
               "evidenceId": "pact.version-source.storage.backup-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -5930,7 +6160,7 @@
             {
               "evidenceId": "pact.version-source.storage.backup-restore-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -5955,7 +6185,7 @@
             {
               "evidenceId": "pact.version-source.storage.checkpoint-tree-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -6105,7 +6335,7 @@
             {
               "evidenceId": "pact.version-source.storage.cloud-drive-port-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -6230,7 +6460,7 @@
             {
               "evidenceId": "pact.version-source.storage.core-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -6255,7 +6485,7 @@
             {
               "evidenceId": "pact.version-source.storage.data-connector-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -6280,7 +6510,7 @@
             {
               "evidenceId": "pact.version-source.storage.data-connector-governance-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -6355,7 +6585,7 @@
             {
               "evidenceId": "pact.version-source.storage.local-mirror-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -6705,7 +6935,7 @@
             {
               "evidenceId": "pact.version-source.strategy.evaluation-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -6880,7 +7110,7 @@
             {
               "evidenceId": "pact.version-source.strategy.management-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -6930,7 +7160,7 @@
             {
               "evidenceId": "pact.version-source.strategy.model-routing-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -7030,7 +7260,7 @@
             {
               "evidenceId": "pact.version-source.strategy.portable-knowledge-distillation-1",
               "kind": "doc",
-              "uri": "docs/KNOWLEDGE-GOVERNANCE.md"
+              "uri": "docs/functionality/KNOWLEDGE.md"
             }
           ]
         }
@@ -7430,7 +7660,7 @@
             {
               "evidenceId": "pact.version-source.strategy.strategy-management-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -8355,7 +8585,7 @@
             {
               "evidenceId": "pact.version-source.tool-skill.management-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -8380,7 +8610,7 @@
             {
               "evidenceId": "pact.version-source.tool.capability-package-lifecycle-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -8430,7 +8660,7 @@
             {
               "evidenceId": "pact.version-source.tool.management-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -8555,7 +8785,7 @@
             {
               "evidenceId": "pact.version-source.tool.module-ecosystem-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -8605,7 +8835,7 @@
             {
               "evidenceId": "pact.version-source.tool.mount-module-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -8630,7 +8860,7 @@
             {
               "evidenceId": "pact.version-source.tool.package-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -8705,7 +8935,7 @@
             {
               "evidenceId": "pact.version-source.tool.skill-management-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -8730,7 +8960,7 @@
             {
               "evidenceId": "pact.version-source.tool.skill-registry-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -8780,7 +9010,7 @@
             {
               "evidenceId": "pact.version-source.version-governance.compatibility-table-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -8805,7 +9035,7 @@
             {
               "evidenceId": "pact.version-source.version-governance.protocol-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -8830,7 +9060,7 @@
             {
               "evidenceId": "pact.version-source.version-governance.registry-schema-1",
               "kind": "doc",
-              "uri": "docs/architecture/PACT-SYSTEM-ARCHITECTURE.html"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -8855,7 +9085,7 @@
             {
               "evidenceId": "pact.version-source.version-governance.transition-config-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -8880,7 +9110,7 @@
             {
               "evidenceId": "pact.version-source.workflow.core-1",
               "kind": "doc",
-              "uri": "docs/IMPLEMENTATION-DECISION-REGISTER.md"
+              "uri": "docs/adr/0001-govern-agent-to-agent-acp-delegation-through-pact.md"
             }
           ]
         }
@@ -8930,7 +9160,7 @@
             {
               "evidenceId": "pact.version-source.workflow.job-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -8980,7 +9210,7 @@
             {
               "evidenceId": "pact.version-source.workflow.job-workflow-1",
               "kind": "doc",
-              "uri": "docs/Architecture.md"
+              "uri": "docs/architecture/ARCHITECTURE.md"
             }
           ]
         }
@@ -9187,6 +9417,56 @@
       ]
     },
     {
+      "artifactId": "pact.workspace.asset-operation-1",
+      "kind": "protocol",
+      "description": "Registered governed version v0.0.1:workspace:asset-operation-1.",
+      "activeVersion": "v0.0.1:workspace:asset-operation-1",
+      "versions": [
+        {
+          "version": "v0.0.1:workspace:asset-operation-1",
+          "ref": "pact.workspace.asset-operation-1@v0.0.1:workspace:asset-operation-1",
+          "lifecycle": "active",
+          "compatibility": {
+            "newBindingsAllowed": true,
+            "historicalResolutionAllowed": true
+          },
+          "artifactRefs": [],
+          "evidenceRefs": [
+            {
+              "evidenceId": "pact.version-source.workspace.asset-operation-1",
+              "kind": "doc",
+              "uri": "docs/protocols/PROTOCOLS.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "artifactId": "pact.workspace.asset-registry-1",
+      "kind": "store",
+      "description": "Registered governed version v0.0.1:workspace:asset-registry-1.",
+      "activeVersion": "v0.0.1:workspace:asset-registry-1",
+      "versions": [
+        {
+          "version": "v0.0.1:workspace:asset-registry-1",
+          "ref": "pact.workspace.asset-registry-1@v0.0.1:workspace:asset-registry-1",
+          "lifecycle": "active",
+          "compatibility": {
+            "newBindingsAllowed": true,
+            "historicalResolutionAllowed": true
+          },
+          "artifactRefs": [],
+          "evidenceRefs": [
+            {
+              "evidenceId": "pact.version-source.workspace.asset-registry-1",
+              "kind": "other",
+              "uri": "server/platform/specialized/agent/workspace-asset-registry/index.mjs"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "artifactId": "pact.workspace.checkpoint-1",
       "kind": "other",
       "description": "Registered governed version v0.0.1:workspace:checkpoint-1.",
@@ -9255,7 +9535,7 @@
             {
               "evidenceId": "pact.version-source.workspace.contribution-1",
               "kind": "doc",
-              "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+              "uri": "docs/IMPLEMENTATION-GAP.md"
             }
           ]
         }
@@ -9280,7 +9560,7 @@
             {
               "evidenceId": "pact.version-source.workspace.core-1",
               "kind": "doc",
-              "uri": "docs/PROTOCOLS.md"
+              "uri": "docs/protocols/PROTOCOLS.md"
             }
           ]
         }
@@ -9305,7 +9585,7 @@
             {
               "evidenceId": "pact.version-source.workspace.governance-1",
               "kind": "doc",
-              "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+              "uri": "docs/functionality/AGENT-COLLABORATION.md"
             }
           ]
         }
@@ -9375,7 +9655,7 @@
         {
           "evidenceId": "pact.version-source.agent-library.core-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -9391,7 +9671,7 @@
         {
           "evidenceId": "pact.version-source.agent.acp-agent-relay-1",
           "kind": "doc",
-          "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+          "uri": "docs/functionality/AGENT-COLLABORATION.md"
         }
       ]
     },
@@ -9423,7 +9703,7 @@
         {
           "evidenceId": "pact.version-source.agent.acp-agent-relay-proof-matrix-1",
           "kind": "doc",
-          "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+          "uri": "docs/functionality/AGENT-COLLABORATION.md"
         }
       ]
     },
@@ -9439,7 +9719,7 @@
         {
           "evidenceId": "pact.version-source.agent.acp-agent-relay-real-proof-bundle-1",
           "kind": "doc",
-          "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+          "uri": "docs/functionality/AGENT-COLLABORATION.md"
         }
       ]
     },
@@ -9455,7 +9735,7 @@
         {
           "evidenceId": "pact.version-source.agent.acp-agent-relay-real-proof-matrix-1",
           "kind": "doc",
-          "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+          "uri": "docs/functionality/AGENT-COLLABORATION.md"
         }
       ]
     },
@@ -9519,7 +9799,7 @@
         {
           "evidenceId": "pact.version-source.agent.acp-relay-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -9567,7 +9847,7 @@
         {
           "evidenceId": "pact.version-source.agent.client-runtime-bootstrap-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -9615,7 +9895,7 @@
         {
           "evidenceId": "pact.version-source.agent.context-bundle-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -9663,7 +9943,7 @@
         {
           "evidenceId": "pact.version-source.agent.downstream-client-aspect-1",
           "kind": "doc",
-          "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+          "uri": "docs/functionality/AGENT-COLLABORATION.md"
         }
       ]
     },
@@ -9711,7 +9991,7 @@
         {
           "evidenceId": "pact.version-source.agent.library-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -9775,7 +10055,7 @@
         {
           "evidenceId": "pact.version-source.agent.runtime-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -9791,7 +10071,7 @@
         {
           "evidenceId": "pact.version-source.agent.session-thread-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -9839,7 +10119,7 @@
         {
           "evidenceId": "pact.version-source.architecture.live-map-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -9855,7 +10135,7 @@
         {
           "evidenceId": "pact.version-source.asset.asset-lineage-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -9871,7 +10151,7 @@
         {
           "evidenceId": "pact.version-source.asset.lineage-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -9887,7 +10167,7 @@
         {
           "evidenceId": "pact.version-source.client-runtime.bootstrap-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -9903,7 +10183,7 @@
         {
           "evidenceId": "pact.version-source.codespace.code-review-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -9919,7 +10199,7 @@
         {
           "evidenceId": "pact.version-source.codespace.core-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -9935,7 +10215,7 @@
         {
           "evidenceId": "pact.version-source.context.bundle-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -9951,7 +10231,7 @@
         {
           "evidenceId": "pact.version-source.devops.core-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -9967,7 +10247,7 @@
         {
           "evidenceId": "pact.version-source.external-service.api-registry-1",
           "kind": "doc",
-          "uri": "docs/boundary/N-2-N-Interfaces.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -9999,7 +10279,7 @@
         {
           "evidenceId": "pact.version-source.external-service.knowledge-adapter-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -10271,7 +10551,7 @@
         {
           "evidenceId": "pact.version-source.external-service.knowledge-distillation-industrial-benchmark-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -10495,7 +10775,7 @@
         {
           "evidenceId": "pact.version-source.external-service.knowledge-distillation-service-gates-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -10783,7 +11063,7 @@
         {
           "evidenceId": "pact.version-source.knowledge.access-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -10791,10 +11071,10 @@
       "compatibilityId": "pact.platform.assembly-1.consumes.knowledge.agent-skill-1.knowledge.agent-skill-1",
       "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
       "providerRef": "pact.knowledge.agent-skill-1@v0.0.1:knowledge:agent-skill-1",
-      "status": "compatible",
-      "newBindingsAllowed": true,
+      "status": "deprecated",
+      "newBindingsAllowed": false,
       "historicalResolutionAllowed": true,
-      "reason": "Pact platform assembly-1 currently consumes v0.0.1:knowledge:agent-skill-1.",
+      "reason": "Pact platform assembly-1 currently consumes v0.0.1:knowledge:agent-skill-1. Compatibility projection only; new bindings should use AgentLibrary Playbook, Retrieval Playbook, or Playbook Framework artifacts.",
       "evidenceRefs": [
         {
           "evidenceId": "pact.version-source.knowledge.agent-skill-1",
@@ -10815,7 +11095,7 @@
         {
           "evidenceId": "pact.version-source.knowledge.backend-port-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -10911,7 +11191,7 @@
         {
           "evidenceId": "pact.version-source.knowledge.distillation-optimization-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -10959,7 +11239,7 @@
         {
           "evidenceId": "pact.version-source.knowledge.embedding-1",
           "kind": "doc",
-          "uri": "docs/SERVER.md"
+          "uri": "docs/functionality/SERVER-RUNTIME.md"
         }
       ]
     },
@@ -11220,6 +11500,38 @@
       ]
     },
     {
+      "compatibilityId": "pact.platform.assembly-1.consumes.knowledge.playbook-1.knowledge.playbook-1",
+      "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
+      "providerRef": "pact.knowledge.playbook-1@v0.0.1:knowledge:playbook-1",
+      "status": "compatible",
+      "newBindingsAllowed": true,
+      "historicalResolutionAllowed": true,
+      "reason": "Pact platform assembly-1 currently consumes v0.0.1:knowledge:playbook-1.",
+      "evidenceRefs": [
+        {
+          "evidenceId": "pact.version-source.knowledge.playbook-1.runtime",
+          "kind": "other",
+          "uri": "server/platform/specialized/knowledge/invocation/knowledge-skill-runtime/index.mjs"
+        }
+      ]
+    },
+    {
+      "compatibilityId": "pact.platform.assembly-1.consumes.knowledge.playbook-framework-1.knowledge.playbook-framework-1",
+      "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
+      "providerRef": "pact.knowledge.playbook-framework-1@v0.0.1:knowledge:playbook-framework-1",
+      "status": "compatible",
+      "newBindingsAllowed": true,
+      "historicalResolutionAllowed": true,
+      "reason": "Pact platform assembly-1 currently consumes v0.0.1:knowledge:playbook-framework-1.",
+      "evidenceRefs": [
+        {
+          "evidenceId": "pact.version-source.knowledge.playbook-framework-1",
+          "kind": "manifest",
+          "uri": "server/config/entity-config/playbooks/knowledge-playbook-framework/framework.json"
+        }
+      ]
+    },
+    {
       "compatibilityId": "pact.platform.assembly-1.consumes.knowledge.preprocess-result-schema-1.knowledge.preprocess-result-schema-1",
       "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
       "providerRef": "pact.knowledge.preprocess-result-schema-1@v0.0.1:knowledge:preprocess-result-schema-1",
@@ -11247,7 +11559,23 @@
         {
           "evidenceId": "pact.version-source.knowledge.retrieval-1",
           "kind": "doc",
-          "uri": "docs/SERVER.md"
+          "uri": "docs/functionality/SERVER-RUNTIME.md"
+        }
+      ]
+    },
+    {
+      "compatibilityId": "pact.platform.assembly-1.consumes.knowledge.retrieval-playbook-1.knowledge.retrieval-playbook-1",
+      "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
+      "providerRef": "pact.knowledge.retrieval-playbook-1@v0.0.1:knowledge:retrieval-playbook-1",
+      "status": "compatible",
+      "newBindingsAllowed": true,
+      "historicalResolutionAllowed": true,
+      "reason": "Pact platform assembly-1 currently consumes v0.0.1:knowledge:retrieval-playbook-1.",
+      "evidenceRefs": [
+        {
+          "evidenceId": "pact.version-source.knowledge.retrieval-playbook-1.operations",
+          "kind": "other",
+          "uri": "server/platform/common/operation-dispatcher/operation-registry.mjs"
         }
       ]
     },
@@ -11279,7 +11607,7 @@
         {
           "evidenceId": "pact.version-source.knowledge.rule-1",
           "kind": "doc",
-          "uri": "docs/CONTEXT.md"
+          "uri": "docs/AGENT.md"
         }
       ]
     },
@@ -11295,7 +11623,7 @@
         {
           "evidenceId": "pact.version-source.knowledge.rule-authoring-1",
           "kind": "doc",
-          "uri": "docs/KNOWLEDGE-GOVERNANCE.md"
+          "uri": "docs/functionality/KNOWLEDGE.md"
         }
       ]
     },
@@ -11335,10 +11663,10 @@
       "compatibilityId": "pact.platform.assembly-1.consumes.knowledge.skill-1.knowledge.skill-1",
       "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
       "providerRef": "pact.knowledge.skill-1@v0.0.1:knowledge:skill-1",
-      "status": "compatible",
-      "newBindingsAllowed": true,
+      "status": "deprecated",
+      "newBindingsAllowed": false,
       "historicalResolutionAllowed": true,
-      "reason": "Pact platform assembly-1 currently consumes v0.0.1:knowledge:skill-1.",
+      "reason": "Pact platform assembly-1 currently consumes v0.0.1:knowledge:skill-1. Compatibility projection only; new bindings should use AgentLibrary Playbook, Retrieval Playbook, or Playbook Framework artifacts.",
       "evidenceRefs": [
         {
           "evidenceId": "pact.version-source.knowledge.skill-1",
@@ -11351,10 +11679,10 @@
       "compatibilityId": "pact.platform.assembly-1.consumes.knowledge.skill-distillation-1.knowledge.skill-distillation-1",
       "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
       "providerRef": "pact.knowledge.skill-distillation-1@v0.0.1:knowledge:skill-distillation-1",
-      "status": "compatible",
-      "newBindingsAllowed": true,
+      "status": "deprecated",
+      "newBindingsAllowed": false,
       "historicalResolutionAllowed": true,
-      "reason": "Pact platform assembly-1 currently consumes v0.0.1:knowledge:skill-distillation-1.",
+      "reason": "Pact platform assembly-1 currently consumes v0.0.1:knowledge:skill-distillation-1. Compatibility projection only; new bindings should use AgentLibrary Playbook, Retrieval Playbook, or Playbook Framework artifacts.",
       "evidenceRefs": [
         {
           "evidenceId": "pact.version-source.knowledge.skill-distillation-1",
@@ -11367,10 +11695,10 @@
       "compatibilityId": "pact.platform.assembly-1.consumes.knowledge.skill-framework-1.knowledge.skill-framework-1",
       "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
       "providerRef": "pact.knowledge.skill-framework-1@v0.0.1:knowledge:skill-framework-1",
-      "status": "compatible",
-      "newBindingsAllowed": true,
+      "status": "deprecated",
+      "newBindingsAllowed": false,
       "historicalResolutionAllowed": true,
-      "reason": "Pact platform assembly-1 currently consumes v0.0.1:knowledge:skill-framework-1.",
+      "reason": "Pact platform assembly-1 currently consumes v0.0.1:knowledge:skill-framework-1. Compatibility projection only; new bindings should use AgentLibrary Playbook, Retrieval Playbook, or Playbook Framework artifacts.",
       "evidenceRefs": [
         {
           "evidenceId": "pact.version-source.knowledge.skill-framework-1",
@@ -11471,7 +11799,7 @@
         {
           "evidenceId": "pact.version-source.knowledge.transformation-1",
           "kind": "doc",
-          "uri": "docs/KNOWLEDGE-GOVERNANCE.md"
+          "uri": "docs/functionality/KNOWLEDGE.md"
         }
       ]
     },
@@ -11487,7 +11815,7 @@
         {
           "evidenceId": "pact.version-source.knowledge.vector-1",
           "kind": "doc",
-          "uri": "docs/SERVER.md"
+          "uri": "docs/functionality/SERVER-RUNTIME.md"
         }
       ]
     },
@@ -11519,7 +11847,7 @@
         {
           "evidenceId": "pact.version-source.mcp.connector-package-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -11551,7 +11879,7 @@
         {
           "evidenceId": "pact.version-source.mcp.device-discovery-schema-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -11567,7 +11895,7 @@
         {
           "evidenceId": "pact.version-source.mcp.device-hub-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -11583,7 +11911,7 @@
         {
           "evidenceId": "pact.version-source.mcp.handshake-1",
           "kind": "other",
-          "uri": "mcp-connector/bin/pact-mcp.mjs"
+          "uri": "server/platform/common/mcp/gateway-installer/bin/pact-mcp.mjs"
         }
       ]
     },
@@ -11663,7 +11991,7 @@
         {
           "evidenceId": "pact.version-source.mcp.sharedspace-exchange-1",
           "kind": "other",
-          "uri": "mcp-connector/bin/pact-mcp.mjs"
+          "uri": "server/platform/common/mcp/gateway-installer/bin/pact-mcp.mjs"
         }
       ]
     },
@@ -11679,7 +12007,7 @@
         {
           "evidenceId": "pact.version-source.module.ecosystem-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -11695,7 +12023,7 @@
         {
           "evidenceId": "pact.version-source.module.mount-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -11727,7 +12055,23 @@
         {
           "evidenceId": "pact.version-source.operation.core-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
+        }
+      ]
+    },
+    {
+      "compatibilityId": "pact.platform.assembly-1.consumes.operation.ledger-1.operation.ledger-1",
+      "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
+      "providerRef": "pact.operation.ledger-1@v0.0.1:operation:ledger-1",
+      "status": "compatible",
+      "newBindingsAllowed": true,
+      "historicalResolutionAllowed": true,
+      "reason": "Pact platform assembly-1 currently consumes v0.0.1:operation:ledger-1.",
+      "evidenceRefs": [
+        {
+          "evidenceId": "pact.version-source.operation.ledger-1",
+          "kind": "other",
+          "uri": "server/platform/common/operation-ledger/index.mjs"
         }
       ]
     },
@@ -11759,7 +12103,7 @@
         {
           "evidenceId": "pact.version-source.operation.reply-schema-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -11775,7 +12119,7 @@
         {
           "evidenceId": "pact.version-source.operation.reply-target-schema-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -11807,7 +12151,7 @@
         {
           "evidenceId": "pact.version-source.organization.model-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -11823,7 +12167,7 @@
         {
           "evidenceId": "pact.version-source.performance.capacity-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -11839,7 +12183,7 @@
         {
           "evidenceId": "pact.version-source.platform.architecture-live-map-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -11855,7 +12199,7 @@
         {
           "evidenceId": "pact.version-source.platform.audit-export-1",
           "kind": "doc",
-          "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+          "uri": "docs/functionality/AGENT-COLLABORATION.md"
         }
       ]
     },
@@ -11871,7 +12215,7 @@
         {
           "evidenceId": "pact.version-source.platform.audit-retention-1",
           "kind": "doc",
-          "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+          "uri": "docs/functionality/AGENT-COLLABORATION.md"
         }
       ]
     },
@@ -11919,7 +12263,7 @@
         {
           "evidenceId": "pact.version-source.platform.code-review-1",
           "kind": "doc",
-          "uri": "docs/architecture/PACT-SYSTEM-ARCHITECTURE.html"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -11935,7 +12279,7 @@
         {
           "evidenceId": "pact.version-source.platform.codespace-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -11999,7 +12343,7 @@
         {
           "evidenceId": "pact.version-source.platform.devops-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -12015,7 +12359,7 @@
         {
           "evidenceId": "pact.version-source.platform.executive-report-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -12111,7 +12455,7 @@
         {
           "evidenceId": "pact.version-source.platform.organization-model-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -12127,7 +12471,7 @@
         {
           "evidenceId": "pact.version-source.platform.performance-capacity-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -12143,7 +12487,7 @@
         {
           "evidenceId": "pact.version-source.platform.production-health-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -12164,13 +12508,29 @@
       ]
     },
     {
-      "compatibilityId": "pact.platform.assembly-1.consumes.platform.project-release-skill-1.platform.project-release-skill-1",
+      "compatibilityId": "pact.platform.assembly-1.consumes.platform.project-release-runbook-1.platform.project-release-runbook-1",
       "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
-      "providerRef": "pact.platform.project-release-skill-1@v0.0.1:platform:project-release-skill-1",
+      "providerRef": "pact.platform.project-release-runbook-1@v0.0.1:platform:project-release-runbook-1",
       "status": "compatible",
       "newBindingsAllowed": true,
       "historicalResolutionAllowed": true,
-      "reason": "Pact platform assembly-1 currently consumes v0.0.1:platform:project-release-skill-1.",
+      "reason": "Pact platform assembly-1 currently consumes v0.0.1:platform:project-release-runbook-1.",
+      "evidenceRefs": [
+        {
+          "evidenceId": "pact.version-source.platform.project-release-runbook-1",
+          "kind": "manifest",
+          "uri": "server/config/entity-config/runbooks/project-release-runbook/manifest.json"
+        }
+      ]
+    },
+    {
+      "compatibilityId": "pact.platform.assembly-1.consumes.platform.project-release-skill-1.platform.project-release-skill-1",
+      "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
+      "providerRef": "pact.platform.project-release-skill-1@v0.0.1:platform:project-release-skill-1",
+      "status": "deprecated",
+      "newBindingsAllowed": false,
+      "historicalResolutionAllowed": true,
+      "reason": "Pact platform assembly-1 currently consumes v0.0.1:platform:project-release-skill-1. Compatibility projection only; new bindings should use project-release-runbook.",
       "evidenceRefs": [
         {
           "evidenceId": "pact.version-source.platform.project-release-skill-1",
@@ -12207,7 +12567,7 @@
         {
           "evidenceId": "pact.version-source.platform.runtime-dependencies-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -12223,7 +12583,7 @@
         {
           "evidenceId": "pact.version-source.platform.sample-business-pack-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -12255,7 +12615,7 @@
         {
           "evidenceId": "pact.version-source.platform.trace-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -12335,7 +12695,7 @@
         {
           "evidenceId": "pact.version-source.mcp.interface-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12367,7 +12727,7 @@
         {
           "evidenceId": "pact.version-source.report.executive-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12479,7 +12839,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.capability-security-helper-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -12495,7 +12855,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.core-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -12511,7 +12871,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.definition-digest-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12527,7 +12887,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.definition.model-1.dsl-1.lifecycle-1.control-1.revision-1",
           "kind": "doc",
-          "uri": "docs/boundary/2-3-5-Security-Model.md"
+          "uri": "docs/functionality/SECURITY-AUTHORIZATION.md"
         }
       ]
     },
@@ -12543,7 +12903,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.evidence-digest-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12559,7 +12919,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.evidence-locator-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12575,7 +12935,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.evidence-locator-digest-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12591,7 +12951,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.evidence-profile-digest-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12607,7 +12967,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.evidence-profile.profile-schema-1.lifecycle-1.contract-1.revision-1",
           "kind": "doc",
-          "uri": "docs/boundary/2-3-5-Security-Model.md"
+          "uri": "docs/functionality/SECURITY-AUTHORIZATION.md"
         }
       ]
     },
@@ -12623,7 +12983,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.evidence-store-digest-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12639,7 +12999,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.evidence-store.schema-1.lifecycle-1.contract-1.revision-1",
           "kind": "doc",
-          "uri": "docs/boundary/2-3-5-Security-Model.md"
+          "uri": "docs/functionality/SECURITY-AUTHORIZATION.md"
         }
       ]
     },
@@ -12655,7 +13015,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.gate-record-digest-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12751,7 +13111,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.operation-anchor-digest-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12767,7 +13127,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.permissions-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -12815,7 +13175,7 @@
         {
           "evidenceId": "pact.version-source.risk-control.recovery-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -12831,7 +13191,7 @@
         {
           "evidenceId": "pact.version-source.runtime.dependencies-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12847,7 +13207,7 @@
         {
           "evidenceId": "pact.version-source.sample.business-pack-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12863,7 +13223,7 @@
         {
           "evidenceId": "pact.version-source.schema.definition-1",
           "kind": "doc",
-          "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+          "uri": "docs/functionality/AGENT-COLLABORATION.md"
         }
       ]
     },
@@ -12879,7 +13239,7 @@
         {
           "evidenceId": "pact.version-source.security.capability-helper-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12895,7 +13255,7 @@
         {
           "evidenceId": "pact.version-source.security.core-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12911,7 +13271,7 @@
         {
           "evidenceId": "pact.version-source.security.permissions-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -12959,7 +13319,7 @@
         {
           "evidenceId": "pact.version-source.skill.registry-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -13055,7 +13415,7 @@
         {
           "evidenceId": "pact.version-source.state-machine.version-artifact-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -13071,7 +13431,7 @@
         {
           "evidenceId": "pact.version-source.state-machine.version-transition-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -13087,7 +13447,7 @@
         {
           "evidenceId": "pact.version-source.state.checkpoint-tree-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -13103,7 +13463,7 @@
         {
           "evidenceId": "pact.version-source.storage.asset-store-1",
           "kind": "doc",
-          "uri": "docs/SERVER.md"
+          "uri": "docs/functionality/SERVER-RUNTIME.md"
         }
       ]
     },
@@ -13119,7 +13479,7 @@
         {
           "evidenceId": "pact.version-source.storage.backup-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -13135,7 +13495,7 @@
         {
           "evidenceId": "pact.version-source.storage.backup-restore-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -13151,7 +13511,7 @@
         {
           "evidenceId": "pact.version-source.storage.checkpoint-tree-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -13247,7 +13607,7 @@
         {
           "evidenceId": "pact.version-source.storage.cloud-drive-port-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -13327,7 +13687,7 @@
         {
           "evidenceId": "pact.version-source.storage.core-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -13343,7 +13703,7 @@
         {
           "evidenceId": "pact.version-source.storage.data-connector-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -13359,7 +13719,7 @@
         {
           "evidenceId": "pact.version-source.storage.data-connector-governance-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -13407,7 +13767,7 @@
         {
           "evidenceId": "pact.version-source.storage.local-mirror-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -13631,7 +13991,7 @@
         {
           "evidenceId": "pact.version-source.strategy.evaluation-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -13743,7 +14103,7 @@
         {
           "evidenceId": "pact.version-source.strategy.management-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -13775,7 +14135,7 @@
         {
           "evidenceId": "pact.version-source.strategy.model-routing-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -13839,7 +14199,7 @@
         {
           "evidenceId": "pact.version-source.strategy.portable-knowledge-distillation-1",
           "kind": "doc",
-          "uri": "docs/KNOWLEDGE-GOVERNANCE.md"
+          "uri": "docs/functionality/KNOWLEDGE.md"
         }
       ]
     },
@@ -14095,7 +14455,7 @@
         {
           "evidenceId": "pact.version-source.strategy.strategy-management-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -14687,7 +15047,7 @@
         {
           "evidenceId": "pact.version-source.tool-skill.management-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -14703,7 +15063,7 @@
         {
           "evidenceId": "pact.version-source.tool.capability-package-lifecycle-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -14735,7 +15095,7 @@
         {
           "evidenceId": "pact.version-source.tool.management-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -14815,7 +15175,7 @@
         {
           "evidenceId": "pact.version-source.tool.module-ecosystem-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -14847,7 +15207,7 @@
         {
           "evidenceId": "pact.version-source.tool.mount-module-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -14863,7 +15223,7 @@
         {
           "evidenceId": "pact.version-source.tool.package-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -14911,7 +15271,7 @@
         {
           "evidenceId": "pact.version-source.tool.skill-management-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -14927,7 +15287,7 @@
         {
           "evidenceId": "pact.version-source.tool.skill-registry-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -14959,7 +15319,7 @@
         {
           "evidenceId": "pact.version-source.version-governance.compatibility-table-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -14975,7 +15335,7 @@
         {
           "evidenceId": "pact.version-source.version-governance.protocol-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -14991,7 +15351,7 @@
         {
           "evidenceId": "pact.version-source.version-governance.registry-schema-1",
           "kind": "doc",
-          "uri": "docs/architecture/PACT-SYSTEM-ARCHITECTURE.html"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -15007,7 +15367,7 @@
         {
           "evidenceId": "pact.version-source.version-governance.transition-config-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -15023,7 +15383,7 @@
         {
           "evidenceId": "pact.version-source.workflow.core-1",
           "kind": "doc",
-          "uri": "docs/IMPLEMENTATION-DECISION-REGISTER.md"
+          "uri": "docs/adr/0001-govern-agent-to-agent-acp-delegation-through-pact.md"
         }
       ]
     },
@@ -15055,7 +15415,7 @@
         {
           "evidenceId": "pact.version-source.workflow.job-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -15087,7 +15447,7 @@
         {
           "evidenceId": "pact.version-source.workflow.job-workflow-1",
           "kind": "doc",
-          "uri": "docs/Architecture.md"
+          "uri": "docs/architecture/ARCHITECTURE.md"
         }
       ]
     },
@@ -15220,6 +15580,38 @@
       ]
     },
     {
+      "compatibilityId": "pact.platform.assembly-1.consumes.workspace.asset-operation-1.workspace.asset-operation-1",
+      "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
+      "providerRef": "pact.workspace.asset-operation-1@v0.0.1:workspace:asset-operation-1",
+      "status": "compatible",
+      "newBindingsAllowed": true,
+      "historicalResolutionAllowed": true,
+      "reason": "Pact platform assembly-1 currently consumes v0.0.1:workspace:asset-operation-1.",
+      "evidenceRefs": [
+        {
+          "evidenceId": "pact.version-source.workspace.asset-operation-1",
+          "kind": "doc",
+          "uri": "docs/protocols/PROTOCOLS.md"
+        }
+      ]
+    },
+    {
+      "compatibilityId": "pact.platform.assembly-1.consumes.workspace.asset-registry-1.workspace.asset-registry-1",
+      "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
+      "providerRef": "pact.workspace.asset-registry-1@v0.0.1:workspace:asset-registry-1",
+      "status": "compatible",
+      "newBindingsAllowed": true,
+      "historicalResolutionAllowed": true,
+      "reason": "Pact platform assembly-1 currently consumes v0.0.1:workspace:asset-registry-1.",
+      "evidenceRefs": [
+        {
+          "evidenceId": "pact.version-source.workspace.asset-registry-1",
+          "kind": "other",
+          "uri": "server/platform/specialized/agent/workspace-asset-registry/index.mjs"
+        }
+      ]
+    },
+    {
       "compatibilityId": "pact.platform.assembly-1.consumes.workspace.checkpoint-1.workspace.checkpoint-1",
       "consumerRef": "pact.platform@v0.0.1:platform:assembly-1",
       "providerRef": "pact.workspace.checkpoint-1@v0.0.1:workspace:checkpoint-1",
@@ -15263,7 +15655,7 @@
         {
           "evidenceId": "pact.version-source.workspace.contribution-1",
           "kind": "doc",
-          "uri": "docs/PRODUCTION-CAPABILITY-GAP.md"
+          "uri": "docs/IMPLEMENTATION-GAP.md"
         }
       ]
     },
@@ -15279,7 +15671,7 @@
         {
           "evidenceId": "pact.version-source.workspace.core-1",
           "kind": "doc",
-          "uri": "docs/PROTOCOLS.md"
+          "uri": "docs/protocols/PROTOCOLS.md"
         }
       ]
     },
@@ -15295,7 +15687,7 @@
         {
           "evidenceId": "pact.version-source.workspace.governance-1",
           "kind": "doc",
-          "uri": "docs/ACP-AGENT-RELAY-DESIGN.md"
+          "uri": "docs/functionality/AGENT-COLLABORATION.md"
         }
       ]
     },
@@ -15455,8 +15847,11 @@
         "pact.knowledge.learning-runtime-1@v0.0.1:knowledge:learning-runtime-1",
         "pact.knowledge.normalized-distillation-documents-1@v0.0.1:knowledge:normalized-distillation-documents-1",
         "pact.knowledge.normalized-document-machine-1@v0.0.1:knowledge:normalized-document-machine-1",
+        "pact.knowledge.playbook-1@v0.0.1:knowledge:playbook-1",
+        "pact.knowledge.playbook-framework-1@v0.0.1:knowledge:playbook-framework-1",
         "pact.knowledge.preprocess-result-schema-1@v0.0.1:knowledge:preprocess-result-schema-1",
         "pact.knowledge.retrieval-1@v0.0.1:knowledge:retrieval-1",
+        "pact.knowledge.retrieval-playbook-1@v0.0.1:knowledge:retrieval-playbook-1",
         "pact.knowledge.retrieval-quality-1@v0.0.1:knowledge:retrieval-quality-1",
         "pact.knowledge.rule-1@v0.0.1:knowledge:rule-1",
         "pact.knowledge.rule-authoring-1@v0.0.1:knowledge:rule-authoring-1",
@@ -15487,6 +15882,7 @@
         "pact.module.mount-1@v0.0.1:module:mount-1",
         "pact.offline.offline-knowledge-license-1@v0.0.1:offline:offline-knowledge-license-1",
         "pact.operation.core-1@v0.0.1:operation:core-1",
+        "pact.operation.ledger-1@v0.0.1:operation:ledger-1",
         "pact.operation.operation-dispatcher-1@v0.0.1:operation:operation-dispatcher-1",
         "pact.operation.reply-schema-1@v0.0.1:operation:reply-schema-1",
         "pact.operation.reply-target-schema-1@v0.0.1:operation:reply-target-schema-1",
@@ -15515,6 +15911,7 @@
         "pact.platform.production-health-1@v0.0.1:platform:production-health-1",
         "pact.platform.production-readiness-1@v0.0.1:platform:production-readiness-1",
         "pact.platform.project-release-skill-1@v0.0.1:platform:project-release-skill-1",
+        "pact.platform.project-release-runbook-1@v0.0.1:platform:project-release-runbook-1",
         "pact.platform.repo-operations-compatibility-route-1@v0.0.1:platform:repo-operations-compatibility-route-1",
         "pact.platform.runtime-dependencies-1@v0.0.1:platform:runtime-dependencies-1",
         "pact.platform.sample-business-pack-1@v0.0.1:platform:sample-business-pack-1",
@@ -15705,6 +16102,8 @@
         "pact.workflow.work-queue-definition-registry-1@v0.0.1:workflow:work-queue-definition-registry-1",
         "pact.workflow.work-queue-state-machine-proof-1@v0.0.1:workflow:work-queue-state-machine-proof-1",
         "pact.workspace.agent-workspace-1@v0.0.1:workspace:agent-workspace-1",
+        "pact.workspace.asset-operation-1@v0.0.1:workspace:asset-operation-1",
+        "pact.workspace.asset-registry-1@v0.0.1:workspace:asset-registry-1",
         "pact.workspace.checkpoint-1@v0.0.1:workspace:checkpoint-1",
         "pact.workspace.context-bundle-1@v0.0.1:workspace:context-bundle-1",
         "pact.workspace.contribution-1@v0.0.1:workspace:contribution-1",

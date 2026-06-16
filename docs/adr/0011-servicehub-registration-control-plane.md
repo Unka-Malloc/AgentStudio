@@ -2,10 +2,10 @@
 
 ## Metadata / 元数据
 
-- Last updated: 2026-06-14
+- Last updated: 2026-06-16
 - Status: Accepted
 - Scope: ServiceHub registration authority, external-service manifests, egress, secrets, adoption, and runtime invocation boundaries.
-- Staleness check: Scanned on 2026-06-14; ServiceHub production claims are covered by current external-service, security, and MCP verification gates.
+- Staleness check: Checked against current consolidated docs layout and referenced implementation evidence on 2026-06-16.
 
 ## Status
 Accepted

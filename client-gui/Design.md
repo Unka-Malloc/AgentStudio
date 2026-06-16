@@ -2,7 +2,7 @@
 
 This document describes the visual and interaction direction for the Pact
 Flutter desktop client. Product scope is controlled by
-[`docs/CLIENT_ARCHITECTURE.md`](../docs/CLIENT_ARCHITECTURE.md).
+[`docs/functionality/CLIENT-DESKTOP.md`](../docs/functionality/CLIENT-DESKTOP.md).
 
 ## Product Identity
 

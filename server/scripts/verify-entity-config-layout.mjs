@@ -69,18 +69,37 @@ async function verifyToolEntityConfigs() {
 }
 
 async function verifySkillBundles() {
+  await assertManifest(path.join(ENTITY_ROOT, "runbooks/project-release-runbook/manifest.json"), {
+    bundleType: "pact.runbook.bundle"
+  });
+  const releaseRunbook = await readJson(path.join(ENTITY_ROOT, "runbooks/project-release-runbook/manifest.json"));
+  assert.equal(releaseRunbook.runbookId, "pact.project.release");
+  assert.equal(releaseRunbook.legacySkillId, "pact.project.release");
+  const releaseRunbookDependencies = await readJson(path.join(ENTITY_ROOT, "runbooks/project-release-runbook/dependencies.json"));
+  assert.equal(releaseRunbookDependencies.dependencyType, "pact.runbook.dependencies");
+
+  await assertManifest(path.join(ENTITY_ROOT, "playbooks/knowledge-playbook-framework/manifest.json"), {
+    bundleType: "pact.playbook-framework.bundle"
+  });
+  const playbookFramework = await readJson(path.join(ENTITY_ROOT, "playbooks/knowledge-playbook-framework/framework.json"));
+  assert.equal(playbookFramework.playbookFrameworkId, "pact.default-agentlibrary-playbook-framework");
+  assert.equal(playbookFramework.legacyFrameworkId, "pact.default-knowledge-skill-framework");
+
   await assertManifest(path.join(ENTITY_ROOT, "skills/knowledge-skill-framework/manifest.json"), {
     bundleType: "pact.skill-framework.bundle"
   });
   await assertManifest(path.join(ENTITY_ROOT, "skills/knowledge-agent-skill/manifest.json"), {
     bundleType: "pact.agent-skill.bundle"
   });
+  await assertManifest(path.join(ENTITY_ROOT, "skills/project-release-skill/manifest.json"), {
+    bundleType: "pact.agent-skill.bundle"
+  });
   const framework = await readJson(path.join(ENTITY_ROOT, "skills/knowledge-skill-framework/framework.json"));
   assert.equal(framework.frameworkId, "pact.default-knowledge-skill-framework");
 
   const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), "pact-entity-skill-"));
-  const { createKnowledgeSkillRuntime } = await import("../platform/specialized/knowledge/invocation/knowledge-skill-runtime/index.mjs");
-  const runtime = createKnowledgeSkillRuntime({ userDataPath });
+  const { createAgentLibraryPlaybookRuntime } = await import("../platform/specialized/knowledge/invocation/knowledge-skill-runtime/index.mjs");
+  const runtime = createAgentLibraryPlaybookRuntime({ userDataPath });
   try {
     const proposal = await runtime.proposeSkill({
       query: "Google bills",
@@ -93,25 +112,34 @@ async function verifySkillBundles() {
       evidenceRefs: ["evidence::google-bill-1"],
       status: "pending_review"
     });
-    assert.equal(proposal.record?.skillId ? true : proposal.skill?.skillId ? true : true, true);
+    assert.equal(proposal.playbook?.playbookId ? true : proposal.skill?.playbookId ? true : false, true);
     const skills = runtime.listSkills({ limit: 1 }).items;
     assert.equal(skills.length, 1);
     const skillId = skills[0].skillId;
-    const bundleRoot = path.join(userDataPath, "knowledge-skills/bundles");
-    const bundleDirs = await fs.readdir(bundleRoot);
-    assert.equal(bundleDirs.length, 1);
-    const manifest = await readJson(path.join(bundleRoot, bundleDirs[0], "manifest.json"));
-    assert.equal(manifest.bundleType, "pact.knowledge-skill.bundle");
-    assert.equal(manifest.skillId, skillId);
-    const dependencies = await readJson(path.join(bundleRoot, bundleDirs[0], "dependencies.json"));
+    const playbookId = skills[0].playbookId;
+    const playbookBundleRoot = path.join(userDataPath, "agentlibrary-playbooks/bundles");
+    const playbookBundleDirs = await fs.readdir(playbookBundleRoot);
+    assert.equal(playbookBundleDirs.length, 1);
+    const playbookManifest = await readJson(path.join(playbookBundleRoot, playbookBundleDirs[0], "manifest.json"));
+    assert.equal(playbookManifest.bundleType, "pact.agentlibrary-playbook.bundle");
+    assert.equal(playbookManifest.playbookId, playbookId);
+    assert.equal(playbookManifest.legacySkillId, skillId);
+    const dependencies = await readJson(path.join(playbookBundleRoot, playbookBundleDirs[0], "dependencies.json"));
+    assert.equal(dependencies.dependencyType, "pact.agentlibrary-playbook.dependencies");
     assert.equal(Array.isArray(dependencies.requiredTools), true);
-    const skillPath = path.join(bundleRoot, bundleDirs[0], "skill.json");
-    const editableSkill = await readJson(skillPath);
-    editableSkill.title = "Edited Google bills bundle";
-    editableSkill.updatedAt = new Date().toISOString();
-    await fs.writeFile(skillPath, `${JSON.stringify(editableSkill, null, 2)}\n`, "utf8");
-    const reloadedSkill = runtime.getSkill(skillId);
-    assert.equal(reloadedSkill.title, "Edited Google bills bundle");
+    const legacyBundleRoot = path.join(userDataPath, "knowledge-skills/bundles");
+    const legacyBundleDirs = await fs.readdir(legacyBundleRoot);
+    assert.equal(legacyBundleDirs.length, 1);
+    const legacyManifest = await readJson(path.join(legacyBundleRoot, legacyBundleDirs[0], "manifest.json"));
+    assert.equal(legacyManifest.bundleType, "pact.knowledge-skill.bundle");
+    assert.equal(legacyManifest.skillId, skillId);
+    const playbookPath = path.join(playbookBundleRoot, playbookBundleDirs[0], "playbook.json");
+    const editablePlaybook = await readJson(playbookPath);
+    editablePlaybook.title = "Edited Google bills playbook bundle";
+    editablePlaybook.updatedAt = new Date(Date.now() + 1000).toISOString();
+    await fs.writeFile(playbookPath, `${JSON.stringify(editablePlaybook, null, 2)}\n`, "utf8");
+    const reloadedPlaybook = runtime.getSkill(playbookId);
+    assert.equal(reloadedPlaybook.title, "Edited Google bills playbook bundle");
   } finally {
     runtime.close();
     await fs.rm(userDataPath, { recursive: true, force: true });

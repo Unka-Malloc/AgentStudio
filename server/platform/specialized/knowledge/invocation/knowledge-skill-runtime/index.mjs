@@ -6,11 +6,15 @@ import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 
 export const KNOWLEDGE_SKILL_PROTOCOL_VERSION = "v0.0.1:knowledge:skill-1";
+export const AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION = "v0.0.1:knowledge:playbook-1";
 
+const ENTITY_PLAYBOOK_FRAMEWORK_PATH = fileURLToPath(
+  new URL("../../../../../config/entity-config/playbooks/knowledge-playbook-framework/framework.json", import.meta.url)
+);
 const ENTITY_DEFAULT_FRAMEWORK_PATH = fileURLToPath(
   new URL("../../../../../config/entity-config/skills/knowledge-skill-framework/framework.json", import.meta.url)
 );
-const DEFAULT_FRAMEWORK_PATH = ENTITY_DEFAULT_FRAMEWORK_PATH;
+const DEFAULT_FRAMEWORK_PATHS = Object.freeze([ENTITY_PLAYBOOK_FRAMEWORK_PATH, ENTITY_DEFAULT_FRAMEWORK_PATH]);
 const DEFAULT_STATUS = "pending_review";
 
 function nowIso() {
@@ -322,7 +326,7 @@ function hydrateSkill(row) {
   if (!row) {
     return null;
   }
-  return {
+  return withPlaybookAliases({
     protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
     skillId: row.skill_id,
     version: Number(row.version || 1),
@@ -338,6 +342,51 @@ function hydrateSkill(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     publishedAt: row.published_at
+  });
+}
+
+function hydratePlaybook(row) {
+  if (!row) {
+    return null;
+  }
+  return withPlaybookAliases({
+    protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+    skillId: row.legacy_skill_id || row.playbook_id,
+    playbookId: row.playbook_id,
+    legacySkillId: row.legacy_skill_id || row.playbook_id,
+    version: Number(row.version || 1),
+    status: row.status,
+    title: row.title,
+    sourceQuery: row.source_query,
+    scope: parseJson(row.scope_json, {}),
+    summary: row.summary,
+    skill: parseJson(row.playbook_json || row.skill_json, {}),
+    playbook: parseJson(row.playbook_json || row.skill_json, {}),
+    evidenceRefs: parseJson(row.evidence_refs_json, []),
+    qualityReport: parseJson(row.quality_json, {}),
+    modelDecision: parseJson(row.model_decision_json, null),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    publishedAt: row.published_at
+  });
+}
+
+function withPlaybookAliases(skill = {}) {
+  if (!skill) {
+    return null;
+  }
+  const skillId = normalizeText(skill.skillId || skill.legacySkillId || skill.playbookId || "");
+  const playbookId = normalizeText(skill.playbookId || skillId);
+  const playbookPayload = asObject(skill.playbook || skill.skill);
+  return {
+    ...skill,
+    protocolVersion: skill.protocolVersion || KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+    playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
+    skillId,
+    playbookId,
+    legacySkillId: normalizeText(skill.legacySkillId || skillId),
+    skill: playbookPayload,
+    playbook: playbookPayload
   };
 }
 
@@ -428,6 +477,10 @@ function knowledgeSkillBundleDirectory(rootPath, skillId) {
   return path.join(rootPath, "bundles", safeEntityFileId(skillId));
 }
 
+function agentLibraryPlaybookBundleDirectory(rootPath, playbookId) {
+  return path.join(rootPath, "bundles", safeEntityFileId(playbookId));
+}
+
 function knowledgeSkillDependencies(skill = {}) {
   return {
     schemaVersion: "v0.0.1:schema:definition-1",
@@ -462,6 +515,109 @@ function knowledgeSkillDependencies(skill = {}) {
     evidenceRefs: asArray(skill.evidenceRefs),
     scope: asObject(skill.scope)
   };
+}
+
+function playbookRecordFromSkill(skill = {}) {
+  const normalized = withPlaybookAliases(skill);
+  return {
+    schemaVersion: "v0.0.1:schema:definition-1",
+    protocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
+    playbookId: normalized.playbookId,
+    legacySkillId: normalized.legacySkillId,
+    version: normalized.version,
+    status: normalized.status,
+    title: normalized.title,
+    sourceQuery: normalized.sourceQuery,
+    scope: normalized.scope,
+    summary: normalized.summary,
+    playbook: normalized.playbook,
+    evidenceRefs: asArray(normalized.evidenceRefs),
+    qualityReport: asObject(normalized.qualityReport),
+    modelDecision: normalized.modelDecision || null,
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt,
+    publishedAt: normalized.publishedAt || ""
+  };
+}
+
+function writeAgentLibraryPlaybookBundle(rootPath, skill) {
+  const playbook = playbookRecordFromSkill(skill);
+  if (!playbook.playbookId) {
+    return;
+  }
+  const bundleDir = agentLibraryPlaybookBundleDirectory(rootPath, playbook.playbookId);
+  const dependencies = knowledgeSkillDependencies({
+    ...skill,
+    evidenceRefs: playbook.evidenceRefs
+  });
+  const manifest = {
+    schemaVersion: "v0.0.1:schema:definition-1",
+    bundleType: "pact.agentlibrary-playbook.bundle",
+    protocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
+    playbookId: playbook.playbookId,
+    legacySkillId: playbook.legacySkillId,
+    version: playbook.version,
+    status: playbook.status,
+    title: playbook.title,
+    sourceQuery: playbook.sourceQuery,
+    lightweightBundle: true,
+    files: {
+      manifest: "manifest.json",
+      playbook: "playbook.json",
+      legacySkillProjection: "skill.json",
+      dependencies: "dependencies.json",
+      evidenceRefs: "evidence-refs.json",
+      quality: "quality.json",
+      readme: "README.md"
+    },
+    dependencySummary: {
+      requiredToolCount: dependencies.requiredTools.length,
+      evidenceRefCount: dependencies.evidenceRefs.length,
+      heavyDependencyCount: dependencies.heavyDependencies.length,
+      manifestOnlyDependencyCount: dependencies.manifestOnlyDependencies.length
+    },
+    createdAt: playbook.createdAt,
+    updatedAt: playbook.updatedAt,
+    publishedAt: playbook.publishedAt
+  };
+  writeJsonFileSync(path.join(bundleDir, "manifest.json"), manifest);
+  writeJsonFileSync(path.join(bundleDir, "playbook.json"), playbook);
+  writeJsonFileSync(path.join(bundleDir, "skill.json"), withPlaybookAliases(skill));
+  writeJsonFileSync(path.join(bundleDir, "dependencies.json"), {
+    ...dependencies,
+    dependencyType: "pact.agentlibrary-playbook.dependencies",
+    protocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
+    legacyProtocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION
+  });
+  writeJsonFileSync(path.join(bundleDir, "evidence-refs.json"), {
+    protocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
+    playbookId: playbook.playbookId,
+    legacySkillId: playbook.legacySkillId,
+    evidenceRefs: asArray(playbook.evidenceRefs)
+  });
+  writeJsonFileSync(path.join(bundleDir, "quality.json"), {
+    protocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
+    playbookId: playbook.playbookId,
+    legacySkillId: playbook.legacySkillId,
+    qualityReport: asObject(playbook.qualityReport),
+    modelDecision: playbook.modelDecision || null
+  });
+  writeTextFileSync(
+    path.join(bundleDir, "README.md"),
+    [
+      `# ${playbook.title || playbook.playbookId}`,
+      "",
+      `Playbook ID: \`${playbook.playbookId}\``,
+      `Legacy Skill ID: \`${playbook.legacySkillId}\``,
+      `Version: \`${playbook.version}\``,
+      `Status: \`${playbook.status}\``,
+      "",
+      playbook.summary || "",
+      "",
+      "This is a lightweight Pact AgentLibrary Playbook bundle. The runnable tool contracts and local dependencies are declared in `dependencies.json`; large evidence payloads are referenced by id instead of being copied into the bundle.",
+      ""
+    ].join("\n")
+  );
 }
 
 function writeKnowledgeSkillBundle(rootPath, skill) {
@@ -906,11 +1062,17 @@ export function createKnowledgeSkillRuntime({
   goldenRuleRuntime = null
 } = {}) {
   const rootPath = path.join(userDataPath, "knowledge-skills");
+  const playbookRootPath = path.join(userDataPath, "agentlibrary-playbooks");
   fs.mkdirSync(rootPath, { recursive: true });
+  fs.mkdirSync(playbookRootPath, { recursive: true });
   const db = new Database(path.join(rootPath, "knowledge-skills.sqlite"));
+  const playbookDb = new Database(path.join(playbookRootPath, "agentlibrary-playbooks.sqlite"));
   const skillEvaluationRunsPath = path.join(rootPath, "skill-evaluation-runs.json");
   const skillDeploymentsPath = path.join(rootPath, "skill-deployments.json");
+  const playbookEvaluationRunsPath = path.join(playbookRootPath, "playbook-evaluation-runs.json");
+  const playbookDeploymentsPath = path.join(playbookRootPath, "playbook-deployments.json");
   db.pragma("journal_mode = WAL");
+  playbookDb.pragma("journal_mode = WAL");
   db.exec(`
     CREATE TABLE IF NOT EXISTS knowledge_skills (
       skill_id TEXT PRIMARY KEY,
@@ -932,6 +1094,31 @@ export function createKnowledgeSkillRuntime({
       ON knowledge_skills(status, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_knowledge_skills_source_query
       ON knowledge_skills(source_query);
+  `);
+  playbookDb.exec(`
+    CREATE TABLE IF NOT EXISTS agentlibrary_playbooks (
+      playbook_id TEXT PRIMARY KEY,
+      legacy_skill_id TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL,
+      title TEXT NOT NULL,
+      source_query TEXT NOT NULL,
+      scope_json TEXT NOT NULL DEFAULT '{}',
+      summary TEXT NOT NULL DEFAULT '',
+      playbook_json TEXT NOT NULL DEFAULT '{}',
+      evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+      quality_json TEXT NOT NULL DEFAULT '{}',
+      model_decision_json TEXT NOT NULL DEFAULT 'null',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      published_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_agentlibrary_playbooks_status_updated
+      ON agentlibrary_playbooks(status, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agentlibrary_playbooks_legacy_skill
+      ON agentlibrary_playbooks(legacy_skill_id);
+    CREATE INDEX IF NOT EXISTS idx_agentlibrary_playbooks_source_query
+      ON agentlibrary_playbooks(source_query);
   `);
 
   const insertSkillStmt = db.prepare(`
@@ -958,9 +1145,46 @@ export function createKnowledgeSkillRuntime({
       updated_at = excluded.updated_at,
       published_at = excluded.published_at
   `);
+  const insertPlaybookStmt = playbookDb.prepare(`
+    INSERT INTO agentlibrary_playbooks (
+      playbook_id, legacy_skill_id, version, status, title, source_query, scope_json, summary,
+      playbook_json, evidence_refs_json, quality_json, model_decision_json,
+      created_at, updated_at, published_at
+    ) VALUES (
+      @playbookId, @legacySkillId, @version, @status, @title, @sourceQuery, @scopeJson, @summary,
+      @playbookJson, @evidenceRefsJson, @qualityJson, @modelDecisionJson,
+      @createdAt, @updatedAt, @publishedAt
+    )
+    ON CONFLICT(playbook_id) DO UPDATE SET
+      legacy_skill_id = excluded.legacy_skill_id,
+      version = excluded.version,
+      status = excluded.status,
+      title = excluded.title,
+      source_query = excluded.source_query,
+      scope_json = excluded.scope_json,
+      summary = excluded.summary,
+      playbook_json = excluded.playbook_json,
+      evidence_refs_json = excluded.evidence_refs_json,
+      quality_json = excluded.quality_json,
+      model_decision_json = excluded.model_decision_json,
+      updated_at = excluded.updated_at,
+      published_at = excluded.published_at
+  `);
   const selectSkillStmt = db.prepare("SELECT * FROM knowledge_skills WHERE skill_id = ?");
+  const selectPlaybookStmt = playbookDb.prepare(`
+    SELECT * FROM agentlibrary_playbooks
+    WHERE playbook_id = ? OR legacy_skill_id = ?
+    ORDER BY updated_at DESC
+    LIMIT 1
+  `);
   const listSkillsStmt = db.prepare(`
     SELECT * FROM knowledge_skills
+    WHERE (? = '' OR status = ?)
+    ORDER BY updated_at DESC, title ASC
+    LIMIT ?
+  `);
+  const listPlaybooksStmt = playbookDb.prepare(`
+    SELECT * FROM agentlibrary_playbooks
     WHERE (? = '' OR status = ?)
     ORDER BY updated_at DESC, title ASC
     LIMIT ?
@@ -969,6 +1193,11 @@ export function createKnowledgeSkillRuntime({
     UPDATE knowledge_skills
     SET status = ?, updated_at = ?, published_at = ?
     WHERE skill_id = ?
+  `);
+  const updatePlaybookStatusStmt = playbookDb.prepare(`
+    UPDATE agentlibrary_playbooks
+    SET status = ?, updated_at = ?, published_at = ?
+    WHERE playbook_id = ? OR legacy_skill_id = ?
   `);
 
   function upsertSkillIndex(record = {}) {
@@ -988,23 +1217,50 @@ export function createKnowledgeSkillRuntime({
       updatedAt: record.updatedAt,
       publishedAt: record.publishedAt || ""
     });
+    upsertPlaybookIndex(record);
+  }
+
+  function upsertPlaybookIndex(record = {}) {
+    const normalized = withPlaybookAliases(record);
+    if (!normalized?.playbookId) {
+      return;
+    }
+    insertPlaybookStmt.run({
+      playbookId: normalized.playbookId,
+      legacySkillId: normalized.legacySkillId || normalized.skillId,
+      version: normalized.version,
+      status: normalized.status,
+      title: normalized.title,
+      sourceQuery: normalized.sourceQuery,
+      scopeJson: JSON.stringify(normalized.scope || {}),
+      summary: normalized.summary || "",
+      playbookJson: JSON.stringify(normalized.playbook || normalized.skill || {}),
+      evidenceRefsJson: JSON.stringify(normalized.evidenceRefs || []),
+      qualityJson: JSON.stringify(normalized.qualityReport || {}),
+      modelDecisionJson: JSON.stringify(normalized.modelDecision || null),
+      createdAt: normalized.createdAt,
+      updatedAt: normalized.updatedAt,
+      publishedAt: normalized.publishedAt || ""
+    });
   }
 
   function normalizeSkillBundleRecord(skill = {}) {
-    const skillId = normalizeText(skill.skillId || skill.id || "");
+    const skillId = normalizeText(skill.skillId || skill.legacySkillId || skill.playbookId || skill.id || "");
     if (!skillId) {
       return null;
     }
     const timestamp = nowIso();
     return {
       skillId,
+      playbookId: normalizeText(skill.playbookId || skillId),
+      legacySkillId: normalizeText(skill.legacySkillId || skillId),
       version: Math.max(1, Number(skill.version || 1)),
       status: normalizeText(skill.status || DEFAULT_STATUS) || DEFAULT_STATUS,
-      title: normalizeText(skill.title || skill.skill?.title || skillId),
+      title: normalizeText(skill.title || skill.skill?.title || skill.playbook?.title || skillId),
       sourceQuery: normalizeText(skill.sourceQuery || skill.scope?.query || skill.title || ""),
       scope: asObject(skill.scope),
-      summary: normalizeText(skill.summary || skill.skill?.summary || ""),
-      skill: asObject(skill.skill),
+      summary: normalizeText(skill.summary || skill.skill?.summary || skill.playbook?.summary || ""),
+      skill: asObject(skill.playbook || skill.skill),
       evidenceRefs: asArray(skill.evidenceRefs),
       qualityReport: asObject(skill.qualityReport),
       modelDecision: skill.modelDecision || null,
@@ -1040,46 +1296,147 @@ export function createKnowledgeSkillRuntime({
     }
   }
 
+  function syncPlaybookBundlesIntoIndex() {
+    const bundlesRoot = path.join(playbookRootPath, "bundles");
+    let entries = [];
+    try {
+      entries = fs.readdirSync(bundlesRoot, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const playbookPath = path.join(bundlesRoot, entry.name, "playbook.json");
+      try {
+        const record = normalizeSkillBundleRecord(
+          JSON.parse(fs.readFileSync(playbookPath, "utf8"))
+        );
+        if (record) {
+          upsertPlaybookIndex(record);
+        }
+      } catch {
+        // New Playbook bundles are best-effort during migration.
+      }
+    }
+  }
+
+  function syncLegacySkillIndexIntoPlaybooks() {
+    const rows = listSkillsStmt.all("", "", 10000);
+    for (const row of rows) {
+      const record = hydrateSkill(row);
+      if (record) {
+        const existing = hydratePlaybook(selectPlaybookStmt.get(record.playbookId, record.skillId));
+        const existingUpdatedAt = Date.parse(existing?.updatedAt || "");
+        const legacyUpdatedAt = Date.parse(record.updatedAt || "");
+        if (
+          existing &&
+          Number.isFinite(existingUpdatedAt) &&
+          Number.isFinite(legacyUpdatedAt) &&
+          existingUpdatedAt >= legacyUpdatedAt
+        ) {
+          continue;
+        }
+        upsertPlaybookIndex(record);
+      }
+    }
+  }
+
+  function syncAllSkillIndexes() {
+    syncSkillBundlesIntoIndex();
+    syncPlaybookBundlesIntoIndex();
+    syncLegacySkillIndexIntoPlaybooks();
+  }
+
+  function migrateLegacySkillsToPlaybooks({ writeBundles = true } = {}) {
+    syncSkillBundlesIntoIndex();
+    const rows = listSkillsStmt.all("", "", 10000);
+    const migrated = [];
+    for (const row of rows) {
+      const record = hydrateSkill(row);
+      if (!record) {
+        continue;
+      }
+      upsertPlaybookIndex(record);
+      if (writeBundles) {
+        writeAgentLibraryPlaybookBundle(playbookRootPath, record);
+      }
+      migrated.push(record.playbookId || record.skillId);
+    }
+    return {
+      protocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
+      legacyProtocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      ok: true,
+      migratedCount: migrated.length,
+      migratedPlaybookIds: migrated,
+      storagePath: path.join(playbookRootPath, "agentlibrary-playbooks.sqlite"),
+      legacyStoragePath: path.join(rootPath, "knowledge-skills.sqlite"),
+      bundleRootPath: path.join(playbookRootPath, "bundles")
+    };
+  }
+
   async function loadFramework() {
     const overridePath = path.join(rootPath, "framework.json");
+    const playbookOverridePath = path.join(playbookRootPath, "framework.json");
     const loadJson = async (filePath) => JSON.parse(await fsp.readFile(filePath, "utf8"));
-    try {
-      return normalizeFramework(await loadJson(overridePath));
-    } catch {
-      return normalizeFramework(await loadJson(DEFAULT_FRAMEWORK_PATH));
+    for (const candidate of [playbookOverridePath, overridePath, ...DEFAULT_FRAMEWORK_PATHS]) {
+      try {
+        return normalizeFramework(await loadJson(candidate));
+      } catch {
+        // Try the next compatibility path.
+      }
     }
+    throw new Error("AgentLibrary Playbook framework config is unavailable.");
   }
 
   async function saveFramework(input = {}) {
     const framework = normalizeFramework(input);
     await fsp.mkdir(rootPath, { recursive: true });
-    await fsp.writeFile(
-      path.join(rootPath, "framework.json"),
-      JSON.stringify(framework, null, 2),
-      "utf8"
-    );
+    await fsp.mkdir(playbookRootPath, { recursive: true });
+    await Promise.all([
+      fsp.writeFile(
+        path.join(rootPath, "framework.json"),
+        JSON.stringify(framework, null, 2),
+        "utf8"
+      ),
+      fsp.writeFile(
+        path.join(playbookRootPath, "framework.json"),
+        JSON.stringify({
+          ...framework,
+          playbookFrameworkId: framework.frameworkId === "pact.default-knowledge-skill-framework"
+            ? "pact.default-agentlibrary-playbook-framework"
+            : framework.frameworkId,
+          legacyFrameworkId: framework.frameworkId
+        }, null, 2),
+        "utf8"
+      )
+    ]);
     return {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       framework
     };
   }
 
   function persistSkill(record) {
     upsertSkillIndex(record);
-    const skill = hydrateSkill(selectSkillStmt.get(record.skillId));
+    const skill = getSkill(record.skillId);
     writeKnowledgeSkillBundle(rootPath, skill);
+    writeAgentLibraryPlaybookBundle(playbookRootPath, skill);
     return skill;
   }
 
   function listSkills(input = {}) {
-    syncSkillBundlesIntoIndex();
+    syncAllSkillIndexes();
     const status = normalizeText(input.status || "");
     const limit = Math.max(1, Math.min(Number(input.limit || 50), 200));
-    const items = listSkillsStmt.all(status, status, limit).map(hydrateSkill);
+    const items = listPlaybooksStmt.all(status, status, limit).map(hydratePlaybook);
     const query = normalizeText(input.query || input.q || "");
     const filtered = query ? rankSkillsForQuery(items, query).map((item) => item.skill) : items;
     return {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       items: filtered,
       summary: {
         totalReturned: filtered.length,
@@ -1089,8 +1446,17 @@ export function createKnowledgeSkillRuntime({
   }
 
   function getSkill(skillId) {
-    syncSkillBundlesIntoIndex();
-    return hydrateSkill(selectSkillStmt.get(String(skillId || "")));
+    syncAllSkillIndexes();
+    const id = String(skillId || "");
+    const playbook = hydratePlaybook(selectPlaybookStmt.get(id, id));
+    if (playbook) {
+      return playbook;
+    }
+    const legacy = hydrateSkill(selectSkillStmt.get(id));
+    if (legacy) {
+      upsertPlaybookIndex(legacy);
+    }
+    return legacy;
   }
 
   function rankSkillsForQuery(skills = [], query = "") {
@@ -1126,6 +1492,7 @@ export function createKnowledgeSkillRuntime({
     const ranked = rankSkillsForQuery(candidates, input.query || input.q || "");
     return {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       query: normalizeText(input.query || input.q || ""),
       items: ranked.slice(0, limit).map((item) => ({
         ...item.skill,
@@ -1240,7 +1607,8 @@ export function createKnowledgeSkillRuntime({
     let skill = fallbackSkill;
     if (modelDecisionRuntime && typeof modelDecisionRuntime.decide === "function") {
       modelDecision = await modelDecisionRuntime.decide({
-        roleId: "knowledge_skill_distiller",
+        roleId: input.modelRoleId || "knowledge_playbook_distiller",
+        legacyRoleId: "knowledge_skill_distiller",
         modelEnabled: input.modelEnabled === true,
         modelAlias: input.modelAlias || "",
         input: {
@@ -1275,8 +1643,8 @@ export function createKnowledgeSkillRuntime({
           : DEFAULT_STATUS;
     const now = nowIso();
     const skillId =
-      normalizeText(input.skillId || "") ||
-      stableId("knowledge_skill", query, JSON.stringify(skill.evidenceRefs || []));
+      normalizeText(input.playbookId || input["playbook-id"] || input.skillId || "") ||
+      stableId("agentlibrary_playbook", query, JSON.stringify(skill.evidenceRefs || []));
     const previous = getSkill(skillId);
     const record = persistSkill({
       skillId,
@@ -1309,7 +1677,9 @@ export function createKnowledgeSkillRuntime({
     });
     return {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       ok: true,
+      playbook: record,
       skill: record,
       searchResult: {
         ...searchResult,
@@ -1392,9 +1762,9 @@ export function createKnowledgeSkillRuntime({
           : defaultStatus;
     const now = nowIso();
     const skillId =
-      normalizeText(input.skillId || proposal.skillId || "") ||
+      normalizeText(input.playbookId || input["playbook-id"] || input.skillId || proposal.playbookId || proposal.skillId || "") ||
       stableId(
-        "knowledge_skill",
+        "agentlibrary_playbook",
         "agent_proposal",
         sourceType,
         query,
@@ -1451,7 +1821,9 @@ export function createKnowledgeSkillRuntime({
     });
     return {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       ok: true,
+      playbook: record,
       skill: record,
       openedEvidence,
       qualityReport,
@@ -1466,7 +1838,7 @@ export function createKnowledgeSkillRuntime({
   }
 
   function resolveSkill(input = {}) {
-    const skillId = normalizeText(input.skillId || input.id || "");
+    const skillId = normalizeText(input.playbookId || input["playbook-id"] || input.skillId || input.id || "");
     const action = normalizeText(input.action || input.resolution || "");
     const skill = getSkill(skillId);
     if (!skill) {
@@ -1477,6 +1849,7 @@ export function createKnowledgeSkillRuntime({
       if (!skill.qualityReport?.passed && input.force !== true) {
         return {
           protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+          playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
           ok: false,
           error: "quality_gate_not_passed",
           skill,
@@ -1493,19 +1866,36 @@ export function createKnowledgeSkillRuntime({
     } else {
       return {
         protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+        playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
         ok: false,
         error: "unsupported_skill_resolution",
         allowedActions: ["publish", "reject", "archive", "draft", "pending_review"]
       };
     }
     const now = nowIso();
-    updateStatusStmt.run(status, now, status === "published" ? now : skill.publishedAt || "", skillId);
-    const resolvedSkill = hydrateSkill(selectSkillStmt.get(skillId));
+    updateStatusStmt.run(status, now, status === "published" ? now : skill.publishedAt || "", skill.legacySkillId || skill.skillId || skillId);
+    updatePlaybookStatusStmt.run(
+      status,
+      now,
+      status === "published" ? now : skill.publishedAt || "",
+      skill.playbookId || skillId,
+      skill.legacySkillId || skill.skillId || skillId
+    );
+    const resolvedSkill = withPlaybookAliases({
+      ...skill,
+      status,
+      updatedAt: now,
+      publishedAt: status === "published" ? now : skill.publishedAt || ""
+    });
+    upsertSkillIndex(resolvedSkill);
     writeKnowledgeSkillBundle(rootPath, resolvedSkill);
+    writeAgentLibraryPlaybookBundle(playbookRootPath, resolvedSkill);
     return {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       ok: true,
       action,
+      playbook: resolvedSkill,
       skill: resolvedSkill
     };
   }
@@ -1526,30 +1916,73 @@ export function createKnowledgeSkillRuntime({
   }
 
   async function readSkillEvaluationRuns() {
+    const playbookStore = await readJsonStore(playbookEvaluationRunsPath, null);
+    if (playbookStore && Array.isArray(playbookStore.runs)) {
+      return playbookStore;
+    }
     return readJsonStore(skillEvaluationRunsPath, {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       runs: []
     });
   }
 
   async function writeSkillEvaluationRuns(runs = []) {
+    const normalizedRuns = asArray(runs).slice(-200);
     await writeJsonStore(skillEvaluationRunsPath, {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
-      runs: asArray(runs).slice(-200)
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
+      runs: normalizedRuns
+    });
+    await writeJsonStore(playbookEvaluationRunsPath, {
+      protocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
+      legacyProtocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      runs: normalizedRuns.map((run) => ({
+        ...run,
+        playbookSetVersion: run.playbookSetVersion || run.skillSetVersion || "",
+        legacySkillSetVersion: run.skillSetVersion || "",
+        caseResults: asArray(run.caseResults).map((item) => ({
+          ...item,
+          expectedPlaybookId: item.expectedPlaybookId || item.expectedSkillId || "",
+          rankedPlaybookIds: asArray(item.rankedPlaybookIds || item.rankedSkillIds),
+          expectedSkillId: item.expectedSkillId || item.expectedPlaybookId || "",
+          rankedSkillIds: asArray(item.rankedSkillIds || item.rankedPlaybookIds)
+        }))
+      }))
     });
   }
 
   async function readSkillDeployments() {
+    const playbookStore = await readJsonStore(playbookDeploymentsPath, null);
+    if (playbookStore && Array.isArray(playbookStore.deployments)) {
+      return playbookStore;
+    }
     return readJsonStore(skillDeploymentsPath, {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       deployments: []
     });
   }
 
   async function writeSkillDeployments(deployments = []) {
+    const normalizedDeployments = asArray(deployments).slice(-200);
     await writeJsonStore(skillDeploymentsPath, {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
-      deployments: asArray(deployments).slice(-200)
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
+      deployments: normalizedDeployments
+    });
+    await writeJsonStore(playbookDeploymentsPath, {
+      protocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
+      legacyProtocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      deployments: normalizedDeployments.map((deployment) => ({
+        ...deployment,
+        playbookSetVersion: deployment.playbookSetVersion || deployment.skillSetVersion || "",
+        legacySkillSetVersion: deployment.skillSetVersion || "",
+        playbookIds: asArray(deployment.playbookIds || deployment.skillIds),
+        publishedPlaybookIds: asArray(deployment.publishedPlaybookIds || deployment.publishedSkillIds),
+        skillIds: asArray(deployment.skillIds || deployment.playbookIds),
+        publishedSkillIds: asArray(deployment.publishedSkillIds || deployment.publishedPlaybookIds)
+      }))
     });
   }
 
@@ -1565,7 +1998,8 @@ export function createKnowledgeSkillRuntime({
     const cases = asArray(goldCases.items).map((item, index) => ({
       caseId: normalizeText(item.caseId || item.id || `case-${index + 1}`),
       query: normalizeText(item.query || item.q || item.question || ""),
-      expectedSkillId: normalizeText(item.expectedSkillId || item.skillId || ""),
+      expectedPlaybookId: normalizeText(item.expectedPlaybookId || item.playbookId || item.expectedSkillId || item.skillId || ""),
+      expectedSkillId: normalizeText(item.expectedSkillId || item.skillId || item.expectedPlaybookId || item.playbookId || ""),
       requiredEvidenceIds: uniqueEvidenceRefs(asArray(item.requiredEvidenceIds || item.evidenceRefs).map((evidenceId) => ({ evidenceId }))),
       forbiddenEvidenceIds: uniqueEvidenceRefs(asArray(item.forbiddenEvidenceIds).map((evidenceId) => ({ evidenceId })))
     })).filter((item) => item.query);
@@ -1576,12 +2010,16 @@ export function createKnowledgeSkillRuntime({
         status: input.status || "",
         limit: k
       }).items;
-      const rankedSkillIds = ranked.map((skill) => skill.skillId).filter(Boolean);
+      const rankedPlaybookIds = ranked.map((skill) => skill.playbookId || skill.skillId).filter(Boolean);
+      const rankedSkillIds = ranked.map((skill) => skill.skillId || skill.legacySkillId || skill.playbookId).filter(Boolean);
       const rankedEvidenceIds = [
         ...new Set(ranked.flatMap((skill) => asArray(skill.evidenceRefs || skill.skill?.evidenceRefs)).filter(Boolean))
       ];
-      const skillHitIndex = testCase.expectedSkillId
-        ? rankedSkillIds.findIndex((skillId) => skillId === testCase.expectedSkillId)
+      const expectedPlaybookId = testCase.expectedPlaybookId || testCase.expectedSkillId;
+      const skillHitIndex = expectedPlaybookId
+        ? rankedPlaybookIds.findIndex((playbookId) => playbookId === expectedPlaybookId) >= 0
+          ? rankedPlaybookIds.findIndex((playbookId) => playbookId === expectedPlaybookId)
+          : rankedSkillIds.findIndex((skillId) => skillId === expectedPlaybookId)
         : -1;
       const requiredEvidence = new Set(testCase.requiredEvidenceIds);
       const evidenceHitCount = rankedEvidenceIds.filter((evidenceId) => requiredEvidence.has(evidenceId)).length;
@@ -1589,7 +2027,9 @@ export function createKnowledgeSkillRuntime({
       caseResults.push({
         caseId: testCase.caseId,
         query: testCase.query,
+        expectedPlaybookId,
         expectedSkillId: testCase.expectedSkillId,
+        rankedPlaybookIds,
         rankedSkillIds,
         rankedEvidenceIds,
         metrics: {
@@ -1620,11 +2060,13 @@ export function createKnowledgeSkillRuntime({
       metrics.forbiddenEvidenceHitRate <= thresholds.maxForbiddenEvidenceHitRate;
     const run = {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       runId,
       status: "completed",
       passed,
       k,
-      skillSetVersion: normalizeText(input.skillSetVersion || ""),
+      playbookSetVersion: normalizeText(input.playbookSetVersion || input.skillSetVersion || ""),
+      skillSetVersion: normalizeText(input.skillSetVersion || input.playbookSetVersion || ""),
       metrics,
       thresholds,
       caseResults,
@@ -1632,7 +2074,7 @@ export function createKnowledgeSkillRuntime({
       finishedAt: nowIso(),
       recommendations: passed
         ? []
-        : ["不要发布候选 SkillSet；先补充黄金样本、证据引用或专家规则。"]
+        : ["不要发布候选 PlaybookSet；先补充黄金样本、证据引用或专家规则。"]
     };
     const store = await readSkillEvaluationRuns();
     await writeSkillEvaluationRuns([...asArray(store.runs).filter((item) => item.runId !== runId), run]);
@@ -1644,6 +2086,7 @@ export function createKnowledgeSkillRuntime({
     const store = await readSkillEvaluationRuns();
     return {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       runs: asArray(store.runs)
         .slice()
         .sort((left, right) => String(right.startedAt || "").localeCompare(String(left.startedAt || "")))
@@ -1657,10 +2100,14 @@ export function createKnowledgeSkillRuntime({
 
   async function createSkillDeployment(input = {}) {
     const startedAt = nowIso();
-    const skillIds = uniqueEvidenceRefs(asArray(input.skillIds || input.skills).map((skillId) => ({ evidenceId: typeof skillId === "string" ? skillId : skillId?.skillId })));
+    const skillIds = uniqueEvidenceRefs(asArray(input.playbookIds || input.skillIds || input.playbooks || input.skills).map((skillId) => ({
+      evidenceId: typeof skillId === "string" ? skillId : skillId?.playbookId || skillId?.skillId
+    })));
+    const playbookIds = skillIds;
     const status = normalizeText(input.status || input.publishMode || "canary") || "canary";
-    const deploymentId = normalizeText(input.deploymentId || "") || stableId("skill_deployment", status, startedAt, JSON.stringify(skillIds));
-    const skillSetVersion = normalizeText(input.skillSetVersion || "") || `skillset-${Date.now().toString(36)}`;
+    const deploymentId = normalizeText(input.deploymentId || "") || stableId("playbook_deployment", status, startedAt, JSON.stringify(playbookIds));
+    const skillSetVersion = normalizeText(input.skillSetVersion || input.playbookSetVersion || "") || `playbookset-${Date.now().toString(36)}`;
+    const playbookSetVersion = normalizeText(input.playbookSetVersion || input.skillSetVersion || "") || skillSetVersion;
     let evaluationRun = null;
     if (input.evaluationRunId) {
       evaluationRun = asArray((await readSkillEvaluationRuns()).runs).find((run) => run.runId === input.evaluationRunId) || null;
@@ -1668,6 +2115,7 @@ export function createKnowledgeSkillRuntime({
     if (input.force !== true && evaluationRun && evaluationRun.passed !== true) {
       return {
         protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+        playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
         ok: false,
         error: "skill_evaluation_not_passed",
         evaluationRun
@@ -1682,11 +2130,15 @@ export function createKnowledgeSkillRuntime({
     }
     const deployment = {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       deploymentId,
+      playbookSetVersion,
       skillSetVersion,
       status,
       trafficPercent: status === "active" ? 100 : Math.max(1, Math.min(Number(input.trafficPercent || 10), 100)),
+      playbookIds,
       skillIds,
+      publishedPlaybookIds: status === "active" ? publishable.map((skill) => skill.playbookId || skill.skillId) : [],
       publishedSkillIds: status === "active" ? publishable.map((skill) => skill.skillId) : [],
       baseline: input.baseline || null,
       metrics: evaluationRun?.metrics || input.metrics || {},
@@ -1703,6 +2155,7 @@ export function createKnowledgeSkillRuntime({
     await writeSkillDeployments([...asArray(store.deployments).filter((item) => item.deploymentId !== deploymentId), deployment]);
     return {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       ok: true,
       deployment
     };
@@ -1718,7 +2171,7 @@ export function createKnowledgeSkillRuntime({
     const timestamp = nowIso();
     const rollback = {
       ...current,
-      deploymentId: normalizeText(input.rollbackDeploymentId || "") || stableId("skill_deployment_rollback", deploymentId, timestamp),
+      deploymentId: normalizeText(input.rollbackDeploymentId || "") || stableId("playbook_deployment_rollback", deploymentId, timestamp),
       status: "rolled_back",
       rollbackOf: deploymentId,
       reason: normalizeText(input.reason || "manual_or_metric_rollback"),
@@ -1730,6 +2183,7 @@ export function createKnowledgeSkillRuntime({
     ]);
     return {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       ok: true,
       deployment: rollback
     };
@@ -1740,6 +2194,7 @@ export function createKnowledgeSkillRuntime({
     const store = await readSkillDeployments();
     return {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       deployments: asArray(store.deployments)
         .slice()
         .sort((left, right) => String(right.updatedAt || right.createdAt || "").localeCompare(String(left.updatedAt || left.createdAt || "")))
@@ -1753,41 +2208,62 @@ export function createKnowledgeSkillRuntime({
       status: input.status || "published",
       limit: input.limit || 3
     });
+    const playbooks = result.items.map((item) => ({
+      playbookId: item.playbookId || item.skillId,
+      legacySkillId: item.legacySkillId || item.skillId,
+      skillId: item.skillId,
+      title: item.title,
+      summary: item.summary,
+      matchScore: item.matchScore,
+      applicability: item.playbook?.applicability || item.skill?.applicability || {},
+      coreConcepts: asArray(item.playbook?.coreConcepts || item.skill?.coreConcepts).slice(0, 8),
+      decisionHeuristics: asArray(item.playbook?.decisionHeuristics || item.skill?.decisionHeuristics).slice(0, 8),
+      antiPatterns: asArray(item.playbook?.antiPatterns || item.skill?.antiPatterns).slice(0, 6),
+      honestBoundaries: asArray(item.playbook?.honestBoundaries || item.skill?.honestBoundaries).slice(0, 6),
+      evidenceRefs: asArray(item.evidenceRefs).slice(0, 10)
+    }));
     return {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
       query: result.query,
-      skills: result.items.map((item) => ({
-        skillId: item.skillId,
-        title: item.title,
-        summary: item.summary,
-        matchScore: item.matchScore,
-        applicability: item.skill?.applicability || {},
-        coreConcepts: asArray(item.skill?.coreConcepts).slice(0, 8),
-        decisionHeuristics: asArray(item.skill?.decisionHeuristics).slice(0, 8),
-        antiPatterns: asArray(item.skill?.antiPatterns).slice(0, 6),
-        honestBoundaries: asArray(item.skill?.honestBoundaries).slice(0, 6),
-        evidenceRefs: asArray(item.evidenceRefs).slice(0, 10)
-      }))
+      playbooks,
+      skills: playbooks
     };
   }
 
   function describe() {
     return {
       protocolVersion: KNOWLEDGE_SKILL_PROTOCOL_VERSION,
-      name: "pact.knowledge.skill-runtime",
+      playbookProtocolVersion: AGENT_LIBRARY_PLAYBOOK_PROTOCOL_VERSION,
+      name: "pact.agentLibrary.playbook-runtime",
+      legacyName: "pact.knowledge.skill-runtime",
       purpose:
-        "Distill evidence-backed knowledge into reusable, reviewable, and publishable KnowledgeSkill units.",
-      storagePath: path.join(rootPath, "knowledge-skills.sqlite"),
-      bundleRootPath: path.join(rootPath, "bundles"),
+        "Distill evidence-backed knowledge into reusable, reviewable, and publishable AgentLibrary Playbook units.",
+      storagePath: path.join(playbookRootPath, "agentlibrary-playbooks.sqlite"),
+      legacyStoragePath: path.join(rootPath, "knowledge-skills.sqlite"),
+      bundleRootPath: path.join(playbookRootPath, "bundles"),
+      legacyBundleRootPath: path.join(rootPath, "bundles"),
       frameworkPath: path.join(rootPath, "framework.json"),
+      playbookFrameworkPath: path.join(playbookRootPath, "framework.json"),
+      migration: {
+        primaryStore: "agentlibrary-playbooks",
+        legacyStore: "knowledge-skills",
+        dualWrite: true,
+        legacyReadFallback: true,
+        legacyDeleteAllowed: false
+      },
       bundlePolicy: {
         enabled: true,
         lightweight: true,
         largeEvidencePayloadsCopied: false,
+        manifestFile: "manifest.json",
+        playbookFile: "playbook.json",
+        legacySkillProjectionFile: "skill.json",
         dependencyManifestFile: "dependencies.json"
       },
       policies: {
         canonicalWritesAllowed: false,
+        publishedPlaybookRequiresQualityGate: true,
         publishedSkillRequiresQualityGate: true,
         evidenceRefsRequired: true,
         modelUseRequiresExplicitEnable: true
@@ -1812,10 +2288,16 @@ export function createKnowledgeSkillRuntime({
     listSkillDeployments,
     buildContextForQuery,
     resolveSkill,
+    migrateLegacySkillsToPlaybooks,
     close() {
       db.close();
+      playbookDb.close();
     }
   };
+}
+
+export function createAgentLibraryPlaybookRuntime(options = {}) {
+  return createKnowledgeSkillRuntime(options);
 }
 
 export default createKnowledgeSkillRuntime;
