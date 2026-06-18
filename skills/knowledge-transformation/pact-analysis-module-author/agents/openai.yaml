@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact Analysis Module Author"
-  short_description: "Help with Pact Analysis Module Author tasks"
-  default_prompt: "Use $pact-analysis-module-author to handle this Pact platform task."

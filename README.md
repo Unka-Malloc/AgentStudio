@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="docs/banner.svg" alt="Pact — Trusted Agent Collaboration Space" width="100%"/>
+  <img src="docs/banner.svg" alt="Pactium - Protocol Substrate for Auditable Systems" width="100%"/>
 </p>
 
 <p align="center">
-  <strong>The secure, auditable hub where your AI agents collaborate — without going rogue.</strong>
+  <strong>A protocol substrate for operation ledgers, append-only restore trees, and Merkle-verifiable state.</strong>
 </p>
 
 <p align="center">
@@ -11,160 +11,114 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml"><img src="https://github.com/Unka-Malloc/Pact/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://www.npmjs.com/package/pactium"><img src="https://img.shields.io/npm/v/pactium.svg" alt="npm version"/></a>
+  <a href="https://github.com/Unka-Malloc/Pactium/actions/workflows/ci.yml"><img src="https://github.com/Unka-Malloc/Pactium/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPL_3.0--or--later-blue.svg" alt="License: GPL-3.0-or-later"/></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white" alt="Node.js"/></a>
-  <a href="https://vuejs.org/"><img src="https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js&logoColor=white" alt="Vue 3"/></a>
-  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-CLI-DEA584?logo=rust&logoColor=white" alt="Rust"/></a>
-  <a href="https://flutter.dev/"><img src="https://img.shields.io/badge/Flutter-GUI-02569B?logo=flutter&logoColor=white" alt="Flutter"/></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white" alt="Node.js 22+"/></a>
+  <img src="https://img.shields.io/badge/ESM-library-111827" alt="ESM library"/>
+  <img src="https://img.shields.io/badge/SQLite-backed-0f766e" alt="SQLite backed"/>
 </p>
 
+**Pactium** is a **library-first protocol framework** for host systems that need durable operation records, restoreable execution checkpoints, and verifiable state commits.
 
-**Pact** is a **Trusted Agent Collaboration Space**. We bridge the gap between isolated local AI agents and static enterprise knowledge bases by providing a **secure, controllable, and 100% auditable** collaborative environment.
+It is intentionally not a full collaboration product. Pactium provides the protocol layer: an **Operation Ledger**, an append-only **Checkpoint Tree**, and a **Merkle State Substrate**. Authentication, product semantics, policy engines, agent gateways, knowledge pipelines, and user interfaces belong to the host system.
 
 > [!WARNING]
-> **Pact is under active development.** The core architecture is stabilizing but breaking changes may occur between releases. We welcome contributors — whether you're interested in governance engines, protocol adapters, or frontend tooling. See our [Contributing Guide](CONTRIBUTING.md) to get started.
+> Pactium is in early public shape. The core model is small and test-covered, but the v0.1 API may still evolve before a stable release line.
 
-## Why Pact?
+## Why Pactium?
 
-- **Stop worrying about rogue agents** — Every state change (writes, exports, knowledge access) must pass through a strict Policy Engine and is permanently recorded in an immutable Operation Ledger.
-- **One hub, all your agents** — Local AI agents, automation scripts, CLI tools, and human members all collaborate in a single unified workspace, eliminating information silos.
-- **Full replay, zero trust** — Every file modification, permission request, and even every *denied* access attempt generates an immutable Checkpoint Node. Roll back to any point in history, just like Git.
+- **Record effects before they disappear** - write operations into a durable ledger with operation ID, workspace, subject, risk, status, receipts, and redacted input.
+- **Restore without rewriting history** - model checkpoints as append-only trees; preview and apply restore markers without mutating the original trace.
+- **Verify state instead of trusting storage** - commit state through content-addressed blocks, Merkle manifests, indexes, event logs, and state commit verification.
+- **Embed the protocol, keep your product** - Pactium exposes primitives and thin CLI/HTTP facades; your system owns auth, policy, UI, and domain meaning.
 
-## Connect Your Agent in One Command
+## Core Capabilities
 
-Already have a local AI agent? Connect it to Pact instantly:
-
-```bash
-/bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
-```
-
-> Supports OpenClaw, Claude Code, Codex, Antigravity, OpenCode, Copilot, Kilo Code, Cursor, and Hermes Agent via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
-
-## Product Capabilities
-
-<p align="center">
-  <img src="docs/product-matrix.svg" alt="Pact Product Capabilities" width="100%"/>
-</p>
-
-## Core Features
-
-| Feature | Description |
+| Capability | What Pactium Provides |
 | --- | --- |
-| **Agent Governance** | Agents are external operators. Every write, export, or access attempt is policy-checked and ledger-recorded before execution. |
-| **Agent Library** | Dynamic knowledge slicing with hyper-granular egress controls (`controlledView`, `copyToContext`, `checkoutAllowed`). Knowledge is re-authorized upon every access. |
-| **Checkpoint Tree** | An append-only state graph of all workspace effects. Supports safe rollback to any historical point — reads, writes, denials, and restores are all tracked. |
-| **MCP Native** | First-class protocol support for the entire MCP agent ecosystem. Seven stable semantic outlets: `pact.discovery`, `pact.agentLibrary`, `pact.sharedspace`, `pact.codespace`, `pact.skillHub`, `pact.agentRelay`, `pact.serviceHub`. |
-| **Contribution Leaderboard** | Quantifies which agent (or human) contributed the most reusable knowledge, rules, and skills — turning compute into lasting digital assets. |
-| **ACP Relay** | Governed agent-to-agent delegation through Pact. Source agents delegate to target agents via Virtual Inbound Agent projections with full policy mediation. |
+| **Operation Ledger** | SQLite-backed operation records with idempotent replay, status transitions, warnings, receipts, and lookup/list APIs. |
+| **Checkpoint Tree** | Append-only task/workflow trees with `startTree`, `upsertNode`, `finishTree`, `diffTree`, `queryScope`, `previewRestore`, and `restore`. |
+| **Merkle State Substrate** | Content-addressed store, Merkle DAG manifests, sorted indexes, partitioned event logs, state commits, and ingest receipts. |
+| **Pactium Kernel** | A composition layer that records one operation across ledger entry, checkpoint node, and optional state commit. |
+| **Thin Facades** | `pactium` CLI and localhost JSON HTTP server for smoke tests, local tooling, and host integration. |
 
-## Tech Stack
-
-This project follows the "Modular Monolith" principle, strictly separating concerns into specific directories:
-
-| Directory | Role | Technology |
-| --- | --- | --- |
-| `server` | Core Control Plane — auth, asset slicing, state machines, Ledger | Node.js + SQLite |
-| `server-web` | Management Console — asset browsers, audit views, permission configs | Vue 3 + Element Plus |
-| `client-cli` | Client Execution Layer — local environment adapters, high-throughput interactions | Rust |
-| `client-gui` | Cross-platform Desktop Application — lightweight terminal | Flutter |
-| `mcp-connector` | MCP Client Connector — one-line install for local AI agents | Node.js |
-| `tests` | Unit, component, integration, and E2E verification | Vitest + Vue Test Utils + Playwright |
-| `docs` | Architectural principles and design decisions | Markdown |
-
-## Quick Start
-
-### Docker (Recommended)
-
-The fastest way to run Pact — no toolchain installation required:
+## Install
 
 ```bash
-docker compose up -d
+npm install pactium
 ```
 
-Access the Web Console at `http://127.0.0.1:7228`.
+## Use As A Library
 
-### Pre-built Binary (MCP Connector)
+```js
+import { createPactiumKernel } from "pactium";
 
-Install the MCP Connector to connect your local AI agents:
+const kernel = createPactiumKernel({ dataDir: "./.pactium" });
+
+const receipt = await kernel.recordOperation({
+  operationId: "workspace.file.write",
+  workspaceId: "workspace-a",
+  subject: { type: "agent", id: "agent-a" },
+  effectKind: "file.changed",
+  state: {
+    mutations: [
+      { action: "put", key: "docs/a.md", value: { text: "hello" } }
+    ]
+  }
+});
+
+console.log(receipt.ledgerEventId);
+console.log(receipt.checkpointNodeId);
+console.log(receipt.stateCommitId);
+```
+
+## CLI
 
 ```bash
-# Automatic installer — detects your OS and architecture
-/bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-install.sh)"
+pactium doctor
+pactium operation record --body '{"operationId":"demo.write","workspaceId":"demo"}'
+pactium ledger list
+pactium checkpoint list
+pactium state verify state_commit_example
+pactium serve --host 127.0.0.1 --port 7288
 ```
 
-To remove:
-```bash
-/bin/sh -c "$(curl -fsSL https://github.com/Unka-Malloc/Pact/releases/latest/download/pact-mcp-uninstall.sh)"
-```
+## Public API
 
-### From Source (Contributors)
+- `createPactiumKernel({ dataDir })`
+- `createOperationLedger({ dataDir })`
+- `createCheckpointTreeStore({ dataDir })`
+- `createMerkleStateSubstrate({ dataDir })`
+- `createPactiumHttpServer({ dataDir })`
+- `startPactiumHttpServer({ dataDir, host, port })`
 
-For contributors who want to build from source:
+Type declarations are included through `src/index.d.ts`.
 
-```bash
-git clone https://github.com/Unka-Malloc/Pact.git && cd Pact
+## Repository Layout
 
-# Install dependencies
-npm install
-
-# Pull runtime dependencies (JRE + Tika, project-local only)
-npm run server:setup-runtime
-
-# Start the backend API + Web Console
-npm run start:all
-```
-
-Access the Web Console at `http://127.0.0.1:7228`.
-
-For development with Vite HMR:
-```bash
-npm run start:all -- --dev
-```
-
-## Production Deployment
-
-When deploying Pact to production, apply the following hardening measures:
-
-| Requirement | Details |
+| Path | Purpose |
 | --- | --- |
-| **HTTPS Reverse Proxy** | Terminate TLS via Caddy, Nginx, Traefik, or Kubernetes Ingress. Never expose plain HTTP externally. |
-| **Network Isolation** | Deploy within private subnets/VPCs. Restrict access to authorized clients only. |
-| **Secret Management** | Inject credentials via environment variables or external secret stores (Vault, KMS). Never hardcode secrets. |
-| **Audit Archiving** | Enable the Operation Ledger and configure periodic archival for compliance. |
-| **Backup & Recovery** | Implement regular backups for SQLite databases and object storage volumes. |
+| `src/` | Pactium protocol-layer implementation. |
+| `bin/` | `pactium` command line facade. |
+| `tests/pactium/` | Core, CLI, and HTTP smoke tests. |
+| `docs/` | Pactium protocol and architecture notes. |
+| `examples/` | Minimal library usage examples. |
 
-## Documentation
+The old full-system implementation is stored outside this repository as a compressed reference archive. It is not part of the Pactium package or maintenance surface.
 
-### Core Design Documents
+## Verify
 
-| Document | Description |
-| --- | --- |
-| [Architecture Overview](docs/Architecture.md) | System positioning, design scope, module design, data models |
-| [Protocol Boundaries](docs/PROTOCOLS.md) | Workspace API, operations, tools, knowledge, and protocol adapters |
-| [Workspace Asset Governance](docs/WORKSPACE-ASSET-GOVERNANCE.md) | Asset governance, snapshots, traceability, restore, and security principles |
-| [Knowledge Governance](docs/KNOWLEDGE-GOVERNANCE.md) | Agent Library, 3-layer knowledge model, evidence packs, maintenance loop |
-
-### Operational Documents
-
-| Document | Description |
-| --- | --- |
-| [Server Guide](docs/SERVER.md) | Startup, configuration, mounts, Knowledge Core, APIs |
-| [Usage Guide](docs/USAGE.md) | Console, client, CLI, and email import workflows |
-| [Developer Guidelines](docs/DEVELOPER-GUIDELINES.md) | Coding conventions, architecture principles |
-| [Test Framework](docs/TEST-FRAMEWORK.md) | Unified test contract and verification |
-| [Feature Profiles](docs/FEATURE-PROFILES.md) | Feature flags and profile definitions |
-
-## Contributing
-
-We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) to get started.
-
-For development guidelines and coding conventions, see [Developer Guidelines](docs/DEVELOPER-GUIDELINES.md).
+```bash
+npm run verify
+npm audit
+npm publish --dry-run --access public
+```
 
 ## License
 
-This project is licensed under the [GNU General Public License v3.0 or later](LICENSE) — see the LICENSE file for details.
+This project is licensed under the [GNU General Public License v3.0 or later](LICENSE).
 
 ---
 
-> *"In Pact, agents are not trusted. We only trust verifiable asset states and a replayable operation ledger."*
+> *"In Pactium, systems do not rely on trust in the caller. They rely on replayable operations, append-only checkpoints, and verifiable state."*

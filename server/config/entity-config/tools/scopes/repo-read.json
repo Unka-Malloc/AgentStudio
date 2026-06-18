@@ -1,5 +1,0 @@
-{
-  "id": "repo:read",
-  "label": "Read repositories",
-  "description": "Read repository status, files, trees, diffs, commits, review targets, and change metadata."
-}

@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "v0.0.1:schema:definition-1",
-  "bundleType": "pact.spec.bundle",
-  "specId": "pact.source-search-rules",
-  "sourceSeed": "server/config/default-source-search-rules.json",
-  "runtimeAuthority": "<userDataPath>/rules/source-search-rules.json",
-  "lightweightBundle": true
-}

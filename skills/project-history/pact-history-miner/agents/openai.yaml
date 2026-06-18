@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact History Miner"
-  short_description: "Find Pact-related local agent conversations"
-  default_prompt: "Use $pact-history-miner to find local agent history related to Pact, splitall, and agent studio."

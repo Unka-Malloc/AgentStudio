@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact Client Config Index"
-  short_description: "Help with Pact Client Config Index tasks"
-  default_prompt: "Use $pact-client-config-index to handle this Pact platform task."

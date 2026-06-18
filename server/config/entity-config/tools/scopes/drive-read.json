@@ -1,5 +1,0 @@
-{
-  "id": "drive:read",
-  "label": "Read cloud drives",
-  "description": "Read cloud drive accounts, safe metadata, downloads, sync plans, and provider status."
-}

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact KnowledgeSkill Maintainer"
-  short_description: "Maintain Pact KnowledgeSkill runtime"
-  default_prompt: "Use $pact-knowledge-skill-maintainer to maintain Pact runtime KnowledgeSkill behavior."

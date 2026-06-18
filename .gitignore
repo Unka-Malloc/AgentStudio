@@ -24,8 +24,8 @@ replay_pid*
 crash-*
 
 # App local data and generated workspace outputs
-.pact-server-data/
-/.pact-agent-history/
+.pactium/
+/.pactium/
 /build/*
 !/build/
 !/build/README.md
@@ -35,7 +35,6 @@ crash-*
 
 # Java / Rust / Node build outputs
 node_modules/
-client-cli/target/
 
 # Generated archives / binaries
 *.app
@@ -50,17 +49,6 @@ client-cli/target/
 *.rar
 
 # Local module runtimes and heavy assets
-server/platform/modules/knowledge/runtime/jre/**
-!server/platform/modules/knowledge/runtime/jre/
-!server/platform/modules/knowledge/runtime/jre/.gitkeep
-server/platform/modules/knowledge/tika/*
-!server/platform/modules/knowledge/tika/
-!server/platform/modules/knowledge/tika/.gitkeep
-server/platform/modules/knowledge/ocr/runtime/**
-!server/platform/modules/knowledge/ocr/runtime/
-!server/platform/modules/knowledge/ocr/runtime/README.md
-!server/platform/modules/knowledge/ocr/runtime/**/
-!server/platform/modules/knowledge/ocr/runtime/**/.gitkeep
 
 # Temporary files
 *.tmp

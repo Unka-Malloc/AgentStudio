@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact Storage Ops"
-  short_description: "Help with Pact Storage Ops tasks"
-  default_prompt: "Use $pact-storage-ops to handle this Pact platform task."

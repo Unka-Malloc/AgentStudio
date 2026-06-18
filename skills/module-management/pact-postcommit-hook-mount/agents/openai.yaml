@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact Postcommit Hook Mount"
-  short_description: "Help with Pact Postcommit Hook Mount tasks"
-  default_prompt: "Use $pact-postcommit-hook-mount to handle this Pact platform task."

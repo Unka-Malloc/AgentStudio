@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact Mount Author"
-  short_description: "Help with Pact Mount Author tasks"
-  default_prompt: "Use $pact-mount-author to handle this Pact platform task."

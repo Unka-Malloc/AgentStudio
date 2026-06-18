@@ -1,5 +1,0 @@
-{
-  "id": "drive:write",
-  "label": "Write cloud drives",
-  "description": "Create drive connections and write mediated cloud drive projections."
-}

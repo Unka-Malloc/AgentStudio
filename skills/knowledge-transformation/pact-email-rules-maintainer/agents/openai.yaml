@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact Email Rules Maintainer"
-  short_description: "Help with Pact Email Rules Maintainer tasks"
-  default_prompt: "Use $pact-email-rules-maintainer to handle this Pact platform task."

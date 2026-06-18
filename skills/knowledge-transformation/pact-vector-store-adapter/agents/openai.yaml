@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact Vector Store Adapter"
-  short_description: "Help with Pact Vector Store Adapter tasks"
-  default_prompt: "Use $pact-vector-store-adapter to handle this Pact platform task."

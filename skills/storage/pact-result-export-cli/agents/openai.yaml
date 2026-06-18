@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact Result Export CLI"
-  short_description: "Help with Pact Result Export CLI tasks"
-  default_prompt: "Use $pact-result-export-cli to handle this Pact platform task."

@@ -1,35 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400" role="img" aria-label="Pact — Trusted Agent Collaboration Space">
-  <title>Pact — Trusted Agent Collaboration Space</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400" role="img" aria-label="Pactium - Protocol Substrate for Auditable Systems">
+  <title>Pactium - Protocol Substrate for Auditable Systems</title>
 
   <defs>
-    <!-- Background gradient: deep charcoal → near-black -->
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%"   stop-color="#0d0d12"/>
+      <stop offset="0%" stop-color="#0d0d12"/>
       <stop offset="100%" stop-color="#080810"/>
     </linearGradient>
 
-    <!-- Accent gradient for the outermost ring: warm gold fade -->
     <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%"   stop-color="#c9a96e"/>
-      <stop offset="50%"  stop-color="#f0d28c"/>
+      <stop offset="0%" stop-color="#c9a96e"/>
+      <stop offset="50%" stop-color="#f0d28c"/>
       <stop offset="100%" stop-color="#a8893a"/>
     </linearGradient>
 
-    <!-- Inner accent: cooler silver-blue for depth contrast -->
     <linearGradient id="silver" x1="0" y1="1" x2="1" y2="0">
-      <stop offset="0%"   stop-color="#7a8ea8"/>
+      <stop offset="0%" stop-color="#7a8ea8"/>
       <stop offset="100%" stop-color="#b0c0d4"/>
     </linearGradient>
 
-    <!-- Subtle radial glow behind the seal -->
     <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0%"   stop-color="#c9a96e" stop-opacity="0.06"/>
+      <stop offset="0%" stop-color="#c9a96e" stop-opacity="0.07"/>
       <stop offset="100%" stop-color="#c9a96e" stop-opacity="0"/>
     </radialGradient>
 
-    <!-- Subtle radial glow for text area -->
     <radialGradient id="textGlow" cx="0.65" cy="0.5" r="0.4">
-      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.025"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
 
@@ -38,20 +33,13 @@
     </style>
   </defs>
 
-  <!-- ── Background ─────────────────────────────────────────────────────────── -->
   <rect width="1200" height="400" fill="url(#bg)"/>
-
-  <!-- Ambient glow layers -->
   <circle cx="330" cy="200" r="220" fill="url(#glow)"/>
   <rect width="1200" height="400" fill="url(#textGlow)"/>
 
-  <!-- ── Seal Icon — centered at (330, 200) ────────────────────────────────── -->
   <g transform="translate(330,200)" class="ring">
-
-    <!-- Outermost decorative ring — thin, wide, gold gradient -->
     <circle r="140" stroke="url(#gold)" stroke-width="0.5" opacity="0.3"/>
 
-    <!-- Tick marks around outer ring — 16 evenly-spaced dashes -->
     <g opacity="0.2" stroke="#c9a96e" stroke-width="0.8">
       <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(0)"/>
       <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(22.5)"/>
@@ -71,59 +59,34 @@
       <line x1="0" y1="-134" x2="0" y2="-140" transform="rotate(337.5)"/>
     </g>
 
-    <!-- Outer octagon (flat-top, R=125) — gold stroke -->
     <polygon
-      points="
-        115.5, 47.8
-         47.8,115.5
-        -47.8,115.5
-       -115.5, 47.8
-       -115.5,-47.8
-        -47.8,-115.5
-         47.8,-115.5
-        115.5,-47.8"
+      points="115.5,47.8 47.8,115.5 -47.8,115.5 -115.5,47.8 -115.5,-47.8 -47.8,-115.5 47.8,-115.5 115.5,-47.8"
       stroke="url(#gold)" stroke-width="1.8" opacity="0.65"/>
-
-    <!-- Ring 1 — concentric, just inside the octagon -->
     <circle r="113" stroke="#d4c5a0" stroke-width="1.2" opacity="0.45"/>
-
-    <!-- Ring 2 — offset SW, creates the crossing illusion at NE & SW edges -->
     <circle cx="-16" cy="16" r="89" stroke="url(#silver)" stroke-width="1.1" opacity="0.40"/>
-
-    <!-- Ring 3 — offset NE, crosses in the opposite arcs -->
     <circle cx="13" cy="-10" r="63" stroke="#a0b0c4" stroke-width="1.0" opacity="0.45"/>
-
-    <!-- Inner ring — concentric, anchors the centre -->
     <circle r="36" stroke="url(#gold)" stroke-width="1.2" opacity="0.55"/>
-
-    <!-- Central dot — the seal's focal anchor -->
     <circle r="3" fill="#c9a96e" opacity="0.5"/>
-
   </g>
 
-  <!-- ── Decorative separator line ──────────────────────────────────────────── -->
   <line x1="510" y1="155" x2="510" y2="245" stroke="#c9a96e" stroke-width="0.5" opacity="0.2"/>
 
-  <!-- ── Wordmark: "PACT" ───────────────────────────────────────────────────── -->
   <text
-    x="560" y="195"
+    x="555" y="195"
     dominant-baseline="middle"
     font-family="Georgia, 'Palatino Linotype', 'Book Antiqua', Palatino, serif"
-    font-size="88"
+    font-size="82"
     font-weight="400"
-    letter-spacing="22"
-    fill="#ede6d6">PACT</text>
+    letter-spacing="15"
+    fill="#ede6d6">PACTIUM</text>
 
-  <!-- ── Subtitle ───────────────────────────────────────────────────────────── -->
   <text
     x="563" y="248"
     font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
     font-size="13.5"
     font-weight="300"
-    letter-spacing="5"
-    fill="#7a7060">TRUSTED AGENT COLLABORATION SPACE</text>
+    letter-spacing="4.2"
+    fill="#7a7060">PROTOCOL SUBSTRATE FOR AUDITABLE SYSTEMS</text>
 
-  <!-- ── Bottom decorative line ─────────────────────────────────────────────── -->
-  <line x1="563" y1="272" x2="910" y2="272" stroke="#c9a96e" stroke-width="0.4" opacity="0.15"/>
-
+  <line x1="563" y1="272" x2="990" y2="272" stroke="#c9a96e" stroke-width="0.4" opacity="0.15"/>
 </svg>

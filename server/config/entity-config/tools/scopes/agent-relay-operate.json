@@ -1,5 +1,0 @@
-{
-  "id": "agent_relay:operate",
-  "label": "Operate agent relay",
-  "description": "Register relay targets, refresh downstream agent adapters, and create, manage, and operate ACP relay sessions and turns."
-}
