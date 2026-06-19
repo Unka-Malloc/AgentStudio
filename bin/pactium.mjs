@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
-import { createPactiumKernel } from "../src/kernel.js";
+import { createPactium, resolveDataDir } from "../src/index.js";
 import { startPactiumHttpServer } from "../src/http.js";
-import { resolveDataDir } from "../src/paths.js";
+import { createLicoLiteAspect } from "../src/aspects/licolite/index.js";
 
 function argValue(args, name, fallback = "") {
   const index = args.indexOf(name);
@@ -37,17 +37,13 @@ function usage() {
 Usage:
   pactium doctor [--data-dir DIR]
   pactium serve [--data-dir DIR] [--host HOST] [--port PORT]
+  pactium intent begin --body JSON
+  pactium outcome append --body JSON
   pactium operation record --body JSON
-  pactium ledger list [--operation-id ID] [--workspace-id ID] [--status STATUS]
-  pactium ledger get LEDGER_EVENT_ID
-  pactium checkpoint list [--kind KIND] [--owner-id ID]
-  pactium checkpoint get CHECKPOINT_TREE_ID
-  pactium checkpoint start --body JSON
-  pactium checkpoint upsert-node --body JSON
-  pactium checkpoint restore-preview CHECKPOINT_TREE_ID --body JSON
-  pactium checkpoint restore CHECKPOINT_TREE_ID --body JSON
-  pactium state commit --body JSON
-  pactium state verify STATE_COMMIT_ID
+  pactium envelope verify --body JSON
+  pactium bundle verify --body JSON
+  pactium licolite record --body JSON
+  pactium licolite verify --body JSON
 `;
 }
 
@@ -58,14 +54,18 @@ async function main() {
     return;
   }
   const dataDir = resolveDataDir(argValue(args, "--data-dir", ""));
-  const kernel = createPactiumKernel({ dataDir });
-  const [domain, action, subject] = args.filter((arg, index, all) => {
+  const pactium = createPactium({ dataDir });
+  const licolite = createLicoLiteAspect({
+    pactium,
+    evidencePolicy: argValue(args, "--evidence-policy", "opportunistic")
+  });
+  const [domain, action] = args.filter((arg, index, all) => {
     if (index > 0 && all[index - 1].startsWith("--")) return false;
     return !arg.startsWith("--");
   });
 
   if (domain === "doctor") {
-    printJson(await kernel.doctor());
+    printJson(await pactium.doctor());
     return;
   }
   if (domain === "serve") {
@@ -73,84 +73,39 @@ async function main() {
     const port = Number(argValue(args, "--port", process.env.PACTIUM_HTTP_PORT || "7288"));
     const started = await startPactiumHttpServer({ dataDir, host, port });
     printJson({
-      protocolVersion: started.protocolVersion,
+      protocol: started.protocol,
       url: started.url,
       dataDir
     });
     return;
   }
+  if (domain === "intent" && action === "begin") {
+    printJson(await pactium.beginOperationIntent(await bodyFromArgs(args)));
+    return;
+  }
+  if (domain === "outcome" && action === "append") {
+    printJson(await pactium.appendOperationOutcome(await bodyFromArgs(args)));
+    return;
+  }
   if (domain === "operation" && action === "record") {
-    printJson(await kernel.recordOperation(await bodyFromArgs(args)));
+    printJson(await pactium.recordOperation(await bodyFromArgs(args)));
     return;
   }
-  if (domain === "ledger" && action === "list") {
-    printJson(kernel.ledger.listEntries({
-      operationId: argValue(args, "--operation-id", ""),
-      workspaceId: argValue(args, "--workspace-id", ""),
-      status: argValue(args, "--status", ""),
-      limit: argValue(args, "--limit", "100")
-    }));
+  if (domain === "envelope" && action === "verify") {
+    printJson(await pactium.verifyEnvelope(await bodyFromArgs(args)));
     return;
   }
-  if (domain === "ledger" && action === "get") {
-    const entry = kernel.ledger.getEntry(subject);
-    if (!entry) {
-      process.exitCode = 2;
-      printJson({ code: "not_found", error: "Ledger entry not found." });
-      return;
-    }
-    printJson(entry);
+  if (domain === "bundle" && action === "verify") {
+    const { verifyProofBundle } = await import("../src/index.js");
+    printJson(await verifyProofBundle(await bodyFromArgs(args)));
     return;
   }
-  if (domain === "checkpoint" && action === "list") {
-    printJson({
-      protocolVersion: kernel.checkpointTree.protocolVersion,
-      items: await kernel.checkpointTree.list({
-        kind: argValue(args, "--kind", ""),
-        ownerId: argValue(args, "--owner-id", ""),
-        limit: argValue(args, "--limit", "100")
-      })
-    });
+  if (domain === "licolite" && action === "record") {
+    printJson(await licolite.recordWorkspaceOperation(await bodyFromArgs(args)));
     return;
   }
-  if (domain === "checkpoint" && action === "get") {
-    const tree = await kernel.checkpointTree.load({ treeId: subject });
-    if (!tree) {
-      process.exitCode = 2;
-      printJson({ code: "not_found", error: "Checkpoint tree not found." });
-      return;
-    }
-    printJson(tree);
-    return;
-  }
-  if (domain === "checkpoint" && action === "start") {
-    printJson(await kernel.checkpointTree.startTree(await bodyFromArgs(args)));
-    return;
-  }
-  if (domain === "checkpoint" && action === "upsert-node") {
-    printJson(await kernel.checkpointTree.upsertNode(await bodyFromArgs(args)));
-    return;
-  }
-  if (domain === "checkpoint" && action === "restore-preview") {
-    printJson(await kernel.checkpointTree.previewRestore({
-      ...(await bodyFromArgs(args)),
-      treeId: subject
-    }));
-    return;
-  }
-  if (domain === "checkpoint" && action === "restore") {
-    printJson(await kernel.checkpointTree.restore({
-      ...(await bodyFromArgs(args)),
-      treeId: subject
-    }));
-    return;
-  }
-  if (domain === "state" && action === "commit") {
-    printJson(await kernel.merkleState.stateCommit.commit(await bodyFromArgs(args)));
-    return;
-  }
-  if (domain === "state" && action === "verify") {
-    printJson(await kernel.merkleState.stateCommit.verifyCommit(subject));
+  if (domain === "licolite" && action === "verify") {
+    printJson(await licolite.verifyEnvelope(await bodyFromArgs(args)));
     return;
   }
   process.exitCode = 1;

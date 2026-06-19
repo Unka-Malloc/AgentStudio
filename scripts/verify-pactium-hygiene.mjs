@@ -5,7 +5,6 @@ const root = process.cwd();
 const skippedDirs = new Set([
   ".git",
   "build",
-  "legacy",
   "node_modules",
   "test-results",
   "coverage"
@@ -29,14 +28,19 @@ const binaryExtensions = new Set([
   ".sqlite"
 ]);
 
+const oldPactMcpCommand = `${"pact"}-${"mcp"}`;
+const oldPactClientCommand = `${"pact"}-${"client"}`;
+const oldPactServerIdentifier = `${"pact"}-${"server"}`;
+
 const checks = [
   { pattern: /\bPACT_[A-Z0-9_]+\b/g, reason: "old PACT_* environment variable" },
-  { pattern: /\.pact-server-data/g, reason: "old Pact server data directory" },
-  { pattern: /\bpact-mcp\b/g, reason: "old pact-mcp command" },
-  { pattern: /\bpact-client\b/g, reason: "old pact-client command" },
-  { pattern: /\bpact-server\b/g, reason: "old pact-server identifier" },
+  { pattern: new RegExp(`\\.${oldPactServerIdentifier}-data`, "g"), reason: "old server data directory" },
+  { pattern: new RegExp(`\\b${oldPactMcpCommand}\\b`, "g"), reason: "old MCP command" },
+  { pattern: new RegExp(`\\b${oldPactClientCommand}\\b`, "g"), reason: "old client command" },
+  { pattern: new RegExp(`\\b${oldPactServerIdentifier}\\b`, "g"), reason: "old server identifier" },
   { pattern: /Unka-Malloc\/Pact(?!ium)/g, reason: "old repository identity" },
-  { pattern: /\bLicoLite\b|\bLicolite\b|\bO-Sys-It\b/g, reason: "old product positioning" }
+  { pattern: /\bLicolite\b/g, reason: "incorrect LicoLite spelling" },
+  { pattern: /\bO-Sys-It\b/g, reason: "old product positioning" }
 ];
 
 async function walk(dir) {
@@ -58,8 +62,17 @@ async function walk(dir) {
   return files;
 }
 
+async function addMaintainedGeneratedDocs(files) {
+  const buildReadme = path.join(root, "build", "README.md");
+  try {
+    await fs.access(buildReadme);
+    files.push(buildReadme);
+  } catch {}
+  return files;
+}
+
 const findings = [];
-for (const file of await walk(root)) {
+for (const file of await addMaintainedGeneratedDocs(await walk(root))) {
   const relative = path.relative(root, file);
   const text = await fs.readFile(file, "utf8").catch(() => "");
   for (const check of checks) {

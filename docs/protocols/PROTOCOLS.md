@@ -1,52 +1,62 @@
 # Pactium Protocols
 
+Pactium is the current proof-first protocol substrate. The glossary is maintained in [Terms](../TERM.md), and the approved protocol parameter matrix is [Protocol Profile](./PROFILE.md).
+
 ## Operation Ledger
 
-`createOperationLedger({ dataDir })` stores operation entries in `operation-ledger/operation-ledger.sqlite`.
+The Operation Ledger is the global ordering authority for Pactium protocol facts. It uses a dedicated Ledger Transparency Log to produce verifiable Ledger Heads, inclusion proofs, and consistency proofs.
 
-Stable fields include:
+Operation lifecycle is append-only:
 
-- `operationId`
-- `workspaceId`
-- `subject`
-- `risk`
-- `status`
-- `receiptRefs`
-- `ledgerEventId`
+- `Operation Intent` records the intended operation.
+- `Operation Outcome` records the terminal result.
+- `Open Intent Index` and `Outcome Index` make lifecycle recovery and lookup verifiable.
+- `Intent Idempotency Index` and `Outcome Idempotency Index` make retries recover existing facts rather than append duplicates.
+
+## Workspace Projection
+
+Workspace Projection is a first-priority capability for the LicoLite Aspect. It is enabled by default for LicoLite and is bound by global Ledger entries.
+
+Workspace Projection uses two Verifiable Index Engine-backed indexes:
+
+- `Workspace Order Index` maps workspace-local order to ledger event references.
+- `Workspace Membership Index` maps ledger event identifiers to workspace-local membership material.
+
+Workspace Projection currently includes workspace-scoped Operation Intents and Operation Outcomes. Repair Facts are reserved for a future repair executor and are not appended by the current package.
+
+## Verifiable Index Engine
+
+Pactium uses one shared Canonical Prolly Tree based Verifiable Index Engine for ordered-key indexes that need stable roots, structural sharing, membership proofs, non-membership proofs, and efficient diffs.
+
+Domain adapters convert domain material into canonical `Index Key` and `Index Value Ref` values. The engine is reused for Merkle State, Checkpoint Node, Workspace Projection, lifecycle, idempotency, and causality indexes.
+
+## Merkle State
+
+Merkle State uses the shared Verifiable Index Engine for state roots, key membership proofs, key non-membership proofs, and diffs. State Commits bind to Operation Outcomes, not Operation Intents.
 
 ## Checkpoint Tree
 
-`createCheckpointTreeStore({ dataDir })` stores checkpoint trees in `checkpoint-trees/*.json`.
+Checkpoint Tree owns recovery and progress structure. It is verifiable, but it does not replace Ledger Authority.
 
-Stable operations:
+Checkpoint Tree distinguishes:
 
-- `startTree`
-- `upsertNode`
-- `finishTree`
-- `diffTree`
-- `queryScope`
-- `previewRestore`
-- `restore`
+- `Intent Checkpoint` for lifecycle start or recoverable progress.
+- `Outcome Checkpoint` for declared results, effect evidence, or state transition material.
 
-`restore` records a new marker node and does not rewrite older nodes.
+Checkpoint node membership and diffs use shared Verifiable Index Engine-backed indexes.
 
-## Merkle State Substrate
+## Proof Envelopes And Bundles
 
-`createMerkleStateSubstrate({ dataDir })` exposes:
+`recordOperation` and lower-level lifecycle APIs return Pactium Proof Envelopes with content-addressed Proof Material Refs. Full portable proof material is exported through Proof Bundles.
 
-- `cas`
-- `merkleDag`
-- `merkleIndex`
-- `eventLog`
-- `stateCommit`
-- `lsmIngest`
+Proof Bundles are CAR-like content-addressed block bundles with a Pactium manifest naming the root envelope, required blocks, protocol versions, Ledger Head, and critical extensions.
 
-## Kernel
+## LicoLite Aspect
 
-`createPactiumKernel({ dataDir }).recordOperation(input)` writes:
+`pactium/licolite` is a first-class package surface for LicoLite. It provides LicoLite-facing protocol substrate integration, default Workspace Projection, default signing policy, critical policy and workspace-effect extensions, LicoLite-level verification, repair planning, and new-data-directory support.
 
-- an Operation Ledger entry
-- a Checkpoint Tree node
-- an optional Merkle state commit when `input.state.mutations` is present
+LicoLite owns runtime policy decisions, operation dispatching, side effects, UI ownership, and durable Host Evidence storage. Pactium binds LicoLite evidence and verifies the binding.
 
-The response includes `ledgerEventId`, `checkpointTreeId`, `checkpointNodeId`, and `stateCommitId` when a state commit is created.
+## Current Non-Surfaces
+
+The current package does not ship a SQLite storage backend, a separate per-workspace FIFO lane queue, a repair executor that appends Repair Facts, or pressure-profile baseline regression enforcement. These require explicit implementation before maintained docs can describe them as current behavior.

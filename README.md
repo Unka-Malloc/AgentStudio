@@ -1,124 +1,92 @@
 <p align="center">
-  <img src="docs/banner.svg" alt="Pactium - Protocol Substrate for Auditable Systems" width="100%"/>
+  <strong>Pactium — the verifiable protocol substrate for LicoLite.</strong>
 </p>
 
-<p align="center">
-  <strong>A protocol substrate for operation ledgers, append-only restore trees, and Merkle-verifiable state.</strong>
-</p>
+Pactium is a proof-first npm package that provides LicoLite's durable protocol substrate: verifiable operation facts, workspace projections, checkpoint recovery history, Merkle state, proof envelopes, and proof bundles.
 
-<p align="center">
-  English | <a href="README.zh-CN.md">简体中文</a>
-</p>
+Pactium implements the current verifiable protocol model documented in [Architecture](./docs/architecture/ARCHITECTURE.md), [Protocols](./docs/protocols/PROTOCOLS.md), and [Protocol Profile](./docs/protocols/PROFILE.md). The package root exposes only the latest proof-first API.
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/pactium"><img src="https://img.shields.io/npm/v/pactium.svg" alt="npm version"/></a>
-  <a href="https://github.com/Unka-Malloc/Pactium/actions/workflows/ci.yml"><img src="https://github.com/Unka-Malloc/Pactium/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPL_3.0--or--later-blue.svg" alt="License: GPL-3.0-or-later"/></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white" alt="Node.js 22+"/></a>
-  <img src="https://img.shields.io/badge/ESM-library-111827" alt="ESM library"/>
-  <img src="https://img.shields.io/badge/SQLite-backed-0f766e" alt="SQLite backed"/>
-</p>
+## Direction
 
-**Pactium** is a **library-first protocol framework** for host systems that need durable operation records, restoreable execution checkpoints, and verifiable state commits.
+- **Operation Ledger** is the global ordering authority and uses a transparency log for inclusion and consistency proofs.
+- **Operation lifecycle** is append-only through Operation Intent and Operation Outcome facts.
+- **Workspace Projection** is first priority for the LicoLite Aspect and is enabled by default.
+- **Verifiable Index Engine** is a shared Canonical Prolly Tree based proof engine for state, checkpoint, workspace projection, lifecycle, idempotency, and causality indexes.
+- **Proof Envelopes** bind Ledger, Workspace Projection, Checkpoint, State, and LicoLite evidence into one receipt shape.
+- **Proof Bundles** export portable CAR-like proof material for offline verification.
+- **LicoLite Aspect** is a first-class package surface under `pactium/licolite`.
 
-It is intentionally not a full collaboration product. Pactium provides the protocol layer: an **Operation Ledger**, an append-only **Checkpoint Tree**, and a **Merkle State Substrate**. Authentication, product semantics, policy engines, agent gateways, knowledge pipelines, and user interfaces belong to the host system.
+## Boundaries
 
-> [!WARNING]
-> Pactium is in early public shape. The core model is small and test-covered, but the v0.1 API may still evolve before a stable release line.
+Pactium owns protocol facts, proof algorithms, canonical encoding, storage ports, verification, repair planning, and LicoLite protocol-substrate adapters.
 
-## Why Pactium?
+LicoLite owns runtime policy decisions, operation dispatching, side effects, UI ownership, and durable host evidence storage.
 
-- **Record effects before they disappear** - write operations into a durable ledger with operation ID, workspace, subject, risk, status, receipts, and redacted input.
-- **Restore without rewriting history** - model checkpoints as append-only trees; preview and apply restore markers without mutating the original trace.
-- **Verify state instead of trusting storage** - commit state through content-addressed blocks, Merkle manifests, indexes, event logs, and state commit verification.
-- **Embed the protocol, keep your product** - Pactium exposes primitives and thin CLI/HTTP facades; your system owns auth, policy, UI, and domain meaning.
+## Status
 
-## Core Capabilities
+The proof-first implementation is active. Pactium accepts the latest verifiable schema only; earlier experimental data formats are rejected.
 
-| Capability | What Pactium Provides |
-| --- | --- |
-| **Operation Ledger** | SQLite-backed operation records with idempotent replay, status transitions, warnings, receipts, and lookup/list APIs. |
-| **Checkpoint Tree** | Append-only task/workflow trees with `startTree`, `upsertNode`, `finishTree`, `diffTree`, `queryScope`, `previewRestore`, and `restore`. |
-| **Merkle State Substrate** | Content-addressed store, Merkle DAG manifests, sorted indexes, partitioned event logs, state commits, and ingest receipts. |
-| **Pactium Kernel** | A composition layer that records one operation across ledger entry, checkpoint node, and optional state commit. |
-| **Thin Facades** | `pactium` CLI and localhost JSON HTTP server for smoke tests, local tooling, and host integration. |
-
-## Install
-
-```bash
-npm install pactium
-```
-
-## Use As A Library
+## Usage
 
 ```js
-import { createPactiumKernel } from "pactium";
+import { createPactium } from "pactium";
 
-const kernel = createPactiumKernel({ dataDir: "./.pactium" });
+const pactium = createPactium({ dataDir: "./.pactium" });
 
-const receipt = await kernel.recordOperation({
+const envelope = await pactium.recordOperation({
   operationId: "workspace.file.write",
   workspaceId: "workspace-a",
-  subject: { type: "agent", id: "agent-a" },
-  effectKind: "file.changed",
-  state: {
-    mutations: [
-      { action: "put", key: "docs/a.md", value: { text: "hello" } }
-    ]
-  }
+  idempotencyKey: "intent-a",
+  outcomeIdempotencyKey: "outcome-a",
+  input: { path: "docs/a.md" },
+  stateMutations: [
+    { key: "docs/a.md", value: { text: "hello" } }
+  ]
 });
 
-console.log(receipt.ledgerEventId);
-console.log(receipt.checkpointNodeId);
-console.log(receipt.stateCommitId);
+console.log(await pactium.verifyEnvelope(envelope));
 ```
 
-## CLI
+```js
+import { createLicoLiteAspect, createLicoLiteSigner } from "pactium/licolite";
+
+const signingSecret = process.env.LICOLITE_SIGNING_SECRET;
+if (!signingSecret) throw new Error("LICOLITE_SIGNING_SECRET is required.");
+
+const licolite = createLicoLiteAspect({
+  evidencePolicy: "production",
+  signer: createLicoLiteSigner({
+    signerId: "host-managed-signer",
+    secret: signingSecret
+  })
+});
+
+const envelope = await licolite.recordWorkspaceOperation({
+  operationId: "workspace.effect",
+  workspaceId: "workspace-a",
+  policyEvidence: { decision: "allow" },
+  workspaceEffectEvidence: { durableRef: "host:asset:a" }
+});
+
+console.log(await licolite.verifyEnvelope(envelope));
+```
+
+## Verification
 
 ```bash
-pactium doctor
-pactium operation record --body '{"operationId":"demo.write","workspaceId":"demo"}'
-pactium ledger list
-pactium checkpoint list
-pactium state verify state_commit_example
-pactium serve --host 127.0.0.1 --port 7288
+npm run verify:release
 ```
 
-## Public API
+The default release gate runs deterministic proof vectors, regression snapshots, seeded property tests, scaled public API pressure profiles, coverage thresholds, hygiene checks, release-readiness checks, and package dry run. CI runs the same release gate on every supported Node.js LTS major.
 
-- `createPactiumKernel({ dataDir })`
-- `createOperationLedger({ dataDir })`
-- `createCheckpointTreeStore({ dataDir })`
-- `createMerkleStateSubstrate({ dataDir })`
-- `createPactiumHttpServer({ dataDir })`
-- `startPactiumHttpServer({ dataDir, host, port })`
+## Documentation
 
-Type declarations are included through `src/index.d.ts`.
-
-## Repository Layout
-
-| Path | Purpose |
-| --- | --- |
-| `src/` | Pactium protocol-layer implementation. |
-| `bin/` | `pactium` command line facade. |
-| `tests/pactium/` | Core, CLI, and HTTP smoke tests. |
-| `docs/` | Pactium protocol and architecture notes. |
-| `examples/` | Minimal library usage examples. |
-
-The old full-system implementation is stored outside this repository as a compressed reference archive. It is not part of the Pactium package or maintenance surface.
-
-## Verify
-
-```bash
-npm run verify
-npm audit
-npm publish --dry-run --access public
-```
+- [Terms](./docs/TERM.md)
+- [Protocol Overview](./docs/protocols/PROTOCOLS.md)
+- [Protocol Profile](./docs/protocols/PROFILE.md)
+- [Architecture](./docs/architecture/ARCHITECTURE.md)
+- [LicoLite Aspect](./docs/LICOLITE-ASPECT.md)
 
 ## License
 
 This project is licensed under the [GNU General Public License v3.0 or later](LICENSE).
-
----
-
-> *"In Pactium, systems do not rely on trust in the caller. They rely on replayable operations, append-only checkpoints, and verifiable state."*

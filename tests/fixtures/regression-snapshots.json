@@ -1,0 +1,152 @@
+{
+  "protocol": "pactium.v0.2",
+  "packageExports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js",
+      "default": "./src/index.js"
+    },
+    "./licolite": {
+      "types": "./src/aspects/licolite/index.d.ts",
+      "import": "./src/aspects/licolite/index.js",
+      "default": "./src/aspects/licolite/index.js"
+    }
+  },
+  "rootExports": [
+    "HASH_DOMAINS",
+    "PACTIUM_BUNDLE_ENCODING",
+    "PACTIUM_INDEX_ENGINE",
+    "PACTIUM_INDEX_SPLITTER",
+    "PACTIUM_PACKAGE_VERSION",
+    "PACTIUM_PROOF_BUNDLE_TYPE",
+    "PACTIUM_PROOF_TYPES",
+    "PACTIUM_PROTOCOL",
+    "PACTIUM_PROTOCOL_PROFILE",
+    "PACTIUM_SCHEMA_VERSION",
+    "advanceTo",
+    "advanceTrustedHead",
+    "canonicalDecode",
+    "canonicalEncode",
+    "canonicalString",
+    "cidForBytes",
+    "cidForCanonical",
+    "covers",
+    "createAppendCondition",
+    "createCompactRange",
+    "createDefaultProofVerifierRegistry",
+    "createLedgerConsistencyProof",
+    "createLedgerInclusionProof",
+    "createLedgerTransparencyLog",
+    "createMaintenanceTaskEngine",
+    "createPactium",
+    "createRepairPlanner",
+    "createStoragePort",
+    "createTrackingCursor",
+    "createVerifiableIndexEngine",
+    "createVerificationFailure",
+    "createVerifierManifest",
+    "defaultPactiumDataDir",
+    "emptyTreeHash",
+    "envelopeSigningHash",
+    "ledgerHeadSigningPayload",
+    "ledgerLeafHash",
+    "ledgerNodeHash",
+    "normalizeCanonicalValue",
+    "protocolHash",
+    "protocolHashHex",
+    "resolveDataDir",
+    "resolveWithin",
+    "runPactiumQualityGateProfile",
+    "samePositionAs",
+    "signLedgerHead",
+    "verifyIndexProof",
+    "verifyLedgerConsistencyProof",
+    "verifyLedgerHeadSignature",
+    "verifyLedgerInclusionProof",
+    "verifyProofBundle",
+    "verifyProofEnvelope",
+    "verifyTrackingCursor"
+  ],
+  "licoLiteExports": [
+    "LICOLITE_ASPECT_PROTOCOL",
+    "LICOLITE_CRITICAL_EXTENSIONS",
+    "LICOLITE_POLICY_EXTENSION",
+    "LICOLITE_SIGNATURE_EXTENSION",
+    "LICOLITE_SUPPORTED_CRITICAL_EXTENSIONS",
+    "LICOLITE_WORKSPACE_EFFECT_EXTENSION",
+    "createLicoLiteAspect",
+    "createLicoLiteSigner",
+    "licoLitePolicyExtensionValue",
+    "licoLiteWorkspaceEffectExtensionValue",
+    "recordLicoLiteWorkspaceOperation",
+    "verifyLicoLiteBundle",
+    "verifyLicoLiteEnvelope"
+  ],
+  "declarations": {
+    "src/index.d.ts": {
+      "sha256": "d7176c9d14ab5bdec11f3536392a7cd333ae3ad2baa14afb09a55cfac97d2dad",
+      "byteLength": 10652,
+      "exportCount": 70
+    },
+    "src/aspects/licolite/index.d.ts": {
+      "sha256": "39c4101a91edffd6d7e4dcb5f455f285616e4a7124a75108cd8bc27e57d97b86",
+      "byteLength": 2777,
+      "exportCount": 15
+    }
+  },
+  "oldRootExportsAbsent": true,
+  "profile": {
+    "protocol": "pactium.v0.2",
+    "schema": "pactium.v0.2.schema.latest",
+    "hash": "sha256",
+    "cid": "cid:sha256:<hex>",
+    "canonicalValue": "restricted-ipld-dag-cbor-style",
+    "orderingAuthority": "operation-ledger",
+    "ledger": {
+      "model": "rfc6962-transparency-log",
+      "leafHash": "H(0x00 || canonical(leaf))",
+      "nodeHash": "H(0x01 || leftHash || rightHash)",
+      "emptyTreeHash": "H(\"\")",
+      "appendLane": "single-ledger-append-lane"
+    },
+    "indexEngine": {
+      "structure": "canonical-prolly-tree",
+      "chunking": {
+        "minEntries": 32,
+        "targetEntries": 64,
+        "maxEntries": 128,
+        "boundaryMask": 63
+      }
+    },
+    "licoLite": {
+      "exportPath": "pactium/licolite",
+      "workspaceProjection": "enabled-by-default",
+      "signing": "enabled-by-default",
+      "criticalExtensions": [
+        "licolite.policy",
+        "licolite.workspaceEffect"
+      ],
+      "dataSupport": "latest-schema-only"
+    }
+  },
+  "licoLiteDefaults": {
+    "workspaceProjectionDefault": true,
+    "criticalExtensions": [
+      "licolite.policy",
+      "licolite.workspaceEffect"
+    ]
+  },
+  "proofBundle": {
+    "ok": true,
+    "bundleType": "pactium.proof-bundle.indexed",
+    "blockCount": 5,
+    "criticalExtensions": [
+      "licolite.policy",
+      "licolite.workspaceEffect"
+    ]
+  },
+  "failureCodes": [
+    "derived_index_missing",
+    "rebuild-derived-index"
+  ]
+}

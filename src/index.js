@@ -1,44 +1,73 @@
 export {
-  PACTIUM_PROTOCOL_VERSION,
-  assertPactiumToken,
+  HASH_DOMAINS,
+  PACTIUM_BUNDLE_ENCODING,
+  PACTIUM_INDEX_ENGINE,
+  PACTIUM_INDEX_SPLITTER,
+  PACTIUM_PACKAGE_VERSION,
+  PACTIUM_PROOF_BUNDLE_TYPE,
+  PACTIUM_PROOF_TYPES,
+  PACTIUM_PROTOCOL,
+  PACTIUM_PROTOCOL_PROFILE,
+  PACTIUM_SCHEMA_VERSION
+} from "./protocol/constants.js";
+export {
+  canonicalDecode,
+  canonicalEncode,
+  canonicalString,
+  normalizeCanonicalValue
+} from "./canonical/value.js";
+export {
+  cidForBytes,
+  cidForCanonical,
+  protocolHash,
+  protocolHashHex
+} from "./protocol/hashing.js";
+export {
+  createStoragePort,
   defaultPactiumDataDir,
-  pactiumToken,
   resolveDataDir,
-  resolveWithin,
-  sha256Hex
-} from "./paths.js";
+  resolveWithin
+} from "./storage/local-json-storage-port.js";
+export { createVerificationFailure } from "./verification/failure.js";
 export {
-  OPERATION_LEDGER_PROTOCOL_VERSION,
-  createOperationLedger
-} from "./ledger.js";
+  createLedgerConsistencyProof,
+  createLedgerInclusionProof,
+  createLedgerTransparencyLog,
+  createCompactRange,
+  emptyTreeHash,
+  ledgerLeafHash,
+  ledgerNodeHash,
+  verifyLedgerConsistencyProof,
+  verifyLedgerInclusionProof
+} from "./ledger/transparency-log.js";
 export {
-  CHECKPOINT_TREE_PROTOCOL_VERSION,
-  CHECKPOINT_TREE_SCHEMA_VERSION,
-  checkpointTreeId,
-  checkpointTreeSummary,
-  createCheckpointTreeStore,
-  deleteCheckpointTree,
-  diffCheckpointTree,
-  finishCheckpointTree,
-  getCheckpointTreePath,
-  listCheckpointTrees,
-  loadCheckpointTree,
-  previewCheckpointRestore,
-  queryCheckpointScope,
-  restoreCheckpointTree,
-  startCheckpointTree,
-  upsertCheckpointNode
-} from "./checkpoint-tree.js";
+  advanceTrustedHead,
+  createVerifierManifest,
+  ledgerHeadSigningPayload,
+  signLedgerHead,
+  verifyLedgerHeadSignature
+} from "./ledger/signed-head.js";
 export {
-  MERKLE_STATE_SUBSTRATE_PROTOCOL_VERSION,
-  createMerkleStateSubstrate
-} from "./merkle-state.js";
+  createVerifiableIndexEngine,
+  verifyIndexProof
+} from "./index-engine/snapshot-merkle-index.js";
 export {
-  PACTIUM_KERNEL_PROTOCOL_VERSION,
-  createPactiumKernel,
-  createProtocolCatalog
-} from "./kernel.js";
+  createAppendCondition
+} from "./core/append-condition.js";
 export {
-  createPactiumHttpServer,
-  startPactiumHttpServer
-} from "./http.js";
+  advanceTo,
+  covers,
+  createTrackingCursor,
+  samePositionAs,
+  verifyTrackingCursor
+} from "./core/tracking-cursor.js";
+export { createPactium } from "./core/pactium-core.js";
+export {
+  envelopeSigningHash,
+  verifyProofEnvelope
+} from "./proof/envelope.js";
+export { createDefaultProofVerifierRegistry } from "./proof/registry.js";
+export { verifyProofBundle } from "./proof/bundle.js";
+export { createRepairPlanner } from "./repair/planner.js";
+export { createMaintenanceTaskEngine } from "./maintenance/task-engine.js";
+export { runPactiumQualityGateProfile } from "./quality/profile-runner.js";

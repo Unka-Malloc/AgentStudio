@@ -1,13 +1,13 @@
-# Pactium Docs
+# Pactium Public Docs
 
-Pactium is a protocol-layer framework for durable operation records, append-only checkpoint trees, and Merkle-addressed state.
+Pactium is a proof-first protocol substrate for LicoLite.
 
-## Maintained Documents
+## Package Documents
 
 - [Architecture](architecture/ARCHITECTURE.md)
 - [Protocols](protocols/PROTOCOLS.md)
+- [Protocol Profile](protocols/PROFILE.md)
+- [LicoLite Aspect](LICOLITE-ASPECT.md)
 - [Terms](TERM.md)
-- [Manifest](Manifest.md)
-- [Version](VERSION.md)
 
-The previous full-system documentation is preserved in the external reference archive.
+The current `src/` tree implements the proof-first package surface. Repository maintenance, release, tooling, ADR, and optimization records are intentionally not part of the published npm package.

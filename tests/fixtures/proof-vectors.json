@@ -1,0 +1,218 @@
+{
+  "protocol": "pactium.v0.2",
+  "canonical": {
+    "stableA": "{\"a\":[1,null,\"value\"],\"bytes\":{\"$bytes\":\"cGFjdGl1bS1wcm9vZi12ZWN0b3I=\"},\"z\":true}",
+    "stableB": "{\"a\":[1,null,\"value\"],\"bytes\":{\"$bytes\":\"cGFjdGl1bS1wcm9vZi12ZWN0b3I=\"},\"z\":true}",
+    "equal": true
+  },
+  "hashDomains": {
+    "intent": "sha256:6c84343f98208a0b06ec03b2f03211b162ad80543f9044b58566925151ce0d60",
+    "outcome": "sha256:763ebfd2df695e75c315140056382f60d0aa5d6341b352f10b0334a990979861",
+    "separated": true
+  },
+  "ledger": {
+    "emptyTreeHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "leafHashes": [
+      "c0e60d33f009986095bcd476f3061f6c4343e51aa76f9cef7816712b69bad999",
+      "d745647980fd81a82ac7427318df650f2d868bbc820561a7309e6a6a562ab754"
+    ],
+    "head": {
+      "protocol": "pactium.v0.2",
+      "size": 2,
+      "rootHash": "e32b25cf5d7b2f12ede543e54d061341b7840c5ba61df2163d29d9ba2653606b"
+    },
+    "inclusion": {
+      "protocol": "pactium.v0.2",
+      "proofType": "ledger.inclusion.audit-path",
+      "index": 1,
+      "size": 2,
+      "leafHash": "d745647980fd81a82ac7427318df650f2d868bbc820561a7309e6a6a562ab754",
+      "leaf": {
+        "protocol": "pactium.v0.2",
+        "index": 1,
+        "factType": "operation.outcome",
+        "factCid": "cid:sha256:2222",
+        "factHash": "sha256:2222",
+        "timestamp": "2026-01-01T00:00:01.000Z"
+      },
+      "auditPath": [
+        {
+          "side": "left",
+          "hash": "c0e60d33f009986095bcd476f3061f6c4343e51aa76f9cef7816712b69bad999"
+        }
+      ],
+      "rootHash": "e32b25cf5d7b2f12ede543e54d061341b7840c5ba61df2163d29d9ba2653606b",
+      "headRef": ""
+    },
+    "consistency": {
+      "protocol": "pactium.v0.2",
+      "proofType": "ledger.consistency.audit-path",
+      "oldSize": 1,
+      "newSize": 2,
+      "oldRootHash": "c0e60d33f009986095bcd476f3061f6c4343e51aa76f9cef7816712b69bad999",
+      "newRootHash": "e32b25cf5d7b2f12ede543e54d061341b7840c5ba61df2163d29d9ba2653606b",
+      "auditPath": [
+        "d745647980fd81a82ac7427318df650f2d868bbc820561a7309e6a6a562ab754"
+      ],
+      "oldHeadRef": "",
+      "newHeadRef": "",
+      "proofHash": "sha256:107daad74942035fac8346df218525bf9ee05193038d3ab71d2f8f5bbb6a56fe"
+    },
+    "runtimeInclusionOk": true,
+    "runtimeConsistencyOk": true
+  },
+  "index": {
+    "root": "cid:sha256:59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
+    "membership": {
+      "protocol": "pactium.v0.2",
+      "proofType": "index.membership.prolly-path",
+      "domain": "vector",
+      "indexRoot": "cid:sha256:59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
+      "rootHash": "59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
+      "key": "alpha",
+      "entry": {
+        "key": "alpha",
+        "valueRef": "ref:alpha",
+        "valueHash": "sha256:b8cc8d4ee9d83db6423d0a90f85b8ca9debfffd80d4ca026a35becb43b08f302",
+        "metadata": {}
+      },
+      "leafHash": "bf8835f8cc6764289156daee7ba34b43121aeb174f8a365249723a90fb1387e8",
+      "leafRoot": "cid:sha256:59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
+      "leafRootHash": "59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
+      "leafNode": {
+        "keyRange": {
+          "max": "omega",
+          "min": "alpha"
+        },
+        "count": 2,
+        "entries": [
+          {
+            "key": "alpha",
+            "valueRef": "ref:alpha",
+            "valueHash": "sha256:b8cc8d4ee9d83db6423d0a90f85b8ca9debfffd80d4ca026a35becb43b08f302",
+            "metadata": {}
+          },
+          {
+            "key": "omega",
+            "valueRef": "ref:omega",
+            "valueHash": "sha256:6b7d4c964ce8a33309d8394b475f1c6841d57be223826e2d66651030d8ef302b",
+            "metadata": {}
+          }
+        ],
+        "splitter": {
+          "algorithm": "pactium-cdc-boundary",
+          "boundaryMask": 63,
+          "maxEntries": 128,
+          "minEntries": 32,
+          "targetEntries": 64
+        }
+      },
+      "path": []
+    },
+    "nonMembership": {
+      "protocol": "pactium.v0.2",
+      "proofType": "index.non-membership.prolly-path",
+      "domain": "vector",
+      "indexRoot": "cid:sha256:59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
+      "rootHash": "59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
+      "key": "middle",
+      "containingLeaf": {
+        "keyRange": {
+          "max": "omega",
+          "min": "alpha"
+        },
+        "entries": [
+          {
+            "key": "alpha",
+            "valueRef": "ref:alpha",
+            "valueHash": "sha256:b8cc8d4ee9d83db6423d0a90f85b8ca9debfffd80d4ca026a35becb43b08f302",
+            "metadata": {}
+          },
+          {
+            "key": "omega",
+            "valueRef": "ref:omega",
+            "valueHash": "sha256:6b7d4c964ce8a33309d8394b475f1c6841d57be223826e2d66651030d8ef302b",
+            "metadata": {}
+          }
+        ],
+        "leafRoot": "cid:sha256:59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
+        "leafRootHash": "59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
+        "leafNode": {
+          "keyRange": {
+            "max": "omega",
+            "min": "alpha"
+          },
+          "count": 2,
+          "entries": [
+            {
+              "key": "alpha",
+              "valueRef": "ref:alpha",
+              "valueHash": "sha256:b8cc8d4ee9d83db6423d0a90f85b8ca9debfffd80d4ca026a35becb43b08f302",
+              "metadata": {}
+            },
+            {
+              "key": "omega",
+              "valueRef": "ref:omega",
+              "valueHash": "sha256:6b7d4c964ce8a33309d8394b475f1c6841d57be223826e2d66651030d8ef302b",
+              "metadata": {}
+            }
+          ],
+          "splitter": {
+            "algorithm": "pactium-cdc-boundary",
+            "boundaryMask": 63,
+            "maxEntries": 128,
+            "minEntries": 32,
+            "targetEntries": 64
+          }
+        },
+        "path": []
+      },
+      "leftBoundary": "alpha",
+      "rightBoundary": "omega"
+    },
+    "membershipOk": true,
+    "nonMembershipOk": true,
+    "deterministicChunkFixture": {
+      "root": "cid:sha256:bb76f92fa3b52a321297a6a43c14a0e8ea0c63caa0759dbf82d24fd7df72febd",
+      "rootHash": "bb76f92fa3b52a321297a6a43c14a0e8ea0c63caa0759dbf82d24fd7df72febd",
+      "height": 1,
+      "count": 384,
+      "keyRange": {
+        "max": "fixture:0383",
+        "min": "fixture:0000"
+      },
+      "chunkBoundaries": [
+        {
+          "startKey": "fixture:0000",
+          "endKey": "fixture:0040",
+          "count": 41,
+          "rootHash": "d0506832184baa6f6de12f1e868bd3c402384269c317dcbcd06059d5fa44eab0"
+        },
+        {
+          "startKey": "fixture:0041",
+          "endKey": "fixture:0168",
+          "count": 128,
+          "rootHash": "b4bbb6edce515fc8e40ecdac072210a1fccdb06b430bcc4a9febaec67e9d8bf6"
+        },
+        {
+          "startKey": "fixture:0169",
+          "endKey": "fixture:0296",
+          "count": 128,
+          "rootHash": "f6b754d72137519447f12f5fdba1c639b4ed8faf80443a37eed1d099cbfcd1c9"
+        },
+        {
+          "startKey": "fixture:0297",
+          "endKey": "fixture:0346",
+          "count": 50,
+          "rootHash": "d296470a8469711cc70d8a0ac1c82666e965771500a00823265fa9330d89805b"
+        },
+        {
+          "startKey": "fixture:0347",
+          "endKey": "fixture:0383",
+          "count": 37,
+          "rootHash": "48621b73e43ce026cabc413f06da3e7d04556f0f9f031c8afa5ebc9c0d10fe4d"
+        }
+      ]
+    }
+  }
+}

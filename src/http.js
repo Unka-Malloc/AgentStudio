@@ -1,9 +1,10 @@
 import http from "node:http";
 import { URL } from "node:url";
-import { createPactiumKernel } from "./kernel.js";
-import { resolveDataDir } from "./paths.js";
+import { PACTIUM_PROTOCOL } from "./protocol/constants.js";
+import { createPactium } from "./core/pactium-core.js";
+import { createLicoLiteAspect } from "./aspects/licolite/index.js";
 
-export const PACTIUM_HTTP_PROTOCOL_VERSION = "v0.1.0:pactium:http-1";
+export const PACTIUM_HTTP_PROTOCOL = "pactium.v0.2.http";
 
 function sendJson(response, statusCode, payload) {
   const body = JSON.stringify(payload, null, 2);
@@ -14,92 +15,67 @@ function sendJson(response, statusCode, payload) {
   response.end(body);
 }
 
-function notFound(response) {
-  sendJson(response, 404, {
-    code: "not_found",
-    error: "Pactium endpoint not found."
-  });
-}
-
 async function readJson(request) {
   const chunks = [];
   for await (const chunk of request) chunks.push(chunk);
   const text = Buffer.concat(chunks).toString("utf8").trim();
-  if (!text) return {};
-  return JSON.parse(text);
+  return text ? JSON.parse(text) : {};
 }
 
-function queryObject(url) {
-  return Object.fromEntries(url.searchParams.entries());
-}
-
-async function routeRequest({ kernel, request, response }) {
+async function routeRequest({ pactium, licolite, request, response }) {
   const baseUrl = `http://${request.headers.host || "127.0.0.1"}`;
   const url = new URL(request.url || "/", baseUrl);
-  const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
   try {
     if (request.method === "GET" && url.pathname === "/health") {
       return sendJson(response, 200, {
-        protocolVersion: PACTIUM_HTTP_PROTOCOL_VERSION,
+        protocol: PACTIUM_HTTP_PROTOCOL,
+        coreProtocol: PACTIUM_PROTOCOL,
         ok: true,
-        dataDir: kernel.dataDir
+        dataDir: pactium.dataDir
       });
     }
     if (request.method === "GET" && url.pathname === "/protocols") {
-      return sendJson(response, 200, kernel.protocolCatalog());
+      return sendJson(response, 200, await pactium.protocolCatalog());
+    }
+    if (request.method === "POST" && url.pathname === "/intents") {
+      return sendJson(response, 200, await pactium.beginOperationIntent(await readJson(request)));
+    }
+    if (request.method === "POST" && url.pathname === "/outcomes") {
+      return sendJson(response, 200, await pactium.appendOperationOutcome(await readJson(request)));
     }
     if (request.method === "POST" && url.pathname === "/operations") {
-      return sendJson(response, 200, await kernel.recordOperation(await readJson(request)));
+      return sendJson(response, 200, await pactium.recordOperation(await readJson(request)));
     }
-    if (request.method === "GET" && url.pathname === "/ledger") {
-      return sendJson(response, 200, kernel.ledger.listEntries(queryObject(url)));
+    if (request.method === "POST" && url.pathname === "/licolite/operations") {
+      return sendJson(response, 200, await licolite.recordWorkspaceOperation(await readJson(request)));
     }
-    if (request.method === "GET" && parts[0] === "ledger" && parts[1]) {
-      const entry = kernel.ledger.getEntry(parts[1]);
-      return entry ? sendJson(response, 200, entry) : notFound(response);
+    if (request.method === "POST" && url.pathname === "/verify/envelope") {
+      return sendJson(response, 200, await pactium.verifyEnvelope(await readJson(request)));
     }
-    if (request.method === "GET" && url.pathname === "/checkpoint-trees") {
-      return sendJson(response, 200, {
-        protocolVersion: kernel.checkpointTree.protocolVersion,
-        items: await kernel.checkpointTree.list(queryObject(url))
-      });
+    if (request.method === "POST" && url.pathname === "/licolite/verify/envelope") {
+      return sendJson(response, 200, await licolite.verifyEnvelope(await readJson(request)));
     }
-    if (request.method === "GET" && parts[0] === "checkpoint-trees" && parts[1]) {
-      const tree = await kernel.checkpointTree.load({ treeId: parts[1] });
-      return tree ? sendJson(response, 200, tree) : notFound(response);
-    }
-    if (request.method === "POST" && parts[0] === "checkpoint-trees" && parts[1] && parts[2] === "restore-preview") {
-      return sendJson(response, 200, await kernel.checkpointTree.previewRestore({
-        ...(await readJson(request)),
-        treeId: parts[1]
-      }));
-    }
-    if (request.method === "POST" && parts[0] === "checkpoint-trees" && parts[1] && parts[2] === "restore") {
-      return sendJson(response, 200, await kernel.checkpointTree.restore({
-        ...(await readJson(request)),
-        treeId: parts[1]
-      }));
-    }
-    if (request.method === "POST" && url.pathname === "/state/commits") {
-      return sendJson(response, 200, await kernel.merkleState.stateCommit.commit(await readJson(request)));
-    }
-    if (request.method === "GET" && parts[0] === "state" && parts[1] === "commits" && parts[2] && parts[3] === "verify") {
-      return sendJson(response, 200, await kernel.merkleState.stateCommit.verifyCommit(parts[2]));
-    }
-    return notFound(response);
+    return sendJson(response, 404, {
+      protocol: PACTIUM_HTTP_PROTOCOL,
+      code: "not_found",
+      error: "Pactium endpoint not found."
+    });
   } catch (error) {
     return sendJson(response, 500, {
-      code: "pactium_error",
+      protocol: PACTIUM_HTTP_PROTOCOL,
+      code: "pactium_http_error",
       error: error instanceof Error ? error.message : String(error)
     });
   }
 }
 
-export function createPactiumHttpServer({ dataDir = "", kernel = null } = {}) {
-  const resolvedKernel = kernel || createPactiumKernel({ dataDir: resolveDataDir(dataDir) });
+export function createPactiumHttpServer({ dataDir = "", userDataPath = "", pactium = null, licolite = null } = {}) {
+  const core = pactium || createPactium({ dataDir, userDataPath });
+  const aspect = licolite || createLicoLiteAspect({ pactium: core, evidencePolicy: "opportunistic" });
   return http.createServer((request, response) => {
-    routeRequest({ kernel: resolvedKernel, request, response }).catch((error) => {
+    routeRequest({ pactium: core, licolite: aspect, request, response }).catch((error) => {
       sendJson(response, 500, {
+        protocol: PACTIUM_HTTP_PROTOCOL,
         code: "pactium_http_error",
         error: error instanceof Error ? error.message : String(error)
       });
@@ -107,14 +83,14 @@ export function createPactiumHttpServer({ dataDir = "", kernel = null } = {}) {
   });
 }
 
-export async function startPactiumHttpServer({ dataDir = "", host = "127.0.0.1", port = 7288 } = {}) {
-  const server = createPactiumHttpServer({ dataDir });
+export async function startPactiumHttpServer({ dataDir = "", userDataPath = "", host = "127.0.0.1", port = 7288 } = {}) {
+  const server = createPactiumHttpServer({ dataDir, userDataPath });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(Number(port), host, resolve);
   });
   return {
-    protocolVersion: PACTIUM_HTTP_PROTOCOL_VERSION,
+    protocol: PACTIUM_HTTP_PROTOCOL,
     server,
     host,
     port: Number(port),

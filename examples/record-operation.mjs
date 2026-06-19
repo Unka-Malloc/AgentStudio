@@ -1,17 +1,26 @@
-import { createPactiumKernel } from "../src/index.js";
+import { createPactium } from "../src/index.js";
+import { createLicoLiteAspect } from "../src/aspects/licolite/index.js";
 
-const kernel = createPactiumKernel({ dataDir: "./.pactium" });
-
-const receipt = await kernel.recordOperation({
-  operationId: "example.write",
-  workspaceId: "example",
-  subject: { type: "example" },
-  effectKind: "state.changed",
-  state: {
-    mutations: [
-      { action: "put", key: "hello.json", value: { hello: "pactium" } }
-    ]
-  }
+const pactium = createPactium({ dataDir: "./.pactium" });
+const licolite = createLicoLiteAspect({
+  pactium,
+  evidencePolicy: "opportunistic"
 });
 
-console.log(JSON.stringify(receipt, null, 2));
+const envelope = await licolite.recordWorkspaceOperation({
+  operationId: "example.write",
+  workspaceId: "example",
+  idempotencyKey: "example-intent",
+  outcomeIdempotencyKey: "example-outcome",
+  input: { target: "hello.json" },
+  policyEvidence: { decision: "allow" },
+  workspaceEffectEvidence: { durableRef: "host:example:hello" },
+  stateMutations: [
+    { key: "hello.json", value: { hello: "pactium" } }
+  ]
+});
+
+console.log(JSON.stringify({
+  envelopeId: envelope.envelopeId,
+  verification: await licolite.verifyEnvelope(envelope)
+}, null, 2));

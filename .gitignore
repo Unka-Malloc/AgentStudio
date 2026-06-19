@@ -44,9 +44,16 @@ node_modules/
 *.exe
 *.msi
 *.zip
+*.tgz
+*.tar
 *.tar.gz
 *.tar.xz
+*.br
+*.zst
 *.rar
+*.sqlite
+*.db
+*.bin
 
 # Local module runtimes and heavy assets
 
@@ -56,6 +63,9 @@ node_modules/
 
 # Local test source data can contain large/private documents.
 /tests/fixtures/
+!/tests/fixtures/
+!/tests/fixtures/proof-vectors.json
+!/tests/fixtures/regression-snapshots.json
 /tests/email-corpus/
 
 # Local browser/test artifacts
@@ -64,6 +74,7 @@ output/
 test-results/
 
 # Local AI assistant skill/runtime artifacts
+/CONTEXT.md
 .codex-research/
 .gemini/
 .impeccable/
