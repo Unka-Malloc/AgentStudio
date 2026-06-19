@@ -64,6 +64,6 @@
     "verify:release:readiness": "node scripts/verify-release-readiness.mjs",
     "verify:release": "npm run verify:hygiene && npm run verify:core && npm run verify:protocol:gates && npm run verify:release:readiness && npm run verify:package:contents && npm run pack:dry-run && npm run publish:dry-run",
     "pack:dry-run": "npm pack --dry-run",
-    "publish:dry-run": "npm publish --dry-run"
+    "publish:dry-run": "node scripts/verify-publish-dry-run.mjs"
   }
 }

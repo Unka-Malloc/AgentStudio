@@ -9,6 +9,36 @@ permissions:
   contents: read
 
 jobs:
+  package-status:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      published: ${{ steps.registry.outputs.published }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
+      - id: version
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+      - run: |
+          if [ "${GITHUB_EVENT_NAME}" = "release" ] && [ "${GITHUB_REF_NAME}" != "v${{ steps.version.outputs.version }}" ]; then
+            echo "Release tag ${GITHUB_REF_NAME} does not match package version v${{ steps.version.outputs.version }}."
+            exit 1
+          fi
+      - id: registry
+        run: |
+          if npm view "pactium@${{ steps.version.outputs.version }}" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "pactium@${{ steps.version.outputs.version }} is already published."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "pactium@${{ steps.version.outputs.version }} is not published yet."
+          fi
+
   verify:
     runs-on: ubuntu-latest
     strategy:
@@ -27,7 +57,8 @@ jobs:
       - run: npm run verify:release
 
   publish:
-    needs: verify
+    needs: [package-status, verify]
+    if: needs.package-status.outputs.published != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,9 +76,13 @@ jobs:
       - run: npm ci
       - run: npm run verify:release
       - run: |
-          VERSION="$(node -p "require('./package.json').version")"
-          if [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
-            echo "Release tag ${GITHUB_REF_NAME} does not match package version v${VERSION}."
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${{ needs.package-status.outputs.version }}" ]; then
+            echo "Release tag ${GITHUB_REF_NAME} does not match package version v${{ needs.package-status.outputs.version }}."
             exit 1
           fi
-      - run: npm publish --access public
+      - run: |
+          if npm view "pactium@${{ needs.package-status.outputs.version }}" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
+            echo "pactium@${{ needs.package-status.outputs.version }} became published before this job reached npm publish; skipping."
+            exit 0
+          fi
+          npm publish --access public

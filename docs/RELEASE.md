@@ -42,6 +42,8 @@ Published package contents are limited to runtime source, CLI, examples, public 
 
 Publishing is handled by `.github/workflows/publish.yml` after the Node.js 22 and Node.js 24 release gates pass. The workflow uses npm Trusted Publishing through GitHub Actions OIDC; configure npm's trusted publisher for repository `Unka-Malloc/Pactium` and workflow filename `publish.yml`.
 
+The publish workflow first checks whether the package version already exists on npm. Existing versions are treated as already released, so manual workflow dispatch can validate the gate without attempting to republish an immutable npm version. The local publish dry run follows the same rule because npm versions are immutable after publication.
+
 ## Documentation Closure
 
 Release is blocked when any of the following exists:

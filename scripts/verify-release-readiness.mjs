@@ -167,7 +167,7 @@ async function verifyToolingSurface(files, findings) {
     "verify:release:readiness": "node scripts/verify-release-readiness.mjs",
     "verify:release": "npm run verify:hygiene && npm run verify:core && npm run verify:protocol:gates && npm run verify:release:readiness && npm run verify:package:contents && npm run pack:dry-run && npm run publish:dry-run",
     "pack:dry-run": "npm pack --dry-run",
-    "publish:dry-run": "npm publish --dry-run"
+    "publish:dry-run": "node scripts/verify-publish-dry-run.mjs"
   };
   const expectedBin = {
     pactium: "bin/pactium.mjs"
@@ -235,6 +235,7 @@ async function verifyToolingSurface(files, findings) {
     "scripts/verify-package-contents.mjs",
     "scripts/verify-pactium-hygiene.mjs",
     "scripts/verify-protocol-gates.mjs",
+    "scripts/verify-publish-dry-run.mjs",
     "scripts/verify-release-readiness.mjs"
   ];
   const actualToolFiles = rels.filter((rel) => rel.startsWith("bin/") || rel.startsWith("scripts/"));
@@ -287,6 +288,7 @@ async function verifyToolingSurface(files, findings) {
     "scripts/verify-pactium-hygiene.mjs",
     "scripts/verify-protocol-gates.mjs",
     "scripts/verify-package-contents.mjs",
+    "scripts/verify-publish-dry-run.mjs",
     "scripts/verify-release-readiness.mjs",
     "docs/TOOLING.md",
     "docs/QUALITY-GATES.md",
