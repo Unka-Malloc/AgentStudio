@@ -342,7 +342,7 @@ async function main() {
     }
   }
   const allowedExports = Object.keys(packageJson.exports).sort();
-  assertDeepEqual(allowedExports, [".", "./licolite"], "package exports");
+  assertDeepEqual(allowedExports, [".", "./licolite", "./package.json"], "package exports");
   const vectors = await buildProofVectors();
   const snapshots = await buildRegressionSnapshots();
   if (process.env.PACTIUM_UPDATE_FIXTURES === "1") {

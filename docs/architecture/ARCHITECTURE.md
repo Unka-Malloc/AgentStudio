@@ -2,6 +2,8 @@
 
 Pactium is a proof-first protocol substrate for LicoLite. LicoLite is the primary host, and `pactium/licolite` is a first-class package aspect rather than an external plugin.
 
+## System Overview
+
 ```text
 LicoLite host
   -> pactium/licolite
@@ -18,17 +20,205 @@ LicoLite host
             -> Maintenance Task Engine and Repair Planner
 ```
 
-## Authority
+## Module Dependency Graph
+
+```text
+                    ┌─────────────────────┐
+                    │   pactium/licolite   │  LicoLite Aspect
+                    │  (aspect.js, etc.)   │
+                    └──────────┬───────────┘
+                               │
+                    ┌──────────▼───────────┐
+                    │    pactium (core)     │  Public API facade
+                    │    src/index.js       │
+                    └──────────┬───────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │                │                │
+    ┌─────────▼──────┐  ┌─────▼──────┐  ┌─────▼──────────┐
+    │  Pactium Core  │  │   Proof    │  │  Maintenance   │
+    │  pactium-core  │  │ envelope   │  │  task-engine   │
+    │                │  │ bundle     │  │  repair plan   │
+    └───────┬────────┘  └─────┬──────┘  └────────────────┘
+            │                 │
+    ┌───────┼─────────────────┼──────────────────┐
+    │       │                 │                  │
+    │  ┌────▼────┐  ┌────────▼───────┐  ┌──────▼──────┐
+    │  │ Ledger  │  │ Index Engine   │  │ Verification│
+    │  │ transp. │  │ snapshot-      │  │ failure.js  │
+    │  │ log     │  │ merkle-index   │  └─────────────┘
+    │  └────┬────┘  └────────┬───────┘
+    │       │                │
+    │  ┌────▼────────────────▼───────┐
+    │  │     Protocol Layer          │
+    │  │  canonical/value.js         │
+    │  │  protocol/constants.js      │
+    │  │  protocol/hashing.js        │
+    │  └─────────────┬───────────────┘
+    │                │
+    │  ┌─────────────▼───────────────┐
+    │  │     Storage Port            │
+    │  │  local-json-storage-port.js │
+    │  └─────────────────────────────┘
+    └────────────────────────────────────────────┘
+```
+
+## Authority Model
 
 The Operation Ledger is the global ordering authority. Workspace Projection, Merkle State, Checkpoint Tree, lifecycle, idempotency, and causality indexes are verifiable structures, but they do not replace Ledger Authority.
 
 The shared Verifiable Index Engine is the canonical ordered-key proof engine. State, checkpoint, workspace projection, lifecycle, idempotency, and causality indexes use domain adapters over that shared engine rather than separate tree implementations.
+
+## Data Flow: Recording an Operation
+
+```text
+  Host calls recordOperation(input)
+       │
+       ▼
+  ┌─────────────────────────────┐
+  │ 1. Idempotency Check        │ Check Intent/Outcome Idempotency Indexes
+  │    (replay if existing)     │ Return existing proof if found
+  └──────────────┬──────────────┘
+                 │ (new operation)
+                 ▼
+  ┌─────────────────────────────┐
+  │ 2. Canonical Encode         │ Normalize input to PactiumCanonicalValue
+  │    + Protocol Hash          │ Compute content-addressed identifiers
+  └──────────────┬──────────────┘
+                 │
+                 ▼
+  ┌─────────────────────────────┐
+  │ 3. Ledger Append            │ Append Intent + Outcome as leaf entries
+  │    (Transparency Log)       │ Compute new Ledger Head
+  └──────────────┬──────────────┘
+                 │
+                 ▼
+  ┌─────────────────────────────┐
+  │ 4. Index Updates            │ Update lifecycle, idempotency, workspace,
+  │    (Verifiable Index Engine)│ state, checkpoint, and causality indexes
+  └──────────────┬──────────────┘
+                 │
+                 ▼
+  ┌─────────────────────────────┐
+  │ 5. Proof Assembly           │ Gather inclusion proof, index proofs,
+  │    (Proof Envelope)         │ state root, extensions → Proof Envelope
+  └──────────────┬──────────────┘
+                 │
+                 ▼
+  ┌─────────────────────────────┐
+  │ 6. Return Proof Envelope    │ Content-addressed Proof Material Refs
+  │    to caller                │ included for later verification
+  └─────────────────────────────┘
+```
+
+## Data Flow: Verifying a Proof Envelope
+
+```text
+  Caller provides Proof Envelope
+       │
+       ▼
+  ┌─────────────────────────────┐
+  │ 1. Resolve Proof Material   │ Load content-addressed blocks via refs
+  └──────────────┬──────────────┘
+                 │
+                 ▼
+  ┌─────────────────────────────┐
+  │ 2. Ledger Inclusion Check   │ Verify leaf hash against Ledger Head
+  │                             │ using RFC 6962 inclusion proof
+  └──────────────┬──────────────┘
+                 │
+                 ▼
+  ┌─────────────────────────────┐
+  │ 3. Index Proof Check        │ Verify membership/non-membership proofs
+  │                             │ against index roots
+  └──────────────┬──────────────┘
+                 │
+                 ▼
+  ┌─────────────────────────────┐
+  │ 4. Extension Check          │ Verify critical extensions are supported
+  │                             │ Verify extension hash bindings
+  └──────────────┬──────────────┘
+                 │
+                 ▼
+  ┌─────────────────────────────┐
+  │ 5. Result                   │ { ok, failures[], checked[] }
+  │                             │ Failures are structured, not thrown
+  └─────────────────────────────┘
+```
 
 ## LicoLite Boundary
 
 Pactium owns protocol facts, proof algorithms, canonical encoding, storage ports, verification, repair planning, and LicoLite protocol-substrate adapters.
 
 LicoLite owns runtime policy decisions, operation dispatching, side effects, UI ownership, authorization, and durable Host Evidence storage. Pactium binds LicoLite policy and workspace-effect evidence as critical proof extensions and verifies those bindings.
+
+```text
+  ┌──────────────────────────────────────────────────────┐
+  │                    LicoLite Host                      │
+  │                                                      │
+  │  Policy     Operations    Side Effects    Evidence   │
+  │  Decisions  Dispatching   Execution       Storage    │
+  │                                                      │
+  └────────────────────────┬─────────────────────────────┘
+                           │
+              ─ ─ ─ ─ ─ ─ ─│─ ─ ─ ─ ─ ─ ─  Host Boundary
+                           │
+  ┌────────────────────────▼─────────────────────────────┐
+  │                  pactium/licolite                     │
+  │                                                      │
+  │  Signing    Critical Extensions    Workspace Proj.   │
+  │  Authority  (policy + effects)     (default: on)     │
+  │                                                      │
+  └────────────────────────┬─────────────────────────────┘
+                           │
+  ┌────────────────────────▼─────────────────────────────┐
+  │                   Pactium Core                       │
+  │                                                      │
+  │  Ledger   Index Engine   Proofs   Repair   Storage   │
+  │                                                      │
+  └──────────────────────────────────────────────────────┘
+```
+
+## Storage Architecture
+
+```text
+  Data Directory (.pactium/)
+  ├── blocks/           Content-addressed block store (CID → canonical bytes)
+  ├── protocol/         Protocol objects (scoped key-value)
+  │   ├── ledger/       Ledger entries, heads
+  │   ├── indexes/      Index roots and node references
+  │   ├── checkpoints/  Checkpoint tree state
+  │   └── projections/  Workspace projection state
+  └── metadata/         Directory metadata and protocol version
+```
+
+The Storage Port abstraction separates Pactium's protocol logic from persistence mechanics. The current implementation uses a local JSON backend. Storage backends may change how bytes are stored but cannot change canonical encoding, hash computation, or proof semantics.
+
+## Shared Engine: Index Domain Adapters
+
+All verifiable indexes share one Canonical Prolly Tree engine:
+
+```text
+  ┌─────────────────────────────────────────────────────────┐
+  │              Verifiable Index Engine                     │
+  │         (Canonical Prolly Tree + CAS nodes)             │
+  └─────────────────────────┬───────────────────────────────┘
+                            │
+       ┌────────────┬───────┼───────┬────────────┬──────────┐
+       │            │       │       │            │          │
+  ┌────▼───┐  ┌────▼──┐  ┌─▼──┐  ┌─▼──────┐  ┌─▼────┐  ┌─▼───────┐
+  │ State  │  │Worksp.│  │Life│  │Idempot.│  │Check │  │Causality│
+  │ Index  │  │Proj.  │  │cycle│ │Index   │  │point │  │Index    │
+  │Adapter │  │Adapter│  │Adp.│  │Adapter │  │Adptr │  │Adapter  │
+  └────────┘  └───────┘  └────┘  └────────┘  └──────┘  └─────────┘
+```
+
+Each domain adapter normalizes its domain-specific keys and values into canonical `Index Key` and `Index Value Ref` forms before they enter the shared engine. This means:
+
+- One set of membership/non-membership proof algorithms
+- One set of structural-sharing and diff algorithms
+- One CDC (Content-Defined Chunking) implementation
+- Consistent proof format across all domain indexes
 
 ## Current Implementation Status
 
@@ -56,6 +246,8 @@ The maintained design is implemented by these package surfaces:
 | Proof Envelopes and Bundles | `src/proof/envelope.js`, `src/proof/bundle.js`, `src/core/pactium-core.js`: verification and export surfaces |
 | LicoLite Aspect | `src/aspects/licolite/`: `createLicoLiteAspect`, `createLicoLiteSigner`, evidence helpers, verifier |
 | CLI and HTTP facades | `bin/pactium.mjs`, `src/http.js` |
+
+## Non-Surfaces
 
 Maintained docs must not describe SQLite storage, separate per-workspace lane queues, repair fact execution, or pressure baseline regression enforcement as implemented unless those surfaces are added and verified.
 

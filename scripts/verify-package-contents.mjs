@@ -7,17 +7,27 @@ const root = process.cwd();
 
 const requiredFiles = [
   "LICENSE",
+  "CHANGELOG.md",
   "README.md",
   "README.zh-CN.md",
   "SECURITY.md",
   "bin/pactium.mjs",
+  "docs/API.md",
+  "docs/FAQ.md",
   "docs/LICOLITE-ASPECT.md",
+  "docs/MIGRATION.md",
   "docs/README.md",
   "docs/TERM.md",
   "docs/architecture/ARCHITECTURE.md",
+  "docs/logo.svg",
   "docs/protocols/PROFILE.md",
   "docs/protocols/PROTOCOLS.md",
+  "examples/README.md",
+  "examples/export-proof-bundle.mjs",
+  "examples/licolite-signed-operation.mjs",
   "examples/record-operation.mjs",
+  "examples/verify-envelope.mjs",
+  "examples/workspace-projection.mjs",
   "package.json",
   "src/aspects/licolite/index.d.ts",
   "src/aspects/licolite/index.js",
@@ -82,6 +92,54 @@ async function readText(relativePath) {
   return fs.readFile(path.join(root, relativePath), "utf8");
 }
 
+function normalizePackagePath(filePath) {
+  return path.normalize(filePath).replace(/\\/g, "/");
+}
+
+function stripLinkDecoration(target) {
+  const trimmed = target.trim();
+  if (trimmed.startsWith("<") && trimmed.endsWith(">")) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function isExternalOrAnchorTarget(target) {
+  return (
+    target === "" ||
+    target.startsWith("#") ||
+    target.startsWith("//") ||
+    /^[a-z][a-z0-9+.-]*:/i.test(target)
+  );
+}
+
+function resolvePackageLinkTarget(fromFile, rawTarget) {
+  const target = stripLinkDecoration(rawTarget);
+  if (isExternalOrAnchorTarget(target)) return null;
+  const withoutFragment = target.split("#", 1)[0].split("?", 1)[0];
+  if (isExternalOrAnchorTarget(withoutFragment) || path.isAbsolute(withoutFragment)) return null;
+  return normalizePackagePath(path.join(path.dirname(fromFile), withoutFragment));
+}
+
+function extractLinkedTargets(text) {
+  const targets = [];
+  const markdownLinkPattern = /!?\[[^\]]*\]\(\s*([^)\s]+)(?:\s+["'][^"']*["'])?\s*\)/g;
+  const htmlLinkPattern = /\b(?:href|src)=["']([^"']+)["']/gi;
+  for (const pattern of [markdownLinkPattern, htmlLinkPattern]) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      targets.push(match[1]);
+    }
+  }
+  return targets;
+}
+
+function packageContainsTarget(packageFiles, packageFileSet, targetPath) {
+  if (packageFileSet.has(targetPath)) return true;
+  const directoryPrefix = targetPath.endsWith("/") ? targetPath : `${targetPath}/`;
+  return packageFiles.some((file) => file.path.startsWith(directoryPrefix));
+}
+
 function runNpmPackDryRun() {
   const result = spawnSync("npm", ["pack", "--dry-run", "--json"], {
     cwd: root,
@@ -138,6 +196,7 @@ function verifyExecutableBins(packageFiles, findings) {
 }
 
 async function verifyPublishedDocLinks(packageFiles, findings) {
+  const packageFileSet = new Set(packageFiles.map((file) => file.path));
   const markdownFiles = packageFiles
     .map((file) => file.path)
     .filter((file) => [".md", ".mdx"].includes(path.extname(file).toLowerCase()));
@@ -151,6 +210,18 @@ async function verifyPublishedDocLinks(packageFiles, findings) {
         "published_doc_links_unpublished_process_doc",
         "Published package docs must not link to release, tooling, ADR, optimization, agent, or manifest process documents."
       );
+    }
+    for (const target of extractLinkedTargets(text)) {
+      const resolvedTarget = resolvePackageLinkTarget(file, target);
+      if (!resolvedTarget) continue;
+      if (!packageContainsTarget(packageFiles, packageFileSet, resolvedTarget)) {
+        addFinding(
+          findings,
+          file,
+          "published_doc_links_missing_package_file",
+          `${target} resolves to ${resolvedTarget}, which is not included in the npm package.`
+        );
+      }
     }
   }
 }
