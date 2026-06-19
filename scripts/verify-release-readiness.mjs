@@ -157,15 +157,17 @@ async function verifyToolingSurface(files, findings) {
   const packageJson = JSON.parse(await readText("package.json"));
   const expectedScripts = {
     start: "pactium serve",
+    "docs:sync-version": "node scripts/update-published-doc-versions.mjs --write",
     test: "node --test tests/pactium/*.test.mjs",
     "test:coverage": "node --test --experimental-test-coverage '--test-coverage-exclude=bin/**' --test-coverage-exclude=src/http.js --test-coverage-lines=95 --test-coverage-functions=95 --test-coverage-branches=90 tests/pactium/*.test.mjs",
     verify: "npm run verify:release",
     "verify:core": "npm run test:coverage",
+    "verify:docs:versions": "node scripts/update-published-doc-versions.mjs --check",
     "verify:hygiene": "node scripts/verify-pactium-hygiene.mjs",
     "verify:protocol:gates": "node scripts/verify-protocol-gates.mjs",
     "verify:package:contents": "node scripts/verify-package-contents.mjs",
     "verify:release:readiness": "node scripts/verify-release-readiness.mjs",
-    "verify:release": "npm run verify:hygiene && npm run verify:core && npm run verify:protocol:gates && npm run verify:release:readiness && npm run verify:package:contents && npm run pack:dry-run && npm run publish:dry-run",
+    "verify:release": "npm run verify:hygiene && npm run verify:core && npm run verify:protocol:gates && npm run verify:release:readiness && npm run verify:docs:versions && npm run verify:package:contents && npm run pack:dry-run && npm run publish:dry-run",
     "pack:dry-run": "npm pack --dry-run",
     "publish:dry-run": "node scripts/verify-publish-dry-run.mjs"
   };
@@ -187,13 +189,19 @@ async function verifyToolingSurface(files, findings) {
       types: "./src/aspects/licolite/index.d.ts",
       import: "./src/aspects/licolite/index.js",
       default: "./src/aspects/licolite/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   };
   const expectedFiles = [
     "src/",
     "bin/",
     "examples/",
+    "CHANGELOG.md",
+    "docs/logo.svg",
     "docs/README.md",
+    "docs/API.md",
+    "docs/FAQ.md",
+    "docs/MIGRATION.md",
     "docs/architecture/",
     "docs/protocols/",
     "docs/LICOLITE-ASPECT.md",
@@ -232,6 +240,7 @@ async function verifyToolingSurface(files, findings) {
   }
   const expectedToolFiles = [
     "bin/pactium.mjs",
+    "scripts/update-published-doc-versions.mjs",
     "scripts/verify-package-contents.mjs",
     "scripts/verify-pactium-hygiene.mjs",
     "scripts/verify-protocol-gates.mjs",
@@ -285,6 +294,7 @@ async function verifyToolingSurface(files, findings) {
     ".github/workflows/ci.yml",
     ".github/workflows/publish.yml",
     "bin/pactium.mjs",
+    "scripts/update-published-doc-versions.mjs",
     "scripts/verify-pactium-hygiene.mjs",
     "scripts/verify-protocol-gates.mjs",
     "scripts/verify-package-contents.mjs",

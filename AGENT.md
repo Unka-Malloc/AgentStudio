@@ -10,6 +10,7 @@ This is the single entry point for automated coding agents maintaining this repo
 - The current `src/` implementation is the proof-first implementation surface.
 - Protocol authority lives in maintained `docs/` files and ADRs: `docs/architecture/ARCHITECTURE.md`, `docs/protocols/PROTOCOLS.md`, `docs/protocols/PROFILE.md`, and `docs/adr/`.
 - `CONTEXT.md` is development scratch space only. Do not cite it from README, package docs, source docs, or release artifacts. Any durable decision from `CONTEXT.md` must be moved into maintained docs or ADRs before release.
+- Process documentation must not be published to npm. Agent guides, ADRs, release rules, tooling notes, quality gates, optimization records, contributor process docs, tests, scripts, build outputs, binary caches, and compressed archives stay out of `package.json` `files`; package-facing docs may link to those records only through GitHub URLs.
 
 ## Maintenance Method
 
@@ -52,6 +53,8 @@ This is the single entry point for automated coding agents maintaining this repo
 - Add proof-vector tests for every new protocol primitive before wiring LicoLite-level flows.
 - Run `npm run verify:hygiene` after renaming or documentation edits, but update the hygiene script first if its old assumptions conflict with current documentation.
 - Run `npm run pack:dry-run` before release-oriented changes.
+- After changing `package.json` version, run `npm run docs:sync-version` so current-version references in published docs match the package version.
 - Run `npm run verify:release` before publishing. Release verification must pass independently on every supported Node.js LTS major in the CI matrix.
+- Before release, verify that the npm tarball contains only runtime source, CLI, examples, public project docs, README files, security policy, changelog, package metadata, and license. Process docs must remain unpublished.
 - Before release, verify that package scripts, `bin/`, `scripts/`, exports, and project skill/tool directories still match `docs/TOOLING.md`.
 - Before release, scan documentation against implementation. If a maintained doc describes an unimplemented design, report it and block release rather than treating it as roadmap text.

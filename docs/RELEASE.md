@@ -31,6 +31,7 @@ The release gate must include:
 - seeded property tests;
 - public API pressure profiles;
 - tool and skill surface checks;
+- published-document version checks against `package.json`;
 - package content checks that exclude process docs, release tooling, tests, build outputs, binary caches, compressed archives, and unpublished-doc links;
 - release-readiness scans;
 - package dry run;
@@ -38,7 +39,7 @@ The release gate must include:
 
 ## npm Publishing
 
-Published package contents are limited to runtime source, CLI, examples, public protocol/architecture docs, README files, security policy, and license. Repository maintenance documents such as agent guides, release rules, tooling notes, quality gates, ADRs, optimization records, tests, scripts, build outputs, binary caches, and compressed archives must not be included in the npm tarball.
+Published package contents are limited to runtime source, CLI, examples, public protocol/architecture docs, README files, security policy, changelog, package metadata, and license. Repository maintenance documents such as agent guides, release rules, tooling notes, quality gates, ADRs, optimization records, tests, scripts, build outputs, binary caches, and compressed archives must not be included in the npm tarball.
 
 Publishing is handled by `.github/workflows/publish.yml` after the Node.js 22 and Node.js 24 release gates pass. The workflow uses npm Trusted Publishing through GitHub Actions OIDC; configure npm's trusted publisher for repository `Unka-Malloc/Pactium` and workflow filename `publish.yml`.
 

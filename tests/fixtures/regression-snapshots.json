@@ -10,7 +10,8 @@
       "types": "./src/aspects/licolite/index.d.ts",
       "import": "./src/aspects/licolite/index.js",
       "default": "./src/aspects/licolite/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "rootExports": [
     "HASH_DOMAINS",
@@ -84,7 +85,7 @@
   ],
   "declarations": {
     "src/index.d.ts": {
-      "sha256": "d7176c9d14ab5bdec11f3536392a7cd333ae3ad2baa14afb09a55cfac97d2dad",
+      "sha256": "0803c2bcf4482fb42f8adcaf819820a12fb50c3adb426c7972bfad8bb7de1333",
       "byteLength": 10652,
       "exportCount": 70
     },
