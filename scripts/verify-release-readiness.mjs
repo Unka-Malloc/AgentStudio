@@ -431,6 +431,16 @@ async function verifyNodeLtsMatrix(findings) {
       addFinding(findings, "docs/RELEASE.md", "missing_lts_release_doc", `Node.js ${major} is missing from release rules.`);
     }
   }
+  for (const branch of ["stable", "nightly"]) {
+    if (!new RegExp(`\\b${branch}\\b`).test(workflow)) {
+      addFinding(
+        findings,
+        ".github/workflows/ci.yml",
+        "missing_release_branch_ci_gate",
+        `Release branch ${branch} is missing from CI push triggers.`
+      );
+    }
+  }
 }
 
 async function verifyPublishWorkflow(findings) {

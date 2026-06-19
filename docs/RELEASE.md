@@ -4,7 +4,7 @@ Pactium releases are allowed only from a closed, current-state repository. Maint
 
 ## Node.js LTS Matrix
 
-`package.json` declares support for Node.js 22 and Node.js 24. Release CI must run the full release gate on each supported LTS major independently.
+`package.json` declares support for Node.js 22 and Node.js 24. Release CI must run the full release gate on each supported LTS major independently. The default release branch `stable` and active integration branch `nightly` must both trigger CI push gates.
 
 Current release matrix:
 
