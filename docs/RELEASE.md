@@ -8,6 +8,18 @@ Pactium releases are allowed only from a closed, current-state repository. Maint
 
 Only `stable` is allowed to publish new npm versions. Manual publish workflow dispatch must use the `stable` branch ref. Release/tag-triggered publishing is allowed only when the release tag commit is contained in `origin/stable`; tags cut from `nightly` or any other branch must fail before npm publishing.
 
+## Branch Flow
+
+Code changes are committed and pushed to `nightly`. The remote `stable` branch is protected and must be updated only through GitHub pull requests from `nightly`.
+
+The `stable` branch protection must enforce:
+
+- pull requests before updates;
+- required status checks `verify (22)` and `verify (24)`;
+- administrator enforcement;
+- no force pushes;
+- no branch deletion.
+
 Current release matrix:
 
 | Node.js major | Gate |
