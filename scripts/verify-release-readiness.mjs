@@ -456,6 +456,10 @@ async function verifyNodeLtsMatrix(findings) {
 async function verifyPublishWorkflow(findings) {
   const workflow = await readText(".github/workflows/publish.yml");
   const requiredPatterns = [
+    [/release-source:/, "missing_stable_publish_source_job"],
+    [/Manual publish dispatch must use the stable branch/, "missing_stable_manual_publish_gate"],
+    [/GITHUB_REF_NAME[^]*stable/, "missing_stable_ref_publish_gate"],
+    [/git merge-base --is-ancestor "\$\{RELEASE_SHA\}" origin\/stable/, "missing_stable_tag_ancestor_gate"],
     [/id-token:\s*write/, "missing_oidc_permission"],
     [/npm install -g npm@latest/, "missing_current_npm_cli"],
     [/npm run verify:release/, "missing_release_gate_before_publish"],

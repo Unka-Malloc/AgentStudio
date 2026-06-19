@@ -120,6 +120,7 @@ That script must run, at minimum:
 - public API pressure tests, using scaled counts by default and full counts when `PACTIUM_FULL_PRESSURE=1`;
 - published-document version checks against `package.json`;
 - tool and skill surface checks against the current package tooling inventory;
+- stable-only publish source checks for both manual and release-triggered npm publishing;
 - package-content checks that reject process docs, agent maintenance docs, release tooling, tests, build outputs, binary caches, compressed archives, links to unpublished process docs, and relative links to missing package files;
 - root `AGENT.md` single-entry checks for automated coding agents;
 - release-readiness scans for process-state docs, version-named docs, development scratch authority links, design/implementation anchors, and Node.js LTS gate coverage;

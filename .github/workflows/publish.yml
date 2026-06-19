@@ -9,7 +9,37 @@ permissions:
   contents: read
 
 jobs:
+  release-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require stable publish source
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ "${GITHUB_REF_TYPE}" != "branch" ] || [ "${GITHUB_REF_NAME}" != "stable" ]; then
+              echo "Manual publish dispatch must use the stable branch, got ${GITHUB_REF_TYPE}:${GITHUB_REF_NAME}."
+              exit 1
+            fi
+            exit 0
+          fi
+
+          if [ "${GITHUB_EVENT_NAME}" = "release" ]; then
+            git fetch --no-tags origin stable
+            RELEASE_SHA="$(git rev-parse HEAD)"
+            if ! git merge-base --is-ancestor "${RELEASE_SHA}" origin/stable; then
+              echo "Release tag commit ${RELEASE_SHA} is not contained in origin/stable."
+              exit 1
+            fi
+            exit 0
+          fi
+
+          echo "Unsupported publish event: ${GITHUB_EVENT_NAME}."
+          exit 1
+
   package-status:
+    needs: release-source
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -40,6 +70,7 @@ jobs:
           fi
 
   verify:
+    needs: release-source
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -57,7 +88,7 @@ jobs:
       - run: npm run verify:release
 
   publish:
-    needs: [package-status, verify]
+    needs: [release-source, package-status, verify]
     if: needs.package-status.outputs.published != 'true'
     runs-on: ubuntu-latest
     permissions:

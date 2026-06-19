@@ -6,6 +6,8 @@ Pactium releases are allowed only from a closed, current-state repository. Maint
 
 `package.json` declares support for Node.js 22 and Node.js 24. Release CI must run the full release gate on each supported LTS major independently. The default release branch `stable` and active integration branch `nightly` must both trigger CI push gates.
 
+Only `stable` is allowed to publish new npm versions. Manual publish workflow dispatch must use the `stable` branch ref. Release/tag-triggered publishing is allowed only when the release tag commit is contained in `origin/stable`; tags cut from `nightly` or any other branch must fail before npm publishing.
+
 Current release matrix:
 
 | Node.js major | Gate |

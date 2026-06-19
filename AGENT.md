@@ -56,5 +56,6 @@ This is the single entry point for automated coding agents maintaining this repo
 - After changing `package.json` version, run `npm run docs:sync-version` so current-version references in published docs match the package version.
 - Run `npm run verify:release` before publishing. Release verification must pass independently on every supported Node.js LTS major in the CI matrix.
 - Before release, verify that the npm tarball contains only runtime source, CLI, examples, public project docs, README files, security policy, changelog, package metadata, and license. Process docs must remain unpublished.
+- Publish new npm versions only from `stable`. Manual publish workflow dispatch must use the `stable` ref, and release tags must point to commits already contained in `origin/stable`.
 - Before release, verify that package scripts, `bin/`, `scripts/`, exports, and project skill/tool directories still match `docs/TOOLING.md`.
 - Before release, scan documentation against implementation. If a maintained doc describes an unimplemented design, report it and block release rather than treating it as roadmap text.
