@@ -1,5 +1,0 @@
-{
-  "id": "repo:admin",
-  "label": "Administer repositories",
-  "description": "Manage repository protection rules, webhooks, and member permissions."
-}

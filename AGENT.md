@@ -1,80 +1,57 @@
-# Pact Agent Rules
+# Pactium Agent Entry
 
-## 智能体入口与上下文范围
+This is the single entry point for automated coding agents maintaining this repository. Read this file before changing code, tests, documentation, release scripts, or package metadata.
 
-- `AGENT.md` 是根目录唯一的智能体工程入口；不要新增并行根入口文件，除非用户明确要求。
-- 根 `README.md` 和 `README.zh-CN.md` 是产品宣传页，默认不作为工程事实源；只有产品定位、对外文案或用户明确要求时才读取或修改。
-- 工程任务优先从本文件、目标子目录最近的 `AGENT.md`、`docs/README.md` 或局部说明建立上下文。
-- 代码修改先按任务路由缩小到一个子系统，再在候选目录内搜索；文档修改先看 `docs/README.md` 的索引和维护规则，再打开目标文档。
-- `build/`、`node_modules/`、`client-cli/target/`、`client-gui/build/`、`client-gui/coverage/` 和 `docs/reports/history/` 默认视为生成物、依赖缓存或历史材料；只有任务明确指向、验证输出指向，或需要核对历史事实时再进入。
-- 扩大到全仓库搜索前，先说明当前入口无法回答的问题，并尽量限定文件类型或目录前缀，减少无关上下文进入会话。
-- 开始修改前先运行 `git status --short`，区分当前任务改动和用户已有改动；无关改动保持原样。
-- 搜索优先使用 `rg` 或 `rg --files`，避免把整段生成物、大型历史报告或依赖目录读入上下文。
+## Project Scope
 
-## 任务路由
+- Pactium is the proof-first protocol substrate npm package for LicoLite.
+- LicoLite is Pactium's primary host. The `pactium/licolite` aspect is a first-class package surface, not an external plugin.
+- Active code lives in `src/`, CLI code lives in `bin/`, tests live in `tests/pactium/`, and maintained docs live in `docs/`.
+- The current `src/` implementation is the proof-first implementation surface.
+- Protocol authority lives in maintained `docs/` files and ADRs: `docs/architecture/ARCHITECTURE.md`, `docs/protocols/PROTOCOLS.md`, `docs/protocols/PROFILE.md`, and `docs/adr/`.
+- `CONTEXT.md` is development scratch space only. Do not cite it from README, package docs, source docs, or release artifacts. Any durable decision from `CONTEXT.md` must be moved into maintained docs or ADRs before release.
 
-- 前端控制台任务从 `server-web/` 开始，只打开相关的 `components/`、`views/`、`lib/` 和样式文件。
-- 服务端或运行时任务从 `server/` 开始；只有涉及启动、挂载、运行行为或运维语义时再查阅 `docs/SERVER.md`。
-- MCP connector 任务从 `mcp-connector/` 开始；安装和注册行为再查阅 `mcp-connector/README.md` 与 `docs/MCP_INSTALL.md`。
-- 架构、策略或治理类任务先看 `docs/README.md`，再打开与主题对应的核心文档。
-- 测试任务先从失败测试或 verifier 本身开始；只有测试契约不清楚时再查阅 `docs/TEST-FRAMEWORK.md`。
-- Skill 或知识工具任务从 `skills/README.md` 或目标 skill 目录开始，避免默认展开完整 `docs/reports/history/`。
-- 子系统目录入口已放在 `server/AGENT.md`、`server-web/AGENT.md`、`mcp-connector/AGENT.md`、`client-cli/AGENT.md`、`client-gui/AGENT.md` 和 `docs/AGENT.md`。
+## Maintenance Method
 
-## 工作树协作
+- Start by reading the maintained docs or ADRs that own the area being changed, then inspect the current implementation with local code search before editing.
+- Keep code, tests, docs, package metadata, and release gates aligned in the same change when behavior or public surface changes.
+- Prefer the smallest change that preserves the proof-first model and covers the touched behavior with the appropriate regression test.
+- Treat maintained docs as current-state documentation. If a claim is not implemented and covered by an ADR, either implement and verify it or keep it out of maintained docs.
+- Before finishing, run the narrowest relevant check first, then the release gate when the change affects docs, public APIs, tooling, protocol behavior, or package contents.
 
-- 默认把主工作树作为集成和手动产品文案维护区，不在其中混入大范围实验性改动。
-- 子系统工作优先使用独立 worktree：服务端、Web Console、MCP connector、CLI、GUI、文档/智能体规则分别建分支维护。
-- 跨子系统契约变更使用单独集成 worktree 完成，避免服务端接口、前端调用和文档在多个分支中漂移。
-- 具体拆分、目录归属和建树命令见 `docs/GIT-COLLAB.md`。
+## Implementation Boundaries
 
-## 任务启动流程
+- Do not add old product-system code back into active Pactium modules. Product-level features belong in the host system that embeds Pactium.
+- Maintain the current proof-first implementation. Do not reintroduce removed storage-shaped APIs.
+- Root exports must expose the latest proof-first API only. Do not keep weak historical APIs in the root export.
+- Build from foundations upward: canonical encoding and protocol hash, storage port, Ledger Transparency Log, Verifiable Index Engine, lifecycle indexes, Workspace Projection, Merkle State, Checkpoint Tree, Proof Envelopes/Bundles, LicoLite Aspect, then maintenance and repair.
+- Operation Ledger is the global ordering authority. Checkpoint Tree, Merkle State, Workspace Projection, lifecycle, idempotency, and causality indexes are verifiable structures but do not replace Ledger Authority.
+- Reuse the shared Verifiable Index Engine for ordered proof indexes. Do not create separate domain-specific proof tree implementations.
+- Workspace Projection is first priority for LicoLite, enabled by default in the LicoLite Aspect, and updated synchronously with Ledger commits.
+- Pactium must not execute LicoLite policy decisions or side effects. It binds LicoLite policy and workspace effect evidence as critical proof extensions and verifies the binding.
+- Pactium provides deterministic maintenance tasks and repair plans, but hosts schedule and execute them.
+- Support the latest verifiable schema only. Do not add historical Pactium or LicoLite data migration unless the protocol decisions are explicitly revisited.
+- Keep project tooling minimal and current. Do not add project-local agent skills, unrelated tool registries, historical entrypoints, or version-named tooling. The current tool surface is documented in `docs/TOOLING.md` and enforced by the release-readiness gate.
+- `AGENT.md` is the only in-repository agent entry. Do not add `AGENTS.md`, root `skills/`, root `tools/`, editor-specific agent skill directories, or product runtime tool registries to Pactium.
 
-- 开始工作时建议说明当前 worktree、目标子系统和计划写入范围。
-- 读取根 `AGENT.md` 后，建议继续读取目标子系统的局部 `AGENT.md`；没有局部入口时再读取最近的 README。
-- 如果任务需要跨子系统修改，建议切换到集成 worktree 或明确唯一负责人，再开始编辑。
-- 涉及入口文件、工作树拆分或文档索引调整时，运行 `npm run repo:hygiene` 或对应的入口健康检查。
+## Implementation Notes
 
-## 用户配置真实性
+- Do not return proof hashes as substitutes for membership or non-membership proofs.
+- Do not use mutable ledger rows for operation lifecycle. Use append-only Operation Intent and Operation Outcome facts.
+- Do not inline full domain objects in Verifiable Index Engine leaves. Use content-addressed Index Value Refs.
+- Do not let storage backends define hashes, roots, proof formats, or canonical encoding.
+- Do not make hash algorithms, chunking, or proof formats host-configurable. They are protocol constants.
+- Do not add a resident scheduler or daemon to Pactium core.
+- Do not add Implementation Plan, Implementation Guide, Gap, or similar process-state documents. Their presence means work is not closed and a release must be blocked until the work is completed or removed.
+- Do not add documents named after a package or protocol version. Maintained documents describe the project's current state; historical version material must be merged into current docs or ADRs and then removed.
+- Do not leave design claims in documentation unless the implementation exists and the matching ADR records the current behavior.
 
-- 用户配置不允许由代码指定缺省默认值。没有配置的情况下必须保持为空。
-- 所有页面、接口、命令行和运行时模块必须反映用户的真实配置，不能用供应商模板、候选项、历史兼容值或推断值伪装成用户已配置内容。
-- 候选模板只能用于“新增配置时可选择的类型”，不能进入功能绑定、模型下拉、运行时注册表或任何表示已配置状态的数据结构。
-- 保存、加载、规范化、红acted 输出、迁移和兼容逻辑都必须遵守同一原则：空配置仍然是空配置，不允许自动补默认模型、默认供应商、默认智能体或默认绑定。
+## Verification
 
-## 通用组件优先
-
-- 页面上已经存在通用组件时，必须优先使用通用组件，不允许在局部页面重新实现一套样式、交互或状态管理。
-- 新增可复用 UI 组件时，每个组件必须使用独立文件实现，并在 `server-web/components/common.ts` 统一注册和导出；未登记在该入口的组件不能视为通用组件。
-- 通用组件只能统一外观、交互和基础事件协议，不能接管业务数据源、自动补默认值或覆盖用户配置；选项、模型、路径、历史记录等数据仍由各自页面显式绑定。
-
-## 智能体配置分层
-
-- 智能体通用配置只负责远程模型连通性和基础身份；模块/功能参数必须放在 `moduleAgentProfiles` 这种专属夹层中。
-- 功能选择智能体时必须尊重智能体的 `moduleAccess` 可见性；没有被授权给该功能的智能体不能出现在下拉选项里。
-- 运行时调用智能体的加载顺序固定为：通用连接配置 -> 模块/功能专属参数 -> 会话/任务上下文。不能把会话记忆或功能依赖写回通用模型配置。
-
-## 文档与使用说明风格
-
-- 本项目的所有文档和使用说明，应力图让用户了解本项目所提供的能力，而不是它的限制和审计。
-
-## 验证范围
-
-- 优先运行覆盖当前改动范围的最小 verifier。
-- 除非用户明确要求完整发布或 readiness 检查，否则不运行完整 `npm run server:verify`。
-- `package.json` 脚本较多，优先查询所需脚本名和局部片段，避免把整份文件作为默认上下文。
-- 涉及部署、运行时自举、镜像构建、外部服务启动、包管理器安装、平台依赖下载或生产入口配置的测试，必须在全新的容器环境中执行；本机环境检查只能标注为代码路径调试或非部署类快速验证。
-
-## README.md 修改权限
-
-- 除非用户明确要求，否则所有的文档改动都**不可以**修改项目根目录下的 README.md 文件。
-
-## 提交前自检 (Pre-submission Self-Check)
-
-- **语气自检**：在完成代码修改、文档更新或总结汇报前，智能体**必须**主动回溯并审视自己即将提交的文本（包括但不限于 UI 文案、日志提示、报错信息、Markdown 文档）。
-- **拦截激烈言辞**：如果发现“禁止”、“必须”、“不允许”、“违规”、“警告”等言辞过于激烈或具有强烈管控感的词汇，需主动将其替换为中性或赋能导向的词汇，确保在最终输出时语言平实、友善。
-- **推荐中性与赋能词汇表**：
-  - 基础名词替换：优先使用 **日志**、**记录**、**历史**、**规范** 等中性词汇。
-  - 避免使用“审计”等强管控词：改为使用 **可观测**、**可溯源**、**透明度** 等凸显可见性与系统洞察力的词汇。
-  - 表达限制与阻断时：使用 **未启用**、**暂不支持**、**建议调整** 等非强制性、指引性的表述。
-  - 展现生产环境安全与韧性时：多使用 **可回退**、**可复原**、**可分流** 等彰显框架提供强大保障能力的专有词汇，避免给用户“设限”的压迫感。
+- For implementation work, satisfy `docs/QUALITY-GATES.md`. Unit tests alone are not enough.
+- Add proof-vector tests for every new protocol primitive before wiring LicoLite-level flows.
+- Run `npm run verify:hygiene` after renaming or documentation edits, but update the hygiene script first if its old assumptions conflict with current documentation.
+- Run `npm run pack:dry-run` before release-oriented changes.
+- Run `npm run verify:release` before publishing. Release verification must pass independently on every supported Node.js LTS major in the CI matrix.
+- Before release, verify that package scripts, `bin/`, `scripts/`, exports, and project skill/tool directories still match `docs/TOOLING.md`.
+- Before release, scan documentation against implementation. If a maintained doc describes an unimplemented design, report it and block release rather than treating it as roadmap text.

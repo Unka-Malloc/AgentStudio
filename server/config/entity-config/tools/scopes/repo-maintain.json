@@ -1,5 +1,0 @@
-{
-  "id": "repo:maintain",
-  "label": "Maintain repositories",
-  "description": "Merge, submit, rebase, revert, close, abandon, or force-update repository review targets."
-}

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact Runtime Doctor"
-  short_description: "Help with Pact Runtime Doctor tasks"
-  default_prompt: "Use $pact-runtime-doctor to handle this Pact platform task."

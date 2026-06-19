@@ -1,5 +1,0 @@
-{
-  "id": "repo:approve",
-  "label": "Approve repositories",
-  "description": "Approve code review targets without merging or submitting them."
-}

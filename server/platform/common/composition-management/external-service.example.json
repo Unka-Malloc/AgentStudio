@@ -1,7 +1,0 @@
-{
-  "templateId": "external-service.template.raw-mcp-streamable-http",
-  "serviceId": "example-raw-mcp",
-  "upstream": {
-    "url": "https://mcp.example.com:443/mcp/"
-  }
-}

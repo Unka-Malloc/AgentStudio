@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact Graph Store Adapter"
-  short_description: "Help with Pact Graph Store Adapter tasks"
-  default_prompt: "Use $pact-graph-store-adapter to handle this Pact platform task."

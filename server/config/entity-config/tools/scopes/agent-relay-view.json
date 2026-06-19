@@ -1,5 +1,0 @@
-{
-  "id": "agent_relay:view",
-  "label": "View agent relay resources",
-  "description": "List virtual relay agents and relay targets; no write side effects."
-}

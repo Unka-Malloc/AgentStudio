@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact Ocr Doctor"
-  short_description: "Help with Pact Ocr Doctor tasks"
-  default_prompt: "Use $pact-ocr-doctor to handle this Pact platform task."

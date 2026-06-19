@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pact Checkpoint Resume Debug"
-  short_description: "Help with Pact Checkpoint Resume Debug tasks"
-  default_prompt: "Use $pact-checkpoint-resume-debug to handle this Pact platform task."
