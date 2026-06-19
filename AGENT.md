@@ -14,7 +14,7 @@ This is the single entry point for automated coding agents maintaining this repo
 
 ## Maintenance Method
 
-- Commit and push code changes to `nightly` by default. Do not commit directly on local `stable`, and do not push directly to `origin/stable`; the remote `stable` branch is protected and must be updated only through a GitHub pull request from `nightly`.
+- Commit and push code changes to `nightly` by default. Do not commit directly on local `stable`, and do not push directly to `origin/stable`; the remote `stable` branch is protected by the GitHub ruleset `Protect stable branch` and must be updated only through a GitHub pull request from `nightly`.
 - Start by reading the maintained docs or ADRs that own the area being changed, then inspect the current implementation with local code search before editing.
 - Keep code, tests, docs, package metadata, and release gates aligned in the same change when behavior or public surface changes.
 - Prefer the smallest change that preserves the proof-first model and covers the touched behavior with the appropriate regression test.
@@ -58,6 +58,6 @@ This is the single entry point for automated coding agents maintaining this repo
 - Run `npm run verify:release` before publishing. Release verification must pass independently on every supported Node.js LTS major in the CI matrix.
 - Before release, verify that the npm tarball contains only runtime source, CLI, examples, public project docs, README files, security policy, changelog, package metadata, and license. Process docs must remain unpublished.
 - Publish new npm versions only from `stable`. Manual publish workflow dispatch must use the `stable` ref, and release tags must point to commits already contained in `origin/stable`.
-- Before merging to `stable`, use a pull request and confirm the protected-branch checks `verify (22)` and `verify (24)` pass. Direct pushes, force pushes, and branch deletion are prohibited on `stable`, including for administrators.
+- Before merging to `stable`, use a pull request and confirm the protected-branch checks `verify (22)` and `verify (24)` pass. The GitHub ruleset `Protect stable branch` prohibits direct pushes, force pushes, and branch deletion on `stable`, with no administrator bypass.
 - Before release, verify that package scripts, `bin/`, `scripts/`, exports, and project skill/tool directories still match `docs/TOOLING.md`.
 - Before release, scan documentation against implementation. If a maintained doc describes an unimplemented design, report it and block release rather than treating it as roadmap text.

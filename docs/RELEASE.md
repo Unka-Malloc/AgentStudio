@@ -10,14 +10,14 @@ Only `stable` is allowed to publish new npm versions. Manual publish workflow di
 
 ## Branch Flow
 
-Code changes are committed and pushed to `nightly`. The remote `stable` branch is protected and must be updated only through GitHub pull requests from `nightly`.
+Code changes are committed and pushed to `nightly`. The remote `stable` branch is protected by the GitHub ruleset `Protect stable branch` and must be updated only through GitHub pull requests from `nightly`.
 
-The `stable` branch protection must enforce:
+The `Protect stable branch` ruleset must enforce:
 
-- pull requests before updates;
+- pull requests before updates to `stable`;
 - required status checks `verify (22)` and `verify (24)`;
-- administrator enforcement;
-- no force pushes;
+- no bypass actors, including administrators;
+- no non-fast-forward updates or force pushes;
 - no branch deletion.
 
 Current release matrix:
