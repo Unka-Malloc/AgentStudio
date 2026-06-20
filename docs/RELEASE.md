@@ -31,6 +31,14 @@ When the Node.js project changes active LTS lines, update `engines`, CI, and thi
 
 ## Required Gate
 
+Prepare release file changes with:
+
+```bash
+npm run release:prepare -- <version> --summary "Release summary" --changed "Release note"
+```
+
+This updates package metadata, public package-version constants, managed published-document version references, `CHANGELOG.md`, and protocol regression fixtures. Use `--verify` to run the full release gate in the same command.
+
 Run:
 
 ```bash

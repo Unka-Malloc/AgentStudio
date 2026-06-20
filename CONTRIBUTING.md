@@ -145,7 +145,7 @@ npm run verify:release
 
 ### Before submitting
 
-1. If `package.json` version changed, run `npm run docs:sync-version`
+1. Use `npm run release:prepare -- <version>` for release file preparation, or run `npm run docs:sync-version` after any manual `package.json` version change
 2. Run `npm run verify:release` and confirm it passes
 3. Ensure your change aligns with the [Protocol Profile](./docs/protocols/PROFILE.md)
 4. If you changed public API surface, update:

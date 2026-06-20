@@ -164,6 +164,7 @@ async function verifyToolingSurface(files, findings) {
   const packageJson = JSON.parse(await readText("package.json"));
   const expectedScripts = {
     start: "pactium serve",
+    "release:prepare": "node scripts/prepare-release.mjs",
     "docs:sync-version": "node scripts/update-published-doc-versions.mjs --write",
     test: "node --test tests/pactium/*.test.mjs",
     "test:coverage": "node --test --experimental-test-coverage '--test-coverage-exclude=bin/**' --test-coverage-exclude=src/http.js --test-coverage-lines=95 --test-coverage-functions=95 --test-coverage-branches=90 tests/pactium/*.test.mjs",
@@ -247,6 +248,7 @@ async function verifyToolingSurface(files, findings) {
   }
   const expectedToolFiles = [
     "bin/pactium.mjs",
+    "scripts/prepare-release.mjs",
     "scripts/update-published-doc-versions.mjs",
     "scripts/verify-package-contents.mjs",
     "scripts/verify-pactium-hygiene.mjs",
@@ -301,6 +303,7 @@ async function verifyToolingSurface(files, findings) {
     ".github/workflows/ci.yml",
     ".github/workflows/publish.yml",
     "bin/pactium.mjs",
+    "scripts/prepare-release.mjs",
     "scripts/update-published-doc-versions.mjs",
     "scripts/verify-pactium-hygiene.mjs",
     "scripts/verify-protocol-gates.mjs",
