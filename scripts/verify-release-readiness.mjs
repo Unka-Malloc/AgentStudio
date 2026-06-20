@@ -79,12 +79,56 @@ function equalStableJson(left, right) {
   return JSON.stringify(stableJson(left)) === JSON.stringify(stableJson(right));
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function packageMinorLine(version) {
+  const match = /^(\d+)\.(\d+)\.\d+$/.exec(version);
+  if (!match) throw new Error(`Expected plain semver package version, got ${version}`);
+  return `${match[1]}.${match[2]}.x`;
+}
+
 async function readIfExists(relativePath) {
   try {
     return await readText(relativePath);
   } catch (error) {
     if (error?.code === "ENOENT") return "";
     throw error;
+  }
+}
+
+async function verifyPackageVersionDocs(findings) {
+  const packageJson = JSON.parse(await readText("package.json"));
+  const currentMinorLine = packageMinorLine(packageJson.version);
+  const security = await readIfExists("SECURITY.md");
+  const migration = await readIfExists("docs/MIGRATION.md");
+
+  if (!new RegExp(`\\|\\s*${escapeRegExp(currentMinorLine)}\\s*\\|\\s*Yes\\s*\\|`).test(security)) {
+    addFinding(
+      findings,
+      "SECURITY.md",
+      "missing_current_supported_version",
+      `Security policy must list the current package minor line ${currentMinorLine} as supported.`
+    );
+  }
+
+  if (!new RegExp(`\\|\\s*${escapeRegExp(currentMinorLine)}[^\\n]*\\^22\\.0\\.0[^\\n]*\\^24\\.0\\.0`).test(migration)) {
+    addFinding(
+      findings,
+      "docs/MIGRATION.md",
+      "missing_current_node_compatibility",
+      `Migration guide must list the current package minor line ${currentMinorLine} in Node.js compatibility.`
+    );
+  }
+
+  if (/###\s+Current:\s+v\d/i.test(migration)) {
+    addFinding(
+      findings,
+      "docs/MIGRATION.md",
+      "ambiguous_current_version_heading",
+      "Migration guide must distinguish package version from protocol/data format in current-version headings."
+    );
   }
 }
 
@@ -598,6 +642,7 @@ async function main() {
   await verifyDesignImplementationAnchors(findings);
   await verifyNodeLtsMatrix(findings);
   await verifyPublishWorkflow(findings);
+  await verifyPackageVersionDocs(findings);
   await verifyDocumentImplementationDrift(findings);
 
   if (findings.length > 0) {
