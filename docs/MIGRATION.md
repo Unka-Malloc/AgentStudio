@@ -6,9 +6,9 @@ This guide covers version compatibility, protocol stability, and upgrade guidanc
 
 Pactium follows [Semantic Versioning](https://semver.org/):
 
-- **Major** (1.0, 2.0) -- breaking changes to public API or protocol format
-- **Minor** (0.2, 0.3) -- new features, backward-compatible API additions
-- **Patch** (0.2.1, 0.2.2) -- bug fixes with no API or protocol changes
+- **Major** -- breaking changes to public API or protocol format
+- **Minor** -- new features and backward-compatible API additions
+- **Patch** -- bug fixes with no API or protocol changes
 
 During the `0.x` series, minor versions may include breaking changes. The protocol profile is locked per minor version.
 
@@ -28,7 +28,7 @@ During the `0.x` series, minor versions may include breaking changes. The protoc
 
 ### Current protocol/data format: v0.2.x
 
-Pactium 0.3.0 keeps the v0.2 protocol/data directory format and creates and manages its own data directory format. Key constraints:
+Pactium 0.3.x keeps the v0.2 protocol/data directory format and creates and manages its own data directory format. Key constraints:
 
 - **New directories only** -- Pactium does not read or migrate data from earlier experimental formats
 - **Latest schema only** -- there is no support for loading older schema versions
@@ -36,7 +36,7 @@ Pactium 0.3.0 keeps the v0.2 protocol/data directory format and creates and mana
 
 ### Upgrading between minor versions
 
-When upgrading from one minor version to the next (e.g., future 0.2.x to 0.3.x):
+When upgrading from one minor version to the next:
 
 1. Check the [CHANGELOG](../CHANGELOG.md) for breaking changes
 2. Create a fresh data directory for the new version if the protocol version changes
@@ -48,6 +48,7 @@ Pactium intentionally does not include automatic migration. Data directories are
 
 | Pactium version | Node.js requirement |
 | --- | --- |
+| 0.3.x | `^22.0.0 \|\| ^24.0.0` |
 | 0.2.x | `^22.0.0 \|\| ^24.0.0` |
 
 Pactium is pure ESM. It cannot be loaded via `require()`. If your project uses CommonJS, use dynamic `import()`:
