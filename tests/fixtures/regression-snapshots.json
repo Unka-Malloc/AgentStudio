@@ -85,7 +85,7 @@
   ],
   "declarations": {
     "src/index.d.ts": {
-      "sha256": "0803c2bcf4482fb42f8adcaf819820a12fb50c3adb426c7972bfad8bb7de1333",
+      "sha256": "333572a367a70928b7106d57e840624c7f21ef03fc2b9a8320d75044d978a217",
       "byteLength": 10652,
       "exportCount": 70
     },
@@ -140,7 +140,7 @@
   "proofBundle": {
     "ok": true,
     "bundleType": "pactium.proof-bundle.indexed",
-    "blockCount": 5,
+    "blockCount": 6,
     "criticalExtensions": [
       "licolite.policy",
       "licolite.workspaceEffect"

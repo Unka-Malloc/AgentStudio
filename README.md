@@ -45,18 +45,18 @@
 
 ## Why Pactium
 
-Most systems record operations into mutable databases and hope the data stays consistent. When something goes wrong -- a crash mid-write, a silent corruption, a disputed operation -- there is no cryptographic proof of what happened or didn't happen.
+Pactium is the protocol substrate for [LicoLite](https://github.com/Unka-Malloc). It exists to provide LicoLite with durable operation facts, append-only recovery history, and verifiable state -- capabilities that LicoLite's product requirements demand at the protocol level.
 
-Pactium solves this by making **every operation a verifiable fact**:
+Concretely, Pactium provides:
 
-- **Append-only ledger** -- operations cannot be silently rewritten or deleted
-- **Cryptographic proofs** -- every write returns a proof envelope that can be independently verified
-- **Portable verification** -- proof bundles can be verified offline without access to the original storage
-- **Workspace isolation** -- workspace-scoped projections with verifiable membership proofs
+- **Append-only operation ledger** -- records operation facts as immutable entries in a transparency log
+- **Cryptographic proofs** -- every write returns a proof envelope with inclusion and consistency proofs
+- **Portable verification** -- proof bundles can be verified without access to the original storage
+- **Workspace projection** -- verifiable workspace-scoped indexes with membership and non-membership proofs
 
-Pactium is a zero-dependency, pure-ESM Node.js package that provides a cryptographically verifiable protocol substrate. It records operation facts into an append-only transparency log, maintains verifiable indexes over workspace-scoped projections, and produces portable proof envelopes and bundles that can be independently verified without access to the original storage.
+Pactium is a zero-dependency, pure-ESM Node.js package. It records operation metadata into an append-only transparency log, maintains verifiable indexes, and produces proof envelopes and bundles. It does not replace databases, message queues, or other storage systems that a host might use for its own application data.
 
-Pactium is designed as the protocol substrate for [LicoLite](https://github.com/Unka-Malloc) and exposes a first-class integration surface at `pactium/licolite`.
+The first-class integration surface for LicoLite is at `pactium/licolite`.
 
 ## Design Philosophy
 
@@ -156,6 +156,8 @@ const envelope = await licolite.recordWorkspaceOperation({
 const result = await licolite.verifyEnvelope(envelope);
 console.log(result.ok); // true
 ```
+
+Production LicoLite mode requires an explicit `signer` or `signerSecret` when recording and verifying envelopes. Opportunistic mode is for local development and may use a development signer.
 
 ### Export and verify a portable proof bundle
 
@@ -292,6 +294,8 @@ pactium licolite verify --body-file ./licolite-envelope.json
 ```
 
 The CLI reads JSON from `--body`, `--body-file`, or stdin.
+
+`pactium serve` binds to `127.0.0.1` by default and enforces a 1 MiB JSON body limit. Use `--host`, `--max-body-bytes`, `PACTIUM_HTTP_HOST`, and `PACTIUM_HTTP_MAX_BODY_BYTES` only when the server is behind the host system's authentication, authorization, and transport security controls.
 
 ## Architecture
 

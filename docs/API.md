@@ -265,12 +265,26 @@ import {
 } from "pactium";
 
 // Verify that a leaf is included in the ledger at a given size
-const inclusion = createLedgerInclusionProof({ leafIndex, treeSize, hashes });
-const valid = verifyLedgerInclusionProof({ leafHash, treeSize, rootHash, proof: inclusion });
+const inclusion = createLedgerInclusionProof({
+  leafHashes,
+  index,
+  leaf
+});
+const valid = verifyLedgerInclusionProof({
+  head,
+  proof: inclusion
+});
 
 // Verify that a smaller ledger is a prefix of a larger one
-const consistency = createLedgerConsistencyProof({ oldSize, newSize, hashes });
-const valid = verifyLedgerConsistencyProof({ oldSize, newSize, oldRoot, newRoot, proof: consistency });
+const consistency = createLedgerConsistencyProof({
+  oldHead,
+  newEntries
+});
+const consistent = verifyLedgerConsistencyProof({
+  oldHead,
+  newHead,
+  proof: consistency
+});
 ```
 
 ---
@@ -288,23 +302,35 @@ import {
 
 // Create a verifier manifest describing the signing authority
 const manifest = createVerifierManifest({
-  signerId: "authority-1",
-  algorithm: "ed25519",
-  publicKey: publicKeyHex
+  signers: [{
+    signerId: "authority-1",
+    algorithm: "ed25519",
+    publicKey: publicKeyPem,
+    roles: ["ledger-head"]
+  }],
+  quorum: 1
 });
 
 // Sign a ledger head
-const signedHead = signLedgerHead(head, { signer, manifest });
+const signature = signLedgerHead(head, {
+  privateKey: privateKeyPem,
+  signerId: "authority-1",
+  manifest
+});
 
 // Verify signature
-const result = verifyLedgerHeadSignature(signedHead, manifest);
+const result = verifyLedgerHeadSignature(head, manifest, {
+  signatures: [signature]
+});
 // { ok: true/false, accepted: signatureCount }
 
 // Advance a local trust anchor
 const advanced = advanceTrustedHead({
-  lastTrusted: previousHead,
-  candidate: newHead,
-  consistencyProof: proof
+  oldHead: previousHead,
+  newHead,
+  proof: consistencyProof,
+  manifest,
+  signatures: [signature]
 });
 ```
 
@@ -425,6 +451,8 @@ await storage.putProtocolObject("ledger", "head", headValue);
 const head = await storage.getProtocolObject("ledger", "head");
 ```
 
+`resolveDataDir()` expands `~` to the current user's home directory. Protocol object scopes and keys are stored as path-safe tokens and cannot escape the Pactium data directory.
+
 ---
 
 ### Tracking Cursors and Append Conditions
@@ -481,7 +509,7 @@ const result = await engine.run("doctor");
 import {
   PACTIUM_PROTOCOL,           // "pactium.v0.2"
   PACTIUM_SCHEMA_VERSION,     // "pactium.v0.2.schema.latest"
-  PACTIUM_PACKAGE_VERSION,    // "0.2.1"
+  PACTIUM_PACKAGE_VERSION,    // "0.2.2"
   PACTIUM_INDEX_ENGINE,       // "pactium.verifiable-index-engine"
   PACTIUM_INDEX_SPLITTER,     // "pactium-cdc-boundary"
   PACTIUM_PROOF_BUNDLE_TYPE,  // "pactium.proof-bundle.indexed"
@@ -524,6 +552,8 @@ const licolite = createLicoLiteAspect({
 | `workspaceProjectionDefault` | `true` | Workspace projection always enabled |
 | `criticalExtensions` | `string[]` | Required critical extensions |
 | `signer` | `LicoLiteSigner \| null` | Signing authority |
+
+When `evidencePolicy` is `"production"`, recording and verification require an explicit `signer` or `signerSecret`; Pactium does not install a hidden production default signing key.
 
 ---
 
@@ -587,6 +617,8 @@ LicoLite-level verification that checks core proofs plus:
 const result = await licolite.verifyEnvelope(envelope);
 // { ok: true/false, failures: [...] }
 ```
+
+Production verification fails closed when the required LicoLite policy/effect extensions are not critical, when signature material is present without a configured verifier, or when no explicit verifier signer is configured.
 
 ---
 

@@ -2,21 +2,21 @@
 
 ## Objective
 
-Upgrade Pactium's Operation Ledger from the baseline full-history recomputation model to a compact RFC6962-style transparency log while preserving the proof-first API and latest-schema-only boundary.
+Document the current compact RFC6962-style Operation Ledger implementation. The optimization has been completed in `src/ledger/transparency-log.js` and `src/ledger/signed-head.js` while preserving the proof-first API and latest-schema-only boundary.
 
-## Baseline State
+## Current State
 
-At the start of this optimization pass, Pactium already used the correct transparency-log hash shape:
+Pactium now uses the transparency-log hash shape as the active ledger protocol:
 
-- `ledgerLeafHash(leaf)` hashes `0x00 || canonical(leaf)` in `src/ledger/transparency-log.js:7`.
-- `ledgerNodeHash(left,right)` hashes `0x01 || left || right` in `src/ledger/transparency-log.js:11`.
-- Inclusion proofs are generated through recursive subtree paths in `src/ledger/transparency-log.js:58`.
+- `ledgerLeafHash(leaf)` hashes `0x00 || canonical(leaf)` in `src/ledger/transparency-log.js`.
+- `ledgerNodeHash(left,right)` hashes `0x01 || left || right` in `src/ledger/transparency-log.js`.
+- Inclusion and consistency proof verification rejects malformed hash syntax, impossible sizes, wrong path direction, and unused or insufficient path elements.
+- Appends persist leaves, compact-range peaks, immutable heads, and compact tree nodes separately rather than rewriting a full ledger array.
+- Stored proof generation reads only required leaf/node records and emits `ledger.*.audit-path` proofs.
+- Ledger Heads are signed by default with a local Ed25519 signer unless the ledger is explicitly constructed with `signer: false`.
+- `verifyProofEnvelope` verifies embedded signed-head material when a verifier manifest is present in proof material or supplied by the caller.
 
-The algorithmic gap is consistency and append storage:
-
-- `rootHashFromLeafHashes` recursively recomputes from arrays (`src/ledger/transparency-log.js:25`).
-- `createLedgerConsistencyProof` stores `oldLeafHashes` and `newLeafHashes` (`src/ledger/transparency-log.js:87`).
-- `append` writes the entire `entries` object back through `save()` (`src/ledger/transparency-log.js:149`).
+The old full-history recomputation path and `oldLeafHashes`/`newLeafHashes` consistency transcript are not current behavior.
 
 ## Reference Signals
 
@@ -27,17 +27,18 @@ The algorithmic gap is consistency and append storage:
 | Rekor | `pkg/verify/verify.go:40`, `pkg/verify/verify.go:116`, `pkg/verify/verify.go:141` | Public clients verify consistency from a previous signed tree head and verify inclusion against a signed checkpoint. |
 | Hypercore | `lib/merkle-tree.js:149`, `lib/verifier.js:58` | Signed Merkle roots need a stable verifier identity/manifest, not just a hash. |
 
-## Target Model
+## Storage Model
 
-Add explicit ledger storage objects:
+The implementation stores explicit ledger protocol objects:
 
 | Object | Key | Contents |
 | --- | --- | --- |
-| `ledger/head/current` | singleton | `size`, `rootHash`, `root`, `headId`, `createdAt`, optional `signatureRef`, optional `witnessRefs`. |
-| `ledger/leaf/<index>` | by sequence number | `leaf`, `leafHash`, `factCid`, `factHash`, `timestamp`. |
-| `ledger/node/<level>/<index>` | by compact tree coordinates | `hash`, `leftRef`, `rightRef`, `size`, `level`, `createdAt`. |
-| `ledger/compact-range/current` | singleton | Minimal perfect-subtree hashes for the current size. |
-| `ledger/head/<headId>` | by hash-bound id | Immutable head snapshots for proof bundle export and consistency verification. |
+| `ledger/head-current` | singleton | Current `Ledger Head` with `size`, `rootHash`, `root`, `headId`, `previousHeadId`, `createdAt`, verifier manifest, and signatures when signing is enabled. |
+| `ledger-leaf/<index>` | by sequence number | Persisted entry, leaf, fact CID/hash, leaf hash, event id, and timestamp. |
+| `ledger-node/<level>-<index>` | by compact tree coordinates | Internal node hash plus left/right refs, child hashes, level, size, and creation metadata. |
+| `ledger/compact-range-current` | singleton | Minimal perfect-subtree peaks for the current ledger size. |
+| `ledger-head/<headId>` | by hash-bound id | Immutable head snapshots for proof bundle export and consistency verification. |
+| `ledger-signer/default` | singleton when auto signing is enabled | Local Ed25519 signer material and verifier manifest. |
 
 The existing JSON storage port can store these as protocol objects first. A later storage backend can make them append-only files or database rows without changing proof semantics.
 
@@ -77,91 +78,46 @@ The existing JSON storage port can store these as protocol objects first. A late
 
 The consistency proof must not include all leaf hashes. It contains only the RFC6962 audit path needed to derive both roots.
 
-## Implementation Plan
+## Current Implementation
 
-### Phase 1: Isolate The Hasher And Proof Verifier
+### Hasher And Proof Verifier
 
-1. Move `ledgerLeafHash`, `ledgerNodeHash`, and `emptyTreeHash` into a small `src/ledger/rfc6962-hasher.js`.
-2. Add proof-shape validation based on the transparency-dev/merkle behavior:
-   - reject `index >= size`;
-   - reject `size === 0` for inclusion;
-   - reject `oldSize > newSize`;
-   - reject empty-tree consistency proofs except the explicit `oldSize === 0` trust-bootstrap case;
-   - reject unused or insufficient path elements.
-3. Reject proof shapes outside the audit-path model so tests cover the current verifier contract.
+`ledgerLeafHash`, `ledgerNodeHash`, and `emptyTreeHash` remain in `src/ledger/transparency-log.js` and are exported through the package root. Verification accepts only the current audit-path proof shape and validates tree sizes, hash syntax, path direction, and complete path consumption.
 
-Acceptance: existing ledger tests pass, plus new negative tests for malformed proof size, proof length, and mismatched roots.
+### Leaves, Nodes, And Compact Range
 
-### Phase 2: Persist Leaves And Nodes Separately
+`append` writes the fact block, the authoritative `ledger-leaf/<index>` protocol object, any newly formed `ledger-node/<level>-<index>` records, `ledger/compact-range-current`, `ledger/head-current`, and immutable `ledger-head/<headId>`. Durable load reads the compact range and current head instead of reconstructing authority from a full entry list.
 
-1. Replace the singleton `operation-ledger` array write with per-leaf writes.
-2. Store `ledger/head/current` separately from leaf records.
-3. Retain `entries()` as an inspection API by reading leaves by index, not by returning an in-memory authority.
-4. Add `getLeaf(index)` and `getHead(headIdOrCurrent)`.
+`entries()` and `pageEntries({ start, limit })` remain inspection/read APIs. They read authoritative leaf records by index and fail closed if a required leaf is missing.
 
-Acceptance: appending N entries writes O(log N) node records plus one leaf and one head, not a full ledger rewrite.
+### Logarithmic Consistency Proofs
 
-### Phase 3: Add Compact Range Append
+`createConsistencyProof(oldHead, newHead)` emits `ledger.consistency.audit-path` proof material containing only the RFC6962 audit path plus old/new head refs. Stored-node proof generation fetches required leaf and internal node hashes through `rangeRoot`; proof bundles for new writes do not include unrelated historical leaf hashes.
 
-1. Implement `createCompactRange({ size, hashes })` with the same abstraction as transparency-dev/merkle `compact.Range`.
-2. On append, merge the new leaf hash into the compact range and emit newly formed internal nodes through a visitor callback.
-3. Persist only newly formed nodes and the updated compact range.
-4. Compute the new root from compact range peaks.
+### Signed Heads
 
-Acceptance: append complexity is O(log N) storage writes and O(log N) memory for the compact range.
-
-### Phase 4: Generate Logarithmic Consistency Proofs
-
-1. Add stored-node consistency proof generation for `{ oldHead, newHead }`.
-2. Fetch only the required audit nodes from stored `ledger/node/<level>/<index>` records.
-3. Verify by deriving roots from the audit path.
-4. Export both old and new head refs in proof material.
-
-Acceptance: proof byte size grows O(log N), and proof bundles for new writes do not include unrelated leaf hashes.
-
-### Phase 5: Signed Heads
-
-1. Define `ledger.head.signing` payload:
-   - protocol;
-   - schema;
-   - ledgerId;
-   - size;
-   - rootHash;
-   - root;
-   - previousHeadId;
-   - createdAt.
-2. Add an optional core signer interface using public-key algorithms first. Keep LicoLite HMAC as a host/development policy, not as the recommended portable signature.
-3. Bind `signatureRef` into `ledger/head/<headId>`.
-4. Add `verifyLedgerHeadSignature(head, verifierManifest)` and call it from bundle verification when a manifest is supplied.
-
-Acceptance: an offline verifier can validate "this root was signed by this trusted verifier identity" without LicoLite runtime state.
+The ledger auto-generates a local Ed25519 signer and verifier manifest by default. `signer: false` is the explicit unsigned mode. Custom signers can inject signer id, public/private key material, and a verifier manifest. `verifyLedgerHeadSignature` verifies manifest id/hash binding, signer role, unique signer quorum, canonical head payload hash, algorithm, and Ed25519 signature bytes.
 
 ## API Changes
 
-| API | Change |
+| API | Current behavior |
 | --- | --- |
 | `ledger.append(fact)` | Returns inclusion and consistency audit-path proofs. |
 | `ledger.head()` | Returns current head with `headId` and optional `signatureRef`. |
-| `ledger.getHead(id)` | New API for proof bundles and trusted-head advancement. |
+| `ledger.getHead(id)` | Returns current or immutable historical heads for proof bundles and trusted-head advancement. |
 | `ledger.verifyConsistency` | Verifies the audit-path consistency proof. |
 | `verifyProofEnvelope` | Verifies ledger proofs and optional signed head material through the proof verifier registry. |
 
-## Tests
+## Verification Coverage
 
 | Test | Purpose |
 | --- | --- |
-| RFC6962 fixed vectors | Prevent hash/path regressions. |
-| Random append/inclusion property tests | For each append, verify every sampled leaf against the current head. |
-| Random consistency property tests | Verify sampled old/new size pairs with audit-path proof and reject tampered paths. |
-| Bundle leakage test | Assert a new consistency proof does not include all historical leaf hashes. |
-| Storage write-count test | Assert append writes O(log N) ledger nodes after warm-up. |
-| Signed-head test | Verify valid signature, reject wrong key, wrong size, wrong root, and wrong previous head. |
+| RFC6962 tree-shape tests | Prevent hash/path regressions across power-of-two and non-power-of-two ledger sizes. |
+| Inclusion and consistency negative tests | Reject malformed hashes, impossible size pairs, tampered paths, empty-head bootstrap misuse, and forked histories. |
+| Bundle leakage tests | Assert consistency proofs do not include historical leaf hash transcripts. |
+| Missing authoritative leaf test | Assert proof generation and paging fail closed when required persisted leaf material is absent. |
+| Signed-head tests | Verify valid manifest/signature material and reject wrong signer, wrong role, duplicate signer quorum, wrong root, and wrong payload. |
 
-## Rollout
-
-1. Implement stored audit-path proof generation.
-2. Make verification accept only the current audit-path shape.
-3. Emit current proof material under the latest schema.
-4. Keep dependent tests and docs aligned to the current proof names.
+## Maintained Boundary
 
 Because Pactium currently rejects historical data directories, no in-place migration is required. Existing test fixtures can be regenerated under the latest protocol profile.

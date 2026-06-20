@@ -16,6 +16,9 @@ export function normalizeCanonicalValue(value) {
   }
   if (Array.isArray(value)) return value.map((item) => normalizeCanonicalValue(item));
   if (typeof value === "object") {
+    if (Object.hasOwn(value, "$bytes")) {
+      throw new TypeError("Pactium Canonical Value reserves $bytes for binary data.");
+    }
     return Object.fromEntries(
       Object.keys(value)
         .filter((key) => value[key] !== undefined)

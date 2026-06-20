@@ -45,18 +45,18 @@
 
 ## 为什么选择 Pactium
 
-大多数系统将操作记录到可变数据库中，期望数据保持一致。当出现问题时——写入中途崩溃、静默损坏、争议操作——没有密码学证据证明发生了什么或没有发生什么。
+Pactium 是 [LicoLite](https://github.com/Unka-Malloc) 的协议基底。它的存在是为了向 LicoLite 提供持久操作事实、仅追加恢复历史和可验证状态——这些是 LicoLite 的产品需求在协议层面所要求的能力。
 
-Pactium 通过使**每个操作成为可验证事实**来解决这个问题：
+具体来说，Pactium 提供：
 
-- **仅追加账本** -- 操作不能被静默改写或删除
-- **密码学证明** -- 每次写入都返回可独立验证的证明信封
-- **可移植验证** -- 证明包可以在无需访问原始存储的情况下离线验证
-- **工作空间隔离** -- 工作空间范围的投影，支持可验证的成员证明
+- **仅追加操作账本** -- 将操作事实记录为透明日志中的不可变条目
+- **密码学证明** -- 每次写入返回包含包含证明和一致性证明的证明信封
+- **可移植验证** -- 证明包可以在无需访问原始存储的情况下验证
+- **工作空间投影** -- 可验证的工作空间范围索引，支持成员和非成员证明
 
-Pactium 是一个零依赖的纯 ESM Node.js 包，提供密码学可验证的协议基底。它将操作事实记录到仅追加的透明日志中，维护工作空间范围的可验证索引投影，并生成可移植的证明信封和证明包，支持在无需访问原始存储的情况下独立验证。
+Pactium 是一个零依赖的纯 ESM Node.js 包。它将操作元数据记录到仅追加的透明日志中，维护可验证索引，并生成证明信封和证明包。它不替代数据库、消息队列或宿主系统用于自身应用数据的其他存储系统。
 
-Pactium 是 [LicoLite](https://github.com/Unka-Malloc) 的协议基底，通过 `pactium/licolite` 暴露一等集成界面。
+LicoLite 的一等集成界面位于 `pactium/licolite`。
 
 ## 设计哲学
 
@@ -157,6 +157,8 @@ const result = await licolite.verifyEnvelope(envelope);
 console.log(result.ok); // true
 ```
 
+LicoLite 生产模式在记录和验证信封时必须显式提供 `signer` 或 `signerSecret`。`opportunistic` 模式用于本地开发，可能使用开发签名器。
+
 ### 导出和验证可移植证明包
 
 ```js
@@ -229,6 +231,8 @@ pactium licolite verify --body-file ./licolite-envelope.json
 ```
 
 CLI 从 `--body`、`--body-file` 或标准输入读取 JSON。
+
+`pactium serve` 默认绑定 `127.0.0.1`，并强制 1 MiB JSON 请求体上限。只有在宿主系统提供认证、授权和传输安全控制时，才应使用 `--host`、`--max-body-bytes`、`PACTIUM_HTTP_HOST` 和 `PACTIUM_HTTP_MAX_BODY_BYTES` 暴露到非本机地址。
 
 ## 架构
 

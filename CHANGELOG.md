@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - 2026-06-20
+
+This patch release tightens proof verification, LicoLite production signing behavior, HTTP defaults, and release gates. It does not change the protocol version or public API shape.
+
+### Changed
+
+- Hardened proof-envelope semantic binding so verified ledger facts, append conditions, and state commits must agree with the proof material they reference.
+- Tightened LicoLite production mode to require explicit signer configuration and to fail closed when required LicoLite policy or workspace-effect extensions are not critical.
+- Defaulted the HTTP server and container examples to loopback-safe operation, with configurable JSON request body limits.
+- Strengthened package-content and release-readiness checks for the published npm artifact.
+
+### Fixed
+
+- Prevented attacker-controlled workspace IDs from polluting object prototypes in persisted core state.
+- Rejected reserved Canonical Value `$bytes` object keys until binary values have an explicit protocol representation.
+- Normalized cursor positions and `~` data-directory expansion for safer local operation.
+
 ## [0.2.1] - 2026-06-20
 
 This patch release expands the published documentation set and tightens release gates. It does not change the protocol format or public API behavior.
@@ -146,5 +163,6 @@ This is the first public release of Pactium as a proof-first protocol substrate.
 - Ed25519 signing support for Ledger Heads and LicoLite envelopes
 - Signed head verification with verifier manifest validation
 
+[0.2.2]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.2.2
 [0.2.1]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.2.0

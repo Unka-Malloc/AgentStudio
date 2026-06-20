@@ -35,11 +35,13 @@ import {
   covers,
   defaultPactiumDataDir,
   emptyTreeHash,
+  envelopeSigningHash,
   ledgerLeafHash,
   ledgerNodeHash,
   ledgerHeadSigningPayload,
   protocolHash,
   protocolHashHex,
+  resolveDataDir,
   resolveWithin,
   runPactiumQualityGateProfile,
   samePositionAs,
@@ -53,6 +55,7 @@ import {
   verifyTrackingCursor
 } from "../../src/index.js";
 import {
+  LICOLITE_SIGNATURE_EXTENSION,
   LICOLITE_POLICY_EXTENSION,
   LICOLITE_WORKSPACE_EFFECT_EXTENSION,
   createLicoLiteAspect,
@@ -145,6 +148,7 @@ describe("Pactium proof-first root API", () => {
     assert.match(protocolHashHex("proof.envelope", left), /^[a-f0-9]{64}$/);
     assert.match(protocolHashHex("raw-buffer", Buffer.from("raw")), /^[a-f0-9]{64}$/);
     assert.deepEqual(canonicalDecode(Buffer.from(canonicalString({ from: "string" }))), { from: "string" });
+    assert.throws(() => canonicalString({ $bytes: "YQ==" }), /reserves \$bytes/);
     assert.throws(() => canonicalEncode(Number.NaN), /finite numbers/);
   });
 
@@ -161,6 +165,11 @@ describe("Pactium proof-first root API", () => {
     assert.equal(walk.blockCount, 1);
     await reloaded.putProtocolObject("test", "object", { ok: true });
     assert.deepEqual(await reloaded.getProtocolObject("test", "object"), { ok: true });
+    await reloaded.putProtocolObject("..", "pactium-manifest", { escaped: true });
+    assert.deepEqual(await reloaded.getProtocolObject("default", "pactium-manifest"), { escaped: true });
+    const manifest = JSON.parse(await fs.readFile(path.join(dataDir, "pactium-manifest.json"), "utf8"));
+    assert.equal(manifest.latestSchemaOnly, true);
+    assert.equal(resolveDataDir("~/pactium-unit").startsWith(os.homedir()), true);
 
     const historicalDir = await tempDataDir("pactium-historical-");
     await fs.mkdir(path.join(historicalDir, "operation-ledger"), { recursive: true });
@@ -834,6 +843,11 @@ describe("Pactium proof-first root API", () => {
     });
     const seedMaterial = canonicalDecode((await pactium.storage.getBlock(seedEnvelope.proofRefs[0].cid)).bytes);
     const seedRoot = seedMaterial.proofs.state.root;
+    assert.equal(seedMaterial.proofs.stateCommit.mutationCount, 512);
+    assert.equal(seedMaterial.proofs.stateCommit.touchedKeyCount, 32);
+    assert.equal(seedMaterial.proofs.state.touchedKeyProofs.length, 32);
+    assert.equal(verifyIndexProof(seedMaterial.proofs.state.touchedKeyProofs.at(-1)), true);
+    assert.equal((await pactium.verifyEnvelope(seedEnvelope)).ok, true);
     const seedWrites = indexNodeWrites;
 
     const updateEnvelope = await pactium.recordOperation({
@@ -867,6 +881,20 @@ describe("Pactium proof-first root API", () => {
     const freshEngine = createVerifiableIndexEngine({ storage: pactium.storage, domain: "pactium" });
     assert.equal((await freshEngine.readIndexRoot(deleteMaterial.proofs.state.root)).root, deleteMaterial.proofs.state.root);
     assert.equal(verifyIndexProof(await freshEngine.prove(deleteMaterial.proofs.state.root, "state:0256")), true);
+  });
+
+  it("keeps attacker-chosen workspace ids out of object prototypes", async () => {
+    const pactium = createPactium({ inMemory: true });
+    await pactium.recordOperation({
+      operationId: "workspace.prototype.pollution",
+      workspaceId: "__proto__",
+      stateMutations: [{ key: "polluted", value: { ok: true } }]
+    });
+    assert.equal(Object.prototype.nextOrdinal, undefined);
+    assert.equal(Object.prototype.polluted, undefined);
+    const projection = await pactium.getWorkspaceProjection("__proto__");
+    assert.equal(projection.workspaceId, "__proto__");
+    assert.equal(projection.nextOrdinal, 2);
   });
 
   it("supports append conditions, tracking cursors, recovery plans, and trusted head advancement", async () => {
@@ -952,7 +980,7 @@ describe("Pactium proof-first root API", () => {
     assert.equal(createTrackingCursor({ scope: "workspace" }).workspaceId, "default");
     const advancedCursor = advanceTo(manualCursor, 3, { gaps: [1], headRef: ledgerPage.head.headId });
     assert.equal(covers(advancedCursor, 1), false);
-    assert.equal(covers(advancedCursor, 3), true);
+    assert.equal(covers(advancedCursor, 3), false);
     assert.equal(advanceTo(advancedCursor, 2).position, 3);
     assert.equal(covers({ position: 0, gaps: [] }, 1), false);
     assert.equal(samePositionAs(advancedCursor, createTrackingCursor({
@@ -971,6 +999,14 @@ describe("Pactium proof-first root API", () => {
       ...manualCursor,
       cursorId: "tracking_cursor_bad"
     }, { head: ledgerPage.head }), false);
+    assert.equal(verifyTrackingCursor({
+      ...manualCursor,
+      position: 0.5
+    }, { head: ledgerPage.head }), false);
+    assert.equal((await pactium.getLedgerCursor({
+      fromCursor: { ...manualCursor, position: 0.5 },
+      limit: 1
+    })).entries[0].index, 0);
     assert.equal(verifyTrackingCursor(null), false);
     assert.equal(verifyTrackingCursor(createTrackingCursor({
       scope: "ledger",
@@ -1650,6 +1686,74 @@ console.log(JSON.stringify({ oldExportMissing, protocol: envelope.protocol, ok: 
     assert.equal((await maintenance.runTask(maintenance.planTask("seal", {}))).result.plannedOnly, true);
   });
 
+  it("rejects proof semantic rebinding attacks", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const proofMaterialFor = async (envelope) =>
+      canonicalDecode((await pactium.storage.getBlock(envelope.proofRefs[0].cid)).bytes);
+    const envelopeWithProofBlock = (envelope, block) => ({
+      ...envelope,
+      proofRefs: [{
+        ...envelope.proofRefs[0],
+        cid: block.cid,
+        payloadHash: block.payloadHash,
+        byteLength: block.byteLength
+      }]
+    });
+
+    const first = await pactium.recordOperation({
+      operationId: "semantic.state.first",
+      workspaceId: "semantic-bind",
+      stateMutations: [{ key: "setting", value: { version: 1 } }]
+    });
+    const second = await pactium.recordOperation({
+      operationId: "semantic.state.second",
+      workspaceId: "semantic-bind",
+      stateMutations: [{ key: "setting", value: { version: 2 } }]
+    });
+    const firstMaterial = await proofMaterialFor(first);
+    const secondMaterial = await proofMaterialFor(second);
+    const reboundStateMaterial = structuredClone(firstMaterial);
+    reboundStateMaterial.proofs.state = structuredClone(secondMaterial.proofs.state);
+    reboundStateMaterial.proofs.stateCommit = {
+      ...reboundStateMaterial.proofs.stateCommit,
+      stateRoot: secondMaterial.proofs.stateCommit.stateRoot,
+      mutations: structuredClone(secondMaterial.proofs.stateCommit.mutations),
+      mutationKeys: [...secondMaterial.proofs.stateCommit.mutationKeys],
+      mutationActions: [...secondMaterial.proofs.stateCommit.mutationActions],
+      mutationCount: secondMaterial.proofs.stateCommit.mutationCount,
+      touchedKeyCount: secondMaterial.proofs.stateCommit.touchedKeyCount
+    };
+    const reboundStateBlock = await pactium.storage.putBlock(reboundStateMaterial, {
+      kind: "proof-material:ledger-and-index-proofs",
+      refs: [firstMaterial.ledger.inclusionProof.leaf.factCid]
+    });
+    const reboundState = await pactium.verifyEnvelope(envelopeWithProofBlock(first, reboundStateBlock));
+    assert.ok(reboundState.failures.some((failure) => failure.code === "bad_state_commit_binding"));
+
+    const head = await pactium.ledger.head();
+    const appendCondition = createAppendCondition({
+      workspaceId: "semantic-append",
+      requiredLedgerHead: head.headId
+    });
+    const conditioned = await pactium.beginOperationIntent({
+      operationId: "semantic.append.condition",
+      workspaceId: "semantic-append",
+      appendCondition
+    });
+    const conditionedMaterial = await proofMaterialFor(conditioned);
+    const reboundConditionMaterial = structuredClone(conditionedMaterial);
+    reboundConditionMaterial.appendCondition = createAppendCondition({
+      workspaceId: "semantic-append",
+      requiredLedgerHead: "ledger_head_attacker"
+    });
+    const reboundConditionBlock = await pactium.storage.putBlock(reboundConditionMaterial, {
+      kind: "proof-material:ledger-and-index-proofs",
+      refs: [conditionedMaterial.ledger.inclusionProof.leaf.factCid]
+    });
+    const reboundCondition = await pactium.verifyEnvelope(envelopeWithProofBlock(conditioned, reboundConditionBlock));
+    assert.ok(reboundCondition.failures.some((failure) => failure.code === "bad_append_condition_binding"));
+  });
+
   it("covers LicoLite verifier failure modes and convenience exports", async () => {
     const pactium = createPactium({ inMemory: true });
     const licolite = createLicoLiteAspect({
@@ -1669,6 +1773,22 @@ console.log(JSON.stringify({ oldExportMissing, protocol: envelope.protocol, ok: 
       workspaceId: "unsigned"
     });
     assert.ok((await noSignerAspect.verifyEnvelope(unsigned)).failures.some((failure) => failure.code === "missing_signature"));
+    const fakeSignature = await noSignerAspect.core.createExtension({
+      name: LICOLITE_SIGNATURE_EXTENSION,
+      critical: false,
+      value: {
+        protocol: "pactium.v0.2.licolite-aspect",
+        signerId: "fake",
+        algorithm: "hmac-sha256",
+        signedEnvelopeHash: envelopeSigningHash(unsigned),
+        signature: "fake"
+      }
+    });
+    const fakeSigned = await noSignerAspect.core.storeEnvelope({
+      ...unsigned,
+      extensions: [...unsigned.extensions, fakeSignature]
+    });
+    assert.ok((await noSignerAspect.verifyEnvelope(fakeSigned)).failures.some((failure) => failure.code === "signature_verifier_unconfigured"));
     const customSigner = {
       async sign(message) {
         return `plain:${message}`;
@@ -1705,8 +1825,19 @@ console.log(JSON.stringify({ oldExportMissing, protocol: envelope.protocol, ok: 
       policyEvidence: { allow: true },
       workspaceEffectEvidence: { ref: "effect" }
     });
+    const productionNoVerifier = createLicoLiteAspect({ pactium, evidencePolicy: "production" });
+    assert.ok((await productionNoVerifier.verifyEnvelope(envelope)).failures.some((failure) => failure.code === "missing_signature_verifier"));
     const noSignature = { ...envelope, extensions: envelope.extensions.filter((extension) => extension.name !== "licolite.signature") };
     assert.ok((await licolite.verifyEnvelope(noSignature)).failures.some((failure) => failure.code === "missing_signature"));
+    const downgradedRequiredExtension = {
+      ...envelope,
+      criticalExtensions: [],
+      extensions: envelope.extensions.map((extension) =>
+        extension.name === LICOLITE_POLICY_EXTENSION || extension.name === LICOLITE_WORKSPACE_EFFECT_EXTENSION
+          ? { ...extension, critical: false }
+          : extension)
+    };
+    assert.ok((await licolite.verifyEnvelope(downgradedRequiredExtension)).failures.some((failure) => failure.code === "noncritical_required_extension"));
     const missingSignatureMaterial = {
       ...envelope,
       extensions: envelope.extensions.map((extension) => extension.name === "licolite.signature"
@@ -1714,42 +1845,42 @@ console.log(JSON.stringify({ oldExportMissing, protocol: envelope.protocol, ok: 
         : extension)
     };
     assert.ok((await licolite.verifyEnvelope(missingSignatureMaterial)).failures.some((failure) => failure.code === "missing_signature_material"));
-	    const tampered = { ...envelope, relatedEnvelopeIds: ["tampered"] };
-	    assert.ok((await licolite.verifyEnvelope(tampered)).failures.some((failure) => failure.code === "bad_signed_envelope_hash"));
-	    const missingEvidenceRef = {
-	      ...envelope,
-	      extensions: envelope.extensions.map((extension) => extension.name === LICOLITE_POLICY_EXTENSION
-	        ? { ...extension, valueRef: "cid:sha256:3".padEnd(75, "3"), metadata: {} }
-	        : extension)
-	    };
-	    assert.ok((await licolite.verifyEnvelope(missingEvidenceRef)).failures.some((failure) => failure.code === "missing_evidence_ref"));
-	    const policyExtension = envelope.extensions.find((extension) => extension.name === LICOLITE_POLICY_EXTENSION);
-	    const policyBlock = await pactium.storage.getBlock(policyExtension.valueRef);
-	    const badPolicyBlock = await pactium.storage.putBlock({
-	      ...canonicalDecode(policyBlock.bytes),
-	      evidenceHash: `sha256:${"0".repeat(64)}`
-	    }, { kind: "proof-extension:licolite.policy" });
-	    const badEvidenceHash = {
-	      ...envelope,
-	      extensions: envelope.extensions.map((extension) => extension.name === LICOLITE_POLICY_EXTENSION
-	        ? { ...extension, valueRef: badPolicyBlock.cid, valueHash: badPolicyBlock.payloadHash }
-	        : extension)
-	    };
-	    assert.ok((await licolite.verifyEnvelope(badEvidenceHash)).failures.some((failure) => failure.code === "bad_evidence_hash"));
-	    const algorithmKeys = crypto.generateKeyPairSync("ed25519");
-	    const wrongAlgorithm = createLicoLiteAspect({
-	      pactium,
-	      signer: createLicoLiteSigner({
-	        signerId: "licolite-local",
-	        algorithm: "ed25519",
-	        publicKey: algorithmKeys.publicKey.export({ type: "spki", format: "pem" })
-	      }),
-	      evidencePolicy: "opportunistic"
-	    });
-	    assert.ok((await wrongAlgorithm.verifyEnvelope(envelope)).failures.some((failure) => failure.code === "bad_signature_algorithm"));
-	    const wrongSigner = createLicoLiteAspect({
-	      pactium,
-	      signer: createLicoLiteSigner({ secret: "wrong" }),
+    const tampered = { ...envelope, relatedEnvelopeIds: ["tampered"] };
+    assert.ok((await licolite.verifyEnvelope(tampered)).failures.some((failure) => failure.code === "bad_signed_envelope_hash"));
+    const missingEvidenceRef = {
+      ...envelope,
+      extensions: envelope.extensions.map((extension) => extension.name === LICOLITE_POLICY_EXTENSION
+        ? { ...extension, valueRef: "cid:sha256:3".padEnd(75, "3"), metadata: {} }
+        : extension)
+    };
+    assert.ok((await licolite.verifyEnvelope(missingEvidenceRef)).failures.some((failure) => failure.code === "missing_evidence_ref"));
+    const policyExtension = envelope.extensions.find((extension) => extension.name === LICOLITE_POLICY_EXTENSION);
+    const policyBlock = await pactium.storage.getBlock(policyExtension.valueRef);
+    const badPolicyBlock = await pactium.storage.putBlock({
+      ...canonicalDecode(policyBlock.bytes),
+      evidenceHash: `sha256:${"0".repeat(64)}`
+    }, { kind: "proof-extension:licolite.policy" });
+    const badEvidenceHash = {
+      ...envelope,
+      extensions: envelope.extensions.map((extension) => extension.name === LICOLITE_POLICY_EXTENSION
+        ? { ...extension, valueRef: badPolicyBlock.cid, valueHash: badPolicyBlock.payloadHash }
+        : extension)
+    };
+    assert.ok((await licolite.verifyEnvelope(badEvidenceHash)).failures.some((failure) => failure.code === "bad_evidence_hash"));
+    const algorithmKeys = crypto.generateKeyPairSync("ed25519");
+    const wrongAlgorithm = createLicoLiteAspect({
+      pactium,
+      signer: createLicoLiteSigner({
+        signerId: "licolite-local",
+        algorithm: "ed25519",
+        publicKey: algorithmKeys.publicKey.export({ type: "spki", format: "pem" })
+      }),
+      evidencePolicy: "opportunistic"
+    });
+    assert.ok((await wrongAlgorithm.verifyEnvelope(envelope)).failures.some((failure) => failure.code === "bad_signature_algorithm"));
+    const wrongSigner = createLicoLiteAspect({
+      pactium,
+      signer: createLicoLiteSigner({ secret: "wrong" }),
       evidencePolicy: "opportunistic"
     });
     assert.ok((await wrongSigner.verifyEnvelope(envelope)).failures.some((failure) => failure.code === "bad_signature"));
@@ -1761,11 +1892,19 @@ console.log(JSON.stringify({ oldExportMissing, protocol: envelope.protocol, ok: 
       workspaceId: "standalone",
       policyEvidence: { ok: true },
       workspaceEffectEvidence: { ok: true }
-    }, { pactium: standalone, evidencePolicy: "production" });
-    assert.equal((await verifyLicoLiteEnvelope(standaloneEnvelope, { pactium: standalone })).ok, true);
+    }, { pactium: standalone, evidencePolicy: "production", signerSecret: "standalone" });
+    assert.equal((await verifyLicoLiteEnvelope(standaloneEnvelope, {
+      pactium: standalone,
+      evidencePolicy: "production",
+      signerSecret: "standalone"
+    })).ok, true);
     const standaloneBundle = await standalone.exportProofBundle(standaloneEnvelope);
     assert.equal(standaloneBundle.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
-    assert.equal((await verifyLicoLiteBundle(standaloneBundle, { pactium: standalone })).ok, true);
+    assert.equal((await verifyLicoLiteBundle(standaloneBundle, {
+      pactium: standalone,
+      evidencePolicy: "production",
+      signerSecret: "standalone"
+    })).ok, true);
   });
 
   it("covers remaining HTTP and CLI public surfaces", async () => {
@@ -1773,8 +1912,29 @@ console.log(JSON.stringify({ oldExportMissing, protocol: envelope.protocol, ok: 
     try {
       const health = await requestJson({ port: started.server.address().port, requestPath: "/health" });
       assert.equal(health.body.ok, true);
+      assert.equal(Object.hasOwn(health.body, "dataDir"), false);
+      assert.equal(started.host, "127.0.0.1");
+      assert.equal(started.maxBodyBytes, 1024 * 1024);
     } finally {
       await close(started.server);
+    }
+
+    const limitedServer = createPactiumHttpServer({
+      pactium: createPactium({ inMemory: true }),
+      maxBodyBytes: 32
+    });
+    const limitedAddress = await listen(limitedServer);
+    try {
+      const tooLarge = await requestJson({
+        port: limitedAddress.port,
+        method: "POST",
+        requestPath: "/operations",
+        body: { operationId: "x".repeat(128) }
+      });
+      assert.equal(tooLarge.statusCode, 413);
+      assert.equal(tooLarge.body.code, "request_body_too_large");
+    } finally {
+      await close(limitedServer);
     }
 
     const pactium = createPactium({ inMemory: true });

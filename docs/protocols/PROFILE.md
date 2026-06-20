@@ -105,7 +105,7 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | --- | --- |
 | Export path | `pactium/licolite` |
 | Workspace projection | Enabled by default, first priority |
-| Signing | Enabled by default; missing signer behavior is LicoLite policy |
+| Signing | Enabled by default; production recording and verification require an explicit signer or signerSecret |
 | Policy evidence | Critical LicoLite Policy Extension |
 | Workspace effect evidence | Critical LicoLite Workspace Effect Extension |
 | Verifier | Required LicoLite Verifier |

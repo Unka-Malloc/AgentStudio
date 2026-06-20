@@ -2,20 +2,25 @@
 
 ## Objective
 
-Strengthen Pactium's operation lifecycle without moving host responsibilities into Pactium. The target is better replay, recovery, and concurrency semantics for LicoLite hosts while preserving Pactium as a proof substrate.
+Document the current operation lifecycle implementation without moving host responsibilities into Pactium. Pactium provides replay, recovery, append-condition, cursor, and trusted-head semantics for LicoLite hosts while remaining a proof substrate.
 
-## Baseline State
+## Current State
 
-At the start of this optimization pass, Pactium already had a useful lifecycle model:
+Pactium's current lifecycle model includes:
 
-- Operation Intent is recorded by `beginOperationIntent` (`src/core/pactium-core.js:224`).
-- Operation Outcome is recorded by `appendOperationOutcome` (`src/core/pactium-core.js:327`).
-- `recordOperation` composes intent and outcome (`src/core/pactium-core.js:494`).
-- Intent idempotency and outcome idempotency are separate (`src/core/pactium-core.js:36`, `src/core/pactium-core.js:45`).
-- Exactly one terminal outcome per intent is enforced (`src/core/pactium-core.js:346`).
-- Workspace projection is updated synchronously with ledger append (`src/core/pactium-core.js:109`).
+- Operation Intent recording through `beginOperationIntent`.
+- Operation Outcome recording through `appendOperationOutcome`.
+- `recordOperation` as a convenience composition of intent plus outcome.
+- Separate Intent Idempotency and Outcome Idempotency indexes.
+- Conflict rejection when an idempotency key is reused with different input or output identity.
+- Exactly one terminal outcome per intent.
+- Synchronous Workspace Projection updates during operation commits.
+- Append conditions checked before ledger append.
+- Tracking cursors for global ledger and workspace projection pages.
+- Trusted-head advancement with ledger consistency and optional signed-head verification.
+- Recovery planning that returns deterministic non-executing tasks.
 
-The baseline model was good for proof receipts, but hosts still needed clearer recovery cursors, append conditions, and durable effect boundaries. The lifecycle/cursor pieces are now implemented; host side effects remain intentionally outside Pactium.
+Host side effects remain intentionally outside Pactium.
 
 ## Reference Signals
 
@@ -26,11 +31,11 @@ The baseline model was good for proof receipts, but hosts still needed clearer r
 | Axon GapAwareTrackingToken | `GapAwareTrackingToken.java:61`, `GapAwareTrackingToken.java:120`, `GapAwareTrackingToken.java:208`, `GapAwareTrackingToken.java:284` | Recovery cursors need to model gaps, advancement, coverage, and position. |
 | Rekor/Trillian | Rekor `pkg/verify/verify.go:40`, Trillian `client/log_verifier.go:57` | Trusted-head advancement should be explicit, not implied by "latest local state". |
 
-## Target Concepts
+## Current Concepts
 
 ### Append Condition
 
-Add a protocol object that lets a host declare what it believes before appending:
+`createAppendCondition` creates a protocol object that lets a host declare what it believes before appending:
 
 ```js
 {
@@ -48,7 +53,7 @@ This is not a lock. It is a verifiable precondition. If the current ledger/proje
 
 ### Tracking Cursor
 
-Add a cursor for workspace projection and global ledger consumption:
+`createTrackingCursor` creates a cursor for workspace projection and global ledger consumption:
 
 ```js
 {
@@ -62,11 +67,11 @@ Add a cursor for workspace projection and global ledger consumption:
 }
 ```
 
-For Pactium, `gaps` should be rare because the local ledger append lane is ordered. It is still useful when hosts import bundles, resume from partial proof material, or process workspace projections asynchronously.
+For Pactium, `gaps` are usually empty because the local ledger append lane is ordered. They remain part of the cursor shape for imported bundles, partial proof material, or asynchronous host projection workflows.
 
 ### Trusted Head Store
 
-Hosts should be able to store and advance trusted heads:
+Hosts can store and advance trusted heads:
 
 ```js
 {
@@ -78,79 +83,78 @@ Hosts should be able to store and advance trusted heads:
 }
 ```
 
-The store belongs to the host or embedding application. Pactium provides verification and advancement helpers.
+The store belongs to the host or embedding application. Pactium provides verification and advancement helpers through `advanceTrustedHead`.
 
-## API Additions
+## API Surface
 
 | API | Owner | Purpose |
 | --- | --- | --- |
 | `createAppendCondition(input)` | Pactium | Canonicalizes host preconditions. |
 | `recordOperation({ appendCondition, ... })` | Pactium | Rejects writes when lifecycle/projection state no longer matches the condition. |
-| `getLedgerCursor({ fromHead, limit })` | Pactium | Returns ordered ledger facts and next cursor. |
+| `getLedgerCursor({ fromCursor, position, limit })` | Pactium | Returns ordered ledger facts and next cursor. |
 | `getWorkspaceCursor({ workspaceId, fromCursor, limit })` | Pactium | Returns workspace projection entries and next cursor. |
 | `advanceTrustedHead({ oldHead, newHead, proof, manifest })` | Pactium | Verifies consistency/signature and returns a new trusted head. |
 | `planRecovery({ cursor, failures })` | Pactium | Produces deterministic repair/replay tasks without executing host side effects. |
 
 ## Host Boundary Rules
 
-| Boundary | Pactium should own | LicoLite/host should own |
+| Boundary | Pactium owns | LicoLite/host owns |
 | --- | --- | --- |
 | Operation facts | Canonical Intent/Outcome facts, ids, hashes, proof envelopes. | Deciding what operation means and when to dispatch side effects. |
 | Append condition | Verifying declared preconditions against current proofs. | Choosing which preconditions matter for the workflow. |
 | Host evidence | Hash-binding and critical extension verification. | Durable storage, retention, authorization, and policy semantics. |
 | Recovery | Proof-safe cursors and deterministic plans. | Re-running business workflows, restoring side-effect evidence, operator UX. |
-| Repair | Derived index rebuild proof and repair fact schema later. | Deciding whether and when to execute repairs. |
+| Repair | Structured failure classification and deterministic repair planning. | Deciding whether and when to execute repairs; any future repair executor. |
 
-## Implementation Plan
+## Current Implementation
 
-### Phase 1: Append Conditions
+### Append Conditions
 
-1. Add `src/core/append-condition.js`.
-2. Canonicalize and hash append condition payloads.
-3. In `beginOperationIntent`, check:
+1. `src/core/append-condition.js` canonicalizes and hashes append condition payloads.
+2. `beginOperationIntent` checks:
    - required ledger head equals current head when provided;
    - required open-intent state matches current `lookupOpenIntent`;
    - required workspace roots match current workspace projection.
-4. In `appendOperationOutcome`, check:
+3. `appendOperationOutcome` checks:
    - intent exists;
    - terminal outcome absent unless idempotency replay applies;
    - required outcome state matches current `lookupOutcome`;
    - required causality refs are known or explicitly allowed missing.
-5. Bind the append condition hash into proof material.
+4. The append condition hash is bound into proof material and checked during envelope semantic verification.
 
-Acceptance: conflicting writes fail before ledger append and produce structured verification failures.
+Conflicting writes fail before ledger append and produce structured verification failures.
 
-### Phase 2: Cursors
+### Cursors
 
-1. Add ledger cursor read over `ledger/leaf/<index>` after the ledger storage optimization.
-2. Add workspace cursor read over `workspace-order` index.
-3. Include `headRef` and root proofs with every cursor page.
-4. Add `covers`, `advanceTo`, and `samePositionAs` helpers inspired by Axon's tracking token behavior.
+1. Ledger cursors page through `ledger.pageEntries({ start, limit })`.
+2. Workspace cursors page through the `workspace-order` index with bounded `indexEngine.scan`.
+3. Cursor pages include the current head and cursor `headRef`.
+4. Workspace cursor pages include order proofs for returned entries.
+5. `verifyTrackingCursor` validates cursor hash bindings against context.
 
-Acceptance: a host can resume projection processing from a cursor without scanning the whole workspace index.
+Hosts can resume projection processing from a cursor without scanning the whole workspace index.
 
-### Phase 3: Trusted Head Advancement
+### Trusted Head Advancement
 
-1. Add `advanceTrustedHead`.
-2. Verify consistency proof from old to new head.
-3. Verify new head signature if a manifest is provided.
-4. Return the advanced trusted head object for host storage.
+1. `advanceTrustedHead` verifies consistency proof from old to new head.
+2. It verifies new head signatures if a manifest is provided.
+3. It returns the advanced trusted head object for host storage.
 
-Acceptance: offline bundle verification and host sync can use explicit trust advancement rather than "latest local head".
+Offline bundle verification and host sync can use explicit trust advancement rather than "latest local head".
 
-### Phase 4: Recovery Planning
+### Recovery Planning
 
-1. Extend `createRepairPlanner` to accept cursor context and lifecycle state.
-2. Keep tasks deterministic and non-executing.
-3. Add plan types:
+1. `createRepairPlanner` accepts cursor context and lifecycle state.
+2. Tasks are deterministic and non-executing.
+3. Plan types include:
    - `resume-open-intent`;
    - `restore-missing-proof-material`;
    - `rebuild-derived-index`;
    - `request-host-evidence`;
    - `manual-conflict-resolution`.
-4. Do not append repair facts until a separate repair executor exists.
+4. Repair Facts are not appended because no repair executor exists.
 
-Acceptance: recovery plans explain what is missing and who owns the next action without inventing facts.
+Recovery plans explain what is missing and who owns the next action without inventing facts.
 
 ## Tests
 

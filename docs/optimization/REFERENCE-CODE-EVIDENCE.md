@@ -1,6 +1,6 @@
 # Reference Code Evidence
 
-This file records the external code and official documentation used for the Pactium algorithm comparison. Repositories were downloaded under `/tmp/pactium-reference-repos` and inspected directly on 2026-06-19. The Pactium anchors below are the optimization baseline captured before the implementation pass; current status is tracked in [Implementation Status](IMPLEMENTATION-STATUS.md).
+This file records the external code and official documentation used for the Pactium algorithm comparison. Repositories were downloaded under `/tmp/pactium-reference-repos` and inspected directly on 2026-06-19. The Pactium anchors below describe the current implementation after the optimization pass; current status is tracked in [Implementation Status](IMPLEMENTATION-STATUS.md).
 
 ## Downloaded Repositories
 
@@ -27,18 +27,18 @@ This file records the external code and official documentation used for the Pact
 | Axon Framework reference | https://docs.axoniq.io/axon-framework-reference/4.12/ | Confirms Axon is an event-driven framework around DDD, CQRS, and event sourcing. |
 | immudb README | https://github.com/codenotary/immudb | Used only to understand product positioning; current repository license makes it unsuitable for code reuse. |
 
-## Pactium Baseline Anchors
+## Pactium Current Implementation Anchors
 
-| Pactium area | Baseline implementation anchors | Evidence summary |
+| Pactium area | Current implementation anchors | Evidence summary |
 | --- | --- | --- |
 | Architecture and intent | `docs/architecture/ARCHITECTURE.md:1`, `docs/protocols/PROFILE.md:1`, `docs/protocols/PROTOCOLS.md:1` | Pactium is proof-first, LicoLite-oriented, latest-schema-only, and host-owned for runtime policy/effects. |
-| Ledger | `src/ledger/transparency-log.js:7`, `src/ledger/transparency-log.js:25`, `src/ledger/transparency-log.js:87`, `src/ledger/transparency-log.js:149` | Leaf/node prefixes match RFC6962 style, but roots and consistency proofs are rebuilt from full leaf hash arrays. |
-| Index | `src/index-engine/snapshot-merkle-index.js:20`, `src/index-engine/snapshot-merkle-index.js:71`, `src/index-engine/snapshot-merkle-index.js:112`, `src/index-engine/snapshot-merkle-index.js:259` | Pairwise Merkle layers over full snapshots; chunk boundaries are metadata only; mutation and diff rebuild/scan full snapshots. |
-| Core lifecycle | `src/core/pactium-core.js:224`, `src/core/pactium-core.js:327`, `src/core/pactium-core.js:494` | Intent/outcome lifecycle, idempotency replay, one terminal outcome per intent. |
-| Proof envelope | `src/proof/envelope.js:91`, `src/proof/envelope.js:197`, `src/proof/envelope.js:229` | Verifies envelope identity, proof refs, extensions, ledger inclusion, and ledger consistency. It does not verify embedded index proofs. |
-| Proof bundle | `src/core/pactium-core.js:563`, `src/proof/bundle.js:6` | Exports direct proof/extension refs and walked blocks as JSON; verifies required direct blocks and delegates to envelope verification. |
-| Storage | `src/storage/local-json-storage-port.js:103`, `src/storage/local-json-storage-port.js:153`, `src/storage/local-json-storage-port.js:175` | JSON CAS records, DFS by `refs`, protocol objects, latest-schema-only directory boundary. |
-| LicoLite | `src/aspects/licolite/aspect.js:56`, `src/aspects/licolite/aspect.js:89`, `src/aspects/licolite/aspect.js:146` | Production evidence policy, critical extensions, default signing, LicoLite-level verifier. |
+| Ledger | `src/ledger/transparency-log.js`, `src/ledger/signed-head.js` | RFC6962-style leaf/node prefixes, stored leaves/nodes/compact ranges, audit-path inclusion and consistency proofs, Ed25519 signed heads, verifier manifests, and trusted-head advancement. |
+| Index | `src/index-engine/snapshot-merkle-index.js` | Content-addressed Canonical Prolly nodes, metadata-only roots, membership and non-membership Prolly-path proofs, local leaf-window mutation, bounded scan/prefix, and shared-node diff. |
+| Core lifecycle | `src/core/pactium-core.js` | Intent/outcome lifecycle, idempotency replay, idempotency conflict rejection, causality proofs, one terminal outcome per intent, append conditions, cursors, and recovery planning. |
+| Proof envelope | `src/proof/envelope.js`, `src/proof/registry.js` | Verifies envelope identity, proof refs, extensions, ledger inclusion, ledger consistency, signed heads, semantic bindings, and embedded index/ledger proof material through the registry. |
+| Proof bundle | `src/core/pactium-core.js`, `src/proof/bundle.js`, `src/proof/bundle-format.js` | Exports indexed binary record streams with required block manifests, offset metadata, duplicate detection, size limits, lazy required-block reads, and optional full archive verification. |
+| Storage | `src/storage/local-json-storage-port.js` | JSON protocol object backend plus content-addressed block records, DFS by `refs`, latest-schema-only directory boundary, write locking, cache refresh, and in-memory pruning helpers. |
+| LicoLite | `src/aspects/licolite/aspect.js`, `src/aspects/licolite/signing.js`, `src/aspects/licolite/evidence.js` | Production evidence policy, critical policy/effect extensions, canonical evidence decoding, HMAC or Ed25519 envelope signing, LicoLite-level verifier, offline bundle evidence closure, and repair planning. |
 | Canonical encoding | `src/canonical/value.js:4`, `src/canonical/value.js:29`, `src/canonical/value.js:33` | Deterministic normalized JSON bytes with `$bytes` base64, not a binary DAG-CBOR codec. |
 
 ## License Boundary

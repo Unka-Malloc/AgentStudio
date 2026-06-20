@@ -2,18 +2,20 @@
 
 ## Objective
 
-Make Pactium proof verification complete and make proof bundles portable at larger sizes by adding proof-type dispatch, signed head verification, and CAR-like indexed bundle transport.
+Document the current proof verification and portable bundle implementation: proof-type dispatch, signed head verification, and CAR-like indexed bundle transport.
 
-## Baseline State
+## Current State
 
-At the start of this optimization pass, proof envelopes and bundles already had useful structure:
+Proof envelopes and bundles now use the implemented verifier and indexed bundle path:
 
-- `createEnvelope` stores Proof Material Refs and extension refs (`src/core/pactium-core.js:162`).
-- `verifyProofEnvelope` validates envelope identity, proof refs, extension block hashes, ledger inclusion, and ledger consistency (`src/proof/envelope.js:91`, `src/proof/envelope.js:197`).
-- `exportProofBundle` walked direct proof/extension refs and emitted a JSON block list.
-- `verifyProofBundle` checks required direct blocks and delegates to envelope verification (`src/proof/bundle.js:6`).
+- `createEnvelope` stores content-addressed Proof Material Refs and extension refs.
+- `verifyProofEnvelope` validates envelope identity, proof refs, extension block hashes, ledger inclusion, ledger consistency, semantic bindings, optional signed head material, and embedded proof material.
+- `createDefaultProofVerifierRegistry` registers ledger inclusion, ledger consistency, index membership, and index non-membership verifiers.
+- `verifyProofEnvelope` recursively traverses `proofMaterial.proofs` and dispatches every object with a `proofType`.
+- `exportProofBundle` emits `pactium.proof-bundle.indexed` with a length-delimited binary record stream and offset index.
+- `verifyProofBundle` validates bundle identity, bundle hash, required block closure, indexed block integrity, and the embedded envelope without access to local Pactium storage.
 
-The baseline gap was proof coverage. `proofMaterial.proofs` could contain workspace, state, checkpoint, idempotency, and lifecycle index proofs, but core verification did not dispatch to index proof verifiers. Bundle transport was also all-in-memory JSON with no offset index. These items are now implemented; see [Implementation Status](IMPLEMENTATION-STATUS.md).
+The old JSON block-list export path and the un-dispatched embedded proof gap are not current behavior.
 
 ## Reference Signals
 
@@ -25,7 +27,7 @@ The baseline gap was proof coverage. `proofMaterial.proofs` could contain worksp
 
 ## Verifier Registry
 
-Add a registry to `src/proof`:
+The default registry in `src/proof/registry.js` covers the built-in proof types:
 
 ```js
 const registry = {
@@ -36,7 +38,7 @@ const registry = {
 };
 ```
 
-`verifyProofEnvelope` should:
+`verifyProofEnvelope` currently:
 
 1. Decode every proof material block.
 2. Verify ledger material as it does today.
@@ -45,22 +47,22 @@ const registry = {
 5. Record a structured failure if the verifier is missing, if it returns false, or if it throws.
 6. Add checked proof paths such as `proofs.workspaceProjection.orderProof`.
 
-Unknown proof types should be allowed only when they are explicitly declared non-critical. Proof material tied to critical extensions must be fail-closed.
+Unknown proof types are allowed only when `requireAllProofs` is false and the proof object is explicitly non-critical. The default behavior is fail-closed.
 
 ## LicoLite Verification Upgrade
 
-The baseline LicoLite verifier added critical extension and signature checks, then reported `licolite-workspace-projection` in `checked`. The registry upgrade implemented the following:
+The LicoLite verifier now layers LicoLite requirements on top of core envelope verification:
 
-1. `verifyLicoLiteEnvelope` must require valid workspace projection proofs for:
+1. `verifyLicoLiteEnvelope` requires valid workspace projection proofs through core registry verification for:
    - `workspaceProjection.orderProof`;
-   - `workspaceProjection.membershipProof`;
-   - any LicoLite workspace-effect proof extension.
-2. It must decode critical extension payloads with `canonicalDecode`, not raw `JSON.parse`, so the verifier follows the same codec abstraction as core proof material.
-3. The default HMAC signer should be labelled as development or host-local trust. Portable proof bundles should prefer a public-key signer manifest.
+   - `workspaceProjection.membershipProof`.
+2. It decodes critical extension payloads with `canonicalDecode`, not raw `JSON.parse`, so the verifier follows the same codec abstraction as core proof material.
+3. It verifies LicoLite signature material against the configured signer and binds signer id and algorithm.
+4. Production mode requires explicit signer material for recording and verification.
 
 ## Signed Head And Verifier Manifest
 
-Add a manifest object:
+The verifier manifest object is implemented as:
 
 ```js
 {
@@ -81,7 +83,7 @@ Add a manifest object:
 }
 ```
 
-Signed heads should reference the manifest hash and signer id. Verification should reject:
+Signed heads reference the manifest hash and signer id. Verification rejects:
 
 - unknown signer id;
 - unsupported algorithm;
@@ -89,7 +91,7 @@ Signed heads should reference the manifest hash and signer id. Verification shou
 - head size/root mismatch;
 - manifest quorum failure.
 
-This mirrors the useful parts of Rekor checkpoints and Hypercore signer manifests without introducing a witness network yet.
+This mirrors the useful parts of Rekor checkpoints and Hypercore signer manifests without introducing a witness network.
 
 ## Indexed Bundle Format
 
@@ -108,7 +110,7 @@ The implemented bundle format is the indexed proof-bundle record stream:
 }
 ```
 
-The binary payload should be length-delimited block records:
+The binary payload is length-delimited block records:
 
 ```text
 varint(recordLength)
@@ -116,7 +118,7 @@ canonical-json(blockHeader)
 raw block bytes
 ```
 
-This is not required to be byte-compatible with IPLD CAR at first. It should copy the important operational properties:
+This is not byte-compatible with IPLD CAR. It copies the important operational properties:
 
 - root manifest first;
 - strict maximum header size;
@@ -142,12 +144,12 @@ If full CAR interoperability becomes a goal, the next step is to emit actual CAR
 
 ## API Changes
 
-| API | Change |
+| API | Current behavior |
 | --- | --- |
-| `verifyProofEnvelope(envelope, options)` | Add `proofVerifiers`, `requireAllProofs`, and `verifierManifest`. |
+| `verifyProofEnvelope(envelope, options)` | Supports `proofVerifiers`, `requireAllProofs`, `verifierManifest`, `ledgerHeadSignatures`, `bundle`, and `bundleResolver`. |
 | `verifyProofBundle(bundle, options)` | Verifies the indexed bundle format and required proof/extension blocks. |
 | `exportProofBundle(envelopeOrId, options)` | Emits the indexed bundle format. |
-| `createLicoLiteAspect` | Accept public-key signer/verifier manifest options in addition to local signer. |
+| `createLicoLiteAspect` | Accepts local HMAC or Ed25519 signer material; core ledger-head verification uses verifier manifests. |
 
 ## Tests
 
@@ -160,10 +162,10 @@ If full CAR interoperability becomes a goal, the next step is to emit actual CAR
 | Signed head | Verify valid manifest/signature; reject wrong signer, wrong quorum, wrong root, wrong size. |
 | LicoLite codec | Signature extension decoding works through canonical codec and rejects corrupted payload. |
 
-## Rollout
+## Maintained Boundary
 
-1. Add proof registry and use it for index proofs while keeping ledger verification behavior. Done.
-2. Make LicoLite workspace projection checks depend on registry results. Done.
-3. Add signed head manifest support as optional verification. Done.
-4. Add indexed bundle export/import. Done.
-5. Remove the JSON block-list export path so bundle structure is organized by transport behavior, not by release labels. Done.
+1. Proof registry dispatch is the current verification path for embedded proofs.
+2. LicoLite workspace projection checks depend on core registry results.
+3. Signed head manifest support is implemented for core Ledger Heads.
+4. Indexed bundle export/import is the only supported proof bundle transport.
+5. Full CAR/IPLD interoperability remains a separate protocol decision.

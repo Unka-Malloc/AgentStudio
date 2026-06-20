@@ -65,9 +65,12 @@ export function createLicoLiteAspect({
   signerSecret = ""
 } = {}) {
   const core = pactium || createPactium({ dataDir, userDataPath, inMemory });
-  const resolvedSigner = signer === false ? null : signer || createLicoLiteSigner({
-    secret: signerSecret || "licolite-development-signer"
-  });
+  const hasExplicitSignerSecret = safeText(signerSecret) !== "";
+  const resolvedSigner = signer === false
+    ? null
+    : signer || (hasExplicitSignerSecret || evidencePolicy !== "production"
+      ? createLicoLiteSigner({ secret: signerSecret || "licolite-development-signer" })
+      : null);
   const verifierSigner = resolvedSigner;
   const repairPlanner = createRepairPlanner();
 
@@ -80,6 +83,9 @@ export function createLicoLiteAspect({
     }
     if (evidencePolicy === "production" && !effectEvidence) {
       throw new Error("LicoLite production evidence policy requires workspace effect evidence.");
+    }
+    if (evidencePolicy === "production" && !resolvedSigner) {
+      throw new Error("LicoLite production evidence policy requires an explicit signer or signerSecret.");
     }
     const policyExtension = await materializeEvidenceExtension(core, {
       name: LICOLITE_POLICY_EXTENSION,
@@ -116,8 +122,11 @@ export function createLicoLiteAspect({
       ledgerHeadSignatures: options.ledgerHeadSignatures || []
     });
     const failures = [...coreResult.failures];
-    const extensionNames = new Set(asArray(envelope?.extensions).map((extension) => extension.name));
+    const extensions = asArray(envelope?.extensions);
+    const extensionNames = new Set(extensions.map((extension) => extension.name));
+    const criticalExtensionNames = new Set(asArray(envelope?.criticalExtensions).map(String));
     for (const required of LICOLITE_CRITICAL_EXTENSIONS) {
+      const extension = extensions.find((candidate) => candidate.name === required);
       if (!extensionNames.has(required)) {
         failures.push(createVerificationFailure({
           layer: "licolite",
@@ -126,9 +135,17 @@ export function createLicoLiteAspect({
           evidenceRef: envelope?.envelopeId || "",
           repairable: evidencePolicy !== "production"
         }));
+      } else if (extension?.critical !== true || !criticalExtensionNames.has(required)) {
+        failures.push(createVerificationFailure({
+          layer: "licolite",
+          code: "noncritical_required_extension",
+          message: `LicoLite required extension ${required} must be critical and listed in criticalExtensions.`,
+          evidenceRef: envelope?.envelopeId || "",
+          repairable: true
+        }));
       }
     }
-    for (const extension of asArray(envelope?.extensions).filter((candidate) =>
+    for (const extension of extensions.filter((candidate) =>
       candidate.name === LICOLITE_POLICY_EXTENSION || candidate.name === LICOLITE_WORKSPACE_EFFECT_EXTENSION
     )) {
       const extensionBlock = await resolveMaterialBlock({ core, cid: extension.valueRef, bundleMap });
@@ -161,6 +178,15 @@ export function createLicoLiteAspect({
       }
     }
     const signatureExtension = asArray(envelope?.extensions).find((extension) => extension.name === LICOLITE_SIGNATURE_EXTENSION);
+    if (evidencePolicy === "production" && !verifierSigner) {
+      failures.push(createVerificationFailure({
+        layer: "licolite.signing",
+        code: "missing_signature_verifier",
+        message: "LicoLite production verification requires an explicit signer or signerSecret.",
+        evidenceRef: envelope?.envelopeId || "",
+        repairable: true
+      }));
+    }
     if (!signatureExtension) {
       failures.push(createVerificationFailure({
         layer: "licolite.signing",
@@ -196,6 +222,14 @@ export function createLicoLiteAspect({
           layer: "licolite.signing",
           code: "bad_signature_algorithm",
           evidenceRef: signatureExtension.valueRef
+        }));
+      } else if (!verifierSigner) {
+        failures.push(createVerificationFailure({
+          layer: "licolite.signing",
+          code: "signature_verifier_unconfigured",
+          message: "LicoLite signature material cannot be verified without an explicit signer or signerSecret.",
+          evidenceRef: signatureExtension.valueRef,
+          repairable: true
         }));
       } else if (verifierSigner && !(await verifierSigner.verify(value.signedEnvelopeHash, value.signature))) {
         failures.push(createVerificationFailure({
@@ -270,9 +304,9 @@ export async function recordLicoLiteWorkspaceOperation(input = {}, options = {})
 }
 
 export async function verifyLicoLiteEnvelope(envelope, options = {}) {
-  return createLicoLiteAspect(options).verifyLicoLiteEnvelope(envelope);
+  return createLicoLiteAspect(options).verifyLicoLiteEnvelope(envelope, options);
 }
 
 export async function verifyLicoLiteBundle(bundle, options = {}) {
-  return createLicoLiteAspect(options).verifyLicoLiteBundle(bundle);
+  return createLicoLiteAspect(options).verifyLicoLiteBundle(bundle, options);
 }

@@ -55,6 +55,8 @@ Proof Bundles are CAR-like content-addressed block bundles with a Pactium manife
 
 `pactium/licolite` is a first-class package surface for LicoLite. It provides LicoLite-facing protocol substrate integration, default Workspace Projection, default signing policy, critical policy and workspace-effect extensions, LicoLite-level verification, repair planning, and new-data-directory support.
 
+LicoLite production mode requires an explicit signer or signerSecret for both recording and verification. The required policy and workspace-effect extensions must be critical and listed in `criticalExtensions`; downgrading either extension fails LicoLite verification.
+
 LicoLite owns runtime policy decisions, operation dispatching, side effects, UI ownership, and durable Host Evidence storage. Pactium binds LicoLite evidence and verifies the binding.
 
 ## Current Non-Surfaces

@@ -13,7 +13,11 @@ export function defaultPactiumDataDir() {
 }
 
 export function resolveDataDir(dataDir = "") {
-  return path.resolve(String(dataDir || process.env.PACTIUM_DATA_DIR || defaultPactiumDataDir()));
+  const configured = String(dataDir || process.env.PACTIUM_DATA_DIR || defaultPactiumDataDir());
+  const expanded = configured === "~" || configured.startsWith("~/") || configured.startsWith(`~${path.sep}`)
+    ? path.join(os.homedir(), configured.slice(2))
+    : configured;
+  return path.resolve(expanded);
 }
 
 export function resolveWithin(root, ...segments) {

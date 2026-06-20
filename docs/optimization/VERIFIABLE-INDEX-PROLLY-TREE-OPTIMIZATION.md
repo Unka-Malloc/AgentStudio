@@ -2,19 +2,21 @@
 
 ## Objective
 
-Replace the baseline full-snapshot pairwise Merkle index with a real content-addressed Prolly tree, matching the maintained protocol profile and improving mutation, proof, and diff complexity for state, checkpoint, workspace, lifecycle, idempotency, and causality indexes.
+Document the current content-addressed Prolly Tree implementation used by the shared Verifiable Index Engine for state, checkpoint, workspace, lifecycle, idempotency, and causality indexes.
 
-## Baseline State
+## Current State
 
-At the start of this optimization pass, the implementation was correctly deterministic but not a Prolly tree:
+The implementation in `src/index-engine/snapshot-merkle-index.js` now matches the maintained protocol profile:
 
-- `buildPairLayers` builds a binary Merkle overlay over a full leaf array (`src/index-engine/snapshot-merkle-index.js:20`).
-- `chunkBoundariesForEntries` records boundary metadata (`src/index-engine/snapshot-merkle-index.js:71`) but those boundaries are not nodes and do not affect the Merkle root.
-- `writeSnapshot` stores all normalized entries and leaf hashes in one protocol object (`src/index-engine/snapshot-merkle-index.js:112`).
-- `put` and `deleteKey` rebuild the full snapshot (`src/index-engine/snapshot-merkle-index.js:163`, `src/index-engine/snapshot-merkle-index.js:178`).
-- `diff` builds full maps and compares canonical strings (`src/index-engine/snapshot-merkle-index.js:259`).
+- Index roots contain root metadata only: root CID, root hash, count, key range, height, domain, and splitter constants.
+- Leaf and internal Prolly nodes are stored as content-addressed CAS blocks with child refs.
+- Membership and non-membership proofs use `index.*.prolly-path` proof material.
+- `scan` and `prefix` traverse key ranges over leaf nodes and support bounded pagination.
+- `diff` skips equal subtree roots, merges non-aligned child ranges, descends changed overlap groups, and compares entries only at leaf level.
+- `put` and `delete` mutate a local leaf descriptor window, rechunk the affected entries, splice replacement leaves, and rebuild canonical parent levels from leaf descriptors.
+- `readSnapshot` remains an inspection helper that materializes entries from nodes; emitted roots do not store full entry arrays as authority.
 
-The maintained protocol profile already said the structure was a Canonical Prolly Tree with content-defined chunking and shared-node diff (`docs/protocols/PROFILE.md:43`). The implementation has now been brought up to that contract; see [Implementation Status](IMPLEMENTATION-STATUS.md).
+The previous pairwise Merkle full-snapshot authority and metadata-only chunk boundary model are not current behavior.
 
 ## Reference Signals
 
@@ -105,9 +107,9 @@ This is simpler than Dolt's rolling hash and key splitter, but it preserves Pact
 
 1. Read the root node path for `key`.
 2. Replace or insert the entry in the target leaf chunk.
-3. Re-chunk only the affected local run. Include neighboring chunks when a boundary changes.
-4. Rebuild parent descriptors up to the root.
-5. Reuse all untouched child nodes by CID.
+3. Re-chunk the affected local leaf run. Include neighboring chunks until the replacement tail lands on a real chunk boundary or the global tail.
+4. Splice the replacement leaves into the leaf descriptor sequence.
+5. Rebuild canonical parent descriptors from the leaf descriptors so the root matches a full rebuild for the same entries.
 6. Return the new index root object.
 
 ### `delete(root, key, options)`
@@ -115,11 +117,7 @@ This is simpler than Dolt's rolling hash and key splitter, but it preserves Pact
 1. Read the root node path for `key`.
 2. Remove the entry if present.
 3. Merge/rechunk neighboring chunks if the leaf falls below `minEntries`.
-4. Rebuild only changed ancestors.
-
-### Conservative First Implementation
-
-If local rechunking is too risky for the first iteration, implement a builder that writes real Prolly nodes from a full sorted entry stream. Even that first step fixes proof format, storage shape, and diff by shared nodes for future roots. Then optimize point mutations incrementally.
+4. Splice the replacement leaves and rebuild canonical parent descriptors from the leaf descriptors.
 
 ## Proof Format
 
@@ -172,7 +170,7 @@ The verifier checks the containing leaf range and confirms that no entry key equ
 
 ## Diff Algorithm
 
-Implement `diff(leftRoot, rightRoot)` as shared-node traversal:
+`diff(leftRoot, rightRoot)` is implemented as shared-node traversal:
 
 1. If both root CIDs match, return no changes.
 2. If key ranges do not overlap, emit create/delete ranges.
@@ -181,7 +179,7 @@ Implement `diff(leftRoot, rightRoot)` as shared-node traversal:
 5. Descend only changed or overlapping ranges.
 6. At leaf level, compare entries by key.
 
-Acceptance target: diff cost should be proportional to changed chunks plus tree height, not total key count.
+The intended cost is proportional to changed chunks plus tree height, not total key count. The reference tests assert non-aligned child range diffs and small mutations do not fall back to full snapshot traversal.
 
 ## Storage Changes
 
@@ -194,12 +192,13 @@ Acceptance target: diff cost should be proportional to changed chunks plus tree 
 
 ## Verifier Integration
 
-1. Export `verifyIndexProof(proof)` from the index engine module.
-2. Register index proof verifiers with `verifyProofEnvelope`.
-3. Make LicoLite workspace projection verification call the same verifier for order and membership proofs.
-4. Reject unknown critical proof types in proof material.
+1. `verifyIndexProof(proof)` is exported from the index engine module.
+2. `createDefaultProofVerifierRegistry` registers index membership and non-membership proof verifiers.
+3. `verifyProofEnvelope` recursively walks `proofMaterial.proofs` and dispatches every object with a `proofType` to the registry.
+4. LicoLite verification relies on core registry verification for workspace order and membership proofs before reporting success.
+5. Missing verifiers fail closed when `requireAllProofs` is true or the proof material is critical.
 
-This closes the current gap where embedded index proofs can be present but not actually checked by core envelope verification.
+Embedded index proofs are therefore checked by core envelope verification.
 
 ## Tests
 
@@ -214,13 +213,12 @@ This closes the current gap where embedded index proofs can be present but not a
 | Domain separation | Same key/value under different domains yields different roots. |
 | Envelope verification | Corrupt workspace/state/checkpoint index proof causes `verifyProofEnvelope` failure. |
 
-## Rollout
+## Current Runtime Boundary
 
-1. Add Prolly node writer/reader and full-builder implementation.
-2. Emit Prolly index roots for new data directories.
-3. Register only the current Prolly-path proof verifiers.
-4. Add cursor scan/prefix.
-5. Add local mutation rechunking after builder/proofs are stable.
-6. Remove snapshot full-entry storage from emitted roots.
+1. New data directories emit Prolly index roots and CAS-backed nodes.
+2. Only the current Prolly-path membership and non-membership proof types are registered as built-in index proof types.
+3. Cursor scan/prefix use key-range traversal over leaf nodes.
+4. Local mutation rechunking is implemented for `put` and `delete`.
+5. Snapshot full-entry storage is not part of emitted root authority.
 
 Because Pactium is latest-schema-only, the rollout can regenerate fixtures instead of migrating existing data directories.
