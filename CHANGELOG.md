@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-06-20
+
+This minor release publishes the HTTP adapter as a public API surface for host-controlled service integration. It keeps the protocol version unchanged while expanding the package API available to LicoLite and other hosts.
+
+### Added
+
+- Published the pactium/http package entry point with TypeScript declarations for HTTP server creation and startup.
+
+### Changed
+
+- Expanded the HTTP adapter route surface for operation lifecycle, proof bundle export and verification, workspace projections, cursors, repair planning, maintenance tasks, extensions, and LicoLite bundle operations.
+
 ## [0.2.2] - 2026-06-20
 
 This patch release tightens proof verification, LicoLite production signing behavior, HTTP defaults, and release gates. It does not change the protocol version or public API shape.
@@ -163,6 +175,7 @@ This is the first public release of Pactium as a proof-first protocol substrate.
 - Ed25519 signing support for Ledger Heads and LicoLite envelopes
 - Signed head verification with verifier manifest validation
 
+[0.3.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.3.0
 [0.2.2]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.2.2
 [0.2.1]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.2.0

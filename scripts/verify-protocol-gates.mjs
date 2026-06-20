@@ -163,6 +163,7 @@ async function buildRegressionSnapshots() {
   const licoLiteExports = Object.keys(await import("../src/aspects/licolite/index.js")).sort();
   const declarationFiles = [
     "src/index.d.ts",
+    "src/http.d.ts",
     "src/aspects/licolite/index.d.ts"
   ];
   const declarations = Object.fromEntries(await Promise.all(
@@ -342,7 +343,7 @@ async function main() {
     }
   }
   const allowedExports = Object.keys(packageJson.exports).sort();
-  assertDeepEqual(allowedExports, [".", "./licolite", "./package.json"], "package exports");
+  assertDeepEqual(allowedExports, [".", "./http", "./licolite", "./package.json"], "package exports");
   const vectors = await buildProofVectors();
   const snapshots = await buildRegressionSnapshots();
   if (process.env.PACTIUM_UPDATE_FIXTURES === "1") {

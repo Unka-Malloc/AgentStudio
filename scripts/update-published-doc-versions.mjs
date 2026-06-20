@@ -81,15 +81,6 @@ function syncText(file, text, packageVersion) {
     packageVersion
   });
 
-  next = replaceVersionSlot({
-    file,
-    text: next,
-    findings,
-    rule: "migration_patch_version_example",
-    pattern: /(\*\*Patch\*\*\s*\()(\d+\.\d+\.\d+)(\)\s*--)/g,
-    packageVersion
-  });
-
   return { next, findings };
 }
 

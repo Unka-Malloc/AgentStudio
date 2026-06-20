@@ -99,6 +99,15 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | Extensions | Hash-bound Proof Extensions |
 | Critical extension | Unsupported critical extension fails verification |
 
+## HTTP Adapter
+
+| Parameter | Value |
+| --- | --- |
+| Export path | `pactium/http` |
+| Role | Host-controlled JSON transport for the proof-first public API |
+| Scope | Operation lifecycle, proof envelope and bundle verification, proof bundle export, workspace projection, cursor paging, append conditions, trusted-head advancement, repair planning, maintenance tasks, extension materialization, and envelope storage |
+| Security boundary | Authentication, authorization, transport security, and host policy remain host-owned |
+
 ## LicoLite Aspect
 
 | Parameter | Value |

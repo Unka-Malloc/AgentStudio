@@ -51,6 +51,10 @@ Checkpoint node membership and diffs use shared Verifiable Index Engine-backed i
 
 Proof Bundles are CAR-like content-addressed block bundles with a Pactium manifest naming the root envelope, required blocks, protocol versions, Ledger Head, and critical extensions.
 
+## HTTP Adapter
+
+`pactium/http` is a public JSON transport adapter for host-controlled service integration. It exposes the proof-first core calls for operation lifecycle, Proof Envelope and Proof Bundle verification, bundle export, workspace projections, cursor paging, append conditions, trusted-head advancement, repair planning, maintenance tasks, extensions, and stored envelopes. It does not add authentication, authorization, witness networking, policy decisions, or host side-effect execution.
+
 ## LicoLite Aspect
 
 `pactium/licolite` is a first-class package surface for LicoLite. It provides LicoLite-facing protocol substrate integration, default Workspace Projection, default signing policy, critical policy and workspace-effect extensions, LicoLite-level verification, repair planning, and new-data-directory support.

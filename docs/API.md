@@ -7,9 +7,18 @@ This document covers the complete public API surface of the `pactium` package.
 | Export path | Description |
 | --- | --- |
 | `pactium` | Core proof-first protocol API |
+| `pactium/http` | HTTP adapter for the proof-first protocol API |
 | `pactium/licolite` | LicoLite integration aspect |
 
 ---
+
+## API Completeness Audit
+
+The 2026-06-20 public API audit compared Pactium's exposed surface with the practical API patterns used by Trillian/Rekor-style transparency logs, CAR/IPLD-style portable block archives, Hypercore-style signed append-only feeds, and EventStore/Axon-style append conditions, cursors, and recovery flows.
+
+The algorithmic protocol surface already exposed the required primitives through `pactium`: append-only writes, inclusion and consistency proofs, signed heads, verifiable indexes, workspace projections, proof bundles, cursors, append conditions, and repair planning. The missing surface was the HTTP adapter: `pactium serve` existed, but package consumers could not import it through a package export, and HTTP clients could only record operations and verify proof envelopes. That forced server-based upstreams to bypass package exports or reimplement bundle export, workspace queries, cursor paging, and recovery calls locally.
+
+This gap is closed by making `pactium/http` a public entry point and by aligning the HTTP routes with the proof-first core capabilities. The adapter remains a transport layer only: it does not add authentication, authorization, business policy, witness networking, or host side-effect execution.
 
 ## Core API (`pactium`)
 
@@ -503,13 +512,88 @@ const result = await engine.run("doctor");
 
 ---
 
+## HTTP Adapter API (`pactium/http`)
+
+The HTTP adapter exposes Pactium's proof-first capabilities to local service processes and host-controlled gateways.
+
+```js
+import {
+  PACTIUM_HTTP_PROTOCOL,
+  PACTIUM_HTTP_MAX_BODY_BYTES,
+  createPactiumHttpServer,
+  startPactiumHttpServer
+} from "pactium/http";
+
+const started = await startPactiumHttpServer({
+  dataDir: "./.pactium",
+  host: "127.0.0.1",
+  port: 7288,
+  maxBodyBytes: PACTIUM_HTTP_MAX_BODY_BYTES
+});
+
+console.log(started.url);
+```
+
+The same exports are also available from the root `pactium` entry point for hosts that centralize imports.
+
+### HTTP Routes
+
+All non-`GET` routes accept JSON and return JSON. The adapter is intended to sit behind host-owned authentication, authorization, and transport security when exposed beyond localhost.
+
+| Route | Method | Core call |
+| --- | --- | --- |
+| `/health` | `GET` | Health check without data directory disclosure |
+| `/doctor` | `GET` | `pactium.doctor()` |
+| `/protocols` | `GET` | `pactium.protocolCatalog()` |
+| `/intents` | `POST` | `pactium.beginOperationIntent(body)` |
+| `/intents/lookup` | `POST` | `pactium.lookupOpenIntent(body.intentId)` |
+| `/intents/:intentId` | `GET` | `pactium.lookupOpenIntent(intentId)` |
+| `/outcomes` | `POST` | `pactium.appendOperationOutcome(body)` |
+| `/outcomes/lookup` | `POST` | `pactium.lookupOutcome(body.intentId)` |
+| `/outcomes/:intentId` | `GET` | `pactium.lookupOutcome(intentId)` |
+| `/operations` | `POST` | `pactium.recordOperation(body)` |
+| `/verify/envelope` | `POST` | `pactium.verifyEnvelope(envelope, options)` |
+| `/verify/bundle` | `POST` | `verifyProofBundle(bundle, options)` |
+| `/bundles/export` | `POST` | `pactium.exportProofBundle(envelopeOrId, options)` |
+| `/workspaces/projection` | `POST` | `pactium.getWorkspaceProjection(body.workspaceId)` |
+| `/workspaces/:workspaceId/projection` | `GET` | `pactium.getWorkspaceProjection(workspaceId)` |
+| `/workspaces/membership` | `POST` | `pactium.proveWorkspaceMembership(body)` |
+| `/cursors/ledger` | `POST` | `pactium.getLedgerCursor(body)` |
+| `/cursors/workspace` | `POST` | `pactium.getWorkspaceCursor(body)` |
+| `/cursors/verify` | `POST` | `pactium.verifyCursor(body.cursor, body.context)` |
+| `/append-conditions` | `POST` | `pactium.createAppendCondition(body)` |
+| `/trusted-heads/advance` | `POST` | `pactium.advanceTrustedHead(body)` |
+| `/repair/plan` | `POST` | `pactium.planRecovery(body)` |
+| `/maintenance/tasks/plan` | `POST` | `createMaintenanceTaskEngine({ pactium }).planTask(body.taskType, body.input)` |
+| `/maintenance/tasks/run` | `POST` | `createMaintenanceTaskEngine({ pactium }).runTask(body)` |
+| `/extensions` | `POST` | `pactium.createExtension(body)` |
+| `/envelopes` | `POST` | `pactium.storeEnvelope(body)` |
+| `/licolite/operations` | `POST` | `licolite.recordWorkspaceOperation(body)` |
+| `/licolite/verify/envelope` | `POST` | `licolite.verifyEnvelope(envelope, options)` |
+| `/licolite/verify/bundle` | `POST` | `licolite.verifyBundle(bundle, options)` |
+| `/licolite/bundles/export` | `POST` | `licolite.exportProofBundle(envelopeOrId, options)` |
+| `/licolite/repair/plan` | `POST` | `licolite.planRepair(body.failures)` |
+
+Envelope and bundle verification routes accept either the object directly or a wrapper:
+
+```json
+{
+  "envelope": { "...": "..." },
+  "options": { "requireAllProofs": true }
+}
+```
+
+Bundle export accepts `{ "envelope": ... }`, `{ "envelopeId": "..." }`, `{ "id": "..." }`, or a JSON string envelope id.
+
+---
+
 ### Protocol Constants
 
 ```js
 import {
   PACTIUM_PROTOCOL,           // "pactium.v0.2"
   PACTIUM_SCHEMA_VERSION,     // "pactium.v0.2.schema.latest"
-  PACTIUM_PACKAGE_VERSION,    // "0.2.2"
+  PACTIUM_PACKAGE_VERSION,    // "0.3.0"
   PACTIUM_INDEX_ENGINE,       // "pactium.verifiable-index-engine"
   PACTIUM_INDEX_SPLITTER,     // "pactium-cdc-boundary"
   PACTIUM_PROOF_BUNDLE_TYPE,  // "pactium.proof-bundle.indexed"
@@ -699,7 +783,10 @@ import type {
   PactiumLedgerPageOptions,
   PactiumLedgerPage,
   PactiumLedger,
-  PactiumCore
+  PactiumCore,
+  PactiumHttpServerOptions,
+  PactiumHttpServerStartOptions,
+  PactiumHttpServerStartResult
 } from "pactium";
 
 import type {

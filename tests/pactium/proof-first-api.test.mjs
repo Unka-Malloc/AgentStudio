@@ -1356,7 +1356,8 @@ describe("Pactium proof-first root API", () => {
     await fs.symlink(path.resolve("."), path.join(nodeModulesDir, "pactium"), "dir");
     const scriptPath = path.join(projectDir, "consumer.mjs");
     await fs.writeFile(scriptPath, `
-import { createPactium } from "pactium";
+import { createPactium, startPactiumHttpServer as startRootHttpServer } from "pactium";
+import { PACTIUM_HTTP_PROTOCOL, createPactiumHttpServer } from "pactium/http";
 import { createLicoLiteAspect } from "pactium/licolite";
 
 let oldExportMissing = false;
@@ -1369,13 +1370,24 @@ try {
 const pactium = createPactium({ inMemory: true });
 const licolite = createLicoLiteAspect({ pactium, evidencePolicy: "opportunistic" });
 const envelope = await licolite.recordWorkspaceOperation({ operationId: "external", workspaceId: "x" });
-console.log(JSON.stringify({ oldExportMissing, protocol: envelope.protocol, ok: (await licolite.verifyEnvelope(envelope)).ok }));
+const httpServer = createPactiumHttpServer({ pactium });
+console.log(JSON.stringify({
+  oldExportMissing,
+  protocol: envelope.protocol,
+  ok: (await licolite.verifyEnvelope(envelope)).ok,
+  httpProtocol: PACTIUM_HTTP_PROTOCOL,
+  httpServerType: typeof httpServer.close,
+  rootHttpType: typeof startRootHttpServer
+}));
 `, "utf8");
     const run = await execFileAsync(process.execPath, [scriptPath], { cwd: projectDir });
     const parsed = JSON.parse(run.stdout);
     assert.equal(parsed.oldExportMissing, true);
     assert.equal(parsed.protocol, PACTIUM_PROTOCOL);
     assert.equal(parsed.ok, true);
+    assert.equal(parsed.httpProtocol, "pactium.v0.2.http");
+    assert.equal(parsed.httpServerType, "function");
+    assert.equal(parsed.rootHttpType, "function");
   });
 
   it("serves HTTP endpoints and CLI proof-first commands", async () => {
@@ -1386,6 +1398,8 @@ console.log(JSON.stringify({ oldExportMissing, protocol: envelope.protocol, ok: 
       const health = await requestJson({ port: address.port, requestPath: "/health" });
       assert.equal(health.statusCode, 200);
       assert.equal(health.body.coreProtocol, PACTIUM_PROTOCOL);
+      const doctor = await requestJson({ port: address.port, requestPath: "/doctor" });
+      assert.equal(doctor.body.ok, true);
       const recorded = await requestJson({
         port: address.port,
         method: "POST",
@@ -1401,6 +1415,20 @@ console.log(JSON.stringify({ oldExportMissing, protocol: envelope.protocol, ok: 
         body: recorded.body
       });
       assert.equal(verified.body.ok, true);
+      const exported = await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/bundles/export",
+        body: { envelopeId: recorded.body.envelopeId }
+      });
+      assert.equal(exported.body.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
+      const verifiedBundle = await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/verify/bundle",
+        body: { bundle: exported.body, options: { verifyAllBlocks: true } }
+      });
+      assert.equal(verifiedBundle.body.ok, true);
     } finally {
       await close(server);
     }
@@ -1956,6 +1984,109 @@ console.log(JSON.stringify({ oldExportMissing, protocol: envelope.protocol, ok: 
         body: { intentId: intent.body.factId }
       });
       assert.equal(outcome.body.envelopeKind, "operation-outcome");
+      assert.equal((await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/intents/lookup",
+        body: { intentId: intent.body.factId }
+      })).body.exists, false);
+      assert.equal((await requestJson({ port: address.port, requestPath: `/outcomes/${encodeURIComponent(intent.body.factId)}` })).body.exists, true);
+      const exported = await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/bundles/export",
+        body: { envelope: outcome.body }
+      });
+      assert.equal(exported.body.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
+      assert.equal((await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/verify/bundle",
+        body: exported.body
+      })).body.ok, true);
+      const projection = await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/workspaces/projection",
+        body: { workspaceId: "http-2" }
+      });
+      assert.equal(projection.body.nextOrdinal, 2);
+      assert.equal((await requestJson({
+        port: address.port,
+        requestPath: `/workspaces/${encodeURIComponent("http-2")}/projection`
+      })).body.nextOrdinal, 2);
+      assert.equal((await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/workspaces/membership",
+        body: {
+          workspaceId: "http-2",
+          ledgerEventId: outcome.body.factRef.ledgerEventId
+        }
+      })).body.member, true);
+      const ledgerCursor = await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/cursors/ledger",
+        body: { position: 0, limit: 2 }
+      });
+      assert.equal(ledgerCursor.body.entries.length, 2);
+      const workspaceCursor = await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/cursors/workspace",
+        body: { workspaceId: "http-2", limit: 2 }
+      });
+      assert.equal(workspaceCursor.body.entries.length, 2);
+      assert.equal((await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/cursors/verify",
+        body: { cursor: ledgerCursor.body.cursor, context: { head: ledgerCursor.body.head } }
+      })).body.ok, true);
+      assert.match((await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/append-conditions",
+        body: { expectedLedgerSize: 2 }
+      })).body.conditionHash, /^sha256:/);
+      const repairPlan = await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/repair/plan",
+        body: {
+          cursor: ledgerCursor.body.cursor,
+          failures: [{ layer: "proof-bundle", code: "missing_bundle_block" }]
+        }
+      });
+      assert.equal(repairPlan.body.recoveryPlanType, "pactium.recovery-plan");
+      assert.ok(repairPlan.body.tasks.length >= 2);
+      const maintenanceTask = await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/maintenance/tasks/plan",
+        body: { taskType: "doctor" }
+      });
+      assert.equal(maintenanceTask.body.taskType, "doctor");
+      assert.equal((await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/maintenance/tasks/run",
+        body: maintenanceTask.body
+      })).body.ok, true);
+      const extension = await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/extensions",
+        body: { name: "unit.http", value: { ok: true } }
+      });
+      assert.equal(extension.body.name, "unit.http");
+      assert.equal((await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/envelopes",
+        body: outcome.body
+      })).body.envelopeType, "pactium.proof-envelope");
       const lico = await requestJson({
         port: address.port,
         method: "POST",
@@ -1970,6 +2101,25 @@ console.log(JSON.stringify({ oldExportMissing, protocol: envelope.protocol, ok: 
         body: lico.body
       });
       assert.equal(licoVerify.body.ok, true);
+      const licoBundle = await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/licolite/bundles/export",
+        body: { envelopeId: lico.body.envelopeId }
+      });
+      assert.equal(licoBundle.body.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
+      assert.equal((await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/licolite/verify/bundle",
+        body: { bundle: licoBundle.body }
+      })).body.ok, true);
+      assert.ok((await requestJson({
+        port: address.port,
+        method: "POST",
+        requestPath: "/licolite/repair/plan",
+        body: { failures: [{ layer: "licolite", code: "missing_licolite_policy" }] }
+      })).body.tasks.length >= 1);
       assert.equal((await requestJson({ port: address.port, requestPath: "/missing" })).statusCode, 404);
       const error = await requestJson({
         port: address.port,

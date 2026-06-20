@@ -193,6 +193,11 @@ async function verifyToolingSurface(files, findings) {
       import: "./src/index.js",
       default: "./src/index.js"
     },
+    "./http": {
+      types: "./src/http.d.ts",
+      import: "./src/http.js",
+      default: "./src/http.js"
+    },
     "./licolite": {
       types: "./src/aspects/licolite/index.d.ts",
       import: "./src/aspects/licolite/index.js",

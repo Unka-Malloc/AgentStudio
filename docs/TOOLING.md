@@ -10,8 +10,8 @@ Pactium keeps a deliberately small tooling surface. Tools exist only when they s
 | CLI | `bin/pactium.mjs` | Local Pactium doctor, HTTP server, operation recording, proof verification, and LicoLite recording/verification. |
 | Release scripts | `scripts/prepare-release.mjs`, `scripts/update-published-doc-versions.mjs`, `scripts/verify-pactium-hygiene.mjs`, `scripts/verify-protocol-gates.mjs`, `scripts/verify-package-contents.mjs`, `scripts/verify-publish-dry-run.mjs`, `scripts/verify-release-readiness.mjs` | One-command release file preparation, published-doc version sync, hygiene scanning, protocol fixtures/properties/pressure gates, package content checks, publish dry-run checks, and release closure checks. |
 | GitHub Actions | `.github/workflows/ci.yml`, `.github/workflows/publish.yml` | Matrix release-gate CI and trusted-publishing npm release workflow. |
-| HTTP facade | `src/http.js` | Local JSON endpoints for health, protocol catalog, operation recording, LicoLite operation recording, and envelope verification. |
-| Public package exports | `.`, `./licolite`, `./package.json` | Current proof-first package API, first-class LicoLite aspect, and package metadata. |
+| HTTP facade | `src/http.js`, `pactium/http` | Local JSON endpoints for health, protocol catalog, operation lifecycle, proof bundle export/verification, workspace projection, cursors, recovery, maintenance, LicoLite operations, and envelope verification. |
+| Public package exports | `.`, `./http`, `./licolite`, `./package.json` | Current proof-first package API, HTTP adapter, first-class LicoLite aspect, and package metadata. |
 
 The HTTP facade is a local integration surface. `pactium serve` defaults to `127.0.0.1` and a 1 MiB JSON request body cap; non-loopback exposure must be owned by the embedding host's authentication, authorization, TLS, and network policy.
 

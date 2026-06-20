@@ -1,6 +1,6 @@
 {
   "name": "pactium",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Proof-first protocol substrate for verifiable operation facts, append-only recovery history, and cryptographic state verification.",
   "author": "Unka Y.Y.",
   "license": "GPL-3.0-or-later",
@@ -40,6 +40,11 @@
       "types": "./src/index.d.ts",
       "import": "./src/index.js",
       "default": "./src/index.js"
+    },
+    "./http": {
+      "types": "./src/http.d.ts",
+      "import": "./src/http.js",
+      "default": "./src/http.js"
     },
     "./licolite": {
       "types": "./src/aspects/licolite/index.d.ts",

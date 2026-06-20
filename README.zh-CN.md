@@ -176,12 +176,24 @@ console.log(result.ok); // true
 
 ## API 概览
 
-Pactium 暴露两个包入口点：
+Pactium 暴露三个包入口点：
 
 | 导出 | 入口 | 描述 |
 | --- | --- | --- |
 | `pactium` | `./src/index.js` | 核心证明优先协议 API |
+| `pactium/http` | `./src/http.js` | 宿主受控服务集成的 HTTP 适配器 |
 | `pactium/licolite` | `./src/aspects/licolite/index.js` | LicoLite 集成 Aspect |
+
+### HTTP 适配器 (`pactium/http`)
+
+```js
+import {
+  createPactiumHttpServer,
+  startPactiumHttpServer
+} from "pactium/http";
+```
+
+HTTP 适配器以 JSON 路由开放操作生命周期、证明信封和证明包验证、证明包导出、工作空间投影、游标分页、追加条件、可信头推进、修复计划、维护任务、扩展和信封存储等调用。完整路由矩阵见 [docs/API.md](./docs/API.md#http-adapter-api-pactiumhttp)。
 
 ### TypeScript
 
