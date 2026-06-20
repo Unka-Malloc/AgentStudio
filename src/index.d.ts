@@ -183,9 +183,32 @@ export interface PactiumCore {
   doctor(): Promise<PactiumRecord & { ok: boolean; dataDir: string }>;
 }
 
+export interface PactiumHttpServerOptions extends PactiumDataDirOptions {
+  pactium?: PactiumCore | null;
+  licolite?: unknown;
+  maxBodyBytes?: number;
+}
+
+export interface PactiumHttpServerStartOptions extends PactiumDataDirOptions {
+  host?: string;
+  port?: number | string;
+  maxBodyBytes?: number;
+}
+
+export interface PactiumHttpServerStartResult {
+  protocol: "pactium.v0.2.http";
+  server: unknown;
+  host: string;
+  port: number;
+  maxBodyBytes: number;
+  url: string;
+}
+
 export const PACTIUM_PROTOCOL: "pactium.v0.2";
 export const PACTIUM_SCHEMA_VERSION: "pactium.v0.2.schema.latest";
-export const PACTIUM_PACKAGE_VERSION: "0.2.2";
+export const PACTIUM_PACKAGE_VERSION: "0.3.0";
+export const PACTIUM_HTTP_PROTOCOL: "pactium.v0.2.http";
+export const PACTIUM_HTTP_MAX_BODY_BYTES: 1048576;
 export const PACTIUM_INDEX_ENGINE: "pactium.verifiable-index-engine";
 export const PACTIUM_INDEX_SPLITTER: "pactium-cdc-boundary";
 export const PACTIUM_PROOF_BUNDLE_TYPE: "pactium.proof-bundle.indexed";
@@ -242,3 +265,5 @@ export function createRepairPlanner(): PactiumRecord;
 export function createMaintenanceTaskEngine(options?: PactiumRecord): PactiumRecord;
 export function envelopeSigningHash(envelope: PactiumProofEnvelope): string;
 export function runPactiumQualityGateProfile(options?: PactiumRecord): Promise<PactiumRecord>;
+export function createPactiumHttpServer(options?: PactiumHttpServerOptions): unknown;
+export function startPactiumHttpServer(options?: PactiumHttpServerStartOptions): Promise<PactiumHttpServerStartResult>;

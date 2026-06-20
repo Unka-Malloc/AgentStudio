@@ -54,7 +54,7 @@ This is the single entry point for automated coding agents maintaining this repo
 - Add proof-vector tests for every new protocol primitive before wiring LicoLite-level flows.
 - Run `npm run verify:hygiene` after renaming or documentation edits, but update the hygiene script first if its old assumptions conflict with current documentation.
 - Run `npm run pack:dry-run` before release-oriented changes.
-- After changing `package.json` version, run `npm run docs:sync-version` so current-version references in published docs match the package version.
+- Use `npm run release:prepare -- <version>` for release file preparation. If `package.json` version is changed manually, run `npm run docs:sync-version` so current-version references in published docs match the package version.
 - Run `npm run verify:release` before publishing. Release verification must pass independently on every supported Node.js LTS major in the CI matrix.
 - Before release, verify that the npm tarball contains only runtime source, CLI, examples, public project docs, README files, security policy, changelog, package metadata, and license. Process docs must remain unpublished.
 - Publish new npm versions only from `stable`. Manual publish workflow dispatch must use the `stable` ref, and release tags must point to commits already contained in `origin/stable`.

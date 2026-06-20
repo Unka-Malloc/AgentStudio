@@ -176,11 +176,12 @@ console.log(result.ok); // true
 
 ## API Overview
 
-Pactium exposes two package entry points:
+Pactium exposes three package entry points:
 
 | Export | Entry | Description |
 | --- | --- | --- |
 | `pactium` | `./src/index.js` | Core proof-first protocol API |
+| `pactium/http` | `./src/http.js` | HTTP adapter for host-controlled service integration |
 | `pactium/licolite` | `./src/aspects/licolite/index.js` | LicoLite integration aspect |
 
 ### Core API (`pactium`)
@@ -228,9 +229,24 @@ import {
 
   // Maintenance and repair
   createRepairPlanner,
-  createMaintenanceTaskEngine
+  createMaintenanceTaskEngine,
+
+  // HTTP adapter
+  createPactiumHttpServer,
+  startPactiumHttpServer
 } from "pactium";
 ```
+
+### HTTP Adapter (`pactium/http`)
+
+```js
+import {
+  createPactiumHttpServer,
+  startPactiumHttpServer
+} from "pactium/http";
+```
+
+The HTTP adapter exposes operation lifecycle, envelope and bundle verification, proof bundle export, workspace projection, cursor paging, append-condition, trusted-head, repair, maintenance, extension, and envelope storage calls as JSON routes. See [docs/API.md](./docs/API.md#http-adapter-api-pactiumhttp) for the full route matrix.
 
 ### LicoLite Aspect (`pactium/licolite`)
 

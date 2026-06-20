@@ -8,7 +8,7 @@ Pactium follows [Semantic Versioning](https://semver.org/):
 
 - **Major** (1.0, 2.0) -- breaking changes to public API or protocol format
 - **Minor** (0.2, 0.3) -- new features, backward-compatible API additions
-- **Patch** (0.2.2) -- bug fixes with no API or protocol changes
+- **Patch** (0.2.1, 0.2.2) -- bug fixes with no API or protocol changes
 
 During the `0.x` series, minor versions may include breaking changes. The protocol profile is locked per minor version.
 
@@ -26,9 +26,9 @@ During the `0.x` series, minor versions may include breaking changes. The protoc
 
 ## Data Directory Compatibility
 
-### Current: v0.2.x
+### Current protocol/data format: v0.2.x
 
-Pactium v0.2.x creates and manages its own data directory format. Key constraints:
+Pactium 0.3.0 keeps the v0.2 protocol/data directory format and creates and manages its own data directory format. Key constraints:
 
 - **New directories only** -- Pactium does not read or migrate data from earlier experimental formats
 - **Latest schema only** -- there is no support for loading older schema versions
@@ -69,14 +69,14 @@ Pactium ships as a pure ES module. There is no CommonJS build and no dual-packag
 
 **If you see `ERR_MODULE_NOT_FOUND`:**
 
-- Ensure you're importing from the correct path (`pactium` or `pactium/licolite`)
+- Ensure you're importing from the correct path (`pactium`, `pactium/http`, or `pactium/licolite`)
 - Deep imports into `src/` are not part of the public API and may change without notice
 
 ## API Stability Tiers
 
 | Tier | Surface | Guarantee |
 | --- | --- | --- |
-| **Public** | Exports from `pactium` and `pactium/licolite` | Semver-governed; no removals in patch |
+| **Public** | Exports from `pactium`, `pactium/http`, and `pactium/licolite` | Semver-governed; no removals in patch |
 | **Protocol Constants** | `PACTIUM_PROTOCOL`, `PACTIUM_PROTOCOL_PROFILE`, `HASH_DOMAINS` | Locked per protocol version |
 | **Type Declarations** | `.d.ts` exports | Stable within minor version |
 | **CLI** | `pactium` commands | Stable within minor; new subcommands in minor |

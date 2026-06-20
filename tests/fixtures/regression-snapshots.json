@@ -6,6 +6,11 @@
       "import": "./src/index.js",
       "default": "./src/index.js"
     },
+    "./http": {
+      "types": "./src/http.d.ts",
+      "import": "./src/http.js",
+      "default": "./src/http.js"
+    },
     "./licolite": {
       "types": "./src/aspects/licolite/index.d.ts",
       "import": "./src/aspects/licolite/index.js",
@@ -16,6 +21,8 @@
   "rootExports": [
     "HASH_DOMAINS",
     "PACTIUM_BUNDLE_ENCODING",
+    "PACTIUM_HTTP_MAX_BODY_BYTES",
+    "PACTIUM_HTTP_PROTOCOL",
     "PACTIUM_INDEX_ENGINE",
     "PACTIUM_INDEX_SPLITTER",
     "PACTIUM_PACKAGE_VERSION",
@@ -40,6 +47,7 @@
     "createLedgerTransparencyLog",
     "createMaintenanceTaskEngine",
     "createPactium",
+    "createPactiumHttpServer",
     "createRepairPlanner",
     "createStoragePort",
     "createTrackingCursor",
@@ -60,6 +68,7 @@
     "runPactiumQualityGateProfile",
     "samePositionAs",
     "signLedgerHead",
+    "startPactiumHttpServer",
     "verifyIndexProof",
     "verifyLedgerConsistencyProof",
     "verifyLedgerHeadSignature",
@@ -85,9 +94,14 @@
   ],
   "declarations": {
     "src/index.d.ts": {
-      "sha256": "333572a367a70928b7106d57e840624c7f21ef03fc2b9a8320d75044d978a217",
-      "byteLength": 10652,
-      "exportCount": 70
+      "sha256": "5a7738f457e6ba3802c22e5c63d8de9e0d625465a7cf9c37f3e74036dd4bbfb8",
+      "byteLength": 11446,
+      "exportCount": 77
+    },
+    "src/http.d.ts": {
+      "sha256": "1df83d5fbd340712b70616baf51993a7e8950677013d482c46c08f132c00a8ac",
+      "byteLength": 865,
+      "exportCount": 7
     },
     "src/aspects/licolite/index.d.ts": {
       "sha256": "39c4101a91edffd6d7e4dcb5f455f285616e4a7124a75108cd8bc27e57d97b86",

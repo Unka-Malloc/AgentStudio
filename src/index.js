@@ -71,3 +71,9 @@ export { verifyProofBundle } from "./proof/bundle.js";
 export { createRepairPlanner } from "./repair/planner.js";
 export { createMaintenanceTaskEngine } from "./maintenance/task-engine.js";
 export { runPactiumQualityGateProfile } from "./quality/profile-runner.js";
+export {
+  PACTIUM_HTTP_MAX_BODY_BYTES,
+  PACTIUM_HTTP_PROTOCOL,
+  createPactiumHttpServer,
+  startPactiumHttpServer
+} from "./http.js";

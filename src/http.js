@@ -2,7 +2,9 @@ import http from "node:http";
 import { URL } from "node:url";
 import { PACTIUM_PROTOCOL } from "./protocol/constants.js";
 import { createPactium } from "./core/pactium-core.js";
+import { createMaintenanceTaskEngine } from "./maintenance/task-engine.js";
 import { createLicoLiteAspect } from "./aspects/licolite/index.js";
+import { verifyProofBundle } from "./proof/bundle.js";
 
 export const PACTIUM_HTTP_PROTOCOL = "pactium.v0.2.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES = 1024 * 1024;
@@ -44,9 +46,41 @@ async function readJson(request, { maxBodyBytes = PACTIUM_HTTP_MAX_BODY_BYTES } 
   }
 }
 
+function routeId(pathname, prefix) {
+  const base = `${prefix}/`;
+  if (!pathname.startsWith(base)) return "";
+  return decodeURIComponent(pathname.slice(base.length));
+}
+
+function envelopeAndOptions(input) {
+  if (input && typeof input === "object" && input.envelope) {
+    return { envelope: input.envelope, options: input.options || {} };
+  }
+  return { envelope: input, options: {} };
+}
+
+function bundleAndOptions(input) {
+  if (input && typeof input === "object" && input.bundle) {
+    return { bundle: input.bundle, options: input.options || {} };
+  }
+  return { bundle: input, options: {} };
+}
+
+function bundleExportRequest(input) {
+  if (typeof input === "string") return { envelopeOrId: input, options: {} };
+  if (input && typeof input === "object") {
+    if (input.envelope) return { envelopeOrId: input.envelope, options: input.options || {} };
+    if (input.envelopeId) return { envelopeOrId: String(input.envelopeId), options: input.options || {} };
+    if (input.id) return { envelopeOrId: String(input.id), options: input.options || {} };
+    if (input.envelopeKind || input.envelopeType) return { envelopeOrId: input, options: {} };
+  }
+  return { envelopeOrId: input, options: {} };
+}
+
 async function routeRequest({ pactium, licolite, request, response, maxBodyBytes }) {
   const baseUrl = `http://${request.headers.host || "127.0.0.1"}`;
   const url = new URL(request.url || "/", baseUrl);
+  const maintenance = createMaintenanceTaskEngine({ pactium });
   try {
     if (request.method === "GET" && url.pathname === "/health") {
       return sendJson(response, 200, {
@@ -58,11 +92,30 @@ async function routeRequest({ pactium, licolite, request, response, maxBodyBytes
     if (request.method === "GET" && url.pathname === "/protocols") {
       return sendJson(response, 200, await pactium.protocolCatalog());
     }
+    if (request.method === "GET" && url.pathname === "/doctor") {
+      return sendJson(response, 200, await pactium.doctor());
+    }
     if (request.method === "POST" && url.pathname === "/intents") {
       return sendJson(response, 200, await pactium.beginOperationIntent(await readJson(request, { maxBodyBytes })));
     }
+    if (request.method === "POST" && url.pathname === "/intents/lookup") {
+      const input = await readJson(request, { maxBodyBytes });
+      return sendJson(response, 200, await pactium.lookupOpenIntent(input.intentId || input.id || ""));
+    }
+    const intentId = routeId(url.pathname, "/intents");
+    if (request.method === "GET" && intentId) {
+      return sendJson(response, 200, await pactium.lookupOpenIntent(intentId));
+    }
     if (request.method === "POST" && url.pathname === "/outcomes") {
       return sendJson(response, 200, await pactium.appendOperationOutcome(await readJson(request, { maxBodyBytes })));
+    }
+    if (request.method === "POST" && url.pathname === "/outcomes/lookup") {
+      const input = await readJson(request, { maxBodyBytes });
+      return sendJson(response, 200, await pactium.lookupOutcome(input.intentId || input.id || ""));
+    }
+    const outcomeIntentId = routeId(url.pathname, "/outcomes");
+    if (request.method === "GET" && outcomeIntentId) {
+      return sendJson(response, 200, await pactium.lookupOutcome(outcomeIntentId));
     }
     if (request.method === "POST" && url.pathname === "/operations") {
       return sendJson(response, 200, await pactium.recordOperation(await readJson(request, { maxBodyBytes })));
@@ -71,10 +124,82 @@ async function routeRequest({ pactium, licolite, request, response, maxBodyBytes
       return sendJson(response, 200, await licolite.recordWorkspaceOperation(await readJson(request, { maxBodyBytes })));
     }
     if (request.method === "POST" && url.pathname === "/verify/envelope") {
-      return sendJson(response, 200, await pactium.verifyEnvelope(await readJson(request, { maxBodyBytes })));
+      const input = await readJson(request, { maxBodyBytes });
+      const { envelope, options } = envelopeAndOptions(input);
+      return sendJson(response, 200, await pactium.verifyEnvelope(envelope, options));
+    }
+    if (request.method === "POST" && url.pathname === "/verify/bundle") {
+      const input = await readJson(request, { maxBodyBytes });
+      const { bundle, options } = bundleAndOptions(input);
+      return sendJson(response, 200, await verifyProofBundle(bundle, options));
     }
     if (request.method === "POST" && url.pathname === "/licolite/verify/envelope") {
-      return sendJson(response, 200, await licolite.verifyEnvelope(await readJson(request, { maxBodyBytes })));
+      const input = await readJson(request, { maxBodyBytes });
+      const { envelope, options } = envelopeAndOptions(input);
+      return sendJson(response, 200, await licolite.verifyEnvelope(envelope, options));
+    }
+    if (request.method === "POST" && url.pathname === "/licolite/verify/bundle") {
+      const input = await readJson(request, { maxBodyBytes });
+      const { bundle, options } = bundleAndOptions(input);
+      return sendJson(response, 200, await licolite.verifyBundle(bundle, options));
+    }
+    if (request.method === "POST" && url.pathname === "/bundles/export") {
+      const { envelopeOrId, options } = bundleExportRequest(await readJson(request, { maxBodyBytes }));
+      return sendJson(response, 200, await pactium.exportProofBundle(envelopeOrId, options));
+    }
+    if (request.method === "POST" && url.pathname === "/licolite/bundles/export") {
+      const { envelopeOrId, options } = bundleExportRequest(await readJson(request, { maxBodyBytes }));
+      return sendJson(response, 200, await licolite.exportProofBundle(envelopeOrId, options));
+    }
+    if (request.method === "POST" && url.pathname === "/workspaces/projection") {
+      const input = await readJson(request, { maxBodyBytes });
+      return sendJson(response, 200, await pactium.getWorkspaceProjection(input.workspaceId || input.id || "default"));
+    }
+    const projectionWorkspaceId = routeId(url.pathname, "/workspaces");
+    if (request.method === "GET" && projectionWorkspaceId.endsWith("/projection")) {
+      return sendJson(response, 200, await pactium.getWorkspaceProjection(projectionWorkspaceId.slice(0, -"/projection".length)));
+    }
+    if (request.method === "POST" && url.pathname === "/workspaces/membership") {
+      return sendJson(response, 200, await pactium.proveWorkspaceMembership(await readJson(request, { maxBodyBytes })));
+    }
+    if (request.method === "POST" && url.pathname === "/cursors/ledger") {
+      return sendJson(response, 200, await pactium.getLedgerCursor(await readJson(request, { maxBodyBytes })));
+    }
+    if (request.method === "POST" && url.pathname === "/cursors/workspace") {
+      return sendJson(response, 200, await pactium.getWorkspaceCursor(await readJson(request, { maxBodyBytes })));
+    }
+    if (request.method === "POST" && url.pathname === "/cursors/verify") {
+      const input = await readJson(request, { maxBodyBytes });
+      return sendJson(response, 200, {
+        protocol: PACTIUM_PROTOCOL,
+        ok: pactium.verifyCursor(input.cursor || input, input.context || {})
+      });
+    }
+    if (request.method === "POST" && url.pathname === "/append-conditions") {
+      return sendJson(response, 200, pactium.createAppendCondition(await readJson(request, { maxBodyBytes })));
+    }
+    if (request.method === "POST" && url.pathname === "/trusted-heads/advance") {
+      return sendJson(response, 200, pactium.advanceTrustedHead(await readJson(request, { maxBodyBytes })));
+    }
+    if (request.method === "POST" && url.pathname === "/repair/plan") {
+      return sendJson(response, 200, pactium.planRecovery(await readJson(request, { maxBodyBytes })));
+    }
+    if (request.method === "POST" && url.pathname === "/licolite/repair/plan") {
+      const input = await readJson(request, { maxBodyBytes });
+      return sendJson(response, 200, licolite.planRepair(input.failures || input));
+    }
+    if (request.method === "POST" && url.pathname === "/maintenance/tasks/plan") {
+      const input = await readJson(request, { maxBodyBytes });
+      return sendJson(response, 200, maintenance.planTask(input.taskType || input.type || "doctor", input.input || {}));
+    }
+    if (request.method === "POST" && url.pathname === "/maintenance/tasks/run") {
+      return sendJson(response, 200, await maintenance.runTask(await readJson(request, { maxBodyBytes })));
+    }
+    if (request.method === "POST" && url.pathname === "/extensions") {
+      return sendJson(response, 200, await pactium.createExtension(await readJson(request, { maxBodyBytes })));
+    }
+    if (request.method === "POST" && url.pathname === "/envelopes") {
+      return sendJson(response, 200, await pactium.storeEnvelope(await readJson(request, { maxBodyBytes })));
     }
     return sendJson(response, 404, {
       protocol: PACTIUM_HTTP_PROTOCOL,

@@ -49,7 +49,7 @@ Integration tests must use the public API whenever possible. Tests that reach pr
 
 Regression tests must include checked-in snapshots or fixtures for:
 
-- Package root exports, `pactium/licolite` exports, and the package metadata export.
+- Package root exports, `pactium/http` exports, `pactium/licolite` exports, and the package metadata export.
 - Public TypeScript declaration digests.
 - Protocol profile constants.
 - Proof vector outputs.

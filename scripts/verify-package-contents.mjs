@@ -31,6 +31,7 @@ const requiredFiles = [
   "package.json",
   "src/aspects/licolite/index.d.ts",
   "src/aspects/licolite/index.js",
+  "src/http.d.ts",
   "src/index.d.ts",
   "src/index.js"
 ];
@@ -70,6 +71,7 @@ const approvedFiles = new Set([
   "src/core/append-condition.js",
   "src/core/pactium-core.js",
   "src/core/tracking-cursor.js",
+  "src/http.d.ts",
   "src/http.js",
   "src/index-engine/snapshot-merkle-index.js",
   "src/index.d.ts",
