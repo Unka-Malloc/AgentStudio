@@ -134,6 +134,21 @@ function shouldCutChunk({ size, boundaryHash, splitter }) {
   return (first32(boundaryHash) & splitter.boundaryMask) === 0 || size >= splitter.maxEntries;
 }
 
+function chunkEntryGroups(entries, snapshotDomain) {
+  const splitter = splitterConfig();
+  const chunks = [];
+  let active = [];
+  for (const entry of entries) {
+    active.push(entry);
+    if (shouldCutChunk({ size: active.length, boundaryHash: entryBoundaryHash(snapshotDomain, entry), splitter })) {
+      chunks.push({ entries: active, closed: true });
+      active = [];
+    }
+  }
+  if (active.length > 0 || chunks.length === 0) chunks.push({ entries: active, closed: false });
+  return chunks;
+}
+
 function ensureSortedEntries(entries) {
   for (let index = 1; index < entries.length; index += 1) {
     if (compareIndexKeys(entries[index - 1].key, entries[index].key) >= 0) return false;
@@ -306,27 +321,17 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
 
   async function writeLeafNodes(entries, snapshotDomain) {
     const splitter = splitterConfig();
-    const chunks = [];
-    let active = [];
-    for (const entry of entries) {
-      active.push(entry);
-      if (shouldCutChunk({ size: active.length, boundaryHash: entryBoundaryHash(snapshotDomain, entry), splitter })) {
-        chunks.push(active);
-        active = [];
-      }
-    }
-    if (active.length > 0 || chunks.length === 0) chunks.push(active);
     const descriptors = [];
-    for (const chunk of chunks) {
+    for (const chunk of chunkEntryGroups(entries, snapshotDomain)) {
       const { descriptor } = await putNode({
         protocol: PACTIUM_PROTOCOL,
         schema: PACTIUM_SCHEMA_VERSION,
         nodeType: INDEX_NODE_TYPE,
         domain: snapshotDomain,
         level: 0,
-        keyRange: rangeForEntries(chunk),
-        count: chunk.length,
-        entries: chunk,
+        keyRange: rangeForEntries(chunk.entries),
+        count: chunk.entries.length,
+        entries: chunk.entries,
         children: [],
         splitter
       });
@@ -441,6 +446,19 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     return nested;
   }
 
+  async function collectLeafDescriptorsFromDescriptor(descriptor, output = []) {
+    if (!descriptor?.root) return output;
+    const payload = await readNode(descriptor.root);
+    if (Number(payload.level || 0) === 0) {
+      output.push(descriptor);
+      return output;
+    }
+    for (const child of asArray(payload.children)) {
+      await collectLeafDescriptorsFromDescriptor(child, output);
+    }
+    return output;
+  }
+
   async function collectEntries(root) {
     const indexRoot = await readIndexRoot(root);
     return collectEntriesFromDescriptor({
@@ -548,24 +566,8 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     return current[0];
   }
 
-  async function rewritePathWithDescriptors(path, replacementDescriptors, snapshotDomain) {
-    let currentDescriptors = replacementDescriptors;
-    let replaceStart = null;
-    let replaceEnd = null;
-    for (const pathItem of asArray(path)) {
-      const children = asArray(pathItem.siblingDescriptors);
-      const start = replaceStart ?? Number(pathItem.replaceStart ?? pathItem.childIndex);
-      const end = replaceEnd ?? Number(pathItem.replaceEnd ?? pathItem.childIndex);
-      const nextChildren = [
-        ...children.slice(0, start),
-        ...currentDescriptors,
-        ...children.slice(end + 1)
-      ];
-      currentDescriptors = await writeParentLevel(nextChildren, snapshotDomain, Number(pathItem.level || 1));
-      replaceStart = null;
-      replaceEnd = null;
-    }
-    return rechunkToSingleRoot(currentDescriptors, snapshotDomain);
+  async function writeCanonicalRootFromLeafDescriptors(leafDescriptors, snapshotDomain) {
+    return writeIndexRootFromDescriptor(await rechunkToSingleRoot(leafDescriptors, snapshotDomain), snapshotDomain);
   }
 
   async function mutateLocal(root, key, mutation, options = {}) {
@@ -574,28 +576,36 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     const normalizedKey = String(key || "");
     if (!normalizedKey) return indexRoot;
     const found = await findLeaf(root, normalizedKey);
-    const immediateParent = found.path[0] || null;
-    let localDescriptors = [found.leafDescriptor];
-    let replaceStart = 0;
-    let replaceEnd = 0;
-    if (immediateParent) {
-      const siblings = asArray(immediateParent.siblingDescriptors);
-      replaceStart = Math.max(0, Number(immediateParent.childIndex || 0) - 1);
-      replaceEnd = Math.min(siblings.length - 1, Number(immediateParent.childIndex || 0) + 1);
-      localDescriptors = siblings.slice(replaceStart, replaceEnd + 1);
-      immediateParent.replaceStart = replaceStart;
-      immediateParent.replaceEnd = replaceEnd;
+    const leafDescriptors = await collectLeafDescriptorsFromDescriptor({
+      root: indexRoot.root,
+      rootHash: indexRoot.rootHash,
+      level: indexRoot.height,
+      count: indexRoot.count,
+      keyRange: indexRoot.keyRange
+    });
+    const foundLeafIndex = Math.max(0, leafDescriptors.findIndex((descriptor) => descriptor.root === found.leafDescriptor.root));
+    let replaceStart = Math.max(0, foundLeafIndex - 1);
+    let replaceEnd = Math.min(leafDescriptors.length - 1, foundLeafIndex + 1);
+    let replacementLeafDescriptors = [];
+    while (true) {
+      const localEntries = [];
+      for (const descriptor of leafDescriptors.slice(replaceStart, replaceEnd + 1)) {
+        localEntries.push(...await collectEntriesFromDescriptor(descriptor));
+      }
+      const mutatedEntries = mutation(normalizeEntries(localEntries)).sort((left, right) => compareIndexKeys(left.key, right.key));
+      const chunks = chunkEntryGroups(mutatedEntries, snapshotDomain);
+      const tailIsClosed = chunks[chunks.length - 1]?.closed === true;
+      if (tailIsClosed || replaceEnd >= leafDescriptors.length - 1) {
+        replacementLeafDescriptors = await writeLeafNodes(mutatedEntries, snapshotDomain);
+        break;
+      }
+      replaceEnd += 1;
     }
-    const localEntries = [];
-    for (const descriptor of localDescriptors) {
-      localEntries.push(...await collectEntriesFromDescriptor(descriptor));
-    }
-    const mutatedEntries = mutation(normalizeEntries(localEntries)).sort((left, right) => compareIndexKeys(left.key, right.key));
-    const replacementLeafDescriptors = await writeLeafNodes(mutatedEntries, snapshotDomain);
-    const rootDescriptor = immediateParent
-      ? await rewritePathWithDescriptors(found.path, replacementLeafDescriptors, snapshotDomain)
-      : await rechunkToSingleRoot(replacementLeafDescriptors, snapshotDomain);
-    return writeIndexRootFromDescriptor(rootDescriptor, snapshotDomain);
+    return writeCanonicalRootFromLeafDescriptors([
+      ...leafDescriptors.slice(0, replaceStart),
+      ...replacementLeafDescriptors,
+      ...leafDescriptors.slice(replaceEnd + 1)
+    ], snapshotDomain);
   }
 
   async function put(root, key, value, options = {}) {

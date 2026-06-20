@@ -139,7 +139,7 @@ Envelope verification checks:
 2. Content-addressed proof material integrity (referenced blocks match their CIDs)
 3. Index proof validity (state/workspace proofs are mathematically correct)
 4. Critical extension support (all required extensions are understood)
-5. Signature validity (if signed heads are used)
+5. Signed Ledger Head validity when verifier manifest material is present (default core recording signs heads unless unsigned mode is explicit)
 
 ### What is a "critical extension"?
 

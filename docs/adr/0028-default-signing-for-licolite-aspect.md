@@ -2,4 +2,4 @@
 
 The LicoLite Aspect enables signing for Pactium Proof Envelopes by default. Pactium remains usable without keys in plain library mode, but LicoLite policy controls whether missing signing material fails closed or falls back to opportunistic signing.
 
-The current package does not sign Ledger Heads. Ledger Head signing is an extension point that requires implementation and tests before docs may describe it as current behavior.
+The current core also signs Ledger Heads by default with a local Ed25519 signer and verifier manifest unless unsigned mode is explicitly requested. LicoLite envelope signing remains separate and can use HMAC or Ed25519 signer material under LicoLite policy.

@@ -192,7 +192,54 @@ function factRefBindings(envelope, proofMaterial) {
   };
 }
 
-function verifySemanticBindings({ envelope, proofMaterial, failures }) {
+async function resolveLedgerFact({ proofMaterial, storage, bundleMap, failures }) {
+  const leaf = proofMaterial?.ledger?.inclusionProof?.leaf || {};
+  if (!leaf.factCid) return null;
+  let block = null;
+  try {
+    block = await resolveBlock({ cid: leaf.factCid, storage, bundleMap });
+  } catch (error) {
+    failures.push(createVerificationFailure({
+      layer: "ledger",
+      code: "replaced_ledger_fact",
+      message: error instanceof Error ? error.message : "Ledger fact material was replaced or corrupted.",
+      evidenceRef: leaf.factCid
+    }));
+    return null;
+  }
+  if (!block) {
+    failures.push(createVerificationFailure({
+      layer: "ledger",
+      code: "missing_ledger_fact_material",
+      message: "Ledger fact material is missing.",
+      evidenceRef: leaf.factCid,
+      repairable: true
+    }));
+    return null;
+  }
+  if (block.cid !== leaf.factCid || block.payloadHash !== leaf.factHash) {
+    failures.push(createVerificationFailure({
+      layer: "ledger",
+      code: "bad_ledger_fact_material",
+      message: "Ledger fact material does not match the verified Ledger leaf.",
+      evidenceRef: leaf.factCid
+    }));
+    return null;
+  }
+  return decodeBlockValue(block);
+}
+
+function mutationDescriptor(value = {}) {
+  return {
+    key: String(value.key || ""),
+    action: String(value.action || "put"),
+    valueRef: String(value.valueRef || ""),
+    valueHash: String(value.valueHash || ""),
+    metadata: normalizeCanonicalValue(asRecord(value.metadata))
+  };
+}
+
+function verifySemanticBindings({ envelope, proofMaterial, ledgerFact = null, failures }) {
   const proofHead = proofMaterial?.ledger?.head || {};
   if (envelope.ledgerHead && (
     envelope.ledgerHead.rootHash !== proofHead.rootHash ||
@@ -221,6 +268,28 @@ function verifySemanticBindings({ envelope, proofMaterial, failures }) {
   }
 
   const proofs = proofMaterial?.proofs || {};
+  const appendConditionHash = String(proofMaterial?.appendCondition?.conditionHash || "");
+  if (ledgerFact) {
+    if (ledgerFact.factType !== envelope.factType) {
+      badBinding("bad_ledger_fact_binding", "Ledger fact type does not match the envelope fact type.", {
+        expectedFactType: envelope.factType,
+        actualFactType: ledgerFact.factType
+      });
+    }
+    if (String(ledgerFact.appendConditionHash || "") !== appendConditionHash) {
+      badBinding("bad_append_condition_binding", "Proof append condition does not match the Ledger fact appendConditionHash.", {
+        expectedAppendConditionHash: ledgerFact.appendConditionHash || "",
+        actualAppendConditionHash: appendConditionHash
+      });
+    }
+    if (proofMaterial?.appendCondition?.workspaceId && ledgerFact.workspaceId &&
+      proofMaterial.appendCondition.workspaceId !== ledgerFact.workspaceId) {
+      badBinding("bad_append_condition_binding", "Proof append condition workspace does not match the Ledger fact workspace.", {
+        expectedWorkspaceId: ledgerFact.workspaceId,
+        actualWorkspaceId: proofMaterial.appendCondition.workspaceId
+      });
+    }
+  }
   function badBinding(code, message, details = {}) {
     failures.push(createVerificationFailure({
       layer: "proof-semantics",
@@ -271,13 +340,28 @@ function verifySemanticBindings({ envelope, proofMaterial, failures }) {
   const stateCommit = proofs.stateCommit;
   if (stateCommit) {
     const touchedKeyProofs = asArray(proofs.state?.touchedKeyProofs);
+    const mutationDescriptors = asArray(stateCommit.mutations).map(mutationDescriptor);
     const mutationKeys = asArray(stateCommit.mutationKeys).map(String).filter(Boolean);
     const mutationActions = asArray(stateCommit.mutationActions).map(String);
+    const expectedStateCommitId = createId("state_commit", {
+      outcomeId: stateCommit.outcomeId,
+      stateRoot: stateCommit.stateRoot,
+      mutations: mutationDescriptors
+    });
     const invalidStateCommit = stateCommit.factType !== "state.commit" ||
       stateCommit.intentId !== envelope.factId ||
+      stateCommit.stateCommitId !== expectedStateCommitId ||
+      (ledgerFact && (
+        stateCommit.outcomeId !== ledgerFact.outcomeId ||
+        stateCommit.intentId !== ledgerFact.intentId ||
+        stateCommit.workspaceId !== ledgerFact.workspaceId
+      )) ||
       stateCommit.stateRoot !== proofs.state?.root ||
-      Number(stateCommit.mutationCount || 0) !== mutationKeys.length ||
-      mutationActions.length !== mutationKeys.length ||
+      Number(stateCommit.mutationCount || 0) !== mutationDescriptors.length ||
+      mutationKeys.length !== mutationDescriptors.length ||
+      mutationActions.length !== mutationDescriptors.length ||
+      mutationKeys.some((key, index) => key !== mutationDescriptors[index]?.key) ||
+      mutationActions.some((action, index) => action !== mutationDescriptors[index]?.action) ||
       Number(stateCommit.touchedKeyCount || 0) !== touchedKeyProofs.length;
     if (invalidStateCommit) {
       failures.push(createVerificationFailure({
@@ -519,7 +603,8 @@ export async function verifyProofEnvelope(envelope, {
     }
   }
   if (proofMaterial) {
-    verifySemanticBindings({ envelope, proofMaterial, failures });
+    const ledgerFact = await resolveLedgerFact({ proofMaterial, storage, bundleMap, failures });
+    verifySemanticBindings({ envelope, proofMaterial, ledgerFact, failures });
     await verifyEmbeddedProofs({
       proofMaterial,
       registry: createDefaultProofVerifierRegistry(proofVerifiers),

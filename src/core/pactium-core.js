@@ -31,17 +31,41 @@ function createEmptyCoreState() {
       outcomeIdempotency: "",
       causality: ""
     },
-    workspace: {},
-    stateEntries: {},
-    checkpointEntries: {},
-    intents: {},
-    outcomes: {},
-    intentEnvelopes: {},
-    intentIdempotencyClaims: {},
-    outcomeEnvelopes: {},
-    envelopes: {},
-    proofBundles: {}
+    workspace: Object.create(null),
+    stateEntries: Object.create(null),
+    checkpointEntries: Object.create(null),
+    intents: Object.create(null),
+    outcomes: Object.create(null),
+    intentEnvelopes: Object.create(null),
+    intentIdempotencyClaims: Object.create(null),
+    outcomeEnvelopes: Object.create(null),
+    envelopes: Object.create(null),
+    proofBundles: Object.create(null)
   };
+}
+
+function mapRecord(value = {}) {
+  return Object.assign(Object.create(null), asRecord(value));
+}
+
+function normalizeCoreState(state) {
+  for (const field of [
+    "workspace",
+    "stateEntries",
+    "checkpointEntries",
+    "intents",
+    "outcomes",
+    "intentEnvelopes",
+    "intentIdempotencyClaims",
+    "outcomeEnvelopes",
+    "envelopes",
+    "proofBundles"
+  ]) {
+    state[field] = mapRecord(state[field]);
+  }
+  for (const key of Object.keys(state.stateEntries)) state.stateEntries[key] = mapRecord(state.stateEntries[key]);
+  for (const key of Object.keys(state.checkpointEntries)) state.checkpointEntries[key] = mapRecord(state.checkpointEntries[key]);
+  return state;
 }
 
 function idempotencyKeyFor(input) {
@@ -91,7 +115,7 @@ function lifecycleValueRef(id, extra = {}) {
 
 function workspaceStateFor(state, workspaceId) {
   const key = safeText(workspaceId, "default");
-  state.workspace[key] ||= {
+  if (!Object.hasOwn(state.workspace, key)) state.workspace[key] = {
     nextOrdinal: 0,
     orderRoot: "",
     membershipRoot: "",
@@ -103,13 +127,13 @@ function workspaceStateFor(state, workspaceId) {
 
 function stateEntriesFor(state, workspaceId) {
   const key = safeText(workspaceId, "default");
-  state.stateEntries[key] ||= {};
+  if (!Object.hasOwn(state.stateEntries, key)) state.stateEntries[key] = Object.create(null);
   return state.stateEntries[key];
 }
 
 function checkpointEntriesFor(state, workspaceId) {
   const key = safeText(workspaceId, "default");
-  state.checkpointEntries[key] ||= {};
+  if (!Object.hasOwn(state.checkpointEntries, key)) state.checkpointEntries[key] = Object.create(null);
   return state.checkpointEntries[key];
 }
 
@@ -236,7 +260,7 @@ export function createPactium({
     state = await resolvedStorage.getProtocolObject("core", "runtime-state", null);
     if (!state) state = createEmptyCoreState();
     state.intentIdempotencyClaims ||= {};
-    return state;
+    return normalizeCoreState(state);
   }
 
   async function saveState() {
@@ -266,7 +290,9 @@ export function createPactium({
       appendCondition,
       proofs
     };
-    const materialRef = await createProofRef(resolvedStorage, "ledger-and-index-proofs", material);
+    const materialRef = await createProofRef(resolvedStorage, "ledger-and-index-proofs", material, [
+      ledgerAppend.entry.factCid
+    ]);
     const materializedExtensions = [];
     for (const extension of extensions) {
       const materialized = await materializeExtension(resolvedStorage, extension);
@@ -583,6 +609,18 @@ export function createPactium({
       }
     }
     const stateRoot = workspace.stateRoot;
+    const mutationDescriptors = keyedMutations.map((mutation) => {
+      const key = String(mutation.key || "");
+      const action = String(mutation.action || "put");
+      const entry = workspaceStateEntries[key] || {};
+      return {
+        key,
+        action,
+        valueRef: action === "delete" ? "" : String(entry.valueRef || ""),
+        valueHash: action === "delete" ? "" : String(entry.valueHash || ""),
+        metadata: normalizeCanonicalValue(asRecord(mutation.metadata))
+      };
+    });
     const stateCommit = {
       protocol: PACTIUM_PROTOCOL,
       schema: PACTIUM_SCHEMA_VERSION,
@@ -590,13 +628,14 @@ export function createPactium({
       stateCommitId: createId("state_commit", {
         outcomeId: outcome.outcomeId,
         stateRoot,
-        mutations: keyedMutations
+        mutations: mutationDescriptors
       }),
       outcomeId: outcome.outcomeId,
       intentId,
       workspaceId,
       stateRoot,
       mutationCount: keyedMutations.length,
+      mutations: mutationDescriptors,
       mutationKeys: keyedMutations.map((mutation) => String(mutation.key || "")),
       mutationActions: keyedMutations.map((mutation) => String(mutation.action || "put")),
       touchedKeyCount: keyedMutations.slice(0, 32).length,
@@ -732,7 +771,8 @@ export function createPactium({
 
   async function getLedgerCursor({ fromCursor = null, position = 0, limit = 100 } = {}) {
     await prepareRead();
-    const start = Math.max(0, Number(fromCursor?.position ?? position ?? 0));
+    const requestedStart = Number(fromCursor?.position ?? position ?? 0);
+    const start = Number.isInteger(requestedStart) && requestedStart >= 0 ? requestedStart : 0;
     const pageLimit = Math.max(1, Math.min(Number(limit || 100), 10000));
     const page = await ledger.pageEntries({ start, limit: pageLimit });
     const currentHead = page.head;
@@ -758,7 +798,8 @@ export function createPactium({
     const current = await prepareRead();
     const workspace = workspaceStateFor(current, workspaceId);
     const currentHead = await ledger.head();
-    const start = Math.max(0, Number(fromCursor?.position ?? position ?? 0));
+    const requestedStart = Number(fromCursor?.position ?? position ?? 0);
+    const start = Number.isInteger(requestedStart) && requestedStart >= 0 ? requestedStart : 0;
     const pageLimit = Math.max(1, Math.min(Number(limit || 100), 10000));
     const entries = workspace.orderRoot
       ? await indexEngine.scan(workspace.orderRoot, { min: padOrdinal(start), limit: pageLimit })

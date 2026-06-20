@@ -25,7 +25,7 @@ That means Pactium should not become a generic database, a full event-sourcing f
 | Area | Original baseline finding | Current status |
 | --- | --- | --- |
 | Ledger | Root and consistency proof work scaled with full leaf history. | Closed: compact-range persistence, stored proof-node fetching, audit-path inclusion/consistency proofs, page reads, and signed heads are implemented. |
-| Verifiable index | Snapshot Merkle authority had no structural sharing and diff/mutation were O(n). | Closed: content-addressed Prolly leaf/internal nodes, path-local `put`/`delete`, bounded scan/prefix, and non-aligned shared-node diff are implemented. |
+| Verifiable index | Snapshot Merkle authority had no structural sharing and diff/mutation were O(n). | Closed: content-addressed Prolly leaf/internal nodes, canonical local leaf-window `put`/`delete`, bounded scan/prefix, and non-aligned shared-node diff are implemented. |
 | Workspace state | State proof roots were rebuilt from `stateEntries` on every mutation. | Closed: `workspace.stateRoot` is authoritative, bootstraps once when empty, mutates incrementally, and is retained during in-memory compaction. |
 | Proof verifier | Core envelope verification did not dispatch to embedded index proof verifiers. | Closed: registered proof verification covers workspace, state, checkpoint, idempotency, and lifecycle proofs. |
 | Proof bundle | Bundle export was a JSON block array with no random-access index. | Closed: `exportProofBundle(envelopeOrId)` emits the indexed proof-bundle record stream. |

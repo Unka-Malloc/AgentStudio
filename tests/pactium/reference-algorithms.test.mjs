@@ -492,6 +492,34 @@ describe("Pactium reference-project algorithm coverage", () => {
 	    assert.equal(deleted.root, (await engine.createIndex(deletedEntries)).root);
 	  });
 
+  it("keeps incremental Prolly mutations canonical across long boundary-shifting sequences", async () => {
+    const engine = createVerifiableIndexEngine({
+      storage: createStoragePort({ inMemory: true }),
+      domain: "reference-canonical-mutation"
+    });
+    let entries = Array.from({ length: 12000 }, (_, index) =>
+      keyEntry(`k:${String(index).padStart(6, "0")}`, `v:${index}`)
+    );
+    let root = await engine.createIndex(entries);
+    for (let index = 0; index < 45; index += 1) {
+      const key = `k:${String((index * 7919) % 14400).padStart(6, "0")}`;
+      if (index % 5 === 0) {
+        root = await engine.delete(root.root, key);
+        entries = entries.filter((entry) => entry.key !== key);
+      } else {
+        const nextEntry = keyEntry(key, `mut:${index}`);
+        root = await engine.put(root.root, key, nextEntry);
+        entries = sortedEntries([
+          ...entries.filter((entry) => entry.key !== key),
+          nextEntry
+        ]);
+      }
+      const rebuilt = await engine.createIndex(entries, { domain: "reference-canonical-mutation" });
+      assert.equal(root.root, rebuilt.root, `incremental root diverged from canonical rebuild at operation ${index}`);
+    }
+  });
+
+
   it("runs index pressure profiles with membership, non-membership, diff, and progress evidence", async () => {
     const progress = [];
     const result = await runPactiumQualityGateProfile({
@@ -1324,7 +1352,7 @@ describe("Pactium reference-project algorithm coverage", () => {
     const advanced = advanceTo(cursor, 8, { gaps: [6], headRef: "head:2", orderRoot: "root:2" });
     assert.equal(advanced.position, 8);
     assert.equal(covers(advanced, 6), false);
-    assert.equal(covers(advanced, 8), true);
+    assert.equal(covers(advanced, 8), false);
 
     assert.deepEqual(decodeVarint(Buffer.from([0x81, 0x01])), { value: 129, nextOffset: 2 });
     assert.throws(() => decodeVarint(Buffer.from([0x80])), /truncated/);

@@ -13,6 +13,8 @@ Pactium keeps a deliberately small tooling surface. Tools exist only when they s
 | HTTP facade | `src/http.js` | Local JSON endpoints for health, protocol catalog, operation recording, LicoLite operation recording, and envelope verification. |
 | Public package exports | `.`, `./licolite`, `./package.json` | Current proof-first package API, first-class LicoLite aspect, and package metadata. |
 
+The HTTP facade is a local integration surface. `pactium serve` defaults to `127.0.0.1` and a 1 MiB JSON request body cap; non-loopback exposure must be owned by the embedding host's authentication, authorization, TLS, and network policy.
+
 ## Agent Entry
 
 `AGENT.md` is the single root entry for automated coding agents maintaining this repository. It is a maintained repository guide, not a package runtime surface and not an agent skill registry.

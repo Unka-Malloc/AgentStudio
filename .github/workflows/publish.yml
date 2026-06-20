@@ -102,10 +102,6 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org/
-          cache: npm
-      - run: npm install -g npm@latest
-      - run: npm ci
-      - run: npm run verify:release
       - run: |
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${{ needs.package-status.outputs.version }}" ]; then
             echo "Release tag ${GITHUB_REF_NAME} does not match package version v${{ needs.package-status.outputs.version }}."

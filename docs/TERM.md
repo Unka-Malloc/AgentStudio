@@ -49,11 +49,11 @@ A Ledger Head retained by a verifier as its local trust anchor for later consist
 _Avoid_: latest server head, cached response, checkpoint file
 
 **Signed Ledger Head**:
-A Ledger Head endorsed by a host-provided signing authority. Current core verifies unsigned Ledger Heads and consistency proofs; signed Ledger Heads are an extension point rather than a shipped LicoLite Aspect behavior.
+A Ledger Head endorsed by a verifier manifest signer. Current core can sign Ledger Heads with Ed25519, embed the verifier manifest on the head, and verify manifest-bound signatures during envelope or trusted-head verification.
 _Avoid_: required key, Pactium identity, global trust root
 
 **Signing Authority**:
-A host-provided authority capable of signing Pactium Proof Envelopes. Ledger Head signing is reserved for a future extension point.
+A host-provided or local Pactium authority capable of signing Pactium Proof Envelopes or Ledger Heads. LicoLite envelope signing can use HMAC or Ed25519; Ledger Head signing uses Ed25519 verifier manifests.
 _Avoid_: built-in product key, mandatory secret, Pactium account
 
 **Witness Extension Point**:

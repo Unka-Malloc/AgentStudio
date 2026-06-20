@@ -14,7 +14,7 @@ Pactium is LicoLite's proof-first protocol substrate. LicoLite is the primary ho
 | Ledger authority | Global Operation Ledger remains the ordering authority. |
 | Projection commit | Workspace Projection updates happen synchronously with Ledger-bound protocol commits. |
 | Workspace reverse lookup | Workspace Membership Index proves whether a Ledger fact belongs to a workspace. |
-| Signing | Enabled by default for the LicoLite Aspect; missing signer behavior is LicoLite policy. |
+| Signing | Enabled by default for the LicoLite Aspect; production recording and verification require an explicit signer or signerSecret. |
 | Policy evidence | LicoLite Policy Extension is critical and hash-bound. |
 | Workspace effect evidence | LicoLite Workspace Effect Extension is critical and hash-bound. |
 | Verifier | LicoLite Verifier is required and returns structured Verification Failures. |
@@ -53,5 +53,6 @@ The LicoLite Aspect is acceptable only when the release gate passes and includes
 - root export and `pactium/licolite` export snapshots;
 - LicoLite workspace operations with signing, critical extensions, Workspace Projection, State Commit, Checkpoint, Proof Envelope, and Proof Bundle;
 - missing signer/evidence behavior controlled by LicoLite policy, with production-style fail-closed tests;
+- required policy/effect extensions must remain critical and listed in `criticalExtensions`;
 - structured Verification Failures for bad signature, missing proof material, unsupported critical extension, bad workspace projection proof, and Ledger consistency failure;
 - public API pressure test `api:licolite-record` in the default scaled release gate, with the 5,000-operation profile available through `PACTIUM_FULL_PRESSURE=1 npm run verify:protocol:gates` for explicit full review.

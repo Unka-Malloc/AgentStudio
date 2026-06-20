@@ -35,6 +35,61 @@ const requiredFiles = [
   "src/index.js"
 ];
 
+const approvedFiles = new Set([
+  "CHANGELOG.md",
+  "LICENSE",
+  "README.md",
+  "README.zh-CN.md",
+  "SECURITY.md",
+  "bin/pactium.mjs",
+  "docs/API.md",
+  "docs/FAQ.md",
+  "docs/LICOLITE-ASPECT.md",
+  "docs/MIGRATION.md",
+  "docs/README.md",
+  "docs/TERM.md",
+  "docs/architecture/ARCHITECTURE.md",
+  "docs/logo.svg",
+  "docs/protocols/PROFILE.md",
+  "docs/protocols/PROTOCOLS.md",
+  "examples/README.md",
+  "examples/export-proof-bundle.mjs",
+  "examples/licolite-signed-operation.mjs",
+  "examples/record-operation.mjs",
+  "examples/verify-envelope.mjs",
+  "examples/workspace-projection.mjs",
+  "package.json",
+  "src/README.md",
+  "src/aspects/licolite/aspect.js",
+  "src/aspects/licolite/constants.js",
+  "src/aspects/licolite/evidence.js",
+  "src/aspects/licolite/index.d.ts",
+  "src/aspects/licolite/index.js",
+  "src/aspects/licolite/signing.js",
+  "src/canonical/value.js",
+  "src/core/append-condition.js",
+  "src/core/pactium-core.js",
+  "src/core/tracking-cursor.js",
+  "src/http.js",
+  "src/index-engine/snapshot-merkle-index.js",
+  "src/index.d.ts",
+  "src/index.js",
+  "src/ledger/signed-head.js",
+  "src/ledger/transparency-log.js",
+  "src/maintenance/task-engine.js",
+  "src/proof/bundle-format.js",
+  "src/proof/bundle.js",
+  "src/proof/envelope.js",
+  "src/proof/registry.js",
+  "src/protocol/constants.js",
+  "src/protocol/hashing.js",
+  "src/quality/profile-runner.js",
+  "src/repair/planner.js",
+  "src/shared/records.js",
+  "src/storage/local-json-storage-port.js",
+  "src/verification/failure.js"
+]);
+
 const deniedExactFiles = new Set([
   "AGENT.md",
   "CONTEXT.md",
@@ -117,7 +172,9 @@ function resolvePackageLinkTarget(fromFile, rawTarget) {
   const target = stripLinkDecoration(rawTarget);
   if (isExternalOrAnchorTarget(target)) return null;
   const withoutFragment = target.split("#", 1)[0].split("?", 1)[0];
-  if (isExternalOrAnchorTarget(withoutFragment) || path.isAbsolute(withoutFragment)) return null;
+  if (isExternalOrAnchorTarget(withoutFragment)) return null;
+  if (withoutFragment.startsWith("/")) return normalizePackagePath(withoutFragment.slice(1));
+  if (path.isAbsolute(withoutFragment)) return null;
   return normalizePackagePath(path.join(path.dirname(fromFile), withoutFragment));
 }
 
@@ -164,6 +221,14 @@ function verifyRequiredFiles(packageFiles, findings) {
   for (const requiredFile of requiredFiles) {
     if (!packageFileSet.has(requiredFile)) {
       addFinding(findings, requiredFile, "missing_required_package_file");
+    }
+  }
+}
+
+function verifyApprovedFiles(packageFiles, findings) {
+  for (const file of packageFiles) {
+    if (!approvedFiles.has(file.path)) {
+      addFinding(findings, file.path, "unexpected_package_file");
     }
   }
 }
@@ -232,6 +297,7 @@ async function main() {
   const packageFiles = pack.files || [];
 
   verifyRequiredFiles(packageFiles, findings);
+  verifyApprovedFiles(packageFiles, findings);
   verifyDeniedFiles(packageFiles, findings);
   verifyExecutableBins(packageFiles, findings);
   await verifyPublishedDocLinks(packageFiles, findings);

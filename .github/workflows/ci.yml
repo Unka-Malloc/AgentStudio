@@ -5,6 +5,9 @@ on:
     branches: [stable, main, nightly]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest

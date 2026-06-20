@@ -23,10 +23,11 @@ export function safeText(value, fallback = "") {
 }
 
 export function safeToken(value, fallback = "default") {
-  return String(value || fallback)
+  const token = String(value || fallback)
     .trim()
     .replace(/[^a-zA-Z0-9._:-]+/g, "_")
     .replace(/^_+|_+$/g, "")
-    .slice(0, 180) || fallback;
+    .slice(0, 180);
+  return token && token !== "." && token !== ".." ? token : fallback;
 }
 /* node:coverage enable */

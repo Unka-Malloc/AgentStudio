@@ -8,7 +8,7 @@ Pactium follows [Semantic Versioning](https://semver.org/):
 
 - **Major** (1.0, 2.0) -- breaking changes to public API or protocol format
 - **Minor** (0.2, 0.3) -- new features, backward-compatible API additions
-- **Patch** (0.2.1) -- bug fixes with no API or protocol changes
+- **Patch** (0.2.2) -- bug fixes with no API or protocol changes
 
 During the `0.x` series, minor versions may include breaking changes. The protocol profile is locked per minor version.
 

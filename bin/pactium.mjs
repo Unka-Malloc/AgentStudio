@@ -36,13 +36,13 @@ function usage() {
 
 Usage:
   pactium doctor [--data-dir DIR]
-  pactium serve [--data-dir DIR] [--host HOST] [--port PORT]
+  pactium serve [--data-dir DIR] [--host HOST] [--port PORT] [--max-body-bytes BYTES]
   pactium intent begin --body JSON
   pactium outcome append --body JSON
   pactium operation record --body JSON
   pactium envelope verify --body JSON
   pactium bundle verify --body JSON
-  pactium licolite record --body JSON
+  pactium licolite record --body JSON [--signer-secret SECRET]
   pactium licolite verify --body JSON
 `;
 }
@@ -69,13 +69,15 @@ async function main() {
     return;
   }
   if (domain === "serve") {
-    const host = argValue(args, "--host", "127.0.0.1");
+    const host = argValue(args, "--host", process.env.PACTIUM_HTTP_HOST || "127.0.0.1");
     const port = Number(argValue(args, "--port", process.env.PACTIUM_HTTP_PORT || "7288"));
-    const started = await startPactiumHttpServer({ dataDir, host, port });
+    const maxBodyBytes = Number(argValue(args, "--max-body-bytes", process.env.PACTIUM_HTTP_MAX_BODY_BYTES || "1048576"));
+    const started = await startPactiumHttpServer({ dataDir, host, port, maxBodyBytes });
     printJson({
       protocol: started.protocol,
       url: started.url,
-      dataDir
+      dataDir,
+      maxBodyBytes: started.maxBodyBytes
     });
     return;
   }
@@ -101,7 +103,12 @@ async function main() {
     return;
   }
   if (domain === "licolite" && action === "record") {
-    printJson(await licolite.recordWorkspaceOperation(await bodyFromArgs(args)));
+    const scopedLicoLite = createLicoLiteAspect({
+      pactium,
+      evidencePolicy: argValue(args, "--evidence-policy", "opportunistic"),
+      signerSecret: argValue(args, "--signer-secret", process.env.LICOLITE_SIGNING_SECRET || "")
+    });
+    printJson(await scopedLicoLite.recordWorkspaceOperation(await bodyFromArgs(args)));
     return;
   }
   if (domain === "licolite" && action === "verify") {

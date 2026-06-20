@@ -346,6 +346,9 @@ async function main() {
   const vectors = await buildProofVectors();
   const snapshots = await buildRegressionSnapshots();
   if (process.env.PACTIUM_UPDATE_FIXTURES === "1") {
+    if (process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true") {
+      throw new Error("PACTIUM_UPDATE_FIXTURES is not allowed in CI.");
+    }
     await fs.mkdir(fixturesDir, { recursive: true });
     await fs.writeFile(vectorPath, stable(vectors));
     await fs.writeFile(snapshotPath, stable(snapshots));

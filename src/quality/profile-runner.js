@@ -227,7 +227,11 @@ export async function runPactiumQualityGateProfile({
     const { createLicoLiteAspect } = await import("../aspects/licolite/index.js");
     const context = createPressureCore(pactium);
     const { core } = context;
-    const aspect = createLicoLiteAspect({ pactium: core, evidencePolicy: "production" });
+    const aspect = createLicoLiteAspect({
+      pactium: core,
+      evidencePolicy: "production",
+      signerSecret: "pactium-quality-gate-signer"
+    });
     for (let index = 0; index < operations; index += 1) {
       const operationStarted = performance.now();
       const envelope = await aspect.recordWorkspaceOperation({

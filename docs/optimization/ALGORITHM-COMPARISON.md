@@ -1,19 +1,19 @@
 # Algorithm Comparison
 
-This comparison treats Pactium as a proof-first protocol substrate for LicoLite, not as a database, transparency service, replication feed, or event-sourcing framework. The table below is the optimization baseline that motivated the implementation pass. For current code status, see [Implementation Status](IMPLEMENTATION-STATUS.md).
+This comparison treats Pactium as a proof-first protocol substrate for LicoLite, not as a database, transparency service, replication feed, or event-sourcing framework. The table below describes the current implementation after the optimization pass; implementation status is tracked in [Implementation Status](IMPLEMENTATION-STATUS.md).
 
 ## Similarities And Differences
 
-| Reference | Similarity to Pactium | Baseline difference from Pactium | Optimization lesson |
+| Reference | Similarity to Pactium | Current Pactium boundary | Implemented lesson |
 | --- | --- | --- | --- |
-| Trillian | Both model an append-only transparency log with inclusion and consistency proofs. Pactium already uses `0x00` leaf and `0x01` node domain separation. | Trillian stores and updates compact ranges/nodes, integrates batches, signs log roots, and fetches proof nodes without full-history disclosure. The baseline Pactium implementation recomputed roots from all leaves and carried `oldLeafHashes`/`newLeafHashes` in consistency proofs. | Replace full-history consistency proofs with compact RFC6962 proofs and stored compact ranges. |
-| Rekor | Both produce portable proof material for append-only facts. | Rekor verification layers include inclusion, checkpoint signature, signed entry timestamp, and consistency against a trusted head. The baseline Pactium core verification stopped at ledger proof checks and optional LicoLite HMAC. | Add signed head/checkpoint material and a verifier manifest so offline recipients can establish who signed which head. |
-| transparency-dev/merkle | Same RFC6962 proof model and hash prefixing. | The reference library validates proof shape, index bounds, and consistency proof semantics directly; the baseline Pactium consistency proof was a full leaf-hash transcript. | Use this as the permissive algorithm baseline for ledger proof validation behavior and negative tests. |
-| Dolt | Same desired data structure family: Prolly tree over ordered key/value entries. | Dolt has real content-defined chunking, content-addressed nodes, subtree counts, NodeStore reads/writes, and cursor-based diff. Baseline Pactium stored one full sorted snapshot with a pairwise Merkle overlay. | Build a real Prolly node graph and make snapshot roots point to nodes, not full entry arrays. |
-| go-car | Both package content-addressed proof blocks for offline transport. | go-car has a binary archive format, offset metadata, indexes, header/section limits, duplicate controls, and streaming readers. Baseline Pactium exported a JSON block list with no offset index. | Keep Pactium manifest semantics while emitting an indexed binary envelope. |
-| Hypercore | Both use append-only Merkle roots and proof material that can be verified remotely. | Hypercore binds roots to signer manifests, quorum rules, tree lengths, forks, and signatures. Baseline Pactium had optional core signing and LicoLite default HMAC, but no stable signer manifest. | Introduce signed ledger heads with manifest-bound verifier identities before adding witness networks. |
+| Trillian | Both model an append-only transparency log with inclusion and consistency proofs. Pactium uses `0x00` leaf and `0x01` node domain separation. | Pactium is local package infrastructure, not a distributed log service. It persists compact ranges/nodes and signed heads, but does not run Trillian's server topology. | Compact RFC6962 proofs, stored compact ranges, and signed heads are implemented. |
+| Rekor | Both produce portable proof material for append-only facts. | Pactium verifies Ledger inclusion, Ledger consistency, signed heads, and embedded proof material, but does not provide Rekor's public transparency service or signed entry timestamp ecosystem. | Verifier manifests and signed-head checks let offline recipients establish who signed a Ledger Head. |
+| transparency-dev/merkle | Same RFC6962 proof model and hash prefixing. | Pactium owns its proof shape and structured failure model rather than reusing the Go library. | Ledger verification validates proof shape, index bounds, consistency semantics, and complete path consumption. |
+| Dolt | Same data structure family: Prolly tree over ordered key/value entries. | Pactium uses protocol-defined key/value-derived boundaries, not Dolt's rolling splitter or storage engine. | Index roots point to content-addressed Prolly nodes, and mutation/diff use shared-node structure. |
+| go-car | Both package content-addressed proof blocks for offline transport. | Pactium's bundle stream is CAR-like but not CARv1/CARv2 byte-compatible. Its CIDs and canonical codec are Pactium-specific. | Bundle export emits an indexed binary record stream with offsets, limits, duplicate control, and block integrity checks. |
+| Hypercore | Both use append-only Merkle roots and proof material that can be verified remotely. | Pactium has manifest-bound Ed25519 Ledger Head signing and trusted-head advancement, but no built-in gossip, replication feed, or witness network. | Signed ledger heads and unique-signer quorum checks are implemented before any witness network is considered. |
 | Axon Framework | Both care about operation lifecycle and replay-safe event history. | Axon is a broad event framework with append conditions, sourcing, streaming, tracking tokens, and conflict boundaries. Pactium intentionally does not own host dispatch or side effects. | Borrow lifecycle boundaries, append conditions, and tracking cursor concepts, not Axon's framework scope. |
-| immudb | Both use cryptographic proof as a product primitive. | immudb combines linear transaction hashes, binary tree proofs, and dual proofs. Baseline Pactium was simpler and ledger-only for core envelope verification. Current immudb source is BUSL, so it is not a copyable code source. | Consider dual-proof ideas only as independently rederived design inspiration for future trusted-head advancement. |
+| immudb | Both use cryptographic proof as a product primitive. | Pactium's current proof model combines Ledger proofs, Prolly index proofs, signed heads, and bundle verification rather than immudb's transaction proof model. Current immudb source is BUSL, so it is not a copyable code source. | Dual-proof ideas remain design inspiration only; current trusted-head advancement is implemented through Ledger consistency and signed heads. |
 
 ## Current Pactium Strengths
 
@@ -25,14 +25,14 @@ This comparison treats Pactium as a proof-first protocol substrate for LicoLite,
 | Latest-schema-only boundary | `src/storage/local-json-storage-port.js:72` rejects historical layouts and schema mismatches. | Makes algorithm upgrades easier because no in-place historical migration is required. |
 | Host boundary | `docs/architecture/ARCHITECTURE.md:27` separates Pactium protocol proofs from LicoLite policy/effects. | Avoids turning Pactium into an app framework or side-effect runtime. |
 
-## Optimization Baseline Matrix
+## Implementation Matrix
 
-| Area | Baseline finding | Reference behavior | Current status |
+| Area | Original gap | Reference behavior | Current status |
 | --- | --- | --- | --- |
 | Ledger append | Append cost and persisted ledger objects grew with full history. | Trillian sequencer stores only affected nodes and signed roots while using compact ranges. | Closed: leaves, compact ranges, immutable heads, and compact tree nodes are persisted separately. |
 | Ledger consistency | Consistency proof exposed full leaf-hash transcripts. | RFC6962 consistency proofs are logarithmic and reveal only audit hashes. | Closed: consistency proofs carry audit paths and stored-node fetching. |
 | Ledger proof validation | Edge-case proof validation was under-specified. | transparency-dev/merkle rejects malformed lengths, impossible size pairs, and invalid consistency cases. | Closed: audit-path verification validates shape, bounds, path consumption, and trusted-head advancement. |
-| Index mutation | Index mutation rebuilt full snapshots. | Dolt chunker mutates ordered trees while reusing unchanged chunks. | Closed: `put`/`delete` rewrite the local leaf neighborhood and affected ancestors only. |
+| Index mutation | Index mutation rebuilt full snapshots. | Dolt chunker mutates ordered trees while reusing unchanged chunks. | Closed: `put`/`delete` rewrite a canonical local leaf window, reuse unchanged leaves, and rebuild parent levels from leaf descriptors so incremental roots match full rebuild roots. |
 | Index chunking | Chunk boundaries were metadata over a full snapshot. | Dolt splitters create actual content-addressed nodes. | Closed: index roots point to content-addressed Prolly leaf/internal nodes. |
 | Index diff | Diff compared full snapshots. | Dolt diff walks cursors and skips shared equal subtrees. | Closed: diff skips equal roots, merges non-aligned child ranges, descends overlap groups, and compares entries at leaf level. |
 | Workspace state root | State mutations rebuilt the full state index from materialized entries. | Prolly-style mutation should update the authoritative root incrementally. | Closed: `workspace.stateRoot` is authoritative, bootstraps once, mutates incrementally, and is retained through compaction. |
@@ -47,7 +47,7 @@ This comparison treats Pactium as a proof-first protocol substrate for LicoLite,
 ## Implemented Direction
 
 1. Ledger compact ranges, logarithmic proofs, signed heads, and RFC6962 negative tests are implemented.
-2. Verifiable indexes use content-addressed Prolly nodes, path-local mutation, bounded scan/prefix, and shared-node diff.
+2. Verifiable indexes use content-addressed Prolly nodes, canonical local leaf-window mutation, bounded scan/prefix, and shared-node diff.
 3. Envelope verification dispatches to registered proof verifiers for embedded proof material.
 4. Proof bundles use indexed record streams with strict size, offset, duplicate, and block-integrity checks.
 5. Signer manifests and public-key ledger-head signatures are implemented; witness networks remain out of scope.
