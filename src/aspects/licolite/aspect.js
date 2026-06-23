@@ -52,7 +52,7 @@ async function resolveMaterialBlock({ core, cid, bundleMap }) {
       bytes: Buffer.from(String(bundled.payloadBase64 || ""), "base64")
     };
   }
-  return core.storage.getBlock(cid);
+  return core.advanced.storage.getBlock(cid);
 }
 
 export function createLicoLiteAspect({
@@ -113,7 +113,7 @@ export function createLicoLiteAspect({
   async function verifyLicoLiteEnvelope(envelope, options = {}) {
     const bundleMap = bundleBlockMap(options.bundle || null);
     const coreResult = await verifyProofEnvelope(envelope, {
-      storage: core.storage,
+      storage: core.advanced.storage,
       bundle: options.bundle || null,
       supportedCriticalExtensions: LICOLITE_SUPPORTED_CRITICAL_EXTENSIONS,
       proofVerifiers: options.proofVerifiers || {},

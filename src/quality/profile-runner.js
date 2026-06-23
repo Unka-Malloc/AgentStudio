@@ -219,7 +219,7 @@ export async function runPactiumQualityGateProfile({
         workspaceId: outcome.workspaceId,
         ledgerEventId: outcome.ledgerEventId
       });
-      if (!membership.member || !core.indexEngine.verifyProof(membership.proof)) {
+      if (!membership.member || !core.advanced.indexEngine.verifyProof(membership.proof)) {
         throw new Error("Pressure recovery workspace membership proof failed.");
       }
     }

@@ -8,7 +8,7 @@ export async function materializeEvidenceExtension(pactium, {
   critical = true,
   metadata = {}
 }) {
-  const block = await pactium.storage.putBlock(evidence || {}, {
+  const block = await pactium.advanced.storage.putBlock(evidence || {}, {
     kind: `licolite-evidence:${name}`
   });
   return pactium.createExtension({

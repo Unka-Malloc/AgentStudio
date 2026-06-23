@@ -9,7 +9,7 @@ import {
 } from "../protocol/constants.js";
 import { canonicalEncode, normalizeCanonicalValue } from "../canonical/value.js";
 import { createAppendCondition, assertAppendCondition } from "./append-condition.js";
-import { createLedgerTransparencyLog } from "../ledger/transparency-log.js";
+import { createLedgerTransparencyLog, ledgerNodeHash } from "../ledger/transparency-log.js";
 import { advanceTrustedHead as advanceTrustedLedgerHead } from "../ledger/signed-head.js";
 import { createVerifiableIndexEngine } from "../index-engine/snapshot-merkle-index.js";
 import { createId, protocolHash, protocolHashHex } from "../protocol/hashing.js";
@@ -638,7 +638,10 @@ export function createPactium({
       mutations: mutationDescriptors,
       mutationKeys: keyedMutations.map((mutation) => String(mutation.key || "")),
       mutationActions: keyedMutations.map((mutation) => String(mutation.action || "put")),
-      touchedKeyCount: keyedMutations.slice(0, 32).length,
+      // touchedKeyProofs is a sample of the first 32 keys for tamper detection.
+      // Full state mutation proofs are available through the proof bundle.
+      sampledKeyCount: Math.min(keyedMutations.length, 32),
+      touchedKeyCount: Math.min(keyedMutations.length, 32), // kept for backward compat
       createdAt: nowIso()
     };
     const checkpointEntries = checkpointEntriesFor(current, workspaceId);
@@ -742,17 +745,20 @@ export function createPactium({
     };
   }
 
-  async function getWorkspaceProjection(workspaceId = "default") {
+  async function getWorkspaceProjection(workspaceId = "default", options = {}) {
     const current = await prepareRead();
     const workspace = workspaceStateFor(current, workspaceId);
+    const defaultLimit = Math.max(1, Math.min(Number(options.limit || 100), 10000));
+    const orderLimit = options.orderLimit !== undefined ? Number(options.orderLimit) : defaultLimit;
+    const membershipLimit = options.membershipLimit !== undefined ? Number(options.membershipLimit) : defaultLimit;
     return {
       protocol: PACTIUM_PROTOCOL,
       workspaceId: safeText(workspaceId, "default"),
       nextOrdinal: workspace.nextOrdinal,
       orderRoot: workspace.orderRoot,
       membershipRoot: workspace.membershipRoot,
-      order: workspace.orderRoot ? await indexEngine.scan(workspace.orderRoot, { limit: 100000 }) : [],
-      membership: workspace.membershipRoot ? await indexEngine.scan(workspace.membershipRoot, { limit: 100000 }) : []
+      order: workspace.orderRoot ? await indexEngine.scan(workspace.orderRoot, { limit: orderLimit, after: String(options.after || "") }) : [],
+      membership: workspace.membershipRoot ? await indexEngine.scan(workspace.membershipRoot, { limit: membershipLimit, after: String(options.after || "") }) : []
     };
   }
 
@@ -847,6 +853,7 @@ export function createPactium({
       proofVerifiers: options.proofVerifiers || {},
       requireAllProofs: options.requireAllProofs !== false,
       verifierManifest: options.verifierManifest || null,
+      trustedManifest: options.trustedManifest || null,
       ledgerHeadSignatures: options.ledgerHeadSignatures || []
     });
   }
@@ -1026,14 +1033,121 @@ export function createPactium({
 
   async function doctor() {
     await prepareRead();
+    const failures = [];
+
+    // Verify manifest
+    try {
+      const manifest = await resolvedStorage.getProtocolObject("core", "runtime-state", null);
+    } catch (err) {
+      failures.push(createVerificationFailure({
+        layer: "doctor",
+        code: "manifest_check_failed",
+        message: err instanceof Error ? err.message : "Cannot read storage manifest.",
+        repairable: false
+      }));
+    }
+
+    // Verify ledger head rootHash matches compact range
+    try {
+      const head = await ledger.head();
+      const compact = await ledger.compactRange();
+      if (head && compact) {
+        const peaks = asArray(compact.peaks);
+        if (peaks.length > 0) {
+          // Reconstruct root from peaks
+          let reconstructed = peaks[peaks.length - 1].hash;
+          for (let i = peaks.length - 2; i >= 0; i -= 1) {
+            reconstructed = ledgerNodeHash(peaks[i].hash, reconstructed);
+          }
+          if (reconstructed !== head.rootHash) {
+            failures.push(createVerificationFailure({
+              layer: "doctor",
+              code: "head_compact_range_mismatch",
+              message: "Ledger head rootHash does not match the compact range peaks.",
+              evidenceRef: head.headId || "",
+              repairable: true
+            }));
+          }
+        }
+      }
+    } catch (err) {
+      failures.push(createVerificationFailure({
+        layer: "doctor",
+        code: "ledger_consistency_check_failed",
+        message: err instanceof Error ? err.message : "Ledger consistency check failed.",
+        repairable: true
+      }));
+    }
+
+    // Verify ledger leaf hash chain
+    try {
+      const head = await ledger.head();
+      const pageSize = 1000;
+      let verifiedLeaves = 0;
+      for (let start = 0; start < Number(head.size || 0); start += pageSize) {
+        const page = await ledger.pageEntries({ start, limit: pageSize });
+        for (const entry of page.entries) {
+          // Verify leaf integrity: check factCid maps to a valid CAS block
+          if (entry.factCid) {
+            const block = await resolvedStorage.getBlock(entry.factCid);
+            if (!block) {
+              failures.push(createVerificationFailure({
+                layer: "doctor",
+                code: "missing_ledger_fact_block",
+                message: `CAS block missing for ledger leaf ${entry.index}.`,
+                evidenceRef: entry.factCid,
+                repairable: true
+              }));
+            } else if (block.payloadHash !== entry.factHash) {
+              failures.push(createVerificationFailure({
+                layer: "doctor",
+                code: "bad_ledger_fact_hash",
+                message: `CAS block hash mismatch for ledger leaf ${entry.index}.`,
+                evidenceRef: entry.factCid,
+                repairable: true
+              }));
+            }
+          }
+          verifiedLeaves += 1;
+        }
+        if (page.entries.length === 0 || page.nextPosition <= start) break;
+      }
+    } catch (err) {
+      failures.push(createVerificationFailure({
+        layer: "doctor",
+        code: "ledger_leaf_check_failed",
+        message: err instanceof Error ? err.message : "Ledger leaf integrity check failed.",
+        repairable: true
+      }));
+    }
+
+    // Verify index roots referenced in runtime state exist
+    const current = await ensureState();
+    const retainedRoots = currentIndexRoots(current);
+    for (const root of retainedRoots) {
+      try {
+        if (root) await indexEngine.readIndexRoot(root);
+      } catch (err) {
+        failures.push(createVerificationFailure({
+          layer: "doctor",
+          code: "missing_index_root",
+          message: `Index root ${root} referenced in state but missing from storage.`,
+          evidenceRef: root,
+          repairable: true
+        }));
+      }
+    }
+
     return {
       protocol: PACTIUM_PROTOCOL,
       schema: PACTIUM_SCHEMA_VERSION,
-      ok: true,
+      ok: failures.length === 0,
       dataDir: resolvedStorage.dataDir,
       latestSchemaOnly: true,
       historicalMigration: false,
-      catalog: await protocolCatalog()
+      ledgerSize: Number((await ledger.head()).size || 0),
+      catalog: await protocolCatalog(),
+      ...(failures.length > 0 ? { failures } : {})
     };
   }
 
@@ -1087,9 +1201,6 @@ export function createPactium({
     protocol: PACTIUM_PROTOCOL,
     schema: PACTIUM_SCHEMA_VERSION,
     dataDir: resolvedStorage.dataDir,
-    storage: resolvedStorage,
-    ledger,
-    indexEngine,
     beginOperationIntent,
     appendOperationOutcome,
     recordOperation,
@@ -1109,6 +1220,14 @@ export function createPactium({
     storeEnvelope,
     protocolCatalog,
     doctor,
-    _compactInMemoryCaches: compactInMemoryCaches
+    // Internal components for integration use. Prefer the public API above
+    // unless you need direct storage/ledger/index access for advanced
+    // maintenance, repair execution, or custom verification flows.
+    advanced: Object.freeze({
+      storage: resolvedStorage,
+      ledger,
+      indexEngine,
+      _compactInMemoryCaches: compactInMemoryCaches
+    })
   });
 }

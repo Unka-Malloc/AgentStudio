@@ -136,6 +136,25 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       }));
       continue;
     }
+    const sigTime = safeText(record.createdAt || head.createdAt);
+    if (signer.validFrom && sigTime < signer.validFrom) {
+      failures.push(createVerificationFailure({
+        layer: "ledger-head-signature",
+        code: "signer_not_yet_valid",
+        message: `Signer ${record.signerId} is not yet valid (validFrom: ${signer.validFrom}).`,
+        evidenceRef: record.signerId || ""
+      }));
+      continue;
+    }
+    if (signer.validTo && sigTime > signer.validTo) {
+      failures.push(createVerificationFailure({
+        layer: "ledger-head-signature",
+        code: "signer_expired",
+        message: `Signer ${record.signerId} has expired (validTo: ${signer.validTo}).`,
+        evidenceRef: record.signerId || ""
+      }));
+      continue;
+    }
     const ok = crypto.verify(
       null,
       payloadBytes,
@@ -174,6 +193,7 @@ export function advanceTrustedHead({
   newHead = {},
   proof = {},
   manifest = null,
+  trustedManifest = null,
   signatures = []
 } = {}) {
   const failures = [];
@@ -184,8 +204,10 @@ export function advanceTrustedHead({
       message: "New Ledger head does not extend the old trusted head."
     }));
   }
-  if (manifest) {
-    const signatureResult = verifyLedgerHeadSignature(newHead, manifest, { signatures });
+  // Only trust explicitly provided manifests, not the head's self-carried manifest.
+  const verificationManifest = trustedManifest || manifest || null;
+  if (verificationManifest) {
+    const signatureResult = verifyLedgerHeadSignature(newHead, verificationManifest, { signatures });
     failures.push(...signatureResult.failures);
   }
   if (failures.length > 0) {

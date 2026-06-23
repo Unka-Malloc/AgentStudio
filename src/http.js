@@ -208,10 +208,14 @@ async function routeRequest({ pactium, licolite, request, response, maxBodyBytes
     });
   } catch (error) {
     const statusCode = error instanceof PactiumHttpError ? error.statusCode : 500;
+    const code = error instanceof PactiumHttpError ? error.code : "pactium_http_error";
+    const message = error instanceof PactiumHttpError
+      ? error.message
+      : "An internal error occurred. See server logs for details.";
     return sendJson(response, statusCode, {
       protocol: PACTIUM_HTTP_PROTOCOL,
-      code: error instanceof PactiumHttpError ? error.code : "pactium_http_error",
-      error: error instanceof Error ? error.message : String(error)
+      code,
+      error: message
     });
   }
 }
@@ -230,7 +234,7 @@ export function createPactiumHttpServer({
       sendJson(response, 500, {
         protocol: PACTIUM_HTTP_PROTOCOL,
         code: "pactium_http_error",
-        error: error instanceof Error ? error.message : String(error)
+        error: "An internal server error occurred. See server logs for details."
       });
     });
   });

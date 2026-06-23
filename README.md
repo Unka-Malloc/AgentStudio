@@ -84,7 +84,7 @@ The first-class integration surface for LicoLite is at `pactium/licolite`.
 | **Proof Bundles** | Portable CAR-like exports for offline verification |
 | **Signed Heads** | Optional Ed25519 ledger head signing with verifier manifests |
 | **LicoLite Aspect** | First-class integration surface with default workspace projection and signing |
-| **Repair Planning** | Deterministic repair task generation from structured verification failures |
+| **Repair Planning** | Deterministic repair task generation from structured verification failures; repair execution is host-owned |
 | **Zero Dependencies** | Pure ESM, no runtime dependencies, ships source directly |
 
 ## Installation
@@ -227,7 +227,7 @@ import {
   verifyProofBundle,
   createDefaultProofVerifierRegistry,
 
-  // Maintenance and repair
+  // Maintenance and repair (planning — hosts execute plans)
   createRepairPlanner,
   createMaintenanceTaskEngine,
 

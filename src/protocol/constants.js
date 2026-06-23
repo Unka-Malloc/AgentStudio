@@ -17,7 +17,7 @@ export const PACTIUM_PROTOCOL_PROFILE = Object.freeze({
   schema: PACTIUM_SCHEMA_VERSION,
   hash: "sha256",
   cid: "cid:sha256:<hex>",
-  canonicalValue: "restricted-ipld-dag-cbor-style",
+  canonicalValue: "jcs-like-canonical-json-nfc-safe-integers",
   orderingAuthority: "operation-ledger",
   ledger: {
     model: "rfc6962-transparency-log",

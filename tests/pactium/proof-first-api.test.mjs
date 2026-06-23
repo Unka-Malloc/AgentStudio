@@ -327,9 +327,19 @@ describe("Pactium proof-first root API", () => {
     const persistedSignerStorage = createStoragePort({ dataDir: await tempDataDir("pactium-ledger-signer-") });
     const persistedSignerLedger = createLedgerTransparencyLog({ storage: persistedSignerStorage });
     const persistedFirst = await persistedSignerLedger.append({ factType: "operation.intent", persisted: 1 });
+    // Auto-generated signer marks heads as TOFU trust level.
+    assert.equal(persistedFirst.head.trustLevel, "tofu");
+    assert.equal(persistedFirst.head.signerSource, "auto-generated");
+    // Each instance generates its own keypair; signatures are self-consistent.
+    assert.equal(verifyLedgerHeadSignature(persistedFirst.head, persistedFirst.head.verifierManifest, {
+      signatures: persistedFirst.head.signatures
+    }).ok, true);
     const reloadedSignerLedger = createLedgerTransparencyLog({ storage: createStoragePort({ dataDir: persistedSignerStorage.dataDir }) });
     const persistedSecond = await reloadedSignerLedger.append({ factType: "operation.intent", persisted: 2 });
-    assert.equal(persistedSecond.head.verifierManifest.manifestId, persistedFirst.head.verifierManifest.manifestId);
+    assert.equal(persistedSecond.head.trustLevel, "tofu");
+    assert.equal(verifyLedgerHeadSignature(persistedSecond.head, persistedSecond.head.verifierManifest, {
+      signatures: persistedSecond.head.signatures
+    }).ok, true);
   });
 
   it("uses one verifiable index engine for membership, non-membership, diff, prefix, scan, put, and delete", async () => {
@@ -576,9 +586,9 @@ describe("Pactium proof-first root API", () => {
     assert.equal(verified.ok, true);
     assert.ok(verified.checked.includes("proofs.workspaceProjection.orderProof"));
     assert.ok(verified.checked.includes("ledger-head-signature"));
-    const validProofBlock = await pactium.storage.getBlock(outcome.proofRefs[0].cid);
+    const validProofBlock = await pactium.advanced.storage.getBlock(outcome.proofRefs[0].cid);
     const validProofValue = JSON.parse(Buffer.from(validProofBlock.payloadBase64, "base64").toString("utf8"));
-    const badIndexProofBlock = await pactium.storage.putBlock({
+    const badIndexProofBlock = await pactium.advanced.storage.putBlock({
       ...validProofValue,
       proofs: {
         ...validProofValue.proofs,
@@ -601,7 +611,7 @@ describe("Pactium proof-first root API", () => {
       }]
     };
     assert.ok((await pactium.verifyEnvelope(badIndexEnvelope)).failures.some((failure) => failure.code === "bad_embedded_proof"));
-    const noLedgerBlock = await pactium.storage.putBlock({
+    const noLedgerBlock = await pactium.advanced.storage.putBlock({
       protocol: PACTIUM_PROTOCOL,
       materialType: "pactium.proof-material",
       proofs: {}
@@ -616,7 +626,7 @@ describe("Pactium proof-first root API", () => {
       }]
     };
     assert.ok((await pactium.verifyEnvelope(noLedgerEnvelope)).failures.some((failure) => failure.code === "missing_ledger_proof"));
-    const unknownProofBlock = await pactium.storage.putBlock({
+    const unknownProofBlock = await pactium.advanced.storage.putBlock({
       ...validProofValue,
       proofs: {
         ...validProofValue.proofs,
@@ -635,7 +645,7 @@ describe("Pactium proof-first root API", () => {
     assert.ok((await pactium.verifyEnvelope(unknownProofEnvelope)).failures.some((failure) => failure.code === "missing_proof_verifier"));
     const nonCriticalUnknown = await pactium.verifyEnvelope(unknownProofEnvelope, { requireAllProofs: false });
     assert.equal(nonCriticalUnknown.failures.some((failure) => failure.code === "missing_proof_verifier"), true);
-    const nonCriticalProofBlock = await pactium.storage.putBlock({
+    const nonCriticalProofBlock = await pactium.advanced.storage.putBlock({
       ...validProofValue,
       proofs: {
         ...validProofValue.proofs,
@@ -653,7 +663,7 @@ describe("Pactium proof-first root API", () => {
     };
     assert.equal((await pactium.verifyEnvelope(nonCriticalProofEnvelope, { requireAllProofs: false }))
       .failures.some((failure) => failure.code === "missing_proof_verifier"), false);
-    const throwingProofBlock = await pactium.storage.putBlock({
+    const throwingProofBlock = await pactium.advanced.storage.putBlock({
       ...validProofValue,
       proofs: {
         ...validProofValue.proofs,
@@ -676,7 +686,7 @@ describe("Pactium proof-first root API", () => {
         }
       }
     })).failures.some((failure) => failure.code === "proof_verifier_threw"));
-    const objectProofBlock = await pactium.storage.putBlock({
+    const objectProofBlock = await pactium.advanced.storage.putBlock({
       ...validProofValue,
       proofs: {
         ...validProofValue.proofs,
@@ -841,7 +851,7 @@ describe("Pactium proof-first root API", () => {
         value: { index }
       }))
     });
-    const seedMaterial = canonicalDecode((await pactium.storage.getBlock(seedEnvelope.proofRefs[0].cid)).bytes);
+    const seedMaterial = canonicalDecode((await pactium.advanced.storage.getBlock(seedEnvelope.proofRefs[0].cid)).bytes);
     const seedRoot = seedMaterial.proofs.state.root;
     assert.equal(seedMaterial.proofs.stateCommit.mutationCount, 512);
     assert.equal(seedMaterial.proofs.stateCommit.touchedKeyCount, 32);
@@ -860,7 +870,7 @@ describe("Pactium proof-first root API", () => {
       }]
     });
     const updateWrites = indexNodeWrites - seedWrites;
-    const updateMaterial = canonicalDecode((await pactium.storage.getBlock(updateEnvelope.proofRefs[0].cid)).bytes);
+    const updateMaterial = canonicalDecode((await pactium.advanced.storage.getBlock(updateEnvelope.proofRefs[0].cid)).bytes);
     const updateProof = updateMaterial.proofs.state.touchedKeyProofs[0];
     assert.notEqual(updateMaterial.proofs.state.root, seedRoot);
     assert.equal(updateProof.proofType, PACTIUM_PROOF_TYPES.indexMembership);
@@ -872,13 +882,13 @@ describe("Pactium proof-first root API", () => {
       workspaceId: "state-incremental",
       stateMutations: [{ key: "state:0001", action: "delete" }]
     });
-    const deleteMaterial = canonicalDecode((await pactium.storage.getBlock(deleteEnvelope.proofRefs[0].cid)).bytes);
+    const deleteMaterial = canonicalDecode((await pactium.advanced.storage.getBlock(deleteEnvelope.proofRefs[0].cid)).bytes);
     const deleteProof = deleteMaterial.proofs.state.touchedKeyProofs[0];
     assert.equal(deleteProof.proofType, PACTIUM_PROOF_TYPES.indexNonMembership);
     assert.equal(verifyIndexProof(deleteProof), true);
 
-    await pactium._compactInMemoryCaches();
-    const freshEngine = createVerifiableIndexEngine({ storage: pactium.storage, domain: "pactium" });
+    await pactium.advanced._compactInMemoryCaches();
+    const freshEngine = createVerifiableIndexEngine({ storage: pactium.advanced.storage, domain: "pactium" });
     assert.equal((await freshEngine.readIndexRoot(deleteMaterial.proofs.state.root)).root, deleteMaterial.proofs.state.root);
     assert.equal(verifyIndexProof(await freshEngine.prove(deleteMaterial.proofs.state.root, "state:0256")), true);
   });
@@ -899,7 +909,7 @@ describe("Pactium proof-first root API", () => {
 
   it("supports append conditions, tracking cursors, recovery plans, and trusted head advancement", async () => {
     const pactium = createPactium({ inMemory: true });
-    const emptyHead = await pactium.ledger.head();
+    const emptyHead = await pactium.advanced.ledger.head();
     const appendCondition = createAppendCondition({
       workspaceId: "conditioned",
       requiredLedgerHead: emptyHead.headId,
@@ -954,7 +964,7 @@ describe("Pactium proof-first root API", () => {
     });
     assert.equal(outcome.envelopeKind, "operation-outcome");
     const recordPactium = createPactium({ inMemory: true });
-    const recordHead = await recordPactium.ledger.head();
+    const recordHead = await recordPactium.advanced.ledger.head();
     const recordedOutcome = await recordPactium.recordOperation({
       operationId: "condition.record-operation",
       workspaceId: "conditioned-record",
@@ -1124,7 +1134,7 @@ describe("Pactium proof-first root API", () => {
     });
     assert.ok(recovery.tasks.some((task) => task.action === "restore-missing-proof-material"));
 
-    const proofBlock = await pactium.storage.getBlock(outcome.proofRefs[0].cid);
+    const proofBlock = await pactium.advanced.storage.getBlock(outcome.proofRefs[0].cid);
     const proofValue = JSON.parse(Buffer.from(proofBlock.payloadBase64, "base64").toString("utf8"));
     const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
     const manifest = createVerifierManifest({
@@ -1249,7 +1259,7 @@ describe("Pactium proof-first root API", () => {
         value: { required: true }
       }]
     });
-    const unsupported = await verifyProofEnvelope(envelope, { storage: pactium.storage });
+    const unsupported = await verifyProofEnvelope(envelope, { storage: pactium.advanced.storage });
     assert.equal(unsupported.ok, false);
     assert.ok(unsupported.failures.some((failure) => failure.code === "unsupported_critical_extension"));
     const bundle = await pactium.exportProofBundle(envelope);
@@ -1645,9 +1655,9 @@ console.log(JSON.stringify({
     };
     assert.ok((await pactium.verifyEnvelope(badExtensionHash)).failures.some((failure) => failure.code === "bad_extension_hash"));
 
-    const validProofBlock = await pactium.storage.getBlock(outcome.proofRefs[0].cid);
+    const validProofBlock = await pactium.advanced.storage.getBlock(outcome.proofRefs[0].cid);
     const validProofValue = JSON.parse(Buffer.from(validProofBlock.payloadBase64, "base64").toString("utf8"));
-    const badInclusionBlock = await pactium.storage.putBlock({
+    const badInclusionBlock = await pactium.advanced.storage.putBlock({
       ...validProofValue,
       ledger: {
         ...validProofValue.ledger,
@@ -1668,7 +1678,7 @@ console.log(JSON.stringify({
     };
     assert.ok((await pactium.verifyEnvelope(badInclusionEnvelope)).failures.some((failure) => failure.code === "bad_ledger_inclusion"));
 
-    const badConsistencyBlock = await pactium.storage.putBlock({
+    const badConsistencyBlock = await pactium.advanced.storage.putBlock({
       ...validProofValue,
       ledger: {
         ...validProofValue.ledger,
@@ -1717,7 +1727,7 @@ console.log(JSON.stringify({
   it("rejects proof semantic rebinding attacks", async () => {
     const pactium = createPactium({ inMemory: true });
     const proofMaterialFor = async (envelope) =>
-      canonicalDecode((await pactium.storage.getBlock(envelope.proofRefs[0].cid)).bytes);
+      canonicalDecode((await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid)).bytes);
     const envelopeWithProofBlock = (envelope, block) => ({
       ...envelope,
       proofRefs: [{
@@ -1751,14 +1761,14 @@ console.log(JSON.stringify({
       mutationCount: secondMaterial.proofs.stateCommit.mutationCount,
       touchedKeyCount: secondMaterial.proofs.stateCommit.touchedKeyCount
     };
-    const reboundStateBlock = await pactium.storage.putBlock(reboundStateMaterial, {
+    const reboundStateBlock = await pactium.advanced.storage.putBlock(reboundStateMaterial, {
       kind: "proof-material:ledger-and-index-proofs",
       refs: [firstMaterial.ledger.inclusionProof.leaf.factCid]
     });
     const reboundState = await pactium.verifyEnvelope(envelopeWithProofBlock(first, reboundStateBlock));
     assert.ok(reboundState.failures.some((failure) => failure.code === "bad_state_commit_binding"));
 
-    const head = await pactium.ledger.head();
+    const head = await pactium.advanced.ledger.head();
     const appendCondition = createAppendCondition({
       workspaceId: "semantic-append",
       requiredLedgerHead: head.headId
@@ -1774,7 +1784,7 @@ console.log(JSON.stringify({
       workspaceId: "semantic-append",
       requiredLedgerHead: "ledger_head_attacker"
     });
-    const reboundConditionBlock = await pactium.storage.putBlock(reboundConditionMaterial, {
+    const reboundConditionBlock = await pactium.advanced.storage.putBlock(reboundConditionMaterial, {
       kind: "proof-material:ledger-and-index-proofs",
       refs: [conditionedMaterial.ledger.inclusionProof.leaf.factCid]
     });
@@ -1883,8 +1893,8 @@ console.log(JSON.stringify({
     };
     assert.ok((await licolite.verifyEnvelope(missingEvidenceRef)).failures.some((failure) => failure.code === "missing_evidence_ref"));
     const policyExtension = envelope.extensions.find((extension) => extension.name === LICOLITE_POLICY_EXTENSION);
-    const policyBlock = await pactium.storage.getBlock(policyExtension.valueRef);
-    const badPolicyBlock = await pactium.storage.putBlock({
+    const policyBlock = await pactium.advanced.storage.getBlock(policyExtension.valueRef);
+    const badPolicyBlock = await pactium.advanced.storage.putBlock({
       ...canonicalDecode(policyBlock.bytes),
       evidenceHash: `sha256:${"0".repeat(64)}`
     }, { kind: "proof-extension:licolite.policy" });
@@ -2189,4 +2199,123 @@ console.log(JSON.stringify({
     const invalid = await execFileAsync(process.execPath, [cliPath, "unknown"], { reject: false }).catch((error) => error);
     assert.equal(invalid.code, 1);
   });
+
+  it("rejects proof envelopes with missing required proofs per envelope kind", async () => {
+    const auditPactium = createPactium({ inMemory: true });
+    const envelope = await auditPactium.recordOperation({
+      operationId: "audit.proof.schema",
+      workspaceId: "audit-ws",
+      idempotencyKey: "audit-key",
+      outcomeIdempotencyKey: "audit-out",
+      input: { test: true },
+      stateMutations: [{ key: "audit/key", value: { v: 1 } }]
+    });
+    assert.equal((await auditPactium.verifyEnvelope(envelope)).ok, true);
+    // Missing workspaceProjection
+    const proofRef = envelope.proofRefs[0];
+    const fullBlock = await auditPactium.advanced.storage.getBlock(proofRef.cid);
+    const fullMaterial = canonicalDecode(fullBlock.bytes);
+    const noWsMaterial = { ...fullMaterial, proofs: { ...fullMaterial.proofs, workspaceProjection: undefined } };
+    const noWsBlock = await auditPactium.advanced.storage.putBlock(noWsMaterial, { kind: "proof-material:altered" });
+    const noWsEnvelope = { ...envelope, envelopeId: undefined, proofRefs: [{ name: "altered", cid: noWsBlock.cid, payloadHash: noWsBlock.payloadHash, byteLength: noWsBlock.byteLength }] };
+    const noWsResult = await auditPactium.verifyEnvelope(noWsEnvelope);
+    assert.equal(noWsResult.ok, false);
+    assert.ok(noWsResult.failures.some((f) => f.code === "missing_required_proof" && f.details.path.includes("workspaceProjection")));
+    // Missing stateCommit
+    const noStateMaterial = { ...fullMaterial, proofs: { ...fullMaterial.proofs, stateCommit: undefined } };
+    const noStateBlock = await auditPactium.advanced.storage.putBlock(noStateMaterial, { kind: "proof-material:altered" });
+    const noStateEnvelope = { ...envelope, envelopeId: undefined, proofRefs: [{ name: "altered", cid: noStateBlock.cid, payloadHash: noStateBlock.payloadHash, byteLength: noStateBlock.byteLength }] };
+    const noStateResult = await auditPactium.verifyEnvelope(noStateEnvelope);
+    assert.equal(noStateResult.ok, false);
+    assert.ok(noStateResult.failures.some((f) => f.code === "missing_required_proof" && f.details.path.includes("stateCommit")));
+    // Missing checkpoint
+    const noCpMaterial = { ...fullMaterial, proofs: { ...fullMaterial.proofs, checkpoint: undefined } };
+    const noCpBlock = await auditPactium.advanced.storage.putBlock(noCpMaterial, { kind: "proof-material:altered" });
+    const noCpEnvelope = { ...envelope, envelopeId: undefined, proofRefs: [{ name: "altered", cid: noCpBlock.cid, payloadHash: noCpBlock.payloadHash, byteLength: noCpBlock.byteLength }] };
+    const noCpResult = await auditPactium.verifyEnvelope(noCpEnvelope);
+    assert.equal(noCpResult.ok, false);
+    assert.ok(noCpResult.failures.some((f) => f.code === "missing_required_proof" && f.details.path.includes("checkpoint")));
+  });
+
+  it("rejects critical extension inconsistencies", async () => {
+    const auditPactium = createPactium({ inMemory: true });
+    const envelope = await auditPactium.recordOperation({
+      operationId: "audit.ext.consistency",
+      workspaceId: "audit-ext-ws",
+      idempotencyKey: "ext-key",
+      outcomeIdempotencyKey: "ext-out",
+      input: { test: true }
+    });
+    assert.equal((await auditPactium.verifyEnvelope(envelope)).ok, true);
+    // Extension with critical:true not in criticalExtensions
+    const badCriticalEnvelope = { ...envelope, envelopeId: undefined, extensions: [...envelope.extensions, { name: "custom.critical", critical: true, valueRef: "cid:sha256:" + "00".repeat(32), valueHash: "sha256:" + "00".repeat(32) }], criticalExtensions: [...envelope.criticalExtensions] };
+    const badCriticalResult = await auditPactium.verifyEnvelope(badCriticalEnvelope);
+    assert.equal(badCriticalResult.ok, false);
+    assert.ok(badCriticalResult.failures.some((f) => f.code === "critical_extension_not_listed"));
+    // criticalExtensions lists non-existent extension
+    const ghostCriticalEnvelope = { ...envelope, envelopeId: undefined, criticalExtensions: [...envelope.criticalExtensions, "ghost.extension"] };
+    const ghostResult = await auditPactium.verifyEnvelope(ghostCriticalEnvelope);
+    assert.equal(ghostResult.ok, false);
+    assert.ok(ghostResult.failures.some((f) => f.code === "critical_extension_not_found"));
+  });
+
+  it("distinguishes signature format validity from trusted signature", async () => {
+    const auditPactium = createPactium({ inMemory: true });
+    const envelope = await auditPactium.recordOperation({
+      operationId: "audit.trusted.sig",
+      workspaceId: "audit-trust-ws",
+      idempotencyKey: "trust-key",
+      outcomeIdempotencyKey: "trust-out",
+      input: { test: true }
+    });
+    const result = await auditPactium.verifyEnvelope(envelope);
+    assert.equal(result.ok, true);
+    assert.equal(result.trustedSignatureValid, false);
+    const head = envelope.ledgerHead;
+    const trustedResult = await auditPactium.verifyEnvelope(envelope, { trustedManifest: head.verifierManifest });
+    assert.equal(trustedResult.ok, true);
+    assert.equal(trustedResult.trustedSignatureValid, true);
+  });
+
+  it("rejects non-safe-integer and float values in canonical encoding", () => {
+    assert.throws(() => canonicalEncode({ value: 1.5 }), /safe integer/);
+    assert.throws(() => canonicalEncode({ value: NaN }), /finite/);
+    assert.throws(() => canonicalEncode({ value: Infinity }), /finite/);
+    assert.throws(() => canonicalEncode({ value: Number.MAX_SAFE_INTEGER + 1 }), /safe integer/);
+    assert.doesNotThrow(() => canonicalEncode({ value: 42 }));
+    assert.doesNotThrow(() => canonicalEncode({ value: Number.MAX_SAFE_INTEGER }));
+  });
+
+  it("normalizes Unicode strings to NFC in canonical encoding", () => {
+    const composed = "é";
+    const decomposed = "e\u0301";
+    assert.notEqual(composed, decomposed);
+    assert.equal(canonicalEncode({ key: composed }).toString(), canonicalEncode({ key: decomposed }).toString());
+  });
+
+  it("uses constant-time comparison for HMAC signature verification", async () => {
+    const signer = createLicoLiteSigner({ signerId: "audit-hmac", secret: "audit-secret-42" });
+    assert.equal(signer.algorithm, "hmac-sha256");
+    const message = "test-message-for-constant-time";
+    const signature = await signer.sign(message);
+    assert.equal(await signer.verify(message, signature), true);
+    assert.equal(await signer.verify(message, "wrong-signature"), false);
+    assert.equal(await signer.verify("wrong-message", signature), false);
+    assert.equal(await signer.verify(message, "short"), false);
+  });
+
+  it("protects in-memory protocol objects from external mutation", async () => {
+    const auditStorage = createStoragePort({ inMemory: true });
+    const mutable = { key: "original", nested: { value: 1 } };
+    await auditStorage.putProtocolObject("test-scope", "test-key", mutable);
+    mutable.key = "mutated";
+    mutable.nested.value = 999;
+    const stored = await auditStorage.getProtocolObject("test-scope", "test-key");
+    assert.equal(stored.key, "original");
+    assert.equal(stored.nested.value, 1);
+    stored.key = "also-mutated";
+    const storedAgain = await auditStorage.getProtocolObject("test-scope", "test-key");
+    assert.equal(storedAgain.key, "original");
+  });
+
 });

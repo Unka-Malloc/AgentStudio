@@ -47,11 +47,41 @@ async function readJson(filePath, fallback = null) {
   }
 }
 
+async function fsyncDir(filePath) {
+  try {
+    const dir = path.dirname(filePath);
+    const dirFd = await fs.open(dir, "r");
+    await dirFd.sync();
+    await dirFd.close();
+  } catch (_) {
+    // best-effort directory fsync
+  }
+}
+
+async function fsyncFile(filePath) {
+  try {
+    const fd = await fs.open(filePath, "r+");
+    await fd.sync();
+    await fd.close();
+  } catch (_) {
+    // best-effort file fsync (file may be read-only or already renamed)
+  }
+}
+
 async function writeJsonAtomic(filePath, value) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   const tmpPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  await fs.writeFile(tmpPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  const content = `${JSON.stringify(value, null, 2)}\n`;
+  // Write to temp file with explicit fd for fsync
+  const fd = await fs.open(tmpPath, "w");
+  try {
+    await fd.writeFile(content, "utf8");
+    await fd.sync();
+  } finally {
+    await fd.close();
+  }
   await fs.rename(tmpPath, filePath);
+  await fsyncDir(filePath);
 }
 
 function sleep(ms) {
@@ -202,13 +232,14 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     await ensureInitialized();
     const normalizedScope = safeToken(scope);
     const normalizedKey = safeToken(key);
-    const storedValue = inMemory ? value : normalizeCanonicalValue(value);
+    const storedValue = normalizeCanonicalValue(value);
     const stored = {
       protocol: PACTIUM_PROTOCOL,
       schema: PACTIUM_SCHEMA_VERSION,
       value: storedValue,
       updatedAt: nowIso()
     };
+    // Always store a canonical clone to prevent external mutation of stored values.
     memoryObjects.set(`${normalizedScope}/${normalizedKey}`, storedValue);
     if (!inMemory) await writeJsonAtomic(objectPath(normalizedScope, normalizedKey), stored);
     return storedValue;
@@ -333,7 +364,10 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     const normalizedScope = safeToken(scope);
     const normalizedKey = safeToken(key);
     const memoryKey = `${normalizedScope}/${normalizedKey}`;
-    if (memoryObjects.has(memoryKey)) return memoryObjects.get(memoryKey);
+    if (memoryObjects.has(memoryKey)) {
+      // Return a canonical clone to prevent callers from mutating stored state.
+      return normalizeCanonicalValue(memoryObjects.get(memoryKey));
+    }
     if (inMemory) return fallback;
     const stored = await readJson(objectPath(normalizedScope, normalizedKey));
     if (!stored) return fallback;

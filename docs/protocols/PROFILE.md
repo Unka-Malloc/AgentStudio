@@ -9,7 +9,7 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | Protocol | `PACTIUM_PROTOCOL` | `pactium.v0.2` |
 | Hash | `Protocol Hash` | `sha256` |
 | Hash domains | `domainSeparator` | Fixed per object class |
-| Encoding | `Canonical Value` | Restricted IPLD/DAG-CBOR-style model |
+| Encoding | `Canonical Value` | JCS-like canonical JSON with NFC Unicode normalization and safe integers only |
 | CID | `cid` | `cid:sha256:<hex>` |
 | Time | `timestamp` | RFC3339 metadata, never ordering authority |
 | Ordering | `authority` | Operation Ledger leaf order |
@@ -84,9 +84,11 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | --- | --- |
 | State index | Shared Verifiable Index Engine |
 | Commit binding | Operation Outcome only |
-| Key proof | Membership and non-membership |
+| Key proof | Membership and non-membership (sampled: first 32 keys with individual proofs) |
 | State root | Prolly root CID/hash |
 | Diff | Prolly shared-node diff |
+
+> **Note:** State mutation proofs (`touchedKeyProofs` / `sampledKeyCount`) provide individual membership/non-membership proofs for the first 32 mutated keys for tamper detection. Full state mutation verification across all keys is available through the Proof Bundle export.
 
 ## Proofs
 

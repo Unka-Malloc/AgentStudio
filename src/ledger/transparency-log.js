@@ -453,16 +453,16 @@ export function createLedgerTransparencyLog({
       signingState = {
         signerId: signer.signerId || manifest.signers[0]?.signerId || "pactium-ledger-signer",
         privateKey: signer.privateKey,
-        manifest
+        manifest,
+        signerSource: "host-provided",
+        trustLevel: "trusted"
       };
       await storage.putProtocolObject("ledger", "verifier-manifest-current", manifest);
       return signingState;
     }
-    const stored = await storage.getProtocolObject("ledger-signer", "default", null);
-    if (stored) {
-      signingState = stored;
-      return signingState;
-    }
+    // Auto-generated signer (development/TOFU). Private key is NOT persisted
+    // to protocol storage. The manifest is stored for verification continuity
+    // but callers MUST provide a trusted manifest for meaningful trust.
     const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
     const signerId = createId("ledger_signer", { ledgerId, publicKey: publicKey.export({ type: "spki", format: "pem" }) });
     const manifest = createVerifierManifest({
@@ -475,16 +475,15 @@ export function createLedgerTransparencyLog({
       quorum: 1
     });
     signingState = {
-      protocol: PACTIUM_PROTOCOL,
-      schema: PACTIUM_SCHEMA_VERSION,
-      signerType: "pactium.local-ledger-signer",
       signerId,
       algorithm: "ed25519",
       privateKey: privateKey.export({ type: "pkcs8", format: "pem" }),
       publicKey: publicKey.export({ type: "spki", format: "pem" }),
-      manifest
+      manifest,
+      signerSource: "auto-generated",
+      trustLevel: "tofu"
     };
-    await storage.putProtocolObject("ledger-signer", "default", signingState);
+    // Only store the public manifest, never the private key.
     await storage.putProtocolObject("ledger", "verifier-manifest-current", manifest);
     return signingState;
   }
@@ -504,7 +503,9 @@ export function createLedgerTransparencyLog({
       signatureHash: signatureBlock.payloadHash,
       verifierManifest: state.manifest,
       verifierManifestRef: state.manifest.manifestId,
-      signatures: [signature]
+      signatures: [signature],
+      signerSource: state.signerSource || "auto-generated",
+      trustLevel: state.trustLevel || "tofu"
     };
   }
 

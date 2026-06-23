@@ -43,7 +43,13 @@ Usage:
   pactium envelope verify --body JSON
   pactium bundle verify --body JSON
   pactium licolite record --body JSON [--signer-secret SECRET]
-  pactium licolite verify --body JSON
+  pactium licolite verify --body JSON [--signer-secret SECRET] [--public-key KEY] [--manifest-file PATH]
+
+  licolite record and verify require the same signer configuration
+  to verify envelopes that were recorded with a signing secret.
+  Use --signer-secret or LICOLITE_SIGNING_SECRET for HMAC.
+  Use --public-key for Ed25519 public-key verification.
+  Use --manifest-file to load a verifier manifest JSON.
 `;
 }
 
@@ -112,7 +118,27 @@ async function main() {
     return;
   }
   if (domain === "licolite" && action === "verify") {
-    printJson(await licolite.verifyEnvelope(await bodyFromArgs(args)));
+    const signerSecret = argValue(args, "--signer-secret", process.env.LICOLITE_SIGNING_SECRET || "");
+    const publicKey = argValue(args, "--public-key", "");
+    const manifestFile = argValue(args, "--manifest-file", "");
+    let verifierManifest = null;
+    if (manifestFile) {
+      verifierManifest = JSON.parse(await fs.readFile(manifestFile, "utf8"));
+    }
+    const verifyLicoLite = createLicoLiteAspect({
+      pactium,
+      evidencePolicy: argValue(args, "--evidence-policy", "opportunistic"),
+      signerSecret,
+      signer: publicKey ? { signerId: "cli-verifier", algorithm: "ed25519", publicKey } : null
+    });
+    const body = await bodyFromArgs(args);
+    const envelope = body.envelope || body;
+    const options = body.options || {};
+    const result = await verifyLicoLite.verifyEnvelope(envelope, {
+      ...options,
+      verifierManifest: verifierManifest || options.verifierManifest || null
+    });
+    printJson(result);
     return;
   }
   process.exitCode = 1;
