@@ -85,6 +85,8 @@ The first-class integration surface for LicoLite is at `pactium/licolite`.
 | **Signed Heads** | Optional Ed25519 ledger head signing with verifier manifests |
 | **LicoLite Aspect** | First-class integration surface with default workspace projection and signing |
 | **Repair Planning** | Deterministic repair task generation from structured verification failures; repair execution is host-owned |
+| **Canonical Value** | Pactium-specific canonical encoding (deterministic JSON + NFC + $bytes + safe integers; not RFC 8785 JCS) |
+| **Trust Policy** | Explicit trust model: structural / self-carried-manifest / trusted-manifest-required verification modes |
 | **Zero Dependencies** | Pure ESM, no runtime dependencies, ships source directly |
 
 ## Installation
@@ -246,7 +248,9 @@ import {
 } from "pactium/http";
 ```
 
-The HTTP adapter exposes operation lifecycle, envelope and bundle verification, proof bundle export, workspace projection, cursor paging, append-condition, trusted-head, repair, maintenance, extension, and envelope storage calls as JSON routes. See [docs/API.md](./docs/API.md#http-adapter-api-pactiumhttp) for the full route matrix.
+The HTTP adapter exposes operation lifecycle, envelope and bundle verification, proof bundle export, workspace projection, cursor paging, append-condition, trusted-head, repair, maintenance, extension, and envelope storage calls as JSON routes. By default, the HTTP adapter starts in read-only mode; set `enableMutations: true` to enable write operations. An `authorize(ctx)` hook is available for host-controlled access control. See [docs/API.md](./docs/API.md#http-adapter-api-pactiumhttp) for the full route matrix.
+
+**Important**: The HTTP adapter is a host-controlled internal adapter. It is not designed as a default public-facing network service. Hosts must provide their own authentication, authorization, and transport security controls.
 
 ### LicoLite Aspect (`pactium/licolite`)
 

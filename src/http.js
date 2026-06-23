@@ -9,6 +9,64 @@ import { verifyProofBundle } from "./proof/bundle.js";
 export const PACTIUM_HTTP_PROTOCOL = "pactium.v0.2.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES = 1024 * 1024;
 
+// Route capability classification for authorization gating.
+// Read routes: always allowed, GET or POST. These do not modify ledger state.
+const READ_ROUTES = new Set([
+  "/health",
+  "/protocols",
+  "/doctor",
+  "/intents/lookup",
+  "/outcomes/lookup",
+  "/workspaces/projection",
+  "/workspaces/membership",
+  "/cursors/ledger",
+  "/cursors/workspace",
+  "/cursors/verify",
+  "/append-conditions",
+  "/verify/envelope",
+  "/verify/bundle",
+  "/licolite/verify/envelope",
+  "/licolite/verify/bundle",
+  "/bundles/export",
+  "/licolite/bundles/export",
+  "/trusted-heads/advance",
+  "/repair/plan",
+  "/licolite/repair/plan",
+  "/maintenance/tasks/plan"
+]);
+// Mutation routes: modify ledger state. Gated behind enableMutations.
+const MUTATION_ROUTES = new Set([
+  "/intents",
+  "/outcomes",
+  "/operations",
+  "/licolite/operations"
+]);
+// Privileged routes: storage-level or maintenance execution. Separately gated.
+const PRIVILEGED_ROUTES = new Set([
+  "/maintenance/tasks/run",
+  "/extensions",
+  "/envelopes"
+]);
+
+function classifyRoute(pathname) {
+  if (PRIVILEGED_ROUTES.has(pathname)) return "privileged";
+  // Dynamic routes: GET /intents/:id, GET /outcomes/:id, GET /workspaces/:id/projection
+  if (pathname.startsWith("/intents/") || pathname.startsWith("/outcomes/") ||
+      pathname.startsWith("/workspaces/")) return "read";
+  if (MUTATION_ROUTES.has(pathname)) return "mutation";
+  if (READ_ROUTES.has(pathname)) return "read";
+  return "unknown";
+}
+
+function unauthorizedResponse(code, message) {
+  return {
+    protocol: PACTIUM_HTTP_PROTOCOL,
+    code,
+    error: message,
+    ok: false
+  };
+}
+
 class PactiumHttpError extends Error {
   constructor(statusCode, code, message) {
     super(message);
@@ -77,10 +135,49 @@ function bundleExportRequest(input) {
   return { envelopeOrId: input, options: {} };
 }
 
-async function routeRequest({ pactium, licolite, request, response, maxBodyBytes }) {
+async function routeRequest({ pactium, licolite, request, response, maxBodyBytes, authorize = null, enableMutations = false }) {
   const baseUrl = `http://${request.headers.host || "127.0.0.1"}`;
   const url = new URL(request.url || "/", baseUrl);
+  const pathname = url.pathname;
   const maintenance = createMaintenanceTaskEngine({ pactium });
+
+  // -- Authorization gating --
+  const capability = classifyRoute(pathname);
+  const routeMethod = request.method;
+  const isGet = routeMethod === "GET";
+  const isPost = routeMethod === "POST";
+
+  // Default: only read GET routes are allowed without explicit enableMutations
+  if (!enableMutations && capability !== "read") {
+    // Allow POST to read routes (lookups) even without enableMutations
+    if (capability === "mutation" || capability === "privileged") {
+      return sendJson(response, 403, unauthorizedResponse(
+        "mutations_disabled",
+        "Pactium HTTP server mutations are disabled. Set enableMutations: true to enable write operations."
+      ));
+    }
+  }
+
+  // Privileged routes require explicit gating even with enableMutations
+  if (capability === "privileged" && !enableMutations) {
+    return sendJson(response, 403, unauthorizedResponse(
+      "privileged_route_disabled",
+      "Pactium HTTP privileged routes require explicit enableMutations."
+    ));
+  }
+
+  // Custom authorization hook
+  if (typeof authorize === "function") {
+    const authResult = await authorize({ method: routeMethod, pathname, capability, headers: request.headers });
+    if (authResult === false || (authResult && authResult.allowed === false)) {
+      const reason = authResult?.reason || "Authorization hook rejected the request.";
+      return sendJson(response, authResult?.statusCode || 403, unauthorizedResponse(
+        "unauthorized",
+        reason
+      ));
+    }
+  }
+
   try {
     if (request.method === "GET" && url.pathname === "/health") {
       return sendJson(response, 200, {
@@ -225,12 +322,22 @@ export function createPactiumHttpServer({
   userDataPath = "",
   pactium = null,
   licolite = null,
-  maxBodyBytes = PACTIUM_HTTP_MAX_BODY_BYTES
+  maxBodyBytes = PACTIUM_HTTP_MAX_BODY_BYTES,
+  authorize = null,
+  enableMutations = false
 } = {}) {
   const core = pactium || createPactium({ dataDir, userDataPath });
   const aspect = licolite || createLicoLiteAspect({ pactium: core, evidencePolicy: "opportunistic" });
   return http.createServer((request, response) => {
-    routeRequest({ pactium: core, licolite: aspect, request, response, maxBodyBytes }).catch((error) => {
+    routeRequest({
+      pactium: core,
+      licolite: aspect,
+      request,
+      response,
+      maxBodyBytes,
+      authorize,
+      enableMutations
+    }).catch((error) => {
       sendJson(response, 500, {
         protocol: PACTIUM_HTTP_PROTOCOL,
         code: "pactium_http_error",
@@ -245,9 +352,11 @@ export async function startPactiumHttpServer({
   userDataPath = "",
   host = "127.0.0.1",
   port = 7288,
-  maxBodyBytes = PACTIUM_HTTP_MAX_BODY_BYTES
+  maxBodyBytes = PACTIUM_HTTP_MAX_BODY_BYTES,
+  authorize = null,
+  enableMutations = false
 } = {}) {
-  const server = createPactiumHttpServer({ dataDir, userDataPath, maxBodyBytes });
+  const server = createPactiumHttpServer({ dataDir, userDataPath, maxBodyBytes, authorize, enableMutations });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(Number(port), host, resolve);

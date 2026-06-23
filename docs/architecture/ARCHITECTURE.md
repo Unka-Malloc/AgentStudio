@@ -183,16 +183,41 @@ LicoLite owns runtime policy decisions, operation dispatching, side effects, UI 
 
 ```text
   Data Directory (.pactium/)
-  ├── blocks/           Content-addressed block store (CID → canonical bytes)
-  ├── protocol/         Protocol objects (scoped key-value)
-  │   ├── ledger/       Ledger entries, heads
-  │   ├── indexes/      Index roots and node references
-  │   ├── checkpoints/  Checkpoint tree state
-  │   └── projections/  Workspace projection state
-  └── metadata/         Directory metadata and protocol version
+  ├── pactium-manifest.json  Root manifest (protocol version, schema)
+  ├── cas/                   Content-addressed block store
+  │   └── <hex-prefix>/      Prefix-based sharding (first 2 hex chars of CID)
+  │       └── <hex>.json     Block by full hex CID hash
+  ├── protocol/              Protocol objects (scoped key-value)
+  │   ├── core/              Core runtime state
+  │   ├── ledger/            Ledger entries, heads, compact range
+  │   ├── ledger-head/       Historical ledger heads
+  │   ├── ledger-leaf/       Per-index ledger leaves
+  │   ├── ledger-node/       Merkle tree nodes
+  │   └── index/             Index roots (keyed by domain-hash)
+  └── locks/                 Write-lock directories
+      └── <name>.lock/       Per-lock directory
+          └── owner.json     Lock owner metadata (pid, ownerId, timestamp)
 ```
 
 The Storage Port abstraction separates Pactium's protocol logic from persistence mechanics. The current implementation uses a local JSON backend. Storage backends may change how bytes are stored but cannot change canonical encoding, hash computation, or proof semantics.
+
+### Canonical Value Encoding
+
+Pactium's canonical value encoding (`canonical/value.js`) is **Pactium-specific**. It is NOT an implementation of RFC 8785 (JSON Canonicalization Scheme / JCS).
+
+Key differences from RFC 8785 JCS:
+
+| Aspect | Pactium Canonical Value | RFC 8785 JCS |
+| --- | --- | --- |
+| Binary data | `$bytes` wrapper with base64 encoding | Not supported |
+| String normalization | Unicode NFC normalization | No normalization (code-point identity) |
+| Numbers | Only IEEE 754 safe integers (53-bit) | Arbitrary JSON numbers (implementation-defined) |
+| `-0` | Normalized to `0` | Preserved as `-0` (JSON: `-0`) |
+| `undefined` values | Filtered from objects | N/A (undefined is not valid JSON) |
+| `Buffer` / `Uint8Array` | Encoded as `{ $bytes: base64 }` | Not supported |
+| Reserved keys | `$bytes` is reserved in user objects | No reserved keys |
+
+The canonical value encoding borrows the general concept of deterministic JSON canonicalization (sorted object keys, stable array ordering, no whitespace) but adds Pactium-specific constraints that make it incompatible with generic RFC 8785 implementations. Protocol documents and API descriptions MUST NOT describe Pactium's canonical encoding as "RFC 8785 compatible" or "JCS-compliant."
 
 ## Shared Engine: Index Domain Adapters
 

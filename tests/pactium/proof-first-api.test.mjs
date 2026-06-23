@@ -1402,7 +1402,7 @@ console.log(JSON.stringify({
 
   it("serves HTTP endpoints and CLI proof-first commands", async () => {
     const pactium = createPactium({ dataDir: await tempDataDir() });
-    const server = createPactiumHttpServer({ pactium });
+    const server = createPactiumHttpServer({ pactium, enableMutations: true });
     const address = await listen(server);
     try {
       const health = await requestJson({ port: address.port, requestPath: "/health" });
@@ -1959,7 +1959,8 @@ console.log(JSON.stringify({
 
     const limitedServer = createPactiumHttpServer({
       pactium: createPactium({ inMemory: true }),
-      maxBodyBytes: 32
+      maxBodyBytes: 32,
+      enableMutations: true
     });
     const limitedAddress = await listen(limitedServer);
     try {
@@ -1976,7 +1977,7 @@ console.log(JSON.stringify({
     }
 
     const pactium = createPactium({ inMemory: true });
-    const server = createPactiumHttpServer({ pactium });
+    const server = createPactiumHttpServer({ pactium, enableMutations: true });
     const address = await listen(server);
     try {
       const protocols = await requestJson({ port: address.port, requestPath: "/protocols" });
@@ -2277,6 +2278,302 @@ console.log(JSON.stringify({
     assert.equal(trustedResult.trustedSignatureValid, true);
   });
 
+  it("enforces trustPolicy modes: structural, self-carried-manifest, trusted-manifest-required", async () => {
+    const auditPactium = createPactium({ inMemory: true });
+    const envelope = await auditPactium.recordOperation({
+      operationId: "audit.trust.policy",
+      workspaceId: "audit-trust-policy-ws",
+      idempotencyKey: "trust-policy-key",
+      outcomeIdempotencyKey: "trust-policy-out",
+      input: { test: true }
+    });
+    const head = envelope.ledgerHead;
+    const trustedManifest = head.verifierManifest;
+
+    // 1. structural mode: no manifest needed, proof structure matters
+    const structural = await auditPactium.verifyEnvelope(envelope, { trustPolicy: "structural" });
+    assert.equal(structural.ok, true);
+    assert.equal(structural.proofStructurallyValid, true);
+    assert.equal(structural.trustPolicy, "structural");
+    // ledgerHeadTrusted should be false since no trusted manifest
+    assert.equal(structural.ledgerHeadTrusted, false);
+
+    // 2. self-carried-manifest (default): structural ok, signature validated but not trusted
+    const selfCarried = await auditPactium.verifyEnvelope(envelope, { trustPolicy: "self-carried-manifest" });
+    assert.equal(selfCarried.ok, true);
+    assert.equal(selfCarried.proofStructurallyValid, true);
+    assert.equal(selfCarried.ledgerHeadTrusted, false);
+    assert.equal(selfCarried.trustedSignatureValid, false);
+
+    // 3. trusted-manifest-required without trustedManifest: must fail
+    const noManifest = await auditPactium.verifyEnvelope(envelope, { trustPolicy: "trusted-manifest-required" });
+    assert.equal(noManifest.ok, false);
+    assert.equal(noManifest.trustPolicy, "trusted-manifest-required");
+    assert.equal(noManifest.failures.some((f) => f.code === "trusted_manifest_required"), true);
+
+    // 4. trusted manifest provided with correct signer
+    const trustedOk = await auditPactium.verifyEnvelope(envelope, {
+      trustPolicy: "trusted-manifest-required",
+      trustedManifest
+    });
+    assert.equal(trustedOk.ok, true);
+    assert.equal(trustedOk.ledgerHeadTrusted, true);
+    assert.equal(trustedOk.trustedSignatureValid, true);
+
+    // 5. trusted manifest provided but signer mismatch (wrong manifest)
+    const wrongManifest = createVerifierManifest({
+      signers: [{ signerId: "wrong-signer", algorithm: "ed25519", publicKey: trustedManifest.signers[0].publicKey, roles: ["ledger-head"] }]
+    });
+    const wrongResult = await auditPactium.verifyEnvelope(envelope, {
+      trustPolicy: "trusted-manifest-required",
+      trustedManifest: wrongManifest
+    });
+    assert.equal(wrongResult.ok, false);
+    assert.equal(wrongResult.ledgerHeadTrusted, false);
+    assert.equal(wrongResult.trustedSignatureValid, false);
+  });
+
+  it("bundle verification passes trustPolicy and trustedManifest through to envelope verification", async () => {
+    const auditPactium = createPactium({ inMemory: true });
+    const envelope = await auditPactium.recordOperation({
+      operationId: "bundle.trust",
+      workspaceId: "bundle-trust-ws",
+      idempotencyKey: "bundle-trust-key",
+      outcomeIdempotencyKey: "bundle-trust-out",
+      input: { test: true }
+    });
+    const bundle = await auditPactium.exportProofBundle(envelope);
+    const head = envelope.ledgerHead;
+    const trustedManifest = head.verifierManifest;
+
+    // Bundle verification in structural mode
+    const structural = await verifyProofBundle(bundle, { trustPolicy: "structural" });
+    assert.equal(structural.ok, true);
+    assert.equal(structural.envelope.trustPolicy, "structural");
+    assert.equal(structural.envelope.ledgerHeadTrusted, false);
+
+    // Bundle verification with trusted manifest
+    const trusted = await verifyProofBundle(bundle, {
+      trustPolicy: "trusted-manifest-required",
+      trustedManifest
+    });
+    assert.equal(trusted.ok, true);
+    assert.equal(trusted.envelope.ledgerHeadTrusted, true);
+    assert.equal(trusted.envelope.trustedSignatureValid, true);
+  });
+
+  it("state mutation proof completeness: sampled mode for >32 mutations, full for <=32", async () => {
+    const auditPactium = createPactium({ inMemory: true });
+    // <= 32 mutations => proofCompleteness is "full"
+    const smallMutations = [];
+    for (let i = 0; i < 10; i++) smallMutations.push({ key: `key-${i}`, value: { v: i } });
+    const smallEnvelope = await auditPactium.recordOperation({
+      operationId: "state.small",
+      workspaceId: "state-comp-ws",
+      idempotencyKey: "state-small",
+      outcomeIdempotencyKey: "state-small-out",
+      stateMutations: smallMutations
+    });
+    const smallResult = await auditPactium.verifyEnvelope(smallEnvelope);
+    assert.equal(smallResult.ok, true);
+    // Proof completeness is reflected in the proof material
+    const smallBlock = await auditPactium.advanced.storage.getBlock(smallEnvelope.proofRefs[0].cid);
+    const smallMaterial = canonicalDecode(smallBlock.bytes);
+    const smallCommit = smallMaterial.proofs.stateCommit;
+    assert.equal(smallCommit.proofCompleteness, "full");
+    assert.equal(smallCommit.unprovedMutationCount, 0);
+    // Verify with requireFullStateMutationProofs does not fail when all proved
+    const smallFull = await verifyProofEnvelope(smallEnvelope, {
+      storage: auditPactium.advanced.storage,
+      requireFullStateMutationProofs: true
+    });
+    assert.equal(smallFull.ok, true);
+
+    // > 32 mutations => proofCompleteness is "sampled"
+    const largeMutations = [];
+    for (let i = 0; i < 50; i++) largeMutations.push({ key: `key-${i}`, value: { v: i } });
+    const largeEnvelope = await auditPactium.recordOperation({
+      operationId: "state.large",
+      workspaceId: "state-comp-ws",
+      idempotencyKey: "state-large",
+      outcomeIdempotencyKey: "state-large-out",
+      stateMutations: largeMutations
+    });
+    const largeBlock = await auditPactium.advanced.storage.getBlock(largeEnvelope.proofRefs[0].cid);
+    const largeMaterial = canonicalDecode(largeBlock.bytes);
+    const largeCommit = largeMaterial.proofs.stateCommit;
+    assert.equal(largeCommit.proofCompleteness, "sampled");
+    assert.equal(largeCommit.unprovedMutationCount, 18); // 50 - 32
+
+    // Default verification still passes for sampled proofs
+    const largeResult = await auditPactium.verifyEnvelope(largeEnvelope);
+    assert.equal(largeResult.ok, true);
+
+    // requireFullStateMutationProofs must fail for >32 mutations
+    const largeFull = await verifyProofEnvelope(largeEnvelope, {
+      storage: auditPactium.advanced.storage,
+      requireFullStateMutationProofs: true
+    });
+    assert.equal(largeFull.ok, false);
+    assert.equal(largeFull.failures.some((f) => f.code === "incomplete_state_mutation_proofs"), true);
+  });
+
+  it("bundle verifier detects oversized bundle base64, bad byteLength, bad blockCount, and trailing bytes", async () => {
+    const auditPactium = createPactium({ inMemory: true });
+    const envelope = await auditPactium.recordOperation({
+      operationId: "bundle.size.check",
+      workspaceId: "bundle-size-ws",
+      idempotencyKey: "bundle-size-key",
+      outcomeIdempotencyKey: "bundle-size-out",
+      input: { test: true }
+    });
+    const bundle = await auditPactium.exportProofBundle(envelope);
+
+    // 1. maxBundleBytes pre-decode rejection
+    const tinyResult = await verifyProofBundle(bundle, { maxBundleBytes: 10 });
+    assert.equal(tinyResult.ok, false);
+    assert.equal(tinyResult.failures.some((f) => f.code === "bundle_too_large"), true);
+
+    // 2. bad byteLength
+    const badLen = structuredClone(bundle);
+    badLen.byteLength = 99999;
+    const badLenResult = await verifyProofBundle(badLen);
+    assert.equal(badLenResult.ok, false);
+    assert.equal(badLenResult.failures.some((f) => f.code === "bad_bundle_byte_length"), true);
+
+    // 3. bad blockCount (manifest.blockCount != index.length)
+    const badCount = structuredClone(bundle);
+    badCount.manifest = { ...badCount.manifest, blockCount: 999 };
+    const badCountResult = await verifyProofBundle(badCount);
+    assert.equal(badCountResult.ok, false);
+    assert.equal(badCountResult.failures.some((f) => f.code === "bad_manifest_block_count"), true);
+
+    // 4. trailing bytes (explicitly not allowed)
+    const withTrailing = structuredClone(bundle);
+    const origBytes = Buffer.from(bundle.binaryBase64, "base64");
+    const trailing = Buffer.from("trailing garbage data that will be detected");
+    const combinedBytes = Buffer.concat([origBytes, trailing]);
+    withTrailing.binaryBase64 = combinedBytes.toString("base64");
+    withTrailing.byteLength = combinedBytes.length; // keep consistent
+    const trailResult = await verifyProofBundle(withTrailing);
+    assert.equal(trailResult.ok, false);
+    assert.equal(trailResult.failures.some((f) => f.code === "trailing_bytes"), true);
+
+    // 5. allowTrailingBytes suppresses the error
+    const allowTrailResult = await verifyProofBundle(withTrailing, { allowTrailingBytes: true });
+    assert.equal(allowTrailResult.ok, true);
+  });
+
+  it("LicoLite production verify without trustedManifest returns untrusted result", async () => {
+    const auditDataDir = await tempDataDir("licolite-trust-");
+    const licolite = createLicoLiteAspect({
+      dataDir: auditDataDir,
+      evidencePolicy: "production",
+      signerSecret: "production-secret-123"
+    });
+    const envelope = await licolite.recordWorkspaceOperation({
+      operationId: "licolite.prod.trust",
+      workspaceId: "licolite-trust-ws",
+      policyEvidence: { decision: "allow" },
+      workspaceEffectEvidence: { ref: "host:test" }
+    });
+    const bundle = await licolite.exportProofBundle(envelope);
+
+    // Production verify without trustedManifest should surface untrusted warning
+    const result = await licolite.verifyEnvelope(envelope);
+    assert.equal(result.proofStructurallyValid, true);
+    assert.equal(result.ledgerHeadTrusted, false);
+    assert.equal(result.trustedSignatureValid, false);
+    assert.equal(result.failures.some((f) => f.code === "untrusted_verification"), true);
+
+    // Production verify with explicit trustPolicy: trusted-manifest-required should fail
+    const strict = await licolite.verifyEnvelope(envelope, { trustPolicy: "trusted-manifest-required" });
+    assert.equal(strict.ok, false);
+
+    // Verify with bundle in production without trusted manifest
+    const bundleResult = await licolite.verifyBundle(bundle);
+    assert.equal(bundleResult.envelope.ledgerHeadTrusted, false);
+
+    // Development/opportunistic mode should return structural result without mislabeling trusted
+    const devLicolite = createLicoLiteAspect({ inMemory: true, evidencePolicy: "opportunistic" });
+    const devEnvelope = await devLicolite.recordWorkspaceOperation({
+      operationId: "licolite.dev.trust",
+      workspaceId: "licolite-dev-ws",
+      policyEvidence: { decision: "allow" },
+      workspaceEffectEvidence: { ref: "host:dev" }
+    });
+    const devResult = await devLicolite.verifyEnvelope(devEnvelope);
+    assert.equal(devResult.ok, true);
+    assert.equal(devResult.ledgerHeadTrusted, false);
+  });
+
+  it("blocks mutation routes when enableMutations is false and supports authorization hook", async () => {
+    const dataDir = await tempDataDir("http-auth-");
+    const server = createPactiumHttpServer({ dataDir, enableMutations: false });
+    const address = await listen(server);
+    try {
+      // Read routes work
+      const health = await requestJson({ port: address.port, requestPath: "/health" });
+      assert.equal(health.statusCode, 200);
+      // Mutation route blocked
+      const intent = await requestJson({
+        port: address.port, method: "POST", requestPath: "/intents",
+        body: { operationId: "blocked.op", workspaceId: "ws" }
+      });
+      assert.equal(intent.statusCode, 403);
+      assert.equal(intent.body.code, "mutations_disabled");
+    } finally {
+      await close(server);
+    }
+
+    // With enableMutations + authorize hook
+    const authLog = [];
+    const authServer = createPactiumHttpServer({
+      dataDir: await tempDataDir("http-auth2-"),
+      enableMutations: true,
+      authorize: (ctx) => {
+        authLog.push(ctx.pathname);
+        return ctx.pathname === "/intents" ? { allowed: false, reason: "custom block" } : true;
+      }
+    });
+    const authAddr = await listen(authServer);
+    try {
+      // Authorized read
+      const h = await requestJson({ port: authAddr.port, requestPath: "/health" });
+      assert.equal(h.statusCode, 200);
+      // Blocked by hook
+      const blocked = await requestJson({
+        port: authAddr.port, method: "POST", requestPath: "/intents",
+        body: { operationId: "custom.blocked", workspaceId: "ws" }
+      });
+      assert.equal(blocked.statusCode, 403);
+      assert.equal(blocked.body.code, "unauthorized");
+    } finally {
+      await close(authServer);
+    }
+    assert.ok(authLog.length >= 2);
+  });
+
+  it("no-op mutations on index engine do not produce new roots", async () => {
+    const engine = createVerifiableIndexEngine({ inMemory: true });
+    const idx = await engine.createIndex([
+      { key: "a", valueRef: "ref:a", valueHash: "h:a" },
+      { key: "b", valueRef: "ref:b", valueHash: "h:b" }
+    ]);
+    const root1 = idx.root;
+    // No-op put: same valueRef/valueHash for existing key
+    const putSame = await engine.put(root1, "a", { valueRef: "ref:a", valueHash: "h:a" });
+    assert.equal(putSame.root, root1, "no-op put should return same root");
+    // No-op delete: non-existent key
+    const delNone = await engine.delete(root1, "z");
+    assert.equal(delNone.root, root1, "no-op delete should return same root");
+    // Actual mutation still works
+    const putNew = await engine.put(root1, "c", { valueRef: "ref:c", valueHash: "h:c" });
+    assert.notEqual(putNew.root, root1, "new put should produce different root");
+    const delReal = await engine.delete(putNew.root, "a");
+    assert.notEqual(delReal.root, putNew.root, "real delete should produce different root");
+  });
+
   it("rejects non-safe-integer and float values in canonical encoding", () => {
     assert.throws(() => canonicalEncode({ value: 1.5 }), /safe integer/);
     assert.throws(() => canonicalEncode({ value: NaN }), /finite/);
@@ -2291,6 +2588,42 @@ console.log(JSON.stringify({
     const decomposed = "e\u0301";
     assert.notEqual(composed, decomposed);
     assert.equal(canonicalEncode({ key: composed }).toString(), canonicalEncode({ key: decomposed }).toString());
+  });
+
+  it("isolates canonical node counts per call instead of using a module-level global counter", () => {
+    // 100000 successive calls to normalizeCanonicalValue with a small object should not fail
+    for (let i = 0; i < 100000; i++) {
+      assert.doesNotThrow(() => canonicalEncode({ a: 1 }));
+    }
+    // Concurrent-style interleaved calls should not pollute each other
+    const results = [];
+    for (let i = 0; i < 1000; i++) {
+      results.push(canonicalEncode({ b: 2 }));
+    }
+    assert.equal(results.length, 1000);
+    // Deeply nested structure exceeding MAX_DEPTH must still fail
+    let deep = {};
+    let cursor = deep;
+    for (let i = 0; i < 260; i++) {
+      cursor.nested = {};
+      cursor = cursor.nested;
+    }
+    assert.throws(() => canonicalEncode(deep), /maximum nesting depth/);
+    // Large object exceeding MAX_NODES must still fail
+    const large = {};
+    for (let i = 0; i < 100001; i++) {
+      large[`key${i}`] = i;
+    }
+    assert.throws(() => canonicalEncode(large), /maximum node count/);
+    // canonicalString() and canonicalEncode() remain stable
+    assert.equal(canonicalString({ a: 1 }), '{"a":1}');
+    assert.deepEqual(canonicalDecode(canonicalEncode({ a: 1 })), { a: 1 });
+    // $bytes reserved word still rejected
+    assert.throws(() => canonicalString({ $bytes: "YQ==" }), /reserves \$bytes/);
+    // Buffer / Uint8Array still encodes as { $bytes: base64 }
+    const buf = Buffer.from("test");
+    const result = canonicalDecode(canonicalEncode({ data: buf }));
+    assert.equal(result.data.$bytes, buf.toString("base64"));
   });
 
   it("uses constant-time comparison for HMAC signature verification", async () => {

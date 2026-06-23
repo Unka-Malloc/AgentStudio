@@ -610,6 +610,17 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
 
   async function put(root, key, value, options = {}) {
     const indexRoot = await readIndexRoot(root);
+    const normalizedKey = String(key || "");
+    // No-op fast path: if the key already exists with same valueRef and valueHash,
+    // skip the mutation entirely and return the same root.
+    if (normalizedKey) {
+      const existing = await get(root, normalizedKey);
+      const valueRef = String(value?.valueRef || "");
+      const valueHash = String(value?.valueHash || "");
+      if (existing && existing.valueRef === valueRef && existing.valueHash === valueHash) {
+        return indexRoot;
+      }
+    }
     const valueBlock = value?.valueRef
       ? { cid: value.valueRef, payloadHash: value.valueHash || "" }
       : await storage.putBlock(value, { kind: `index-value:${options.domain || indexRoot.domain || domain}` });
@@ -625,6 +636,15 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
   }
 
   async function deleteKey(root, key, options = {}) {
+    const normalizedKey = String(key || "");
+    // No-op fast path: if the key does not exist, skip mutation entirely.
+    if (normalizedKey) {
+      const existing = await get(root, normalizedKey);
+      if (!existing) {
+        const indexRoot = await readIndexRoot(root);
+        return indexRoot;
+      }
+    }
     return mutateLocal(root, key, (entries) => entries.filter((entry) => entry.key !== String(key || "")), options);
   }
 

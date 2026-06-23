@@ -84,6 +84,11 @@ export interface PactiumVerificationResult {
   protocol: string;
   ok: boolean;
   envelopeId?: string;
+  proofStructurallyValid?: boolean;
+  ledgerHeadSignatureValid?: boolean;
+  ledgerHeadTrusted?: boolean;
+  trustedSignatureValid?: boolean;
+  trustPolicy?: string;
   failures: PactiumVerificationFailure[];
   checked?: string[];
 }
@@ -149,6 +154,12 @@ export interface PactiumLedger extends PactiumRecord {
 
 export interface PactiumProofBundleVerificationOptions extends PactiumRecord {
   verifyAllBlocks?: boolean;
+  maxBundleBytes?: number;
+  allowTrailingBytes?: boolean;
+  maxHeaderSize?: number;
+  maxBlockSize?: number;
+  trustPolicy?: string;
+  trustedManifest?: PactiumRecord;
 }
 
 export interface PactiumProofBundleExportOptions extends PactiumRecord {

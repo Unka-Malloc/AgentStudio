@@ -541,18 +541,51 @@ export async function verifyProofEnvelope(envelope, {
   ledgerHeadSignatures = [],
   bundleResolver = null,
   includeBundleResolverFailures = true,
-  requiredProofs = null
+  requiredProofs = null,
+  trustPolicy = "self-carried-manifest",
+  requireFullStateMutationProofs = false
 } = {}) {
   const failures = [];
   const checkedProofPaths = [];
+  let ledgerHeadSignatureValid = false;
+  let ledgerHeadTrusted = false;
   let trustedSignatureValid = false;
+  const resolvedTrustPolicy = ["structural", "self-carried-manifest", "trusted-manifest-required"].includes(trustPolicy)
+    ? trustPolicy
+    : "self-carried-manifest";
   const supported = new Set([...CORE_CRITICAL_EXTENSIONS, ...supportedCriticalExtensions]);
   const bundleMap = bundleResolver || bundleBlockMap(bundle);
+
+  // -- trust-policy enforcement: trusted-manifest-required must have a caller-supplied manifest --
+  if (resolvedTrustPolicy === "trusted-manifest-required" && !trustedManifest) {
+    return {
+      protocol: PACTIUM_PROTOCOL,
+      envelopeId: envelope?.envelopeId || "",
+      ok: false,
+      proofStructurallyValid: false,
+      ledgerHeadSignatureValid: false,
+      ledgerHeadTrusted: false,
+      trustedSignatureValid: false,
+      trustPolicy: resolvedTrustPolicy,
+      failures: [createVerificationFailure({
+        layer: "trust-policy",
+        code: "trusted_manifest_required",
+        message: "trustPolicy is 'trusted-manifest-required' but no trustedManifest was provided.",
+        repairable: true
+      })]
+    };
+  }
+
   if (!envelope || envelope.protocol !== PACTIUM_PROTOCOL || envelope.envelopeType !== "pactium.proof-envelope") {
     return {
       protocol: PACTIUM_PROTOCOL,
+      envelopeId: envelope?.envelopeId || "",
       ok: false,
+      proofStructurallyValid: false,
+      ledgerHeadSignatureValid: false,
+      ledgerHeadTrusted: false,
       trustedSignatureValid: false,
+      trustPolicy: resolvedTrustPolicy,
       failures: [createVerificationFailure({
         layer: "proof-envelope",
         code: "malformed_envelope",
@@ -672,6 +705,9 @@ export async function verifyProofEnvelope(envelope, {
       }));
     }
   }
+
+  // -- Ledger proofs (inclusion + consistency): always part of structural validity --
+  const structuralFailuresBeforeLedger = failures.length;
   if (!proofMaterial?.ledger) {
     failures.push(createVerificationFailure({
       layer: "ledger",
@@ -703,28 +739,51 @@ export async function verifyProofEnvelope(envelope, {
         repairable: true
       }));
     }
-    // Manifest resolution: trusted manifest (caller-provided trust anchor) >
-    // verifierManifest (host-provided) > proof material's self-carried manifest
-    // (format validation only, not trusted).
+
+    // -- Ledger head signature verification --
+    // Manifest resolution for *signature verification* (not trust):
+    //   trustedManifest (caller trust anchor) >
+    //   verifierManifest (host-provided operational manifest) >
+    //   proof material's self-carried manifest (format validation only)
     const proofManifest = proofMaterial.ledger.verifierManifest || proofMaterial.ledger.head?.verifierManifest || null;
     const manifestForHead = trustedManifest || verifierManifest || proofManifest || null;
     const signaturesForHead = asArray(ledgerHeadSignatures).length > 0
       ? ledgerHeadSignatures
       : asArray(proofMaterial.ledger.ledgerHeadSignatures || proofMaterial.ledger.head?.signatures);
-    if (manifestForHead) {
+
+    // In "structural" mode skip signature verification entirely.
+    if (resolvedTrustPolicy !== "structural" && manifestForHead) {
       const signatureResult = verifyLedgerHeadSignature(proofMaterial.ledger.head, manifestForHead, {
         signatures: signaturesForHead
       });
-      failures.push(...signatureResult.failures);
       if (signatureResult.ok) {
+        ledgerHeadSignatureValid = true;
         checkedProofPaths.push("ledger-head-signature");
-        // Only mark as trusted when the caller provided the trust anchor.
-        if (trustedManifest) trustedSignatureValid = true;
+      }
+      // In "self-carried-manifest" mode, signature failures against the proof's own
+      // manifest are recorded as structural warnings but do not block ok unless the
+      // signature is from a trusted source.
+      if (resolvedTrustPolicy === "trusted-manifest-required" || trustedManifest) {
+        // Signature failures against a caller-provided trustedManifest are hard failures.
+        failures.push(...signatureResult.failures);
+      } else if (resolvedTrustPolicy === "self-carried-manifest" && !trustedManifest && !verifierManifest) {
+        // Self-carried manifest: record signature failures as non-blocking diagnostics
+        // but keep ledgerHeadTrusted = false.
+        for (const sigFailure of signatureResult.failures) {
+          failures.push({ ...sigFailure, severity: "warning", repairable: true });
+        }
+      }
+
+      // Trust determination: only a caller-provided trustedManifest establishes trust.
+      if (trustedManifest && ledgerHeadSignatureValid) {
+        ledgerHeadTrusted = true;
+        trustedSignatureValid = true;
       }
     }
   }
+
+  // -- Remaining structural checks (proof schema, semantic bindings, embedded proofs) --
   if (proofMaterial) {
-    // Enforce required proof schema
     assertRequiredProofs({
       envelopeKind: envelope.envelopeKind,
       proofMaterial,
@@ -733,6 +792,29 @@ export async function verifyProofEnvelope(envelope, {
     });
     const ledgerFact = await resolveLedgerFact({ proofMaterial, storage, bundleMap, failures });
     verifySemanticBindings({ envelope, proofMaterial, ledgerFact, failures });
+
+    // -- State mutation proof completeness check --
+    const stateCommit = proofMaterial?.proofs?.stateCommit;
+    if (stateCommit && requireFullStateMutationProofs) {
+      const mutationCount = Number(stateCommit.mutationCount || 0);
+      const touchedKeyProofs = asArray(proofMaterial?.proofs?.state?.touchedKeyProofs);
+      const provedCount = touchedKeyProofs.length;
+      if (provedCount < mutationCount) {
+        failures.push(createVerificationFailure({
+          layer: "proof-completeness",
+          code: "incomplete_state_mutation_proofs",
+          message: `requireFullStateMutationProofs is set but only ${provedCount}/${mutationCount} mutations have proofs.`,
+          evidenceRef: envelope.envelopeId,
+          details: {
+            mutationCount,
+            provedCount,
+            unprovedMutationCount: mutationCount - provedCount,
+            proofCompleteness: stateCommit.proofCompleteness || "sampled"
+          }
+        }));
+      }
+    }
+
     await verifyEmbeddedProofs({
       proofMaterial,
       registry: createDefaultProofVerifierRegistry(proofVerifiers),
@@ -744,11 +826,37 @@ export async function verifyProofEnvelope(envelope, {
   if (includeBundleResolverFailures && bundleMap?.failures) {
     failures.push(...bundleMap.failures);
   }
+
+  // -- Compute proof structural validity (all checks except trust-dependent decisions) --
+  // Structural validity means: envelope id, proof material refs, critical extensions,
+  // ledger inclusion/consistency, proof schema, semantic bindings, embedded proofs all pass.
+  // It intentionally excludes the trust status of ledger head signatures.
+  const structuralFailures = failures.filter((f) => f.severity !== "warning");
+  const proofStructurallyValid = structuralFailures.length === 0;
+
+  // -- Overall ok depends on trust policy --
+  let ok;
+  if (resolvedTrustPolicy === "structural") {
+    // Structural mode: only proof structure matters. Signature trust is irrelevant.
+    ok = proofStructurallyValid;
+  } else if (resolvedTrustPolicy === "trusted-manifest-required") {
+    // Trusted-manifest-required: both structure AND trusted signature must pass.
+    ok = proofStructurallyValid && trustedSignatureValid;
+  } else {
+    // self-carried-manifest (default): structure must pass; signature validation is
+    // informational. ledgerHeadTrusted is always false without a caller trustedManifest.
+    ok = proofStructurallyValid;
+  }
+
   return {
     protocol: PACTIUM_PROTOCOL,
     envelopeId: envelope.envelopeId,
-    ok: failures.length === 0,
+    ok,
+    proofStructurallyValid,
+    ledgerHeadSignatureValid,
+    ledgerHeadTrusted,
     trustedSignatureValid,
+    trustPolicy: resolvedTrustPolicy,
     failures,
     checked: [
       "envelope-id",

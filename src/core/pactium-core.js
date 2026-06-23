@@ -642,6 +642,12 @@ export function createPactium({
       // Full state mutation proofs are available through the proof bundle.
       sampledKeyCount: Math.min(keyedMutations.length, 32),
       touchedKeyCount: Math.min(keyedMutations.length, 32), // kept for backward compat
+      // Proof completeness semantics: when mutationCount <= 32, all mutations
+      // have proofs (completeness is "full" in practice). When > 32, only the
+      // first 32 are proved (completeness is "sampled").
+      mutationProofMode: "sampled",
+      proofCompleteness: keyedMutations.length <= 32 ? "full" : "sampled",
+      unprovedMutationCount: Math.max(0, keyedMutations.length - 32),
       createdAt: nowIso()
     };
     const checkpointEntries = checkpointEntriesFor(current, workspaceId);
@@ -854,7 +860,9 @@ export function createPactium({
       requireAllProofs: options.requireAllProofs !== false,
       verifierManifest: options.verifierManifest || null,
       trustedManifest: options.trustedManifest || null,
-      ledgerHeadSignatures: options.ledgerHeadSignatures || []
+      ledgerHeadSignatures: options.ledgerHeadSignatures || [],
+      trustPolicy: options.trustPolicy || "self-carried-manifest",
+      requireFullStateMutationProofs: options.requireFullStateMutationProofs || false
     });
   }
 

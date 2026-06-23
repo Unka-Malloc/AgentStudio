@@ -112,6 +112,10 @@ export function createLicoLiteAspect({
 
   async function verifyLicoLiteEnvelope(envelope, options = {}) {
     const bundleMap = bundleBlockMap(options.bundle || null);
+    // In production evidence policy without a trustedManifest, default to
+    // structural-only trust policy and surface the gap explicitly.
+    const effectiveTrustPolicy = options.trustPolicy ||
+      (evidencePolicy === "production" && !options.trustedManifest ? "structural" : "self-carried-manifest");
     const coreResult = await verifyProofEnvelope(envelope, {
       storage: core.advanced.storage,
       bundle: options.bundle || null,
@@ -119,7 +123,10 @@ export function createLicoLiteAspect({
       proofVerifiers: options.proofVerifiers || {},
       requireAllProofs: options.requireAllProofs !== false,
       verifierManifest: options.verifierManifest || null,
-      ledgerHeadSignatures: options.ledgerHeadSignatures || []
+      trustedManifest: options.trustedManifest || null,
+      ledgerHeadSignatures: options.ledgerHeadSignatures || [],
+      trustPolicy: effectiveTrustPolicy,
+      requireFullStateMutationProofs: options.requireFullStateMutationProofs || false
     });
     const failures = [...coreResult.failures];
     const extensions = asArray(envelope?.extensions);
@@ -239,11 +246,29 @@ export function createLicoLiteAspect({
         }));
       }
     }
+    // In production mode without a trusted manifest, the result is not trusted
+    // even if all structural checks pass.
+    if (evidencePolicy === "production" && !options.trustedManifest) {
+      failures.push(createVerificationFailure({
+        layer: "licolite.trust",
+        code: "untrusted_verification",
+        message: "LicoLite production verification was performed without a trusted manifest. The result is structurally valid but not trusted.",
+        evidenceRef: envelope?.envelopeId || "",
+        severity: "warning",
+        repairable: true
+      }));
+    }
+
     return {
       protocol: PACTIUM_PROTOCOL,
       aspect: LICOLITE_ASPECT_PROTOCOL,
       envelopeId: envelope?.envelopeId || "",
-      ok: failures.length === 0,
+      ok: failures.filter((f) => f.severity !== "warning").length === 0,
+      proofStructurallyValid: coreResult.proofStructurallyValid,
+      ledgerHeadSignatureValid: coreResult.ledgerHeadSignatureValid,
+      ledgerHeadTrusted: coreResult.ledgerHeadTrusted,
+      trustedSignatureValid: coreResult.trustedSignatureValid,
+      trustPolicy: coreResult.trustPolicy,
       failures,
       checked: [
         ...asArray(coreResult.checked),

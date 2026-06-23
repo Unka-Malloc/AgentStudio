@@ -25,10 +25,10 @@ export interface LicoLiteAspect {
   signer: LicoLiteSigner | null;
   recordWorkspaceOperation(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
   recordOperation(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
-  verifyLicoLiteEnvelope(envelope: PactiumProofEnvelope, options?: PactiumRecord): Promise<PactiumVerificationResult>;
-  verifyEnvelope(envelope: PactiumProofEnvelope, options?: PactiumRecord): Promise<PactiumVerificationResult>;
-  verifyLicoLiteBundle(bundle: PactiumProofBundle, options?: PactiumRecord): Promise<PactiumVerificationResult>;
-  verifyBundle(bundle: PactiumProofBundle, options?: PactiumRecord): Promise<PactiumVerificationResult>;
+  verifyLicoLiteEnvelope(envelope: PactiumProofEnvelope, options?: PactiumRecord & { trustedManifest?: PactiumRecord; trustPolicy?: string; requireFullStateMutationProofs?: boolean }): Promise<PactiumVerificationResult>;
+  verifyEnvelope(envelope: PactiumProofEnvelope, options?: PactiumRecord & { trustedManifest?: PactiumRecord; trustPolicy?: string; requireFullStateMutationProofs?: boolean }): Promise<PactiumVerificationResult>;
+  verifyLicoLiteBundle(bundle: PactiumProofBundle, options?: PactiumRecord & { trustedManifest?: PactiumRecord; trustPolicy?: string }): Promise<PactiumVerificationResult>;
+  verifyBundle(bundle: PactiumProofBundle, options?: PactiumRecord & { trustedManifest?: PactiumRecord; trustPolicy?: string }): Promise<PactiumVerificationResult>;
   planRepair(failures?: PactiumRecord[]): PactiumRecord;
   getWorkspaceProjection(workspaceId?: string): Promise<PactiumRecord>;
   proveWorkspaceMembership(input?: PactiumRecord): Promise<PactiumRecord>;
