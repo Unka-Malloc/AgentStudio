@@ -110,7 +110,7 @@ yarn add pactium
 
 ## Quick Start
 
-### Record an operation with full proof
+### Record an operation with a verifiable proof envelope
 
 ```js
 import { createPactium } from "pactium";

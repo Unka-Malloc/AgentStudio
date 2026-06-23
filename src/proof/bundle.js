@@ -2,7 +2,7 @@ import { PACTIUM_PROOF_BUNDLE_TYPE, PACTIUM_PROTOCOL } from "../protocol/constan
 import { asArray } from "../shared/records.js";
 import { protocolHash } from "../protocol/hashing.js";
 import { createVerificationFailure } from "../verification/failure.js";
-import { createIndexedBundleResolver } from "./bundle-format.js";
+import { createIndexedBundleResolver, decodeVarint } from "./bundle-format.js";
 import { verifyProofEnvelope } from "./envelope.js";
 
 export async function verifyProofBundle(bundle, options = {}) {
@@ -68,10 +68,13 @@ export async function verifyProofBundle(bundle, options = {}) {
     }
   }
 
-  // -- index item range checks --
+  // -- index item strict layout validation --
+  // Decode every varint to compute exact [start, payloadEnd) for each record,
+  // then check coverage, overlap, gaps, and trailing bytes.
   const decodedBytes = bundle.binaryBase64 ? Buffer.from(String(bundle.binaryBase64), "base64") : null;
   if (decodedBytes && bundle.index) {
     const sorted = [...asArray(bundle.index)].sort((a, b) => Number(a.offset || 0) - Number(b.offset || 0));
+    const ranges = [];
     for (let i = 0; i < sorted.length; i++) {
       const item = sorted[i];
       const offset = Number(item.offset || 0);
@@ -103,45 +106,71 @@ export async function verifyProofBundle(bundle, options = {}) {
           message: `Index item has negative byteLength.`, evidenceRef: item.cid
         }));
       }
-      // offset must be within the decoded binary
       if (offset >= decodedBytes.length) {
         failures.push(createVerificationFailure({
           layer: "proof-bundle", code: "bad_index_range",
           message: `Index item offset exceeds decoded binary length.`, evidenceRef: item.cid
         }));
       }
-      // The record end is determined by the next record's offset (for all but
-      // the last item) or by the end of the binary (for the last item).
-      // recordLength does NOT include the varint prefix length, so we cannot
-      // simply use offset + recordLength to compute the range end.
-      // Overlap detection: use the next item's offset as the boundary.
-      if (i > 0) {
-        const prev = sorted[i - 1];
-        if (prev.offset === offset) {
+
+      // Decode the actual varint at this offset to get the precise payload end.
+      let varintResult;
+      try {
+        varintResult = decodeVarint(decodedBytes, offset);
+      } catch (err) {
+        failures.push(createVerificationFailure({
+          layer: "proof-bundle", code: "bad_bundle_varint",
+          message: err instanceof Error ? err.message : "Bundle varint could not be decoded.",
+          evidenceRef: item.cid
+        }));
+        continue;
+      }
+      if (varintResult.value !== recordLength) {
+        failures.push(createVerificationFailure({
+          layer: "proof-bundle", code: "bad_index_record_length",
+          message: `Varint value ${varintResult.value} does not match index recordLength ${recordLength}.`,
+          evidenceRef: item.cid
+        }));
+      }
+      const recordStart = offset;
+      const payloadStart = varintResult.nextOffset + headerLength;
+      const payloadEnd = payloadStart + byteLength;
+      if (payloadEnd > decodedBytes.length) {
+        failures.push(createVerificationFailure({
+          layer: "proof-bundle", code: "bad_index_range",
+          message: `Record payload extends beyond decoded binary.`, evidenceRef: item.cid
+        }));
+      }
+      ranges.push({ item, recordStart, payloadEnd });
+    }
+
+    // Strict overlap / gap / trailing check using exact [recordStart, payloadEnd)
+    if (ranges.length > 0) {
+      for (let i = 1; i < ranges.length; i++) {
+        const prev = ranges[i - 1];
+        const curr = ranges[i];
+        if (prev.payloadEnd > curr.recordStart) {
           failures.push(createVerificationFailure({
-            layer: "proof-bundle", code: "duplicate_bundle_offset",
-            message: `Two index items share the same offset.`, evidenceRef: `${prev.cid} / ${item.cid}`
+            layer: "proof-bundle", code: "overlapping_index_ranges",
+            message: `Index records have overlapping byte ranges (prev ends at ${prev.payloadEnd}, curr starts at ${curr.recordStart}).`,
+            evidenceRef: `${prev.item.cid} / ${curr.item.cid}`
+          }));
+        } else if (prev.payloadEnd < curr.recordStart) {
+          failures.push(createVerificationFailure({
+            layer: "proof-bundle", code: "index_record_gap",
+            message: `Gap of ${curr.recordStart - prev.payloadEnd} bytes between index records.`,
+            evidenceRef: `${prev.item.cid} / ${curr.item.cid}`
           }));
         }
       }
-    }
-    // Trailing bytes check: the last record must end exactly at decoded.length.
-    // We can check this via the resolver's internal metadata which decodes
-    // the varint. For a lightweight check without decoding every varint here,
-    // only flag trailing bytes when the last offset + recordLength + max
-    // plausible varint is still far from decoded.length.
-    if (sorted.length > 0 && !options.allowTrailingBytes) {
-      const lastItem = sorted[sorted.length - 1];
-      const lastOffset = Number(lastItem.offset || 0);
-      const lastRecordLength = Number(lastItem.recordLength || 0);
-      // Varint max for record lengths up to ~2 GiB is 5 bytes. If
-      // offset + recordLength + 5 is still short, trailing bytes are certain.
-      const maxVarint = 5;
-      if (lastOffset + lastRecordLength + maxVarint < decodedBytes.length) {
+      // Trailing bytes: last record must end exactly at decoded.length.
+      const lastRange = ranges[ranges.length - 1];
+      if (!options.allowTrailingBytes && lastRange.payloadEnd !== decodedBytes.length) {
+        const trailing = decodedBytes.length - lastRange.payloadEnd;
         failures.push(createVerificationFailure({
           layer: "proof-bundle", code: "trailing_bytes",
-          message: `Bundle has at least ${decodedBytes.length - lastOffset - lastRecordLength - maxVarint} trailing bytes after the last record.`,
-          evidenceRef: String(decodedBytes.length - lastOffset - lastRecordLength - maxVarint),
+          message: `Bundle has ${trailing} trailing byte(s) after the last record (expected ${decodedBytes.length}, got end at ${lastRange.payloadEnd}).`,
+          evidenceRef: String(trailing),
           repairable: true
         }));
       }
@@ -193,7 +222,8 @@ export async function verifyProofBundle(bundle, options = {}) {
     verifierManifest: options.verifierManifest || null,
     trustedManifest: options.trustedManifest || null,
     ledgerHeadSignatures: options.ledgerHeadSignatures || [],
-    trustPolicy: options.trustPolicy || "self-carried-manifest"
+    trustPolicy: options.trustPolicy || "self-carried-manifest",
+    requireFullStateMutationProofs: options.requireFullStateMutationProofs || false
   });
   return {
     protocol: PACTIUM_PROTOCOL,

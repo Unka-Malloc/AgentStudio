@@ -10,7 +10,7 @@ export const PACTIUM_HTTP_PROTOCOL = "pactium.v0.2.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES = 1024 * 1024;
 
 // Route capability classification for authorization gating.
-// Read routes: always allowed, GET or POST. These do not modify ledger state.
+// Read routes: always allowed, GET or POST. These do not modify runtime state.
 const READ_ROUTES = new Set([
   "/health",
   "/protocols",
@@ -27,19 +27,20 @@ const READ_ROUTES = new Set([
   "/verify/bundle",
   "/licolite/verify/envelope",
   "/licolite/verify/bundle",
-  "/bundles/export",
-  "/licolite/bundles/export",
   "/trusted-heads/advance",
   "/repair/plan",
   "/licolite/repair/plan",
   "/maintenance/tasks/plan"
 ]);
-// Mutation routes: modify ledger state. Gated behind enableMutations.
+// Mutation routes: modify runtime state (ledger, runtime-state, proof bundle cache).
+// Gated behind enableMutations.
 const MUTATION_ROUTES = new Set([
   "/intents",
   "/outcomes",
   "/operations",
-  "/licolite/operations"
+  "/licolite/operations",
+  "/bundles/export",
+  "/licolite/bundles/export"
 ]);
 // Privileged routes: storage-level or maintenance execution. Separately gated.
 const PRIVILEGED_ROUTES = new Set([

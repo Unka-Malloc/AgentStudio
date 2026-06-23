@@ -639,7 +639,9 @@ export function createPactium({
       mutationKeys: keyedMutations.map((mutation) => String(mutation.key || "")),
       mutationActions: keyedMutations.map((mutation) => String(mutation.action || "put")),
       // touchedKeyProofs is a sample of the first 32 keys for tamper detection.
-      // Full state mutation proofs are available through the proof bundle.
+      // Full state mutation proofs are not emitted by default. Bundles preserve
+      // the same proof coverage as the envelope unless a future full/batch proof
+      // mode is enabled.
       sampledKeyCount: Math.min(keyedMutations.length, 32),
       touchedKeyCount: Math.min(keyedMutations.length, 32), // kept for backward compat
       // Proof completeness semantics: when mutationCount <= 32, all mutations

@@ -2462,6 +2462,44 @@ console.log(JSON.stringify({
     // 5. allowTrailingBytes suppresses the error
     const allowTrailResult = await verifyProofBundle(withTrailing, { allowTrailingBytes: true });
     assert.equal(allowTrailResult.ok, true);
+
+    // 6. requireFullStateMutationProofs passthrough through bundle verification
+    const largeMuts = [];
+    for (let i = 0; i < 50; i++) largeMuts.push({ key: `key-${i}`, value: { v: i } });
+    const largeEnv = await auditPactium.recordOperation({
+      operationId: "bundle.require.full",
+      workspaceId: "bundle-require-ws",
+      idempotencyKey: "bundle-req-key",
+      outcomeIdempotencyKey: "bundle-req-out",
+      stateMutations: largeMuts
+    });
+    const largeBundle = await auditPactium.exportProofBundle(largeEnv);
+    const fullProofResult = await verifyProofBundle(largeBundle, { requireFullStateMutationProofs: true });
+    assert.equal(fullProofResult.ok, false);
+    assert.equal(fullProofResult.failures.some((f) => f.code === "incomplete_state_mutation_proofs"), true);
+  });
+
+  it("detects overlapping index ranges and gaps via strict varint-based layout validation", async () => {
+    const auditPactium = createPactium({ inMemory: true });
+    const envelope = await auditPactium.recordOperation({
+      operationId: "bundle.overlap",
+      workspaceId: "bundle-overlap-ws",
+      idempotencyKey: "bundle-overlap-key",
+      outcomeIdempotencyKey: "bundle-overlap-out",
+      input: { test: true }
+    });
+    const bundle = await auditPactium.exportProofBundle(envelope);
+
+    // Overlapping: modify first record's recordLength to make its payload
+    // range extend into the second record.
+    const overlapping = structuredClone(bundle);
+    const orig = Buffer.from(bundle.binaryBase64, "base64");
+    const idx0 = overlapping.index[0];
+    idx0.recordLength = Number(idx0.recordLength) + 500; // extends into next record
+    const badRangeResult = await verifyProofBundle(overlapping);
+    assert.equal(badRangeResult.ok === false || badRangeResult.failures.some(
+      (f) => f.code === "overlapping_index_ranges" || f.code === "bad_index_record_length"
+    ), true);
   });
 
   it("LicoLite production verify without trustedManifest returns untrusted result", async () => {
@@ -2637,18 +2675,36 @@ console.log(JSON.stringify({
     assert.equal(await signer.verify(message, "short"), false);
   });
 
-  it("protects in-memory protocol objects from external mutation", async () => {
-    const auditStorage = createStoragePort({ inMemory: true });
+  it("protects protocol objects from external mutation (memory and disk backends)", async () => {
+    // -- Memory backend --
+    const memStorage = createStoragePort({ inMemory: true });
     const mutable = { key: "original", nested: { value: 1 } };
-    await auditStorage.putProtocolObject("test-scope", "test-key", mutable);
+    const returned = await memStorage.putProtocolObject("test-scope", "test-key", mutable);
+    // Mutating the input should not affect stored value
     mutable.key = "mutated";
     mutable.nested.value = 999;
-    const stored = await auditStorage.getProtocolObject("test-scope", "test-key");
+    const stored = await memStorage.getProtocolObject("test-scope", "test-key");
     assert.equal(stored.key, "original");
     assert.equal(stored.nested.value, 1);
+    // Mutating the returned object from putProtocolObject should not affect cache
+    returned.key = "put-return-mutated";
+    const afterPutReturn = await memStorage.getProtocolObject("test-scope", "test-key");
+    assert.equal(afterPutReturn.key, "original", "putProtocolObject return mutation should not affect cache");
+    // Mutating a getProtocolObject return should not affect subsequent reads
     stored.key = "also-mutated";
-    const storedAgain = await auditStorage.getProtocolObject("test-scope", "test-key");
+    const storedAgain = await memStorage.getProtocolObject("test-scope", "test-key");
     assert.equal(storedAgain.key, "original");
+
+    // -- Disk backend --
+    const diskDir = await tempDataDir("clone-disk-");
+    const diskStorage = createStoragePort({ dataDir: diskDir });
+    const diskReturned = await diskStorage.putProtocolObject("clone-scope", "clone-key", { count: 1 });
+    diskReturned.count = 999;
+    const diskStored = await diskStorage.getProtocolObject("clone-scope", "clone-key");
+    assert.equal(diskStored.count, 1, "disk putProtocolObject return mutation should not affect stored value");
+    diskStored.count = 777;
+    const diskAgain = await diskStorage.getProtocolObject("clone-scope", "clone-key");
+    assert.equal(diskAgain.count, 1, "disk getProtocolObject return mutation should not affect cache");
   });
 
 });

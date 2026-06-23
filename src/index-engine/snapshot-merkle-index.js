@@ -611,13 +611,17 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
   async function put(root, key, value, options = {}) {
     const indexRoot = await readIndexRoot(root);
     const normalizedKey = String(key || "");
-    // No-op fast path: if the key already exists with same valueRef and valueHash,
-    // skip the mutation entirely and return the same root.
+    // No-op fast path: if the key already exists with the same valueRef,
+    // valueHash, and metadata, skip the mutation entirely and return the
+    // same root. Metadata is compared via canonicalString to cover
+    // structurally equal objects.
     if (normalizedKey) {
       const existing = await get(root, normalizedKey);
       const valueRef = String(value?.valueRef || "");
       const valueHash = String(value?.valueHash || "");
-      if (existing && existing.valueRef === valueRef && existing.valueHash === valueHash) {
+      const existingMetadata = canonicalString(normalizeCanonicalValue(asRecord(existing?.metadata)));
+      const newMetadata = canonicalString(normalizeCanonicalValue(asRecord(value?.metadata)));
+      if (existing && existing.valueRef === valueRef && existing.valueHash === valueHash && existingMetadata === newMetadata) {
         return indexRoot;
       }
     }

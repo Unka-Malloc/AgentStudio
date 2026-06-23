@@ -239,10 +239,11 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
       value: storedValue,
       updatedAt: nowIso()
     };
-    // Always store a canonical clone to prevent external mutation of stored values.
+    // Store a canonical clone internally and return a separate canonical clone
+    // so that callers mutating the returned value cannot poison the cache.
     memoryObjects.set(`${normalizedScope}/${normalizedKey}`, storedValue);
     if (!inMemory) await writeJsonAtomic(objectPath(normalizedScope, normalizedKey), stored);
-    return storedValue;
+    return normalizeCanonicalValue(storedValue);
   }
 
   function clearCache() {
@@ -374,8 +375,11 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     if (stored.protocol !== PACTIUM_PROTOCOL || stored.schema !== PACTIUM_SCHEMA_VERSION) {
       throw new Error("Pactium latest-schema-only boundary rejected protocol material.");
     }
-    memoryObjects.set(memoryKey, stored.value);
-    return stored.value;
+    // Cache a canonical clone and return a separate canonical clone so that
+    // callers mutating the returned value cannot poison the cache.
+    const diskClone = normalizeCanonicalValue(stored.value);
+    memoryObjects.set(memoryKey, diskClone);
+    return normalizeCanonicalValue(diskClone);
   }
 
   return Object.freeze({
