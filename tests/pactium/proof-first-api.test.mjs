@@ -2883,6 +2883,49 @@ console.log(JSON.stringify({
     ), "should detect openIntent root mismatch specifically");
   });
 
+  it("doctor rebuild categorizes roots into fully/partially/skipped", async () => {
+    const dataDir = await tempDataDir("doctor-categorized-");
+    const pactium = createPactium({ dataDir });
+    // Record operation with NO idempotency and NO state mutations
+    await pactium.recordOperation({
+      operationId: "categorized.op",
+      workspaceId: "categorized-ws"
+    });
+    const result = await pactium.doctor({ rebuild: true });
+    assert.ok(result.rebuild, "rebuild should be present");
+    assert.equal(result.rebuild.attempted, true);
+    // Verify root categories are reported
+    assert.ok(result.rebuild.fullyComparableCount >= 0, "should have fullyComparableCount");
+    assert.ok(result.rebuild.partiallyComparableCount >= 0, "should have partiallyComparableCount");
+    assert.ok(result.rebuild.skippedCount > 0, "should have skippedCount for stateRoot");
+    // No hard failures for normal operations (only warnings for skipped roots)
+    const hardFailures = result.failures?.filter((f) => f.severity !== "warning") || [];
+    assert.equal(hardFailures.length, 0, "should have no hard failures for normal operation");
+  });
+
+  it("doctor rebuild with idempotency reports *_rebuild_incomplete warnings, not derived_root_mismatch", async () => {
+    const dataDir = await tempDataDir("doctor-idem-incomplete-");
+    const pactium = createPactium({ dataDir });
+    await pactium.recordOperation({
+      operationId: "idem.rebuild.op",
+      workspaceId: "idem-rebuild-ws",
+      idempotencyKey: "idem-rebuild-key",
+      outcomeIdempotencyKey: "idem-rebuild-out",
+      input: { test: true }
+    });
+    const result = await pactium.doctor({ rebuild: true });
+    // Mismatches in partially comparable roots should be warnings
+    const hardMismatches = (result.rebuild?.mismatches || [])
+      .filter((m) => m.category === "fullyComparable");
+    // Fully comparable roots (openIntent, outcome, causality, workspace order/membership/checkpoint)
+    // should all match since the facts are complete.
+    assert.equal(hardMismatches.length, 0,
+      "fully comparable roots should not have mismatches for a normal operation");
+    // Verify skipped roots include stateRoot
+    assert.ok(result.failures?.some((f) => f.code === "state_rebuild_incomplete"),
+      "should report state_rebuild_incomplete for skipped stateRoot");
+  });
+
   it("beginOperationIntent idempotency conflict does not leave orphan pending marker", async () => {
     const dataDir = await tempDataDir("no-orphan-idem-");
     const pactium = createPactium({ dataDir });

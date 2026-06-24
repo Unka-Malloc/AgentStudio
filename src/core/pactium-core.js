@@ -1279,33 +1279,31 @@ export function createPactium({
         });
         const current = await ensureState();
         const mismatches = [];
-
-        // Compare index roots
-        for (const [rootName, rebuiltRoot] of Object.entries(rebuild.comparableRoots)) {
-          let runtimeRoot = "";
-          if (rootName === "openIntent") runtimeRoot = current.indexRoots.openIntent || "";
-          else if (rootName === "outcome") runtimeRoot = current.indexRoots.outcome || "";
-          else if (rootName === "intentIdempotency") runtimeRoot = current.indexRoots.intentIdempotency || "";
-          else if (rootName === "outcomeIdempotency") runtimeRoot = current.indexRoots.outcomeIdempotency || "";
-          else if (rootName === "causality") runtimeRoot = current.indexRoots.causality || "";
-          else if (rootName.startsWith("workspace:")) {
-            // workspace:<wsId>:<field>
+        const runtimeRootLookup = (rootName) => {
+          if (rootName === "openIntent") return current.indexRoots.openIntent || "";
+          if (rootName === "outcome") return current.indexRoots.outcome || "";
+          if (rootName === "intentIdempotency") return current.indexRoots.intentIdempotency || "";
+          if (rootName === "outcomeIdempotency") return current.indexRoots.outcomeIdempotency || "";
+          if (rootName === "causality") return current.indexRoots.causality || "";
+          if (rootName.startsWith("workspace:")) {
             const parts = rootName.split(":");
             const wsId = parts[1];
             const field = parts.slice(2).join(":");
             const ws = current.workspace?.[wsId];
-            if (field === "orderRoot") runtimeRoot = ws?.orderRoot || "";
-            else if (field === "membershipRoot") runtimeRoot = ws?.membershipRoot || "";
-            else if (field === "checkpointRoot") runtimeRoot = ws?.checkpointRoot || "";
-            else if (field === "stateRoot") runtimeRoot = ws?.stateRoot || "";
+            if (field === "orderRoot") return ws?.orderRoot || "";
+            if (field === "membershipRoot") return ws?.membershipRoot || "";
+            if (field === "checkpointRoot") return ws?.checkpointRoot || "";
+            if (field === "stateRoot") return ws?.stateRoot || "";
           }
+          return "";
+        };
 
-          if (rebuiltRoot && runtimeRoot && rebuiltRoot !== runtimeRoot) {
-            mismatches.push({
-              root: rootName,
-              rebuilt: rebuiltRoot,
-              runtime: runtimeRoot
-            });
+        // Compare fully comparable roots — mismatch here is a hard error
+        for (const [rootName, rebuiltRoot] of Object.entries(rebuild.fullyComparableRoots)) {
+          if (!rebuiltRoot) continue;
+          const runtimeRoot = runtimeRootLookup(rootName);
+          if (runtimeRoot && rebuiltRoot !== runtimeRoot) {
+            mismatches.push({ root: rootName, rebuilt: rebuiltRoot, runtime: runtimeRoot, category: "fullyComparable" });
             failures.push(createVerificationFailure({
               layer: "doctor",
               code: "derived_root_mismatch",
@@ -1316,9 +1314,41 @@ export function createPactium({
           }
         }
 
+        // Compare partially comparable roots — mismatch is a warning, not hard failure
+        for (const [rootName, rebuiltRoot] of Object.entries(rebuild.partiallyComparableRoots)) {
+          if (!rebuiltRoot) continue;
+          const runtimeRoot = runtimeRootLookup(rootName);
+          if (runtimeRoot && rebuiltRoot !== runtimeRoot) {
+            mismatches.push({ root: rootName, rebuilt: rebuiltRoot, runtime: runtimeRoot, category: "partiallyComparable" });
+            failures.push(createVerificationFailure({
+              layer: "doctor",
+              code: `${rootName}_rebuild_incomplete`,
+              message: `Rebuilt ${rootName} does not match runtime state — material may be missing from ledger facts.`,
+              evidenceRef: rootName,
+              repairable: true,
+              severity: "warning"
+            }));
+          }
+        }
+
+        // Report skipped roots as informational warnings
+        for (const [rootName, info] of Object.entries(rebuild.skippedRoots)) {
+          failures.push(createVerificationFailure({
+            layer: "doctor",
+            code: info.code || "rebuild_skipped",
+            message: info.reason || `Root ${rootName} cannot be reliably rebuilt from ledger facts.`,
+            evidenceRef: rootName,
+            repairable: true,
+            severity: "warning"
+          }));
+        }
+
         rebuildResult = {
           attempted: true,
           comparableRootsCount: Object.keys(rebuild.comparableRoots).length,
+          fullyComparableCount: Object.keys(rebuild.fullyComparableRoots).length,
+          partiallyComparableCount: Object.keys(rebuild.partiallyComparableRoots).length,
+          skippedCount: Object.keys(rebuild.skippedRoots).length,
           mismatches,
           stateRebuildIncomplete: rebuild.stateRebuildIncomplete,
           warnings: rebuild.warnings
