@@ -71,6 +71,7 @@ import { assertAppendCondition } from "../../src/core/append-condition.js";
 import { createPactiumHttpServer, startPactiumHttpServer } from "../../src/http.js";
 import { cidFromHex, hexFromCid, hexToBytes } from "../../src/protocol/hashing.js";
 import { createIndexedBundleResolver, decodeVarint, indexedBlocksFromBundle } from "../../src/proof/bundle-format.js";
+import { createFailingStorage } from "./failing-storage.js";
 
 const execFileAsync = promisify(execFile);
 const tempDirs = [];
@@ -2791,6 +2792,35 @@ console.log(JSON.stringify({
     assert.equal(result.ok, false, "doctor should fail with incomplete commit");
     assert.equal(result.failures.some((f) => f.code === "incomplete_commit"), true,
       "doctor should report incomplete_commit");
+  });
+
+  it("detects incomplete commits and stale locks after simulated crash", async () => {
+    const dataDir = await tempDataDir("crash-test-");
+    const pactium = createPactium({ dataDir });
+    await pactium.advanced.storage.putProtocolObject("commit", "pending-crash-001", {
+      protocol: PACTIUM_PROTOCOL,
+      schema: "pactium.v0.2.schema.latest",
+      commitType: "pactium.mutation-commit",
+      commitId: "crash-001", operation: "begin-intent", phase: "pending",
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      ledgerEventIds: [], envelopeIds: [], affectedWorkspaceIds: ["crash-ws"],
+      notes: "simulated mid-op crash"
+    });
+    await pactium.advanced.storage.putProtocolObject("commit", "pending-crash-002", {
+      protocol: PACTIUM_PROTOCOL, schema: "pactium.v0.2.schema.latest",
+      commitType: "pactium.mutation-commit",
+      commitId: "crash-002", operation: "append-outcome", phase: "pending",
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      ledgerEventIds: ["event:partial"], envelopeIds: [],
+      affectedWorkspaceIds: ["crash-ws"], notes: "second incomplete commit"
+    });
+    const result = await pactium.doctor();
+    assert.equal(result.ok, false, "doctor should fail with incomplete commits");
+    const incompleteCommits = result.failures.filter((f) => f.code === "incomplete_commit");
+    assert.ok(incompleteCommits.length >= 2, `should detect at least 2 incomplete commits`);
+    const rebuildResult = await pactium.doctor({ rebuild: true });
+    assert.ok(rebuildResult.rebuild, "rebuild should still be attempted");
+    assert.equal(rebuildResult.rebuild.attempted, true);
   });
 
   it("doctor rebuild mode replays ledger and detects derived root mismatches", async () => {
