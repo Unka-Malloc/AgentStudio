@@ -295,7 +295,7 @@ For 10k+ key workloads, single-point mutations may scan more of the tree than op
 
 ### Crash Consistency
 
-The local JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. This provides crash detection and recovery guidance. It is not an ACID database transaction.
+The local JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. Commit markers cover operation lifecycle commits (`beginOperationIntent`, `appendOperationOutcome`, `recordOperation`). Materialization operations (`exportProofBundle`, `storeEnvelope`, `createExtension`) may write storage or runtime-state but are not currently covered by lifecycle commit markers. This provides crash detection and recovery guidance. It is not an ACID database transaction.
 
 ### Lock Fencing
 

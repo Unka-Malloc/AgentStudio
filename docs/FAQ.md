@@ -206,7 +206,14 @@ State mutation proofs use **sampled mode** by default when there are more than 3
 
 ### Does the local JSON backend provide ACID transactions?
 
-No. The local JSON backend uses **write-ahead commit markers** (pending/complete) with `doctor()` diagnostics for crash detection. This is a WAL marker + diagnostic pattern, not an ACID database transaction. For production deployments requiring full crash recovery guarantees, consider a storage backend with transactional semantics.
+No. The local JSON backend uses **write-ahead commit markers** (pending/complete) with `doctor()` diagnostics for crash detection. This is a WAL marker + diagnostic pattern, not an ACID database transaction.
+
+**Commit marker coverage boundaries:**
+- Commit markers currently cover operation lifecycle commits only: `beginOperationIntent`, `appendOperationOutcome`, and `recordOperation` (which combines both).
+- Materialization/cache operations (`exportProofBundle`, `storeEnvelope`, `createExtension`) may write storage or runtime-state but are not covered by lifecycle commit markers.
+- The local JSON backend remains a WAL-marker + diagnostic pattern, not ACID.
+
+For production deployments requiring full crash recovery guarantees, consider a storage backend with transactional semantics.
 
 ### Are proofs constant-size (bounded)?
 
