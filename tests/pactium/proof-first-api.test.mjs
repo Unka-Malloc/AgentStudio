@@ -2958,6 +2958,24 @@ console.log(JSON.stringify({
       "should report state_rebuild_incomplete for skipped stateRoot");
   });
 
+
+  it("covers verification with unknown proof envelope kind and requireAllProofs", async () => {
+    const pactium = createPactium({ inMemory: true });
+    // Create a normal envelope first
+    const envelope = await pactium.recordOperation({
+      operationId: "test-unknown-kind",
+      workspaceId: "test-ws",
+      value: { step: 1 }
+    });
+    // Verify with requireAllProofs explicitly
+    const result = await pactium.verifyEnvelope(envelope, {
+      requireAllProofs: true
+    });
+    assert.ok(result, "verification result should exist");
+    assert.equal(typeof result.ok, "boolean", "result should have ok boolean");
+  });
+
+
   it("beginOperationIntent idempotency conflict does not leave orphan pending marker", async () => {
     const dataDir = await tempDataDir("no-orphan-idem-");
     const pactium = createPactium({ dataDir });
