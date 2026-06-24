@@ -19,6 +19,7 @@ import { createStoragePort } from "../storage/local-json-storage-port.js";
 import { createTrackingCursor, verifyTrackingCursor } from "./tracking-cursor.js";
 import { asArray, asRecord, nowIso, safeText } from "../shared/records.js";
 import { createVerificationFailure, PactiumLifecycleError } from "../verification/failure.js";
+import { rebuildCoreStateFromLedger } from "./rebuild-state.js";
 
 function createEmptyCoreState() {
   return {
@@ -1097,9 +1098,10 @@ export function createPactium({
     };
   }
 
-  async function doctor() {
+  async function doctor(options = {}) {
     await prepareRead();
     const failures = [];
+    let rebuildResult = null;
 
     // Verify manifest
     try {
@@ -1235,17 +1237,93 @@ export function createPactium({
       }
     }
 
-    return {
+    // -- Rebuild mode: replay ledger leaves and compare derived roots --
+    if (options.rebuild) {
+      try {
+        const rebuild = await rebuildCoreStateFromLedger({
+          ledger,
+          indexEngine,
+          storage: resolvedStorage
+        });
+        const current = await ensureState();
+        const mismatches = [];
+
+        // Compare index roots
+        for (const [rootName, rebuiltRoot] of Object.entries(rebuild.comparableRoots)) {
+          let runtimeRoot = "";
+          if (rootName === "openIntent") runtimeRoot = current.indexRoots.openIntent || "";
+          else if (rootName === "outcome") runtimeRoot = current.indexRoots.outcome || "";
+          else if (rootName === "intentIdempotency") runtimeRoot = current.indexRoots.intentIdempotency || "";
+          else if (rootName === "outcomeIdempotency") runtimeRoot = current.indexRoots.outcomeIdempotency || "";
+          else if (rootName === "causality") runtimeRoot = current.indexRoots.causality || "";
+          else if (rootName.startsWith("workspace:")) {
+            // workspace:<wsId>:<field>
+            const parts = rootName.split(":");
+            const wsId = parts[1];
+            const field = parts.slice(2).join(":");
+            const ws = current.workspace?.[wsId];
+            if (field === "orderRoot") runtimeRoot = ws?.orderRoot || "";
+            else if (field === "membershipRoot") runtimeRoot = ws?.membershipRoot || "";
+            else if (field === "checkpointRoot") runtimeRoot = ws?.checkpointRoot || "";
+            else if (field === "stateRoot") runtimeRoot = ws?.stateRoot || "";
+          }
+
+          if (rebuiltRoot && runtimeRoot && rebuiltRoot !== runtimeRoot) {
+            mismatches.push({
+              root: rootName,
+              rebuilt: rebuiltRoot,
+              runtime: runtimeRoot
+            });
+            failures.push(createVerificationFailure({
+              layer: "doctor",
+              code: "derived_root_mismatch",
+              message: `Rebuilt ${rootName} (${rebuiltRoot}) does not match runtime state (${runtimeRoot}).`,
+              evidenceRef: rootName,
+              repairable: true
+            }));
+          }
+        }
+
+        rebuildResult = {
+          attempted: true,
+          comparableRootsCount: Object.keys(rebuild.comparableRoots).length,
+          mismatches,
+          stateRebuildIncomplete: rebuild.stateRebuildIncomplete,
+          warnings: rebuild.warnings
+        };
+
+        if (rebuild.stateRebuildIncomplete) {
+          failures.push(createVerificationFailure({
+            layer: "doctor",
+            code: "state_rebuild_incomplete",
+            message: "State root rebuild is incomplete because state mutations are not stored in ledger facts.",
+            repairable: true,
+            severity: "warning"
+          }));
+        }
+      } catch (err) {
+        failures.push(createVerificationFailure({
+          layer: "doctor",
+          code: "ledger_replay_failed",
+          message: err instanceof Error ? err.message : "Ledger replay rebuild failed.",
+          repairable: true
+        }));
+      }
+    }
+
+    const result = {
       protocol: PACTIUM_PROTOCOL,
       schema: PACTIUM_SCHEMA_VERSION,
-      ok: failures.length === 0,
+      ok: failures.filter((f) => f.severity !== "warning").length === 0,
       dataDir: resolvedStorage.dataDir,
       latestSchemaOnly: true,
       historicalMigration: false,
       ledgerSize: Number((await ledger.head()).size || 0),
       catalog: await protocolCatalog(),
-      ...(failures.length > 0 ? { failures } : {})
+      ...(failures.length > 0 ? { failures } : {}),
+      ...(rebuildResult ? { rebuild: rebuildResult } : {})
     };
+    return result;
   }
 
   async function compactInMemoryCaches() {

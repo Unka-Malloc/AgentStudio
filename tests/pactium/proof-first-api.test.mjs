@@ -2772,7 +2772,6 @@ console.log(JSON.stringify({
     assert.equal(result.ok, true);
 
     // Manually write a pending commit marker without a complete marker.
-    // This simulates a crash between the pending write and the commit completion.
     await pactium.advanced.storage.putProtocolObject("commit", "pending-test-crash-id", {
       protocol: PACTIUM_PROTOCOL,
       schema: "pactium.v0.2.schema.latest",
@@ -2792,6 +2791,42 @@ console.log(JSON.stringify({
     assert.equal(result.ok, false, "doctor should fail with incomplete commit");
     assert.equal(result.failures.some((f) => f.code === "incomplete_commit"), true,
       "doctor should report incomplete_commit");
+  });
+
+  it("doctor rebuild mode replays ledger and detects derived root mismatches", async () => {
+    const dataDir = await tempDataDir("doctor-rebuild-");
+    const pactium = createPactium({ dataDir });
+    await pactium.recordOperation({
+      operationId: "rebuild.op",
+      workspaceId: "rebuild-ws",
+      idempotencyKey: "rebuild-key",
+      outcomeIdempotencyKey: "rebuild-out",
+      input: { test: true }
+    });
+
+    // Rebuild from ledger — some roots may mismatch because ledger facts
+    // don't store raw input data needed for idempotency key reconstruction.
+    // This is expected and correctly reported.
+    const result = await pactium.doctor({ rebuild: true });
+    assert.ok(result.rebuild, "rebuild result should be present");
+    assert.equal(result.rebuild.attempted, true);
+    assert.ok(result.rebuild.comparableRootsCount > 0, "should have comparable roots");
+    // State rebuild is incomplete because mutations are not in ledger facts
+    assert.ok(result.failures.some((f) => f.code === "state_rebuild_incomplete"),
+      "should warn about state rebuild being incomplete");
+
+    // Tamper with runtime state's openIntent root — this root IS fully
+    // reconstructible from ledger leaves.
+    const state = await pactium.advanced.storage.getProtocolObject("core", "runtime-state");
+    state.indexRoots.openIntent = "cid:sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    await pactium.advanced.storage.putProtocolObject("core", "runtime-state", state);
+    await pactium.advanced.storage.clearCache();
+
+    const tamperedResult = await pactium.doctor({ rebuild: true });
+    assert.equal(tamperedResult.ok, false, "tampered state should fail rebuild");
+    assert.ok(tamperedResult.failures.some((f) =>
+      f.code === "derived_root_mismatch" && f.evidenceRef === "openIntent"
+    ), "should detect openIntent root mismatch specifically");
   });
 
 });
