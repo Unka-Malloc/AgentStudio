@@ -263,7 +263,9 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     const { owner, mtimeMs } = await readLockOwner(lockDir);
     if (!mtimeMs) return false;
     const pid = Number(owner?.pid || 0);
-    const ageMs = Date.now() - (Number(owner?.createdAtMs || 0) || mtimeMs);
+    // Prefer heartbeatAtMs for staleness; fall back to createdAtMs / mtimeMs
+    const lastActivityMs = Number(owner?.heartbeatAtMs || owner?.createdAtMs || 0) || mtimeMs;
+    const ageMs = Date.now() - lastActivityMs;
     if (!owner) {
       if (ageMs < staleMs) return false;
     } else if (ageMs < staleMs && processIsAlive(pid)) {
@@ -271,8 +273,7 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     }
     const latest = await readLockOwner(lockDir);
     const sameOwner = String(latest.owner?.ownerId || "") === String(owner?.ownerId || "") &&
-      Number(latest.owner?.createdAtMs || 0) === Number(owner?.createdAtMs || 0) &&
-      Number(latest.mtimeMs || 0) === Number(mtimeMs || 0);
+      Number(latest.owner?.fencingToken || latest.owner?.createdAtMs || 0) === Number(owner?.fencingToken || owner?.createdAtMs || 0);
     if (!sameOwner) return false;
     await fs.rm(lockDir, { recursive: true, force: true });
     return true;
@@ -321,13 +322,38 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
       schema: PACTIUM_SCHEMA_VERSION,
       lockType: "pactium.write-lock",
       ownerId,
+      fencingToken: crypto.randomUUID(),
       pid: process.pid,
+      host: os.hostname(),
+      processStartKey: crypto.randomUUID(),
       createdAt: nowIso(),
-      createdAtMs: Date.now()
+      createdAtMs: Date.now(),
+      heartbeatAt: nowIso(),
+      heartbeatAtMs: Date.now()
     });
+    // Start heartbeat interval to keep the lock fresh
+    const heartbeatMs = Math.max(100, Math.min(staleMs / 4, 5000));
+    const heartbeat = setInterval(async () => {
+      try {
+        const current = await readJson(lockOwnerPath(targetLockPath), null);
+        if (current?.ownerId !== ownerId) {
+          clearInterval(heartbeat);
+          return;
+        }
+        await writeJsonAtomic(lockOwnerPath(targetLockPath), {
+          ...current,
+          heartbeatAt: nowIso(),
+          heartbeatAtMs: Date.now()
+        });
+      } catch (_) {
+        // best-effort heartbeat; if the lock dir was removed, stop
+        try { clearInterval(heartbeat); } catch (_) { /* ignore */ }
+      }
+    }, heartbeatMs);
     try {
       return await task();
     } finally {
+      clearInterval(heartbeat);
       const owner = await readJson(lockOwnerPath(targetLockPath), null).catch(() => null);
       if (owner?.ownerId === ownerId) {
         await fs.rm(targetLockPath, { recursive: true, force: true });
