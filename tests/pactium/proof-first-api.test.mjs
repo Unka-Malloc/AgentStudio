@@ -3231,6 +3231,71 @@ console.log(JSON.stringify({
     );
   });
 
+  it("proof size guard: indexEngine.prove with maxProofLeafEntries emits proofSizeWarning", async () => {
+    const engine = createVerifiableIndexEngine({ storage: createStoragePort({ inMemory: true }), domain: "size-guard" });
+    // Create an index with many entries — more than the maxProofLeafEntries limit
+    const entries = Array.from({ length: 100 }, (_, i) => ({
+      key: `key:${String(i).padStart(4, "0")}`,
+      valueRef: `ref:${i}`,
+      valueHash: protocolHash("block", i)
+    }));
+    const index = await engine.createIndex(entries, { domain: "size-guard" });
+    // Prove with a low maxProofLeafEntries
+    const proofWithLimit = await engine.prove(index.root, "key:0050", {
+      maxProofLeafEntries: 10,
+      maxProofBytes: 0
+    });
+    assert.ok(proofWithLimit.proofSizeWarning, "should have proofSizeWarning when exceeding leaf limit");
+    assert.equal(proofWithLimit.proofSizeWarning.maxProofLeafEntries, 10);
+    // Prove without limits — no warning
+    const proofNoLimit = await engine.prove(index.root, "key:0050");
+    assert.equal(proofNoLimit.proofSizeWarning, undefined, "should not have warning without limits");
+  });
+
+  it("proof size guard: verifyEnvelope reports warning by default, hard failure with failOnProofSizeWarning", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const envelope = await pactium.recordOperation({
+      operationId: "size.guard.default",
+      workspaceId: "size-guard-ws"
+    });
+    // Default verification (failOnProofSizeWarning === false): should pass with ok: true
+    const withoutFlag = await pactium.verifyEnvelope(envelope, { failOnProofSizeWarning: false });
+    assert.equal(withoutFlag.ok, true, "should pass without failOnProofSizeWarning");
+    // With failOnProofSizeWarning === true: any proofSizeWarning would cause hard failure
+    const withFlag = await pactium.verifyEnvelope(envelope, { failOnProofSizeWarning: true });
+    // Normal-sized proofs should not have size warnings, so this should still pass
+    assert.equal(withFlag.ok, true, "should pass when no proof exceeds size guard");
+    // Verify proof size guard options are propagated through
+    const maxResult = await pactium.verifyEnvelope(envelope, {
+      maxProofLeafEntries: 100,
+      maxProofBytes: 100 * 1024
+    });
+    assert.equal(maxResult.ok, true, "should pass with generous limits");
+  });
+
+  it("proof size guard: bundle verification propagates failOnProofSizeWarning", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const envelope = await pactium.recordOperation({
+      operationId: "bundle.size.guard",
+      workspaceId: "bundle-size-ws"
+    });
+    const bundle = await pactium.exportProofBundle(envelope);
+    // Verify bundle with proof size guard options
+    const result = await verifyProofBundle(bundle, {
+      failOnProofSizeWarning: false,
+      maxProofLeafEntries: 1000,
+      maxProofBytes: 10 * 1024 * 1024
+    });
+    assert.equal(result.ok, true, "bundle should verify ok with generous limits");
+    // Verify bundle with failOnProofSizeWarning flag
+    const strictResult = await verifyProofBundle(bundle, {
+      failOnProofSizeWarning: true,
+      maxProofLeafEntries: 1000,
+      maxProofBytes: 10 * 1024 * 1024
+    });
+    assert.equal(strictResult.ok, true, "strict bundle should verify ok for normal sizes");
+  });
+
   it("LicoLite verify works without depending on core.advanced.storage", async () => {
     // This test verifies that LicoLite's internal resolver uses the public
     // resolver methods instead of core.advanced.storage.

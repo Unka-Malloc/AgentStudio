@@ -236,6 +236,19 @@ async function verifyEmbeddedProofs({
             }));
           } else {
             checked.push(path);
+            // Check for proofSizeWarning in the verifier result or the proof value itself
+            const warning = result?.proofSizeWarning || value?.proofSizeWarning || null;
+            if (warning) {
+              const failure = createVerificationFailure({
+                layer: "proof-registry",
+                code: "proof_size_warning",
+                message: warning.message || `Proof ${proofType} exceeds size guard.`,
+                evidenceRef: path,
+                severity: failOnProofSizeWarning ? "error" : "warning",
+                details: { proofType, path, ...warning }
+              });
+              failures.push(failure);
+            }
           }
         } catch (error) {
           failures.push(createVerificationFailure({
@@ -543,7 +556,10 @@ export async function verifyProofEnvelope(envelope, {
   includeBundleResolverFailures = true,
   requiredProofs = null,
   trustPolicy = "self-carried-manifest",
-  requireFullStateMutationProofs = false
+  requireFullStateMutationProofs = false,
+  maxProofLeafEntries = 0,
+  maxProofBytes = 0,
+  failOnProofSizeWarning = false
 } = {}) {
   const failures = [];
   const checkedProofPaths = [];

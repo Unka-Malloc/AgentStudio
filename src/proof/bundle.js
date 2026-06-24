@@ -232,7 +232,10 @@ export async function verifyProofBundle(bundle, options = {}) {
     trustedManifest: options.trustedManifest || null,
     ledgerHeadSignatures: options.ledgerHeadSignatures || [],
     trustPolicy: options.trustPolicy || "self-carried-manifest",
-    requireFullStateMutationProofs: options.requireFullStateMutationProofs || false
+    requireFullStateMutationProofs: options.requireFullStateMutationProofs || false,
+    maxProofLeafEntries: Number(options.maxProofLeafEntries || 0),
+    maxProofBytes: Number(options.maxProofBytes || 0),
+    failOnProofSizeWarning: options.failOnProofSizeWarning === true
   });
   return {
     protocol: PACTIUM_PROTOCOL,
