@@ -179,7 +179,7 @@ function hashFromCid(cid) {
   return String(cid || "").split(":").pop() || "";
 }
 
-async function updateWorkspaceProjection({ indexEngine, state, workspaceId, ledgerAppend }) {
+async function updateWorkspaceProjection({ indexEngine, state, workspaceId, ledgerAppend, proofOptions = {} }) {
   const workspace = workspaceStateFor(state, workspaceId);
   const ordinal = workspace.nextOrdinal;
   workspace.nextOrdinal += 1;
@@ -204,8 +204,8 @@ async function updateWorkspaceProjection({ indexEngine, state, workspaceId, ledg
     orderKey,
     orderRoot: workspace.orderRoot,
     membershipRoot: workspace.membershipRoot,
-    orderProof: await indexEngine.prove(workspace.orderRoot, orderKey),
-    membershipProof: await indexEngine.prove(workspace.membershipRoot, ledgerAppend.entry.eventId)
+    orderProof: await indexEngine.prove(workspace.orderRoot, orderKey, proofOptions),
+    membershipProof: await indexEngine.prove(workspace.membershipRoot, ledgerAppend.entry.eventId, proofOptions)
   };
 }
 
@@ -426,6 +426,7 @@ export function createPactium({
     // Commit marker: write pending before mutation work begins.
     const commitId = createId("mutation_commit", { operation: "begin-intent", operationId, workspaceId, nonce: crypto.randomUUID() });
     await writePendingMarker(commitId, "begin-intent", { affectedWorkspaceIds: [workspaceId] });
+    const proofOptions = asRecord(input.proofOptions);
     let ledgerCommitted = false;
     try {
       const intent = {
@@ -480,7 +481,7 @@ export function createPactium({
         "operation-causality"
       );
     }
-    const projection = await updateWorkspaceProjection({ indexEngine, state: current, workspaceId, ledgerAppend });
+    const projection = await updateWorkspaceProjection({ indexEngine, state: current, workspaceId, ledgerAppend, proofOptions });
     const workspace = workspaceStateFor(current, workspaceId);
     const checkpoints = checkpointEntriesFor(current, workspaceId);
     const checkpointNodeId = createId("checkpoint_node", { intentId: intent.intentId, kind: "intent" });
@@ -509,17 +510,17 @@ export function createPactium({
       fact: intent,
       ledgerAppend,
       proofs: {
-        openIntent: await indexEngine.prove(current.indexRoots.openIntent, intent.intentId),
-        intentIdempotency: idKey ? await indexEngine.prove(current.indexRoots.intentIdempotency, idKey) : null,
+        openIntent: await indexEngine.prove(current.indexRoots.openIntent, intent.intentId, proofOptions),
+        intentIdempotency: idKey ? await indexEngine.prove(current.indexRoots.intentIdempotency, idKey, proofOptions) : null,
         workspaceProjection: projection,
         checkpoint: {
           root: workspace.checkpointRoot,
-          proof: await indexEngine.prove(workspace.checkpointRoot, checkpointNodeId)
+          proof: await indexEngine.prove(workspace.checkpointRoot, checkpointNodeId, proofOptions)
         },
         causality: {
           root: current.indexRoots.causality,
           proofs: await Promise.all(intent.causalityRefs.map((ref) =>
-            indexEngine.prove(current.indexRoots.causality, `${ref}\u0000${intent.intentId}`)
+            indexEngine.prove(current.indexRoots.causality, `${ref}\u0000${intent.intentId}`, proofOptions)
           ))
         }
       },
@@ -603,6 +604,7 @@ export function createPactium({
     }
     // --- All preflight checks passed; now commit the mutation ---
     await writePendingMarker(commitId, "append-outcome", { affectedWorkspaceIds: [workspaceId] });
+    const proofOptions = asRecord(input.proofOptions);
     let ledgerCommitted = false;
     try {
     const outcome = {
@@ -656,7 +658,7 @@ export function createPactium({
         "operation-causality"
       );
     }
-    const projection = await updateWorkspaceProjection({ indexEngine, state: current, workspaceId, ledgerAppend });
+    const projection = await updateWorkspaceProjection({ indexEngine, state: current, workspaceId, ledgerAppend, proofOptions });
     const workspace = workspaceStateFor(current, workspaceId);
     const workspaceStateEntries = stateEntriesFor(current, workspaceId);
     const mutations = asArray(input.stateMutations || input.state?.mutations);
@@ -752,16 +754,16 @@ export function createPactium({
     );
     const touchedKeyProofs = [];
     for (const mutation of keyedMutations.slice(0, 32)) {
-      touchedKeyProofs.push(await indexEngine.prove(stateRoot, String(mutation.key)));
+      touchedKeyProofs.push(await indexEngine.prove(stateRoot, String(mutation.key), proofOptions));
     }
     const envelope = await createEnvelope({
       envelopeKind: "operation-outcome",
       fact: outcome,
       ledgerAppend,
       proofs: {
-        outcome: await indexEngine.prove(current.indexRoots.outcome, intentId),
-        openIntentRemoved: await indexEngine.prove(current.indexRoots.openIntent, intentId),
-        outcomeIdempotency: outcomeIdKey ? await indexEngine.prove(current.indexRoots.outcomeIdempotency, outcomeIdKey) : null,
+        outcome: await indexEngine.prove(current.indexRoots.outcome, intentId, proofOptions),
+        openIntentRemoved: await indexEngine.prove(current.indexRoots.openIntent, intentId, proofOptions),
+        outcomeIdempotency: outcomeIdKey ? await indexEngine.prove(current.indexRoots.outcomeIdempotency, outcomeIdKey, proofOptions) : null,
         workspaceProjection: projection,
         stateCommit,
         state: {
@@ -770,12 +772,12 @@ export function createPactium({
         },
         checkpoint: {
           root: workspace.checkpointRoot,
-          proof: await indexEngine.prove(workspace.checkpointRoot, outcomeCheckpointNodeId)
+          proof: await indexEngine.prove(workspace.checkpointRoot, outcomeCheckpointNodeId, proofOptions)
         },
         causality: {
           root: current.indexRoots.causality,
           proofs: await Promise.all(outcome.causalityRefs.map((ref) =>
-            indexEngine.prove(current.indexRoots.causality, `${ref}\u0000${outcome.outcomeId}`)
+            indexEngine.prove(current.indexRoots.causality, `${ref}\u0000${outcome.outcomeId}`, proofOptions)
           ))
         }
       },
@@ -859,10 +861,10 @@ export function createPactium({
     };
   }
 
-  async function proveWorkspaceMembership({ workspaceId = "default", ledgerEventId = "" } = {}) {
+  async function proveWorkspaceMembership({ workspaceId = "default", ledgerEventId = "", proofOptions = {} } = {}) {
     const current = await prepareRead();
     const workspace = workspaceStateFor(current, workspaceId);
-    const proof = await indexEngine.prove(workspace.membershipRoot, ledgerEventId);
+    const proof = await indexEngine.prove(workspace.membershipRoot, ledgerEventId, asRecord(proofOptions));
     return {
       protocol: PACTIUM_PROTOCOL,
       workspaceId: safeText(workspaceId, "default"),
@@ -897,7 +899,7 @@ export function createPactium({
     };
   }
 
-  async function getWorkspaceCursor({ workspaceId = "default", fromCursor = null, position = 0, limit = 100 } = {}) {
+  async function getWorkspaceCursor({ workspaceId = "default", fromCursor = null, position = 0, limit = 100, proofOptions = {} } = {}) {
     const current = await prepareRead();
     const workspace = workspaceStateFor(current, workspaceId);
     const currentHead = await ledger.head();
@@ -918,6 +920,7 @@ export function createPactium({
       headRef: currentHead.headId || currentHead.root || currentHead.rootHash,
       orderRoot: workspace.orderRoot
     });
+    const opts = asRecord(proofOptions);
     return {
       protocol: PACTIUM_PROTOCOL,
       pageType: "pactium.workspace-cursor-page",
@@ -927,7 +930,7 @@ export function createPactium({
       nextCursor: cursor,
       head: currentHead,
       orderRoot: workspace.orderRoot,
-      orderProofs: await Promise.all(entries.map((entry) => indexEngine.prove(workspace.orderRoot, entry.key)))
+      orderProofs: await Promise.all(entries.map((entry) => indexEngine.prove(workspace.orderRoot, entry.key, opts)))
     };
   }
 
