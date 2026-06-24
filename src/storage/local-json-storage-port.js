@@ -189,7 +189,14 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
 
   async function getBlock(cid) {
     await ensureInitialized();
-    if (memoryBlocks.has(cid)) return { ...memoryBlocks.get(cid), bytes: Buffer.from(memoryBlocks.get(cid).payloadBase64, "base64") };
+    if (memoryBlocks.has(cid)) {
+      const cached = memoryBlocks.get(cid);
+      return {
+        ...cached,
+        refs: [...asArray(cached.refs)],
+        bytes: Buffer.from(cached.payloadBase64 || "", "base64")
+      };
+    }
     if (inMemory) return null;
     const record = await readJson(blockPath(cid));
     if (!record) return null;
@@ -198,8 +205,9 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     if (payloadHash !== record.payloadHash || cidForBytes(bytes) !== record.cid) {
       throw new Error(`CAS block integrity failure for ${cid}`);
     }
-    memoryBlocks.set(cid, record);
-    return { ...record, bytes };
+    const cloned = { ...record, refs: [...asArray(record.refs)] };
+    memoryBlocks.set(cid, cloned);
+    return { ...cloned, bytes };
   }
 
   async function hasBlock(cid) {

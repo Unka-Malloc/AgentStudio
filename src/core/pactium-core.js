@@ -1445,8 +1445,12 @@ export function createPactium({
   async function resolveBlock(cid) {
     const block = await resolvedStorage.getBlock(String(cid || ""));
     if (!block) return null;
-    // Return a clone; the storage port already returns a clone from getBlock.
-    return block;
+    // Defensive clone: bytes and refs must be independent of storage cache.
+    return {
+      ...block,
+      bytes: block.bytes ? Buffer.from(block.bytes) : undefined,
+      refs: [...asArray(block.refs)]
+    };
   }
 
   async function hasBlock(cid) {
@@ -1454,11 +1458,18 @@ export function createPactium({
   }
 
   async function readLedgerHead(id) {
-    return ledger.getHead(id || "");
+    const head = await ledger.getHead(id || "");
+    if (!head) return null;
+    // Clone to prevent caller mutation of internal ledger state.
+    return normalizeCanonicalValue(head);
   }
 
   async function readLedgerLeaf(index) {
-    return ledger.getLeaf(Number(index));
+    const leaf = await ledger.getLeaf(Number(index));
+    if (!leaf) return null;
+    // Clone to prevent caller mutation. getLeaf returns a protocol object
+    // which is already cloned by storage, but add a defensive clone.
+    return normalizeCanonicalValue(leaf);
   }
 
   async function readProtocolObject(scope, key, fallback) {

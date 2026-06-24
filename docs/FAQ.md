@@ -185,7 +185,7 @@ This means the ledger history diverged -- a later ledger state is not a valid co
 The Prolly Tree engine uses structural sharing and Content-Defined Chunking for efficient updates. For large state sets, consider:
 
 - Using the `scan()` and `prefix()` methods for range queries instead of full snapshots
-- Using `diff()` to compute changes between state roots efficiently
+- Using `diff()` to compute changes between state roots (canonical diff API; note that current implementation is not yet Dolt-style skip-common-subtree optimized — P3 deferred)
 - Checking memory usage with the pressure profile: `PACTIUM_FULL_PRESSURE=1 npm run verify:protocol:gates`
 
 ### What trust policies does Pactium support?
@@ -202,7 +202,7 @@ A **self-carried manifest** (embedded in the proof) is NOT a trusted manifest. I
 
 ### What is the difference between full and sampled state mutation proofs?
 
-State mutation proofs use **sampled mode** by default when there are more than 32 mutations. In sampled mode, a random subset of touched keys are proven (default: 32). Set `requireFullStateMutationProofs: true` to require all mutation keys to be proven individually.
+State mutation proofs use **sampled mode** by default when there are more than 32 mutations. In sampled mode, the **first 32 touched keys in canonical mutation order** are proven. Set `requireFullStateMutationProofs: true` to require all mutation keys to be proven individually (proofCompleteness becomes `full`). When `requireFullStateMutationProofs` is true and the proof is sampled, verification fails.
 
 ### Does the local JSON backend provide ACID transactions?
 

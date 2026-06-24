@@ -832,6 +832,11 @@ This is **not an ACID database transaction**. It is a WAL marker + diagnostic pa
 - **Partially comparable**: `intentIdempotency`, `outcomeIdempotency`, workspace `checkpointRoot` — mismatch is a `*_rebuild_incomplete` warning (old facts may lack material).
 - **Skipped**: workspace `stateRoot` — state mutations live in proof material, not ledger facts. Reports `state_rebuild_incomplete`.
 
+**Commit marker coverage boundaries:**
+- `beginOperationIntent` and `appendOperationOutcome` (and `recordOperation` which combines them) are covered by pending/complete commit markers.
+- `storeEnvelope`, `createExtension`, and `exportProofBundle` are materialization/caching operations that do NOT have commit markers. These operations write blocks or update the proof bundle cache; failures leave recoverable artifacts.
+- HTTP `/bundles/export` is classified as a mutation route because it updates the proof bundle cache in runtime-state, but it is not a ledger lifecycle commit.
+
 ---
 
 ## Lock Heartbeat and Fencing

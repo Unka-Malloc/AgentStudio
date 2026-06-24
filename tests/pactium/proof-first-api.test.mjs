@@ -3111,6 +3111,56 @@ console.log(JSON.stringify({
     assert.equal(block2.cid, proofRef.cid, "second read CID should be untampered");
   });
 
+  it("resolveBlock refs and bytes are independent clones", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const envelope = await pactium.recordOperation({
+      operationId: "resolver.deepclone",
+      workspaceId: "resolver-ws"
+    });
+    const proofRef = envelope.proofRefs[0];
+    const block1 = await pactium.resolveBlock(proofRef.cid);
+    const originalRefsLen = block1.refs?.length || 0;
+    const originalByte0 = block1.bytes?.[0];
+    // Mutate refs array
+    if (block1.refs) block1.refs.push("cid:sha256:injected");
+    // Mutate bytes
+    if (block1.bytes && block1.bytes.length > 0) block1.bytes[0] = 0;
+    // Second read should have unchanged refs and bytes
+    const block2 = await pactium.resolveBlock(proofRef.cid);
+    assert.equal(block2.refs?.length, originalRefsLen, "refs should not include injected ref");
+    if (originalByte0 !== undefined) {
+      assert.equal(block2.bytes?.[0], originalByte0, "bytes should not be mutated");
+    }
+  });
+
+  it("storage.getBlock refs and bytes mutation does not affect cache", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const envelope = await pactium.recordOperation({
+      operationId: "storage.deepclone",
+      workspaceId: "resolver-ws"
+    });
+    const block1 = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const originalRefsLen = block1.refs?.length || 0;
+    if (block1.refs) block1.refs.push("cid:sha256:injected");
+    const block2 = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    assert.equal(block2.refs?.length, originalRefsLen, "storage cache should not be affected by refs mutation");
+  });
+
+  it("readLedgerLeaf and readLedgerHead return fresh data each call", async () => {
+    const pactium = createPactium({ inMemory: true });
+    await pactium.recordOperation({ operationId: "ledger.clone", workspaceId: "clone-ws" });
+    const leaf1 = await pactium.readLedgerLeaf(0);
+    const head1 = await pactium.readLedgerHead();
+    // Mutate returned values
+    if (leaf1) leaf1.tampered = true;
+    if (head1) head1.tampered = true;
+    // Second reads should be clean
+    const leaf2 = await pactium.readLedgerLeaf(0);
+    const head2 = await pactium.readLedgerHead();
+    assert.equal(leaf2?.tampered, undefined, "leaf clone should not retain mutation");
+    assert.equal(head2?.tampered, undefined, "head clone should not retain mutation");
+  });
+
   it("hasBlock returns correct boolean", async () => {
     const pactium = createPactium({ inMemory: true });
     const envelope = await pactium.recordOperation({
