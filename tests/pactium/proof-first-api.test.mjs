@@ -3345,6 +3345,85 @@ console.log(JSON.stringify({
     assert.equal(strictResult.ok, true, "strict bundle should verify ok for normal sizes");
   });
 
+  it("proof size guard: verifyProofEnvelope does not throw ReferenceError on proofSizeWarning", async () => {
+    // Construct a proof block that carries a proofSizeWarning and verify
+    // that the envelope verifier handles it without a ReferenceError.
+    const pactium = createPactium({ inMemory: true });
+    // Create an envelope first
+    const envelope = await pactium.recordOperation({
+      operationId: "ref-error-test",
+      workspaceId: "ref-err-ws"
+    });
+    // Read the proof material and inject a proofSizeWarning into the outcome proof
+    const proofBlock = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const proofValue = JSON.parse(Buffer.from(proofBlock.payloadBase64, "base64").toString("utf8"));
+    // Inject proofSizeWarning into the outcome proof (which has proofType)
+    if (proofValue.proofs?.outcome?.proofType) {
+      proofValue.proofs.outcome.proofSizeWarning = {
+        message: "Proof exceeds size guard.",
+        proofLeafEntries: 100,
+        proofBytes: 50000,
+        maxProofLeafEntries: 10,
+        maxProofBytes: 0
+      };
+    }
+    const tamperedBlock = await pactium.advanced.storage.putBlock(proofValue, {
+      kind: "proof-material:ledger-and-index-proofs"
+    });
+    // Use storeEnvelope to properly finalize the envelope with the new proof ref
+    const tamperedEnvelope = await pactium.storeEnvelope({
+      ...envelope,
+      envelopeId: undefined, // let storeEnvelope compute the new hash
+      proofRefs: [{
+        name: "ledger-and-index-proofs",
+        cid: tamperedBlock.cid,
+        payloadHash: tamperedBlock.payloadHash,
+        byteLength: tamperedBlock.byteLength
+      }]
+    });
+    // Default verification: should NOT throw, ok remains true, warning present
+    const resultDefault = await verifyProofEnvelope(tamperedEnvelope, {
+      storage: pactium.advanced.storage
+    });
+    assert.equal(resultDefault.ok, true, "default: ok should be true with proofSizeWarning");
+    const sizeWarnings = resultDefault.failures.filter((f) => f.code === "proof_size_warning");
+    assert.ok(sizeWarnings.length > 0, "default: should have proof_size_warning failure");
+    assert.equal(sizeWarnings[0].severity, "warning", "default: severity should be warning");
+    assert.ok(!resultDefault.failures.some((f) => f.code === "proof_verifier_threw"),
+      "default: should NOT report proof_verifier_threw");
+
+    // With failOnProofSizeWarning: true → hard failure
+    const resultStrict = await verifyProofEnvelope(tamperedEnvelope, {
+      storage: pactium.advanced.storage,
+      failOnProofSizeWarning: true
+    });
+    assert.equal(resultStrict.ok, false, "strict: ok should be false");
+    const strictSizeWarnings = resultStrict.failures.filter((f) => f.code === "proof_size_warning");
+    assert.ok(strictSizeWarnings.length > 0, "strict: should have proof_size_warning failure");
+    assert.notEqual(strictSizeWarnings[0].severity, "warning", "strict: severity should NOT be warning");
+    assert.ok(!resultStrict.failures.some((f) => f.code === "proof_verifier_threw"),
+      "strict: should NOT report proof_verifier_threw");
+  });
+
+  it("proof size guard: no proofSizeWarning means behavior is unchanged", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const envelope = await pactium.recordOperation({
+      operationId: "no-warning-test",
+      workspaceId: "no-warn-ws"
+    });
+    const resultDefault = await verifyProofEnvelope(envelope, {
+      storage: pactium.advanced.storage
+    });
+    assert.equal(resultDefault.ok, true, "should pass without proofSizeWarning");
+    assert.ok(!resultDefault.failures.some((f) => f.code === "proof_size_warning"),
+      "should not have proof_size_warning when no warning exists");
+    const resultStrict = await verifyProofEnvelope(envelope, {
+      storage: pactium.advanced.storage,
+      failOnProofSizeWarning: true
+    });
+    assert.equal(resultStrict.ok, true, "strict should also pass when no proofSizeWarning exists");
+  });
+
   it("LicoLite verify works without depending on core.advanced.storage", async () => {
     // This test verifies that LicoLite's internal resolver uses the public
     // resolver methods instead of core.advanced.storage.

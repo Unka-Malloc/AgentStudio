@@ -195,7 +195,8 @@ async function verifyEmbeddedProofs({
   registry,
   requireAllProofs,
   failures,
-  checked
+  checked,
+  failOnProofSizeWarning = false
 }) {
   async function visit(value, path) {
     if (Array.isArray(value)) {
@@ -836,7 +837,8 @@ export async function verifyProofEnvelope(envelope, {
       registry: createDefaultProofVerifierRegistry(proofVerifiers),
       requireAllProofs,
       failures,
-      checked: checkedProofPaths
+      checked: checkedProofPaths,
+      failOnProofSizeWarning
     });
   }
   if (includeBundleResolverFailures && bundleMap?.failures) {
@@ -864,6 +866,7 @@ export async function verifyProofEnvelope(envelope, {
     ok = proofStructurallyValid;
   }
 
+  const warnings = failures.filter((f) => f.severity === "warning");
   return {
     protocol: PACTIUM_PROTOCOL,
     envelopeId: envelope.envelopeId,
@@ -874,6 +877,7 @@ export async function verifyProofEnvelope(envelope, {
     trustedSignatureValid,
     trustPolicy: resolvedTrustPolicy,
     failures,
+    ...(warnings.length > 0 ? { warnings } : {}),
     checked: [
       "envelope-id",
       "proof-material-refs",
