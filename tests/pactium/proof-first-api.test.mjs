@@ -3134,6 +3134,103 @@ console.log(JSON.stringify({
     assert.ok(keys.length >= 2, "should have at least complete markers for intent and outcome");
   });
 
+  it("crash injection: fail on proof material putBlock simulates incomplete write", async () => {
+    const dataDir = await tempDataDir("crash-putblock-");
+    const baseStorage = createStoragePort({ dataDir });
+    // Use a predicate to fail specifically on proof-material putBlock calls
+    const failingStorage = createFailingStorage(baseStorage, {
+      failOnPutBlockPredicate: (_value, options) => {
+        return String(options?.kind || "").startsWith("proof-material:");
+      }
+    });
+    const pactium = createPactium({ storage: failingStorage });
+    try {
+      await pactium.beginOperationIntent({
+        operationId: "crash.proof",
+        workspaceId: "crash-ws"
+      });
+      assert.fail("should have thrown on proof material putBlock failure");
+    } catch (error) {
+      assert.ok(error.message.includes("CRASH-INJECTED") || error.message.includes("putBlock"),
+        "should fail with injected error: " + error.message);
+    }
+    // Reopen with clean storage and verify doctor detects the issue
+    const cleanStorage = createStoragePort({ dataDir });
+    const cleanPactium = createPactium({ storage: cleanStorage });
+    const result = await cleanPactium.doctor();
+    // Either incomplete_commit (pending marker) or the ledger may have a fact
+    // whose proof material is missing
+    const hasIssue = result.failures?.some((f) =>
+      f.code === "incomplete_commit" || f.code === "missing_ledger_fact_block"
+    );
+    assert.ok(hasIssue || !result.ok, "doctor should detect crash consequence");
+  });
+
+  it("crash injection: fail on runtime-state putProtocolObject via predicate", async () => {
+    const dataDir = await tempDataDir("crash-putproto-");
+    const baseStorage = createStoragePort({ dataDir });
+    // Fail specifically when trying to write runtime-state
+    const failingStorage = createFailingStorage(baseStorage, {
+      failOnPutProtocolObjectPredicate: (scope, key) => {
+        return scope === "core" && key === "runtime-state";
+      }
+    });
+    const pactium = createPactium({ storage: failingStorage });
+    try {
+      await pactium.beginOperationIntent({
+        operationId: "crash.state",
+        workspaceId: "crash-ws"
+      });
+      assert.fail("should have thrown on runtime-state write failure");
+    } catch (error) {
+      assert.ok(
+        error.message.includes("CRASH-INJECTED") || error.message.includes("putProtocolObject"),
+        "should fail with injected error: " + error.message
+      );
+    }
+    // A pending marker should exist because the ledger append succeeded
+    // but state save failed
+    const cleanStorage = createStoragePort({ dataDir });
+    const pendingKeys = await cleanStorage.listProtocolObjectKeys("commit");
+    const pendingCount = pendingKeys.filter((k) => k.startsWith("pending-")).length;
+    assert.ok(pendingCount > 0, "pending marker should exist after state save failure");
+  });
+
+  it("crash injection: fail on complete-marker putProtocolObject via predicate", async () => {
+    const dataDir = await tempDataDir("crash-complete-");
+    const baseStorage = createStoragePort({ dataDir });
+    // Fail specifically when writing a complete marker
+    const failingStorage = createFailingStorage(baseStorage, {
+      failOnPutProtocolObjectPredicate: (scope, key) => {
+        return scope === "commit" && key.startsWith("complete-");
+      }
+    });
+    const pactium = createPactium({ storage: failingStorage });
+    try {
+      await pactium.beginOperationIntent({
+        operationId: "crash.complete",
+        workspaceId: "crash-ws"
+      });
+      assert.fail("should have thrown on complete marker write failure");
+    } catch (error) {
+      assert.ok(
+        error.message.includes("CRASH-INJECTED") || error.message.includes("putProtocolObject"),
+        "should fail with injected error: " + error.message
+      );
+    }
+    // A pending marker should remain because the complete marker write failed
+    const cleanStorage = createStoragePort({ dataDir });
+    const pendingKeys = await cleanStorage.listProtocolObjectKeys("commit");
+    const pendingCount = pendingKeys.filter((k) => k.startsWith("pending-")).length;
+    assert.ok(pendingCount > 0, "pending marker should remain after complete marker failure");
+    const cleanPactium = createPactium({ storage: cleanStorage });
+    const result = await cleanPactium.doctor();
+    assert.ok(
+      result.failures?.some((f) => f.code === "incomplete_commit"),
+      "doctor should report incomplete_commit after complete marker failure"
+    );
+  });
+
   it("LicoLite verify works without depending on core.advanced.storage", async () => {
     // This test verifies that LicoLite's internal resolver uses the public
     // resolver methods instead of core.advanced.storage.

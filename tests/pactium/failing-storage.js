@@ -1,25 +1,26 @@
 // Test-only storage wrapper for crash injection.
-// Wraps a real storage port and can inject failures at specific call counts.
-// Internal use only — NOT part of the public API.
+// Wraps a real storage port and can inject failures at specific call counts
+// or based on predicates. Internal use only — NOT part of the public API.
 
 export function createFailingStorage(baseStorage, {
   failOnPutBlock = -1,
   failOnPutProtocolObject = -1,
-  failAfterN = -1 // aggregate counter: fail after N total write calls
+  failAfterN = -1, // aggregate counter: fail after N total write calls
+  failOnPutBlockPredicate = null, // (value, options) => true to fail
+  failOnPutProtocolObjectPredicate = null // (scope, key, value) => true to fail
 } = {}) {
   let callCount = 0;
+  const callLog = [];
 
-  function shouldFail(specificThreshold) {
+  function recordCall(method, details = {}) {
     callCount += 1;
-    if (specificThreshold >= 0 && callCount > specificThreshold) return true;
-    if (failAfterN >= 0 && callCount > failAfterN) return true;
-    return false;
+    callLog.push({ call: callCount, method, ...details });
   }
 
-  function injectFailure(operation) {
-    if (shouldFail(-1)) {
-      throw new Error(`CRASH-INJECTED: ${operation} failed at call ${callCount}`);
-    }
+  function shouldFail(method, specificThreshold) {
+    if (specificThreshold >= 0 && callCount >= specificThreshold) return true;
+    if (failAfterN >= 0 && callCount >= failAfterN) return true;
+    return false;
   }
 
   return {
@@ -34,7 +35,13 @@ export function createFailingStorage(baseStorage, {
     pruneProtocolObjects: baseStorage.pruneProtocolObjects?.bind(baseStorage),
 
     async putBlock(value, options) {
-      injectFailure("putBlock");
+      recordCall("putBlock", { kind: options?.kind });
+      if (failOnPutBlockPredicate && failOnPutBlockPredicate(value, options)) {
+        throw new Error(`CRASH-INJECTED: putBlock failed by predicate at call ${callCount}`);
+      }
+      if (shouldFail("putBlock", failOnPutBlock)) {
+        throw new Error(`CRASH-INJECTED: putBlock failed at call ${callCount}`);
+      }
       return baseStorage.putBlock(value, options);
     },
     async getBlock(cid) {
@@ -47,7 +54,13 @@ export function createFailingStorage(baseStorage, {
       return baseStorage.walk(rootCid);
     },
     async putProtocolObject(scope, key, value) {
-      injectFailure("putProtocolObject");
+      recordCall("putProtocolObject", { scope, key });
+      if (failOnPutProtocolObjectPredicate && failOnPutProtocolObjectPredicate(scope, key, value)) {
+        throw new Error(`CRASH-INJECTED: putProtocolObject failed by predicate at call ${callCount}`);
+      }
+      if (shouldFail("putProtocolObject", failOnPutProtocolObject)) {
+        throw new Error(`CRASH-INJECTED: putProtocolObject failed at call ${callCount}`);
+      }
       return baseStorage.putProtocolObject(scope, key, value);
     },
     async getProtocolObject(scope, key, fallback) {
@@ -58,6 +71,11 @@ export function createFailingStorage(baseStorage, {
     },
     async listProtocolObjectKeys(scope) {
       return baseStorage.listProtocolObjectKeys(scope);
-    }
+    },
+
+    // Inspection helpers for tests
+    getCallLog() { return [...callLog]; },
+    getCallCount() { return callCount; },
+    resetCounters() { callCount = 0; callLog.length = 0; }
   };
 }
