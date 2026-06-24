@@ -1598,6 +1598,104 @@ describe("Pactium reference-project algorithm coverage", () => {
     await fs.rm(lockDir, { recursive: true, force: true });
   });
 
+  it("does not delete ownerless lock directory when fresh", async () => {
+    const dataDir = await tempDataDir("pactium-ownerless-fresh-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    await fs.mkdir(lockDir, { recursive: true });
+    // No owner.json — just a freshly created lock directory
+    // The directory is fresh (just created), so it should NOT be deleted
+
+    try {
+      await storage.withWriteLock(() => "unreachable", {
+        timeoutMs: 300,
+        retryMs: 10,
+        staleMs: 5000
+      });
+      assert.fail("should not acquire lock when fresh ownerless dir exists");
+    } catch (error) {
+      assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
+    }
+    // Verify the directory still exists
+    const stillExists = await fs.stat(lockDir).then(() => true, () => false);
+    assert.equal(stillExists, true, "fresh ownerless lock dir should not be deleted");
+    // Cleanup
+    await fs.rm(lockDir, { recursive: true, force: true });
+  });
+
+  it("cleans up stale ownerless lock directory and acquires lock", async () => {
+    const dataDir = await tempDataDir("pactium-ownerless-stale-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    await fs.mkdir(lockDir, { recursive: true });
+    // Make the directory appear stale by setting an old mtime
+    const staleTime = new Date(Date.now() - 10000);
+    await fs.utimes(lockDir, staleTime, staleTime);
+
+    assert.equal(await storage.withWriteLock(() => "cleaned-ownerless", {
+      timeoutMs: 1000,
+      retryMs: 1,
+      staleMs: 5000
+    }), "cleaned-ownerless");
+    // After the lock is acquired and released, the lock dir should be gone
+    assert.equal(await fs.stat(lockDir).then(() => true, () => false), false);
+  });
+
+  it("cleans up stale lock with malformed owner.json", async () => {
+    const dataDir = await tempDataDir("pactium-malformed-owner-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    await fs.mkdir(lockDir, { recursive: true });
+    // Write malformed owner.json (valid JSON but missing expected fields)
+    await fs.writeFile(path.join(lockDir, "owner.json"), JSON.stringify({
+      junk: "not-a-valid-owner",
+      something: { nested: true }
+    }), "utf8");
+    // Make the directory stale
+    const staleTime = new Date(Date.now() - 10000);
+    await fs.utimes(lockDir, staleTime, staleTime);
+
+    assert.equal(await storage.withWriteLock(() => "cleaned-malformed", {
+      timeoutMs: 1000,
+      retryMs: 1,
+      staleMs: 5000
+    }), "cleaned-malformed");
+    assert.equal(await fs.stat(lockDir).then(() => true, () => false), false);
+  });
+
+  it("does not clean fresh lock with malformed owner.json", async () => {
+    const dataDir = await tempDataDir("pactium-malformed-fresh-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    await fs.mkdir(lockDir, { recursive: true });
+    await fs.writeFile(path.join(lockDir, "owner.json"), JSON.stringify({
+      junk: "malformed-but-fresh",
+      pid: process.pid // real, alive pid
+    }), "utf8");
+    // Directory is fresh (just created)
+
+    try {
+      await storage.withWriteLock(() => "unreachable", {
+        timeoutMs: 300,
+        retryMs: 10,
+        staleMs: 5000
+      });
+      assert.fail("should not acquire lock when fresh malformed lock exists with alive pid");
+    } catch (error) {
+      assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
+    }
+    // Cleanup
+    await fs.rm(lockDir, { recursive: true, force: true });
+  });
+
   it("listProtocolObjectKeys reads from disk directory when cache is empty", async () => {
     const dataDir = await tempDataDir("pactium-listkeys-");
     const storage = createStoragePort({ dataDir });

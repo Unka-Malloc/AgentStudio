@@ -885,7 +885,9 @@ Write locks use:
 - **Fencing tokens** (UUID strings): compared as strings, not numbers. Using `Number()` on UUID produces `NaN`, and `NaN === NaN` is always `false` — a known bug fixed in the current release.
 - **Heartbeat interval**: refreshes `heartbeatAtMs` periodically (at most every 5 seconds). A fresh heartbeat means the lock is still active even if `createdAtMs` is old.
 - **Double-read on stale cleanup**: `removeStaleLock()` reads the owner, checks staleness, re-reads the owner, and only deletes if `ownerId`, `fencingToken`, and `processStartKey` all match.
+- **Dirty/ownerless lock cleanup**: lock directories without `owner.json` (or with malformed `owner.json`) are cleaned up safely if stale (directory `mtimeMs` exceeds `staleMs`), using a double-stat pattern to avoid TOCTOU races. Fresh ownerless directories are not removed.
 - **Release guard**: lock release also checks `fencingToken` — if another process tampered with the owner metadata, the lock is not deleted.
+- **Cleanup timing**: lock cleanup occurs only during write-lock acquisition (`withWriteLock`). The `doctor()` function does not currently scan for dirty or stale locks.
 
 This is a **best-effort** mechanism. For production deployments with high lock contention, consider external lock managers.
 

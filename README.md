@@ -395,7 +395,7 @@ The Verifiable Index Engine supports a no-op fast path (mutation that does not c
 The local JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. This provides crash detection and recovery guidance, not ACID transactions. See [docs/API.md](./docs/API.md#crash-consistency-and-doctor) for details.
 
 **Lock Heartbeat / Fencing (best-effort):**
-Write locks use heartbeat intervals and fencing tokens for stale detection and cross-process safety. Fencing token comparison uses string equality (UUID strings, not numeric). Stale lock cleanup performs a double-read with owner identity verification. This is a best-effort mechanism; for production deployments with high contention, consider external lock managers.
+Write locks use heartbeat intervals and fencing tokens for stale detection and cross-process safety. Fencing token comparison uses string equality (UUID strings, not numeric). Stale lock cleanup performs a double-read with owner identity verification. Dirty/ownerless lock directories are cleaned up safely using directory mtime-based staleness with a double-stat pattern. Lock cleanup occurs only during write-lock acquisition; `doctor()` does not scan for dirty or stale locks. This is a best-effort mechanism; for production deployments with high contention, consider external lock managers.
 
 **Advanced API (deprecated for external use):**
 The `pactium.advanced` object (containing `storage`, `ledger`, `indexEngine`) is preserved for internal maintenance and backward compatibility. External consumers should prefer the public read-only resolvers: `resolveBlock()`, `hasBlock()`, `readLedgerHead()`, `readLedgerLeaf()`, `readProtocolObject()`, `listProtocolObjectKeys()`.

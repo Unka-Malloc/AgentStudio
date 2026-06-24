@@ -268,19 +268,56 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
   }
 
   async function removeStaleLock(lockDir, staleMs) {
-    const { owner, mtimeMs } = await readLockOwner(lockDir);
-    if (!mtimeMs) return false;
-    if (!owner) return false; // no owner metadata, cannot determine staleness
-    const pid = Number(owner?.pid || 0);
+    const first = await readLockOwner(lockDir);
+    if (!first.mtimeMs) return false;
+
+    // --- Ownerless lock directory (owner.json missing) ---
+    // A lock directory without owner.json is a dirty/stale artifact. Use
+    // directory mtimeMs as the age signal; double-stat to avoid TOCTOU races.
+    if (!first.owner) {
+      const ageMs = Date.now() - first.mtimeMs;
+      if (ageMs < staleMs) return false; // fresh dirty lock — don't remove
+      // Double-check: re-read stat to confirm mtime is stable
+      const stats2 = await fs.stat(lockDir).catch(() => null);
+      if (!stats2) return false;
+      if (Math.abs(Number(stats2.mtimeMs) - first.mtimeMs) > 100) return false; // mtime changed
+      // Confirm owner.json is still absent
+      const recheck = await readJson(lockOwnerPath(lockDir), undefined);
+      if (recheck !== null) return false; // owner.json appeared between reads
+      await fs.rm(lockDir, { recursive: true, force: true });
+      return true;
+    }
+
+    // --- Owner present — normal staleness check ---
+    const owner = first.owner;
+    // Gracefully handle malformed owner.json: extract fields safely, never crash.
+    const pid = typeof owner?.pid === "number" ? owner.pid : Number(owner?.pid || 0);
     // Prefer heartbeatAtMs for staleness; fall back to createdAtMs, then directory mtime.
     // A fresh heartbeatAtMs means the lock is still active even if createdAtMs is old.
-    const lastActivityMs = Number(owner?.heartbeatAtMs || owner?.createdAtMs || 0) || mtimeMs;
+    const lastActivityMs = typeof owner?.heartbeatAtMs === "number"
+      ? owner.heartbeatAtMs
+      : typeof owner?.createdAtMs === "number"
+        ? owner.createdAtMs
+        : Number(owner?.heartbeatAtMs || owner?.createdAtMs || 0) || first.mtimeMs;
     const ageMs = Date.now() - lastActivityMs;
     if (ageMs < staleMs && processIsAlive(pid)) {
       return false; // process is alive and has recent activity — not stale
     }
     // If no process alive and age exceeds stale threshold, proceed to double-read check
     const latest = await readLockOwner(lockDir);
+    if (!latest.owner) {
+      // Owner went missing between reads. If the directory is also stale by
+      // mtime, treat as ownerless cleanup (double-check pattern).
+      const dirAgeMs = Date.now() - latest.mtimeMs;
+      if (dirAgeMs < staleMs) return false;
+      const statsCheck = await fs.stat(lockDir).catch(() => null);
+      if (!statsCheck) return false;
+      if (Math.abs(Number(statsCheck.mtimeMs) - latest.mtimeMs) > 100) return false;
+      const recheck = await readJson(lockOwnerPath(lockDir), undefined);
+      if (recheck !== null) return false;
+      await fs.rm(lockDir, { recursive: true, force: true });
+      return true;
+    }
     // Compare owner identity fields as STRINGS — fencingToken is a UUID, not a number.
     // Using Number() on UUID produces NaN, and NaN !== NaN is always true,
     // which would prevent stale lock cleanup.
