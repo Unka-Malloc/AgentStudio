@@ -2883,6 +2883,38 @@ console.log(JSON.stringify({
     ), "should detect openIntent root mismatch specifically");
   });
 
+  it("doctor rebuild handles orphan outcome (outcome referencing missing intent)", async () => {
+    const dataDir = await tempDataDir("doctor-orphan-");
+    const pactium = createPactium({ dataDir });
+    // Write a legitimate intent+outcome first to set up the ledger
+    await pactium.recordOperation({
+      operationId: "orphan.setup",
+      workspaceId: "orphan-ws"
+    });
+    // Directly insert an orphan outcome fact into the ledger without a matching intent.
+    // This tests the rebuild's error handling for orphan outcomes.
+    const orphanOutcome = {
+      protocol: PACTIUM_PROTOCOL,
+      schema: "pactium.v0.2.schema.latest",
+      factType: "operation.outcome",
+      outcomeId: "orphan-outcome-001",
+      intentId: "missing-intent-999",
+      status: "succeeded",
+      operationId: "orphan.op",
+      workspaceId: "orphan-ws",
+      createdAt: new Date().toISOString()
+    };
+    await pactium.advanced.ledger.append(orphanOutcome);
+    const result = await pactium.doctor({ rebuild: true });
+    assert.ok(result.rebuild, "rebuild should be present");
+    // Should contain an orphan_outcome warning
+    assert.ok(
+      result.rebuild.warnings?.some((w) => w.code === "orphan_outcome") ||
+      result.failures?.some((f) => f.code === "orphan_outcome"),
+      "should detect orphan outcome in rebuild"
+    );
+  });
+
   it("doctor rebuild categorizes roots into fully/partially/skipped", async () => {
     const dataDir = await tempDataDir("doctor-categorized-");
     const pactium = createPactium({ dataDir });
@@ -3194,6 +3226,23 @@ console.log(JSON.stringify({
     const pendingKeys = await cleanStorage.listProtocolObjectKeys("commit");
     const pendingCount = pendingKeys.filter((k) => k.startsWith("pending-")).length;
     assert.ok(pendingCount > 0, "pending marker should exist after state save failure");
+  });
+
+  it("failing-storage: getCallLog and resetCounters work correctly", async () => {
+    const dataDir = await tempDataDir("failing-log-");
+    const baseStorage = createStoragePort({ dataDir });
+    const failingStorage = createFailingStorage(baseStorage);
+    // Perform some operations to generate calls
+    await failingStorage.putBlock({ value: "test" }, { kind: "test-block" });
+    await failingStorage.putProtocolObject("test", "key", { ok: true });
+    const log = failingStorage.getCallLog();
+    assert.equal(log.length, 2, "should have 2 logged calls");
+    assert.equal(log[0].method, "putBlock");
+    assert.equal(log[1].method, "putProtocolObject");
+    assert.equal(failingStorage.getCallCount(), 2);
+    failingStorage.resetCounters();
+    assert.equal(failingStorage.getCallCount(), 0);
+    assert.equal(failingStorage.getCallLog().length, 0);
   });
 
   it("crash injection: fail on complete-marker putProtocolObject via predicate", async () => {
