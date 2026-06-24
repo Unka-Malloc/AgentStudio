@@ -697,17 +697,32 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     return asArray(leafNode.entries).find((entry) => entry.key === String(key || "")) || null;
   }
 
-  async function prove(root, key) {
+  async function prove(root, key, options = {}) {
     const normalizedKey = String(key || "");
     const { indexRoot, leafDescriptor, leafNode, path } = await findLeaf(root, normalizedKey);
     const entries = asArray(leafNode.entries).map(normalizeIndexEntry);
     const entry = entries.find((candidate) => candidate.key === normalizedKey);
-    const leafNodeProof = {
+    const maxProofLeafEntries = Number(options.maxProofLeafEntries || 0);
+    const maxProofBytes = Number(options.maxProofBytes || 0);
+    const fullLeafNodeProof = {
       keyRange: leafNode.keyRange,
       count: leafNode.count,
       entries,
       splitter: leafNode.splitter
     };
+    const proofBytes = canonicalEncode(fullLeafNodeProof).length;
+    let leafNodeProof = fullLeafNodeProof;
+    let proofSizeWarning = null;
+    if ((maxProofLeafEntries > 0 && entries.length > maxProofLeafEntries) ||
+        (maxProofBytes > 0 && proofBytes > maxProofBytes)) {
+      proofSizeWarning = {
+        leafEntries: entries.length,
+        proofBytes,
+        maxProofLeafEntries: maxProofLeafEntries || undefined,
+        maxProofBytes: maxProofBytes || undefined,
+        message: "Proof leaf contains more entries than the configured limit. Proof size may be large."
+      };
+    }
     if (entry) {
       return {
         protocol: PACTIUM_PROTOCOL,
@@ -721,7 +736,8 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
         leafRoot: leafDescriptor.root,
         leafRootHash: leafDescriptor.rootHash,
         leafNode: leafNodeProof,
-        path
+        path,
+        ...(proofSizeWarning ? { proofSizeWarning } : {})
       };
     }
     const sortedEntries = entries.sort((left, right) => compareIndexKeys(left.key, right.key));
@@ -748,7 +764,8 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
         path
       },
       leftBoundary: left?.key || "",
-      rightBoundary: right?.key || ""
+      rightBoundary: right?.key || "",
+      ...(proofSizeWarning ? { proofSizeWarning } : {})
     };
   }
 
