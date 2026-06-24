@@ -1598,6 +1598,36 @@ describe("Pactium reference-project algorithm coverage", () => {
     await fs.rm(lockDir, { recursive: true, force: true });
   });
 
+  it("does not release lock when processStartKey mismatches on release", async () => {
+    const dataDir = await tempDataDir("pactium-release-startkey-mismatch-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    let lockStillExists = false;
+    let taskCompleted = false;
+
+    // Acquire lock normally
+    await storage.withWriteLock(async () => {
+      // Tamper with the owner.json inside the lock to change processStartKey
+      // This simulates another process overwriting the owner metadata.
+      const ownerPath = path.join(lockDir, "owner.json");
+      const current = JSON.parse(await fs.readFile(ownerPath, "utf8"));
+      current.processStartKey = "tampered-start-key";
+      await fs.writeFile(ownerPath, JSON.stringify(current, null, 2) + "\n");
+      taskCompleted = true;
+    });
+    assert.equal(taskCompleted, true);
+
+    // The lock should NOT have been released because processStartKey mismatched
+    lockStillExists = await fs.stat(lockDir).then(() => true, () => false);
+    assert.equal(lockStillExists, true,
+      "lock should NOT be deleted when processStartKey mismatches");
+
+    // Cleanup: remove the orphaned lock manually
+    await fs.rm(lockDir, { recursive: true, force: true });
+  });
+
   it("does not delete ownerless lock directory when fresh", async () => {
     const dataDir = await tempDataDir("pactium-ownerless-fresh-");
     const storage = createStoragePort({ dataDir });

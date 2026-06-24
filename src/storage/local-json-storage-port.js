@@ -259,11 +259,29 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
   }
 
   async function readLockOwner(lockDir) {
-    const owner = await readJson(lockOwnerPath(lockDir), null);
+    let owner = null;
+    let ownerMissing = false;
+    let ownerUnreadable = false;
+    let rawError = null;
+    try {
+      owner = await readJson(lockOwnerPath(lockDir), null);
+    } catch (error) {
+      ownerUnreadable = true;
+      rawError = error?.message || String(error);
+    }
+    // readJson returns null for ENOENT (file missing) — distinguish from
+    // unreadable (parse/permission errors). A JSON null value is treated as
+    // missing because it is not a valid owner object.
+    if (owner === null && !ownerUnreadable) {
+      ownerMissing = true;
+    }
     const stats = await fs.stat(lockDir).catch(() => null);
     return {
       owner,
-      mtimeMs: Number(stats?.mtimeMs || 0)
+      ownerMissing,
+      ownerUnreadable,
+      mtimeMs: Number(stats?.mtimeMs || 0),
+      rawError
     };
   }
 
@@ -274,7 +292,7 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     // --- Ownerless lock directory (owner.json missing) ---
     // A lock directory without owner.json is a dirty/stale artifact. Use
     // directory mtimeMs as the age signal; double-stat to avoid TOCTOU races.
-    if (!first.owner) {
+    if (first.ownerMissing) {
       const ageMs = Date.now() - first.mtimeMs;
       if (ageMs < staleMs) return false; // fresh dirty lock — don't remove
       // Double-check: re-read stat to confirm mtime is stable
@@ -284,6 +302,21 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
       // Confirm owner.json is still absent
       const recheck = await readJson(lockOwnerPath(lockDir), undefined);
       if (recheck !== null) return false; // owner.json appeared between reads
+      await fs.rm(lockDir, { recursive: true, force: true });
+      return true;
+    }
+
+    // --- Unreadable/malformed owner.json ---
+    // A lock with an unreadable owner.json (parse error, permission denied) is
+    // treated like a dirty artifact. Use directory mtimeMs for age; double-read
+    // to confirm the file is still unreadable before cleaning.
+    if (first.ownerUnreadable) {
+      const ageMs = Date.now() - first.mtimeMs;
+      if (ageMs < staleMs) return false; // fresh unreadable lock — don't remove
+      // Double-check: re-read to confirm still unreadable and mtime stable
+      const latest = await readLockOwner(lockDir);
+      if (!latest.ownerUnreadable) return false; // became readable between checks
+      if (Math.abs(latest.mtimeMs - first.mtimeMs) > 100) return false; // mtime changed
       await fs.rm(lockDir, { recursive: true, force: true });
       return true;
     }
@@ -305,16 +338,22 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     }
     // If no process alive and age exceeds stale threshold, proceed to double-read check
     const latest = await readLockOwner(lockDir);
-    if (!latest.owner) {
-      // Owner went missing between reads. If the directory is also stale by
-      // mtime, treat as ownerless cleanup (double-check pattern).
+    if (latest.ownerMissing || latest.ownerUnreadable) {
+      // Owner went missing or became unreadable between reads.
+      // Use directory mtime for staleness with double-check pattern.
       const dirAgeMs = Date.now() - latest.mtimeMs;
       if (dirAgeMs < staleMs) return false;
       const statsCheck = await fs.stat(lockDir).catch(() => null);
       if (!statsCheck) return false;
       if (Math.abs(Number(statsCheck.mtimeMs) - latest.mtimeMs) > 100) return false;
-      const recheck = await readJson(lockOwnerPath(lockDir), undefined);
-      if (recheck !== null) return false;
+      // If ownerMissing, confirm file is still absent; if ownerUnreadable, re-confirm
+      if (latest.ownerMissing) {
+        const recheck = await readJson(lockOwnerPath(lockDir), undefined);
+        if (recheck !== null) return false;
+      } else {
+        const recheck = await readLockOwner(lockDir);
+        if (!recheck.ownerUnreadable) return false;
+      }
       await fs.rm(lockDir, { recursive: true, force: true });
       return true;
     }
@@ -385,13 +424,15 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     });
     // Start heartbeat interval to keep the lock fresh
     const heartbeatMs = Math.max(100, Math.min(staleMs / 4, 5000));
-    let heartbeatStopped = false;
     const heartbeat = setInterval(async () => {
       try {
         const current = await readJson(lockOwnerPath(targetLockPath), null);
         // Verify owner identity with fencingToken and processStartKey,
         // not just ownerId, to prevent accidental cross-process reuse.
-        if (!current || current.ownerId !== ownerId || current.fencingToken !== fencingToken) {
+        if (!current ||
+            current.ownerId !== ownerId ||
+            current.fencingToken !== fencingToken ||
+            current.processStartKey !== processStartKey) {
           clearInterval(heartbeat);
           return;
         }
@@ -403,7 +444,6 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
       } catch (_) {
         // Stop heartbeat on any error — don't leak the interval.
         // If the lock dir was removed externally, there's nothing to heartbeat.
-        heartbeatStopped = true;
         try { clearInterval(heartbeat); } catch (_) { /* ignore */ }
       }
     }, heartbeatMs);
@@ -411,10 +451,14 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
       return await task();
     } finally {
       try { clearInterval(heartbeat); } catch (_) { /* ignore */ }
-      // Release lock: confirm owner identity including fencingToken.
-      // If fencingToken has changed, another process holds this lock — do not delete.
+      // Release lock: confirm owner identity including fencingToken and
+      // processStartKey. If any identity field has changed, another process
+      // holds this lock — do not delete.
       const owner = await readJson(lockOwnerPath(targetLockPath), null).catch(() => null);
-      if (owner && owner.ownerId === ownerId && owner.fencingToken === fencingToken) {
+      if (owner &&
+          owner.ownerId === ownerId &&
+          owner.fencingToken === fencingToken &&
+          owner.processStartKey === processStartKey) {
         await fs.rm(targetLockPath, { recursive: true, force: true });
       }
     }
