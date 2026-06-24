@@ -26,6 +26,8 @@ export interface PactiumStoragePort {
   walk(rootCid: string): Promise<PactiumRecord>;
   putProtocolObject(scope: string, key: string, value: unknown): Promise<PactiumCanonicalValue>;
   getProtocolObject(scope: string, key: string, fallback?: unknown): Promise<unknown>;
+  deleteProtocolObject?(scope: string, key: string): Promise<void>;
+  listProtocolObjectKeys?(scope: string): Promise<string[]>;
   clearCache?(): void;
   withWriteLock?<T>(
     task: () => T | Promise<T>,
@@ -191,7 +193,18 @@ export interface PactiumCore {
   createExtension(extension: PactiumRecord): Promise<PactiumRecord>;
   storeEnvelope(envelope: PactiumProofEnvelope): Promise<PactiumProofEnvelope>;
   protocolCatalog(): Promise<PactiumRecord>;
-  doctor(): Promise<PactiumRecord & { ok: boolean; dataDir: string }>;
+  /** Run integrity checks. Pass { rebuild: true } to replay ledger and compare derived roots. */
+  doctor(options?: { rebuild?: boolean }): Promise<PactiumRecord & {
+    ok: boolean; dataDir: string; ledgerSize: number;
+    rebuild?: { attempted: boolean; comparableRootsCount: number; mismatches: PactiumRecord[]; stateRebuildIncomplete: boolean; warnings: PactiumVerificationFailure[] };
+  }>;
+  /** @deprecated Prefer public read-only resolvers. Direct access to storage/ledger/indexEngine internals is unstable and not recommended for production use. */
+  advanced: {
+    storage: PactiumStoragePort;
+    ledger: PactiumLedger;
+    indexEngine: PactiumIndexEngine;
+    _compactInMemoryCaches(): Promise<PactiumRecord>;
+  };
 }
 
 export interface PactiumHttpServerOptions extends PactiumDataDirOptions {
