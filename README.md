@@ -315,6 +315,20 @@ pactium licolite verify --body-file ./licolite-envelope.json
 
 The CLI reads JSON from `--body`, `--body-file`, or stdin.
 
+### Crash consistency & recovery
+
+Pactium uses write-ahead commit markers for crash consistency. Each mutation writes a pending marker before work begins and a complete marker after `runtime-state` is saved. `doctor()` scans for incomplete commits (pending without complete) and reports them as repairable failures.
+
+```bash
+# Run standard integrity checks
+pactium doctor --data-dir ./.pactium
+
+# Replay ledger leaves to rebuild derived state and compare roots
+pactium doctor --data-dir ./.pactium --rebuild
+```
+
+`doctor({ rebuild: true })` replays all ledger leaves to reconstruct derived index roots and compares them against the stored `runtime-state`. Mismatches are reported as `derived_root_mismatch` failures. State root reconstruction may be incomplete because state mutations are stored in proof material, not in ledger facts — this is explicitly reported as `state_rebuild_incomplete`.
+
 `pactium serve` binds to `127.0.0.1` by default and enforces a 1 MiB JSON body limit. Use `--host`, `--max-body-bytes`, `PACTIUM_HTTP_HOST`, and `PACTIUM_HTTP_MAX_BODY_BYTES` only when the server is behind the host system's authentication, authorization, and transport security controls.
 
 ## Architecture
