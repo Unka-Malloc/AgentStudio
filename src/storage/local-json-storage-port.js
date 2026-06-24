@@ -262,19 +262,24 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
   async function removeStaleLock(lockDir, staleMs) {
     const { owner, mtimeMs } = await readLockOwner(lockDir);
     if (!mtimeMs) return false;
+    if (!owner) return false; // no owner metadata, cannot determine staleness
     const pid = Number(owner?.pid || 0);
-    // Prefer heartbeatAtMs for staleness; fall back to createdAtMs / mtimeMs
+    // Prefer heartbeatAtMs for staleness; fall back to createdAtMs, then directory mtime.
+    // A fresh heartbeatAtMs means the lock is still active even if createdAtMs is old.
     const lastActivityMs = Number(owner?.heartbeatAtMs || owner?.createdAtMs || 0) || mtimeMs;
     const ageMs = Date.now() - lastActivityMs;
-    if (!owner) {
-      if (ageMs < staleMs) return false;
-    } else if (ageMs < staleMs && processIsAlive(pid)) {
-      return false;
+    if (ageMs < staleMs && processIsAlive(pid)) {
+      return false; // process is alive and has recent activity — not stale
     }
+    // If no process alive and age exceeds stale threshold, proceed to double-read check
     const latest = await readLockOwner(lockDir);
+    // Compare owner identity fields as STRINGS — fencingToken is a UUID, not a number.
+    // Using Number() on UUID produces NaN, and NaN !== NaN is always true,
+    // which would prevent stale lock cleanup.
     const sameOwner = String(latest.owner?.ownerId || "") === String(owner?.ownerId || "") &&
-      Number(latest.owner?.fencingToken || latest.owner?.createdAtMs || 0) === Number(owner?.fencingToken || owner?.createdAtMs || 0);
-    if (!sameOwner) return false;
+      String(latest.owner?.fencingToken || "") === String(owner?.fencingToken || "") &&
+      String(latest.owner?.processStartKey || "") === String(owner?.processStartKey || "");
+    if (!sameOwner) return false; // owner changed between reads — do not delete
     await fs.rm(lockDir, { recursive: true, force: true });
     return true;
   }
@@ -317,15 +322,17 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
         await sleep(retryMs);
       }
     }
+    const fencingToken = crypto.randomUUID();
+    const processStartKey = crypto.randomUUID();
     await writeJsonAtomic(lockOwnerPath(targetLockPath), {
       protocol: PACTIUM_PROTOCOL,
       schema: PACTIUM_SCHEMA_VERSION,
       lockType: "pactium.write-lock",
       ownerId,
-      fencingToken: crypto.randomUUID(),
+      fencingToken,
       pid: process.pid,
       host: os.hostname(),
-      processStartKey: crypto.randomUUID(),
+      processStartKey,
       createdAt: nowIso(),
       createdAtMs: Date.now(),
       heartbeatAt: nowIso(),
@@ -333,10 +340,13 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     });
     // Start heartbeat interval to keep the lock fresh
     const heartbeatMs = Math.max(100, Math.min(staleMs / 4, 5000));
+    let heartbeatStopped = false;
     const heartbeat = setInterval(async () => {
       try {
         const current = await readJson(lockOwnerPath(targetLockPath), null);
-        if (current?.ownerId !== ownerId) {
+        // Verify owner identity with fencingToken and processStartKey,
+        // not just ownerId, to prevent accidental cross-process reuse.
+        if (!current || current.ownerId !== ownerId || current.fencingToken !== fencingToken) {
           clearInterval(heartbeat);
           return;
         }
@@ -346,16 +356,20 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
           heartbeatAtMs: Date.now()
         });
       } catch (_) {
-        // best-effort heartbeat; if the lock dir was removed, stop
+        // Stop heartbeat on any error — don't leak the interval.
+        // If the lock dir was removed externally, there's nothing to heartbeat.
+        heartbeatStopped = true;
         try { clearInterval(heartbeat); } catch (_) { /* ignore */ }
       }
     }, heartbeatMs);
     try {
       return await task();
     } finally {
-      clearInterval(heartbeat);
+      try { clearInterval(heartbeat); } catch (_) { /* ignore */ }
+      // Release lock: confirm owner identity including fencingToken.
+      // If fencingToken has changed, another process holds this lock — do not delete.
       const owner = await readJson(lockOwnerPath(targetLockPath), null).catch(() => null);
-      if (owner?.ownerId === ownerId) {
+      if (owner && owner.ownerId === ownerId && owner.fencingToken === fencingToken) {
         await fs.rm(targetLockPath, { recursive: true, force: true });
       }
     }

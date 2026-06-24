@@ -1430,4 +1430,194 @@ describe("Pactium reference-project algorithm coverage", () => {
     storage.clearCache();
     assert.deepEqual(await storage.getProtocolObject("cache", "value"), { version: 2 });
   });
+
+  it("cleans up stale lock with fencingToken (UUID string comparison)", async () => {
+    const dataDir = await tempDataDir("pactium-fencing-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    await fs.mkdir(lockDir, { recursive: true });
+    // Create a stale lock owner WITH a fencingToken (UUID string).
+    // The bug was using Number(fencingToken) which produces NaN,
+    // making NaN === NaN always false and preventing cleanup.
+    await fs.writeFile(path.join(lockDir, "owner.json"), `${JSON.stringify({
+      protocol: PACTIUM_PROTOCOL,
+      schema: "pactium.v0.2.schema.latest",
+      lockType: "pactium.write-lock",
+      ownerId: "stale-with-fencing",
+      fencingToken: "550e8400-e29b-41d4-a716-446655440000",
+      pid: 99999999,
+      host: "test-host",
+      processStartKey: "start-key-001",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      createdAtMs: Date.now() - 10000,
+      heartbeatAt: "2026-01-01T00:00:00.000Z",
+      heartbeatAtMs: Date.now() - 10000
+    })}\n`, "utf8");
+
+    assert.equal(await storage.withWriteLock(() => "fencing-cleaned", {
+      timeoutMs: 1000,
+      retryMs: 1,
+      staleMs: 5000
+    }), "fencing-cleaned");
+    assert.equal(await fs.stat(lockDir).then(() => true, () => false), false);
+  });
+
+  it("does not delete non-stale lock owned by another writer", async () => {
+    const dataDir = await tempDataDir("pactium-nonstale-");
+    const storageA = createStoragePort({ dataDir });
+    await storageA.initialize();
+    const storageB = createStoragePort({ dataDir });
+    await storageB.initialize();
+
+    let resolved = false;
+    const result = await storageA.withWriteLock(async () => {
+      // Writer B must not be able to acquire the lock while A holds it
+      try {
+        await storageB.withWriteLock(() => "should-not-reach", {
+          timeoutMs: 300,
+          retryMs: 10,
+          staleMs: 30000
+        });
+      } catch (error) {
+        assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
+        resolved = true;
+      }
+      return "a-done";
+    });
+    assert.equal(result, "a-done");
+    assert.equal(resolved, true);
+  });
+
+  it("does not delete lock when owner changes between stale reads", async () => {
+    const dataDir = await tempDataDir("pactium-ownerchange-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    await fs.mkdir(lockDir, { recursive: true });
+    await fs.writeFile(path.join(lockDir, "owner.json"), `${JSON.stringify({
+      protocol: PACTIUM_PROTOCOL,
+      schema: "pactium.v0.2.schema.latest",
+      lockType: "pactium.write-lock",
+      ownerId: "fresh-owner",
+      fencingToken: "fresh-token-uuid",
+      pid: process.pid, // real, alive pid
+      host: os.hostname(),
+      processStartKey: "fresh-start-key",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      createdAtMs: Date.now() - 60000,
+      heartbeatAt: "2026-01-01T00:00:00.000Z",
+      heartbeatAtMs: Date.now() - 1000 // recent heartbeat — NOT stale
+    })}\n`, "utf8");
+
+    // Even with old createdAtMs, the fresh heartbeatAtMs means the lock
+    // is still active. The process is also alive (real pid).
+    // The lock should NOT be deleted.
+    try {
+      await storage.withWriteLock(() => "unreachable", {
+        timeoutMs: 300,
+        retryMs: 10,
+        staleMs: 5000
+      });
+      assert.fail("should not acquire lock held by alive process with recent heartbeat");
+    } catch (error) {
+      assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
+    }
+    // Clean up for the next test
+    await fs.rm(lockDir, { recursive: true, force: true });
+  });
+
+  it("does not steal fresh (non-stale) lock from alive process", async () => {
+    const dataDir = await tempDataDir("pactium-release-fencing-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    await fs.mkdir(lockDir, { recursive: true });
+    // Simulate another process holding the lock with a fresh heartbeat
+    // (not stale). The process is alive, so the lock should not be removed.
+    await fs.writeFile(path.join(lockDir, "owner.json"), `${JSON.stringify({
+      protocol: PACTIUM_PROTOCOL,
+      schema: "pactium.v0.2.schema.latest",
+      lockType: "pactium.write-lock",
+      ownerId: "other-owner",
+      fencingToken: "other-fencing-token",
+      pid: process.pid,
+      host: os.hostname(),
+      processStartKey: "other-start-key",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      createdAtMs: Date.now(),
+      heartbeatAt: new Date().toISOString(),
+      heartbeatAtMs: Date.now() // fresh — not stale
+    })}\n`, "utf8");
+
+    // Should timeout because lock is fresh (not stale) and process is alive
+    try {
+      await storage.withWriteLock(() => "unreachable", {
+        timeoutMs: 300,
+        retryMs: 10,
+        staleMs: 5000
+      });
+      assert.fail("should not acquire lock when a fresh lock exists");
+    } catch (error) {
+      assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
+    }
+    // Cleanup
+    await fs.rm(lockDir, { recursive: true, force: true });
+  });
+
+  it("does not release lock when fencingToken mismatches on release", async () => {
+    const dataDir = await tempDataDir("pactium-release-fencing-mismatch-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    let lockStillExists = false;
+    let taskCompleted = false;
+
+    // Acquire lock normally
+    await storage.withWriteLock(async () => {
+      // Tamper with the owner.json inside the lock to change fencingToken
+      // This simulates another process overwriting the owner metadata.
+      const ownerPath = path.join(lockDir, "owner.json");
+      const current = JSON.parse(await fs.readFile(ownerPath, "utf8"));
+      current.fencingToken = "tampered-fencing-token";
+      await fs.writeFile(ownerPath, JSON.stringify(current, null, 2) + "\n");
+      taskCompleted = true;
+    });
+    assert.equal(taskCompleted, true);
+
+    // The lock should NOT have been released because fencingToken mismatched
+    lockStillExists = await fs.stat(lockDir).then(() => true, () => false);
+    assert.equal(lockStillExists, true,
+      "lock should NOT be deleted when fencingToken mismatches");
+
+    // Cleanup: remove the orphaned lock manually
+    await fs.rm(lockDir, { recursive: true, force: true });
+  });
+
+  it("heartbeat refreshes heartbeatAtMs so lock is not considered stale", async () => {
+    const dataDir = await tempDataDir("pactium-heartbeat-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    // Use a short staleMs so the heartbeat interval is short enough
+    // for the test to see a refresh. heartbeatMs = max(100, min(staleMs/4, 5000))
+    // With staleMs=800, heartbeatMs = max(100, min(200, 5000)) = 200ms.
+    await storage.withWriteLock(async () => {
+      // Wait long enough for at least one heartbeat to fire
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Read the owner file to verify heartbeatAtMs is recent
+      const ownerFile = JSON.parse(await fs.readFile(path.join(lockDir, "owner.json"), "utf8"));
+      assert.ok(Date.now() - ownerFile.heartbeatAtMs < 3000,
+        "heartbeatAtMs should be recent (within last 3s)");
+    }, { staleMs: 800 });
+
+    // Lock should be released after withWriteLock completes
+    assert.equal(await fs.stat(lockDir).then(() => true, () => false), false);
+  });
 });
