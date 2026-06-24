@@ -92,6 +92,8 @@ export interface PactiumVerificationResult {
   trustedSignatureValid?: boolean;
   trustPolicy?: string;
   failures: PactiumVerificationFailure[];
+  /** Non-fatal warnings (e.g. proofSizeWarning, incomplete rebuild). */
+  warnings?: PactiumVerificationFailure[];
   checked?: string[];
 }
 
@@ -115,6 +117,15 @@ export interface PactiumIndexScanOptions extends PactiumRecord {
   after?: string;
 }
 
+export interface PactiumProofOptions {
+  /** Maximum number of leaf entries allowed in a proof. Exceeding this produces a proofSizeWarning. */
+  maxProofLeafEntries?: number;
+  /** Maximum proof size in bytes. Exceeding this produces a proofSizeWarning. */
+  maxProofBytes?: number;
+  /** If true, proofSizeWarning becomes a hard failure. Default false. */
+  failOnProofSizeWarning?: boolean;
+}
+
 export interface PactiumIndexEngine {
   protocol: string;
   engine: string;
@@ -123,7 +134,7 @@ export interface PactiumIndexEngine {
   put(root: string, key: string, value: unknown, options?: PactiumRecord): Promise<PactiumRecord>;
   delete(root: string, key: string, options?: PactiumRecord): Promise<PactiumRecord>;
   get(root: string, key: string): Promise<PactiumRecord | null>;
-  prove(root: string, key: string): Promise<PactiumRecord>;
+  prove(root: string, key: string, options?: PactiumProofOptions): Promise<PactiumRecord>;
   verifyProof(proof: PactiumRecord): boolean;
   scan(root: string, options?: PactiumIndexScanOptions): Promise<PactiumRecord[]>;
   prefix(root: string, keyPrefix?: string, options?: PactiumIndexScanOptions): Promise<PactiumRecord[]>;
@@ -162,6 +173,14 @@ export interface PactiumProofBundleVerificationOptions extends PactiumRecord {
   maxBlockSize?: number;
   trustPolicy?: string;
   trustedManifest?: PactiumRecord;
+  /** Require full (non-sampled) state mutation proofs. Default false. When false, large mutations use sampled proofs. */
+  requireFullStateMutationProofs?: boolean;
+  /** Maximum leaf entries per proof before emitting a proofSizeWarning. */
+  maxProofLeafEntries?: number;
+  /** Maximum proof size in bytes before emitting a proofSizeWarning. */
+  maxProofBytes?: number;
+  /** If true, proofSizeWarning becomes a hard failure. Default false. */
+  failOnProofSizeWarning?: boolean;
 }
 
 export interface PactiumProofBundleExportOptions extends PactiumRecord {
@@ -172,9 +191,6 @@ export interface PactiumCore {
   protocol: string;
   schema: string;
   dataDir: string;
-  storage: PactiumStoragePort;
-  ledger: PactiumLedger;
-  indexEngine: PactiumIndexEngine;
   beginOperationIntent(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
   appendOperationOutcome(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
   recordOperation(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
@@ -198,7 +214,19 @@ export interface PactiumCore {
     ok: boolean; dataDir: string; ledgerSize: number;
     rebuild?: { attempted: boolean; comparableRootsCount: number; mismatches: PactiumRecord[]; stateRebuildIncomplete: boolean; warnings: PactiumVerificationFailure[] };
   }>;
-  /** @deprecated Prefer public read-only resolvers. Direct access to storage/ledger/indexEngine internals is unstable and not recommended for production use. */
+  /** Resolve a CAS block by CID. Returns a canonical clone — safe for external mutation. */
+  resolveBlock(cid: string): Promise<(PactiumRecord & { bytes?: Uint8Array }) | null>;
+  /** Check whether a CAS block exists. */
+  hasBlock(cid: string): Promise<boolean>;
+  /** Read the current ledger head, or a specific head by ID. */
+  readLedgerHead(id?: string): Promise<PactiumLedgerHead | null>;
+  /** Read a ledger leaf by index. */
+  readLedgerLeaf(index: number): Promise<PactiumRecord | null>;
+  /** Read a protocol object. Returns a canonical clone. */
+  readProtocolObject(scope: string, key: string, fallback?: unknown): Promise<unknown>;
+  /** List all keys in a protocol object scope. */
+  listProtocolObjectKeys(scope: string): Promise<string[]>;
+  /** @deprecated Prefer public read-only resolvers (resolveBlock, hasBlock, readLedgerHead, readLedgerLeaf, readProtocolObject, listProtocolObjectKeys). Direct access to storage/ledger/indexEngine internals is unstable and not recommended for production use. */
   advanced: {
     storage: PactiumStoragePort;
     ledger: PactiumLedger;
@@ -211,12 +239,19 @@ export interface PactiumHttpServerOptions extends PactiumDataDirOptions {
   pactium?: PactiumCore | null;
   licolite?: unknown;
   maxBodyBytes?: number;
+  /** Enable mutation routes (POST/PUT/DELETE). Default false. */
+  enableMutations?: boolean;
+  /** Authorization hook for mutation routes. Return false or { allowed: false } to reject. */
+  authorize?: ((ctx: { method: string; pathname: string; capability: string; headers: Record<string, string | string[] | undefined> }) => boolean | { allowed: boolean; reason?: string; statusCode?: number } | Promise<boolean | { allowed: boolean; reason?: string; statusCode?: number }>) | null;
 }
 
 export interface PactiumHttpServerStartOptions extends PactiumDataDirOptions {
   host?: string;
   port?: number | string;
   maxBodyBytes?: number;
+  /** Enable mutation routes (POST/PUT/DELETE). Default false. */
+  enableMutations?: boolean;
+  authorize?: PactiumHttpServerOptions["authorize"];
 }
 
 export interface PactiumHttpServerStartResult {

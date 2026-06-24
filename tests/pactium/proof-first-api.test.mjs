@@ -1381,14 +1381,31 @@ try {
 const pactium = createPactium({ inMemory: true });
 const licolite = createLicoLiteAspect({ pactium, evidencePolicy: "opportunistic" });
 const envelope = await licolite.recordWorkspaceOperation({ operationId: "external", workspaceId: "x" });
-const httpServer = createPactiumHttpServer({ pactium });
+// Test enableMutations and authorize options (TypeScript would check these)
+const httpServer = createPactiumHttpServer({ pactium, enableMutations: true, authorize: null });
+// Test read-only resolvers
+const hasBlock = await pactium.hasBlock(envelope.proofRefs[0].cid);
+const block = await pactium.resolveBlock(envelope.proofRefs[0].cid);
+const head = await pactium.readLedgerHead();
+const leaf = await pactium.readLedgerLeaf(0);
+const state = await pactium.readProtocolObject("core", "runtime-state");
+const keys = await pactium.listProtocolObjectKeys("commit");
+// advanced is @deprecated but still accessible
+const isDeprecated = typeof pactium.advanced !== "undefined";
 console.log(JSON.stringify({
   oldExportMissing,
   protocol: envelope.protocol,
   ok: (await licolite.verifyEnvelope(envelope)).ok,
   httpProtocol: PACTIUM_HTTP_PROTOCOL,
   httpServerType: typeof httpServer.close,
-  rootHttpType: typeof startRootHttpServer
+  rootHttpType: typeof startRootHttpServer,
+  hasBlock,
+  blockExists: !!block,
+  headExists: !!head,
+  leafExists: !!leaf,
+  stateExists: !!state,
+  keysLen: keys.length,
+  isDeprecated
 }));
 `, "utf8");
     const run = await execFileAsync(process.execPath, [scriptPath], { cwd: projectDir });
@@ -1399,6 +1416,13 @@ console.log(JSON.stringify({
     assert.equal(parsed.httpProtocol, "pactium.v0.2.http");
     assert.equal(parsed.httpServerType, "function");
     assert.equal(parsed.rootHttpType, "function");
+    assert.equal(parsed.hasBlock, true);
+    assert.equal(parsed.blockExists, true);
+    assert.equal(parsed.headExists, true);
+    assert.equal(parsed.leafExists, true);
+    assert.equal(parsed.stateExists, true);
+    assert.ok(parsed.keysLen >= 2);
+    assert.equal(parsed.isDeprecated, true);
   });
 
   it("serves HTTP endpoints and CLI proof-first commands", async () => {
