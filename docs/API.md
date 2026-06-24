@@ -205,7 +205,11 @@ const result = await verifyProofBundle(bundle, {
 });
 ```
 
-**Returns:** `PactiumVerificationResult & { bundleHash?: string }`
+**Returns:** `PactiumProofBundleVerificationResult` extending `PactiumVerificationResult` with:
+- `ok: boolean` — overall verification result
+- `failures: PactiumVerificationFailure[]` — structured failures
+- `bundleHash?: string` — hash of the verified bundle
+- `envelope?: PactiumVerificationResult` — envelope-level verification result
 
 #### `pactium.exportProofBundle(envelopeOrId, options?)`
 

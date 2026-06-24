@@ -2,6 +2,7 @@ import type {
   PactiumCore,
   PactiumProofBundle,
   PactiumProofBundleExportOptions,
+  PactiumProofBundleVerificationResult,
   PactiumProofEnvelope,
   PactiumRecord,
   PactiumVerificationResult
@@ -27,8 +28,8 @@ export interface LicoLiteAspect {
   recordOperation(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
   verifyLicoLiteEnvelope(envelope: PactiumProofEnvelope, options?: PactiumRecord & { trustedManifest?: PactiumRecord; trustPolicy?: string; requireFullStateMutationProofs?: boolean }): Promise<PactiumVerificationResult>;
   verifyEnvelope(envelope: PactiumProofEnvelope, options?: PactiumRecord & { trustedManifest?: PactiumRecord; trustPolicy?: string; requireFullStateMutationProofs?: boolean }): Promise<PactiumVerificationResult>;
-  verifyLicoLiteBundle(bundle: PactiumProofBundle, options?: PactiumRecord & { trustedManifest?: PactiumRecord; trustPolicy?: string }): Promise<PactiumVerificationResult>;
-  verifyBundle(bundle: PactiumProofBundle, options?: PactiumRecord & { trustedManifest?: PactiumRecord; trustPolicy?: string }): Promise<PactiumVerificationResult>;
+  verifyLicoLiteBundle(bundle: PactiumProofBundle, options?: PactiumRecord & { trustedManifest?: PactiumRecord; trustPolicy?: string }): Promise<PactiumProofBundleVerificationResult>;
+  verifyBundle(bundle: PactiumProofBundle, options?: PactiumRecord & { trustedManifest?: PactiumRecord; trustPolicy?: string }): Promise<PactiumProofBundleVerificationResult>;
   planRepair(failures?: PactiumRecord[]): PactiumRecord;
   getWorkspaceProjection(workspaceId?: string): Promise<PactiumRecord>;
   proveWorkspaceMembership(input?: PactiumRecord): Promise<PactiumRecord>;
@@ -46,6 +47,6 @@ export function createLicoLiteSigner(options?: PactiumRecord): LicoLiteSigner;
 export function createLicoLiteAspect(options?: PactiumRecord & { pactium?: PactiumCore | null; signer?: LicoLiteSigner | false | null }): LicoLiteAspect;
 export function recordLicoLiteWorkspaceOperation(input?: PactiumRecord, options?: PactiumRecord): Promise<PactiumProofEnvelope>;
 export function verifyLicoLiteEnvelope(envelope: PactiumProofEnvelope, options?: PactiumRecord): Promise<PactiumVerificationResult>;
-export function verifyLicoLiteBundle(bundle: PactiumProofBundle, options?: PactiumRecord): Promise<PactiumVerificationResult>;
+export function verifyLicoLiteBundle(bundle: PactiumProofBundle, options?: PactiumRecord): Promise<PactiumProofBundleVerificationResult>;
 export function licoLitePolicyExtensionValue(input?: PactiumRecord): PactiumRecord;
 export function licoLiteWorkspaceEffectExtensionValue(input?: PactiumRecord): PactiumRecord;

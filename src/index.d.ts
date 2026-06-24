@@ -165,6 +165,11 @@ export interface PactiumLedger extends PactiumRecord {
   pageEntries(options?: PactiumLedgerPageOptions): Promise<PactiumLedgerPage>;
 }
 
+export interface PactiumProofBundleVerificationResult extends PactiumVerificationResult {
+  bundleHash?: string;
+  envelope?: PactiumVerificationResult;
+}
+
 export interface PactiumProofBundleVerificationOptions extends PactiumRecord {
   verifyAllBlocks?: boolean;
   maxBundleBytes?: number;
@@ -318,7 +323,7 @@ export function samePositionAs(left: PactiumRecord, right: PactiumRecord): boole
 export function verifyTrackingCursor(cursor: PactiumRecord, context?: PactiumRecord): boolean;
 export function createPactium(options?: PactiumDataDirOptions & { storage?: PactiumStoragePort | null }): PactiumCore;
 export function verifyProofEnvelope(envelope: PactiumProofEnvelope, options?: PactiumRecord): Promise<PactiumVerificationResult>;
-export function verifyProofBundle(bundle: PactiumProofBundle, options?: PactiumProofBundleVerificationOptions): Promise<PactiumVerificationResult & { bundleHash?: string }>;
+export function verifyProofBundle(bundle: PactiumProofBundle, options?: PactiumProofBundleVerificationOptions): Promise<PactiumProofBundleVerificationResult>;
 export function createDefaultProofVerifierRegistry(extraVerifiers?: PactiumRecord): Map<string, (...args: unknown[]) => unknown>;
 export function createRepairPlanner(): PactiumRecord;
 export function createMaintenanceTaskEngine(options?: PactiumRecord): PactiumRecord;
