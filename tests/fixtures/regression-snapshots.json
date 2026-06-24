@@ -94,9 +94,9 @@
   ],
   "declarations": {
     "src/index.d.ts": {
-      "sha256": "75cce88a2ee26a64144923bae6b1603dd08131f1a592486b35515b6bc156d4fb",
-      "byteLength": 12566,
-      "exportCount": 77
+      "sha256": "87cbadf206b743967a333eb475d3f9af9d701efe26330c801bc296c495685f9a",
+      "byteLength": 15929,
+      "exportCount": 80
     },
     "src/http.d.ts": {
       "sha256": "ec5eff2f4abb6af32a55281b9988463d02aa035bacd7e5ba6dccced57bf7d510",
@@ -104,8 +104,8 @@
       "exportCount": 7
     },
     "src/aspects/licolite/index.d.ts": {
-      "sha256": "6af656f3031afa702f948f4493b9e8c20e5bf947118d104e8dab768ba56c4bb3",
-      "byteLength": 3101,
+      "sha256": "a13e42e505caab0514666a002115a85fddcf545f1408ebe3b1bf7e5145217f9f",
+      "byteLength": 3174,
       "exportCount": 15
     }
   },

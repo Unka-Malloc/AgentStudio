@@ -53,7 +53,6 @@ async function fsyncDir(filePath) {
     const dirFd = await fs.open(dir, "r");
     await dirFd.sync();
     await dirFd.close();
-  /* node:coverage ignore next -- best-effort fsync, untestable */
   } catch (_) {
     // best-effort directory fsync
   }
@@ -64,7 +63,6 @@ async function fsyncFile(filePath) {
     const fd = await fs.open(filePath, "r+");
     await fd.sync();
     await fd.close();
-  /* node:coverage ignore next -- best-effort fsync, untestable */
   } catch (_) {
     // best-effort file fsync (file may be read-only or already renamed)
   }
@@ -179,7 +177,6 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     };
     const existing = await getBlock(cid);
     if (existing) {
-      /* node:coverage ignore next -- requires hash collision, practically unreachable */
       if (existing.payloadHash !== payloadHash || existing.payloadBase64 !== record.payloadBase64) {
         throw new Error(`CAS collision or replacement attempt for ${cid}`);
       }
@@ -341,7 +338,6 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     }
     // If no process alive and age exceeds stale threshold, proceed to double-read check
     const latest = await readLockOwner(lockDir);
-    /* node:coverage ignore start -- TOCTOU race condition, untestable deterministically */
     if (latest.ownerMissing || latest.ownerUnreadable) {
       // Owner went missing or became unreadable between reads.
       // Use directory mtime for staleness with double-check pattern.
@@ -361,7 +357,6 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
       await fs.rm(lockDir, { recursive: true, force: true });
       return true;
     }
-    /* node:coverage ignore stop */
     // Compare owner identity fields as STRINGS — fencingToken is a UUID, not a number.
     // Using Number() on UUID produces NaN, and NaN !== NaN is always true,
     // which would prevent stale lock cleanup.
@@ -446,7 +441,6 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
           heartbeatAt: nowIso(),
           heartbeatAtMs: Date.now()
         });
-      /* node:coverage ignore next -- async setInterval callback, untestable deterministically */
       } catch (_) {
         // Stop heartbeat on any error — don't leak the interval.
         // If the lock dir was removed externally, there's nothing to heartbeat.
@@ -553,7 +547,6 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
           memoryKeys.add(dirent.name.slice(0, -".json".length));
         }
       }
-    /* node:coverage ignore next -- directory may not exist, untestable */
     } catch (_) {
       // directory may not exist
     }

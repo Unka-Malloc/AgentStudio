@@ -70,6 +70,7 @@ const approvedFiles = new Set([
   "src/canonical/value.js",
   "src/core/append-condition.js",
   "src/core/pactium-core.js",
+  "src/core/rebuild-state.js",
   "src/core/tracking-cursor.js",
   "src/http.d.ts",
   "src/http.js",
