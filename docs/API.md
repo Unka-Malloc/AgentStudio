@@ -144,13 +144,16 @@ const outcome = await pactium.lookupOutcome("intent-id");
 
 ### Workspace Projection
 
-#### `pactium.getWorkspaceProjection(workspaceId)`
+#### `pactium.getWorkspaceProjection(workspaceId, options?)`
 
 Returns the current workspace projection state for a given workspace.
 
 ```js
 const projection = await pactium.getWorkspaceProjection("workspace-a");
 // { workspaceId, nextOrdinal, orderRoot, membershipRoot, order, membership }
+
+// With options
+const limited = await pactium.getWorkspaceProjection("workspace-a", { limit: 10 });
 ```
 
 #### `pactium.proveWorkspaceMembership(input)`
@@ -160,10 +163,20 @@ Generates a verifiable proof that a ledger event belongs (or does not belong) to
 ```js
 const proof = await pactium.proveWorkspaceMembership({
   workspaceId: "workspace-a",
-  ledgerEventId: "ledger-event-id"
+  ledgerEventId: "ledger-event-id",
+  proofOptions: { maxProofBytes: 1024 }
 });
 // { member: true/false, proof: { ... } }
 ```
+
+**Options:**
+| Field | Type | Description |
+| --- | --- | --- |
+| `workspaceId` | `string` | Workspace identifier |
+| `ledgerEventId` | `string` | Ledger event to prove membership for |
+| `proofOptions.maxProofLeafEntries` | `number?` | Maximum leaf entries before proofSizeWarning |
+| `proofOptions.maxProofBytes` | `number?` | Maximum proof bytes before proofSizeWarning |
+| `proofOptions.failOnProofSizeWarning` | `boolean?` | Treat proofSizeWarning as hard failure |
 
 ---
 
@@ -174,9 +187,28 @@ const proof = await pactium.proveWorkspaceMembership({
 Verifies a Proof Envelope against local proof material.
 
 ```js
-const result = await pactium.verifyEnvelope(envelope);
-// { ok: true/false, failures: [...], checked: [...] }
+const result = await pactium.verifyEnvelope(envelope, {
+  failOnProofSizeWarning: true,
+  trustPolicy: "self-carried-manifest",
+  requireFullStateMutationProofs: true
+});
+// { ok, failures: [...], checked: [], warnings: [...] }
 ```
+
+**Options:**
+| Field | Type | Description |
+| --- | --- | --- |
+| `maxProofLeafEntries` | `number?` | Max leaf entries before proofSizeWarning |
+| `maxProofBytes` | `number?` | Max proof bytes before proofSizeWarning |
+| `failOnProofSizeWarning` | `boolean?` | Treat proofSizeWarning as hard failure |
+| `supportedCriticalExtensions` | `string[]?` | Extensions the verifier supports |
+| `proofVerifiers` | `PactiumRecord?` | Custom proof verifier registry |
+| `requireAllProofs` | `boolean?` | Require verifiers for all embedded proofs |
+| `verifierManifest` | `PactiumRecord?` | Manifest for signature verification |
+| `trustedManifest` | `PactiumRecord?` | Caller-supplied trusted manifest |
+| `ledgerHeadSignatures` | `PactiumRecord[]?` | Ledger head signatures |
+| `trustPolicy` | `string?` | `"structural"`, `"self-carried-manifest"`, or `"trusted-manifest-required"` |
+| `requireFullStateMutationProofs` | `boolean?` | Require full (non-sampled) state mutation proofs |
 
 **Returns:** `PactiumVerificationResult`
 
@@ -798,12 +830,16 @@ import type {
   PactiumVerificationFailure,
   PactiumVerificationResult,
   PactiumProofBundle,
+  PactiumProofBundleVerificationResult,
   PactiumIndexScanOptions,
   PactiumIndexEngine,
   PactiumLedgerPageOptions,
   PactiumLedgerPage,
   PactiumLedger,
   PactiumCore,
+  PactiumProofOptions,
+  PactiumProofVerificationOptions,
+  PactiumProofBundleVerificationOptions,
   PactiumHttpServerOptions,
   PactiumHttpServerStartOptions,
   PactiumHttpServerStartResult

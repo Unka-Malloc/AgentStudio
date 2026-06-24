@@ -126,6 +126,17 @@ export interface PactiumProofOptions {
   failOnProofSizeWarning?: boolean;
 }
 
+export interface PactiumProofVerificationOptions extends PactiumProofOptions {
+  supportedCriticalExtensions?: string[];
+  proofVerifiers?: PactiumRecord;
+  requireAllProofs?: boolean;
+  verifierManifest?: PactiumRecord;
+  trustedManifest?: PactiumRecord;
+  ledgerHeadSignatures?: PactiumRecord[];
+  trustPolicy?: "structural" | "self-carried-manifest" | "trusted-manifest-required" | string;
+  requireFullStateMutationProofs?: boolean;
+}
+
 export interface PactiumIndexEngine {
   protocol: string;
   engine: string;
@@ -203,13 +214,26 @@ export interface PactiumCore {
   lookupOutcome(intentId: string): Promise<PactiumRecord>;
   createAppendCondition(input?: PactiumRecord): PactiumRecord;
   getLedgerCursor(input?: PactiumRecord): Promise<PactiumRecord>;
-  getWorkspaceCursor(input?: PactiumRecord): Promise<PactiumRecord>;
+  getWorkspaceCursor(input?: PactiumRecord & {
+    workspaceId?: string;
+    fromCursor?: PactiumRecord | null;
+    position?: number;
+    limit?: number;
+    proofOptions?: PactiumProofOptions;
+  }): Promise<PactiumRecord>;
   verifyCursor(cursor: PactiumRecord, context?: PactiumRecord): boolean;
   advanceTrustedHead(input?: PactiumRecord): PactiumRecord;
   planRecovery(input?: PactiumRecord): PactiumRecord;
-  getWorkspaceProjection(workspaceId?: string): Promise<PactiumRecord>;
-  proveWorkspaceMembership(input?: PactiumRecord): Promise<PactiumRecord>;
-  verifyEnvelope(envelope: PactiumProofEnvelope, options?: PactiumRecord): Promise<PactiumVerificationResult>;
+  getWorkspaceProjection(workspaceId?: string, options?: PactiumRecord & { limit?: number }): Promise<PactiumRecord>;
+  proveWorkspaceMembership(input?: PactiumRecord & {
+    workspaceId?: string;
+    ledgerEventId?: string;
+    proofOptions?: PactiumProofOptions;
+  }): Promise<PactiumRecord>;
+  verifyEnvelope(
+    envelope: PactiumProofEnvelope,
+    options?: PactiumProofVerificationOptions
+  ): Promise<PactiumVerificationResult>;
   exportProofBundle(envelopeOrId: PactiumProofEnvelope | string, options?: PactiumProofBundleExportOptions): Promise<PactiumProofBundle>;
   createExtension(extension: PactiumRecord): Promise<PactiumRecord>;
   storeEnvelope(envelope: PactiumProofEnvelope): Promise<PactiumProofEnvelope>;
@@ -322,7 +346,7 @@ export function advanceTo(cursor: PactiumRecord, position: number, options?: Pac
 export function samePositionAs(left: PactiumRecord, right: PactiumRecord): boolean;
 export function verifyTrackingCursor(cursor: PactiumRecord, context?: PactiumRecord): boolean;
 export function createPactium(options?: PactiumDataDirOptions & { storage?: PactiumStoragePort | null }): PactiumCore;
-export function verifyProofEnvelope(envelope: PactiumProofEnvelope, options?: PactiumRecord): Promise<PactiumVerificationResult>;
+export function verifyProofEnvelope(envelope: PactiumProofEnvelope, options?: PactiumProofVerificationOptions): Promise<PactiumVerificationResult>;
 export function verifyProofBundle(bundle: PactiumProofBundle, options?: PactiumProofBundleVerificationOptions): Promise<PactiumProofBundleVerificationResult>;
 export function createDefaultProofVerifierRegistry(extraVerifiers?: PactiumRecord): Map<string, (...args: unknown[]) => unknown>;
 export function createRepairPlanner(): PactiumRecord;
