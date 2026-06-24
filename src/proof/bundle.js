@@ -144,8 +144,17 @@ export async function verifyProofBundle(bundle, options = {}) {
       ranges.push({ item, recordStart, payloadEnd });
     }
 
-    // Strict overlap / gap / trailing check using exact [recordStart, payloadEnd)
+    // Strict coverage / overlap / gap / trailing check using exact ranges.
     if (ranges.length > 0) {
+      // Leading bytes: first record must start at offset 0.
+      if (ranges[0].recordStart !== 0) {
+        failures.push(createVerificationFailure({
+          layer: "proof-bundle", code: "leading_bytes",
+          message: `Bundle has ${ranges[0].recordStart} leading byte(s) before the first record.`,
+          evidenceRef: String(ranges[0].recordStart),
+          repairable: true
+        }));
+      }
       for (let i = 1; i < ranges.length; i++) {
         const prev = ranges[i - 1];
         const curr = ranges[i];

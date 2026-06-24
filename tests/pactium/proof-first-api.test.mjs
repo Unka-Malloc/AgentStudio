@@ -2493,13 +2493,22 @@ console.log(JSON.stringify({
     // Overlapping: modify first record's recordLength to make its payload
     // range extend into the second record.
     const overlapping = structuredClone(bundle);
-    const orig = Buffer.from(bundle.binaryBase64, "base64");
     const idx0 = overlapping.index[0];
     idx0.recordLength = Number(idx0.recordLength) + 500; // extends into next record
     const badRangeResult = await verifyProofBundle(overlapping);
     assert.equal(badRangeResult.ok === false || badRangeResult.failures.some(
       (f) => f.code === "overlapping_index_ranges" || f.code === "bad_index_record_length"
     ), true);
+
+    // Leading bytes: insert garbage before binary, shift all index offsets.
+    const withLeading = structuredClone(bundle);
+    const lead = Buffer.from("leading garbage");
+    withLeading.binaryBase64 = Buffer.concat([lead, Buffer.from(bundle.binaryBase64, "base64")]).toString("base64");
+    withLeading.byteLength = lead.length + bundle.byteLength;
+    withLeading.index = withLeading.index.map((item) => ({ ...item, offset: Number(item.offset) + lead.length }));
+    const leadResult = await verifyProofBundle(withLeading);
+    assert.equal(leadResult.ok, false);
+    assert.equal(leadResult.failures.some((f) => f.code === "leading_bytes"), true);
   });
 
   it("LicoLite production verify without trustedManifest returns untrusted result", async () => {
@@ -2602,6 +2611,13 @@ console.log(JSON.stringify({
     // No-op put: same valueRef/valueHash for existing key
     const putSame = await engine.put(root1, "a", { valueRef: "ref:a", valueHash: "h:a" });
     assert.equal(putSame.root, root1, "no-op put should return same root");
+    // No-op put with plain value: compute hash internally, detect match
+    const putPlain = await engine.put(putSame.root, "a", { plain: true });
+    const putPlainAgain = await engine.put(putPlain.root, "a", { plain: true });
+    assert.equal(putPlainAgain.root, putPlain.root, "no-op plain value put should return same root");
+    // Plain value with different content still mutates
+    const putPlainDiff = await engine.put(putPlainAgain.root, "a", { plain: false });
+    assert.notEqual(putPlainDiff.root, putPlainAgain.root, "different plain value should produce new root");
     // No-op delete: non-existent key
     const delNone = await engine.delete(root1, "z");
     assert.equal(delNone.root, root1, "no-op delete should return same root");

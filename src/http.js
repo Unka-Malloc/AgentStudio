@@ -148,15 +148,13 @@ async function routeRequest({ pactium, licolite, request, response, maxBodyBytes
   const isGet = routeMethod === "GET";
   const isPost = routeMethod === "POST";
 
-  // Default: only read GET routes are allowed without explicit enableMutations
-  if (!enableMutations && capability !== "read") {
-    // Allow POST to read routes (lookups) even without enableMutations
-    if (capability === "mutation" || capability === "privileged") {
-      return sendJson(response, 403, unauthorizedResponse(
-        "mutations_disabled",
-        "Pactium HTTP server mutations are disabled. Set enableMutations: true to enable write operations."
-      ));
-    }
+  // Default: only read-capability routes are allowed (regardless of GET/POST method).
+  // Mutation and privileged routes require enableMutations.
+  if (!enableMutations && (capability === "mutation" || capability === "privileged")) {
+    return sendJson(response, 403, unauthorizedResponse(
+      "mutations_disabled",
+      "Pactium HTTP server mutations are disabled. Set enableMutations: true to enable write operations."
+    ));
   }
 
   // Privileged routes require explicit gating even with enableMutations
