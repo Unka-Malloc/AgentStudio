@@ -2559,16 +2559,30 @@ console.log(JSON.stringify({
     const server = createPactiumHttpServer({ dataDir, enableMutations: false });
     const address = await listen(server);
     try {
-      // Read routes work
+      // Read routes work (GET)
       const health = await requestJson({ port: address.port, requestPath: "/health" });
       assert.equal(health.statusCode, 200);
-      // Mutation route blocked
+      // Read-capability POST route allowed even without enableMutations
+      const verifyPost = await requestJson({
+        port: address.port, method: "POST", requestPath: "/verify/envelope",
+        body: { envelope: null, options: {} }
+      });
+      // /verify/envelope should reach business logic (malformed → 200 with failures, not 403)
+      assert.equal(verifyPost.statusCode, 200);
+      // Mutation route (POST /intents) blocked
       const intent = await requestJson({
         port: address.port, method: "POST", requestPath: "/intents",
         body: { operationId: "blocked.op", workspaceId: "ws" }
       });
       assert.equal(intent.statusCode, 403);
       assert.equal(intent.body.code, "mutations_disabled");
+      // Mutation route (POST /bundles/export) blocked
+      const exportBlocked = await requestJson({
+        port: address.port, method: "POST", requestPath: "/bundles/export",
+        body: { envelopeId: "test" }
+      });
+      assert.equal(exportBlocked.statusCode, 403);
+      assert.equal(exportBlocked.body.code, "mutations_disabled");
     } finally {
       await close(server);
     }
