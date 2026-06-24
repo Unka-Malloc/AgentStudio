@@ -76,7 +76,7 @@ The first-class integration surface for LicoLite is at `pactium/licolite`.
 | --- | --- |
 | **Operation Ledger** | RFC 6962-style transparency log with inclusion and consistency proofs |
 | **Append-Only Lifecycle** | Operation Intent / Outcome facts with idempotency replay |
-| **Verifiable Index Engine** | Canonical Prolly Tree with membership, non-membership proofs, and efficient diffs |
+| **Verifiable Index Engine** | Canonical Prolly Tree with membership, non-membership proofs, and diffs (correct and canonical; Dolt-style skip-common-subtree optimization is P3 deferred) |
 | **Workspace Projection** | Verifiable workspace-scoped order and membership indexes |
 | **Merkle State** | Content-addressed state commits bound to operation outcomes |
 | **Checkpoint Tree** | Verifiable recovery and progress structure |
@@ -409,7 +409,7 @@ The `pactium.advanced` object (containing `storage`, `ledger`, `indexEngine`) is
 - Workspace-scoped operation isolation with verifiable membership
 - Append-only operation history with deterministic recovery
 - Idempotent operation recording with replay detection
-- Verifiable state roots with efficient diffs
+- Verifiable state roots with deterministic diffs (canonical; Dolt-style skip-common-subtree optimization is P3 deferred)
 
 **Pactium is not for:**
 
