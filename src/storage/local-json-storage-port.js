@@ -382,6 +382,48 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     return normalizeCanonicalValue(diskClone);
   }
 
+  async function deleteProtocolObject(scope, key) {
+    await ensureInitialized();
+    const normalizedScope = safeToken(scope);
+    const normalizedKey = safeToken(key);
+    const memoryKey = `${normalizedScope}/${normalizedKey}`;
+    memoryObjects.delete(memoryKey);
+    if (!inMemory) {
+      const filePath = objectPath(normalizedScope, normalizedKey);
+      try {
+        await fs.unlink(filePath);
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+    }
+  }
+
+  async function listProtocolObjectKeys(scope) {
+    await ensureInitialized();
+    const normalizedScope = safeToken(scope);
+    const prefix = `${normalizedScope}/`;
+    const memoryKeys = new Set();
+    for (const compoundKey of memoryObjects.keys()) {
+      if (compoundKey.startsWith(prefix)) {
+        memoryKeys.add(compoundKey.slice(prefix.length));
+      }
+    }
+    if (inMemory) return [...memoryKeys];
+    // Scan disk directory for JSON files
+    try {
+      const dirPath = objectPath(normalizedScope, "__dir__").replace(/[/\\][^/\\]+$/, "");
+      const dirents = await fs.readdir(dirPath, { withFileTypes: true }).catch(() => []);
+      for (const dirent of dirents) {
+        if (dirent.isFile() && dirent.name.endsWith(".json")) {
+          memoryKeys.add(dirent.name.slice(0, -".json".length));
+        }
+      }
+    } catch (_) {
+      // directory may not exist
+    }
+    return [...memoryKeys];
+  }
+
   return Object.freeze({
     protocol: PACTIUM_PROTOCOL,
     schema: PACTIUM_SCHEMA_VERSION,
@@ -394,6 +436,8 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     walk,
     putProtocolObject,
     getProtocolObject,
+    deleteProtocolObject,
+    listProtocolObjectKeys,
     clearCache,
     withWriteLock,
     pruneBlocks,

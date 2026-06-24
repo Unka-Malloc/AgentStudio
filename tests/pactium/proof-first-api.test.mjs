@@ -2757,4 +2757,41 @@ console.log(JSON.stringify({
     assert.equal(diskAgain.count, 1, "disk getProtocolObject return mutation should not affect cache");
   });
 
+  it("doctor detects incomplete mutation commits (pending without complete marker)", async () => {
+    const dataDir = await tempDataDir("doctor-commit-");
+    const pactium = createPactium({ dataDir });
+    // Record a normal operation to create a healthy state
+    await pactium.recordOperation({
+      operationId: "doctor.commit.healthy",
+      workspaceId: "doctor-commit-ws",
+      idempotencyKey: "doctor-key",
+      outcomeIdempotencyKey: "doctor-out",
+      input: { test: true }
+    });
+    let result = await pactium.doctor();
+    assert.equal(result.ok, true);
+
+    // Manually write a pending commit marker without a complete marker.
+    // This simulates a crash between the pending write and the commit completion.
+    await pactium.advanced.storage.putProtocolObject("commit", "pending-test-crash-id", {
+      protocol: PACTIUM_PROTOCOL,
+      schema: "pactium.v0.2.schema.latest",
+      commitType: "pactium.mutation-commit",
+      commitId: "test-crash-id",
+      operation: "begin-intent",
+      phase: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ledgerEventIds: [],
+      envelopeIds: [],
+      affectedWorkspaceIds: ["crash-ws"],
+      notes: "simulated crash before complete"
+    });
+
+    result = await pactium.doctor();
+    assert.equal(result.ok, false, "doctor should fail with incomplete commit");
+    assert.equal(result.failures.some((f) => f.code === "incomplete_commit"), true,
+      "doctor should report incomplete_commit");
+  });
+
 });

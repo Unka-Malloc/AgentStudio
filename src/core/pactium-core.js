@@ -267,6 +267,45 @@ export function createPactium({
     await resolvedStorage.putProtocolObject("core", "runtime-state", state);
   }
 
+  // -- Commit markers for crash consistency --
+  // Each mutation writes a pending marker before work begins and a complete
+  // marker after runtime-state is saved. doctor() scans for orphans.
+  const COMMIT_SCOPE = "commit";
+  function commitMarker(commitId, operation, phase, details = {}) {
+    return {
+      protocol: PACTIUM_PROTOCOL,
+      schema: PACTIUM_SCHEMA_VERSION,
+      commitType: "pactium.mutation-commit",
+      commitId,
+      operation,
+      phase,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      ledgerEventIds: asArray(details.ledgerEventIds).map(String),
+      envelopeIds: asArray(details.envelopeIds).map(String),
+      affectedWorkspaceIds: asArray(details.affectedWorkspaceIds).map(String),
+      notes: details.notes || ""
+    };
+  }
+
+  async function writePendingMarker(commitId, operation, details = {}) {
+    await resolvedStorage.putProtocolObject(COMMIT_SCOPE, `pending-${commitId}`,
+      commitMarker(commitId, operation, "pending", details));
+  }
+
+  async function writeCompleteMarker(commitId, operation, details = {}) {
+    await resolvedStorage.putProtocolObject(COMMIT_SCOPE, `complete-${commitId}`,
+      commitMarker(commitId, operation, "complete", details));
+  }
+
+  async function cleanupPendingMarker(commitId) {
+    try {
+      await resolvedStorage.deleteProtocolObject(COMMIT_SCOPE, `pending-${commitId}`);
+    } catch (_) {
+      // best-effort cleanup
+    }
+  }
+
   async function createEnvelope({
     envelopeKind,
     fact,
@@ -350,6 +389,9 @@ export function createPactium({
       const envelope = { ...current.envelopes[current.intentEnvelopes[idKey]], replayed: true };
       return envelope;
     }
+    // Commit marker: write pending before any mutation work begins.
+    const commitId = createId("mutation_commit", { operation: "begin-intent", operationId, workspaceId, nonce: crypto.randomUUID() });
+    await writePendingMarker(commitId, "begin-intent", { affectedWorkspaceIds: [workspaceId] });
     if (idClaimKey && current.intentIdempotencyClaims[idClaimKey] && current.intentIdempotencyClaims[idClaimKey].inputHash !== inputHash) {
       throw new PactiumLifecycleError("Operation Intent idempotency key was reused with different input.", createVerificationFailure({
         layer: "operation-lifecycle",
@@ -480,6 +522,12 @@ export function createPactium({
     if (idClaimKey) current.intentIdempotencyClaims[idClaimKey] = { inputHash, envelopeId: envelope.envelopeId };
     current.intents[intent.intentId].intentEnvelopeId = envelope.envelopeId;
     await saveState();
+    await writeCompleteMarker(commitId, "begin-intent", {
+      ledgerEventIds: [envelope.factRef.ledgerEventId],
+      envelopeIds: [envelope.envelopeId],
+      affectedWorkspaceIds: [workspaceId]
+    });
+    await cleanupPendingMarker(commitId);
     return envelope;
   }
 
@@ -488,6 +536,7 @@ export function createPactium({
   }
 
   async function appendOperationOutcomeCommitted(input = {}) {
+    const commitId = createId("mutation_commit", { operation: "append-outcome", nonce: crypto.randomUUID() });
     const current = await ensureState();
     const intentId = safeText(input.intentId);
     if (!intentId) throw new Error("intentId is required for Operation Outcome.");
@@ -515,6 +564,7 @@ export function createPactium({
         repairable: false
       }));
     }
+    await writePendingMarker(commitId, "append-outcome", { affectedWorkspaceIds: [intentRecord.intent.workspaceId] });
     const workspaceId = intentRecord.intent.workspaceId;
     const appendCondition = input.appendCondition
       ? createAppendCondition({ workspaceId, ...asRecord(input.appendCondition) })
@@ -712,6 +762,12 @@ export function createPactium({
     });
     if (outcomeIdKey) current.outcomeEnvelopes[outcomeIdKey] = envelope.envelopeId;
     await saveState();
+    await writeCompleteMarker(commitId, "append-outcome", {
+      ledgerEventIds: [envelope.factRef.ledgerEventId],
+      envelopeIds: [envelope.envelopeId],
+      affectedWorkspaceIds: [workspaceId]
+    });
+    await cleanupPendingMarker(commitId);
     return envelope;
   }
 
@@ -1127,6 +1183,37 @@ export function createPactium({
         layer: "doctor",
         code: "ledger_leaf_check_failed",
         message: err instanceof Error ? err.message : "Ledger leaf integrity check failed.",
+        repairable: true
+      }));
+    }
+
+    // Verify commit markers: check for incomplete (pending without matching complete)
+    try {
+      const pendingKeys = await resolvedStorage.listProtocolObjectKeys("commit");
+      const pendingCommitIds = pendingKeys
+        .filter((k) => k.startsWith("pending-"))
+        .map((k) => k.slice("pending-".length));
+      const completeKeys = new Set(
+        pendingKeys
+          .filter((k) => k.startsWith("complete-"))
+          .map((k) => k.slice("complete-".length))
+      );
+      for (const cid of pendingCommitIds) {
+        if (!completeKeys.has(cid)) {
+          failures.push(createVerificationFailure({
+            layer: "doctor",
+            code: "incomplete_commit",
+            message: `Pending mutation commit ${cid} has no matching complete marker.`,
+            evidenceRef: cid,
+            repairable: true
+          }));
+        }
+      }
+    } catch (err) {
+      failures.push(createVerificationFailure({
+        layer: "doctor",
+        code: "commit_check_failed",
+        message: err instanceof Error ? err.message : "Commit marker scan failed.",
         repairable: true
       }));
     }
