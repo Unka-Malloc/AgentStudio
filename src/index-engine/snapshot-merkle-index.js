@@ -7,7 +7,7 @@ import {
   PACTIUM_SCHEMA_VERSION
 } from "../protocol/constants.js";
 import { canonicalEncode, canonicalString, normalizeCanonicalValue } from "../canonical/value.js";
-import { cidForCanonical, hashBytes, hexFromCid, protocolHashHex } from "../protocol/hashing.js";
+import { cidForBytes, cidForCanonical, hashBytes, hexFromCid, protocolHashHex } from "../protocol/hashing.js";
 import { createStoragePort } from "../storage/local-json-storage-port.js";
 import { asArray, asRecord, safeToken } from "../shared/records.js";
 
@@ -615,15 +615,21 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     // valueHash, and metadata, skip the mutation entirely and return the
     // same root. Metadata is compared via canonicalString to cover
     // structurally equal objects.
-    // When valueRef/valueHash are not provided (plain value), compute the
-    // canonical hash directly to allow no-op detection without putBlock.
+    // When valueRef/valueHash are not provided (plain value), compute both
+    // from the canonical bytes to allow no-op detection without putBlock.
     if (normalizedKey) {
       const existing = await get(root, normalizedKey);
       if (existing) {
-        const valueRef = String(value?.valueRef || "");
-        const valueHash = value?.valueRef
-          ? String(value.valueHash || "")
-          : `sha256:${hashBytes(Buffer.from(canonicalEncode(value)))}`;
+        let valueRef;
+        let valueHash;
+        if (value?.valueRef) {
+          valueRef = String(value.valueRef);
+          valueHash = String(value.valueHash || "");
+        } else {
+          const bytes = Buffer.from(canonicalEncode(value));
+          valueRef = cidForBytes(bytes);
+          valueHash = `sha256:${hashBytes(bytes)}`;
+        }
         const existingMetadata = canonicalString(normalizeCanonicalValue(asRecord(existing?.metadata)));
         const newMetadata = canonicalString(normalizeCanonicalValue(asRecord(value?.metadata)));
         if (existing.valueRef === valueRef && existing.valueHash === valueHash && existingMetadata === newMetadata) {

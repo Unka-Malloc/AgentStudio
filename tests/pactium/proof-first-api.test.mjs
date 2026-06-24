@@ -2601,29 +2601,49 @@ console.log(JSON.stringify({
     assert.ok(authLog.length >= 2);
   });
 
-  it("no-op mutations on index engine do not produce new roots", async () => {
+  it("no-op mutations on index engine do not produce new roots (plain values, explicit refs, metadata)", async () => {
     const engine = createVerifiableIndexEngine({ inMemory: true });
     const idx = await engine.createIndex([
       { key: "a", valueRef: "ref:a", valueHash: "h:a" },
       { key: "b", valueRef: "ref:b", valueHash: "h:b" }
     ]);
     const root1 = idx.root;
-    // No-op put: same valueRef/valueHash for existing key
+
+    // 1. Explicit valueRef/valueHash no-op (existing key, same refs)
     const putSame = await engine.put(root1, "a", { valueRef: "ref:a", valueHash: "h:a" });
-    assert.equal(putSame.root, root1, "no-op put should return same root");
-    // No-op put with plain value: compute hash internally, detect match
-    const putPlain = await engine.put(putSame.root, "a", { plain: true });
-    const putPlainAgain = await engine.put(putPlain.root, "a", { plain: true });
-    assert.equal(putPlainAgain.root, putPlain.root, "no-op plain value put should return same root");
-    // Plain value with different content still mutates
-    const putPlainDiff = await engine.put(putPlainAgain.root, "a", { plain: false });
-    assert.notEqual(putPlainDiff.root, putPlainAgain.root, "different plain value should produce new root");
-    // No-op delete: non-existent key
+    assert.equal(putSame.root, root1, "explicit no-op put should return same root");
+
+    // 2. Plain value first put creates new root
+    const putPlain = await engine.put(putSame.root, "a", { plain: true, metadata: { v: 1 } });
+    assert.notEqual(putPlain.root, putSame.root, "first plain value put should produce new root");
+
+    // 3. Same plain value again → no-op (valueRef, valueHash, metadata all match)
+    const putPlainAgain = await engine.put(putPlain.root, "a", { plain: true, metadata: { v: 1 } });
+    assert.equal(putPlainAgain.root, putPlain.root, "same plain value with same metadata should be no-op");
+
+    // 4. Same plain value but different metadata → must produce new root
+    const putPlainMetaDiff = await engine.put(putPlainAgain.root, "a", { plain: true, metadata: { v: 2 } });
+    assert.notEqual(putPlainMetaDiff.root, putPlainAgain.root, "same plain value with different metadata should produce new root");
+
+    // 5. Different plain value → must produce new root
+    const putPlainDiff = await engine.put(putPlainMetaDiff.root, "a", { plain: false });
+    assert.notEqual(putPlainDiff.root, putPlainMetaDiff.root, "different plain value should produce new root");
+
+    // 6. Explicit valueRef/valueHash with metadata no-op
+    const putExplicitMeta = await engine.put(putPlainDiff.root, "a", { valueRef: "ref:a", valueHash: "h:a", metadata: { tag: "x" } });
+    assert.notEqual(putExplicitMeta.root, putPlainDiff.root, "explicit put with new metadata should mutate");
+    const putExplicitMetaSame = await engine.put(putExplicitMeta.root, "a", { valueRef: "ref:a", valueHash: "h:a", metadata: { tag: "x" } });
+    assert.equal(putExplicitMetaSame.root, putExplicitMeta.root, "explicit put with same metadata should be no-op");
+
+    // 7. No-op delete: non-existent key
     const delNone = await engine.delete(root1, "z");
     assert.equal(delNone.root, root1, "no-op delete should return same root");
-    // Actual mutation still works
+
+    // 8. Actual mutation still works for new key
     const putNew = await engine.put(root1, "c", { valueRef: "ref:c", valueHash: "h:c" });
     assert.notEqual(putNew.root, root1, "new put should produce different root");
+
+    // 9. Real delete still works
     const delReal = await engine.delete(putNew.root, "a");
     assert.notEqual(delReal.root, putNew.root, "real delete should produce different root");
   });
