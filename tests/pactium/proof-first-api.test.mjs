@@ -3547,6 +3547,163 @@ console.log(JSON.stringify({
     assert.ok(anyWarning !== undefined, "proofs should be present");
   });
 
+  it("proof size guard: verifier succeeds + proofSizeWarning → ok=true, warnings include it, not proof_verifier_threw", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const envelope = await pactium.recordOperation({
+      operationId: "edge-case-ok-warn",
+      workspaceId: "edge-ws"
+    });
+    const proofBlock = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const proofValue = JSON.parse(Buffer.from(proofBlock.payloadBase64, "base64").toString("utf8"));
+    if (proofValue.proofs?.outcome?.proofType) {
+      proofValue.proofs.outcome.proofSizeWarning = {
+        message: "Proof exceeds size guard.",
+        proofLeafEntries: 100,
+        maxProofLeafEntries: 10
+      };
+    }
+    const tamperedBlock = await pactium.advanced.storage.putBlock(proofValue, {
+      kind: "proof-material:ledger-and-index-proofs"
+    });
+    const tamperedEnvelope = await pactium.storeEnvelope({
+      ...envelope,
+      envelopeId: undefined,
+      proofRefs: [{
+        name: "ledger-and-index-proofs",
+        cid: tamperedBlock.cid,
+        payloadHash: tamperedBlock.payloadHash,
+        byteLength: tamperedBlock.byteLength
+      }]
+    });
+    const result = await verifyProofEnvelope(tamperedEnvelope, {
+      storage: pactium.advanced.storage
+    });
+    assert.equal(result.ok, true, "ok should be true when verifier succeeds with proofSizeWarning (default)");
+    assert.ok(result.failures.some((f) => f.code === "proof_size_warning"),
+      "failures should include proof_size_warning");
+    assert.ok(!result.failures.some((f) => f.code === "proof_verifier_threw"),
+      "should NOT include proof_verifier_threw");
+    assert.ok(result.warnings && result.warnings.some((w) => w.code === "proof_size_warning"),
+      "warnings should include proof_size_warning");
+  });
+
+  it("proof size guard: verifier succeeds + proofSizeWarning + failOnProofSizeWarning → ok=false, not proof_verifier_threw", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const envelope = await pactium.recordOperation({
+      operationId: "edge-case-fail",
+      workspaceId: "edge-ws2"
+    });
+    const proofBlock = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const proofValue = JSON.parse(Buffer.from(proofBlock.payloadBase64, "base64").toString("utf8"));
+    if (proofValue.proofs?.outcome?.proofType) {
+      proofValue.proofs.outcome.proofSizeWarning = {
+        message: "Proof exceeds size guard.",
+        proofLeafEntries: 100,
+        maxProofLeafEntries: 10
+      };
+    }
+    const tamperedBlock = await pactium.advanced.storage.putBlock(proofValue, {
+      kind: "proof-material:ledger-and-index-proofs"
+    });
+    const tamperedEnvelope = await pactium.storeEnvelope({
+      ...envelope,
+      envelopeId: undefined,
+      proofRefs: [{
+        name: "ledger-and-index-proofs",
+        cid: tamperedBlock.cid,
+        payloadHash: tamperedBlock.payloadHash,
+        byteLength: tamperedBlock.byteLength
+      }]
+    });
+    const resultStrict = await verifyProofEnvelope(tamperedEnvelope, {
+      storage: pactium.advanced.storage,
+      failOnProofSizeWarning: true
+    });
+    assert.equal(resultStrict.ok, false, "ok should be false with failOnProofSizeWarning");
+    assert.ok(resultStrict.failures.some((f) => f.code === "proof_size_warning"),
+      "failures should include proof_size_warning");
+    assert.ok(!resultStrict.failures.some((f) => f.code === "proof_verifier_threw"),
+      "should NOT include proof_verifier_threw");
+  });
+
+  it("proof size guard: verifier fails + proofSizeWarning → preserves bad_embedded_proof, not only proof_size_warning", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const envelope = await pactium.recordOperation({
+      operationId: "edge-case-bad",
+      workspaceId: "edge-ws3"
+    });
+    const proofBlock = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const proofValue = JSON.parse(Buffer.from(proofBlock.payloadBase64, "base64").toString("utf8"));
+    // Inject a custom proof type that will fail verification AND carry a proofSizeWarning
+    proofValue.proofs["custom.bad.with-warning"] = {
+      proofType: "custom.bad.with-warning",
+      proofSizeWarning: { message: "Large proof", proofLeafEntries: 999 }
+    };
+    const tamperedBlock = await pactium.advanced.storage.putBlock(proofValue, {
+      kind: "proof-material:ledger-and-index-proofs"
+    });
+    const tamperedEnvelope = await pactium.storeEnvelope({
+      ...envelope,
+      envelopeId: undefined,
+      proofRefs: [{
+        name: "ledger-and-index-proofs",
+        cid: tamperedBlock.cid,
+        payloadHash: tamperedBlock.payloadHash,
+        byteLength: tamperedBlock.byteLength
+      }]
+    });
+    const result = await verifyProofEnvelope(tamperedEnvelope, {
+      storage: pactium.advanced.storage,
+      proofVerifiers: {
+        "custom.bad.with-warning": () => ({ ok: false, proofSizeWarning: { message: "Large proof" } })
+      }
+    });
+    assert.ok(result.failures.some((f) => f.code === "bad_embedded_proof"),
+      "should preserve bad_embedded_proof when verifier fails");
+    assert.ok(!result.failures.some((f) => f.code === "proof_size_warning"),
+      "should NOT emit proof_size_warning when verifier already failed");
+  });
+
+  it("proof size guard: verifier throws → returns proof_verifier_threw, not masked as proof_size_warning", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const envelope = await pactium.recordOperation({
+      operationId: "edge-case-throw",
+      workspaceId: "edge-ws4"
+    });
+    const proofBlock = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const proofValue = JSON.parse(Buffer.from(proofBlock.payloadBase64, "base64").toString("utf8"));
+    // Inject a custom proof that will cause the verifier to throw
+    proofValue.proofs["custom.throw.with-warning"] = {
+      proofType: "custom.throw.with-warning",
+      proofSizeWarning: { message: "Should not appear" }
+    };
+    const tamperedBlock = await pactium.advanced.storage.putBlock(proofValue, {
+      kind: "proof-material:ledger-and-index-proofs"
+    });
+    const tamperedEnvelope = await pactium.storeEnvelope({
+      ...envelope,
+      envelopeId: undefined,
+      proofRefs: [{
+        name: "ledger-and-index-proofs",
+        cid: tamperedBlock.cid,
+        payloadHash: tamperedBlock.payloadHash,
+        byteLength: tamperedBlock.byteLength
+      }]
+    });
+    const result = await verifyProofEnvelope(tamperedEnvelope, {
+      storage: pactium.advanced.storage,
+      proofVerifiers: {
+        "custom.throw.with-warning": () => {
+          throw new Error("verifier crash");
+        }
+      }
+    });
+    assert.ok(result.failures.some((f) => f.code === "proof_verifier_threw"),
+      "should report proof_verifier_threw when verifier throws");
+    assert.ok(!result.failures.some((f) => f.code === "proof_size_warning"),
+      "should NOT emit proof_size_warning when verifier threw");
+  });
+
   it("LicoLite verify works without depending on core.advanced.storage", async () => {
     // This test verifies that LicoLite's internal resolver uses the public
     // resolver methods instead of core.advanced.storage.
