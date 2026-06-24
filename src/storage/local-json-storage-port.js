@@ -338,7 +338,6 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     }
     // If no process alive and age exceeds stale threshold, proceed to double-read check
     const latest = await readLockOwner(lockDir);
-    /* node:coverage ignore start */
     if (latest.ownerMissing || latest.ownerUnreadable) {
       // Owner went missing or became unreadable between reads.
       // Use directory mtime for staleness with double-check pattern.
@@ -358,7 +357,6 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
       await fs.rm(lockDir, { recursive: true, force: true });
       return true;
     }
-    /* node:coverage ignore stop */
     // Compare owner identity fields as STRINGS — fencingToken is a UUID, not a number.
     // Using Number() on UUID produces NaN, and NaN !== NaN is always true,
     // which would prevent stale lock cleanup.
@@ -443,7 +441,6 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
           heartbeatAt: nowIso(),
           heartbeatAtMs: Date.now()
         });
-      /* node:coverage ignore next */
       } catch (_) {
         // Stop heartbeat on any error — don't leak the interval.
         // If the lock dir was removed externally, there's nothing to heartbeat.

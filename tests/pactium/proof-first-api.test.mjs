@@ -2976,6 +2976,29 @@ console.log(JSON.stringify({
   });
 
 
+
+  it("doctor rebuild with outcomeIdempotencyKey exercises idempotency reconstruction paths", async () => {
+    const dataDir = await tempDataDir("pactium-dr-rebuild-okey-");
+    const pactium = createPactium({ dataDir });
+
+    // Record operation with outcomeIdempotencyKey to ensure doctor rebuild
+    // has full material for idempotency key reconstruction.
+    await pactium.recordOperation({
+      operationId: "dr-rebuild-okey-1",
+      workspaceId: "dr-rebuild-okey-ws",
+      idempotencyKey: "idem-okey-1",
+      outcomeIdempotencyKey: "outcome-specific-1",
+      value: { step: 1 }
+    });
+
+    // Run doctor rebuild — this should exercise outcome idempotency key
+    // reconstruction paths in rebuild-state.
+    const report = await pactium.doctor({ rebuild: true });
+    assert.ok(report, "doctor rebuild should produce a report");
+    assert.ok(report.rebuild, "report should have rebuild section");
+  });
+
+
   it("beginOperationIntent idempotency conflict does not leave orphan pending marker", async () => {
     const dataDir = await tempDataDir("no-orphan-idem-");
     const pactium = createPactium({ dataDir });

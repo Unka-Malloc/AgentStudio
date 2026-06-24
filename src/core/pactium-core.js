@@ -540,7 +540,6 @@ export function createPactium({
       await cleanupPendingMarker(commitId);
       return envelope;
     } catch (error) {
-      /* node:coverage ignore next */
     if (!ledgerCommitted) {
         // Nothing durable was written — clean up pending marker so
         // doctor() won't report a false incomplete_commit.
