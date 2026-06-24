@@ -45,9 +45,25 @@ The returned instance exposes:
 | `protocol` | `string` | Protocol identifier (`pactium.v0.2`) |
 | `schema` | `string` | Schema version |
 | `dataDir` | `string` | Resolved data directory path |
-| `storage` | `PactiumStoragePort` | Underlying storage port |
-| `ledger` | `PactiumLedger` | Operation Ledger instance |
-| `indexEngine` | `PactiumIndexEngine` | Verifiable Index Engine instance |
+
+**Read-only resolvers (recommended for external consumers):**
+
+| Method | Description |
+| --- | --- |
+| `resolveBlock(cid)` | Resolve a CAS block by CID. Returns a canonical clone. |
+| `hasBlock(cid)` | Check whether a CAS block exists. |
+| `readLedgerHead(id?)` | Read the current ledger head, or a specific head by ID. |
+| `readLedgerLeaf(index)` | Read a ledger leaf by index. |
+| `readProtocolObject(scope, key, fallback?)` | Read a protocol object. Returns a canonical clone. |
+| `listProtocolObjectKeys(scope)` | List all keys in a protocol object scope. |
+
+**Advanced (deprecated for external use):**
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `advanced.storage` | `PactiumStoragePort` | **@deprecated** Prefer read-only resolvers. |
+| `advanced.ledger` | `PactiumLedger` | **@deprecated** Prefer `readLedgerHead()`/`readLedgerLeaf()`. |
+| `advanced.indexEngine` | `PactiumIndexEngine` | **@deprecated** Internal, unstable API. |
 
 ---
 
@@ -794,6 +810,66 @@ import type {
   LicoLiteAspect
 } from "pactium/licolite";
 ```
+
+---
+
+## Crash Consistency and Doctor
+
+Pactium's local JSON backend uses **write-ahead commit markers** for crash detection:
+
+1. Before mutation work begins, a **pending marker** is written to the `commit` protocol object scope.
+2. If preflight validation fails (e.g., idempotency conflict, append-condition conflict), the pending marker is **cleaned up** — no false `incomplete_commit`.
+3. After all mutation work completes (ledger append + proof material + index + runtime-state save), a **complete marker** is written and the pending marker is cleaned up.
+4. If a crash occurs after the ledger append but before the complete marker is written, the pending marker **remains** — `doctor()` reports `incomplete_commit`.
+
+This is **not an ACID database transaction**. It is a WAL marker + diagnostic pattern:
+- `doctor()` scans for orphan pending markers.
+- `doctor({ rebuild: true })` replays ledger leaves to reconstruct derived state and compares against runtime state.
+- Rebuild categorizes roots as fully comparable, partially comparable, or skipped (see README architecture section).
+
+**Doctor rebuild boundaries:**
+- **Fully comparable**: `openIntent`, `outcome`, `causality`, workspace `orderRoot`/`membershipRoot` — mismatch is a hard `derived_root_mismatch`.
+- **Partially comparable**: `intentIdempotency`, `outcomeIdempotency`, workspace `checkpointRoot` — mismatch is a `*_rebuild_incomplete` warning (old facts may lack material).
+- **Skipped**: workspace `stateRoot` — state mutations live in proof material, not ledger facts. Reports `state_rebuild_incomplete`.
+
+---
+
+## Lock Heartbeat and Fencing
+
+Write locks use:
+- **Fencing tokens** (UUID strings): compared as strings, not numbers. Using `Number()` on UUID produces `NaN`, and `NaN === NaN` is always `false` — a known bug fixed in the current release.
+- **Heartbeat interval**: refreshes `heartbeatAtMs` periodically (at most every 5 seconds). A fresh heartbeat means the lock is still active even if `createdAtMs` is old.
+- **Double-read on stale cleanup**: `removeStaleLock()` reads the owner, checks staleness, re-reads the owner, and only deletes if `ownerId`, `fencingToken`, and `processStartKey` all match.
+- **Release guard**: lock release also checks `fencingToken` — if another process tampered with the owner metadata, the lock is not deleted.
+
+This is a **best-effort** mechanism. For production deployments with high lock contention, consider external lock managers.
+
+---
+
+## Proof Size Guard
+
+`maxProofLeafEntries` and `maxProofBytes` options are available on:
+- `indexEngine.prove(root, key, options?)`
+- `pactium.verifyEnvelope(envelope, options?)`
+- `verifyProofBundle(bundle, options?)`
+
+When a proof exceeds the configured limits, a `proofSizeWarning` is emitted:
+- By default, `proofSizeWarning` is **non-fatal** (severity: "warning") — `ok` remains `true`.
+- Set `failOnProofSizeWarning: true` to treat it as a **hard failure** (`ok: false`).
+
+**This is a size guard / diagnostic, not a bounded proof format.** Bounded proofs (constant-size proofs) are a future protocol goal.
+
+---
+
+## Index Engine Scalability
+
+Current state (P3 deferred):
+- **No-op fast path**: mutations that don't change structure produce the same root. ✓ Implemented.
+- **Local-window rechunk**: single-key mutations collect leaf descriptors within the affected chunk window.
+- **Cursor/chunker path-copying**: Dolt-style skip-common-subtree diff and cursor-based path copying is a **planned major refactor**.
+- **Diff**: the current `diff()` algorithm scans changed ranges but does not yet skip identical subtrees via root hash comparison.
+
+For 10k+ key workloads, single-point mutations may scan more of the tree than optimal. The current implementation is **correct and canonical** but not yet tuned for maximal throughput on very large indexes.
 
 ---
 

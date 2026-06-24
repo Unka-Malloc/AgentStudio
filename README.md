@@ -327,7 +327,11 @@ pactium doctor --data-dir ./.pactium
 pactium doctor --data-dir ./.pactium --rebuild
 ```
 
-`doctor({ rebuild: true })` replays all ledger leaves to reconstruct derived index roots and compares them against the stored `runtime-state`. Mismatches are reported as `derived_root_mismatch` failures. State root reconstruction may be incomplete because state mutations are stored in proof material, not in ledger facts — this is explicitly reported as `state_rebuild_incomplete`.
+`doctor({ rebuild: true })` replays all ledger leaves to reconstruct derived index roots and compares them against the stored `runtime-state`. Roots are categorized:
+
+- **Fully comparable** (`openIntent`, `outcome`, `causality`, workspace `orderRoot`/`membershipRoot`): strict comparison — mismatches report `derived_root_mismatch`.
+- **Partially comparable** (`intentIdempotency`, `outcomeIdempotency`, workspace `checkpointRoot`): may need material not in old ledger facts — mismatches produce `*_rebuild_incomplete` warnings.
+- **Skipped** (workspace `stateRoot`): state mutations are not in ledger facts — reports `state_rebuild_incomplete`.
 
 `pactium serve` binds to `127.0.0.1` by default and enforces a 1 MiB JSON body limit. Use `--host`, `--max-body-bytes`, `PACTIUM_HTTP_HOST`, and `PACTIUM_HTTP_MAX_BODY_BYTES` only when the server is behind the host system's authentication, authorization, and transport security controls.
 
@@ -374,6 +378,25 @@ pactium doctor --data-dir ./.pactium --rebuild
 - Host systems own policy, side effects, and durable evidence storage
 
 For detailed architecture documentation, see [docs/architecture/ARCHITECTURE.md](./docs/architecture/ARCHITECTURE.md).
+
+### Current Implementation Boundaries
+
+Pactium is actively developed. The following areas are in active refinement:
+
+**Index Engine Scalability (P3 deferred):**
+The Verifiable Index Engine supports a no-op fast path (mutation that does not change structure produces the same root). Single-key mutations use local-window rechunking with leaf descriptor collection. Full cursor/chunker path-copying (Dolt-style skip-common-subtree diff) is a planned major refactor. For 10k+ key workloads, single-point mutations may scan more of the tree than optimal. The current implementation is correct and canonical but not yet tuned for maximal throughput on very large indexes.
+
+**Proof Size Guard (not bounded proof format):**
+`maxProofLeafEntries` and `maxProofBytes` options produce `proofSizeWarning` on generated and verified proofs. This is a size guard / diagnostic, not a bounded proof format. By default, `proofSizeWarning` is non-fatal (severity: warning). Set `failOnProofSizeWarning: true` to treat it as a hard failure.
+
+**Crash Consistency (WAL marker + doctor diagnostic, not DB transaction):**
+The local JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. This provides crash detection and recovery guidance, not ACID transactions. See [docs/API.md](./docs/API.md#crash-consistency-and-doctor) for details.
+
+**Lock Heartbeat / Fencing (best-effort):**
+Write locks use heartbeat intervals and fencing tokens for stale detection and cross-process safety. Fencing token comparison uses string equality (UUID strings, not numeric). Stale lock cleanup performs a double-read with owner identity verification. This is a best-effort mechanism; for production deployments with high contention, consider external lock managers.
+
+**Advanced API (deprecated for external use):**
+The `pactium.advanced` object (containing `storage`, `ledger`, `indexEngine`) is preserved for internal maintenance and backward compatibility. External consumers should prefer the public read-only resolvers: `resolveBlock()`, `hasBlock()`, `readLedgerHead()`, `readLedgerLeaf()`, `readProtocolObject()`, `listProtocolObjectKeys()`.
 
 ## When to Use Pactium
 

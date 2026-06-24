@@ -277,3 +277,30 @@ The maintained design is implemented by these package surfaces:
 Maintained docs must not describe SQLite storage, separate per-workspace lane queues, repair fact execution, or pressure baseline regression enforcement as implemented unless those surfaces are added and verified.
 
 If a maintained document introduces a design area that cannot be mapped to an implementation anchor, the design must be implemented and documented before release.
+
+## Current Implementation Boundaries
+
+### Index Engine Scalability (P3 deferred)
+
+- **No-op fast path**: ✓ Implemented. Mutations that don't change structure produce the same root.
+- **Local-window rechunk**: Single-key mutations collect leaf descriptors within the affected chunk window.
+- **Cursor/chunker path-copying**: Dolt-style skip-common-subtree diff and cursor-based path copying is a **planned major refactor**. See [GitHub issues](https://github.com/Unka-Malloc/Pactium/issues) for tracking.
+- **Diff**: The current `diff()` scans changed ranges but does not yet skip identical subtrees via root hash comparison.
+
+For 10k+ key workloads, single-point mutations may scan more of the tree than optimal. The current implementation is correct, canonical, and deterministic — it is not yet tuned for maximal throughput on very large indexes.
+
+### Proof Size Guard
+
+`maxProofLeafEntries` and `maxProofBytes` produce `proofSizeWarning` on proofs that exceed configured limits. This is a **size guard / diagnostic**, not a bounded (constant-size) proof format. Bounded proofs are a future protocol goal.
+
+### Crash Consistency
+
+The local JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. This provides crash detection and recovery guidance. It is not an ACID database transaction.
+
+### Lock Fencing
+
+Write locks use UUID fencing tokens compared as strings. Heartbeat intervals refresh lock freshness. Stale cleanup uses double-read with owner identity verification (ownerId + fencingToken + processStartKey). This is best-effort; production deployments with high contention should consider external lock managers.
+
+### Advanced API
+
+`pactium.advanced` (storage, ledger, indexEngine) is preserved for backward compatibility and internal maintenance. External consumers should prefer the public read-only resolvers: `resolveBlock()`, `hasBlock()`, `readLedgerHead()`, `readLedgerLeaf()`, `readProtocolObject()`, `listProtocolObjectKeys()`.

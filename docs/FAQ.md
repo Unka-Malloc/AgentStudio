@@ -187,3 +187,36 @@ The Prolly Tree engine uses structural sharing and Content-Defined Chunking for 
 - Using the `scan()` and `prefix()` methods for range queries instead of full snapshots
 - Using `diff()` to compute changes between state roots efficiently
 - Checking memory usage with the pressure profile: `PACTIUM_FULL_PRESSURE=1 npm run verify:protocol:gates`
+
+### What trust policies does Pactium support?
+
+Pactium supports three trust policies via the `trustPolicy` option on `verifyEnvelope()` and `verifyProofBundle()`:
+
+| Mode | Behavior |
+| --- | --- |
+| `structural` (least trust) | Verifies proof structure only. Skips all signature verification. |
+| `self-carried-manifest` (default) | Verifies proof structure + validates signatures against the manifest embedded in the proof material. Does **not** require a caller-supplied trusted manifest. `ledgerHeadTrusted` is always `false`. |
+| `trusted-manifest-required` (most trust) | Requires a caller-supplied `trustedManifest`. Verifies proof structure + validates signatures against the trusted manifest. `ledgerHeadTrusted` can be `true`. |
+
+A **self-carried manifest** (embedded in the proof) is NOT a trusted manifest. It provides format-level signature validation but not trust. Only a caller-supplied `trustedManifest` establishes trust.
+
+### What is the difference between full and sampled state mutation proofs?
+
+State mutation proofs use **sampled mode** by default when there are more than 32 mutations. In sampled mode, a random subset of touched keys are proven (default: 32). Set `requireFullStateMutationProofs: true` to require all mutation keys to be proven individually.
+
+### Does the local JSON backend provide ACID transactions?
+
+No. The local JSON backend uses **write-ahead commit markers** (pending/complete) with `doctor()` diagnostics for crash detection. This is a WAL marker + diagnostic pattern, not an ACID database transaction. For production deployments requiring full crash recovery guarantees, consider a storage backend with transactional semantics.
+
+### Are proofs constant-size (bounded)?
+
+No. The `maxProofLeafEntries` and `maxProofBytes` options are **size guards**, not a bounded proof format. They produce `proofSizeWarning` when limits are exceeded. By default this is a non-fatal warning. Set `failOnProofSizeWarning: true` for hard failures. Bounded (constant-size) proofs are a future protocol goal.
+
+### Is the index engine a fully optimized Prolly Tree?
+
+The index engine is **correct and canonical** but not yet fully optimized for large-scale workloads. Key limitations:
+- Single-key mutations use local-window rechunking (not full path-copying).
+- Diff does not yet skip identical subtrees via root hash comparison (Dolt-style).
+- Cursor/chunker path-copying is planned (P3 deferred).
+
+For current throughput characteristics, run the pressure profile: `PACTIUM_FULL_PRESSURE=1 npm run verify:protocol:gates`.
