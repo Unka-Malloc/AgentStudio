@@ -390,9 +390,10 @@ export function createPactium({
       const envelope = { ...current.envelopes[current.intentEnvelopes[idKey]], replayed: true };
       return envelope;
     }
-    // Commit marker: write pending before any mutation work begins.
-    const commitId = createId("mutation_commit", { operation: "begin-intent", operationId, workspaceId, nonce: crypto.randomUUID() });
-    await writePendingMarker(commitId, "begin-intent", { affectedWorkspaceIds: [workspaceId] });
+    // --- Preflight validation (no side effects) ---
+    // All checks that can fail BEFORE we write any pending marker or commit
+    // any mutation must happen here. Otherwise a failed check leaves an orphan
+    // pending marker that doctor() will report as incomplete_commit.
     if (idClaimKey && current.intentIdempotencyClaims[idClaimKey] && current.intentIdempotencyClaims[idClaimKey].inputHash !== inputHash) {
       throw new PactiumLifecycleError("Operation Intent idempotency key was reused with different input.", createVerificationFailure({
         layer: "operation-lifecycle",
@@ -421,7 +422,13 @@ export function createPactium({
         knownCausalityRefs: knownCausalityRefsFor(current)
       });
     }
-    const intent = {
+    // --- All preflight checks passed; now commit the mutation ---
+    // Commit marker: write pending before mutation work begins.
+    const commitId = createId("mutation_commit", { operation: "begin-intent", operationId, workspaceId, nonce: crypto.randomUUID() });
+    await writePendingMarker(commitId, "begin-intent", { affectedWorkspaceIds: [workspaceId] });
+    let ledgerCommitted = false;
+    try {
+      const intent = {
       protocol: PACTIUM_PROTOCOL,
       schema: PACTIUM_SCHEMA_VERSION,
       factType: "operation.intent",
@@ -442,6 +449,7 @@ export function createPactium({
       createdAt: nowIso()
     };
     const ledgerAppend = await ledger.append(intent);
+    ledgerCommitted = true; // ledger fact is durable — keep pending marker on later failure
     current.intents[intent.intentId] = {
       intent,
       ledgerEventId: ledgerAppend.entry.eventId,
@@ -528,8 +536,19 @@ export function createPactium({
       envelopeIds: [envelope.envelopeId],
       affectedWorkspaceIds: [workspaceId]
     });
-    await cleanupPendingMarker(commitId);
-    return envelope;
+      await cleanupPendingMarker(commitId);
+      return envelope;
+    } catch (error) {
+      if (!ledgerCommitted) {
+        // Nothing durable was written — clean up pending marker so
+        // doctor() won't report a false incomplete_commit.
+        await cleanupPendingMarker(commitId);
+      }
+      // If ledgerCommitted is true, the ledger fact exists but the
+      // complete marker was never written. Keep the pending marker so
+      // doctor() correctly reports incomplete_commit.
+      throw error;
+    }
   }
 
   async function appendOperationOutcome(input = {}) {
@@ -565,7 +584,6 @@ export function createPactium({
         repairable: false
       }));
     }
-    await writePendingMarker(commitId, "append-outcome", { affectedWorkspaceIds: [intentRecord.intent.workspaceId] });
     const workspaceId = intentRecord.intent.workspaceId;
     const appendCondition = input.appendCondition
       ? createAppendCondition({ workspaceId, ...asRecord(input.appendCondition) })
@@ -583,6 +601,10 @@ export function createPactium({
         knownCausalityRefs: knownCausalityRefsFor(current)
       });
     }
+    // --- All preflight checks passed; now commit the mutation ---
+    await writePendingMarker(commitId, "append-outcome", { affectedWorkspaceIds: [workspaceId] });
+    let ledgerCommitted = false;
+    try {
     const outcome = {
       protocol: PACTIUM_PROTOCOL,
       schema: PACTIUM_SCHEMA_VERSION,
@@ -605,6 +627,7 @@ export function createPactium({
       createdAt: nowIso()
     };
     const ledgerAppend = await ledger.append(outcome);
+    ledgerCommitted = true; // ledger fact is durable — keep pending marker on later failure
     current.outcomes[intentId] = outcome;
     current.intents[intentId].open = false;
     current.indexRoots.openIntent = await applyIndexDelete(indexEngine, current.indexRoots.openIntent, intentId, "open-intent");
@@ -770,6 +793,15 @@ export function createPactium({
     });
     await cleanupPendingMarker(commitId);
     return envelope;
+    } catch (error) {
+      if (!ledgerCommitted) {
+        // Nothing durable was written — clean up the pending marker.
+        await cleanupPendingMarker(commitId);
+      }
+      // If ledgerCommitted is true, the pending marker stays so doctor()
+      // can correctly report incomplete_commit.
+      throw error;
+    }
   }
 
   async function recordOperation(input = {}) {

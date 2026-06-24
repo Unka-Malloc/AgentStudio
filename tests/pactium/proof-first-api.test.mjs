@@ -2859,4 +2859,124 @@ console.log(JSON.stringify({
     ), "should detect openIntent root mismatch specifically");
   });
 
+  it("beginOperationIntent idempotency conflict does not leave orphan pending marker", async () => {
+    const dataDir = await tempDataDir("no-orphan-idem-");
+    const pactium = createPactium({ dataDir });
+
+    await pactium.beginOperationIntent({
+      operationId: "idem.conflict",
+      workspaceId: "idem-ws",
+      idempotencyKey: "same-key",
+      input: { version: 1 }
+    });
+    // This should throw with idempotency_conflict and NOT leave a pending marker
+    await assert.rejects(
+      () => pactium.beginOperationIntent({
+        operationId: "idem.conflict",
+        workspaceId: "idem-ws",
+        idempotencyKey: "same-key",
+        input: { version: 2 } // different input → idempotency conflict
+      }),
+      /idempotency.*reused|idempotency.*conflict/
+    );
+    // Verify no pending markers exist
+    const pendingKeys = await pactium.advanced.storage.listProtocolObjectKeys("commit");
+    const pendingCount = pendingKeys.filter((k) => k.startsWith("pending-")).length;
+    assert.equal(pendingCount, 0, "should have no pending markers after idempotency conflict");
+    // doctor should still pass
+    const doctorResult = await pactium.doctor();
+    assert.equal(doctorResult.ok, true, "doctor should pass after idempotency conflict cleanup");
+  });
+
+  it("beginOperationIntent append-condition conflict does not leave orphan pending marker", async () => {
+    const dataDir = await tempDataDir("no-orphan-cond-");
+    const pactium = createPactium({ dataDir });
+
+    await pactium.beginOperationIntent({
+      operationId: "cond.first",
+      workspaceId: "cond-ws",
+      idempotencyKey: "cond-first"
+    });
+    // Append-condition that requires a ledger head that won't match
+    await assert.rejects(
+      () => pactium.beginOperationIntent({
+        operationId: "cond.conflict",
+        workspaceId: "cond-ws",
+        idempotencyKey: "cond-second",
+        appendCondition: { requiredLedgerHead: "cid:sha256:0000000000000000000000000000000000000000000000000000000000000000" }
+      }),
+      /Ledger head/
+    );
+    // Verify no pending markers from the failed begin
+    const pendingKeys = await pactium.advanced.storage.listProtocolObjectKeys("commit");
+    const pendingCount = pendingKeys.filter((k) => k.startsWith("pending-")).length;
+    assert.equal(pendingCount, 0, "should have no pending markers after append-condition conflict");
+    const doctorResult = await pactium.doctor();
+    assert.equal(doctorResult.ok, true, "doctor should pass after append-condition conflict cleanup");
+  });
+
+  it("normal begin/outcome completes without residual pending markers", async () => {
+    const dataDir = await tempDataDir("no-residual-");
+    const pactium = createPactium({ dataDir });
+
+    const intent = await pactium.beginOperationIntent({
+      operationId: "normal.op",
+      workspaceId: "normal-ws"
+    });
+    const outcome = await pactium.appendOperationOutcome({
+      intentId: intent.factId,
+      status: "succeeded"
+    });
+    assert.equal(outcome.envelopeKind, "operation-outcome");
+
+    // Verify no pending markers remain
+    const pendingKeys = await pactium.advanced.storage.listProtocolObjectKeys("commit");
+    const pendingCount = pendingKeys.filter((k) => k.startsWith("pending-")).length;
+    assert.equal(pendingCount, 0, "should have no pending markers after normal lifecycle");
+    // Complete markers should exist (2: one for intent, one for outcome)
+    const completeCount = pendingKeys.filter((k) => k.startsWith("complete-")).length;
+    assert.equal(completeCount, 2, "should have complete markers for both intent and outcome");
+    const doctorResult = await pactium.doctor();
+    assert.equal(doctorResult.ok, true, "doctor should pass after normal lifecycle");
+  });
+
+  it("doctor detects manually created pending markers as incomplete_commit", async () => {
+    const dataDir = await tempDataDir("doctor-manual-pending-");
+    const pactium = createPactium({ dataDir });
+
+    // Manually create pending markers (simulating crash)
+    await pactium.advanced.storage.putProtocolObject("commit", "pending-manual-001", {
+      protocol: PACTIUM_PROTOCOL,
+      schema: "pactium.v0.2.schema.latest",
+      commitType: "pactium.mutation-commit",
+      commitId: "manual-001",
+      operation: "begin-intent",
+      phase: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ledgerEventIds: [],
+      envelopeIds: [],
+      affectedWorkspaceIds: ["manual-ws"],
+      notes: "manual pending marker"
+    });
+    await pactium.advanced.storage.putProtocolObject("commit", "pending-manual-002", {
+      protocol: PACTIUM_PROTOCOL,
+      schema: "pactium.v0.2.schema.latest",
+      commitType: "pactium.mutation-commit",
+      commitId: "manual-002",
+      operation: "append-outcome",
+      phase: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ledgerEventIds: ["event:some"],
+      envelopeIds: [],
+      affectedWorkspaceIds: ["manual-ws"],
+      notes: "second manual pending marker"
+    });
+    const result = await pactium.doctor();
+    assert.equal(result.ok, false, "doctor should fail with manual pending markers");
+    const incompleteCommits = result.failures.filter((f) => f.code === "incomplete_commit");
+    assert.ok(incompleteCommits.length >= 2, "should detect at least 2 incomplete commits");
+  });
+
 });
