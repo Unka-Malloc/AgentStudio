@@ -1404,6 +1404,38 @@ export function createPactium({
     };
   }
 
+  // -- Read-only resolvers --
+  // These return canonical clones so callers cannot mutate cached state.
+  async function resolveBlock(cid) {
+    const block = await resolvedStorage.getBlock(String(cid || ""));
+    if (!block) return null;
+    // Return a clone; the storage port already returns a clone from getBlock.
+    return block;
+  }
+
+  async function hasBlock(cid) {
+    return resolvedStorage.hasBlock(String(cid || ""));
+  }
+
+  async function readLedgerHead(id) {
+    return ledger.getHead(id || "");
+  }
+
+  async function readLedgerLeaf(index) {
+    return ledger.getLeaf(Number(index));
+  }
+
+  async function readProtocolObject(scope, key, fallback) {
+    return resolvedStorage.getProtocolObject(String(scope || ""), String(key || ""), fallback);
+  }
+
+  async function listProtocolObjectKeys(scope) {
+    if (typeof resolvedStorage.listProtocolObjectKeys === "function") {
+      return resolvedStorage.listProtocolObjectKeys(String(scope || ""));
+    }
+    return [];
+  }
+
   return Object.freeze({
     protocol: PACTIUM_PROTOCOL,
     schema: PACTIUM_SCHEMA_VERSION,
@@ -1427,9 +1459,17 @@ export function createPactium({
     storeEnvelope,
     protocolCatalog,
     doctor,
-    // Internal components for integration use. Prefer the public API above
-    // unless you need direct storage/ledger/index access for advanced
-    // maintenance, repair execution, or custom verification flows.
+    // Read-only protocol resolvers for storage, ledger, and index data.
+    // These return canonical clones — safe for external consumption.
+    resolveBlock,
+    hasBlock,
+    readLedgerHead,
+    readLedgerLeaf,
+    readProtocolObject,
+    listProtocolObjectKeys,
+    // Internal components for integration use. Prefer the public read-only
+    // resolvers above unless you need direct storage/ledger/index access for
+    // advanced maintenance, repair execution, or custom verification flows.
     advanced: Object.freeze({
       storage: resolvedStorage,
       ledger,

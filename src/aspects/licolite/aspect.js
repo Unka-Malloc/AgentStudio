@@ -52,7 +52,10 @@ async function resolveMaterialBlock({ core, cid, bundleMap }) {
       bytes: Buffer.from(String(bundled.payloadBase64 || ""), "base64")
     };
   }
-  return core.advanced.storage.getBlock(cid);
+  // Use the public read-only resolver instead of core.advanced.storage.
+  return typeof core.resolveBlock === "function"
+    ? core.resolveBlock(cid)
+    : core.advanced.storage.getBlock(cid);
 }
 
 export function createLicoLiteAspect({
@@ -117,7 +120,11 @@ export function createLicoLiteAspect({
     const effectiveTrustPolicy = options.trustPolicy ||
       (evidencePolicy === "production" && !options.trustedManifest ? "structural" : "self-carried-manifest");
     const coreResult = await verifyProofEnvelope(envelope, {
-      storage: core.advanced.storage,
+      // Use resolver-based storage wrapper instead of core.advanced.storage
+      // to reduce dependency on unstable internals.
+      storage: typeof core.resolveBlock === "function"
+        ? { getBlock: (cid) => core.resolveBlock(cid) }
+        : core.advanced.storage,
       bundle: options.bundle || null,
       supportedCriticalExtensions: LICOLITE_SUPPORTED_CRITICAL_EXTENSIONS,
       proofVerifiers: options.proofVerifiers || {},

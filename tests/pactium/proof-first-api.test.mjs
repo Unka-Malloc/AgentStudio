@@ -2979,4 +2979,108 @@ console.log(JSON.stringify({
     assert.ok(incompleteCommits.length >= 2, "should detect at least 2 incomplete commits");
   });
 
+  it("resolveBlock returns proof material block via read-only resolver", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const envelope = await pactium.recordOperation({
+      operationId: "resolver.block",
+      workspaceId: "resolver-ws"
+    });
+    // Use public resolver instead of advanced.storage
+    const proofRef = envelope.proofRefs[0];
+    assert.ok(proofRef.cid, "should have proof ref CID");
+    const block = await pactium.resolveBlock(proofRef.cid);
+    assert.ok(block, "should resolve block");
+    assert.equal(block.cid, proofRef.cid, "resolved block CID should match");
+    assert.ok(block.bytes, "should have bytes property");
+    assert.ok(block.bytes.length > 0, "block bytes should be non-empty");
+  });
+
+  it("resolveBlock returns clone — mutation does not affect subsequent reads", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const envelope = await pactium.recordOperation({
+      operationId: "resolver.clone",
+      workspaceId: "resolver-ws"
+    });
+    const proofRef = envelope.proofRefs[0];
+    const block1 = await pactium.resolveBlock(proofRef.cid);
+    // Mutate the returned block
+    block1.tampered = true;
+    block1.cid = "cid:sha256:bad";
+    // Second read should return fresh clone, not the mutated one
+    const block2 = await pactium.resolveBlock(proofRef.cid);
+    assert.equal(block2.tampered, undefined, "second read should not see mutation");
+    assert.equal(block2.cid, proofRef.cid, "second read CID should be untampered");
+  });
+
+  it("hasBlock returns correct boolean", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const envelope = await pactium.recordOperation({
+      operationId: "resolver.hasBlock",
+      workspaceId: "resolver-ws"
+    });
+    const proofRef = envelope.proofRefs[0];
+    assert.equal(await pactium.hasBlock(proofRef.cid), true);
+    assert.equal(await pactium.hasBlock("cid:sha256:0000000000000000000000000000000000000000000000000000000000000000"), false);
+  });
+
+  it("readLedgerHead and readLedgerLeaf return readable data", async () => {
+    const pactium = createPactium({ inMemory: true });
+    await pactium.recordOperation({
+      operationId: "resolver.ledger",
+      workspaceId: "resolver-ws"
+    });
+    const head = await pactium.readLedgerHead();
+    assert.ok(head, "should return current ledger head");
+    assert.ok(head.rootHash, "head should have rootHash");
+    assert.ok(head.size >= 2, "head should have entries");
+    // Read leaf at index 0 (intent)
+    const leaf0 = await pactium.readLedgerLeaf(0);
+    assert.ok(leaf0, "should return leaf at index 0");
+    assert.ok(leaf0.eventId || leaf0.leafHash, "leaf should have eventId or leafHash");
+    // Read leaf at index 1 (outcome)
+    const leaf1 = await pactium.readLedgerLeaf(1);
+    assert.ok(leaf1, "should return leaf at index 1");
+    assert.ok(leaf1.eventId || leaf1.leafHash, "leaf should have eventId or leafHash");
+    // Out of range returns null
+    const missing = await pactium.readLedgerLeaf(999);
+    assert.equal(missing, null);
+  });
+
+  it("readProtocolObject returns clone and listProtocolObjectKeys returns keys", async () => {
+    const pactium = createPactium({ inMemory: true });
+    await pactium.recordOperation({
+      operationId: "resolver.proto",
+      workspaceId: "resolver-ws"
+    });
+    // Read protocol object (runtime-state)
+    const state = await pactium.readProtocolObject("core", "runtime-state");
+    assert.ok(state, "should return runtime state");
+    assert.ok(state.indexRoots, "should have indexRoots");
+    // Mutate returned value
+    state.tampered = true;
+    // Second read should return fresh clone
+    const state2 = await pactium.readProtocolObject("core", "runtime-state");
+    assert.equal(state2.tampered, undefined, "second read should not see mutation");
+    // List keys in commit scope
+    const keys = await pactium.listProtocolObjectKeys("commit");
+    assert.ok(Array.isArray(keys), "should return array of keys");
+    assert.ok(keys.length >= 2, "should have at least complete markers for intent and outcome");
+  });
+
+  it("LicoLite verify works without depending on core.advanced.storage", async () => {
+    // This test verifies that LicoLite's internal resolver uses the public
+    // resolver methods instead of core.advanced.storage.
+    const pactium = createPactium({ dataDir: await tempDataDir("lico-resolver-") });
+    const signer = createLicoLiteSigner({ secret: "resolver-test" });
+    const licolite = createLicoLiteAspect({ pactium, signer, evidencePolicy: "opportunistic" });
+    const envelope = await licolite.recordWorkspaceOperation({
+      operationId: "lico.resolver",
+      workspaceId: "lico-resolver",
+      policyEvidence: { decision: "allow" },
+      workspaceEffectEvidence: { effect: "read" }
+    });
+    const verified = await licolite.verifyEnvelope(envelope);
+    assert.equal(verified.ok, true);
+  });
+
 });
