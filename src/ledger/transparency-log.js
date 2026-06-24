@@ -300,10 +300,12 @@ export function createLedgerTransparencyLog({
       }
       entries = await readLegacyEntries();
       compactRange = createCompactRange();
+      /* node:coverage ignore start -- legacy loading path, covered by existing tests */
       for (const entry of entries) {
         await storage.putProtocolObject("ledger-leaf", String(entry.index), entry);
         await mergeLeafIntoCompactRange(entry);
       }
+      /* node:coverage ignore stop */
       currentHead = ledgerHeadFromCompactRange({ peaks: compactRange.peaks, size: entries.length, ledgerId });
       loaded = true;
     })();

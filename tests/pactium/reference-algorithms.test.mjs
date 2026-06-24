@@ -417,7 +417,62 @@ describe("Pactium reference-project algorithm coverage", () => {
     );
   });
 
-	  it("keeps verifiable index roots insertion-order independent and makes diffs applicable", async () => {
+	  
+  it("rejects signer not yet valid (validFrom in the future)", async () => {
+    const ledger = createLedgerTransparencyLog({
+      storage: createStoragePort({ inMemory: true }), signer: false
+    });
+    const { head } = await ledger.append({ factType: "reference.signed-head", value: "timebound" });
+    const signerKey = crypto.generateKeyPairSync("ed25519");
+    const manifest = createVerifierManifest({
+      signers: [{
+        signerId: "signer-future",
+        algorithm: "ed25519",
+        publicKey: signerKey.publicKey.export({ type: "spki", format: "pem" }),
+        roles: ["ledger-head"],
+        validFrom: "2099-01-01T00:00:00.000Z"
+      }],
+      quorum: 1
+    });
+    const signature = signLedgerHead(head, {
+      signerId: "signer-future",
+      privateKey: signerKey.privateKey.export({ type: "pkcs8", format: "pem" }),
+      manifest
+    });
+    expectFailureCode(
+      verifyLedgerHeadSignature(head, manifest, { signatures: [signature] }),
+      "signer_not_yet_valid", "signer validFrom in the future"
+    );
+  });
+
+  it("rejects expired signer (validTo in the past)", async () => {
+    const ledger = createLedgerTransparencyLog({
+      storage: createStoragePort({ inMemory: true }), signer: false
+    });
+    const { head } = await ledger.append({ factType: "reference.signed-head", value: "timebound" });
+    const signerKey = crypto.generateKeyPairSync("ed25519");
+    const manifest = createVerifierManifest({
+      signers: [{
+        signerId: "signer-expired",
+        algorithm: "ed25519",
+        publicKey: signerKey.publicKey.export({ type: "spki", format: "pem" }),
+        roles: ["ledger-head"],
+        validTo: "2000-01-01T00:00:00.000Z"
+      }],
+      quorum: 1
+    });
+    const signature = signLedgerHead(head, {
+      signerId: "signer-expired",
+      privateKey: signerKey.privateKey.export({ type: "pkcs8", format: "pem" }),
+      manifest
+    });
+    expectFailureCode(
+      verifyLedgerHeadSignature(head, manifest, { signatures: [signature] }),
+      "signer_expired", "signer validTo in the past"
+    );
+  });
+
+  it("keeps verifiable index roots insertion-order independent and makes diffs applicable", async () => {
     const engine = createVerifiableIndexEngine({
       storage: createStoragePort({ inMemory: true }),
       domain: "reference-diff"
@@ -1628,6 +1683,32 @@ describe("Pactium reference-project algorithm coverage", () => {
     await fs.rm(lockDir, { recursive: true, force: true });
   });
 
+  
+  it("does not release lock when processStartKey mismatches on release", async () => {
+    const dataDir = await tempDataDir("pactium-release-startkey-mismatch-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    let lockStillExists = false;
+    let taskCompleted = false;
+
+    await storage.withWriteLock(async () => {
+      const ownerPath = path.join(lockDir, "owner.json");
+      const current = JSON.parse(await fs.readFile(ownerPath, "utf8"));
+      current.processStartKey = "tampered-start-key";
+      await fs.writeFile(ownerPath, JSON.stringify(current, null, 2) + "\n");
+      taskCompleted = true;
+    });
+    assert.equal(taskCompleted, true);
+
+    lockStillExists = await fs.stat(lockDir).then(() => true, () => false);
+    assert.equal(lockStillExists, true,
+      "lock should NOT be deleted when processStartKey mismatches");
+
+    await fs.rm(lockDir, { recursive: true, force: true });
+  });
+
   it("does not delete ownerless lock directory when fresh", async () => {
     const dataDir = await tempDataDir("pactium-ownerless-fresh-");
     const storage = createStoragePort({ dataDir });
@@ -1724,6 +1805,44 @@ describe("Pactium reference-project algorithm coverage", () => {
     }
     // Cleanup
     await fs.rm(lockDir, { recursive: true, force: true });
+  });
+
+  
+  it("does not clean fresh lock with unreadable owner.json (parse error)", async () => {
+    const dataDir = await tempDataDir("pactium-unreadable-fresh-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    await fs.mkdir(lockDir, { recursive: true });
+    await fs.writeFile(path.join(lockDir, "owner.json"), "{broken-json-not-valid", "utf8");
+
+    try {
+      await storage.withWriteLock(() => "unreachable", {
+        timeoutMs: 300, retryMs: 10, staleMs: 5000
+      });
+      assert.fail("should not acquire lock when fresh unreadable lock exists");
+    } catch (error) {
+      assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
+    }
+    await fs.rm(lockDir, { recursive: true, force: true });
+  });
+
+  it("cleans up stale lock with unreadable owner.json (parse error)", async () => {
+    const dataDir = await tempDataDir("pactium-unreadable-stale-");
+    const storage = createStoragePort({ dataDir });
+    await storage.initialize();
+
+    const lockDir = path.join(dataDir, "locks", "write.lock");
+    await fs.mkdir(lockDir, { recursive: true });
+    await fs.writeFile(path.join(lockDir, "owner.json"), "{broken-json-not-valid", "utf8");
+    const staleTime = new Date(Date.now() - 10000);
+    await fs.utimes(lockDir, staleTime, staleTime);
+
+    assert.equal(await storage.withWriteLock(() => "cleaned-unreadable", {
+      timeoutMs: 1000, retryMs: 1, staleMs: 5000
+    }), "cleaned-unreadable");
+    assert.equal(await fs.stat(lockDir).then(() => true, () => false), false);
   });
 
   it("listProtocolObjectKeys reads from disk directory when cache is empty", async () => {
