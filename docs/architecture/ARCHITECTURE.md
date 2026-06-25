@@ -58,7 +58,8 @@ LicoLite host
     │                │
     │  ┌─────────────▼───────────────┐
     │  │     Storage Port            │
-    │  │  local-json-storage-port.js │
+    │  │  storage-port.js            │
+    │  │  json/sqlite adapters       │
     │  └─────────────────────────────┘
     └────────────────────────────────────────────┘
 ```
@@ -183,16 +184,42 @@ LicoLite owns runtime policy decisions, operation dispatching, side effects, UI 
 
 ```text
   Data Directory (.pactium/)
-  ├── blocks/           Content-addressed block store (CID → canonical bytes)
-  ├── protocol/         Protocol objects (scoped key-value)
-  │   ├── ledger/       Ledger entries, heads
-  │   ├── indexes/      Index roots and node references
-  │   ├── checkpoints/  Checkpoint tree state
-  │   └── projections/  Workspace projection state
-  └── metadata/         Directory metadata and protocol version
+  ├── pactium-manifest.json  Root manifest (protocol, schema, storageBackend)
+  ├── pactium.sqlite         SQLite backend database when storageBackend=sqlite
+  ├── cas/                   JSON backend content-addressed block store
+  │   └── <hex-prefix>/      Prefix-based sharding (first 2 hex chars of CID)
+  │       └── <hex>.json     Block by full hex CID hash
+  ├── protocol/              JSON backend protocol objects (scoped key-value)
+  │   ├── core/              Core runtime state
+  │   ├── ledger/            Ledger entries, heads, compact range
+  │   ├── ledger-head/       Historical ledger heads
+  │   ├── ledger-leaf/       Per-index ledger leaves
+  │   ├── ledger-node/       Merkle tree nodes
+  │   └── index/             Index roots (keyed by domain-hash)
+  └── locks/                 Write-lock directories
+      └── <name>.lock/       Per-lock directory
+          └── owner.json     Lock owner metadata (pid, ownerId, timestamp)
 ```
 
-The Storage Port abstraction separates Pactium's protocol logic from persistence mechanics. The current implementation uses a local JSON backend. Storage backends may change how bytes are stored but cannot change canonical encoding, hash computation, or proof semantics.
+The Storage Port abstraction separates Pactium's protocol logic from persistence mechanics. The current implementation ships local JSON and SQLite adapters behind a manifest-bound factory. `createStoragePort()` defaults to auto backend selection for persistent directories: SQLite is selected for new directories when an implemented provider is available (`node:sqlite` or optional npm `better-sqlite3`), otherwise JSON. JSON is intended for local development, low-concurrency use, and debugging. SQLite is the production local-durability candidate; distributed multi-node deployments still require an external consistency layer. Storage backends may change how bytes are stored but cannot change canonical encoding, hash computation, or proof semantics.
+
+### Canonical Value Encoding
+
+Pactium's canonical value encoding (`canonical/value.js`) is **Pactium-specific**. It is NOT an implementation of RFC 8785 (JSON Canonicalization Scheme / JCS).
+
+Key differences from RFC 8785 JCS:
+
+| Aspect | Pactium Canonical Value | RFC 8785 JCS |
+| --- | --- | --- |
+| Binary data | `$bytes` wrapper with base64 encoding | Not supported |
+| String normalization | Unicode NFC normalization | No normalization (code-point identity) |
+| Numbers | Only IEEE 754 safe integers (53-bit) | Arbitrary JSON numbers (implementation-defined) |
+| `-0` | Normalized to `0` | Preserved as `-0` (JSON: `-0`) |
+| `undefined` values | Filtered from objects | N/A (undefined is not valid JSON) |
+| `Buffer` / `Uint8Array` | Encoded as `{ $bytes: base64 }` | Not supported |
+| Reserved keys | `$bytes` is reserved in user objects | No reserved keys |
+
+The canonical value encoding borrows the general concept of deterministic JSON canonicalization (sorted object keys, stable array ordering, no whitespace) but adds Pactium-specific constraints that make it incompatible with generic RFC 8785 implementations. Protocol documents and API descriptions MUST NOT describe Pactium's canonical encoding as "RFC 8785 compatible" or "JCS-compliant."
 
 ## Shared Engine: Index Domain Adapters
 
@@ -238,7 +265,7 @@ The maintained design is implemented by these package surfaces:
 | --- | --- |
 | Protocol constants and hashing | `src/protocol/constants.js`, `src/protocol/hashing.js` |
 | Canonical Value | `src/canonical/value.js`: `canonicalEncode`, `canonicalDecode`, `normalizeCanonicalValue` |
-| Storage Port | `src/storage/local-json-storage-port.js`: `createStoragePort` |
+| Storage Port | `src/storage/storage-port.js`: `createStoragePort`; `src/storage/local-json-storage-port.js` and `src/storage/sqlite-storage-port.js`: backend adapters |
 | Ledger Transparency Log | `src/ledger/transparency-log.js`: `createLedgerTransparencyLog`, inclusion and consistency proof helpers |
 | Verifiable Index Engine | `src/index-engine/snapshot-merkle-index.js`: `createVerifiableIndexEngine` |
 | Operation lifecycle | `src/core/pactium-core.js`: `beginOperationIntent`, `appendOperationOutcome`, `recordOperation` |
@@ -249,6 +276,33 @@ The maintained design is implemented by these package surfaces:
 
 ## Non-Surfaces
 
-Maintained docs must not describe SQLite storage, separate per-workspace lane queues, repair fact execution, or pressure baseline regression enforcement as implemented unless those surfaces are added and verified.
+Maintained docs must not describe separate per-workspace lane queues, repair fact execution, or pressure baseline regression enforcement as implemented unless those surfaces are added and verified.
 
 If a maintained document introduces a design area that cannot be mapped to an implementation anchor, the design must be implemented and documented before release.
+
+## Current Implementation Boundaries
+
+### Index Engine Scalability
+
+- **No-op fast path**: Mutations that do not change structure produce the same root.
+- **Path-copying mutations**: `put`, `delete`, and `mutate` descend search paths, rewrite affected leaves and necessary ancestors, collapse single-child roots, and reuse unchanged subtrees.
+- **Diff**: Implemented. `diff()` skips equal subtree roots, merges non-aligned child ranges, descends overlap groups, and compares entries at leaf level.
+- **Proof compaction**: Membership multiproofs, range proofs, compact non-membership proofs, and proof-material descriptor-table deduplication are implemented.
+
+The current implementation is correct, canonical, and deterministic. Throughput-sensitive hosts should validate pressure-profile results against their own workload and persistence backend.
+
+### Proof Size Guard
+
+`maxProofLeafEntries` and `maxProofBytes` produce `proofSizeWarning` on proofs that exceed configured limits. This is a **size guard / diagnostic**, not a bounded (constant-size) proof format. Bounded proofs are a future protocol goal.
+
+### Crash Consistency
+
+The JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. Commit markers cover operation lifecycle commits (`beginOperationIntent`, `appendOperationOutcome`, `recordOperation`, and the per-operation commits inside `recordOperations`). Materialization operations (`exportProofBundle`, `storeEnvelope`, `createExtension`) may write storage or runtime-state but are not lifecycle commits. This provides crash detection and recovery guidance. It is not an ACID database transaction. The SQLite adapter uses SQLite transactions for `withWriteLock()` scopes, but Pactium still treats the Storage Port as a persistence adapter rather than part of the proof semantics.
+
+### Lock Fencing
+
+Write locks use UUID fencing tokens compared as strings. Heartbeat intervals refresh lock freshness. Stale cleanup uses double-read with owner identity verification (ownerId + fencingToken + processStartKey). Ownerless or malformed lock directories are cleaned up using mtime-based staleness with a double-stat safety pattern. Lock cleanup occurs only during write-lock acquisition; `doctor()` does not scan for dirty or stale locks. This is best-effort; production deployments with high contention should consider external lock managers.
+
+### Read-Only Resolvers
+
+External consumers inspect protocol material through the public resolver APIs: `resolveBlock()`, `hasBlock()`, `readLedgerHead()`, `readLedgerLeaf()`, `readProtocolObject()`, and `listProtocolObjectKeys()`. Direct storage, ledger, and index internals are not part of the package root API.

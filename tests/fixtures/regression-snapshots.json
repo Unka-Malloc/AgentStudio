@@ -31,6 +31,7 @@
     "PACTIUM_PROTOCOL",
     "PACTIUM_PROTOCOL_PROFILE",
     "PACTIUM_SCHEMA_VERSION",
+    "PACTIUM_TRUST_POLICIES",
     "advanceTo",
     "advanceTrustedHead",
     "canonicalDecode",
@@ -42,6 +43,7 @@
     "createAppendCondition",
     "createCompactRange",
     "createDefaultProofVerifierRegistry",
+    "createJsonStoragePort",
     "createLedgerConsistencyProof",
     "createLedgerInclusionProof",
     "createLedgerTransparencyLog",
@@ -49,12 +51,14 @@
     "createPactium",
     "createPactiumHttpServer",
     "createRepairPlanner",
+    "createSqliteStoragePort",
     "createStoragePort",
     "createTrackingCursor",
     "createVerifiableIndexEngine",
     "createVerificationFailure",
     "createVerifierManifest",
     "defaultPactiumDataDir",
+    "detectSqliteCapabilities",
     "emptyTreeHash",
     "envelopeSigningHash",
     "ledgerHeadSigningPayload",
@@ -68,6 +72,7 @@
     "runPactiumQualityGateProfile",
     "samePositionAs",
     "signLedgerHead",
+    "sqliteStorageAvailable",
     "startPactiumHttpServer",
     "verifyIndexProof",
     "verifyLedgerConsistencyProof",
@@ -94,18 +99,18 @@
   ],
   "declarations": {
     "src/index.d.ts": {
-      "sha256": "a3a0f0ba11dbb2cd2bec755eb5c886dad65b1cfee7079be76476a008b1b222e0",
-      "byteLength": 11446,
-      "exportCount": 77
+      "sha256": "7af2c2dd021ab3f653277a565673a54d82b3ca0cbf0d7e7b18ea320d665eb521",
+      "byteLength": 17279,
+      "exportCount": 86
     },
     "src/http.d.ts": {
-      "sha256": "1df83d5fbd340712b70616baf51993a7e8950677013d482c46c08f132c00a8ac",
-      "byteLength": 865,
+      "sha256": "ec5eff2f4abb6af32a55281b9988463d02aa035bacd7e5ba6dccced57bf7d510",
+      "byteLength": 1272,
       "exportCount": 7
     },
     "src/aspects/licolite/index.d.ts": {
-      "sha256": "39c4101a91edffd6d7e4dcb5f455f285616e4a7124a75108cd8bc27e57d97b86",
-      "byteLength": 2777,
+      "sha256": "a13e42e505caab0514666a002115a85fddcf545f1408ebe3b1bf7e5145217f9f",
+      "byteLength": 3174,
       "exportCount": 15
     }
   },
@@ -115,7 +120,7 @@
     "schema": "pactium.v0.2.schema.latest",
     "hash": "sha256",
     "cid": "cid:sha256:<hex>",
-    "canonicalValue": "restricted-ipld-dag-cbor-style",
+    "canonicalValue": "jcs-like-canonical-json-nfc-safe-integers",
     "orderingAuthority": "operation-ledger",
     "ledger": {
       "model": "rfc6962-transparency-log",
@@ -152,7 +157,7 @@
     ]
   },
   "proofBundle": {
-    "ok": true,
+    "ok": false,
     "bundleType": "pactium.proof-bundle.indexed",
     "blockCount": 6,
     "criticalExtensions": [

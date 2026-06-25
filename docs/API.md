@@ -45,9 +45,17 @@ The returned instance exposes:
 | `protocol` | `string` | Protocol identifier (`pactium.v0.2`) |
 | `schema` | `string` | Schema version |
 | `dataDir` | `string` | Resolved data directory path |
-| `storage` | `PactiumStoragePort` | Underlying storage port |
-| `ledger` | `PactiumLedger` | Operation Ledger instance |
-| `indexEngine` | `PactiumIndexEngine` | Verifiable Index Engine instance |
+
+**Read-only resolvers:**
+
+| Method | Description |
+| --- | --- |
+| `resolveBlock(cid)` | Resolve a CAS block by CID. Returns a canonical clone. |
+| `hasBlock(cid)` | Check whether a CAS block exists. |
+| `readLedgerHead(id?)` | Read the current ledger head, or a specific head by ID. |
+| `readLedgerLeaf(index)` | Read a ledger leaf by index. |
+| `readProtocolObject(scope, key, fallback?)` | Read a protocol object. Returns a canonical clone. |
+| `listProtocolObjectKeys(scope)` | List all keys in a protocol object scope. |
 
 ---
 
@@ -71,7 +79,52 @@ const envelope = await pactium.recordOperation({
 });
 ```
 
+For operations with many `stateMutations`, Pactium emits bounded state mutation proofs by default: the first 32 unique touched keys in canonical key order receive individual `touchedKeyProofs`. If the same key appears more than once in one state commit, the State Commit records the key's final net effect, using the last mutation for that key. Hosts that need strict per-key verification can request full proof generation at write time:
+
+```js
+const envelope = await pactium.recordOperation({
+  operationId: "workspace.batch.write",
+  workspaceId: "workspace-a",
+  idempotencyKey: "batch-intent",
+  outcomeIdempotencyKey: "batch-outcome",
+  proofOptions: { stateMutationProofMode: "full" },
+  stateMutations: manyMutations
+});
+```
+
+Relevant proof-generation options:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `proofOptions.stateMutationProofMode` | `"sampled" \| "full"?` | Choose bounded 32-key state mutation proofs or full per-key proofs over unique touched keys |
+
 **Returns:** `PactiumProofEnvelope`
+
+#### `pactium.recordOperations(inputs)`
+
+Records multiple complete operations through one public batch mutation surface. Each input has the same shape as `recordOperation(input)`. Pactium preserves operation order, records each operation as Intent plus Outcome, and returns the resulting outcome envelopes.
+
+```js
+const batch = await pactium.recordOperations([
+  {
+    operationId: "workspace.file.write",
+    workspaceId: "workspace-a",
+    idempotencyKey: "batch-intent-1",
+    outcomeIdempotencyKey: "batch-outcome-1",
+    stateMutations: [{ key: "a.txt", value: { content: "A" } }]
+  },
+  {
+    operationId: "workspace.file.write",
+    workspaceId: "workspace-a",
+    idempotencyKey: "batch-intent-2",
+    outcomeIdempotencyKey: "batch-outcome-2",
+    stateMutations: [{ key: "b.txt", value: { content: "B" } }]
+  }
+]);
+// { batchType: "pactium.operation-record-batch", count: 2, envelopes: [...] }
+```
+
+**Returns:** `{ protocol, batchType, count, envelopes }`
 
 #### `pactium.beginOperationIntent(input)`
 
@@ -128,13 +181,16 @@ const outcome = await pactium.lookupOutcome("intent-id");
 
 ### Workspace Projection
 
-#### `pactium.getWorkspaceProjection(workspaceId)`
+#### `pactium.getWorkspaceProjection(workspaceId, options?)`
 
 Returns the current workspace projection state for a given workspace.
 
 ```js
 const projection = await pactium.getWorkspaceProjection("workspace-a");
 // { workspaceId, nextOrdinal, orderRoot, membershipRoot, order, membership }
+
+// With options
+const limited = await pactium.getWorkspaceProjection("workspace-a", { limit: 10 });
 ```
 
 #### `pactium.proveWorkspaceMembership(input)`
@@ -144,10 +200,20 @@ Generates a verifiable proof that a ledger event belongs (or does not belong) to
 ```js
 const proof = await pactium.proveWorkspaceMembership({
   workspaceId: "workspace-a",
-  ledgerEventId: "ledger-event-id"
+  ledgerEventId: "ledger-event-id",
+  proofOptions: { maxProofBytes: 1024 }
 });
 // { member: true/false, proof: { ... } }
 ```
+
+**Options:**
+| Field | Type | Description |
+| --- | --- | --- |
+| `workspaceId` | `string` | Workspace identifier |
+| `ledgerEventId` | `string` | Ledger event to prove membership for |
+| `proofOptions.maxProofLeafEntries` | `number?` | Maximum leaf entries before proofSizeWarning |
+| `proofOptions.maxProofBytes` | `number?` | Maximum proof bytes before proofSizeWarning |
+| `proofOptions.failOnProofSizeWarning` | `boolean?` | Treat proofSizeWarning as hard failure |
 
 ---
 
@@ -158,9 +224,30 @@ const proof = await pactium.proveWorkspaceMembership({
 Verifies a Proof Envelope against local proof material.
 
 ```js
-const result = await pactium.verifyEnvelope(envelope);
-// { ok: true/false, failures: [...], checked: [...] }
+const result = await pactium.verifyEnvelope(envelope, {
+  failOnProofSizeWarning: true,
+  trustPolicy: "self-carried-manifest",
+  requireFullStateMutationProofs: true
+});
+// { ok, failures: [...], checked: [], warnings: [...] }
 ```
+
+**Options:**
+| Field | Type | Description |
+| --- | --- | --- |
+| `maxProofLeafEntries` | `number?` | Max leaf entries before proofSizeWarning |
+| `maxProofBytes` | `number?` | Max proof bytes before proofSizeWarning |
+| `failOnProofSizeWarning` | `boolean?` | Treat proofSizeWarning as hard failure |
+| `supportedCriticalExtensions` | `string[]?` | Extensions the verifier supports |
+| `proofVerifiers` | `PactiumRecord?` | Custom proof verifier registry |
+| `requireAllProofs` | `boolean?` | Require verifiers for all embedded proofs |
+| `verifierManifest` | `PactiumRecord?` | Manifest for signature verification |
+| `trustedManifest` | `PactiumRecord?` | Caller-supplied trusted manifest |
+| `ledgerHeadSignatures` | `PactiumRecord[]?` | Ledger head signatures |
+| `trustPolicy` | `string?` | `"structural"`, `"self-carried-manifest"`, or `"trusted-manifest-required"` |
+| `requireFullStateMutationProofs` | `boolean?` | Require full (non-sampled) state mutation proofs during verification; generate them at write time with `proofOptions.stateMutationProofMode: "full"` |
+
+Default trust policy depends on verification context: in-memory Pactium instances use `self-carried-manifest`; persistent Pactium instances and `verifyProofBundle()` use `trusted-manifest-required`.
 
 **Returns:** `PactiumVerificationResult`
 
@@ -189,7 +276,11 @@ const result = await verifyProofBundle(bundle, {
 });
 ```
 
-**Returns:** `PactiumVerificationResult & { bundleHash?: string }`
+**Returns:** `PactiumProofBundleVerificationResult` extending `PactiumVerificationResult` with:
+- `ok: boolean` — overall verification result
+- `failures: PactiumVerificationFailure[]` — structured failures
+- `bundleHash?: string` — hash of the verified bundle
+- `envelope?: PactiumVerificationResult` — envelope-level verification result
 
 #### `pactium.exportProofBundle(envelopeOrId, options?)`
 
@@ -254,7 +345,8 @@ const ledger = createLedgerTransparencyLog({ storage: storagePort });
 
 | Method | Description |
 | --- | --- |
-| `ledger.append(entry)` | Append an entry and return `{ head, leafIndex, inclusionProof }` |
+| `ledger.append(entry)` | Append one fact and return `{ entry, head, previousHead, inclusionProof, consistencyProof }` |
+| `ledger.appendBatch(entries, options?)` | Append ordered facts in one ledger append lane run and return `{ batchType, count, entries, head, previousHead, appends }` |
 | `ledger.head()` | Return the current `PactiumLedgerHead` |
 | `ledger.entries()` | Return all ledger entries |
 | `ledger.pageEntries({ start, limit })` | Return a paginated slice of entries |
@@ -343,6 +435,8 @@ const advanced = advanceTrustedHead({
 });
 ```
 
+Verifier manifests support signer validity windows, signer revocation, signer rotation through manifest updates, quorum policies, external witness metadata, public checkpoint metadata, and gossip policy metadata. Production verification should use `trustPolicy: "trusted-manifest-required"` with a caller-supplied trusted manifest rather than relying on a self-carried manifest embedded in proof material.
+
 ---
 
 ### Verifiable Index Engine
@@ -365,11 +459,14 @@ const engine = createVerifiableIndexEngine({
 | Method | Description |
 | --- | --- |
 | `engine.createIndex(entries?, options?)` | Create an index from initial entries |
-| `engine.put(root, key, value, options?)` | Insert/update a key |
-| `engine.delete(root, key, options?)` | Delete a key |
+| `engine.put(root, key, value, options?)` | Insert/update a key with path-copying |
+| `engine.delete(root, key, options?)` | Delete a key with path-copying |
+| `engine.mutate(root, mutations?, options?)` | Apply ordered batch index mutations through one path-copying mutation pass |
 | `engine.get(root, key)` | Retrieve a value by key |
 | `engine.prove(root, key)` | Generate a membership/non-membership proof |
-| `engine.verifyProof(proof)` | Verify an index proof |
+| `engine.proveMembershipMultiproof(root, keys, options?)` | Generate one compact membership multiproof for multiple keys |
+| `engine.proveRange(root, options?)` | Generate a range proof for `min`/`max`/`after`/`limit` scan options |
+| `engine.verifyProof(proof, context?)` | Verify an index proof; pass `{ proofMaterial }` when descriptor tables were hoisted into proof material |
 | `engine.scan(root, options?)` | Scan keys in range |
 | `engine.prefix(root, keyPrefix?, options?)` | Scan keys by prefix |
 | `engine.diff(leftRoot, rightRoot)` | Compute differences between two roots |
@@ -412,7 +509,7 @@ const str = canonicalString({ b: 2, a: 1 }); // '{"a":1,"b":2}'
 const normalized = normalizeCanonicalValue(input);
 ```
 
-The canonical value model is a restricted IPLD/DAG-CBOR-style data model supporting: `null`, `boolean`, `number`, `string`, arrays, and plain objects with string keys.
+The canonical value model is a Pactium-specific restricted data model supporting: `null`, `boolean`, safe-integer `number`, NFC-normalized `string`, arrays, plain objects with string keys, and binary data through the reserved `$bytes` wrapper. See [Canonical Encoding](./protocols/CANONICAL-ENCODING.md) for the formal byte-level rules.
 
 ---
 
@@ -445,7 +542,8 @@ import { createStoragePort, resolveDataDir, resolveWithin } from "pactium";
 
 const storage = createStoragePort({
   dataDir: "./.pactium",
-  inMemory: false
+  inMemory: false,
+  storageBackend: "json" // "json" (default), "sqlite", or "auto"
 });
 
 await storage.initialize();
@@ -460,7 +558,9 @@ await storage.putProtocolObject("ledger", "head", headValue);
 const head = await storage.getProtocolObject("ledger", "head");
 ```
 
-`resolveDataDir()` expands `~` to the current user's home directory. Protocol object scopes and keys are stored as path-safe tokens and cannot escape the Pactium data directory.
+`resolveDataDir()` expands `~` to the current user's home directory. Protocol object scopes and keys are stored as path-safe tokens and cannot escape the Pactium data directory. For SQLite, `databasePath` is optional and must resolve inside `dataDir`; once `pactium-manifest.json` records `sqlitePath`, that path is manifest-bound.
+
+`detectSqliteCapabilities()` reports local SQLite signals across npm packages, the `sqlite3` CLI, and platform package managers (Brew on macOS, Choco on Windows, apt/rpm/pacman on Linux). `sqliteStorageAvailable()` is narrower: it is true only when Pactium can actually open a SQLite backend through a supported provider (`node:sqlite` or optional npm `better-sqlite3`).
 
 ---
 
@@ -593,7 +693,7 @@ Bundle export accepts `{ "envelope": ... }`, `{ "envelopeId": "..." }`, `{ "id":
 import {
   PACTIUM_PROTOCOL,           // "pactium.v0.2"
   PACTIUM_SCHEMA_VERSION,     // "pactium.v0.2.schema.latest"
-  PACTIUM_PACKAGE_VERSION,    // "0.3.1"
+  PACTIUM_PACKAGE_VERSION,    // "0.4.0"
   PACTIUM_INDEX_ENGINE,       // "pactium.verifiable-index-engine"
   PACTIUM_INDEX_SPLITTER,     // "pactium-cdc-boundary"
   PACTIUM_PROOF_BUNDLE_TYPE,  // "pactium.proof-bundle.indexed"
@@ -778,12 +878,16 @@ import type {
   PactiumVerificationFailure,
   PactiumVerificationResult,
   PactiumProofBundle,
+  PactiumProofBundleVerificationResult,
   PactiumIndexScanOptions,
   PactiumIndexEngine,
   PactiumLedgerPageOptions,
   PactiumLedgerPage,
   PactiumLedger,
   PactiumCore,
+  PactiumProofOptions,
+  PactiumProofVerificationOptions,
+  PactiumProofBundleVerificationOptions,
   PactiumHttpServerOptions,
   PactiumHttpServerStartOptions,
   PactiumHttpServerStartResult
@@ -794,6 +898,82 @@ import type {
   LicoLiteAspect
 } from "pactium/licolite";
 ```
+
+---
+
+## Crash Consistency and Doctor
+
+Pactium's local JSON backend uses **write-ahead commit markers** for crash detection:
+
+1. Before mutation work begins, a **pending marker** is written to the `commit` protocol object scope.
+2. If preflight validation fails (e.g., idempotency conflict, append-condition conflict), the pending marker is **cleaned up** — no false `incomplete_commit`.
+3. After all mutation work completes (ledger append + proof material + index + runtime-state save), a **complete marker** is written and the pending marker is cleaned up.
+4. If a crash occurs after the ledger append but before the complete marker is written, the pending marker **remains** — `doctor()` reports `incomplete_commit`.
+
+`createStoragePort()` defaults to `storageBackend: "auto"` for persistent data directories. Auto mode runs the SQLite capability detector and selects SQLite for a new data directory when a Pactium-supported SQLite provider is available (`node:sqlite` or optional npm `better-sqlite3`), otherwise JSON. System SQLite signals such as the `sqlite3` CLI or package-manager records are reported by `detectSqliteCapabilities()` but are not treated as storage drivers until an adapter exists. Once a data directory has a manifest, Pactium reuses the manifest-bound backend and does not silently switch or fall back to another backend.
+
+This is **not an ACID database transaction**. It is a WAL marker + diagnostic pattern:
+- `doctor()` scans for orphan pending markers.
+- `doctor({ rebuild: true })` replays ledger leaves to reconstruct derived state and compares against runtime state.
+- Rebuild categorizes roots as fully comparable, partially comparable, or skipped (see README architecture section).
+
+Backend profile:
+- JSON is intended for local development, low-concurrency use, and debugging.
+- SQLite is the production local-durability candidate because it provides WAL, transactions, foreign keys, and synchronous durability settings.
+- Distributed multi-node deployments still require an external consistency layer; Storage Port backends do not provide consensus.
+
+**Doctor rebuild boundaries:**
+- **Fully comparable**: `openIntent`, `outcome`, `causality`, workspace `orderRoot`/`membershipRoot` — mismatch is a hard `derived_root_mismatch`.
+- **Partially comparable**: `intentIdempotency`, `outcomeIdempotency`, workspace `checkpointRoot` — mismatch is a `*_rebuild_incomplete` warning (old facts may lack material).
+- **Skipped**: workspace `stateRoot` — state mutations live in proof material, not ledger facts. Reports `state_rebuild_incomplete`.
+
+**Commit marker coverage boundaries:**
+- `beginOperationIntent`, `appendOperationOutcome`, `recordOperation`, and `recordOperations` are covered by pending/complete commit markers.
+- `storeEnvelope`, `createExtension`, and `exportProofBundle` are materialization/caching operations that do NOT have commit markers. These operations write blocks or update the proof bundle cache; failures leave recoverable artifacts.
+- HTTP `/bundles/export` is classified as a mutation route because it updates the proof bundle cache in runtime-state, but it is not a ledger lifecycle commit.
+
+---
+
+## Lock Heartbeat and Fencing
+
+Write locks use:
+- **Fencing tokens** (UUID strings): compared as strings, not numbers. Using `Number()` on UUID produces `NaN`, and `NaN === NaN` is always `false` — a known bug fixed in the current release.
+- **Heartbeat interval**: refreshes `heartbeatAtMs` periodically (at most every 5 seconds). A fresh heartbeat means the lock is still active even if `createdAtMs` is old.
+- **Double-read on stale cleanup**: `removeStaleLock()` reads the owner, checks staleness, re-reads the owner, and only deletes if `ownerId`, `fencingToken`, and `processStartKey` all match.
+- **Dirty/ownerless lock cleanup**: lock directories without `owner.json` (or with malformed `owner.json`) are cleaned up safely if stale (directory `mtimeMs` exceeds `staleMs`), using a double-stat pattern to avoid TOCTOU races. Fresh ownerless directories are not removed.
+- **Release guard**: lock release also checks `fencingToken` — if another process tampered with the owner metadata, the lock is not deleted.
+- **Cleanup timing**: lock cleanup occurs only during write-lock acquisition (`withWriteLock`). The `doctor()` function does not currently scan for dirty or stale locks.
+
+This is a **best-effort** mechanism. For production deployments with high lock contention, consider external lock managers.
+
+---
+
+## Proof Size Guard
+
+`maxProofLeafEntries` and `maxProofBytes` options are available on:
+- `indexEngine.prove(root, key, options?)`
+- `pactium.verifyEnvelope(envelope, options?)`
+- `verifyProofBundle(bundle, options?)`
+
+When a proof exceeds the configured limits, a `proofSizeWarning` is emitted:
+- By default, `proofSizeWarning` is **non-fatal** (severity: "warning") — `ok` remains `true`.
+- Set `failOnProofSizeWarning: true` to treat it as a **hard failure** (`ok: false`).
+
+**This is a size guard / diagnostic, not a bounded proof format.** Bounded proofs (constant-size proofs) are a future protocol goal.
+
+For many related key proofs, use `engine.proveMembershipMultiproof()` or `engine.proveRange()` to avoid repeating path descriptors. Proof envelopes also hoist duplicate sibling descriptors into `proofMaterial.proofDescriptorTable`.
+
+---
+
+## Index Engine Scalability
+
+Current state:
+- **No-op fast path**: mutations that do not change structure produce the same root.
+- **Path-copying mutation**: `put`, `delete`, and `mutate` descend search paths, rewrite affected leaves and necessary ancestors, and reuse unchanged subtrees.
+- **Diff**: `diff()` traverses Prolly nodes, skips equal subtree roots, merges non-aligned child ranges, descends internal overlap groups, and compares entries at leaf level.
+- **Proof compaction**: membership multiproofs, range proofs, compact non-membership proofs, and proof-material descriptor deduplication are implemented.
+
+The current implementation is correct, canonical, and deterministic. Throughput-sensitive hosts should still run pressure profiles against their workload and choose SQLite for durable local production profiles.
 
 ---
 

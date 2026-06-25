@@ -18,9 +18,25 @@ export function createVerifierManifest(input = {}) {
       publicKey: safeText(signer.publicKey),
       validFrom: safeText(signer.validFrom),
       validTo: safeText(signer.validTo),
+      revokedAt: safeText(signer.revokedAt),
+      revocationReason: safeText(signer.revocationReason),
       roles: asArray(signer.roles).map(String)
     })).filter((signer) => signer.signerId && signer.publicKey),
-    quorum: Math.max(1, Number(input.quorum || 1))
+    revokedSigners: asArray(input.revokedSigners).map((revocation) => ({
+      signerId: safeText(revocation.signerId || revocation),
+      revokedAt: safeText(revocation.revokedAt),
+      reason: safeText(revocation.reason || revocation.revocationReason)
+    })).filter((revocation) => revocation.signerId),
+    quorum: Math.max(1, Number(input.quorum || input.quorumPolicy?.ledgerHead || 1)),
+    quorumPolicy: normalizeCanonicalValue(asRecord(input.quorumPolicy)),
+    witnesses: asArray(input.witnesses).map((witness) => ({
+      witnessId: safeText(witness.witnessId || witness.signerId),
+      algorithm: safeText(witness.algorithm, "ed25519"),
+      publicKey: safeText(witness.publicKey),
+      roles: asArray(witness.roles).map(String)
+    })).filter((witness) => witness.witnessId && witness.publicKey),
+    publicCheckpoint: normalizeCanonicalValue(asRecord(input.publicCheckpoint)),
+    gossip: normalizeCanonicalValue(asRecord(input.gossip))
   };
   return {
     ...payload,
@@ -136,6 +152,42 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       }));
       continue;
     }
+    const sigTime = safeText(record.createdAt || head.createdAt);
+    const revokedRecord = asArray(verifierManifest.revokedSigners).find((revocation) => revocation.signerId === record.signerId);
+    if (signer.revokedAt || revokedRecord) {
+      const revokedAt = safeText(signer.revokedAt || revokedRecord?.revokedAt || sigTime);
+      if (!revokedAt || sigTime >= revokedAt) {
+        failures.push(createVerificationFailure({
+          layer: "ledger-head-signature",
+          code: "signer_revoked",
+          message: `Signer ${record.signerId} is revoked.`,
+          evidenceRef: record.signerId || "",
+          details: {
+            revokedAt,
+            reason: signer.revocationReason || revokedRecord?.reason || ""
+          }
+        }));
+        continue;
+      }
+    }
+    if (signer.validFrom && sigTime < signer.validFrom) {
+      failures.push(createVerificationFailure({
+        layer: "ledger-head-signature",
+        code: "signer_not_yet_valid",
+        message: `Signer ${record.signerId} is not yet valid (validFrom: ${signer.validFrom}).`,
+        evidenceRef: record.signerId || ""
+      }));
+      continue;
+    }
+    if (signer.validTo && sigTime > signer.validTo) {
+      failures.push(createVerificationFailure({
+        layer: "ledger-head-signature",
+        code: "signer_expired",
+        message: `Signer ${record.signerId} has expired (validTo: ${signer.validTo}).`,
+        evidenceRef: record.signerId || ""
+      }));
+      continue;
+    }
     const ok = crypto.verify(
       null,
       payloadBytes,
@@ -174,6 +226,7 @@ export function advanceTrustedHead({
   newHead = {},
   proof = {},
   manifest = null,
+  trustedManifest = null,
   signatures = []
 } = {}) {
   const failures = [];
@@ -184,8 +237,10 @@ export function advanceTrustedHead({
       message: "New Ledger head does not extend the old trusted head."
     }));
   }
-  if (manifest) {
-    const signatureResult = verifyLedgerHeadSignature(newHead, manifest, { signatures });
+  // Only trust explicitly provided manifests, not the head's self-carried manifest.
+  const verificationManifest = trustedManifest || manifest || null;
+  if (verificationManifest) {
+    const signatureResult = verifyLedgerHeadSignature(newHead, verificationManifest, { signatures });
     failures.push(...signatureResult.failures);
   }
   if (failures.length > 0) {

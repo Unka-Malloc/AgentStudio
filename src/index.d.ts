@@ -12,6 +12,10 @@ export interface PactiumDataDirOptions {
   dataDir?: string;
   userDataPath?: string;
   inMemory?: boolean;
+  storageBackend?: "json" | "sqlite" | "auto" | string;
+  databasePath?: string;
+  includeSystemSqliteDetection?: boolean;
+  sqliteDetectionTimeoutMs?: number;
 }
 
 export interface PactiumStoragePort {
@@ -19,6 +23,10 @@ export interface PactiumStoragePort {
   schema: string;
   dataDir: string;
   inMemory: boolean;
+  storageBackend?: string;
+  selectedStorageBackend?: string;
+  sqlitePath?: string;
+  sqliteProvider?: string;
   initialize(): Promise<void>;
   putBlock(value: unknown, options?: PactiumRecord): Promise<PactiumRecord>;
   getBlock(cid: string): Promise<(PactiumRecord & { bytes?: Uint8Array }) | null>;
@@ -26,6 +34,8 @@ export interface PactiumStoragePort {
   walk(rootCid: string): Promise<PactiumRecord>;
   putProtocolObject(scope: string, key: string, value: unknown): Promise<PactiumCanonicalValue>;
   getProtocolObject(scope: string, key: string, fallback?: unknown): Promise<unknown>;
+  deleteProtocolObject?(scope: string, key: string): Promise<void>;
+  listProtocolObjectKeys?(scope: string): Promise<string[]>;
   clearCache?(): void;
   withWriteLock?<T>(
     task: () => T | Promise<T>,
@@ -84,7 +94,14 @@ export interface PactiumVerificationResult {
   protocol: string;
   ok: boolean;
   envelopeId?: string;
+  proofStructurallyValid?: boolean;
+  ledgerHeadSignatureValid?: boolean;
+  ledgerHeadTrusted?: boolean;
+  trustedSignatureValid?: boolean;
+  trustPolicy?: string;
   failures: PactiumVerificationFailure[];
+  /** Non-fatal warnings (e.g. proofSizeWarning, incomplete rebuild). */
+  warnings?: PactiumVerificationFailure[];
   checked?: string[];
 }
 
@@ -108,6 +125,32 @@ export interface PactiumIndexScanOptions extends PactiumRecord {
   after?: string;
 }
 
+export interface PactiumProofOptions {
+  /** Maximum number of leaf entries allowed in a proof. Exceeding this produces a proofSizeWarning. */
+  maxProofLeafEntries?: number;
+  /** Maximum proof size in bytes. Exceeding this produces a proofSizeWarning. */
+  maxProofBytes?: number;
+  /** If true, proofSizeWarning becomes a hard failure. Default false. */
+  failOnProofSizeWarning?: boolean;
+  /** For write APIs with stateMutations, emit per-key proofs for every mutation instead of the default bounded sample. */
+  stateMutationProofMode?: "sampled" | "full";
+}
+
+export interface PactiumProofVerificationOptions extends PactiumProofOptions {
+  supportedCriticalExtensions?: string[];
+  proofVerifiers?: PactiumRecord;
+  requireAllProofs?: boolean;
+  verifierManifest?: PactiumRecord;
+  trustedManifest?: PactiumRecord;
+  ledgerHeadSignatures?: PactiumRecord[];
+  trustPolicy?: "structural" | "self-carried-manifest" | "trusted-manifest-required" | string;
+  requireFullStateMutationProofs?: boolean;
+}
+
+export interface PactiumIndexProofContext extends PactiumRecord {
+  proofMaterial?: PactiumRecord;
+}
+
 export interface PactiumIndexEngine {
   protocol: string;
   engine: string;
@@ -115,9 +158,12 @@ export interface PactiumIndexEngine {
   createIndex(entries?: PactiumRecord[], options?: PactiumRecord): Promise<PactiumRecord>;
   put(root: string, key: string, value: unknown, options?: PactiumRecord): Promise<PactiumRecord>;
   delete(root: string, key: string, options?: PactiumRecord): Promise<PactiumRecord>;
+  mutate(root: string, mutations?: PactiumRecord[], options?: PactiumRecord): Promise<PactiumRecord>;
   get(root: string, key: string): Promise<PactiumRecord | null>;
-  prove(root: string, key: string): Promise<PactiumRecord>;
-  verifyProof(proof: PactiumRecord): boolean;
+  prove(root: string, key: string, options?: PactiumProofOptions): Promise<PactiumRecord>;
+  proveMembershipMultiproof(root: string, keys?: string[], options?: PactiumProofOptions): Promise<PactiumRecord>;
+  proveRange(root: string, options?: PactiumIndexScanOptions): Promise<PactiumRecord>;
+  verifyProof(proof: PactiumRecord, context?: PactiumIndexProofContext): boolean;
   scan(root: string, options?: PactiumIndexScanOptions): Promise<PactiumRecord[]>;
   prefix(root: string, keyPrefix?: string, options?: PactiumIndexScanOptions): Promise<PactiumRecord[]>;
   diff(leftRoot: string, rightRoot: string): Promise<PactiumRecord[]>;
@@ -142,13 +188,33 @@ export interface PactiumLedgerPage extends PactiumRecord {
 
 export interface PactiumLedger extends PactiumRecord {
   append(entry?: PactiumRecord): Promise<PactiumRecord>;
+  appendBatch(entries?: PactiumRecord[], options?: PactiumRecord): Promise<PactiumRecord>;
   head(): Promise<PactiumLedgerHead>;
   entries(): Promise<PactiumRecord[]>;
   pageEntries(options?: PactiumLedgerPageOptions): Promise<PactiumLedgerPage>;
 }
 
+export interface PactiumProofBundleVerificationResult extends PactiumVerificationResult {
+  bundleHash?: string;
+  envelope?: PactiumVerificationResult;
+}
+
 export interface PactiumProofBundleVerificationOptions extends PactiumRecord {
   verifyAllBlocks?: boolean;
+  maxBundleBytes?: number;
+  allowTrailingBytes?: boolean;
+  maxHeaderSize?: number;
+  maxBlockSize?: number;
+  trustPolicy?: string;
+  trustedManifest?: PactiumRecord;
+  /** Require full (non-sampled) state mutation proofs. Default false. When false, large mutations use sampled proofs. */
+  requireFullStateMutationProofs?: boolean;
+  /** Maximum leaf entries per proof before emitting a proofSizeWarning. */
+  maxProofLeafEntries?: number;
+  /** Maximum proof size in bytes before emitting a proofSizeWarning. */
+  maxProofBytes?: number;
+  /** If true, proofSizeWarning becomes a hard failure. Default false. */
+  failOnProofSizeWarning?: boolean;
 }
 
 export interface PactiumProofBundleExportOptions extends PactiumRecord {
@@ -159,40 +225,74 @@ export interface PactiumCore {
   protocol: string;
   schema: string;
   dataDir: string;
-  storage: PactiumStoragePort;
-  ledger: PactiumLedger;
-  indexEngine: PactiumIndexEngine;
   beginOperationIntent(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
   appendOperationOutcome(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
   recordOperation(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
+  recordOperations(inputs?: PactiumRecord[]): Promise<PactiumRecord & { envelopes: PactiumProofEnvelope[] }>;
   lookupOpenIntent(intentId: string): Promise<PactiumRecord>;
   lookupOutcome(intentId: string): Promise<PactiumRecord>;
   createAppendCondition(input?: PactiumRecord): PactiumRecord;
   getLedgerCursor(input?: PactiumRecord): Promise<PactiumRecord>;
-  getWorkspaceCursor(input?: PactiumRecord): Promise<PactiumRecord>;
+  getWorkspaceCursor(input?: PactiumRecord & {
+    workspaceId?: string;
+    fromCursor?: PactiumRecord | null;
+    position?: number;
+    limit?: number;
+    proofOptions?: PactiumProofOptions;
+  }): Promise<PactiumRecord>;
   verifyCursor(cursor: PactiumRecord, context?: PactiumRecord): boolean;
   advanceTrustedHead(input?: PactiumRecord): PactiumRecord;
   planRecovery(input?: PactiumRecord): PactiumRecord;
-  getWorkspaceProjection(workspaceId?: string): Promise<PactiumRecord>;
-  proveWorkspaceMembership(input?: PactiumRecord): Promise<PactiumRecord>;
-  verifyEnvelope(envelope: PactiumProofEnvelope, options?: PactiumRecord): Promise<PactiumVerificationResult>;
+  getWorkspaceProjection(workspaceId?: string, options?: PactiumRecord & { limit?: number }): Promise<PactiumRecord>;
+  proveWorkspaceMembership(input?: PactiumRecord & {
+    workspaceId?: string;
+    ledgerEventId?: string;
+    proofOptions?: PactiumProofOptions;
+  }): Promise<PactiumRecord>;
+  verifyEnvelope(
+    envelope: PactiumProofEnvelope,
+    options?: PactiumProofVerificationOptions
+  ): Promise<PactiumVerificationResult>;
   exportProofBundle(envelopeOrId: PactiumProofEnvelope | string, options?: PactiumProofBundleExportOptions): Promise<PactiumProofBundle>;
   createExtension(extension: PactiumRecord): Promise<PactiumRecord>;
   storeEnvelope(envelope: PactiumProofEnvelope): Promise<PactiumProofEnvelope>;
   protocolCatalog(): Promise<PactiumRecord>;
-  doctor(): Promise<PactiumRecord & { ok: boolean; dataDir: string }>;
+  /** Run integrity checks. Pass { rebuild: true } to replay ledger and compare derived roots. */
+  doctor(options?: { rebuild?: boolean }): Promise<PactiumRecord & {
+    ok: boolean; dataDir: string; ledgerSize: number;
+    rebuild?: { attempted: boolean; comparableRootsCount: number; mismatches: PactiumRecord[]; stateRebuildIncomplete: boolean; warnings: PactiumVerificationFailure[] };
+  }>;
+  /** Resolve a CAS block by CID. Returns a canonical clone — safe for external mutation. */
+  resolveBlock(cid: string): Promise<(PactiumRecord & { bytes?: Uint8Array }) | null>;
+  /** Check whether a CAS block exists. */
+  hasBlock(cid: string): Promise<boolean>;
+  /** Read the current ledger head, or a specific head by ID. */
+  readLedgerHead(id?: string): Promise<PactiumLedgerHead | null>;
+  /** Read a ledger leaf by index. */
+  readLedgerLeaf(index: number): Promise<PactiumRecord | null>;
+  /** Read a protocol object. Returns a canonical clone. */
+  readProtocolObject(scope: string, key: string, fallback?: unknown): Promise<unknown>;
+  /** List all keys in a protocol object scope. */
+  listProtocolObjectKeys(scope: string): Promise<string[]>;
 }
 
 export interface PactiumHttpServerOptions extends PactiumDataDirOptions {
   pactium?: PactiumCore | null;
   licolite?: unknown;
   maxBodyBytes?: number;
+  /** Enable mutation routes (POST/PUT/DELETE). Default false. */
+  enableMutations?: boolean;
+  /** Authorization hook for mutation routes. Return false or { allowed: false } to reject. */
+  authorize?: ((ctx: { method: string; pathname: string; capability: string; headers: Record<string, string | string[] | undefined> }) => boolean | { allowed: boolean; reason?: string; statusCode?: number } | Promise<boolean | { allowed: boolean; reason?: string; statusCode?: number }>) | null;
 }
 
 export interface PactiumHttpServerStartOptions extends PactiumDataDirOptions {
   host?: string;
   port?: number | string;
   maxBodyBytes?: number;
+  /** Enable mutation routes (POST/PUT/DELETE). Default false. */
+  enableMutations?: boolean;
+  authorize?: PactiumHttpServerOptions["authorize"];
 }
 
 export interface PactiumHttpServerStartResult {
@@ -206,7 +306,7 @@ export interface PactiumHttpServerStartResult {
 
 export const PACTIUM_PROTOCOL: "pactium.v0.2";
 export const PACTIUM_SCHEMA_VERSION: "pactium.v0.2.schema.latest";
-export const PACTIUM_PACKAGE_VERSION: "0.3.1";
+export const PACTIUM_PACKAGE_VERSION: "0.4.0";
 export const PACTIUM_HTTP_PROTOCOL: "pactium.v0.2.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES: 1048576;
 export const PACTIUM_INDEX_ENGINE: "pactium.verifiable-index-engine";
@@ -217,7 +317,14 @@ export const PACTIUM_PROOF_TYPES: Readonly<{
   ledgerInclusion: "ledger.inclusion.audit-path";
   ledgerConsistency: "ledger.consistency.audit-path";
   indexMembership: "index.membership.prolly-path";
-  indexNonMembership: "index.non-membership.prolly-path";
+  indexMembershipMultiproof: "index.membership-multiproof.prolly-paths";
+  indexRange: "index.range.prolly-paths";
+  indexNonMembership: "index.non-membership.compact-prolly-boundary";
+}>;
+export const PACTIUM_TRUST_POLICIES: Readonly<{
+  structural: "structural";
+  selfCarriedManifest: "self-carried-manifest";
+  trustedManifestRequired: "trusted-manifest-required";
 }>;
 export const PACTIUM_PROTOCOL_PROFILE: PactiumRecord;
 export const HASH_DOMAINS: Record<string, string>;
@@ -235,6 +342,10 @@ export function cidForBytes(bytes: Uint8Array | ArrayBuffer | string): string;
 export function cidForCanonical(value: unknown): string;
 export function createVerificationFailure(input?: PactiumRecord): PactiumVerificationFailure;
 export function createStoragePort(options?: PactiumDataDirOptions): PactiumStoragePort;
+export function createJsonStoragePort(options?: PactiumDataDirOptions): PactiumStoragePort;
+export function createSqliteStoragePort(options?: PactiumDataDirOptions): PactiumStoragePort;
+export function detectSqliteCapabilities(options?: PactiumRecord): Promise<PactiumRecord>;
+export function sqliteStorageAvailable(options?: PactiumRecord): boolean;
 export function ledgerLeafHash(leaf: unknown): string;
 export function ledgerNodeHash(leftHash: string, rightHash: string): string;
 export function emptyTreeHash(): string;
@@ -250,7 +361,7 @@ export function signLedgerHead(head?: PactiumRecord, options?: PactiumRecord): P
 export function verifyLedgerHeadSignature(head?: PactiumRecord, manifest?: PactiumRecord, options?: PactiumRecord): PactiumVerificationResult & { accepted?: number };
 export function advanceTrustedHead(input?: PactiumRecord): PactiumRecord;
 export function createVerifiableIndexEngine(options?: PactiumRecord): PactiumIndexEngine;
-export function verifyIndexProof(proof: PactiumRecord): boolean;
+export function verifyIndexProof(proof: PactiumRecord, context?: PactiumIndexProofContext): boolean;
 export function createAppendCondition(input?: PactiumRecord): PactiumRecord;
 export function createTrackingCursor(input?: PactiumRecord): PactiumRecord;
 export function covers(cursor: PactiumRecord, position: number): boolean;
@@ -258,8 +369,8 @@ export function advanceTo(cursor: PactiumRecord, position: number, options?: Pac
 export function samePositionAs(left: PactiumRecord, right: PactiumRecord): boolean;
 export function verifyTrackingCursor(cursor: PactiumRecord, context?: PactiumRecord): boolean;
 export function createPactium(options?: PactiumDataDirOptions & { storage?: PactiumStoragePort | null }): PactiumCore;
-export function verifyProofEnvelope(envelope: PactiumProofEnvelope, options?: PactiumRecord): Promise<PactiumVerificationResult>;
-export function verifyProofBundle(bundle: PactiumProofBundle, options?: PactiumProofBundleVerificationOptions): Promise<PactiumVerificationResult & { bundleHash?: string }>;
+export function verifyProofEnvelope(envelope: PactiumProofEnvelope, options?: PactiumProofVerificationOptions): Promise<PactiumVerificationResult>;
+export function verifyProofBundle(bundle: PactiumProofBundle, options?: PactiumProofBundleVerificationOptions): Promise<PactiumProofBundleVerificationResult>;
 export function createDefaultProofVerifierRegistry(extraVerifiers?: PactiumRecord): Map<string, (...args: unknown[]) => unknown>;
 export function createRepairPlanner(): PactiumRecord;
 export function createMaintenanceTaskEngine(options?: PactiumRecord): PactiumRecord;

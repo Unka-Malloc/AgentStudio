@@ -76,7 +76,7 @@ The first-class integration surface for LicoLite is at `pactium/licolite`.
 | --- | --- |
 | **Operation Ledger** | RFC 6962-style transparency log with inclusion and consistency proofs |
 | **Append-Only Lifecycle** | Operation Intent / Outcome facts with idempotency replay |
-| **Verifiable Index Engine** | Canonical Prolly Tree with membership, non-membership proofs, and efficient diffs |
+| **Verifiable Index Engine** | Canonical Prolly Tree with path-copying mutations, membership/non-membership proofs, multiproofs, range proofs, and shared-node diffs |
 | **Workspace Projection** | Verifiable workspace-scoped order and membership indexes |
 | **Merkle State** | Content-addressed state commits bound to operation outcomes |
 | **Checkpoint Tree** | Verifiable recovery and progress structure |
@@ -84,7 +84,9 @@ The first-class integration surface for LicoLite is at `pactium/licolite`.
 | **Proof Bundles** | Portable CAR-like exports for offline verification |
 | **Signed Heads** | Optional Ed25519 ledger head signing with verifier manifests |
 | **LicoLite Aspect** | First-class integration surface with default workspace projection and signing |
-| **Repair Planning** | Deterministic repair task generation from structured verification failures |
+| **Repair Planning** | Deterministic repair task generation from structured verification failures; repair execution is host-owned |
+| **Canonical Value** | Pactium-specific canonical encoding (deterministic JSON + NFC + $bytes + safe integers; not RFC 8785 JCS) |
+| **Trust Policy** | Explicit trust model: structural / self-carried-manifest / trusted-manifest-required verification modes |
 | **Zero Dependencies** | Pure ESM, no runtime dependencies, ships source directly |
 
 ## Installation
@@ -108,7 +110,7 @@ yarn add pactium
 
 ## Quick Start
 
-### Record an operation with full proof
+### Record an operation with a verifiable proof envelope
 
 ```js
 import { createPactium } from "pactium";
@@ -227,7 +229,7 @@ import {
   verifyProofBundle,
   createDefaultProofVerifierRegistry,
 
-  // Maintenance and repair
+  // Maintenance and repair (planning — hosts execute plans)
   createRepairPlanner,
   createMaintenanceTaskEngine,
 
@@ -246,7 +248,9 @@ import {
 } from "pactium/http";
 ```
 
-The HTTP adapter exposes operation lifecycle, envelope and bundle verification, proof bundle export, workspace projection, cursor paging, append-condition, trusted-head, repair, maintenance, extension, and envelope storage calls as JSON routes. See [docs/API.md](./docs/API.md#http-adapter-api-pactiumhttp) for the full route matrix.
+The HTTP adapter exposes operation lifecycle, envelope and bundle verification, proof bundle export, workspace projection, cursor paging, append-condition, trusted-head, repair, maintenance, extension, and envelope storage calls as JSON routes. By default, the HTTP adapter starts in read-only mode; set `enableMutations: true` to enable write operations. An `authorize(ctx)` hook is available for host-controlled access control. See [docs/API.md](./docs/API.md#http-adapter-api-pactiumhttp) for the full route matrix.
+
+**Important**: The HTTP adapter is a host-controlled internal adapter. It is not designed as a default public-facing network service. Hosts must provide their own authentication, authorization, and transport security controls.
 
 ### LicoLite Aspect (`pactium/licolite`)
 
@@ -311,6 +315,26 @@ pactium licolite verify --body-file ./licolite-envelope.json
 
 The CLI reads JSON from `--body`, `--body-file`, or stdin.
 
+### Crash consistency & recovery
+
+Pactium uses write-ahead commit markers for crash consistency. Operation lifecycle commits (`beginOperationIntent` and `appendOperationOutcome`) write pending/complete commit markers before work begins and after `runtime-state` is saved. `recordOperation()` consists of two lifecycle commits: intent + outcome. Materialization operations such as `exportProofBundle`, `storeEnvelope`, and `createExtension` may write storage or runtime-state but are not currently covered by lifecycle commit markers. `doctor()` scans for incomplete commits (pending without complete) and reports them as repairable failures.
+
+The HTTP route `/bundles/export` is classified as a mutation-capability route because it caches the proof bundle in runtime-state, but it is not a ledger lifecycle commit.
+
+```bash
+# Run standard integrity checks
+pactium doctor --data-dir ./.pactium
+
+# Replay ledger leaves to rebuild derived state and compare roots
+pactium doctor --data-dir ./.pactium --rebuild
+```
+
+`doctor({ rebuild: true })` replays all ledger leaves to reconstruct derived index roots and compares them against the stored `runtime-state`. Roots are categorized:
+
+- **Fully comparable** (`openIntent`, `outcome`, `causality`, workspace `orderRoot`/`membershipRoot`): strict comparison — mismatches report `derived_root_mismatch`.
+- **Partially comparable** (`intentIdempotency`, `outcomeIdempotency`, workspace `checkpointRoot`): may need material not in old ledger facts — mismatches produce `*_rebuild_incomplete` warnings.
+- **Skipped** (workspace `stateRoot`): state mutations are not in ledger facts — reports `state_rebuild_incomplete`.
+
 `pactium serve` binds to `127.0.0.1` by default and enforces a 1 MiB JSON body limit. Use `--host`, `--max-body-bytes`, `PACTIUM_HTTP_HOST`, and `PACTIUM_HTTP_MAX_BODY_BYTES` only when the server is behind the host system's authentication, authorization, and transport security controls.
 
 ## Architecture
@@ -357,6 +381,22 @@ The CLI reads JSON from `--body`, `--body-file`, or stdin.
 
 For detailed architecture documentation, see [docs/architecture/ARCHITECTURE.md](./docs/architecture/ARCHITECTURE.md).
 
+### Current Implementation Boundaries
+
+Pactium is actively developed. The following areas are in active refinement:
+
+**Index Engine Scalability:**
+The Verifiable Index Engine supports a no-op fast path and full path-copying mutations. `put`, `delete`, and `mutate` descend the search path, rewrite the affected leaf plus necessary ancestors, collapse single-child roots, and reuse unchanged subtrees. `diff()` traverses Prolly nodes, skips equal subtree roots, and handles non-aligned child ranges before falling back to leaf-level comparison. Membership proofs, compact non-membership proofs, membership multiproofs, and range proofs all use descriptor-table compaction.
+
+**Proof Size Guard (not bounded proof format):**
+`maxProofLeafEntries` and `maxProofBytes` options produce `proofSizeWarning` on generated and verified proofs. This is a size guard / diagnostic, not a bounded proof format. By default, `proofSizeWarning` is non-fatal (severity: warning). Set `failOnProofSizeWarning: true` to treat it as a hard failure.
+
+**Storage Backends and Crash Consistency:**
+`createStoragePort()` defaults to `storageBackend: "auto"` for persistent data directories: Pactium chooses SQLite for new directories when a supported provider is available (`node:sqlite` or optional npm `better-sqlite3`), otherwise JSON. Existing data directories stay bound to the backend recorded in `pactium-manifest.json`; Pactium does not silently switch an initialized directory to another backend. The JSON backend is intended for local development, low-concurrency use, and debugging. SQLite is the production local-durability candidate; distributed multi-node deployments still need an external consistency layer. See [docs/API.md](./docs/API.md#crash-consistency-and-doctor) for details.
+
+**Lock Heartbeat / Fencing (best-effort):**
+Write locks use heartbeat intervals and fencing tokens for stale detection and cross-process safety. Fencing token comparison uses string equality (UUID strings, not numeric). Stale lock cleanup performs a double-read with owner identity verification. Dirty/ownerless lock directories are cleaned up safely using directory mtime-based staleness with a double-stat pattern. Lock cleanup occurs only during write-lock acquisition; `doctor()` does not scan for dirty or stale locks. This is a best-effort mechanism; for production deployments with high contention, consider external lock managers.
+
 ## When to Use Pactium
 
 **Use Pactium when you need:**
@@ -366,7 +406,7 @@ For detailed architecture documentation, see [docs/architecture/ARCHITECTURE.md]
 - Workspace-scoped operation isolation with verifiable membership
 - Append-only operation history with deterministic recovery
 - Idempotent operation recording with replay detection
-- Verifiable state roots with efficient diffs
+- Verifiable state roots with path-copying mutations and deterministic shared-node diffs
 
 **Pactium is not for:**
 
@@ -383,6 +423,8 @@ For detailed architecture documentation, see [docs/architecture/ARCHITECTURE.md]
 | [Architecture](./docs/architecture/ARCHITECTURE.md) | System architecture and module structure |
 | [Protocol Specification](./docs/protocols/PROTOCOLS.md) | Protocol behavior and data flow |
 | [Protocol Profile](./docs/protocols/PROFILE.md) | Protocol parameter matrix |
+| [Canonical Encoding](./docs/protocols/CANONICAL-ENCODING.md) | Formal Pactium Canonical Value encoding rules |
+| [Trust Anchors](./docs/protocols/TRUST-ANCHORS.md) | Production trust policy and signer governance |
 | [LicoLite Aspect](./docs/LICOLITE-ASPECT.md) | LicoLite integration surface |
 | [Terms](./docs/TERM.md) | Protocol glossary and vocabulary |
 | [FAQ](./docs/FAQ.md) | Frequently asked questions |

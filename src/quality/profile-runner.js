@@ -1,9 +1,9 @@
 import { PACTIUM_PACKAGE_VERSION, PACTIUM_PROOF_TYPES, PACTIUM_PROTOCOL } from "../protocol/constants.js";
 import { protocolHash } from "../protocol/hashing.js";
-import { createPactium } from "../core/pactium-core.js";
+import { createPactium, getPactiumInternals } from "../core/pactium-core.js";
 import { createVerifiableIndexEngine } from "../index-engine/snapshot-merkle-index.js";
 import { verifyProofBundle } from "../proof/bundle.js";
-import { createStoragePort } from "../storage/local-json-storage-port.js";
+import { createStoragePort } from "../storage/storage-port.js";
 
 function percentile(samples, ratio, fallback) {
   if (samples.length === 0) return fallback;
@@ -50,8 +50,9 @@ function addCompactionDetails(details, compaction) {
 }
 
 async function compactPressureCore(context, details) {
-  if (!context?.owned || typeof context.core?._compactInMemoryCaches !== "function") return;
-  addCompactionDetails(details, await context.core._compactInMemoryCaches());
+  if (!context?.owned) return;
+  const internals = getPactiumInternals(context.core);
+  addCompactionDetails(details, await internals.compactInMemoryCaches());
 }
 
 export async function runPactiumQualityGateProfile({
@@ -148,7 +149,7 @@ export async function runPactiumQualityGateProfile({
         input: { index }
       });
       const bundle = await core.exportProofBundle(envelope);
-      const verified = await verifyProofBundle(bundle);
+      const verified = await verifyProofBundle(bundle, { trustPolicy: "self-carried-manifest" });
       if (!verified.ok) throw new Error("Pressure Proof Bundle verification failed.");
       samples.push(performance.now() - operationStarted);
       completed += 1;
@@ -219,7 +220,7 @@ export async function runPactiumQualityGateProfile({
         workspaceId: outcome.workspaceId,
         ledgerEventId: outcome.ledgerEventId
       });
-      if (!membership.member || !core.indexEngine.verifyProof(membership.proof)) {
+      if (!membership.member || !getPactiumInternals(core).indexEngine.verifyProof(membership.proof)) {
         throw new Error("Pressure recovery workspace membership proof failed.");
       }
     }
@@ -243,7 +244,7 @@ export async function runPactiumQualityGateProfile({
         policyEvidence: { decision: "allow", index },
         workspaceEffectEvidence: { effect: "record", index }
       });
-      const verified = await aspect.verifyEnvelope(envelope);
+      const verified = await aspect.verifyEnvelope(envelope, { trustPolicy: "self-carried-manifest" });
       if (!verified.ok) throw new Error("Pressure LicoLite verification failed.");
       samples.push(performance.now() - operationStarted);
       completed += 1;

@@ -1,0 +1,43 @@
+{
+  "source": "RFC 9162 Merkle Tree Hash domain separation: empty tree H(empty), leaf H(0x00 || leaf_input), node H(0x01 || left || right)",
+  "leaves": [
+    "",
+    "a",
+    "b",
+    "c",
+    "d"
+  ],
+  "emptyTreeHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "leafHashes": [
+    "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+    "022a6979e6dab7aa5ae4c3e5e45f7e977112a7e63593820dbec1ec738a24f93c",
+    "57eb35615d47f34ec714cacdf5fd74608a5e8e102724e80b24b287c0c27b6a31",
+    "597fcb31282d34654c200d3418fca5705c648ebf326ec73d8ddef11841f876d8",
+    "d070dc5b8da9aea7dc0f5ad4c29d89965200059c9a0ceca3abd5da2492dcb71d"
+  ],
+  "treeHashes": {
+    "1": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+    "2": "688dc6244b041199e7ab4990df6340ce3dc14caa5cd5a0e1131addaa1209e1a6",
+    "3": "652297b9504045a600942bcdf9ae5c2400be42d51139c7fb63ab3ee439ff110d",
+    "4": "4a9bab0b70e36b453e967468fc209705d9171fd05e9cf9e0ed6c2dff673fc790",
+    "5": "ff9cdaec73345d3896e37ff5681084b7be4097839f760e621412f9343d139f22"
+  },
+  "inclusion": {
+    "treeSize": 4,
+    "index": 2,
+    "auditPath": [
+      "688dc6244b041199e7ab4990df6340ce3dc14caa5cd5a0e1131addaa1209e1a6",
+      "597fcb31282d34654c200d3418fca5705c648ebf326ec73d8ddef11841f876d8"
+    ]
+  },
+  "consistency": {
+    "oldSize": 3,
+    "newSize": 5,
+    "auditPath": [
+      "57eb35615d47f34ec714cacdf5fd74608a5e8e102724e80b24b287c0c27b6a31",
+      "597fcb31282d34654c200d3418fca5705c648ebf326ec73d8ddef11841f876d8",
+      "688dc6244b041199e7ab4990df6340ce3dc14caa5cd5a0e1131addaa1209e1a6",
+      "d070dc5b8da9aea7dc0f5ad4c29d89965200059c9a0ceca3abd5da2492dcb71d"
+    ]
+  }
+}

@@ -72,7 +72,11 @@ export function createLicoLiteSigner({
       return `hmac-sha256:${hmac(secret, message)}`;
     },
     async verify(message, signature) {
-      return signature === `hmac-sha256:${hmac(secret, message)}`;
+      const expected = `hmac-sha256:${hmac(secret, message)}`;
+      const actual = Buffer.from(String(signature || ""));
+      const expectedBuf = Buffer.from(expected);
+      if (actual.length !== expectedBuf.length) return false;
+      return crypto.timingSafeEqual(actual, expectedBuf);
     }
   });
 }

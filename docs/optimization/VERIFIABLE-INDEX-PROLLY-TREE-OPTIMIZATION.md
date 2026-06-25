@@ -10,10 +10,10 @@ The implementation in `src/index-engine/snapshot-merkle-index.js` now matches th
 
 - Index roots contain root metadata only: root CID, root hash, count, key range, height, domain, and splitter constants.
 - Leaf and internal Prolly nodes are stored as content-addressed CAS blocks with child refs.
-- Membership and non-membership proofs use `index.*.prolly-path` proof material.
+- Membership, compact non-membership, membership multiproof, and range proofs use compact Prolly path proof material.
 - `scan` and `prefix` traverse key ranges over leaf nodes and support bounded pagination.
 - `diff` skips equal subtree roots, merges non-aligned child ranges, descends changed overlap groups, and compares entries only at leaf level.
-- `put` and `delete` mutate a local leaf descriptor window, rechunk the affected entries, splice replacement leaves, and rebuild canonical parent levels from leaf descriptors.
+- `put`, `delete`, and `mutate` use path-copying: they descend affected search paths, rewrite changed leaves and necessary ancestors, collapse single-child roots, and reuse unchanged subtrees.
 - `readSnapshot` remains an inspection helper that materializes entries from nodes; emitted roots do not store full entry arrays as authority.
 
 The previous pairwise Merkle full-snapshot authority and metadata-only chunk boundary model are not current behavior.
@@ -107,17 +107,25 @@ This is simpler than Dolt's rolling hash and key splitter, but it preserves Pact
 
 1. Read the root node path for `key`.
 2. Replace or insert the entry in the target leaf chunk.
-3. Re-chunk the affected local leaf run. Include neighboring chunks until the replacement tail lands on a real chunk boundary or the global tail.
-4. Splice the replacement leaves into the leaf descriptor sequence.
-5. Rebuild canonical parent descriptors from the leaf descriptors so the root matches a full rebuild for the same entries.
+3. Rechunk the mutated leaf entries if the leaf splits or collapses.
+4. Rebuild only ancestors on the search path whose child descriptors changed.
+5. Collapse a single-child internal root.
 6. Return the new index root object.
 
 ### `delete(root, key, options)`
 
 1. Read the root node path for `key`.
 2. Remove the entry if present.
-3. Merge/rechunk neighboring chunks if the leaf falls below `minEntries`.
-4. Splice the replacement leaves and rebuild canonical parent descriptors from the leaf descriptors.
+3. Rechunk the mutated leaf entries if the leaf becomes empty or changes descriptor.
+4. Rebuild only ancestors on the search path whose child descriptors changed.
+
+### `mutate(root, mutations, options)`
+
+1. Normalize mutations by key and keep the final mutation for repeated keys.
+2. Materialize put values into content-addressed value blocks.
+3. Group mutations by child search path at each internal node.
+4. Rewrite only children reached by a mutation group.
+5. Rebuild the changed ancestor descriptors and return the new root.
 
 ## Proof Format
 
@@ -132,12 +140,23 @@ This is simpler than Dolt's rolling hash and key splitter, but it preserves Pact
   key,
   entry,
   leafHash,
+  leafRoot,
+  leafRootHash,
+  leafNode: {
+    keyRange,
+    count,
+    entries,
+    splitter
+  },
+  descriptorTable: [
+    { root, rootHash, level, count, keyRange }
+  ],
   path: [
     {
       nodeRoot,
       level,
       keyRange,
-      siblingDescriptors,
+      siblingDescriptorRefs,
       childIndex,
       nodeHash
     }
@@ -145,28 +164,78 @@ This is simpler than Dolt's rolling hash and key splitter, but it preserves Pact
 }
 ```
 
-Verification recomputes the leaf node, then each parent node from sibling descriptors until `indexRoot`.
+Verification recomputes the leaf node, expands sibling descriptors from the descriptor table, then recomputes each parent node until `indexRoot`.
 
 ### Non-Membership
 
 ```js
 {
-  proofType: "index.non-membership.prolly-path",
+  proofType: "index.non-membership.compact-prolly-boundary",
   domain,
   indexRoot,
   rootHash,
   key,
-  containingLeaf: {
+  leafRoot,
+  leafRootHash,
+  leafNode: {
     keyRange,
     entries,
-    path
   },
+  descriptorTable,
+  path,
   leftBoundary,
   rightBoundary
 }
 ```
 
 The verifier checks the containing leaf range and confirms that no entry key equals the queried key. This is more compact and more direct than proving nearest left/right keys separately.
+
+### Membership Multiproof
+
+```js
+{
+  proofType: "index.membership-multiproof.prolly-paths",
+  domain,
+  indexRoot,
+  rootHash,
+  keys,
+  missingKeys,
+  descriptorTable,
+  leaves: [
+    {
+      leafRoot,
+      leafRootHash,
+      leafNode,
+      path,
+      keys
+    }
+  ]
+}
+```
+
+Verification fails if any requested key is missing or if a leaf/path cannot recompute the committed root.
+
+### Range Proof
+
+```js
+{
+  proofType: "index.range.prolly-paths",
+  domain,
+  indexRoot,
+  rootHash,
+  min,
+  max,
+  after,
+  limit,
+  truncated,
+  entries,
+  descriptorTable,
+  leaves,
+  boundaryProof
+}
+```
+
+Verification recomputes every included leaf path, checks returned entries against the requested range, rejects omitted covered siblings, and uses `boundaryProof` for empty ranges.
 
 ## Diff Algorithm
 
@@ -193,7 +262,7 @@ The intended cost is proportional to changed chunks plus tree height, not total 
 ## Verifier Integration
 
 1. `verifyIndexProof(proof)` is exported from the index engine module.
-2. `createDefaultProofVerifierRegistry` registers index membership and non-membership proof verifiers.
+2. `createDefaultProofVerifierRegistry` registers index membership, compact non-membership, membership multiproof, and range proof verifiers.
 3. `verifyProofEnvelope` recursively walks `proofMaterial.proofs` and dispatches every object with a `proofType` to the registry.
 4. LicoLite verification relies on core registry verification for workspace order and membership proofs before reporting success.
 5. Missing verifiers fail closed when `requireAllProofs` is true or the proof material is critical.
@@ -206,9 +275,10 @@ Embedded index proofs are therefore checked by core envelope verification.
 | --- | --- |
 | Builder determinism | Same entries in any insertion order produce same root. |
 | Chunk boundary fixtures | Boundary constants produce stable node cuts. |
-| Membership proofs | Valid keys verify; tampered entries, siblings, and roots fail. |
+| Membership proofs | Valid keys verify; tampered entries, sibling refs, and roots fail. |
 | Non-membership proofs | Missing keys inside, before, and after ranges verify; inserted key tampering fails. |
-| Mutation structural sharing | Updating one key reuses unrelated subtree roots. |
+| Multiproofs and range proofs | Multi-key and range proof material verifies; omitted leaves, missing keys, and tampered entries fail. |
+| Mutation structural sharing | Updating one key rewrites only necessary path nodes and reuses unrelated subtree roots. |
 | Diff scaling | Unchanged shared roots are skipped; changed keys are reported exactly. |
 | Domain separation | Same key/value under different domains yields different roots. |
 | Envelope verification | Corrupt workspace/state/checkpoint index proof causes `verifyProofEnvelope` failure. |
@@ -216,7 +286,7 @@ Embedded index proofs are therefore checked by core envelope verification.
 ## Current Runtime Boundary
 
 1. New data directories emit Prolly index roots and CAS-backed nodes.
-2. Only the current Prolly-path membership and non-membership proof types are registered as built-in index proof types.
+2. The current membership, compact non-membership, membership multiproof, and range proof types are registered as built-in index proof types.
 3. Cursor scan/prefix use key-range traversal over leaf nodes.
 4. Local mutation rechunking is implemented for `put` and `delete`.
 5. Snapshot full-entry storage is not part of emitted root authority.

@@ -4,12 +4,16 @@ export interface PactiumHttpServerOptions extends PactiumDataDirOptions {
   pactium?: PactiumCore | null;
   licolite?: unknown;
   maxBodyBytes?: number;
+  enableMutations?: boolean;
+  authorize?: ((ctx: { method: string; pathname: string; capability: string; headers: Record<string, string | string[] | undefined> }) => boolean | { allowed: boolean; reason?: string; statusCode?: number } | Promise<boolean | { allowed: boolean; reason?: string; statusCode?: number }>) | null;
 }
 
 export interface PactiumHttpServerStartOptions extends PactiumDataDirOptions {
   host?: string;
   port?: number | string;
   maxBodyBytes?: number;
+  enableMutations?: boolean;
+  authorize?: PactiumHttpServerOptions["authorize"];
 }
 
 export interface PactiumHttpServerStartResult {

@@ -8,7 +8,8 @@ export {
   PACTIUM_PROOF_TYPES,
   PACTIUM_PROTOCOL,
   PACTIUM_PROTOCOL_PROFILE,
-  PACTIUM_SCHEMA_VERSION
+  PACTIUM_SCHEMA_VERSION,
+  PACTIUM_TRUST_POLICIES
 } from "./protocol/constants.js";
 export {
   canonicalDecode,
@@ -23,11 +24,17 @@ export {
   protocolHashHex
 } from "./protocol/hashing.js";
 export {
-  createStoragePort,
   defaultPactiumDataDir,
   resolveDataDir,
   resolveWithin
 } from "./storage/local-json-storage-port.js";
+export {
+  createStoragePort,
+  createJsonStoragePort,
+  createSqliteStoragePort,
+  detectSqliteCapabilities,
+  sqliteStorageAvailable
+} from "./storage/storage-port.js";
 export { createVerificationFailure } from "./verification/failure.js";
 export {
   createLedgerConsistencyProof,

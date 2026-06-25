@@ -5,20 +5,38 @@ import {
   PACTIUM_PROOF_BUNDLE_TYPE,
   PACTIUM_PROOF_TYPES,
   PACTIUM_PROTOCOL,
-  PACTIUM_SCHEMA_VERSION
+  PACTIUM_SCHEMA_VERSION,
+  PACTIUM_TRUST_POLICIES
 } from "../protocol/constants.js";
 import { canonicalEncode, normalizeCanonicalValue } from "../canonical/value.js";
 import { createAppendCondition, assertAppendCondition } from "./append-condition.js";
-import { createLedgerTransparencyLog } from "../ledger/transparency-log.js";
+import { createLedgerTransparencyLog, ledgerNodeHash } from "../ledger/transparency-log.js";
 import { advanceTrustedHead as advanceTrustedLedgerHead } from "../ledger/signed-head.js";
 import { createVerifiableIndexEngine } from "../index-engine/snapshot-merkle-index.js";
 import { createId, protocolHash, protocolHashHex } from "../protocol/hashing.js";
-import { createProofRef, finalizeEnvelope, materializeExtension, verifyProofEnvelope } from "../proof/envelope.js";
+import {
+  compactProofMaterialDescriptors,
+  createProofRef,
+  finalizeEnvelope,
+  materializeExtension,
+  verifyProofEnvelope
+} from "../proof/envelope.js";
 import { createRepairPlanner } from "../repair/planner.js";
-import { createStoragePort } from "../storage/local-json-storage-port.js";
+import { createStoragePort } from "../storage/storage-port.js";
 import { createTrackingCursor, verifyTrackingCursor } from "./tracking-cursor.js";
 import { asArray, asRecord, nowIso, safeText } from "../shared/records.js";
 import { createVerificationFailure, PactiumLifecycleError } from "../verification/failure.js";
+import { rebuildCoreStateFromLedger } from "./rebuild-state.js";
+
+const pactiumInternals = new WeakMap();
+
+export function getPactiumInternals(core) {
+  const internals = pactiumInternals.get(core);
+  if (!internals) {
+    throw new Error("Pactium internals are available only for core instances created by createPactium().");
+  }
+  return internals;
+}
 
 function createEmptyCoreState() {
   return {
@@ -141,6 +159,25 @@ function padOrdinal(value) {
   return String(value).padStart(16, "0");
 }
 
+function compareStateMutationKeys(left, right) {
+  const leftKey = String(left);
+  const rightKey = String(right);
+  if (leftKey < rightKey) return -1;
+  if (leftKey > rightKey) return 1;
+  /* node:coverage ignore next -- netStateMutationsByKey sorts unique Map keys. */
+  return 0;
+}
+
+function netStateMutationsByKey(mutations) {
+  const latestByKey = new Map();
+  for (const mutation of asArray(mutations)) {
+    const key = String(mutation?.key || "");
+    if (!key) continue;
+    latestByKey.set(key, { ...asRecord(mutation), key });
+  }
+  return [...latestByKey.values()].sort((left, right) => compareStateMutationKeys(left.key, right.key));
+}
+
 function isMembershipProof(proof) {
   return proof?.proofType === PACTIUM_PROOF_TYPES.indexMembership;
 }
@@ -178,7 +215,7 @@ function hashFromCid(cid) {
   return String(cid || "").split(":").pop() || "";
 }
 
-async function updateWorkspaceProjection({ indexEngine, state, workspaceId, ledgerAppend }) {
+async function updateWorkspaceProjection({ indexEngine, state, workspaceId, ledgerAppend, proofOptions = {} }) {
   const workspace = workspaceStateFor(state, workspaceId);
   const ordinal = workspace.nextOrdinal;
   workspace.nextOrdinal += 1;
@@ -203,8 +240,8 @@ async function updateWorkspaceProjection({ indexEngine, state, workspaceId, ledg
     orderKey,
     orderRoot: workspace.orderRoot,
     membershipRoot: workspace.membershipRoot,
-    orderProof: await indexEngine.prove(workspace.orderRoot, orderKey),
-    membershipProof: await indexEngine.prove(workspace.membershipRoot, ledgerAppend.entry.eventId)
+    orderProof: await indexEngine.prove(workspace.orderRoot, orderKey, proofOptions),
+    membershipProof: await indexEngine.prove(workspace.membershipRoot, ledgerAppend.entry.eventId, proofOptions)
   };
 }
 
@@ -219,9 +256,11 @@ export function createPactium({
   dataDir = "",
   userDataPath = "",
   storage = null,
-  inMemory = false
+  inMemory = false,
+  storageBackend = "",
+  databasePath = ""
 } = {}) {
-  const resolvedStorage = storage || createStoragePort({ dataDir, userDataPath, inMemory });
+  const resolvedStorage = storage || createStoragePort({ dataDir, userDataPath, inMemory, storageBackend, databasePath });
   const ledger = createLedgerTransparencyLog({ storage: resolvedStorage });
   const indexEngine = createVerifiableIndexEngine({ storage: resolvedStorage, domain: "pactium" });
   const repairPlanner = createRepairPlanner();
@@ -267,6 +306,45 @@ export function createPactium({
     await resolvedStorage.putProtocolObject("core", "runtime-state", state);
   }
 
+  // -- Commit markers for crash consistency --
+  // Each mutation writes a pending marker before work begins and a complete
+  // marker after runtime-state is saved. doctor() scans for orphans.
+  const COMMIT_SCOPE = "commit";
+  function commitMarker(commitId, operation, phase, details = {}) {
+    return {
+      protocol: PACTIUM_PROTOCOL,
+      schema: PACTIUM_SCHEMA_VERSION,
+      commitType: "pactium.mutation-commit",
+      commitId,
+      operation,
+      phase,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      ledgerEventIds: asArray(details.ledgerEventIds).map(String),
+      envelopeIds: asArray(details.envelopeIds).map(String),
+      affectedWorkspaceIds: asArray(details.affectedWorkspaceIds).map(String),
+      notes: details.notes || ""
+    };
+  }
+
+  async function writePendingMarker(commitId, operation, details = {}) {
+    await resolvedStorage.putProtocolObject(COMMIT_SCOPE, `pending-${commitId}`,
+      commitMarker(commitId, operation, "pending", details));
+  }
+
+  async function writeCompleteMarker(commitId, operation, details = {}) {
+    await resolvedStorage.putProtocolObject(COMMIT_SCOPE, `complete-${commitId}`,
+      commitMarker(commitId, operation, "complete", details));
+  }
+
+  async function cleanupPendingMarker(commitId) {
+    try {
+      await resolvedStorage.deleteProtocolObject(COMMIT_SCOPE, `pending-${commitId}`);
+    } catch (_) {
+      // best-effort cleanup
+    }
+  }
+
   async function createEnvelope({
     envelopeKind,
     fact,
@@ -277,7 +355,7 @@ export function createPactium({
     replayed = false,
     relatedEnvelopeIds = []
   }) {
-    const material = {
+    const material = compactProofMaterialDescriptors({
       protocol: PACTIUM_PROTOCOL,
       materialType: "pactium.proof-material",
       envelopeKind,
@@ -289,7 +367,7 @@ export function createPactium({
       },
       appendCondition,
       proofs
-    };
+    });
     const materialRef = await createProofRef(resolvedStorage, "ledger-and-index-proofs", material, [
       ledgerAppend.entry.factCid
     ]);
@@ -350,6 +428,10 @@ export function createPactium({
       const envelope = { ...current.envelopes[current.intentEnvelopes[idKey]], replayed: true };
       return envelope;
     }
+    // --- Preflight validation (no side effects) ---
+    // All checks that can fail BEFORE we write any pending marker or commit
+    // any mutation must happen here. Otherwise a failed check leaves an orphan
+    // pending marker that doctor() will report as incomplete_commit.
     if (idClaimKey && current.intentIdempotencyClaims[idClaimKey] && current.intentIdempotencyClaims[idClaimKey].inputHash !== inputHash) {
       throw new PactiumLifecycleError("Operation Intent idempotency key was reused with different input.", createVerificationFailure({
         layer: "operation-lifecycle",
@@ -378,7 +460,14 @@ export function createPactium({
         knownCausalityRefs: knownCausalityRefsFor(current)
       });
     }
-    const intent = {
+    // --- All preflight checks passed; now commit the mutation ---
+    // Commit marker: write pending before mutation work begins.
+    const commitId = createId("mutation_commit", { operation: "begin-intent", operationId, workspaceId, nonce: crypto.randomUUID() });
+    await writePendingMarker(commitId, "begin-intent", { affectedWorkspaceIds: [workspaceId] });
+    const proofOptions = asRecord(input.proofOptions);
+    let ledgerCommitted = false;
+    try {
+      const intent = {
       protocol: PACTIUM_PROTOCOL,
       schema: PACTIUM_SCHEMA_VERSION,
       factType: "operation.intent",
@@ -399,6 +488,7 @@ export function createPactium({
       createdAt: nowIso()
     };
     const ledgerAppend = await ledger.append(intent);
+    ledgerCommitted = true; // ledger fact is durable — keep pending marker on later failure
     current.intents[intent.intentId] = {
       intent,
       ledgerEventId: ledgerAppend.entry.eventId,
@@ -429,7 +519,7 @@ export function createPactium({
         "operation-causality"
       );
     }
-    const projection = await updateWorkspaceProjection({ indexEngine, state: current, workspaceId, ledgerAppend });
+    const projection = await updateWorkspaceProjection({ indexEngine, state: current, workspaceId, ledgerAppend, proofOptions });
     const workspace = workspaceStateFor(current, workspaceId);
     const checkpoints = checkpointEntriesFor(current, workspaceId);
     const checkpointNodeId = createId("checkpoint_node", { intentId: intent.intentId, kind: "intent" });
@@ -458,17 +548,17 @@ export function createPactium({
       fact: intent,
       ledgerAppend,
       proofs: {
-        openIntent: await indexEngine.prove(current.indexRoots.openIntent, intent.intentId),
-        intentIdempotency: idKey ? await indexEngine.prove(current.indexRoots.intentIdempotency, idKey) : null,
+        openIntent: await indexEngine.prove(current.indexRoots.openIntent, intent.intentId, proofOptions),
+        intentIdempotency: idKey ? await indexEngine.prove(current.indexRoots.intentIdempotency, idKey, proofOptions) : null,
         workspaceProjection: projection,
         checkpoint: {
           root: workspace.checkpointRoot,
-          proof: await indexEngine.prove(workspace.checkpointRoot, checkpointNodeId)
+          proof: await indexEngine.prove(workspace.checkpointRoot, checkpointNodeId, proofOptions)
         },
         causality: {
           root: current.indexRoots.causality,
           proofs: await Promise.all(intent.causalityRefs.map((ref) =>
-            indexEngine.prove(current.indexRoots.causality, `${ref}\u0000${intent.intentId}`)
+            indexEngine.prove(current.indexRoots.causality, `${ref}\u0000${intent.intentId}`, proofOptions)
           ))
         }
       },
@@ -480,7 +570,24 @@ export function createPactium({
     if (idClaimKey) current.intentIdempotencyClaims[idClaimKey] = { inputHash, envelopeId: envelope.envelopeId };
     current.intents[intent.intentId].intentEnvelopeId = envelope.envelopeId;
     await saveState();
-    return envelope;
+    await writeCompleteMarker(commitId, "begin-intent", {
+      ledgerEventIds: [envelope.factRef.ledgerEventId],
+      envelopeIds: [envelope.envelopeId],
+      affectedWorkspaceIds: [workspaceId]
+    });
+      await cleanupPendingMarker(commitId);
+      return envelope;
+    } catch (error) {
+    if (!ledgerCommitted) {
+        // Nothing durable was written — clean up pending marker so
+        // doctor() won't report a false incomplete_commit.
+        await cleanupPendingMarker(commitId);
+      }
+      // If ledgerCommitted is true, the ledger fact exists but the
+      // complete marker was never written. Keep the pending marker so
+      // doctor() correctly reports incomplete_commit.
+      throw error;
+    }
   }
 
   async function appendOperationOutcome(input = {}) {
@@ -488,6 +595,7 @@ export function createPactium({
   }
 
   async function appendOperationOutcomeCommitted(input = {}) {
+    const commitId = createId("mutation_commit", { operation: "append-outcome", nonce: crypto.randomUUID() });
     const current = await ensureState();
     const intentId = safeText(input.intentId);
     if (!intentId) throw new Error("intentId is required for Operation Outcome.");
@@ -532,6 +640,11 @@ export function createPactium({
         knownCausalityRefs: knownCausalityRefsFor(current)
       });
     }
+    // --- All preflight checks passed; now commit the mutation ---
+    await writePendingMarker(commitId, "append-outcome", { affectedWorkspaceIds: [workspaceId] });
+    const proofOptions = asRecord(input.proofOptions);
+    let ledgerCommitted = false;
+    try {
     const outcome = {
       protocol: PACTIUM_PROTOCOL,
       schema: PACTIUM_SCHEMA_VERSION,
@@ -554,6 +667,7 @@ export function createPactium({
       createdAt: nowIso()
     };
     const ledgerAppend = await ledger.append(outcome);
+    ledgerCommitted = true; // ledger fact is durable — keep pending marker on later failure
     current.outcomes[intentId] = outcome;
     current.intents[intentId].open = false;
     current.indexRoots.openIntent = await applyIndexDelete(indexEngine, current.indexRoots.openIntent, intentId, "open-intent");
@@ -582,18 +696,20 @@ export function createPactium({
         "operation-causality"
       );
     }
-    const projection = await updateWorkspaceProjection({ indexEngine, state: current, workspaceId, ledgerAppend });
+    const projection = await updateWorkspaceProjection({ indexEngine, state: current, workspaceId, ledgerAppend, proofOptions });
     const workspace = workspaceStateFor(current, workspaceId);
     const workspaceStateEntries = stateEntriesFor(current, workspaceId);
     const mutations = asArray(input.stateMutations || input.state?.mutations);
     const keyedMutations = mutations.filter((mutation) => mutation?.key);
+    const netKeyedMutations = netStateMutationsByKey(keyedMutations);
     await ensureWorkspaceStateRoot({ indexEngine, workspace, workspaceStateEntries });
-    for (const mutation of mutations) {
+    const stateIndexMutations = [];
+    for (const mutation of netKeyedMutations) {
       const key = String(mutation.key || "");
       if (!key) continue;
       if (mutation.action === "delete") {
         delete workspaceStateEntries[key];
-        workspace.stateRoot = await applyIndexDelete(indexEngine, workspace.stateRoot, key, "state");
+        stateIndexMutations.push({ action: "delete", key });
       } else {
         const valueBlock = mutation.valueRef
           ? { cid: mutation.valueRef, payloadHash: mutation.valueHash || "" }
@@ -605,11 +721,24 @@ export function createPactium({
           metadata: normalizeCanonicalValue(asRecord(mutation.metadata))
         };
         workspaceStateEntries[key] = stateEntry;
-        workspace.stateRoot = await applyIndexPut(indexEngine, workspace.stateRoot, key, stateEntry, "state");
+        stateIndexMutations.push({
+          action: "put",
+          key,
+          valueRef: stateEntry.valueRef,
+          valueHash: stateEntry.valueHash,
+          metadata: stateEntry.metadata
+        });
       }
     }
+    if (stateIndexMutations.length > 0) {
+      workspace.stateRoot = (await indexEngine.mutate(workspace.stateRoot, stateIndexMutations, { domain: "state" })).root;
+    }
     const stateRoot = workspace.stateRoot;
-    const mutationDescriptors = keyedMutations.map((mutation) => {
+    const fullStateMutationMode = proofOptions.stateMutationProofMode === "full";
+    const provedStateMutationCount = fullStateMutationMode
+      ? netKeyedMutations.length
+      : Math.min(netKeyedMutations.length, 32);
+    const mutationDescriptors = netKeyedMutations.map((mutation) => {
       const key = String(mutation.key || "");
       const action = String(mutation.action || "put");
       const entry = workspaceStateEntries[key] || {};
@@ -634,11 +763,23 @@ export function createPactium({
       intentId,
       workspaceId,
       stateRoot,
-      mutationCount: keyedMutations.length,
+      mutationCount: netKeyedMutations.length,
       mutations: mutationDescriptors,
-      mutationKeys: keyedMutations.map((mutation) => String(mutation.key || "")),
-      mutationActions: keyedMutations.map((mutation) => String(mutation.action || "put")),
-      touchedKeyCount: keyedMutations.slice(0, 32).length,
+      mutationKeys: netKeyedMutations.map((mutation) => String(mutation.key || "")),
+      mutationActions: netKeyedMutations.map((mutation) => String(mutation.action || "put")),
+      provedKeyCount: provedStateMutationCount,
+      mutationProofMode: fullStateMutationMode ? "full" : "sampled",
+      proofCompleteness: provedStateMutationCount >= netKeyedMutations.length ? "full" : "sampled",
+      unprovedMutationCount: Math.max(0, netKeyedMutations.length - provedStateMutationCount),
+      proofProfile: {
+        profileType: "pactium.state-mutation-proof-profile",
+        mode: fullStateMutationMode ? "full" : "sampled",
+        sampling: fullStateMutationMode ? "all-unique-keys" : "first-32-canonical-unique-keys",
+        totalUniqueKeyCount: netKeyedMutations.length,
+        provedKeyCount: provedStateMutationCount,
+        completeness: provedStateMutationCount >= netKeyedMutations.length ? "full" : "sampled",
+        unprovedKeyCount: Math.max(0, netKeyedMutations.length - provedStateMutationCount)
+      },
       createdAt: nowIso()
     };
     const checkpointEntries = checkpointEntriesFor(current, workspaceId);
@@ -666,17 +807,17 @@ export function createPactium({
       "checkpoint"
     );
     const touchedKeyProofs = [];
-    for (const mutation of keyedMutations.slice(0, 32)) {
-      touchedKeyProofs.push(await indexEngine.prove(stateRoot, String(mutation.key)));
+    for (const mutation of netKeyedMutations.slice(0, provedStateMutationCount)) {
+      touchedKeyProofs.push(await indexEngine.prove(stateRoot, String(mutation.key), proofOptions));
     }
     const envelope = await createEnvelope({
       envelopeKind: "operation-outcome",
       fact: outcome,
       ledgerAppend,
       proofs: {
-        outcome: await indexEngine.prove(current.indexRoots.outcome, intentId),
-        openIntentRemoved: await indexEngine.prove(current.indexRoots.openIntent, intentId),
-        outcomeIdempotency: outcomeIdKey ? await indexEngine.prove(current.indexRoots.outcomeIdempotency, outcomeIdKey) : null,
+        outcome: await indexEngine.prove(current.indexRoots.outcome, intentId, proofOptions),
+        openIntentRemoved: await indexEngine.prove(current.indexRoots.openIntent, intentId, proofOptions),
+        outcomeIdempotency: outcomeIdKey ? await indexEngine.prove(current.indexRoots.outcomeIdempotency, outcomeIdKey, proofOptions) : null,
         workspaceProjection: projection,
         stateCommit,
         state: {
@@ -685,12 +826,12 @@ export function createPactium({
         },
         checkpoint: {
           root: workspace.checkpointRoot,
-          proof: await indexEngine.prove(workspace.checkpointRoot, outcomeCheckpointNodeId)
+          proof: await indexEngine.prove(workspace.checkpointRoot, outcomeCheckpointNodeId, proofOptions)
         },
         causality: {
           root: current.indexRoots.causality,
           proofs: await Promise.all(outcome.causalityRefs.map((ref) =>
-            indexEngine.prove(current.indexRoots.causality, `${ref}\u0000${outcome.outcomeId}`)
+            indexEngine.prove(current.indexRoots.causality, `${ref}\u0000${outcome.outcomeId}`, proofOptions)
           ))
         }
       },
@@ -701,7 +842,22 @@ export function createPactium({
     });
     if (outcomeIdKey) current.outcomeEnvelopes[outcomeIdKey] = envelope.envelopeId;
     await saveState();
+    await writeCompleteMarker(commitId, "append-outcome", {
+      ledgerEventIds: [envelope.factRef.ledgerEventId],
+      envelopeIds: [envelope.envelopeId],
+      affectedWorkspaceIds: [workspaceId]
+    });
+    await cleanupPendingMarker(commitId);
     return envelope;
+    } catch (error) {
+      if (!ledgerCommitted) {
+        // Nothing durable was written — clean up the pending marker.
+        await cleanupPendingMarker(commitId);
+      }
+      // If ledgerCommitted is true, the pending marker stays so doctor()
+      // can correctly report incomplete_commit.
+      throw error;
+    }
   }
 
   async function recordOperation(input = {}) {
@@ -715,6 +871,33 @@ export function createPactium({
       intentId,
       appendCondition: input.outcomeAppendCondition || input.outcome?.appendCondition || null,
       extensions: asArray(input.outcomeExtensions || input.extensions)
+    });
+  }
+
+  async function recordOperations(inputs = []) {
+    return enqueueMutation(async () => {
+      const envelopes = [];
+      for (const input of asArray(inputs)) {
+        const intentEnvelope = await beginOperationIntentCommitted(input.intentAppendCondition
+          ? { ...input, appendCondition: input.intentAppendCondition }
+          : input);
+        if (intentEnvelope.replayed && input.returnIntentReplay) {
+          envelopes.push(intentEnvelope);
+          continue;
+        }
+        envelopes.push(await appendOperationOutcomeCommitted({
+          ...input,
+          intentId: intentEnvelope.factId,
+          appendCondition: input.outcomeAppendCondition || input.outcome?.appendCondition || null,
+          extensions: asArray(input.outcomeExtensions || input.extensions)
+        }));
+      }
+      return {
+        protocol: PACTIUM_PROTOCOL,
+        batchType: "pactium.operation-record-batch",
+        count: envelopes.length,
+        envelopes
+      };
     });
   }
 
@@ -742,24 +925,27 @@ export function createPactium({
     };
   }
 
-  async function getWorkspaceProjection(workspaceId = "default") {
+  async function getWorkspaceProjection(workspaceId = "default", options = {}) {
     const current = await prepareRead();
     const workspace = workspaceStateFor(current, workspaceId);
+    const defaultLimit = Math.max(1, Math.min(Number(options.limit || 100), 10000));
+    const orderLimit = options.orderLimit !== undefined ? Number(options.orderLimit) : defaultLimit;
+    const membershipLimit = options.membershipLimit !== undefined ? Number(options.membershipLimit) : defaultLimit;
     return {
       protocol: PACTIUM_PROTOCOL,
       workspaceId: safeText(workspaceId, "default"),
       nextOrdinal: workspace.nextOrdinal,
       orderRoot: workspace.orderRoot,
       membershipRoot: workspace.membershipRoot,
-      order: workspace.orderRoot ? await indexEngine.scan(workspace.orderRoot, { limit: 100000 }) : [],
-      membership: workspace.membershipRoot ? await indexEngine.scan(workspace.membershipRoot, { limit: 100000 }) : []
+      order: workspace.orderRoot ? await indexEngine.scan(workspace.orderRoot, { limit: orderLimit, after: String(options.after || "") }) : [],
+      membership: workspace.membershipRoot ? await indexEngine.scan(workspace.membershipRoot, { limit: membershipLimit, after: String(options.after || "") }) : []
     };
   }
 
-  async function proveWorkspaceMembership({ workspaceId = "default", ledgerEventId = "" } = {}) {
+  async function proveWorkspaceMembership({ workspaceId = "default", ledgerEventId = "", proofOptions = {} } = {}) {
     const current = await prepareRead();
     const workspace = workspaceStateFor(current, workspaceId);
-    const proof = await indexEngine.prove(workspace.membershipRoot, ledgerEventId);
+    const proof = await indexEngine.prove(workspace.membershipRoot, ledgerEventId, asRecord(proofOptions));
     return {
       protocol: PACTIUM_PROTOCOL,
       workspaceId: safeText(workspaceId, "default"),
@@ -794,7 +980,7 @@ export function createPactium({
     };
   }
 
-  async function getWorkspaceCursor({ workspaceId = "default", fromCursor = null, position = 0, limit = 100 } = {}) {
+  async function getWorkspaceCursor({ workspaceId = "default", fromCursor = null, position = 0, limit = 100, proofOptions = {} } = {}) {
     const current = await prepareRead();
     const workspace = workspaceStateFor(current, workspaceId);
     const currentHead = await ledger.head();
@@ -815,6 +1001,7 @@ export function createPactium({
       headRef: currentHead.headId || currentHead.root || currentHead.rootHash,
       orderRoot: workspace.orderRoot
     });
+    const opts = asRecord(proofOptions);
     return {
       protocol: PACTIUM_PROTOCOL,
       pageType: "pactium.workspace-cursor-page",
@@ -824,7 +1011,7 @@ export function createPactium({
       nextCursor: cursor,
       head: currentHead,
       orderRoot: workspace.orderRoot,
-      orderProofs: await Promise.all(entries.map((entry) => indexEngine.prove(workspace.orderRoot, entry.key)))
+      orderProofs: await Promise.all(entries.map((entry) => indexEngine.prove(workspace.orderRoot, entry.key, opts)))
     };
   }
 
@@ -841,13 +1028,22 @@ export function createPactium({
   }
 
   async function verifyEnvelope(envelope, options = {}) {
+    const defaultTrustPolicy = resolvedStorage.inMemory
+      ? PACTIUM_TRUST_POLICIES.selfCarriedManifest
+      : PACTIUM_TRUST_POLICIES.trustedManifestRequired;
     return verifyProofEnvelope(envelope, {
       storage: resolvedStorage,
       supportedCriticalExtensions: options.supportedCriticalExtensions || [],
       proofVerifiers: options.proofVerifiers || {},
       requireAllProofs: options.requireAllProofs !== false,
       verifierManifest: options.verifierManifest || null,
-      ledgerHeadSignatures: options.ledgerHeadSignatures || []
+      trustedManifest: options.trustedManifest || null,
+      ledgerHeadSignatures: options.ledgerHeadSignatures || [],
+      trustPolicy: options.trustPolicy || defaultTrustPolicy,
+      requireFullStateMutationProofs: options.requireFullStateMutationProofs || false,
+      maxProofLeafEntries: Number(options.maxProofLeafEntries || 0),
+      maxProofBytes: Number(options.maxProofBytes || 0),
+      failOnProofSizeWarning: options.failOnProofSizeWarning === true
     });
   }
 
@@ -1024,17 +1220,265 @@ export function createPactium({
     };
   }
 
-  async function doctor() {
+  async function doctor(options = {}) {
     await prepareRead();
-    return {
+    const failures = [];
+    let rebuildResult = null;
+
+    // Verify manifest
+    try {
+      const manifest = await resolvedStorage.getProtocolObject("core", "runtime-state", null);
+    } catch (err) {
+      failures.push(createVerificationFailure({
+        layer: "doctor",
+        code: "manifest_check_failed",
+        message: err instanceof Error ? err.message : "Cannot read storage manifest.",
+        repairable: false
+      }));
+    }
+
+    // Verify ledger head rootHash matches compact range
+    try {
+      const head = await ledger.head();
+      const compact = await ledger.compactRange();
+      if (head && compact) {
+        const peaks = asArray(compact.peaks);
+        if (peaks.length > 0) {
+          // Reconstruct root from peaks
+          let reconstructed = peaks[peaks.length - 1].hash;
+          for (let i = peaks.length - 2; i >= 0; i -= 1) {
+            reconstructed = ledgerNodeHash(peaks[i].hash, reconstructed);
+          }
+          if (reconstructed !== head.rootHash) {
+            failures.push(createVerificationFailure({
+              layer: "doctor",
+              code: "head_compact_range_mismatch",
+              message: "Ledger head rootHash does not match the compact range peaks.",
+              evidenceRef: head.headId || "",
+              repairable: true
+            }));
+          }
+        }
+      }
+    /* node:coverage ignore next 8 */
+    } catch (err) {
+      failures.push(createVerificationFailure({
+        layer: "doctor",
+        code: "ledger_consistency_check_failed",
+        message: err instanceof Error ? err.message : "Ledger consistency check failed.",
+        repairable: true
+      }));
+    }
+
+    // Verify ledger leaf hash chain
+    try {
+      const head = await ledger.head();
+      const pageSize = 1000;
+      let verifiedLeaves = 0;
+      for (let start = 0; start < Number(head.size || 0); start += pageSize) {
+        const page = await ledger.pageEntries({ start, limit: pageSize });
+        for (const entry of page.entries) {
+          // Verify leaf integrity: check factCid maps to a valid CAS block
+          if (entry.factCid) {
+            const block = await resolvedStorage.getBlock(entry.factCid);
+            if (!block) {
+              failures.push(createVerificationFailure({
+                layer: "doctor",
+                code: "missing_ledger_fact_block",
+                message: `CAS block missing for ledger leaf ${entry.index}.`,
+                evidenceRef: entry.factCid,
+                repairable: true
+              }));
+            } else if (block.payloadHash !== entry.factHash) {
+              failures.push(createVerificationFailure({
+                layer: "doctor",
+                code: "bad_ledger_fact_hash",
+                message: `CAS block hash mismatch for ledger leaf ${entry.index}.`,
+                evidenceRef: entry.factCid,
+                repairable: true
+              }));
+            }
+          }
+          verifiedLeaves += 1;
+        }
+        if (page.entries.length === 0 || page.nextPosition <= start) break;
+      }
+    } catch (err) {
+      failures.push(createVerificationFailure({
+        layer: "doctor",
+        code: "ledger_leaf_check_failed",
+        message: err instanceof Error ? err.message : "Ledger leaf integrity check failed.",
+        repairable: true
+      }));
+    }
+
+    // Verify commit markers: check for incomplete (pending without matching complete)
+    try {
+      const pendingKeys = await resolvedStorage.listProtocolObjectKeys("commit");
+      const pendingCommitIds = pendingKeys
+        .filter((k) => k.startsWith("pending-"))
+        .map((k) => k.slice("pending-".length));
+      const completeKeys = new Set(
+        pendingKeys
+          .filter((k) => k.startsWith("complete-"))
+          .map((k) => k.slice("complete-".length))
+      );
+      for (const cid of pendingCommitIds) {
+        if (!completeKeys.has(cid)) {
+          failures.push(createVerificationFailure({
+            layer: "doctor",
+            code: "incomplete_commit",
+            message: `Pending mutation commit ${cid} has no matching complete marker.`,
+            evidenceRef: cid,
+            repairable: true
+          }));
+        }
+      }
+    } catch (err) {
+      failures.push(createVerificationFailure({
+        layer: "doctor",
+        code: "commit_check_failed",
+        message: err instanceof Error ? err.message : "Commit marker scan failed.",
+        repairable: true
+      }));
+    }
+
+    // Verify index roots referenced in runtime state exist
+    const current = await ensureState();
+    const retainedRoots = currentIndexRoots(current);
+    for (const root of retainedRoots) {
+      try {
+        if (root) await indexEngine.readIndexRoot(root);
+      } catch (err) {
+        failures.push(createVerificationFailure({
+          layer: "doctor",
+          code: "missing_index_root",
+          message: `Index root ${root} referenced in state but missing from storage.`,
+          evidenceRef: root,
+          repairable: true
+        }));
+      }
+    }
+
+    // -- Rebuild mode: replay ledger leaves and compare derived roots --
+    if (options.rebuild) {
+      try {
+        const rebuild = await rebuildCoreStateFromLedger({
+          ledger,
+          indexEngine,
+          storage: resolvedStorage
+        });
+        const current = await ensureState();
+        const mismatches = [];
+        const runtimeRootLookup = (rootName) => {
+          if (rootName === "openIntent") return current.indexRoots.openIntent || "";
+          if (rootName === "outcome") return current.indexRoots.outcome || "";
+          if (rootName === "intentIdempotency") return current.indexRoots.intentIdempotency || "";
+          if (rootName === "outcomeIdempotency") return current.indexRoots.outcomeIdempotency || "";
+          if (rootName === "causality") return current.indexRoots.causality || "";
+          if (rootName.startsWith("workspace:")) {
+            const parts = rootName.split(":");
+            const wsId = parts[1];
+            const field = parts.slice(2).join(":");
+            const ws = current.workspace?.[wsId];
+            if (field === "orderRoot") return ws?.orderRoot || "";
+            if (field === "membershipRoot") return ws?.membershipRoot || "";
+            if (field === "checkpointRoot") return ws?.checkpointRoot || "";
+            /* node:coverage ignore next 2 */
+            if (field === "stateRoot") return ws?.stateRoot || "";
+          }
+          /* node:coverage ignore next 2 */
+          return "";
+        };
+
+        // Compare fully comparable roots — mismatch here is a hard error
+        for (const [rootName, rebuiltRoot] of Object.entries(rebuild.fullyComparableRoots)) {
+          if (!rebuiltRoot) continue;
+          const runtimeRoot = runtimeRootLookup(rootName);
+          if (runtimeRoot && rebuiltRoot !== runtimeRoot) {
+            mismatches.push({ root: rootName, rebuilt: rebuiltRoot, runtime: runtimeRoot, category: "fullyComparable" });
+            failures.push(createVerificationFailure({
+              layer: "doctor",
+              code: "derived_root_mismatch",
+              message: `Rebuilt ${rootName} (${rebuiltRoot}) does not match runtime state (${runtimeRoot}).`,
+              evidenceRef: rootName,
+              repairable: true
+            }));
+          }
+        }
+
+        // Compare partially comparable roots — mismatch is a warning, not hard failure
+        for (const [rootName, rebuiltRoot] of Object.entries(rebuild.partiallyComparableRoots)) {
+          if (!rebuiltRoot) continue;
+          const runtimeRoot = runtimeRootLookup(rootName);
+          if (runtimeRoot && rebuiltRoot !== runtimeRoot) {
+            mismatches.push({ root: rootName, rebuilt: rebuiltRoot, runtime: runtimeRoot, category: "partiallyComparable" });
+            failures.push(createVerificationFailure({
+              layer: "doctor",
+              code: `${rootName}_rebuild_incomplete`,
+              message: `Rebuilt ${rootName} does not match runtime state — material may be missing from ledger facts.`,
+              evidenceRef: rootName,
+              repairable: true,
+              severity: "warning"
+            }));
+          }
+        }
+
+        // Report skipped roots as informational warnings
+        for (const [rootName, info] of Object.entries(rebuild.skippedRoots)) {
+          failures.push(createVerificationFailure({
+            layer: "doctor",
+            code: info.code || "rebuild_skipped",
+            message: info.reason || `Root ${rootName} cannot be reliably rebuilt from ledger facts.`,
+            evidenceRef: rootName,
+            repairable: true,
+            severity: "warning"
+          }));
+        }
+
+        rebuildResult = {
+          attempted: true,
+          comparableRootsCount: Object.keys(rebuild.comparableRoots).length,
+          fullyComparableCount: Object.keys(rebuild.fullyComparableRoots).length,
+          partiallyComparableCount: Object.keys(rebuild.partiallyComparableRoots).length,
+          skippedCount: Object.keys(rebuild.skippedRoots).length,
+          mismatches,
+          stateRebuildIncomplete: rebuild.stateRebuildIncomplete,
+          warnings: rebuild.warnings
+        };
+
+        if (rebuild.stateRebuildIncomplete) {
+          failures.push(createVerificationFailure({
+            layer: "doctor",
+            code: "state_rebuild_incomplete",
+            message: "State root rebuild is incomplete because state mutations are not stored in ledger facts.",
+            repairable: true,
+            severity: "warning"
+          }));
+        }
+      } catch (err) {
+        failures.push(createVerificationFailure({
+          layer: "doctor",
+          code: "ledger_replay_failed",
+          message: err instanceof Error ? err.message : "Ledger replay rebuild failed.",
+          repairable: true
+        }));
+      }
+    }
+
+    const result = {
       protocol: PACTIUM_PROTOCOL,
       schema: PACTIUM_SCHEMA_VERSION,
-      ok: true,
+      ok: failures.filter((f) => f.severity !== "warning").length === 0,
       dataDir: resolvedStorage.dataDir,
       latestSchemaOnly: true,
       historicalMigration: false,
-      catalog: await protocolCatalog()
+      ledgerSize: Number((await ledger.head()).size || 0),
+      catalog: await protocolCatalog(),
+      ...(failures.length > 0 ? { failures } : {}),
+      ...(rebuildResult ? { rebuild: rebuildResult } : {})
     };
+    return result;
   }
 
   async function compactInMemoryCaches() {
@@ -1083,16 +1527,57 @@ export function createPactium({
     };
   }
 
-  return Object.freeze({
+  // -- Read-only resolvers --
+  // These return canonical clones so callers cannot mutate cached state.
+  async function resolveBlock(cid) {
+    const block = await resolvedStorage.getBlock(String(cid || ""));
+    if (!block) return null;
+    // Defensive clone: bytes and refs must be independent of storage cache.
+    return {
+      ...block,
+      bytes: block.bytes ? Buffer.from(block.bytes) : undefined,
+      refs: [...asArray(block.refs)]
+    };
+  }
+
+  async function hasBlock(cid) {
+    return resolvedStorage.hasBlock(String(cid || ""));
+  }
+
+  async function readLedgerHead(id) {
+    const head = await ledger.getHead(id || "");
+    if (!head) return null;
+    // Clone to prevent caller mutation of internal ledger state.
+    return normalizeCanonicalValue(head);
+  }
+
+  async function readLedgerLeaf(index) {
+    const leaf = await ledger.getLeaf(Number(index));
+    if (!leaf) return null;
+    // Clone to prevent caller mutation. getLeaf returns a protocol object
+    // which is already cloned by storage, but add a defensive clone.
+    return normalizeCanonicalValue(leaf);
+  }
+
+  async function readProtocolObject(scope, key, fallback) {
+    return resolvedStorage.getProtocolObject(String(scope || ""), String(key || ""), fallback);
+  }
+
+  async function listProtocolObjectKeys(scope) {
+    if (typeof resolvedStorage.listProtocolObjectKeys === "function") {
+      return resolvedStorage.listProtocolObjectKeys(String(scope || ""));
+    }
+    return [];
+  }
+
+  const core = Object.freeze({
     protocol: PACTIUM_PROTOCOL,
     schema: PACTIUM_SCHEMA_VERSION,
     dataDir: resolvedStorage.dataDir,
-    storage: resolvedStorage,
-    ledger,
-    indexEngine,
     beginOperationIntent,
     appendOperationOutcome,
     recordOperation,
+    recordOperations,
     lookupOpenIntent,
     lookupOutcome,
     createAppendCondition,
@@ -1109,6 +1594,20 @@ export function createPactium({
     storeEnvelope,
     protocolCatalog,
     doctor,
-    _compactInMemoryCaches: compactInMemoryCaches
+    // Read-only protocol resolvers for storage, ledger, and index data.
+    // These return canonical clones — safe for external consumption.
+    resolveBlock,
+    hasBlock,
+    readLedgerHead,
+    readLedgerLeaf,
+    readProtocolObject,
+    listProtocolObjectKeys
   });
+  pactiumInternals.set(core, Object.freeze({
+    storage: resolvedStorage,
+    ledger,
+    indexEngine,
+    compactInMemoryCaches
+  }));
+  return core;
 }

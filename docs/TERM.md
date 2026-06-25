@@ -249,7 +249,7 @@ A verifiable Merkle State fact bound to an Operation Outcome. It declares state 
 _Avoid_: intent state commit, planned state, mutable state row
 
 **Prolly Tree State Index**:
-The canonical ordered-key index for Merkle State. It provides stable state roots, structural sharing, key membership proofs, key non-membership proofs, and efficient diffs.
+The canonical ordered-key index for Merkle State. It provides stable state roots, structural sharing, path-copying mutations, key membership proofs, compact key non-membership proofs, multiproofs, range proofs, and shared-node diffs.
 _Avoid_: sorted-array index, proof hash, temporary state index
 
 **Canonical Prolly Tree**:
@@ -257,7 +257,7 @@ Pactium's own protocol-defined Prolly Tree format. Its encoding, chunking, hash 
 _Avoid_: external Prolly package, implementation detail, adapter tree
 
 **Verifiable Index Engine**:
-The shared algorithmic core used by Pactium indexes that need ordered keys, stable roots, membership proofs, non-membership proofs, structural sharing, and efficient diffs. Domain indexes may use different protocol profiles, but they do not reimplement separate proof engines.
+The shared algorithmic core used by Pactium indexes that need ordered keys, stable roots, path-copying mutations, membership proofs, compact non-membership proofs, multiproofs, range proofs, structural sharing, and shared-node diffs. Domain indexes may use different protocol profiles, but they do not reimplement separate proof engines.
 _Avoid_: duplicate index implementation, per-domain tree algorithm, ad hoc proof store
 
 **Index Domain Adapter**:

@@ -1,4 +1,4 @@
-import { PACTIUM_PROTOCOL } from "../../protocol/constants.js";
+import { PACTIUM_PROTOCOL, PACTIUM_TRUST_POLICIES } from "../../protocol/constants.js";
 import { canonicalDecode } from "../../canonical/value.js";
 import { envelopeSigningHash, verifyProofEnvelope } from "../../proof/envelope.js";
 import { verifyProofBundle } from "../../proof/bundle.js";
@@ -52,7 +52,7 @@ async function resolveMaterialBlock({ core, cid, bundleMap }) {
       bytes: Buffer.from(String(bundled.payloadBase64 || ""), "base64")
     };
   }
-  return core.storage.getBlock(cid);
+  return core.resolveBlock(cid);
 }
 
 export function createLicoLiteAspect({
@@ -112,14 +112,24 @@ export function createLicoLiteAspect({
 
   async function verifyLicoLiteEnvelope(envelope, options = {}) {
     const bundleMap = bundleBlockMap(options.bundle || null);
+    // Production verification is fail-closed unless the caller supplies a
+    // trusted manifest. Development evidence policy may opt into TOFU-style
+    // self-carried manifest validation explicitly.
+    const effectiveTrustPolicy = options.trustPolicy ||
+      (evidencePolicy === "production"
+        ? PACTIUM_TRUST_POLICIES.trustedManifestRequired
+        : PACTIUM_TRUST_POLICIES.selfCarriedManifest);
     const coreResult = await verifyProofEnvelope(envelope, {
-      storage: core.storage,
+      storage: { getBlock: (cid) => core.resolveBlock(cid) },
       bundle: options.bundle || null,
       supportedCriticalExtensions: LICOLITE_SUPPORTED_CRITICAL_EXTENSIONS,
       proofVerifiers: options.proofVerifiers || {},
       requireAllProofs: options.requireAllProofs !== false,
       verifierManifest: options.verifierManifest || null,
-      ledgerHeadSignatures: options.ledgerHeadSignatures || []
+      trustedManifest: options.trustedManifest || null,
+      ledgerHeadSignatures: options.ledgerHeadSignatures || [],
+      trustPolicy: effectiveTrustPolicy,
+      requireFullStateMutationProofs: options.requireFullStateMutationProofs || false
     });
     const failures = [...coreResult.failures];
     const extensions = asArray(envelope?.extensions);
@@ -239,11 +249,29 @@ export function createLicoLiteAspect({
         }));
       }
     }
+    // In production mode without a trusted manifest, keep an explicit LicoLite
+    // finding alongside the core trust-policy failure.
+    if (evidencePolicy === "production" && !options.trustedManifest) {
+      failures.push(createVerificationFailure({
+        layer: "licolite.trust",
+        code: "untrusted_verification",
+        message: "LicoLite production verification was performed without a trusted manifest. The result is structurally valid but not trusted.",
+        evidenceRef: envelope?.envelopeId || "",
+        severity: "warning",
+        repairable: true
+      }));
+    }
+
     return {
       protocol: PACTIUM_PROTOCOL,
       aspect: LICOLITE_ASPECT_PROTOCOL,
       envelopeId: envelope?.envelopeId || "",
-      ok: failures.length === 0,
+      ok: failures.filter((f) => f.severity !== "warning").length === 0,
+      proofStructurallyValid: coreResult.proofStructurallyValid,
+      ledgerHeadSignatureValid: coreResult.ledgerHeadSignatureValid,
+      ledgerHeadTrusted: coreResult.ledgerHeadTrusted,
+      trustedSignatureValid: coreResult.trustedSignatureValid,
+      trustPolicy: coreResult.trustPolicy,
       failures,
       checked: [
         ...asArray(coreResult.checked),

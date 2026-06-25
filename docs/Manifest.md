@@ -7,7 +7,7 @@ The active design target is Pactium: a proof-first protocol substrate npm packag
 Active protocol scope:
 
 - Canonical Value encoding and Protocol Hash.
-- Storage Port with local backend.
+- Storage Port with local backends.
 - Operation Ledger Transparency Log.
 - Shared Verifiable Index Engine.
 - Operation Intent, Operation Outcome, Open Intent recovery, idempotency, and causality indexes.
@@ -55,5 +55,5 @@ Project documentation must also avoid release-blocking process drift:
 - no maintained documents named after package or protocol versions;
 - no published documentation links or authority references to development scratch files;
 - no design claims without corresponding implementation and ADR coverage.
-- no current-state claims for SQLite storage, separate per-workspace lane queues, repair fact execution, or benchmark baseline enforcement unless implementation and tests exist.
+- no current-state claims for separate per-workspace lane queues, repair fact execution, or benchmark baseline enforcement unless implementation and tests exist.
 - no agent entry other than root `AGENT.md`, project-local agent skills, unrelated tool registries, or version-organized tooling outside the current [Tooling Surface](TOOLING.md).

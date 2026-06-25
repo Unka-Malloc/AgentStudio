@@ -40,11 +40,11 @@ Pactium is a pure ESM package. It cannot be loaded with `require()`. Options:
 
 ### Does Pactium have any runtime dependencies?
 
-No. Pactium has zero runtime dependencies. It uses only Node.js built-in modules (`node:crypto`, `node:fs`, `node:path`, etc.).
+Pactium declares zero runtime dependencies. Core proof functionality uses Node.js built-in modules. The SQLite backend can also use a host-provided optional npm `better-sqlite3` package when present; Pactium does not install it as a dependency.
 
 ### Where does Pactium store data?
 
-By default, Pactium stores data in the directory you specify via `dataDir` option (e.g., `./.pactium`). You can also use `inMemory: true` for testing. The storage format is content-addressed JSON files managed through the Storage Port abstraction.
+By default, Pactium stores data in the directory you specify via `dataDir` option (e.g., `./.pactium`) with `storageBackend: "auto"`. Auto mode chooses SQLite for new data directories when a supported provider is available (`node:sqlite` or optional npm `better-sqlite3`), otherwise JSON. Use `inMemory: true` for tests and `storageBackend: "json"` for local/debug profiles that explicitly want file-per-object storage. Storage is managed through the Storage Port abstraction.
 
 ---
 
@@ -185,5 +185,44 @@ This means the ledger history diverged -- a later ledger state is not a valid co
 The Prolly Tree engine uses structural sharing and Content-Defined Chunking for efficient updates. For large state sets, consider:
 
 - Using the `scan()` and `prefix()` methods for range queries instead of full snapshots
-- Using `diff()` to compute changes between state roots efficiently
+- Using `diff()` to compute changes between state roots with the shared-node diff API
 - Checking memory usage with the pressure profile: `PACTIUM_FULL_PRESSURE=1 npm run verify:protocol:gates`
+
+### What trust policies does Pactium support?
+
+Pactium supports three trust policies via the `trustPolicy` option on `verifyEnvelope()` and `verifyProofBundle()`:
+
+| Mode | Behavior |
+| --- | --- |
+| `structural` (least trust) | Verifies proof structure only. Skips all signature verification. |
+| `self-carried-manifest` | Verifies proof structure + validates signatures against the manifest embedded in the proof material. Does **not** require a caller-supplied trusted manifest. `ledgerHeadTrusted` is always `false`. This is the default only for in-memory/development verification. |
+| `trusted-manifest-required` (most trust) | Requires a caller-supplied `trustedManifest`. Verifies proof structure + validates signatures against the trusted manifest. `ledgerHeadTrusted` can be `true`. |
+
+A **self-carried manifest** (embedded in the proof) is NOT a trusted manifest. It provides format-level signature validation but not trust. Only a caller-supplied `trustedManifest` establishes trust.
+
+Persistent storage and Proof Bundle verification default to `trusted-manifest-required`. Production callers should pass a trusted manifest, rotate or revoke signers in the manifest, and use quorum/witness policies appropriate for their deployment.
+
+### What is the difference between full and sampled state mutation proofs?
+
+State mutation proofs use **sampled mode** by default when there are more than 32 unique touched keys. In sampled mode, the **first 32 unique touched keys in canonical key order** are proven. If the same key appears more than once in one state commit, Pactium records the final net effect for that key and uses the last mutation for that key. Set `proofOptions.stateMutationProofMode: "full"` when recording the operation to emit an individual proof for every unique touched key. Set `requireFullStateMutationProofs: true` when verifying an envelope or Proof Bundle to reject sampled proof material.
+
+### Does the local JSON backend provide ACID transactions?
+
+No. The local JSON backend uses **write-ahead commit markers** (pending/complete) with `doctor()` diagnostics for crash detection. This is a WAL marker + diagnostic pattern, not an ACID database transaction.
+
+**Commit marker coverage boundaries:**
+- Commit markers currently cover operation lifecycle commits only: `beginOperationIntent`, `appendOperationOutcome`, and `recordOperation` (which combines both).
+- Materialization/cache operations (`exportProofBundle`, `storeEnvelope`, `createExtension`) may write storage or runtime-state but are not covered by lifecycle commit markers.
+- The local JSON backend remains a WAL-marker + diagnostic pattern, not ACID.
+
+For production deployments requiring local durable transactions, use the SQLite backend. The JSON backend is appropriate for local development, low-concurrency use, and debugging. Distributed multi-node production still requires an external consistency layer.
+
+### Are proofs constant-size (bounded)?
+
+No. The `maxProofLeafEntries` and `maxProofBytes` options are **size guards**, not a bounded proof format. They produce `proofSizeWarning` when limits are exceeded. By default this is a non-fatal warning. Set `failOnProofSizeWarning: true` for hard failures. Use membership multiproofs and range proofs when many related keys need smaller aggregate proof material.
+
+### Is the index engine a fully optimized Prolly Tree?
+
+The index engine uses content-addressed Prolly nodes with full path-copying mutations. `put`, `delete`, and `mutate` rewrite only the affected leaf path and necessary ancestors, while `diff()` skips equal subtree roots and handles non-aligned child ranges. The engine intentionally keeps Pactium's protocol-defined splitter and proof format rather than adopting Dolt's storage engine.
+
+For current throughput characteristics, run the pressure profile: `PACTIUM_FULL_PRESSURE=1 npm run verify:protocol:gates`.

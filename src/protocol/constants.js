@@ -1,15 +1,22 @@
 export const PACTIUM_PROTOCOL = "pactium.v0.2";
 export const PACTIUM_SCHEMA_VERSION = "pactium.v0.2.schema.latest";
-export const PACTIUM_PACKAGE_VERSION = "0.3.1";
+export const PACTIUM_PACKAGE_VERSION = "0.4.0";
 export const PACTIUM_INDEX_ENGINE = "pactium.verifiable-index-engine";
 export const PACTIUM_INDEX_SPLITTER = "pactium-cdc-boundary";
 export const PACTIUM_PROOF_BUNDLE_TYPE = "pactium.proof-bundle.indexed";
 export const PACTIUM_BUNDLE_ENCODING = "pactium.bundle.indexed-record-stream";
+export const PACTIUM_TRUST_POLICIES = Object.freeze({
+  structural: "structural",
+  selfCarriedManifest: "self-carried-manifest",
+  trustedManifestRequired: "trusted-manifest-required"
+});
 export const PACTIUM_PROOF_TYPES = Object.freeze({
   ledgerInclusion: "ledger.inclusion.audit-path",
   ledgerConsistency: "ledger.consistency.audit-path",
   indexMembership: "index.membership.prolly-path",
-  indexNonMembership: "index.non-membership.prolly-path"
+  indexMembershipMultiproof: "index.membership-multiproof.prolly-paths",
+  indexRange: "index.range.prolly-paths",
+  indexNonMembership: "index.non-membership.compact-prolly-boundary"
 });
 
 export const PACTIUM_PROTOCOL_PROFILE = Object.freeze({
@@ -17,7 +24,7 @@ export const PACTIUM_PROTOCOL_PROFILE = Object.freeze({
   schema: PACTIUM_SCHEMA_VERSION,
   hash: "sha256",
   cid: "cid:sha256:<hex>",
-  canonicalValue: "restricted-ipld-dag-cbor-style",
+  canonicalValue: "jcs-like-canonical-json-nfc-safe-integers",
   orderingAuthority: "operation-ledger",
   ledger: {
     model: "rfc6962-transparency-log",

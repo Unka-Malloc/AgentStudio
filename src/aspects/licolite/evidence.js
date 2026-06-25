@@ -1,5 +1,6 @@
 import { protocolHash } from "../../protocol/hashing.js";
 import { asRecord } from "../../shared/records.js";
+import { getPactiumInternals } from "../../core/pactium-core.js";
 import { LICOLITE_ASPECT_PROTOCOL, LICOLITE_POLICY_EXTENSION, LICOLITE_WORKSPACE_EFFECT_EXTENSION } from "./constants.js";
 
 export async function materializeEvidenceExtension(pactium, {
@@ -8,7 +9,8 @@ export async function materializeEvidenceExtension(pactium, {
   critical = true,
   metadata = {}
 }) {
-  const block = await pactium.storage.putBlock(evidence || {}, {
+  const { storage } = getPactiumInternals(pactium);
+  const block = await storage.putBlock(evidence || {}, {
     kind: `licolite-evidence:${name}`
   });
   return pactium.createExtension({
