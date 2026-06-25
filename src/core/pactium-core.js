@@ -1176,7 +1176,8 @@ export function createPactium({
           }
         }
       }
-    } /* node:coverage ignore next */ catch (err) {
+    /* node:coverage ignore next -- ledger caches internally after init, untestable */
+    } catch (err) {
       failures.push(createVerificationFailure({
         layer: "doctor",
         code: "ledger_consistency_check_failed",

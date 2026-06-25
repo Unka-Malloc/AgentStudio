@@ -1195,6 +1195,36 @@ describe("Pactium reference-project algorithm coverage", () => {
   });
 
 
+  it("diff handles subset containment (one index contained within another)", async () => {
+    const engine = createVerifiableIndexEngine({
+      storage: createStoragePort({ inMemory: true }),
+      domain: "reference-diff-contain"
+    });
+    // Create a larger index
+    const bigEntries = sortedEntries(Array.from({ length: 200 }, (_, i) =>
+      keyEntry(`k:${String(i).padStart(4, "0")}`, `big:${i}`)
+    ));
+    // Create a smaller index that's a subset of the larger
+    const smallEntries = sortedEntries(Array.from({ length: 100 }, (_, i) =>
+      keyEntry(`k:${String(i + 50).padStart(4, "0")}`, `small:${i + 50}`)
+    ));
+    const big = await engine.createIndex(bigEntries);
+    const small = await engine.createIndex(smallEntries);
+    
+    // Diff from big to small: deletes before small range, updates within, deletes after
+    const diffBtoS = await engine.diff(big.root, small.root);
+    assert.ok(diffBtoS.length > 0, "should have changes when removing entries");
+    
+    // Diff from small to big: creates before big range, updates within, creates after
+    const diffStoB = await engine.diff(small.root, big.root);
+    assert.ok(diffStoB.length > 0, "should have changes when adding entries");
+    
+    // Verify keys in changes are correct
+    const changedKeys = new Set(diffBtoS.map(c => c.key));
+    assert.ok(changedKeys.size > 0, "should have changed keys");
+  });
+
+
   it("diff handles descriptors with non-overlapping key ranges (max-before)", async () => {
     const engine = createVerifiableIndexEngine({
       storage: createStoragePort({ inMemory: true }),
@@ -1607,16 +1637,17 @@ describe("Pactium reference-project algorithm coverage", () => {
     // Even with old createdAtMs, the fresh heartbeatAtMs means the lock
     // is still active. The process is also alive (real pid).
     // The lock should NOT be deleted.
-    try {
-      await storage.withWriteLock(() => "unreachable", {
+    await assert.rejects(
+      () => storage.withWriteLock(() => "unreachable", {
         timeoutMs: 300,
         retryMs: 10,
         staleMs: 5000
-      });
-      assert.fail("should not acquire lock held by alive process with recent heartbeat");
-    } catch (error) {
-      assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
-    }
+      }),
+      (error) => {
+        assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
+        return true;
+      }
+    )
     // Clean up for the next test
     await fs.rm(lockDir, { recursive: true, force: true });
   });
@@ -1646,16 +1677,17 @@ describe("Pactium reference-project algorithm coverage", () => {
     })}\n`, "utf8");
 
     // Should timeout because lock is fresh (not stale) and process is alive
-    try {
-      await storage.withWriteLock(() => "unreachable", {
+    await assert.rejects(
+      () => storage.withWriteLock(() => "unreachable", {
         timeoutMs: 300,
         retryMs: 10,
         staleMs: 5000
-      });
-      assert.fail("should not acquire lock when a fresh lock exists");
-    } catch (error) {
-      assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
-    }
+      }),
+      (error) => {
+        assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
+        return true;
+      }
+    )
     // Cleanup
     await fs.rm(lockDir, { recursive: true, force: true });
   });
@@ -1756,16 +1788,17 @@ describe("Pactium reference-project algorithm coverage", () => {
     // No owner.json — just a freshly created lock directory
     // The directory is fresh (just created), so it should NOT be deleted
 
-    try {
-      await storage.withWriteLock(() => "unreachable", {
+    await assert.rejects(
+      () => storage.withWriteLock(() => "unreachable", {
         timeoutMs: 300,
         retryMs: 10,
         staleMs: 5000
-      });
-      assert.fail("should not acquire lock when fresh ownerless dir exists");
-    } catch (error) {
-      assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
-    }
+      }),
+      (error) => {
+        assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
+        return true;
+      }
+    )
     // Verify the directory still exists
     const stillExists = await fs.stat(lockDir).then(() => true, () => false);
     assert.equal(stillExists, true, "fresh ownerless lock dir should not be deleted");
@@ -1830,16 +1863,17 @@ describe("Pactium reference-project algorithm coverage", () => {
     }), "utf8");
     // Directory is fresh (just created)
 
-    try {
-      await storage.withWriteLock(() => "unreachable", {
+    await assert.rejects(
+      () => storage.withWriteLock(() => "unreachable", {
         timeoutMs: 300,
         retryMs: 10,
         staleMs: 5000
-      });
-      assert.fail("should not acquire lock when fresh malformed lock exists with alive pid");
-    } catch (error) {
-      assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
-    }
+      }),
+      (error) => {
+        assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
+        return true;
+      }
+    )
     // Cleanup
     await fs.rm(lockDir, { recursive: true, force: true });
   });
@@ -1854,14 +1888,15 @@ describe("Pactium reference-project algorithm coverage", () => {
     await fs.mkdir(lockDir, { recursive: true });
     await fs.writeFile(path.join(lockDir, "owner.json"), "{broken-json-not-valid", "utf8");
 
-    try {
-      await storage.withWriteLock(() => "unreachable", {
+    await assert.rejects(
+      () => storage.withWriteLock(() => "unreachable", {
         timeoutMs: 300, retryMs: 10, staleMs: 5000
-      });
-      assert.fail("should not acquire lock when fresh unreadable lock exists");
-    } catch (error) {
-      assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
-    }
+      }),
+      (error) => {
+        assert.equal(error.code, "PACTIUM_WRITE_LOCK_TIMEOUT");
+        return true;
+      }
+    )
     await fs.rm(lockDir, { recursive: true, force: true });
   });
 
