@@ -28,6 +28,16 @@ import { asArray, asRecord, nowIso, safeText } from "../shared/records.js";
 import { createVerificationFailure, PactiumLifecycleError } from "../verification/failure.js";
 import { rebuildCoreStateFromLedger } from "./rebuild-state.js";
 
+const pactiumInternals = new WeakMap();
+
+export function getPactiumInternals(core) {
+  const internals = pactiumInternals.get(core);
+  if (!internals) {
+    throw new Error("Pactium internals are available only for core instances created by createPactium().");
+  }
+  return internals;
+}
+
 function createEmptyCoreState() {
   return {
     protocol: PACTIUM_PROTOCOL,
@@ -248,10 +258,9 @@ export function createPactium({
   storage = null,
   inMemory = false,
   storageBackend = "",
-  backend = "",
   databasePath = ""
 } = {}) {
-  const resolvedStorage = storage || createStoragePort({ dataDir, userDataPath, inMemory, storageBackend, backend, databasePath });
+  const resolvedStorage = storage || createStoragePort({ dataDir, userDataPath, inMemory, storageBackend, databasePath });
   const ledger = createLedgerTransparencyLog({ storage: resolvedStorage });
   const indexEngine = createVerifiableIndexEngine({ storage: resolvedStorage, domain: "pactium" });
   const repairPlanner = createRepairPlanner();
@@ -725,11 +734,8 @@ export function createPactium({
       workspace.stateRoot = (await indexEngine.mutate(workspace.stateRoot, stateIndexMutations, { domain: "state" })).root;
     }
     const stateRoot = workspace.stateRoot;
-    const fullStateMutationProofs =
-      input.fullStateMutationProofs === true ||
-      proofOptions.fullStateMutationProofs === true ||
-      proofOptions.stateMutationProofMode === "full";
-    const provedStateMutationCount = fullStateMutationProofs
+    const fullStateMutationMode = proofOptions.stateMutationProofMode === "full";
+    const provedStateMutationCount = fullStateMutationMode
       ? netKeyedMutations.length
       : Math.min(netKeyedMutations.length, 32);
     const mutationDescriptors = netKeyedMutations.map((mutation) => {
@@ -762,13 +768,13 @@ export function createPactium({
       mutationKeys: netKeyedMutations.map((mutation) => String(mutation.key || "")),
       mutationActions: netKeyedMutations.map((mutation) => String(mutation.action || "put")),
       provedKeyCount: provedStateMutationCount,
-      mutationProofMode: fullStateMutationProofs ? "full" : "sampled",
+      mutationProofMode: fullStateMutationMode ? "full" : "sampled",
       proofCompleteness: provedStateMutationCount >= netKeyedMutations.length ? "full" : "sampled",
       unprovedMutationCount: Math.max(0, netKeyedMutations.length - provedStateMutationCount),
       proofProfile: {
         profileType: "pactium.state-mutation-proof-profile",
-        mode: fullStateMutationProofs ? "full" : "sampled",
-        sampling: fullStateMutationProofs ? "all-unique-keys" : "first-32-canonical-unique-keys",
+        mode: fullStateMutationMode ? "full" : "sampled",
+        sampling: fullStateMutationMode ? "all-unique-keys" : "first-32-canonical-unique-keys",
         totalUniqueKeyCount: netKeyedMutations.length,
         provedKeyCount: provedStateMutationCount,
         completeness: provedStateMutationCount >= netKeyedMutations.length ? "full" : "sampled",
@@ -1564,7 +1570,7 @@ export function createPactium({
     return [];
   }
 
-  return Object.freeze({
+  const core = Object.freeze({
     protocol: PACTIUM_PROTOCOL,
     schema: PACTIUM_SCHEMA_VERSION,
     dataDir: resolvedStorage.dataDir,
@@ -1595,15 +1601,13 @@ export function createPactium({
     readLedgerHead,
     readLedgerLeaf,
     readProtocolObject,
-    listProtocolObjectKeys,
-    // Internal components for integration use. Prefer the public read-only
-    // resolvers above unless you need direct storage/ledger/index access for
-    // advanced maintenance, repair execution, or custom verification flows.
-    advanced: Object.freeze({
-      storage: resolvedStorage,
-      ledger,
-      indexEngine,
-      _compactInMemoryCaches: compactInMemoryCaches
-    })
+    listProtocolObjectKeys
   });
+  pactiumInternals.set(core, Object.freeze({
+    storage: resolvedStorage,
+    ledger,
+    indexEngine,
+    compactInMemoryCaches
+  }));
+  return core;
 }

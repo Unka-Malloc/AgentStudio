@@ -78,6 +78,7 @@ import {
 } from "../../src/storage/sqlite-capability.js";
 import { materializeEvidenceExtension } from "../../src/aspects/licolite/evidence.js";
 import { assertAppendCondition } from "../../src/core/append-condition.js";
+import { getPactiumInternals } from "../../src/core/pactium-core.js";
 import { createPactiumHttpServer, startPactiumHttpServer } from "../../src/http.js";
 import { cidFromHex, hexFromCid, hexToBytes } from "../../src/protocol/hashing.js";
 import { createIndexedBundleResolver, decodeVarint, indexedBlocksFromBundle } from "../../src/proof/bundle-format.js";
@@ -1123,9 +1124,9 @@ describe("Pactium proof-first root API", () => {
     assert.equal(verified.ok, true);
     assert.ok(verified.checked.includes("proofs.workspaceProjection.orderProof"));
     assert.ok(verified.checked.includes("ledger-head-signature"));
-    const validProofBlock = await pactium.advanced.storage.getBlock(outcome.proofRefs[0].cid);
+    const validProofBlock = await getPactiumInternals(pactium).storage.getBlock(outcome.proofRefs[0].cid);
     const validProofValue = JSON.parse(Buffer.from(validProofBlock.payloadBase64, "base64").toString("utf8"));
-    const badIndexProofBlock = await pactium.advanced.storage.putBlock({
+    const badIndexProofBlock = await getPactiumInternals(pactium).storage.putBlock({
       ...validProofValue,
       proofs: {
         ...validProofValue.proofs,
@@ -1148,7 +1149,7 @@ describe("Pactium proof-first root API", () => {
       }]
     };
     assert.ok((await pactium.verifyEnvelope(badIndexEnvelope)).failures.some((failure) => failure.code === "bad_embedded_proof"));
-    const noLedgerBlock = await pactium.advanced.storage.putBlock({
+    const noLedgerBlock = await getPactiumInternals(pactium).storage.putBlock({
       protocol: PACTIUM_PROTOCOL,
       materialType: "pactium.proof-material",
       proofs: {}
@@ -1163,7 +1164,7 @@ describe("Pactium proof-first root API", () => {
       }]
     };
     assert.ok((await pactium.verifyEnvelope(noLedgerEnvelope)).failures.some((failure) => failure.code === "missing_ledger_proof"));
-    const unknownProofBlock = await pactium.advanced.storage.putBlock({
+    const unknownProofBlock = await getPactiumInternals(pactium).storage.putBlock({
       ...validProofValue,
       proofs: {
         ...validProofValue.proofs,
@@ -1182,7 +1183,7 @@ describe("Pactium proof-first root API", () => {
     assert.ok((await pactium.verifyEnvelope(unknownProofEnvelope)).failures.some((failure) => failure.code === "missing_proof_verifier"));
     const nonCriticalUnknown = await pactium.verifyEnvelope(unknownProofEnvelope, { requireAllProofs: false });
     assert.equal(nonCriticalUnknown.failures.some((failure) => failure.code === "missing_proof_verifier"), true);
-    const nonCriticalProofBlock = await pactium.advanced.storage.putBlock({
+    const nonCriticalProofBlock = await getPactiumInternals(pactium).storage.putBlock({
       ...validProofValue,
       proofs: {
         ...validProofValue.proofs,
@@ -1200,7 +1201,7 @@ describe("Pactium proof-first root API", () => {
     };
     assert.equal((await pactium.verifyEnvelope(nonCriticalProofEnvelope, { requireAllProofs: false }))
       .failures.some((failure) => failure.code === "missing_proof_verifier"), false);
-    const throwingProofBlock = await pactium.advanced.storage.putBlock({
+    const throwingProofBlock = await getPactiumInternals(pactium).storage.putBlock({
       ...validProofValue,
       proofs: {
         ...validProofValue.proofs,
@@ -1223,7 +1224,7 @@ describe("Pactium proof-first root API", () => {
         }
       }
     })).failures.some((failure) => failure.code === "proof_verifier_threw"));
-    const objectProofBlock = await pactium.advanced.storage.putBlock({
+    const objectProofBlock = await getPactiumInternals(pactium).storage.putBlock({
       ...validProofValue,
       proofs: {
         ...validProofValue.proofs,
@@ -1260,7 +1261,7 @@ describe("Pactium proof-first root API", () => {
     assert.equal(explicitIndexedBundle.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
     await assert.rejects(() => pactium.exportProofBundle("missing-envelope"), /not found/);
     await assert.rejects(() => pactium.exportProofBundle(outcome, { format: "bad-format" }), /Unsupported proof bundle format/);
-    const persistentCompact = await pactium.advanced._compactInMemoryCaches();
+    const persistentCompact = await getPactiumInternals(pactium).compactInMemoryCaches();
     assert.equal(persistentCompact.inMemory, false);
     const pageFromCursor = await pactium.getLedgerCursor({ fromCursor: { position: 100 }, limit: 0 });
     assert.equal(pageFromCursor.entries.length, 0);
@@ -1410,12 +1411,12 @@ describe("Pactium proof-first root API", () => {
     assert.equal(batch.batchType, "pactium.operation-record-batch");
     assert.equal(batch.count, 2);
     assert.equal(batch.envelopes.length, 2);
-    assert.equal((await pactium.advanced.ledger.head()).size, 4);
+    assert.equal((await getPactiumInternals(pactium).ledger.head()).size, 4);
     const projection = await pactium.getWorkspaceProjection("batch-workspace");
     assert.equal(projection.nextOrdinal, 4);
-    const material = canonicalDecode((await pactium.advanced.storage.getBlock(batch.envelopes[1].proofRefs[0].cid)).bytes);
+    const material = canonicalDecode((await getPactiumInternals(pactium).storage.getBlock(batch.envelopes[1].proofRefs[0].cid)).bytes);
     const stateRoot = material.proofs.state.root;
-    const engine = createVerifiableIndexEngine({ storage: pactium.advanced.storage, domain: "state" });
+    const engine = createVerifiableIndexEngine({ storage: getPactiumInternals(pactium).storage, domain: "state" });
     assert.equal(verifyIndexProof(await engine.prove(stateRoot, "batch:key:1")), true);
     assert.equal(verifyIndexProof(await engine.prove(stateRoot, "batch:key:2")), true);
     const replayBatch = await pactium.recordOperations([{
@@ -1430,7 +1431,7 @@ describe("Pactium proof-first root API", () => {
     assert.equal(replayBatch.envelopes[0].replayed, true);
 
     const conditionedBatchCore = createPactium({ inMemory: true });
-    const conditionedBatchHead = await conditionedBatchCore.advanced.ledger.head();
+    const conditionedBatchHead = await getPactiumInternals(conditionedBatchCore).ledger.head();
     const conditionedBatch = await conditionedBatchCore.recordOperations([{
       operationId: "batch.operation.conditioned",
       workspaceId: "batch-conditioned",
@@ -1467,7 +1468,7 @@ describe("Pactium proof-first root API", () => {
         value: { index }
       }))
     });
-    const seedMaterial = canonicalDecode((await pactium.advanced.storage.getBlock(seedEnvelope.proofRefs[0].cid)).bytes);
+    const seedMaterial = canonicalDecode((await getPactiumInternals(pactium).storage.getBlock(seedEnvelope.proofRefs[0].cid)).bytes);
     const seedRoot = seedMaterial.proofs.state.root;
     assert.equal(seedMaterial.proofs.stateCommit.mutationCount, 512);
     assert.equal(seedMaterial.proofs.stateCommit.proofProfile.provedKeyCount, 32);
@@ -1488,7 +1489,7 @@ describe("Pactium proof-first root API", () => {
       }]
     });
     const updateWrites = indexNodeWrites - seedWrites;
-    const updateMaterial = canonicalDecode((await pactium.advanced.storage.getBlock(updateEnvelope.proofRefs[0].cid)).bytes);
+    const updateMaterial = canonicalDecode((await getPactiumInternals(pactium).storage.getBlock(updateEnvelope.proofRefs[0].cid)).bytes);
     const updateProof = updateMaterial.proofs.state.touchedKeyProofs[0];
     assert.notEqual(updateMaterial.proofs.state.root, seedRoot);
     assert.equal(updateProof.proofType, PACTIUM_PROOF_TYPES.indexMembership);
@@ -1500,15 +1501,15 @@ describe("Pactium proof-first root API", () => {
       workspaceId: "state-incremental",
       stateMutations: [{ key: "state:0001", action: "delete" }]
     });
-    const deleteMaterial = canonicalDecode((await pactium.advanced.storage.getBlock(deleteEnvelope.proofRefs[0].cid)).bytes);
+    const deleteMaterial = canonicalDecode((await getPactiumInternals(pactium).storage.getBlock(deleteEnvelope.proofRefs[0].cid)).bytes);
     const deleteProof = deleteMaterial.proofs.state.touchedKeyProofs[0];
     assert.equal(deleteProof.proofType, PACTIUM_PROOF_TYPES.indexNonMembership);
     assert.equal(verifyIndexProof(deleteProof, { proofMaterial: deleteMaterial }), true);
 
-    const compacted = await pactium.advanced._compactInMemoryCaches();
+    const compacted = await getPactiumInternals(pactium).compactInMemoryCaches();
     assert.equal(compacted.inMemory, true);
     assert.ok(compacted.retainedRoots > 0);
-    const freshEngine = createVerifiableIndexEngine({ storage: pactium.advanced.storage, domain: "pactium" });
+    const freshEngine = createVerifiableIndexEngine({ storage: getPactiumInternals(pactium).storage, domain: "pactium" });
     assert.equal((await freshEngine.readIndexRoot(deleteMaterial.proofs.state.root)).root, deleteMaterial.proofs.state.root);
     assert.equal(verifyIndexProof(await freshEngine.prove(deleteMaterial.proofs.state.root, "state:0256")), true);
   });
@@ -1529,7 +1530,7 @@ describe("Pactium proof-first root API", () => {
 
   it("supports append conditions, tracking cursors, recovery plans, and trusted head advancement", async () => {
     const pactium = createPactium({ inMemory: true });
-    const emptyHead = await pactium.advanced.ledger.head();
+    const emptyHead = await getPactiumInternals(pactium).ledger.head();
     const appendCondition = createAppendCondition({
       workspaceId: "conditioned",
       requiredLedgerHead: emptyHead.headId,
@@ -1584,14 +1585,14 @@ describe("Pactium proof-first root API", () => {
     });
     assert.equal(outcome.envelopeKind, "operation-outcome");
     const recordPactium = createPactium({ inMemory: true });
-    const recordHead = await recordPactium.advanced.ledger.head();
+    const recordHead = await getPactiumInternals(recordPactium).ledger.head();
     const recordedOutcome = await recordPactium.recordOperation({
       operationId: "condition.record-operation",
       workspaceId: "conditioned-record",
       appendCondition: { requiredLedgerHead: recordHead.headId }
     });
     assert.equal(recordedOutcome.envelopeKind, "operation-outcome");
-    const splitConditionHead = await recordPactium.advanced.ledger.head();
+    const splitConditionHead = await getPactiumInternals(recordPactium).ledger.head();
     const splitConditionOutcome = await recordPactium.recordOperation({
       operationId: "condition.record-operation.split",
       workspaceId: "conditioned-record",
@@ -1774,7 +1775,7 @@ describe("Pactium proof-first root API", () => {
     });
     assert.ok(recovery.tasks.some((task) => task.action === "restore-missing-proof-material"));
 
-    const proofBlock = await pactium.advanced.storage.getBlock(outcome.proofRefs[0].cid);
+    const proofBlock = await getPactiumInternals(pactium).storage.getBlock(outcome.proofRefs[0].cid);
     const proofValue = JSON.parse(Buffer.from(proofBlock.payloadBase64, "base64").toString("utf8"));
     const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
     const manifest = createVerifierManifest({
@@ -1899,7 +1900,7 @@ describe("Pactium proof-first root API", () => {
         value: { required: true }
       }]
     });
-    const unsupported = await verifyProofEnvelope(envelope, { storage: pactium.advanced.storage });
+    const unsupported = await verifyProofEnvelope(envelope, { storage: getPactiumInternals(pactium).storage });
     assert.equal(unsupported.ok, false);
     assert.ok(unsupported.failures.some((failure) => failure.code === "unsupported_critical_extension"));
     const bundle = await pactium.exportProofBundle(envelope);
@@ -2029,8 +2030,7 @@ const head = await pactium.readLedgerHead();
 const leaf = await pactium.readLedgerLeaf(0);
 const state = await pactium.readProtocolObject("core", "runtime-state");
 const keys = await pactium.listProtocolObjectKeys("commit");
-// advanced is @deprecated but still accessible
-const isDeprecated = typeof pactium.advanced !== "undefined";
+const hasAdvanced = Object.prototype.hasOwnProperty.call(pactium, "advanced");
 console.log(JSON.stringify({
   oldExportMissing,
   protocol: envelope.protocol,
@@ -2044,7 +2044,7 @@ console.log(JSON.stringify({
   leafExists: !!leaf,
   stateExists: !!state,
   keysLen: keys.length,
-  isDeprecated
+  hasAdvanced
 }));
 `, "utf8");
     const run = await execFileAsync(process.execPath, [scriptPath], { cwd: projectDir });
@@ -2061,7 +2061,7 @@ console.log(JSON.stringify({
     assert.equal(parsed.leafExists, true);
     assert.equal(parsed.stateExists, true);
     assert.ok(parsed.keysLen >= 2);
-    assert.equal(parsed.isDeprecated, true);
+    assert.equal(parsed.hasAdvanced, false);
   });
 
   it("serves HTTP endpoints and CLI proof-first commands", async () => {
@@ -2328,9 +2328,9 @@ console.log(JSON.stringify({
     };
     assert.ok((await pactium.verifyEnvelope(badExtensionHash)).failures.some((failure) => failure.code === "bad_extension_hash"));
 
-    const validProofBlock = await pactium.advanced.storage.getBlock(outcome.proofRefs[0].cid);
+    const validProofBlock = await getPactiumInternals(pactium).storage.getBlock(outcome.proofRefs[0].cid);
     const validProofValue = JSON.parse(Buffer.from(validProofBlock.payloadBase64, "base64").toString("utf8"));
-    const badInclusionBlock = await pactium.advanced.storage.putBlock({
+    const badInclusionBlock = await getPactiumInternals(pactium).storage.putBlock({
       ...validProofValue,
       ledger: {
         ...validProofValue.ledger,
@@ -2351,7 +2351,7 @@ console.log(JSON.stringify({
     };
     assert.ok((await pactium.verifyEnvelope(badInclusionEnvelope)).failures.some((failure) => failure.code === "bad_ledger_inclusion"));
 
-    const badConsistencyBlock = await pactium.advanced.storage.putBlock({
+    const badConsistencyBlock = await getPactiumInternals(pactium).storage.putBlock({
       ...validProofValue,
       ledger: {
         ...validProofValue.ledger,
@@ -2373,7 +2373,7 @@ console.log(JSON.stringify({
     assert.ok((await pactium.verifyEnvelope(badConsistencyEnvelope)).failures.some((failure) => failure.code === "bad_ledger_consistency"));
     const ledgerFactCid = validProofValue.ledger.inclusionProof.leaf.factCid;
     const missingLedgerFact = await verifyProofEnvelope(outcome, {
-      storage: pactium.advanced.storage,
+      storage: getPactiumInternals(pactium).storage,
       bundleResolver: {
         has(cid) {
           return cid === ledgerFactCid;
@@ -2385,7 +2385,7 @@ console.log(JSON.stringify({
     });
     assert.ok(missingLedgerFact.failures.some((failure) => failure.code === "missing_ledger_fact_material"));
     const replacedLedgerFact = await verifyProofEnvelope(outcome, {
-      storage: pactium.advanced.storage,
+      storage: getPactiumInternals(pactium).storage,
       bundleResolver: {
         has(cid) {
           return cid === ledgerFactCid;
@@ -2396,7 +2396,7 @@ console.log(JSON.stringify({
       }
     });
     assert.ok(replacedLedgerFact.failures.some((failure) => failure.code === "replaced_ledger_fact"));
-    const badLedgerFactHashBlock = await pactium.advanced.storage.putBlock({
+    const badLedgerFactHashBlock = await getPactiumInternals(pactium).storage.putBlock({
       ...validProofValue,
       ledger: {
         ...validProofValue.ledger,
@@ -2448,7 +2448,7 @@ console.log(JSON.stringify({
   it("rejects proof semantic rebinding attacks", async () => {
     const pactium = createPactium({ inMemory: true });
     const proofMaterialFor = async (envelope) =>
-      canonicalDecode((await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid)).bytes);
+      canonicalDecode((await getPactiumInternals(pactium).storage.getBlock(envelope.proofRefs[0].cid)).bytes);
     const envelopeWithProofBlock = (envelope, block) => ({
       ...envelope,
       proofRefs: [{
@@ -2482,14 +2482,14 @@ console.log(JSON.stringify({
       mutationCount: secondMaterial.proofs.stateCommit.mutationCount,
       proofProfile: secondMaterial.proofs.stateCommit.proofProfile
     };
-    const reboundStateBlock = await pactium.advanced.storage.putBlock(reboundStateMaterial, {
+    const reboundStateBlock = await getPactiumInternals(pactium).storage.putBlock(reboundStateMaterial, {
       kind: "proof-material:ledger-and-index-proofs",
       refs: [firstMaterial.ledger.inclusionProof.leaf.factCid]
     });
     const reboundState = await pactium.verifyEnvelope(envelopeWithProofBlock(first, reboundStateBlock));
     assert.ok(reboundState.failures.some((failure) => failure.code === "bad_state_commit_binding"));
 
-    const head = await pactium.advanced.ledger.head();
+    const head = await getPactiumInternals(pactium).ledger.head();
     const appendCondition = createAppendCondition({
       workspaceId: "semantic-append",
       requiredLedgerHead: head.headId
@@ -2505,7 +2505,7 @@ console.log(JSON.stringify({
       workspaceId: "semantic-append",
       requiredLedgerHead: "ledger_head_attacker"
     });
-    const reboundConditionBlock = await pactium.advanced.storage.putBlock(reboundConditionMaterial, {
+    const reboundConditionBlock = await getPactiumInternals(pactium).storage.putBlock(reboundConditionMaterial, {
       kind: "proof-material:ledger-and-index-proofs",
       refs: [conditionedMaterial.ledger.inclusionProof.leaf.factCid]
     });
@@ -2516,7 +2516,7 @@ console.log(JSON.stringify({
       workspaceId: "semantic-append-attacker",
       requiredLedgerHead: head.headId
     });
-    const reboundConditionWorkspaceBlock = await pactium.advanced.storage.putBlock(reboundConditionWorkspaceMaterial, {
+    const reboundConditionWorkspaceBlock = await getPactiumInternals(pactium).storage.putBlock(reboundConditionWorkspaceMaterial, {
       kind: "proof-material:ledger-and-index-proofs",
       refs: [conditionedMaterial.ledger.inclusionProof.leaf.factCid]
     });
@@ -2645,8 +2645,8 @@ console.log(JSON.stringify({
     };
     assert.ok((await licolite.verifyEnvelope(missingEvidenceRef)).failures.some((failure) => failure.code === "missing_evidence_ref"));
     const policyExtension = envelope.extensions.find((extension) => extension.name === LICOLITE_POLICY_EXTENSION);
-    const policyBlock = await pactium.advanced.storage.getBlock(policyExtension.valueRef);
-    const badPolicyBlock = await pactium.advanced.storage.putBlock({
+    const policyBlock = await getPactiumInternals(pactium).storage.getBlock(policyExtension.valueRef);
+    const badPolicyBlock = await getPactiumInternals(pactium).storage.putBlock({
       ...canonicalDecode(policyBlock.bytes),
       evidenceHash: `sha256:${"0".repeat(64)}`
     }, { kind: "proof-extension:licolite.policy" });
@@ -2977,24 +2977,24 @@ console.log(JSON.stringify({
     assert.equal((await auditPactium.verifyEnvelope(envelope)).ok, true);
     // Missing workspaceProjection
     const proofRef = envelope.proofRefs[0];
-    const fullBlock = await auditPactium.advanced.storage.getBlock(proofRef.cid);
+    const fullBlock = await getPactiumInternals(auditPactium).storage.getBlock(proofRef.cid);
     const fullMaterial = canonicalDecode(fullBlock.bytes);
     const noWsMaterial = { ...fullMaterial, proofs: { ...fullMaterial.proofs, workspaceProjection: undefined } };
-    const noWsBlock = await auditPactium.advanced.storage.putBlock(noWsMaterial, { kind: "proof-material:altered" });
+    const noWsBlock = await getPactiumInternals(auditPactium).storage.putBlock(noWsMaterial, { kind: "proof-material:altered" });
     const noWsEnvelope = { ...envelope, envelopeId: undefined, proofRefs: [{ name: "altered", cid: noWsBlock.cid, payloadHash: noWsBlock.payloadHash, byteLength: noWsBlock.byteLength }] };
     const noWsResult = await auditPactium.verifyEnvelope(noWsEnvelope);
     assert.equal(noWsResult.ok, false);
     assert.ok(noWsResult.failures.some((f) => f.code === "missing_required_proof" && f.details.path.includes("workspaceProjection")));
     // Missing stateCommit
     const noStateMaterial = { ...fullMaterial, proofs: { ...fullMaterial.proofs, stateCommit: undefined } };
-    const noStateBlock = await auditPactium.advanced.storage.putBlock(noStateMaterial, { kind: "proof-material:altered" });
+    const noStateBlock = await getPactiumInternals(auditPactium).storage.putBlock(noStateMaterial, { kind: "proof-material:altered" });
     const noStateEnvelope = { ...envelope, envelopeId: undefined, proofRefs: [{ name: "altered", cid: noStateBlock.cid, payloadHash: noStateBlock.payloadHash, byteLength: noStateBlock.byteLength }] };
     const noStateResult = await auditPactium.verifyEnvelope(noStateEnvelope);
     assert.equal(noStateResult.ok, false);
     assert.ok(noStateResult.failures.some((f) => f.code === "missing_required_proof" && f.details.path.includes("stateCommit")));
     // Missing checkpoint
     const noCpMaterial = { ...fullMaterial, proofs: { ...fullMaterial.proofs, checkpoint: undefined } };
-    const noCpBlock = await auditPactium.advanced.storage.putBlock(noCpMaterial, { kind: "proof-material:altered" });
+    const noCpBlock = await getPactiumInternals(auditPactium).storage.putBlock(noCpMaterial, { kind: "proof-material:altered" });
     const noCpEnvelope = { ...envelope, envelopeId: undefined, proofRefs: [{ name: "altered", cid: noCpBlock.cid, payloadHash: noCpBlock.payloadHash, byteLength: noCpBlock.byteLength }] };
     const noCpResult = await auditPactium.verifyEnvelope(noCpEnvelope);
     assert.equal(noCpResult.ok, false);
@@ -3140,14 +3140,14 @@ console.log(JSON.stringify({
     const smallResult = await auditPactium.verifyEnvelope(smallEnvelope);
     assert.equal(smallResult.ok, true);
     // Proof completeness is reflected in the proof material
-    const smallBlock = await auditPactium.advanced.storage.getBlock(smallEnvelope.proofRefs[0].cid);
+    const smallBlock = await getPactiumInternals(auditPactium).storage.getBlock(smallEnvelope.proofRefs[0].cid);
     const smallMaterial = canonicalDecode(smallBlock.bytes);
     const smallCommit = smallMaterial.proofs.stateCommit;
     assert.equal(smallCommit.proofProfile.completeness, "full");
     assert.equal(smallCommit.proofProfile.unprovedKeyCount, 0);
     // Verify with requireFullStateMutationProofs does not fail when all proved
     const smallFull = await verifyProofEnvelope(smallEnvelope, {
-      storage: auditPactium.advanced.storage,
+      storage: getPactiumInternals(auditPactium).storage,
       requireFullStateMutationProofs: true
     });
     assert.equal(smallFull.ok, true);
@@ -3162,7 +3162,7 @@ console.log(JSON.stringify({
       outcomeIdempotencyKey: "state-large-out",
       stateMutations: largeMutations
     });
-    const largeBlock = await auditPactium.advanced.storage.getBlock(largeEnvelope.proofRefs[0].cid);
+    const largeBlock = await getPactiumInternals(auditPactium).storage.getBlock(largeEnvelope.proofRefs[0].cid);
     const largeMaterial = canonicalDecode(largeBlock.bytes);
     const largeCommit = largeMaterial.proofs.stateCommit;
     assert.equal(largeCommit.proofProfile.completeness, "sampled");
@@ -3174,7 +3174,7 @@ console.log(JSON.stringify({
 
     // requireFullStateMutationProofs must fail for >32 mutations
     const largeFull = await verifyProofEnvelope(largeEnvelope, {
-      storage: auditPactium.advanced.storage,
+      storage: getPactiumInternals(auditPactium).storage,
       requireFullStateMutationProofs: true
     });
     assert.equal(largeFull.ok, false);
@@ -3188,7 +3188,7 @@ console.log(JSON.stringify({
       proofOptions: { stateMutationProofMode: "full" },
       stateMutations: largeMutations
     });
-    const explicitFullBlock = await auditPactium.advanced.storage.getBlock(explicitFullEnvelope.proofRefs[0].cid);
+    const explicitFullBlock = await getPactiumInternals(auditPactium).storage.getBlock(explicitFullEnvelope.proofRefs[0].cid);
     const explicitFullMaterial = canonicalDecode(explicitFullBlock.bytes);
     const explicitFullCommit = explicitFullMaterial.proofs.stateCommit;
     assert.equal(explicitFullCommit.proofProfile.mode, "full");
@@ -3197,7 +3197,7 @@ console.log(JSON.stringify({
     assert.equal(explicitFullCommit.proofProfile.unprovedKeyCount, 0);
     assert.equal(explicitFullMaterial.proofs.state.touchedKeyProofs.length, 50);
     const explicitFullResult = await verifyProofEnvelope(explicitFullEnvelope, {
-      storage: auditPactium.advanced.storage,
+      storage: getPactiumInternals(auditPactium).storage,
       requireFullStateMutationProofs: true
     });
     assert.equal(explicitFullResult.ok, true);
@@ -3219,7 +3219,7 @@ console.log(JSON.stringify({
 	        { key: "", value: { ignored: true } }
 	      ]
 	    });
-	    const duplicateKeyBlock = await auditPactium.advanced.storage.getBlock(duplicateKeyEnvelope.proofRefs[0].cid);
+	    const duplicateKeyBlock = await getPactiumInternals(auditPactium).storage.getBlock(duplicateKeyEnvelope.proofRefs[0].cid);
 	    const duplicateKeyMaterial = canonicalDecode(duplicateKeyBlock.bytes);
 	    const duplicateKeyCommit = duplicateKeyMaterial.proofs.stateCommit;
 	    assert.equal(duplicateKeyCommit.mutationCount, 4);
@@ -3232,34 +3232,10 @@ console.log(JSON.stringify({
 	    assert.deepEqual(duplicateKeyCommit.mutationActions, ["put", "put", "delete", "put"]);
 	    assert.equal(duplicateKeyMaterial.proofs.state.touchedKeyProofs.length, 4);
     const duplicateKeyResult = await verifyProofEnvelope(duplicateKeyEnvelope, {
-      storage: auditPactium.advanced.storage,
+      storage: getPactiumInternals(auditPactium).storage,
       requireFullStateMutationProofs: true
     });
     assert.equal(duplicateKeyResult.ok, true);
-
-    const topLevelAliasEnvelope = await auditPactium.recordOperation({
-      operationId: "state.full.alias.top",
-      workspaceId: "state-comp-ws",
-      idempotencyKey: "state-full-alias-top",
-      outcomeIdempotencyKey: "state-full-alias-top-out",
-      fullStateMutationProofs: true,
-      stateMutations: [{ key: "alias-top", value: { v: 1 } }]
-    });
-    const topLevelAliasBlock = await auditPactium.advanced.storage.getBlock(topLevelAliasEnvelope.proofRefs[0].cid);
-    const topLevelAliasMaterial = canonicalDecode(topLevelAliasBlock.bytes);
-    assert.equal(topLevelAliasMaterial.proofs.stateCommit.proofProfile.mode, "full");
-
-    const proofOptionsAliasEnvelope = await auditPactium.recordOperation({
-      operationId: "state.full.alias.options",
-      workspaceId: "state-comp-ws",
-      idempotencyKey: "state-full-alias-options",
-      outcomeIdempotencyKey: "state-full-alias-options-out",
-      proofOptions: { fullStateMutationProofs: true },
-      stateMutations: [{ key: "alias-options", value: { v: 2 } }]
-    });
-    const proofOptionsAliasBlock = await auditPactium.advanced.storage.getBlock(proofOptionsAliasEnvelope.proofRefs[0].cid);
-    const proofOptionsAliasMaterial = canonicalDecode(proofOptionsAliasBlock.bytes);
-    assert.equal(proofOptionsAliasMaterial.proofs.stateCommit.proofProfile.mode, "full");
   });
 
   it("bundle verifier detects oversized bundle base64, bad byteLength, bad blockCount, and trailing bytes", async () => {
@@ -3637,7 +3613,7 @@ console.log(JSON.stringify({
     assert.equal(result.ok, true);
 
     // Manually write a pending commit marker without a complete marker.
-    await pactium.advanced.storage.putProtocolObject("commit", "pending-test-crash-id", {
+    await getPactiumInternals(pactium).storage.putProtocolObject("commit", "pending-test-crash-id", {
       protocol: PACTIUM_PROTOCOL,
       schema: "pactium.v0.2.schema.latest",
       commitType: "pactium.mutation-commit",
@@ -3661,7 +3637,7 @@ console.log(JSON.stringify({
   it("detects incomplete commits and stale locks after simulated crash", async () => {
     const dataDir = await tempDataDir("crash-test-");
     const pactium = createPactium({ dataDir });
-    await pactium.advanced.storage.putProtocolObject("commit", "pending-crash-001", {
+    await getPactiumInternals(pactium).storage.putProtocolObject("commit", "pending-crash-001", {
       protocol: PACTIUM_PROTOCOL,
       schema: "pactium.v0.2.schema.latest",
       commitType: "pactium.mutation-commit",
@@ -3670,7 +3646,7 @@ console.log(JSON.stringify({
       ledgerEventIds: [], envelopeIds: [], affectedWorkspaceIds: ["crash-ws"],
       notes: "simulated mid-op crash"
     });
-    await pactium.advanced.storage.putProtocolObject("commit", "pending-crash-002", {
+    await getPactiumInternals(pactium).storage.putProtocolObject("commit", "pending-crash-002", {
       protocol: PACTIUM_PROTOCOL, schema: "pactium.v0.2.schema.latest",
       commitType: "pactium.mutation-commit",
       commitId: "crash-002", operation: "append-outcome", phase: "pending",
@@ -3711,10 +3687,10 @@ console.log(JSON.stringify({
 
     // Tamper with runtime state's openIntent root — this root IS fully
     // reconstructible from ledger leaves.
-    const state = await pactium.advanced.storage.getProtocolObject("core", "runtime-state");
+    const state = await getPactiumInternals(pactium).storage.getProtocolObject("core", "runtime-state");
     state.indexRoots.openIntent = "cid:sha256:0000000000000000000000000000000000000000000000000000000000000000";
-    await pactium.advanced.storage.putProtocolObject("core", "runtime-state", state);
-    await pactium.advanced.storage.clearCache();
+    await getPactiumInternals(pactium).storage.putProtocolObject("core", "runtime-state", state);
+    await getPactiumInternals(pactium).storage.clearCache();
 
     const tamperedResult = await pactium.doctor({ rebuild: true });
     assert.equal(tamperedResult.ok, false, "tampered state should fail rebuild");
@@ -3744,7 +3720,7 @@ console.log(JSON.stringify({
       workspaceId: "orphan-ws",
       createdAt: new Date().toISOString()
     };
-    await pactium.advanced.ledger.append(orphanOutcome);
+    await getPactiumInternals(pactium).ledger.append(orphanOutcome);
     const result = await pactium.doctor({ rebuild: true });
     assert.ok(result.rebuild, "rebuild should be present");
     // Should contain an orphan_outcome warning
@@ -3867,7 +3843,7 @@ console.log(JSON.stringify({
       /idempotency.*reused|idempotency.*conflict/
     );
     // Verify no pending markers exist
-    const pendingKeys = await pactium.advanced.storage.listProtocolObjectKeys("commit");
+    const pendingKeys = await getPactiumInternals(pactium).storage.listProtocolObjectKeys("commit");
     const pendingCount = pendingKeys.filter((k) => k.startsWith("pending-")).length;
     assert.equal(pendingCount, 0, "should have no pending markers after idempotency conflict");
     // doctor should still pass
@@ -3895,7 +3871,7 @@ console.log(JSON.stringify({
       /Ledger head/
     );
     // Verify no pending markers from the failed begin
-    const pendingKeys = await pactium.advanced.storage.listProtocolObjectKeys("commit");
+    const pendingKeys = await getPactiumInternals(pactium).storage.listProtocolObjectKeys("commit");
     const pendingCount = pendingKeys.filter((k) => k.startsWith("pending-")).length;
     assert.equal(pendingCount, 0, "should have no pending markers after append-condition conflict");
     const doctorResult = await pactium.doctor();
@@ -3917,7 +3893,7 @@ console.log(JSON.stringify({
     assert.equal(outcome.envelopeKind, "operation-outcome");
 
     // Verify no pending markers remain
-    const pendingKeys = await pactium.advanced.storage.listProtocolObjectKeys("commit");
+    const pendingKeys = await getPactiumInternals(pactium).storage.listProtocolObjectKeys("commit");
     const pendingCount = pendingKeys.filter((k) => k.startsWith("pending-")).length;
     assert.equal(pendingCount, 0, "should have no pending markers after normal lifecycle");
     // Complete markers should exist (2: one for intent, one for outcome)
@@ -3932,7 +3908,7 @@ console.log(JSON.stringify({
     const pactium = createPactium({ dataDir });
 
     // Manually create pending markers (simulating crash)
-    await pactium.advanced.storage.putProtocolObject("commit", "pending-manual-001", {
+    await getPactiumInternals(pactium).storage.putProtocolObject("commit", "pending-manual-001", {
       protocol: PACTIUM_PROTOCOL,
       schema: "pactium.v0.2.schema.latest",
       commitType: "pactium.mutation-commit",
@@ -3946,7 +3922,7 @@ console.log(JSON.stringify({
       affectedWorkspaceIds: ["manual-ws"],
       notes: "manual pending marker"
     });
-    await pactium.advanced.storage.putProtocolObject("commit", "pending-manual-002", {
+    await getPactiumInternals(pactium).storage.putProtocolObject("commit", "pending-manual-002", {
       protocol: PACTIUM_PROTOCOL,
       schema: "pactium.v0.2.schema.latest",
       commitType: "pactium.mutation-commit",
@@ -3972,7 +3948,7 @@ console.log(JSON.stringify({
       operationId: "resolver.block",
       workspaceId: "resolver-ws"
     });
-    // Use public resolver instead of advanced.storage
+    // Use public resolver instead of direct storage internals.
     const proofRef = envelope.proofRefs[0];
     assert.ok(proofRef.cid, "should have proof ref CID");
     const block = await pactium.resolveBlock(proofRef.cid);
@@ -4027,10 +4003,10 @@ console.log(JSON.stringify({
       operationId: "storage.deepclone",
       workspaceId: "resolver-ws"
     });
-    const block1 = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const block1 = await getPactiumInternals(pactium).storage.getBlock(envelope.proofRefs[0].cid);
     const originalRefsLen = block1.refs?.length || 0;
     if (block1.refs) block1.refs.push("cid:sha256:injected");
-    const block2 = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const block2 = await getPactiumInternals(pactium).storage.getBlock(envelope.proofRefs[0].cid);
     assert.equal(block2.refs?.length, originalRefsLen, "storage cache should not be affected by refs mutation");
   });
 
@@ -4295,7 +4271,7 @@ console.log(JSON.stringify({
       workspaceId: "ref-err-ws"
     });
     // Read the proof material and inject a proofSizeWarning into the outcome proof
-    const proofBlock = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const proofBlock = await getPactiumInternals(pactium).storage.getBlock(envelope.proofRefs[0].cid);
     const proofValue = JSON.parse(Buffer.from(proofBlock.payloadBase64, "base64").toString("utf8"));
     // Inject proofSizeWarning into the outcome proof (which has proofType)
     if (proofValue.proofs?.outcome?.proofType) {
@@ -4307,7 +4283,7 @@ console.log(JSON.stringify({
         maxProofBytes: 0
       };
     }
-    const tamperedBlock = await pactium.advanced.storage.putBlock(proofValue, {
+    const tamperedBlock = await getPactiumInternals(pactium).storage.putBlock(proofValue, {
       kind: "proof-material:ledger-and-index-proofs"
     });
     // Use storeEnvelope to properly finalize the envelope with the new proof ref
@@ -4323,7 +4299,7 @@ console.log(JSON.stringify({
     });
     // Default verification: should NOT throw, ok remains true, warning present
     const resultDefault = await verifyProofEnvelope(tamperedEnvelope, {
-      storage: pactium.advanced.storage
+      storage: getPactiumInternals(pactium).storage
     });
     assert.equal(resultDefault.ok, true, "default: ok should be true with proofSizeWarning");
     const sizeWarnings = resultDefault.failures.filter((f) => f.code === "proof_size_warning");
@@ -4334,7 +4310,7 @@ console.log(JSON.stringify({
 
     // With failOnProofSizeWarning: true → hard failure
     const resultStrict = await verifyProofEnvelope(tamperedEnvelope, {
-      storage: pactium.advanced.storage,
+      storage: getPactiumInternals(pactium).storage,
       failOnProofSizeWarning: true
     });
     assert.equal(resultStrict.ok, false, "strict: ok should be false");
@@ -4352,13 +4328,13 @@ console.log(JSON.stringify({
       workspaceId: "no-warn-ws"
     });
     const resultDefault = await verifyProofEnvelope(envelope, {
-      storage: pactium.advanced.storage
+      storage: getPactiumInternals(pactium).storage
     });
     assert.equal(resultDefault.ok, true, "should pass without proofSizeWarning");
     assert.ok(!resultDefault.failures.some((f) => f.code === "proof_size_warning"),
       "should not have proof_size_warning when no warning exists");
     const resultStrict = await verifyProofEnvelope(envelope, {
-      storage: pactium.advanced.storage,
+      storage: getPactiumInternals(pactium).storage,
       failOnProofSizeWarning: true
     });
     assert.equal(resultStrict.ok, true, "strict should also pass when no proofSizeWarning exists");
@@ -4443,7 +4419,7 @@ console.log(JSON.stringify({
       operationId: "edge-case-ok-warn",
       workspaceId: "edge-ws"
     });
-    const proofBlock = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const proofBlock = await getPactiumInternals(pactium).storage.getBlock(envelope.proofRefs[0].cid);
     const proofValue = JSON.parse(Buffer.from(proofBlock.payloadBase64, "base64").toString("utf8"));
     if (proofValue.proofs?.outcome?.proofType) {
       proofValue.proofs.outcome.proofSizeWarning = {
@@ -4452,7 +4428,7 @@ console.log(JSON.stringify({
         maxProofLeafEntries: 10
       };
     }
-    const tamperedBlock = await pactium.advanced.storage.putBlock(proofValue, {
+    const tamperedBlock = await getPactiumInternals(pactium).storage.putBlock(proofValue, {
       kind: "proof-material:ledger-and-index-proofs"
     });
     const tamperedEnvelope = await pactium.storeEnvelope({
@@ -4466,7 +4442,7 @@ console.log(JSON.stringify({
       }]
     });
     const result = await verifyProofEnvelope(tamperedEnvelope, {
-      storage: pactium.advanced.storage
+      storage: getPactiumInternals(pactium).storage
     });
     assert.equal(result.ok, true, "ok should be true when verifier succeeds with proofSizeWarning (default)");
     assert.ok(result.failures.some((f) => f.code === "proof_size_warning"),
@@ -4483,7 +4459,7 @@ console.log(JSON.stringify({
       operationId: "edge-case-fail",
       workspaceId: "edge-ws2"
     });
-    const proofBlock = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const proofBlock = await getPactiumInternals(pactium).storage.getBlock(envelope.proofRefs[0].cid);
     const proofValue = JSON.parse(Buffer.from(proofBlock.payloadBase64, "base64").toString("utf8"));
     if (proofValue.proofs?.outcome?.proofType) {
       proofValue.proofs.outcome.proofSizeWarning = {
@@ -4492,7 +4468,7 @@ console.log(JSON.stringify({
         maxProofLeafEntries: 10
       };
     }
-    const tamperedBlock = await pactium.advanced.storage.putBlock(proofValue, {
+    const tamperedBlock = await getPactiumInternals(pactium).storage.putBlock(proofValue, {
       kind: "proof-material:ledger-and-index-proofs"
     });
     const tamperedEnvelope = await pactium.storeEnvelope({
@@ -4506,7 +4482,7 @@ console.log(JSON.stringify({
       }]
     });
     const resultStrict = await verifyProofEnvelope(tamperedEnvelope, {
-      storage: pactium.advanced.storage,
+      storage: getPactiumInternals(pactium).storage,
       failOnProofSizeWarning: true
     });
     assert.equal(resultStrict.ok, false, "ok should be false with failOnProofSizeWarning");
@@ -4522,14 +4498,14 @@ console.log(JSON.stringify({
       operationId: "edge-case-bad",
       workspaceId: "edge-ws3"
     });
-    const proofBlock = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const proofBlock = await getPactiumInternals(pactium).storage.getBlock(envelope.proofRefs[0].cid);
     const proofValue = JSON.parse(Buffer.from(proofBlock.payloadBase64, "base64").toString("utf8"));
     // Inject a custom proof type that will fail verification AND carry a proofSizeWarning
     proofValue.proofs["custom.bad.with-warning"] = {
       proofType: "custom.bad.with-warning",
       proofSizeWarning: { message: "Large proof", proofLeafEntries: 999 }
     };
-    const tamperedBlock = await pactium.advanced.storage.putBlock(proofValue, {
+    const tamperedBlock = await getPactiumInternals(pactium).storage.putBlock(proofValue, {
       kind: "proof-material:ledger-and-index-proofs"
     });
     const tamperedEnvelope = await pactium.storeEnvelope({
@@ -4543,7 +4519,7 @@ console.log(JSON.stringify({
       }]
     });
     const result = await verifyProofEnvelope(tamperedEnvelope, {
-      storage: pactium.advanced.storage,
+      storage: getPactiumInternals(pactium).storage,
       proofVerifiers: {
         "custom.bad.with-warning": () => ({ ok: false, proofSizeWarning: { message: "Large proof" } })
       }
@@ -4560,14 +4536,14 @@ console.log(JSON.stringify({
       operationId: "edge-case-throw",
       workspaceId: "edge-ws4"
     });
-    const proofBlock = await pactium.advanced.storage.getBlock(envelope.proofRefs[0].cid);
+    const proofBlock = await getPactiumInternals(pactium).storage.getBlock(envelope.proofRefs[0].cid);
     const proofValue = JSON.parse(Buffer.from(proofBlock.payloadBase64, "base64").toString("utf8"));
     // Inject a custom proof that will cause the verifier to throw
     proofValue.proofs["custom.throw.with-warning"] = {
       proofType: "custom.throw.with-warning",
       proofSizeWarning: { message: "Should not appear" }
     };
-    const tamperedBlock = await pactium.advanced.storage.putBlock(proofValue, {
+    const tamperedBlock = await getPactiumInternals(pactium).storage.putBlock(proofValue, {
       kind: "proof-material:ledger-and-index-proofs"
     });
     const tamperedEnvelope = await pactium.storeEnvelope({
@@ -4581,7 +4557,7 @@ console.log(JSON.stringify({
       }]
     });
     const result = await verifyProofEnvelope(tamperedEnvelope, {
-      storage: pactium.advanced.storage,
+      storage: getPactiumInternals(pactium).storage,
       proofVerifiers: {
         "custom.throw.with-warning": () => {
           throw new Error("verifier crash");
@@ -4594,9 +4570,9 @@ console.log(JSON.stringify({
       "should NOT emit proof_size_warning when verifier threw");
   });
 
-  it("LicoLite verify works without depending on core.advanced.storage", async () => {
-    // This test verifies that LicoLite's internal resolver uses the public
-    // resolver methods instead of core.advanced.storage.
+  it("LicoLite verify works through public block resolvers", async () => {
+    // This test verifies that LicoLite verification reads material through
+    // public resolver methods.
     const pactium = createPactium({ dataDir: await tempDataDir("lico-resolver-") });
     const signer = createLicoLiteSigner({ secret: "resolver-test" });
     const licolite = createLicoLiteAspect({ pactium, signer, evidencePolicy: "opportunistic" });

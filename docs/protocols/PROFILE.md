@@ -89,7 +89,7 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | State root | Prolly root CID/hash |
 | Diff | Prolly shared-node diff |
 
-> **Note:** State mutation proofs (`touchedKeyProofs` plus `stateCommit.proofProfile`) provide individual membership/non-membership proofs for the first 32 unique touched keys by default. Repeated keys inside one State Commit collapse to the last mutation's final effect because proofs bind to the final state root. Set `proofOptions.stateMutationProofMode: "full"` or `fullStateMutationProofs: true` on write APIs to emit proofs for every unique touched key; `requireFullStateMutationProofs: true` then verifies that strict coverage in envelopes and Proof Bundles.
+> **Note:** State mutation proofs (`touchedKeyProofs` plus `stateCommit.proofProfile`) provide individual membership/non-membership proofs for the first 32 unique touched keys by default. Repeated keys inside one State Commit collapse to the last mutation's final effect because proofs bind to the final state root. Set `proofOptions.stateMutationProofMode: "full"` on write APIs to emit proofs for every unique touched key; `requireFullStateMutationProofs: true` then verifies that strict coverage in envelopes and Proof Bundles.
 
 ## Proofs
 

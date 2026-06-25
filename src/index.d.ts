@@ -13,7 +13,6 @@ export interface PactiumDataDirOptions {
   userDataPath?: string;
   inMemory?: boolean;
   storageBackend?: "json" | "sqlite" | "auto" | string;
-  backend?: "json" | "sqlite" | "auto" | string;
   databasePath?: string;
   includeSystemSqliteDetection?: boolean;
   sqliteDetectionTimeoutMs?: number;
@@ -135,8 +134,6 @@ export interface PactiumProofOptions {
   failOnProofSizeWarning?: boolean;
   /** For write APIs with stateMutations, emit per-key proofs for every mutation instead of the default bounded sample. */
   stateMutationProofMode?: "sampled" | "full";
-  /** Alias for stateMutationProofMode: "full" on write APIs with stateMutations. */
-  fullStateMutationProofs?: boolean;
 }
 
 export interface PactiumProofVerificationOptions extends PactiumProofOptions {
@@ -277,13 +274,6 @@ export interface PactiumCore {
   readProtocolObject(scope: string, key: string, fallback?: unknown): Promise<unknown>;
   /** List all keys in a protocol object scope. */
   listProtocolObjectKeys(scope: string): Promise<string[]>;
-  /** @deprecated Prefer public read-only resolvers (resolveBlock, hasBlock, readLedgerHead, readLedgerLeaf, readProtocolObject, listProtocolObjectKeys). Direct access to storage/ledger/indexEngine internals is unstable and not recommended for production use. */
-  advanced: {
-    storage: PactiumStoragePort;
-    ledger: PactiumLedger;
-    indexEngine: PactiumIndexEngine;
-    _compactInMemoryCaches(): Promise<PactiumRecord>;
-  };
 }
 
 export interface PactiumHttpServerOptions extends PactiumDataDirOptions {

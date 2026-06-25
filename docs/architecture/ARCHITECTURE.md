@@ -303,6 +303,6 @@ The JSON backend uses write-ahead commit markers (pending/complete) with `doctor
 
 Write locks use UUID fencing tokens compared as strings. Heartbeat intervals refresh lock freshness. Stale cleanup uses double-read with owner identity verification (ownerId + fencingToken + processStartKey). Ownerless or malformed lock directories are cleaned up using mtime-based staleness with a double-stat safety pattern. Lock cleanup occurs only during write-lock acquisition; `doctor()` does not scan for dirty or stale locks. This is best-effort; production deployments with high contention should consider external lock managers.
 
-### Advanced API
+### Read-Only Resolvers
 
-`pactium.advanced` (storage, ledger, indexEngine) is an internal maintenance and diagnostics surface. External consumers should prefer the public lifecycle, resolver, verification, and bundle APIs, including `resolveBlock()`, `hasBlock()`, `readLedgerHead()`, `readLedgerLeaf()`, `readProtocolObject()`, and `listProtocolObjectKeys()`.
+External consumers inspect protocol material through the public resolver APIs: `resolveBlock()`, `hasBlock()`, `readLedgerHead()`, `readLedgerLeaf()`, `readProtocolObject()`, and `listProtocolObjectKeys()`. Direct storage, ledger, and index internals are not part of the package root API.

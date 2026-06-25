@@ -1,6 +1,6 @@
 import { PACTIUM_PACKAGE_VERSION, PACTIUM_PROOF_TYPES, PACTIUM_PROTOCOL } from "../protocol/constants.js";
 import { protocolHash } from "../protocol/hashing.js";
-import { createPactium } from "../core/pactium-core.js";
+import { createPactium, getPactiumInternals } from "../core/pactium-core.js";
 import { createVerifiableIndexEngine } from "../index-engine/snapshot-merkle-index.js";
 import { verifyProofBundle } from "../proof/bundle.js";
 import { createStoragePort } from "../storage/storage-port.js";
@@ -50,8 +50,9 @@ function addCompactionDetails(details, compaction) {
 }
 
 async function compactPressureCore(context, details) {
-  if (!context?.owned || typeof context.core?._compactInMemoryCaches !== "function") return;
-  addCompactionDetails(details, await context.core._compactInMemoryCaches());
+  if (!context?.owned) return;
+  const internals = getPactiumInternals(context.core);
+  addCompactionDetails(details, await internals.compactInMemoryCaches());
 }
 
 export async function runPactiumQualityGateProfile({
@@ -219,7 +220,7 @@ export async function runPactiumQualityGateProfile({
         workspaceId: outcome.workspaceId,
         ledgerEventId: outcome.ledgerEventId
       });
-      if (!membership.member || !core.advanced.indexEngine.verifyProof(membership.proof)) {
+      if (!membership.member || !getPactiumInternals(core).indexEngine.verifyProof(membership.proof)) {
         throw new Error("Pressure recovery workspace membership proof failed.");
       }
     }

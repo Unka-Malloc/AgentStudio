@@ -46,7 +46,7 @@ The returned instance exposes:
 | `schema` | `string` | Schema version |
 | `dataDir` | `string` | Resolved data directory path |
 
-**Read-only resolvers (recommended for external consumers):**
+**Read-only resolvers:**
 
 | Method | Description |
 | --- | --- |
@@ -56,16 +56,6 @@ The returned instance exposes:
 | `readLedgerLeaf(index)` | Read a ledger leaf by index. |
 | `readProtocolObject(scope, key, fallback?)` | Read a protocol object. Returns a canonical clone. |
 | `listProtocolObjectKeys(scope)` | List all keys in a protocol object scope. |
-
-**Advanced (deprecated for external use):**
-
-| Property | Type | Description |
-| --- | --- | --- |
-| `advanced.storage` | `PactiumStoragePort` | **@deprecated** Prefer read-only resolvers. |
-| `advanced.ledger` | `PactiumLedger` | **@deprecated** Prefer `readLedgerHead()`/`readLedgerLeaf()`. |
-| `advanced.indexEngine` | `PactiumIndexEngine` | **@deprecated** Internal, unstable API. |
-
-`pactium.advanced` remains an internal maintenance and diagnostics surface. Application code should use the public lifecycle, resolver, verification, and bundle APIs.
 
 ---
 
@@ -107,7 +97,6 @@ Relevant proof-generation options:
 | Field | Type | Description |
 | --- | --- | --- |
 | `proofOptions.stateMutationProofMode` | `"sampled" \| "full"?` | Choose bounded 32-key state mutation proofs or full per-key proofs over unique touched keys |
-| `proofOptions.fullStateMutationProofs` | `boolean?` | Alias for `stateMutationProofMode: "full"` |
 
 **Returns:** `PactiumProofEnvelope`
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createPactium } from "../../src/index.js";
+import { getPactiumInternals } from "../../src/core/pactium-core.js";
 import { createJsonStoragePort as createStoragePort } from "../../src/storage/local-json-storage-port.js";
 import { createLedgerTransparencyLog } from "../../src/ledger/transparency-log.js";
 import { rebuildCoreStateFromLedger } from "../../src/core/rebuild-state.js";
@@ -8,7 +9,7 @@ import { rebuildCoreStateFromLedger } from "../../src/core/rebuild-state.js";
 describe("Pactium rebuild-state coverage — minimal fact and edge case paths", () => {
   it("rebuild fires intent_idempotency_rebuild_incomplete for minimal intent without inputHash", async () => {
     const pactium = createPactium({ inMemory: true });
-    const ledger = pactium.advanced.ledger;
+    const ledger = getPactiumInternals(pactium).ledger;
 
     await ledger.append({
       factType: "operation.intent",
@@ -21,7 +22,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
     });
 
     const result = await rebuildCoreStateFromLedger({
-      ledger, indexEngine: pactium.advanced.indexEngine, storage: null
+      ledger, indexEngine: getPactiumInternals(pactium).indexEngine, storage: null
     });
 
     assert.ok(Array.isArray(result.warnings), "warnings should be an array");
@@ -35,7 +36,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
 
   it("rebuild fires outcome_idempotency_rebuild_incomplete for minimal outcome without resultHash", async () => {
     const pactium = createPactium({ inMemory: true });
-    const ledger = pactium.advanced.ledger;
+    const ledger = getPactiumInternals(pactium).ledger;
 
     await ledger.append({
       factType: "operation.intent",
@@ -60,7 +61,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
     });
 
     const result = await rebuildCoreStateFromLedger({
-      ledger, indexEngine: pactium.advanced.indexEngine, storage: null
+      ledger, indexEngine: getPactiumInternals(pactium).indexEngine, storage: null
     });
 
     const codes = result.warnings.map((w) => w.code);
@@ -73,7 +74,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
 
   it("rebuild processes causality refs on intent and outcome facts", async () => {
     const pactium = createPactium({ inMemory: true });
-    const ledger = pactium.advanced.ledger;
+    const ledger = getPactiumInternals(pactium).ledger;
 
     await ledger.append({
       factType: "operation.intent",
@@ -100,7 +101,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
     });
 
     const result = await rebuildCoreStateFromLedger({
-      ledger, indexEngine: pactium.advanced.indexEngine, storage: null
+      ledger, indexEngine: getPactiumInternals(pactium).indexEngine, storage: null
     });
 
     const fcrKeys = Object.keys(result.fullyComparableRoots);
@@ -110,7 +111,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
 
   it("rebuild processes outcome with outcomeIdempotencyKey and full material", async () => {
     const pactium = createPactium({ inMemory: true });
-    const ledger = pactium.advanced.ledger;
+    const ledger = getPactiumInternals(pactium).ledger;
 
     await ledger.append({
       factType: "operation.intent",
@@ -137,7 +138,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
     });
 
     const result = await rebuildCoreStateFromLedger({
-      ledger, indexEngine: pactium.advanced.indexEngine, storage: null
+      ledger, indexEngine: getPactiumInternals(pactium).indexEngine, storage: null
     });
 
     const allKeys = [...Object.keys(result.fullyComparableRoots), ...Object.keys(result.partiallyComparableRoots)];
@@ -147,7 +148,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
 
   it("rebuild processes multi-workspace checkpoint initialization", async () => {
     const pactium = createPactium({ inMemory: true });
-    const ledger = pactium.advanced.ledger;
+    const ledger = getPactiumInternals(pactium).ledger;
 
     for (const wsId of ["ws-alpha", "ws-beta"]) {
       const intentId = `intent-${wsId}`;
@@ -167,7 +168,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
     }
 
     const result = await rebuildCoreStateFromLedger({
-      ledger, indexEngine: pactium.advanced.indexEngine, storage: null
+      ledger, indexEngine: getPactiumInternals(pactium).indexEngine, storage: null
     });
 
     assert.ok(result.state, "rebuild should produce state");
@@ -180,7 +181,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
     const pactium = createPactium({ inMemory: true });
 
     const result = await rebuildCoreStateFromLedger({
-      ledger, indexEngine: pactium.advanced.indexEngine, storage: null
+      ledger, indexEngine: getPactiumInternals(pactium).indexEngine, storage: null
     });
 
     assert.ok(result.state, "rebuild should produce state even for empty ledger");
@@ -199,7 +200,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
     };
     const emptyPageResult = await rebuildCoreStateFromLedger({
       ledger: emptyPageLedger,
-      indexEngine: pactium.advanced.indexEngine,
+      indexEngine: getPactiumInternals(pactium).indexEngine,
       storage: null
     });
     assert.deepEqual(Object.keys(emptyPageResult.fullyComparableRoots), ["openIntent", "outcome", "causality"]);
@@ -220,7 +221,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
     };
     const nullFactResult = await rebuildCoreStateFromLedger({
       ledger: nullFactLedger,
-      indexEngine: pactium.advanced.indexEngine,
+      indexEngine: getPactiumInternals(pactium).indexEngine,
       storage: null
     });
     assert.equal(pageCalls, 1);
@@ -229,7 +230,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
 
   it("rebuild identifies skippedRoots for stateRoot", async () => {
     const pactium = createPactium({ inMemory: true });
-    const ledger = pactium.advanced.ledger;
+    const ledger = getPactiumInternals(pactium).ledger;
 
     await ledger.append({
       factType: "operation.intent",
@@ -256,7 +257,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
     });
 
     const result = await rebuildCoreStateFromLedger({
-      ledger, indexEngine: pactium.advanced.indexEngine, storage: null
+      ledger, indexEngine: getPactiumInternals(pactium).indexEngine, storage: null
     });
 
     const srKeys = Object.keys(result.skippedRoots);
@@ -266,7 +267,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
 
   it("doctor rebuild detects orphan outcome (outcome referencing missing intent)", async () => {
     const pactium = createPactium({ inMemory: true });
-    const ledger = pactium.advanced.ledger;
+    const ledger = getPactiumInternals(pactium).ledger;
 
     await ledger.append({
       factType: "operation.outcome",
@@ -282,7 +283,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
     });
 
     const result = await rebuildCoreStateFromLedger({
-      ledger, indexEngine: pactium.advanced.indexEngine, storage: null
+      ledger, indexEngine: getPactiumInternals(pactium).indexEngine, storage: null
     });
 
     const codes = result.warnings.map((w) => w.code);

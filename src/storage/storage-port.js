@@ -154,7 +154,7 @@ function createAutoStoragePort(options) {
 
 export function createStoragePort(options = {}) {
   const backend = normalizeStorageBackend(
-    options.storageBackend || options.backend || process.env.PACTIUM_STORAGE_BACKEND || PACTIUM_STORAGE_BACKEND_AUTO
+    options.storageBackend || process.env.PACTIUM_STORAGE_BACKEND || PACTIUM_STORAGE_BACKEND_AUTO
   );
   if (options.inMemory) return createJsonStoragePort(options);
   if (backend === PACTIUM_STORAGE_BACKEND_AUTO) return createAutoStoragePort(options);

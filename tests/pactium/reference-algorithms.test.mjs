@@ -43,6 +43,7 @@ import {
   createLicoLiteAspect,
   createLicoLiteSigner
 } from "../../src/aspects/licolite/index.js";
+import { getPactiumInternals } from "../../src/core/pactium-core.js";
 import { decodeVarint, indexedBlocksFromBundle } from "../../src/proof/bundle-format.js";
 
 // Reference behavior map: Trillian/Rekor for transparency proofs, Dolt for index diff,
@@ -96,7 +97,7 @@ function expectFailureCode(result, code, label = "") {
 
 async function proofMaterialFor(pactium, envelope) {
   const ref = envelope.proofRefs.find((candidate) => candidate.name === "ledger-and-index-proofs") || envelope.proofRefs[0];
-  const block = await pactium.advanced.storage.getBlock(ref.cid);
+  const block = await getPactiumInternals(pactium).storage.getBlock(ref.cid);
   assert.ok(block, `proof material block ${ref.cid} should exist`);
   return canonicalDecode(block.bytes);
 }
@@ -112,7 +113,7 @@ function setAtPath(object, pathSegments, value) {
 async function envelopeWithMutatedProofMaterial(pactium, envelope, mutate) {
   const material = structuredClone(await proofMaterialFor(pactium, envelope));
   mutate(material);
-  const block = await pactium.advanced.storage.putBlock(material, { kind: "proof-material:ledger-and-index-proofs" });
+  const block = await getPactiumInternals(pactium).storage.putBlock(material, { kind: "proof-material:ledger-and-index-proofs" });
   const originalRef = envelope.proofRefs.find((candidate) => candidate.name === "ledger-and-index-proofs") || envelope.proofRefs[0];
   return pactium.storeEnvelope({
     ...envelope,
@@ -785,7 +786,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 	      idempotencyKey: "open-intent-proof"
 	    });
 	    const intentMaterial = await proofMaterialFor(pactium, intentEnvelope);
-	    const nonMemberOpenIntentProof = await pactium.advanced.indexEngine.prove(intentMaterial.proofs.openIntent.indexRoot, "missing-open-intent");
+	    const nonMemberOpenIntentProof = await getPactiumInternals(pactium).indexEngine.prove(intentMaterial.proofs.openIntent.indexRoot, "missing-open-intent");
 	    const wrongOpenIntentBinding = await envelopeWithMutatedProofMaterial(pactium, intentEnvelope, (material) => {
 	      material.proofs.openIntent = nonMemberOpenIntentProof;
 	    });
@@ -825,20 +826,20 @@ describe("Pactium reference-project algorithm coverage", () => {
 	      expectFailureCode(result, "bad_embedded_proof", target.join("."));
 	    }
 	    const validMaterial = await proofMaterialFor(pactium, envelope);
-	    const alternateLedgerLeafProof = await pactium.advanced.ledger.createInclusionProof(0, validMaterial.ledger.head);
+	    const alternateLedgerLeafProof = await getPactiumInternals(pactium).ledger.createInclusionProof(0, validMaterial.ledger.head);
 	    const wrongFactRefEnvelope = await envelopeWithMutatedProofMaterial(pactium, envelope, (material) => {
 	      material.ledger.inclusionProof = alternateLedgerLeafProof;
 	    });
 	    expectFailureCode(await pactium.verifyEnvelope(wrongFactRefEnvelope), "bad_fact_ref_binding", "ledger leaf factRef binding");
 
-	    const foreignRoot = await pactium.advanced.indexEngine.createIndex([keyEntry("foreign/proof", "foreign")]);
-	    const foreignProof = await pactium.advanced.indexEngine.prove(foreignRoot.root, "foreign/proof");
+	    const foreignRoot = await getPactiumInternals(pactium).indexEngine.createIndex([keyEntry("foreign/proof", "foreign")]);
+	    const foreignProof = await getPactiumInternals(pactium).indexEngine.prove(foreignRoot.root, "foreign/proof");
 	    const wrongWorkspaceBinding = await envelopeWithMutatedProofMaterial(pactium, envelope, (material) => {
 	      material.proofs.workspaceProjection.orderProof = foreignProof;
 	    });
 	    expectFailureCode(await pactium.verifyEnvelope(wrongWorkspaceBinding), "bad_index_proof_binding", "workspace order root binding");
 
-	    const nonMemberOutcomeProof = await pactium.advanced.indexEngine.prove(validMaterial.proofs.outcome.indexRoot, "missing-intent");
+	    const nonMemberOutcomeProof = await getPactiumInternals(pactium).indexEngine.prove(validMaterial.proofs.outcome.indexRoot, "missing-intent");
 	    const wrongOutcomeBinding = await envelopeWithMutatedProofMaterial(pactium, envelope, (material) => {
 	      material.proofs.outcome = nonMemberOutcomeProof;
 	    });
@@ -872,7 +873,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 	    assert.equal(material.proofs.causality.proofs[0].key, `${parent.factId}\u0000${material.proofs.stateCommit.outcomeId}`);
 	    assert.equal((await pactium.verifyEnvelope(child)).ok, true);
 
-	    const nonMemberCausalityProof = await pactium.advanced.indexEngine.prove(
+	    const nonMemberCausalityProof = await getPactiumInternals(pactium).indexEngine.prove(
 	      material.proofs.causality.root,
 	      `${parent.factId}\u0000wrong-outcome`
 	    );
@@ -923,7 +924,7 @@ describe("Pactium reference-project algorithm coverage", () => {
     });
     const bundle = await pactium.exportProofBundle(envelope);
     assert.equal(bundle.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
-    const extraBlock = await pactium.advanced.storage.putBlock({
+    const extraBlock = await getPactiumInternals(pactium).storage.putBlock({
       proofMaterial: "not required by this envelope",
       payload: "extra block that should be skipped by default"
     }, { kind: "proof-material:unused-extra" });
@@ -988,7 +989,7 @@ describe("Pactium reference-project algorithm coverage", () => {
       input: { stable: true }
     })));
     assert.equal(new Set(intentAttempts.map((envelope) => envelope.envelopeId)).size, 1);
-    assert.equal((await pactium.advanced.ledger.head()).size, 1);
+    assert.equal((await getPactiumInternals(pactium).ledger.head()).size, 1);
 
     const intentId = intentAttempts[0].factId;
     const outcomeAttempts = await Promise.all(Array.from({ length: 16 }, () => pactium.appendOperationOutcome({
@@ -997,7 +998,7 @@ describe("Pactium reference-project algorithm coverage", () => {
       result: { stable: true }
     })));
     assert.equal(new Set(outcomeAttempts.map((envelope) => envelope.envelopeId)).size, 1);
-    assert.equal((await pactium.advanced.ledger.head()).size, 2);
+    assert.equal((await getPactiumInternals(pactium).ledger.head()).size, 2);
 
 	    const reloaded = createPactium({ dataDir });
 	    const replayedIntent = await reloaded.beginOperationIntent({
@@ -1067,7 +1068,7 @@ describe("Pactium reference-project algorithm coverage", () => {
         ledgerEventId: result.ledgerEventId
       });
       assert.equal(membership.member, true);
-      assert.equal(staleReader.advanced.indexEngine.verifyProof(membership.proof), true);
+      assert.equal(getPactiumInternals(staleReader).indexEngine.verifyProof(membership.proof), true);
     }
 
     const parentEnvelope = await staleReader.recordOperation({
@@ -1084,7 +1085,7 @@ describe("Pactium reference-project algorithm coverage", () => {
     })).ok, true);
 
     const fresh = createPactium({ dataDir });
-    assert.equal((await fresh.advanced.ledger.head()).size, workerCount * 2 + 2);
+    assert.equal((await getPactiumInternals(fresh).ledger.head()).size, workerCount * 2 + 2);
     assert.equal((await fresh.getWorkspaceProjection(workspaceId)).nextOrdinal, workerCount * 2 + 2);
   });
 
@@ -1123,7 +1124,7 @@ describe("Pactium reference-project algorithm coverage", () => {
     assert.equal(new Set(results.map((result) => result.envelopeId)).size, 1);
 
     const fresh = createPactium({ dataDir });
-    const head = await fresh.advanced.ledger.head();
+    const head = await getPactiumInternals(fresh).ledger.head();
     const projection = await fresh.getWorkspaceProjection(workspaceId);
     const page = await fresh.getLedgerCursor({ limit: 10 });
     assert.equal(head.size, 2);
@@ -1172,7 +1173,7 @@ describe("Pactium reference-project algorithm coverage", () => {
     );
     assert.equal(workspacePage.cursor.position, 105);
     assert.equal(workspacePage.orderProofs.length, 5);
-    assert.equal(workspacePage.orderProofs.every((proof) => fresh.advanced.indexEngine.verifyProof(proof)), true);
+    assert.equal(workspacePage.orderProofs.every((proof) => getPactiumInternals(fresh).indexEngine.verifyProof(proof)), true);
     assert.ok(indexNodeReads < 100, `expected workspace cursor to avoid a full index read, read ${indexNodeReads} nodes`);
   });
 
@@ -1230,7 +1231,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 	    for (const extension of envelope.extensions.filter((candidate) =>
 	      candidate.name === "licolite.policy" || candidate.name === "licolite.workspaceEffect"
 	    )) {
-	      const block = await online.core.advanced.storage.getBlock(extension.valueRef);
+	      const block = await getPactiumInternals(online.core).storage.getBlock(extension.valueRef);
 	      const value = canonicalDecode(block.bytes);
 	      evidenceRefs.push(value.evidenceRef);
 	    }
@@ -1341,7 +1342,7 @@ describe("Pactium reference-project algorithm coverage", () => {
       idempotencyKey: "durable-compact-intent",
       outcomeIdempotencyKey: "durable-compact-outcome"
     });
-    assert.deepEqual(await durable.advanced._compactInMemoryCaches(), {
+    assert.deepEqual(await getPactiumInternals(durable).compactInMemoryCaches(), {
       protocol: PACTIUM_PROTOCOL,
       inMemory: false,
       retainedRoots: 0,
