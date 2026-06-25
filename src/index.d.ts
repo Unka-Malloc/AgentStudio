@@ -306,7 +306,7 @@ export interface PactiumHttpServerStartResult {
 
 export const PACTIUM_PROTOCOL: "pactium.v0.2";
 export const PACTIUM_SCHEMA_VERSION: "pactium.v0.2.schema.latest";
-export const PACTIUM_PACKAGE_VERSION: "0.3.1";
+export const PACTIUM_PACKAGE_VERSION: "0.4.0";
 export const PACTIUM_HTTP_PROTOCOL: "pactium.v0.2.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES: 1048576;
 export const PACTIUM_INDEX_ENGINE: "pactium.verifiable-index-engine";

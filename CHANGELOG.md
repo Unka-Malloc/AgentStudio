@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-06-26
+
+This minor release hardens Pactium's proof and storage foundations while expanding recovery, storage, and verification capabilities. It keeps the protocol profile current with the new proof-size, crash-consistency, and storage surfaces.
+
+### Added
+
+- Added SQLite-backed storage capability and storage port modularization for host-controlled persistence.
+- Added WAL commit markers, ledger replay rebuild support, lock heartbeat and fencing tokens, and richer doctor recovery coverage.
+
+### Changed
+
+- Hardened proof trust boundaries, proof bundle verification, canonical encoding validation, and HTTP route authorization behavior.
+- Reduced proof material size through path-copying index structures and compact proofs, with configurable proof size guard options.
+
+### Fixed
+
+- Aligned TypeScript declarations, protocol fixtures, package contents checks, and documentation with the current implementation.
+
 ## [0.3.1] - 2026-06-20
 
 This patch release corrects package-version support documentation after Pactium 0.3.0 while keeping the protocol/data format at pactium.v0.2.
@@ -187,6 +205,7 @@ This is the first public release of Pactium as a proof-first protocol substrate.
 - Ed25519 signing support for Ledger Heads and LicoLite envelopes
 - Signed head verification with verifier manifest validation
 
+[0.4.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.4.0
 [0.3.1]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.3.0
 [0.2.2]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.2.2

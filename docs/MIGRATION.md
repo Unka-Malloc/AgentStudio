@@ -28,7 +28,7 @@ During the `0.x` series, minor versions may include breaking changes. The protoc
 
 ### Current protocol/data format: v0.2.x
 
-Pactium 0.3.x keeps the v0.2 protocol/data directory format and creates and manages its own data directory format. Key constraints:
+Pactium 0.4.x keeps the v0.2 protocol/data directory format and creates and manages its own data directory format. Key constraints:
 
 - **New directories only** -- Pactium does not read or migrate data from earlier experimental formats
 - **Latest schema only** -- there is no support for loading older schema versions
@@ -48,6 +48,7 @@ Pactium intentionally does not include automatic migration. Data directories are
 
 | Pactium version | Node.js requirement |
 | --- | --- |
+| 0.4.x | `^22.0.0 \|\| ^24.0.0` |
 | 0.3.x | `^22.0.0 \|\| ^24.0.0` |
 | 0.2.x | `^22.0.0 \|\| ^24.0.0` |
 
