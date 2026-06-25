@@ -23,10 +23,13 @@ import {
   createLedgerConsistencyProof,
   createLedgerInclusionProof,
   createLedgerTransparencyLog,
+  detectSqliteCapabilities,
   createMaintenanceTaskEngine,
   createPactium,
   createRepairPlanner,
   createDefaultProofVerifierRegistry,
+  createJsonStoragePort,
+  createSqliteStoragePort,
   createStoragePort,
   createTrackingCursor,
   createVerifierManifest,
@@ -46,6 +49,7 @@ import {
   runPactiumQualityGateProfile,
   samePositionAs,
   signLedgerHead,
+  sqliteStorageAvailable,
   verifyLedgerHeadSignature,
   verifyLedgerConsistencyProof,
   verifyLedgerInclusionProof,
@@ -176,6 +180,141 @@ describe("Pactium proof-first root API", () => {
     await fs.mkdir(path.join(historicalDir, "operation-ledger"), { recursive: true });
     const historicalStorage = createStoragePort({ dataDir: historicalDir });
     await assert.rejects(() => historicalStorage.initialize(), /no data migration/);
+  });
+
+  it("detects SQLite capabilities across platform-specific providers without overstating storage support", async () => {
+    const makeRunCommand = (availableIds) => async (_command, _args, { probe } = {}) => {
+      if (!availableIds.has(probe?.id)) return { ok: false, errorCode: "ENOENT", stdout: "", stderr: "" };
+      return { ok: true, stdout: `${probe.id} 3.45.0\n`, stderr: "" };
+    };
+    const resolveOnlySqlite3 = (packageName) => packageName === "sqlite3"
+      ? `/fake/node_modules/${packageName}/index.js`
+      : "";
+    const noRuntimeDriver = {
+      loadNodeSqlite: () => null,
+      loadBetterSqlite3: () => null,
+      resolvePackage: resolveOnlySqlite3,
+      timeoutMs: 1
+    };
+
+    const darwin = await detectSqliteCapabilities({
+      ...noRuntimeDriver,
+      platform: "darwin",
+      runCommand: makeRunCommand(new Set(["cli:sqlite3", "brew:sqlite"]))
+    });
+    assert.equal(darwin.sqliteAvailable, true);
+    assert.equal(darwin.storageAvailable, false);
+    assert.equal(darwin.capabilities.find((capability) => capability.id === "brew:sqlite")?.available, true);
+    assert.equal(darwin.capabilities.find((capability) => capability.id === "npm:sqlite3")?.available, true);
+    assert.equal(darwin.capabilities.find((capability) => capability.id === "npm:sqlite3")?.usableByPactium, false);
+
+    const win32 = await detectSqliteCapabilities({
+      ...noRuntimeDriver,
+      platform: "win32",
+      runCommand: makeRunCommand(new Set(["choco:sqlite"]))
+    });
+    assert.equal(win32.capabilities.find((capability) => capability.id === "choco:sqlite")?.available, true);
+    assert.equal(win32.storageAvailable, false);
+
+    const linux = await detectSqliteCapabilities({
+      ...noRuntimeDriver,
+      platform: "linux",
+      runCommand: makeRunCommand(new Set(["apt:sqlite3", "rpm:sqlite", "pacman:sqlite"]))
+    });
+    assert.equal(linux.capabilities.find((capability) => capability.id === "apt:sqlite3")?.available, true);
+    assert.equal(linux.capabilities.find((capability) => capability.id === "rpm:sqlite")?.available, true);
+    assert.equal(linux.capabilities.find((capability) => capability.id === "pacman:sqlite")?.available, true);
+    assert.equal(linux.storageAvailable, false);
+
+    const betterSqlite3 = await detectSqliteCapabilities({
+      platform: "linux",
+      includeSystem: false,
+      resolvePackage: (packageName) => packageName === "better-sqlite3"
+        ? `/fake/node_modules/${packageName}/index.js`
+        : "",
+      loadNodeSqlite: () => null,
+      loadBetterSqlite3: () => function BetterSqlite3() {},
+      runCommand: makeRunCommand(new Set()),
+      timeoutMs: 1
+    });
+    assert.equal(betterSqlite3.storageAvailable, true);
+    assert.equal(betterSqlite3.selectedStorageProvider, "better-sqlite3");
+  });
+
+  it("selects storage backends through manifest-bound factory policy", async () => {
+    const autoDir = await tempDataDir("pactium-auto-storage-");
+    const autoStorage = createStoragePort({ dataDir: autoDir, storageBackend: "auto" });
+    await autoStorage.putProtocolObject("auto", "key", { ok: true });
+    const autoManifest = JSON.parse(await fs.readFile(path.join(autoDir, "pactium-manifest.json"), "utf8"));
+    const expectedAutoBackend = sqliteStorageAvailable() ? "sqlite" : "json";
+    assert.equal(autoManifest.storageBackend, expectedAutoBackend);
+    assert.equal(autoStorage.selectedStorageBackend, expectedAutoBackend);
+    assert.deepEqual(await autoStorage.getProtocolObject("auto", "key"), { ok: true });
+
+    const autoCoreDir = await tempDataDir("pactium-auto-core-");
+    const autoPactium = createPactium({ dataDir: autoCoreDir, storageBackend: "auto" });
+    const envelope = await autoPactium.recordOperation({
+      operationId: "storage.auto.core",
+      workspaceId: "storage-auto",
+      stateMutations: [{ key: "auto/key", value: { ok: true } }]
+    });
+    assert.equal((await autoPactium.verifyEnvelope(envelope)).ok, true);
+    const autoCoreManifest = JSON.parse(await fs.readFile(path.join(autoCoreDir, "pactium-manifest.json"), "utf8"));
+    assert.equal(autoCoreManifest.storageBackend, expectedAutoBackend);
+    const reloadedAuto = createPactium({ dataDir: autoCoreDir, storageBackend: "auto" });
+    assert.equal((await reloadedAuto.lookupOutcome(envelope.factId)).exists, true);
+
+    if (sqliteStorageAvailable()) {
+      assert.equal(await fs.stat(path.join(autoDir, "pactium.sqlite")).then(() => true, () => false), true);
+      await assert.rejects(
+        () => createJsonStoragePort({ dataDir: autoDir }).initialize(),
+        /sqlite storage backend; JSON storage backend cannot open/i
+      );
+
+      const customSqliteDir = await tempDataDir("pactium-sqlite-custom-");
+      const customSqlite = createSqliteStoragePort({ dataDir: customSqliteDir, databasePath: "db/pactium.sqlite" });
+      await customSqlite.putProtocolObject("sqlite", "key", { ok: true });
+      assert.equal(customSqlite.sqlitePath, path.join(customSqliteDir, "db", "pactium.sqlite"));
+      assert.equal(await fs.stat(path.join(customSqliteDir, "db", "pactium.sqlite")).then(() => true, () => false), true);
+      const customAuto = createStoragePort({ dataDir: customSqliteDir, storageBackend: "auto" });
+      await customAuto.initialize();
+      assert.equal(customAuto.selectedStorageBackend, "sqlite");
+      assert.deepEqual(await customAuto.getProtocolObject("sqlite", "key"), { ok: true });
+      await assert.rejects(
+        () => createSqliteStoragePort({ dataDir: customSqliteDir, databasePath: "other.sqlite" }).initialize(),
+        /SQLite manifest uses database/
+      );
+
+      const rollbackStorage = createSqliteStoragePort({ dataDir: await tempDataDir("pactium-sqlite-rollback-") });
+      let rolledBlockCid = "";
+      await assert.rejects(async () => rollbackStorage.withWriteLock(async () => {
+        await rollbackStorage.putProtocolObject("tx", "rolled", { ok: false });
+        rolledBlockCid = (await rollbackStorage.putBlock({ rolled: true })).cid;
+        throw new Error("rollback sentinel");
+      }), /rollback sentinel/);
+      assert.equal(await rollbackStorage.getProtocolObject("tx", "rolled", null), null);
+      assert.equal(await rollbackStorage.getBlock(rolledBlockCid), null);
+    }
+
+    assert.throws(
+      () => createSqliteStoragePort({ dataDir: autoDir, databasePath: "../outside.sqlite" }),
+      /Path escapes Pactium data directory/
+    );
+
+    const jsonDir = await tempDataDir("pactium-json-manifest-");
+    const jsonStorage = createJsonStoragePort({ dataDir: jsonDir });
+    await jsonStorage.putProtocolObject("json", "key", { ok: true });
+    const autoExistingJson = createStoragePort({ dataDir: jsonDir, storageBackend: "auto" });
+    await autoExistingJson.initialize();
+    assert.equal(autoExistingJson.selectedStorageBackend, "json");
+    assert.deepEqual(await autoExistingJson.getProtocolObject("json", "key"), { ok: true });
+
+    if (sqliteStorageAvailable()) {
+      await assert.rejects(
+        () => createSqliteStoragePort({ dataDir: jsonDir }).initialize(),
+        /json storage backend; SQLite storage backend cannot open/i
+      );
+    }
   });
 
   it("creates and verifies ledger transparency log inclusion and consistency proofs", async () => {

@@ -42,6 +42,7 @@
     "createAppendCondition",
     "createCompactRange",
     "createDefaultProofVerifierRegistry",
+    "createJsonStoragePort",
     "createLedgerConsistencyProof",
     "createLedgerInclusionProof",
     "createLedgerTransparencyLog",
@@ -49,12 +50,14 @@
     "createPactium",
     "createPactiumHttpServer",
     "createRepairPlanner",
+    "createSqliteStoragePort",
     "createStoragePort",
     "createTrackingCursor",
     "createVerifiableIndexEngine",
     "createVerificationFailure",
     "createVerifierManifest",
     "defaultPactiumDataDir",
+    "detectSqliteCapabilities",
     "emptyTreeHash",
     "envelopeSigningHash",
     "ledgerHeadSigningPayload",
@@ -68,6 +71,7 @@
     "runPactiumQualityGateProfile",
     "samePositionAs",
     "signLedgerHead",
+    "sqliteStorageAvailable",
     "startPactiumHttpServer",
     "verifyIndexProof",
     "verifyLedgerConsistencyProof",
@@ -94,9 +98,9 @@
   ],
   "declarations": {
     "src/index.d.ts": {
-      "sha256": "c9116270bd911a2d9f2ed82373d3c30db2910cbd3470e43b2a77c773d3a9c6b3",
-      "byteLength": 16221,
-      "exportCount": 80
+      "sha256": "0fb94d7a88dfbe809e4075c0da93ab5fadb4d48f59256dd7bc813dfa7bcea3c3",
+      "byteLength": 16893,
+      "exportCount": 84
     },
     "src/http.d.ts": {
       "sha256": "ec5eff2f4abb6af32a55281b9988463d02aa035bacd7e5ba6dccced57bf7d510",

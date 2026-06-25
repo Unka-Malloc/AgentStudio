@@ -22,7 +22,7 @@ This comparison treats Pactium as a proof-first protocol substrate for LicoLite,
 | Clear protocol authority | `docs/architecture/ARCHITECTURE.md:21` and `docs/protocols/PROFILE.md:15` make the Operation Ledger the ordering authority. | Prevents derived workspace/state indexes from becoming hidden sources of truth. |
 | Proof-first receipt shape | `src/core/pactium-core.js:162` creates envelopes and material refs during writes. | User-facing operations already return verifiable receipts, so improvements can be additive. |
 | Shared index engine boundary | `docs/protocols/PROFILE.md:43` says one engine powers state, checkpoint, workspace, lifecycle, idempotency, and causality indexes. | A Prolly upgrade benefits every derived proof area at once. |
-| Latest-schema-only boundary | `src/storage/local-json-storage-port.js:72` rejects historical layouts and schema mismatches. | Makes algorithm upgrades easier because no in-place historical migration is required. |
+| Latest-schema-only boundary | `src/storage/storage-port.js` routes by manifest, and storage adapters reject historical layouts and schema mismatches. | Makes algorithm upgrades easier because no in-place historical migration is required. |
 | Host boundary | `docs/architecture/ARCHITECTURE.md:27` separates Pactium protocol proofs from LicoLite policy/effects. | Avoids turning Pactium into an app framework or side-effect runtime. |
 
 ## Implementation Matrix

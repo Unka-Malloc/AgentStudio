@@ -65,4 +65,4 @@ LicoLite owns runtime policy decisions, operation dispatching, side effects, UI 
 
 ## Current Non-Surfaces
 
-The current package does not ship a SQLite storage backend, a separate per-workspace FIFO lane queue, a repair executor that appends Repair Facts, or pressure-profile baseline regression enforcement. These require explicit implementation before maintained docs can describe them as current behavior.
+The current package does not ship a separate per-workspace FIFO lane queue, a repair executor that appends Repair Facts, or pressure-profile baseline regression enforcement. These require explicit implementation before maintained docs can describe them as current behavior. Storage currently supports manifest-bound local JSON and SQLite adapters behind the same Storage Port.

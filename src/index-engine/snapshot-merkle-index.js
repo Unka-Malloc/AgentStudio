@@ -8,7 +8,7 @@ import {
 } from "../protocol/constants.js";
 import { canonicalEncode, canonicalString, normalizeCanonicalValue } from "../canonical/value.js";
 import { cidForBytes, cidForCanonical, hashBytes, hexFromCid, protocolHashHex } from "../protocol/hashing.js";
-import { createStoragePort } from "../storage/local-json-storage-port.js";
+import { createStoragePort } from "../storage/storage-port.js";
 import { asArray, asRecord, safeToken } from "../shared/records.js";
 
 const INDEX_NODE_TYPE = "pactium.index.node";

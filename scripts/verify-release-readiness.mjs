@@ -403,6 +403,9 @@ async function verifyDesignImplementationAnchors(findings) {
     "src/protocol/hashing.js",
     "src/canonical/value.js",
     "src/storage/local-json-storage-port.js",
+    "src/storage/sqlite-capability.js",
+    "src/storage/sqlite-storage-port.js",
+    "src/storage/storage-port.js",
     "src/ledger/transparency-log.js",
     "src/index-engine/snapshot-merkle-index.js",
     "src/core/pactium-core.js",
@@ -428,7 +431,7 @@ async function verifyDesignImplementationAnchors(findings) {
     },
     {
       design: "Storage Port",
-      code: ["createStoragePort", "putBlock", "getBlock"],
+      code: ["createStoragePort", "createJsonStoragePort", "detectSqliteCapabilities", "putBlock", "getBlock"],
       adr: "docs/adr/0014-storage-port-with-local-backend.md"
     },
     {
@@ -548,6 +551,9 @@ async function verifyDocumentImplementationDrift(findings) {
     "src/protocol/hashing.js",
     "src/canonical/value.js",
     "src/storage/local-json-storage-port.js",
+    "src/storage/sqlite-capability.js",
+    "src/storage/sqlite-storage-port.js",
+    "src/storage/storage-port.js",
     "src/ledger/transparency-log.js",
     "src/index-engine/snapshot-merkle-index.js",
     "src/core/pactium-core.js",

@@ -517,7 +517,8 @@ import { createStoragePort, resolveDataDir, resolveWithin } from "pactium";
 
 const storage = createStoragePort({
   dataDir: "./.pactium",
-  inMemory: false
+  inMemory: false,
+  storageBackend: "json" // "json" (default), "sqlite", or "auto"
 });
 
 await storage.initialize();
@@ -532,7 +533,9 @@ await storage.putProtocolObject("ledger", "head", headValue);
 const head = await storage.getProtocolObject("ledger", "head");
 ```
 
-`resolveDataDir()` expands `~` to the current user's home directory. Protocol object scopes and keys are stored as path-safe tokens and cannot escape the Pactium data directory.
+`resolveDataDir()` expands `~` to the current user's home directory. Protocol object scopes and keys are stored as path-safe tokens and cannot escape the Pactium data directory. For SQLite, `databasePath` is optional and must resolve inside `dataDir`; once `pactium-manifest.json` records `sqlitePath`, that path is manifest-bound.
+
+`detectSqliteCapabilities()` reports local SQLite signals across npm packages, the `sqlite3` CLI, and platform package managers (Brew on macOS, Choco on Windows, apt/rpm/pacman on Linux). `sqliteStorageAvailable()` is narrower: it is true only when Pactium can actually open a SQLite backend through a supported provider (`node:sqlite` or optional npm `better-sqlite3`).
 
 ---
 
@@ -882,6 +885,8 @@ Pactium's local JSON backend uses **write-ahead commit markers** for crash detec
 3. After all mutation work completes (ledger append + proof material + index + runtime-state save), a **complete marker** is written and the pending marker is cleaned up.
 4. If a crash occurs after the ledger append but before the complete marker is written, the pending marker **remains** — `doctor()` reports `incomplete_commit`.
 
+`createStoragePort({ storageBackend: "auto" })` runs the SQLite capability detector and selects SQLite for a new data directory when a Pactium-supported SQLite provider is available (`node:sqlite` or optional npm `better-sqlite3`), otherwise JSON. System SQLite signals such as the `sqlite3` CLI or package-manager records are reported by `detectSqliteCapabilities()` but are not treated as storage drivers until an adapter exists. Once a data directory has a manifest, Pactium reuses the manifest-bound backend and does not silently switch or fall back to another backend.
+
 This is **not an ACID database transaction**. It is a WAL marker + diagnostic pattern:
 - `doctor()` scans for orphan pending markers.
 - `doctor({ rebuild: true })` replays ledger leaves to reconstruct derived state and compares against runtime state.
@@ -930,11 +935,11 @@ When a proof exceeds the configured limits, a `proofSizeWarning` is emitted:
 
 ## Index Engine Scalability
 
-Current state (P3 deferred):
+Current state (partly optimized; P3 remains):
 - **No-op fast path**: mutations that don't change structure produce the same root. ✓ Implemented.
 - **Local-window rechunk**: single-key mutations collect leaf descriptors within the affected chunk window.
-- **Cursor/chunker path-copying**: Dolt-style skip-common-subtree diff and cursor-based path copying is a **planned major refactor**.
-- **Diff**: the current `diff()` algorithm scans changed ranges but does not yet skip identical subtrees via root hash comparison.
+- **Diff**: `diff()` traverses Prolly nodes, skips equal subtree roots, merges non-aligned child ranges, descends internal overlap groups, and compares entries at leaf level.
+- **Cursor/chunker path-copying**: full Dolt-style cursor-based path copying is a **planned major refactor**.
 
 For 10k+ key workloads, single-point mutations may scan more of the tree than optimal. The current implementation is **correct and canonical** but not yet tuned for maximal throughput on very large indexes.
 

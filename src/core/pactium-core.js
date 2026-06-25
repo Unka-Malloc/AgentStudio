@@ -15,7 +15,7 @@ import { createVerifiableIndexEngine } from "../index-engine/snapshot-merkle-ind
 import { createId, protocolHash, protocolHashHex } from "../protocol/hashing.js";
 import { createProofRef, finalizeEnvelope, materializeExtension, verifyProofEnvelope } from "../proof/envelope.js";
 import { createRepairPlanner } from "../repair/planner.js";
-import { createStoragePort } from "../storage/local-json-storage-port.js";
+import { createStoragePort } from "../storage/storage-port.js";
 import { createTrackingCursor, verifyTrackingCursor } from "./tracking-cursor.js";
 import { asArray, asRecord, nowIso, safeText } from "../shared/records.js";
 import { createVerificationFailure, PactiumLifecycleError } from "../verification/failure.js";
@@ -239,9 +239,12 @@ export function createPactium({
   dataDir = "",
   userDataPath = "",
   storage = null,
-  inMemory = false
+  inMemory = false,
+  storageBackend = "",
+  backend = "",
+  databasePath = ""
 } = {}) {
-  const resolvedStorage = storage || createStoragePort({ dataDir, userDataPath, inMemory });
+  const resolvedStorage = storage || createStoragePort({ dataDir, userDataPath, inMemory, storageBackend, backend, databasePath });
   const ledger = createLedgerTransparencyLog({ storage: resolvedStorage });
   const indexEngine = createVerifiableIndexEngine({ storage: resolvedStorage, domain: "pactium" });
   const repairPlanner = createRepairPlanner();

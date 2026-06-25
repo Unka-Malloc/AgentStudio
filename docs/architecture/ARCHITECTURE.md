@@ -58,7 +58,8 @@ LicoLite host
     │                │
     │  ┌─────────────▼───────────────┐
     │  │     Storage Port            │
-    │  │  local-json-storage-port.js │
+    │  │  storage-port.js            │
+    │  │  json/sqlite adapters       │
     │  └─────────────────────────────┘
     └────────────────────────────────────────────┘
 ```
@@ -183,11 +184,12 @@ LicoLite owns runtime policy decisions, operation dispatching, side effects, UI 
 
 ```text
   Data Directory (.pactium/)
-  ├── pactium-manifest.json  Root manifest (protocol version, schema)
-  ├── cas/                   Content-addressed block store
+  ├── pactium-manifest.json  Root manifest (protocol, schema, storageBackend)
+  ├── pactium.sqlite         SQLite backend database when storageBackend=sqlite
+  ├── cas/                   JSON backend content-addressed block store
   │   └── <hex-prefix>/      Prefix-based sharding (first 2 hex chars of CID)
   │       └── <hex>.json     Block by full hex CID hash
-  ├── protocol/              Protocol objects (scoped key-value)
+  ├── protocol/              JSON backend protocol objects (scoped key-value)
   │   ├── core/              Core runtime state
   │   ├── ledger/            Ledger entries, heads, compact range
   │   ├── ledger-head/       Historical ledger heads
@@ -199,7 +201,7 @@ LicoLite owns runtime policy decisions, operation dispatching, side effects, UI 
           └── owner.json     Lock owner metadata (pid, ownerId, timestamp)
 ```
 
-The Storage Port abstraction separates Pactium's protocol logic from persistence mechanics. The current implementation uses a local JSON backend. Storage backends may change how bytes are stored but cannot change canonical encoding, hash computation, or proof semantics.
+The Storage Port abstraction separates Pactium's protocol logic from persistence mechanics. The current implementation ships local JSON and SQLite adapters behind a manifest-bound factory. SQLite selection uses a capability detector plus provider selector: npm, CLI, and platform package-manager signals are reported, but only implemented providers (`node:sqlite` and optional npm `better-sqlite3`) are storage-capable. Storage backends may change how bytes are stored but cannot change canonical encoding, hash computation, or proof semantics.
 
 ### Canonical Value Encoding
 
@@ -263,7 +265,7 @@ The maintained design is implemented by these package surfaces:
 | --- | --- |
 | Protocol constants and hashing | `src/protocol/constants.js`, `src/protocol/hashing.js` |
 | Canonical Value | `src/canonical/value.js`: `canonicalEncode`, `canonicalDecode`, `normalizeCanonicalValue` |
-| Storage Port | `src/storage/local-json-storage-port.js`: `createStoragePort` |
+| Storage Port | `src/storage/storage-port.js`: `createStoragePort`; `src/storage/local-json-storage-port.js` and `src/storage/sqlite-storage-port.js`: backend adapters |
 | Ledger Transparency Log | `src/ledger/transparency-log.js`: `createLedgerTransparencyLog`, inclusion and consistency proof helpers |
 | Verifiable Index Engine | `src/index-engine/snapshot-merkle-index.js`: `createVerifiableIndexEngine` |
 | Operation lifecycle | `src/core/pactium-core.js`: `beginOperationIntent`, `appendOperationOutcome`, `recordOperation` |
@@ -274,18 +276,18 @@ The maintained design is implemented by these package surfaces:
 
 ## Non-Surfaces
 
-Maintained docs must not describe SQLite storage, separate per-workspace lane queues, repair fact execution, or pressure baseline regression enforcement as implemented unless those surfaces are added and verified.
+Maintained docs must not describe separate per-workspace lane queues, repair fact execution, or pressure baseline regression enforcement as implemented unless those surfaces are added and verified.
 
 If a maintained document introduces a design area that cannot be mapped to an implementation anchor, the design must be implemented and documented before release.
 
 ## Current Implementation Boundaries
 
-### Index Engine Scalability (P3 deferred)
+### Index Engine Scalability (partly optimized; P3 remains)
 
 - **No-op fast path**: ✓ Implemented. Mutations that don't change structure produce the same root.
 - **Local-window rechunk**: Single-key mutations collect leaf descriptors within the affected chunk window.
-- **Cursor/chunker path-copying**: Dolt-style skip-common-subtree diff and cursor-based path copying is a **planned major refactor**. See [GitHub issues](https://github.com/Unka-Malloc/Pactium/issues) for tracking.
-- **Diff**: The current `diff()` scans changed ranges but does not yet skip identical subtrees via root hash comparison.
+- **Diff**: Implemented. `diff()` skips equal subtree roots, merges non-aligned child ranges, descends overlap groups, and compares entries at leaf level.
+- **Cursor/chunker path-copying**: Full Dolt-style cursor-based path copying is a **planned major refactor**. See [GitHub issues](https://github.com/Unka-Malloc/Pactium/issues) for tracking.
 
 For 10k+ key workloads, single-point mutations may scan more of the tree than optimal. The current implementation is correct, canonical, and deterministic — it is not yet tuned for maximal throughput on very large indexes.
 
@@ -295,7 +297,7 @@ For 10k+ key workloads, single-point mutations may scan more of the tree than op
 
 ### Crash Consistency
 
-The local JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. Commit markers cover operation lifecycle commits (`beginOperationIntent`, `appendOperationOutcome`, `recordOperation`). Materialization operations (`exportProofBundle`, `storeEnvelope`, `createExtension`) may write storage or runtime-state but are not currently covered by lifecycle commit markers. This provides crash detection and recovery guidance. It is not an ACID database transaction.
+The default local JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. Commit markers cover operation lifecycle commits (`beginOperationIntent`, `appendOperationOutcome`, `recordOperation`). Materialization operations (`exportProofBundle`, `storeEnvelope`, `createExtension`) may write storage or runtime-state but are not currently covered by lifecycle commit markers. This provides crash detection and recovery guidance. It is not an ACID database transaction. The SQLite adapter uses SQLite transactions for `withWriteLock()` scopes, but Pactium still treats the Storage Port as a persistence adapter rather than part of the proof semantics.
 
 ### Lock Fencing
 

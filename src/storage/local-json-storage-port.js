@@ -8,6 +8,8 @@ import { canonicalEncode, normalizeCanonicalValue } from "../canonical/value.js"
 import { cidForBytes, hashBytes, hexFromCid } from "../protocol/hashing.js";
 import { asArray, nowIso, safeToken } from "../shared/records.js";
 
+export const PACTIUM_STORAGE_BACKEND_JSON = "json";
+
 export function defaultPactiumDataDir() {
   return path.join(os.homedir(), ".pactium");
 }
@@ -98,7 +100,7 @@ function processIsAlive(pid) {
   }
 }
 
-export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = false } = {}) {
+export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemory = false } = {}) {
   const resolvedDataDir = resolveDataDir(dataDir || userDataPath);
   const memoryBlocks = new Map();
   const memoryObjects = new Map();
@@ -135,6 +137,10 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
       if (manifest.protocol !== PACTIUM_PROTOCOL || manifest.schema !== PACTIUM_SCHEMA_VERSION) {
         throw new Error("Pactium latest-schema-only boundary rejected a non-current protocol data directory.");
       }
+      const manifestBackend = String(manifest.storageBackend || PACTIUM_STORAGE_BACKEND_JSON);
+      if (manifestBackend !== PACTIUM_STORAGE_BACKEND_JSON) {
+        throw new Error(`Pactium data directory uses ${manifestBackend} storage backend; JSON storage backend cannot open it.`);
+      }
       return;
     }
     const historicalLayoutHints = [
@@ -150,6 +156,7 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     await writeJsonAtomic(manifestPath(), {
       protocol: PACTIUM_PROTOCOL,
       schema: PACTIUM_SCHEMA_VERSION,
+      storageBackend: PACTIUM_STORAGE_BACKEND_JSON,
       createdAt: nowIso(),
       latestSchemaOnly: true,
       historicalMigration: false
@@ -558,6 +565,7 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     schema: PACTIUM_SCHEMA_VERSION,
     dataDir: resolvedDataDir,
     inMemory,
+    storageBackend: PACTIUM_STORAGE_BACKEND_JSON,
     initialize: ensureInitialized,
     putBlock,
     getBlock,
@@ -572,4 +580,10 @@ export function createStoragePort({ dataDir = "", userDataPath = "", inMemory = 
     pruneBlocks,
     pruneProtocolObjects
   });
+}
+
+// Backward-compatible JSON-only alias for direct internal imports. The package
+// root exports the backend-selecting factory from storage-port.js.
+export function createStoragePort(options = {}) {
+  return createJsonStoragePort(options);
 }

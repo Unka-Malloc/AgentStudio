@@ -90,6 +90,9 @@ const approvedFiles = new Set([
   "src/repair/planner.js",
   "src/shared/records.js",
   "src/storage/local-json-storage-port.js",
+  "src/storage/sqlite-capability.js",
+  "src/storage/sqlite-storage-port.js",
+  "src/storage/storage-port.js",
   "src/verification/failure.js"
 ]);
 

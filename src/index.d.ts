@@ -12,6 +12,11 @@ export interface PactiumDataDirOptions {
   dataDir?: string;
   userDataPath?: string;
   inMemory?: boolean;
+  storageBackend?: "json" | "sqlite" | "auto" | string;
+  backend?: "json" | "sqlite" | "auto" | string;
+  databasePath?: string;
+  includeSystemSqliteDetection?: boolean;
+  sqliteDetectionTimeoutMs?: number;
 }
 
 export interface PactiumStoragePort {
@@ -19,6 +24,10 @@ export interface PactiumStoragePort {
   schema: string;
   dataDir: string;
   inMemory: boolean;
+  storageBackend?: string;
+  selectedStorageBackend?: string;
+  sqlitePath?: string;
+  sqliteProvider?: string;
   initialize(): Promise<void>;
   putBlock(value: unknown, options?: PactiumRecord): Promise<PactiumRecord>;
   getBlock(cid: string): Promise<(PactiumRecord & { bytes?: Uint8Array }) | null>;
@@ -327,6 +336,10 @@ export function cidForBytes(bytes: Uint8Array | ArrayBuffer | string): string;
 export function cidForCanonical(value: unknown): string;
 export function createVerificationFailure(input?: PactiumRecord): PactiumVerificationFailure;
 export function createStoragePort(options?: PactiumDataDirOptions): PactiumStoragePort;
+export function createJsonStoragePort(options?: PactiumDataDirOptions): PactiumStoragePort;
+export function createSqliteStoragePort(options?: PactiumDataDirOptions): PactiumStoragePort;
+export function detectSqliteCapabilities(options?: PactiumRecord): Promise<PactiumRecord>;
+export function sqliteStorageAvailable(options?: PactiumRecord): boolean;
 export function ledgerLeafHash(leaf: unknown): string;
 export function ledgerNodeHash(leftHash: string, rightHash: string): string;
 export function emptyTreeHash(): string;

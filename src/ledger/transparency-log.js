@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { PACTIUM_PROOF_TYPES, PACTIUM_PROTOCOL, PACTIUM_SCHEMA_VERSION } from "../protocol/constants.js";
 import { canonicalEncode } from "../canonical/value.js";
 import { cidFromHex, createId, hashBytes, hexToBytes, protocolHash } from "../protocol/hashing.js";
-import { createStoragePort } from "../storage/local-json-storage-port.js";
+import { createStoragePort } from "../storage/storage-port.js";
 import { asArray, nowIso } from "../shared/records.js";
 import { createVerifierManifest, signLedgerHead } from "./signed-head.js";
 

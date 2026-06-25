@@ -40,11 +40,11 @@ Pactium is a pure ESM package. It cannot be loaded with `require()`. Options:
 
 ### Does Pactium have any runtime dependencies?
 
-No. Pactium has zero runtime dependencies. It uses only Node.js built-in modules (`node:crypto`, `node:fs`, `node:path`, etc.).
+Pactium declares zero runtime dependencies. Core proof functionality uses Node.js built-in modules. The SQLite backend can also use a host-provided optional npm `better-sqlite3` package when present; Pactium does not install it as a dependency.
 
 ### Where does Pactium store data?
 
-By default, Pactium stores data in the directory you specify via `dataDir` option (e.g., `./.pactium`). You can also use `inMemory: true` for testing. The storage format is content-addressed JSON files managed through the Storage Port abstraction.
+By default, Pactium stores data in the directory you specify via `dataDir` option (e.g., `./.pactium`) using the local JSON backend. You can also use `inMemory: true` for testing or `storageBackend: "auto"` to detect local SQLite capabilities and choose SQLite for new data directories when a Pactium-supported provider is available (`node:sqlite` or optional npm `better-sqlite3`). Storage is managed through the Storage Port abstraction.
 
 ---
 
@@ -185,7 +185,7 @@ This means the ledger history diverged -- a later ledger state is not a valid co
 The Prolly Tree engine uses structural sharing and Content-Defined Chunking for efficient updates. For large state sets, consider:
 
 - Using the `scan()` and `prefix()` methods for range queries instead of full snapshots
-- Using `diff()` to compute changes between state roots (canonical diff API; note that current implementation is not yet Dolt-style skip-common-subtree optimized — P3 deferred)
+- Using `diff()` to compute changes between state roots (canonical shared-node diff API; full cursor/chunker path-copying remains P3 deferred)
 - Checking memory usage with the pressure profile: `PACTIUM_FULL_PRESSURE=1 npm run verify:protocol:gates`
 
 ### What trust policies does Pactium support?
@@ -223,7 +223,7 @@ No. The `maxProofLeafEntries` and `maxProofBytes` options are **size guards**, n
 
 The index engine is **correct and canonical** but not yet fully optimized for large-scale workloads. Key limitations:
 - Single-key mutations use local-window rechunking (not full path-copying).
-- Diff does not yet skip identical subtrees via root hash comparison (Dolt-style).
-- Cursor/chunker path-copying is planned (P3 deferred).
+- `diff()` skips equal subtree roots and handles non-aligned child ranges, but it is not a full cursor-based Dolt implementation.
+- Full cursor/chunker path-copying and maximal large-index tuning are planned (P3 deferred).
 
 For current throughput characteristics, run the pressure profile: `PACTIUM_FULL_PRESSURE=1 npm run verify:protocol:gates`.

@@ -23,11 +23,17 @@ export {
   protocolHashHex
 } from "./protocol/hashing.js";
 export {
-  createStoragePort,
   defaultPactiumDataDir,
   resolveDataDir,
   resolveWithin
 } from "./storage/local-json-storage-port.js";
+export {
+  createStoragePort,
+  createJsonStoragePort,
+  createSqliteStoragePort,
+  detectSqliteCapabilities,
+  sqliteStorageAvailable
+} from "./storage/storage-port.js";
 export { createVerificationFailure } from "./verification/failure.js";
 export {
   createLedgerConsistencyProof,

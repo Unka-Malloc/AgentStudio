@@ -3,7 +3,7 @@ import { protocolHash } from "../protocol/hashing.js";
 import { createPactium } from "../core/pactium-core.js";
 import { createVerifiableIndexEngine } from "../index-engine/snapshot-merkle-index.js";
 import { verifyProofBundle } from "../proof/bundle.js";
-import { createStoragePort } from "../storage/local-json-storage-port.js";
+import { createStoragePort } from "../storage/storage-port.js";
 
 function percentile(samples, ratio, fallback) {
   if (samples.length === 0) return fallback;

@@ -76,7 +76,7 @@ The first-class integration surface for LicoLite is at `pactium/licolite`.
 | --- | --- |
 | **Operation Ledger** | RFC 6962-style transparency log with inclusion and consistency proofs |
 | **Append-Only Lifecycle** | Operation Intent / Outcome facts with idempotency replay |
-| **Verifiable Index Engine** | Canonical Prolly Tree with membership, non-membership proofs, and diffs (correct and canonical; Dolt-style skip-common-subtree optimization is P3 deferred) |
+| **Verifiable Index Engine** | Canonical Prolly Tree with membership, non-membership proofs, and shared-node diffs (correct and canonical; full cursor/chunker path-copying remains P3 deferred) |
 | **Workspace Projection** | Verifiable workspace-scoped order and membership indexes |
 | **Merkle State** | Content-addressed state commits bound to operation outcomes |
 | **Checkpoint Tree** | Verifiable recovery and progress structure |
@@ -385,14 +385,14 @@ For detailed architecture documentation, see [docs/architecture/ARCHITECTURE.md]
 
 Pactium is actively developed. The following areas are in active refinement:
 
-**Index Engine Scalability (P3 deferred):**
-The Verifiable Index Engine supports a no-op fast path (mutation that does not change structure produces the same root). Single-key mutations use local-window rechunking with leaf descriptor collection. Full cursor/chunker path-copying (Dolt-style skip-common-subtree diff) is a planned major refactor. For 10k+ key workloads, single-point mutations may scan more of the tree than optimal. The current implementation is correct and canonical but not yet tuned for maximal throughput on very large indexes.
+**Index Engine Scalability (partly optimized; P3 remains):**
+The Verifiable Index Engine supports a no-op fast path (mutation that does not change structure produces the same root). Single-key mutations use local-window rechunking with leaf descriptor collection. `diff()` traverses Prolly nodes, skips equal subtree roots, and handles non-aligned child ranges before falling back to leaf-level comparison. Full cursor/chunker path-copying and maximal large-index tuning remain planned P3 work. For 10k+ key workloads, single-point mutations may scan more of the tree than optimal. The current implementation is correct and canonical but not yet tuned for maximal throughput on very large indexes.
 
 **Proof Size Guard (not bounded proof format):**
 `maxProofLeafEntries` and `maxProofBytes` options produce `proofSizeWarning` on generated and verified proofs. This is a size guard / diagnostic, not a bounded proof format. By default, `proofSizeWarning` is non-fatal (severity: warning). Set `failOnProofSizeWarning: true` to treat it as a hard failure.
 
-**Crash Consistency (WAL marker + doctor diagnostic, not DB transaction):**
-The local JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. This provides crash detection and recovery guidance, not ACID transactions. See [docs/API.md](./docs/API.md#crash-consistency-and-doctor) for details.
+**Storage Backends and Crash Consistency:**
+`createStoragePort()` defaults to the local JSON backend. Use `storageBackend: "auto"` to detect SQLite capabilities and choose SQLite for new data directories when a Pactium-supported provider is available (`node:sqlite` or optional npm `better-sqlite3`), otherwise JSON. Existing data directories stay bound to the backend recorded in `pactium-manifest.json`; Pactium does not silently switch an initialized directory to another backend. The JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. This provides crash detection and recovery guidance, not ACID transactions. See [docs/API.md](./docs/API.md#crash-consistency-and-doctor) for details.
 
 **Lock Heartbeat / Fencing (best-effort):**
 Write locks use heartbeat intervals and fencing tokens for stale detection and cross-process safety. Fencing token comparison uses string equality (UUID strings, not numeric). Stale lock cleanup performs a double-read with owner identity verification. Dirty/ownerless lock directories are cleaned up safely using directory mtime-based staleness with a double-stat pattern. Lock cleanup occurs only during write-lock acquisition; `doctor()` does not scan for dirty or stale locks. This is a best-effort mechanism; for production deployments with high contention, consider external lock managers.
@@ -409,7 +409,7 @@ The `pactium.advanced` object (containing `storage`, `ledger`, `indexEngine`) is
 - Workspace-scoped operation isolation with verifiable membership
 - Append-only operation history with deterministic recovery
 - Idempotent operation recording with replay detection
-- Verifiable state roots with deterministic diffs (canonical; Dolt-style skip-common-subtree optimization is P3 deferred)
+- Verifiable state roots with deterministic shared-node diffs (canonical; full cursor/chunker path-copying remains P3 deferred)
 
 **Pactium is not for:**
 

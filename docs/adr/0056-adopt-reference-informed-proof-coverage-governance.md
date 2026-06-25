@@ -22,7 +22,7 @@ Maintained Pactium work must stay on the package line unless an ADR explicitly r
 | transparency-dev/merkle and Trillian | RFC6962-style leaf/node domain separation, strict inclusion and consistency proof shape validation, compact ranges, signed roots | Pactium remains a local package substrate, not a distributed log service. |
 | Tessera | Tile-based transparency logs reduce operating cost for large deployed logs | Future reference only; no tile protocol is adopted in this ADR. |
 | Sigstore Rekor | Portable proof material, signed checkpoint thinking, explicit trust policy | Pactium does not provide a public transparency service or SET ecosystem. |
-| Dolt | Content-addressed Prolly nodes and structural sharing | Pactium keeps its protocol-defined splitter and canonical value model. Dolt-style cursor/path-copying and maximal skip-common-subtree diff remain deferred optimization work. |
+| Dolt | Content-addressed Prolly nodes and structural sharing | Pactium keeps its protocol-defined splitter and canonical value model. Current diff skips equal Pactium subtree roots; Dolt-style cursor/path-copying and maximal large-index diff tuning remain deferred optimization work. |
 | IPLD CAR / go-car | Content-addressed archive transport, indexed block access, size limits | Pactium proof bundles stay CAR-like, not CARv1/CARv2 byte-compatible. |
 | Hypercore | Signed append-only roots and remote proof verification shaped by signer identity | Pactium implements signer manifests and signed heads without adding replication or gossip. |
 | EventStore / Axon Framework | Append conditions, tracking positions, event lifecycle boundaries | Pactium records protocol facts and cursors; hosts own dispatch and side effects. |
@@ -57,7 +57,7 @@ Maintained Pactium work must stay on the package line unless an ADR explicitly r
 | Pattern | Apply? | Evaluation |
 | --- | --- | --- |
 | Strategy / Registry | Yes | The proof verifier registry reduces coupling between envelope verification and proof algorithms. It improves maintainability and vulnerability prevention by failing closed on unsupported critical proof types. |
-| Port / Adapter | Yes | The storage port keeps proof semantics independent of the local JSON backend. It improves maintainability and allows stronger production storage without protocol churn. |
+| Port / Adapter | Yes | The storage port keeps proof semantics independent of local JSON and SQLite backends. It improves maintainability and allows stronger production storage without protocol churn. |
 | Unit of Work | Yes, bounded | Pending/complete commit markers model lifecycle commits and improve crash diagnostics. They are not a full ACID transaction manager. |
 | Command | Yes | Repair planner tasks encode deterministic host-owned actions without executing side effects in Pactium. |
 | Policy Object | Yes | Append conditions and proof coverage modes make concurrency and audit expectations explicit data, not hidden control flow. |
