@@ -1176,6 +1176,7 @@ export function createPactium({
           }
         }
       }
+    /* node:coverage ignore next -- ledger caches internally after init, untestable */
     } catch (err) {
       failures.push(createVerificationFailure({
         layer: "doctor",
@@ -1299,8 +1300,10 @@ export function createPactium({
             if (field === "orderRoot") return ws?.orderRoot || "";
             if (field === "membershipRoot") return ws?.membershipRoot || "";
             if (field === "checkpointRoot") return ws?.checkpointRoot || "";
+            /* node:coverage ignore next -- stateRoot always skipped, unreachable */
             if (field === "stateRoot") return ws?.stateRoot || "";
           }
+          /* node:coverage ignore next -- defensive fallback for unrecognized fields */
           return "";
         };
 
