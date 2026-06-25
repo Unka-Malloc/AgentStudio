@@ -26,7 +26,7 @@ Workspace Projection currently includes workspace-scoped Operation Intents and O
 
 ## Verifiable Index Engine
 
-Pactium uses one shared Canonical Prolly Tree based Verifiable Index Engine for ordered-key indexes that need stable roots, structural sharing, membership proofs, non-membership proofs, and efficient diffs.
+Pactium uses one shared Canonical Prolly Tree based Verifiable Index Engine for ordered-key indexes that need stable roots, structural sharing, path-copying mutations, membership proofs, compact non-membership proofs, membership multiproofs, range proofs, and efficient diffs.
 
 Domain adapters convert domain material into canonical `Index Key` and `Index Value Ref` values. The engine is reused for Merkle State, Checkpoint Node, Workspace Projection, lifecycle, idempotency, and causality indexes.
 
@@ -47,9 +47,15 @@ Checkpoint node membership and diffs use shared Verifiable Index Engine-backed i
 
 ## Proof Envelopes And Bundles
 
-`recordOperation` and lower-level lifecycle APIs return Pactium Proof Envelopes with content-addressed Proof Material Refs. Full portable proof material is exported through Proof Bundles.
+`recordOperation`, `recordOperations`, and lower-level lifecycle APIs return Pactium Proof Envelopes with content-addressed Proof Material Refs. Full portable proof material is exported through Proof Bundles.
 
 Proof Bundles are CAR-like content-addressed block bundles with a Pactium manifest naming the root envelope, required blocks, protocol versions, Ledger Head, and critical extensions.
+
+Proof material compacts repeated index sibling descriptors through `proofDescriptorTable`. Persistent verification and Proof Bundle verification default to the `trusted-manifest-required` trust policy; in-memory/development verification may use the self-carried manifest profile.
+
+## Trust Anchors
+
+Verifier manifests are the production trust-anchor object. They support signer validity windows, signer revocation, quorum policy metadata, external witness metadata, public checkpoint metadata, and gossip policy metadata. Pactium validates structural proof correctness separately from trusted signature status so a verifier can report a structurally valid but untrusted envelope. See [Trust Anchors](./TRUST-ANCHORS.md).
 
 ## HTTP Adapter
 

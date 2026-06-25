@@ -1,5 +1,5 @@
-import { PACTIUM_PROOF_TYPES, PACTIUM_PROTOCOL } from "../protocol/constants.js";
-import { canonicalDecode, normalizeCanonicalValue } from "../canonical/value.js";
+import { PACTIUM_PROOF_TYPES, PACTIUM_PROTOCOL, PACTIUM_TRUST_POLICIES } from "../protocol/constants.js";
+import { canonicalDecode, canonicalString, normalizeCanonicalValue } from "../canonical/value.js";
 import { cidForBytes, createId, hashBytes, protocolHash } from "../protocol/hashing.js";
 import { verifyLedgerConsistencyProof, verifyLedgerInclusionProof } from "../ledger/transparency-log.js";
 import { verifyLedgerHeadSignature } from "../ledger/signed-head.js";
@@ -39,6 +39,51 @@ export async function createProofRef(storage, name, value, refs = []) {
     payloadHash: block.payloadHash,
     byteLength: block.byteLength
   };
+}
+
+export function compactProofMaterialDescriptors(material) {
+  const rootTable = [];
+  const rootIndexes = new Map();
+  function refFor(descriptor) {
+    const normalized = normalizeCanonicalValue(descriptor);
+    const key = canonicalString(normalized);
+    if (!rootIndexes.has(key)) {
+      rootIndexes.set(key, rootTable.length);
+      rootTable.push(normalized);
+    }
+    return rootIndexes.get(key);
+  }
+  function visit(value) {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const table = Array.isArray(value.descriptorTable) ? value.descriptorTable : [];
+    if (table.length > 0) {
+      for (const pathItem of asArray(value.path)) {
+        pathItem.siblingDescriptorRefs = asArray(pathItem.siblingDescriptorRefs)
+          .map((ref) => table[Number(ref)])
+          .filter(Boolean)
+          .map(refFor);
+      }
+      for (const leaf of asArray(value.leaves)) {
+        for (const pathItem of asArray(leaf.path)) {
+          pathItem.siblingDescriptorRefs = asArray(pathItem.siblingDescriptorRefs)
+            .map((ref) => table[Number(ref)])
+            .filter(Boolean)
+            .map(refFor);
+        }
+      }
+      delete value.descriptorTable;
+      value.descriptorTableScope = "proof-material";
+    }
+    for (const nested of Object.values(value)) visit(nested);
+  }
+  const compacted = normalizeCanonicalValue(material);
+  visit(compacted.proofs || {});
+  if (rootTable.length > 0) compacted.proofDescriptorTable = rootTable;
+  return compacted;
 }
 
 function extensionSigningPayload(envelope) {
@@ -424,13 +469,13 @@ function verifySemanticBindings({ envelope, proofMaterial, ledgerFact = null, fa
     expectIndexProof(proofs.workspaceProjection.orderProof, {
       root: proofs.workspaceProjection.orderRoot,
       key: proofs.workspaceProjection.orderKey,
-      proofType: "index.membership.prolly-path",
+      proofType: PACTIUM_PROOF_TYPES.indexMembership,
       label: "workspace order proof"
     });
     expectIndexProof(proofs.workspaceProjection.membershipProof, {
       root: proofs.workspaceProjection.membershipRoot,
       key: envelope.factRef?.ledgerEventId || "",
-      proofType: "index.membership.prolly-path",
+      proofType: PACTIUM_PROOF_TYPES.indexMembership,
       label: "workspace membership proof"
     });
   }
@@ -440,6 +485,9 @@ function verifySemanticBindings({ envelope, proofMaterial, ledgerFact = null, fa
     const mutationDescriptors = asArray(stateCommit.mutations).map(mutationDescriptor);
     const mutationKeys = asArray(stateCommit.mutationKeys).map(String).filter(Boolean);
     const mutationActions = asArray(stateCommit.mutationActions).map(String);
+    const proofProfile = asRecord(stateCommit.proofProfile);
+    const provedKeyCount = Number(proofProfile.provedKeyCount ?? stateCommit.provedKeyCount ?? 0);
+    const totalUniqueKeyCount = Number(proofProfile.totalUniqueKeyCount ?? stateCommit.mutationCount ?? 0);
     const expectedStateCommitId = createId("state_commit", {
       outcomeId: stateCommit.outcomeId,
       stateRoot: stateCommit.stateRoot,
@@ -459,8 +507,10 @@ function verifySemanticBindings({ envelope, proofMaterial, ledgerFact = null, fa
       mutationActions.length !== mutationDescriptors.length ||
       mutationKeys.some((key, index) => key !== mutationDescriptors[index]?.key) ||
       mutationActions.some((action, index) => action !== mutationDescriptors[index]?.action) ||
-      Number(stateCommit.sampledKeyCount || stateCommit.touchedKeyCount || 0) !== touchedKeyProofs.length ||
-      Number(stateCommit.sampledKeyCount || stateCommit.touchedKeyCount || 0) > mutationDescriptors.length;
+      provedKeyCount !== touchedKeyProofs.length ||
+      provedKeyCount > mutationDescriptors.length ||
+      totalUniqueKeyCount !== mutationDescriptors.length ||
+      !["sampled", "full"].includes(String(proofProfile.mode || stateCommit.mutationProofMode || ""));
     if (invalidStateCommit) {
       failures.push(createVerificationFailure({
         layer: "proof-semantics",
@@ -476,7 +526,7 @@ function verifySemanticBindings({ envelope, proofMaterial, ledgerFact = null, fa
     expectIndexProof(proof, {
       root: proofs.state?.root || "",
       key: String(mutationKey || proof?.key || ""),
-      proofType: mutationAction === "delete" ? "index.non-membership.prolly-path" : "index.membership.prolly-path",
+      proofType: mutationAction === "delete" ? PACTIUM_PROOF_TYPES.indexNonMembership : PACTIUM_PROOF_TYPES.indexMembership,
       label: `state touched key proof ${index}`
     });
   }
@@ -485,7 +535,7 @@ function verifySemanticBindings({ envelope, proofMaterial, ledgerFact = null, fa
   if (checkpointProof) {
     expectIndexProof(checkpointProof, {
       root: proofs.checkpoint?.root || "",
-      proofType: "index.membership.prolly-path",
+      proofType: PACTIUM_PROOF_TYPES.indexMembership,
       label: "checkpoint proof"
     });
     const metadata = checkpointProof.entry?.metadata || {};
@@ -517,28 +567,28 @@ function verifySemanticBindings({ envelope, proofMaterial, ledgerFact = null, fa
     expectIndexProof(proof, {
       root: proofs.causality?.root || "",
       key: expectedCausalityKey,
-      proofType: "index.membership.prolly-path",
+      proofType: PACTIUM_PROOF_TYPES.indexMembership,
       label: `causality proof ${index}`
     });
   }
   if (proofs.openIntent) {
     expectIndexProof(proofs.openIntent, {
       key: envelope.factId,
-      proofType: "index.membership.prolly-path",
+      proofType: PACTIUM_PROOF_TYPES.indexMembership,
       label: "open intent proof"
     });
   }
   if (proofs.outcome) {
     expectIndexProof(proofs.outcome, {
       key: stateCommit?.intentId || proofs.checkpoint?.proof?.entry?.metadata?.intentId || "",
-      proofType: "index.membership.prolly-path",
+      proofType: PACTIUM_PROOF_TYPES.indexMembership,
       label: "outcome proof"
     });
   }
   if (proofs.openIntentRemoved) {
     expectIndexProof(proofs.openIntentRemoved, {
       key: stateCommit?.intentId || proofs.checkpoint?.proof?.entry?.metadata?.intentId || "",
-      proofType: "index.non-membership.prolly-path",
+      proofType: PACTIUM_PROOF_TYPES.indexNonMembership,
       label: "open intent removal proof"
     });
   }
@@ -556,7 +606,7 @@ export async function verifyProofEnvelope(envelope, {
   bundleResolver = null,
   includeBundleResolverFailures = true,
   requiredProofs = null,
-  trustPolicy = "self-carried-manifest",
+  trustPolicy = "",
   requireFullStateMutationProofs = false,
   maxProofLeafEntries = 0,
   maxProofBytes = 0,
@@ -567,30 +617,25 @@ export async function verifyProofEnvelope(envelope, {
   let ledgerHeadSignatureValid = false;
   let ledgerHeadTrusted = false;
   let trustedSignatureValid = false;
-  const resolvedTrustPolicy = ["structural", "self-carried-manifest", "trusted-manifest-required"].includes(trustPolicy)
-    ? trustPolicy
-    : "self-carried-manifest";
+  const supportedTrustPolicies = new Set(Object.values(PACTIUM_TRUST_POLICIES));
+  const defaultTrustPolicy = storage?.inMemory
+    ? PACTIUM_TRUST_POLICIES.selfCarriedManifest
+    : PACTIUM_TRUST_POLICIES.trustedManifestRequired;
+  const requestedTrustPolicy = trustPolicy || defaultTrustPolicy;
+  const resolvedTrustPolicy = supportedTrustPolicies.has(requestedTrustPolicy)
+    ? requestedTrustPolicy
+    : PACTIUM_TRUST_POLICIES.trustedManifestRequired;
   const supported = new Set([...CORE_CRITICAL_EXTENSIONS, ...supportedCriticalExtensions]);
   const bundleMap = bundleResolver || bundleBlockMap(bundle);
 
   // -- trust-policy enforcement: trusted-manifest-required must have a caller-supplied manifest --
-  if (resolvedTrustPolicy === "trusted-manifest-required" && !trustedManifest) {
-    return {
-      protocol: PACTIUM_PROTOCOL,
-      envelopeId: envelope?.envelopeId || "",
-      ok: false,
-      proofStructurallyValid: false,
-      ledgerHeadSignatureValid: false,
-      ledgerHeadTrusted: false,
-      trustedSignatureValid: false,
-      trustPolicy: resolvedTrustPolicy,
-      failures: [createVerificationFailure({
-        layer: "trust-policy",
-        code: "trusted_manifest_required",
-        message: "trustPolicy is 'trusted-manifest-required' but no trustedManifest was provided.",
-        repairable: true
-      })]
-    };
+  if (resolvedTrustPolicy === PACTIUM_TRUST_POLICIES.trustedManifestRequired && !trustedManifest) {
+    failures.push(createVerificationFailure({
+      layer: "trust-policy",
+      code: "trusted_manifest_required",
+      message: "trustPolicy is 'trusted-manifest-required' but no trustedManifest was provided.",
+      repairable: true
+    }));
   }
 
   if (!envelope || envelope.protocol !== PACTIUM_PROTOCOL || envelope.envelopeType !== "pactium.proof-envelope") {
@@ -780,10 +825,10 @@ export async function verifyProofEnvelope(envelope, {
       // In "self-carried-manifest" mode, signature failures against the proof's own
       // manifest are recorded as structural warnings but do not block ok unless the
       // signature is from a trusted source.
-      if (resolvedTrustPolicy === "trusted-manifest-required" || trustedManifest) {
+      if (resolvedTrustPolicy === PACTIUM_TRUST_POLICIES.trustedManifestRequired || trustedManifest) {
         // Signature failures against a caller-provided trustedManifest are hard failures.
         failures.push(...signatureResult.failures);
-      } else if (resolvedTrustPolicy === "self-carried-manifest" && !trustedManifest && !verifierManifest) {
+      } else if (resolvedTrustPolicy === PACTIUM_TRUST_POLICIES.selfCarriedManifest && !trustedManifest && !verifierManifest) {
         // Self-carried manifest: record signature failures as non-blocking diagnostics
         // but keep ledgerHeadTrusted = false.
         for (const sigFailure of signatureResult.failures) {
@@ -813,10 +858,12 @@ export async function verifyProofEnvelope(envelope, {
     // -- State mutation proof completeness check --
     const stateCommit = proofMaterial?.proofs?.stateCommit;
     if (stateCommit && requireFullStateMutationProofs) {
-      const mutationCount = Number(stateCommit.mutationCount || 0);
+      const proofProfile = asRecord(stateCommit.proofProfile);
+      const mutationCount = Number(proofProfile.totalUniqueKeyCount ?? stateCommit.mutationCount ?? 0);
       const touchedKeyProofs = asArray(proofMaterial?.proofs?.state?.touchedKeyProofs);
-      const provedCount = touchedKeyProofs.length;
-      if (provedCount < mutationCount) {
+      const provedCount = Number(proofProfile.provedKeyCount ?? touchedKeyProofs.length);
+      const completeness = String(proofProfile.completeness || "");
+      if (provedCount < mutationCount || completeness !== "full") {
         failures.push(createVerificationFailure({
           layer: "proof-completeness",
           code: "incomplete_state_mutation_proofs",
@@ -826,7 +873,7 @@ export async function verifyProofEnvelope(envelope, {
             mutationCount,
             provedCount,
             unprovedMutationCount: mutationCount - provedCount,
-            proofCompleteness: stateCommit.proofCompleteness || "sampled"
+            proofCompleteness: completeness || "sampled"
           }
         }));
       }
@@ -849,20 +896,20 @@ export async function verifyProofEnvelope(envelope, {
   // Structural validity means: envelope id, proof material refs, critical extensions,
   // ledger inclusion/consistency, proof schema, semantic bindings, embedded proofs all pass.
   // It intentionally excludes the trust status of ledger head signatures.
-  const structuralFailures = failures.filter((f) => f.severity !== "warning");
+  const structuralFailures = failures.filter((f) => f.severity !== "warning" && f.layer !== "trust-policy");
   const proofStructurallyValid = structuralFailures.length === 0;
 
   // -- Overall ok depends on trust policy --
   let ok;
-  if (resolvedTrustPolicy === "structural") {
+  if (resolvedTrustPolicy === PACTIUM_TRUST_POLICIES.structural) {
     // Structural mode: only proof structure matters. Signature trust is irrelevant.
     ok = proofStructurallyValid;
-  } else if (resolvedTrustPolicy === "trusted-manifest-required") {
+  } else if (resolvedTrustPolicy === PACTIUM_TRUST_POLICIES.trustedManifestRequired) {
     // Trusted-manifest-required: both structure AND trusted signature must pass.
     ok = proofStructurallyValid && trustedSignatureValid;
   } else {
-    // self-carried-manifest (default): structure must pass; signature validation is
-    // informational. ledgerHeadTrusted is always false without a caller trustedManifest.
+    // self-carried-manifest: structure must pass; signature validation is
+    // informational unless the caller supplies a trusted manifest.
     ok = proofStructurallyValid;
   }
 

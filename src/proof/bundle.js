@@ -1,4 +1,4 @@
-import { PACTIUM_PROOF_BUNDLE_TYPE, PACTIUM_PROTOCOL } from "../protocol/constants.js";
+import { PACTIUM_PROOF_BUNDLE_TYPE, PACTIUM_PROTOCOL, PACTIUM_TRUST_POLICIES } from "../protocol/constants.js";
 import { asArray } from "../shared/records.js";
 import { protocolHash } from "../protocol/hashing.js";
 import { createVerificationFailure } from "../verification/failure.js";
@@ -231,7 +231,7 @@ export async function verifyProofBundle(bundle, options = {}) {
     verifierManifest: options.verifierManifest || null,
     trustedManifest: options.trustedManifest || null,
     ledgerHeadSignatures: options.ledgerHeadSignatures || [],
-    trustPolicy: options.trustPolicy || "self-carried-manifest",
+    trustPolicy: options.trustPolicy || PACTIUM_TRUST_POLICIES.trustedManifestRequired,
     requireFullStateMutationProofs: options.requireFullStateMutationProofs || false,
     maxProofLeafEntries: Number(options.maxProofLeafEntries || 0),
     maxProofBytes: Number(options.maxProofBytes || 0),

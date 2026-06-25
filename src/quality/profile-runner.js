@@ -148,7 +148,7 @@ export async function runPactiumQualityGateProfile({
         input: { index }
       });
       const bundle = await core.exportProofBundle(envelope);
-      const verified = await verifyProofBundle(bundle);
+      const verified = await verifyProofBundle(bundle, { trustPolicy: "self-carried-manifest" });
       if (!verified.ok) throw new Error("Pressure Proof Bundle verification failed.");
       samples.push(performance.now() - operationStarted);
       completed += 1;
@@ -243,7 +243,7 @@ export async function runPactiumQualityGateProfile({
         policyEvidence: { decision: "allow", index },
         workspaceEffectEvidence: { effect: "record", index }
       });
-      const verified = await aspect.verifyEnvelope(envelope);
+      const verified = await aspect.verifyEnvelope(envelope, { trustPolicy: "self-carried-manifest" });
       if (!verified.ok) throw new Error("Pressure LicoLite verification failed.");
       samples.push(performance.now() - operationStarted);
       completed += 1;

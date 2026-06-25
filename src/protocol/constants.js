@@ -5,11 +5,18 @@ export const PACTIUM_INDEX_ENGINE = "pactium.verifiable-index-engine";
 export const PACTIUM_INDEX_SPLITTER = "pactium-cdc-boundary";
 export const PACTIUM_PROOF_BUNDLE_TYPE = "pactium.proof-bundle.indexed";
 export const PACTIUM_BUNDLE_ENCODING = "pactium.bundle.indexed-record-stream";
+export const PACTIUM_TRUST_POLICIES = Object.freeze({
+  structural: "structural",
+  selfCarriedManifest: "self-carried-manifest",
+  trustedManifestRequired: "trusted-manifest-required"
+});
 export const PACTIUM_PROOF_TYPES = Object.freeze({
   ledgerInclusion: "ledger.inclusion.audit-path",
   ledgerConsistency: "ledger.consistency.audit-path",
   indexMembership: "index.membership.prolly-path",
-  indexNonMembership: "index.non-membership.prolly-path"
+  indexMembershipMultiproof: "index.membership-multiproof.prolly-paths",
+  indexRange: "index.range.prolly-paths",
+  indexNonMembership: "index.non-membership.compact-prolly-boundary"
 });
 
 export const PACTIUM_PROTOCOL_PROFILE = Object.freeze({

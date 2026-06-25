@@ -9,7 +9,7 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | Protocol | `PACTIUM_PROTOCOL` | `pactium.v0.2` |
 | Hash | `Protocol Hash` | `sha256` |
 | Hash domains | `domainSeparator` | Fixed per object class |
-| Encoding | `Canonical Value` | JCS-like canonical JSON with NFC Unicode normalization and safe integers only |
+| Encoding | `Canonical Value` | Pactium-specific canonical JSON bytes with sorted keys, NFC strings, safe integers, and `$bytes`; see [Canonical Encoding](./CANONICAL-ENCODING.md) |
 | CID | `cid` | `cid:sha256:<hex>` |
 | Time | `timestamp` | RFC3339 metadata, never ordering authority |
 | Ordering | `authority` | Operation Ledger leaf order |
@@ -23,7 +23,7 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | `nodeHash` | `H(0x01 || leftHash || rightHash)` |
 | `emptyTreeHash` | `H("")` |
 | Append order | Single Ledger Append Lane |
-| Batch append | Allowed only when ordered |
+| Batch append | `appendBatch` preserves caller order and emits per-append inclusion/consistency proofs |
 | Proofs | Inclusion and consistency proofs |
 | Signing | Optional in core, default for LicoLite Aspect |
 | Split-view defense | Consistency proof support; hosts retain last trusted heads; witness is extension point |
@@ -50,7 +50,8 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | Key | Canonical Index Key |
 | Value | Content-addressed Index Value Ref |
 | Chunking | Content-Defined Chunking with protocol constants |
-| Proofs | Membership and non-membership |
+| Proofs | Membership, compact non-membership, membership multiproof, and range proof |
+| Mutation | Path-copying `put`, `delete`, and `mutate`; unchanged subtrees are reused |
 | Diff | Shared-node hash traversal |
 | Storage | CAS-backed nodes through Storage Port |
 
@@ -84,11 +85,11 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | --- | --- |
 | State index | Shared Verifiable Index Engine |
 | Commit binding | Operation Outcome only |
-| Key proof | Membership and non-membership (default sampled: first 32 unique touched keys with individual proofs; optional full mode proves every unique touched key) |
+| Key proof | Membership/non-membership with explicit `proofProfile`; default sampled mode proves the first 32 unique touched keys, optional full mode proves every unique touched key |
 | State root | Prolly root CID/hash |
 | Diff | Prolly shared-node diff |
 
-> **Note:** State mutation proofs (`touchedKeyProofs` / `sampledKeyCount`) provide individual membership/non-membership proofs for the first 32 unique touched keys by default. Repeated keys inside one State Commit collapse to the last mutation's final effect because proofs bind to the final state root. Set `proofOptions.stateMutationProofMode: "full"` or `fullStateMutationProofs: true` on write APIs to emit proofs for every unique touched key; `requireFullStateMutationProofs: true` then verifies that strict coverage in envelopes and Proof Bundles.
+> **Note:** State mutation proofs (`touchedKeyProofs` plus `stateCommit.proofProfile`) provide individual membership/non-membership proofs for the first 32 unique touched keys by default. Repeated keys inside one State Commit collapse to the last mutation's final effect because proofs bind to the final state root. Set `proofOptions.stateMutationProofMode: "full"` or `fullStateMutationProofs: true` on write APIs to emit proofs for every unique touched key; `requireFullStateMutationProofs: true` then verifies that strict coverage in envelopes and Proof Bundles.
 
 ## Proofs
 
@@ -100,6 +101,18 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | Bundle format | CAR-like block bundle plus Pactium manifest |
 | Extensions | Hash-bound Proof Extensions |
 | Critical extension | Unsupported critical extension fails verification |
+| Descriptor compaction | Proof envelopes hoist repeated index sibling descriptors into `proofMaterial.proofDescriptorTable` |
+| Trust policy | In-memory verification defaults to `self-carried-manifest`; persistent envelopes and bundles default to `trusted-manifest-required` |
+
+## Storage Backend Profile
+
+| Parameter | Value |
+| --- | --- |
+| Persistent default | `createStoragePort()` uses `storageBackend: "auto"` |
+| SQLite | Production local-durability candidate when `node:sqlite` or optional npm `better-sqlite3` is available |
+| JSON | Local development, low-concurrency use, debugging, and explicit `storageBackend: "json"` profiles |
+| Manifest binding | Existing data directories reopen only with their recorded backend |
+| Distributed deployments | Require an external consistency layer; Storage Port does not provide consensus |
 
 ## HTTP Adapter
 

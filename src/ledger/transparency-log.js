@@ -283,10 +283,6 @@ export function createLedgerTransparencyLog({
   let loadPromise = null;
   let appendLane = Promise.resolve();
 
-  async function readLegacyEntries() {
-    return asArray(await storage.getProtocolObject("ledger", "operation-ledger", []));
-  }
-
   async function load() {
     if (loaded) return;
     if (loadPromise) return loadPromise;
@@ -298,15 +294,9 @@ export function createLedgerTransparencyLog({
         loaded = true;
         return;
       }
-      entries = await readLegacyEntries();
+      entries = [];
       compactRange = createCompactRange();
-      /* node:coverage ignore start -- legacy loading path, covered by existing tests */
-      for (const entry of entries) {
-        await storage.putProtocolObject("ledger-leaf", String(entry.index), entry);
-        await mergeLeafIntoCompactRange(entry);
-      }
-      /* node:coverage ignore stop */
-      currentHead = ledgerHeadFromCompactRange({ peaks: compactRange.peaks, size: entries.length, ledgerId });
+      currentHead = ledgerHeadFromCompactRange({ peaks: [], size: 0, ledgerId });
       loaded = true;
     })();
     try {
@@ -558,72 +548,92 @@ export function createLedgerTransparencyLog({
     await storage.putProtocolObject("ledger-head", head.headId, head);
   }
 
-  async function append(fact, { timestamp = nowIso() } = {}) {
+  async function appendBatch(facts = [], { timestamp = nowIso(), timestamps = [] } = {}) {
     await load();
     const run = appendLane.then(async () => {
-      const previousHead = currentHead;
-      const previousHeadRef = previousHead.headId || "";
-      const index = Number(currentHead.size || 0);
-      const factBlock = await storage.putBlock(fact, { kind: "ledger-fact" });
-      const leaf = {
-        protocol: PACTIUM_PROTOCOL,
-        schema: PACTIUM_SCHEMA_VERSION,
-        index,
-        factType: fact.factType,
-        factCid: factBlock.cid,
-        factHash: factBlock.payloadHash,
-        timestamp
-      };
-      const leafHash = ledgerLeafHash(leaf);
-      const eventId = createId("ledger_event", { index, leafHash });
-      const entry = {
-        protocol: PACTIUM_PROTOCOL,
-        schema: PACTIUM_SCHEMA_VERSION,
-        eventId,
-        index,
-        fact,
-        factCid: factBlock.cid,
-        factHash: factBlock.payloadHash,
-        leaf,
-        leafHash,
-        timestamp
-      };
-      entries[index] = entry;
-      await storage.putProtocolObject("ledger-leaf", String(index), entry);
-      await mergeLeafIntoCompactRange(entry);
-      currentHead = ledgerHeadFromCompactRange({
-        peaks: compactRange.peaks,
-        size: index + 1,
-        previousHeadId: previousHeadRef,
-        createdAt: timestamp,
-        ledgerId
-      });
-      currentHead = await signHead(currentHead);
+      const normalizedFacts = asArray(facts);
+      const appends = [];
+      for (const [batchIndex, fact] of normalizedFacts.entries()) {
+        const entryTimestamp = asArray(timestamps)[batchIndex] || timestamp || nowIso();
+        const previousHead = currentHead;
+        const previousHeadRef = previousHead.headId || "";
+        const index = Number(currentHead.size || 0);
+        const factBlock = await storage.putBlock(fact, { kind: "ledger-fact" });
+        const leaf = {
+          protocol: PACTIUM_PROTOCOL,
+          schema: PACTIUM_SCHEMA_VERSION,
+          index,
+          factType: fact.factType,
+          factCid: factBlock.cid,
+          factHash: factBlock.payloadHash,
+          timestamp: entryTimestamp
+        };
+        const leafHash = ledgerLeafHash(leaf);
+        const eventId = createId("ledger_event", { index, leafHash });
+        const entry = {
+          protocol: PACTIUM_PROTOCOL,
+          schema: PACTIUM_SCHEMA_VERSION,
+          eventId,
+          index,
+          fact,
+          factCid: factBlock.cid,
+          factHash: factBlock.payloadHash,
+          leaf,
+          leafHash,
+          timestamp: entryTimestamp
+        };
+        entries[index] = entry;
+        await storage.putProtocolObject("ledger-leaf", String(index), entry);
+        await mergeLeafIntoCompactRange(entry);
+        currentHead = ledgerHeadFromCompactRange({
+          peaks: compactRange.peaks,
+          size: index + 1,
+          previousHeadId: previousHeadRef,
+          createdAt: entryTimestamp,
+          ledgerId
+        });
+        currentHead = await signHead(currentHead);
+        appends.push({
+          protocol: PACTIUM_PROTOCOL,
+          entry,
+          head: currentHead,
+          previousHead,
+          inclusionProof: await createStoredInclusionProof({
+            index,
+            leaf,
+            head: currentHead
+          }),
+          consistencyProof: await createStoredConsistencyProof({
+            oldHead: previousHead,
+            newHead: currentHead
+          })
+        });
+      }
       await storage.putProtocolObject("ledger", "compact-range-current", compactRange);
       await persistHead(currentHead);
       return {
         protocol: PACTIUM_PROTOCOL,
-        entry,
+        batchType: "pactium.ledger-append-batch",
+        count: appends.length,
+        entries: appends.map((appendResult) => appendResult.entry),
         head: currentHead,
-        previousHead,
-        inclusionProof: await createStoredInclusionProof({
-          index,
-          leaf,
-          head: currentHead
-        }),
-        consistencyProof: await createStoredConsistencyProof({
-          oldHead: previousHead,
-          newHead: currentHead
-        })
+        previousHead: appends[0]?.previousHead || currentHead,
+        appends
       };
     });
     appendLane = run.catch(() => null);
     return run;
   }
 
+  async function append(fact, options = {}) {
+    const batch = await appendBatch([fact], options);
+    return batch.appends[0];
+  }
+
   return Object.freeze({
     protocol: PACTIUM_PROTOCOL,
     append,
+    appendBatch,
     reload,
     async head() {
       await load();

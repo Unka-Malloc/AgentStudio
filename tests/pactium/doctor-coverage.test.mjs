@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createPactium } from "../../src/index.js";
-import { createStoragePort } from "../../src/storage/local-json-storage-port.js";
+import { createJsonStoragePort as createStoragePort } from "../../src/storage/local-json-storage-port.js";
 
 describe("Pactium doctor coverage — error branches", () => {
   it("doctor reports manifest_check_failed when getProtocolObject throws on second call", async () => {

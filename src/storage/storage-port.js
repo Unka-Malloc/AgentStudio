@@ -19,7 +19,7 @@ export const PACTIUM_STORAGE_BACKEND_AUTO = "auto";
 
 function normalizeStorageBackend(value) {
   const backend = String(value || "").trim().toLowerCase();
-  if (!backend) return PACTIUM_STORAGE_BACKEND_JSON;
+  if (!backend) return PACTIUM_STORAGE_BACKEND_AUTO;
   if ([PACTIUM_STORAGE_BACKEND_AUTO, PACTIUM_STORAGE_BACKEND_JSON, PACTIUM_STORAGE_BACKEND_SQLITE].includes(backend)) {
     return backend;
   }
@@ -154,7 +154,7 @@ function createAutoStoragePort(options) {
 
 export function createStoragePort(options = {}) {
   const backend = normalizeStorageBackend(
-    options.storageBackend || options.backend || process.env.PACTIUM_STORAGE_BACKEND || PACTIUM_STORAGE_BACKEND_JSON
+    options.storageBackend || options.backend || process.env.PACTIUM_STORAGE_BACKEND || PACTIUM_STORAGE_BACKEND_AUTO
   );
   if (options.inMemory) return createJsonStoragePort(options);
   if (backend === PACTIUM_STORAGE_BACKEND_AUTO) return createAutoStoragePort(options);

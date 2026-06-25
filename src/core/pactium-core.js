@@ -5,7 +5,8 @@ import {
   PACTIUM_PROOF_BUNDLE_TYPE,
   PACTIUM_PROOF_TYPES,
   PACTIUM_PROTOCOL,
-  PACTIUM_SCHEMA_VERSION
+  PACTIUM_SCHEMA_VERSION,
+  PACTIUM_TRUST_POLICIES
 } from "../protocol/constants.js";
 import { canonicalEncode, normalizeCanonicalValue } from "../canonical/value.js";
 import { createAppendCondition, assertAppendCondition } from "./append-condition.js";
@@ -13,7 +14,13 @@ import { createLedgerTransparencyLog, ledgerNodeHash } from "../ledger/transpare
 import { advanceTrustedHead as advanceTrustedLedgerHead } from "../ledger/signed-head.js";
 import { createVerifiableIndexEngine } from "../index-engine/snapshot-merkle-index.js";
 import { createId, protocolHash, protocolHashHex } from "../protocol/hashing.js";
-import { createProofRef, finalizeEnvelope, materializeExtension, verifyProofEnvelope } from "../proof/envelope.js";
+import {
+  compactProofMaterialDescriptors,
+  createProofRef,
+  finalizeEnvelope,
+  materializeExtension,
+  verifyProofEnvelope
+} from "../proof/envelope.js";
 import { createRepairPlanner } from "../repair/planner.js";
 import { createStoragePort } from "../storage/storage-port.js";
 import { createTrackingCursor, verifyTrackingCursor } from "./tracking-cursor.js";
@@ -339,7 +346,7 @@ export function createPactium({
     replayed = false,
     relatedEnvelopeIds = []
   }) {
-    const material = {
+    const material = compactProofMaterialDescriptors({
       protocol: PACTIUM_PROTOCOL,
       materialType: "pactium.proof-material",
       envelopeKind,
@@ -351,7 +358,7 @@ export function createPactium({
       },
       appendCondition,
       proofs
-    };
+    });
     const materialRef = await createProofRef(resolvedStorage, "ledger-and-index-proofs", material, [
       ledgerAppend.entry.factCid
     ]);
@@ -687,12 +694,13 @@ export function createPactium({
     const keyedMutations = mutations.filter((mutation) => mutation?.key);
     const netKeyedMutations = netStateMutationsByKey(keyedMutations);
     await ensureWorkspaceStateRoot({ indexEngine, workspace, workspaceStateEntries });
-    for (const mutation of mutations) {
+    const stateIndexMutations = [];
+    for (const mutation of netKeyedMutations) {
       const key = String(mutation.key || "");
       if (!key) continue;
       if (mutation.action === "delete") {
         delete workspaceStateEntries[key];
-        workspace.stateRoot = await applyIndexDelete(indexEngine, workspace.stateRoot, key, "state");
+        stateIndexMutations.push({ action: "delete", key });
       } else {
         const valueBlock = mutation.valueRef
           ? { cid: mutation.valueRef, payloadHash: mutation.valueHash || "" }
@@ -704,8 +712,17 @@ export function createPactium({
           metadata: normalizeCanonicalValue(asRecord(mutation.metadata))
         };
         workspaceStateEntries[key] = stateEntry;
-        workspace.stateRoot = await applyIndexPut(indexEngine, workspace.stateRoot, key, stateEntry, "state");
+        stateIndexMutations.push({
+          action: "put",
+          key,
+          valueRef: stateEntry.valueRef,
+          valueHash: stateEntry.valueHash,
+          metadata: stateEntry.metadata
+        });
       }
+    }
+    if (stateIndexMutations.length > 0) {
+      workspace.stateRoot = (await indexEngine.mutate(workspace.stateRoot, stateIndexMutations, { domain: "state" })).root;
     }
     const stateRoot = workspace.stateRoot;
     const fullStateMutationProofs =
@@ -744,16 +761,19 @@ export function createPactium({
       mutations: mutationDescriptors,
       mutationKeys: netKeyedMutations.map((mutation) => String(mutation.key || "")),
       mutationActions: netKeyedMutations.map((mutation) => String(mutation.action || "put")),
-      // By default, touchedKeyProofs samples the first 32 unique touched keys to
-      // keep write receipts bounded. Repeated keys in one commit collapse to the
-      // last mutation's final effect because proofs bind to the final stateRoot.
-      // Hosts that need strict per-key verification can request full mode.
-      sampledKeyCount: provedStateMutationCount,
-      touchedKeyCount: provedStateMutationCount, // kept for backward compat
       provedKeyCount: provedStateMutationCount,
       mutationProofMode: fullStateMutationProofs ? "full" : "sampled",
       proofCompleteness: provedStateMutationCount >= netKeyedMutations.length ? "full" : "sampled",
       unprovedMutationCount: Math.max(0, netKeyedMutations.length - provedStateMutationCount),
+      proofProfile: {
+        profileType: "pactium.state-mutation-proof-profile",
+        mode: fullStateMutationProofs ? "full" : "sampled",
+        sampling: fullStateMutationProofs ? "all-unique-keys" : "first-32-canonical-unique-keys",
+        totalUniqueKeyCount: netKeyedMutations.length,
+        provedKeyCount: provedStateMutationCount,
+        completeness: provedStateMutationCount >= netKeyedMutations.length ? "full" : "sampled",
+        unprovedKeyCount: Math.max(0, netKeyedMutations.length - provedStateMutationCount)
+      },
       createdAt: nowIso()
     };
     const checkpointEntries = checkpointEntriesFor(current, workspaceId);
@@ -845,6 +865,33 @@ export function createPactium({
       intentId,
       appendCondition: input.outcomeAppendCondition || input.outcome?.appendCondition || null,
       extensions: asArray(input.outcomeExtensions || input.extensions)
+    });
+  }
+
+  async function recordOperations(inputs = []) {
+    return enqueueMutation(async () => {
+      const envelopes = [];
+      for (const input of asArray(inputs)) {
+        const intentEnvelope = await beginOperationIntentCommitted(input.intentAppendCondition
+          ? { ...input, appendCondition: input.intentAppendCondition }
+          : input);
+        if (intentEnvelope.replayed && input.returnIntentReplay) {
+          envelopes.push(intentEnvelope);
+          continue;
+        }
+        envelopes.push(await appendOperationOutcomeCommitted({
+          ...input,
+          intentId: intentEnvelope.factId,
+          appendCondition: input.outcomeAppendCondition || input.outcome?.appendCondition || null,
+          extensions: asArray(input.outcomeExtensions || input.extensions)
+        }));
+      }
+      return {
+        protocol: PACTIUM_PROTOCOL,
+        batchType: "pactium.operation-record-batch",
+        count: envelopes.length,
+        envelopes
+      };
     });
   }
 
@@ -975,6 +1022,9 @@ export function createPactium({
   }
 
   async function verifyEnvelope(envelope, options = {}) {
+    const defaultTrustPolicy = resolvedStorage.inMemory
+      ? PACTIUM_TRUST_POLICIES.selfCarriedManifest
+      : PACTIUM_TRUST_POLICIES.trustedManifestRequired;
     return verifyProofEnvelope(envelope, {
       storage: resolvedStorage,
       supportedCriticalExtensions: options.supportedCriticalExtensions || [],
@@ -983,7 +1033,7 @@ export function createPactium({
       verifierManifest: options.verifierManifest || null,
       trustedManifest: options.trustedManifest || null,
       ledgerHeadSignatures: options.ledgerHeadSignatures || [],
-      trustPolicy: options.trustPolicy || "self-carried-manifest",
+      trustPolicy: options.trustPolicy || defaultTrustPolicy,
       requireFullStateMutationProofs: options.requireFullStateMutationProofs || false,
       maxProofLeafEntries: Number(options.maxProofLeafEntries || 0),
       maxProofBytes: Number(options.maxProofBytes || 0),
@@ -1204,7 +1254,7 @@ export function createPactium({
           }
         }
       }
-    /* node:coverage ignore next -- ledger caches internally after init, untestable */
+    /* node:coverage ignore next 8 */
     } catch (err) {
       failures.push(createVerificationFailure({
         layer: "doctor",
@@ -1328,10 +1378,10 @@ export function createPactium({
             if (field === "orderRoot") return ws?.orderRoot || "";
             if (field === "membershipRoot") return ws?.membershipRoot || "";
             if (field === "checkpointRoot") return ws?.checkpointRoot || "";
-            /* node:coverage ignore next -- stateRoot always skipped, unreachable */
+            /* node:coverage ignore next 2 */
             if (field === "stateRoot") return ws?.stateRoot || "";
           }
-          /* node:coverage ignore next -- defensive fallback for unrecognized fields */
+          /* node:coverage ignore next 2 */
           return "";
         };
 
@@ -1521,6 +1571,7 @@ export function createPactium({
     beginOperationIntent,
     appendOperationOutcome,
     recordOperation,
+    recordOperations,
     lookupOpenIntent,
     lookupOutcome,
     createAppendCondition,

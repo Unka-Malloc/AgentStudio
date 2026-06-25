@@ -31,6 +31,7 @@
     "PACTIUM_PROTOCOL",
     "PACTIUM_PROTOCOL_PROFILE",
     "PACTIUM_SCHEMA_VERSION",
+    "PACTIUM_TRUST_POLICIES",
     "advanceTo",
     "advanceTrustedHead",
     "canonicalDecode",
@@ -98,9 +99,9 @@
   ],
   "declarations": {
     "src/index.d.ts": {
-      "sha256": "0fb94d7a88dfbe809e4075c0da93ab5fadb4d48f59256dd7bc813dfa7bcea3c3",
-      "byteLength": 16893,
-      "exportCount": 84
+      "sha256": "cc4ab51d7c2b8428018c1e7699ae7f3a44b276f05bc7c581ad49200845c6eac1",
+      "byteLength": 17883,
+      "exportCount": 86
     },
     "src/http.d.ts": {
       "sha256": "ec5eff2f4abb6af32a55281b9988463d02aa035bacd7e5ba6dccced57bf7d510",
@@ -156,7 +157,7 @@
     ]
   },
   "proofBundle": {
-    "ok": true,
+    "ok": false,
     "bundleType": "pactium.proof-bundle.indexed",
     "blockCount": 6,
     "criticalExtensions": [

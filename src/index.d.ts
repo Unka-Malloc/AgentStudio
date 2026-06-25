@@ -150,6 +150,10 @@ export interface PactiumProofVerificationOptions extends PactiumProofOptions {
   requireFullStateMutationProofs?: boolean;
 }
 
+export interface PactiumIndexProofContext extends PactiumRecord {
+  proofMaterial?: PactiumRecord;
+}
+
 export interface PactiumIndexEngine {
   protocol: string;
   engine: string;
@@ -157,9 +161,12 @@ export interface PactiumIndexEngine {
   createIndex(entries?: PactiumRecord[], options?: PactiumRecord): Promise<PactiumRecord>;
   put(root: string, key: string, value: unknown, options?: PactiumRecord): Promise<PactiumRecord>;
   delete(root: string, key: string, options?: PactiumRecord): Promise<PactiumRecord>;
+  mutate(root: string, mutations?: PactiumRecord[], options?: PactiumRecord): Promise<PactiumRecord>;
   get(root: string, key: string): Promise<PactiumRecord | null>;
   prove(root: string, key: string, options?: PactiumProofOptions): Promise<PactiumRecord>;
-  verifyProof(proof: PactiumRecord): boolean;
+  proveMembershipMultiproof(root: string, keys?: string[], options?: PactiumProofOptions): Promise<PactiumRecord>;
+  proveRange(root: string, options?: PactiumIndexScanOptions): Promise<PactiumRecord>;
+  verifyProof(proof: PactiumRecord, context?: PactiumIndexProofContext): boolean;
   scan(root: string, options?: PactiumIndexScanOptions): Promise<PactiumRecord[]>;
   prefix(root: string, keyPrefix?: string, options?: PactiumIndexScanOptions): Promise<PactiumRecord[]>;
   diff(leftRoot: string, rightRoot: string): Promise<PactiumRecord[]>;
@@ -184,6 +191,7 @@ export interface PactiumLedgerPage extends PactiumRecord {
 
 export interface PactiumLedger extends PactiumRecord {
   append(entry?: PactiumRecord): Promise<PactiumRecord>;
+  appendBatch(entries?: PactiumRecord[], options?: PactiumRecord): Promise<PactiumRecord>;
   head(): Promise<PactiumLedgerHead>;
   entries(): Promise<PactiumRecord[]>;
   pageEntries(options?: PactiumLedgerPageOptions): Promise<PactiumLedgerPage>;
@@ -223,6 +231,7 @@ export interface PactiumCore {
   beginOperationIntent(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
   appendOperationOutcome(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
   recordOperation(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
+  recordOperations(inputs?: PactiumRecord[]): Promise<PactiumRecord & { envelopes: PactiumProofEnvelope[] }>;
   lookupOpenIntent(intentId: string): Promise<PactiumRecord>;
   lookupOutcome(intentId: string): Promise<PactiumRecord>;
   createAppendCondition(input?: PactiumRecord): PactiumRecord;
@@ -318,7 +327,14 @@ export const PACTIUM_PROOF_TYPES: Readonly<{
   ledgerInclusion: "ledger.inclusion.audit-path";
   ledgerConsistency: "ledger.consistency.audit-path";
   indexMembership: "index.membership.prolly-path";
-  indexNonMembership: "index.non-membership.prolly-path";
+  indexMembershipMultiproof: "index.membership-multiproof.prolly-paths";
+  indexRange: "index.range.prolly-paths";
+  indexNonMembership: "index.non-membership.compact-prolly-boundary";
+}>;
+export const PACTIUM_TRUST_POLICIES: Readonly<{
+  structural: "structural";
+  selfCarriedManifest: "self-carried-manifest";
+  trustedManifestRequired: "trusted-manifest-required";
 }>;
 export const PACTIUM_PROTOCOL_PROFILE: PactiumRecord;
 export const HASH_DOMAINS: Record<string, string>;
@@ -355,7 +371,7 @@ export function signLedgerHead(head?: PactiumRecord, options?: PactiumRecord): P
 export function verifyLedgerHeadSignature(head?: PactiumRecord, manifest?: PactiumRecord, options?: PactiumRecord): PactiumVerificationResult & { accepted?: number };
 export function advanceTrustedHead(input?: PactiumRecord): PactiumRecord;
 export function createVerifiableIndexEngine(options?: PactiumRecord): PactiumIndexEngine;
-export function verifyIndexProof(proof: PactiumRecord): boolean;
+export function verifyIndexProof(proof: PactiumRecord, context?: PactiumIndexProofContext): boolean;
 export function createAppendCondition(input?: PactiumRecord): PactiumRecord;
 export function createTrackingCursor(input?: PactiumRecord): PactiumRecord;
 export function covers(cursor: PactiumRecord, position: number): boolean;

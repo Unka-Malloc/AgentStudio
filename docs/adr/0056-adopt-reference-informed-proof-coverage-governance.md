@@ -22,7 +22,7 @@ Maintained Pactium work must stay on the package line unless an ADR explicitly r
 | transparency-dev/merkle and Trillian | RFC6962-style leaf/node domain separation, strict inclusion and consistency proof shape validation, compact ranges, signed roots | Pactium remains a local package substrate, not a distributed log service. |
 | Tessera | Tile-based transparency logs reduce operating cost for large deployed logs | Future reference only; no tile protocol is adopted in this ADR. |
 | Sigstore Rekor | Portable proof material, signed checkpoint thinking, explicit trust policy | Pactium does not provide a public transparency service or SET ecosystem. |
-| Dolt | Content-addressed Prolly nodes and structural sharing | Pactium keeps its protocol-defined splitter and canonical value model. Current diff skips equal Pactium subtree roots; Dolt-style cursor/path-copying and maximal large-index diff tuning remain deferred optimization work. |
+| Dolt | Content-addressed Prolly nodes, structural sharing, and path-copying updates | Pactium keeps its protocol-defined splitter and canonical value model. Path-copying mutations and shared-node diffs are implemented without adopting Dolt's storage engine. |
 | IPLD CAR / go-car | Content-addressed archive transport, indexed block access, size limits | Pactium proof bundles stay CAR-like, not CARv1/CARv2 byte-compatible. |
 | Hypercore | Signed append-only roots and remote proof verification shaped by signer identity | Pactium implements signer manifests and signed heads without adding replication or gossip. |
 | EventStore / Axon Framework | Append conditions, tracking positions, event lifecycle boundaries | Pactium records protocol facts and cursors; hosts own dispatch and side effects. |
@@ -50,7 +50,7 @@ Maintained Pactium work must stay on the package line unless an ADR explicitly r
 2. The shared Verifiable Index Engine remains the only ordered proof index implementation.
 3. Ledger compact ranges and signed heads remain the active transparency-log model.
 4. Future large-log work should evaluate tile-backed proof distribution before changing the ledger protocol.
-5. Future large-state work should evaluate compressed batch/range mutation proofs before making full per-key proofs the default.
+5. Large-state proof work uses membership multiproofs, range proofs, compact non-membership proofs, and proof-material descriptor deduplication before considering any default switch from sampled to full per-key state proofs.
 
 ## Design Pattern Evaluation
 

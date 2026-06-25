@@ -107,20 +107,24 @@
           "targetEntries": 64
         }
       },
+      "descriptorTable": [],
       "path": []
     },
     "nonMembership": {
       "protocol": "pactium.v0.2",
-      "proofType": "index.non-membership.prolly-path",
+      "proofType": "index.non-membership.compact-prolly-boundary",
       "domain": "vector",
       "indexRoot": "cid:sha256:59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
       "rootHash": "59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
       "key": "middle",
-      "containingLeaf": {
+      "leafRoot": "cid:sha256:59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
+      "leafRootHash": "59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
+      "leafNode": {
         "keyRange": {
           "max": "omega",
           "min": "alpha"
         },
+        "count": 2,
         "entries": [
           {
             "key": "alpha",
@@ -135,38 +139,16 @@
             "metadata": {}
           }
         ],
-        "leafRoot": "cid:sha256:59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
-        "leafRootHash": "59393ef0d217005a79ebeb6119bec002044032d7bc7f3a06d3711e458c289145",
-        "leafNode": {
-          "keyRange": {
-            "max": "omega",
-            "min": "alpha"
-          },
-          "count": 2,
-          "entries": [
-            {
-              "key": "alpha",
-              "valueRef": "ref:alpha",
-              "valueHash": "sha256:b8cc8d4ee9d83db6423d0a90f85b8ca9debfffd80d4ca026a35becb43b08f302",
-              "metadata": {}
-            },
-            {
-              "key": "omega",
-              "valueRef": "ref:omega",
-              "valueHash": "sha256:6b7d4c964ce8a33309d8394b475f1c6841d57be223826e2d66651030d8ef302b",
-              "metadata": {}
-            }
-          ],
-          "splitter": {
-            "algorithm": "pactium-cdc-boundary",
-            "boundaryMask": 63,
-            "maxEntries": 128,
-            "minEntries": 32,
-            "targetEntries": 64
-          }
-        },
-        "path": []
+        "splitter": {
+          "algorithm": "pactium-cdc-boundary",
+          "boundaryMask": 63,
+          "maxEntries": 128,
+          "minEntries": 32,
+          "targetEntries": 64
+        }
       },
+      "descriptorTable": [],
+      "path": [],
       "leftBoundary": "alpha",
       "rightBoundary": "omega"
     },

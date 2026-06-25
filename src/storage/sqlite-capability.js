@@ -10,6 +10,7 @@ function loadOptionalModule(moduleName, required = false) {
   try {
     return require(moduleName);
   } catch (error) {
+    /* node:coverage ignore next 3 */
     if (!required) return null;
     throw error;
   }
@@ -19,6 +20,7 @@ export function loadNodeSqliteModule(required = false) {
   try {
     return require("node:sqlite");
   } catch (error) {
+    /* node:coverage ignore next 6 */
     if (!required) return null;
     const wrapped = new Error("SQLite storage backend requires a supported SQLite driver.");
     wrapped.cause = error;

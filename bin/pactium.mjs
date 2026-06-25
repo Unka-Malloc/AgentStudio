@@ -100,12 +100,18 @@ async function main() {
     return;
   }
   if (domain === "envelope" && action === "verify") {
-    printJson(await pactium.verifyEnvelope(await bodyFromArgs(args)));
+    const input = await bodyFromArgs(args);
+    const envelope = input && typeof input === "object" && input.envelope ? input.envelope : input;
+    const options = input && typeof input === "object" && input.envelope ? input.options || {} : {};
+    printJson(await pactium.verifyEnvelope(envelope, options));
     return;
   }
   if (domain === "bundle" && action === "verify") {
     const { verifyProofBundle } = await import("../src/index.js");
-    printJson(await verifyProofBundle(await bodyFromArgs(args)));
+    const input = await bodyFromArgs(args);
+    const bundle = input && typeof input === "object" && input.bundle ? input.bundle : input;
+    const options = input && typeof input === "object" && input.bundle ? input.options || {} : {};
+    printJson(await verifyProofBundle(bundle, options));
     return;
   }
   if (domain === "licolite" && action === "record") {

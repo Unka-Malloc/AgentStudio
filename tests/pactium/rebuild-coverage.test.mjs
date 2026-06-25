@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createPactium } from "../../src/index.js";
-import { createStoragePort } from "../../src/storage/local-json-storage-port.js";
+import { createJsonStoragePort as createStoragePort } from "../../src/storage/local-json-storage-port.js";
 import { createLedgerTransparencyLog } from "../../src/ledger/transparency-log.js";
 import { rebuildCoreStateFromLedger } from "../../src/core/rebuild-state.js";
 
-describe("Pactium rebuild-state coverage — legacy data and edge case paths", () => {
-  it("rebuild fires intent_idempotency_rebuild_incomplete for old-style intent without inputHash", async () => {
+describe("Pactium rebuild-state coverage — minimal fact and edge case paths", () => {
+  it("rebuild fires intent_idempotency_rebuild_incomplete for minimal intent without inputHash", async () => {
     const pactium = createPactium({ inMemory: true });
     const ledger = pactium.advanced.ledger;
 
@@ -33,7 +33,7 @@ describe("Pactium rebuild-state coverage — legacy data and edge case paths", (
     // because intentIdempotencyRebuildIncomplete was set.
   });
 
-  it("rebuild fires outcome_idempotency_rebuild_incomplete for old-style outcome without resultHash", async () => {
+  it("rebuild fires outcome_idempotency_rebuild_incomplete for minimal outcome without resultHash", async () => {
     const pactium = createPactium({ inMemory: true });
     const ledger = pactium.advanced.ledger;
 
@@ -185,6 +185,46 @@ describe("Pactium rebuild-state coverage — legacy data and edge case paths", (
 
     assert.ok(result.state, "rebuild should produce state even for empty ledger");
     assert.equal(result.warnings.length, 0, "empty ledger should have no warnings");
+  });
+
+  it("rebuild stops on empty or stalled ledger pages without inventing state", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const emptyPageLedger = {
+      async head() {
+        return { size: 2 };
+      },
+      async pageEntries() {
+        return { entries: [], nextPosition: 0 };
+      }
+    };
+    const emptyPageResult = await rebuildCoreStateFromLedger({
+      ledger: emptyPageLedger,
+      indexEngine: pactium.advanced.indexEngine,
+      storage: null
+    });
+    assert.deepEqual(Object.keys(emptyPageResult.fullyComparableRoots), ["openIntent", "outcome", "causality"]);
+    assert.equal(emptyPageResult.warnings.length, 0);
+
+    let pageCalls = 0;
+    const nullFactLedger = {
+      async head() {
+        return { size: 2 };
+      },
+      async pageEntries() {
+        pageCalls += 1;
+        return {
+          entries: [{ fact: null }],
+          nextPosition: 0
+        };
+      }
+    };
+    const nullFactResult = await rebuildCoreStateFromLedger({
+      ledger: nullFactLedger,
+      indexEngine: pactium.advanced.indexEngine,
+      storage: null
+    });
+    assert.equal(pageCalls, 1);
+    assert.equal(nullFactResult.warnings.length, 0);
   });
 
   it("rebuild identifies skippedRoots for stateRoot", async () => {

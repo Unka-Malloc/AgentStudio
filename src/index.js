@@ -8,7 +8,8 @@ export {
   PACTIUM_PROOF_TYPES,
   PACTIUM_PROTOCOL,
   PACTIUM_PROTOCOL_PROFILE,
-  PACTIUM_SCHEMA_VERSION
+  PACTIUM_SCHEMA_VERSION,
+  PACTIUM_TRUST_POLICIES
 } from "./protocol/constants.js";
 export {
   canonicalDecode,

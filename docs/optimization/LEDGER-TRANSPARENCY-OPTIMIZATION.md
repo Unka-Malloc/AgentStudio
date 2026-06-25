@@ -16,7 +16,7 @@ Pactium now uses the transparency-log hash shape as the active ledger protocol:
 - Ledger Heads are signed by default with a local Ed25519 signer unless the ledger is explicitly constructed with `signer: false`.
 - `verifyProofEnvelope` verifies embedded signed-head material when a verifier manifest is present in proof material or supplied by the caller.
 
-The old full-history recomputation path and `oldLeafHashes`/`newLeafHashes` consistency transcript are not current behavior.
+Full-history recomputation and `oldLeafHashes`/`newLeafHashes` consistency transcripts are not current behavior.
 
 ## Reference Signals
 

@@ -10,12 +10,12 @@ Proof envelopes and bundles now use the implemented verifier and indexed bundle 
 
 - `createEnvelope` stores content-addressed Proof Material Refs and extension refs.
 - `verifyProofEnvelope` validates envelope identity, proof refs, extension block hashes, ledger inclusion, ledger consistency, semantic bindings, optional signed head material, and embedded proof material.
-- `createDefaultProofVerifierRegistry` registers ledger inclusion, ledger consistency, index membership, and index non-membership verifiers.
+- `createDefaultProofVerifierRegistry` registers ledger inclusion, ledger consistency, index membership, compact index non-membership, index membership multiproof, and index range verifiers.
 - `verifyProofEnvelope` recursively traverses `proofMaterial.proofs` and dispatches every object with a `proofType`.
 - `exportProofBundle` emits `pactium.proof-bundle.indexed` with a length-delimited binary record stream and offset index.
-- `verifyProofBundle` validates bundle identity, bundle hash, required block closure, indexed block integrity, and the embedded envelope without access to local Pactium storage.
+- `verifyProofBundle` validates bundle identity, bundle hash, required block closure, indexed block integrity, and the embedded envelope without access to local Pactium storage. Bundle verification defaults to `trusted-manifest-required` unless the caller selects another trust policy.
 
-The old JSON block-list export path and the un-dispatched embedded proof gap are not current behavior.
+The JSON block-list export path and the un-dispatched embedded proof gap are not current behavior.
 
 ## Reference Signals
 
@@ -34,7 +34,9 @@ const registry = {
   "ledger.inclusion.audit-path": verifyLedgerInclusionProof,
   "ledger.consistency.audit-path": verifyLedgerConsistencyProof,
   "index.membership.prolly-path": verifyIndexProof,
-  "index.non-membership.prolly-path": verifyIndexProof
+  "index.non-membership.compact-prolly-boundary": verifyIndexProof,
+  "index.membership-multiproof.prolly-paths": verifyIndexProof,
+  "index.range.prolly-paths": verifyIndexProof
 };
 ```
 
@@ -76,10 +78,17 @@ The verifier manifest object is implemented as:
       publicKey,
       validFrom,
       validTo,
+      revokedAt,
+      revocationReason,
       roles: ["ledger-head", "proof-envelope"]
     }
   ],
-  quorum: 1
+  revokedSigners: [{ signerId, revokedAt, reason }],
+  quorum: 1,
+  quorumPolicy,
+  witnesses,
+  publicCheckpoint,
+  gossip
 }
 ```
 
@@ -89,6 +98,7 @@ Signed heads reference the manifest hash and signer id. Verification rejects:
 - unsupported algorithm;
 - signature over a different canonical head payload;
 - head size/root mismatch;
+- signer validity or revocation failure;
 - manifest quorum failure.
 
 This mirrors the useful parts of Rekor checkpoints and Hypercore signer manifests without introducing a witness network.
@@ -128,7 +138,7 @@ This is not byte-compatible with IPLD CAR. It copies the important operational p
 - streaming verification;
 - ability to skip or fetch a block by cid without decoding every block.
 
-If full CAR interoperability becomes a goal, the next step is to emit actual CARv1/CARv2 blocks whose CIDs are multiformat CIDs. That is a larger canonical encoding decision and should not be hidden inside this optimization.
+Boundary tests cover malformed varints, oversized headers/blocks, duplicate CIDs, offset/header/payload length mismatches, trailing bytes, missing required blocks, and corrupted required payloads. If full CAR interoperability becomes a goal, the next step is to emit actual CARv1/CARv2 blocks whose CIDs are multiformat CIDs. That is a larger canonical encoding decision and should not be hidden inside this optimization.
 
 ## Verification Algorithm
 
@@ -139,15 +149,15 @@ If full CAR interoperability becomes a goal, the next step is to emit actual CAR
 5. Verify proof refs and extension refs.
 6. Decode proof material blocks.
 7. Run proof registry verification for every embedded proof.
-8. Verify signed ledger head if present and verifier manifest is provided.
+8. Verify signed ledger head according to trust policy. Persistent/bundle verification requires a caller-supplied trusted manifest unless the caller selects a less strict policy.
 9. Verify LicoLite critical extensions and signatures when `pactium/licolite` verifier is used.
 
 ## API Changes
 
 | API | Current behavior |
 | --- | --- |
-| `verifyProofEnvelope(envelope, options)` | Supports `proofVerifiers`, `requireAllProofs`, `verifierManifest`, `ledgerHeadSignatures`, `bundle`, and `bundleResolver`. |
-| `verifyProofBundle(bundle, options)` | Verifies the indexed bundle format and required proof/extension blocks. |
+| `verifyProofEnvelope(envelope, options)` | Supports `proofVerifiers`, `requireAllProofs`, `trustedManifest`, `trustPolicy`, `ledgerHeadSignatures`, `bundle`, and `bundleResolver`. |
+| `verifyProofBundle(bundle, options)` | Verifies the indexed bundle format, required proof/extension blocks, and embedded envelope under the selected trust policy. |
 | `exportProofBundle(envelopeOrId, options)` | Emits the indexed bundle format. |
 | `createLicoLiteAspect` | Accepts local HMAC or Ed25519 signer material; core ledger-head verification uses verifier manifests. |
 
@@ -158,8 +168,8 @@ If full CAR interoperability becomes a goal, the next step is to emit actual CAR
 | Embedded proof tamper | Corrupt workspace/state/checkpoint proof and assert envelope verification fails. |
 | Missing verifier | Unknown critical proof type fails with structured failure. |
 | Bundle random access | Verify a bundle by loading only required indexed blocks. |
-| Bundle limits | Reject oversized header, oversized block, duplicate cid mismatch, and bad offset. |
-| Signed head | Verify valid manifest/signature; reject wrong signer, wrong quorum, wrong root, wrong size. |
+| Bundle limits | Reject oversized header, oversized block, duplicate cid mismatch, bad offset, malformed layout, trailing bytes, and corrupted required payloads. |
+| Signed head | Verify valid manifest/signature; reject wrong signer, wrong quorum, wrong root, wrong size, expired signer, future signer, and revoked signer. |
 | LicoLite codec | Signature extension decoding works through canonical codec and rejects corrupted payload. |
 
 ## Maintained Boundary

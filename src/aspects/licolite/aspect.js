@@ -1,4 +1,4 @@
-import { PACTIUM_PROTOCOL } from "../../protocol/constants.js";
+import { PACTIUM_PROTOCOL, PACTIUM_TRUST_POLICIES } from "../../protocol/constants.js";
 import { canonicalDecode } from "../../canonical/value.js";
 import { envelopeSigningHash, verifyProofEnvelope } from "../../proof/envelope.js";
 import { verifyProofBundle } from "../../proof/bundle.js";
@@ -115,10 +115,13 @@ export function createLicoLiteAspect({
 
   async function verifyLicoLiteEnvelope(envelope, options = {}) {
     const bundleMap = bundleBlockMap(options.bundle || null);
-    // In production evidence policy without a trustedManifest, default to
-    // structural-only trust policy and surface the gap explicitly.
+    // Production verification is fail-closed unless the caller supplies a
+    // trusted manifest. Development evidence policy may opt into TOFU-style
+    // self-carried manifest validation explicitly.
     const effectiveTrustPolicy = options.trustPolicy ||
-      (evidencePolicy === "production" && !options.trustedManifest ? "structural" : "self-carried-manifest");
+      (evidencePolicy === "production"
+        ? PACTIUM_TRUST_POLICIES.trustedManifestRequired
+        : PACTIUM_TRUST_POLICIES.selfCarriedManifest);
     const coreResult = await verifyProofEnvelope(envelope, {
       // Use resolver-based storage wrapper instead of core.advanced.storage
       // to reduce dependency on unstable internals.
@@ -253,8 +256,8 @@ export function createLicoLiteAspect({
         }));
       }
     }
-    // In production mode without a trusted manifest, the result is not trusted
-    // even if all structural checks pass.
+    // In production mode without a trusted manifest, keep an explicit LicoLite
+    // finding alongside the core trust-policy failure.
     if (evidencePolicy === "production" && !options.trustedManifest) {
       failures.push(createVerificationFailure({
         layer: "licolite.trust",

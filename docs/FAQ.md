@@ -44,7 +44,7 @@ Pactium declares zero runtime dependencies. Core proof functionality uses Node.j
 
 ### Where does Pactium store data?
 
-By default, Pactium stores data in the directory you specify via `dataDir` option (e.g., `./.pactium`) using the local JSON backend. You can also use `inMemory: true` for testing or `storageBackend: "auto"` to detect local SQLite capabilities and choose SQLite for new data directories when a Pactium-supported provider is available (`node:sqlite` or optional npm `better-sqlite3`). Storage is managed through the Storage Port abstraction.
+By default, Pactium stores data in the directory you specify via `dataDir` option (e.g., `./.pactium`) with `storageBackend: "auto"`. Auto mode chooses SQLite for new data directories when a supported provider is available (`node:sqlite` or optional npm `better-sqlite3`), otherwise JSON. Use `inMemory: true` for tests and `storageBackend: "json"` for local/debug profiles that explicitly want file-per-object storage. Storage is managed through the Storage Port abstraction.
 
 ---
 
@@ -185,7 +185,7 @@ This means the ledger history diverged -- a later ledger state is not a valid co
 The Prolly Tree engine uses structural sharing and Content-Defined Chunking for efficient updates. For large state sets, consider:
 
 - Using the `scan()` and `prefix()` methods for range queries instead of full snapshots
-- Using `diff()` to compute changes between state roots (canonical shared-node diff API; full cursor/chunker path-copying remains P3 deferred)
+- Using `diff()` to compute changes between state roots with the shared-node diff API
 - Checking memory usage with the pressure profile: `PACTIUM_FULL_PRESSURE=1 npm run verify:protocol:gates`
 
 ### What trust policies does Pactium support?
@@ -195,10 +195,12 @@ Pactium supports three trust policies via the `trustPolicy` option on `verifyEnv
 | Mode | Behavior |
 | --- | --- |
 | `structural` (least trust) | Verifies proof structure only. Skips all signature verification. |
-| `self-carried-manifest` (default) | Verifies proof structure + validates signatures against the manifest embedded in the proof material. Does **not** require a caller-supplied trusted manifest. `ledgerHeadTrusted` is always `false`. |
+| `self-carried-manifest` | Verifies proof structure + validates signatures against the manifest embedded in the proof material. Does **not** require a caller-supplied trusted manifest. `ledgerHeadTrusted` is always `false`. This is the default only for in-memory/development verification. |
 | `trusted-manifest-required` (most trust) | Requires a caller-supplied `trustedManifest`. Verifies proof structure + validates signatures against the trusted manifest. `ledgerHeadTrusted` can be `true`. |
 
 A **self-carried manifest** (embedded in the proof) is NOT a trusted manifest. It provides format-level signature validation but not trust. Only a caller-supplied `trustedManifest` establishes trust.
+
+Persistent storage and Proof Bundle verification default to `trusted-manifest-required`. Production callers should pass a trusted manifest, rotate or revoke signers in the manifest, and use quorum/witness policies appropriate for their deployment.
 
 ### What is the difference between full and sampled state mutation proofs?
 
@@ -213,17 +215,14 @@ No. The local JSON backend uses **write-ahead commit markers** (pending/complete
 - Materialization/cache operations (`exportProofBundle`, `storeEnvelope`, `createExtension`) may write storage or runtime-state but are not covered by lifecycle commit markers.
 - The local JSON backend remains a WAL-marker + diagnostic pattern, not ACID.
 
-For production deployments requiring full crash recovery guarantees, consider a storage backend with transactional semantics.
+For production deployments requiring local durable transactions, use the SQLite backend. The JSON backend is appropriate for local development, low-concurrency use, and debugging. Distributed multi-node production still requires an external consistency layer.
 
 ### Are proofs constant-size (bounded)?
 
-No. The `maxProofLeafEntries` and `maxProofBytes` options are **size guards**, not a bounded proof format. They produce `proofSizeWarning` when limits are exceeded. By default this is a non-fatal warning. Set `failOnProofSizeWarning: true` for hard failures. Bounded (constant-size) proofs are a future protocol goal.
+No. The `maxProofLeafEntries` and `maxProofBytes` options are **size guards**, not a bounded proof format. They produce `proofSizeWarning` when limits are exceeded. By default this is a non-fatal warning. Set `failOnProofSizeWarning: true` for hard failures. Use membership multiproofs and range proofs when many related keys need smaller aggregate proof material.
 
 ### Is the index engine a fully optimized Prolly Tree?
 
-The index engine is **correct and canonical** but not yet fully optimized for large-scale workloads. Key limitations:
-- Single-key mutations use local-window rechunking (not full path-copying).
-- `diff()` skips equal subtree roots and handles non-aligned child ranges, but it is not a full cursor-based Dolt implementation.
-- Full cursor/chunker path-copying and maximal large-index tuning are planned (P3 deferred).
+The index engine uses content-addressed Prolly nodes with full path-copying mutations. `put`, `delete`, and `mutate` rewrite only the affected leaf path and necessary ancestors, while `diff()` skips equal subtree roots and handles non-aligned child ranges. The engine intentionally keeps Pactium's protocol-defined splitter and proof format rather than adopting Dolt's storage engine.
 
 For current throughput characteristics, run the pressure profile: `PACTIUM_FULL_PRESSURE=1 npm run verify:protocol:gates`.

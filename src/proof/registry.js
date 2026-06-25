@@ -12,6 +12,8 @@ export function createDefaultProofVerifierRegistry(extraVerifiers = {}) {
       proof
     })],
     [PACTIUM_PROOF_TYPES.indexMembership, verifyIndexProof],
+    [PACTIUM_PROOF_TYPES.indexMembershipMultiproof, verifyIndexProof],
+    [PACTIUM_PROOF_TYPES.indexRange, verifyIndexProof],
     [PACTIUM_PROOF_TYPES.indexNonMembership, verifyIndexProof],
     ...Object.entries(asRecord(extraVerifiers))
   ]);

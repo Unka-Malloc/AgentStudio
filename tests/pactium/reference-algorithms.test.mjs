@@ -16,9 +16,10 @@ import {
   advanceTo,
   canonicalDecode,
 	  canonicalEncode,
-	  canonicalString,
-	  createLedgerConsistencyProof,
-	  createLedgerTransparencyLog,
+  canonicalString,
+  createLedgerConsistencyProof,
+  createLedgerTransparencyLog,
+  createJsonStoragePort,
   createPactium,
   createStoragePort,
   createTrackingCursor,
@@ -49,6 +50,7 @@ import { decodeVarint, indexedBlocksFromBundle } from "../../src/proof/bundle-fo
 const tempDirs = [];
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const fixturesDir = path.join(repoRoot, "tests", "fixtures");
 const pactiumIndexUrl = pathToFileURL(path.join(repoRoot, "src/index.js")).href;
 
 async function tempDataDir(prefix = "pactium-reference-test-") {
@@ -219,6 +221,71 @@ function sortedEntries(entries) {
   return [...entries].sort((left, right) => String(left.key) < String(right.key) ? -1 : String(left.key) > String(right.key) ? 1 : 0);
 }
 
+function rfc9162Hash(...parts) {
+  const hash = crypto.createHash("sha256");
+  for (const part of parts) hash.update(part);
+  return hash.digest("hex");
+}
+
+function rfc9162LeafHashBytes(bytes) {
+  return rfc9162Hash(Buffer.from([0x00]), Buffer.from(bytes));
+}
+
+function rfc9162NodeHash(leftHash, rightHash) {
+  return rfc9162Hash(Buffer.from([0x01]), Buffer.from(leftHash, "hex"), Buffer.from(rightHash, "hex"));
+}
+
+function rfc9162LargestPowerOfTwoLessThan(value) {
+  let power = 1;
+  while (power * 2 < value) power *= 2;
+  return power;
+}
+
+function rfc9162TreeHash(leafHashes) {
+  const hashes = [...leafHashes];
+  if (hashes.length === 0) return rfc9162Hash(Buffer.alloc(0));
+  if (hashes.length === 1) return hashes[0];
+  const split = rfc9162LargestPowerOfTwoLessThan(hashes.length);
+  return rfc9162NodeHash(
+    rfc9162TreeHash(hashes.slice(0, split)),
+    rfc9162TreeHash(hashes.slice(split))
+  );
+}
+
+function rfc9162InclusionPath(index, leafHashes) {
+  const hashes = [...leafHashes];
+  if (hashes.length <= 1) return [];
+  const split = rfc9162LargestPowerOfTwoLessThan(hashes.length);
+  if (index < split) {
+    return [
+      ...rfc9162InclusionPath(index, hashes.slice(0, split)),
+      rfc9162TreeHash(hashes.slice(split))
+    ];
+  }
+  return [
+    rfc9162TreeHash(hashes.slice(0, split)),
+    ...rfc9162InclusionPath(index - split, hashes.slice(split))
+  ];
+}
+
+function rfc9162ConsistencyPath(oldSize, leafHashes, trusted = true) {
+  const hashes = [...leafHashes];
+  const newSize = hashes.length;
+  if (oldSize === 0) return [];
+  if (oldSize === newSize) return trusted ? [] : [rfc9162TreeHash(hashes)];
+  const split = rfc9162LargestPowerOfTwoLessThan(newSize);
+  if (oldSize <= split) {
+    return [
+      ...rfc9162ConsistencyPath(oldSize, hashes.slice(0, split), trusted),
+      rfc9162TreeHash(hashes.slice(split))
+    ];
+  }
+  return [
+    ...rfc9162ConsistencyPath(oldSize - split, hashes.slice(split), false),
+    rfc9162TreeHash(hashes.slice(0, split))
+  ];
+}
+
 describe("Pactium reference-project algorithm coverage", () => {
   it("verifies RFC6962-style inclusion and consistency proofs across tree shapes and rejects forks", async () => {
     const ledger = createLedgerTransparencyLog({
@@ -326,6 +393,50 @@ describe("Pactium reference-project algorithm coverage", () => {
       newHead: rightBranch.head,
       proof: falseProof
     }), "bad_trusted_head_consistency", "forked trusted head");
+  });
+
+  it("matches RFC 9162 Merkle tree vectors and cross-checks ledger proofs with an independent verifier", async () => {
+    const vector = JSON.parse(await fs.readFile(path.join(fixturesDir, "rfc9162-merkle-vectors.json"), "utf8"));
+    const rawLeafHashes = vector.leaves.map((leaf) => rfc9162LeafHashBytes(Buffer.from(leaf, "utf8")));
+    assert.equal(rfc9162TreeHash([]), vector.emptyTreeHash);
+    assert.deepEqual(rawLeafHashes, vector.leafHashes);
+    assert.deepEqual(
+      Object.fromEntries(rawLeafHashes.map((_, index) => [String(index + 1), rfc9162TreeHash(rawLeafHashes.slice(0, index + 1))])),
+      vector.treeHashes
+    );
+    assert.deepEqual(rfc9162InclusionPath(vector.inclusion.index, rawLeafHashes.slice(0, vector.inclusion.treeSize)), vector.inclusion.auditPath);
+    assert.deepEqual(
+      rfc9162ConsistencyPath(vector.consistency.oldSize, rawLeafHashes.slice(0, vector.consistency.newSize)),
+      vector.consistency.auditPath
+    );
+
+    const ledger = createLedgerTransparencyLog({
+      storage: createStoragePort({ inMemory: true }),
+      signer: false
+    });
+    await ledger.appendBatch(vector.leaves.map((leaf) => ({
+      factType: "reference.rfc9162",
+      value: leaf
+    })), {
+      timestamps: vector.leaves.map((_, index) => `2026-02-01T00:00:0${index}.000Z`)
+    });
+    const entries = await ledger.entries();
+    const pactiumLeafHashes = entries.map((entry) => rfc9162LeafHashBytes(canonicalEncode(entry.leaf)));
+    assert.deepEqual(pactiumLeafHashes, entries.map((entry) => entry.leafHash));
+    assert.equal((await ledger.head()).rootHash, rfc9162TreeHash(pactiumLeafHashes));
+
+    const inclusion = await ledger.createInclusionProof(vector.inclusion.index, await ledger.head());
+    assert.deepEqual(inclusion.auditPath.map((item) => item.hash), rfc9162InclusionPath(vector.inclusion.index, pactiumLeafHashes));
+    assert.equal(verifyLedgerInclusionProof({ head: await ledger.head(), proof: inclusion }), true);
+
+    const oldHead = {
+      protocol: PACTIUM_PROTOCOL,
+      size: vector.consistency.oldSize,
+      rootHash: rfc9162TreeHash(pactiumLeafHashes.slice(0, vector.consistency.oldSize))
+    };
+    const consistency = await ledger.createConsistencyProof(oldHead, await ledger.head());
+    assert.deepEqual(consistency.auditPath, rfc9162ConsistencyPath(vector.consistency.oldSize, pactiumLeafHashes));
+    assert.equal(verifyLedgerConsistencyProof({ oldHead, newHead: await ledger.head(), proof: consistency }), true);
   });
 
   it("enforces signed ledger-head quorum and signer roles", async () => {
@@ -472,6 +583,67 @@ describe("Pactium reference-project algorithm coverage", () => {
     );
   });
 
+  it("rejects revoked ledger-head signers from signer records and manifest revocation lists", async () => {
+    const ledger = createLedgerTransparencyLog({
+      storage: createStoragePort({ inMemory: true }),
+      signer: false
+    });
+    const { head } = await ledger.append({ factType: "reference.signed-head", value: "revoked" });
+    const signerKey = crypto.generateKeyPairSync("ed25519");
+    const signer = {
+      signerId: "signer-revoked",
+      algorithm: "ed25519",
+      publicKey: signerKey.publicKey.export({ type: "spki", format: "pem" }),
+      roles: ["ledger-head"]
+    };
+    const revokedSignerManifest = createVerifierManifest({
+      signers: [{ ...signer, revokedAt: "2000-01-01T00:00:00.000Z" }],
+      quorum: 1
+    });
+    const revokedSignerSignature = signLedgerHead(head, {
+      signerId: signer.signerId,
+      privateKey: signerKey.privateKey.export({ type: "pkcs8", format: "pem" }),
+      manifest: revokedSignerManifest
+    });
+    expectFailureCode(
+      verifyLedgerHeadSignature(head, revokedSignerManifest, { signatures: [revokedSignerSignature] }),
+      "signer_revoked",
+      "signer revoked in signer record"
+    );
+
+    const revocationListManifest = createVerifierManifest({
+      signers: [signer],
+      revokedSigners: [{
+        signerId: signer.signerId,
+        revokedAt: "2000-01-01T00:00:00.000Z",
+        reason: "rotation"
+      }],
+      quorum: 1
+    });
+    const revocationListSignature = signLedgerHead(head, {
+      signerId: signer.signerId,
+      privateKey: signerKey.privateKey.export({ type: "pkcs8", format: "pem" }),
+      manifest: revocationListManifest
+    });
+    expectFailureCode(
+      verifyLedgerHeadSignature(head, revocationListManifest, { signatures: [revocationListSignature] }),
+      "signer_revoked",
+      "signer revoked in manifest list"
+    );
+    const futureRevocationManifest = createVerifierManifest({
+      signers: [{ ...signer, revokedAt: "2999-01-01T00:00:00.000Z" }],
+      quorum: 1
+    });
+    const futureRevocationSignature = signLedgerHead(head, {
+      signerId: signer.signerId,
+      privateKey: signerKey.privateKey.export({ type: "pkcs8", format: "pem" }),
+      manifest: futureRevocationManifest
+    });
+    assert.equal(verifyLedgerHeadSignature(head, futureRevocationManifest, {
+      signatures: [futureRevocationSignature]
+    }).ok, true);
+  });
+
   it("keeps verifiable index roots insertion-order independent and makes diffs applicable", async () => {
     const engine = createVerifiableIndexEngine({
       storage: createStoragePort({ inMemory: true }),
@@ -507,7 +679,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 	  it("keeps Prolly key ordering canonical across reloads and boundary-local mutations", async () => {
 	    const dataDir = await tempDataDir("pactium-key-order-");
 	    const engine = createVerifiableIndexEngine({
-	      storage: createStoragePort({ dataDir }),
+	      storage: createJsonStoragePort({ dataDir }),
 	      domain: "reference-key-order"
 	    });
 	    const mixedCaseRoot = await engine.createIndex([
@@ -520,7 +692,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 	      assert.equal(engine.verifyProof(await engine.prove(mixedCaseRoot.root, key)), true);
 	    }
 	    const reloaded = createVerifiableIndexEngine({
-	      storage: createStoragePort({ dataDir }),
+	      storage: createJsonStoragePort({ dataDir }),
 	      domain: "reference-key-order"
 	    });
 	    assert.deepEqual((await reloaded.scan(mixedCaseRoot.root)).map((entry) => entry.key), ["A", "a", "b"]);
@@ -532,19 +704,22 @@ describe("Pactium reference-project algorithm coverage", () => {
 	      keyEntry(`m:${String(index).padStart(4, "0")}`, `base:${index}`)
 	    );
 	    const base = await engine.createIndex(baseEntries);
-	    const updatedEntry = keyEntry("m:0064", "updated:0064");
-	    const updatedEntries = sortedEntries(baseEntries.map((entry) => entry.key === updatedEntry.key ? updatedEntry : entry));
-	    const updated = await engine.put(base.root, updatedEntry.key, updatedEntry);
-	    assert.equal(updated.root, (await engine.createIndex(updatedEntries)).root);
+    const updatedEntry = keyEntry("m:0064", "updated:0064");
+    const updatedEntries = sortedEntries(baseEntries.map((entry) => entry.key === updatedEntry.key ? updatedEntry : entry));
+    const updated = await engine.put(base.root, updatedEntry.key, updatedEntry);
+    assert.deepEqual(await engine.scan(updated.root, { limit: 600 }), updatedEntries);
+    assert.deepEqual((await engine.diff(base.root, updated.root)).map((change) => change.action), ["update"]);
 
-	    const insertedEntry = keyEntry("m:0064:inserted", "inserted:0064");
-	    const insertedEntries = sortedEntries([...updatedEntries, insertedEntry]);
-	    const inserted = await engine.put(updated.root, insertedEntry.key, insertedEntry);
-	    assert.equal(inserted.root, (await engine.createIndex(insertedEntries)).root);
+    const insertedEntry = keyEntry("m:0064:inserted", "inserted:0064");
+    const insertedEntries = sortedEntries([...updatedEntries, insertedEntry]);
+    const inserted = await engine.put(updated.root, insertedEntry.key, insertedEntry);
+    assert.deepEqual(await engine.scan(inserted.root, { limit: 600 }), insertedEntries);
+    assert.equal(engine.verifyProof(await engine.prove(inserted.root, insertedEntry.key)), true);
 
-	    const deletedEntries = sortedEntries(insertedEntries.filter((entry) => entry.key !== "m:0065"));
-	    const deleted = await engine.delete(inserted.root, "m:0065");
-	    assert.equal(deleted.root, (await engine.createIndex(deletedEntries)).root);
+    const deletedEntries = sortedEntries(insertedEntries.filter((entry) => entry.key !== "m:0065"));
+    const deleted = await engine.delete(inserted.root, "m:0065");
+    assert.deepEqual(await engine.scan(deleted.root, { limit: 600 }), deletedEntries);
+    assert.equal((await engine.prove(deleted.root, "m:0065")).proofType, PACTIUM_PROOF_TYPES.indexNonMembership);
 	  });
 
   it("keeps incremental Prolly mutations canonical across long boundary-shifting sequences", async () => {
@@ -569,8 +744,12 @@ describe("Pactium reference-project algorithm coverage", () => {
           nextEntry
         ]);
       }
-      const rebuilt = await engine.createIndex(entries, { domain: "reference-canonical-mutation" });
-      assert.equal(root.root, rebuilt.root, `incremental root diverged from canonical rebuild at operation ${index}`);
+      assert.deepEqual(
+        await engine.scan(root.root, { limit: entries.length + 10 }),
+        entries,
+        `path-copied entries diverged at operation ${index}`
+      );
+      assert.equal(engine.verifyProof(await engine.prove(root.root, key)), true);
     }
   });
 
@@ -714,7 +893,7 @@ describe("Pactium reference-project algorithm coverage", () => {
     });
     const bundle = await pactium.exportProofBundle(envelope);
     assert.equal(bundle.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
-    assert.equal((await verifyProofBundle(bundle)).ok, true);
+    assert.equal((await verifyProofBundle(bundle, { trustPolicy: "self-carried-manifest" })).ok, true);
 
     const missingRequiredBlock = structuredClone(bundle);
     const missingCid = missingRequiredBlock.manifest.requiredBlocks[0];
@@ -749,11 +928,11 @@ describe("Pactium reference-project algorithm coverage", () => {
       payload: "extra block that should be skipped by default"
     }, { kind: "proof-material:unused-extra" });
     const withExtra = appendIndexedBundleBlock(bundle, extraBlock);
-    assert.equal((await verifyProofBundle(withExtra)).ok, true);
+    assert.equal((await verifyProofBundle(withExtra, { trustPolicy: "self-carried-manifest" })).ok, true);
 
     const corruptedExtra = corruptIndexedBundlePayload(withExtra, extraBlock.cid);
     assert.equal(
-      (await verifyProofBundle(corruptedExtra)).ok,
+      (await verifyProofBundle(corruptedExtra, { trustPolicy: "self-carried-manifest" })).ok,
       true,
       "default verification should not read a non-required extra block payload"
     );
@@ -791,7 +970,7 @@ describe("Pactium reference-project algorithm coverage", () => {
       outcomeIdempotencyKey: "recover-outcome",
       result: { ok: true }
     });
-    assert.equal((await second.verifyEnvelope(outcome)).ok, true);
+    assert.equal((await second.verifyEnvelope(outcome, { trustedManifest: outcome.ledgerHead.verifierManifest })).ok, true);
 
     const third = createPactium({ dataDir });
     assert.equal((await third.lookupOpenIntent(intent.factId)).exists, false);
@@ -859,7 +1038,7 @@ describe("Pactium reference-project algorithm coverage", () => {
         stateMutations: [{ key: \`workers/\${workerId}\`, value: { workerId, durable: true } }]
       });
       const projection = await pactium.getWorkspaceProjection(${JSON.stringify(workspaceId)});
-      const verification = await pactium.verifyEnvelope(envelope);
+        const verification = await pactium.verifyEnvelope(envelope, { trustedManifest: envelope.ledgerHead.verifierManifest });
       console.log(JSON.stringify({
         workerId,
         envelopeId: envelope.envelopeId,
@@ -900,7 +1079,9 @@ describe("Pactium reference-project algorithm coverage", () => {
       result: { parent: true },
       stateMutations: [{ key: "workers/parent", value: { parent: true } }]
     });
-    assert.equal((await staleReader.verifyEnvelope(parentEnvelope)).ok, true);
+    assert.equal((await staleReader.verifyEnvelope(parentEnvelope, {
+      trustedManifest: parentEnvelope.ledgerHead.verifierManifest
+    })).ok, true);
 
     const fresh = createPactium({ dataDir });
     assert.equal((await fresh.advanced.ledger.head()).size, workerCount * 2 + 2);
@@ -922,7 +1103,7 @@ describe("Pactium reference-project algorithm coverage", () => {
         result: { stable: true },
         stateMutations: [{ key: "shared/value", value: { stable: true } }]
       });
-      const verification = await pactium.verifyEnvelope(envelope);
+        const verification = await pactium.verifyEnvelope(envelope, { trustedManifest: envelope.ledgerHead.verifierManifest });
       console.log(JSON.stringify({
         workerId,
         envelopeId: envelope.envelopeId,
@@ -1042,7 +1223,7 @@ describe("Pactium reference-project algorithm coverage", () => {
       workspaceEffectEvidence: { durableRef: "host:effect:1" },
       stateMutations: [{ key: "licolite/state", value: { ok: true } }]
     });
-    assert.equal((await online.verifyEnvelope(envelope)).ok, true);
+    assert.equal((await online.verifyEnvelope(envelope, { trustedManifest: envelope.ledgerHead.verifierManifest })).ok, true);
 	    const bundle = await online.exportProofBundle(envelope);
 	    assert.equal(bundle.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
 	    const evidenceRefs = [];
@@ -1057,7 +1238,8 @@ describe("Pactium reference-project algorithm coverage", () => {
 	    assert.equal(evidenceRefs.every((cid) => bundle.index.some((item) => item.cid === cid)), true);
 	    assert.equal(evidenceRefs.every((cid) => bundle.manifest.requiredBlocks.includes(cid)), true);
 	    assert.equal((await verifyProofBundle(bundle, {
-	      supportedCriticalExtensions: online.supportedCriticalExtensions
+	      supportedCriticalExtensions: online.supportedCriticalExtensions,
+	      trustedManifest: envelope.ledgerHead.verifierManifest
 	    })).ok, true);
 
     const offline = createLicoLiteAspect({
@@ -1069,12 +1251,16 @@ describe("Pactium reference-project algorithm coverage", () => {
         publicKey: keys.publicKey.export({ type: "spki", format: "pem" })
       })
     });
-	    const offlineResult = await offline.verifyBundle(bundle);
+	    const offlineResult = await offline.verifyBundle(bundle, {
+	      trustedManifest: envelope.ledgerHead.verifierManifest
+	    });
 	    assert.equal(offlineResult.ok, true, JSON.stringify(offlineResult.failures, null, 2));
 	    const missingEvidenceBundle = structuredClone(bundle);
 	    missingEvidenceBundle.index = missingEvidenceBundle.index.filter((item) => !evidenceRefs.includes(item.cid));
 	    missingEvidenceBundle.bundleHash = indexedBundleHash(missingEvidenceBundle);
-	    expectFailureCode(await offline.verifyBundle(missingEvidenceBundle), "missing_bundle_block", "missing evidence block");
+		    expectFailureCode(await offline.verifyBundle(missingEvidenceBundle, {
+		      trustedManifest: envelope.ledgerHead.verifierManifest
+		    }), "missing_bundle_block", "missing evidence block");
 
 	    const wrongKeys = crypto.generateKeyPairSync("ed25519");
 	    const wrongOffline = createLicoLiteAspect({
@@ -1086,7 +1272,9 @@ describe("Pactium reference-project algorithm coverage", () => {
         publicKey: wrongKeys.publicKey.export({ type: "spki", format: "pem" })
       })
 	    });
-	    expectFailureCode(await wrongOffline.verifyBundle(bundle), "bad_signature", "wrong offline public key");
+		    expectFailureCode(await wrongOffline.verifyBundle(bundle, {
+		      trustedManifest: envelope.ledgerHead.verifierManifest
+		    }), "bad_signature", "wrong offline public key");
 	    const wrongSignerId = createLicoLiteAspect({
 	      inMemory: true,
 	      evidencePolicy: "production",
@@ -1096,7 +1284,9 @@ describe("Pactium reference-project algorithm coverage", () => {
 	        publicKey: keys.publicKey.export({ type: "spki", format: "pem" })
 	      })
 	    });
-	    expectFailureCode(await wrongSignerId.verifyBundle(bundle), "bad_signature_signer", "rewritten signature signer");
+	    expectFailureCode(await wrongSignerId.verifyBundle(bundle, {
+	      trustedManifest: envelope.ledgerHead.verifierManifest
+	    }), "bad_signature_signer", "rewritten signature signer");
 	  });
 
   it("derives an Ed25519 LicoLite verifier from a private key and rejects public-key-only signing", async () => {
@@ -1506,7 +1696,7 @@ describe("Pactium reference-project algorithm coverage", () => {
     const dataDir = path.join(parent, "data");
     assert.throws(() => resolveWithin(dataDir, "..", "escape.json"), /escapes Pactium data directory/);
 
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.putProtocolObject("../scope", "../../key", { ok: true });
     assert.deepEqual(await storage.getProtocolObject("../scope", "../../key"), { ok: true });
     assert.deepEqual((await fs.readdir(parent)).sort(), ["data"]);
@@ -1514,7 +1704,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("enforces filesystem write-lock timeout, stale cleanup, and protocol-object cache refresh", async () => {
     const dataDir = await tempDataDir("pactium-storage-lock-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1546,7 +1736,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
     await storage.putProtocolObject("cache", "value", { version: 1 });
     assert.deepEqual(await storage.getProtocolObject("cache", "value"), { version: 1 });
-    const second = createStoragePort({ dataDir });
+    const second = createJsonStoragePort({ dataDir });
     await second.putProtocolObject("cache", "value", { version: 2 });
     assert.deepEqual(await storage.getProtocolObject("cache", "value"), { version: 1 });
     storage.clearCache();
@@ -1555,7 +1745,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("cleans up stale lock with fencingToken (UUID string comparison)", async () => {
     const dataDir = await tempDataDir("pactium-fencing-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1588,9 +1778,9 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("does not delete non-stale lock owned by another writer", async () => {
     const dataDir = await tempDataDir("pactium-nonstale-");
-    const storageA = createStoragePort({ dataDir });
+    const storageA = createJsonStoragePort({ dataDir });
     await storageA.initialize();
-    const storageB = createStoragePort({ dataDir });
+    const storageB = createJsonStoragePort({ dataDir });
     await storageB.initialize();
 
     let resolved = false;
@@ -1614,7 +1804,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("does not delete lock when owner changes between stale reads", async () => {
     const dataDir = await tempDataDir("pactium-ownerchange-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1654,7 +1844,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("does not steal fresh (non-stale) lock from alive process", async () => {
     const dataDir = await tempDataDir("pactium-release-fencing-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1694,7 +1884,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("does not release lock when fencingToken mismatches on release", async () => {
     const dataDir = await tempDataDir("pactium-release-fencing-mismatch-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1724,7 +1914,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("does not release lock when processStartKey mismatches on release", async () => {
     const dataDir = await tempDataDir("pactium-release-startkey-mismatch-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1755,7 +1945,7 @@ describe("Pactium reference-project algorithm coverage", () => {
   
   it("does not release lock when processStartKey mismatches on release", async () => {
     const dataDir = await tempDataDir("pactium-release-startkey-mismatch-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1780,7 +1970,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("does not delete ownerless lock directory when fresh", async () => {
     const dataDir = await tempDataDir("pactium-ownerless-fresh-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1808,7 +1998,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("cleans up stale ownerless lock directory and acquires lock", async () => {
     const dataDir = await tempDataDir("pactium-ownerless-stale-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1828,7 +2018,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("cleans up stale lock with malformed owner.json", async () => {
     const dataDir = await tempDataDir("pactium-malformed-owner-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1852,7 +2042,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("does not clean fresh lock with malformed owner.json", async () => {
     const dataDir = await tempDataDir("pactium-malformed-fresh-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1881,7 +2071,7 @@ describe("Pactium reference-project algorithm coverage", () => {
   
   it("does not clean fresh lock with unreadable owner.json (parse error)", async () => {
     const dataDir = await tempDataDir("pactium-unreadable-fresh-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1902,7 +2092,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("cleans up stale lock with unreadable owner.json (parse error)", async () => {
     const dataDir = await tempDataDir("pactium-unreadable-stale-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");
@@ -1919,13 +2109,13 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("listProtocolObjectKeys reads from disk directory when cache is empty", async () => {
     const dataDir = await tempDataDir("pactium-listkeys-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
     // Write some protocol objects to disk
     await storage.putProtocolObject("test-scope", "key-a", { value: 1 });
     await storage.putProtocolObject("test-scope", "key-b", { value: 2 });
     // Clear memory cache and create a fresh storage port (disk-only)
-    const freshStorage = createStoragePort({ dataDir });
+    const freshStorage = createJsonStoragePort({ dataDir });
     await freshStorage.initialize();
     const keys = await freshStorage.listProtocolObjectKeys("test-scope");
     assert.ok(keys.includes("key-a"), "should list key-a from disk");
@@ -1934,7 +2124,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("CAS collision and integrity checks on storage blocks", async () => {
     const dataDir = await tempDataDir("pactium-cas-check-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     const block1 = await storage.putBlock({ value: "same-content" });
     // Same content should dedupe
     const block2 = await storage.putBlock({ value: "same-content" });
@@ -1947,7 +2137,7 @@ describe("Pactium reference-project algorithm coverage", () => {
 
   it("heartbeat refreshes heartbeatAtMs so lock is not considered stale", async () => {
     const dataDir = await tempDataDir("pactium-heartbeat-");
-    const storage = createStoragePort({ dataDir });
+    const storage = createJsonStoragePort({ dataDir });
     await storage.initialize();
 
     const lockDir = path.join(dataDir, "locks", "write.lock");

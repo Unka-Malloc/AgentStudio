@@ -18,6 +18,8 @@ Welcome to the Pactium documentation. This index covers all maintained documenta
 | [Architecture](./architecture/ARCHITECTURE.md) | System architecture, module structure, and data flow |
 | [Protocol Specification](./protocols/PROTOCOLS.md) | Protocol behavior, data structures, and verification rules |
 | [Protocol Profile](./protocols/PROFILE.md) | Versioned protocol parameter matrix (algorithms, constants, formats) |
+| [Canonical Encoding](./protocols/CANONICAL-ENCODING.md) | Formal Pactium Canonical Value encoding rules |
+| [Trust Anchors](./protocols/TRUST-ANCHORS.md) | Production trust policy, signer rotation/revocation, quorum, witness/checkpoint metadata |
 | [LicoLite Aspect](./LICOLITE-ASPECT.md) | First-class LicoLite integration surface and requirements |
 | [Terms](./TERM.md) | Protocol glossary with preferred and avoided vocabulary |
 
