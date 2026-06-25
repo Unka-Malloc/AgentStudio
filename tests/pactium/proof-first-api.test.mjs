@@ -1723,6 +1723,54 @@ console.log(JSON.stringify({
       }]
     };
     assert.ok((await pactium.verifyEnvelope(badConsistencyEnvelope)).failures.some((failure) => failure.code === "bad_ledger_consistency"));
+    const ledgerFactCid = validProofValue.ledger.inclusionProof.leaf.factCid;
+    const missingLedgerFact = await verifyProofEnvelope(outcome, {
+      storage: pactium.advanced.storage,
+      bundleResolver: {
+        has(cid) {
+          return cid === ledgerFactCid;
+        },
+        get() {
+          return null;
+        }
+      }
+    });
+    assert.ok(missingLedgerFact.failures.some((failure) => failure.code === "missing_ledger_fact_material"));
+    const replacedLedgerFact = await verifyProofEnvelope(outcome, {
+      storage: pactium.advanced.storage,
+      bundleResolver: {
+        has(cid) {
+          return cid === ledgerFactCid;
+        },
+        get() {
+          throw new Error("ledger fact resolver failed");
+        }
+      }
+    });
+    assert.ok(replacedLedgerFact.failures.some((failure) => failure.code === "replaced_ledger_fact"));
+    const badLedgerFactHashBlock = await pactium.advanced.storage.putBlock({
+      ...validProofValue,
+      ledger: {
+        ...validProofValue.ledger,
+        inclusionProof: {
+          ...validProofValue.ledger.inclusionProof,
+          leaf: {
+            ...validProofValue.ledger.inclusionProof.leaf,
+            factHash: `sha256:${"0".repeat(64)}`
+          }
+        }
+      }
+    }, { kind: "proof-material:ledger-and-index-proofs" });
+    const badLedgerFactHashEnvelope = {
+      ...outcome,
+      proofRefs: [{
+        name: "ledger-and-index-proofs",
+        cid: badLedgerFactHashBlock.cid,
+        payloadHash: badLedgerFactHashBlock.payloadHash,
+        byteLength: badLedgerFactHashBlock.byteLength
+      }]
+    };
+    assert.ok((await pactium.verifyEnvelope(badLedgerFactHashEnvelope)).failures.some((failure) => failure.code === "bad_ledger_fact_material"));
     const defaultBundleById = await pactium.exportProofBundle(outcome.envelopeId);
     assert.equal(defaultBundleById.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
     assert.equal(defaultBundleById.envelope.envelopeId, outcome.envelopeId);
@@ -1815,6 +1863,17 @@ console.log(JSON.stringify({
     });
     const reboundCondition = await pactium.verifyEnvelope(envelopeWithProofBlock(conditioned, reboundConditionBlock));
     assert.ok(reboundCondition.failures.some((failure) => failure.code === "bad_append_condition_binding"));
+    const reboundConditionWorkspaceMaterial = structuredClone(conditionedMaterial);
+    reboundConditionWorkspaceMaterial.appendCondition = createAppendCondition({
+      workspaceId: "semantic-append-attacker",
+      requiredLedgerHead: head.headId
+    });
+    const reboundConditionWorkspaceBlock = await pactium.advanced.storage.putBlock(reboundConditionWorkspaceMaterial, {
+      kind: "proof-material:ledger-and-index-proofs",
+      refs: [conditionedMaterial.ledger.inclusionProof.leaf.factCid]
+    });
+    const reboundConditionWorkspace = await pactium.verifyEnvelope(envelopeWithProofBlock(conditioned, reboundConditionWorkspaceBlock));
+    assert.ok(reboundConditionWorkspace.failures.some((failure) => failure.code === "bad_append_condition_binding"));
   });
 
   it("covers LicoLite verifier failure modes and convenience exports", async () => {
@@ -1882,6 +1941,12 @@ console.log(JSON.stringify({
       workspaceId: "lico-fail",
       policyEvidence: { allow: true }
     }), /workspace effect evidence/);
+    await assert.rejects(() => strict.recordWorkspaceOperation({
+      operationId: "missing.signer",
+      workspaceId: "lico-fail",
+      policyEvidence: { allow: true },
+      workspaceEffectEvidence: { ref: "effect" }
+    }), /explicit signer or signerSecret/);
     const envelope = await licolite.recordWorkspaceOperation({
       operationId: "licolite.failure.modes",
       workspaceId: "lico-fail",
@@ -2441,6 +2506,87 @@ console.log(JSON.stringify({
     });
     assert.equal(largeFull.ok, false);
     assert.equal(largeFull.failures.some((f) => f.code === "incomplete_state_mutation_proofs"), true);
+
+    const explicitFullEnvelope = await auditPactium.recordOperation({
+      operationId: "state.large.full",
+      workspaceId: "state-comp-ws",
+      idempotencyKey: "state-large-full",
+      outcomeIdempotencyKey: "state-large-full-out",
+      proofOptions: { stateMutationProofMode: "full" },
+      stateMutations: largeMutations
+    });
+    const explicitFullBlock = await auditPactium.advanced.storage.getBlock(explicitFullEnvelope.proofRefs[0].cid);
+    const explicitFullMaterial = canonicalDecode(explicitFullBlock.bytes);
+    const explicitFullCommit = explicitFullMaterial.proofs.stateCommit;
+    assert.equal(explicitFullCommit.mutationProofMode, "full");
+    assert.equal(explicitFullCommit.proofCompleteness, "full");
+    assert.equal(explicitFullCommit.provedKeyCount, 50);
+    assert.equal(explicitFullCommit.unprovedMutationCount, 0);
+    assert.equal(explicitFullMaterial.proofs.state.touchedKeyProofs.length, 50);
+    const explicitFullResult = await verifyProofEnvelope(explicitFullEnvelope, {
+      storage: auditPactium.advanced.storage,
+      requireFullStateMutationProofs: true
+    });
+    assert.equal(explicitFullResult.ok, true);
+
+	    const duplicateKeyEnvelope = await auditPactium.recordOperation({
+	      operationId: "state.large.full.duplicate-keys",
+	      workspaceId: "state-comp-ws",
+	      idempotencyKey: "state-large-full-duplicate-keys",
+	      outcomeIdempotencyKey: "state-large-full-duplicate-keys-out",
+	      proofOptions: { stateMutationProofMode: "full" },
+	      stateMutations: [
+	        { key: "z-out-of-order", value: { v: 9 } },
+	        { value: { ignored: true } },
+	        { key: "dup-a", value: { v: 1 } },
+	        { key: "dup-a", value: { v: 2 } },
+	        { key: "dup-delete", value: { transient: true } },
+	        { key: "dup-delete", action: "delete" },
+	        { key: "a-out-of-order", value: { v: 0 } },
+	        { key: "", value: { ignored: true } }
+	      ]
+	    });
+	    const duplicateKeyBlock = await auditPactium.advanced.storage.getBlock(duplicateKeyEnvelope.proofRefs[0].cid);
+	    const duplicateKeyMaterial = canonicalDecode(duplicateKeyBlock.bytes);
+	    const duplicateKeyCommit = duplicateKeyMaterial.proofs.stateCommit;
+	    assert.equal(duplicateKeyCommit.mutationCount, 4);
+	    assert.deepEqual(duplicateKeyCommit.mutationKeys, [
+	      "a-out-of-order",
+	      "dup-a",
+	      "dup-delete",
+	      "z-out-of-order"
+	    ]);
+	    assert.deepEqual(duplicateKeyCommit.mutationActions, ["put", "put", "delete", "put"]);
+	    assert.equal(duplicateKeyMaterial.proofs.state.touchedKeyProofs.length, 4);
+    const duplicateKeyResult = await verifyProofEnvelope(duplicateKeyEnvelope, {
+      storage: auditPactium.advanced.storage,
+      requireFullStateMutationProofs: true
+    });
+    assert.equal(duplicateKeyResult.ok, true);
+
+    const topLevelAliasEnvelope = await auditPactium.recordOperation({
+      operationId: "state.full.alias.top",
+      workspaceId: "state-comp-ws",
+      idempotencyKey: "state-full-alias-top",
+      outcomeIdempotencyKey: "state-full-alias-top-out",
+      fullStateMutationProofs: true,
+      stateMutations: [{ key: "alias-top", value: { v: 1 } }]
+    });
+    const topLevelAliasBlock = await auditPactium.advanced.storage.getBlock(topLevelAliasEnvelope.proofRefs[0].cid);
+    const topLevelAliasMaterial = canonicalDecode(topLevelAliasBlock.bytes);
+    assert.equal(topLevelAliasMaterial.proofs.stateCommit.mutationProofMode, "full");
+
+    const proofOptionsAliasEnvelope = await auditPactium.recordOperation({
+      operationId: "state.full.alias.options",
+      workspaceId: "state-comp-ws",
+      idempotencyKey: "state-full-alias-options",
+      outcomeIdempotencyKey: "state-full-alias-options-out",
+      proofOptions: { fullStateMutationProofs: true },
+      stateMutations: [{ key: "alias-options", value: { v: 2 } }]
+    });
+    const proofOptionsAliasBlock = await auditPactium.advanced.storage.getBlock(proofOptionsAliasEnvelope.proofRefs[0].cid);
+    const proofOptionsAliasMaterial = canonicalDecode(proofOptionsAliasBlock.bytes);
+    assert.equal(proofOptionsAliasMaterial.proofs.stateCommit.mutationProofMode, "full");
   });
 
   it("bundle verifier detects oversized bundle base64, bad byteLength, bad blockCount, and trailing bytes", async () => {
@@ -2502,6 +2648,17 @@ console.log(JSON.stringify({
     const fullProofResult = await verifyProofBundle(largeBundle, { requireFullStateMutationProofs: true });
     assert.equal(fullProofResult.ok, false);
     assert.equal(fullProofResult.failures.some((f) => f.code === "incomplete_state_mutation_proofs"), true);
+    const strictEnv = await auditPactium.recordOperation({
+      operationId: "bundle.require.full.strict",
+      workspaceId: "bundle-require-ws",
+      idempotencyKey: "bundle-req-full-key",
+      outcomeIdempotencyKey: "bundle-req-full-out",
+      proofOptions: { stateMutationProofMode: "full" },
+      stateMutations: largeMuts
+    });
+    const strictBundle = await auditPactium.exportProofBundle(strictEnv);
+    const strictFullProofResult = await verifyProofBundle(strictBundle, { requireFullStateMutationProofs: true });
+    assert.equal(strictFullProofResult.ok, true);
   });
 
   it("detects overlapping index ranges and gaps via strict varint-based layout validation", async () => {

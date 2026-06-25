@@ -94,8 +94,8 @@
   ],
   "declarations": {
     "src/index.d.ts": {
-      "sha256": "87cbadf206b743967a333eb475d3f9af9d701efe26330c801bc296c495685f9a",
-      "byteLength": 15929,
+      "sha256": "c9116270bd911a2d9f2ed82373d3c30db2910cbd3470e43b2a77c773d3a9c6b3",
+      "byteLength": 16221,
       "exportCount": 80
     },
     "src/http.d.ts": {

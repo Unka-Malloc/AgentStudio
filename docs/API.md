@@ -87,6 +87,26 @@ const envelope = await pactium.recordOperation({
 });
 ```
 
+For operations with many `stateMutations`, Pactium emits bounded state mutation proofs by default: the first 32 unique touched keys in canonical key order receive individual `touchedKeyProofs`. If the same key appears more than once in one state commit, the State Commit records the key's final net effect, using the last mutation for that key. Hosts that need strict per-key verification can request full proof generation at write time:
+
+```js
+const envelope = await pactium.recordOperation({
+  operationId: "workspace.batch.write",
+  workspaceId: "workspace-a",
+  idempotencyKey: "batch-intent",
+  outcomeIdempotencyKey: "batch-outcome",
+  proofOptions: { stateMutationProofMode: "full" },
+  stateMutations: manyMutations
+});
+```
+
+Relevant proof-generation options:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `proofOptions.stateMutationProofMode` | `"sampled" \| "full"?` | Choose bounded 32-key state mutation proofs or full per-key proofs over unique touched keys |
+| `proofOptions.fullStateMutationProofs` | `boolean?` | Alias for `stateMutationProofMode: "full"` |
+
 **Returns:** `PactiumProofEnvelope`
 
 #### `pactium.beginOperationIntent(input)`
@@ -208,7 +228,7 @@ const result = await pactium.verifyEnvelope(envelope, {
 | `trustedManifest` | `PactiumRecord?` | Caller-supplied trusted manifest |
 | `ledgerHeadSignatures` | `PactiumRecord[]?` | Ledger head signatures |
 | `trustPolicy` | `string?` | `"structural"`, `"self-carried-manifest"`, or `"trusted-manifest-required"` |
-| `requireFullStateMutationProofs` | `boolean?` | Require full (non-sampled) state mutation proofs |
+| `requireFullStateMutationProofs` | `boolean?` | Require full (non-sampled) state mutation proofs during verification; generate them at write time with `proofOptions.stateMutationProofMode: "full"` |
 
 **Returns:** `PactiumVerificationResult`
 

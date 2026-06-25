@@ -124,6 +124,10 @@ export interface PactiumProofOptions {
   maxProofBytes?: number;
   /** If true, proofSizeWarning becomes a hard failure. Default false. */
   failOnProofSizeWarning?: boolean;
+  /** For write APIs with stateMutations, emit per-key proofs for every mutation instead of the default bounded sample. */
+  stateMutationProofMode?: "sampled" | "full";
+  /** Alias for stateMutationProofMode: "full" on write APIs with stateMutations. */
+  fullStateMutationProofs?: boolean;
 }
 
 export interface PactiumProofVerificationOptions extends PactiumProofOptions {

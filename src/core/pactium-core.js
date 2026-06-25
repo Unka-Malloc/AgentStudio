@@ -142,6 +142,25 @@ function padOrdinal(value) {
   return String(value).padStart(16, "0");
 }
 
+function compareStateMutationKeys(left, right) {
+  const leftKey = String(left);
+  const rightKey = String(right);
+  if (leftKey < rightKey) return -1;
+  if (leftKey > rightKey) return 1;
+  /* node:coverage ignore next -- netStateMutationsByKey sorts unique Map keys. */
+  return 0;
+}
+
+function netStateMutationsByKey(mutations) {
+  const latestByKey = new Map();
+  for (const mutation of asArray(mutations)) {
+    const key = String(mutation?.key || "");
+    if (!key) continue;
+    latestByKey.set(key, { ...asRecord(mutation), key });
+  }
+  return [...latestByKey.values()].sort((left, right) => compareStateMutationKeys(left.key, right.key));
+}
+
 function isMembershipProof(proof) {
   return proof?.proofType === PACTIUM_PROOF_TYPES.indexMembership;
 }
@@ -663,6 +682,7 @@ export function createPactium({
     const workspaceStateEntries = stateEntriesFor(current, workspaceId);
     const mutations = asArray(input.stateMutations || input.state?.mutations);
     const keyedMutations = mutations.filter((mutation) => mutation?.key);
+    const netKeyedMutations = netStateMutationsByKey(keyedMutations);
     await ensureWorkspaceStateRoot({ indexEngine, workspace, workspaceStateEntries });
     for (const mutation of mutations) {
       const key = String(mutation.key || "");
@@ -685,7 +705,14 @@ export function createPactium({
       }
     }
     const stateRoot = workspace.stateRoot;
-    const mutationDescriptors = keyedMutations.map((mutation) => {
+    const fullStateMutationProofs =
+      input.fullStateMutationProofs === true ||
+      proofOptions.fullStateMutationProofs === true ||
+      proofOptions.stateMutationProofMode === "full";
+    const provedStateMutationCount = fullStateMutationProofs
+      ? netKeyedMutations.length
+      : Math.min(netKeyedMutations.length, 32);
+    const mutationDescriptors = netKeyedMutations.map((mutation) => {
       const key = String(mutation.key || "");
       const action = String(mutation.action || "put");
       const entry = workspaceStateEntries[key] || {};
@@ -710,22 +737,20 @@ export function createPactium({
       intentId,
       workspaceId,
       stateRoot,
-      mutationCount: keyedMutations.length,
+      mutationCount: netKeyedMutations.length,
       mutations: mutationDescriptors,
-      mutationKeys: keyedMutations.map((mutation) => String(mutation.key || "")),
-      mutationActions: keyedMutations.map((mutation) => String(mutation.action || "put")),
-      // touchedKeyProofs is a sample of the first 32 keys for tamper detection.
-      // Full state mutation proofs are not emitted by default. Bundles preserve
-      // the same proof coverage as the envelope unless a future full/batch proof
-      // mode is enabled.
-      sampledKeyCount: Math.min(keyedMutations.length, 32),
-      touchedKeyCount: Math.min(keyedMutations.length, 32), // kept for backward compat
-      // Proof completeness semantics: when mutationCount <= 32, all mutations
-      // have proofs (completeness is "full" in practice). When > 32, only the
-      // first 32 are proved (completeness is "sampled").
-      mutationProofMode: "sampled",
-      proofCompleteness: keyedMutations.length <= 32 ? "full" : "sampled",
-      unprovedMutationCount: Math.max(0, keyedMutations.length - 32),
+      mutationKeys: netKeyedMutations.map((mutation) => String(mutation.key || "")),
+      mutationActions: netKeyedMutations.map((mutation) => String(mutation.action || "put")),
+      // By default, touchedKeyProofs samples the first 32 unique touched keys to
+      // keep write receipts bounded. Repeated keys in one commit collapse to the
+      // last mutation's final effect because proofs bind to the final stateRoot.
+      // Hosts that need strict per-key verification can request full mode.
+      sampledKeyCount: provedStateMutationCount,
+      touchedKeyCount: provedStateMutationCount, // kept for backward compat
+      provedKeyCount: provedStateMutationCount,
+      mutationProofMode: fullStateMutationProofs ? "full" : "sampled",
+      proofCompleteness: provedStateMutationCount >= netKeyedMutations.length ? "full" : "sampled",
+      unprovedMutationCount: Math.max(0, netKeyedMutations.length - provedStateMutationCount),
       createdAt: nowIso()
     };
     const checkpointEntries = checkpointEntriesFor(current, workspaceId);
@@ -753,7 +778,7 @@ export function createPactium({
       "checkpoint"
     );
     const touchedKeyProofs = [];
-    for (const mutation of keyedMutations.slice(0, 32)) {
+    for (const mutation of netKeyedMutations.slice(0, provedStateMutationCount)) {
       touchedKeyProofs.push(await indexEngine.prove(stateRoot, String(mutation.key), proofOptions));
     }
     const envelope = await createEnvelope({

@@ -202,7 +202,7 @@ A **self-carried manifest** (embedded in the proof) is NOT a trusted manifest. I
 
 ### What is the difference between full and sampled state mutation proofs?
 
-State mutation proofs use **sampled mode** by default when there are more than 32 mutations. In sampled mode, the **first 32 touched keys in canonical mutation order** are proven. Set `requireFullStateMutationProofs: true` to require all mutation keys to be proven individually (proofCompleteness becomes `full`). When `requireFullStateMutationProofs` is true and the proof is sampled, verification fails.
+State mutation proofs use **sampled mode** by default when there are more than 32 unique touched keys. In sampled mode, the **first 32 unique touched keys in canonical key order** are proven. If the same key appears more than once in one state commit, Pactium records the final net effect for that key and uses the last mutation for that key. Set `proofOptions.stateMutationProofMode: "full"` or `fullStateMutationProofs: true` when recording the operation to emit an individual proof for every unique touched key. Set `requireFullStateMutationProofs: true` when verifying an envelope or Proof Bundle to reject sampled proof material.
 
 ### Does the local JSON backend provide ACID transactions?
 

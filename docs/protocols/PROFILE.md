@@ -84,11 +84,11 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | --- | --- |
 | State index | Shared Verifiable Index Engine |
 | Commit binding | Operation Outcome only |
-| Key proof | Membership and non-membership (sampled: first 32 keys with individual proofs) |
+| Key proof | Membership and non-membership (default sampled: first 32 unique touched keys with individual proofs; optional full mode proves every unique touched key) |
 | State root | Prolly root CID/hash |
 | Diff | Prolly shared-node diff |
 
-> **Note:** State mutation proofs (`touchedKeyProofs` / `sampledKeyCount`) provide individual membership/non-membership proofs for the first 32 mutated keys for tamper detection. Full state mutation verification across all keys is available through the Proof Bundle export.
+> **Note:** State mutation proofs (`touchedKeyProofs` / `sampledKeyCount`) provide individual membership/non-membership proofs for the first 32 unique touched keys by default. Repeated keys inside one State Commit collapse to the last mutation's final effect because proofs bind to the final state root. Set `proofOptions.stateMutationProofMode: "full"` or `fullStateMutationProofs: true` on write APIs to emit proofs for every unique touched key; `requireFullStateMutationProofs: true` then verifies that strict coverage in envelopes and Proof Bundles.
 
 ## Proofs
 
