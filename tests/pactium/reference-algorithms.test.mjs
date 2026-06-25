@@ -1210,8 +1210,8 @@ describe("Pactium reference-project algorithm coverage", () => {
     const right = await engine.createIndex(rightEntries);
     const changes = await engine.diff(left.root, right.root);
     assert.ok(changes.length > 0, "non-overlapping ranges should produce changes");
-    const types = new Set(changes.map(c => c.type));
-    assert.ok(types.has("create") || types.has("delete"), "should have create and/or delete actions");
+    const actions = new Set(changes.map(c => c.action));
+    assert.ok(actions.has("create") || actions.has("delete"), "should have create and/or delete actions");
   });
 
   it("diffs child range gaps and tail creates/deletes without snapshot fallback", async () => {
