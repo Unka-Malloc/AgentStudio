@@ -1194,6 +1194,26 @@ describe("Pactium reference-project algorithm coverage", () => {
     assert.equal((await engine.prove(right.root, rightEntries[0].key)).proofType, PACTIUM_PROOF_TYPES.indexMembership);
   });
 
+
+  it("diff handles descriptors with non-overlapping key ranges (max-before)", async () => {
+    const engine = createVerifiableIndexEngine({
+      storage: createStoragePort({ inMemory: true }),
+      domain: "reference-diff-nonoverlap"
+    });
+    const leftEntries = sortedEntries(Array.from({ length: 50 }, (_, i) =>
+      keyEntry(`aa:${String(i).padStart(4, "0")}`, `left:${i}`)
+    ));
+    const rightEntries = sortedEntries(Array.from({ length: 50 }, (_, i) =>
+      keyEntry(`zz:${String(i).padStart(4, "0")}`, `right:${i}`)
+    ));
+    const left = await engine.createIndex(leftEntries);
+    const right = await engine.createIndex(rightEntries);
+    const changes = await engine.diff(left.root, right.root);
+    assert.ok(changes.length > 0, "non-overlapping ranges should produce changes");
+    const types = new Set(changes.map(c => c.type));
+    assert.ok(types.has("create") || types.has("delete"), "should have create and/or delete actions");
+  });
+
   it("diffs child range gaps and tail creates/deletes without snapshot fallback", async () => {
     const engine = createVerifiableIndexEngine({
       storage: createStoragePort({ inMemory: true }),
