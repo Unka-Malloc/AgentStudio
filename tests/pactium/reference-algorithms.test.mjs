@@ -1386,6 +1386,23 @@ describe("Pactium reference-project algorithm coverage", () => {
     }), false);
   });
 
+
+  it("prove returns valid non-membership proof for absent key with correct structure", async () => {
+    const engine = createVerifiableIndexEngine({
+      storage: createStoragePort({ inMemory: true }),
+      domain: "reference-nm-struct"
+    });
+    const entries = sortedEntries(Array.from({ length: 128 }, (_, i) =>
+      keyEntry(`k:${String(i).padStart(4, "0")}`, `val:${i}`)
+    ));
+    const index = await engine.createIndex(entries);
+    const proof = await engine.prove(index.root, "zzz:absent");
+    assert.ok(proof, "should produce a proof for absent key");
+    assert.ok(proof.proofType && proof.proofType.includes("non-membership"),
+      "proof type should indicate non-membership");
+    assert.equal(engine.verifyProof(proof), true, "non-membership proof should verify");
+  });
+
   it("validates tracking cursors and indexed bundle record parsing failure modes", async () => {
     const cursor = createTrackingCursor({
       scope: "workspace",
