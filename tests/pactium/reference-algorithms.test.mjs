@@ -18,6 +18,7 @@ import {
 	  canonicalEncode,
   canonicalString,
   createLedgerConsistencyProof,
+  createLedgerInclusionProof,
   createLedgerTransparencyLog,
   createJsonStoragePort,
   createPactium,
@@ -26,6 +27,7 @@ import {
   createVerifiableIndexEngine,
   createVerifierManifest,
   covers,
+  ledgerHeadSigningPayload,
   protocolHash,
   resolveWithin,
   runPactiumQualityGateProfile,
@@ -425,6 +427,13 @@ describe("Pactium reference-project algorithm coverage", () => {
     const pactiumLeafHashes = entries.map((entry) => rfc9162LeafHashBytes(canonicalEncode(entry.leaf)));
     assert.deepEqual(pactiumLeafHashes, entries.map((entry) => entry.leafHash));
     assert.equal((await ledger.head()).rootHash, rfc9162TreeHash(pactiumLeafHashes));
+    const rightBranchProof = createLedgerInclusionProof({
+      leafHashes: pactiumLeafHashes,
+      index: pactiumLeafHashes.length - 1,
+      leaf: entries.at(-1).leaf
+    });
+    assert.equal(verifyLedgerInclusionProof({ head: await ledger.head(), proof: rightBranchProof }), true);
+    assert.equal((await ledger.getEntry(entries.at(-1).eventId)).eventId, entries.at(-1).eventId);
 
     const inclusion = await ledger.createInclusionProof(vector.inclusion.index, await ledger.head());
     assert.deepEqual(inclusion.auditPath.map((item) => item.hash), rfc9162InclusionPath(vector.inclusion.index, pactiumLeafHashes));
@@ -645,6 +654,33 @@ describe("Pactium reference-project algorithm coverage", () => {
     }).ok, true);
   });
 
+  it("returns structured failures for malformed ledger-head verifier public keys", async () => {
+    const ledger = createLedgerTransparencyLog({
+      storage: createStoragePort({ inMemory: true }),
+      signer: false
+    });
+    const { head } = await ledger.append({ factType: "reference.signed-head", value: "malformed-key" });
+    const payload = ledgerHeadSigningPayload(head);
+    const manifest = createVerifierManifest({
+      signers: [{
+        signerId: "bad-public-key",
+        algorithm: "ed25519",
+        publicKey: "not a pem public key",
+        roles: ["ledger-head"]
+      }]
+    });
+    const result = verifyLedgerHeadSignature(head, manifest, {
+      signatures: [{
+        signerId: "bad-public-key",
+        algorithm: "ed25519",
+        signedPayloadHash: protocolHash("ledger.head.signing", payload),
+        signature: "AAAA"
+      }]
+    });
+    assert.equal(result.ok, false);
+    expectFailureCode(result, "bad_signer_public_key", "malformed public key");
+  });
+
   it("keeps verifiable index roots insertion-order independent and makes diffs applicable", async () => {
     const engine = createVerifiableIndexEngine({
       storage: createStoragePort({ inMemory: true }),
@@ -676,6 +712,34 @@ describe("Pactium reference-project algorithm coverage", () => {
 	      assert.equal(engine.verifyProof(await engine.prove(right.root, key)), true);
 	    }
 	  });
+
+  it("binds range proof truncation to visible limit-plus-one evidence", async () => {
+    const engine = createVerifiableIndexEngine({
+      storage: createStoragePort({ inMemory: true }),
+      domain: "reference-range-truncation"
+    });
+    const entries = Array.from({ length: 40 }, (_, index) =>
+      keyEntry(`range:${String(index).padStart(4, "0")}`, `value:${index}`)
+    );
+    const root = await engine.createIndex(entries);
+    const truncated = await engine.proveRange(root.root, {
+      min: "range:0000",
+      max: "range:0039",
+      limit: 1
+    });
+    assert.equal(truncated.truncated, true);
+    assert.equal(verifyIndexProof(truncated), true);
+    assert.equal(verifyIndexProof({ ...truncated, truncated: false }), false);
+
+    const complete = await engine.proveRange(root.root, {
+      min: "range:0000",
+      max: "range:0039",
+      limit: 40
+    });
+    assert.equal(complete.truncated, false);
+    assert.equal(verifyIndexProof(complete), true);
+    assert.equal(verifyIndexProof({ ...complete, truncated: true }), false);
+  });
 
 	  it("keeps Prolly key ordering canonical across reloads and boundary-local mutations", async () => {
 	    const dataDir = await tempDataDir("pactium-key-order-");
@@ -1654,8 +1718,10 @@ describe("Pactium reference-project algorithm coverage", () => {
     });
     assert.equal(cursor.workspaceId, "default");
     assert.deepEqual(cursor.gaps, [1, 3]);
+    assert.equal(covers(cursor, 0), true);
     assert.equal(covers(cursor, 4), true);
     assert.equal(covers(cursor, 3), false);
+    assert.equal(covers(cursor, "not-a-number"), false);
     assert.equal(samePositionAs(cursor, { scope: "workspace", workspaceId: "default", position: 5 }), true);
     assert.equal(verifyTrackingCursor(cursor, { head: { root: "head:1" }, orderRoot: "root:1" }), true);
     assert.equal(verifyTrackingCursor(null), false);
@@ -1668,6 +1734,7 @@ describe("Pactium reference-project algorithm coverage", () => {
     assert.equal(covers(advanced, 8), false);
 
     assert.deepEqual(decodeVarint(Buffer.from([0x81, 0x01])), { value: 129, nextOffset: 2 });
+    assert.throws(() => decodeVarint(Buffer.from([0x00]), -1), /offset/);
     assert.throws(() => decodeVarint(Buffer.from([0x80])), /truncated/);
     assert.throws(() => decodeVarint(Buffer.from(Array.from({ length: 10 }, () => 0xff))), /too large/);
     const wrongType = indexedBlocksFromBundle({ bundleType: "wrong.bundle.type", blocks: [{ cid: "cid:unused" }] });

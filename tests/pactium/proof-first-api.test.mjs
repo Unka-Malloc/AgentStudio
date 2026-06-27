@@ -80,6 +80,7 @@ import { materializeEvidenceExtension } from "../../src/aspects/licolite/evidenc
 import { assertAppendCondition } from "../../src/core/append-condition.js";
 import { getPactiumInternals } from "../../src/core/pactium-core.js";
 import { createPactiumHttpServer, startPactiumHttpServer } from "../../src/http.js";
+import { finalizeEnvelope } from "../../src/proof/envelope.js";
 import { cidFromHex, hexFromCid, hexToBytes } from "../../src/protocol/hashing.js";
 import { createIndexedBundleResolver, decodeVarint, indexedBlocksFromBundle } from "../../src/proof/bundle-format.js";
 import { createFailingStorage } from "./failing-storage.js";
@@ -247,13 +248,13 @@ describe("Pactium proof-first root API", () => {
 
     const historicalDir = await tempDataDir("pactium-historical-");
     await fs.mkdir(path.join(historicalDir, "operation-ledger"), { recursive: true });
-    const historicalStorage = createStoragePort({ dataDir: historicalDir });
+    const historicalStorage = createJsonStoragePort({ dataDir: historicalDir });
     await assert.rejects(() => historicalStorage.initialize(), /no data migration/);
     for (const historicalLayout of ["checkpoint-trees", "state-substrate"]) {
       const historicalLayoutDir = await tempDataDir(`pactium-historical-${historicalLayout}-`);
       await fs.mkdir(path.join(historicalLayoutDir, historicalLayout), { recursive: true });
       await assert.rejects(
-        () => createStoragePort({ dataDir: historicalLayoutDir }).initialize(),
+        () => createJsonStoragePort({ dataDir: historicalLayoutDir }).initialize(),
         /no data migration/
       );
     }
@@ -545,6 +546,9 @@ describe("Pactium proof-first root API", () => {
     assert.equal(batch.entries[0].index, 2);
     assert.equal(batch.entries[1].index, 3);
     assert.equal(batch.head.size, 4);
+    assert.equal(Boolean(batch.appends[0].head.signatureRef), false);
+    assert.equal(Boolean(batch.appends[1].head.signatureRef), true);
+    assert.equal(Boolean(batch.head.signatureRef), true);
     assert.equal(verifyLedgerInclusionProof({ head: batch.appends[0].head, proof: batch.appends[0].inclusionProof }), true);
     assert.equal(verifyLedgerConsistencyProof({
       oldHead: batch.appends[0].previousHead,
@@ -614,6 +618,12 @@ describe("Pactium proof-first root API", () => {
       newHead: await ledger.head(),
       proof: storedConsistency
     }), true);
+    const signedEachBatch = await ledger.appendBatch([
+      { factType: "operation.intent", value: "batch-e" },
+      { factType: "operation.outcome", value: "batch-f" }
+    ], { signEach: true });
+    assert.equal(Boolean(signedEachBatch.appends[0].head.signatureRef), true);
+    assert.equal(Boolean(signedEachBatch.appends[1].head.signatureRef), true);
     const nonPowerLedger = createLedgerTransparencyLog({ storage: createStoragePort({ inMemory: true }) });
     const nonPowerHeads = [];
     for (let index = 0; index < 5; index += 1) {
@@ -1298,7 +1308,7 @@ describe("Pactium proof-first root API", () => {
     assert.ok((await verifyProofBundle(badIndexBundle)).failures.some((failure) => failure.code === "bad_bundle_index"));
     const badCidIndexBundle = structuredClone(indexedBundle);
     badCidIndexBundle.index[0].cid = cidForBytes(Buffer.from("different-payload"));
-    assert.ok((await verifyProofBundle(badCidIndexBundle)).failures.some((failure) => failure.code === "bad_bundle_index"));
+    assert.ok((await verifyProofBundle(badCidIndexBundle, { verifyAllBlocks: true })).failures.some((failure) => failure.code === "bad_bundle_index"));
     const badHeaderLengthBundle = structuredClone(indexedBundle);
     const badHeaderLengthBytes = Buffer.from(badHeaderLengthBundle.binaryBase64, "base64");
     let replacementHeader = null;
@@ -1326,6 +1336,7 @@ describe("Pactium proof-first root API", () => {
     const badLengthBundle = structuredClone(indexedBundle);
     badLengthBundle.index[0].recordLength += 1;
     assert.ok((await verifyProofBundle(badLengthBundle)).failures.some((failure) => failure.code === "bad_bundle_record_length"));
+    assert.ok((await verifyProofBundle(badLengthBundle, { verifyAllBlocks: true })).failures.some((failure) => failure.code === "bad_index_record_length"));
     const badHeaderPayloadLengthBundle = structuredClone(indexedBundle);
     badHeaderPayloadLengthBundle.index[0].headerLength += 1;
     assert.ok((await verifyProofBundle(badHeaderPayloadLengthBundle)).failures.some((failure) => failure.code === "bad_bundle_record_length"));
@@ -1368,7 +1379,7 @@ describe("Pactium proof-first root API", () => {
       headerLength: -1,
       byteLength: -1
     };
-    const badIndexResult = await verifyProofBundle(badIndexFields);
+    const badIndexResult = await verifyProofBundle(badIndexFields, { verifyAllBlocks: true });
     assert.equal(badIndexResult.ok, false);
     for (const code of ["bad_index_offset", "bad_index_record_length", "bad_index_header_length", "bad_index_byte_length"]) {
       assert.ok(badIndexResult.failures.some((failure) => failure.code === code), `expected ${code}`);
@@ -1387,6 +1398,7 @@ describe("Pactium proof-first root API", () => {
 
   it("records operations through the public batch mutation surface", async () => {
     const pactium = createPactium({ inMemory: true });
+    assert.throws(() => getPactiumInternals({}), /created by createPactium/);
     const batch = await pactium.recordOperations([
       {
         operationId: "batch.operation.one",
@@ -1402,9 +1414,11 @@ describe("Pactium proof-first root API", () => {
         idempotencyKey: "batch-two-intent",
         outcomeIdempotencyKey: "batch-two-outcome",
         input: { item: 2 },
+        causalityRefs: ["external-batch-cause"],
         stateMutations: [
           { key: "batch:key:1", value: { item: 1, updated: true } },
-          { key: "batch:key:2", value: { item: 2 } }
+          { key: "batch:key:2", value: { item: 2 } },
+          { action: "delete", key: "batch:key:deleted-before-create" }
         ]
       }
     ]);
@@ -1419,6 +1433,7 @@ describe("Pactium proof-first root API", () => {
     const engine = createVerifiableIndexEngine({ storage: getPactiumInternals(pactium).storage, domain: "state" });
     assert.equal(verifyIndexProof(await engine.prove(stateRoot, "batch:key:1")), true);
     assert.equal(verifyIndexProof(await engine.prove(stateRoot, "batch:key:2")), true);
+    assert.equal(verifyIndexProof(await engine.prove(stateRoot, "batch:key:deleted-before-create")), true);
     const replayBatch = await pactium.recordOperations([{
       operationId: "batch.operation.one",
       workspaceId: "batch-workspace",
@@ -1447,6 +1462,78 @@ describe("Pactium proof-first root API", () => {
     }]);
     assert.equal(conditionedBatch.count, 1);
     assert.equal(conditionedBatch.envelopes[0].envelopeKind, "operation-outcome");
+
+    await assert.rejects(() => pactium.recordOperations([{
+      operationId: "batch.conflict",
+      workspaceId: "batch-workspace",
+      idempotencyKey: "same-claim",
+      input: { value: 1 }
+    }, {
+      operationId: "batch.conflict",
+      workspaceId: "batch-workspace",
+      idempotencyKey: "same-claim",
+      input: { value: 2 }
+    }]), /idempotency key/);
+
+    await pactium.recordOperation({
+      operationId: "batch.existing.claim",
+      workspaceId: "batch-workspace",
+      idempotencyKey: "existing-claim",
+      input: { value: "original" }
+    });
+    await assert.rejects(() => pactium.recordOperations([{
+      operationId: "batch.existing.claim",
+      workspaceId: "batch-workspace",
+      idempotencyKey: "existing-claim",
+      input: { value: "changed" }
+    }]), /idempotency key/);
+
+    const intentFallbackCore = createPactium({ inMemory: true });
+    await intentFallbackCore.recordOperation({
+      operationId: "batch.intent.fallback",
+      workspaceId: "batch-fallback",
+      idempotencyKey: "same-intent",
+      input: { value: "original" }
+    });
+    await assert.rejects(() => intentFallbackCore.recordOperations([{
+      operationId: "batch.intent.fallback",
+      workspaceId: "batch-fallback",
+      idempotencyKey: "same-intent",
+      outcomeIdempotencyKey: "new-outcome-key",
+      input: { value: "original" }
+    }]), (error) => error?.failure?.code === "terminal_outcome_exists");
+
+    const outcomeFallbackCore = createPactium({ inMemory: true });
+    const outcomeFallback = await outcomeFallbackCore.recordOperations([
+      {
+        operationId: "batch.outcome.fallback",
+        workspaceId: "batch-fallback",
+        nonce: "same-intent-nonce",
+        outcomeIdempotencyKey: "same-outcome",
+        input: { value: "same" },
+        result: { ok: true }
+      },
+      {
+        operationId: "batch.outcome.fallback",
+        workspaceId: "batch-fallback",
+        nonce: "same-intent-nonce",
+        outcomeIdempotencyKey: "same-outcome",
+        input: { value: "same" },
+        result: { ok: true }
+      }
+    ]);
+    assert.deepEqual(outcomeFallback.envelopes.map((envelope) => envelope.replayed), [false, true]);
+
+    const failingBase = createStoragePort({ inMemory: true });
+    const failingStorage = createFailingStorage(failingBase, {
+      failOnPutBlockPredicate: (_value, options) => options?.kind === "ledger-fact"
+    });
+    const failingBatchCore = createPactium({ storage: failingStorage });
+    await assert.rejects(() => failingBatchCore.recordOperations([{
+      operationId: "batch.fail.before-ledger",
+      workspaceId: "batch-failure"
+    }]), /CRASH-INJECTED/);
+    assert.deepEqual(await failingBase.listProtocolObjectKeys("commit"), []);
   });
 
   it("updates workspace state roots incrementally and retains state Prolly nodes", async () => {
@@ -2251,10 +2338,30 @@ console.log(JSON.stringify({
       proof: { proofType: PACTIUM_PROOF_TYPES.ledgerConsistency, oldSize: 1, newSize: 2, oldLeafHashes: [], newLeafHashes: ["a", "b"] }
     }), false);
 
-    const ledger = createLedgerTransparencyLog({ storage: createStoragePort({ inMemory: true }) });
+    const getEntryBaseStorage = createStoragePort({ inMemory: true });
+    let getEntryLeafReads = 0;
+    let getEntryEventReads = 0;
+    const getEntryStorage = {
+      ...getEntryBaseStorage,
+      async getProtocolObject(scope, key, fallback) {
+        if (scope === "ledger-leaf") getEntryLeafReads += 1;
+        if (scope === "ledger-event") getEntryEventReads += 1;
+        return getEntryBaseStorage.getProtocolObject(scope, key, fallback);
+      }
+    };
+    const ledger = createLedgerTransparencyLog({ storage: getEntryStorage });
     const append = await ledger.append({ factType: "operation.intent", key: "x" });
+    await ledger.reload();
+    getEntryLeafReads = 0;
+    getEntryEventReads = 0;
     assert.equal((await ledger.getEntry(append.entry.eventId)).eventId, append.entry.eventId);
+    assert.equal(getEntryEventReads, 1);
+    assert.equal(getEntryLeafReads, 1);
+    getEntryLeafReads = 0;
+    getEntryEventReads = 0;
     assert.equal(await ledger.getEntry("missing"), null);
+    assert.equal(getEntryEventReads, 1);
+    assert.equal(getEntryLeafReads, 0);
 
     const engine = createVerifiableIndexEngine({ storage: createStoragePort({ inMemory: true }), domain: "errors" });
     await assert.rejects(() => engine.readSnapshot("cid:sha256:0000"), /missing/);
@@ -3003,6 +3110,9 @@ console.log(JSON.stringify({
 
   it("rejects critical extension inconsistencies", async () => {
     const auditPactium = createPactium({ inMemory: true });
+    assert.throws(() => finalizeEnvelope({
+      extensions: [{ name: "duplicate.extension" }, { name: "duplicate.extension" }]
+    }), /Duplicate extension name/);
     const envelope = await auditPactium.recordOperation({
       operationId: "audit.ext.consistency",
       workspaceId: "audit-ext-ws",
@@ -3268,19 +3378,23 @@ console.log(JSON.stringify({
     assert.equal(badCountResult.ok, false);
     assert.equal(badCountResult.failures.some((f) => f.code === "bad_manifest_block_count"), true);
 
-    // 4. trailing bytes (explicitly not allowed)
+    // 4. trailing bytes are an archive-level issue: default verification stays lazy,
+    // while verifyAllBlocks performs strict record-stream coverage checks.
     const withTrailing = structuredClone(bundle);
     const origBytes = Buffer.from(bundle.binaryBase64, "base64");
     const trailing = Buffer.from("trailing garbage data that will be detected");
     const combinedBytes = Buffer.concat([origBytes, trailing]);
     withTrailing.binaryBase64 = combinedBytes.toString("base64");
     withTrailing.byteLength = combinedBytes.length; // keep consistent
-    const trailResult = await verifyProofBundle(withTrailing);
+    const lazyTrailResult = await verifyProofBundle(withTrailing, { trustPolicy: "self-carried-manifest" });
+    assert.equal(lazyTrailResult.ok, true);
+    const trailResult = await verifyProofBundle(withTrailing, { verifyAllBlocks: true });
     assert.equal(trailResult.ok, false);
     assert.equal(trailResult.failures.some((f) => f.code === "trailing_bytes"), true);
 
-    // 5. allowTrailingBytes suppresses the error
+    // 5. allowTrailingBytes suppresses the strict archive error
     const allowTrailResult = await verifyProofBundle(withTrailing, {
+      verifyAllBlocks: true,
       allowTrailingBytes: true,
       trustPolicy: "self-carried-manifest"
     });
@@ -3327,15 +3441,26 @@ console.log(JSON.stringify({
     });
     const bundle = await auditPactium.exportProofBundle(envelope);
 
-    // Overlapping: modify first record's recordLength to make its payload
-    // range extend into the second record.
+    // Overlapping: duplicate the first record range in the strict layout index.
     const overlapping = structuredClone(bundle);
-    const idx0 = overlapping.index[0];
-    idx0.recordLength = Number(idx0.recordLength) + 500; // extends into next record
-    const badRangeResult = await verifyProofBundle(overlapping);
-    assert.equal(badRangeResult.ok === false || badRangeResult.failures.some(
-      (f) => f.code === "overlapping_index_ranges" || f.code === "bad_index_record_length"
-    ), true);
+    overlapping.index = [
+      overlapping.index[0],
+      { ...overlapping.index[0] },
+      ...overlapping.index.slice(1)
+    ];
+    overlapping.manifest = { ...overlapping.manifest, blockCount: overlapping.index.length };
+    const badRangeResult = await verifyProofBundle(overlapping, { verifyAllBlocks: true });
+    assert.equal(badRangeResult.ok, false);
+    assert.equal(badRangeResult.failures.some((f) => f.code === "overlapping_index_ranges"), true);
+
+    const payloadBeyondBinary = structuredClone(bundle);
+    payloadBeyondBinary.index[0] = {
+      ...payloadBeyondBinary.index[0],
+      byteLength: Number(payloadBeyondBinary.index[0].byteLength) + Number(bundle.byteLength)
+    };
+    const beyondResult = await verifyProofBundle(payloadBeyondBinary, { verifyAllBlocks: true });
+    assert.equal(beyondResult.ok, false);
+    assert.equal(beyondResult.failures.some((f) => f.code === "bad_index_range"), true);
 
     // Leading bytes: insert garbage before binary, shift all index offsets.
     const withLeading = structuredClone(bundle);
@@ -3343,9 +3468,25 @@ console.log(JSON.stringify({
     withLeading.binaryBase64 = Buffer.concat([lead, Buffer.from(bundle.binaryBase64, "base64")]).toString("base64");
     withLeading.byteLength = lead.length + bundle.byteLength;
     withLeading.index = withLeading.index.map((item) => ({ ...item, offset: Number(item.offset) + lead.length }));
-    const leadResult = await verifyProofBundle(withLeading);
+    const leadResult = await verifyProofBundle(withLeading, { verifyAllBlocks: true });
     assert.equal(leadResult.ok, false);
     assert.equal(leadResult.failures.some((f) => f.code === "leading_bytes"), true);
+
+    const withGap = structuredClone(bundle);
+    const gapBytes = Buffer.from(bundle.binaryBase64, "base64");
+    const secondOffset = Number(withGap.index[1].offset);
+    withGap.binaryBase64 = Buffer.concat([
+      gapBytes.subarray(0, secondOffset),
+      Buffer.from([0]),
+      gapBytes.subarray(secondOffset)
+    ]).toString("base64");
+    withGap.byteLength = bundle.byteLength + 1;
+    withGap.index = withGap.index.map((item, index) => index === 0
+      ? item
+      : { ...item, offset: Number(item.offset) + 1 });
+    const gapResult = await verifyProofBundle(withGap, { verifyAllBlocks: true });
+    assert.equal(gapResult.ok, false);
+    assert.equal(gapResult.failures.some((f) => f.code === "index_record_gap"), true);
   });
 
   it("LicoLite production verify without trustedManifest returns untrusted result", async () => {
