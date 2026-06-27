@@ -322,9 +322,9 @@ function nodePayloadFromProofLeaf(proof) {
   });
 }
 
-function verifyPathToRoot({ proof, leafDescriptor, selectionKey = null, context = {} }) {
+function verifyPathToRoot({ proof, leafDescriptor, selectionKey = null, context = {}, expandedPath = null }) {
   let current = leafDescriptor;
-  const path = expandProofPath(proof, context);
+  const path = expandedPath || expandProofPath(proof, context);
   for (const pathItem of path) {
     if (!pathItem.siblingDescriptors) return null;
     const children = pathItem.siblingDescriptors.map((child) => ({ ...child }));
@@ -404,6 +404,8 @@ function verifyMembershipMultiproof(proof, context = {}) {
   if (asArray(proof.missingKeys).length > 0) return false;
   const seenKeys = new Set();
   for (const leafProof of asArray(proof.leaves)) {
+    const leafKeys = asArray(leafProof.keys).map(String);
+    if (leafKeys.length === 0) return false;
     const localProof = {
       protocol: proof.protocol,
       proofType: PACTIUM_PROOF_TYPES.indexMembership,
@@ -418,17 +420,27 @@ function verifyMembershipMultiproof(proof, context = {}) {
       descriptorTableScope: proof.descriptorTableScope
     };
     const leafPayload = nodePayloadFromProofLeaf(localProof);
+    const leafRoot = cidForCanonical(leafPayload);
+    const leafRootHash = hexFromCid(leafRoot);
+    if (!verifyNodePayload(leafPayload, { root: leafProof.leafRoot || leafRoot })) return false;
+    if ((leafProof.leafRoot && leafProof.leafRoot !== leafRoot) ||
+        (leafProof.leafRootHash && leafProof.leafRootHash !== leafRootHash)) {
+      return false;
+    }
+    const leafDescriptor = descriptorFromNodePayload(leafPayload, leafRoot);
+    const rootDescriptor = verifyPathToRoot({
+      proof: localProof,
+      leafDescriptor,
+      selectionKey: leafKeys[0],
+      context
+    });
+    if (!rootDescriptor || rootDescriptor.root !== proof.indexRoot || rootDescriptor.rootHash !== proof.rootHash) {
+      return false;
+    }
     const entries = asArray(leafPayload.entries).map(normalizeIndexEntry);
-    for (const key of asArray(leafProof.keys).map(String)) {
-      const entry = entries.find((candidate) => candidate.key === key);
-      if (!entry) return false;
-      const memberProof = {
-        ...localProof,
-        key,
-        entry,
-        leafHash: indexLeafHash(entry)
-      };
-      if (!verifyMembershipProof(memberProof, context)) return false;
+    const entriesByKey = new Map(entries.map((entry) => [entry.key, entry]));
+    for (const key of leafKeys) {
+      if (!entriesByKey.has(key)) return false;
       seenKeys.add(key);
     }
   }
@@ -477,24 +489,34 @@ function verifyRangeProof(proof, context = {}) {
     if (leafProof.leafRoot !== leafRoot || leafProof.leafRootHash !== hexFromCid(leafRoot)) return false;
     const descriptor = descriptorFromNodePayload(leafPayload, leafRoot);
     const entries = asArray(leafPayload.entries).map(normalizeIndexEntry);
-    const selectionKey = entries.find((entry) =>
-      (!after || compareIndexKeys(entry.key, after) > 0) &&
-      compareIndexKeys(entry.key, min) >= 0 &&
-      compareIndexKeys(entry.key, max) <= 0
-    )?.key || descriptor.keyRange?.min || "";
-    const rootDescriptor = verifyPathToRoot({ proof: localProof, leafDescriptor: descriptor, selectionKey, context });
+    const matchingEntries = [];
+    let selectionKey = "";
+    for (const entry of entries) {
+      const matches = (!after || compareIndexKeys(entry.key, after) > 0) &&
+        compareIndexKeys(entry.key, min) >= 0 &&
+        compareIndexKeys(entry.key, max) <= 0;
+      if (!matches) continue;
+      if (!selectionKey) selectionKey = entry.key;
+      matchingEntries.push(entry);
+    }
+    selectionKey ||= descriptor.keyRange?.min || "";
+    const expandedPath = expandProofPath(localProof, context);
+    const rootDescriptor = verifyPathToRoot({
+      proof: localProof,
+      leafDescriptor: descriptor,
+      selectionKey,
+      context,
+      expandedPath
+    });
     if (!rootDescriptor || rootDescriptor.root !== proof.indexRoot || rootDescriptor.rootHash !== proof.rootHash) return false;
     coveredRoots.add(leafRoot);
-    for (const pathItem of expandProofPath(localProof, context)) coveredRoots.add(pathItem.nodeRoot);
+    for (const pathItem of expandedPath) coveredRoots.add(pathItem.nodeRoot);
     leafRecords.push({
       proof: leafProof,
       descriptor,
       entries,
-      matchingEntries: entries.filter((entry) =>
-        (!after || compareIndexKeys(entry.key, after) > 0) &&
-        compareIndexKeys(entry.key, min) >= 0 &&
-        compareIndexKeys(entry.key, max) <= 0
-      )
+      matchingEntries,
+      expandedPath
     });
   }
   const expectedEntries = asArray(proof.entries).map(normalizeIndexEntry);
@@ -520,8 +542,7 @@ function verifyRangeProof(proof, context = {}) {
     return false;
   }
   for (const record of sortedLeafRecords) {
-    const localProof = { ...record.proof, descriptorTable: proof.descriptorTable, descriptorTableScope: proof.descriptorTableScope };
-    for (const pathItem of expandProofPath(localProof, context)) {
+    for (const pathItem of record.expandedPath) {
       if (!pathItem.siblingDescriptors) return false;
       for (const descriptor of pathItem.siblingDescriptors) {
         if (!proofRangeContains(descriptor.keyRange, proof)) continue;
@@ -1395,8 +1416,12 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
       active.max = maxKey(active.max, rangeMax);
     }
     for (const group of groups) {
-      const leftGroup = group.items.filter((item) => item.side === "left").map((item) => item.descriptor);
-      const rightGroup = group.items.filter((item) => item.side === "right").map((item) => item.descriptor);
+      const leftGroup = [];
+      const rightGroup = [];
+      for (const item of group.items) {
+        if (item.side === "left") leftGroup.push(item.descriptor);
+        else rightGroup.push(item.descriptor);
+      }
       if (leftGroup.length === 0) {
         for (const descriptor of rightGroup) changes.push(...await descriptorActionChanges(descriptor, "create"));
       } else if (rightGroup.length === 0) {

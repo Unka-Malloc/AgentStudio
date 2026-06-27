@@ -84,6 +84,14 @@ import { finalizeEnvelope } from "../../src/proof/envelope.js";
 import { cidFromHex, hexFromCid, hexToBytes } from "../../src/protocol/hashing.js";
 import { createIndexedBundleResolver, decodeVarint, indexedBlocksFromBundle } from "../../src/proof/bundle-format.js";
 import { createFailingStorage } from "./failing-storage.js";
+import {
+  REDACTED_LOCAL_HOST,
+  REDACTED_LOCAL_PATH,
+  REDACTED_LOCAL_USER,
+  REDACTED_PROCESS,
+  REDACTED_SECRET,
+  redactLocalOutput
+} from "../../src/shared/output-redaction.js";
 
 const execFileAsync = promisify(execFile);
 const tempDirs = [];
@@ -143,7 +151,58 @@ function requestJson({ port, method = "GET", requestPath = "/", body = null }) {
   });
 }
 
+function localUsername() {
+  try {
+    return os.userInfo().username || "";
+  } catch {
+    return "";
+  }
+}
+
 describe("Pactium proof-first root API", () => {
+  it("redacts local process details from public output payloads", async () => {
+    const dataDir = await tempDataDir("pactium-redaction-");
+    const username = localUsername();
+    const redacted = redactLocalOutput({
+      dataDir,
+      lockPath: path.join(dataDir, "locks", "write.lock"),
+      note: `open ${dataDir} with token=local-token-value`,
+      value: {
+        path: "docs/a.md",
+        privateKey: "local-private-key",
+        publicKey: "public-key-material",
+        key: "protocol-key",
+        signerSecret: "local-signer-secret",
+        tokens: ["local-token-array-value"],
+        privateKeys: ["local-private-key-array-value"],
+        user: username,
+        host: os.hostname(),
+        pid: process.pid
+      }
+    });
+    const serialized = JSON.stringify(redacted);
+    assert.equal(redacted.dataDir, REDACTED_LOCAL_PATH);
+    assert.equal(redacted.lockPath, REDACTED_LOCAL_PATH);
+    assert.equal(redacted.value.privateKey, REDACTED_SECRET);
+    assert.equal(redacted.value.signerSecret, REDACTED_SECRET);
+    assert.equal(redacted.value.tokens, REDACTED_SECRET);
+    assert.equal(redacted.value.privateKeys, REDACTED_SECRET);
+    assert.equal(redacted.value.publicKey, "public-key-material");
+    assert.equal(redacted.value.key, "protocol-key");
+    assert.equal(redacted.value.path, "docs/a.md");
+    if (username) assert.equal(redacted.value.user, REDACTED_LOCAL_USER);
+    assert.equal(redacted.value.host, REDACTED_LOCAL_HOST);
+    assert.equal(redacted.value.pid, REDACTED_PROCESS);
+    assert.equal(serialized.includes(dataDir), false);
+    assert.equal(serialized.includes("local-token-value"), false);
+    assert.equal(serialized.includes("local-private-key"), false);
+    assert.equal(serialized.includes("local-signer-secret"), false);
+    assert.equal(serialized.includes("local-token-array-value"), false);
+    assert.equal(serialized.includes("local-private-key-array-value"), false);
+    if (username) assert.equal(serialized.includes(username), false);
+    assert.equal(serialized.includes(os.hostname()), false);
+  });
+
   it("canonicalizes values deterministically and separates protocol hash domains", () => {
     const left = { b: true, a: [1, null, "x"], bytes: Buffer.from("abc") };
     const right = { bytes: new Uint8Array(Buffer.from("abc")), a: [1, null, "x"], b: true };
@@ -2152,7 +2211,8 @@ console.log(JSON.stringify({
   });
 
   it("serves HTTP endpoints and CLI proof-first commands", async () => {
-    const pactium = createPactium({ dataDir: await tempDataDir() });
+    const httpDataDir = await tempDataDir("pactium-http-redaction-");
+    const pactium = createPactium({ dataDir: httpDataDir });
     const server = createPactiumHttpServer({ pactium, enableMutations: true });
     const address = await listen(server);
     try {
@@ -2161,6 +2221,8 @@ console.log(JSON.stringify({
       assert.equal(health.body.coreProtocol, PACTIUM_PROTOCOL);
       const doctor = await requestJson({ port: address.port, requestPath: "/doctor" });
       assert.equal(doctor.body.ok, true);
+      assert.equal(doctor.body.dataDir, REDACTED_LOCAL_PATH);
+      assert.equal(JSON.stringify(doctor.body).includes(httpDataDir), false);
       const recorded = await requestJson({
         port: address.port,
         method: "POST",
@@ -2206,7 +2268,10 @@ console.log(JSON.stringify({
     const dataDir = await tempDataDir("pactium-cli-");
     const cliPath = path.resolve("bin/pactium.mjs");
     const doctor = await execFileAsync(process.execPath, [cliPath, "doctor", "--data-dir", dataDir]);
-    assert.equal(JSON.parse(doctor.stdout).protocol, PACTIUM_PROTOCOL);
+    const doctorBody = JSON.parse(doctor.stdout);
+    assert.equal(doctorBody.protocol, PACTIUM_PROTOCOL);
+    assert.equal(doctorBody.dataDir, REDACTED_LOCAL_PATH);
+    assert.equal(doctor.stdout.includes(dataDir), false);
     const record = await execFileAsync(process.execPath, [
       cliPath,
       "operation",
@@ -2217,6 +2282,20 @@ console.log(JSON.stringify({
       JSON.stringify({ operationId: "cli.record", workspaceId: "cli" })
     ]);
     assert.equal(JSON.parse(record.stdout).envelopeKind, "operation-outcome");
+    const missingBodyFile = path.join(dataDir, "missing-body.json");
+    const missing = await execFileAsync(process.execPath, [
+      cliPath,
+      "intent",
+      "begin",
+      "--data-dir",
+      dataDir,
+      "--body-file",
+      missingBodyFile
+    ]).catch((error) => error);
+    assert.equal(missing.code, 1);
+    assert.equal(JSON.parse(missing.stdout).code, "pactium_cli_error");
+    assert.equal(missing.stdout.includes(dataDir), false);
+    assert.equal(missing.stdout.includes(missingBodyFile), false);
   });
 
   it("runs deterministic quality gate pressure profiles through public APIs", async () => {
@@ -3571,12 +3650,17 @@ console.log(JSON.stringify({
 
     // With enableMutations + authorize hook
     const authLog = [];
+    const authSecret = "auth-token-local-value";
+    const authUser = localUsername();
+    const authHost = os.hostname();
     const authServer = createPactiumHttpServer({
       dataDir: await tempDataDir("http-auth2-"),
       enableMutations: true,
       authorize: (ctx) => {
         authLog.push(ctx.pathname);
-        return ctx.pathname === "/intents" ? { allowed: false, reason: "custom block" } : true;
+        return ctx.pathname === "/intents"
+          ? { allowed: false, reason: `custom block ${dataDir} token=${authSecret} user=${authUser} host=${authHost}` }
+          : true;
       }
     });
     const authAddr = await listen(authServer);
@@ -3591,6 +3675,10 @@ console.log(JSON.stringify({
       });
       assert.equal(blocked.statusCode, 403);
       assert.equal(blocked.body.code, "unauthorized");
+      assert.equal(blocked.body.error.includes(dataDir), false);
+      assert.equal(blocked.body.error.includes(authSecret), false);
+      if (authUser) assert.equal(blocked.body.error.includes(authUser), false);
+      assert.equal(blocked.body.error.includes(authHost), false);
     } finally {
       await close(authServer);
     }

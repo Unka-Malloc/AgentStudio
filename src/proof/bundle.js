@@ -2,7 +2,7 @@ import { PACTIUM_PROOF_BUNDLE_TYPE, PACTIUM_PROTOCOL, PACTIUM_TRUST_POLICIES } f
 import { asArray } from "../shared/records.js";
 import { protocolHash } from "../protocol/hashing.js";
 import { createVerificationFailure } from "../verification/failure.js";
-import { createIndexedBundleResolver } from "./bundle-format.js";
+import { bundleHashIndexForResolver, createIndexedBundleResolver } from "./bundle-format.js";
 import { verifyProofEnvelope } from "./envelope.js";
 
 export async function verifyProofBundle(bundle, options = {}) {
@@ -40,7 +40,7 @@ export async function verifyProofBundle(bundle, options = {}) {
     }
   }
 
-  const resolver = createIndexedBundleResolver(bundle, { maxHeaderSize, maxBlockSize });
+  const resolver = options.bundleResolver || createIndexedBundleResolver(bundle, { maxHeaderSize, maxBlockSize });
   failures.push(...resolver.indexFailures);
 
   // -- byteLength consistency --
@@ -68,17 +68,18 @@ export async function verifyProofBundle(bundle, options = {}) {
   }
 
   const blockCids = resolver.blockCids;
+  const bundleHashIndex = bundleHashIndexForResolver(resolver, bundle) || asArray(bundle.index).map((item) => ({
+    cid: item.cid,
+    offset: item.offset,
+    recordLength: item.recordLength,
+    headerLength: item.headerLength,
+    byteLength: item.byteLength,
+    payloadHash: item.payloadHash
+  }));
   const expectedBundleHash = protocolHash("proof.bundle", {
     manifest: bundle.manifest,
     envelope: bundle.envelope,
-    index: asArray(bundle.index).map((item) => ({
-      cid: item.cid,
-      offset: item.offset,
-      recordLength: item.recordLength,
-      headerLength: item.headerLength,
-      byteLength: item.byteLength,
-      payloadHash: item.payloadHash
-    }))
+    index: bundleHashIndex
   });
   if (bundle.bundleHash && bundle.bundleHash !== expectedBundleHash) {
     failures.push(createVerificationFailure({

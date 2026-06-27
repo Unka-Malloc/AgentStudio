@@ -35,7 +35,7 @@ Welcome to the Pactium documentation. This index covers all maintained documenta
 
 | Document | Description |
 | --- | --- |
-| [ADR Index](https://github.com/Unka-Malloc/Pactium/tree/stable/docs/adr) | 55 Architecture Decision Records covering protocol design choices |
+| [ADR Index](https://github.com/Unka-Malloc/Pactium/tree/stable/docs/adr) | Architecture Decision Records covering protocol design choices |
 
 ## Documentation Principles
 
@@ -50,4 +50,4 @@ The npm package includes a curated subset of documentation:
 
 **Published in npm tarball:** `README.md`, `README.zh-CN.md`, `CHANGELOG.md`, `SECURITY.md`, `docs/README.md`, `docs/API.md`, `docs/FAQ.md`, `docs/MIGRATION.md`, `docs/logo.svg`, `docs/architecture/`, `docs/protocols/`, `docs/LICOLITE-ASPECT.md`, `docs/TERM.md`, `examples/`
 
-**Not published:** ADRs, optimization analysis, quality gates, release rules, agent instructions, release tooling, tests, build outputs, and binary/cache artifacts (these are available on GitHub only when appropriate)
+**Not published:** ADRs, quality gates, release rules, agent instructions, release tooling, tests, build outputs, and binary/cache artifacts (these are available on GitHub only when appropriate)

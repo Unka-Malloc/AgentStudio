@@ -4,6 +4,8 @@ import { cidForBytes, hashBytes } from "../protocol/hashing.js";
 import { asArray, asRecord } from "../shared/records.js";
 import { createVerificationFailure } from "../verification/failure.js";
 
+const RESOLVER_DETAILS = new WeakMap();
+
 export function decodeVarint(bytes, offset = 0) {
   let value = 0;
   let shift = 0;
@@ -39,6 +41,11 @@ function emptyResolver(indexFailures = []) {
       return { blocks: [], failures: this.failures };
     }
   };
+}
+
+export function bundleHashIndexForResolver(resolver, bundle) {
+  const details = resolver && typeof resolver === "object" ? RESOLVER_DETAILS.get(resolver) : null;
+  return details?.bundle === bundle ? details.bundleHashIndex : null;
 }
 
 function bundleFailure(code, evidenceRef, message = "", repairable = false) {
@@ -182,7 +189,19 @@ export function createIndexedBundleResolver(bundle, {
   const bytes = Buffer.from(String(bundle.binaryBase64 || ""), "base64");
   const offsets = new Set();
   const cids = new Set();
-  const entries = asArray(bundle.index).map((item, ordinal) => ({ item, ordinal }));
+  const entries = [];
+  const bundleHashIndex = [];
+  for (const [ordinal, item] of asArray(bundle.index).entries()) {
+    entries.push({ item, ordinal });
+    bundleHashIndex.push({
+      cid: item.cid,
+      offset: item.offset,
+      recordLength: item.recordLength,
+      headerLength: item.headerLength,
+      byteLength: item.byteLength,
+      payloadHash: item.payloadHash
+    });
+  }
   const indexByCid = new Map();
   const cache = new Map();
   const metadataCache = new Map();
@@ -248,7 +267,7 @@ export function createIndexedBundleResolver(bundle, {
       indexFailures.push(bundleFailure("bad_bundle_record_length", item.cid));
     }
   }
-  return {
+  const resolver = {
     blockCids: new Set(indexByCid.keys()),
     decodedByteLength: bytes.length,
     indexFailures,
@@ -358,6 +377,8 @@ export function createIndexedBundleResolver(bundle, {
       return { blocks, failures: this.failures };
     }
   };
+  RESOLVER_DETAILS.set(resolver, { bundle, bundleHashIndex });
+  return resolver;
 }
 
 export function indexedBlocksFromBundle(bundle, options = {}) {
