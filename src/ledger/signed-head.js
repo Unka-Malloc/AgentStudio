@@ -188,12 +188,23 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       }));
       continue;
     }
-    const ok = crypto.verify(
-      null,
-      payloadBytes,
-      signer.publicKey,
-      Buffer.from(String(record.signature || ""), "base64")
-    );
+    let ok = false;
+    try {
+      ok = crypto.verify(
+        null,
+        payloadBytes,
+        signer.publicKey,
+        Buffer.from(String(record.signature || ""), "base64")
+      );
+    } catch (error) {
+      failures.push(createVerificationFailure({
+        layer: "ledger-head-signature",
+        code: "bad_signer_public_key",
+        message: error instanceof Error ? error.message : "Signer public key could not be used for verification.",
+        evidenceRef: record.signerId || ""
+      }));
+      continue;
+    }
     if (ok) {
       accepted += 1;
       acceptedSigners.add(record.signerId);
