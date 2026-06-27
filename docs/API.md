@@ -346,7 +346,7 @@ const ledger = createLedgerTransparencyLog({ storage: storagePort });
 | Method | Description |
 | --- | --- |
 | `ledger.append(entry)` | Append one fact and return `{ entry, head, previousHead, inclusionProof, consistencyProof }` |
-| `ledger.appendBatch(entries, options?)` | Append ordered facts in one ledger append lane run and return `{ batchType, count, entries, head, previousHead, appends }` |
+| `ledger.appendBatch(entries, options?)` | Append ordered facts in one ledger append lane run, emit per-append inclusion/consistency proofs, sign the final batch head, and return `{ batchType, count, entries, head, previousHead, appends }` |
 | `ledger.head()` | Return the current `PactiumLedgerHead` |
 | `ledger.entries()` | Return all ledger entries |
 | `ledger.pageEntries({ start, limit })` | Return a paginated slice of entries |

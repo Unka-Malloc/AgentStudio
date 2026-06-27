@@ -51,10 +51,18 @@ export function samePositionAs(left, right) {
 
 export function covers(cursor, position) {
   const target = Number(position || 0);
+  const gaps = asArray(cursor?.gaps).map(Number);
+  let low = 0;
+  let high = gaps.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >>> 1;
+    if (gaps[middle] === target) return false;
+    if (gaps[middle] < target) low = middle + 1;
+    else high = middle - 1;
+  }
   return Number.isInteger(target) &&
     target >= 0 &&
-    Number(cursor?.position || 0) > target &&
-    !asArray(cursor?.gaps).includes(target);
+    Number(cursor?.position || 0) > target;
 }
 
 export function advanceTo(cursor, position, options = {}) {

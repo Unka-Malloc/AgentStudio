@@ -2,8 +2,10 @@ import crypto from "node:crypto";
 import { HASH_DOMAINS, PACTIUM_PROTOCOL } from "./constants.js";
 import { canonicalEncode } from "../canonical/value.js";
 
+const domainPrefixCache = new Map();
+
 export function hashBytes(bytes) {
-  return crypto.createHash("sha256").update(bytes).digest("hex");
+  return crypto.hash("sha256", Buffer.from(bytes || ""), "hex");
 }
 
 export function hexToBytes(hex) {
@@ -23,15 +25,19 @@ export function createId(prefix, value) {
   return `${prefix}_${protocolHashHex(prefix, value).slice(0, 32)}`;
 }
 
-export function protocolHashHex(domain, value) {
+function domainPrefix(domain) {
   const separator = HASH_DOMAINS[domain] || String(domain || "pactium.v0.2.generic");
+  if (!domainPrefixCache.has(separator)) {
+    domainPrefixCache.set(separator, Buffer.from(`${PACTIUM_PROTOCOL}:${separator}\0`, "utf8"));
+  }
+  return domainPrefixCache.get(separator);
+}
+
+export function protocolHashHex(domain, value) {
   const bytes = Buffer.isBuffer(value) || value instanceof Uint8Array
     ? Buffer.from(value)
     : Buffer.from(canonicalEncode(value));
-  return hashBytes(Buffer.concat([
-    Buffer.from(`${PACTIUM_PROTOCOL}:${separator}\0`, "utf8"),
-    bytes
-  ]));
+  return hashBytes(Buffer.concat([domainPrefix(domain), bytes]));
 }
 
 export function protocolHash(domain, value) {

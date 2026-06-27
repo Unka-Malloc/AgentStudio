@@ -23,7 +23,7 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | `nodeHash` | `H(0x01 || leftHash || rightHash)` |
 | `emptyTreeHash` | `H("")` |
 | Append order | Single Ledger Append Lane |
-| Batch append | `appendBatch` preserves caller order and emits per-append inclusion/consistency proofs |
+| Batch append | `appendBatch` preserves caller order, emits per-append inclusion/consistency proofs, and signs only the final batch head when signing is enabled |
 | Proofs | Inclusion and consistency proofs |
 | Signing | Optional in core, default for LicoLite Aspect |
 | Split-view defense | Consistency proof support; hosts retain last trusted heads; witness is extension point |

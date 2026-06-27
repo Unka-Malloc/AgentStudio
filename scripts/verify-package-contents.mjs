@@ -75,6 +75,7 @@ const approvedFiles = new Set([
   "src/core/append-condition.js",
   "src/core/pactium-core.js",
   "src/core/rebuild-state.js",
+  "src/core/state-helpers.js",
   "src/core/tracking-cursor.js",
   "src/http.d.ts",
   "src/http.js",
