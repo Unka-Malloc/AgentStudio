@@ -17,6 +17,7 @@ import {
   canonicalDecode,
   canonicalEncode,
   canonicalString,
+  normalizeCanonicalValue,
   advanceTo,
   createAppendCondition,
   cidForBytes,
@@ -219,6 +220,11 @@ describe("Pactium proof-first root API", () => {
     assert.match(protocolHashHex("", { generic: true }), /^[a-f0-9]{64}$/);
     assert.match(protocolHashHex("proof.envelope", left), /^[a-f0-9]{64}$/);
     assert.match(protocolHashHex("raw-buffer", Buffer.from("raw")), /^[a-f0-9]{64}$/);
+    assert.equal(
+      protocolHashHex("raw-buffer", new Uint8Array([114, 97, 119])),
+      protocolHashHex("raw-buffer", Buffer.from("raw"))
+    );
+    assert.equal(hexFromCid(), "");
     assert.deepEqual(canonicalDecode(Buffer.from(canonicalString({ from: "string" }))), { from: "string" });
     assert.throws(() => canonicalString({ $bytes: "YQ==" }), /reserves \$bytes/);
     assert.throws(() => canonicalEncode(Number.NaN), /finite numbers/);
@@ -716,6 +722,8 @@ describe("Pactium proof-first root API", () => {
       failHeads.push((await failLedger.append({ factType: "operation.intent", value: `fail-store-${index}` })).head);
     }
     failLeafTwo = true;
+    // Reload drops memoized range roots so the storage outage is observable.
+    await failLedger.reload();
     await assert.rejects(() => failLedger.createInclusionProof(0), /Ledger leaf missing/);
     failLeafTwo = false;
     failHeads.push((await failLedger.append({ factType: "operation.intent", value: "fail-store-3" })).head);
@@ -730,6 +738,58 @@ describe("Pactium proof-first root API", () => {
       newEntries: moreEntries.slice(0, 5)
     });
     assert.equal(consistencyFromThree.proofType, PACTIUM_PROOF_TYPES.ledgerConsistency);
+    const emptyConsistency = createLedgerConsistencyProof({ oldHead: { size: 0 }, newEntries: [] });
+    assert.equal(emptyConsistency.oldRootHash, emptyTreeHash());
+    assert.equal(emptyConsistency.newRootHash, emptyTreeHash());
+    assert.equal(verifyLedgerConsistencyProof({
+      oldHead: { size: 0, rootHash: emptyTreeHash() },
+      newHead: { size: 0, rootHash: emptyTreeHash() },
+      proof: emptyConsistency
+    }), true);
+    const sameSizeConsistency = createLedgerConsistencyProof({
+      oldHead: second.head,
+      newEntries: moreEntries.slice(0, 2)
+    });
+    assert.equal(verifyLedgerConsistencyProof({
+      oldHead: second.head,
+      newHead: second.head,
+      proof: sameSizeConsistency
+    }), true);
+    assert.equal(verifyLedgerConsistencyProof({
+      oldHead: first.head,
+      newHead: second.head,
+      proof: { ...manualConsistency, auditPath: [] }
+    }), false);
+    assert.equal(verifyLedgerConsistencyProof({
+      oldHead: first.head,
+      newHead: second.head,
+      proof: { ...manualConsistency, auditPath: manualConsistency.auditPath.map((hash) => ({ hash })) }
+    }), true);
+    assert.equal(verifyLedgerConsistencyProof({
+      oldHead: first.head,
+      newHead: second.head,
+      proof: { ...manualConsistency, auditPath: [null] }
+    }), false);
+    // String sizes pass the raw > comparison but fail numeric path validation.
+    assert.equal(verifyLedgerConsistencyProof({
+      oldHead: { size: 10, rootHash: manualConsistency.oldRootHash },
+      newHead: { size: 9, rootHash: manualConsistency.newRootHash },
+      proof: { ...manualConsistency, oldSize: "10", newSize: "9" }
+    }), false);
+    const manualInclusionRight = createLedgerInclusionProof({
+      leafHashes: [first.entry.leafHash, second.entry.leafHash],
+      index: 1,
+      leaf: second.entry.leaf
+    });
+    assert.equal(verifyLedgerInclusionProof({ head: second.head, proof: manualInclusionRight }), true);
+    assert.equal(verifyLedgerInclusionProof({
+      head: second.head,
+      proof: {
+        ...manualInclusionRight,
+        auditPath: manualInclusionRight.auditPath.map((item) => ({ ...item, side: "right" }))
+      }
+    }), false);
+    assert.equal(verifyLedgerInclusionProof({ head: second.head, proof: { ...manualInclusion, leaf: null } }), true);
     const customKeys = crypto.generateKeyPairSync("ed25519");
     const customManifest = createVerifierManifest({
       signers: [{
@@ -921,6 +981,43 @@ describe("Pactium proof-first root API", () => {
     const tamperedMultiproof = structuredClone(multiproof);
     tamperedMultiproof.leaves[0].keys[0] = "many:9999";
     assert.equal(engine.verifyProof(tamperedMultiproof), false);
+    const tamperedLeafRootMultiproof = structuredClone(multiproof);
+    tamperedLeafRootMultiproof.leaves[0].leafRootHash = "0".repeat(64);
+    assert.equal(engine.verifyProof(tamperedLeafRootMultiproof), false);
+    // Proof transport material is normalized before hashing: junk fields that
+    // normalize away cannot change the verified canonical content, so the
+    // proof still verifies against the same leaf root.
+    const extraFieldLeafProof = structuredClone(manyProof);
+    extraFieldLeafProof.leafNode.entries[0] = { ...extraFieldLeafProof.leafNode.entries[0], forged: true };
+    assert.equal(engine.verifyProof(extraFieldLeafProof), true);
+    // Tampers that survive normalization must change the recomputed leaf root
+    // (or break canonical leaf shape) and fail verification.
+    const nonObjectEntryLeafProof = structuredClone(manyProof);
+    nonObjectEntryLeafProof.leafNode.entries[0] = "many:0200";
+    assert.equal(engine.verifyProof(nonObjectEntryLeafProof), false);
+    const arrayEntryLeafProof = structuredClone(manyProof);
+    arrayEntryLeafProof.leafNode.entries[0] = [arrayEntryLeafProof.leafNode.entries[0]];
+    assert.equal(engine.verifyProof(arrayEntryLeafProof), false);
+    const countMismatchLeafProof = structuredClone(manyProof);
+    countMismatchLeafProof.leafNode.count += 1;
+    assert.equal(engine.verifyProof(countMismatchLeafProof), false);
+    const reversedEntriesLeafProof = structuredClone(manyProof);
+    reversedEntriesLeafProof.leafNode.entries.reverse();
+    assert.equal(engine.verifyProof(reversedEntriesLeafProof), false);
+    const widenedRangeLeafProof = structuredClone(manyProof);
+    widenedRangeLeafProof.leafNode.keyRange = { ...widenedRangeLeafProof.leafNode.keyRange, max: "many:zzzz" };
+    assert.equal(engine.verifyProof(widenedRangeLeafProof), false);
+    // Internal path descriptors are reconstructed into internal node payloads,
+    // so reordered or range-tampered sibling groups must also fail.
+    const reorderedPathProof = structuredClone(manyProof);
+    reorderedPathProof.path[0].siblingDescriptorRefs.reverse();
+    assert.equal(engine.verifyProof(reorderedPathProof), false);
+    const unsortedChildrenProof = structuredClone(manyProof);
+    const unsortedPathItem = unsortedChildrenProof.path[0];
+    assert.ok(unsortedPathItem.childIndex < unsortedPathItem.siblingDescriptorRefs.length - 1);
+    const trailingSiblingRef = unsortedPathItem.siblingDescriptorRefs.at(-1);
+    unsortedChildrenProof.descriptorTable[trailingSiblingRef].keyRange = { min: "many:0000", max: "many:0001" };
+    assert.equal(engine.verifyProof(unsortedChildrenProof), false);
     const extraLeafKeyMultiproof = structuredClone(multiproof);
     const extraLeafKey = extraLeafKeyMultiproof.leaves[0].leafNode.entries
       .find((entry) => !extraLeafKeyMultiproof.keys.includes(entry.key))?.key;
@@ -1330,6 +1427,18 @@ describe("Pactium proof-first root API", () => {
     assert.equal(explicitIndexedBundle.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
     await assert.rejects(() => pactium.exportProofBundle("missing-envelope"), /not found/);
     await assert.rejects(() => pactium.exportProofBundle(outcome, { format: "bad-format" }), /Unsupported proof bundle format/);
+    const missingBlockCore = createPactium({ inMemory: true });
+    const missingBlockEnvelope = await missingBlockCore.recordOperation({
+      operationId: "envelope.block.missing",
+      workspaceId: "envelope-blocks",
+      idempotencyKey: "envelope-block-missing",
+      input: { probe: true }
+    });
+    getPactiumInternals(missingBlockCore).storage.pruneBlocks((block) => block.kind === "proof-envelope");
+    await assert.rejects(
+      () => missingBlockCore.exportProofBundle(missingBlockEnvelope.envelopeId),
+      /Proof Envelope block missing/
+    );
     const persistentCompact = await getPactiumInternals(pactium).compactInMemoryCaches();
     assert.equal(persistentCompact.inMemory, false);
     const pageFromCursor = await pactium.getLedgerCursor({ fromCursor: { position: 100 }, limit: 0 });
@@ -3746,6 +3855,22 @@ console.log(JSON.stringify({
     const decomposed = "e\u0301";
     assert.notEqual(composed, decomposed);
     assert.equal(canonicalEncode({ key: composed }).toString(), canonicalEncode({ key: decomposed }).toString());
+  });
+
+  it("keeps normalizeCanonicalValue aligned with the single-pass canonical serializer", () => {
+    const bytes = Buffer.from([1, 2, 3]);
+    assert.deepEqual(normalizeCanonicalValue(bytes), { $bytes: bytes.toString("base64") });
+    assert.deepEqual(normalizeCanonicalValue(new Uint8Array([7])), { $bytes: Buffer.from([7]).toString("base64") });
+    assert.throws(() => normalizeCanonicalValue({ $bytes: "forged" }), /reserves \$bytes/);
+    assert.throws(() => normalizeCanonicalValue({ bad: () => {} }), /Unsupported Pactium Canonical Value type/);
+    const sample = {
+      zed: [decomposedSample(), -0, 12, true, null, undefined, bytes],
+      alpha: { dropped: undefined, kept: "value", "km²": "unit" }
+    };
+    assert.equal(JSON.stringify(normalizeCanonicalValue(sample)), canonicalString(sample));
+    function decomposedSample() {
+      return "e\u0301clair \\ \"quoted\"";
+    }
   });
 
   it("isolates canonical node counts per call instead of using a module-level global counter", () => {

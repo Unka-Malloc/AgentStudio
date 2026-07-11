@@ -33,7 +33,9 @@ const READ_ROUTES = new Set([
   "/licolite/repair/plan",
   "/maintenance/tasks/plan"
 ]);
-// Mutation routes: modify runtime state (ledger, runtime-state, proof bundle cache).
+// Mutation-capability routes: lifecycle writes plus bundle export. Bundle
+// export does not mutate runtime state, but it walks and emits raw proof
+// block payloads, so hosts gate it with the same capability switch.
 // Gated behind enableMutations.
 const MUTATION_ROUTES = new Set([
   "/intents",

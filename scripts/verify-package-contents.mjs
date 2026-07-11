@@ -93,6 +93,8 @@ const approvedFiles = new Set([
   "src/protocol/hashing.js",
   "src/quality/profile-runner.js",
   "src/repair/planner.js",
+  "src/shared/lru-cache.js",
+  "src/shared/output-redaction.js",
   "src/shared/records.js",
   "src/storage/local-json-storage-port.js",
   "src/storage/sqlite-capability.js",

@@ -5,14 +5,22 @@ import { canonicalEncode } from "../canonical/value.js";
 import { cidFromHex, createId, hashBytes, hexToBytes, protocolHash } from "../protocol/hashing.js";
 import { createStoragePort } from "../storage/storage-port.js";
 import { asArray, nowIso } from "../shared/records.js";
+import { cacheGet, cacheSet } from "../shared/lru-cache.js";
 import { createVerifierManifest, signLedgerHead } from "./signed-head.js";
 
+const LEAF_HASH_PREFIX = Buffer.from([0x00]);
+const NODE_HASH_PREFIX = Buffer.from([0x01]);
+
 export function ledgerLeafHash(leaf) {
-  return hashBytes(Buffer.concat([Buffer.from([0x00]), Buffer.from(canonicalEncode(leaf))]));
+  return crypto.createHash("sha256").update(LEAF_HASH_PREFIX).update(canonicalEncode(leaf)).digest("hex");
 }
 
 export function ledgerNodeHash(leftHash, rightHash) {
-  return hashBytes(Buffer.concat([Buffer.from([0x01]), hexToBytes(leftHash), hexToBytes(rightHash)]));
+  return crypto.createHash("sha256")
+    .update(NODE_HASH_PREFIX)
+    .update(hexToBytes(leftHash))
+    .update(hexToBytes(rightHash))
+    .digest("hex");
 }
 
 export function emptyTreeHash() {
@@ -276,17 +284,20 @@ function levelForSize(size) {
   return Math.log2(size);
 }
 
+const RANGE_ROOT_CACHE_LIMIT = 4096;
+const EVENT_INDEX_CACHE_LIMIT = 65536;
+
 export function createLedgerTransparencyLog({
   storage = createStoragePort({ inMemory: true }),
   ledgerId = "pactium-operation-ledger",
   signer = "auto",
   verifierManifest = null
 } = {}) {
-  let entries = [];
   let compactRange = createCompactRange();
   let currentHead = null;
   let signingState = null;
   let eventIndex = new Map();
+  let rangeRootCache = new Map();
   let loaded = false;
   let loadPromise = null;
   let appendLane = Promise.resolve();
@@ -298,11 +309,9 @@ export function createLedgerTransparencyLog({
       compactRange = await storage.getProtocolObject("ledger", "compact-range-current", null);
       currentHead = await storage.getProtocolObject("ledger", "head-current", null);
       if (compactRange && currentHead) {
-        entries = [];
         loaded = true;
         return;
       }
-      entries = [];
       compactRange = createCompactRange();
       currentHead = ledgerHeadFromCompactRange({ peaks: [], size: 0, ledgerId });
       loaded = true;
@@ -316,11 +325,11 @@ export function createLedgerTransparencyLog({
 
   async function reload() {
     await appendLane.catch(() => null);
-    entries = [];
     compactRange = createCompactRange();
     currentHead = null;
     signingState = null;
     eventIndex = new Map();
+    rangeRootCache = new Map();
     loaded = false;
     loadPromise = null;
     await load();
@@ -344,23 +353,30 @@ export function createLedgerTransparencyLog({
     return leaf;
   }
 
+  // Leaf ranges are immutable in an append-only ledger, so every computed
+  // range root can be memoized for reuse across proof generations.
   async function rangeRoot(start, size) {
     if (size === 0) return emptyTreeHash();
+    const cacheKey = `${start}:${size}`;
+    const cached = cacheGet(rangeRootCache, cacheKey);
+    if (cached !== undefined) return cached;
+    let hash;
     if (size === 1) {
-      const leaf = await requireLeafRecord(start);
-      return leaf.leafHash;
-    }
-    if (isPowerOfTwo(size)) {
+      hash = (await requireLeafRecord(start)).leafHash;
+    } else if (isPowerOfTwo(size)) {
       const level = levelForSize(size);
       const node = await readNodeRecord(level, Math.floor(start / size));
       if (!node) throw new Error(`Ledger node missing for level ${level} index ${Math.floor(start / size)}`);
-      return node.hash;
+      hash = node.hash;
+    } else {
+      const split = largestPowerOfTwoLessThan(size);
+      hash = ledgerNodeHash(
+        await rangeRoot(start, split),
+        await rangeRoot(start + split, size - split)
+      );
     }
-    const split = largestPowerOfTwoLessThan(size);
-    return ledgerNodeHash(
-      await rangeRoot(start, split),
-      await rangeRoot(start + split, size - split)
-    );
+    cacheSet(rangeRootCache, cacheKey, hash, RANGE_ROOT_CACHE_LIMIT);
+    return hash;
   }
 
   async function inclusionPathFromStore(index, size, start = 0) {
@@ -592,9 +608,8 @@ export function createLedgerTransparencyLog({
           leafHash,
           timestamp: entryTimestamp
         };
-        entries[index] = entry;
         await storage.putProtocolObject("ledger-leaf", String(index), entry);
-        eventIndex.set(eventId, index);
+        cacheSet(eventIndex, eventId, index, EVENT_INDEX_CACHE_LIMIT);
         await storage.putProtocolObject("ledger-event", eventId, {
           protocol: PACTIUM_PROTOCOL,
           schema: PACTIUM_SCHEMA_VERSION,
@@ -701,7 +716,7 @@ export function createLedgerTransparencyLog({
       await load();
       const normalizedEventId = String(eventId || "");
       if (!normalizedEventId) return null;
-      const cachedIndex = eventIndex.get(normalizedEventId);
+      const cachedIndex = cacheGet(eventIndex, normalizedEventId);
       if (cachedIndex !== undefined) {
         const cachedEntry = await readLeafRecord(cachedIndex);
         if (cachedEntry?.eventId === normalizedEventId) return cachedEntry;
@@ -712,7 +727,7 @@ export function createLedgerTransparencyLog({
       if (!Number.isInteger(index) || index < 0 || index >= Number(currentHead.size || 0)) return null;
       const entry = await readLeafRecord(index);
       if (entry?.eventId !== normalizedEventId) return null;
-      eventIndex.set(normalizedEventId, index);
+      cacheSet(eventIndex, normalizedEventId, index, EVENT_INDEX_CACHE_LIMIT);
       return entry;
     },
     async verifierManifest() {

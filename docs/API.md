@@ -929,8 +929,9 @@ Backend profile:
 
 **Commit marker coverage boundaries:**
 - `beginOperationIntent`, `appendOperationOutcome`, `recordOperation`, and `recordOperations` are covered by pending/complete commit markers.
-- `storeEnvelope`, `createExtension`, and `exportProofBundle` are materialization/caching operations that do NOT have commit markers. These operations write blocks or update the proof bundle cache; failures leave recoverable artifacts.
-- HTTP `/bundles/export` is classified as a mutation route because it updates the proof bundle cache in runtime-state, but it is not a ledger lifecycle commit.
+- `storeEnvelope` and `createExtension` are materialization operations that do NOT have commit markers. These operations write content-addressed blocks; failures leave recoverable artifacts.
+- `exportProofBundle` is a pure read: it derives the portable bundle from immutable content-addressed blocks and never writes storage or runtime state.
+- HTTP `/bundles/export` stays gated behind `enableMutations` as a host capability boundary because it exports raw proof block payloads, but it is not a ledger lifecycle commit and does not mutate runtime state.
 
 ---
 

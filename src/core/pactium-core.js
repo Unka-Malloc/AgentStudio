@@ -8,7 +8,7 @@ import {
   PACTIUM_SCHEMA_VERSION,
   PACTIUM_TRUST_POLICIES
 } from "../protocol/constants.js";
-import { canonicalEncode, normalizeCanonicalValue } from "../canonical/value.js";
+import { canonicalDecode, canonicalEncode, normalizeCanonicalValue } from "../canonical/value.js";
 import { createAppendCondition, assertAppendCondition } from "./append-condition.js";
 import { createLedgerTransparencyLog, ledgerNodeHash } from "../ledger/transparency-log.js";
 import { advanceTrustedHead as advanceTrustedLedgerHead } from "../ledger/signed-head.js";
@@ -190,6 +190,25 @@ export function createPactium({
     await resolvedStorage.putProtocolObject("core", "runtime-state", state);
   }
 
+  // Runtime state keeps only the envelope block CID; the envelope body lives in
+  // content-addressed storage. This keeps runtime-state size independent of
+  // envelope payload size and avoids rewriting every envelope on each save.
+  async function registerEnvelope(current, envelope, refs) {
+    const block = await resolvedStorage.putBlock(envelope, { kind: "proof-envelope", refs });
+    current.envelopes[envelope.envelopeId] = block.cid;
+    return block;
+  }
+
+  async function resolveEnvelopeById(current, envelopeId) {
+    const cid = current.envelopes[String(envelopeId || "")];
+    if (!cid) return null;
+    const block = await resolvedStorage.getBlock(String(cid));
+    if (!block) {
+      throw new Error(`Proof Envelope block missing from storage: ${envelopeId}`);
+    }
+    return canonicalDecode(block.bytes);
+  }
+
   // -- Commit markers for crash consistency --
   // Each mutation writes a pending marker before work begins and a complete
   // marker after runtime-state is saved. doctor() scans for orphans.
@@ -282,15 +301,11 @@ export function createPactium({
       createdAt: nowIso()
     };
     const envelope = finalizeEnvelope(envelopeBase);
-    await resolvedStorage.putBlock(envelope, {
-      kind: "proof-envelope",
-      refs: [
-        ...envelope.proofRefs.map((ref) => ref.cid),
-        ...envelope.extensions.map((extension) => extension.valueRef)
-      ]
-    });
     const current = await ensureState();
-    current.envelopes[envelope.envelopeId] = envelope;
+    await registerEnvelope(current, envelope, [
+      ...envelope.proofRefs.map((ref) => ref.cid),
+      ...envelope.extensions.map((extension) => extension.valueRef)
+    ]);
     await saveState();
     return envelope;
   }
@@ -309,8 +324,7 @@ export function createPactium({
     const idClaimKey = idempotencyKey ? intentIdempotencyClaimKeyFor({ operationId, workspaceId, idempotencyKey }) : "";
     const inputHash = protocolHash("operation.intent", input.input ?? input.payload ?? {});
     if (idKey && current.intentEnvelopes[idKey]) {
-      const envelope = { ...current.envelopes[current.intentEnvelopes[idKey]], replayed: true };
-      return envelope;
+      return { ...await resolveEnvelopeById(current, current.intentEnvelopes[idKey]), replayed: true };
     }
     // --- Preflight validation (no side effects) ---
     // All checks that can fail BEFORE we write any pending marker or commit
@@ -496,7 +510,7 @@ export function createPactium({
       ? outcomeIdempotencyKeyFor(input)
       : "";
     if (outcomeIdKey && current.outcomeEnvelopes[outcomeIdKey]) {
-      return { ...current.envelopes[current.outcomeEnvelopes[outcomeIdKey]], replayed: true };
+      return { ...await resolveEnvelopeById(current, current.outcomeEnvelopes[outcomeIdKey]), replayed: true };
     }
     if (current.outcomes[intentId]) {
       throw new PactiumLifecycleError("Operation Intent already has a Terminal Outcome.", createVerificationFailure({
@@ -1384,13 +1398,14 @@ export function createPactium({
     return { index, binaryBase64: Buffer.concat(records).toString("base64"), byteLength: offset };
   }
 
+  // Bundle export derives portable proof material from immutable CAS blocks
+  // and the envelope registry. It never mutates runtime state, so it runs as
+  // a read (still serialized behind in-flight mutations by prepareRead).
   async function exportProofBundle(envelopeOrId, options = {}) {
-    return enqueueMutation(() => exportProofBundleCommitted(envelopeOrId, options));
-  }
-
-  async function exportProofBundleCommitted(envelopeOrId, options = {}) {
-    const current = await ensureState();
-    const envelope = typeof envelopeOrId === "string" ? current.envelopes[envelopeOrId] : envelopeOrId;
+    const current = await prepareRead();
+    const envelope = typeof envelopeOrId === "string"
+      ? await resolveEnvelopeById(current, envelopeOrId)
+      : envelopeOrId;
     if (!envelope) throw new Error("Proof Envelope not found.");
     const refs = [
       ...asArray(envelope.proofRefs).map((ref) => ref.cid),
@@ -1431,7 +1446,7 @@ export function createPactium({
       createdAt: nowIso()
     };
     const indexed = indexedBundleRecords(blocks);
-    const bundle = {
+    return {
       protocol: PACTIUM_PROTOCOL,
       schema: PACTIUM_SCHEMA_VERSION,
       bundleType: PACTIUM_PROOF_BUNDLE_TYPE,
@@ -1454,9 +1469,6 @@ export function createPactium({
         }))
       })
     };
-    current.proofBundles[envelope.envelopeId] = bundle;
-    await saveState();
-    return bundle;
   }
 
   async function createExtension(extension) {
@@ -1470,14 +1482,10 @@ export function createPactium({
   async function storeEnvelopeCommitted(envelope) {
     const current = await ensureState();
     const finalized = finalizeEnvelope(envelope);
-    await resolvedStorage.putBlock(finalized, {
-      kind: "proof-envelope",
-      refs: [
-        ...asArray(finalized.proofRefs).map((ref) => ref.cid),
-        ...asArray(finalized.extensions).map((extension) => extension.valueRef)
-      ]
-    });
-    current.envelopes[finalized.envelopeId] = finalized;
+    await registerEnvelope(current, finalized, [
+      ...asArray(finalized.proofRefs).map((ref) => ref.cid),
+      ...asArray(finalized.extensions).map((extension) => extension.valueRef)
+    ]);
     await saveState();
     return finalized;
   }
@@ -1796,7 +1804,9 @@ export function createPactium({
       ? resolvedStorage.pruneBlocks((block) => {
           const kind = String(block.kind || "");
           if (kind.startsWith("index-node:")) return !retainedNodeRoots.has(block.cid);
-          return kind !== "state-value";
+          // Envelope blocks are the only stored copy backing idempotent
+          // replay and export-by-id, so compaction must retain them.
+          return kind !== "state-value" && kind !== "proof-envelope";
         })
       : 0;
     const prunedProtocolObjects = typeof resolvedStorage.pruneProtocolObjects === "function"

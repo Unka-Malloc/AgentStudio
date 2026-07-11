@@ -45,11 +45,12 @@ export function compactProofMaterialDescriptors(material) {
   const rootTable = [];
   const rootIndexes = new Map();
   function refFor(descriptor) {
-    const normalized = normalizeCanonicalValue(descriptor);
-    const key = canonicalString(normalized);
+    // canonicalString normalizes while serializing, so the descriptor is only
+    // deep-normalized when it first enters the table.
+    const key = canonicalString(descriptor);
     if (!rootIndexes.has(key)) {
       rootIndexes.set(key, rootTable.length);
-      rootTable.push(normalized);
+      rootTable.push(normalizeCanonicalValue(descriptor));
     }
     return rootIndexes.get(key);
   }
@@ -86,21 +87,23 @@ export function compactProofMaterialDescriptors(material) {
   return compacted;
 }
 
+// Both payloads flow straight into protocol hashing, which canonicalizes
+// during serialization, so no eager deep normalization is needed here.
 function extensionSigningPayload(envelope) {
-  return normalizeCanonicalValue({
+  return {
     ...envelope,
     envelopeId: undefined,
     replayed: false,
     extensions: asArray(envelope.extensions).filter((extension) => extension.name !== "licolite.signature")
-  });
+  };
 }
 
 function envelopeIdentityPayload(envelope) {
-  return normalizeCanonicalValue({
+  return {
     ...envelope,
     replayed: false,
     envelopeId: undefined
-  });
+  };
 }
 
 export function envelopeSigningHash(envelope) {

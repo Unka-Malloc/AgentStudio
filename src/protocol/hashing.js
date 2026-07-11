@@ -5,7 +5,7 @@ import { canonicalEncode } from "../canonical/value.js";
 const domainPrefixCache = new Map();
 
 export function hashBytes(bytes) {
-  return crypto.hash("sha256", Buffer.from(bytes || ""), "hex");
+  return crypto.hash("sha256", Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes || ""), "hex");
 }
 
 export function hexToBytes(hex) {
@@ -34,10 +34,13 @@ function domainPrefix(domain) {
 }
 
 export function protocolHashHex(domain, value) {
-  const bytes = Buffer.isBuffer(value) || value instanceof Uint8Array
-    ? Buffer.from(value)
-    : Buffer.from(canonicalEncode(value));
-  return hashBytes(Buffer.concat([domainPrefix(domain), bytes]));
+  const bytes = Buffer.isBuffer(value)
+    ? value
+    : value instanceof Uint8Array
+      ? Buffer.from(value.buffer, value.byteOffset, value.byteLength)
+      : canonicalEncode(value);
+  // Incremental updates avoid allocating a concatenated prefix+payload buffer.
+  return crypto.createHash("sha256").update(domainPrefix(domain)).update(bytes).digest("hex");
 }
 
 export function protocolHash(domain, value) {
@@ -45,7 +48,7 @@ export function protocolHash(domain, value) {
 }
 
 export function cidForBytes(bytes) {
-  return cidFromHex(hashBytes(Buffer.from(bytes || "")));
+  return cidFromHex(hashBytes(bytes));
 }
 
 export function cidForCanonical(value) {

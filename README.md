@@ -317,9 +317,9 @@ The CLI reads JSON from `--body`, `--body-file`, or stdin.
 
 ### Crash consistency & recovery
 
-Pactium uses write-ahead commit markers for crash consistency. Operation lifecycle commits (`beginOperationIntent` and `appendOperationOutcome`) write pending/complete commit markers before work begins and after `runtime-state` is saved. `recordOperation()` consists of two lifecycle commits: intent + outcome. Materialization operations such as `exportProofBundle`, `storeEnvelope`, and `createExtension` may write storage or runtime-state but are not currently covered by lifecycle commit markers. `doctor()` scans for incomplete commits (pending without complete) and reports them as repairable failures.
+Pactium uses write-ahead commit markers for crash consistency. Operation lifecycle commits (`beginOperationIntent` and `appendOperationOutcome`) write pending/complete commit markers before work begins and after `runtime-state` is saved. `recordOperation()` consists of two lifecycle commits: intent + outcome. Materialization operations such as `storeEnvelope` and `createExtension` write content-addressed blocks plus the envelope reference registry but are not covered by lifecycle commit markers. `exportProofBundle` is a pure read that derives the bundle from immutable content-addressed blocks. `doctor()` scans for incomplete commits (pending without complete) and reports them as repairable failures.
 
-The HTTP route `/bundles/export` is classified as a mutation-capability route because it caches the proof bundle in runtime-state, but it is not a ledger lifecycle commit.
+The HTTP route `/bundles/export` remains gated behind the mutation capability switch because it exports raw proof block payloads, but it is not a ledger lifecycle commit and does not mutate runtime state.
 
 ```bash
 # Run standard integrity checks

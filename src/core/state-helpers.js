@@ -22,8 +22,9 @@ export function createEmptyCoreState() {
     intentEnvelopes: Object.create(null),
     intentIdempotencyClaims: Object.create(null),
     outcomeEnvelopes: Object.create(null),
-    envelopes: Object.create(null),
-    proofBundles: Object.create(null)
+    // envelopeId -> proof-envelope block CID. Envelope bodies live in
+    // content-addressed storage, never inside runtime state.
+    envelopes: Object.create(null)
   };
 }
 
@@ -41,8 +42,7 @@ export function normalizeCoreState(state) {
     "intentEnvelopes",
     "intentIdempotencyClaims",
     "outcomeEnvelopes",
-    "envelopes",
-    "proofBundles"
+    "envelopes"
   ]) {
     state[field] = mapRecord(state[field]);
   }

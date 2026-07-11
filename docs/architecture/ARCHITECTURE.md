@@ -297,7 +297,7 @@ The current implementation is correct, canonical, and deterministic. Throughput-
 
 ### Crash Consistency
 
-The JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. Commit markers cover operation lifecycle commits (`beginOperationIntent`, `appendOperationOutcome`, `recordOperation`, and the per-operation commits inside `recordOperations`). Materialization operations (`exportProofBundle`, `storeEnvelope`, `createExtension`) may write storage or runtime-state but are not lifecycle commits. This provides crash detection and recovery guidance. It is not an ACID database transaction. The SQLite adapter uses SQLite transactions for `withWriteLock()` scopes, but Pactium still treats the Storage Port as a persistence adapter rather than part of the proof semantics.
+The JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. Commit markers cover operation lifecycle commits (`beginOperationIntent`, `appendOperationOutcome`, `recordOperation`, and the per-operation commits inside `recordOperations`). Materialization operations (`storeEnvelope`, `createExtension`) write content-addressed blocks plus the envelope reference registry but are not lifecycle commits; `exportProofBundle` is a pure read over immutable blocks. This provides crash detection and recovery guidance. It is not an ACID database transaction. The SQLite adapter uses SQLite transactions for `withWriteLock()` scopes, but Pactium still treats the Storage Port as a persistence adapter rather than part of the proof semantics.
 
 ### Lock Fencing
 

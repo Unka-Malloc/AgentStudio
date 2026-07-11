@@ -10,6 +10,7 @@ import { canonicalEncode, canonicalString, normalizeCanonicalValue } from "../ca
 import { cidForCanonical, hexFromCid, protocolHashHex } from "../protocol/hashing.js";
 import { createStoragePort } from "../storage/storage-port.js";
 import { asArray, asRecord, safeToken } from "../shared/records.js";
+import { cacheGet, cacheSet } from "../shared/lru-cache.js";
 
 const INDEX_NODE_TYPE = "pactium.index.node";
 const CACHE_LIMITS = Object.freeze({
@@ -17,6 +18,10 @@ const CACHE_LIMITS = Object.freeze({
   nodes: 10000,
   snapshots: 100
 });
+const BOUNDARY_HASH_CACHE_LIMIT = 16384;
+// Boundary hashes are pure functions of protocol constants and entry/child
+// identity, so one shared cache is correct across all engine instances.
+const boundaryHashCache = new Map();
 
 function compareIndexKeys(left, right) {
   return String(left || "") < String(right || "")
@@ -117,8 +122,7 @@ function indexEntriesEqual(left, right) {
   return left.key === right.key &&
     left.valueRef === right.valueRef &&
     left.valueHash === right.valueHash &&
-    canonicalString(normalizeCanonicalValue(asRecord(left.metadata))) ===
-      canonicalString(normalizeCanonicalValue(asRecord(right.metadata)));
+    canonicalString(asRecord(left.metadata)) === canonicalString(asRecord(right.metadata));
 }
 
 function entryListsEqual(leftEntries, rightEntries) {
@@ -129,33 +133,52 @@ function entryListsEqual(leftEntries, rightEntries) {
   return true;
 }
 
-function entryBoundaryHash(domain, entry) {
-  return protocolHashHex("index.boundary", {
-    domain,
-    key: entry.key,
-    valueRef: entry.valueRef,
-    valueHash: entry.valueHash
-  });
-}
-
-function childBoundaryHash(domain, child) {
-  return protocolHashHex("index.boundary", {
-    domain,
-    key: child.keyRange?.max || "",
-    root: child.root,
-    rootHash: child.rootHash,
-    level: child.level,
-    count: child.count
-  });
-}
-
 function first32(hash) {
   return Number.parseInt(String(hash || "").slice(0, 8), 16) || 0;
 }
 
-function shouldCutChunk({ size, boundaryHash, splitter }) {
+// Chunk-boundary decisions consume only the first 32 bits of the boundary
+// hash, and each hash is a pure function of protocol constants plus entry or
+// child identity. Path-copy mutations rehash the same unchanged entries on
+// every leaf rewrite, so the memoized 32-bit signal removes almost all
+// boundary hashing from steady-state writes.
+function boundarySignalFor(cacheKey, buildPayload) {
+  const cached = cacheGet(boundaryHashCache, cacheKey);
+  if (cached !== undefined) return cached;
+  const signal = first32(protocolHashHex("index.boundary", buildPayload()));
+  cacheSet(boundaryHashCache, cacheKey, signal, BOUNDARY_HASH_CACHE_LIMIT);
+  return signal;
+}
+
+function entryBoundarySignal(domain, entry) {
+  return boundarySignalFor(
+    `e\u0000${domain}\u0000${entry.key}\u0000${entry.valueRef}\u0000${entry.valueHash}`,
+    () => ({
+      domain,
+      key: entry.key,
+      valueRef: entry.valueRef,
+      valueHash: entry.valueHash
+    })
+  );
+}
+
+function childBoundarySignal(domain, child) {
+  return boundarySignalFor(
+    `c\u0000${domain}\u0000${child.keyRange?.max || ""}\u0000${child.root}\u0000${child.level}\u0000${child.count}`,
+    () => ({
+      domain,
+      key: child.keyRange?.max || "",
+      root: child.root,
+      rootHash: child.rootHash,
+      level: child.level,
+      count: child.count
+    })
+  );
+}
+
+function shouldCutChunk({ size, boundarySignal, splitter }) {
   if (size < splitter.minEntries) return false;
-  return (first32(boundaryHash) & splitter.boundaryMask) === 0 || size >= splitter.maxEntries;
+  return (boundarySignal & splitter.boundaryMask) === 0 || size >= splitter.maxEntries;
 }
 
 function chunkEntryGroups(entries, snapshotDomain) {
@@ -164,7 +187,7 @@ function chunkEntryGroups(entries, snapshotDomain) {
   let active = [];
   for (const entry of entries) {
     active.push(entry);
-    if (shouldCutChunk({ size: active.length, boundaryHash: entryBoundaryHash(snapshotDomain, entry), splitter })) {
+    if (shouldCutChunk({ size: active.length, boundarySignal: entryBoundarySignal(snapshotDomain, entry), splitter })) {
       chunks.push({ entries: active, closed: true });
       active = [];
     }
@@ -180,11 +203,27 @@ function ensureSortedEntries(entries) {
   return true;
 }
 
+// Anti-malleability check: a stored leaf entry must already be in canonical
+// index-entry shape. Generic canonical encoding preserves extra fields and
+// non-string scalars inside the node CID, so without this comparison two
+// different node payloads could describe the same logical entry set.
+function rawEntryIsCanonical(raw, normalized) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  if (Object.keys(raw).length !== 4) return false;
+  return raw.key === normalized.key &&
+    raw.valueRef === normalized.valueRef &&
+    raw.valueHash === normalized.valueHash &&
+    canonicalString(raw.metadata) === canonicalString(normalized.metadata);
+}
+
 function validateLeafNodePayload(payload) {
   if (!payload || payload.protocol !== PACTIUM_PROTOCOL || payload.nodeType !== INDEX_NODE_TYPE || payload.level !== 0) return false;
-  const entries = asArray(payload.entries).map(normalizeIndexEntry);
+  const rawEntries = asArray(payload.entries);
+  const entries = rawEntries.map(normalizeIndexEntry);
   if (entries.length !== Number(payload.count || 0)) return false;
-  if (!entryListsEqual(entries, asArray(payload.entries).map(normalizeIndexEntry))) return false;
+  for (let index = 0; index < rawEntries.length; index += 1) {
+    if (!rawEntryIsCanonical(rawEntries[index], entries[index])) return false;
+  }
   if (!ensureSortedEntries(entries)) return false;
   return keyRangesEqual(rangeForEntries(entries), payload.keyRange || {});
 }
@@ -201,13 +240,17 @@ function validateInternalNodePayload(payload) {
   return keyRangesEqual(rangeForChildren(children), payload.keyRange || {});
 }
 
-function verifyNodePayload(payload, expected = {}) {
-  const finalized = finalizeNodePayload(payload);
-  const root = cidForCanonical(finalized);
+// Fast path for payloads this module already finalized: skips re-finalization
+// and reuses a precomputed root CID instead of re-encoding the payload.
+function verifyFinalizedNodePayload(finalized, expected = {}, root = cidForCanonical(finalized)) {
   const validShape = finalized.level === 0 ? validateLeafNodePayload(finalized) : validateInternalNodePayload(finalized);
   return validShape &&
     (!expected.root || expected.root === root) &&
     (!expected.rootHash || expected.rootHash === hexFromCid(root));
+}
+
+function verifyNodePayload(payload, expected = {}) {
+  return verifyFinalizedNodePayload(finalizeNodePayload(payload), expected);
 }
 
 function findChildIndex(children, key) {
@@ -221,22 +264,6 @@ function findChildIndex(children, key) {
     else high = middle;
   }
   return low;
-}
-
-function cacheGet(cache, key) {
-  if (!cache.has(key)) return undefined;
-  const value = cache.get(key);
-  cache.delete(key);
-  cache.set(key, value);
-  return value;
-}
-
-function cacheSet(cache, key, value, limit) {
-  if (cache.has(key)) cache.delete(key);
-  cache.set(key, value);
-  while (cache.size > limit) {
-    cache.delete(cache.keys().next().value);
-  }
 }
 
 function rangesIntersect(range, min, max) {
@@ -265,11 +292,12 @@ function compactProofPath(path) {
   const descriptorTable = [];
   const descriptorIndexes = new Map();
   function refFor(descriptor) {
-    const normalized = normalizeCanonicalValue(descriptor);
-    const key = canonicalString(normalized);
+    // canonicalString normalizes while serializing, so the descriptor is only
+    // deep-normalized when it first enters the table.
+    const key = canonicalString(descriptor);
     if (!descriptorIndexes.has(key)) {
       descriptorIndexes.set(key, descriptorTable.length);
-      descriptorTable.push(normalized);
+      descriptorTable.push(normalizeCanonicalValue(descriptor));
     }
     return descriptorIndexes.get(key);
   }
@@ -292,8 +320,7 @@ function descriptorTableForProof(proof, context = {}) {
   return asArray(context?.proofMaterial?.proofDescriptorTable).map((descriptor) => normalizeCanonicalValue(descriptor));
 }
 
-function expandProofPath(proof, context = {}) {
-  const descriptorTable = descriptorTableForProof(proof, context);
+function expandProofPath(proof, context = {}, descriptorTable = descriptorTableForProof(proof, context)) {
   return proofEntryPath(proof.path).map((item) => {
     const siblingDescriptors = [];
     for (const ref of item.siblingDescriptorRefs) {
@@ -343,8 +370,9 @@ function verifyPathToRoot({ proof, leafDescriptor, selectionKey = null, context 
       children,
       splitter: splitterConfig()
     });
-    if (!verifyNodePayload(parentPayload, { rootHash: pathItem.nodeHash })) return null;
-    current = descriptorFromNodePayload(parentPayload);
+    const parentRoot = cidForCanonical(parentPayload);
+    if (!verifyFinalizedNodePayload(parentPayload, { rootHash: pathItem.nodeHash }, parentRoot)) return null;
+    current = descriptorFromNodePayload(parentPayload, parentRoot);
     if (current.root !== pathItem.nodeRoot) return null;
   }
   return current;
@@ -356,14 +384,15 @@ function verifyMembershipProof(proof, context = {}) {
   const leafPayload = nodePayloadFromProofLeaf(proof);
   const leafRoot = cidForCanonical(leafPayload);
   const leafRootHash = hexFromCid(leafRoot);
-  if (!verifyNodePayload(leafPayload, { root: proof.leafRoot || leafRoot })) return false;
+  if (!verifyFinalizedNodePayload(leafPayload, { root: proof.leafRoot || leafRoot }, leafRoot)) return false;
   if ((proof.leafRoot && proof.leafRoot !== leafRoot) || (proof.leafRootHash && proof.leafRootHash !== leafRootHash)) return false;
   const leafDescriptor = descriptorFromNodePayload(leafPayload, leafRoot);
   const normalizedKey = String(proof.key || "");
   const rootDescriptor = verifyPathToRoot({ proof, leafDescriptor, selectionKey: normalizedKey, context });
   if (!rootDescriptor) return false;
   if (rootDescriptor.root !== proof.indexRoot || rootDescriptor.rootHash !== proof.rootHash) return false;
-  const entries = asArray(leafPayload.entries).map(normalizeIndexEntry);
+  // Leaf shape validation guarantees payload entries are canonical entries.
+  const entries = asArray(leafPayload.entries);
   const entry = normalizeIndexEntry(proof.entry || {});
   const found = entries.find((candidate) => candidate.key === normalizedKey);
   return Boolean(found) &&
@@ -377,14 +406,15 @@ function verifyCompactNonMembershipProof(proof, context = {}) {
   const leafPayload = nodePayloadFromProofLeaf(proof);
   const leafRoot = cidForCanonical(leafPayload);
   const leafRootHash = hexFromCid(leafRoot);
-  if (!verifyNodePayload(leafPayload, { root: proof.leafRoot || leafRoot })) return false;
+  if (!verifyFinalizedNodePayload(leafPayload, { root: proof.leafRoot || leafRoot }, leafRoot)) return false;
   if ((proof.leafRoot && proof.leafRoot !== leafRoot) || (proof.leafRootHash && proof.leafRootHash !== leafRootHash)) return false;
   const leafDescriptor = descriptorFromNodePayload(leafPayload, leafRoot);
   const normalizedKey = String(proof.key || "");
   const rootDescriptor = verifyPathToRoot({ proof, leafDescriptor, selectionKey: normalizedKey, context });
   if (!rootDescriptor) return false;
   if (rootDescriptor.root !== proof.indexRoot || rootDescriptor.rootHash !== proof.rootHash) return false;
-  const entries = asArray(leafPayload.entries).map(normalizeIndexEntry);
+  // Leaf shape validation guarantees payload entries are canonical entries.
+  const entries = asArray(leafPayload.entries);
   const containsKey = entries.some((entry) => entry.key === normalizedKey);
   const insertionPoint = entries.findIndex((entry) => compareIndexKeys(entry.key, normalizedKey) > 0);
   const left = insertionPoint < 0
@@ -403,6 +433,9 @@ function verifyMembershipMultiproof(proof, context = {}) {
   if (!Array.isArray(proof.keys) || proof.keys.length === 0) return false;
   if (asArray(proof.missingKeys).length > 0) return false;
   const seenKeys = new Set();
+  // The descriptor table is shared by every leaf path, so normalize it once
+  // instead of once per leaf.
+  const descriptorTable = descriptorTableForProof(proof, context);
   for (const leafProof of asArray(proof.leaves)) {
     const leafKeys = asArray(leafProof.keys).map(String);
     if (leafKeys.length === 0) return false;
@@ -422,7 +455,7 @@ function verifyMembershipMultiproof(proof, context = {}) {
     const leafPayload = nodePayloadFromProofLeaf(localProof);
     const leafRoot = cidForCanonical(leafPayload);
     const leafRootHash = hexFromCid(leafRoot);
-    if (!verifyNodePayload(leafPayload, { root: leafProof.leafRoot || leafRoot })) return false;
+    if (!verifyFinalizedNodePayload(leafPayload, { root: leafProof.leafRoot || leafRoot }, leafRoot)) return false;
     if ((leafProof.leafRoot && leafProof.leafRoot !== leafRoot) ||
         (leafProof.leafRootHash && leafProof.leafRootHash !== leafRootHash)) {
       return false;
@@ -432,13 +465,14 @@ function verifyMembershipMultiproof(proof, context = {}) {
       proof: localProof,
       leafDescriptor,
       selectionKey: leafKeys[0],
-      context
+      context,
+      expandedPath: expandProofPath(localProof, context, descriptorTable)
     });
     if (!rootDescriptor || rootDescriptor.root !== proof.indexRoot || rootDescriptor.rootHash !== proof.rootHash) {
       return false;
     }
-    const entries = asArray(leafPayload.entries).map(normalizeIndexEntry);
-    const entriesByKey = new Map(entries.map((entry) => [entry.key, entry]));
+    // Leaf shape validation guarantees payload entries are canonical entries.
+    const entriesByKey = new Map(asArray(leafPayload.entries).map((entry) => [entry.key, entry]));
     for (const key of leafKeys) {
       if (!entriesByKey.has(key)) return false;
       seenKeys.add(key);
@@ -467,6 +501,9 @@ function verifyRangeProof(proof, context = {}) {
   const coveredRoots = new Set();
   const leafRecords = [];
   const requestedLimit = clampLimit(proof.limit, 100000);
+  // The descriptor table is shared by every leaf path, so normalize it once
+  // instead of once per leaf.
+  const descriptorTable = descriptorTableForProof(proof, context);
   for (const leafProof of asArray(proof.leaves)) {
     const localProof = {
       protocol: proof.protocol,
@@ -500,7 +537,7 @@ function verifyRangeProof(proof, context = {}) {
       matchingEntries.push(entry);
     }
     selectionKey ||= descriptor.keyRange?.min || "";
-    const expandedPath = expandProofPath(localProof, context);
+    const expandedPath = expandProofPath(localProof, context, descriptorTable);
     const rootDescriptor = verifyPathToRoot({
       proof: localProof,
       leafDescriptor: descriptor,
@@ -617,7 +654,7 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     let active = [];
     for (const child of children) {
       active.push(child);
-      if (shouldCutChunk({ size: active.length, boundaryHash: childBoundaryHash(snapshotDomain, child), splitter })) {
+      if (shouldCutChunk({ size: active.length, boundarySignal: childBoundarySignal(snapshotDomain, child), splitter })) {
         chunks.push(active);
         active = [];
       }
@@ -1105,11 +1142,10 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     const table = [];
     const tableMap = new Map();
     function globalRef(descriptor) {
-      const normalized = normalizeCanonicalValue(descriptor);
-      const key = canonicalString(normalized);
+      const key = canonicalString(descriptor);
       if (!tableMap.has(key)) {
         tableMap.set(key, table.length);
-        table.push(normalized);
+        table.push(normalizeCanonicalValue(descriptor));
       }
       return tableMap.get(key);
     }
@@ -1246,11 +1282,10 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     const table = [];
     const tableMap = new Map();
     function refFor(descriptor) {
-      const normalized = normalizeCanonicalValue(descriptor);
-      const key = canonicalString(normalized);
+      const key = canonicalString(descriptor);
       if (!tableMap.has(key)) {
         tableMap.set(key, table.length);
-        table.push(normalized);
+        table.push(normalizeCanonicalValue(descriptor));
       }
       return tableMap.get(key);
     }
