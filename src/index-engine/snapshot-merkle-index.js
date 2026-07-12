@@ -7,11 +7,22 @@ import {
   PACTIUM_SCHEMA_VERSION
 } from "../protocol/constants.js";
 import { canonicalEncode, canonicalString, normalizeCanonicalValue } from "../canonical/value.js";
-import { cidForBytes, cidForCanonical, hashBytes, hexFromCid, protocolHashHex } from "../protocol/hashing.js";
+import { cidForCanonical, hexFromCid, protocolHashHex } from "../protocol/hashing.js";
 import { createStoragePort } from "../storage/storage-port.js";
 import { asArray, asRecord, safeToken } from "../shared/records.js";
+import { cacheGet, cacheSet } from "../shared/lru-cache.js";
 
 const INDEX_NODE_TYPE = "pactium.index.node";
+const CACHE_LIMITS = Object.freeze({
+  roots: 100,
+  nodes: 10000,
+  snapshots: 100
+});
+const BOUNDARY_HASH_CACHE_LIMIT = 16384;
+// Boundary hashes are pure functions of protocol constants and entry/child
+// identity, so one shared cache is correct across all engine instances.
+const boundaryHashCache = new Map();
+
 function compareIndexKeys(left, right) {
   return String(left || "") < String(right || "")
     ? -1
@@ -49,16 +60,12 @@ function normalizeIndexEntry(entry) {
 }
 
 function normalizeEntries(entries) {
-  const normalizedEntries = asArray(entries)
-    .map(normalizeIndexEntry)
-    .filter((entry) => entry.key)
-    .sort((left, right) => compareIndexKeys(left.key, right.key));
-  const deduped = [];
-  for (const entry of normalizedEntries) {
-    if (deduped.length > 0 && deduped[deduped.length - 1].key === entry.key) deduped[deduped.length - 1] = entry;
-    else deduped.push(entry);
+  const byKey = new Map();
+  for (const rawEntry of asArray(entries)) {
+    const entry = normalizeIndexEntry(rawEntry);
+    if (entry.key) byKey.set(entry.key, entry);
   }
-  return deduped;
+  return [...byKey.values()].sort((left, right) => compareIndexKeys(left.key, right.key));
 }
 
 function rangeForEntries(entries) {
@@ -73,6 +80,11 @@ function rangeForChildren(children) {
     min: children[0]?.keyRange?.min || "",
     max: children[children.length - 1]?.keyRange?.max || ""
   };
+}
+
+function keyRangesEqual(left, right) {
+  return String(left?.min || "") === String(right?.min || "") &&
+    String(left?.max || "") === String(right?.max || "");
 }
 
 function descriptorFromNodePayload(payload, root = cidForCanonical(payload)) {
@@ -105,33 +117,68 @@ function descriptorMatches(left, right) {
     left?.keyRange?.max === right?.keyRange?.max;
 }
 
-function entryBoundaryHash(domain, entry) {
-  return protocolHashHex("index.boundary", {
-    domain,
-    key: entry.key,
-    valueRef: entry.valueRef,
-    valueHash: entry.valueHash
-  });
+function indexEntriesEqual(left, right) {
+  if (!left || !right) return left === right;
+  return left.key === right.key &&
+    left.valueRef === right.valueRef &&
+    left.valueHash === right.valueHash &&
+    canonicalString(asRecord(left.metadata)) === canonicalString(asRecord(right.metadata));
 }
 
-function childBoundaryHash(domain, child) {
-  return protocolHashHex("index.boundary", {
-    domain,
-    key: child.keyRange?.max || "",
-    root: child.root,
-    rootHash: child.rootHash,
-    level: child.level,
-    count: child.count
-  });
+function entryListsEqual(leftEntries, rightEntries) {
+  if (leftEntries.length !== rightEntries.length) return false;
+  for (let index = 0; index < leftEntries.length; index += 1) {
+    if (!indexEntriesEqual(leftEntries[index], rightEntries[index])) return false;
+  }
+  return true;
 }
 
 function first32(hash) {
   return Number.parseInt(String(hash || "").slice(0, 8), 16) || 0;
 }
 
-function shouldCutChunk({ size, boundaryHash, splitter }) {
+// Chunk-boundary decisions consume only the first 32 bits of the boundary
+// hash, and each hash is a pure function of protocol constants plus entry or
+// child identity. Path-copy mutations rehash the same unchanged entries on
+// every leaf rewrite, so the memoized 32-bit signal removes almost all
+// boundary hashing from steady-state writes.
+function boundarySignalFor(cacheKey, buildPayload) {
+  const cached = cacheGet(boundaryHashCache, cacheKey);
+  if (cached !== undefined) return cached;
+  const signal = first32(protocolHashHex("index.boundary", buildPayload()));
+  cacheSet(boundaryHashCache, cacheKey, signal, BOUNDARY_HASH_CACHE_LIMIT);
+  return signal;
+}
+
+function entryBoundarySignal(domain, entry) {
+  return boundarySignalFor(
+    `e\u0000${domain}\u0000${entry.key}\u0000${entry.valueRef}\u0000${entry.valueHash}`,
+    () => ({
+      domain,
+      key: entry.key,
+      valueRef: entry.valueRef,
+      valueHash: entry.valueHash
+    })
+  );
+}
+
+function childBoundarySignal(domain, child) {
+  return boundarySignalFor(
+    `c\u0000${domain}\u0000${child.keyRange?.max || ""}\u0000${child.root}\u0000${child.level}\u0000${child.count}`,
+    () => ({
+      domain,
+      key: child.keyRange?.max || "",
+      root: child.root,
+      rootHash: child.rootHash,
+      level: child.level,
+      count: child.count
+    })
+  );
+}
+
+function shouldCutChunk({ size, boundarySignal, splitter }) {
   if (size < splitter.minEntries) return false;
-  return (first32(boundaryHash) & splitter.boundaryMask) === 0 || size >= splitter.maxEntries;
+  return (boundarySignal & splitter.boundaryMask) === 0 || size >= splitter.maxEntries;
 }
 
 function chunkEntryGroups(entries, snapshotDomain) {
@@ -140,7 +187,7 @@ function chunkEntryGroups(entries, snapshotDomain) {
   let active = [];
   for (const entry of entries) {
     active.push(entry);
-    if (shouldCutChunk({ size: active.length, boundaryHash: entryBoundaryHash(snapshotDomain, entry), splitter })) {
+    if (shouldCutChunk({ size: active.length, boundarySignal: entryBoundarySignal(snapshotDomain, entry), splitter })) {
       chunks.push({ entries: active, closed: true });
       active = [];
     }
@@ -156,13 +203,29 @@ function ensureSortedEntries(entries) {
   return true;
 }
 
+// Anti-malleability check: a stored leaf entry must already be in canonical
+// index-entry shape. Generic canonical encoding preserves extra fields and
+// non-string scalars inside the node CID, so without this comparison two
+// different node payloads could describe the same logical entry set.
+function rawEntryIsCanonical(raw, normalized) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  if (Object.keys(raw).length !== 4) return false;
+  return raw.key === normalized.key &&
+    raw.valueRef === normalized.valueRef &&
+    raw.valueHash === normalized.valueHash &&
+    canonicalString(raw.metadata) === canonicalString(normalized.metadata);
+}
+
 function validateLeafNodePayload(payload) {
   if (!payload || payload.protocol !== PACTIUM_PROTOCOL || payload.nodeType !== INDEX_NODE_TYPE || payload.level !== 0) return false;
-  const entries = asArray(payload.entries).map(normalizeIndexEntry);
+  const rawEntries = asArray(payload.entries);
+  const entries = rawEntries.map(normalizeIndexEntry);
   if (entries.length !== Number(payload.count || 0)) return false;
-  if (canonicalString(entries) !== canonicalString(asArray(payload.entries))) return false;
+  for (let index = 0; index < rawEntries.length; index += 1) {
+    if (!rawEntryIsCanonical(rawEntries[index], entries[index])) return false;
+  }
   if (!ensureSortedEntries(entries)) return false;
-  return canonicalString(rangeForEntries(entries)) === canonicalString(payload.keyRange || {});
+  return keyRangesEqual(rangeForEntries(entries), payload.keyRange || {});
 }
 
 function validateInternalNodePayload(payload) {
@@ -174,23 +237,33 @@ function validateInternalNodePayload(payload) {
   for (let index = 1; index < children.length; index += 1) {
     if (compareIndexKeys(children[index - 1].keyRange?.max, children[index].keyRange?.min) >= 0) return false;
   }
-  return canonicalString(rangeForChildren(children)) === canonicalString(payload.keyRange || {});
+  return keyRangesEqual(rangeForChildren(children), payload.keyRange || {});
 }
 
-function verifyNodePayload(payload, expected = {}) {
-  const finalized = finalizeNodePayload(payload);
-  const root = cidForCanonical(finalized);
+// Fast path for payloads this module already finalized: skips re-finalization
+// and reuses a precomputed root CID instead of re-encoding the payload.
+function verifyFinalizedNodePayload(finalized, expected = {}, root = cidForCanonical(finalized)) {
   const validShape = finalized.level === 0 ? validateLeafNodePayload(finalized) : validateInternalNodePayload(finalized);
   return validShape &&
     (!expected.root || expected.root === root) &&
     (!expected.rootHash || expected.rootHash === hexFromCid(root));
 }
 
+function verifyNodePayload(payload, expected = {}) {
+  return verifyFinalizedNodePayload(finalizeNodePayload(payload), expected);
+}
+
 function findChildIndex(children, key) {
   if (children.length === 0) return -1;
   const normalizedKey = String(key || "");
-  const index = children.findIndex((child) => compareIndexKeys(normalizedKey, child.keyRange?.max) <= 0);
-  return index >= 0 ? index : children.length - 1;
+  let low = 0;
+  let high = children.length - 1;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (compareIndexKeys(normalizedKey, children[middle].keyRange?.max) > 0) low = middle + 1;
+    else high = middle;
+  }
+  return low;
 }
 
 function rangesIntersect(range, min, max) {
@@ -219,11 +292,12 @@ function compactProofPath(path) {
   const descriptorTable = [];
   const descriptorIndexes = new Map();
   function refFor(descriptor) {
-    const normalized = normalizeCanonicalValue(descriptor);
-    const key = canonicalString(normalized);
+    // canonicalString normalizes while serializing, so the descriptor is only
+    // deep-normalized when it first enters the table.
+    const key = canonicalString(descriptor);
     if (!descriptorIndexes.has(key)) {
       descriptorIndexes.set(key, descriptorTable.length);
-      descriptorTable.push(normalized);
+      descriptorTable.push(normalizeCanonicalValue(descriptor));
     }
     return descriptorIndexes.get(key);
   }
@@ -246,8 +320,7 @@ function descriptorTableForProof(proof, context = {}) {
   return asArray(context?.proofMaterial?.proofDescriptorTable).map((descriptor) => normalizeCanonicalValue(descriptor));
 }
 
-function expandProofPath(proof, context = {}) {
-  const descriptorTable = descriptorTableForProof(proof, context);
+function expandProofPath(proof, context = {}, descriptorTable = descriptorTableForProof(proof, context)) {
   return proofEntryPath(proof.path).map((item) => {
     const siblingDescriptors = [];
     for (const ref of item.siblingDescriptorRefs) {
@@ -276,9 +349,9 @@ function nodePayloadFromProofLeaf(proof) {
   });
 }
 
-function verifyPathToRoot({ proof, leafDescriptor, selectionKey = null, context = {} }) {
+function verifyPathToRoot({ proof, leafDescriptor, selectionKey = null, context = {}, expandedPath = null }) {
   let current = leafDescriptor;
-  const path = expandProofPath(proof, context);
+  const path = expandedPath || expandProofPath(proof, context);
   for (const pathItem of path) {
     if (!pathItem.siblingDescriptors) return null;
     const children = pathItem.siblingDescriptors.map((child) => ({ ...child }));
@@ -297,8 +370,9 @@ function verifyPathToRoot({ proof, leafDescriptor, selectionKey = null, context 
       children,
       splitter: splitterConfig()
     });
-    if (!verifyNodePayload(parentPayload, { rootHash: pathItem.nodeHash })) return null;
-    current = descriptorFromNodePayload(parentPayload);
+    const parentRoot = cidForCanonical(parentPayload);
+    if (!verifyFinalizedNodePayload(parentPayload, { rootHash: pathItem.nodeHash }, parentRoot)) return null;
+    current = descriptorFromNodePayload(parentPayload, parentRoot);
     if (current.root !== pathItem.nodeRoot) return null;
   }
   return current;
@@ -310,18 +384,19 @@ function verifyMembershipProof(proof, context = {}) {
   const leafPayload = nodePayloadFromProofLeaf(proof);
   const leafRoot = cidForCanonical(leafPayload);
   const leafRootHash = hexFromCid(leafRoot);
-  if (!verifyNodePayload(leafPayload, { root: proof.leafRoot || leafRoot })) return false;
+  if (!verifyFinalizedNodePayload(leafPayload, { root: proof.leafRoot || leafRoot }, leafRoot)) return false;
   if ((proof.leafRoot && proof.leafRoot !== leafRoot) || (proof.leafRootHash && proof.leafRootHash !== leafRootHash)) return false;
   const leafDescriptor = descriptorFromNodePayload(leafPayload, leafRoot);
   const normalizedKey = String(proof.key || "");
   const rootDescriptor = verifyPathToRoot({ proof, leafDescriptor, selectionKey: normalizedKey, context });
   if (!rootDescriptor) return false;
   if (rootDescriptor.root !== proof.indexRoot || rootDescriptor.rootHash !== proof.rootHash) return false;
-  const entries = asArray(leafPayload.entries).map(normalizeIndexEntry);
+  // Leaf shape validation guarantees payload entries are canonical entries.
+  const entries = asArray(leafPayload.entries);
   const entry = normalizeIndexEntry(proof.entry || {});
   const found = entries.find((candidate) => candidate.key === normalizedKey);
   return Boolean(found) &&
-    canonicalString(found) === canonicalString(entry) &&
+    indexEntriesEqual(found, entry) &&
     indexLeafHash(entry) === proof.leafHash;
 }
 
@@ -331,14 +406,15 @@ function verifyCompactNonMembershipProof(proof, context = {}) {
   const leafPayload = nodePayloadFromProofLeaf(proof);
   const leafRoot = cidForCanonical(leafPayload);
   const leafRootHash = hexFromCid(leafRoot);
-  if (!verifyNodePayload(leafPayload, { root: proof.leafRoot || leafRoot })) return false;
+  if (!verifyFinalizedNodePayload(leafPayload, { root: proof.leafRoot || leafRoot }, leafRoot)) return false;
   if ((proof.leafRoot && proof.leafRoot !== leafRoot) || (proof.leafRootHash && proof.leafRootHash !== leafRootHash)) return false;
   const leafDescriptor = descriptorFromNodePayload(leafPayload, leafRoot);
   const normalizedKey = String(proof.key || "");
   const rootDescriptor = verifyPathToRoot({ proof, leafDescriptor, selectionKey: normalizedKey, context });
   if (!rootDescriptor) return false;
   if (rootDescriptor.root !== proof.indexRoot || rootDescriptor.rootHash !== proof.rootHash) return false;
-  const entries = asArray(leafPayload.entries).map(normalizeIndexEntry);
+  // Leaf shape validation guarantees payload entries are canonical entries.
+  const entries = asArray(leafPayload.entries);
   const containsKey = entries.some((entry) => entry.key === normalizedKey);
   const insertionPoint = entries.findIndex((entry) => compareIndexKeys(entry.key, normalizedKey) > 0);
   const left = insertionPoint < 0
@@ -357,7 +433,12 @@ function verifyMembershipMultiproof(proof, context = {}) {
   if (!Array.isArray(proof.keys) || proof.keys.length === 0) return false;
   if (asArray(proof.missingKeys).length > 0) return false;
   const seenKeys = new Set();
+  // The descriptor table is shared by every leaf path, so normalize it once
+  // instead of once per leaf.
+  const descriptorTable = descriptorTableForProof(proof, context);
   for (const leafProof of asArray(proof.leaves)) {
+    const leafKeys = asArray(leafProof.keys).map(String);
+    if (leafKeys.length === 0) return false;
     const localProof = {
       protocol: proof.protocol,
       proofType: PACTIUM_PROOF_TYPES.indexMembership,
@@ -372,17 +453,28 @@ function verifyMembershipMultiproof(proof, context = {}) {
       descriptorTableScope: proof.descriptorTableScope
     };
     const leafPayload = nodePayloadFromProofLeaf(localProof);
-    const entries = asArray(leafPayload.entries).map(normalizeIndexEntry);
-    for (const key of asArray(leafProof.keys).map(String)) {
-      const entry = entries.find((candidate) => candidate.key === key);
-      if (!entry) return false;
-      const memberProof = {
-        ...localProof,
-        key,
-        entry,
-        leafHash: indexLeafHash(entry)
-      };
-      if (!verifyMembershipProof(memberProof, context)) return false;
+    const leafRoot = cidForCanonical(leafPayload);
+    const leafRootHash = hexFromCid(leafRoot);
+    if (!verifyFinalizedNodePayload(leafPayload, { root: leafProof.leafRoot || leafRoot }, leafRoot)) return false;
+    if ((leafProof.leafRoot && leafProof.leafRoot !== leafRoot) ||
+        (leafProof.leafRootHash && leafProof.leafRootHash !== leafRootHash)) {
+      return false;
+    }
+    const leafDescriptor = descriptorFromNodePayload(leafPayload, leafRoot);
+    const rootDescriptor = verifyPathToRoot({
+      proof: localProof,
+      leafDescriptor,
+      selectionKey: leafKeys[0],
+      context,
+      expandedPath: expandProofPath(localProof, context, descriptorTable)
+    });
+    if (!rootDescriptor || rootDescriptor.root !== proof.indexRoot || rootDescriptor.rootHash !== proof.rootHash) {
+      return false;
+    }
+    // Leaf shape validation guarantees payload entries are canonical entries.
+    const entriesByKey = new Map(asArray(leafPayload.entries).map((entry) => [entry.key, entry]));
+    for (const key of leafKeys) {
+      if (!entriesByKey.has(key)) return false;
       seenKeys.add(key);
     }
   }
@@ -407,9 +499,11 @@ function verifyRangeProof(proof, context = {}) {
   const after = String(proof.after || "");
   if (compareIndexKeys(min, max) > 0) return false;
   const coveredRoots = new Set();
-  const collectedEntries = [];
-  const leafDescriptors = [];
+  const leafRecords = [];
   const requestedLimit = clampLimit(proof.limit, 100000);
+  // The descriptor table is shared by every leaf path, so normalize it once
+  // instead of once per leaf.
+  const descriptorTable = descriptorTableForProof(proof, context);
   for (const leafProof of asArray(proof.leaves)) {
     const localProof = {
       protocol: proof.protocol,
@@ -432,43 +526,65 @@ function verifyRangeProof(proof, context = {}) {
     if (leafProof.leafRoot !== leafRoot || leafProof.leafRootHash !== hexFromCid(leafRoot)) return false;
     const descriptor = descriptorFromNodePayload(leafPayload, leafRoot);
     const entries = asArray(leafPayload.entries).map(normalizeIndexEntry);
-    const selectionKey = entries.find((entry) =>
-      (!after || compareIndexKeys(entry.key, after) > 0) &&
-      compareIndexKeys(entry.key, min) >= 0 &&
-      compareIndexKeys(entry.key, max) <= 0
-    )?.key || descriptor.keyRange?.min || "";
-    const rootDescriptor = verifyPathToRoot({ proof: localProof, leafDescriptor: descriptor, selectionKey, context });
+    const matchingEntries = [];
+    let selectionKey = "";
+    for (const entry of entries) {
+      const matches = (!after || compareIndexKeys(entry.key, after) > 0) &&
+        compareIndexKeys(entry.key, min) >= 0 &&
+        compareIndexKeys(entry.key, max) <= 0;
+      if (!matches) continue;
+      if (!selectionKey) selectionKey = entry.key;
+      matchingEntries.push(entry);
+    }
+    selectionKey ||= descriptor.keyRange?.min || "";
+    const expandedPath = expandProofPath(localProof, context, descriptorTable);
+    const rootDescriptor = verifyPathToRoot({
+      proof: localProof,
+      leafDescriptor: descriptor,
+      selectionKey,
+      context,
+      expandedPath
+    });
     if (!rootDescriptor || rootDescriptor.root !== proof.indexRoot || rootDescriptor.rootHash !== proof.rootHash) return false;
     coveredRoots.add(leafRoot);
-    for (const pathItem of expandProofPath(localProof, context)) coveredRoots.add(pathItem.nodeRoot);
-    leafDescriptors.push(descriptor);
-    for (const entry of entries) {
-      if (after && compareIndexKeys(entry.key, after) <= 0) continue;
-      if (compareIndexKeys(entry.key, min) < 0 || compareIndexKeys(entry.key, max) > 0) continue;
-      if (collectedEntries.length < requestedLimit) collectedEntries.push(entry);
-    }
+    for (const pathItem of expandedPath) coveredRoots.add(pathItem.nodeRoot);
+    leafRecords.push({
+      proof: leafProof,
+      descriptor,
+      entries,
+      matchingEntries,
+      expandedPath
+    });
   }
   const expectedEntries = asArray(proof.entries).map(normalizeIndexEntry);
-  if (canonicalString(collectedEntries) !== canonicalString(expectedEntries)) return false;
-  const sortedLeafDescriptors = [...leafDescriptors].sort((left, right) => compareIndexKeys(left.keyRange?.min, right.keyRange?.min));
-  for (let index = 1; index < sortedLeafDescriptors.length; index += 1) {
-    if (compareIndexKeys(sortedLeafDescriptors[index - 1].keyRange?.max, sortedLeafDescriptors[index].keyRange?.min) >= 0) {
+  if (expectedEntries.length > requestedLimit) return false;
+  const sortedLeafRecords = [...leafRecords].sort((left, right) => compareIndexKeys(left.descriptor.keyRange?.min, right.descriptor.keyRange?.min));
+  for (let index = 1; index < sortedLeafRecords.length; index += 1) {
+    if (compareIndexKeys(sortedLeafRecords[index - 1].descriptor.keyRange?.max, sortedLeafRecords[index].descriptor.keyRange?.min) >= 0) {
       return false;
     }
   }
+  const matchingEntries = sortedLeafRecords.flatMap((record) => record.matchingEntries);
+  if (!entryListsEqual(matchingEntries.slice(0, expectedEntries.length), expectedEntries)) return false;
   if (expectedEntries.length === 0) {
+    if (matchingEntries.length > 0) return false;
+    if (proof.truncated === true) return false;
     return proof.boundaryProof ? verifyCompactNonMembershipProof(proof.boundaryProof, context) : asArray(proof.leaves).length === 0;
   }
   const lastReturnedKey = expectedEntries[expectedEntries.length - 1]?.key || "";
-  const truncated = proof.truncated === true;
-  for (const leafProof of asArray(proof.leaves)) {
-    const localProof = { ...leafProof, descriptorTable: proof.descriptorTable, descriptorTableScope: proof.descriptorTableScope };
-    for (const pathItem of expandProofPath(localProof, context)) {
+  const hasLocalExtra = matchingEntries.length > expectedEntries.length;
+  if (proof.truncated === true) {
+    if (expectedEntries.length !== requestedLimit || !hasLocalExtra) return false;
+  } else if (hasLocalExtra) {
+    return false;
+  }
+  for (const record of sortedLeafRecords) {
+    for (const pathItem of record.expandedPath) {
       if (!pathItem.siblingDescriptors) return false;
       for (const descriptor of pathItem.siblingDescriptors) {
         if (!proofRangeContains(descriptor.keyRange, proof)) continue;
         if (coveredRoots.has(descriptor.root)) continue;
-        if (truncated && lastReturnedKey && compareIndexKeys(descriptor.keyRange?.min, lastReturnedKey) > 0) continue;
+        if (proof.truncated === true && lastReturnedKey && compareIndexKeys(descriptor.keyRange?.min, lastReturnedKey) > 0) continue;
         return false;
       }
     }
@@ -495,18 +611,19 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     const refs = asArray(finalized.children).map((child) => child.root).filter(Boolean);
     const block = await storage.putBlock(finalized, { kind: `index-node:${finalized.domain}`, refs });
     const descriptor = descriptorFromNodePayload(finalized, block.cid);
-    nodes.set(block.cid, finalized);
+    cacheSet(nodes, block.cid, finalized, CACHE_LIMITS.nodes);
     return { payload: finalized, descriptor };
   }
 
   async function readNode(root) {
     if (!root) return null;
-    if (nodes.has(root)) return nodes.get(root);
+    const cached = cacheGet(nodes, root);
+    if (cached) return cached;
     const block = await storage.getBlock(root);
     if (!block) throw new Error(`Index node missing for ${root}`);
     const payload = normalizeCanonicalValue(JSON.parse(Buffer.from(block.payloadBase64, "base64").toString("utf8")));
     if (!verifyNodePayload(payload, { root })) throw new Error(`Index node integrity failure for ${root}`);
-    nodes.set(root, payload);
+    cacheSet(nodes, root, payload, CACHE_LIMITS.nodes);
     return payload;
   }
 
@@ -537,7 +654,7 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     let active = [];
     for (const child of children) {
       active.push(child);
-      if (shouldCutChunk({ size: active.length, boundaryHash: childBoundaryHash(snapshotDomain, child), splitter })) {
+      if (shouldCutChunk({ size: active.length, boundarySignal: childBoundarySignal(snapshotDomain, child), splitter })) {
         chunks.push(active);
         active = [];
       }
@@ -583,7 +700,7 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
       height: rootDescriptor.level,
       splitter: splitterConfig()
     };
-    roots.set(rootDescriptor.root, indexRoot);
+    cacheSet(roots, rootDescriptor.root, indexRoot, CACHE_LIMITS.roots);
     await storage.putProtocolObject("index", `${safeToken(snapshotDomain)}-${rootDescriptor.rootHash}`, indexRoot);
     if (snapshotDomain !== domain) {
       await storage.putProtocolObject("index", `${safeToken(domain)}-${rootDescriptor.rootHash}`, indexRoot);
@@ -605,7 +722,7 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
       height: rootDescriptor.level,
       splitter: splitterConfig()
     };
-    roots.set(rootDescriptor.root, indexRoot);
+    cacheSet(roots, rootDescriptor.root, indexRoot, CACHE_LIMITS.roots);
     await storage.putProtocolObject("index", `${safeToken(snapshotDomain)}-${rootDescriptor.rootHash}`, indexRoot);
     if (snapshotDomain !== domain) {
       await storage.putProtocolObject("index", `${safeToken(domain)}-${rootDescriptor.rootHash}`, indexRoot);
@@ -619,10 +736,11 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
       const empty = await writeIndexRoot([], domain);
       return empty;
     }
-    if (roots.has(root)) return roots.get(root);
+    const cached = cacheGet(roots, root);
+    if (cached) return cached;
     const object = await storage.getProtocolObject("index", `${safeToken(domain)}-${hexFromCid(root)}`, null);
     if (!object) throw new Error(`Index snapshot missing for ${root}`);
-    roots.set(root, object);
+    cacheSet(roots, root, object, CACHE_LIMITS.roots);
     return object;
   }
 
@@ -691,7 +809,8 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
       const empty = await writeIndexRoot([], domain);
       root = empty.root;
     }
-    if (snapshots.has(root)) return snapshots.get(root);
+    const cached = cacheGet(snapshots, root);
+    if (cached) return cached;
     const indexRoot = await readIndexRoot(root);
     const entries = await collectEntries(root);
     const leafHashes = entries.map(indexLeafHash);
@@ -701,7 +820,7 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
       leafHashes,
       chunkBoundaries: await chunkBoundaries(root)
     };
-    snapshots.set(root, snapshot);
+    cacheSet(snapshots, root, snapshot, CACHE_LIMITS.snapshots);
     return snapshot;
   }
 
@@ -832,7 +951,7 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     if (Number(payload.level || 0) === 0) {
       const originalEntries = asArray(payload.entries).map(normalizeIndexEntry);
       const mutatedEntries = applyMutationsToEntries(originalEntries, materializedMutations);
-      if (canonicalString(originalEntries) === canonicalString(mutatedEntries)) return [descriptor];
+      if (entryListsEqual(originalEntries, mutatedEntries)) return [descriptor];
       return writeLeafDescriptorsForMutatedEntries({
         originalDescriptor: descriptor,
         entries: mutatedEntries,
@@ -869,14 +988,20 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
   async function mutatePathCopy(root, mutations, options = {}) {
     const indexRoot = await readIndexRoot(root);
     const snapshotDomain = options.domain || indexRoot.domain || domain;
+    async function unchangedRoot() {
+      if (Number(indexRoot.count || 0) === 0 && indexRoot.domain !== snapshotDomain) {
+        return writeIndexRoot([], snapshotDomain);
+      }
+      return indexRoot;
+    }
     const normalizedMutations = normalizeMutations(mutations);
-    if (normalizedMutations.length === 0) return indexRoot;
+    if (normalizedMutations.length === 0) return unchangedRoot();
     const materializedMutations = [];
     for (const mutation of normalizedMutations) {
       const materialized = await materializeMutation(mutation, snapshotDomain);
       if (materialized) materializedMutations.push(materialized);
     }
-    if (materializedMutations.length === 0) return indexRoot;
+    if (materializedMutations.length === 0) return unchangedRoot();
     const rootDescriptor = {
       root: indexRoot.root,
       rootHash: indexRoot.rootHash,
@@ -885,39 +1010,11 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
       keyRange: indexRoot.keyRange
     };
     const descriptors = await applyMutationsToDescriptor(rootDescriptor, materializedMutations, snapshotDomain);
-    if (descriptors.length === 1 && descriptorMatches(descriptors[0], rootDescriptor)) return indexRoot;
+    if (descriptors.length === 1 && descriptorMatches(descriptors[0], rootDescriptor)) return unchangedRoot();
     return writeRootFromMutationDescriptors(descriptors, snapshotDomain);
   }
 
   async function put(root, key, value, options = {}) {
-    const indexRoot = await readIndexRoot(root);
-    const normalizedKey = String(key || "");
-    // No-op fast path: if the key already exists with the same valueRef,
-    // valueHash, and metadata, skip the mutation entirely and return the
-    // same root. Metadata is compared via canonicalString to cover
-    // structurally equal objects.
-    // When valueRef/valueHash are not provided (plain value), compute both
-    // from the canonical bytes to allow no-op detection without putBlock.
-    if (normalizedKey) {
-      const existing = await get(root, normalizedKey);
-      if (existing) {
-        let valueRef;
-        let valueHash;
-        if (value?.valueRef) {
-          valueRef = String(value.valueRef);
-          valueHash = String(value.valueHash || "");
-        } else {
-          const bytes = Buffer.from(canonicalEncode(value));
-          valueRef = cidForBytes(bytes);
-          valueHash = `sha256:${hashBytes(bytes)}`;
-        }
-        const existingMetadata = canonicalString(normalizeCanonicalValue(asRecord(existing?.metadata)));
-        const newMetadata = canonicalString(normalizeCanonicalValue(asRecord(value?.metadata)));
-        if (existing.valueRef === valueRef && existing.valueHash === valueHash && existingMetadata === newMetadata) {
-          return indexRoot;
-        }
-      }
-    }
     return mutatePathCopy(root, [{
       action: "put",
       key: String(key || ""),
@@ -929,15 +1026,6 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
   }
 
   async function deleteKey(root, key, options = {}) {
-    const normalizedKey = String(key || "");
-    // No-op fast path: if the key does not exist, skip mutation entirely.
-    if (normalizedKey) {
-      const existing = await get(root, normalizedKey);
-      if (!existing) {
-        const indexRoot = await readIndexRoot(root);
-        return indexRoot;
-      }
-    }
     return mutatePathCopy(root, [{ action: "delete", key: String(key || "") }], options);
   }
 
@@ -1051,45 +1139,59 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
 
   async function proveMembershipMultiproof(root, keys = [], options = {}) {
     const normalizedKeys = [...new Set(asArray(keys).map(String).filter(Boolean))].sort(compareIndexKeys);
-    const proofs = await Promise.all(normalizedKeys.map((key) => prove(root, key, options)));
-    const missingKeys = proofs
-      .filter((proof) => proof.proofType !== PACTIUM_PROOF_TYPES.indexMembership)
-      .map((proof) => proof.key);
     const table = [];
     const tableMap = new Map();
     function globalRef(descriptor) {
-      const normalized = normalizeCanonicalValue(descriptor);
-      const key = canonicalString(normalized);
+      const key = canonicalString(descriptor);
       if (!tableMap.has(key)) {
         tableMap.set(key, table.length);
-        table.push(normalized);
+        table.push(normalizeCanonicalValue(descriptor));
       }
       return tableMap.get(key);
     }
-    function remapPath(proof) {
-      const localTable = asArray(proof.descriptorTable);
-      return asArray(proof.path).map((item) => ({
+    function remapPath(compact) {
+      const localTable = asArray(compact.descriptorTable);
+      return asArray(compact.path).map((item) => ({
         ...item,
         siblingDescriptorRefs: asArray(item.siblingDescriptorRefs).map((ref) => globalRef(localTable[Number(ref)]))
       }));
     }
     const leaves = [];
-    const leavesByRoot = new Map();
-    for (const proof of proofs.filter((candidate) => candidate.proofType === PACTIUM_PROOF_TYPES.indexMembership)) {
-      const leafKey = proof.leafRoot;
-      if (!leavesByRoot.has(leafKey)) {
-        leavesByRoot.set(leafKey, {
-          leafRoot: proof.leafRoot,
-          leafRootHash: proof.leafRootHash,
-          leafNode: proof.leafNode,
-          path: remapPath(proof),
-          keys: []
-        });
-        leaves.push(leavesByRoot.get(leafKey));
-      }
-      leavesByRoot.get(leafKey).keys.push(proof.key);
-    }
+    const missingKeys = [];
     const indexRoot = await readIndexRoot(root);
+    let cursor = 0;
+    while (cursor < normalizedKeys.length) {
+      const { leafDescriptor, leafNode, path } = await findLeaf(root, normalizedKeys[cursor]);
+      const entries = asArray(leafNode.entries).map(normalizeIndexEntry);
+      const entryKeys = new Set(entries.map((entry) => entry.key));
+      const leafKeys = [];
+      const leafMax = String(leafDescriptor.keyRange?.max || "");
+      const rootMax = String(indexRoot.keyRange?.max || "");
+      while (cursor < normalizedKeys.length) {
+        const key = normalizedKeys[cursor];
+        const mapsToCurrentLeaf = !leafMax || compareIndexKeys(key, leafMax) <= 0 || leafMax === rootMax;
+        if (!mapsToCurrentLeaf) break;
+        if (entryKeys.has(key)) leafKeys.push(key);
+        else missingKeys.push(key);
+        cursor += 1;
+      }
+      if (leafKeys.length > 0) {
+        const compact = compactProofPath(path);
+        leaves.push({
+          leafRoot: leafDescriptor.root,
+          leafRootHash: leafDescriptor.rootHash,
+          leafNode: {
+            keyRange: leafNode.keyRange,
+            count: leafNode.count,
+            entries,
+            splitter: leafNode.splitter
+          },
+          path: remapPath(compact),
+          keys: leafKeys
+        });
+      }
+      if (cursor < normalizedKeys.length && leafMax === rootMax) break;
+    }
     return {
       protocol: PACTIUM_PROTOCOL,
       proofType: PACTIUM_PROOF_TYPES.indexMembershipMultiproof,
@@ -1109,8 +1211,9 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     const max = String(options.max || "\uffff");
     const after = String(options.after || "");
     const limit = clampLimit(options.limit, 100000);
+    const scanLimit = limit + 1;
     const leaves = [];
-    const entries = [];
+    const scannedEntries = [];
     const rootDescriptor = {
       root: indexRoot.root,
       rootHash: indexRoot.rootHash,
@@ -1119,7 +1222,7 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
       keyRange: indexRoot.keyRange
     };
     async function visit(descriptor, pathFromRoot = []) {
-      if (!descriptor?.root || entries.length >= limit) return;
+      if (!descriptor?.root || scannedEntries.length >= scanLimit) return;
       if (!rangesIntersect(descriptor.keyRange, min, max)) return;
       if (after && compareIndexKeys(descriptor.keyRange?.max, after) <= 0) return;
       const payload = await readNode(descriptor.root);
@@ -1143,14 +1246,14 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
           rawPath: [...pathFromRoot].reverse()
         });
         for (const entry of filtered) {
-          if (entries.length >= limit) break;
-          entries.push(entry);
+          if (scannedEntries.length >= scanLimit) break;
+          scannedEntries.push(entry);
         }
         return;
       }
       const children = asArray(payload.children);
       for (const [childIndex, child] of children.entries()) {
-        if (entries.length >= limit) break;
+        if (scannedEntries.length >= scanLimit) break;
         await visit(child, [
           ...pathFromRoot,
           {
@@ -1165,7 +1268,13 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
       }
     }
     await visit(rootDescriptor);
-    return { indexRoot, leaves, entries, limit, truncated: entries.length >= limit };
+    return {
+      indexRoot,
+      leaves,
+      entries: scannedEntries.slice(0, limit),
+      limit,
+      truncated: scannedEntries.length > limit
+    };
   }
 
   async function proveRange(root, options = {}) {
@@ -1173,11 +1282,10 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     const table = [];
     const tableMap = new Map();
     function refFor(descriptor) {
-      const normalized = normalizeCanonicalValue(descriptor);
-      const key = canonicalString(normalized);
+      const key = canonicalString(descriptor);
       if (!tableMap.has(key)) {
         tableMap.set(key, table.length);
-        table.push(normalized);
+        table.push(normalizeCanonicalValue(descriptor));
       }
       return tableMap.get(key);
     }
@@ -1248,7 +1356,7 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
       .map((key) => {
         const before = leftMap.get(key) || null;
         const after = rightMap.get(key) || null;
-        return canonicalString(before) === canonicalString(after)
+        return indexEntriesEqual(before, after)
           ? null
           : { key, action: before && after ? "update" : before ? "delete" : "create", before, after };
       })
@@ -1320,60 +1428,42 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
 
   async function diffChildDescriptors(leftChildren, rightChildren) {
     const changes = [];
-    let leftIndex = 0;
-    let rightIndex = 0;
-    while (leftIndex < leftChildren.length || rightIndex < rightChildren.length) {
-      const leftChild = leftChildren[leftIndex] || null;
-      const rightChild = rightChildren[rightIndex] || null;
-      if (!leftChild) {
-        changes.push(...await descriptorActionChanges(rightChild, "create"));
-        rightIndex += 1;
+    const groups = [];
+    const items = [
+      ...asArray(leftChildren).map((descriptor) => ({ side: "left", descriptor })),
+      ...asArray(rightChildren).map((descriptor) => ({ side: "right", descriptor }))
+    ].sort((left, right) => {
+      const minCompare = compareKeys(left.descriptor.keyRange?.min, right.descriptor.keyRange?.min);
+      if (minCompare !== 0) return minCompare;
+      const maxCompare = compareKeys(left.descriptor.keyRange?.max, right.descriptor.keyRange?.max);
+      if (maxCompare !== 0) return maxCompare;
+      return left.side.localeCompare(right.side);
+    });
+    for (const item of items) {
+      const rangeMin = String(item.descriptor.keyRange?.min || "");
+      const rangeMax = String(item.descriptor.keyRange?.max || "");
+      const active = groups[groups.length - 1];
+      if (!active || compareKeys(rangeMin, active.max) > 0) {
+        groups.push({ max: rangeMax, items: [item] });
         continue;
       }
-      if (!rightChild) {
-        changes.push(...await descriptorActionChanges(leftChild, "delete"));
-        leftIndex += 1;
-        continue;
-      }
-      if (leftChild.root === rightChild.root) {
-        leftIndex += 1;
-        rightIndex += 1;
-        continue;
-      }
-      if (descriptorMaxBefore(leftChild, rightChild)) {
-        changes.push(...await descriptorActionChanges(leftChild, "delete"));
-        leftIndex += 1;
-        continue;
-      }
-      if (descriptorMaxBefore(rightChild, leftChild)) {
-        changes.push(...await descriptorActionChanges(rightChild, "create"));
-        rightIndex += 1;
-        continue;
-      }
-
-      let groupMax = maxKey(leftChild.keyRange?.max, rightChild.keyRange?.max);
+      active.items.push(item);
+      active.max = maxKey(active.max, rangeMax);
+    }
+    for (const group of groups) {
       const leftGroup = [];
       const rightGroup = [];
-      let expanded = true;
-      while (expanded) {
-        expanded = false;
-        while (leftIndex < leftChildren.length && compareKeys(leftChildren[leftIndex].keyRange?.min, groupMax) <= 0) {
-          const child = leftChildren[leftIndex];
-          leftGroup.push(child);
-          groupMax = maxKey(groupMax, child.keyRange?.max);
-          leftIndex += 1;
-          expanded = true;
-        }
-        while (rightIndex < rightChildren.length && compareKeys(rightChildren[rightIndex].keyRange?.min, groupMax) <= 0) {
-          const child = rightChildren[rightIndex];
-          rightGroup.push(child);
-          groupMax = maxKey(groupMax, child.keyRange?.max);
-          rightIndex += 1;
-          expanded = true;
-        }
+      for (const item of group.items) {
+        if (item.side === "left") leftGroup.push(item.descriptor);
+        else rightGroup.push(item.descriptor);
       }
-
-      if (leftGroup.length === 1 && rightGroup.length === 1 && sameDescriptorRange(leftGroup[0], rightGroup[0])) {
+      if (leftGroup.length === 0) {
+        for (const descriptor of rightGroup) changes.push(...await descriptorActionChanges(descriptor, "create"));
+      } else if (rightGroup.length === 0) {
+        for (const descriptor of leftGroup) changes.push(...await descriptorActionChanges(descriptor, "delete"));
+      } else if (leftGroup.length === 1 && rightGroup.length === 1 && leftGroup[0].root === rightGroup[0].root) {
+        continue;
+      } else if (leftGroup.length === 1 && rightGroup.length === 1 && sameDescriptorRange(leftGroup[0], rightGroup[0])) {
         changes.push(...await diffDescriptors(leftGroup[0], rightGroup[0]));
       } else {
         changes.push(...await diffDescriptorGroups(leftGroup, rightGroup));

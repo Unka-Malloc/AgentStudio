@@ -1,6 +1,6 @@
 {
   "name": "pactium",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Proof-first protocol substrate for verifiable operation facts, append-only recovery history, and cryptographic state verification.",
   "author": "Unka Y.Y.",
   "license": "GPL-3.0-or-later",

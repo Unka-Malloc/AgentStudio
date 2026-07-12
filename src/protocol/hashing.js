@@ -2,8 +2,10 @@ import crypto from "node:crypto";
 import { HASH_DOMAINS, PACTIUM_PROTOCOL } from "./constants.js";
 import { canonicalEncode } from "../canonical/value.js";
 
+const domainPrefixCache = new Map();
+
 export function hashBytes(bytes) {
-  return crypto.createHash("sha256").update(bytes).digest("hex");
+  return crypto.hash("sha256", Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes || ""), "hex");
 }
 
 export function hexToBytes(hex) {
@@ -23,15 +25,22 @@ export function createId(prefix, value) {
   return `${prefix}_${protocolHashHex(prefix, value).slice(0, 32)}`;
 }
 
-export function protocolHashHex(domain, value) {
+function domainPrefix(domain) {
   const separator = HASH_DOMAINS[domain] || String(domain || "pactium.v0.2.generic");
-  const bytes = Buffer.isBuffer(value) || value instanceof Uint8Array
-    ? Buffer.from(value)
-    : Buffer.from(canonicalEncode(value));
-  return hashBytes(Buffer.concat([
-    Buffer.from(`${PACTIUM_PROTOCOL}:${separator}\0`, "utf8"),
-    bytes
-  ]));
+  if (!domainPrefixCache.has(separator)) {
+    domainPrefixCache.set(separator, Buffer.from(`${PACTIUM_PROTOCOL}:${separator}\0`, "utf8"));
+  }
+  return domainPrefixCache.get(separator);
+}
+
+export function protocolHashHex(domain, value) {
+  const bytes = Buffer.isBuffer(value)
+    ? value
+    : value instanceof Uint8Array
+      ? Buffer.from(value.buffer, value.byteOffset, value.byteLength)
+      : canonicalEncode(value);
+  // Incremental updates avoid allocating a concatenated prefix+payload buffer.
+  return crypto.createHash("sha256").update(domainPrefix(domain)).update(bytes).digest("hex");
 }
 
 export function protocolHash(domain, value) {
@@ -39,7 +48,7 @@ export function protocolHash(domain, value) {
 }
 
 export function cidForBytes(bytes) {
-  return cidFromHex(hashBytes(Buffer.from(bytes || "")));
+  return cidFromHex(hashBytes(bytes));
 }
 
 export function cidForCanonical(value) {

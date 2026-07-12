@@ -4,10 +4,13 @@ import { cidForBytes, hashBytes } from "../protocol/hashing.js";
 import { asArray, asRecord } from "../shared/records.js";
 import { createVerificationFailure } from "../verification/failure.js";
 
+const RESOLVER_DETAILS = new WeakMap();
+
 export function decodeVarint(bytes, offset = 0) {
   let value = 0;
   let shift = 0;
   let cursor = offset;
+  if (!Number.isInteger(cursor) || cursor < 0) throw new Error("Bundle varint offset is invalid.");
   while (cursor < bytes.length) {
     const byte = bytes[cursor];
     value += (byte & 0x7f) * (2 ** shift);
@@ -38,6 +41,11 @@ function emptyResolver(indexFailures = []) {
       return { blocks: [], failures: this.failures };
     }
   };
+}
+
+export function bundleHashIndexForResolver(resolver, bundle) {
+  const details = resolver && typeof resolver === "object" ? RESOLVER_DETAILS.get(resolver) : null;
+  return details?.bundle === bundle ? details.bundleHashIndex : null;
 }
 
 function bundleFailure(code, evidenceRef, message = "", repairable = false) {
@@ -181,13 +189,34 @@ export function createIndexedBundleResolver(bundle, {
   const bytes = Buffer.from(String(bundle.binaryBase64 || ""), "base64");
   const offsets = new Set();
   const cids = new Set();
-  const entries = asArray(bundle.index).map((item, ordinal) => ({ item, ordinal }));
+  const entries = [];
+  const bundleHashIndex = [];
+  for (const [ordinal, item] of asArray(bundle.index).entries()) {
+    entries.push({ item, ordinal });
+    bundleHashIndex.push({
+      cid: item.cid,
+      offset: item.offset,
+      recordLength: item.recordLength,
+      headerLength: item.headerLength,
+      byteLength: item.byteLength,
+      payloadHash: item.payloadHash
+    });
+  }
   const indexByCid = new Map();
   const cache = new Map();
   const metadataCache = new Map();
   const payloadCache = new Map();
   const indexFailures = [];
   const readFailures = [];
+  const readFailureKeys = new Set();
+  function pushReadFailures(failures) {
+    for (const failure of asArray(failures)) {
+      const key = `${failure.code || ""}\u0000${failure.evidenceRef || ""}\u0000${failure.message || ""}`;
+      if (readFailureKeys.has(key)) continue;
+      readFailureKeys.add(key);
+      readFailures.push(failure);
+    }
+  }
   function metadataFor(entry) {
     if (metadataCache.has(entry.ordinal)) return metadataCache.get(entry.ordinal);
     const decoded = decodeIndexedMetadata({
@@ -208,9 +237,7 @@ export function createIndexedBundleResolver(bundle, {
       maxHeaderSize,
       maxBlockSize
     });
-    if (decoded.failures.length > 0 && metadataFor(entry).failures.length === 0) {
-      readFailures.push(...decoded.failures);
-    }
+    if (decoded.failures.length > 0) pushReadFailures(decoded.failures);
     payloadCache.set(entry.ordinal, decoded.block);
     return decoded.block;
   }
@@ -230,10 +257,19 @@ export function createIndexedBundleResolver(bundle, {
     if (offset < 0 || offset >= bytes.length) {
       indexFailures.push(bundleFailure("bad_bundle_offset", String(offset), "", true));
     }
-    indexFailures.push(...metadataFor(entry).failures);
+    if (Number(item.recordLength || 0) <= 0) {
+      indexFailures.push(bundleFailure("bad_bundle_record_length", item.cid));
+    }
+    if (Number(item.headerLength || 0) < 0) {
+      indexFailures.push(bundleFailure("bad_bundle_header", item.cid));
+    }
+    if (Number(item.byteLength || 0) < 0) {
+      indexFailures.push(bundleFailure("bad_bundle_record_length", item.cid));
+    }
   }
-  return {
+  const resolver = {
     blockCids: new Set(indexByCid.keys()),
+    decodedByteLength: bytes.length,
     indexFailures,
     readFailures,
     get failures() {
@@ -249,6 +285,89 @@ export function createIndexedBundleResolver(bundle, {
       cache.set(cid, block);
       return block;
     },
+    verifyLayout({ allowTrailingBytes = false } = {}) {
+      const failures = [];
+      const sorted = [...entries].sort((a, b) => Number(a.item.offset || 0) - Number(b.item.offset || 0));
+      const ranges = [];
+      for (const entry of sorted) {
+        const { item } = entry;
+        const offset = Number(item.offset || 0);
+        const recordLength = Number(item.recordLength || 0);
+        const headerLength = Number(item.headerLength || 0);
+        const byteLength = Number(item.byteLength || 0);
+        if (offset < 0) failures.push(bundleFailure("bad_index_offset", item.cid, "Index item has negative offset."));
+        if (recordLength <= 0) failures.push(bundleFailure("bad_index_record_length", item.cid, "Index item has non-positive recordLength."));
+        if (headerLength < 0) failures.push(bundleFailure("bad_index_header_length", item.cid, "Index item has negative headerLength."));
+        if (byteLength < 0) failures.push(bundleFailure("bad_index_byte_length", item.cid, "Index item has negative byteLength."));
+        if (offset >= bytes.length) failures.push(bundleFailure("bad_index_range", item.cid, "Index item offset exceeds decoded binary length."));
+
+        let varintResult;
+        try {
+          varintResult = decodeVarint(bytes, offset);
+        } catch (error) {
+          failures.push(bundleFailure(
+            "bad_bundle_varint",
+            item.cid,
+            error instanceof Error ? error.message : "Bundle varint could not be decoded."
+          ));
+          continue;
+        }
+        if (varintResult.value !== recordLength) {
+          failures.push(bundleFailure(
+            "bad_index_record_length",
+            item.cid,
+            `Varint value ${varintResult.value} does not match index recordLength ${recordLength}.`
+          ));
+        }
+        const recordStart = offset;
+        const payloadStart = varintResult.nextOffset + headerLength;
+        const payloadEnd = payloadStart + byteLength;
+        if (payloadEnd > bytes.length) {
+          failures.push(bundleFailure("bad_index_range", item.cid, "Record payload extends beyond decoded binary."));
+        }
+        ranges.push({ item, recordStart, payloadEnd });
+        const metadata = metadataFor(entry);
+        if (metadata.failures.length > 0) failures.push(...metadata.failures);
+      }
+      if (ranges.length > 0) {
+        if (ranges[0].recordStart !== 0) {
+          failures.push(bundleFailure(
+            "leading_bytes",
+            String(ranges[0].recordStart),
+            `Bundle has ${ranges[0].recordStart} leading byte(s) before the first record.`,
+            true
+          ));
+        }
+        for (let index = 1; index < ranges.length; index += 1) {
+          const previous = ranges[index - 1];
+          const current = ranges[index];
+          if (previous.payloadEnd > current.recordStart) {
+            failures.push(bundleFailure(
+              "overlapping_index_ranges",
+              `${previous.item.cid} / ${current.item.cid}`,
+              `Index records have overlapping byte ranges (prev ends at ${previous.payloadEnd}, curr starts at ${current.recordStart}).`
+            ));
+          } else if (previous.payloadEnd < current.recordStart) {
+            failures.push(bundleFailure(
+              "index_record_gap",
+              `${previous.item.cid} / ${current.item.cid}`,
+              `Gap of ${current.recordStart - previous.payloadEnd} bytes between index records.`
+            ));
+          }
+        }
+        const lastRange = ranges[ranges.length - 1];
+        if (!allowTrailingBytes && lastRange.payloadEnd !== bytes.length) {
+          const trailing = bytes.length - lastRange.payloadEnd;
+          failures.push(bundleFailure(
+            "trailing_bytes",
+            String(trailing),
+            `Bundle has ${trailing} trailing byte(s) after the last record (expected ${bytes.length}, got end at ${lastRange.payloadEnd}).`,
+            true
+          ));
+        }
+      }
+      return failures;
+    },
     verifyAll() {
       const blocks = [];
       for (const entry of entries) {
@@ -258,6 +377,8 @@ export function createIndexedBundleResolver(bundle, {
       return { blocks, failures: this.failures };
     }
   };
+  RESOLVER_DETAILS.set(resolver, { bundle, bundleHashIndex });
+  return resolver;
 }
 
 export function indexedBlocksFromBundle(bundle, options = {}) {

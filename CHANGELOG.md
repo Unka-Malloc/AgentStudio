@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-07-11
+
+This patch release prepares Pactium 0.4.1. It does not change the protocol version or persisted protocol format.
+
+### Added
+
+- Added idempotent `close()` lifecycle contracts for Pactium cores and storage ports, including atomic admission shutdown, admitted-work and SQLite write-lane draining, descriptor release, and explicit closed-state errors.
+- Hardened SQLite data directories, database files, and current journal sidecars to private modes and rejected symbolic-link or special-file database artifacts.
+- Added reentrant compound core mutation transactions so host projections and nested Pactium evidence writes share one serialized SQLite commit boundary.
+
+### Changed
+
+- Synchronized package metadata, public version constants, published documentation, and protocol regression fixtures for the release.
+- Made JSON state publication power-loss durable with private temporary files, file synchronization before rename, and parent-directory synchronization after rename.
+- Made JSON initialization failures sticky for the instance, added a real JSON closed lifecycle, and retried SQLite writer admission through the configured busy deadline.
+
+### Fixed
+
+- Rejected core and storage close calls made from inside their own admitted
+  mutation or write callback, preventing lifecycle self-wait deadlocks.
+
 ## [0.4.0] - 2026-06-26
 
 This minor release hardens Pactium's proof and storage foundations while expanding recovery, storage, and verification capabilities. It keeps the protocol profile current with the new proof-size, crash-consistency, and storage surfaces.
@@ -205,6 +226,7 @@ This is the first public release of Pactium as a proof-first protocol substrate.
 - Ed25519 signing support for Ledger Heads and LicoLite envelopes
 - Signed head verification with verifier manifest validation
 
+[0.4.1]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.4.0
 [0.3.1]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.3.0

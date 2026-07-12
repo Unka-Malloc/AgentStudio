@@ -5,6 +5,7 @@ import { createPactium } from "./core/pactium-core.js";
 import { createMaintenanceTaskEngine } from "./maintenance/task-engine.js";
 import { createLicoLiteAspect } from "./aspects/licolite/index.js";
 import { verifyProofBundle } from "./proof/bundle.js";
+import { redactLocalOutput } from "./shared/output-redaction.js";
 
 export const PACTIUM_HTTP_PROTOCOL = "pactium.v0.2.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES = 1024 * 1024;
@@ -32,7 +33,9 @@ const READ_ROUTES = new Set([
   "/licolite/repair/plan",
   "/maintenance/tasks/plan"
 ]);
-// Mutation routes: modify runtime state (ledger, runtime-state, proof bundle cache).
+// Mutation-capability routes: lifecycle writes plus bundle export. Bundle
+// export does not mutate runtime state, but it walks and emits raw proof
+// block payloads, so hosts gate it with the same capability switch.
 // Gated behind enableMutations.
 const MUTATION_ROUTES = new Set([
   "/intents",
@@ -77,7 +80,7 @@ class PactiumHttpError extends Error {
 }
 
 function sendJson(response, statusCode, payload) {
-  const body = JSON.stringify(payload, null, 2);
+  const body = JSON.stringify(redactLocalOutput(payload), null, 2);
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
     "x-content-type-options": "nosniff",

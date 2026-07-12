@@ -39,9 +39,33 @@ async function attachSignature({ pactium, envelope, signer }) {
   });
 }
 
-function bundleBlockMap(bundle) {
+function bundleBlockMap(bundle, options = {}) {
   if (!bundle) return null;
-  return createIndexedBundleResolver(bundle);
+  return createIndexedBundleResolver(bundle, {
+    maxHeaderSize: Number(options.maxHeaderSize || 16 * 1024),
+    maxBlockSize: Number(options.maxBlockSize || 64 * 1024 * 1024)
+  });
+}
+
+function indexExtensionsByName(extensions) {
+  const byName = new Map();
+  for (const extension of asArray(extensions)) {
+    const name = String(extension.name || "");
+    if (!name) continue;
+    if (!byName.has(name)) byName.set(name, []);
+    byName.get(name).push(extension);
+  }
+  return byName;
+}
+
+function firstExtensionByName(extensionIndex, name) {
+  return extensionIndex.get(name)?.[0] || null;
+}
+
+function extensionsByNames(extensionIndex, names) {
+  const output = [];
+  for (const name of names) output.push(...asArray(extensionIndex.get(name)));
+  return output;
 }
 
 async function resolveMaterialBlock({ core, cid, bundleMap }) {
@@ -111,7 +135,18 @@ export function createLicoLiteAspect({
   }
 
   async function verifyLicoLiteEnvelope(envelope, options = {}) {
-    const bundleMap = bundleBlockMap(options.bundle || null);
+    const bundleMap = options.bundleResolver || bundleBlockMap(options.bundle || null, options);
+    const decodedMaterial = new Map();
+    async function resolveDecodedMaterial(cid) {
+      const key = String(cid || "");
+      if (!key) return { block: null, value: null };
+      if (decodedMaterial.has(key)) return decodedMaterial.get(key);
+      const block = await resolveMaterialBlock({ core, cid: key, bundleMap });
+      const value = block ? canonicalDecode(block.bytes || Buffer.from(String(block.payloadBase64 || ""), "base64")) : null;
+      const result = { block, value };
+      decodedMaterial.set(key, result);
+      return result;
+    }
     // Production verification is fail-closed unless the caller supplies a
     // trusted manifest. Development evidence policy may opt into TOFU-style
     // self-carried manifest validation explicitly.
@@ -119,9 +154,10 @@ export function createLicoLiteAspect({
       (evidencePolicy === "production"
         ? PACTIUM_TRUST_POLICIES.trustedManifestRequired
         : PACTIUM_TRUST_POLICIES.selfCarriedManifest);
-    const coreResult = await verifyProofEnvelope(envelope, {
+    const coreResult = options.coreEnvelopeResult || await verifyProofEnvelope(envelope, {
       storage: { getBlock: (cid) => core.resolveBlock(cid) },
       bundle: options.bundle || null,
+      bundleResolver: bundleMap,
       supportedCriticalExtensions: LICOLITE_SUPPORTED_CRITICAL_EXTENSIONS,
       proofVerifiers: options.proofVerifiers || {},
       requireAllProofs: options.requireAllProofs !== false,
@@ -133,10 +169,11 @@ export function createLicoLiteAspect({
     });
     const failures = [...coreResult.failures];
     const extensions = asArray(envelope?.extensions);
-    const extensionNames = new Set(extensions.map((extension) => extension.name));
+    const extensionIndex = indexExtensionsByName(extensions);
+    const extensionNames = new Set(extensionIndex.keys());
     const criticalExtensionNames = new Set(asArray(envelope?.criticalExtensions).map(String));
     for (const required of LICOLITE_CRITICAL_EXTENSIONS) {
-      const extension = extensions.find((candidate) => candidate.name === required);
+      const extension = firstExtensionByName(extensionIndex, required);
       if (!extensionNames.has(required)) {
         failures.push(createVerificationFailure({
           layer: "licolite",
@@ -155,11 +192,11 @@ export function createLicoLiteAspect({
         }));
       }
     }
-    for (const extension of extensions.filter((candidate) =>
-      candidate.name === LICOLITE_POLICY_EXTENSION || candidate.name === LICOLITE_WORKSPACE_EFFECT_EXTENSION
-    )) {
-      const extensionBlock = await resolveMaterialBlock({ core, cid: extension.valueRef, bundleMap });
-      const extensionValue = extensionBlock ? canonicalDecode(extensionBlock.bytes || Buffer.from(extensionBlock.payloadBase64, "base64")) : null;
+    for (const extension of extensionsByNames(extensionIndex, [
+      LICOLITE_POLICY_EXTENSION,
+      LICOLITE_WORKSPACE_EFFECT_EXTENSION
+    ])) {
+      const { value: extensionValue } = await resolveDecodedMaterial(extension.valueRef);
       const evidenceRef = extensionValue?.evidenceRef || extension.metadata?.evidenceRef || "";
       const evidenceHash = extensionValue?.evidenceHash || extension.metadata?.evidenceHash || "";
       if (!evidenceRef || !evidenceHash) {
@@ -187,7 +224,7 @@ export function createLicoLiteAspect({
         }));
       }
     }
-    const signatureExtension = asArray(envelope?.extensions).find((extension) => extension.name === LICOLITE_SIGNATURE_EXTENSION);
+    const signatureExtension = firstExtensionByName(extensionIndex, LICOLITE_SIGNATURE_EXTENSION);
     if (evidencePolicy === "production" && !verifierSigner) {
       failures.push(createVerificationFailure({
         layer: "licolite.signing",
@@ -206,8 +243,7 @@ export function createLicoLiteAspect({
         repairable: evidencePolicy !== "production"
       }));
     } else {
-      const block = await resolveMaterialBlock({ core, cid: signatureExtension.valueRef, bundleMap });
-      const value = block ? canonicalDecode(block.bytes || Buffer.from(block.payloadBase64, "base64")) : null;
+      const { value } = await resolveDecodedMaterial(signatureExtension.valueRef);
       if (!value) {
         failures.push(createVerificationFailure({
           layer: "licolite.signing",
@@ -284,13 +320,17 @@ export function createLicoLiteAspect({
   }
 
   async function verifyLicoLiteBundle(bundle, options = {}) {
+    const bundleResolver = options.bundleResolver || bundleBlockMap(bundle, options);
     const bundleResult = await verifyProofBundle(bundle, {
       supportedCriticalExtensions: LICOLITE_SUPPORTED_CRITICAL_EXTENSIONS,
-      ...options
+      ...options,
+      bundleResolver
     });
     const envelopeResult = await verifyLicoLiteEnvelope(bundle?.envelope || {}, {
       ...options,
-      bundle
+      bundle,
+      bundleResolver,
+      coreEnvelopeResult: bundleResult.envelope
     });
     return {
       protocol: PACTIUM_PROTOCOL,

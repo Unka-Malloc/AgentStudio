@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -10,6 +9,12 @@ import { cidForBytes, hashBytes } from "../protocol/hashing.js";
 import { asArray, nowIso, safeToken } from "../shared/records.js";
 import { loadSqliteStorageDriver, sqliteStorageAvailable } from "./sqlite-capability.js";
 import { defaultPactiumDataDir, resolveDataDir, resolveWithin } from "./local-json-storage-port.js";
+import {
+  ensurePrivateDirectory,
+  hardenPrivateRegularFile,
+  PRIVATE_FILE_MODE,
+  writePrivateFileAtomic
+} from "./private-atomic-file.js";
 
 export const PACTIUM_STORAGE_BACKEND_SQLITE = "sqlite";
 export { sqliteStorageAvailable };
@@ -33,10 +38,26 @@ async function readJson(filePath, fallback = null) {
 }
 
 async function writeJsonAtomic(filePath, value) {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const tmpPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  await fs.writeFile(tmpPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await fs.rename(tmpPath, filePath);
+  return writePrivateFileAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+async function preparePrivateDatabaseFile(filePath) {
+  if (await hardenPrivateRegularFile(filePath, { allowMissing: true })) return;
+  let handle = null;
+  try {
+    handle = await fs.open(filePath, "wx", PRIVATE_FILE_MODE);
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+  } finally {
+    await handle?.close();
+  }
+  await hardenPrivateRegularFile(filePath);
+}
+
+async function hardenSqliteSidecars(filePath) {
+  for (const suffix of ["-wal", "-shm", "-journal"]) {
+    await hardenPrivateRegularFile(`${filePath}${suffix}`, { allowMissing: true });
+  }
 }
 
 /* node:coverage ignore next 4 */
@@ -46,8 +67,9 @@ function sleep(ms) {
 
 /* node:coverage ignore next 5 */
 function isSqliteBusy(error) {
-  return error?.code === "ERR_SQLITE_ERROR" &&
-    (Number(error?.errcode || 0) === 5 || /database is locked/i.test(String(error?.message || "")));
+  return error?.code === "SQLITE_BUSY" ||
+    Number(error?.errcode || 0) === 5 ||
+    /database is locked/i.test(String(error?.message || ""));
 }
 
 function blockFromRow(row) {
@@ -97,6 +119,10 @@ export function createSqliteStoragePort({
   let sqliteProvider = "";
   let inTransaction = false;
   let writeLane = Promise.resolve();
+  let initializationPromise = null;
+  let closePromise = null;
+  let lifecycleState = "open";
+  const activeOperations = new Set();
   const transactionContext = new AsyncLocalStorage();
   const transactionToken = {};
 
@@ -111,10 +137,21 @@ export function createSqliteStoragePort({
       : resolvedDatabasePath;
   }
 
-  async function ensureInitialized() {
-    if (initialized) return;
+  function closedStorageError() {
+    const error = new Error("Pactium SQLite storage is closed.");
+    error.code = "PACTIUM_STORAGE_CLOSED";
+    return error;
+  }
+
+  function reentrantCloseError() {
+    const error = new Error("Pactium SQLite storage cannot close from inside its own write transaction.");
+    error.code = "PACTIUM_REENTRANT_CLOSE";
+    return error;
+  }
+
+  async function initializeStorage() {
     const driver = loadSqliteStorageDriver(true);
-    await fs.mkdir(resolvedDataDir, { recursive: true });
+    await ensurePrivateDirectory(resolvedDataDir);
     const manifest = await readJson(manifestPath());
     if (manifest) {
       if (manifest.protocol !== PACTIUM_PROTOCOL || manifest.schema !== PACTIUM_SCHEMA_VERSION) {
@@ -145,7 +182,9 @@ export function createSqliteStoragePort({
       }
     }
 
-    await fs.mkdir(path.dirname(resolvedDatabasePath), { recursive: true });
+    await ensurePrivateDirectory(path.dirname(resolvedDatabasePath));
+    await preparePrivateDatabaseFile(resolvedDatabasePath);
+    await hardenSqliteSidecars(resolvedDatabasePath);
     db = driver.open(resolvedDatabasePath);
     sqliteProvider = driver.providerId;
     db.exec("PRAGMA busy_timeout = 10000;");
@@ -173,6 +212,8 @@ export function createSqliteStoragePort({
         PRIMARY KEY (scope, key)
       );
     `);
+    await hardenPrivateRegularFile(resolvedDatabasePath);
+    await hardenSqliteSidecars(resolvedDatabasePath);
     if (!manifest) {
       await writeJsonAtomic(manifestPath(), {
         protocol: PACTIUM_PROTOCOL,
@@ -186,6 +227,53 @@ export function createSqliteStoragePort({
       });
     }
     initialized = true;
+  }
+
+  function closingOwnedTransaction() {
+    return lifecycleState === "closing" && transactionContext.getStore() === transactionToken;
+  }
+
+  async function ensureInitialized() {
+    if (lifecycleState !== "open" && !closingOwnedTransaction()) throw closedStorageError();
+    if (initialized) return;
+    if (!initializationPromise) {
+      initializationPromise = initializeStorage()
+        .catch((error) => {
+          initialized = false;
+          const failedDatabase = db;
+          db = null;
+          sqliteProvider = "";
+          try {
+            failedDatabase?.close?.();
+          } catch {
+            // Preserve the initialization error; the failed driver handle is not reusable.
+          }
+          throw error;
+        })
+        .finally(() => {
+          initializationPromise = null;
+        });
+    }
+    await initializationPromise;
+    if (lifecycleState !== "open" && !closingOwnedTransaction()) throw closedStorageError();
+  }
+
+  function runOperation(task) {
+    if (lifecycleState !== "open" && !closingOwnedTransaction()) {
+      return Promise.reject(closedStorageError());
+    }
+    let result;
+    try {
+      result = task();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    let tracked;
+    tracked = Promise.resolve(result).finally(() => {
+      activeOperations.delete(tracked);
+    });
+    activeOperations.add(tracked);
+    return tracked;
   }
 
   function database() {
@@ -349,7 +437,7 @@ export function createSqliteStoragePort({
 
   async function runWriteTransaction(task, timeoutMs) {
     database().exec(`PRAGMA busy_timeout = ${Math.max(1, Number(timeoutMs || 10000))}`);
-    database().exec("BEGIN IMMEDIATE");
+    await execWithBusyRetry("BEGIN IMMEDIATE", { timeoutMs });
     inTransaction = true;
     try {
       const result = await task();
@@ -381,6 +469,33 @@ export function createSqliteStoragePort({
     return run;
   }
 
+  function close() {
+    if (transactionContext.getStore() === transactionToken) {
+      return Promise.reject(reentrantCloseError());
+    }
+    if (lifecycleState === "closed") return Promise.resolve();
+    if (closePromise) return closePromise;
+    lifecycleState = "closing";
+    const admittedOperations = [...activeOperations];
+    closePromise = (async () => {
+      await Promise.allSettled(admittedOperations);
+      await initializationPromise?.catch(() => null);
+      await writeLane.catch(() => null);
+      const activeDatabase = db;
+      activeDatabase?.close?.();
+      db = null;
+      initialized = false;
+      inTransaction = false;
+      memoryBlocks.clear();
+      memoryObjects.clear();
+      lifecycleState = "closed";
+    })().catch((error) => {
+      closePromise = null;
+      throw error;
+    });
+    return closePromise;
+  }
+
   return Object.freeze({
     protocol: PACTIUM_PROTOCOL,
     schema: PACTIUM_SCHEMA_VERSION,
@@ -389,17 +504,18 @@ export function createSqliteStoragePort({
     get sqliteProvider() { return sqliteProvider; },
     inMemory: false,
     storageBackend: PACTIUM_STORAGE_BACKEND_SQLITE,
-    initialize: ensureInitialized,
-    putBlock,
-    getBlock,
-    hasBlock,
-    walk,
-    putProtocolObject,
-    getProtocolObject,
-    deleteProtocolObject,
-    listProtocolObjectKeys,
+    initialize() { return runOperation(ensureInitialized); },
+    putBlock(...args) { return runOperation(() => putBlock(...args)); },
+    getBlock(...args) { return runOperation(() => getBlock(...args)); },
+    hasBlock(...args) { return runOperation(() => hasBlock(...args)); },
+    walk(...args) { return runOperation(() => walk(...args)); },
+    putProtocolObject(...args) { return runOperation(() => putProtocolObject(...args)); },
+    getProtocolObject(...args) { return runOperation(() => getProtocolObject(...args)); },
+    deleteProtocolObject(...args) { return runOperation(() => deleteProtocolObject(...args)); },
+    listProtocolObjectKeys(...args) { return runOperation(() => listProtocolObjectKeys(...args)); },
     clearCache,
-    withWriteLock,
+    withWriteLock(...args) { return runOperation(() => withWriteLock(...args)); },
+    close,
     pruneBlocks() { return 0; },
     pruneProtocolObjects() { return 0; }
   });

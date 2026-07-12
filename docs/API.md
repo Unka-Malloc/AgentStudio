@@ -45,6 +45,8 @@ The returned instance exposes:
 | `protocol` | `string` | Protocol identifier (`pactium.v0.2`) |
 | `schema` | `string` | Schema version |
 | `dataDir` | `string` | Resolved data directory path |
+| `withMutationTransaction(task)` | `Promise<T>` | Serialize a compound mutation through the core mutation lane and the selected storage write transaction. Nested core mutations reuse the same transaction. Persistent callers requiring rollback atomicity must use the SQLite backend. |
+| `close()` | `Promise<void>` | Atomically stop admitting new calls, drain admitted work, and idempotently close storage created by this core. Injected storage remains caller-owned. Calls admitted after closing starts reject with `PACTIUM_CLOSED`. |
 
 **Read-only resolvers:**
 
@@ -346,7 +348,7 @@ const ledger = createLedgerTransparencyLog({ storage: storagePort });
 | Method | Description |
 | --- | --- |
 | `ledger.append(entry)` | Append one fact and return `{ entry, head, previousHead, inclusionProof, consistencyProof }` |
-| `ledger.appendBatch(entries, options?)` | Append ordered facts in one ledger append lane run and return `{ batchType, count, entries, head, previousHead, appends }` |
+| `ledger.appendBatch(entries, options?)` | Append ordered facts in one ledger append lane run, emit per-append inclusion/consistency proofs, sign the final batch head, and return `{ batchType, count, entries, head, previousHead, appends }` |
 | `ledger.head()` | Return the current `PactiumLedgerHead` |
 | `ledger.entries()` | Return all ledger entries |
 | `ledger.pageEntries({ start, limit })` | Return a paginated slice of entries |
@@ -543,7 +545,7 @@ import { createStoragePort, resolveDataDir, resolveWithin } from "pactium";
 const storage = createStoragePort({
   dataDir: "./.pactium",
   inMemory: false,
-  storageBackend: "json" // "json" (default), "sqlite", or "auto"
+  storageBackend: "auto" // default; explicitly select "json" or "sqlite" when required
 });
 
 await storage.initialize();
@@ -556,11 +558,16 @@ const exists = await storage.hasBlock(cid);
 // Protocol object storage (scoped key-value)
 await storage.putProtocolObject("ledger", "head", headValue);
 const head = await storage.getProtocolObject("ledger", "head");
+
+// Idempotent lifecycle closure; SQLite waits for its active write lane.
+await storage.close();
 ```
 
 `resolveDataDir()` expands `~` to the current user's home directory. Protocol object scopes and keys are stored as path-safe tokens and cannot escape the Pactium data directory. For SQLite, `databasePath` is optional and must resolve inside `dataDir`; once `pactium-manifest.json` records `sqlitePath`, that path is manifest-bound.
 
 `detectSqliteCapabilities()` reports local SQLite signals across npm packages, the `sqlite3` CLI, and platform package managers (Brew on macOS, Choco on Windows, apt/rpm/pacman on Linux). `sqliteStorageAvailable()` is narrower: it is true only when Pactium can actually open a SQLite backend through a supported provider (`node:sqlite` or optional npm `better-sqlite3`).
+
+Persistent JSON state is published through a private `0600` temporary file. Pactium synchronizes the temporary file before the atomic rename and synchronizes the parent directory afterward. Platforms that do not support directory synchronization may ignore only the documented Windows unsupported-operation errors; other synchronization failures are surfaced. SQLite forces its data and database directories to `0700`, creates or hardens the database and current journal sidecars to `0600`, and rejects symbolic-link or non-regular database artifacts. `close()` is idempotent. An auto port closes its selected backend without selecting a backend merely to close, and closing or closed auto and SQLite ports reject later operations with `PACTIUM_STORAGE_CLOSED`. Calling `close()` from inside the same core mutation transaction or storage write operation is rejected immediately with `PACTIUM_REENTRANT_CLOSE`; callers must close after the admitted callback settles.
 
 ---
 
@@ -693,7 +700,7 @@ Bundle export accepts `{ "envelope": ... }`, `{ "envelopeId": "..." }`, `{ "id":
 import {
   PACTIUM_PROTOCOL,           // "pactium.v0.2"
   PACTIUM_SCHEMA_VERSION,     // "pactium.v0.2.schema.latest"
-  PACTIUM_PACKAGE_VERSION,    // "0.4.0"
+  PACTIUM_PACKAGE_VERSION,    // "0.4.1"
   PACTIUM_INDEX_ENGINE,       // "pactium.verifiable-index-engine"
   PACTIUM_INDEX_SPLITTER,     // "pactium-cdc-boundary"
   PACTIUM_PROOF_BUNDLE_TYPE,  // "pactium.proof-bundle.indexed"
@@ -929,8 +936,9 @@ Backend profile:
 
 **Commit marker coverage boundaries:**
 - `beginOperationIntent`, `appendOperationOutcome`, `recordOperation`, and `recordOperations` are covered by pending/complete commit markers.
-- `storeEnvelope`, `createExtension`, and `exportProofBundle` are materialization/caching operations that do NOT have commit markers. These operations write blocks or update the proof bundle cache; failures leave recoverable artifacts.
-- HTTP `/bundles/export` is classified as a mutation route because it updates the proof bundle cache in runtime-state, but it is not a ledger lifecycle commit.
+- `storeEnvelope` and `createExtension` are materialization operations that do NOT have commit markers. These operations write content-addressed blocks; failures leave recoverable artifacts.
+- `exportProofBundle` is a pure read: it derives the portable bundle from immutable content-addressed blocks and never writes storage or runtime state.
+- HTTP `/bundles/export` stays gated behind `enableMutations` as a host capability boundary because it exports raw proof block payloads, but it is not a ledger lifecycle commit and does not mutate runtime state.
 
 ---
 

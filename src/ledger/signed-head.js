@@ -93,9 +93,20 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
   const acceptedSigners = new Set();
   const payload = ledgerHeadSigningPayload(head);
   const payloadBytes = Buffer.from(canonicalEncode(payload));
+  const signedPayloadHash = protocolHash("ledger.head.signing", payload);
+  const signersById = new Map();
+  for (const signer of asArray(verifierManifest.signers)) {
+    if (signer?.signerId && !signersById.has(signer.signerId)) signersById.set(signer.signerId, signer);
+  }
+  const revokedSignersById = new Map();
+  for (const revocation of asArray(verifierManifest.revokedSigners)) {
+    if (revocation?.signerId && !revokedSignersById.has(revocation.signerId)) {
+      revokedSignersById.set(revocation.signerId, revocation);
+    }
+  }
   for (const signature of signatures) {
     const record = asRecord(signature);
-    const signer = asArray(verifierManifest.signers).find((candidate) => candidate.signerId === record.signerId);
+    const signer = signersById.get(record.signerId);
     if (!signer) {
       failures.push(createVerificationFailure({
         layer: "ledger-head-signature",
@@ -144,7 +155,7 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       }));
       continue;
     }
-    if (record.signedPayloadHash !== protocolHash("ledger.head.signing", payload)) {
+    if (record.signedPayloadHash !== signedPayloadHash) {
       failures.push(createVerificationFailure({
         layer: "ledger-head-signature",
         code: "bad_signed_head_payload",
@@ -153,7 +164,7 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       continue;
     }
     const sigTime = safeText(record.createdAt || head.createdAt);
-    const revokedRecord = asArray(verifierManifest.revokedSigners).find((revocation) => revocation.signerId === record.signerId);
+    const revokedRecord = revokedSignersById.get(record.signerId);
     if (signer.revokedAt || revokedRecord) {
       const revokedAt = safeText(signer.revokedAt || revokedRecord?.revokedAt || sigTime);
       if (!revokedAt || sigTime >= revokedAt) {
@@ -188,12 +199,23 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       }));
       continue;
     }
-    const ok = crypto.verify(
-      null,
-      payloadBytes,
-      signer.publicKey,
-      Buffer.from(String(record.signature || ""), "base64")
-    );
+    let ok = false;
+    try {
+      ok = crypto.verify(
+        null,
+        payloadBytes,
+        signer.publicKey,
+        Buffer.from(String(record.signature || ""), "base64")
+      );
+    } catch (error) {
+      failures.push(createVerificationFailure({
+        layer: "ledger-head-signature",
+        code: "bad_signer_public_key",
+        message: error instanceof Error ? error.message : "Signer public key could not be used for verification.",
+        evidenceRef: record.signerId || ""
+      }));
+      continue;
+    }
     if (ok) {
       accepted += 1;
       acceptedSigners.add(record.signerId);

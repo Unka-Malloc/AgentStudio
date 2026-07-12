@@ -45,11 +45,12 @@ export function compactProofMaterialDescriptors(material) {
   const rootTable = [];
   const rootIndexes = new Map();
   function refFor(descriptor) {
-    const normalized = normalizeCanonicalValue(descriptor);
-    const key = canonicalString(normalized);
+    // canonicalString normalizes while serializing, so the descriptor is only
+    // deep-normalized when it first enters the table.
+    const key = canonicalString(descriptor);
     if (!rootIndexes.has(key)) {
       rootIndexes.set(key, rootTable.length);
-      rootTable.push(normalized);
+      rootTable.push(normalizeCanonicalValue(descriptor));
     }
     return rootIndexes.get(key);
   }
@@ -86,21 +87,23 @@ export function compactProofMaterialDescriptors(material) {
   return compacted;
 }
 
+// Both payloads flow straight into protocol hashing, which canonicalizes
+// during serialization, so no eager deep normalization is needed here.
 function extensionSigningPayload(envelope) {
-  return normalizeCanonicalValue({
+  return {
     ...envelope,
     envelopeId: undefined,
     replayed: false,
     extensions: asArray(envelope.extensions).filter((extension) => extension.name !== "licolite.signature")
-  });
+  };
 }
 
 function envelopeIdentityPayload(envelope) {
-  return normalizeCanonicalValue({
+  return {
     ...envelope,
     replayed: false,
     envelopeId: undefined
-  });
+  };
 }
 
 export function envelopeSigningHash(envelope) {
@@ -243,7 +246,12 @@ async function verifyEmbeddedProofs({
   checked,
   failOnProofSizeWarning = false
 }) {
+  const visitedObjects = new WeakSet();
   async function visit(value, path) {
+    if (value && typeof value === "object") {
+      if (visitedObjects.has(value)) return;
+      visitedObjects.add(value);
+    }
     if (Array.isArray(value)) {
       for (const [index, item] of value.entries()) await visit(item, `${path}[${index}]`);
       return;
@@ -665,6 +673,13 @@ export async function verifyProofEnvelope(envelope, {
   }
   // Bidirectional critical extension validation
   const extensions = asArray(envelope.extensions);
+  const extensionsByName = new Map();
+  for (const extension of extensions) {
+    const name = String(extension.name || "");
+    if (!name) continue;
+    if (!extensionsByName.has(name)) extensionsByName.set(name, []);
+    extensionsByName.get(name).push(extension);
+  }
   const criticalExtensionNames = new Set(asArray(envelope.criticalExtensions).map(String));
   for (const extension of extensions) {
     const name = String(extension.name || "");
@@ -680,7 +695,7 @@ export async function verifyProofEnvelope(envelope, {
     }
   }
   for (const critical of criticalExtensionNames) {
-    if (!extensions.find((extension) => String(extension.name || "") === critical)) {
+    if (!extensionsByName.has(critical)) {
       failures.push(createVerificationFailure({
         layer: "proof-extension",
         code: "critical_extension_not_found",

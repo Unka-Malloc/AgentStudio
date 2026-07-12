@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { createPactium, resolveDataDir } from "../src/index.js";
 import { startPactiumHttpServer } from "../src/http.js";
 import { createLicoLiteAspect } from "../src/aspects/licolite/index.js";
+import { redactLocalOutput } from "../src/shared/output-redaction.js";
 
 function argValue(args, name, fallback = "") {
   const index = args.indexOf(name);
@@ -14,7 +15,7 @@ function hasArg(args, name) {
 }
 
 function printJson(value) {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(redactLocalOutput(value), null, 2)}\n`);
 }
 
 async function bodyFromArgs(args) {

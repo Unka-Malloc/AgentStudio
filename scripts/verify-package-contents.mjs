@@ -75,6 +75,7 @@ const approvedFiles = new Set([
   "src/core/append-condition.js",
   "src/core/pactium-core.js",
   "src/core/rebuild-state.js",
+  "src/core/state-helpers.js",
   "src/core/tracking-cursor.js",
   "src/http.d.ts",
   "src/http.js",
@@ -92,8 +93,11 @@ const approvedFiles = new Set([
   "src/protocol/hashing.js",
   "src/quality/profile-runner.js",
   "src/repair/planner.js",
+  "src/shared/lru-cache.js",
+  "src/shared/output-redaction.js",
   "src/shared/records.js",
   "src/storage/local-json-storage-port.js",
+  "src/storage/private-atomic-file.js",
   "src/storage/sqlite-capability.js",
   "src/storage/sqlite-storage-port.js",
   "src/storage/storage-port.js",
@@ -217,10 +221,17 @@ function runNpmPackDryRun() {
   }
   try {
     const parsed = JSON.parse(result.stdout);
-    if (!Array.isArray(parsed) || parsed.length !== 1) {
-      throw new Error("Expected npm pack JSON to contain one package.");
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+      throw new Error("Expected npm 12 pack JSON to be a package-keyed object.");
     }
-    return parsed[0];
+    const packages = Object.values(parsed);
+    if (packages.length !== 1 || !packages[0] || typeof packages[0] !== "object") {
+      throw new Error("Expected npm 12 pack JSON to contain exactly one package.");
+    }
+    if (!Array.isArray(packages[0].files)) {
+      throw new Error("Expected npm 12 pack JSON package metadata to contain a files array.");
+    }
+    return packages[0];
   } catch (error) {
     throw new Error(`Could not parse npm pack JSON: ${error.message}\n${result.stdout}`);
   }
