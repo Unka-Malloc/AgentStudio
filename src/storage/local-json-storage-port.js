@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +8,7 @@ import { PACTIUM_PROTOCOL, PACTIUM_SCHEMA_VERSION } from "../protocol/constants.
 import { canonicalEncode, normalizeCanonicalValue } from "../canonical/value.js";
 import { cidForBytes, hashBytes, hexFromCid } from "../protocol/hashing.js";
 import { asArray, nowIso, safeToken } from "../shared/records.js";
+import { writePrivateFileAtomic } from "./private-atomic-file.js";
 
 export const PACTIUM_STORAGE_BACKEND_JSON = "json";
 
@@ -49,43 +51,8 @@ async function readJson(filePath, fallback = null) {
   }
 }
 
-/* node:coverage ignore next 11 */
-async function fsyncDir(filePath) {
-  try {
-    const dir = path.dirname(filePath);
-    const dirFd = await fs.open(dir, "r");
-    await dirFd.sync();
-    await dirFd.close();
-  } catch (_) {
-    // best-effort directory fsync
-  }
-}
-
-/* node:coverage ignore next 10 */
-async function fsyncFile(filePath) {
-  try {
-    const fd = await fs.open(filePath, "r+");
-    await fd.sync();
-    await fd.close();
-  } catch (_) {
-    // best-effort file fsync (file may be read-only or already renamed)
-  }
-}
-
 async function writeJsonAtomic(filePath, value) {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const tmpPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  const content = `${JSON.stringify(value, null, 2)}\n`;
-  // Write to temp file with explicit fd for fsync
-  const fd = await fs.open(tmpPath, "w");
-  try {
-    await fd.writeFile(content, "utf8");
-    await fd.sync();
-  } finally {
-    await fd.close();
-  }
-  await fs.rename(tmpPath, filePath);
-  await fsyncDir(filePath);
+  return writePrivateFileAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function sleep(ms) {
@@ -107,6 +74,13 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
   const memoryBlocks = new Map();
   const memoryObjects = new Map();
   let initialized = false;
+  let initializationPromise = null;
+  let initializationFailure = null;
+  let closePromise = null;
+  let lifecycleState = "open";
+  const activeOperations = new Set();
+  const operationContext = new AsyncLocalStorage();
+  const operationToken = {};
 
   function manifestPath() {
     return resolveWithin(resolvedDataDir, "pactium-manifest.json");
@@ -129,9 +103,23 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
     return path.join(lockDir, "owner.json");
   }
 
-  async function ensureInitialized() {
-    if (initialized) return;
-    initialized = true;
+  function closedStorageError() {
+    const error = new Error("Pactium JSON storage is closed.");
+    error.code = "PACTIUM_STORAGE_CLOSED";
+    return error;
+  }
+
+  function reentrantCloseError() {
+    const error = new Error("Pactium JSON storage cannot close from inside its own active operation.");
+    error.code = "PACTIUM_REENTRANT_CLOSE";
+    return error;
+  }
+
+  function admittedOperation() {
+    return operationContext.getStore() === operationToken;
+  }
+
+  async function initializeStorage() {
     if (inMemory) return;
     await fs.mkdir(resolvedDataDir, { recursive: true });
     const manifest = await readJson(manifestPath());
@@ -163,6 +151,46 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
       latestSchemaOnly: true,
       historicalMigration: false
     });
+  }
+
+  async function ensureInitialized() {
+    if (lifecycleState !== "open" && !admittedOperation()) throw closedStorageError();
+    if (initializationFailure) throw initializationFailure;
+    if (initialized) return;
+    if (!initializationPromise) {
+      initializationPromise = initializeStorage()
+        .then(() => {
+          initialized = true;
+        })
+        .catch((error) => {
+          initializationFailure = error;
+          initialized = false;
+          throw error;
+        })
+        .finally(() => {
+          initializationPromise = null;
+        });
+    }
+    await initializationPromise;
+    if (lifecycleState !== "open" && !admittedOperation()) throw closedStorageError();
+  }
+
+  function runOperation(task) {
+    if (lifecycleState !== "open" && !admittedOperation()) {
+      return Promise.reject(closedStorageError());
+    }
+    let result;
+    try {
+      result = operationContext.run(operationToken, task);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    let tracked;
+    tracked = Promise.resolve(result).finally(() => {
+      activeOperations.delete(tracked);
+    });
+    activeOperations.add(tracked);
+    return tracked;
   }
 
   async function putBlock(value, { codec = "pactium-canonical", kind = "protocol-material", refs = [] } = {}) {
@@ -265,7 +293,27 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
   }
 
   function clearCache() {
+    if (lifecycleState !== "open" && !admittedOperation()) throw closedStorageError();
     memoryObjects.clear();
+  }
+
+  function close() {
+    if (admittedOperation()) return Promise.reject(reentrantCloseError());
+    if (lifecycleState === "closed") return Promise.resolve();
+    if (closePromise) return closePromise;
+    lifecycleState = "closing";
+    const admittedOperations = [...activeOperations];
+    closePromise = (async () => {
+      await Promise.allSettled(admittedOperations);
+      await initializationPromise?.catch(() => null);
+      memoryBlocks.clear();
+      memoryObjects.clear();
+      lifecycleState = "closed";
+    })().catch((error) => {
+      closePromise = null;
+      throw error;
+    });
+    return closePromise;
   }
 
   async function readLockOwner(lockDir) {
@@ -476,6 +524,7 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
   }
 
   function pruneBlocks(predicate = () => false) {
+    if (lifecycleState !== "open" && !admittedOperation()) throw closedStorageError();
     if (!inMemory) return 0;
     let pruned = 0;
     for (const [cid, record] of memoryBlocks.entries()) {
@@ -488,6 +537,7 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
   }
 
   function pruneProtocolObjects(predicate = () => false) {
+    if (lifecycleState !== "open" && !admittedOperation()) throw closedStorageError();
     if (!inMemory) return 0;
     let pruned = 0;
     for (const [compoundKey, value] of memoryObjects.entries()) {
@@ -570,17 +620,18 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
     dataDir: resolvedDataDir,
     inMemory,
     storageBackend: PACTIUM_STORAGE_BACKEND_JSON,
-    initialize: ensureInitialized,
-    putBlock,
-    getBlock,
-    hasBlock,
-    walk,
-    putProtocolObject,
-    getProtocolObject,
-    deleteProtocolObject,
-    listProtocolObjectKeys,
+    initialize() { return runOperation(ensureInitialized); },
+    putBlock(...args) { return runOperation(() => putBlock(...args)); },
+    getBlock(...args) { return runOperation(() => getBlock(...args)); },
+    hasBlock(...args) { return runOperation(() => hasBlock(...args)); },
+    walk(...args) { return runOperation(() => walk(...args)); },
+    putProtocolObject(...args) { return runOperation(() => putProtocolObject(...args)); },
+    getProtocolObject(...args) { return runOperation(() => getProtocolObject(...args)); },
+    deleteProtocolObject(...args) { return runOperation(() => deleteProtocolObject(...args)); },
+    listProtocolObjectKeys(...args) { return runOperation(() => listProtocolObjectKeys(...args)); },
     clearCache,
-    withWriteLock,
+    withWriteLock(...args) { return runOperation(() => withWriteLock(...args)); },
+    close,
     pruneBlocks,
     pruneProtocolObjects
   });

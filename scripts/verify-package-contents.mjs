@@ -97,6 +97,7 @@ const approvedFiles = new Set([
   "src/shared/output-redaction.js",
   "src/shared/records.js",
   "src/storage/local-json-storage-port.js",
+  "src/storage/private-atomic-file.js",
   "src/storage/sqlite-capability.js",
   "src/storage/sqlite-storage-port.js",
   "src/storage/storage-port.js",

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 import {
   PACTIUM_BUNDLE_ENCODING,
@@ -144,13 +145,58 @@ export function createPactium({
   storageBackend = "",
   databasePath = ""
 } = {}) {
+  const ownsStorage = !storage;
   const resolvedStorage = storage || createStoragePort({ dataDir, userDataPath, inMemory, storageBackend, databasePath });
   const ledger = createLedgerTransparencyLog({ storage: resolvedStorage });
   const indexEngine = createVerifiableIndexEngine({ storage: resolvedStorage, domain: "pactium" });
   const repairPlanner = createRepairPlanner();
   let state = null;
   let mutationLane = Promise.resolve();
+  let closePromise = null;
+  let lifecycleState = "open";
+  const activeCalls = new Set();
   const useDurableWriteLock = !resolvedStorage.inMemory && typeof resolvedStorage.withWriteLock === "function";
+  const mutationContext = new AsyncLocalStorage();
+  const mutationContextToken = {};
+
+  function closedCoreError() {
+    const error = new Error("Pactium core is closed.");
+    error.code = "PACTIUM_CLOSED";
+    return error;
+  }
+
+  function reentrantCloseError() {
+    const error = new Error("Pactium core cannot close from inside its own mutation transaction.");
+    error.code = "PACTIUM_REENTRANT_CLOSE";
+    return error;
+  }
+
+  function runOpenAsync(method, args) {
+    if (lifecycleState !== "open") return Promise.reject(closedCoreError());
+    let result;
+    try {
+      result = method(...args);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    let tracked;
+    tracked = Promise.resolve(result).finally(() => {
+      activeCalls.delete(tracked);
+    });
+    activeCalls.add(tracked);
+    return tracked;
+  }
+
+  function guardAsync(method) {
+    return (...args) => runOpenAsync(method, args);
+  }
+
+  function guardSync(method) {
+    return (...args) => {
+      if (lifecycleState !== "open") throw closedCoreError();
+      return method(...args);
+    };
+  }
 
   async function reloadFromStorage() {
     if (typeof resolvedStorage.clearCache === "function") resolvedStorage.clearCache();
@@ -166,15 +212,34 @@ export function createPactium({
   }
 
   function enqueueMutation(task) {
+    if (mutationContext.getStore() === mutationContextToken) {
+      return Promise.resolve().then(task);
+    }
     const run = mutationLane.catch(() => null).then(() => {
-      if (!useDurableWriteLock) return task();
+      if (!useDurableWriteLock) {
+        return mutationContext.run(mutationContextToken, task);
+      }
       return resolvedStorage.withWriteLock(async () => {
-        await reloadFromStorage();
-        return task();
+        return mutationContext.run(mutationContextToken, async () => {
+          await reloadFromStorage();
+          return task();
+        });
+      }).catch(async (error) => {
+        state = null;
+        if (typeof resolvedStorage.clearCache === "function") resolvedStorage.clearCache();
+        if (typeof ledger.reload === "function") await ledger.reload().catch(() => null);
+        throw error;
       });
     });
     mutationLane = run;
     return run;
+  }
+
+  function withMutationTransaction(task) {
+    if (typeof task !== "function") {
+      return Promise.reject(new TypeError("withMutationTransaction requires a task function."));
+    }
+    return enqueueMutation(task);
   }
 
   async function ensureState() {
@@ -1870,38 +1935,61 @@ export function createPactium({
     return [];
   }
 
+  function close() {
+    if (mutationContext.getStore() === mutationContextToken) {
+      return Promise.reject(reentrantCloseError());
+    }
+    if (lifecycleState === "closed") return Promise.resolve();
+    if (closePromise) return closePromise;
+    lifecycleState = "closing";
+    const admittedCalls = [...activeCalls];
+    closePromise = (async () => {
+      await Promise.allSettled(admittedCalls);
+      await mutationLane.catch(() => null);
+      state = null;
+      if (ownsStorage) await resolvedStorage.close?.();
+      lifecycleState = "closed";
+    })().catch((error) => {
+      closePromise = null;
+      throw error;
+    });
+    return closePromise;
+  }
+
   const core = Object.freeze({
     protocol: PACTIUM_PROTOCOL,
     schema: PACTIUM_SCHEMA_VERSION,
     dataDir: resolvedStorage.dataDir,
-    beginOperationIntent,
-    appendOperationOutcome,
-    recordOperation,
-    recordOperations,
-    lookupOpenIntent,
-    lookupOutcome,
-    createAppendCondition,
-    getLedgerCursor,
-    getWorkspaceCursor,
-    verifyCursor,
-    advanceTrustedHead,
-    planRecovery,
-    getWorkspaceProjection,
-    proveWorkspaceMembership,
-    verifyEnvelope,
-    exportProofBundle,
-    createExtension,
-    storeEnvelope,
-    protocolCatalog,
-    doctor,
+    beginOperationIntent: guardAsync(beginOperationIntent),
+    appendOperationOutcome: guardAsync(appendOperationOutcome),
+    recordOperation: guardAsync(recordOperation),
+    recordOperations: guardAsync(recordOperations),
+    lookupOpenIntent: guardAsync(lookupOpenIntent),
+    lookupOutcome: guardAsync(lookupOutcome),
+    createAppendCondition: guardSync(createAppendCondition),
+    getLedgerCursor: guardAsync(getLedgerCursor),
+    getWorkspaceCursor: guardAsync(getWorkspaceCursor),
+    verifyCursor: guardSync(verifyCursor),
+    advanceTrustedHead: guardSync(advanceTrustedHead),
+    planRecovery: guardSync(planRecovery),
+    getWorkspaceProjection: guardAsync(getWorkspaceProjection),
+    proveWorkspaceMembership: guardAsync(proveWorkspaceMembership),
+    verifyEnvelope: guardAsync(verifyEnvelope),
+    exportProofBundle: guardAsync(exportProofBundle),
+    createExtension: guardAsync(createExtension),
+    storeEnvelope: guardAsync(storeEnvelope),
+    protocolCatalog: guardAsync(protocolCatalog),
+    doctor: guardAsync(doctor),
     // Read-only protocol resolvers for storage, ledger, and index data.
     // These return canonical clones — safe for external consumption.
-    resolveBlock,
-    hasBlock,
-    readLedgerHead,
-    readLedgerLeaf,
-    readProtocolObject,
-    listProtocolObjectKeys
+    resolveBlock: guardAsync(resolveBlock),
+    hasBlock: guardAsync(hasBlock),
+    readLedgerHead: guardAsync(readLedgerHead),
+    readLedgerLeaf: guardAsync(readLedgerLeaf),
+    readProtocolObject: guardAsync(readProtocolObject),
+    listProtocolObjectKeys: guardAsync(listProtocolObjectKeys),
+    withMutationTransaction: guardAsync(withMutationTransaction),
+    close
   });
   pactiumInternals.set(core, Object.freeze({
     storage: resolvedStorage,

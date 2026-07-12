@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -73,12 +74,31 @@ function createAutoStoragePort(options) {
   const resolvedDataDir = resolveDataDir(options.dataDir || options.userDataPath || defaultPactiumDataDir());
   let selected = null;
   let selectionPromise = null;
+  let closePromise = null;
+  let lifecycleState = "open";
+  const activeOperations = new Set();
+  const operationContext = new AsyncLocalStorage();
+  const operationToken = {};
+
+  function closedStorageError() {
+    const error = new Error("Pactium auto storage is closed.");
+    error.code = "PACTIUM_STORAGE_CLOSED";
+    return error;
+  }
+
+  function reentrantCloseError() {
+    const error = new Error("Pactium auto storage cannot close from inside its own active operation.");
+    error.code = "PACTIUM_REENTRANT_CLOSE";
+    return error;
+  }
 
   async function select() {
+    if (lifecycleState !== "open") throw closedStorageError();
     if (selected) return selected;
     if (!selectionPromise) {
       selectionPromise = (async () => {
         const backend = await resolveAutoBackend(resolvedDataDir, options);
+        if (lifecycleState !== "open") throw closedStorageError();
         selected = createBackendStoragePort(backend, {
           ...options,
           dataDir: resolvedDataDir
@@ -86,7 +106,9 @@ function createAutoStoragePort(options) {
         return selected;
       })();
     }
-    return selectionPromise;
+    const port = await selectionPromise;
+    if (lifecycleState !== "open") throw closedStorageError();
+    return port;
   }
 
   function selectedSync() {
@@ -96,6 +118,42 @@ function createAutoStoragePort(options) {
   async function withSelected(method, ...args) {
     const port = await select();
     return port[method](...args);
+  }
+
+  function runOperation(task) {
+    if (lifecycleState !== "open") return Promise.reject(closedStorageError());
+    let result;
+    try {
+      result = operationContext.run(operationToken, task);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    let tracked;
+    tracked = Promise.resolve(result).finally(() => {
+      activeOperations.delete(tracked);
+    });
+    activeOperations.add(tracked);
+    return tracked;
+  }
+
+  function close() {
+    if (operationContext.getStore() === operationToken) {
+      return Promise.reject(reentrantCloseError());
+    }
+    if (lifecycleState === "closed") return Promise.resolve();
+    if (closePromise) return closePromise;
+    lifecycleState = "closing";
+    const admittedOperations = [...activeOperations];
+    closePromise = (async () => {
+      await Promise.allSettled(admittedOperations);
+      if (selectionPromise) await selectionPromise.catch(() => null);
+      await selected?.close?.();
+      lifecycleState = "closed";
+    })().catch((error) => {
+      closePromise = null;
+      throw error;
+    });
+    return closePromise;
   }
 
   return Object.freeze({
@@ -109,40 +167,41 @@ function createAutoStoragePort(options) {
     get selectedStorageBackend() {
       return selectedSync()?.storageBackend || "";
     },
-    async initialize() {
-      await withSelected("initialize");
-    },
+    initialize() { return runOperation(() => withSelected("initialize")); },
     putBlock(value, writeOptions) {
-      return withSelected("putBlock", value, writeOptions);
+      return runOperation(() => withSelected("putBlock", value, writeOptions));
     },
     getBlock(cid) {
-      return withSelected("getBlock", cid);
+      return runOperation(() => withSelected("getBlock", cid));
     },
     hasBlock(cid) {
-      return withSelected("hasBlock", cid);
+      return runOperation(() => withSelected("hasBlock", cid));
     },
     walk(rootCid) {
-      return withSelected("walk", rootCid);
+      return runOperation(() => withSelected("walk", rootCid));
     },
     putProtocolObject(scope, key, value) {
-      return withSelected("putProtocolObject", scope, key, value);
+      return runOperation(() => withSelected("putProtocolObject", scope, key, value));
     },
     getProtocolObject(scope, key, fallback) {
-      return withSelected("getProtocolObject", scope, key, fallback);
+      return runOperation(() => withSelected("getProtocolObject", scope, key, fallback));
     },
     deleteProtocolObject(scope, key) {
-      return withSelected("deleteProtocolObject", scope, key);
+      return runOperation(() => withSelected("deleteProtocolObject", scope, key));
     },
     listProtocolObjectKeys(scope) {
-      return withSelected("listProtocolObjectKeys", scope);
+      return runOperation(() => withSelected("listProtocolObjectKeys", scope));
     },
     clearCache() {
       selectedSync()?.clearCache?.();
     },
     async withWriteLock(task, lockOptions) {
-      const port = await select();
-      return port.withWriteLock ? port.withWriteLock(task, lockOptions) : task();
+      return runOperation(async () => {
+        const port = await select();
+        return port.withWriteLock ? port.withWriteLock(task, lockOptions) : task();
+      });
     },
+    close,
     pruneBlocks() {
       return selectedSync()?.pruneBlocks?.() || 0;
     },

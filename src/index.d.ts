@@ -28,6 +28,7 @@ export interface PactiumStoragePort {
   sqlitePath?: string;
   sqliteProvider?: string;
   initialize(): Promise<void>;
+  close(): Promise<void>;
   putBlock(value: unknown, options?: PactiumRecord): Promise<PactiumRecord>;
   getBlock(cid: string): Promise<(PactiumRecord & { bytes?: Uint8Array }) | null>;
   hasBlock(cid: string): Promise<boolean>;
@@ -274,6 +275,9 @@ export interface PactiumCore {
   readProtocolObject(scope: string, key: string, fallback?: unknown): Promise<unknown>;
   /** List all keys in a protocol object scope. */
   listProtocolObjectKeys(scope: string): Promise<string[]>;
+  /** Serialize a compound mutation through the core lane and owned storage transaction. */
+  withMutationTransaction<T>(task: () => T | Promise<T>): Promise<T>;
+  close(): Promise<void>;
 }
 
 export interface PactiumHttpServerOptions extends PactiumDataDirOptions {
@@ -306,7 +310,7 @@ export interface PactiumHttpServerStartResult {
 
 export const PACTIUM_PROTOCOL: "pactium.v0.2";
 export const PACTIUM_SCHEMA_VERSION: "pactium.v0.2.schema.latest";
-export const PACTIUM_PACKAGE_VERSION: "0.4.0";
+export const PACTIUM_PACKAGE_VERSION: "0.4.1";
 export const PACTIUM_HTTP_PROTOCOL: "pactium.v0.2.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES: 1048576;
 export const PACTIUM_INDEX_ENGINE: "pactium.verifiable-index-engine";
