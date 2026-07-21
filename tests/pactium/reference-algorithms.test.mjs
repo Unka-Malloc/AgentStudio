@@ -115,7 +115,7 @@ function setAtPath(object, pathSegments, value) {
 
 async function envelopeWithMutatedProofMaterial(pactium, envelope, mutate) {
   const material = structuredClone(await proofMaterialFor(pactium, envelope));
-  mutate(material);
+  await mutate(material);
   const block = await getPactiumInternals(pactium).storage.putBlock(material, { kind: "proof-material:ledger-and-index-proofs" });
   const originalRef = envelope.proofRefs.find((candidate) => candidate.name === "ledger-and-index-proofs") || envelope.proofRefs[0];
   return pactium.storeEnvelope({
@@ -952,6 +952,27 @@ describe("Pactium reference-project algorithm coverage", () => {
 	      nextMaterial.proofs.causality = structuredClone(material.proofs.causality);
 	    });
 	    expectFailureCode(await pactium.verifyEnvelope(unexpectedCausality), "bad_causality_multiproof_binding", "unexpected causality proof");
+	  });
+
+	  it("rejects receipt proofs rebound to an unsupported receipt profile", async () => {
+	    const pactium = createPactium({ inMemory: true });
+	    const receipt = await pactium.recordOperationReceipt({
+	      operationId: "reference.receipt.binding",
+	      workspaceId: "receipt-binding",
+	      profile: "receipt"
+	    });
+	    const rebound = await envelopeWithMutatedProofMaterial(pactium, receipt, async (material) => {
+	      const storage = getPactiumInternals(pactium).storage;
+	      const originalFactCid = material.ledger.inclusionProof.leaf.factCid;
+	      const originalFactBlock = await storage.getBlock(originalFactCid);
+	      const replacementFact = await storage.putBlock({
+	        ...canonicalDecode(originalFactBlock.bytes),
+	        profile: "unsupported-receipt-profile"
+	      });
+	      material.ledger.inclusionProof.leaf.factCid = replacementFact.cid;
+	      material.ledger.inclusionProof.leaf.factHash = replacementFact.payloadHash;
+	    });
+	    expectFailureCode(await pactium.verifyEnvelope(rebound), "bad_receipt_binding", "receipt profile binding");
 	  });
 
   it("treats proof bundles as self-contained content-addressed artifacts with required blocks", async () => {
