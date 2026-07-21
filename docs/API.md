@@ -42,7 +42,7 @@ The returned instance exposes:
 
 | Property | Type | Description |
 | --- | --- | --- |
-| `protocol` | `string` | Protocol identifier (`pactium.v0.2`) |
+| `protocol` | `string` | Protocol identifier (`pactium.v0.3`) |
 | `schema` | `string` | Schema version |
 | `dataDir` | `string` | Resolved data directory path |
 | `withMutationTransaction(task)` | `Promise<T>` | Serialize a compound mutation through the core mutation lane and the selected storage write transaction. Nested core mutations reuse the same transaction. Persistent callers requiring rollback atomicity must use the SQLite backend. |
@@ -161,6 +161,25 @@ const outcomeEnvelope = await pactium.appendOperationOutcome({
 
 **Returns:** `PactiumProofEnvelope`
 
+#### `pactium.recordOperationReceipt(input)`
+
+Records one terminal receipt without opening an Intent. Use `profile: "receipt"` for an idempotent terminal fact or `profile: "on-change"` to append only when the supplied digest changes. Receipt profiles do not accept `stateMutations`.
+
+```js
+const receipt = await pactium.recordOperationReceipt({
+  profile: "on-change",
+  operationId: "system.console_state",
+  workspaceId: "default",
+  idempotencyKey: "request-001",
+  changeKey: "console-state-v1",
+  changeDigest: "sha256:...",
+  status: "succeeded"
+});
+// disposition: "recorded" | "replayed" | "unchanged"
+```
+
+An unchanged or idempotently replayed receipt performs no protocol write. `finalizeEnvelopeExtensions` runs only for a newly recorded final envelope.
+
 #### `pactium.lookupOpenIntent(intentId)`
 
 Looks up an Operation Intent that does not yet have a corresponding outcome.
@@ -178,6 +197,10 @@ Looks up the Operation Outcome for a given intent.
 const outcome = await pactium.lookupOutcome("intent-id");
 // Returns the outcome record or null
 ```
+
+#### `pactium.lookupReceipt(receiptId)`
+
+Returns the receipt fact locator and its membership proof. Lifecycle lookup results include `ledgerEventId`, `ledgerIndex`, `factCid`, and `envelopeId` so callers can resolve immutable material lazily.
 
 ---
 
@@ -559,6 +582,15 @@ const exists = await storage.hasBlock(cid);
 await storage.putProtocolObject("ledger", "head", headValue);
 const head = await storage.getProtocolObject("ledger", "head");
 
+// SQLite-only durable maintenance primitives.
+const page = await storage.scanBlocks({ limit: 1000 });
+const preview = await storage.collectGarbage({
+  roots: currentRoots,
+  sweepKinds: ["index-node:state"],
+  dryRun: true
+});
+await storage.reclaimDatabasePages({ pages: 256 });
+
 // Idempotent lifecycle closure; SQLite waits for its active write lane.
 await storage.close();
 ```
@@ -613,9 +645,19 @@ const plan = planner.planRepair(failures);
 
 // Maintenance task engine
 const engine = createMaintenanceTaskEngine({ pactium });
-const result = await engine.run("doctor");
-// { ok: true/false, dataDir, checks: [...] }
+const doctorTask = engine.planTask("doctor", {});
+const result = await engine.runTask(doctorTask);
+
+// Conservative derived-index collection defaults to dry-run.
+const preview = await pactium.compactStorage();
+const gcTask = engine.planTask("storage-gc", {
+  dryRun: false,
+  reclaimPages: 256
+});
+await engine.runTask(gcTask);
 ```
+
+`compactStorage()` reads current roots and performs mark/sweep in the same SQLite write transaction. It aborts on missing roots, only sweeps allowed derived index-node kinds, and runs incremental page reclamation after commit. Durable JSON storage reports garbage collection as unsupported.
 
 ---
 
@@ -698,9 +740,9 @@ Bundle export accepts `{ "envelope": ... }`, `{ "envelopeId": "..." }`, `{ "id":
 
 ```js
 import {
-  PACTIUM_PROTOCOL,           // "pactium.v0.2"
-  PACTIUM_SCHEMA_VERSION,     // "pactium.v0.2.schema.latest"
-  PACTIUM_PACKAGE_VERSION,    // "0.4.1"
+  PACTIUM_PROTOCOL,           // "pactium.v0.3"
+  PACTIUM_SCHEMA_VERSION,     // "pactium.v0.3.schema.latest"
+  PACTIUM_PACKAGE_VERSION,    // "0.5.0"
   PACTIUM_INDEX_ENGINE,       // "pactium.verifiable-index-engine"
   PACTIUM_INDEX_SPLITTER,     // "pactium-cdc-boundary"
   PACTIUM_PROOF_BUNDLE_TYPE,  // "pactium.proof-bundle.indexed"
@@ -910,12 +952,12 @@ import type {
 
 ## Crash Consistency and Doctor
 
-Pactium's local JSON backend uses **write-ahead commit markers** for crash detection:
+Pactium's local JSON backend uses **bounded write-ahead commit markers** for crash detection:
 
 1. Before mutation work begins, a **pending marker** is written to the `commit` protocol object scope.
 2. If preflight validation fails (e.g., idempotency conflict, append-condition conflict), the pending marker is **cleaned up** — no false `incomplete_commit`.
-3. After all mutation work completes (ledger append + proof material + index + runtime-state save), a **complete marker** is written and the pending marker is cleaned up.
-4. If a crash occurs after the ledger append but before the complete marker is written, the pending marker **remains** — `doctor()` reports `incomplete_commit`.
+3. After all mutation work completes (ledger append + proof material + index + runtime-state save), that same marker is overwritten with `phase: "complete"` and then deleted. Successful operations therefore leave no permanent marker history.
+4. If a crash occurs before finalization, the pending marker **remains** and `doctor()` reports `incomplete_commit`. If a process stops after finalization but before deletion, `doctor()` recognizes the finalized residual as safe.
 
 `createStoragePort()` defaults to `storageBackend: "auto"` for persistent data directories. Auto mode runs the SQLite capability detector and selects SQLite for a new data directory when a Pactium-supported SQLite provider is available (`node:sqlite` or optional npm `better-sqlite3`), otherwise JSON. System SQLite signals such as the `sqlite3` CLI or package-manager records are reported by `detectSqliteCapabilities()` but are not treated as storage drivers until an adapter exists. Once a data directory has a manifest, Pactium reuses the manifest-bound backend and does not silently switch or fall back to another backend.
 

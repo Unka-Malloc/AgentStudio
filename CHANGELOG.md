@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-07-21
+
+This release moves the current protocol and data format to `pactium.v0.3` and removes the previous persisted layout without a compatibility reader.
+
+### Added
+
+- Added single-fact `receipt` and atomic `on-change` operation profiles with write-free replay/unchanged paths.
+- Added SQLite block scanning, fail-closed derived-index garbage collection, post-commit incremental page reclamation, and a `storage-gc` maintenance task.
+- Added global proof leaf tables and exact-key causality membership multiproofs.
+
+### Changed
+
+- Replaced aggregate runtime state with a fixed-size manifest and domain-separated generation records, with one publication per lifecycle phase.
+- Made JSON record slots preserve each entity's latest published value across sparse generations and removed permanent successful commit-marker history.
+- Replaced SQLite text payloads with canonical BLOBs, adaptive Brotli q4, normalized block references, content-hash no-op UPSERT, and byte-bounded caches.
+- Made index CAS roots authoritative and removed protocol-object root aliases.
+- Finalized and signed envelopes once before registration.
+
+### Breaking Changes
+
+- Current data directories must use the v0.3 schema and `pactium.sqlite.v2.br1`; non-current directories are rejected and are not migrated in place.
+- Proof material, hash domains, HTTP protocol identifiers, and the LicoLite aspect identifier now use v0.3.
+
 ## [0.4.1] - 2026-07-11
 
 This patch release prepares Pactium 0.4.1. It does not change the protocol version or persisted protocol format.
@@ -226,6 +249,7 @@ This is the first public release of Pactium as a proof-first protocol substrate.
 - Ed25519 signing support for Ledger Heads and LicoLite envelopes
 - Signed head verification with verifier manifest validation
 
+[0.5.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.5.0
 [0.4.1]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.4.0
 [0.3.1]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.3.1

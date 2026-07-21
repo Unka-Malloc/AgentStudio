@@ -28,6 +28,11 @@ const REQUIRED_PROOF_SCHEMA = Object.freeze({
     { path: "proofs.workspaceProjection.membershipProof", proofType: PACTIUM_PROOF_TYPES.indexMembership, label: "workspace membership proof" },
     { path: "proofs.stateCommit", proofType: null, label: "state commit material" },
     { path: "proofs.checkpoint.proof", proofType: PACTIUM_PROOF_TYPES.indexMembership, label: "checkpoint membership proof" }
+  ]),
+  "operation-receipt": Object.freeze([
+    { path: "ledger.inclusionProof", proofType: PACTIUM_PROOF_TYPES.ledgerInclusion, label: "ledger inclusion proof" },
+    { path: "ledger.consistencyProof", proofType: PACTIUM_PROOF_TYPES.ledgerConsistency, label: "ledger consistency proof" },
+    { path: "proofs.receipt.proof", proofType: PACTIUM_PROOF_TYPES.indexMembership, label: "receipt membership proof" }
   ])
 });
 
@@ -41,49 +46,73 @@ export async function createProofRef(storage, name, value, refs = []) {
   };
 }
 
-export function compactProofMaterialDescriptors(material) {
-  const rootTable = [];
-  const rootIndexes = new Map();
-  function refFor(descriptor) {
+export function compactProofMaterialTables(material) {
+  const descriptorTable = [];
+  const descriptorIndexes = new Map();
+  const leafTable = [];
+  const leafIndexes = new Map();
+  function descriptorRefFor(descriptor) {
     // canonicalString normalizes while serializing, so the descriptor is only
     // deep-normalized when it first enters the table.
     const key = canonicalString(descriptor);
-    if (!rootIndexes.has(key)) {
-      rootIndexes.set(key, rootTable.length);
-      rootTable.push(normalizeCanonicalValue(descriptor));
+    if (!descriptorIndexes.has(key)) {
+      descriptorIndexes.set(key, descriptorTable.length);
+      descriptorTable.push(normalizeCanonicalValue(descriptor));
     }
-    return rootIndexes.get(key);
+    return descriptorIndexes.get(key);
   }
-  function visit(value) {
+  function leafRefFor(record) {
+    const key = canonicalString(record);
+    if (!leafIndexes.has(key)) {
+      leafIndexes.set(key, leafTable.length);
+      leafTable.push(normalizeCanonicalValue(record));
+    }
+    return leafIndexes.get(key);
+  }
+  function visit(value, inheritedDomain = "") {
     if (Array.isArray(value)) {
-      for (const item of value) visit(item);
+      for (const item of value) visit(item, inheritedDomain);
       return;
     }
     if (!value || typeof value !== "object") return;
+    const activeDomain = String(value.domain || inheritedDomain || "");
     const table = Array.isArray(value.descriptorTable) ? value.descriptorTable : [];
     if (table.length > 0) {
       for (const pathItem of asArray(value.path)) {
         pathItem.siblingDescriptorRefs = asArray(pathItem.siblingDescriptorRefs)
           .map((ref) => table[Number(ref)])
           .filter(Boolean)
-          .map(refFor);
+          .map(descriptorRefFor);
       }
       for (const leaf of asArray(value.leaves)) {
         for (const pathItem of asArray(leaf.path)) {
           pathItem.siblingDescriptorRefs = asArray(pathItem.siblingDescriptorRefs)
             .map((ref) => table[Number(ref)])
             .filter(Boolean)
-            .map(refFor);
+            .map(descriptorRefFor);
         }
       }
       delete value.descriptorTable;
       value.descriptorTableScope = "proof-material";
     }
-    for (const nested of Object.values(value)) visit(nested);
+    if (value.leafNode && typeof value.leafNode === "object" && value.leafRoot && value.leafRootHash) {
+      value.leafRef = leafRefFor({
+        domain: activeDomain,
+        leafRoot: String(value.leafRoot),
+        leafRootHash: String(value.leafRootHash),
+        leafNode: value.leafNode
+      });
+      value.leafTableScope = "proof-material";
+      delete value.leafNode;
+      delete value.leafRoot;
+      delete value.leafRootHash;
+    }
+    for (const key of Object.keys(value).sort()) visit(value[key], activeDomain);
   }
   const compacted = normalizeCanonicalValue(material);
   visit(compacted.proofs || {});
-  if (rootTable.length > 0) compacted.proofDescriptorTable = rootTable;
+  if (descriptorTable.length > 0) compacted.proofDescriptorTable = descriptorTable;
+  if (leafTable.length > 0) compacted.proofLeafTable = leafTable;
   return compacted;
 }
 
@@ -94,6 +123,7 @@ function extensionSigningPayload(envelope) {
     ...envelope,
     envelopeId: undefined,
     replayed: false,
+    disposition: undefined,
     extensions: asArray(envelope.extensions).filter((extension) => extension.name !== "licolite.signature")
   };
 }
@@ -102,6 +132,7 @@ function envelopeIdentityPayload(envelope) {
   return {
     ...envelope,
     replayed: false,
+    disposition: undefined,
     envelopeId: undefined
   };
 }
@@ -565,19 +596,39 @@ function verifySemanticBindings({ envelope, proofMaterial, ledgerFact = null, fa
       }));
     }
   }
-  const ledgerLeaf = proofMaterial?.ledger?.inclusionProof?.leaf || {};
-  const causalityRefs = asArray(ledgerLeaf.causalityRefs).map(String);
-  const causalityOutcomeId = String(stateCommit?.outcomeId || ledgerLeaf.outcomeId || "");
-  for (const [index, proof] of asArray(proofs.causality?.proofs).entries()) {
-    const expectedCausalityKey = causalityRefs[index] && causalityOutcomeId
-      ? `${causalityRefs[index]}\u0000${causalityOutcomeId}`
-      : "";
-    expectIndexProof(proof, {
-      root: proofs.causality?.root || "",
-      key: expectedCausalityKey,
-      proofType: PACTIUM_PROOF_TYPES.indexMembership,
-      label: `causality proof ${index}`
-    });
+  const causalityRefs = asArray(ledgerFact?.causalityRefs).map(String);
+  const causalityFactId = String(ledgerFact?.outcomeId || ledgerFact?.intentId || ledgerFact?.receiptId || "");
+  const expectedCausalityKeys = causalityRefs
+    .map((ref) => causalityFactId ? `${ref}\u0000${causalityFactId}` : "")
+    .filter(Boolean)
+    .sort();
+  const causalityMultiproof = proofs.causality?.multiproof || null;
+  if (asArray(proofs.causality?.proofs).length > 0) {
+    badBinding(
+      "bad_causality_multiproof_binding",
+      "Causality material must use the current membership multiproof layout."
+    );
+  }
+  if (expectedCausalityKeys.length > 0) {
+    const actualKeys = asArray(causalityMultiproof?.keys).map(String);
+    const invalidMultiproof = !causalityMultiproof ||
+      causalityMultiproof.proofType !== PACTIUM_PROOF_TYPES.indexMembershipMultiproof ||
+      causalityMultiproof.indexRoot !== proofs.causality?.root ||
+      asArray(causalityMultiproof.missingKeys).length > 0 ||
+      actualKeys.length !== expectedCausalityKeys.length ||
+      actualKeys.some((key, index) => key !== expectedCausalityKeys[index]);
+    if (invalidMultiproof) {
+      badBinding(
+        "bad_causality_multiproof_binding",
+        "Causality multiproof keys do not exactly bind the Ledger fact causality references.",
+        { expectedKeys: expectedCausalityKeys, actualKeys }
+      );
+    }
+  } else if (causalityMultiproof) {
+    badBinding(
+      "bad_causality_multiproof_binding",
+      "Causality multiproof is present for a Ledger fact without causality references."
+    );
   }
   if (proofs.openIntent) {
     expectIndexProof(proofs.openIntent, {
@@ -599,6 +650,23 @@ function verifySemanticBindings({ envelope, proofMaterial, ledgerFact = null, fa
       proofType: PACTIUM_PROOF_TYPES.indexNonMembership,
       label: "open intent removal proof"
     });
+  }
+  if (proofs.receipt?.proof) {
+    expectIndexProof(proofs.receipt.proof, {
+      root: proofs.receipt.root || "",
+      key: ledgerFact?.receiptId || envelope.factId || "",
+      proofType: PACTIUM_PROOF_TYPES.indexMembership,
+      label: "receipt proof"
+    });
+    if (envelope.envelopeKind !== "operation-receipt" ||
+        ledgerFact?.factType !== "operation.receipt" ||
+        ledgerFact?.receiptId !== envelope.factId ||
+        !["receipt", "on-change"].includes(String(ledgerFact?.profile || ""))) {
+      badBinding(
+        "bad_receipt_binding",
+        "Operation Receipt proof does not bind to a current receipt fact and profile."
+      );
+    }
   }
 }
 

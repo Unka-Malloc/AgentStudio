@@ -6,7 +6,7 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 
 | Area | Parameter | Value |
 | --- | --- | --- |
-| Protocol | `PACTIUM_PROTOCOL` | `pactium.v0.2` |
+| Protocol | `PACTIUM_PROTOCOL` | `pactium.v0.3` |
 | Hash | `Protocol Hash` | `sha256` |
 | Hash domains | `domainSeparator` | Fixed per object class |
 | Encoding | `Canonical Value` | Pactium-specific canonical JSON bytes with sorted keys, NFC strings, safe integers, and `$bytes`; see [Canonical Encoding](./CANONICAL-ENCODING.md) |
@@ -32,13 +32,14 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 
 | Parameter | Value |
 | --- | --- |
-| Facts | Operation Intent plus Operation Outcome |
+| Facts | Operation Intent plus Operation Outcome, or one terminal Operation Receipt |
 | Open state | Open Intent is first-class and recoverable |
 | Terminality | One Terminal Outcome per Intent |
 | Cancellation | Canceled Outcome |
 | Recovery links | Causality References plus Operation Causality Index |
 | Idempotency | Intent Idempotency Index and Outcome Idempotency Index |
 | Replay | Returns existing proof/ref with `replayed`, appends no Ledger fact |
+| Receipt profiles | `receipt` is a single idempotent terminal fact; `on-change` is a single terminal fact only when its digest changes |
 
 ## Verifiable Index Engine
 
@@ -102,6 +103,8 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | Extensions | Hash-bound Proof Extensions |
 | Critical extension | Unsupported critical extension fails verification |
 | Descriptor compaction | Proof envelopes hoist repeated index sibling descriptors into `proofMaterial.proofDescriptorTable` |
+| Leaf compaction | Repeated proof leaves are hoisted into the self-contained `proofMaterial.proofLeafTable` |
+| Causality | One exact-key membership multiproof per envelope |
 | Trust policy | In-memory verification defaults to `self-carried-manifest`; persistent envelopes and bundles default to `trusted-manifest-required` |
 
 ## Storage Backend Profile
@@ -110,8 +113,11 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | --- | --- |
 | Persistent default | `createStoragePort()` uses `storageBackend: "auto"` |
 | SQLite | Production local-durability candidate when `node:sqlite` or optional npm `better-sqlite3` is available |
+| SQLite format | Canonical BLOB payloads, normalized reference rows, adaptive Brotli q4, content-hash no-op UPSERT |
 | JSON | Local development, low-concurrency use, debugging, and explicit `storageBackend: "json"` profiles |
 | Manifest binding | Existing data directories reopen only with their recorded backend |
+| Runtime state | Fixed-size manifest plus domain-separated generation records |
+| Garbage collection | SQLite-only, dry-run by default, fail-closed mark/sweep of unreachable derived index nodes |
 | Distributed deployments | Require an external consistency layer; Storage Port does not provide consensus |
 
 ## HTTP Adapter
@@ -143,6 +149,7 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | --- | --- |
 | Scheduler | No resident daemon |
 | Task model | Deterministic Maintenance Task Engine |
+| Storage task | `storage-gc` previews or executes conservative index-node collection; page reclamation is opt-in |
 | Repair execution | Host executes plans |
 | Derived index repair | Repair Planner returns deterministic tasks; current package does not execute repair tasks or append Repair Facts |
 | Original fact/content repair | Not invented; recovered only from authority, backup, or host evidence |

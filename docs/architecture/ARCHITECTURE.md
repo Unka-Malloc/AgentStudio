@@ -112,6 +112,8 @@ The shared Verifiable Index Engine is the canonical ordered-key proof engine. St
   └─────────────────────────────┘
 ```
 
+For read-only or terminal-only host events, `recordOperationReceipt()` skips the open-intent lifecycle. A `receipt` appends one terminal fact; `on-change` compares a domain-separated digest under the same mutation transaction and appends nothing when unchanged.
+
 ## Data Flow: Verifying a Proof Envelope
 
 ```text
@@ -190,18 +192,23 @@ LicoLite owns runtime policy decisions, operation dispatching, side effects, UI 
   │   └── <hex-prefix>/      Prefix-based sharding (first 2 hex chars of CID)
   │       └── <hex>.json     Block by full hex CID hash
   ├── protocol/              JSON backend protocol objects (scoped key-value)
-  │   ├── core/              Core runtime state
+  │   ├── core/              Fixed-size runtime manifest
+  │   ├── core-*/            Domain-separated locator and claim records
   │   ├── ledger/            Ledger entries, heads, compact range
   │   ├── ledger-head/       Historical ledger heads
   │   ├── ledger-leaf/       Per-index ledger leaves
   │   ├── ledger-node/       Merkle tree nodes
-  │   └── index/             Index roots (keyed by domain-hash)
+  │   └── ...                Ledger and normalized runtime records
   └── locks/                 Write-lock directories
       └── <name>.lock/       Per-lock directory
           └── owner.json     Lock owner metadata (pid, ownerId, timestamp)
 ```
 
-The Storage Port abstraction separates Pactium's protocol logic from persistence mechanics. The current implementation ships local JSON and SQLite adapters behind a manifest-bound factory. `createStoragePort()` defaults to auto backend selection for persistent directories: SQLite is selected for new directories when an implemented provider is available (`node:sqlite` or optional npm `better-sqlite3`), otherwise JSON. JSON is intended for local development, low-concurrency use, and debugging. SQLite is the production local-durability candidate; distributed multi-node deployments still require an external consistency layer. Storage ports expose an idempotent asynchronous `close()` contract. JSON and SQLite stop admitting operations and drain admitted work; SQLite also drains its write lane before closing the database, while auto storage closes only an already selected backend. A core mutation or storage write callback cannot await closure of the lifecycle that admitted it; reentrant close is rejected before lifecycle state changes, and closure must be requested after that callback settles. Failed JSON initialization remains failed for that storage instance and cannot fall through into writes. SQLite enforces private directory and database modes, rejects symbolic-link or special-file database artifacts, and retries writer admission within the declared busy deadline. Storage backends may change how bytes are stored but cannot change canonical encoding, hash computation, or proof semantics.
+The Storage Port abstraction separates Pactium's protocol logic from persistence mechanics. The current implementation ships local JSON and SQLite adapters behind a manifest-bound factory. `createStoragePort()` defaults to auto backend selection for persistent directories: SQLite is selected for new directories when an implemented provider is available (`node:sqlite` or optional npm `better-sqlite3`), otherwise JSON. JSON is intended for local development, low-concurrency use, and debugging. SQLite is the production local-durability candidate; distributed multi-node deployments still require an external consistency layer.
+
+SQLite stores canonical payloads as BLOBs and computes CIDs before adaptive Brotli compression. Block references live in normalized rows, unchanged protocol objects use a content-hash no-op UPSERT, and transaction cache entries are promoted only after commit. `compactStorage()` snapshots current roots and performs fail-closed mark/sweep in one write transaction; only unreachable current-domain index nodes are eligible. Incremental page reclamation runs after commit. JSON deliberately does not implement durable GC.
+
+Storage ports expose an idempotent asynchronous `close()` contract. JSON and SQLite stop admitting operations and drain admitted work; SQLite also drains its write lane before closing the database, while auto storage closes only an already selected backend. A core mutation or storage write callback cannot await closure of the lifecycle that admitted it; reentrant close is rejected before lifecycle state changes, and closure must be requested after that callback settles. Failed JSON initialization remains failed for that storage instance and cannot fall through into writes. SQLite enforces private directory and database modes, rejects symbolic-link or special-file database artifacts, and retries writer admission within the declared busy deadline. Storage backends may change how bytes are stored but cannot change canonical encoding, hash computation, or proof semantics.
 
 ### Canonical Value Encoding
 
@@ -287,7 +294,7 @@ If a maintained document introduces a design area that cannot be mapped to an im
 - **No-op fast path**: Mutations that do not change structure produce the same root.
 - **Path-copying mutations**: `put`, `delete`, and `mutate` descend search paths, rewrite affected leaves and necessary ancestors, collapse single-child roots, and reuse unchanged subtrees.
 - **Diff**: Implemented. `diff()` skips equal subtree roots, merges non-aligned child ranges, descends overlap groups, and compares entries at leaf level.
-- **Proof compaction**: Membership multiproofs, range proofs, compact non-membership proofs, and proof-material descriptor-table deduplication are implemented.
+- **Proof compaction**: Membership multiproofs, range proofs, compact non-membership proofs, a global descriptor table, and a self-contained global leaf table are implemented. Index roots are read from CAS nodes rather than protocol-object aliases.
 
 The current implementation is correct, canonical, and deterministic. Throughput-sensitive hosts should validate pressure-profile results against their own workload and persistence backend.
 
@@ -297,7 +304,9 @@ The current implementation is correct, canonical, and deterministic. Throughput-
 
 ### Crash Consistency
 
-The JSON backend uses write-ahead commit markers (pending/complete) with `doctor()` diagnostics. Commit markers cover operation lifecycle commits (`beginOperationIntent`, `appendOperationOutcome`, `recordOperation`, and the per-operation commits inside `recordOperations`). Materialization operations (`storeEnvelope`, `createExtension`) write content-addressed blocks plus the envelope reference registry but are not lifecycle commits; `exportProofBundle` is a pure read over immutable blocks. Each JSON state file is published from a private synchronized temporary file, followed by an atomic rename and parent-directory synchronization. Unsupported Windows directory synchronization errors are tolerated; other synchronization failures are surfaced. This provides crash detection and recovery guidance. It is not an ACID database transaction. The SQLite adapter uses SQLite transactions for `withWriteLock()` scopes. `withMutationTransaction()` enters the core mutation lane first, then the storage transaction, and lets nested core mutations reuse that boundary; a failed compound task rolls back both host projection writes and Pactium evidence and refreshes in-memory state from the committed generation. Pactium still treats the Storage Port as a persistence adapter rather than part of the proof semantics.
+The JSON backend publishes each domain-separated record into the slot opposite its latest published value, then atomically replaces the fixed-size runtime manifest. Unpublished future records are ignored after a crash, including for records that skipped generations. JSON keeps at most one marker per in-flight lifecycle mutation: it overwrites that marker with a finalized phase and deletes it, so successful work leaves no permanent marker history. Each JSON file is published from a private synchronized temporary file, followed by an atomic rename and parent-directory synchronization. This provides crash detection and recovery guidance, not an ACID multi-file transaction.
+
+SQLite publishes normalized records, the manifest, ledger facts, indexes, and envelopes in one transaction and therefore creates no lifecycle commit markers. `withMutationTransaction()` enters the core mutation lane first, then the storage transaction, and lets nested core mutations reuse that boundary; a failed compound task rolls back both host projection writes and Pactium evidence and refreshes in-memory state from the committed generation. Each lifecycle phase publishes the manifest once.
 
 ### Lock Fencing
 

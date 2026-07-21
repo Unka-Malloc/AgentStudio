@@ -46,6 +46,7 @@ export async function hardenPrivateRegularFile(filePath, {
   try {
     await fileSystem.chmod(filePath, PRIVATE_FILE_MODE);
   } catch (error) {
+    if (allowMissing && error?.code === "ENOENT") return false;
     if (!isUnsupportedDirectorySyncError(error, platform)) throw error;
   }
   return true;

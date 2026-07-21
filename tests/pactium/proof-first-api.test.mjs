@@ -91,7 +91,8 @@ import {
   REDACTED_LOCAL_USER,
   REDACTED_PROCESS,
   REDACTED_SECRET,
-  redactLocalOutput
+  redactLocalOutput,
+  redactLocalString
 } from "../../src/shared/output-redaction.js";
 
 const execFileAsync = promisify(execFile);
@@ -202,6 +203,39 @@ describe("Pactium proof-first root API", () => {
     assert.equal(serialized.includes("local-private-key-array-value"), false);
     if (username) assert.equal(serialized.includes(username), false);
     assert.equal(serialized.includes(os.hostname()), false);
+
+    const cyclic = { label: "safe" };
+    cyclic.self = cyclic;
+    const redactedCycle = redactLocalOutput(cyclic);
+    assert.equal(redactedCycle.self, redactedCycle);
+    assert.deepEqual(redactLocalOutput(["safe", null, false]), ["safe", null, false]);
+    const bytes = new Uint8Array([1, 2, 3]);
+    assert.equal(redactLocalOutput(bytes), bytes);
+    assert.equal(redactLocalString("owner=definitely-not-the-local-user"), "owner=definitely-not-the-local-user");
+    assert.equal(redactLocalString("host=definitely-not-the-local-host"), "host=definitely-not-the-local-host");
+    assert.equal(redactLocalString("relative/path", "cwd"), "relative/path");
+    assert.equal(redactLocalOutput("value", "passwordDigest"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "credentialMaterial"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "authorizationHeader"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "cookieJar"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "serviceToken"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "serviceTokens"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "clientApiKey"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "clientAccessKey"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "signingPrivateKey"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "serviceSecret"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "servicePassword"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "servicePassphrase"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "clientApiKeys"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "clientAccessKeys"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "signingPrivateKeys"), REDACTED_SECRET);
+    assert.equal(redactLocalOutput("value", "idempotencyKey"), "value");
+    assert.equal(redactLocalOutput(process.pid + 1, "pid"), process.pid + 1);
+    const buffer = new ArrayBuffer(4);
+    assert.equal(redactLocalOutput(buffer), buffer);
+    assert.equal(redactLocalString("~/private", "path"), REDACTED_LOCAL_PATH);
+    assert.equal(redactLocalString("C:\\private\\state", "path"), REDACTED_LOCAL_PATH);
+    assert.equal(redactLocalString("", "path"), "");
   });
 
   it("canonicalizes values deterministically and separates protocol hash domains", () => {
@@ -866,7 +900,7 @@ describe("Pactium proof-first root API", () => {
     await assert.rejects(() => engine.readNode(`cid:sha256:${"1".repeat(64)}`), /Index node missing/);
     await assert.rejects(
       () => createVerifiableIndexEngine({ storage: createStoragePort({ inMemory: true }), domain: "missing-index" }).readIndexRoot(first.root),
-      /Index snapshot missing/
+      /Index node missing/
     );
     const proof = await engine.prove(first.root, "b");
     assert.equal(engine.verifyProof(proof), true);
@@ -1166,23 +1200,37 @@ describe("Pactium proof-first root API", () => {
     })), { domain: "range" });
     assert.ok((await engine.diff(beforeRange.root, afterRange.root)).some((change) => change.action === "delete"));
     assert.ok((await engine.diff(afterRange.root, beforeRange.root)).some((change) => change.action === "create"));
-    const parentCut = await engine.createIndex(Array.from({ length: 9000 }, (_, index) => ({
+    const parentCut = await engine.createIndex(Array.from({ length: 12000 }, (_, index) => ({
       key: `parent:${String(index).padStart(5, "0")}`,
       valueRef: `ref:parent:${index}`,
       valueHash: protocolHash("block", `parent:${index}`)
     })), { domain: "parent-cut" });
     assert.ok(parentCut.height > 1);
     assert.ok((await engine.readSnapshot(parentCut.root)).chunkBoundaries.length > 1);
-    assert.ok((await engine.readSnapshot(parentCut.root)).chunkBoundaries.length > 1);
     assert.equal((await engine.readSnapshot("")).count, 0);
-    const splitDomain = "split-domain-704";
-    const splitLeaf = await engine.createIndex(Array.from({ length: 127 }, (_, index) => ({
+    const splitEntries = Array.from({ length: 127 }, (_, index) => ({
       key: `split:${String(index).padStart(3, "0")}`,
       valueRef: `ref:split:${index}`,
       valueHash: protocolHash("block", `split:${index}`)
-    })), { domain: splitDomain });
+    }));
+    let splitDomain = "";
+    let splitLeaf = null;
+    for (let candidate = 0; candidate < 512; candidate += 1) {
+      const domain = `split-domain-${candidate}`;
+      const index = await engine.createIndex(splitEntries, { domain });
+      if (index.height === 0) {
+        splitDomain = domain;
+        splitLeaf = index;
+        break;
+      }
+    }
+    assert.ok(splitLeaf, "test fixture should derive a leaf without an early content-defined cut");
     assert.equal(splitLeaf.height, 0);
-    const splitAfterPut = await engine.put(splitLeaf.root, "split:999", {
+    const splitAtMaximum = await engine.put(splitLeaf.root, "split:998", {
+      valueRef: "ref:split:998",
+      valueHash: protocolHash("block", "split:998")
+    }, { domain: splitDomain });
+    const splitAfterPut = await engine.put(splitAtMaximum.root, "split:999", {
       valueRef: "ref:split:999",
       valueHash: protocolHash("block", "split:999")
     }, { domain: splitDomain });
@@ -1439,7 +1487,7 @@ describe("Pactium proof-first root API", () => {
       () => missingBlockCore.exportProofBundle(missingBlockEnvelope.envelopeId),
       /Proof Envelope block missing/
     );
-    const persistentCompact = await getPactiumInternals(pactium).compactInMemoryCaches();
+    const persistentCompact = await pactium.compactStorage();
     assert.equal(persistentCompact.inMemory, false);
     const pageFromCursor = await pactium.getLedgerCursor({ fromCursor: { position: 100 }, limit: 0 });
     assert.equal(pageFromCursor.entries.length, 0);
@@ -1761,7 +1809,7 @@ describe("Pactium proof-first root API", () => {
     assert.equal(deleteProof.proofType, PACTIUM_PROOF_TYPES.indexNonMembership);
     assert.equal(verifyIndexProof(deleteProof, { proofMaterial: deleteMaterial }), true);
 
-    const compacted = await getPactiumInternals(pactium).compactInMemoryCaches();
+    const compacted = await pactium.compactStorage();
     assert.equal(compacted.inMemory, true);
     assert.ok(compacted.retainedRoots > 0);
     const freshEngine = createVerifiableIndexEngine({ storage: getPactiumInternals(pactium).storage, domain: "pactium" });
@@ -2211,6 +2259,11 @@ describe("Pactium proof-first root API", () => {
     const maintenance = createMaintenanceTaskEngine({ pactium });
     const task = maintenance.planTask("doctor", {});
     assert.equal((await maintenance.runTask(task)).ok, true);
+    const storageGc = maintenance.planTask("storage-gc", {});
+    const storageGcResult = await maintenance.runTask(storageGc);
+    assert.equal(storageGcResult.ok, true);
+    assert.equal(storageGcResult.result.inMemory, true);
+    assert.ok(storageGcResult.result.prunedBlocks >= 0);
   });
 
   it("provides first-class LicoLite aspect with signing and required critical extensions", async () => {
@@ -2307,7 +2360,7 @@ console.log(JSON.stringify({
     assert.equal(parsed.oldExportMissing, true);
     assert.equal(parsed.protocol, PACTIUM_PROTOCOL);
     assert.equal(parsed.ok, true);
-    assert.equal(parsed.httpProtocol, "pactium.v0.2.http");
+    assert.equal(parsed.httpProtocol, "pactium.v0.3.http");
     assert.equal(parsed.httpServerType, "function");
     assert.equal(parsed.rootHttpType, "function");
     assert.equal(parsed.hasBlock, true);
@@ -2315,7 +2368,7 @@ console.log(JSON.stringify({
     assert.equal(parsed.headExists, true);
     assert.equal(parsed.leafExists, true);
     assert.equal(parsed.stateExists, true);
-    assert.ok(parsed.keysLen >= 2);
+    assert.equal(parsed.keysLen, 0);
     assert.equal(parsed.hasAdvanced, false);
   });
 
@@ -2856,7 +2909,7 @@ console.log(JSON.stringify({
       name: LICOLITE_SIGNATURE_EXTENSION,
       critical: false,
       value: {
-        protocol: "pactium.v0.2.licolite-aspect",
+        protocol: "pactium.v0.3.licolite-aspect",
         signerId: "fake",
         algorithm: "hmac-sha256",
         signedEnvelopeHash: envelopeSigningHash(unsigned),
@@ -3952,7 +4005,7 @@ console.log(JSON.stringify({
     assert.equal(diskAgain.count, 1, "disk getProtocolObject return mutation should not affect cache");
   });
 
-  it("doctor detects incomplete mutation commits (pending without complete marker)", async () => {
+  it("doctor detects incomplete mutation commits", async () => {
     const dataDir = await tempDataDir("doctor-commit-");
     const pactium = createPactium({ dataDir });
     // Record a normal operation to create a healthy state
@@ -3966,10 +4019,10 @@ console.log(JSON.stringify({
     let result = await pactium.doctor();
     assert.equal(result.ok, true);
 
-    // Manually write a pending commit marker without a complete marker.
+    // Manually write a marker that never reached its finalized state.
     await getPactiumInternals(pactium).storage.putProtocolObject("commit", "pending-test-crash-id", {
       protocol: PACTIUM_PROTOCOL,
-      schema: "pactium.v0.2.schema.latest",
+      schema: PACTIUM_SCHEMA_VERSION,
       commitType: "pactium.mutation-commit",
       commitId: "test-crash-id",
       operation: "begin-intent",
@@ -3993,7 +4046,7 @@ console.log(JSON.stringify({
     const pactium = createPactium({ dataDir });
     await getPactiumInternals(pactium).storage.putProtocolObject("commit", "pending-crash-001", {
       protocol: PACTIUM_PROTOCOL,
-      schema: "pactium.v0.2.schema.latest",
+      schema: PACTIUM_SCHEMA_VERSION,
       commitType: "pactium.mutation-commit",
       commitId: "crash-001", operation: "begin-intent", phase: "pending",
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -4001,7 +4054,7 @@ console.log(JSON.stringify({
       notes: "simulated mid-op crash"
     });
     await getPactiumInternals(pactium).storage.putProtocolObject("commit", "pending-crash-002", {
-      protocol: PACTIUM_PROTOCOL, schema: "pactium.v0.2.schema.latest",
+      protocol: PACTIUM_PROTOCOL, schema: PACTIUM_SCHEMA_VERSION,
       commitType: "pactium.mutation-commit",
       commitId: "crash-002", operation: "append-outcome", phase: "pending",
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -4065,7 +4118,7 @@ console.log(JSON.stringify({
     // This tests the rebuild's error handling for orphan outcomes.
     const orphanOutcome = {
       protocol: PACTIUM_PROTOCOL,
-      schema: "pactium.v0.2.schema.latest",
+      schema: PACTIUM_SCHEMA_VERSION,
       factType: "operation.outcome",
       outcomeId: "orphan-outcome-001",
       intentId: "missing-intent-999",
@@ -4250,9 +4303,7 @@ console.log(JSON.stringify({
     const pendingKeys = await getPactiumInternals(pactium).storage.listProtocolObjectKeys("commit");
     const pendingCount = pendingKeys.filter((k) => k.startsWith("pending-")).length;
     assert.equal(pendingCount, 0, "should have no pending markers after normal lifecycle");
-    // Complete markers should exist (2: one for intent, one for outcome)
-    const completeCount = pendingKeys.filter((k) => k.startsWith("complete-")).length;
-    assert.equal(completeCount, 2, "should have complete markers for both intent and outcome");
+    assert.equal(pendingKeys.length, 0, "successful mutations should leave no commit-marker history");
     const doctorResult = await pactium.doctor();
     assert.equal(doctorResult.ok, true, "doctor should pass after normal lifecycle");
   });
@@ -4264,7 +4315,7 @@ console.log(JSON.stringify({
     // Manually create pending markers (simulating crash)
     await getPactiumInternals(pactium).storage.putProtocolObject("commit", "pending-manual-001", {
       protocol: PACTIUM_PROTOCOL,
-      schema: "pactium.v0.2.schema.latest",
+      schema: PACTIUM_SCHEMA_VERSION,
       commitType: "pactium.mutation-commit",
       commitId: "manual-001",
       operation: "begin-intent",
@@ -4278,7 +4329,7 @@ console.log(JSON.stringify({
     });
     await getPactiumInternals(pactium).storage.putProtocolObject("commit", "pending-manual-002", {
       protocol: PACTIUM_PROTOCOL,
-      schema: "pactium.v0.2.schema.latest",
+      schema: PACTIUM_SCHEMA_VERSION,
       commitType: "pactium.mutation-commit",
       commitId: "manual-002",
       operation: "append-outcome",
@@ -4431,7 +4482,7 @@ console.log(JSON.stringify({
     // List keys in commit scope
     const keys = await pactium.listProtocolObjectKeys("commit");
     assert.ok(Array.isArray(keys), "should return array of keys");
-    assert.ok(keys.length >= 2, "should have at least complete markers for intent and outcome");
+    assert.equal(keys.length, 0, "successful mutations should leave no commit-marker history");
   });
 
   it("crash injection: fail on proof material putBlock simulates incomplete write", async () => {
@@ -4513,13 +4564,13 @@ console.log(JSON.stringify({
     assert.equal(failingStorage.getCallLog().length, 0);
   });
 
-  it("crash injection: fail on complete-marker putProtocolObject via predicate", async () => {
-    const dataDir = await tempDataDir("crash-complete-");
+  it("crash injection: fail on commit-marker finalization via predicate", async () => {
+    const dataDir = await tempDataDir("crash-finalize-");
     const baseStorage = createJsonStoragePort({ dataDir });
-    // Fail specifically when writing a complete marker
+    // Fail specifically when overwriting the in-flight marker as finalized.
     const failingStorage = createFailingStorage(baseStorage, {
-      failOnPutProtocolObjectPredicate: (scope, key) => {
-        return scope === "commit" && key.startsWith("complete-");
+      failOnPutProtocolObjectPredicate: (scope, key, value) => {
+        return scope === "commit" && key.startsWith("pending-") && value?.phase === "complete";
       }
     });
     const pactium = createPactium({ storage: failingStorage });
@@ -4528,23 +4579,23 @@ console.log(JSON.stringify({
         operationId: "crash.complete",
         workspaceId: "crash-ws"
       });
-      assert.fail("should have thrown on complete marker write failure");
+      assert.fail("should have thrown on commit-marker finalization failure");
     } catch (error) {
       assert.ok(
         error.message.includes("CRASH-INJECTED") || error.message.includes("putProtocolObject"),
         "should fail with injected error: " + error.message
       );
     }
-    // A pending marker should remain because the complete marker write failed
+    // The pending phase remains because its final overwrite failed.
     const cleanStorage = createJsonStoragePort({ dataDir });
     const pendingKeys = await cleanStorage.listProtocolObjectKeys("commit");
     const pendingCount = pendingKeys.filter((k) => k.startsWith("pending-")).length;
-    assert.ok(pendingCount > 0, "pending marker should remain after complete marker failure");
+    assert.ok(pendingCount > 0, "pending marker should remain after marker finalization failure");
     const cleanPactium = createPactium({ storage: cleanStorage });
     const result = await cleanPactium.doctor();
     assert.ok(
       result.failures?.some((f) => f.code === "incomplete_commit"),
-      "doctor should report incomplete_commit after complete marker failure"
+      "doctor should report incomplete_commit after marker finalization failure"
     );
   });
 

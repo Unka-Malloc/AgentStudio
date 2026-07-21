@@ -1,5 +1,5 @@
 {
-  "protocol": "pactium.v0.2",
+  "protocol": "pactium.v0.3",
   "packageExports": {
     ".": {
       "types": "./src/index.d.ts",
@@ -99,12 +99,12 @@
   ],
   "declarations": {
     "src/index.d.ts": {
-      "sha256": "a177d8e409f05492c8fb038073090e7c420de2a7def1fd9fd5accdde5bbb870c",
-      "byteLength": 17493,
+      "sha256": "5c3dc00434b932fc8019600448a73c475c23ef9535a1bc56dbcfc4169290c404",
+      "byteLength": 18803,
       "exportCount": 86
     },
     "src/http.d.ts": {
-      "sha256": "ec5eff2f4abb6af32a55281b9988463d02aa035bacd7e5ba6dccced57bf7d510",
+      "sha256": "515e87d296b479f84afd44cbe7d6e276ac10e5ecd9315950cc8ffb0b506b6a29",
       "byteLength": 1272,
       "exportCount": 7
     },
@@ -116,8 +116,8 @@
   },
   "oldRootExportsAbsent": true,
   "profile": {
-    "protocol": "pactium.v0.2",
-    "schema": "pactium.v0.2.schema.latest",
+    "protocol": "pactium.v0.3",
+    "schema": "pactium.v0.3.schema.latest",
     "hash": "sha256",
     "cid": "cid:sha256:<hex>",
     "canonicalValue": "jcs-like-canonical-json-nfc-safe-integers",

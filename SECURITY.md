@@ -4,8 +4,8 @@
 
 | Version | Supported |
 | --- | --- |
-| 0.4.x | Yes |
-| < 0.4.0 | No |
+| 0.5.x | Yes |
+| < 0.5.0 | No |
 
 Only the latest released version receives security updates.
 

@@ -27,6 +27,8 @@ export interface PactiumStoragePort {
   selectedStorageBackend?: string;
   sqlitePath?: string;
   sqliteProvider?: string;
+  storageFormat?: string;
+  atomicTransactions?: boolean;
   initialize(): Promise<void>;
   close(): Promise<void>;
   putBlock(value: unknown, options?: PactiumRecord): Promise<PactiumRecord>;
@@ -37,6 +39,19 @@ export interface PactiumStoragePort {
   getProtocolObject(scope: string, key: string, fallback?: unknown): Promise<unknown>;
   deleteProtocolObject?(scope: string, key: string): Promise<void>;
   listProtocolObjectKeys?(scope: string): Promise<string[]>;
+  scanBlocks?(options?: {
+    afterCid?: string;
+    limit?: number;
+    kinds?: string[];
+  }): Promise<{ supported: boolean; items: PactiumRecord[]; nextCursor: string; done: boolean }>;
+  collectGarbage?(options?: {
+    roots?: string[];
+    retain?: string[];
+    sweepKinds?: string[];
+    createdBefore?: string;
+    dryRun?: boolean;
+  }): Promise<PactiumRecord>;
+  reclaimDatabasePages?(options?: { pages?: number }): Promise<PactiumRecord>;
   clearCache?(): void;
   withWriteLock?<T>(
     task: () => T | Promise<T>,
@@ -77,6 +92,7 @@ export interface PactiumProofEnvelope {
   criticalExtensions: string[];
   relatedEnvelopeIds: string[];
   replayed: boolean;
+  disposition?: "recorded" | "replayed";
   createdAt: string;
 }
 
@@ -228,10 +244,21 @@ export interface PactiumCore {
   dataDir: string;
   beginOperationIntent(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
   appendOperationOutcome(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
+  recordOperationReceipt(input?: PactiumRecord & {
+    profile?: "receipt" | "on-change";
+    changeKey?: string;
+    changeDigest?: string;
+    finalizeEnvelopeExtensions?: ((envelope: PactiumProofEnvelope) => unknown | Promise<unknown>) | null;
+  }): Promise<(PactiumProofEnvelope & { disposition: "recorded" | "replayed" }) | (PactiumRecord & {
+    disposition: "unchanged";
+    envelopeId: string;
+    receiptId: string;
+  })>;
   recordOperation(input?: PactiumRecord): Promise<PactiumProofEnvelope>;
   recordOperations(inputs?: PactiumRecord[]): Promise<PactiumRecord & { envelopes: PactiumProofEnvelope[] }>;
   lookupOpenIntent(intentId: string): Promise<PactiumRecord>;
   lookupOutcome(intentId: string): Promise<PactiumRecord>;
+  lookupReceipt(receiptId: string): Promise<PactiumRecord>;
   createAppendCondition(input?: PactiumRecord): PactiumRecord;
   getLedgerCursor(input?: PactiumRecord): Promise<PactiumRecord>;
   getWorkspaceCursor(input?: PactiumRecord & {
@@ -263,6 +290,14 @@ export interface PactiumCore {
     ok: boolean; dataDir: string; ledgerSize: number;
     rebuild?: { attempted: boolean; comparableRootsCount: number; mismatches: PactiumRecord[]; stateRebuildIncomplete: boolean; warnings: PactiumVerificationFailure[] };
   }>;
+  /**
+   * Preview or execute conservative mark/sweep of obsolete derived index nodes.
+   * Durable stores default to dry-run; page reclamation is opt-in.
+   */
+  compactStorage(options?: {
+    dryRun?: boolean;
+    reclaimPages?: number;
+  }): Promise<PactiumRecord>;
   /** Resolve a CAS block by CID. Returns a canonical clone — safe for external mutation. */
   resolveBlock(cid: string): Promise<(PactiumRecord & { bytes?: Uint8Array }) | null>;
   /** Check whether a CAS block exists. */
@@ -300,7 +335,7 @@ export interface PactiumHttpServerStartOptions extends PactiumDataDirOptions {
 }
 
 export interface PactiumHttpServerStartResult {
-  protocol: "pactium.v0.2.http";
+  protocol: "pactium.v0.3.http";
   server: unknown;
   host: string;
   port: number;
@@ -308,10 +343,10 @@ export interface PactiumHttpServerStartResult {
   url: string;
 }
 
-export const PACTIUM_PROTOCOL: "pactium.v0.2";
-export const PACTIUM_SCHEMA_VERSION: "pactium.v0.2.schema.latest";
-export const PACTIUM_PACKAGE_VERSION: "0.4.1";
-export const PACTIUM_HTTP_PROTOCOL: "pactium.v0.2.http";
+export const PACTIUM_PROTOCOL: "pactium.v0.3";
+export const PACTIUM_SCHEMA_VERSION: "pactium.v0.3.schema.latest";
+export const PACTIUM_PACKAGE_VERSION: "0.5.0";
+export const PACTIUM_HTTP_PROTOCOL: "pactium.v0.3.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES: 1048576;
 export const PACTIUM_INDEX_ENGINE: "pactium.verifiable-index-engine";
 export const PACTIUM_INDEX_SPLITTER: "pactium-cdc-boundary";

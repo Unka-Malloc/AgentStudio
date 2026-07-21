@@ -12,6 +12,7 @@ import {
   PACTIUM_PROOF_BUNDLE_TYPE,
   PACTIUM_PROOF_TYPES,
   PACTIUM_PROTOCOL,
+  PACTIUM_SCHEMA_VERSION,
   advanceTrustedHead,
   advanceTo,
   canonicalDecode,
@@ -933,18 +934,24 @@ describe("Pactium reference-project algorithm coverage", () => {
 	      stateMutations: [{ key: "causality/child", value: { ok: true } }]
 	    });
 	    const material = await proofMaterialFor(pactium, child);
-	    assert.equal(material.proofs.causality.proofs.length, 1);
-	    assert.equal(material.proofs.causality.proofs[0].key, `${parent.factId}\u0000${material.proofs.stateCommit.outcomeId}`);
+	    assert.equal(material.proofs.causality.multiproof.keys.length, 1);
+	    assert.equal(material.proofs.causality.multiproof.keys[0], `${parent.factId}\u0000${material.proofs.stateCommit.outcomeId}`);
 	    assert.equal((await pactium.verifyEnvelope(child)).ok, true);
 
-	    const nonMemberCausalityProof = await getPactiumInternals(pactium).indexEngine.prove(
-	      material.proofs.causality.root,
-	      `${parent.factId}\u0000wrong-outcome`
-	    );
 	    const badCausality = await envelopeWithMutatedProofMaterial(pactium, child, (nextMaterial) => {
-	      nextMaterial.proofs.causality.proofs[0] = nonMemberCausalityProof;
+	      nextMaterial.proofs.causality.multiproof.keys[0] = `${parent.factId}\u0000wrong-outcome`;
 	    });
-	    expectFailureCode(await pactium.verifyEnvelope(badCausality), "bad_index_proof_binding", "causality edge binding");
+	    expectFailureCode(await pactium.verifyEnvelope(badCausality), "bad_causality_multiproof_binding", "causality edge binding");
+
+	    const legacyCausality = await envelopeWithMutatedProofMaterial(pactium, child, (nextMaterial) => {
+	      nextMaterial.proofs.causality.proofs = [{ key: "legacy-proof-layout" }];
+	    });
+	    expectFailureCode(await pactium.verifyEnvelope(legacyCausality), "bad_causality_multiproof_binding", "legacy causality layout");
+
+	    const unexpectedCausality = await envelopeWithMutatedProofMaterial(pactium, parent, (nextMaterial) => {
+	      nextMaterial.proofs.causality = structuredClone(material.proofs.causality);
+	    });
+	    expectFailureCode(await pactium.verifyEnvelope(unexpectedCausality), "bad_causality_multiproof_binding", "unexpected causality proof");
 	  });
 
   it("treats proof bundles as self-contained content-addressed artifacts with required blocks", async () => {
@@ -1406,14 +1413,12 @@ describe("Pactium reference-project algorithm coverage", () => {
       idempotencyKey: "durable-compact-intent",
       outcomeIdempotencyKey: "durable-compact-outcome"
     });
-    assert.deepEqual(await getPactiumInternals(durable).compactInMemoryCaches(), {
-      protocol: PACTIUM_PROTOCOL,
-      inMemory: false,
-      retainedRoots: 0,
-      retainedNodeRoots: 0,
-      prunedBlocks: 0,
-      prunedProtocolObjects: 0
-    });
+    const compactPreview = await durable.compactStorage();
+    assert.equal(compactPreview.protocol, PACTIUM_PROTOCOL);
+    assert.equal(compactPreview.inMemory, false);
+    assert.equal(compactPreview.garbageCollection.supported, true);
+    assert.equal(compactPreview.garbageCollection.dryRun, true);
+    assert.ok(compactPreview.retainedRoots > 0);
   });
 
   it("proves disjoint range diffs and cache pruning preserve retained roots", async () => {
@@ -1531,25 +1536,37 @@ describe("Pactium reference-project algorithm coverage", () => {
     const leftEntries = Array.from({ length: 4096 }, (_, index) =>
       keyEntry(`aligned:${String(index).padStart(5, "0")}`, `value:${index}`)
     );
-    const updatedKeys = new Set();
-    const rightEntries = leftEntries.map((entry, index) => {
-      if (index < 1980 || index > 2059) return entry;
-      updatedKeys.add(entry.key);
-      return keyEntry(entry.key, `updated:${index}`);
-    });
     const left = await writer.createIndex(leftEntries);
-    const right = await writer.createIndex(rightEntries);
     const leftSnapshot = await writer.readSnapshot(left.root);
-    const rightSnapshot = await writer.readSnapshot(right.root);
     const overlaps = (leftRange, rightRange) =>
       leftRange.startKey <= rightRange.endKey && rightRange.startKey <= leftRange.endKey;
-    const hasNonAlignedOverlap = leftSnapshot.chunkBoundaries.some((leftRange) =>
-      rightSnapshot.chunkBoundaries.some((rightRange) =>
-        overlaps(leftRange, rightRange) &&
-          (leftRange.startKey !== rightRange.startKey || leftRange.endKey !== rightRange.endKey)
-      )
+    const maximumChunkCount = Math.max(...leftSnapshot.chunkBoundaries.map((range) => range.count));
+    const movableBoundary = leftSnapshot.chunkBoundaries.find((range, index) =>
+      index < leftSnapshot.chunkBoundaries.length - 1 && range.count < maximumChunkCount
     );
-    assert.ok(hasNonAlignedOverlap, "test fixture should create overlapping children with different key ranges");
+    assert.ok(movableBoundary, "test fixture should contain a content-defined boundary");
+    const updatedKeys = new Set([movableBoundary.endKey]);
+    let right = null;
+    let rightSnapshot = null;
+    for (let salt = 1; salt <= 128; salt += 1) {
+      const rightEntries = leftEntries.map((entry) => entry.key === movableBoundary.endKey
+        ? keyEntry(entry.key, `boundary-update:${salt}`)
+        : entry);
+      const candidate = await writer.createIndex(rightEntries);
+      const candidateSnapshot = await writer.readSnapshot(candidate.root);
+      const hasNonAlignedOverlap = leftSnapshot.chunkBoundaries.some((leftRange) =>
+        candidateSnapshot.chunkBoundaries.some((rightRange) =>
+          overlaps(leftRange, rightRange) &&
+            (leftRange.startKey !== rightRange.startKey || leftRange.endKey !== rightRange.endKey)
+        )
+      );
+      if (hasNonAlignedOverlap) {
+        right = candidate;
+        rightSnapshot = candidateSnapshot;
+        break;
+      }
+    }
+    assert.ok(right && rightSnapshot, "test fixture should derive a non-aligned content-defined boundary");
 
     let indexNodeReads = 0;
     const countedStorage = {
@@ -1788,7 +1805,7 @@ describe("Pactium reference-project algorithm coverage", () => {
     await fs.mkdir(lockDir, { recursive: true });
     await fs.writeFile(path.join(lockDir, "owner.json"), `${JSON.stringify({
       protocol: PACTIUM_PROTOCOL,
-      schema: "pactium.v0.2.schema.latest",
+      schema: PACTIUM_SCHEMA_VERSION,
       lockType: "pactium.write-lock",
       ownerId: "stale-owner",
       pid: 99999999,
@@ -1823,7 +1840,7 @@ describe("Pactium reference-project algorithm coverage", () => {
     // making NaN === NaN always false and preventing cleanup.
     await fs.writeFile(path.join(lockDir, "owner.json"), `${JSON.stringify({
       protocol: PACTIUM_PROTOCOL,
-      schema: "pactium.v0.2.schema.latest",
+      schema: PACTIUM_SCHEMA_VERSION,
       lockType: "pactium.write-lock",
       ownerId: "stale-with-fencing",
       fencingToken: "550e8400-e29b-41d4-a716-446655440000",
@@ -1879,7 +1896,7 @@ describe("Pactium reference-project algorithm coverage", () => {
     await fs.mkdir(lockDir, { recursive: true });
     await fs.writeFile(path.join(lockDir, "owner.json"), `${JSON.stringify({
       protocol: PACTIUM_PROTOCOL,
-      schema: "pactium.v0.2.schema.latest",
+      schema: PACTIUM_SCHEMA_VERSION,
       lockType: "pactium.write-lock",
       ownerId: "fresh-owner",
       fencingToken: "fresh-token-uuid",
@@ -1921,7 +1938,7 @@ describe("Pactium reference-project algorithm coverage", () => {
     // (not stale). The process is alive, so the lock should not be removed.
     await fs.writeFile(path.join(lockDir, "owner.json"), `${JSON.stringify({
       protocol: PACTIUM_PROTOCOL,
-      schema: "pactium.v0.2.schema.latest",
+      schema: PACTIUM_SCHEMA_VERSION,
       lockType: "pactium.write-lock",
       ownerId: "other-owner",
       fencingToken: "other-fencing-token",

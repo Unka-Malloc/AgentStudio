@@ -26,7 +26,7 @@ export function createId(prefix, value) {
 }
 
 function domainPrefix(domain) {
-  const separator = HASH_DOMAINS[domain] || String(domain || "pactium.v0.2.generic");
+  const separator = HASH_DOMAINS[domain] || String(domain || "pactium.v0.3.generic");
   if (!domainPrefixCache.has(separator)) {
     domainPrefixCache.set(separator, Buffer.from(`${PACTIUM_PROTOCOL}:${separator}\0`, "utf8"));
   }

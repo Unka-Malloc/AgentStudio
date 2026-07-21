@@ -76,6 +76,7 @@ const approvedFiles = new Set([
   "src/core/pactium-core.js",
   "src/core/rebuild-state.js",
   "src/core/state-helpers.js",
+  "src/core/state-store.js",
   "src/core/tracking-cursor.js",
   "src/http.d.ts",
   "src/http.js",
@@ -100,6 +101,7 @@ const approvedFiles = new Set([
   "src/storage/private-atomic-file.js",
   "src/storage/sqlite-capability.js",
   "src/storage/sqlite-storage-port.js",
+  "src/storage/storage-codec.js",
   "src/storage/storage-port.js",
   "src/verification/failure.js"
 ]);

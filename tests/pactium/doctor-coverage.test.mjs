@@ -90,9 +90,8 @@ describe("Pactium doctor coverage — error branches", () => {
       }
     };
     const pactium = createPactium({ storage: throwingDeleteStorage });
-    // The operation writes pending + complete markers, then tries to clean up
-    // the pending marker. The delete failure is caught silently at pactium-core
-    // lines 306-307 (best-effort cleanup). The operation succeeds.
+    // Persistent JSON storage finalizes one in-flight marker and then performs
+    // best-effort deletion. A cleanup failure must not fail the operation.
     const envelope = await pactium.recordOperation({
       operationId: "cleanup-fail-op",
       workspaceId: "cleanup-fail-ws",

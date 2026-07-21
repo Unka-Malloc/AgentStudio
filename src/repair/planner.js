@@ -85,7 +85,7 @@ export function createRepairPlanner() {
   function plan(failures = []) {
     return {
       protocol: PACTIUM_PROTOCOL,
-      planner: "pactium.v0.2.repair-planner",
+      planner: "pactium.v0.3.repair-planner",
       tasks: asArray(failures).map((failure, index) => {
         const action = actionForFailure(failure);
         return {

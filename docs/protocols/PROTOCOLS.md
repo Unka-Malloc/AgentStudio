@@ -10,8 +10,10 @@ Operation lifecycle is append-only:
 
 - `Operation Intent` records the intended operation.
 - `Operation Outcome` records the terminal result.
+- `Operation Receipt` records a terminal `receipt` or `on-change` profile without an open intent.
 - `Open Intent Index` and `Outcome Index` make lifecycle recovery and lookup verifiable.
 - `Intent Idempotency Index` and `Outcome Idempotency Index` make retries recover existing facts rather than append duplicates.
+- `Receipt Index`, replay locators, and change claims make repeated or unchanged receipts write-free.
 
 ## Workspace Projection
 
@@ -51,7 +53,13 @@ Checkpoint node membership and diffs use shared Verifiable Index Engine-backed i
 
 Proof Bundles are CAR-like content-addressed block bundles with a Pactium manifest naming the root envelope, required blocks, protocol versions, Ledger Head, and critical extensions.
 
-Proof material compacts repeated index sibling descriptors through `proofDescriptorTable`. Persistent verification and Proof Bundle verification default to the `trusted-manifest-required` trust policy; in-memory/development verification may use the self-carried manifest profile.
+Proof material compacts repeated index sibling descriptors through `proofDescriptorTable`, repeated leaf bodies through the self-contained `proofLeafTable`, and causality edges through one membership multiproof. Persistent verification and Proof Bundle verification default to the `trusted-manifest-required` trust policy; in-memory/development verification may use the self-carried manifest profile.
+
+## Runtime State And Storage
+
+The mutable runtime state is a fixed-size generation manifest plus domain-separated locator and claim records. SQLite publishes a phase in one transaction; JSON uses two generation slots and ignores unpublished future records.
+
+The current SQLite format stores canonical bytes as BLOBs, applies adaptive Brotli after CID computation, normalizes block references, and avoids updates when a protocol object's content hash is unchanged. `compactStorage()` uses a fail-closed root snapshot and only permits unreachable derived `index-node:*` blocks to be swept. Proof material, envelopes, ledger facts, extensions, and state values remain immutable evidence.
 
 ## Trust Anchors
 
