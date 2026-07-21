@@ -26,13 +26,13 @@ During the `0.x` series, minor versions may include breaking changes. The protoc
 
 ## Data Directory Compatibility
 
-### Current protocol/data format: v0.2.x
+### Current protocol/data format: v0.3
 
-Pactium 0.4.x keeps the v0.2 protocol/data directory format and creates and manages its own data directory format. Key constraints:
+Pactium 0.5.0 uses the `pactium.v0.3` protocol, normalized runtime-state layout, and `pactium.sqlite.v2.br1` SQLite format. Key constraints:
 
-- **New directories only** -- Pactium does not read or migrate data from earlier experimental formats
+- **Fresh current directories only** -- Pactium does not read, dual-write, or migrate non-current formats
 - **Latest schema only** -- there is no support for loading older schema versions
-- **Forward-compatible within patch** -- patch releases do not change data format
+- **No in-place upgrade** -- export required Proof Bundles before replacing an older data directory
 
 ### Upgrading between minor versions
 
@@ -48,9 +48,7 @@ Pactium intentionally does not include automatic migration. Data directories are
 
 | Pactium version | Node.js requirement |
 | --- | --- |
-| 0.4.x | `^22.0.0 \|\| ^24.0.0` |
-| 0.3.x | `^22.0.0 \|\| ^24.0.0` |
-| 0.2.x | `^22.0.0 \|\| ^24.0.0` |
+| 0.5.x | `^22.0.0 \|\| ^24.0.0` |
 
 Pactium is pure ESM. It cannot be loaded via `require()`. If your project uses CommonJS, use dynamic `import()`:
 

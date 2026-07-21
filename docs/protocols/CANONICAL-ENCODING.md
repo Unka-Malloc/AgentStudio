@@ -51,7 +51,7 @@ Each call to `normalizeCanonicalValue`, `canonicalString`, or `canonicalEncode` 
 Protocol hashes prepend Pactium protocol and hash-domain bytes before canonical bytes:
 
 ```text
-sha256("pactium.v0.2:" || domainSeparator || 0x00 || canonicalEncode(value))
+sha256("pactium.v0.3:" || domainSeparator || 0x00 || canonicalEncode(value))
 ```
 
 Ledger tree hashes use RFC 9162 / RFC 6962 Merkle domain separation over Pactium canonical leaf bytes:

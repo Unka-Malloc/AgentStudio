@@ -1,6 +1,6 @@
-export const PACTIUM_PROTOCOL = "pactium.v0.2";
-export const PACTIUM_SCHEMA_VERSION = "pactium.v0.2.schema.latest";
-export const PACTIUM_PACKAGE_VERSION = "0.4.1";
+export const PACTIUM_PROTOCOL = "pactium.v0.3";
+export const PACTIUM_SCHEMA_VERSION = "pactium.v0.3.schema.latest";
+export const PACTIUM_PACKAGE_VERSION = "0.5.0";
 export const PACTIUM_INDEX_ENGINE = "pactium.verifiable-index-engine";
 export const PACTIUM_INDEX_SPLITTER = "pactium-cdc-boundary";
 export const PACTIUM_PROOF_BUNDLE_TYPE = "pactium.proof-bundle.indexed";
@@ -55,22 +55,25 @@ export const PACTIUM_PROTOCOL_PROFILE = Object.freeze({
 });
 
 export const HASH_DOMAINS = Object.freeze({
-  block: "pactium.v0.2.block",
-  "append.condition": "pactium.v0.2.append.condition",
-  "checkpoint.node": "pactium.v0.2.checkpoint.node",
-  "index.boundary": "pactium.v0.2.index.boundary",
-  "index.leaf": "pactium.v0.2.index.leaf",
-  "index.node": "pactium.v0.2.index.node",
-  "ledger.consistency": "pactium.v0.2.ledger.consistency",
-  "ledger.event-id": "pactium.v0.2.ledger.event-id",
-  "ledger.head.signing": "pactium.v0.2.ledger.head.signing",
-  "operation.intent": "pactium.v0.2.operation.intent",
-  "operation.outcome": "pactium.v0.2.operation.outcome",
-  "proof.bundle": "pactium.v0.2.proof.bundle",
-  "proof.envelope": "pactium.v0.2.proof.envelope",
-  "proof.envelope.signing": "pactium.v0.2.proof.envelope.signing",
-  "proof.extension": "pactium.v0.2.proof.extension",
-  "state.commit": "pactium.v0.2.state.commit",
-  "verifier.manifest": "pactium.v0.2.verifier.manifest",
-  "workspace.projection": "pactium.v0.2.workspace.projection"
+  block: "pactium.v0.3.block",
+  "append.condition": "pactium.v0.3.append.condition",
+  "checkpoint.node": "pactium.v0.3.checkpoint.node",
+  "index.boundary": "pactium.v0.3.index.boundary",
+  "index.leaf": "pactium.v0.3.index.leaf",
+  "index.node": "pactium.v0.3.index.node",
+  "ledger.consistency": "pactium.v0.3.ledger.consistency",
+  "ledger.event-id": "pactium.v0.3.ledger.event-id",
+  "ledger.head.signing": "pactium.v0.3.ledger.head.signing",
+  "operation.intent": "pactium.v0.3.operation.intent",
+  "operation.outcome": "pactium.v0.3.operation.outcome",
+  "operation.receipt": "pactium.v0.3.operation.receipt",
+  "operation.receipt.change": "pactium.v0.3.operation.receipt.change",
+  "operation.receipt.result": "pactium.v0.3.operation.receipt.result",
+  "proof.bundle": "pactium.v0.3.proof.bundle",
+  "proof.envelope": "pactium.v0.3.proof.envelope",
+  "proof.envelope.signing": "pactium.v0.3.proof.envelope.signing",
+  "proof.extension": "pactium.v0.3.proof.extension",
+  "state.commit": "pactium.v0.3.state.commit",
+  "verifier.manifest": "pactium.v0.3.verifier.manifest",
+  "workspace.projection": "pactium.v0.3.workspace.projection"
 });

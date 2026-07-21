@@ -2,7 +2,7 @@
 
 Date: 2026-07-11
 
-Status: Implemented
+Status: Superseded by ADR-0060, ADR-0061, and ADR-0062
 
 ## Context
 
@@ -49,7 +49,7 @@ Cache and state boundaries:
 - all new caches are instance-scoped to one ledger or index engine and bounded by explicit limits;
 - `reload()` and snapshot loading clear or bypass caches so verification against storage stays authoritative;
 - the envelope registry stores only CIDs; envelope content remains content-addressed and immutable;
-- `compactInMemoryCaches` retains `proof-envelope` blocks so replay and envelope resolution keep working after compaction;
+- `compactStorage` retains immutable evidence blocks, including `proof-envelope`, so replay and envelope resolution keep working after compaction;
 - no module-level mutable state is introduced; the domain prefix cache holds only immutable derived buffers keyed by domain constants.
 
 The decision does not change canonical byte output, protocol hash values, CIDs, public proof material shape, bundle format, failure codes, append ordering, or host responsibilities. Removing `state.proofBundles` changes only runtime state layout, which is internal to the current verifiable schema; persisted proof material remains content-addressed blocks.

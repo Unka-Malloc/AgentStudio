@@ -13,7 +13,12 @@ import {
   sqliteStorageAvailable
 } from "../../src/index.js";
 import { getPactiumInternals } from "../../src/core/pactium-core.js";
-import { writePrivateFileAtomic } from "../../src/storage/private-atomic-file.js";
+import {
+  ensurePrivateDirectory,
+  hardenPrivateRegularFile,
+  isUnsupportedDirectorySyncError,
+  writePrivateFileAtomic
+} from "../../src/storage/private-atomic-file.js";
 
 const tempDirs = [];
 const execFileAsync = promisify(execFile);
@@ -164,6 +169,117 @@ describe("Pactium durable storage lifecycle", () => {
       (error) => error === durableFailure
     );
     assert.equal(linuxFixture.events.at(-1), "cleanup");
+  });
+
+  it("rejects unsafe private paths and scopes platform-specific chmod failures", async () => {
+    const root = await tempDataDir("pactium-private-path-boundaries-");
+    const directoryPath = path.join(root, "directory");
+    const missingPath = path.join(root, "missing");
+    await fs.mkdir(directoryPath);
+
+    await assert.rejects(() => ensurePrivateDirectory("/unsafe-directory", {
+      fileSystem: {
+        async mkdir() {},
+        async lstat() {
+          return {
+            isSymbolicLink: () => false,
+            isDirectory: () => false
+          };
+        }
+      }
+    }), {
+      code: "PACTIUM_PRIVATE_PATH_INVALID"
+    });
+    await assert.rejects(() => hardenPrivateRegularFile(directoryPath), {
+      code: "PACTIUM_PRIVATE_PATH_INVALID"
+    });
+    assert.equal(await hardenPrivateRegularFile(missingPath, { allowMissing: true }), false);
+    await assert.rejects(() => hardenPrivateRegularFile(missingPath), { code: "ENOENT" });
+    assert.equal(isUnsupportedDirectorySyncError({ code: "EPERM" }, "win32"), true);
+    assert.equal(isUnsupportedDirectorySyncError({ code: "EPERM" }, "linux"), false);
+    assert.equal(isUnsupportedDirectorySyncError({ code: "EIO" }, "win32"), false);
+
+    const directoryStat = {
+      isSymbolicLink: () => false,
+      isDirectory: () => true,
+      isFile: () => false
+    };
+    const fileStat = {
+      isSymbolicLink: () => false,
+      isDirectory: () => false,
+      isFile: () => true
+    };
+    const unsupportedChmod = Object.assign(new Error("chmod unsupported"), { code: "EPERM" });
+    await assert.doesNotReject(() => ensurePrivateDirectory("C:/private", {
+      platform: "win32",
+      fileSystem: {
+        async mkdir() {},
+        async lstat() { return directoryStat; },
+        async chmod() { throw unsupportedChmod; }
+      }
+    }));
+    await assert.doesNotReject(() => hardenPrivateRegularFile("C:/private/file", {
+      platform: "win32",
+      fileSystem: {
+        async lstat() { return fileStat; },
+        async chmod() { throw unsupportedChmod; }
+      }
+    }));
+    const disappearedDuringHardening = Object.assign(new Error("file disappeared"), { code: "ENOENT" });
+    assert.equal(await hardenPrivateRegularFile("/private/transient-journal", {
+      allowMissing: true,
+      platform: "linux",
+      fileSystem: {
+        async lstat() { return fileStat; },
+        async chmod() { throw disappearedDuringHardening; }
+      }
+    }), false);
+    await assert.rejects(() => hardenPrivateRegularFile("/private/required-file", {
+      platform: "linux",
+      fileSystem: {
+        async lstat() { return fileStat; },
+        async chmod() { throw disappearedDuringHardening; }
+      }
+    }), (error) => error === disappearedDuringHardening);
+
+    const durableChmod = Object.assign(new Error("chmod failed"), { code: "EIO" });
+    await assert.rejects(() => ensurePrivateDirectory("/private", {
+      platform: "linux",
+      fileSystem: {
+        async mkdir() {},
+        async lstat() { return directoryStat; },
+        async chmod() { throw durableChmod; }
+      }
+    }), (error) => error === durableChmod);
+    await assert.rejects(() => hardenPrivateRegularFile("/private/file", {
+      platform: "linux",
+      fileSystem: {
+        async lstat() { return fileStat; },
+        async chmod() { throw durableChmod; }
+      }
+    }), (error) => error === durableChmod);
+  });
+
+  it("forwards durable maintenance through the auto storage facade", async () => {
+    const dataDir = await tempDataDir("pactium-auto-maintenance-");
+    const storage = createStoragePort({ dataDir, storageBackend: "auto" });
+    assert.equal(storage.storageBackend, "auto");
+    storage.clearCache();
+    assert.equal(storage.pruneBlocks(), 0);
+    assert.equal(storage.pruneProtocolObjects(), 0);
+    const scan = await storage.scanBlocks({ limit: 1 });
+    assert.equal(typeof scan.supported, "boolean");
+    const collection = await storage.collectGarbage({ roots: [] });
+    assert.equal(typeof collection.supported, "boolean");
+    const reclaim = await storage.reclaimDatabasePages({ pages: 0 });
+    assert.equal(typeof reclaim.supported, "boolean");
+    assert.equal(await storage.withWriteLock(async () => "locked"), "locked");
+    storage.clearCache();
+    await storage.close();
+    assert.throws(
+      () => createStoragePort({ dataDir, storageBackend: "removed-backend" }),
+      /Unsupported Pactium storage backend/
+    );
   });
 
   it("creates private durable JSON state files", async () => {

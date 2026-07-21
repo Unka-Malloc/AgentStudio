@@ -7,7 +7,7 @@ import { createLedgerTransparencyLog } from "../../src/ledger/transparency-log.j
 import { rebuildCoreStateFromLedger } from "../../src/core/rebuild-state.js";
 
 describe("Pactium rebuild-state coverage — minimal fact and edge case paths", () => {
-  it("rebuild fires intent_idempotency_rebuild_incomplete for minimal intent without inputHash", async () => {
+  it("does not synthesize removed intent idempotency material", async () => {
     const pactium = createPactium({ inMemory: true });
     const ledger = getPactiumInternals(pactium).ledger;
 
@@ -25,16 +25,12 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
       ledger, indexEngine: getPactiumInternals(pactium).indexEngine, storage: null
     });
 
-    assert.ok(Array.isArray(result.warnings), "warnings should be an array");
-    const codes = result.warnings.map((w) => w.code);
-    assert.ok(codes.includes("intent_idempotency_rebuild_incomplete"),
-      `expected intent_idempotency_rebuild_incomplete, got ${codes.join(", ")}`);
-    // Intent-only: no outcome means no state mutations processed
-    // The idempotency root is excluded from partiallyComparableRoots
-    // because intentIdempotencyRebuildIncomplete was set.
+    assert.deepEqual(result.warnings, []);
+    assert.equal(result.state.indexRoots.intentIdempotency, "",
+      "current-schema rebuild requires the fact's explicit idempotencyReplayKey");
   });
 
-  it("rebuild fires outcome_idempotency_rebuild_incomplete for minimal outcome without resultHash", async () => {
+  it("does not synthesize removed outcome idempotency material", async () => {
     const pactium = createPactium({ inMemory: true });
     const ledger = getPactiumInternals(pactium).ledger;
 
@@ -64,10 +60,8 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
       ledger, indexEngine: getPactiumInternals(pactium).indexEngine, storage: null
     });
 
-    const codes = result.warnings.map((w) => w.code);
-    assert.ok(codes.includes("outcome_idempotency_rebuild_incomplete"),
-      `expected outcome_idempotency_rebuild_incomplete, got ${codes.join(", ")}`);
-    // When rebuild is incomplete, the root is excluded from partiallyComparableRoots
+    assert.equal(result.state.indexRoots.outcomeIdempotency, "",
+      "current-schema rebuild requires the fact's explicit outcomeIdempotencyReplayKey");
     assert.equal(result.stateRebuildIncomplete, true,
       "state rebuild should be marked incomplete");
   });
@@ -203,7 +197,7 @@ describe("Pactium rebuild-state coverage — minimal fact and edge case paths", 
       indexEngine: getPactiumInternals(pactium).indexEngine,
       storage: null
     });
-    assert.deepEqual(Object.keys(emptyPageResult.fullyComparableRoots), ["openIntent", "outcome", "causality"]);
+    assert.deepEqual(Object.keys(emptyPageResult.fullyComparableRoots), ["openIntent", "outcome", "receipt", "causality"]);
     assert.equal(emptyPageResult.warnings.length, 0);
 
     let pageCalls = 0;

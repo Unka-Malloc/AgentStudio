@@ -7,7 +7,7 @@ import { createLicoLiteAspect } from "./aspects/licolite/index.js";
 import { verifyProofBundle } from "./proof/bundle.js";
 import { redactLocalOutput } from "./shared/output-redaction.js";
 
-export const PACTIUM_HTTP_PROTOCOL = "pactium.v0.2.http";
+export const PACTIUM_HTTP_PROTOCOL = "pactium.v0.3.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES = 1024 * 1024;
 
 // Route capability classification for authorization gating.

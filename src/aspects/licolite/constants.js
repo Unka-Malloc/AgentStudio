@@ -1,4 +1,4 @@
-export const LICOLITE_ASPECT_PROTOCOL = "pactium.v0.2.licolite-aspect";
+export const LICOLITE_ASPECT_PROTOCOL = "pactium.v0.3.licolite-aspect";
 export const LICOLITE_POLICY_EXTENSION = "licolite.policy";
 export const LICOLITE_WORKSPACE_EFFECT_EXTENSION = "licolite.workspaceEffect";
 export const LICOLITE_SIGNATURE_EXTENSION = "licolite.signature";

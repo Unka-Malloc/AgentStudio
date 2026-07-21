@@ -51,7 +51,8 @@ export async function assertAppendCondition(condition, {
   workspace = {},
   openIntentState = null,
   outcomeState = null,
-  knownCausalityRefs = new Set()
+  knownCausalityRefs = new Set(),
+  hasCausalityRef = null
 } = {}) {
   if (!condition) return true;
   if (condition.requiredLedgerHead &&
@@ -91,7 +92,10 @@ export async function assertAppendCondition(condition, {
   }
   if (!condition.allowMissingCausalityRefs) {
     for (const ref of asArray(condition.expectedCausalityRefs)) {
-      if (!knownCausalityRefs.has(ref)) {
+      const known = knownCausalityRefs.has(ref) || (
+        typeof hasCausalityRef === "function" && await hasCausalityRef(ref)
+      );
+      if (!known) {
         fail("unknown_causality_ref", "Append condition referenced unknown causality material.", {
           causalityRef: ref
         });

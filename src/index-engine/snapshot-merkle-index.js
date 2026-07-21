@@ -9,7 +9,7 @@ import {
 import { canonicalEncode, canonicalString, normalizeCanonicalValue } from "../canonical/value.js";
 import { cidForCanonical, hexFromCid, protocolHashHex } from "../protocol/hashing.js";
 import { createStoragePort } from "../storage/storage-port.js";
-import { asArray, asRecord, safeToken } from "../shared/records.js";
+import { asArray, asRecord } from "../shared/records.js";
 import { cacheGet, cacheSet } from "../shared/lru-cache.js";
 
 const INDEX_NODE_TYPE = "pactium.index.node";
@@ -333,8 +333,36 @@ function expandProofPath(proof, context = {}, descriptorTable = descriptorTableF
   });
 }
 
-function nodePayloadFromProofLeaf(proof) {
-  const leafNode = asRecord(proof.leafNode);
+function leafRecordForProof(proof, context = {}) {
+  const hasInlineLeaf = proof?.leafNode && typeof proof.leafNode === "object";
+  const hasLeafRef = proof?.leafRef !== undefined || proof?.leafTableScope !== undefined;
+  if (hasInlineLeaf && hasLeafRef) return null;
+  if (hasInlineLeaf) {
+    return {
+      domain: String(proof.domain || ""),
+      leafRoot: String(proof.leafRoot || ""),
+      leafRootHash: String(proof.leafRootHash || ""),
+      leafNode: proof.leafNode
+    };
+  }
+  if (proof?.leafTableScope !== "proof-material" || !Number.isInteger(proof?.leafRef)) return null;
+  const table = asArray(context?.proofMaterial?.proofLeafTable);
+  if (proof.leafRef < 0 || proof.leafRef >= table.length) return null;
+  const record = asRecord(table[proof.leafRef]);
+  if (!record.leafNode || typeof record.leafNode !== "object") return null;
+  if (String(record.domain || "") !== String(proof.domain || "")) return null;
+  return {
+    domain: String(record.domain || ""),
+    leafRoot: String(record.leafRoot || ""),
+    leafRootHash: String(record.leafRootHash || ""),
+    leafNode: record.leafNode
+  };
+}
+
+function nodePayloadFromProofLeaf(proof, context = {}) {
+  const record = leafRecordForProof(proof, context);
+  if (!record) return null;
+  const leafNode = asRecord(record.leafNode);
   return finalizeNodePayload({
     protocol: PACTIUM_PROTOCOL,
     schema: PACTIUM_SCHEMA_VERSION,
@@ -381,11 +409,14 @@ function verifyPathToRoot({ proof, leafDescriptor, selectionKey = null, context 
 function verifyMembershipProof(proof, context = {}) {
   if (!proof || typeof proof !== "object") return false;
   if (proof.proofType !== PACTIUM_PROOF_TYPES.indexMembership) return false;
-  const leafPayload = nodePayloadFromProofLeaf(proof);
+  const leafRecord = leafRecordForProof(proof, context);
+  const leafPayload = nodePayloadFromProofLeaf(proof, context);
+  if (!leafRecord || !leafPayload) return false;
   const leafRoot = cidForCanonical(leafPayload);
   const leafRootHash = hexFromCid(leafRoot);
-  if (!verifyFinalizedNodePayload(leafPayload, { root: proof.leafRoot || leafRoot }, leafRoot)) return false;
-  if ((proof.leafRoot && proof.leafRoot !== leafRoot) || (proof.leafRootHash && proof.leafRootHash !== leafRootHash)) return false;
+  if (!verifyFinalizedNodePayload(leafPayload, { root: leafRecord.leafRoot || leafRoot }, leafRoot)) return false;
+  if ((leafRecord.leafRoot && leafRecord.leafRoot !== leafRoot) ||
+      (leafRecord.leafRootHash && leafRecord.leafRootHash !== leafRootHash)) return false;
   const leafDescriptor = descriptorFromNodePayload(leafPayload, leafRoot);
   const normalizedKey = String(proof.key || "");
   const rootDescriptor = verifyPathToRoot({ proof, leafDescriptor, selectionKey: normalizedKey, context });
@@ -403,11 +434,14 @@ function verifyMembershipProof(proof, context = {}) {
 function verifyCompactNonMembershipProof(proof, context = {}) {
   if (!proof || typeof proof !== "object") return false;
   if (proof.proofType !== PACTIUM_PROOF_TYPES.indexNonMembership) return false;
-  const leafPayload = nodePayloadFromProofLeaf(proof);
+  const leafRecord = leafRecordForProof(proof, context);
+  const leafPayload = nodePayloadFromProofLeaf(proof, context);
+  if (!leafRecord || !leafPayload) return false;
   const leafRoot = cidForCanonical(leafPayload);
   const leafRootHash = hexFromCid(leafRoot);
-  if (!verifyFinalizedNodePayload(leafPayload, { root: proof.leafRoot || leafRoot }, leafRoot)) return false;
-  if ((proof.leafRoot && proof.leafRoot !== leafRoot) || (proof.leafRootHash && proof.leafRootHash !== leafRootHash)) return false;
+  if (!verifyFinalizedNodePayload(leafPayload, { root: leafRecord.leafRoot || leafRoot }, leafRoot)) return false;
+  if ((leafRecord.leafRoot && leafRecord.leafRoot !== leafRoot) ||
+      (leafRecord.leafRootHash && leafRecord.leafRootHash !== leafRootHash)) return false;
   const leafDescriptor = descriptorFromNodePayload(leafPayload, leafRoot);
   const normalizedKey = String(proof.key || "");
   const rootDescriptor = verifyPathToRoot({ proof, leafDescriptor, selectionKey: normalizedKey, context });
@@ -448,16 +482,20 @@ function verifyMembershipMultiproof(proof, context = {}) {
       leafRoot: leafProof.leafRoot,
       leafRootHash: leafProof.leafRootHash,
       leafNode: leafProof.leafNode,
+      leafTableScope: leafProof.leafTableScope,
+      leafRef: leafProof.leafRef,
       path: leafProof.path,
       descriptorTable: proof.descriptorTable,
       descriptorTableScope: proof.descriptorTableScope
     };
-    const leafPayload = nodePayloadFromProofLeaf(localProof);
+    const leafRecord = leafRecordForProof(localProof, context);
+    const leafPayload = nodePayloadFromProofLeaf(localProof, context);
+    if (!leafRecord || !leafPayload) return false;
     const leafRoot = cidForCanonical(leafPayload);
     const leafRootHash = hexFromCid(leafRoot);
-    if (!verifyFinalizedNodePayload(leafPayload, { root: leafProof.leafRoot || leafRoot }, leafRoot)) return false;
-    if ((leafProof.leafRoot && leafProof.leafRoot !== leafRoot) ||
-        (leafProof.leafRootHash && leafProof.leafRootHash !== leafRootHash)) {
+    if (!verifyFinalizedNodePayload(leafPayload, { root: leafRecord.leafRoot || leafRoot }, leafRoot)) return false;
+    if ((leafRecord.leafRoot && leafRecord.leafRoot !== leafRoot) ||
+        (leafRecord.leafRootHash && leafRecord.leafRootHash !== leafRootHash)) {
       return false;
     }
     const leafDescriptor = descriptorFromNodePayload(leafPayload, leafRoot);
@@ -514,6 +552,8 @@ function verifyRangeProof(proof, context = {}) {
       leafRoot: leafProof.leafRoot,
       leafRootHash: leafProof.leafRootHash,
       leafNode: leafProof.leafNode,
+      leafTableScope: leafProof.leafTableScope,
+      leafRef: leafProof.leafRef,
       path: leafProof.path,
       descriptorTable: proof.descriptorTable,
       descriptorTableScope: proof.descriptorTableScope,
@@ -521,9 +561,11 @@ function verifyRangeProof(proof, context = {}) {
       entry: {},
       leafHash: ""
     };
-    const leafPayload = nodePayloadFromProofLeaf(localProof);
+    const leafRecord = leafRecordForProof(localProof, context);
+    const leafPayload = nodePayloadFromProofLeaf(localProof, context);
+    if (!leafRecord || !leafPayload) return false;
     const leafRoot = cidForCanonical(leafPayload);
-    if (leafProof.leafRoot !== leafRoot || leafProof.leafRootHash !== hexFromCid(leafRoot)) return false;
+    if (leafRecord.leafRoot !== leafRoot || leafRecord.leafRootHash !== hexFromCid(leafRoot)) return false;
     const descriptor = descriptorFromNodePayload(leafPayload, leafRoot);
     const entries = asArray(leafPayload.entries).map(normalizeIndexEntry);
     const matchingEntries = [];
@@ -608,8 +650,12 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
 
   async function putNode(payload) {
     const finalized = finalizeNodePayload(payload);
-    const refs = asArray(finalized.children).map((child) => child.root).filter(Boolean);
-    const block = await storage.putBlock(finalized, { kind: `index-node:${finalized.domain}`, refs });
+    const refs = new Set(asArray(finalized.children).map((child) => child.root).filter(Boolean));
+    for (const entry of asArray(finalized.entries)) {
+      const valueRef = String(entry?.valueRef || "");
+      if (/^cid:sha256:[a-f0-9]{64}$/.test(valueRef)) refs.add(valueRef);
+    }
+    const block = await storage.putBlock(finalized, { kind: `index-node:${finalized.domain}`, refs: [...refs] });
     const descriptor = descriptorFromNodePayload(finalized, block.cid);
     cacheSet(nodes, block.cid, finalized, CACHE_LIMITS.nodes);
     return { payload: finalized, descriptor };
@@ -621,7 +667,7 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     if (cached) return cached;
     const block = await storage.getBlock(root);
     if (!block) throw new Error(`Index node missing for ${root}`);
-    const payload = normalizeCanonicalValue(JSON.parse(Buffer.from(block.payloadBase64, "base64").toString("utf8")));
+    const payload = normalizeCanonicalValue(JSON.parse(Buffer.from(block.bytes).toString("utf8")));
     if (!verifyNodePayload(payload, { root })) throw new Error(`Index node integrity failure for ${root}`);
     cacheSet(nodes, root, payload, CACHE_LIMITS.nodes);
     return payload;
@@ -701,10 +747,6 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
       splitter: splitterConfig()
     };
     cacheSet(roots, rootDescriptor.root, indexRoot, CACHE_LIMITS.roots);
-    await storage.putProtocolObject("index", `${safeToken(snapshotDomain)}-${rootDescriptor.rootHash}`, indexRoot);
-    if (snapshotDomain !== domain) {
-      await storage.putProtocolObject("index", `${safeToken(domain)}-${rootDescriptor.rootHash}`, indexRoot);
-    }
     snapshots.delete(rootDescriptor.root);
     return indexRoot;
   }
@@ -723,10 +765,6 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
       splitter: splitterConfig()
     };
     cacheSet(roots, rootDescriptor.root, indexRoot, CACHE_LIMITS.roots);
-    await storage.putProtocolObject("index", `${safeToken(snapshotDomain)}-${rootDescriptor.rootHash}`, indexRoot);
-    if (snapshotDomain !== domain) {
-      await storage.putProtocolObject("index", `${safeToken(domain)}-${rootDescriptor.rootHash}`, indexRoot);
-    }
     snapshots.delete(rootDescriptor.root);
     return indexRoot;
   }
@@ -738,10 +776,22 @@ export function createVerifiableIndexEngine({ storage = createStoragePort({ inMe
     }
     const cached = cacheGet(roots, root);
     if (cached) return cached;
-    const object = await storage.getProtocolObject("index", `${safeToken(domain)}-${hexFromCid(root)}`, null);
-    if (!object) throw new Error(`Index snapshot missing for ${root}`);
-    cacheSet(roots, root, object, CACHE_LIMITS.roots);
-    return object;
+    const payload = await readNode(root);
+    const descriptor = descriptorFromNodePayload(payload, root);
+    const indexRoot = {
+      protocol: PACTIUM_PROTOCOL,
+      schema: PACTIUM_SCHEMA_VERSION,
+      engine: PACTIUM_INDEX_ENGINE,
+      domain: String(payload.domain || domain),
+      root: descriptor.root,
+      rootHash: descriptor.rootHash,
+      count: descriptor.count,
+      keyRange: descriptor.keyRange,
+      height: descriptor.level,
+      splitter: payload.splitter || splitterConfig()
+    };
+    cacheSet(roots, root, indexRoot, CACHE_LIMITS.roots);
+    return indexRoot;
   }
 
   async function collectEntriesFromDescriptor(descriptor) {

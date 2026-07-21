@@ -614,11 +614,20 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
     return [...memoryKeys];
   }
 
+  async function unsupportedDurableMaintenance() {
+    await ensureInitialized();
+    return {
+      supported: false,
+      reason: "durable-block-maintenance-requires-sqlite"
+    };
+  }
+
   return Object.freeze({
     protocol: PACTIUM_PROTOCOL,
     schema: PACTIUM_SCHEMA_VERSION,
     dataDir: resolvedDataDir,
     inMemory,
+    atomicTransactions: false,
     storageBackend: PACTIUM_STORAGE_BACKEND_JSON,
     initialize() { return runOperation(ensureInitialized); },
     putBlock(...args) { return runOperation(() => putBlock(...args)); },
@@ -629,6 +638,9 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
     getProtocolObject(...args) { return runOperation(() => getProtocolObject(...args)); },
     deleteProtocolObject(...args) { return runOperation(() => deleteProtocolObject(...args)); },
     listProtocolObjectKeys(...args) { return runOperation(() => listProtocolObjectKeys(...args)); },
+    scanBlocks() { return runOperation(unsupportedDurableMaintenance); },
+    collectGarbage() { return runOperation(unsupportedDurableMaintenance); },
+    reclaimDatabasePages() { return runOperation(unsupportedDurableMaintenance); },
     clearCache,
     withWriteLock(...args) { return runOperation(() => withWriteLock(...args)); },
     close,

@@ -63,7 +63,7 @@ The first-class integration surface for LicoLite is at `pactium/licolite`.
 | Principle | Meaning |
 | --- | --- |
 | **Proof-first** | Write operations return verifiable proof envelopes, not storage acknowledgments. The proof is the API response. |
-| **Append-only facts** | Operations are recorded as immutable Intent and Outcome facts. Corrections create new facts with causality references rather than mutating history. |
+| **Append-only facts** | Full operations use immutable Intent/Outcome facts; terminal-only operations use one immutable Receipt. Corrections create new facts with causality references rather than mutating history. |
 | **Single ordering authority** | The Operation Ledger is the only global ordering authority. All other structures derive their ordering from it. |
 | **Verifiable indexes** | Every index (state, workspace, lifecycle) uses the same Canonical Prolly Tree engine with membership and non-membership proofs. |
 | **Host boundary** | Pactium owns protocol facts and proofs. Host systems own policy decisions, side effects, authorization, and durable evidence storage. |
@@ -76,6 +76,7 @@ The first-class integration surface for LicoLite is at `pactium/licolite`.
 | --- | --- |
 | **Operation Ledger** | RFC 6962-style transparency log with inclusion and consistency proofs |
 | **Append-Only Lifecycle** | Operation Intent / Outcome facts with idempotency replay |
+| **Receipt Profiles** | One-fact `receipt` and atomic write-free `on-change` suppression for read-only/terminal evidence |
 | **Verifiable Index Engine** | Canonical Prolly Tree with path-copying mutations, membership/non-membership proofs, multiproofs, range proofs, and shared-node diffs |
 | **Workspace Projection** | Verifiable workspace-scoped order and membership indexes |
 | **Merkle State** | Content-addressed state commits bound to operation outcomes |
@@ -87,6 +88,7 @@ The first-class integration surface for LicoLite is at `pactium/licolite`.
 | **Repair Planning** | Deterministic repair task generation from structured verification failures; repair execution is host-owned |
 | **Canonical Value** | Pactium-specific canonical encoding (deterministic JSON + NFC + $bytes + safe integers; not RFC 8785 JCS) |
 | **Trust Policy** | Explicit trust model: structural / self-carried-manifest / trusted-manifest-required verification modes |
+| **Bounded Storage** | Fixed-size runtime manifest, adaptive Brotli SQLite BLOBs, normalized refs, no-op UPSERT, and conservative derived-index GC |
 | **Zero Dependencies** | Pure ESM, no runtime dependencies, ships source directly |
 
 ## Installation

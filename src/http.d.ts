@@ -17,7 +17,7 @@ export interface PactiumHttpServerStartOptions extends PactiumDataDirOptions {
 }
 
 export interface PactiumHttpServerStartResult {
-  protocol: "pactium.v0.2.http";
+  protocol: "pactium.v0.3.http";
   server: unknown;
   host: string;
   port: number;
@@ -25,7 +25,7 @@ export interface PactiumHttpServerStartResult {
   url: string;
 }
 
-export const PACTIUM_HTTP_PROTOCOL: "pactium.v0.2.http";
+export const PACTIUM_HTTP_PROTOCOL: "pactium.v0.3.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES: 1048576;
 export function createPactiumHttpServer(options?: PactiumHttpServerOptions): unknown;
 export function startPactiumHttpServer(options?: PactiumHttpServerStartOptions): Promise<PactiumHttpServerStartResult>;

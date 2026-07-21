@@ -16,7 +16,7 @@ import { advanceTrustedHead as advanceTrustedLedgerHead } from "../ledger/signed
 import { createVerifiableIndexEngine } from "../index-engine/snapshot-merkle-index.js";
 import { createId, protocolHash } from "../protocol/hashing.js";
 import {
-  compactProofMaterialDescriptors,
+  compactProofMaterialTables,
   createProofRef,
   finalizeEnvelope,
   materializeExtension,
@@ -32,7 +32,6 @@ import {
   applyIndexDelete,
   applyIndexPut,
   checkpointEntriesFor,
-  createEmptyCoreState,
   eventRefValue,
   idempotencyKeyFor,
   intentIdempotencyClaimKeyFor,
@@ -40,9 +39,13 @@ import {
   normalizeCoreState,
   outcomeIdempotencyKeyFor,
   padOrdinal,
+  receiptChangeClaimKeyFor,
+  receiptReplayKeyFor,
+  resetCoreRuntimeCaches,
   stateEntriesFor,
   workspaceStateFor
 } from "./state-helpers.js";
+import { createCoreStateStore } from "./state-store.js";
 
 const pactiumInternals = new WeakMap();
 
@@ -77,27 +80,19 @@ function isMembershipProof(proof) {
   return proof?.proofType === PACTIUM_PROOF_TYPES.indexMembership;
 }
 
-function knownCausalityRefsFor(state) {
-  return new Set([
-    ...Object.keys(asRecord(state.intents)),
-    ...Object.values(asRecord(state.intents)).map((record) => record?.ledgerEventId).filter(Boolean),
-    ...Object.keys(asRecord(state.outcomes)),
-    ...Object.values(asRecord(state.outcomes)).map((outcome) => outcome?.outcomeId).filter(Boolean)
-  ]);
-}
-
-function currentIndexRoots(state) {
+async function currentIndexRoots(state, stateStore) {
   const retained = new Set(Object.values(asRecord(state.indexRoots)).map(String).filter(Boolean));
-  for (const workspace of Object.values(asRecord(state.workspace))) {
+  const persisted = await stateStore.list(stateStore.scopes.workspace);
+  const workspaces = [
+    ...persisted.map((record) => record.value),
+    ...Object.values(asRecord(state.workspace))
+  ];
+  for (const workspace of workspaces) {
     for (const field of ["orderRoot", "membershipRoot", "checkpointRoot", "stateRoot"]) {
       if (workspace?.[field]) retained.add(String(workspace[field]));
     }
   }
   return [...retained];
-}
-
-function hashFromCid(cid) {
-  return String(cid || "").split(":").pop() || "";
 }
 
 async function updateWorkspaceProjection({ indexEngine, state, workspaceId, ledgerAppend, proofOptions = {} }) {
@@ -150,6 +145,7 @@ export function createPactium({
   const ledger = createLedgerTransparencyLog({ storage: resolvedStorage });
   const indexEngine = createVerifiableIndexEngine({ storage: resolvedStorage, domain: "pactium" });
   const repairPlanner = createRepairPlanner();
+  const stateStore = createCoreStateStore({ storage: resolvedStorage });
   let state = null;
   let mutationLane = Promise.resolve();
   let closePromise = null;
@@ -208,7 +204,7 @@ export function createPactium({
   async function prepareRead() {
     await mutationLane.catch(() => null);
     if (useDurableWriteLock) return reloadFromStorage();
-    return ensureState();
+    return resetCoreRuntimeCaches(await ensureState());
   }
 
   function enqueueMutation(task) {
@@ -245,14 +241,159 @@ export function createPactium({
   async function ensureState() {
     await resolvedStorage.initialize();
     if (state) return state;
-    state = await resolvedStorage.getProtocolObject("core", "runtime-state", null);
-    if (!state) state = createEmptyCoreState();
-    state.intentIdempotencyClaims ||= {};
-    return normalizeCoreState(state);
+    state = normalizeCoreState(await stateStore.load());
+    return state;
   }
 
   async function saveState() {
-    await resolvedStorage.putProtocolObject("core", "runtime-state", state);
+    await stateStore.publish(state);
+    resetCoreRuntimeCaches(state);
+  }
+
+  async function loadWorkspace(current, workspaceId) {
+    const key = safeText(workspaceId, "default");
+    if (!Object.hasOwn(current.workspace, key)) {
+      const stored = await stateStore.get(stateStore.scopes.workspace, key, null);
+      current.workspace[key] = stored || workspaceStateFor(current, key);
+    }
+    return current.workspace[key];
+  }
+
+  function stageWorkspace(current, workspaceId) {
+    const key = safeText(workspaceId, "default");
+    stateStore.stage(stateStore.scopes.workspace, key, current.workspace[key]);
+  }
+
+  async function readFact(locator, expectedFactType) {
+    if (!locator?.factCid) return null;
+    const block = await resolvedStorage.getBlock(String(locator.factCid));
+    if (!block) throw new Error(`Ledger fact block missing from storage: ${locator.factCid}`);
+    const fact = canonicalDecode(block.bytes);
+    if (fact?.factType !== expectedFactType) {
+      throw new Error(`Runtime locator expected ${expectedFactType}, received ${fact?.factType || "unknown"}.`);
+    }
+    return fact;
+  }
+
+  async function loadIntentRecord(current, intentId) {
+    const key = String(intentId || "");
+    if (!key) return null;
+    if (Object.hasOwn(current.intents, key)) return current.intents[key];
+    const locator = await stateStore.get(stateStore.scopes.intent, key, null);
+    if (!locator) return null;
+    const record = {
+      intent: await readFact(locator, "operation.intent"),
+      ledgerEventId: safeText(locator.ledgerEventId),
+      ledgerIndex: Number(locator.ledgerIndex || 0),
+      factCid: safeText(locator.factCid),
+      open: locator.open === true,
+      intentEnvelopeId: safeText(locator.intentEnvelopeId)
+    };
+    current.intents[key] = record;
+    return record;
+  }
+
+  function stageIntentRecord(intentId, record) {
+    stateStore.stage(stateStore.scopes.intent, String(intentId), {
+      intentId: String(intentId),
+      workspaceId: safeText(record.intent?.workspaceId),
+      operationId: safeText(record.intent?.operationId),
+      ledgerEventId: safeText(record.ledgerEventId),
+      ledgerIndex: Number(record.ledgerIndex || 0),
+      factCid: safeText(record.factCid),
+      open: record.open === true,
+      intentEnvelopeId: safeText(record.intentEnvelopeId)
+    });
+  }
+
+  async function loadOutcome(current, intentId) {
+    const key = String(intentId || "");
+    if (!key) return null;
+    if (Object.hasOwn(current.outcomes, key)) return current.outcomes[key];
+    const locator = await stateStore.get(stateStore.scopes.outcome, key, null);
+    if (!locator) return null;
+    const outcome = await readFact(locator, "operation.outcome");
+    current.outcomeLocators[key] = locator;
+    current.outcomes[key] = outcome;
+    return outcome;
+  }
+
+  function stageOutcome(intentId, outcome, ledgerAppend, outcomeEnvelopeId = "") {
+    const locator = {
+      intentId: String(intentId),
+      outcomeId: safeText(outcome.outcomeId),
+      workspaceId: safeText(outcome.workspaceId),
+      ledgerEventId: safeText(ledgerAppend.entry.eventId),
+      ledgerIndex: Number(ledgerAppend.entry.index || 0),
+      factCid: safeText(ledgerAppend.entry.factCid),
+      outcomeEnvelopeId: safeText(outcomeEnvelopeId)
+    };
+    if (state) state.outcomeLocators[String(intentId)] = locator;
+    stateStore.stage(stateStore.scopes.outcome, String(intentId), {
+      ...locator
+    });
+  }
+
+  async function loadReceipt(current, receiptId) {
+    const key = String(receiptId || "");
+    if (!key) return null;
+    if (Object.hasOwn(current.receipts, key)) return current.receipts[key];
+    const locator = await stateStore.get(stateStore.scopes.receipt, key, null);
+    if (!locator) return null;
+    const receipt = await readFact(locator, "operation.receipt");
+    current.receiptLocators[key] = locator;
+    current.receipts[key] = receipt;
+    return receipt;
+  }
+
+  function stageReceipt(receipt, ledgerAppend, envelopeId) {
+    const locator = {
+      receiptId: safeText(receipt.receiptId),
+      workspaceId: safeText(receipt.workspaceId),
+      operationId: safeText(receipt.operationId),
+      ledgerEventId: safeText(ledgerAppend.entry.eventId),
+      ledgerIndex: Number(ledgerAppend.entry.index || 0),
+      factCid: safeText(ledgerAppend.entry.factCid),
+      envelopeId: safeText(envelopeId)
+    };
+    state.receipts[receipt.receiptId] = receipt;
+    state.receiptLocators[receipt.receiptId] = locator;
+    stateStore.stage(stateStore.scopes.receipt, receipt.receiptId, locator);
+  }
+
+  async function loadChangeClaim(current, key) {
+    if (!key) return null;
+    if (Object.hasOwn(current.changeClaims, key)) return current.changeClaims[key];
+    const claim = await stateStore.get(stateStore.scopes.changeClaim, key, null);
+    if (claim) current.changeClaims[key] = claim;
+    return claim;
+  }
+
+  async function loadReplay(scope, cache, key) {
+    if (!key) return null;
+    if (Object.hasOwn(cache, key)) return cache[key];
+    const record = await stateStore.get(scope, key, null);
+    if (!record?.envelopeId) return null;
+    cache[key] = record.envelopeId;
+    return record.envelopeId;
+  }
+
+  async function loadIntentClaim(current, key) {
+    if (!key) return null;
+    if (Object.hasOwn(current.intentIdempotencyClaims, key)) return current.intentIdempotencyClaims[key];
+    const claim = await stateStore.get(stateStore.scopes.intentClaim, key, null);
+    if (claim) current.intentIdempotencyClaims[key] = claim;
+    return claim;
+  }
+
+  function stageCausalityIdentity(identity, kind) {
+    const key = safeText(identity);
+    if (!key) return;
+    stateStore.stage(stateStore.scopes.causalityRef, key, { identity: key, kind: safeText(kind) });
+  }
+
+  async function hasCausalityRef(ref) {
+    return Boolean(await stateStore.get(stateStore.scopes.causalityRef, String(ref || ""), null));
   }
 
   // Runtime state keeps only the envelope block CID; the envelope body lives in
@@ -261,11 +402,21 @@ export function createPactium({
   async function registerEnvelope(current, envelope, refs) {
     const block = await resolvedStorage.putBlock(envelope, { kind: "proof-envelope", refs });
     current.envelopes[envelope.envelopeId] = block.cid;
+    stateStore.stage(stateStore.scopes.envelope, envelope.envelopeId, {
+      envelopeId: envelope.envelopeId,
+      factId: safeText(envelope.factId),
+      cid: block.cid
+    });
     return block;
   }
 
   async function resolveEnvelopeById(current, envelopeId) {
-    const cid = current.envelopes[String(envelopeId || "")];
+    const key = String(envelopeId || "");
+    if (!Object.hasOwn(current.envelopes, key)) {
+      const locator = await stateStore.get(stateStore.scopes.envelope, key, null);
+      if (locator?.cid) current.envelopes[key] = locator.cid;
+    }
+    const cid = current.envelopes[key];
     if (!cid) return null;
     const block = await resolvedStorage.getBlock(String(cid));
     if (!block) {
@@ -275,9 +426,13 @@ export function createPactium({
   }
 
   // -- Commit markers for crash consistency --
-  // Each mutation writes a pending marker before work begins and a complete
-  // marker after runtime-state is saved. doctor() scans for orphans.
+  // Non-transactional storage keeps one marker per in-flight mutation. The
+  // same key is finalized before deletion, so successful operations leave no
+  // ever-growing completion history. doctor() scans only residual keys.
   const COMMIT_SCOPE = "commit";
+  function usesCommitMarkers() {
+    return !resolvedStorage.inMemory && !stateStore.isAtomicBackend();
+  }
   function commitMarker(commitId, operation, phase, details = {}) {
     return {
       protocol: PACTIUM_PROTOCOL,
@@ -296,16 +451,19 @@ export function createPactium({
   }
 
   async function writePendingMarker(commitId, operation, details = {}) {
+    if (!usesCommitMarkers()) return;
     await resolvedStorage.putProtocolObject(COMMIT_SCOPE, `pending-${commitId}`,
       commitMarker(commitId, operation, "pending", details));
   }
 
-  async function writeCompleteMarker(commitId, operation, details = {}) {
-    await resolvedStorage.putProtocolObject(COMMIT_SCOPE, `complete-${commitId}`,
+  async function finalizeCommitMarker(commitId, operation, details = {}) {
+    if (!usesCommitMarkers()) return;
+    await resolvedStorage.putProtocolObject(COMMIT_SCOPE, `pending-${commitId}`,
       commitMarker(commitId, operation, "complete", details));
   }
 
   async function cleanupPendingMarker(commitId) {
+    if (!usesCommitMarkers()) return;
     try {
       await resolvedStorage.deleteProtocolObject(COMMIT_SCOPE, `pending-${commitId}`);
     } catch (_) {
@@ -320,10 +478,11 @@ export function createPactium({
     proofs = {},
     appendCondition = null,
     extensions = [],
+    finalizeEnvelopeExtensions = null,
     replayed = false,
     relatedEnvelopeIds = []
   }) {
-    const material = compactProofMaterialDescriptors({
+    const material = compactProofMaterialTables({
       protocol: PACTIUM_PROTOCOL,
       materialType: "pactium.proof-material",
       envelopeKind,
@@ -350,7 +509,7 @@ export function createPactium({
       envelopeType: "pactium.proof-envelope",
       envelopeKind,
       factType: fact.factType,
-      factId: fact.intentId || fact.outcomeId || fact.repairId || ledgerAppend.entry.eventId,
+      factId: fact.intentId || fact.outcomeId || fact.receiptId || fact.repairId || ledgerAppend.entry.eventId,
       factRef: {
         ledgerEventId: ledgerAppend.entry.eventId,
         ledgerIndex: ledgerAppend.entry.index,
@@ -359,19 +518,40 @@ export function createPactium({
       },
       ledgerHead: ledgerAppend.head,
       proofRefs: [materialRef],
-      extensions: materializedExtensions,
+      extensions: [...materializedExtensions],
       criticalExtensions: materializedExtensions.filter((extension) => extension.critical).map((extension) => extension.name),
       relatedEnvelopeIds,
       replayed,
       createdAt: nowIso()
     };
-    const envelope = finalizeEnvelope(envelopeBase);
+    const preliminaryEnvelope = finalizeEnvelope(envelopeBase);
+    const finalExtensions = [...materializedExtensions];
+    let hookAddedExtension = false;
+    if (typeof finalizeEnvelopeExtensions === "function") {
+      const finalizedExtensions = await finalizeEnvelopeExtensions(preliminaryEnvelope);
+      const extensionInputs = Array.isArray(finalizedExtensions)
+        ? finalizedExtensions
+        : Array.isArray(finalizedExtensions?.extensions)
+          ? finalizedExtensions.extensions
+          : finalizedExtensions
+            ? [finalizedExtensions]
+            : [];
+      for (const extension of extensionInputs) {
+        const materialized = await materializeExtension(resolvedStorage, extension);
+        if (materialized) {
+          finalExtensions.push(materialized);
+          hookAddedExtension = true;
+        }
+      }
+    }
+    const envelope = hookAddedExtension
+      ? finalizeEnvelope({ ...envelopeBase, extensions: finalExtensions })
+      : preliminaryEnvelope;
     const current = await ensureState();
     await registerEnvelope(current, envelope, [
       ...envelope.proofRefs.map((ref) => ref.cid),
       ...envelope.extensions.map((extension) => extension.valueRef)
     ]);
-    await saveState();
     return envelope;
   }
 
@@ -388,14 +568,16 @@ export function createPactium({
     const idKey = idempotencyKey ? idempotencyKeyFor({ ...input, operationId, workspaceId }) : "";
     const idClaimKey = idempotencyKey ? intentIdempotencyClaimKeyFor({ operationId, workspaceId, idempotencyKey }) : "";
     const inputHash = protocolHash("operation.intent", input.input ?? input.payload ?? {});
-    if (idKey && current.intentEnvelopes[idKey]) {
-      return { ...await resolveEnvelopeById(current, current.intentEnvelopes[idKey]), replayed: true };
+    const replayEnvelopeId = await loadReplay(stateStore.scopes.intentReplay, current.intentEnvelopes, idKey);
+    if (replayEnvelopeId) {
+      return { ...await resolveEnvelopeById(current, replayEnvelopeId), replayed: true };
     }
     // --- Preflight validation (no side effects) ---
     // All checks that can fail BEFORE we write any pending marker or commit
     // any mutation must happen here. Otherwise a failed check leaves an orphan
     // pending marker that doctor() will report as incomplete_commit.
-    if (idClaimKey && current.intentIdempotencyClaims[idClaimKey] && current.intentIdempotencyClaims[idClaimKey].inputHash !== inputHash) {
+    const existingClaim = await loadIntentClaim(current, idClaimKey);
+    if (existingClaim && existingClaim.inputHash !== inputHash) {
       throw new PactiumLifecycleError("Operation Intent idempotency key was reused with different input.", createVerificationFailure({
         layer: "operation-lifecycle",
         code: "idempotency_conflict",
@@ -407,20 +589,22 @@ export function createPactium({
     const appendCondition = input.appendCondition
       ? createAppendCondition({ workspaceId, ...asRecord(input.appendCondition) })
       : null;
+    const workspace = await loadWorkspace(current, workspaceId);
     if (appendCondition) {
       const requiredIntentId = appendCondition.requiredOpenIntentState?.intentId || "";
+      const requiredIntent = requiredIntentId ? await loadIntentRecord(current, requiredIntentId) : null;
       const openIntentState = requiredIntentId
         ? {
           intentId: requiredIntentId,
-          exists: current.intents[requiredIntentId]?.open === true
+          exists: requiredIntent?.open === true
         }
         : { exists: false };
       await assertAppendCondition(appendCondition, {
         phase: "intent",
         currentHead: await ledger.head(),
-        workspace: workspaceStateFor(current, workspaceId),
+        workspace,
         openIntentState,
-        knownCausalityRefs: knownCausalityRefsFor(current)
+        hasCausalityRef
       });
     }
     // --- All preflight checks passed; now commit the mutation ---
@@ -445,6 +629,8 @@ export function createPactium({
       workspaceId,
       idempotencyKey,
       inputHash,
+      idempotencyReplayKey: idKey,
+      idempotencyClaimKey: idClaimKey,
       subject: normalizeCanonicalValue(asRecord(input.subject)),
       causalityRefs: asArray(input.causalityRefs).map(String),
       appendConditionHash: appendCondition?.conditionHash || "",
@@ -455,6 +641,8 @@ export function createPactium({
     current.intents[intent.intentId] = {
       intent,
       ledgerEventId: ledgerAppend.entry.eventId,
+      ledgerIndex: ledgerAppend.entry.index,
+      factCid: ledgerAppend.entry.factCid,
       open: true
     };
     current.indexRoots.openIntent = await applyIndexPut(
@@ -483,7 +671,6 @@ export function createPactium({
       );
     }
     const projection = await updateWorkspaceProjection({ indexEngine, state: current, workspaceId, ledgerAppend, proofOptions });
-    const workspace = workspaceStateFor(current, workspaceId);
     const checkpoints = checkpointEntriesFor(current, workspaceId);
     const checkpointNodeId = createId("checkpoint_node", { intentId: intent.intentId, kind: "intent" });
     const checkpointNode = {
@@ -520,20 +707,31 @@ export function createPactium({
         },
         causality: {
           root: current.indexRoots.causality,
-          proofs: await Promise.all(intent.causalityRefs.map((ref) =>
-            indexEngine.prove(current.indexRoots.causality, `${ref}\u0000${intent.intentId}`, proofOptions)
-          ))
+          multiproof: intent.causalityRefs.length > 0
+            ? await indexEngine.proveMembershipMultiproof(
+                current.indexRoots.causality,
+                intent.causalityRefs.map((ref) => `${ref}\u0000${intent.intentId}`),
+                proofOptions
+              )
+            : null
         }
       },
       appendCondition,
       extensions: asArray(input.extensions),
+      finalizeEnvelopeExtensions: input.finalizeEnvelopeExtensions,
       replayed: false
     });
     if (idKey) current.intentEnvelopes[idKey] = envelope.envelopeId;
     if (idClaimKey) current.intentIdempotencyClaims[idClaimKey] = { inputHash, envelopeId: envelope.envelopeId };
     current.intents[intent.intentId].intentEnvelopeId = envelope.envelopeId;
+    stageIntentRecord(intent.intentId, current.intents[intent.intentId]);
+    if (idKey) stateStore.stage(stateStore.scopes.intentReplay, idKey, { envelopeId: envelope.envelopeId });
+    if (idClaimKey) stateStore.stage(stateStore.scopes.intentClaim, idClaimKey, { inputHash, envelopeId: envelope.envelopeId });
+    stageCausalityIdentity(intent.intentId, "intent-id");
+    stageCausalityIdentity(ledgerAppend.entry.eventId, "ledger-event-id");
+    stageWorkspace(current, workspaceId);
     await saveState();
-    await writeCompleteMarker(commitId, "begin-intent", {
+    await finalizeCommitMarker(commitId, "begin-intent", {
       ledgerEventIds: [envelope.factRef.ledgerEventId],
       envelopeIds: [envelope.envelopeId],
       affectedWorkspaceIds: [workspaceId]
@@ -541,13 +739,14 @@ export function createPactium({
       await cleanupPendingMarker(commitId);
       return envelope;
     } catch (error) {
+      stateStore.discard();
     if (!ledgerCommitted) {
         // Nothing durable was written — clean up pending marker so
         // doctor() won't report a false incomplete_commit.
         await cleanupPendingMarker(commitId);
       }
       // If ledgerCommitted is true, the ledger fact exists but the
-      // complete marker was never written. Keep the pending marker so
+      // marker never reached its finalized phase. Keep the pending marker so
       // doctor() correctly reports incomplete_commit.
       throw error;
     }
@@ -562,7 +761,7 @@ export function createPactium({
     const current = await ensureState();
     const intentId = safeText(input.intentId);
     if (!intentId) throw new Error("intentId is required for Operation Outcome.");
-    const intentRecord = current.intents[intentId];
+    const intentRecord = await loadIntentRecord(current, intentId);
     if (!intentRecord) {
       throw new PactiumLifecycleError("Operation Intent does not exist.", createVerificationFailure({
         layer: "operation-lifecycle",
@@ -574,19 +773,22 @@ export function createPactium({
     const outcomeIdKey = safeText(input.outcomeIdempotencyKey || input.idempotencyKey)
       ? outcomeIdempotencyKeyFor(input)
       : "";
-    if (outcomeIdKey && current.outcomeEnvelopes[outcomeIdKey]) {
-      return { ...await resolveEnvelopeById(current, current.outcomeEnvelopes[outcomeIdKey]), replayed: true };
+    const replayEnvelopeId = await loadReplay(stateStore.scopes.outcomeReplay, current.outcomeEnvelopes, outcomeIdKey);
+    if (replayEnvelopeId) {
+      return { ...await resolveEnvelopeById(current, replayEnvelopeId), replayed: true };
     }
-    if (current.outcomes[intentId]) {
+    const existingOutcome = await loadOutcome(current, intentId);
+    if (existingOutcome) {
       throw new PactiumLifecycleError("Operation Intent already has a Terminal Outcome.", createVerificationFailure({
         layer: "operation-lifecycle",
         code: "terminal_outcome_exists",
         message: "Pactium records exactly one Terminal Outcome per Operation Intent.",
-        evidenceRef: current.outcomes[intentId].outcomeId,
+        evidenceRef: existingOutcome.outcomeId,
         repairable: false
       }));
     }
     const workspaceId = intentRecord.intent.workspaceId;
+    const workspace = await loadWorkspace(current, workspaceId);
     const appendCondition = input.appendCondition
       ? createAppendCondition({ workspaceId, ...asRecord(input.appendCondition) })
       : null;
@@ -594,13 +796,13 @@ export function createPactium({
       await assertAppendCondition(appendCondition, {
         phase: "outcome",
         currentHead: await ledger.head(),
-        workspace: workspaceStateFor(current, workspaceId),
+        workspace,
         outcomeState: {
           intentId,
-          exists: Boolean(current.outcomes[intentId]),
-          outcomeId: current.outcomes[intentId]?.outcomeId || ""
+          exists: Boolean(existingOutcome),
+          outcomeId: existingOutcome?.outcomeId || ""
         },
-        knownCausalityRefs: knownCausalityRefsFor(current)
+        hasCausalityRef
       });
     }
     // --- All preflight checks passed; now commit the mutation ---
@@ -624,6 +826,8 @@ export function createPactium({
       workspaceId,
       status: safeText(input.status, "succeeded"),
       resultHash: protocolHash("operation.outcome", input.result ?? input.output ?? {}),
+      outcomeIdempotencyKey: safeText(input.outcomeIdempotencyKey || input.idempotencyKey),
+      outcomeIdempotencyReplayKey: outcomeIdKey,
       hostEvidenceRefs: asArray(input.hostEvidenceRefs).map(String),
       causalityRefs: asArray(input.causalityRefs).map(String),
       appendConditionHash: appendCondition?.conditionHash || "",
@@ -660,7 +864,6 @@ export function createPactium({
       );
     }
     const projection = await updateWorkspaceProjection({ indexEngine, state: current, workspaceId, ledgerAppend, proofOptions });
-    const workspace = workspaceStateFor(current, workspaceId);
     const workspaceStateEntries = stateEntriesFor(current, workspaceId);
     const mutations = asArray(input.stateMutations || input.state?.mutations);
     const keyedMutations = mutations.filter((mutation) => mutation?.key);
@@ -793,19 +996,30 @@ export function createPactium({
         },
         causality: {
           root: current.indexRoots.causality,
-          proofs: await Promise.all(outcome.causalityRefs.map((ref) =>
-            indexEngine.prove(current.indexRoots.causality, `${ref}\u0000${outcome.outcomeId}`, proofOptions)
-          ))
+          multiproof: outcome.causalityRefs.length > 0
+            ? await indexEngine.proveMembershipMultiproof(
+                current.indexRoots.causality,
+                outcome.causalityRefs.map((ref) => `${ref}\u0000${outcome.outcomeId}`),
+                proofOptions
+              )
+            : null
         }
       },
       appendCondition,
       extensions: asArray(input.extensions),
+      finalizeEnvelopeExtensions: input.finalizeEnvelopeExtensions,
       replayed: false,
       relatedEnvelopeIds: [intentRecord.intentEnvelopeId].filter(Boolean)
     });
     if (outcomeIdKey) current.outcomeEnvelopes[outcomeIdKey] = envelope.envelopeId;
+    stageOutcome(intentId, outcome, ledgerAppend, envelope.envelopeId);
+    stageIntentRecord(intentId, current.intents[intentId]);
+    if (outcomeIdKey) stateStore.stage(stateStore.scopes.outcomeReplay, outcomeIdKey, { envelopeId: envelope.envelopeId });
+    stageCausalityIdentity(outcome.outcomeId, "outcome-id");
+    stageCausalityIdentity(ledgerAppend.entry.eventId, "ledger-event-id");
+    stageWorkspace(current, workspaceId);
     await saveState();
-    await writeCompleteMarker(commitId, "append-outcome", {
+    await finalizeCommitMarker(commitId, "append-outcome", {
       ledgerEventIds: [envelope.factRef.ledgerEventId],
       envelopeIds: [envelope.envelopeId],
       affectedWorkspaceIds: [workspaceId]
@@ -813,12 +1027,160 @@ export function createPactium({
     await cleanupPendingMarker(commitId);
     return envelope;
     } catch (error) {
+      stateStore.discard();
       if (!ledgerCommitted) {
         // Nothing durable was written — clean up the pending marker.
         await cleanupPendingMarker(commitId);
       }
       // If ledgerCommitted is true, the pending marker stays so doctor()
       // can correctly report incomplete_commit.
+      throw error;
+    }
+  }
+
+  async function recordOperationReceipt(input = {}) {
+    return enqueueMutation(() => recordOperationReceiptCommitted(input));
+  }
+
+  async function recordOperationReceiptCommitted(input = {}) {
+    const current = await ensureState();
+    const operationId = safeText(input.operationId);
+    if (!operationId) throw new Error("operationId is required for Operation Receipt.");
+    if (asArray(input.stateMutations || input.state?.mutations).length > 0) {
+      throw new Error("Operation Receipt is terminal evidence and does not accept stateMutations.");
+    }
+    const workspaceId = safeText(input.workspaceId || input.scope, "default");
+    const profile = safeText(input.profile || input.receiptProfile, "receipt").toLowerCase();
+    if (profile !== "receipt" && profile !== "on-change") {
+      throw new Error(`Unsupported Operation Receipt profile: ${profile}`);
+    }
+    const idempotencyKey = safeText(input.idempotencyKey);
+    const replayKey = idempotencyKey
+      ? receiptReplayKeyFor({ workspaceId, operationId, idempotencyKey })
+      : "";
+    const replayEnvelopeId = await loadReplay(
+      stateStore.scopes.receiptReplay,
+      current.receiptEnvelopes,
+      replayKey
+    );
+    if (replayEnvelopeId) {
+      const envelope = await resolveEnvelopeById(current, replayEnvelopeId);
+      return { ...envelope, replayed: true, disposition: "replayed" };
+    }
+
+    const changeDigest = protocolHash("operation.receipt.change", input.changeDigest
+      ? { suppliedDigest: safeText(input.changeDigest) }
+      : input.change ?? input.input ?? input.payload ?? input.result ?? input.output ?? {});
+    const changeClaimKey = profile === "on-change"
+      ? receiptChangeClaimKeyFor({
+          workspaceId,
+          operationId,
+          changeKey: safeText(input.changeKey, operationId)
+        })
+      : "";
+    const existingChangeClaim = await loadChangeClaim(current, changeClaimKey);
+    if (existingChangeClaim?.changeDigest === changeDigest) {
+      return {
+        protocol: PACTIUM_PROTOCOL,
+        schema: PACTIUM_SCHEMA_VERSION,
+        receiptType: "pactium.operation-receipt-result",
+        profile,
+        disposition: "unchanged",
+        envelopeId: safeText(existingChangeClaim.envelopeId),
+        receiptId: safeText(existingChangeClaim.receiptId),
+        replayed: false
+      };
+    }
+
+    const commitId = createId("mutation_commit", {
+      operation: "record-operation-receipt",
+      operationId,
+      workspaceId,
+      nonce: crypto.randomUUID()
+    });
+    await writePendingMarker(commitId, "record-operation-receipt", { affectedWorkspaceIds: [workspaceId] });
+    let ledgerCommitted = false;
+    try {
+      const receipt = {
+        protocol: PACTIUM_PROTOCOL,
+        schema: PACTIUM_SCHEMA_VERSION,
+        factType: "operation.receipt",
+        receiptId: createId("operation_receipt", {
+          operationId,
+          workspaceId,
+          profile,
+          changeDigest,
+          idempotencyKey,
+          nonce: input.nonce || crypto.randomUUID()
+        }),
+        operationId,
+        workspaceId,
+        profile,
+        status: safeText(input.status, "succeeded"),
+        idempotencyKey,
+        receiptReplayKey: replayKey,
+        changeClaimKey,
+        changeDigest,
+        resultHash: protocolHash("operation.receipt.result", input.result ?? input.output ?? {}),
+        subject: normalizeCanonicalValue(asRecord(input.subject)),
+        hostEvidenceRefs: asArray(input.hostEvidenceRefs).map(String),
+        createdAt: nowIso()
+      };
+      const ledgerAppend = await ledger.append(receipt);
+      ledgerCommitted = true;
+      current.indexRoots.receipt = await applyIndexPut(
+        indexEngine,
+        current.indexRoots.receipt,
+        receipt.receiptId,
+        eventRefValue(ledgerAppend),
+        "operation-receipt"
+      );
+      const proofOptions = asRecord(input.proofOptions);
+      const envelope = await createEnvelope({
+        envelopeKind: "operation-receipt",
+        fact: receipt,
+        ledgerAppend,
+        proofs: {
+          receipt: {
+            root: current.indexRoots.receipt,
+            proof: await indexEngine.prove(current.indexRoots.receipt, receipt.receiptId, proofOptions)
+          }
+        },
+        extensions: asArray(input.extensions),
+        finalizeEnvelopeExtensions: input.finalizeEnvelopeExtensions,
+        replayed: false
+      });
+      stageReceipt(receipt, ledgerAppend, envelope.envelopeId);
+      if (replayKey) {
+        current.receiptEnvelopes[replayKey] = envelope.envelopeId;
+        stateStore.stage(stateStore.scopes.receiptReplay, replayKey, {
+          envelopeId: envelope.envelopeId,
+          receiptId: receipt.receiptId
+        });
+      }
+      if (changeClaimKey) {
+        const claim = {
+          changeClaimKey,
+          changeDigest,
+          envelopeId: envelope.envelopeId,
+          receiptId: receipt.receiptId
+        };
+        current.changeClaims[changeClaimKey] = claim;
+        stateStore.stage(stateStore.scopes.changeClaim, changeClaimKey, claim);
+      }
+      stageCausalityIdentity(receipt.receiptId, "receipt-id");
+      stageCausalityIdentity(ledgerAppend.entry.eventId, "ledger-event-id");
+      await saveState();
+      await finalizeCommitMarker(commitId, "record-operation-receipt", {
+        ledgerEventIds: [ledgerAppend.entry.eventId],
+        envelopeIds: [envelope.envelopeId],
+        affectedWorkspaceIds: [workspaceId]
+      });
+      await cleanupPendingMarker(commitId);
+      return { ...envelope, disposition: "recorded" };
+    } catch (error) {
+      stateStore.discard();
+      if (!ledgerCommitted) await cleanupPendingMarker(commitId);
       throw error;
     }
   }
@@ -868,10 +1230,12 @@ export function createPactium({
         const idKey = idempotencyKey ? idempotencyKeyFor({ ...input, operationId, workspaceId }) : "";
         const idClaimKey = idempotencyKey ? intentIdempotencyClaimKeyFor({ operationId, workspaceId, idempotencyKey }) : "";
         const inputHash = protocolHash("operation.intent", input.input ?? input.payload ?? {});
-        if (idKey && (current.intentEnvelopes[idKey] || seenIntentIdempotencyKeys.has(idKey))) {
+        const existingIntentReplay = await loadReplay(stateStore.scopes.intentReplay, current.intentEnvelopes, idKey);
+        if (idKey && (existingIntentReplay || seenIntentIdempotencyKeys.has(idKey))) {
           return recordOperationsStepwise(normalizedInputs);
         }
-        if (idClaimKey && current.intentIdempotencyClaims[idClaimKey] && current.intentIdempotencyClaims[idClaimKey].inputHash !== inputHash) {
+        const existingIntentClaim = await loadIntentClaim(current, idClaimKey);
+        if (existingIntentClaim && existingIntentClaim.inputHash !== inputHash) {
           throw new PactiumLifecycleError("Operation Intent idempotency key was reused with different input.", createVerificationFailure({
             layer: "operation-lifecycle",
             code: "idempotency_conflict",
@@ -904,6 +1268,8 @@ export function createPactium({
           workspaceId,
           idempotencyKey,
           inputHash,
+          idempotencyReplayKey: idKey,
+          idempotencyClaimKey: idClaimKey,
           subject: normalizeCanonicalValue(asRecord(input.subject)),
           causalityRefs: asArray(input.causalityRefs).map(String),
           appendConditionHash: "",
@@ -913,7 +1279,8 @@ export function createPactium({
         const outcomeIdKey = safeText(outcomeInput.outcomeIdempotencyKey || outcomeInput.idempotencyKey)
           ? outcomeIdempotencyKeyFor(outcomeInput)
           : "";
-        if (outcomeIdKey && (current.outcomeEnvelopes[outcomeIdKey] || seenOutcomeIdempotencyKeys.has(outcomeIdKey))) {
+        const existingOutcomeReplay = await loadReplay(stateStore.scopes.outcomeReplay, current.outcomeEnvelopes, outcomeIdKey);
+        if (outcomeIdKey && (existingOutcomeReplay || seenOutcomeIdempotencyKeys.has(outcomeIdKey))) {
           return recordOperationsStepwise(normalizedInputs);
         }
         const outcome = {
@@ -932,6 +1299,8 @@ export function createPactium({
           workspaceId,
           status: safeText(input.status, "succeeded"),
           resultHash: protocolHash("operation.outcome", input.result ?? input.output ?? {}),
+          outcomeIdempotencyKey: safeText(input.outcomeIdempotencyKey || input.idempotencyKey),
+          outcomeIdempotencyReplayKey: outcomeIdKey,
           hostEvidenceRefs: asArray(input.hostEvidenceRefs).map(String),
           causalityRefs: asArray(input.causalityRefs).map(String),
           appendConditionHash: "",
@@ -940,6 +1309,7 @@ export function createPactium({
         if (idKey) seenIntentIdempotencyKeys.add(idKey);
         if (idClaimKey) seenIntentIdempotencyClaims.set(idClaimKey, inputHash);
         if (outcomeIdKey) seenOutcomeIdempotencyKeys.add(outcomeIdKey);
+        await loadWorkspace(current, workspaceId);
         staged.push({ input, operationId, workspaceId, idKey, idClaimKey, inputHash, outcomeIdKey, intent, outcome });
         facts.push(intent, outcome);
       }
@@ -964,6 +1334,8 @@ export function createPactium({
           current.intents[item.intent.intentId] = {
             intent: item.intent,
             ledgerEventId: intentAppend.entry.eventId,
+            ledgerIndex: intentAppend.entry.index,
+            factCid: intentAppend.entry.factCid,
             open: true
           };
           current.indexRoots.openIntent = await applyIndexPut(
@@ -1035,13 +1407,18 @@ export function createPactium({
               },
               causality: {
                 root: current.indexRoots.causality,
-                proofs: await Promise.all(item.intent.causalityRefs.map((ref) =>
-                  indexEngine.prove(current.indexRoots.causality, `${ref}\u0000${item.intent.intentId}`, proofOptions)
-                ))
+                multiproof: item.intent.causalityRefs.length > 0
+                  ? await indexEngine.proveMembershipMultiproof(
+                      current.indexRoots.causality,
+                      item.intent.causalityRefs.map((ref) => `${ref}\u0000${item.intent.intentId}`),
+                      proofOptions
+                    )
+                  : null
               }
             },
             appendCondition: null,
             extensions: asArray(item.input.extensions),
+            finalizeEnvelopeExtensions: item.input.finalizeEnvelopeExtensions,
             replayed: false
           });
           if (item.idKey) current.intentEnvelopes[item.idKey] = intentEnvelope.envelopeId;
@@ -1212,21 +1589,41 @@ export function createPactium({
               },
               causality: {
                 root: current.indexRoots.causality,
-                proofs: await Promise.all(item.outcome.causalityRefs.map((ref) =>
-                  indexEngine.prove(current.indexRoots.causality, `${ref}\u0000${item.outcome.outcomeId}`, proofOptions)
-                ))
+                multiproof: item.outcome.causalityRefs.length > 0
+                  ? await indexEngine.proveMembershipMultiproof(
+                      current.indexRoots.causality,
+                      item.outcome.causalityRefs.map((ref) => `${ref}\u0000${item.outcome.outcomeId}`),
+                      proofOptions
+                    )
+                  : null
               }
             },
             appendCondition: null,
             extensions: asArray(item.input.outcomeExtensions || item.input.extensions),
+            finalizeEnvelopeExtensions: item.input.finalizeEnvelopeExtensions,
             replayed: false,
             relatedEnvelopeIds: [intentEnvelope.envelopeId]
           });
           if (item.outcomeIdKey) current.outcomeEnvelopes[item.outcomeIdKey] = outcomeEnvelope.envelopeId;
+          stageOutcome(item.intent.intentId, item.outcome, outcomeAppend, outcomeEnvelope.envelopeId);
+          stageIntentRecord(item.intent.intentId, current.intents[item.intent.intentId]);
+          if (item.idKey) stateStore.stage(stateStore.scopes.intentReplay, item.idKey, { envelopeId: intentEnvelope.envelopeId });
+          if (item.idClaimKey) stateStore.stage(stateStore.scopes.intentClaim, item.idClaimKey, {
+            inputHash: item.inputHash,
+            envelopeId: intentEnvelope.envelopeId
+          });
+          if (item.outcomeIdKey) stateStore.stage(stateStore.scopes.outcomeReplay, item.outcomeIdKey, {
+            envelopeId: outcomeEnvelope.envelopeId
+          });
+          stageCausalityIdentity(item.intent.intentId, "intent-id");
+          stageCausalityIdentity(intentAppend.entry.eventId, "ledger-event-id");
+          stageCausalityIdentity(item.outcome.outcomeId, "outcome-id");
+          stageCausalityIdentity(outcomeAppend.entry.eventId, "ledger-event-id");
+          stageWorkspace(current, item.workspaceId);
           envelopes.push(outcomeEnvelope);
         }
         await saveState();
-        await writeCompleteMarker(commitId, "record-operations", {
+        await finalizeCommitMarker(commitId, "record-operations", {
           ledgerEventIds: envelopes.map((envelope) => envelope.factRef.ledgerEventId),
           envelopeIds: envelopes.map((envelope) => envelope.envelopeId),
           affectedWorkspaceIds: [...new Set(staged.map((item) => item.workspaceId))]
@@ -1239,6 +1636,7 @@ export function createPactium({
           envelopes
         };
       } catch (error) {
+        stateStore.discard();
         if (!ledgerCommitted) await cleanupPendingMarker(commitId);
         throw error;
       }
@@ -1273,30 +1671,60 @@ export function createPactium({
   async function lookupOpenIntent(intentId) {
     const current = await prepareRead();
     const proof = await indexEngine.prove(current.indexRoots.openIntent, String(intentId || ""));
+    const intentRecord = await loadIntentRecord(current, intentId);
     return {
       protocol: PACTIUM_PROTOCOL,
       intentId,
       exists: isMembershipProof(proof),
       proof,
-      intent: current.intents[intentId]?.intent || null
+      intent: intentRecord?.intent || null,
+      ledgerEventId: intentRecord?.ledgerEventId || "",
+      ledgerIndex: Number(intentRecord?.ledgerIndex || 0),
+      factCid: intentRecord?.factCid || "",
+      envelopeId: intentRecord?.intentEnvelopeId || ""
     };
   }
 
   async function lookupOutcome(intentId) {
     const current = await prepareRead();
     const proof = await indexEngine.prove(current.indexRoots.outcome, String(intentId || ""));
+    const outcome = await loadOutcome(current, intentId);
+    const locator = current.outcomeLocators[String(intentId || "")] || {};
     return {
       protocol: PACTIUM_PROTOCOL,
       intentId,
       exists: isMembershipProof(proof),
       proof,
-      outcome: current.outcomes[intentId] || null
+      outcome,
+      ledgerEventId: locator.ledgerEventId || "",
+      ledgerIndex: Number(locator.ledgerIndex || 0),
+      factCid: locator.factCid || "",
+      envelopeId: locator.outcomeEnvelopeId || ""
+    };
+  }
+
+  async function lookupReceipt(receiptId) {
+    const current = await prepareRead();
+    const key = String(receiptId || "");
+    const proof = await indexEngine.prove(current.indexRoots.receipt, key);
+    const receipt = await loadReceipt(current, key);
+    const locator = current.receiptLocators[key] || {};
+    return {
+      protocol: PACTIUM_PROTOCOL,
+      receiptId: key,
+      exists: isMembershipProof(proof),
+      proof,
+      receipt,
+      ledgerEventId: locator.ledgerEventId || "",
+      ledgerIndex: Number(locator.ledgerIndex || 0),
+      factCid: locator.factCid || "",
+      envelopeId: locator.envelopeId || ""
     };
   }
 
   async function getWorkspaceProjection(workspaceId = "default", options = {}) {
     const current = await prepareRead();
-    const workspace = workspaceStateFor(current, workspaceId);
+    const workspace = await loadWorkspace(current, workspaceId);
     const defaultLimit = Math.max(1, Math.min(Number(options.limit || 100), 10000));
     const orderLimit = options.orderLimit !== undefined ? Number(options.orderLimit) : defaultLimit;
     const membershipLimit = options.membershipLimit !== undefined ? Number(options.membershipLimit) : defaultLimit;
@@ -1313,7 +1741,7 @@ export function createPactium({
 
   async function proveWorkspaceMembership({ workspaceId = "default", ledgerEventId = "", proofOptions = {} } = {}) {
     const current = await prepareRead();
-    const workspace = workspaceStateFor(current, workspaceId);
+    const workspace = await loadWorkspace(current, workspaceId);
     const proof = await indexEngine.prove(workspace.membershipRoot, ledgerEventId, asRecord(proofOptions));
     return {
       protocol: PACTIUM_PROTOCOL,
@@ -1351,7 +1779,7 @@ export function createPactium({
 
   async function getWorkspaceCursor({ workspaceId = "default", fromCursor = null, position = 0, limit = 100, proofOptions = {} } = {}) {
     const current = await prepareRead();
-    const workspace = workspaceStateFor(current, workspaceId);
+    const workspace = await loadWorkspace(current, workspaceId);
     const currentHead = await ledger.head();
     const requestedStart = Number(fromCursor?.position ?? position ?? 0);
     const start = Number.isInteger(requestedStart) && requestedStart >= 0 ? requestedStart : 0;
@@ -1569,6 +1997,7 @@ export function createPactium({
         "ledger-transparency-log",
         "verifiable-index-engine",
         "operation-lifecycle",
+        "operation-receipt",
         "append-condition",
         "tracking-cursor",
         "trusted-head-advancement",
@@ -1675,23 +2104,21 @@ export function createPactium({
       }));
     }
 
-    // Verify commit markers: check for incomplete (pending without matching complete)
+    // Verify residual commit markers. A finalized marker can remain only when
+    // the process stopped between its final overwrite and best-effort delete;
+    // every other residual phase is an incomplete mutation.
     try {
-      const pendingKeys = await resolvedStorage.listProtocolObjectKeys("commit");
-      const pendingCommitIds = pendingKeys
+      const commitKeys = await resolvedStorage.listProtocolObjectKeys("commit");
+      const pendingCommitIds = commitKeys
         .filter((k) => k.startsWith("pending-"))
         .map((k) => k.slice("pending-".length));
-      const completeKeys = new Set(
-        pendingKeys
-          .filter((k) => k.startsWith("complete-"))
-          .map((k) => k.slice("complete-".length))
-      );
       for (const cid of pendingCommitIds) {
-        if (!completeKeys.has(cid)) {
+        const marker = await resolvedStorage.getProtocolObject("commit", `pending-${cid}`, null);
+        if (marker?.phase !== "complete") {
           failures.push(createVerificationFailure({
             layer: "doctor",
             code: "incomplete_commit",
-            message: `Pending mutation commit ${cid} has no matching complete marker.`,
+            message: `Pending mutation commit ${cid} did not reach its finalized state.`,
             evidenceRef: cid,
             repairable: true
           }));
@@ -1708,7 +2135,7 @@ export function createPactium({
 
     // Verify index roots referenced in runtime state exist
     const current = await ensureState();
-    const retainedRoots = currentIndexRoots(current);
+    const retainedRoots = await currentIndexRoots(current, stateStore);
     for (const root of retainedRoots) {
       try {
         if (root) await indexEngine.readIndexRoot(root);
@@ -1732,18 +2159,26 @@ export function createPactium({
           storage: resolvedStorage
         });
         const current = await ensureState();
+        const runtimeWorkspaces = new Map(
+          (await stateStore.list(stateStore.scopes.workspace))
+            .map((record) => [record.logicalKey, record.value])
+        );
+        for (const [workspaceId, workspace] of Object.entries(asRecord(current.workspace))) {
+          runtimeWorkspaces.set(workspaceId, workspace);
+        }
         const mismatches = [];
         const runtimeRootLookup = (rootName) => {
           if (rootName === "openIntent") return current.indexRoots.openIntent || "";
           if (rootName === "outcome") return current.indexRoots.outcome || "";
           if (rootName === "intentIdempotency") return current.indexRoots.intentIdempotency || "";
           if (rootName === "outcomeIdempotency") return current.indexRoots.outcomeIdempotency || "";
+          if (rootName === "receipt") return current.indexRoots.receipt || "";
           if (rootName === "causality") return current.indexRoots.causality || "";
           if (rootName.startsWith("workspace:")) {
             const parts = rootName.split(":");
             const wsId = parts[1];
             const field = parts.slice(2).join(":");
-            const ws = current.workspace?.[wsId];
+            const ws = runtimeWorkspaces.get(wsId);
             if (field === "orderRoot") return ws?.orderRoot || "";
             if (field === "membershipRoot") return ws?.membershipRoot || "";
             if (field === "checkpointRoot") return ws?.checkpointRoot || "";
@@ -1844,40 +2279,67 @@ export function createPactium({
     return result;
   }
 
-  async function compactInMemoryCaches() {
-    const current = await ensureState();
-    if (!resolvedStorage.inMemory) {
+  async function compactStorage(options = {}) {
+    const dryRun = options?.dryRun !== false;
+    const reclaimPages = Number(options?.reclaimPages || 0);
+    const result = await enqueueMutation(() => compactStorageCommitted({ dryRun }));
+    if (
+      !resolvedStorage.inMemory &&
+      !dryRun &&
+      reclaimPages > 0 &&
+      typeof resolvedStorage.reclaimDatabasePages === "function"
+    ) {
       return {
-        protocol: PACTIUM_PROTOCOL,
-        inMemory: false,
-        retainedRoots: 0,
-        retainedNodeRoots: 0,
-        prunedBlocks: 0,
-        prunedProtocolObjects: 0
+        ...result,
+        pageReclamation: await resolvedStorage.reclaimDatabasePages({ pages: reclaimPages })
       };
     }
-    const retainedRoots = currentIndexRoots(current);
+    return result;
+  }
+
+  async function compactStorageCommitted({ dryRun = true } = {}) {
+    const current = await ensureState();
+    const retainedRoots = await currentIndexRoots(current, stateStore);
     const cache = typeof indexEngine.pruneCache === "function"
       ? await indexEngine.pruneCache({ roots: retainedRoots })
       : { retainedRoots, retainedNodeRoots: retainedRoots };
+    if (!resolvedStorage.inMemory) {
+      const sweepKinds = new Set();
+      for (const root of retainedRoots) {
+        const block = await resolvedStorage.getBlock(root);
+        const kind = String(block?.kind || "");
+        if (kind.startsWith("index-node:")) sweepKinds.add(kind);
+      }
+      const garbageCollection = typeof resolvedStorage.collectGarbage === "function"
+        ? await resolvedStorage.collectGarbage({
+            roots: retainedRoots,
+            sweepKinds: [...sweepKinds],
+            dryRun: dryRun !== false
+          })
+        : { supported: false, dryRun: dryRun !== false, deleted: 0 };
+      return {
+        protocol: PACTIUM_PROTOCOL,
+        inMemory: false,
+        retainedRoots: retainedRoots.length,
+        retainedNodeRoots: asArray(cache.retainedNodeRoots).length,
+        prunedNodes: Number(cache.prunedNodes || 0),
+        prunedRoots: Number(cache.prunedRoots || 0),
+        prunedSnapshots: Number(cache.prunedSnapshots || 0),
+        garbageCollection,
+        pageReclamation: { supported: false, pagesRequested: 0 }
+      };
+    }
     const retainedNodeRoots = new Set(asArray(cache.retainedNodeRoots || retainedRoots).map(String));
-    const retainedRootHashes = new Set([
-      ...asArray(cache.retainedRoots || retainedRoots),
-      ...retainedNodeRoots
-    ].map(hashFromCid).filter(Boolean));
     const prunedBlocks = typeof resolvedStorage.pruneBlocks === "function"
       ? resolvedStorage.pruneBlocks((block) => {
           const kind = String(block.kind || "");
           if (kind.startsWith("index-node:")) return !retainedNodeRoots.has(block.cid);
-          // Envelope blocks are the only stored copy backing idempotent
-          // replay and export-by-id, so compaction must retain them.
-          return kind !== "state-value" && kind !== "proof-envelope";
+          // Only derived index nodes are currently sweepable. Ledger facts,
+          // envelopes, proof material, extension values and state values are
+          // immutable evidence roots even when they are not reachable from a
+          // current index root.
+          return false;
         })
-      : 0;
-    const prunedProtocolObjects = typeof resolvedStorage.pruneProtocolObjects === "function"
-      ? resolvedStorage.pruneProtocolObjects((object) =>
-          object.scope === "index" && !retainedRootHashes.has(String(object.key || "").split("-").pop())
-        )
       : 0;
     return {
       protocol: PACTIUM_PROTOCOL,
@@ -1888,7 +2350,7 @@ export function createPactium({
       prunedRoots: Number(cache.prunedRoots || 0),
       prunedSnapshots: Number(cache.prunedSnapshots || 0),
       prunedBlocks,
-      prunedProtocolObjects
+      prunedProtocolObjects: 0
     };
   }
 
@@ -1962,10 +2424,12 @@ export function createPactium({
     dataDir: resolvedStorage.dataDir,
     beginOperationIntent: guardAsync(beginOperationIntent),
     appendOperationOutcome: guardAsync(appendOperationOutcome),
+    recordOperationReceipt: guardAsync(recordOperationReceipt),
     recordOperation: guardAsync(recordOperation),
     recordOperations: guardAsync(recordOperations),
     lookupOpenIntent: guardAsync(lookupOpenIntent),
     lookupOutcome: guardAsync(lookupOutcome),
+    lookupReceipt: guardAsync(lookupReceipt),
     createAppendCondition: guardSync(createAppendCondition),
     getLedgerCursor: guardAsync(getLedgerCursor),
     getWorkspaceCursor: guardAsync(getWorkspaceCursor),
@@ -1980,6 +2444,7 @@ export function createPactium({
     storeEnvelope: guardAsync(storeEnvelope),
     protocolCatalog: guardAsync(protocolCatalog),
     doctor: guardAsync(doctor),
+    compactStorage: guardAsync(compactStorage),
     // Read-only protocol resolvers for storage, ledger, and index data.
     // These return canonical clones — safe for external consumption.
     resolveBlock: guardAsync(resolveBlock),
@@ -1995,7 +2460,7 @@ export function createPactium({
     storage: resolvedStorage,
     ledger,
     indexEngine,
-    compactInMemoryCaches
+    stateStore
   }));
   return core;
 }

@@ -167,6 +167,12 @@ function createAutoStoragePort(options) {
     get selectedStorageBackend() {
       return selectedSync()?.storageBackend || "";
     },
+    get storageFormat() {
+      return selectedSync()?.storageFormat || "";
+    },
+    get atomicTransactions() {
+      return Boolean(selectedSync()?.atomicTransactions);
+    },
     initialize() { return runOperation(() => withSelected("initialize")); },
     putBlock(value, writeOptions) {
       return runOperation(() => withSelected("putBlock", value, writeOptions));
@@ -191,6 +197,15 @@ function createAutoStoragePort(options) {
     },
     listProtocolObjectKeys(scope) {
       return runOperation(() => withSelected("listProtocolObjectKeys", scope));
+    },
+    scanBlocks(options) {
+      return runOperation(() => withSelected("scanBlocks", options));
+    },
+    collectGarbage(options) {
+      return runOperation(() => withSelected("collectGarbage", options));
+    },
+    reclaimDatabasePages(options) {
+      return runOperation(() => withSelected("reclaimDatabasePages", options));
     },
     clearCache() {
       selectedSync()?.clearCache?.();

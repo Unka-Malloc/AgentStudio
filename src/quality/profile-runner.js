@@ -51,8 +51,7 @@ function addCompactionDetails(details, compaction) {
 
 async function compactPressureCore(context, details) {
   if (!context?.owned) return;
-  const internals = getPactiumInternals(context.core);
-  addCompactionDetails(details, await internals.compactInMemoryCaches());
+  addCompactionDetails(details, await context.core.compactStorage());
 }
 
 export async function runPactiumQualityGateProfile({

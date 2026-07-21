@@ -1,13 +1,10 @@
-import { createId, protocolHash, protocolHashHex } from "../protocol/hashing.js";
+import { createId, protocolHash } from "../protocol/hashing.js";
 import { asArray, safeText } from "../shared/records.js";
 import { createVerificationFailure } from "../verification/failure.js";
 import {
   createEmptyCoreState,
   eventRefValue,
-  idempotencyKeyFor,
-  intentIdempotencyClaimKeyFor,
   lifecycleValueRef,
-  outcomeIdempotencyKeyFor,
   padOrdinal,
   workspaceStateFor
 } from "./state-helpers.js";
@@ -38,7 +35,6 @@ import {
  * Limitations:
  * - State mutation descriptors live in proof material, not in ledger facts.
  * - Envelope and bundle data are not stored in ledger facts and are not rebuilt.
- * - Old ledger facts may lack idempotency material (inputHash, outcomeIdempotencyKey).
  * - This is a diagnostic/repair tool, not a full hot-recovery path.
  */
 export async function rebuildCoreStateFromLedger({
@@ -53,14 +49,11 @@ export async function rebuildCoreStateFromLedger({
     outcome: { domain: "outcome", mutations: [] },
     intentIdempotency: { domain: "intent-idempotency", mutations: [] },
     outcomeIdempotency: { domain: "outcome-idempotency", mutations: [] },
+    receipt: { domain: "operation-receipt", mutations: [] },
     causality: { domain: "operation-causality", mutations: [] }
   };
   const workspaceMutations = new Map();
   let stateRebuildIncomplete = false;
-  let intentIdempotencyRebuildIncomplete = false;
-  let outcomeIdempotencyRebuildIncomplete = false;
-  // Track which old facts lack necessary material for full idempotency rebuild
-  const idempotencyMaterialWarnings = [];
 
   const head = await ledger.head();
   const size = Number(head.size || 0);
@@ -108,6 +101,10 @@ export async function rebuildCoreStateFromLedger({
       if (!fact) continue;
 
       const workspaceId = safeText(fact.workspaceId, "default");
+      if (fact.factType === "operation.receipt") {
+        queueRootPut("receipt", fact.receiptId, eventRefValue({ entry }));
+        continue;
+      }
       const workspace = workspaceStateFor(state, workspaceId);
 
       if (fact.factType === "operation.intent") {
@@ -119,29 +116,14 @@ export async function rebuildCoreStateFromLedger({
         };
         queueRootPut("openIntent", fact.intentId, eventRefValue({ entry }));
 
-        const idKey = fact.idempotencyKey
-          ? idempotencyKeyFor({ ...fact, operationId: fact.operationId, workspaceId })
-          : "";
+        const idKey = safeText(fact.idempotencyReplayKey);
         if (idKey) {
-          // Old ledger facts may not store inputHash; warn if material is missing.
-          const hasInputHash = typeof fact.inputHash === "string" && fact.inputHash.length > 0;
-          if (!hasInputHash) {
-            idempotencyMaterialWarnings.push({
-              factId: fact.intentId,
-              code: "intent_idempotency_rebuild_incomplete",
-              reason: "Old intent fact lacks inputHash — idempotency index may not match runtime state."
-            });
-            intentIdempotencyRebuildIncomplete = true;
-          }
           queueRootPut("intentIdempotency", idKey, lifecycleValueRef(fact.intentId, { intentId: fact.intentId }));
-          state.intentEnvelopes[idKey] = ""; // placeholder; envelope not in ledger
         }
-        const claimKey = fact.idempotencyKey
-          ? intentIdempotencyClaimKeyFor({ operationId: fact.operationId, workspaceId, idempotencyKey: fact.idempotencyKey })
-          : "";
+        const claimKey = safeText(fact.idempotencyClaimKey);
         if (claimKey) {
           state.intentIdempotencyClaims[claimKey] = {
-            inputHash: fact.inputHash || protocolHashHex("operation.intent", fact.input ?? fact.payload ?? {}),
+            inputHash: fact.inputHash,
             envelopeId: ""
           };
         }
@@ -212,29 +194,9 @@ export async function rebuildCoreStateFromLedger({
         queueRootPut("outcome", intentId, eventRefValue({ entry }));
 
         // Outcome idempotency
-        const outcomeIdKey = safeText(fact.outcomeIdempotencyKey || "")
-          ? outcomeIdempotencyKeyFor({
-              intentId: fact.intentId,
-              outcomeIdempotencyKey: fact.outcomeIdempotencyKey,
-              status: fact.status || "succeeded",
-              result: fact.resultHash ? { resultHash: fact.resultHash } : {}
-            })
-          : "";
+        const outcomeIdKey = safeText(fact.outcomeIdempotencyReplayKey);
         if (outcomeIdKey) {
-          // Old outcome facts may not store the materials needed for
-          // exact idempotency key reconstruction (resultHash, full result).
-          const hasOutcomeMaterial = typeof fact.resultHash === "string" ||
-            (typeof fact.result === "object" && fact.result !== null);
-          if (!hasOutcomeMaterial && safeText(fact.outcomeIdempotencyKey || "")) {
-            idempotencyMaterialWarnings.push({
-              factId: fact.outcomeId,
-              code: "outcome_idempotency_rebuild_incomplete",
-              reason: "Old outcome fact lacks resultHash/full result — outcome idempotency index may not match runtime state."
-            });
-            outcomeIdempotencyRebuildIncomplete = true;
-          }
           queueRootPut("outcomeIdempotency", outcomeIdKey, lifecycleValueRef(fact.outcomeId, { outcomeId: fact.outcomeId }));
-          state.outcomeEnvelopes[outcomeIdKey] = ""; // placeholder
         }
 
         // Causality
@@ -291,6 +253,7 @@ export async function rebuildCoreStateFromLedger({
   state.indexRoots.outcome = await applyBatch(state.indexRoots.outcome, rootMutations.outcome);
   state.indexRoots.intentIdempotency = await applyBatch(state.indexRoots.intentIdempotency, rootMutations.intentIdempotency);
   state.indexRoots.outcomeIdempotency = await applyBatch(state.indexRoots.outcomeIdempotency, rootMutations.outcomeIdempotency);
+  state.indexRoots.receipt = await applyBatch(state.indexRoots.receipt, rootMutations.receipt);
   state.indexRoots.causality = await applyBatch(state.indexRoots.causality, rootMutations.causality);
   for (const [workspaceId, buckets] of workspaceMutations) {
     const workspace = workspaceStateFor(state, workspaceId);
@@ -306,14 +269,17 @@ export async function rebuildCoreStateFromLedger({
   const fullyComparableRoots = {
     openIntent: state.indexRoots.openIntent,
     outcome: state.indexRoots.outcome,
+    receipt: state.indexRoots.receipt,
     causality: state.indexRoots.causality
   };
 
-  // partiallyComparableRoots: may need material not in old facts.
+  // partiallyComparableRoots: batch reconstruction can choose different
+  // Prolly boundaries than the incremental hot path while representing the
+  // same entries.
   //   Mismatch here produces a *_rebuild_incomplete warning, not a hard failure.
   const partiallyComparableRoots = {
-    ...(!intentIdempotencyRebuildIncomplete ? { intentIdempotency: state.indexRoots.intentIdempotency } : {}),
-    ...(!outcomeIdempotencyRebuildIncomplete ? { outcomeIdempotency: state.indexRoots.outcomeIdempotency } : {})
+    intentIdempotency: state.indexRoots.intentIdempotency,
+    outcomeIdempotency: state.indexRoots.outcomeIdempotency
   };
 
   // skippedRoots: cannot be reliably rebuilt from ledger facts alone.
@@ -332,19 +298,7 @@ export async function rebuildCoreStateFromLedger({
     };
   }
 
-  // Merge all warnings
-  for (const w of idempotencyMaterialWarnings) {
-    warnings.push(createVerificationFailure({
-      layer: "rebuild",
-      code: w.code,
-      message: w.reason,
-      evidenceRef: w.factId,
-      repairable: true,
-      severity: "warning"
-    }));
-  }
-
-  // Backward-compatible comparableRoots (flat map for existing code)
+  // Flat map used by the doctor report summary.
   const comparableRoots = {
     ...fullyComparableRoots,
     ...partiallyComparableRoots

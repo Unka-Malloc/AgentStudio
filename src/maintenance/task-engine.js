@@ -22,12 +22,26 @@ export function createMaintenanceTaskEngine({ pactium = null } = {}) {
         result: await pactium.doctor()
       };
     }
+    if (task.taskType === "storage-gc" && pactium) {
+      const input = task.input && typeof task.input === "object" ? task.input : {};
+      return {
+        protocol: PACTIUM_PROTOCOL,
+        taskId: task.taskId,
+        ok: true,
+        result: await pactium.compactStorage({
+          dryRun: input.dryRun !== false,
+          reclaimPages: Number.isSafeInteger(Number(input.reclaimPages))
+            ? Math.max(0, Number(input.reclaimPages))
+            : 0
+        })
+      };
+    }
     return {
       protocol: PACTIUM_PROTOCOL,
       taskId: task.taskId,
       ok: true,
       result: {
-        plannedOnly: task.taskType !== "doctor",
+        plannedOnly: !["doctor", "storage-gc"].includes(task.taskType),
         daemon: false
       }
     };
