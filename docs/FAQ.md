@@ -4,7 +4,7 @@
 
 ### What is Pactium?
 
-Pactium is a proof-first protocol substrate for Node.js. It records operation facts into an append-only transparency log and produces cryptographic proofs that operations were recorded and the ledger history is consistent. It is designed as the protocol substrate for LicoLite.
+Pactium is a host-neutral proof-first protocol substrate for Node.js. It records operation facts into an append-only transparency log and produces cryptographic proofs that operations were recorded and the ledger history is consistent.
 
 ### What does "proof-first" mean?
 
@@ -18,9 +18,9 @@ No. Pactium is a protocol substrate that records operation metadata and produces
 
 No. Pactium is a local protocol substrate, not a distributed consensus system. It uses a transparency log (similar to Certificate Transparency) for append-only operation recording and Merkle proofs for verification, but it does not run a network, perform consensus, or require gas/tokens.
 
-### What is the relationship between Pactium and LicoLite?
+### What is the relationship between Pactium and Meshrix?
 
-Pactium exists to serve LicoLite as its protocol substrate. LicoLite is the primary host, and `pactium/licolite` is a first-class package aspect (not a plugin). LicoLite requirements may shape Pactium core capabilities.
+Meshrix is an independent downstream framework that uses the public `pactium` package. Pactium owns generic facts and proofs; Meshrix owns governance, policy, permissions, services, plugins, effects, and operations. Pactium has no Meshrix-specific package entry point or product mode.
 
 ---
 
@@ -101,9 +101,13 @@ A Proof Bundle is a portable, self-contained export that includes all content-ad
 
 Both are append-only facts. The Intent is never mutated into the Outcome. Failed and successful outcomes are both recorded as facts.
 
-### Can I use Pactium without LicoLite?
+### Can I use Pactium without Meshrix?
 
-Yes. The core `pactium` export is independent. `pactium/licolite` is a first-class aspect for LicoLite hosts, but you can use the core API directly for any host system that needs verifiable operation recording.
+Yes. Pactium is independently usable by any host that needs verifiable operation recording.
+
+### Does Pactium store my input and result values?
+
+Not by default. Operation facts store `inputHash` and `resultHash`. A `stateMutations` value is explicitly persisted as state, and a Proof Extension `value` is explicitly persisted as portable proof content. The host must minimize and authorize both before supplying them.
 
 ---
 
@@ -123,9 +127,9 @@ These are protocol constants, not tuning options. If a verifier expects `sha256`
 
 **Host owns:** Policy decisions (allow/deny), operation dispatching, side-effect execution, authorization, durable evidence storage, UI, key management and rotation.
 
-### How does workspace isolation work?
+### Does Workspace Projection provide isolation?
 
-Each operation is associated with a `workspaceId`. Pactium maintains per-workspace projection indexes (order and membership) that are verifiable. You can prove that a ledger event belongs to a specific workspace, or prove that it does not belong, using Merkle proofs from the shared index engine.
+No. Pactium maintains verifiable order and membership projections for each `workspaceId`. These prove logical membership in a projection; authentication, authorization, tenant separation, storage isolation, and access control remain host-owned.
 
 ---
 
@@ -143,9 +147,7 @@ Envelope verification checks:
 
 ### What is a "critical extension"?
 
-A critical extension is a Proof Extension that must be understood by the verifier. If a verifier encounters an unknown critical extension, verification fails. This prevents silently ignoring important evidence bindings.
-
-LicoLite uses two critical extensions: Policy Extension and Workspace Effect Extension.
+A critical extension is a Proof Extension that must be understood by the verifier. If a verifier encounters an unknown critical extension, verification fails. Hosts define extension names and verifier support; Pactium does not assign business meaning to them.
 
 ### What happens when verification fails?
 
@@ -170,7 +172,7 @@ Call `createPactium()` or `createStoragePort()` with a valid `dataDir`. The data
 
 - Ensure you're verifying against the same Pactium instance (or use Proof Bundles for portable verification)
 - Check that proof material refs are resolvable (content-addressed blocks exist in storage)
-- For LicoLite envelopes, ensure the verifier supports the required critical extensions
+- Ensure the verifier explicitly supports every host-defined critical extension
 
 ### Proof Bundle verification fails but envelope verification passes
 

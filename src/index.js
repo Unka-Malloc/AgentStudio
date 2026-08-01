@@ -70,7 +70,6 @@ export {
 } from "./core/tracking-cursor.js";
 export { createPactium } from "./core/pactium-core.js";
 export {
-  envelopeSigningHash,
   verifyProofEnvelope
 } from "./proof/envelope.js";
 export { createDefaultProofVerifierRegistry } from "./proof/registry.js";

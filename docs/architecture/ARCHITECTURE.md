@@ -1,68 +1,23 @@
 # Pactium Architecture
 
-Pactium is a proof-first protocol substrate for LicoLite. LicoLite is the primary host, and `pactium/licolite` is a first-class package aspect rather than an external plugin.
+Pactium is a host-neutral proof-first protocol substrate. Meshrix is an independent downstream framework that imports the public root package; no framework-specific policy or adapter layer sits inside Pactium.
 
 ## System Overview
 
 ```text
-LicoLite host
-  -> pactium/licolite
-       -> Proof-first Pactium core
-            -> Canonical Value encoding and Protocol Hash
-            -> Storage Port and content-addressed blocks
+Host framework or service
+  -> pactium / pactium/http
+       -> Pactium Core
+            -> Canonical Value + Protocol Hash
             -> Operation Ledger Transparency Log
             -> Shared Verifiable Index Engine
-            -> Operation Lifecycle indexes
-            -> Workspace Projection
-            -> Merkle State
-            -> Checkpoint Tree
-            -> Proof Envelopes and Proof Bundles
-            -> Maintenance Task Engine and Repair Planner
+            -> Lifecycle, workspace, state, and checkpoint structures
+            -> Proof Envelopes, Extensions, and Bundles
+            -> Repair Planner + explicit Maintenance Task Engine
+            -> Storage Port -> in-memory / JSON / SQLite
 ```
 
-## Module Dependency Graph
-
-```text
-                    ┌─────────────────────┐
-                    │   pactium/licolite   │  LicoLite Aspect
-                    │  (aspect.js, etc.)   │
-                    └──────────┬───────────┘
-                               │
-                    ┌──────────▼───────────┐
-                    │    pactium (core)     │  Public API facade
-                    │    src/index.js       │
-                    └──────────┬───────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              │                │                │
-    ┌─────────▼──────┐  ┌─────▼──────┐  ┌─────▼──────────┐
-    │  Pactium Core  │  │   Proof    │  │  Maintenance   │
-    │  pactium-core  │  │ envelope   │  │  task-engine   │
-    │                │  │ bundle     │  │  repair plan   │
-    └───────┬────────┘  └─────┬──────┘  └────────────────┘
-            │                 │
-    ┌───────┼─────────────────┼──────────────────┐
-    │       │                 │                  │
-    │  ┌────▼────┐  ┌────────▼───────┐  ┌──────▼──────┐
-    │  │ Ledger  │  │ Index Engine   │  │ Verification│
-    │  │ transp. │  │ snapshot-      │  │ failure.js  │
-    │  │ log     │  │ merkle-index   │  └─────────────┘
-    │  └────┬────┘  └────────┬───────┘
-    │       │                │
-    │  ┌────▼────────────────▼───────┐
-    │  │     Protocol Layer          │
-    │  │  canonical/value.js         │
-    │  │  protocol/constants.js      │
-    │  │  protocol/hashing.js        │
-    │  └─────────────┬───────────────┘
-    │                │
-    │  ┌─────────────▼───────────────┐
-    │  │     Storage Port            │
-    │  │  storage-port.js            │
-    │  │  json/sqlite adapters       │
-    │  └─────────────────────────────┘
-    └────────────────────────────────────────────┘
-```
+The package root is the public composition boundary. Host-specific semantics remain above it; storage-specific mechanics remain below the Storage Port.
 
 ## Authority Model
 
@@ -83,8 +38,8 @@ The shared Verifiable Index Engine is the canonical ordered-key proof engine. St
                  │ (new operation)
                  ▼
   ┌─────────────────────────────┐
-  │ 2. Canonical Encode         │ Normalize input to PactiumCanonicalValue
-  │    + Protocol Hash          │ Compute content-addressed identifiers
+  │ 2. Protocol commitment      │ Hash input/result without retaining them
+  │    + explicit content       │ Persist only requested state/extensions
   └──────────────┬──────────────┘
                  │
                  ▼
@@ -149,37 +104,22 @@ For read-only or terminal-only host events, `recordOperationReceipt()` skips the
   └─────────────────────────────┘
 ```
 
-## LicoLite Boundary
+## Host Boundary
 
-Pactium owns protocol facts, proof algorithms, canonical encoding, storage ports, verification, repair planning, and LicoLite protocol-substrate adapters.
+Pactium owns canonical facts, proof algorithms, storage mechanics, verification, and deterministic planning. Every host, including Meshrix, owns identity, policy, authorization, approvals, operation dispatch, side effects, business content, disclosure, UI, and operational controls.
 
-LicoLite owns runtime policy decisions, operation dispatching, side effects, UI ownership, authorization, and durable Host Evidence storage. Pactium binds LicoLite policy and workspace-effect evidence as critical proof extensions and verifies those bindings.
+Operation input and result values cross the core boundary only as protocol hashes. A State Value or Proof Extension value crosses as retained content only when the caller explicitly supplies it. Workspace Projection is logical membership and ordering, not an access-control boundary.
 
 ```text
-  ┌──────────────────────────────────────────────────────┐
-  │                    LicoLite Host                      │
-  │                                                      │
-  │  Policy     Operations    Side Effects    Evidence   │
-  │  Decisions  Dispatching   Execution       Storage    │
-  │                                                      │
-  └────────────────────────┬─────────────────────────────┘
-                           │
-              ─ ─ ─ ─ ─ ─ ─│─ ─ ─ ─ ─ ─ ─  Host Boundary
-                           │
-  ┌────────────────────────▼─────────────────────────────┐
-  │                  pactium/licolite                     │
-  │                                                      │
-  │  Signing    Critical Extensions    Workspace Proj.   │
-  │  Authority  (policy + effects)     (default: on)     │
-  │                                                      │
-  └────────────────────────┬─────────────────────────────┘
-                           │
-  ┌────────────────────────▼─────────────────────────────┐
-  │                   Pactium Core                       │
-  │                                                      │
-  │  Ledger   Index Engine   Proofs   Repair   Storage   │
-  │                                                      │
-  └──────────────────────────────────────────────────────┘
+Host: identity, authorization, policy, content, effects, operations
+  |
+  | public host-neutral API
+  v
+Pactium: facts, hashes, ledger, indexes, proofs, verification, planning
+  |
+  | Storage Port
+  v
+Local persistence: in-memory, JSON, or SQLite
 ```
 
 ## Storage Architecture
@@ -256,13 +196,12 @@ Each domain adapter normalizes its domain-specific keys and values into canonica
 
 ## Current Implementation Status
 
-The current `src/` implementation is the proof-first package surface. The package root exports proof-first APIs, and `pactium/licolite` exports the first-class LicoLite Aspect.
+The current `src/` implementation is the host-neutral proof-first package surface. The package root exports the protocol API and `pactium/http` exports its host-controlled transport adapter.
 
-The implementation follows the package protocol and aspect documents:
+The implementation follows the package protocol documents:
 
 - [Protocol Profile](../protocols/PROFILE.md)
 - [Protocols](../protocols/PROTOCOLS.md)
-- [LicoLite Aspect](../LICOLITE-ASPECT.md)
 
 ## Implemented Surfaces
 
@@ -278,12 +217,11 @@ The maintained design is implemented by these package surfaces:
 | Operation lifecycle | `src/core/pactium-core.js`: `beginOperationIntent`, `appendOperationOutcome`, `recordOperation` |
 | Workspace Projection | `src/core/pactium-core.js`: `getWorkspaceProjection`, `proveWorkspaceMembership` |
 | Proof Envelopes and Bundles | `src/proof/envelope.js`, `src/proof/bundle.js`, `src/core/pactium-core.js`: verification and export surfaces |
-| LicoLite Aspect | `src/aspects/licolite/`: `createLicoLiteAspect`, `createLicoLiteSigner`, evidence helpers, verifier |
 | CLI and HTTP facades | `bin/pactium.mjs`, `src/http.js` |
 
 ## Non-Surfaces
 
-Maintained docs must not describe separate per-workspace lane queues, repair fact execution, or pressure baseline regression enforcement as implemented unless those surfaces are added and verified.
+Separate per-workspace lane queues, repair execution, and pressure-baseline regression enforcement are not current package surfaces.
 
 If a maintained document introduces a design area that cannot be mapped to an implementation anchor, the design must be implemented and documented before release.
 
@@ -300,7 +238,7 @@ The current implementation is correct, canonical, and deterministic. Throughput-
 
 ### Proof Size Guard
 
-`maxProofLeafEntries` and `maxProofBytes` produce `proofSizeWarning` on proofs that exceed configured limits. This is a **size guard / diagnostic**, not a bounded (constant-size) proof format. Bounded proofs are a future protocol goal.
+`maxProofLeafEntries` and `maxProofBytes` produce `proofSizeWarning` on proofs that exceed configured limits. This is a **size guard / diagnostic**, not a constant-size proof format; Pactium proofs remain variable-size.
 
 ### Crash Consistency
 

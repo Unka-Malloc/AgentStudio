@@ -8,17 +8,15 @@ This document covers the complete public API surface of the `pactium` package.
 | --- | --- |
 | `pactium` | Core proof-first protocol API |
 | `pactium/http` | HTTP adapter for the proof-first protocol API |
-| `pactium/licolite` | LicoLite integration aspect |
+| `pactium/package.json` | Package metadata |
 
 ---
 
-## API Completeness Audit
+## API Boundary
 
-The 2026-06-20 public API audit compared Pactium's exposed surface with the practical API patterns used by Trillian/Rekor-style transparency logs, CAR/IPLD-style portable block archives, Hypercore-style signed append-only feeds, and EventStore/Axon-style append conditions, cursors, and recovery flows.
+The package surface is host-neutral. It provides protocol facts, proofs, storage mechanics, verification, repair planning, explicit maintenance calls, and a transport adapter. It does not provide host policy, authorization, side-effect execution, tenant isolation, or framework-specific integration modes.
 
-The algorithmic protocol surface already exposed the required primitives through `pactium`: append-only writes, inclusion and consistency proofs, signed heads, verifiable indexes, workspace projections, proof bundles, cursors, append conditions, and repair planning. The missing surface was the HTTP adapter: `pactium serve` existed, but package consumers could not import it through a package export, and HTTP clients could only record operations and verify proof envelopes. That forced server-based upstreams to bypass package exports or reimplement bundle export, workspace queries, cursor paging, and recovery calls locally.
-
-This gap is closed by making `pactium/http` a public entry point and by aligning the HTTP routes with the proof-first core capabilities. The adapter remains a transport layer only: it does not add authentication, authorization, business policy, witness networking, or host side-effect execution.
+Operation inputs and results are reduced to protocol hashes in core facts. Pactium does not retain those values by default. A caller can deliberately persist a State Value through `stateMutations` or attach an explicit portable copy through a Proof Extension `value`; the host owns minimization and disclosure safety for both.
 
 ## Core API (`pactium`)
 
@@ -66,6 +64,8 @@ The returned instance exposes:
 #### `pactium.recordOperation(input)`
 
 Records a complete operation (intent + outcome) in a single call. This is the high-level convenience API.
+
+`input` and `result`/`output` contribute to `inputHash` and `resultHash`; their original values are not copied into facts or Proof Bundles. `stateMutations` and `extensions` are explicit content-persistence surfaces.
 
 ```js
 const envelope = await pactium.recordOperation({
@@ -717,11 +717,6 @@ All non-`GET` routes accept JSON and return JSON. The adapter is intended to sit
 | `/maintenance/tasks/run` | `POST` | `createMaintenanceTaskEngine({ pactium }).runTask(body)` |
 | `/extensions` | `POST` | `pactium.createExtension(body)` |
 | `/envelopes` | `POST` | `pactium.storeEnvelope(body)` |
-| `/licolite/operations` | `POST` | `licolite.recordWorkspaceOperation(body)` |
-| `/licolite/verify/envelope` | `POST` | `licolite.verifyEnvelope(envelope, options)` |
-| `/licolite/verify/bundle` | `POST` | `licolite.verifyBundle(bundle, options)` |
-| `/licolite/bundles/export` | `POST` | `licolite.exportProofBundle(envelopeOrId, options)` |
-| `/licolite/repair/plan` | `POST` | `licolite.planRepair(body.failures)` |
 
 Envelope and bundle verification routes accept either the object directly or a wrapper:
 
@@ -742,7 +737,7 @@ Bundle export accepts `{ "envelope": ... }`, `{ "envelopeId": "..." }`, `{ "id":
 import {
   PACTIUM_PROTOCOL,           // "pactium.v0.3"
   PACTIUM_SCHEMA_VERSION,     // "pactium.v0.3.schema.latest"
-  PACTIUM_PACKAGE_VERSION,    // "0.5.0"
+  PACTIUM_PACKAGE_VERSION,    // "0.6.0"
   PACTIUM_INDEX_ENGINE,       // "pactium.verifiable-index-engine"
   PACTIUM_INDEX_SPLITTER,     // "pactium-cdc-boundary"
   PACTIUM_PROOF_BUNDLE_TYPE,  // "pactium.proof-bundle.indexed"
@@ -751,163 +746,6 @@ import {
   PACTIUM_PROTOCOL_PROFILE,   // Full protocol parameter matrix
   HASH_DOMAINS                // Domain separation constants
 } from "pactium";
-```
-
----
-
-## LicoLite Aspect API (`pactium/licolite`)
-
-### `createLicoLiteAspect(options?)`
-
-Creates a LicoLite Aspect instance with workspace projection and signing defaults.
-
-```js
-import { createLicoLiteAspect, createLicoLiteSigner } from "pactium/licolite";
-
-const licolite = createLicoLiteAspect({
-  pactium: pactiumInstance,           // Optional: provide existing instance
-  dataDir: "./.pactium",             // Or create new instance from dataDir
-  evidencePolicy: "production",       // "production" | "opportunistic"
-  signer: createLicoLiteSigner({
-    signerId: "host-signer",
-    secret: signingSecret
-  })
-});
-```
-
-**Returns:** `LicoLiteAspect`
-
-| Property | Type | Description |
-| --- | --- | --- |
-| `protocol` | `string` | LicoLite aspect protocol identifier |
-| `core` | `PactiumCore` | Underlying Pactium instance |
-| `evidencePolicy` | `string` | Evidence policy mode |
-| `workspaceProjectionDefault` | `true` | Workspace projection always enabled |
-| `criticalExtensions` | `string[]` | Required critical extensions |
-| `signer` | `LicoLiteSigner \| null` | Signing authority |
-
-When `evidencePolicy` is `"production"`, recording and verification require an explicit `signer` or `signerSecret`; Pactium does not install a hidden production default signing key.
-
----
-
-### `createLicoLiteSigner(options)`
-
-Creates a signing authority for LicoLite proof envelopes.
-
-```js
-import { createLicoLiteSigner } from "pactium/licolite";
-
-const signer = createLicoLiteSigner({
-  signerId: "my-signer",
-  secret: "base64-encoded-secret",
-  algorithm: "ed25519"  // Default
-});
-```
-
-**Returns:** `LicoLiteSigner`
-
-| Method | Description |
-| --- | --- |
-| `signer.sign(message)` | Sign a message string |
-| `signer.verify(message, signature)` | Verify a signature |
-
----
-
-### `licolite.recordWorkspaceOperation(input)`
-
-Records a workspace operation with LicoLite policy and workspace effect evidence.
-
-```js
-const envelope = await licolite.recordWorkspaceOperation({
-  operationId: "workspace.file.write",
-  workspaceId: "workspace-a",
-  idempotencyKey: "intent-key",
-  outcomeIdempotencyKey: "outcome-key",
-  input: { path: "file.txt" },
-  outcome: "success",
-  policyEvidence: { decision: "allow", rule: "write-permitted" },
-  workspaceEffectEvidence: { durableRef: "host:asset:file-001" },
-  stateMutations: [
-    { key: "file.txt", value: { content: "data" } }
-  ]
-});
-```
-
-The returned envelope includes critical LicoLite extensions for policy and workspace effect evidence.
-
----
-
-### `licolite.verifyEnvelope(envelope, options?)`
-
-LicoLite-level verification that checks core proofs plus:
-- Signature validity
-- Critical extension support
-- Policy extension binding
-- Workspace effect extension binding
-- Workspace projection proof
-
-```js
-const result = await licolite.verifyEnvelope(envelope);
-// { ok: true/false, failures: [...] }
-```
-
-Production verification fails closed when the required LicoLite policy/effect extensions are not critical, when signature material is present without a configured verifier, or when no explicit verifier signer is configured.
-
----
-
-### `licolite.verifyBundle(bundle, options?)`
-
-Verifies a Proof Bundle with LicoLite-level checks.
-
-```js
-const result = await licolite.verifyBundle(bundle);
-```
-
----
-
-### `licolite.planRepair(failures?)`
-
-Translates verification failures into deterministic repair tasks.
-
-```js
-const plan = licolite.planRepair(result.failures);
-// { tasks: [...], repairable: true/false }
-```
-
----
-
-### LicoLite Constants
-
-```js
-import {
-  LICOLITE_ASPECT_PROTOCOL,
-  LICOLITE_POLICY_EXTENSION,            // "licolite.policy"
-  LICOLITE_WORKSPACE_EFFECT_EXTENSION,  // "licolite.workspaceEffect"
-  LICOLITE_SIGNATURE_EXTENSION,         // "licolite.signature"
-  LICOLITE_CRITICAL_EXTENSIONS,
-  LICOLITE_SUPPORTED_CRITICAL_EXTENSIONS
-} from "pactium/licolite";
-```
-
-### Evidence Helpers
-
-```js
-import {
-  licoLitePolicyExtensionValue,
-  licoLiteWorkspaceEffectExtensionValue
-} from "pactium/licolite";
-
-// Generate policy extension value
-const policyExt = licoLitePolicyExtensionValue({
-  decision: "allow",
-  rule: "upload-permitted"
-});
-
-// Generate workspace effect extension value
-const effectExt = licoLiteWorkspaceEffectExtensionValue({
-  durableRef: "host:asset:001",
-  effectType: "file-write"
-});
 ```
 
 ---
@@ -941,11 +779,6 @@ import type {
   PactiumHttpServerStartOptions,
   PactiumHttpServerStartResult
 } from "pactium";
-
-import type {
-  LicoLiteSigner,
-  LicoLiteAspect
-} from "pactium/licolite";
 ```
 
 ---
@@ -1009,7 +842,7 @@ When a proof exceeds the configured limits, a `proofSizeWarning` is emitted:
 - By default, `proofSizeWarning` is **non-fatal** (severity: "warning") — `ok` remains `true`.
 - Set `failOnProofSizeWarning: true` to treat it as a **hard failure** (`ok: false`).
 
-**This is a size guard / diagnostic, not a bounded proof format.** Bounded proofs (constant-size proofs) are a future protocol goal.
+**This is a size guard / diagnostic, not a constant-size proof format.** Pactium proofs remain variable-size.
 
 For many related key proofs, use `engine.proveMembershipMultiproof()` or `engine.proveRange()` to avoid repeating path descriptors. Proof envelopes also hoist duplicate sibling descriptors into `proofMaterial.proofDescriptorTable`.
 

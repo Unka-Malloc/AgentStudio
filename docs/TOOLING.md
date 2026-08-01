@@ -7,11 +7,11 @@ Pactium keeps a deliberately small tooling surface. Tools exist only when they s
 | Surface | Kept tool | Purpose |
 | --- | --- | --- |
 | Package scripts | `start`, `release:prepare`, `docs:sync-version`, `test`, `test:coverage`, `verify`, `verify:core`, `verify:docs:versions`, `verify:hygiene`, `verify:protocol:gates`, `verify:package:contents`, `verify:release:readiness`, `verify:release`, `pack:dry-run`, `publish:dry-run` | Development, one-command release file preparation, published-doc version sync, coverage, protocol gates, package-content checks, release readiness, package dry run, and publish dry run. |
-| CLI | `bin/pactium.mjs` | Local Pactium doctor, HTTP server, operation recording, proof verification, and LicoLite recording/verification. |
+| CLI | `bin/pactium.mjs` | Local Pactium doctor, HTTP server, operation lifecycle recording, and proof verification. |
 | Release scripts | `scripts/prepare-release.mjs`, `scripts/update-published-doc-versions.mjs`, `scripts/verify-pactium-hygiene.mjs`, `scripts/verify-protocol-gates.mjs`, `scripts/verify-package-contents.mjs`, `scripts/verify-publish-dry-run.mjs`, `scripts/verify-release-readiness.mjs` | One-command release file preparation, published-doc version sync, hygiene scanning, protocol fixtures/properties/pressure gates, package content checks, publish dry-run checks, and release closure checks. |
 | GitHub Actions | `.github/workflows/ci.yml`, `.github/workflows/publish.yml` | Matrix release-gate CI and trusted-publishing npm release workflow. |
-| HTTP facade | `src/http.js`, `pactium/http` | Local JSON endpoints for health, protocol catalog, operation lifecycle, proof bundle export/verification, workspace projection, cursors, recovery, maintenance, LicoLite operations, and envelope verification. |
-| Public package exports | `.`, `./http`, `./licolite`, `./package.json` | Current proof-first package API, HTTP adapter, first-class LicoLite aspect, and package metadata. |
+| HTTP facade | `src/http.js`, `pactium/http` | Local JSON endpoints for health, protocol catalog, operation lifecycle, proof bundle export/verification, workspace projection, cursors, recovery, maintenance, extensions, and envelope verification. |
+| Public package exports | `.`, `./http`, `./package.json` | Current proof-first package API, HTTP adapter, and package metadata. |
 
 The HTTP facade is a local integration surface. `pactium serve` defaults to `127.0.0.1` and a 1 MiB JSON request body cap; non-loopback exposure must be owned by the embedding host's authentication, authorization, TLS, and network policy.
 

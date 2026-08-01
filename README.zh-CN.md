@@ -4,90 +4,43 @@
 
 <h1 align="center">Pactium</h1>
 
-<p align="center">
-  证明优先的协议基底，提供可验证的操作事实、仅追加的恢复历史和密码学状态验证。
-</p>
-
-<p align="center">
-  <a href="https://github.com/Unka-Malloc/Pactium/actions/workflows/ci.yml"><img src="https://github.com/Unka-Malloc/Pactium/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://www.npmjs.com/package/pactium"><img src="https://img.shields.io/npm/v/pactium.svg" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/pactium"><img src="https://img.shields.io/npm/dm/pactium.svg" alt="npm downloads" /></a>
-  <a href="https://github.com/Unka-Malloc/Pactium/blob/stable/LICENSE"><img src="https://img.shields.io/npm/l/pactium.svg" alt="license" /></a>
-  <a href="https://img.shields.io/node/v/pactium"><img src="https://img.shields.io/node/v/pactium.svg" alt="node version" /></a>
-  <img src="https://img.shields.io/badge/types-included-blue.svg" alt="TypeScript types" />
-</p>
+<p align="center">宿主中立、证明优先的协议基底，用于可验证操作事实、仅追加恢复历史和密码学状态承诺。</p>
 
 <p align="center">
   <a href="./README.md">English</a> |
+  <a href="./PRODUCT.md">产品边界</a> |
   <a href="./docs/API.md">API 参考</a> |
-  <a href="./docs/protocols/PROTOCOLS.md">协议规范</a> |
-  <a href="https://github.com/Unka-Malloc/Pactium/blob/stable/CONTRIBUTING.md">贡献指南</a>
+  <a href="./docs/protocols/PROTOCOLS.md">协议规范</a>
 </p>
 
----
+英文正式文档是规范来源；本文件同步投影相同的产品事实。
 
-## 目录
+## Pactium 是什么
 
-- [为什么选择 Pactium](#为什么选择-pactium)
-- [设计哲学](#设计哲学)
-- [特性](#特性)
-- [安装](#安装)
-- [快速开始](#快速开始)
-- [API 概览](#api-概览)
-- [CLI 命令行](#cli-命令行)
-- [架构](#架构)
-- [适用场景](#适用场景)
-- [文档](#文档)
-- [运行环境](#运行环境)
-- [验证](#验证)
-- [贡献](#贡献)
-- [许可证](#许可证)
+Pactium 是一个可独立使用的 Node.js 包，用于记录不可变操作事实并生成可验证的证明信封与证明包。它提供：
 
-## 为什么选择 Pactium
+- RFC 6962 风格的仅追加 Operation Ledger；
+- Intent、Outcome 和终态 Receipt 生命周期事实；
+- 支持成员、非成员、范围、多重证明和差异查询的 Canonical Prolly Tree 索引；
+- 工作空间投影、状态承诺、检查点、游标与可信头推进；
+- 内容寻址证明材料和可移植证明包验证；
+- 本地 JSON 与 SQLite Storage Port；以及
+- 确定性修复规划、显式维护任务和宿主受控 HTTP 适配器。
 
-Pactium 是 [LicoLite](https://github.com/Unka-Malloc) 的协议基底。它的存在是为了向 LicoLite 提供持久操作事实、仅追加恢复历史和可验证状态——这些是 LicoLite 的产品需求在协议层面所要求的能力。
+Pactium 不是业务数据库、工作流引擎、授权服务、租户边界、公共透明日志服务、分布式共识系统或副作用执行器。
 
-具体来说，Pactium 提供：
+Meshrix 是独立的下游框架，通过 Pactium 的公共包 API 使用通用证明能力。Meshrix 拥有平台治理、权限、策略、服务、插件、执行和运维；Pactium 不包含 Meshrix 专用 Aspect 或产品模式。
 
-- **仅追加操作账本** -- 将操作事实记录为透明日志中的不可变条目
-- **密码学证明** -- 每次写入返回包含包含证明和一致性证明的证明信封
-- **可移植验证** -- 证明包可以在无需访问原始存储的情况下验证
-- **工作空间投影** -- 可验证的工作空间范围索引，支持成员和非成员证明
+## 证据与内容边界
 
-Pactium 是一个零依赖的纯 ESM Node.js 包。它将操作元数据记录到仅追加的透明日志中，维护可验证索引，并生成证明信封和证明包。它不替代数据库、消息队列或宿主系统用于自身应用数据的其他存储系统。
+Pactium 在协议事实中记录操作输入和结果的哈希，默认不保存这些业务值。
 
-LicoLite 的一等集成界面位于 `pactium/licolite`。
+只有调用方显式提供下列内容时，Pactium 才会持久化内容：
 
-## 设计哲学
+- `stateMutations` 值：成为内容寻址的可验证状态；
+- Proof Extension 的 `value`：成为哈希绑定块，并在信封可达时随证明包导出。
 
-| 原则 | 含义 |
-| --- | --- |
-| **证明优先** | 写操作返回可验证的证明信封，而非存储确认。证明就是 API 响应。 |
-| **仅追加事实** | 完整操作使用不可变的 Intent/Outcome；终态操作使用单条 Receipt。修正创建带有因果引用的新事实，而非修改历史。 |
-| **唯一排序权威** | Operation Ledger 是唯一的全局排序权威，所有其他结构从中派生排序。 |
-| **可验证索引** | 每个索引（状态、工作空间、生命周期）使用相同的 Canonical Prolly Tree 引擎，支持成员和非成员证明。 |
-| **宿主边界** | Pactium 拥有协议事实和证明，宿主系统拥有策略决策、副作用、授权和持久证据存储。 |
-| **零依赖** | 无运行时依赖。直接发布源码。可预测的供应链。 |
-| **协议，非配置** | 哈希算法、编码格式和分块参数是协议常量，不是宿主选项。更改需要新的协议版本。 |
-
-## 特性
-
-| 能力 | 描述 |
-| --- | --- |
-| **Operation Ledger** | RFC 6962 风格透明日志，支持包含证明和一致性证明 |
-| **仅追加生命周期** | Operation Intent / Outcome 事实，支持幂等重放 |
-| **Receipt Profiles** | 为只读/终态证据提供单事实 `receipt`，以及原子、零写的 `on-change` 抑制 |
-| **可验证索引引擎** | Canonical Prolly Tree，支持成员、非成员证明和高效差异比对 |
-| **工作空间投影** | 可验证的工作空间范围顺序和成员索引 |
-| **Merkle 状态** | 内容寻址的状态提交，绑定到操作结果 |
-| **检查点树** | 可验证的恢复和进度结构 |
-| **证明信封** | 跨证明收据，绑定账本、索引、状态和检查点证据 |
-| **证明包** | 可移植的 CAR 格式导出，支持离线验证 |
-| **签名头** | 可选的 Ed25519 账本头签名，配合验证者清单 |
-| **LicoLite Aspect** | 一等集成界面，默认启用工作空间投影和签名 |
-| **修复规划** | 从结构化验证失败中确定性地生成修复任务 |
-| **有界存储** | 固定大小状态清单、自适应 Brotli SQLite BLOB、规范化引用、无变化 UPSERT 与保守派生索引 GC |
-| **零依赖** | 纯 ESM，无运行时依赖，直接发布源码 |
+宿主负责内容最小化、授权、披露、保留和脱敏。Pactium 证明完整性，不证明宿主内容的真实性或披露安全性。
 
 ## 安装
 
@@ -95,276 +48,95 @@ LicoLite 的一等集成界面位于 `pactium/licolite`。
 npm install pactium
 ```
 
-```bash
-pnpm add pactium
-```
-
-```bash
-yarn add pactium
-```
-
-### 运行环境要求
-
-- Node.js 22+ 或 Node.js 24+
-- 仅 ESM（你的 `package.json` 中需要 `"type": "module"`）
+要求：Node.js 22 或 24，仅支持 ESM。
 
 ## 快速开始
-
-### 记录操作并获取完整证明
-
-```js
-import { createPactium } from "pactium";
-
-const pactium = createPactium({ dataDir: "./.pactium" });
-
-// 记录操作，返回可验证的证明信封
-const envelope = await pactium.recordOperation({
-  operationId: "workspace.file.write",
-  workspaceId: "workspace-a",
-  idempotencyKey: "intent-001",
-  outcomeIdempotencyKey: "outcome-001",
-  input: { path: "docs/readme.md" },
-  stateMutations: [
-    { key: "docs/readme.md", value: { content: "hello world" } }
-  ]
-});
-
-// 验证信封
-const result = await pactium.verifyEnvelope(envelope);
-console.log(result.ok); // true
-```
-
-### 使用 LicoLite Aspect
-
-```js
-import { createLicoLiteAspect, createLicoLiteSigner } from "pactium/licolite";
-
-const licolite = createLicoLiteAspect({
-  evidencePolicy: "production",
-  signer: createLicoLiteSigner({
-    signerId: "host-signer",
-    secret: process.env.LICOLITE_SIGNING_SECRET
-  })
-});
-
-const envelope = await licolite.recordWorkspaceOperation({
-  operationId: "workspace.asset.upload",
-  workspaceId: "workspace-a",
-  policyEvidence: { decision: "allow", rule: "upload-permitted" },
-  workspaceEffectEvidence: { durableRef: "host:asset:image-001" }
-});
-
-// LicoLite 级别验证：检查签名 + 关键扩展
-const result = await licolite.verifyEnvelope(envelope);
-console.log(result.ok); // true
-```
-
-LicoLite 生产模式在记录和验证信封时必须显式提供 `signer` 或 `signerSecret`。`opportunistic` 模式用于本地开发，可能使用开发签名器。
-
-### 导出和验证可移植证明包
 
 ```js
 import { createPactium, verifyProofBundle } from "pactium";
 
 const pactium = createPactium({ dataDir: "./.pactium" });
 
-// 将信封导出为可移植的证明包
+const envelope = await pactium.recordOperation({
+  operationId: "workspace.file.write",
+  workspaceId: "workspace-a",
+  idempotencyKey: "intent-001",
+  outcomeIdempotencyKey: "outcome-001",
+  input: { path: "docs/readme.md" },
+  result: { status: "written" },
+  extensions: [{
+    name: "host.operation-copy",
+    critical: false,
+    value: {
+      input: { path: "docs/readme.md" },
+      result: { status: "written" }
+    }
+  }]
+});
+
+const local = await pactium.verifyEnvelope(envelope);
 const bundle = await pactium.exportProofBundle(envelope);
+const portable = await verifyProofBundle(bundle, {
+  trustPolicy: "self-carried-manifest"
+});
 
-// 无需本地存储即可验证
-const result = await verifyProofBundle(bundle);
-console.log(result.ok); // true
+console.log(local.ok, portable.ok);
 ```
 
-## API 概览
+仅需要摘要承诺时应移除 `extensions`。提供扩展值或状态值属于显式持久化决定。
 
-Pactium 暴露三个包入口点：
+## 公共 API
 
-| 导出 | 入口 | 描述 |
-| --- | --- | --- |
-| `pactium` | `./src/index.js` | 核心证明优先协议 API |
-| `pactium/http` | `./src/http.js` | 宿主受控服务集成的 HTTP 适配器 |
-| `pactium/licolite` | `./src/aspects/licolite/index.js` | LicoLite 集成 Aspect |
+| 导出 | 用途 |
+| --- | --- |
+| `pactium` | 核心协议、存储、账本、索引、证明、修复、维护及 HTTP 导出 |
+| `pactium/http` | 宿主受控 JSON 适配器 |
+| `pactium/package.json` | 包元数据 |
 
-### HTTP 适配器 (`pactium/http`)
+HTTP 适配器默认只读。写入和特权路由需要 `enableMutations: true`；宿主仍须提供身份认证、授权、TLS、网络暴露策略、配额及运维控制。
 
-```js
-import {
-  createPactiumHttpServer,
-  startPactiumHttpServer
-} from "pactium/http";
-```
+## 重要边界
 
-HTTP 适配器以 JSON 路由开放操作生命周期、证明信封和证明包验证、证明包导出、工作空间投影、游标分页、追加条件、可信头推进、修复计划、维护任务、扩展和信封存储等调用。完整路由矩阵见 [docs/API.md](./docs/API.md#http-adapter-api-pactiumhttp)。
+- Workspace Projection 证明逻辑账本成员关系和工作空间内顺序，不提供租户或授权隔离。
+- Proof Bundle 包含可达的证明块和显式扩展块，不会自动包含操作输入或结果值。
+- 状态变更值会被显式持久化，可能包含敏感内容。
+- 运行时元数据采用有界规范化记录，但不可变事实、信封、证明材料、扩展和状态值会持续增长；当前垃圾回收仅清理不可达的派生索引节点。
+- Repair Planner 只生成任务，不执行修复，也不追加 Repair Fact。
+- 维护仅在宿主调用时运行；Pactium 没有常驻调度器或守护进程。
+- JSON 适用于本地开发和低并发场景；SQLite 是本地持久化候选；分布式部署需要宿主协调。
 
-### TypeScript
-
-Pactium 附带手工编写的 TypeScript 声明。所有公共类型均可从包入口点导入：
-
-```ts
-import type {
-  PactiumCore,
-  PactiumProofEnvelope,
-  PactiumVerificationResult,
-  PactiumProofBundle,
-  PactiumLedgerHead,
-  PactiumVerificationFailure
-} from "pactium";
-
-import type {
-  LicoLiteAspect,
-  LicoLiteSigner
-} from "pactium/licolite";
-```
-
-完整 API 参考见 [docs/API.md](./docs/API.md)。
-
-## CLI 命令行
-
-Pactium 提供 CLI 用于本地操作记录和验证：
+## CLI
 
 ```bash
-# 检查数据目录健康状态
 pactium doctor --data-dir ./.pactium
-
-# 启动 HTTP 验证服务器
-pactium serve --port 7288
-
-# 记录操作
-pactium operation record --body '{"operationId":"test","workspaceId":"ws"}'
-
-# 验证证明信封
+pactium serve --data-dir ./.pactium --port 7288
+pactium intent begin --body '{"operationId":"example","workspaceId":"ws"}'
+pactium outcome append --body-file ./outcome.json
+pactium operation record --body-file ./operation.json
 pactium envelope verify --body-file ./envelope.json
-
-# 验证证明包
 pactium bundle verify --body-file ./bundle.json
-
-# LicoLite 工作空间操作
-pactium licolite record --body '{"operationId":"ws.op","workspaceId":"ws"}'
-pactium licolite verify --body-file ./licolite-envelope.json
 ```
-
-CLI 从 `--body`、`--body-file` 或标准输入读取 JSON。
-
-`pactium serve` 默认绑定 `127.0.0.1`，并强制 1 MiB JSON 请求体上限。只有在宿主系统提供认证、授权和传输安全控制时，才应使用 `--host`、`--max-body-bytes`、`PACTIUM_HTTP_HOST` 和 `PACTIUM_HTTP_MAX_BODY_BYTES` 暴露到非本机地址。
-
-## 架构
-
-```
-                    宿主系统 (LicoLite)
-                           |
-                    pactium/licolite
-                           |
-            +--------------+---------------+
-            |       Pactium 核心            |
-            |                              |
-            |  +------------------------+  |
-            |  | Canonical Value + Hash |  |
-            |  +------------------------+  |
-            |  | Storage Port (CAS)     |  |
-            |  +------------------------+  |
-            |  | Operation Ledger       |  |  <- 全局排序权威
-            |  | (Transparency Log)     |  |
-            |  +------------------------+  |
-            |  | Verifiable Index Engine|  |  <- 共享 Prolly Tree
-            |  +------------------------+  |
-            |  | Workspace Projection   |  |
-            |  | Merkle State           |  |
-            |  | Checkpoint Tree        |  |
-            |  | Lifecycle Indexes      |  |
-            |  +------------------------+  |
-            |  | Proof Envelopes        |  |
-            |  | Proof Bundles          |  |
-            |  +------------------------+  |
-            |  | Repair Planner         |  |
-            |  | Maintenance Engine     |  |
-            |  +------------------------+  |
-            +------------------------------+
-```
-
-**核心设计原则：**
-
-- Operation Ledger 是唯一的全局排序权威
-- 所有索引共享同一个可验证索引引擎（Canonical Prolly Tree）
-- 写操作返回可验证的证明信封，而非存储记录
-- 证明包支持无需原始存储的独立验证
-- 宿主系统拥有策略、副作用和持久证据存储的所有权
-
-详细架构文档见 [docs/architecture/ARCHITECTURE.md](./docs/architecture/ARCHITECTURE.md)。
-
-## 适用场景
-
-**适合使用 Pactium 的场景：**
-
-- 需要操作被记录且账本一致的密码学证明
-- 需要可移植的证明包，可在无需原始系统的情况下验证
-- 需要工作空间范围的操作隔离及可验证的成员证明
-- 需要仅追加的操作历史及确定性恢复
-- 需要幂等操作记录及重放检测
-- 需要可验证的状态根及高效差异比对
-
-**Pactium 不适合：**
-
-- 通用数据库存储（请使用数据库）
-- 分布式节点间的网络共识（Pactium 是本地协议基底）
-- 授权或访问控制（宿主系统拥有策略）
-- 文件存储或 Blob 管理（Pactium 存储操作元数据和证明）
 
 ## 文档
 
-| 文档 | 描述 |
+| 权威 | 用途 |
 | --- | --- |
-| [API 参考](./docs/API.md) | 完整的公共 API 文档 |
-| [架构](./docs/architecture/ARCHITECTURE.md) | 系统架构和模块结构 |
-| [协议规范](./docs/protocols/PROTOCOLS.md) | 协议行为和数据流 |
-| [协议参数矩阵](./docs/protocols/PROFILE.md) | 协议参数矩阵 |
-| [LicoLite Aspect](./docs/LICOLITE-ASPECT.md) | LicoLite 集成界面 |
-| [术语表](./docs/TERM.md) | 协议词汇表 |
-| [常见问题](./docs/FAQ.md) | 常见问题与故障排除 |
-| [迁移指南](./docs/MIGRATION.md) | 版本兼容性与升级指导 |
-| [示例指南](./examples/README.md) | 带注释的使用示例 |
-| [质量门](https://github.com/Unka-Malloc/Pactium/blob/stable/docs/QUALITY-GATES.md) | 发布验证要求 |
-| [ADR](https://github.com/Unka-Malloc/Pactium/tree/stable/docs/adr) | 架构决策记录（55 项决策） |
-
-## 运行环境
-
-| 要求 | 版本 |
-| --- | --- |
-| Node.js | `^22.0.0 \|\| ^24.0.0` |
-| 模块系统 | 仅 ESM (`"type": "module"`) |
-| 运行时依赖 | 无 |
-
-Pactium 是纯 ESM 包，不能从 CommonJS 模块中 `require()`。如需 CJS 互操作，请使用动态 `import()`。
+| [产品](./PRODUCT.md) | 持久目标与仓库边界 |
+| [领域语言](./CONTEXT.md) | 规范术语与不变量 |
+| [文档索引](./docs/README.md) | 维护中文档地图 |
+| [API](./docs/API.md) | JavaScript、TypeScript、HTTP 与 CLI 公共表面 |
+| [架构](./docs/architecture/ARCHITECTURE.md) | 模块、数据流、所有权与存储行为 |
+| [协议](./docs/protocols/PROTOCOLS.md) | 协议事实与证明语义 |
+| [协议画像](./docs/protocols/PROFILE.md) | 固定协议参数与当前能力矩阵 |
+| [安全](./SECURITY.md) | 安全范围与漏洞披露流程 |
 
 ## 验证
 
-本地运行完整发布门：
-
 ```bash
+npm test
 npm run verify:release
 ```
 
-这将运行覆盖率强制测试、协议证明向量、回归快照、种子属性测试、缩放公共 API 压力测试、卫生检查、包内容检查、打包干燥运行和发布干燥运行。
-
-完整计数压力测试（显式发布审查）：
-
-```bash
-PACTIUM_FULL_PRESSURE=1 npm run verify:protocol:gates
-```
-
-## 生态系统
-
-| 包 | 描述 |
-| --- | --- |
-| [`pactium`](https://www.npmjs.com/package/pactium) | 核心协议基底（本包） |
-| `pactium/licolite` | 一等 LicoLite 集成 Aspect（已包含） |
-
-Pactium 是 [LicoLite](https://github.com/Unka-Malloc) 的协议基底。`pactium/licolite` Aspect 是一等包导出，而非外部插件。
-
-## 贡献
-
-参见 [CONTRIBUTING.md](https://github.com/Unka-Malloc/Pactium/blob/stable/CONTRIBUTING.md) 了解开发环境设置、编码规范和提交指南。
-
 ## 许可证
 
-[GPL-3.0-or-later](./LICENSE) -- Copyright (c) Unka Y.Y.
+GPL-3.0-or-later。参见 [LICENSE](./LICENSE)。

@@ -6,7 +6,7 @@ Status: Accepted
 
 ## Context
 
-Pactium is the proof-first protocol substrate for LicoLite. The active product direction on `nightly` and `stable` is a small zero-dependency ESM package for verifiable operation facts, append-only recovery history, Prolly-backed indexes, proof envelopes, proof bundles, and the first-class `pactium/licolite` aspect.
+Pactium is a host-neutral, zero-dependency ESM protocol substrate for verifiable operation facts, append-only recovery history, Prolly-backed indexes, Proof Envelopes, and Proof Bundles.
 
 Branch review found two historical product lines:
 

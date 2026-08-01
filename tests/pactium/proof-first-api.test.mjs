@@ -40,7 +40,6 @@ import {
   covers,
   defaultPactiumDataDir,
   emptyTreeHash,
-  envelopeSigningHash,
   ledgerLeafHash,
   ledgerNodeHash,
   ledgerHeadSigningPayload,
@@ -61,23 +60,10 @@ import {
   verifyTrackingCursor
 } from "../../src/index.js";
 import {
-  LICOLITE_SIGNATURE_EXTENSION,
-  LICOLITE_POLICY_EXTENSION,
-  LICOLITE_WORKSPACE_EFFECT_EXTENSION,
-  createLicoLiteAspect,
-  createLicoLiteSigner,
-  licoLitePolicyExtensionValue,
-  licoLiteWorkspaceEffectExtensionValue,
-  recordLicoLiteWorkspaceOperation,
-  verifyLicoLiteBundle,
-  verifyLicoLiteEnvelope
-} from "../../src/aspects/licolite/index.js";
-import {
   loadNodeSqliteModule,
   loadSqliteStorageDriver,
   sqliteCapabilityProbePlan
 } from "../../src/storage/sqlite-capability.js";
-import { materializeEvidenceExtension } from "../../src/aspects/licolite/evidence.js";
 import { assertAppendCondition } from "../../src/core/append-condition.js";
 import { getPactiumInternals } from "../../src/core/pactium-core.js";
 import { createPactiumHttpServer, startPactiumHttpServer } from "../../src/http.js";
@@ -381,6 +367,12 @@ describe("Pactium proof-first root API", () => {
     });
     assert.equal(fakeBetterDriver.providerId, "better-sqlite3");
     assert.equal(fakeBetterDriver.open("better.db").databasePath, "better.db");
+    const fakeDirectBetterDriver = loadSqliteStorageDriver(false, {
+      loadNodeSqlite: () => ({}),
+      loadBetterSqlite3: () => FakeBetterSqlite3
+    });
+    assert.equal(fakeDirectBetterDriver.providerId, "better-sqlite3");
+    assert.equal(fakeDirectBetterDriver.open("direct-better.db").databasePath, "direct-better.db");
     assert.equal(loadSqliteStorageDriver(false, {
       loadNodeSqlite: () => null,
       loadBetterSqlite3: () => null
@@ -2226,7 +2218,6 @@ describe("Pactium proof-first root API", () => {
       { layer: "proof-material", code: "missing_bundle_block" },
       { layer: "proof-extension", code: "missing_extension_material" },
       { layer: "host", code: "host_evidence_missing" },
-      { layer: "licolite", code: "licolite_bad_signature" },
       { layer: "policy", code: "evidence_missing" },
       { layer: "append-condition", code: "ledger_head_conflict" },
       { layer: "operation-lifecycle", code: "terminal_outcome_exists" },
@@ -2242,7 +2233,6 @@ describe("Pactium proof-first root API", () => {
       "resume-open-intent",
       "restore-missing-proof-material",
       "restore-missing-proof-material",
-      "request-host-evidence",
       "request-host-evidence",
       "request-host-evidence",
       "manual-conflict-resolution",
@@ -2266,110 +2256,58 @@ describe("Pactium proof-first root API", () => {
     assert.ok(storageGcResult.result.prunedBlocks >= 0);
   });
 
-  it("provides first-class LicoLite aspect with signing and required critical extensions", async () => {
-    const pactium = createPactium({ dataDir: await tempDataDir() });
-    const signer = createLicoLiteSigner({ secret: "unit-secret" });
-    assert.equal(await signer.verify("message", await signer.sign("message")), true);
-    const licolite = createLicoLiteAspect({ pactium, signer, evidencePolicy: "production" });
-    await assert.rejects(() => licolite.recordWorkspaceOperation({
-      operationId: "missing.evidence",
-      workspaceId: "lico"
-    }), /policy evidence/);
-    const envelope = await licolite.recordWorkspaceOperation({
-      operationId: "workspace.effect",
-      workspaceId: "lico",
-      idempotencyKey: "intent-1",
-      outcomeIdempotencyKey: "outcome-1",
-      input: { file: "a" },
-      policyEvidence: { decision: "allow", policyVersion: "unit" },
-      workspaceEffectEvidence: { effect: "file.write", durableRef: "host:asset:a" },
-      stateMutations: [{ key: "files/a", value: { ok: true } }]
+  it("stores operation content as digests unless the caller attaches an explicit proof copy", async () => {
+    const pactium = createPactium({ inMemory: true });
+    const inputMarker = "synthetic-private-input";
+    const resultMarker = "synthetic-private-result";
+    const defaultEnvelope = await pactium.recordOperation({
+      operationId: "content.boundary.default",
+      workspaceId: "content-boundary",
+      input: { marker: inputMarker },
+      result: { marker: resultMarker }
     });
-    assert.ok(envelope.criticalExtensions.includes(LICOLITE_POLICY_EXTENSION));
-    assert.ok(envelope.criticalExtensions.includes(LICOLITE_WORKSPACE_EFFECT_EXTENSION));
-    const verified = await licolite.verifyEnvelope(envelope, { trustedManifest: envelope.ledgerHead.verifierManifest });
-    assert.equal(verified.ok, true);
-    const stripped = { ...envelope, extensions: envelope.extensions.filter((extension) => extension.name !== LICOLITE_POLICY_EXTENSION) };
-    const strippedVerified = await licolite.verifyEnvelope(stripped, { trustedManifest: envelope.ledgerHead.verifierManifest });
-    assert.equal(strippedVerified.ok, false);
-    assert.ok(strippedVerified.failures.some((failure) => failure.code.includes("licolite_policy")));
-    assert.equal(licoLitePolicyExtensionValue({ evidence: { a: 1 } }).evidenceType, LICOLITE_POLICY_EXTENSION);
-    assert.equal(licoLiteWorkspaceEffectExtensionValue({ evidence: { a: 1 } }).evidenceType, LICOLITE_WORKSPACE_EFFECT_EXTENSION);
-    assert.deepEqual(licoLitePolicyExtensionValue().decision, {});
-    assert.deepEqual(licoLiteWorkspaceEffectExtensionValue().effect, {});
-    const materializedEvidence = await materializeEvidenceExtension(pactium, {
-      name: "licolite.unitEvidence"
+
+    const facts = [];
+    for (const index of [0, 1]) {
+      const leaf = await pactium.readLedgerLeaf(index);
+      const block = await pactium.resolveBlock(leaf.factCid);
+      facts.push(canonicalDecode(block.bytes));
+    }
+    assert.equal(facts[0].inputHash.startsWith("sha256:"), true);
+    assert.equal(facts[1].resultHash.startsWith("sha256:"), true);
+    assert.equal(JSON.stringify(facts).includes(inputMarker), false);
+    assert.equal(JSON.stringify(facts).includes(resultMarker), false);
+
+    const defaultBundle = await pactium.exportProofBundle(defaultEnvelope);
+    const defaultResolver = createIndexedBundleResolver(defaultBundle);
+    const defaultPayloads = [...defaultResolver.blockCids].map((cid) => {
+      const block = defaultResolver.get(cid);
+      return Buffer.from(String(block.payloadBase64 || ""), "base64").toString("utf8");
+    }).join("\n");
+    assert.equal(defaultPayloads.includes(inputMarker), false);
+    assert.equal(defaultPayloads.includes(resultMarker), false);
+
+    const copiedEnvelope = await pactium.recordOperation({
+      operationId: "content.boundary.explicit-copy",
+      workspaceId: "content-boundary",
+      input: { marker: inputMarker },
+      result: { marker: resultMarker },
+      extensions: [{
+        name: "host.operation-copy",
+        critical: false,
+        value: {
+          input: { marker: inputMarker },
+          result: { marker: resultMarker }
+        }
+      }]
     });
-    assert.equal(materializedEvidence.critical, true);
-    assert.equal(materializedEvidence.name, "licolite.unitEvidence");
-    const bundle = await licolite.exportProofBundle(envelope);
-    assert.equal(bundle.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
-    assert.equal((await licolite.verifyBundle(bundle, { trustedManifest: envelope.ledgerHead.verifierManifest })).ok, true);
-    assert.equal((await licolite.getWorkspaceProjection("lico")).nextOrdinal, 2);
-  });
-
-  it("resolves proof-first root and pactium/licolite exports from an external project", async () => {
-    const projectDir = await tempDataDir("pactium-external-");
-    const nodeModulesDir = path.join(projectDir, "node_modules");
-    await fs.mkdir(nodeModulesDir, { recursive: true });
-    await fs.symlink(path.resolve("."), path.join(nodeModulesDir, "pactium"), "dir");
-    const scriptPath = path.join(projectDir, "consumer.mjs");
-    await fs.writeFile(scriptPath, `
-import { createPactium, startPactiumHttpServer as startRootHttpServer } from "pactium";
-import { PACTIUM_HTTP_PROTOCOL, createPactiumHttpServer } from "pactium/http";
-import { createLicoLiteAspect } from "pactium/licolite";
-
-let oldExportMissing = false;
-try {
-  await import("pactium/ledger");
-} catch {
-  oldExportMissing = true;
-}
-
-const pactium = createPactium({ inMemory: true });
-const licolite = createLicoLiteAspect({ pactium, evidencePolicy: "opportunistic" });
-const envelope = await licolite.recordWorkspaceOperation({ operationId: "external", workspaceId: "x" });
-// Test enableMutations and authorize options (TypeScript would check these)
-const httpServer = createPactiumHttpServer({ pactium, enableMutations: true, authorize: null });
-// Test read-only resolvers
-const hasBlock = await pactium.hasBlock(envelope.proofRefs[0].cid);
-const block = await pactium.resolveBlock(envelope.proofRefs[0].cid);
-const head = await pactium.readLedgerHead();
-const leaf = await pactium.readLedgerLeaf(0);
-const state = await pactium.readProtocolObject("core", "runtime-state");
-const keys = await pactium.listProtocolObjectKeys("commit");
-const hasAdvanced = Object.prototype.hasOwnProperty.call(pactium, "advanced");
-console.log(JSON.stringify({
-  oldExportMissing,
-  protocol: envelope.protocol,
-  ok: (await licolite.verifyEnvelope(envelope)).ok,
-  httpProtocol: PACTIUM_HTTP_PROTOCOL,
-  httpServerType: typeof httpServer.close,
-  rootHttpType: typeof startRootHttpServer,
-  hasBlock,
-  blockExists: !!block,
-  headExists: !!head,
-  leafExists: !!leaf,
-  stateExists: !!state,
-  keysLen: keys.length,
-  hasAdvanced
-}));
-`, "utf8");
-    const run = await execFileAsync(process.execPath, [scriptPath], { cwd: projectDir });
-    const parsed = JSON.parse(run.stdout);
-    assert.equal(parsed.oldExportMissing, true);
-    assert.equal(parsed.protocol, PACTIUM_PROTOCOL);
-    assert.equal(parsed.ok, true);
-    assert.equal(parsed.httpProtocol, "pactium.v0.3.http");
-    assert.equal(parsed.httpServerType, "function");
-    assert.equal(parsed.rootHttpType, "function");
-    assert.equal(parsed.hasBlock, true);
-    assert.equal(parsed.blockExists, true);
-    assert.equal(parsed.headExists, true);
-    assert.equal(parsed.leafExists, true);
-    assert.equal(parsed.stateExists, true);
-    assert.equal(parsed.keysLen, 0);
-    assert.equal(parsed.hasAdvanced, false);
+    const copiedBundle = await pactium.exportProofBundle(copiedEnvelope);
+    const copiedResolver = createIndexedBundleResolver(copiedBundle);
+    const copyBlock = copiedResolver.get(copiedEnvelope.extensions[0].valueRef);
+    assert.deepEqual(canonicalDecode(Buffer.from(copyBlock.payloadBase64, "base64")), {
+      input: { marker: inputMarker },
+      result: { marker: resultMarker }
+    });
   });
 
   it("serves HTTP endpoints and CLI proof-first commands", async () => {
@@ -2485,12 +2423,12 @@ console.log(JSON.stringify({
     });
     assert.equal(lifecycleProfile.operationCount, 20);
     assert.ok(lifecycleProfile.memoryHighWaterMark > 0);
-    for (const profile of ["api:licolite-record", "api:proof-bundle", "api:recovery"]) {
+    for (const profile of ["api:proof-bundle", "api:recovery"]) {
       const result = await runPactiumQualityGateProfile({ profile, operations: 2 });
       assert.equal(result.operationCount, 2);
       assert.ok(result.throughputPerSecond > 0);
     }
-    for (const profile of ["api:proof-bundle", "api:recovery", "api:licolite-record"]) {
+    for (const profile of ["api:proof-bundle", "api:recovery"]) {
       const result = await runPactiumQualityGateProfile({
         profile,
         operations: 1,
@@ -2662,6 +2600,12 @@ console.log(JSON.stringify({
       valueHash: outcome.proofRefs[0].payloadHash
     });
     assert.equal(directExtension.valueRef, outcome.proofRefs[0].cid);
+    assert.equal(await pactium.createExtension(null), null);
+    const emptyExtension = await pactium.createExtension({});
+    assert.equal(emptyExtension.name, "");
+    assert.equal(emptyExtension.critical, false);
+    const unnamedFinalized = finalizeEnvelope({ ...outcome, envelopeId: undefined, extensions: [{}] });
+    assert.deepEqual(unnamedFinalized.criticalExtensions, []);
     const missingExtension = {
       ...outcome,
       extensions: [{ name: "x", critical: false, valueRef: "cid:sha256:1".padEnd(75, "1"), valueHash: "sha256:missing" }]
@@ -2872,181 +2816,6 @@ console.log(JSON.stringify({
     assert.ok(reboundConditionWorkspace.failures.some((failure) => failure.code === "bad_append_condition_binding"));
   });
 
-  it("covers LicoLite verifier failure modes and convenience exports", async () => {
-    const pactium = createPactium({ inMemory: true });
-    const licolite = createLicoLiteAspect({
-      pactium,
-      signer: createLicoLiteSigner({ secret: "good" }),
-      evidencePolicy: "opportunistic"
-    });
-    const emptySigner = createLicoLiteSigner({ signerId: "", secret: "" });
-    assert.equal(await emptySigner.verify("", await emptySigner.sign("")), true);
-    assert.equal(await emptySigner.verify("missing-signature"), false);
-    const ed25519Keys = crypto.generateKeyPairSync("ed25519");
-    const ed25519Signer = createLicoLiteSigner({
-      signerId: "ed25519-unit",
-      privateKey: ed25519Keys.privateKey
-    });
-    const ed25519Signature = await ed25519Signer.sign("ed25519-message");
-    assert.equal(await ed25519Signer.verify("ed25519-message", ed25519Signature), true);
-    assert.equal(await ed25519Signer.verify("ed25519-message", ""), false);
-    const publicOnlySigner = createLicoLiteSigner({
-      signerId: "ed25519-public-only",
-      publicKey: ed25519Keys.publicKey.export({ type: "spki", format: "pem" })
-    });
-    await assert.rejects(() => publicOnlySigner.sign("cannot-sign"), /requires a privateKey/);
-    const noSignerAspect = createLicoLiteAspect({
-      pactium: createPactium({ inMemory: true }),
-      signer: false,
-      evidencePolicy: "opportunistic"
-    });
-    const unsigned = await noSignerAspect.recordWorkspaceOperation({
-      operationId: "unsigned",
-      workspaceId: "unsigned"
-    });
-    assert.ok((await noSignerAspect.verifyEnvelope(unsigned)).failures.some((failure) => failure.code === "missing_signature"));
-    const fakeSignature = await noSignerAspect.core.createExtension({
-      name: LICOLITE_SIGNATURE_EXTENSION,
-      critical: false,
-      value: {
-        protocol: "pactium.v0.3.licolite-aspect",
-        signerId: "fake",
-        algorithm: "hmac-sha256",
-        signedEnvelopeHash: envelopeSigningHash(unsigned),
-        signature: "fake"
-      }
-    });
-    const fakeSigned = await noSignerAspect.core.storeEnvelope({
-      ...unsigned,
-      extensions: [...unsigned.extensions, fakeSignature]
-    });
-    assert.ok((await noSignerAspect.verifyEnvelope(fakeSigned)).failures.some((failure) => failure.code === "signature_verifier_unconfigured"));
-    const customSigner = {
-      async sign(message) {
-        return `plain:${message}`;
-      },
-      async verify(message, signature) {
-        return signature === `plain:${message}`;
-      }
-    };
-    const customSignerAspect = createLicoLiteAspect({
-      pactium: createPactium({ inMemory: true }),
-      signer: customSigner,
-      evidencePolicy: "opportunistic"
-    });
-    const customEnvelope = await customSignerAspect.recordWorkspaceOperation({
-      operationId: "custom.signer",
-      scope: "scope-only"
-    });
-    assert.equal((await customSignerAspect.verifyEnvelope(customEnvelope)).ok, true);
-    const ownedAspect = createLicoLiteAspect({
-      inMemory: true,
-      evidencePolicy: "opportunistic",
-      signerSecret: "owned"
-    });
-    assert.equal((await ownedAspect.recordWorkspaceOperation({ operationId: "owned.core" })).protocol, PACTIUM_PROTOCOL);
-    const strict = createLicoLiteAspect({ pactium, evidencePolicy: "production" });
-    await assert.rejects(() => strict.recordWorkspaceOperation({
-      operationId: "missing.effect",
-      workspaceId: "lico-fail",
-      policyEvidence: { allow: true }
-    }), /workspace effect evidence/);
-    await assert.rejects(() => strict.recordWorkspaceOperation({
-      operationId: "missing.signer",
-      workspaceId: "lico-fail",
-      policyEvidence: { allow: true },
-      workspaceEffectEvidence: { ref: "effect" }
-    }), /explicit signer or signerSecret/);
-    const envelope = await licolite.recordWorkspaceOperation({
-      operationId: "licolite.failure.modes",
-      workspaceId: "lico-fail",
-      policyEvidence: { allow: true },
-      workspaceEffectEvidence: { ref: "effect" }
-    });
-    const productionNoVerifier = createLicoLiteAspect({ pactium, evidencePolicy: "production" });
-    assert.ok((await productionNoVerifier.verifyEnvelope(envelope)).failures.some((failure) => failure.code === "missing_signature_verifier"));
-    const noSignature = { ...envelope, extensions: envelope.extensions.filter((extension) => extension.name !== "licolite.signature") };
-    assert.ok((await licolite.verifyEnvelope(noSignature)).failures.some((failure) => failure.code === "missing_signature"));
-    const downgradedRequiredExtension = {
-      ...envelope,
-      criticalExtensions: [],
-      extensions: envelope.extensions.map((extension) =>
-        extension.name === LICOLITE_POLICY_EXTENSION || extension.name === LICOLITE_WORKSPACE_EFFECT_EXTENSION
-          ? { ...extension, critical: false }
-          : extension)
-    };
-    assert.ok((await licolite.verifyEnvelope(downgradedRequiredExtension)).failures.some((failure) => failure.code === "noncritical_required_extension"));
-    const missingSignatureMaterial = {
-      ...envelope,
-      extensions: envelope.extensions.map((extension) => extension.name === "licolite.signature"
-        ? { ...extension, valueRef: "cid:sha256:2".padEnd(75, "2") }
-        : extension)
-    };
-    assert.ok((await licolite.verifyEnvelope(missingSignatureMaterial)).failures.some((failure) => failure.code === "missing_signature_material"));
-    const tampered = { ...envelope, relatedEnvelopeIds: ["tampered"] };
-    assert.ok((await licolite.verifyEnvelope(tampered)).failures.some((failure) => failure.code === "bad_signed_envelope_hash"));
-    const missingEvidenceRef = {
-      ...envelope,
-      extensions: envelope.extensions.map((extension) => extension.name === LICOLITE_POLICY_EXTENSION
-        ? { ...extension, valueRef: "cid:sha256:3".padEnd(75, "3"), metadata: {} }
-        : extension)
-    };
-    assert.ok((await licolite.verifyEnvelope(missingEvidenceRef)).failures.some((failure) => failure.code === "missing_evidence_ref"));
-    const policyExtension = envelope.extensions.find((extension) => extension.name === LICOLITE_POLICY_EXTENSION);
-    const policyBlock = await getPactiumInternals(pactium).storage.getBlock(policyExtension.valueRef);
-    const badPolicyBlock = await getPactiumInternals(pactium).storage.putBlock({
-      ...canonicalDecode(policyBlock.bytes),
-      evidenceHash: `sha256:${"0".repeat(64)}`
-    }, { kind: "proof-extension:licolite.policy" });
-    const badEvidenceHash = {
-      ...envelope,
-      extensions: envelope.extensions.map((extension) => extension.name === LICOLITE_POLICY_EXTENSION
-        ? { ...extension, valueRef: badPolicyBlock.cid, valueHash: badPolicyBlock.payloadHash }
-        : extension)
-    };
-    assert.ok((await licolite.verifyEnvelope(badEvidenceHash)).failures.some((failure) => failure.code === "bad_evidence_hash"));
-    const algorithmKeys = crypto.generateKeyPairSync("ed25519");
-    const wrongAlgorithm = createLicoLiteAspect({
-      pactium,
-      signer: createLicoLiteSigner({
-        signerId: "licolite-local",
-        algorithm: "ed25519",
-        publicKey: algorithmKeys.publicKey.export({ type: "spki", format: "pem" })
-      }),
-      evidencePolicy: "opportunistic"
-    });
-    assert.ok((await wrongAlgorithm.verifyEnvelope(envelope)).failures.some((failure) => failure.code === "bad_signature_algorithm"));
-    const wrongSigner = createLicoLiteAspect({
-      pactium,
-      signer: createLicoLiteSigner({ secret: "wrong" }),
-      evidencePolicy: "opportunistic"
-    });
-    assert.ok((await wrongSigner.verifyEnvelope(envelope)).failures.some((failure) => failure.code === "bad_signature"));
-    assert.ok(licolite.planRepair([{ layer: "licolite", code: "derived_index_missing" }]).tasks.length > 0);
-
-    const standalone = createPactium({ inMemory: true });
-    const standaloneEnvelope = await recordLicoLiteWorkspaceOperation({
-      operationId: "standalone",
-      workspaceId: "standalone",
-      policyEvidence: { ok: true },
-      workspaceEffectEvidence: { ok: true }
-    }, { pactium: standalone, evidencePolicy: "production", signerSecret: "standalone" });
-	    assert.equal((await verifyLicoLiteEnvelope(standaloneEnvelope, {
-	      pactium: standalone,
-	      evidencePolicy: "production",
-	      signerSecret: "standalone",
-	      trustedManifest: standaloneEnvelope.ledgerHead.verifierManifest
-	    })).ok, true);
-    const standaloneBundle = await standalone.exportProofBundle(standaloneEnvelope);
-    assert.equal(standaloneBundle.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
-	    assert.equal((await verifyLicoLiteBundle(standaloneBundle, {
-	      pactium: standalone,
-	      evidencePolicy: "production",
-	      signerSecret: "standalone",
-	      trustedManifest: standaloneEnvelope.ledgerHead.verifierManifest
-	    })).ok, true);
-  });
-
   it("covers remaining HTTP and CLI public surfaces", async () => {
     const started = await startPactiumHttpServer({ dataDir: await tempDataDir("pactium-start-server-"), port: 0 });
     try {
@@ -3203,42 +2972,6 @@ console.log(JSON.stringify({
         requestPath: "/envelopes",
         body: outcome.body
       })).body.envelopeType, "pactium.proof-envelope");
-      const lico = await requestJson({
-        port: address.port,
-        method: "POST",
-        requestPath: "/licolite/operations",
-        body: { operationId: "http.lico", workspaceId: "http-lico" }
-      });
-      assert.equal(lico.body.envelopeKind, "operation-outcome");
-      const licoVerify = await requestJson({
-        port: address.port,
-        method: "POST",
-        requestPath: "/licolite/verify/envelope",
-        body: lico.body
-      });
-      assert.equal(licoVerify.body.ok, true);
-      const licoBundle = await requestJson({
-        port: address.port,
-        method: "POST",
-        requestPath: "/licolite/bundles/export",
-        body: { envelopeId: lico.body.envelopeId }
-      });
-      assert.equal(licoBundle.body.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
-      assert.equal((await requestJson({
-        port: address.port,
-        method: "POST",
-        requestPath: "/licolite/verify/bundle",
-        body: {
-          bundle: licoBundle.body,
-          options: { trustPolicy: "self-carried-manifest" }
-        }
-      })).body.ok, true);
-      assert.ok((await requestJson({
-        port: address.port,
-        method: "POST",
-        requestPath: "/licolite/repair/plan",
-        body: { failures: [{ layer: "licolite", code: "missing_licolite_policy" }] }
-      })).body.tasks.length >= 1);
       assert.equal((await requestJson({ port: address.port, requestPath: "/missing" })).statusCode, 404);
       const error = await requestJson({
         port: address.port,
@@ -3289,24 +3022,6 @@ console.log(JSON.stringify({
       cliDir,
       "--body-file",
       verifyFile
-    ])).stdout).ok, true);
-    const lico = JSON.parse((await execFileAsync(process.execPath, [
-      cliPath,
-      "licolite",
-      "record",
-      "--data-dir",
-      cliDir,
-      "--body",
-      JSON.stringify({ operationId: "cli.lico", workspaceId: "cli-lico" })
-    ])).stdout);
-    assert.equal(JSON.parse((await execFileAsync(process.execPath, [
-      cliPath,
-      "licolite",
-      "verify",
-      "--data-dir",
-      cliDir,
-      "--body",
-      JSON.stringify(lico)
     ])).stdout).ok, true);
     const invalid = await execFileAsync(process.execPath, [cliPath, "unknown"], { reject: false }).catch((error) => error);
     assert.equal(invalid.code, 1);
@@ -3730,53 +3445,6 @@ console.log(JSON.stringify({
     assert.equal(gapResult.failures.some((f) => f.code === "index_record_gap"), true);
   });
 
-  it("LicoLite production verify without trustedManifest returns untrusted result", async () => {
-    const auditDataDir = await tempDataDir("licolite-trust-");
-    const licolite = createLicoLiteAspect({
-      dataDir: auditDataDir,
-      evidencePolicy: "production",
-      signerSecret: "production-secret-123"
-    });
-    const envelope = await licolite.recordWorkspaceOperation({
-      operationId: "licolite.prod.trust",
-      workspaceId: "licolite-trust-ws",
-      policyEvidence: { decision: "allow" },
-      workspaceEffectEvidence: { ref: "host:test" }
-    });
-    const bundle = await licolite.exportProofBundle(envelope);
-
-    // Production verify without trustedManifest must fail closed while still
-    // reporting that the proof structure itself is valid.
-    const result = await licolite.verifyEnvelope(envelope);
-    assert.equal(result.ok, false);
-    assert.equal(result.proofStructurallyValid, true);
-    assert.equal(result.ledgerHeadTrusted, false);
-    assert.equal(result.trustedSignatureValid, false);
-    assert.equal(result.failures.some((f) => f.code === "trusted_manifest_required"), true);
-    assert.equal(result.failures.some((f) => f.code === "untrusted_verification"), true);
-
-    // Production verify with explicit trustPolicy: trusted-manifest-required should fail
-    const strict = await licolite.verifyEnvelope(envelope, { trustPolicy: "trusted-manifest-required" });
-    assert.equal(strict.ok, false);
-
-    // Verify with bundle in production without trusted manifest
-    const bundleResult = await licolite.verifyBundle(bundle);
-    assert.equal(bundleResult.ok, false);
-    assert.equal(bundleResult.envelope.ledgerHeadTrusted, false);
-
-    // Development/opportunistic mode should return structural result without mislabeling trusted
-    const devLicolite = createLicoLiteAspect({ inMemory: true, evidencePolicy: "opportunistic" });
-    const devEnvelope = await devLicolite.recordWorkspaceOperation({
-      operationId: "licolite.dev.trust",
-      workspaceId: "licolite-dev-ws",
-      policyEvidence: { decision: "allow" },
-      workspaceEffectEvidence: { ref: "host:dev" }
-    });
-    const devResult = await devLicolite.verifyEnvelope(devEnvelope);
-    assert.equal(devResult.ok, true);
-    assert.equal(devResult.ledgerHeadTrusted, false);
-  });
-
   it("blocks mutation routes when enableMutations is false and supports authorization hook", async () => {
     const dataDir = await tempDataDir("http-auth-");
     const server = createPactiumHttpServer({ dataDir, enableMutations: false });
@@ -3960,17 +3628,6 @@ console.log(JSON.stringify({
     const buf = Buffer.from("test");
     const result = canonicalDecode(canonicalEncode({ data: buf }));
     assert.equal(result.data.$bytes, buf.toString("base64"));
-  });
-
-  it("uses constant-time comparison for HMAC signature verification", async () => {
-    const signer = createLicoLiteSigner({ signerId: "audit-hmac", secret: "audit-secret-42" });
-    assert.equal(signer.algorithm, "hmac-sha256");
-    const message = "test-message-for-constant-time";
-    const signature = await signer.sign(message);
-    assert.equal(await signer.verify(message, signature), true);
-    assert.equal(await signer.verify(message, "wrong-signature"), false);
-    assert.equal(await signer.verify("wrong-message", signature), false);
-    assert.equal(await signer.verify(message, "short"), false);
   });
 
   it("protects protocol objects from external mutation (memory and disk backends)", async () => {
@@ -4517,6 +4174,56 @@ console.log(JSON.stringify({
     assert.ok(hasIssue || !result.ok, "doctor should detect crash consequence");
   });
 
+  it("recordOperationReceipt cleans its pending marker when the ledger fact write fails", async () => {
+    const dataDir = await tempDataDir("receipt-ledger-failure-");
+    const failingStorage = createFailingStorage(createJsonStoragePort({ dataDir }), {
+      failOnPutBlockPredicate: (_value, options) => options?.kind === "ledger-fact"
+    });
+    const pactium = createPactium({ storage: failingStorage });
+    await assert.rejects(
+      () => pactium.recordOperationReceipt({
+        operationId: "receipt.ledger.failure",
+        workspaceId: "receipt-failure"
+      }),
+      /CRASH-INJECTED/
+    );
+    const pendingKeys = await createJsonStoragePort({ dataDir }).listProtocolObjectKeys("commit");
+    assert.equal(pendingKeys.some((key) => key.startsWith("pending-")), false);
+  });
+
+  it("recordOperationReceipt retains its pending marker when proof material fails after ledger commit", async () => {
+    const dataDir = await tempDataDir("receipt-proof-failure-");
+    const failingStorage = createFailingStorage(createJsonStoragePort({ dataDir }), {
+      failOnPutBlockPredicate: (_value, options) => String(options?.kind || "").startsWith("proof-material:")
+    });
+    const pactium = createPactium({ storage: failingStorage });
+    await assert.rejects(
+      () => pactium.recordOperationReceipt({
+        operationId: "receipt.proof.failure",
+        workspaceId: "receipt-failure"
+      }),
+      /CRASH-INJECTED/
+    );
+    const pendingKeys = await createJsonStoragePort({ dataDir }).listProtocolObjectKeys("commit");
+    assert.equal(pendingKeys.some((key) => key.startsWith("pending-")), true);
+  });
+
+  it("treats successful commit-marker cleanup as best effort", async () => {
+    const dataDir = await tempDataDir("marker-cleanup-failure-");
+    const failingStorage = createFailingStorage(createJsonStoragePort({ dataDir }));
+    failingStorage.deleteProtocolObject = async () => {
+      throw new Error("cleanup unavailable");
+    };
+    const pactium = createPactium({ storage: failingStorage });
+    const envelope = await pactium.recordOperationReceipt({
+      operationId: "receipt.cleanup.failure",
+      workspaceId: "receipt-failure"
+    });
+    assert.equal(envelope.disposition, "recorded");
+    const pendingKeys = await createJsonStoragePort({ dataDir }).listProtocolObjectKeys("commit");
+    assert.equal(pendingKeys.some((key) => key.startsWith("pending-")), true);
+  });
+
   it("crash injection: fail on runtime-state putProtocolObject via predicate", async () => {
     const dataDir = await tempDataDir("crash-putproto-");
     const baseStorage = createJsonStoragePort({ dataDir });
@@ -4975,20 +4682,5 @@ console.log(JSON.stringify({
       "should NOT emit proof_size_warning when verifier threw");
   });
 
-  it("LicoLite verify works through public block resolvers", async () => {
-    // This test verifies that LicoLite verification reads material through
-    // public resolver methods.
-    const pactium = createPactium({ dataDir: await tempDataDir("lico-resolver-") });
-    const signer = createLicoLiteSigner({ secret: "resolver-test" });
-    const licolite = createLicoLiteAspect({ pactium, signer, evidencePolicy: "opportunistic" });
-    const envelope = await licolite.recordWorkspaceOperation({
-      operationId: "lico.resolver",
-      workspaceId: "lico-resolver",
-      policyEvidence: { decision: "allow" },
-      workspaceEffectEvidence: { effect: "read" }
-    });
-    const verified = await licolite.verifyEnvelope(envelope);
-    assert.equal(verified.ok, true);
-  });
 
 });

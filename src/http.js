@@ -3,7 +3,6 @@ import { URL } from "node:url";
 import { PACTIUM_PROTOCOL } from "./protocol/constants.js";
 import { createPactium } from "./core/pactium-core.js";
 import { createMaintenanceTaskEngine } from "./maintenance/task-engine.js";
-import { createLicoLiteAspect } from "./aspects/licolite/index.js";
 import { verifyProofBundle } from "./proof/bundle.js";
 import { redactLocalOutput } from "./shared/output-redaction.js";
 
@@ -26,11 +25,8 @@ const READ_ROUTES = new Set([
   "/append-conditions",
   "/verify/envelope",
   "/verify/bundle",
-  "/licolite/verify/envelope",
-  "/licolite/verify/bundle",
   "/trusted-heads/advance",
   "/repair/plan",
-  "/licolite/repair/plan",
   "/maintenance/tasks/plan"
 ]);
 // Mutation-capability routes: lifecycle writes plus bundle export. Bundle
@@ -41,9 +37,7 @@ const MUTATION_ROUTES = new Set([
   "/intents",
   "/outcomes",
   "/operations",
-  "/licolite/operations",
-  "/bundles/export",
-  "/licolite/bundles/export"
+  "/bundles/export"
 ]);
 // Privileged routes: storage-level or maintenance execution. Separately gated.
 const PRIVILEGED_ROUTES = new Set([
@@ -139,7 +133,7 @@ function bundleExportRequest(input) {
   return { envelopeOrId: input, options: {} };
 }
 
-async function routeRequest({ pactium, licolite, request, response, maxBodyBytes, authorize = null, enableMutations = false }) {
+async function routeRequest({ pactium, request, response, maxBodyBytes, authorize = null, enableMutations = false }) {
   const baseUrl = `http://${request.headers.host || "127.0.0.1"}`;
   const url = new URL(request.url || "/", baseUrl);
   const pathname = url.pathname;
@@ -219,9 +213,6 @@ async function routeRequest({ pactium, licolite, request, response, maxBodyBytes
     if (request.method === "POST" && url.pathname === "/operations") {
       return sendJson(response, 200, await pactium.recordOperation(await readJson(request, { maxBodyBytes })));
     }
-    if (request.method === "POST" && url.pathname === "/licolite/operations") {
-      return sendJson(response, 200, await licolite.recordWorkspaceOperation(await readJson(request, { maxBodyBytes })));
-    }
     if (request.method === "POST" && url.pathname === "/verify/envelope") {
       const input = await readJson(request, { maxBodyBytes });
       const { envelope, options } = envelopeAndOptions(input);
@@ -232,23 +223,9 @@ async function routeRequest({ pactium, licolite, request, response, maxBodyBytes
       const { bundle, options } = bundleAndOptions(input);
       return sendJson(response, 200, await verifyProofBundle(bundle, options));
     }
-    if (request.method === "POST" && url.pathname === "/licolite/verify/envelope") {
-      const input = await readJson(request, { maxBodyBytes });
-      const { envelope, options } = envelopeAndOptions(input);
-      return sendJson(response, 200, await licolite.verifyEnvelope(envelope, options));
-    }
-    if (request.method === "POST" && url.pathname === "/licolite/verify/bundle") {
-      const input = await readJson(request, { maxBodyBytes });
-      const { bundle, options } = bundleAndOptions(input);
-      return sendJson(response, 200, await licolite.verifyBundle(bundle, options));
-    }
     if (request.method === "POST" && url.pathname === "/bundles/export") {
       const { envelopeOrId, options } = bundleExportRequest(await readJson(request, { maxBodyBytes }));
       return sendJson(response, 200, await pactium.exportProofBundle(envelopeOrId, options));
-    }
-    if (request.method === "POST" && url.pathname === "/licolite/bundles/export") {
-      const { envelopeOrId, options } = bundleExportRequest(await readJson(request, { maxBodyBytes }));
-      return sendJson(response, 200, await licolite.exportProofBundle(envelopeOrId, options));
     }
     if (request.method === "POST" && url.pathname === "/workspaces/projection") {
       const input = await readJson(request, { maxBodyBytes });
@@ -282,10 +259,6 @@ async function routeRequest({ pactium, licolite, request, response, maxBodyBytes
     }
     if (request.method === "POST" && url.pathname === "/repair/plan") {
       return sendJson(response, 200, pactium.planRecovery(await readJson(request, { maxBodyBytes })));
-    }
-    if (request.method === "POST" && url.pathname === "/licolite/repair/plan") {
-      const input = await readJson(request, { maxBodyBytes });
-      return sendJson(response, 200, licolite.planRepair(input.failures || input));
     }
     if (request.method === "POST" && url.pathname === "/maintenance/tasks/plan") {
       const input = await readJson(request, { maxBodyBytes });
@@ -323,17 +296,14 @@ export function createPactiumHttpServer({
   dataDir = "",
   userDataPath = "",
   pactium = null,
-  licolite = null,
   maxBodyBytes = PACTIUM_HTTP_MAX_BODY_BYTES,
   authorize = null,
   enableMutations = false
 } = {}) {
   const core = pactium || createPactium({ dataDir, userDataPath });
-  const aspect = licolite || createLicoLiteAspect({ pactium: core, evidencePolicy: "opportunistic" });
   return http.createServer((request, response) => {
     routeRequest({
       pactium: core,
-      licolite: aspect,
       request,
       response,
       maxBodyBytes,

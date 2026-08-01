@@ -3,7 +3,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const root = process.cwd();
-const contextDoc = "CONTEXT.md";
 
 const skippedDirs = new Set([
   ".git",
@@ -161,10 +160,7 @@ async function verifyNoVersionOrganizedStructure(files, findings) {
     /\bpactium\.proof-bundle\.v\d+\b/i,
     /\bversion\s*:\s*["']v\d+["']/i
   ];
-  const prohibitedEntrypoints = [
-    /^src\/v\d+\.js$/i,
-    /^src\/licolite\.(?:js|d\.ts)$/i
-  ];
+  const prohibitedEntrypoints = [/^src\/v\d+\.js$/i];
   for (const file of files) {
     const rel = relative(file);
     const base = path.basename(rel);
@@ -242,11 +238,6 @@ async function verifyToolingSurface(files, findings) {
       import: "./src/http.js",
       default: "./src/http.js"
     },
-    "./licolite": {
-      types: "./src/aspects/licolite/index.d.ts",
-      import: "./src/aspects/licolite/index.js",
-      default: "./src/aspects/licolite/index.js"
-    },
     "./package.json": "./package.json"
   };
   const expectedFiles = [
@@ -254,6 +245,8 @@ async function verifyToolingSurface(files, findings) {
     "bin/",
     "examples/",
     "CHANGELOG.md",
+    "PRODUCT.md",
+    "CONTEXT.md",
     "docs/logo.svg",
     "docs/README.md",
     "docs/API.md",
@@ -261,7 +254,6 @@ async function verifyToolingSurface(files, findings) {
     "docs/MIGRATION.md",
     "docs/architecture/",
     "docs/protocols/",
-    "docs/LICOLITE-ASPECT.md",
     "docs/TERM.md",
     "README.md",
     "README.zh-CN.md",
@@ -294,6 +286,16 @@ async function verifyToolingSurface(files, findings) {
       "missing_agent_entry",
       "Pactium requires root AGENT.md as the single in-repository entry for automated coding agents."
     );
+  }
+  for (const requiredAuthority of ["PRODUCT.md", "CONTEXT.md"]) {
+    if (!rels.includes(requiredAuthority)) {
+      addFinding(
+        findings,
+        requiredAuthority,
+        "missing_product_authority",
+        `${requiredAuthority} is required as a repository boundary authority.`
+      );
+    }
   }
   const expectedToolFiles = [
     "bin/pactium.mjs",
@@ -376,26 +378,6 @@ async function verifyToolingSurface(files, findings) {
   }
 }
 
-async function verifyNoPublishedContextLinks(files, findings) {
-  const publishedDocs = files.filter((file) => {
-    const rel = relative(file);
-    return (
-      rel === "README.md" ||
-      rel === "README.zh-CN.md" ||
-      rel === "src/README.md" ||
-      rel.startsWith("docs/")
-    ) && [".md", ".mdx"].includes(path.extname(rel).toLowerCase());
-  });
-  const linkPattern = /\[[^\]]+\]\([^)]*CONTEXT\.md[^)]*\)/i;
-  for (const file of publishedDocs) {
-    const rel = relative(file);
-    const text = await fs.readFile(file, "utf8");
-    if (linkPattern.test(text) || text.includes(contextDoc)) {
-      addFinding(findings, rel, "context_doc_reference", `${contextDoc} is development scratch space and must not be a published documentation authority.`);
-    }
-  }
-}
-
 async function verifyDesignImplementationAnchors(findings) {
   const sourceText = await Promise.all([
     "src/index.js",
@@ -414,10 +396,6 @@ async function verifyDesignImplementationAnchors(findings) {
     "src/repair/planner.js",
     "src/maintenance/task-engine.js",
     "src/quality/profile-runner.js",
-    "src/aspects/licolite/aspect.js",
-    "src/aspects/licolite/index.js",
-    "src/aspects/licolite/signing.js",
-    "src/aspects/licolite/evidence.js",
     "src/http.js",
     "bin/pactium.mjs",
     "package.json"
@@ -427,7 +405,7 @@ async function verifyDesignImplementationAnchors(findings) {
     {
       design: "Canonical Value",
       code: ["canonicalEncode", "canonicalDecode", "protocolHash"],
-      adr: "docs/adr/0016-use-ipld-style-canonical-values.md"
+      adr: "docs/adr/0016-use-pactium-canonical-json-values.md"
     },
     {
       design: "Storage Port",
@@ -452,17 +430,12 @@ async function verifyDesignImplementationAnchors(findings) {
     {
       design: "Workspace Projection",
       code: ["getWorkspaceProjection", "proveWorkspaceMembership"],
-      adr: "docs/adr/0020-enable-workspace-projections-by-default-for-licolite.md"
+      adr: "docs/adr/0018-use-global-ledger-with-workspace-projections.md"
     },
     {
       design: "Proof Envelope and Proof Bundle",
       code: ["verifyProofEnvelope", "verifyProofBundle", "exportProofBundle"],
       adr: "docs/adr/0025-return-proof-refs-and-export-proof-bundles.md"
-    },
-    {
-      design: "LicoLite Aspect",
-      code: ["createLicoLiteAspect", "createLicoLiteSigner", "src/aspects/licolite/index.js"],
-      adr: "docs/adr/0009-use-host-declaration-profiles.md"
     },
     {
       design: "Release Readiness Gate",
@@ -479,6 +452,66 @@ async function verifyDesignImplementationAnchors(findings) {
     }
     if (!(await pathExists(path.join(root, anchor.adr)))) {
       addFinding(findings, anchor.adr, "documented_design_without_adr", `${anchor.design} is missing ADR coverage.`);
+    }
+  }
+}
+
+async function verifyRepositoryBoundaryDocs(findings) {
+  const contracts = {
+    "PRODUCT.md": [
+      /host-neutral proof-first protocol substrate/i,
+      /Meshrix is an independent downstream framework/i,
+      /does not retain those business values by default/i
+    ],
+    "CONTEXT.md": [
+      /\*\*Input Digest\*\*/,
+      /\*\*Result Digest\*\*/,
+      /\*\*Explicit Proof Copy\*\*/,
+      /not tenant, authorization, or storage isolation/i
+    ],
+    "README.md": [
+      /Meshrix is an independent downstream framework/i,
+      /does not retain those business values by default/i,
+      /does not provide tenant or authorization isolation/i
+    ],
+    "README.zh-CN.md": [
+      /Meshrix 是独立的下游框架/,
+      /默认不保存这些业务值/,
+      /不提供租户或授权隔离/
+    ],
+    "SECURITY.md": [
+      /inputs and results are retained as hashes by default/i,
+      /State Values and Proof Extension values are explicit host-authorized persistence surfaces/i
+    ],
+    "docs/API.md": [
+      /package surface is host-neutral/i,
+      /their original values are not copied into facts or Proof Bundles/i
+    ],
+    "docs/architecture/ARCHITECTURE.md": [
+      /host-neutral proof-first protocol substrate/i,
+      /Workspace Projection is logical membership and ordering, not an access-control boundary/i
+    ],
+    "docs/protocols/PROTOCOLS.md": [
+      /protocol is host-neutral/i,
+      /Pactium never creates those content copies implicitly/i
+    ],
+    "docs/protocols/PROFILE.md": [
+      /Intent and Outcome facts retain input\/result digests, not original values/i,
+      /State mutation values and Proof Extension values are persisted only when supplied by the caller/i
+    ]
+  };
+  for (const [file, patterns] of Object.entries(contracts)) {
+    const text = await readIfExists(file);
+    for (const pattern of patterns) {
+      if (!pattern.test(text)) {
+        addFinding(
+          findings,
+          file,
+          "repository_boundary_drift",
+          "Maintained product projections must preserve the canonical host, Meshrix, content-retention, and workspace-isolation boundaries."
+        );
+        break;
+      }
     }
   }
 }
@@ -562,10 +595,6 @@ async function verifyDocumentImplementationDrift(findings) {
     "src/repair/planner.js",
     "src/maintenance/task-engine.js",
     "src/quality/profile-runner.js",
-    "src/aspects/licolite/aspect.js",
-    "src/aspects/licolite/index.js",
-    "src/aspects/licolite/signing.js",
-    "src/aspects/licolite/evidence.js",
     "package.json"
   ].map(readText));
   const code = sourceText.join("\n");
@@ -597,7 +626,6 @@ async function verifyDocumentImplementationDrift(findings) {
     "docs/protocols/PROFILE.md": profile,
     "docs/protocols/PROTOCOLS.md": await readIfExists("docs/protocols/PROTOCOLS.md"),
     "docs/TERM.md": await readIfExists("docs/TERM.md"),
-    "docs/adr/0035-record-derived-index-repairs-as-ledger-facts.md": await readIfExists("docs/adr/0035-record-derived-index-repairs-as-ledger-facts.md"),
     "docs/adr/0038-project-all-workspace-scoped-ledger-facts.md": await readIfExists("docs/adr/0038-project-all-workspace-scoped-ledger-facts.md")
   };
   const repairFactImplemented = /factType:\s*["']repair|recordRepair|appendRepair|repairId\s*:/i.test(code);
@@ -644,7 +672,7 @@ async function main() {
   verifyNoProcessStateDocs(files, findings);
   await verifyNoVersionOrganizedStructure(files, findings);
   await verifyToolingSurface(files, findings);
-  await verifyNoPublishedContextLinks(files, findings);
+  await verifyRepositoryBoundaryDocs(findings);
   await verifyDesignImplementationAnchors(findings);
   await verifyNodeLtsMatrix(findings);
   await verifyPublishWorkflow(findings);

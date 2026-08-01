@@ -39,7 +39,6 @@ const checks = [
   { pattern: new RegExp(`\\b${oldPactClientCommand}\\b`, "g"), reason: "old client command" },
   { pattern: new RegExp(`\\b${oldPactServerIdentifier}\\b`, "g"), reason: "old server identifier" },
   { pattern: /Unka-Malloc\/Pact(?!ium)/g, reason: "old repository identity" },
-  { pattern: /\bLicolite\b/g, reason: "incorrect LicoLite spelling" },
   { pattern: /\bO-Sys-It\b/g, reason: "old product positioning" }
 ];
 

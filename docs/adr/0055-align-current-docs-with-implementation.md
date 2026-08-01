@@ -4,10 +4,10 @@ Maintained Pactium documentation must describe current implemented behavior rath
 
 The following claims are not current behavior and must not be documented as implemented:
 
-- local filesystem/SQLite storage backend;
+- distributed storage or consensus backend;
 - separate per-workspace FIFO Workspace Lane Queue;
 - Repair Fact execution and Ledger append from repair tasks;
 - pressure-profile baseline regression enforcement in CI;
 - release-blocking coverage thresholds beyond the thresholds enforced by `npm run test:coverage`.
 
-These items are not rejected permanently. They require explicit implementation, focused tests, and ADR updates before maintained docs may promote them to current behavior.
+These are not current package surfaces and maintained documentation must not imply otherwise.

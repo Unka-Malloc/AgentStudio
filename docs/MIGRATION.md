@@ -33,6 +33,7 @@ Pactium 0.5.0 uses the `pactium.v0.3` protocol, normalized runtime-state layout,
 - **Fresh current directories only** -- Pactium does not read, dual-write, or migrate non-current formats
 - **Latest schema only** -- there is no support for loading older schema versions
 - **No in-place upgrade** -- export required Proof Bundles before replacing an older data directory
+- **No retired-product discovery** -- Pactium does not search for, import, rename, or translate state owned by removed host integrations
 
 ### Upgrading between minor versions
 
@@ -48,7 +49,7 @@ Pactium intentionally does not include automatic migration. Data directories are
 
 | Pactium version | Node.js requirement |
 | --- | --- |
-| 0.5.x | `^22.0.0 \|\| ^24.0.0` |
+| 0.6.x | `^22.0.0 \|\| ^24.0.0` |
 
 Pactium is pure ESM. It cannot be loaded via `require()`. If your project uses CommonJS, use dynamic `import()`:
 
@@ -69,14 +70,14 @@ Pactium ships as a pure ES module. There is no CommonJS build and no dual-packag
 
 **If you see `ERR_MODULE_NOT_FOUND`:**
 
-- Ensure you're importing from the correct path (`pactium`, `pactium/http`, or `pactium/licolite`)
+- Ensure you're importing from the correct path (`pactium` or `pactium/http`)
 - Deep imports into `src/` are not part of the public API and may change without notice
 
 ## API Stability Tiers
 
 | Tier | Surface | Guarantee |
 | --- | --- | --- |
-| **Public** | Exports from `pactium`, `pactium/http`, and `pactium/licolite` | Semver-governed; no removals in patch |
+| **Public** | Exports from `pactium` and `pactium/http` | Semver-governed; no removals in patch |
 | **Protocol Constants** | `PACTIUM_PROTOCOL`, `PACTIUM_PROTOCOL_PROFILE`, `HASH_DOMAINS` | Locked per protocol version |
 | **Type Declarations** | `.d.ts` exports | Stable within minor version |
 | **CLI** | `pactium` commands | Stable within minor; new subcommands in minor |
@@ -97,14 +98,6 @@ Proof Bundles are the recommended way to preserve verification material across P
 Breaking changes will be:
 
 1. Documented in the [CHANGELOG](../CHANGELOG.md) under a `### Breaking Changes` section
-2. Announced at least one minor version in advance when possible (deprecation notices)
-3. Accompanied by migration instructions in this document
+2. Accompanied by current-version migration instructions in this document
 
-## From Pre-Release to Stable (Future)
-
-When Pactium reaches 1.0:
-
-- The protocol format will be considered stable
-- Data directory format will receive backward-compatible migration support
-- The public API will follow strict semver without the `0.x` flexibility
-- This section will be updated with specific 0.x-to-1.0 migration steps
+Pactium complete migrations remove superseded entry points, aliases, readers, fixtures, and retired state discovery in the same release unless coexistence is explicitly approved as a current product requirement.

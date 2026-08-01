@@ -8,9 +8,9 @@ Status: Accepted
 
 Pactium had a separate optimization dossier under `docs/optimization` that compared the implementation with Trillian, Rekor, transparency-dev/merkle, Dolt, go-car, Hypercore, Axon Framework, and immudb. That material mixed architecture decisions, implementation status, reference evidence, and completion notes.
 
-Maintained Pactium documentation should not keep report-style design records beside ADRs. Reference-informed architecture belongs in ADRs, while current user-facing behavior belongs in API, protocol, architecture, and LicoLite docs.
+Maintained Pactium documentation should not keep report-style design records beside ADRs. Reference-informed architecture belongs in ADRs, while current user-facing behavior belongs in API, protocol, and architecture documents.
 
-Pactium remains a proof-first protocol substrate for LicoLite. It is not a database, public transparency service, replication runtime, event-sourcing framework, or side-effect executor.
+Pactium remains a host-neutral proof-first protocol substrate. It is not a database, public transparency service, replication runtime, event-sourcing framework, policy engine, or side-effect executor.
 
 ## Decision
 
@@ -23,7 +23,7 @@ Adopt the reference-informed algorithm architecture as accepted Pactium design:
 5. Proof Bundles use the indexed record-stream format with offset metadata, required block closure, payload integrity checks, lazy required-block reads, and optional full archive verification.
 6. Ledger Head signatures use verifier manifests, Ed25519 signer material, unique-signer quorum checks, signer validity windows, and revocation checks.
 7. The operation lifecycle includes append conditions, distinct intent and outcome idempotency indexes, one terminal outcome per intent, tracking cursors, trusted-head advancement, and deterministic recovery planning.
-8. LicoLite verification builds on core proof verification and continues to own host policy, authorization, durable evidence retention, side effects, and operator workflows.
+8. Host-defined critical extensions build on core proof verification while the host owns policy, authorization, durable evidence retention, side effects, and operator workflows.
 
 ## Reference Boundaries
 
@@ -46,7 +46,7 @@ This architecture is covered by the release verification surface:
 - workspace state-root mutation and proof material verification tests;
 - embedded proof tampering, semantic binding, missing verifier, and verifier exception tests;
 - indexed proof-bundle layout, random access, required-block closure, corruption, and full-archive tests;
-- append-condition, cursor paging, trusted-head advancement, signed-head, LicoLite evidence closure, idempotency, causality, and recovery planning tests.
+- append-condition, cursor paging, trusted-head advancement, signed-head, extension closure, idempotency, causality, and recovery planning tests.
 
 The maintained verification command is `npm run verify:release`.
 
@@ -54,4 +54,4 @@ The maintained verification command is `npm run verify:release`.
 
 The standalone optimization dossier is removed. Future algorithm comparisons, reference audits, implementation status notes, or completion reports must update the relevant ADRs plus current protocol/API docs and tests instead of adding another report directory.
 
-The accepted boundaries remain explicit: no witness network, no CAR/IPLD compatibility claim, no repair executor, no LicoLite side-effect execution, and no full event framework without new implementation, tests, and ADR updates.
+The accepted boundaries remain explicit: no witness network, no CAR/IPLD compatibility claim, no repair executor, no host side-effect execution, and no full event framework.

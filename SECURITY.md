@@ -4,7 +4,7 @@
 
 | Version | Supported |
 | --- | --- |
-| 0.5.x | Yes |
+| 0.6.x | Yes |
 | < 0.5.0 | No |
 
 Only the latest released version receives security updates.
@@ -29,7 +29,8 @@ Host systems are responsible for:
 - Tenant isolation
 - Secret management and key rotation
 - Side-effect execution security
-- Durable Host Evidence storage security
+- Business-content minimization, disclosure, retention, and redaction
+- State Value and Proof Extension content supplied by the host
 
 Pactium should be embedded behind the host system's security boundary.
 
@@ -83,7 +84,9 @@ Pactium's proof model is designed so that:
 - Ledger history cannot be silently rewritten (consistency proofs detect divergence)
 - Proof material is content-addressed (tampering is detectable)
 - Critical extensions must be understood by verifiers (unknown extensions fail verification)
-- Repair operations are explicit ledger facts, not silent mutations
+- Operation inputs and results are retained as hashes by default, not copied as plaintext
+- State Values and Proof Extension values are explicit host-authorized persistence surfaces
+- Repair Planner outputs are descriptions only; the current package neither executes repairs nor appends Repair Facts
 
 ## Acknowledgments
 
