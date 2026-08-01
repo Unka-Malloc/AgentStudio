@@ -31,15 +31,15 @@ End-to-end integration tests must cover:
 
 - Fresh local data directory initialization.
 - Root proof-first API imports.
-- `pactium/licolite` imports.
+- `pactium/http` imports.
 - Intent append, Open Intent lookup, Outcome append, and Outcome lookup.
 - Idempotency replay for Intent and Outcome.
-- Workspace Projection default behavior for LicoLite, including order and membership proofs.
+- Workspace Projection order and membership proofs, without treating projections as tenant isolation.
 - State Commit bound to Outcome.
 - Outcome Checkpoint material for operation outcomes.
 - Proof Envelope verification from local Proof Material Refs.
 - Proof Bundle export and verification without local storage.
-- Signed LicoLite envelope verification.
+- Input and result values absent from facts and default Proof Bundles, with explicit Proof Extension copies included when requested.
 - Structured Verification Failures for missing proof material, bad signature, unsupported critical extension, bad workspace projection proof, and Ledger consistency failure.
 - Repair Planner output for repairable derived-index failures.
 
@@ -49,14 +49,15 @@ Integration tests must use the public API whenever possible. Tests that reach pr
 
 Regression tests must include checked-in snapshots or fixtures for:
 
-- Package root exports, `pactium/http` exports, `pactium/licolite` exports, and the package metadata export.
+- Package root exports, `pactium/http` exports, and the package metadata export.
 - Public TypeScript declaration digests.
 - Protocol profile constants.
 - Proof vector outputs.
 - Structured Verification Failure codes.
-- LicoLite default Aspect behavior.
 
 Any snapshot change must be reviewed as an API, protocol, or host-profile change.
+
+The release-readiness gate also checks positive repository-boundary anchors across Product, Context, both READMEs, Security, API, Architecture, Protocols, and Profile. These projections must agree that Pactium is host-neutral, Meshrix is an independent downstream framework, input/result values are digest-only by default, explicit State Values and Proof Extensions retain caller content, and Workspace Projection is not tenant isolation.
 
 ## Tooling And Skill Surface Gates
 
@@ -91,7 +92,6 @@ Full release-count profiles:
 | Profile | Required scenario |
 | --- | --- |
 | `api:operation-lifecycle` | 10,000 Intent/Outcome lifecycles across at least 10 workspaces through public lifecycle APIs |
-| `api:licolite-record` | 5,000 LicoLite workspace operations through `pactium/licolite` with signing, critical extensions, and Workspace Projection enabled |
 | `api:index-engine` | 100,000 indexed keys, then 10,000 membership proofs, 10,000 non-membership proofs, and a root-to-root diff |
 | `api:proof-bundle` | Export and verify at least 1,000 Proof Bundles without local storage |
 | `api:recovery` | Create at least 1,000 Open Intents, recover them with Outcomes, and verify projection/index consistency |
@@ -123,7 +123,7 @@ That script must run, at minimum:
 - stable-only publish source checks for both manual and release-triggered npm publishing;
 - package-content checks that reject process docs, agent maintenance docs, release tooling, tests, build outputs, binary caches, compressed archives, links to unpublished process docs, and relative links to missing package files;
 - root `AGENT.md` single-entry checks for automated coding agents;
-- release-readiness scans for process-state docs, version-named docs, development scratch authority links, design/implementation anchors, and Node.js LTS gate coverage;
+- release-readiness scans for process-state docs, version-named docs, product authorities, design/implementation anchors, and Node.js LTS gate coverage;
 - package dry run.
 - publish dry run.
 

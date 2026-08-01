@@ -42,10 +42,6 @@ import {
   verifyProofEnvelope,
   verifyTrackingCursor
 } from "../../src/index.js";
-import {
-  createLicoLiteAspect,
-  createLicoLiteSigner
-} from "../../src/aspects/licolite/index.js";
 import { getPactiumInternals } from "../../src/core/pactium-core.js";
 import { decodeVarint, indexedBlocksFromBundle } from "../../src/proof/bundle-format.js";
 
@@ -1285,125 +1281,6 @@ describe("Pactium reference-project algorithm coverage", () => {
       () => reloaded.pageEntries({ start: 0, limit: 2 }),
       /Ledger leaf missing for 1/
     );
-  });
-
-  it("verifies LicoLite production evidence and offline bundles without local storage", async () => {
-    const keys = crypto.generateKeyPairSync("ed25519");
-    const signer = createLicoLiteSigner({
-      signerId: "shared-licolite-signer",
-      algorithm: "ed25519",
-      privateKey: keys.privateKey.export({ type: "pkcs8", format: "pem" }),
-      publicKey: keys.publicKey.export({ type: "spki", format: "pem" })
-    });
-    await assert.rejects(() => createLicoLiteAspect({
-      inMemory: true,
-      evidencePolicy: "production",
-      signer
-    }).recordWorkspaceOperation({
-      operationId: "reference.licolite.missing-evidence",
-      workspaceId: "licolite"
-    }), /policy evidence/);
-
-    const online = createLicoLiteAspect({
-      inMemory: true,
-      evidencePolicy: "production",
-      signer
-    });
-    const envelope = await online.recordWorkspaceOperation({
-      operationId: "reference.licolite.offline",
-      workspaceId: "licolite",
-      policyEvidence: { decision: "allow", rule: "unit" },
-      workspaceEffectEvidence: { durableRef: "host:effect:1" },
-      stateMutations: [{ key: "licolite/state", value: { ok: true } }]
-    });
-    assert.equal((await online.verifyEnvelope(envelope, { trustedManifest: envelope.ledgerHead.verifierManifest })).ok, true);
-	    const bundle = await online.exportProofBundle(envelope);
-	    assert.equal(bundle.bundleType, PACTIUM_PROOF_BUNDLE_TYPE);
-	    const evidenceRefs = [];
-	    for (const extension of envelope.extensions.filter((candidate) =>
-	      candidate.name === "licolite.policy" || candidate.name === "licolite.workspaceEffect"
-	    )) {
-	      const block = await getPactiumInternals(online.core).storage.getBlock(extension.valueRef);
-	      const value = canonicalDecode(block.bytes);
-	      evidenceRefs.push(value.evidenceRef);
-	    }
-	    assert.equal(evidenceRefs.length, 2);
-	    assert.equal(evidenceRefs.every((cid) => bundle.index.some((item) => item.cid === cid)), true);
-	    assert.equal(evidenceRefs.every((cid) => bundle.manifest.requiredBlocks.includes(cid)), true);
-	    assert.equal((await verifyProofBundle(bundle, {
-	      supportedCriticalExtensions: online.supportedCriticalExtensions,
-	      trustedManifest: envelope.ledgerHead.verifierManifest
-	    })).ok, true);
-
-    const offline = createLicoLiteAspect({
-      inMemory: true,
-      evidencePolicy: "production",
-      signer: createLicoLiteSigner({
-        signerId: "shared-licolite-signer",
-        algorithm: "ed25519",
-        publicKey: keys.publicKey.export({ type: "spki", format: "pem" })
-      })
-    });
-	    const offlineResult = await offline.verifyBundle(bundle, {
-	      trustedManifest: envelope.ledgerHead.verifierManifest
-	    });
-	    assert.equal(offlineResult.ok, true, JSON.stringify(offlineResult.failures, null, 2));
-	    const missingEvidenceBundle = structuredClone(bundle);
-	    missingEvidenceBundle.index = missingEvidenceBundle.index.filter((item) => !evidenceRefs.includes(item.cid));
-	    missingEvidenceBundle.bundleHash = indexedBundleHash(missingEvidenceBundle);
-		    expectFailureCode(await offline.verifyBundle(missingEvidenceBundle, {
-		      trustedManifest: envelope.ledgerHead.verifierManifest
-		    }), "missing_bundle_block", "missing evidence block");
-
-	    const wrongKeys = crypto.generateKeyPairSync("ed25519");
-	    const wrongOffline = createLicoLiteAspect({
-      inMemory: true,
-      evidencePolicy: "production",
-      signer: createLicoLiteSigner({
-        signerId: "shared-licolite-signer",
-        algorithm: "ed25519",
-        publicKey: wrongKeys.publicKey.export({ type: "spki", format: "pem" })
-      })
-	    });
-		    expectFailureCode(await wrongOffline.verifyBundle(bundle, {
-		      trustedManifest: envelope.ledgerHead.verifierManifest
-		    }), "bad_signature", "wrong offline public key");
-	    const wrongSignerId = createLicoLiteAspect({
-	      inMemory: true,
-	      evidencePolicy: "production",
-	      signer: createLicoLiteSigner({
-	        signerId: "rewritten-signer",
-	        algorithm: "ed25519",
-	        publicKey: keys.publicKey.export({ type: "spki", format: "pem" })
-	      })
-	    });
-	    expectFailureCode(await wrongSignerId.verifyBundle(bundle, {
-	      trustedManifest: envelope.ledgerHead.verifierManifest
-	    }), "bad_signature_signer", "rewritten signature signer");
-	  });
-
-  it("derives an Ed25519 LicoLite verifier from a private key and rejects public-key-only signing", async () => {
-    const keys = crypto.generateKeyPairSync("ed25519");
-    const signer = createLicoLiteSigner({
-      signerId: "derived-ed25519",
-      algorithm: "ed25519",
-      privateKey: keys.privateKey.export({ type: "pkcs8", format: "pem" })
-    });
-    assert.ok(String(signer.publicKey).includes("BEGIN PUBLIC KEY"));
-
-    const message = "derive-ed25519-public-key";
-    const signature = await signer.sign(message);
-    assert.equal(await signer.verify(message, signature), true);
-
-    const verifier = createLicoLiteSigner({
-      signerId: "derived-ed25519",
-      algorithm: "ed25519",
-      publicKey: signer.publicKey
-    });
-    assert.equal(await verifier.verify(message, signature), true);
-    assert.equal(await verifier.verify(message, "hmac-sha256:wrong-prefix"), false);
-    assert.equal(await createLicoLiteSigner({ algorithm: "ed25519" }).verify(message, signature), false);
-    await assert.rejects(() => verifier.sign(message), /privateKey/);
   });
 
   it("reports bad extension hashes from bundle material and keeps durable compaction non-destructive", async () => {

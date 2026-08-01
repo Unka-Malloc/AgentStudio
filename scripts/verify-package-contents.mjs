@@ -8,13 +8,14 @@ const root = process.cwd();
 const requiredFiles = [
   "LICENSE",
   "CHANGELOG.md",
+  "PRODUCT.md",
+  "CONTEXT.md",
   "README.md",
   "README.zh-CN.md",
   "SECURITY.md",
   "bin/pactium.mjs",
   "docs/API.md",
   "docs/FAQ.md",
-  "docs/LICOLITE-ASPECT.md",
   "docs/MIGRATION.md",
   "docs/README.md",
   "docs/TERM.md",
@@ -26,13 +27,10 @@ const requiredFiles = [
   "docs/protocols/TRUST-ANCHORS.md",
   "examples/README.md",
   "examples/export-proof-bundle.mjs",
-  "examples/licolite-signed-operation.mjs",
   "examples/record-operation.mjs",
   "examples/verify-envelope.mjs",
   "examples/workspace-projection.mjs",
   "package.json",
-  "src/aspects/licolite/index.d.ts",
-  "src/aspects/licolite/index.js",
   "src/http.d.ts",
   "src/index.d.ts",
   "src/index.js"
@@ -40,6 +38,8 @@ const requiredFiles = [
 
 const approvedFiles = new Set([
   "CHANGELOG.md",
+  "PRODUCT.md",
+  "CONTEXT.md",
   "LICENSE",
   "README.md",
   "README.zh-CN.md",
@@ -47,7 +47,6 @@ const approvedFiles = new Set([
   "bin/pactium.mjs",
   "docs/API.md",
   "docs/FAQ.md",
-  "docs/LICOLITE-ASPECT.md",
   "docs/MIGRATION.md",
   "docs/README.md",
   "docs/TERM.md",
@@ -59,18 +58,11 @@ const approvedFiles = new Set([
   "docs/protocols/TRUST-ANCHORS.md",
   "examples/README.md",
   "examples/export-proof-bundle.mjs",
-  "examples/licolite-signed-operation.mjs",
   "examples/record-operation.mjs",
   "examples/verify-envelope.mjs",
   "examples/workspace-projection.mjs",
   "package.json",
   "src/README.md",
-  "src/aspects/licolite/aspect.js",
-  "src/aspects/licolite/constants.js",
-  "src/aspects/licolite/evidence.js",
-  "src/aspects/licolite/index.d.ts",
-  "src/aspects/licolite/index.js",
-  "src/aspects/licolite/signing.js",
   "src/canonical/value.js",
   "src/core/append-condition.js",
   "src/core/pactium-core.js",
@@ -108,7 +100,6 @@ const approvedFiles = new Set([
 
 const deniedExactFiles = new Set([
   "AGENT.md",
-  "CONTEXT.md",
   "docs/Manifest.md",
   "docs/QUALITY-GATES.md",
   "docs/RELEASE.md",
@@ -223,15 +214,16 @@ function runNpmPackDryRun() {
   }
   try {
     const parsed = JSON.parse(result.stdout);
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
-      throw new Error("Expected npm 12 pack JSON to be a package-keyed object.");
-    }
-    const packages = Object.values(parsed);
+    const packages = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === "object"
+        ? Object.values(parsed)
+        : [];
     if (packages.length !== 1 || !packages[0] || typeof packages[0] !== "object") {
-      throw new Error("Expected npm 12 pack JSON to contain exactly one package.");
+      throw new Error("Expected npm pack JSON to contain exactly one package.");
     }
     if (!Array.isArray(packages[0].files)) {
-      throw new Error("Expected npm 12 pack JSON package metadata to contain a files array.");
+      throw new Error("Expected npm pack JSON package metadata to contain a files array.");
     }
     return packages[0];
   } catch (error) {

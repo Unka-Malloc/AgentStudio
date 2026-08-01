@@ -116,18 +116,6 @@ export function compactProofMaterialTables(material) {
   return compacted;
 }
 
-// Both payloads flow straight into protocol hashing, which canonicalizes
-// during serialization, so no eager deep normalization is needed here.
-function extensionSigningPayload(envelope) {
-  return {
-    ...envelope,
-    envelopeId: undefined,
-    replayed: false,
-    disposition: undefined,
-    extensions: asArray(envelope.extensions).filter((extension) => extension.name !== "licolite.signature")
-  };
-}
-
 function envelopeIdentityPayload(envelope) {
   return {
     ...envelope,
@@ -135,10 +123,6 @@ function envelopeIdentityPayload(envelope) {
     disposition: undefined,
     envelopeId: undefined
   };
-}
-
-export function envelopeSigningHash(envelope) {
-  return protocolHash("proof.envelope.signing", extensionSigningPayload(envelope));
 }
 
 export function finalizeEnvelope(envelope) {

@@ -317,7 +317,6 @@ export interface PactiumCore {
 
 export interface PactiumHttpServerOptions extends PactiumDataDirOptions {
   pactium?: PactiumCore | null;
-  licolite?: unknown;
   maxBodyBytes?: number;
   /** Enable mutation routes (POST/PUT/DELETE). Default false. */
   enableMutations?: boolean;
@@ -345,7 +344,7 @@ export interface PactiumHttpServerStartResult {
 
 export const PACTIUM_PROTOCOL: "pactium.v0.3";
 export const PACTIUM_SCHEMA_VERSION: "pactium.v0.3.schema.latest";
-export const PACTIUM_PACKAGE_VERSION: "0.5.0";
+export const PACTIUM_PACKAGE_VERSION: "0.6.0";
 export const PACTIUM_HTTP_PROTOCOL: "pactium.v0.3.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES: 1048576;
 export const PACTIUM_INDEX_ENGINE: "pactium.verifiable-index-engine";
@@ -413,7 +412,6 @@ export function verifyProofBundle(bundle: PactiumProofBundle, options?: PactiumP
 export function createDefaultProofVerifierRegistry(extraVerifiers?: PactiumRecord): Map<string, (...args: unknown[]) => unknown>;
 export function createRepairPlanner(): PactiumRecord;
 export function createMaintenanceTaskEngine(options?: PactiumRecord): PactiumRecord;
-export function envelopeSigningHash(envelope: PactiumProofEnvelope): string;
 export function runPactiumQualityGateProfile(options?: PactiumRecord): Promise<PactiumRecord>;
 export function createPactiumHttpServer(options?: PactiumHttpServerOptions): unknown;
 export function startPactiumHttpServer(options?: PactiumHttpServerStartOptions): Promise<PactiumHttpServerStartResult>;

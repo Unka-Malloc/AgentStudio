@@ -2,6 +2,8 @@
 
 Pactium is the current proof-first protocol substrate. The glossary is maintained in [Terms](../TERM.md), and the approved protocol parameter matrix is [Protocol Profile](./PROFILE.md).
 
+The protocol is host-neutral. Meshrix is an independent downstream framework using the public package contract; host governance and product semantics do not enter Pactium protocol namespaces.
+
 ## Operation Ledger
 
 The Operation Ledger is the global ordering authority for Pactium protocol facts. It uses a dedicated Ledger Transparency Log to produce verifiable Ledger Heads, inclusion proofs, and consistency proofs.
@@ -17,14 +19,14 @@ Operation lifecycle is append-only:
 
 ## Workspace Projection
 
-Workspace Projection is a first-priority capability for the LicoLite Aspect. It is enabled by default for LicoLite and is bound by global Ledger entries.
+Workspace Projection is updated synchronously for workspace-scoped lifecycle facts and is bound by global Ledger entries.
 
 Workspace Projection uses two Verifiable Index Engine-backed indexes:
 
 - `Workspace Order Index` maps workspace-local order to ledger event references.
 - `Workspace Membership Index` maps ledger event identifiers to workspace-local membership material.
 
-Workspace Projection currently includes workspace-scoped Operation Intents and Operation Outcomes. Repair Facts are reserved for a future repair executor and are not appended by the current package.
+Workspace Projection currently includes workspace-scoped Operation Intents and Operation Outcomes. The current package does not append Repair Facts. Projection membership is logical proof data, not authentication, tenant isolation, or access control.
 
 ## Verifiable Index Engine
 
@@ -51,6 +53,8 @@ Checkpoint node membership and diffs use shared Verifiable Index Engine-backed i
 
 `recordOperation`, `recordOperations`, and lower-level lifecycle APIs return Pactium Proof Envelopes with content-addressed Proof Material Refs. Full portable proof material is exported through Proof Bundles.
 
+Operation Intent and Outcome facts retain `inputHash` and `resultHash`, not the original caller values. Inline state mutation values are explicitly persisted as content-addressed State Values. Proof Extension values are another explicit persistence surface; reachable extension blocks are included in exported bundles. Pactium never creates those content copies implicitly.
+
 Proof Bundles are CAR-like content-addressed block bundles with a Pactium manifest naming the root envelope, required blocks, protocol versions, Ledger Head, and critical extensions.
 
 Proof material compacts repeated index sibling descriptors through `proofDescriptorTable`, repeated leaf bodies through the self-contained `proofLeafTable`, and causality edges through one membership multiproof. Persistent verification and Proof Bundle verification default to the `trusted-manifest-required` trust policy; in-memory/development verification may use the self-carried manifest profile.
@@ -69,14 +73,6 @@ Verifier manifests are the production trust-anchor object. They support signer v
 
 `pactium/http` is a public JSON transport adapter for host-controlled service integration. It exposes the proof-first core calls for operation lifecycle, Proof Envelope and Proof Bundle verification, bundle export, workspace projections, cursor paging, append conditions, trusted-head advancement, repair planning, maintenance tasks, extensions, and stored envelopes. It does not add authentication, authorization, witness networking, policy decisions, or host side-effect execution.
 
-## LicoLite Aspect
-
-`pactium/licolite` is a first-class package surface for LicoLite. It provides LicoLite-facing protocol substrate integration, default Workspace Projection, default signing policy, critical policy and workspace-effect extensions, LicoLite-level verification, repair planning, and new-data-directory support.
-
-LicoLite production mode requires an explicit signer or signerSecret for both recording and verification. The required policy and workspace-effect extensions must be critical and listed in `criticalExtensions`; downgrading either extension fails LicoLite verification.
-
-LicoLite owns runtime policy decisions, operation dispatching, side effects, UI ownership, and durable Host Evidence storage. Pactium binds LicoLite evidence and verifies the binding.
-
 ## Current Non-Surfaces
 
-The current package does not ship a separate per-workspace FIFO lane queue, a repair executor that appends Repair Facts, or pressure-profile baseline regression enforcement. These require explicit implementation before maintained docs can describe them as current behavior. Storage currently supports manifest-bound local JSON and SQLite adapters behind the same Storage Port.
+The current package does not ship a separate per-workspace FIFO lane queue, a repair executor that appends Repair Facts, or pressure-profile baseline regression enforcement. Storage supports manifest-bound local JSON and SQLite adapters behind the same Storage Port.

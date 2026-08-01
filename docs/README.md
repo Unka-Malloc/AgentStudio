@@ -7,6 +7,8 @@ Welcome to the Pactium documentation. This index covers all maintained documenta
 | Resource | Description |
 | --- | --- |
 | [README](../README.md) | Project overview, installation, and quick start |
+| [Product Boundary](../PRODUCT.md) | Durable product goal, repository ownership, and non-goals |
+| [Domain Language](../CONTEXT.md) | Canonical terms and invariants |
 | [API Reference](./API.md) | Complete public API documentation |
 | [Examples Guide](../examples/README.md) | Annotated usage examples with learning path |
 | [FAQ](./FAQ.md) | Frequently asked questions and troubleshooting |
@@ -20,7 +22,6 @@ Welcome to the Pactium documentation. This index covers all maintained documenta
 | [Protocol Profile](./protocols/PROFILE.md) | Versioned protocol parameter matrix (algorithms, constants, formats) |
 | [Canonical Encoding](./protocols/CANONICAL-ENCODING.md) | Formal Pactium Canonical Value encoding rules |
 | [Trust Anchors](./protocols/TRUST-ANCHORS.md) | Production trust policy, signer rotation/revocation, quorum, witness/checkpoint metadata |
-| [LicoLite Aspect](./LICOLITE-ASPECT.md) | First-class LicoLite integration surface and requirements |
 | [Terms](./TERM.md) | Protocol glossary with preferred and avoided vocabulary |
 
 ## Maintenance and Operations
@@ -48,6 +49,6 @@ Welcome to the Pactium documentation. This index covers all maintained documenta
 
 The npm package includes a curated subset of documentation:
 
-**Published in npm tarball:** `README.md`, `README.zh-CN.md`, `CHANGELOG.md`, `SECURITY.md`, `docs/README.md`, `docs/API.md`, `docs/FAQ.md`, `docs/MIGRATION.md`, `docs/logo.svg`, `docs/architecture/`, `docs/protocols/`, `docs/LICOLITE-ASPECT.md`, `docs/TERM.md`, `examples/`
+**Published in npm tarball:** `README.md`, `README.zh-CN.md`, `PRODUCT.md`, `CONTEXT.md`, `CHANGELOG.md`, `SECURITY.md`, `docs/README.md`, `docs/API.md`, `docs/FAQ.md`, `docs/MIGRATION.md`, `docs/logo.svg`, `docs/architecture/`, `docs/protocols/`, `docs/TERM.md`, `examples/`
 
 **Not published:** ADRs, quality gates, release rules, agent instructions, release tooling, tests, build outputs, and binary/cache artifacts (these are available on GitHub only when appropriate)

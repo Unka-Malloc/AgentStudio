@@ -223,37 +223,6 @@ export async function runPactiumQualityGateProfile({
         throw new Error("Pressure recovery workspace membership proof failed.");
       }
     }
-  } else if (profile === "api:licolite-record") {
-    const { createLicoLiteAspect } = await import("../aspects/licolite/index.js");
-    const context = createPressureCore(pactium);
-    const { core } = context;
-    const aspect = createLicoLiteAspect({
-      pactium: core,
-      evidencePolicy: "production",
-      signerSecret: "pactium-quality-gate-signer"
-    });
-    for (let index = 0; index < operations; index += 1) {
-      const operationStarted = performance.now();
-      const envelope = await aspect.recordWorkspaceOperation({
-        operationId: "pressure.licolite",
-        workspaceId: `workspace-${index % 10}`,
-        idempotencyKey: `licolite-intent-${index}`,
-        outcomeIdempotencyKey: `licolite-outcome-${index}`,
-        input: { index },
-        policyEvidence: { decision: "allow", index },
-        workspaceEffectEvidence: { effect: "record", index }
-      });
-      const verified = await aspect.verifyEnvelope(envelope, { trustPolicy: "self-carried-manifest" });
-      if (!verified.ok) throw new Error("Pressure LicoLite verification failed.");
-      samples.push(performance.now() - operationStarted);
-      completed += 1;
-      if (shouldCompactPressure(completed, operations, compactionInterval)) {
-        await compactPressureCore(context, details);
-      }
-      if (shouldReportProgress(completed, operations, progressInterval)) {
-        emitProgress(onProgress, { profile, phase: "operations", completed, total: operations });
-      }
-    }
   } else {
     const context = createPressureCore(pactium);
     const { core } = context;

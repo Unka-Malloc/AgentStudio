@@ -1,6 +1,6 @@
 export const PACTIUM_PROTOCOL = "pactium.v0.3";
 export const PACTIUM_SCHEMA_VERSION = "pactium.v0.3.schema.latest";
-export const PACTIUM_PACKAGE_VERSION = "0.5.0";
+export const PACTIUM_PACKAGE_VERSION = "0.6.0";
 export const PACTIUM_INDEX_ENGINE = "pactium.verifiable-index-engine";
 export const PACTIUM_INDEX_SPLITTER = "pactium-cdc-boundary";
 export const PACTIUM_PROOF_BUNDLE_TYPE = "pactium.proof-bundle.indexed";
@@ -41,16 +41,6 @@ export const PACTIUM_PROTOCOL_PROFILE = Object.freeze({
       maxEntries: 128,
       boundaryMask: 63
     }
-  },
-  licoLite: {
-    exportPath: "pactium/licolite",
-    workspaceProjection: "enabled-by-default",
-    signing: "enabled-by-default",
-    criticalExtensions: [
-      "licolite.policy",
-      "licolite.workspaceEffect"
-    ],
-    dataSupport: "latest-schema-only"
   }
 });
 
@@ -71,7 +61,6 @@ export const HASH_DOMAINS = Object.freeze({
   "operation.receipt.result": "pactium.v0.3.operation.receipt.result",
   "proof.bundle": "pactium.v0.3.proof.bundle",
   "proof.envelope": "pactium.v0.3.proof.envelope",
-  "proof.envelope.signing": "pactium.v0.3.proof.envelope.signing",
   "proof.extension": "pactium.v0.3.proof.extension",
   "state.commit": "pactium.v0.3.state.commit",
   "verifier.manifest": "pactium.v0.3.verifier.manifest",

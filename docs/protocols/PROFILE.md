@@ -25,7 +25,7 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | Append order | Single Ledger Append Lane |
 | Batch append | `appendBatch` preserves caller order, emits per-append inclusion/consistency proofs, and signs only the final batch head when signing is enabled |
 | Proofs | Inclusion and consistency proofs |
-| Signing | Optional in core, default for LicoLite Aspect |
+| Signing | Optional through Ledger Head signer configuration |
 | Split-view defense | Consistency proof support; hosts retain last trusted heads; witness is extension point |
 
 ## Operation Lifecycle
@@ -60,13 +60,13 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 
 | Parameter | Value |
 | --- | --- |
-| LicoLite default | Enabled and first priority |
+| Core behavior | Updated synchronously for workspace-scoped lifecycle facts |
 | Structure | Dual index |
 | Order index | `workspaceOrdinal -> ledgerEventRef` |
 | Membership index | `ledgerEventId -> workspaceOrdinalRef` |
 | Ordinal assignment | Same protocol commit as Ledger append |
 | Concurrency | Single Ledger Append Lane plus synchronous projection updates; no separate per-workspace queue in current package |
-| Contents | Operation Intents and Operation Outcomes; Repair Facts are reserved for a future repair executor |
+| Contents | Operation Intents and Operation Outcomes; the current package does not append Repair Facts |
 | Ledger binding | Every projection update bound by global Ledger facts |
 
 ## Checkpoint
@@ -76,7 +76,7 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | Role | Recovery/progress structure |
 | Node proof | Shared Verifiable Index Engine |
 | Intent Checkpoint | Lifecycle start or recoverable progress |
-| Outcome Checkpoint | Default for LicoLite effects, results, and state transitions |
+| Outcome Checkpoint | Declared results and state transitions |
 | Restore | Append marker/fact, no destructive rewrite |
 | Tree head | Checkpoint root plus node index root |
 
@@ -102,6 +102,8 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | Bundle format | CAR-like block bundle plus Pactium manifest |
 | Extensions | Hash-bound Proof Extensions |
 | Critical extension | Unsupported critical extension fails verification |
+| Core content | Intent and Outcome facts retain input/result digests, not original values |
+| Explicit content | State mutation values and Proof Extension values are persisted only when supplied by the caller |
 | Descriptor compaction | Proof envelopes hoist repeated index sibling descriptors into `proofMaterial.proofDescriptorTable` |
 | Leaf compaction | Repeated proof leaves are hoisted into the self-contained `proofMaterial.proofLeafTable` |
 | Causality | One exact-key membership multiproof per envelope |
@@ -117,7 +119,7 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | JSON | Local development, low-concurrency use, debugging, and explicit `storageBackend: "json"` profiles |
 | Manifest binding | Existing data directories reopen only with their recorded backend |
 | Runtime state | Fixed-size manifest plus domain-separated generation records |
-| Garbage collection | SQLite-only, dry-run by default, fail-closed mark/sweep of unreachable derived index nodes |
+| Garbage collection | SQLite-only, dry-run by default, fail-closed mark/sweep of unreachable derived index nodes; immutable facts, proof material, extensions, envelopes, and state values are retained |
 | Distributed deployments | Require an external consistency layer; Storage Port does not provide consensus |
 
 ## HTTP Adapter
@@ -128,20 +130,6 @@ The Protocol Profile is the implementation baseline for the proof-first rewrite.
 | Role | Host-controlled JSON transport for the proof-first public API |
 | Scope | Operation lifecycle, proof envelope and bundle verification, proof bundle export, workspace projection, cursor paging, append conditions, trusted-head advancement, repair planning, maintenance tasks, extension materialization, and envelope storage |
 | Security boundary | Authentication, authorization, transport security, and host policy remain host-owned |
-
-## LicoLite Aspect
-
-| Parameter | Value |
-| --- | --- |
-| Export path | `pactium/licolite` |
-| Workspace projection | Enabled by default, first priority |
-| Signing | Enabled by default; production recording and verification require an explicit signer or signerSecret |
-| Policy evidence | Critical LicoLite Policy Extension |
-| Workspace effect evidence | Critical LicoLite Workspace Effect Extension |
-| Verifier | Required LicoLite Verifier |
-| Failures | Structured Verification Failures |
-| Repair | Repair Planner only, no automatic repair |
-| Data support | Latest schema only |
 
 ## Maintenance And Repair
 

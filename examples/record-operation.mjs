@@ -1,20 +1,22 @@
 import { createPactium } from "../src/index.js";
-import { createLicoLiteAspect } from "../src/aspects/licolite/index.js";
 
 const pactium = createPactium({ dataDir: "./.pactium" });
-const licolite = createLicoLiteAspect({
-  pactium,
-  evidencePolicy: "opportunistic"
-});
 
-const envelope = await licolite.recordWorkspaceOperation({
+const envelope = await pactium.recordOperation({
   operationId: "example.write",
   workspaceId: "example",
   idempotencyKey: "example-intent",
   outcomeIdempotencyKey: "example-outcome",
   input: { target: "hello.json" },
-  policyEvidence: { decision: "allow" },
-  workspaceEffectEvidence: { durableRef: "host:example:hello" },
+  result: { status: "recorded" },
+  extensions: [{
+    name: "host.operation-copy",
+    critical: false,
+    value: {
+      input: { target: "hello.json" },
+      result: { status: "recorded" }
+    }
+  }],
   stateMutations: [
     { key: "hello.json", value: { hello: "pactium" } }
   ]
@@ -22,5 +24,5 @@ const envelope = await licolite.recordWorkspaceOperation({
 
 console.log(JSON.stringify({
   envelopeId: envelope.envelopeId,
-  verification: await licolite.verifyEnvelope(envelope)
+  verification: await pactium.verifyEnvelope(envelope)
 }, null, 2));

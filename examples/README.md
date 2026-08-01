@@ -10,7 +10,6 @@ node examples/record-operation.mjs
 node examples/verify-envelope.mjs
 node examples/export-proof-bundle.mjs
 node examples/workspace-projection.mjs
-node examples/licolite-signed-operation.mjs
 ```
 
 Examples create a `.pactium` data directory in the working directory. Remove it between runs for a fresh state: `rm -rf .pactium`.
@@ -23,13 +22,13 @@ If you're new to Pactium, follow these examples in order:
 
 **File:** [`record-operation.mjs`](./record-operation.mjs)
 
-The simplest end-to-end example. Creates a LicoLite Aspect instance and records a workspace operation with policy evidence and workspace effect evidence, then verifies the resulting envelope.
+The simplest end-to-end example. Records and verifies a workspace-scoped operation through the host-neutral Pactium core. It also shows how a caller can explicitly attach a portable copy as a Proof Extension.
 
 **Concepts introduced:**
 - `createPactium()` instance creation
-- `createLicoLiteAspect()` aspect setup
-- `recordWorkspaceOperation()` high-level API
+- `recordOperation()` high-level API
 - `verifyEnvelope()` verification
+- Explicit host-owned copy material through `extensions`
 - Proof Envelope structure
 
 ### 2. Two-Phase Operation Lifecycle
@@ -67,20 +66,7 @@ Records operations across multiple workspaces, queries workspace projections, an
 - `getWorkspaceProjection()` -- query workspace state
 - `proveWorkspaceMembership()` -- prove event belongs to workspace
 - Non-membership proofs -- prove event does NOT belong to workspace
-- Workspace isolation guarantees
-
-### 5. LicoLite Signed Operations
-
-**File:** [`licolite-signed-operation.mjs`](./licolite-signed-operation.mjs)
-
-Full LicoLite integration example with Ed25519 signing, critical policy/effect extensions, production evidence policy, and LicoLite-level verification including bundle export.
-
-**Concepts introduced:**
-- `createLicoLiteSigner()` -- Ed25519 signing authority
-- `evidencePolicy: "production"` -- fail-closed on missing evidence
-- Critical extensions (policy + workspace effect)
-- LicoLite-level verification (core + signing + extensions)
-- Bundle export through the aspect
+- Workspace-scoped projection membership, not tenant or authorization isolation
 
 ## Key Patterns
 
@@ -90,7 +76,7 @@ All examples use `idempotencyKey` and `outcomeIdempotencyKey`. If you re-run an 
 
 ### Proof-First API
 
-Every write operation returns a Proof Envelope. The envelope is the proof -- it contains or references all material needed to verify that the operation was recorded and the ledger is consistent.
+Every write operation returns a Proof Envelope. Core facts contain input and result digests, not business plaintext. A caller that needs portable content can explicitly attach a hash-bound Proof Extension; bundle export then includes that extension block.
 
 ### Error Handling
 

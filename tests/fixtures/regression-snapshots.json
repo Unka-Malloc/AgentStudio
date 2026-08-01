@@ -11,11 +11,6 @@
       "import": "./src/http.js",
       "default": "./src/http.js"
     },
-    "./licolite": {
-      "types": "./src/aspects/licolite/index.d.ts",
-      "import": "./src/aspects/licolite/index.js",
-      "default": "./src/aspects/licolite/index.js"
-    },
     "./package.json": "./package.json"
   },
   "rootExports": [
@@ -60,7 +55,6 @@
     "defaultPactiumDataDir",
     "detectSqliteCapabilities",
     "emptyTreeHash",
-    "envelopeSigningHash",
     "ledgerHeadSigningPayload",
     "ledgerLeafHash",
     "ledgerNodeHash",
@@ -82,36 +76,16 @@
     "verifyProofEnvelope",
     "verifyTrackingCursor"
   ],
-  "licoLiteExports": [
-    "LICOLITE_ASPECT_PROTOCOL",
-    "LICOLITE_CRITICAL_EXTENSIONS",
-    "LICOLITE_POLICY_EXTENSION",
-    "LICOLITE_SIGNATURE_EXTENSION",
-    "LICOLITE_SUPPORTED_CRITICAL_EXTENSIONS",
-    "LICOLITE_WORKSPACE_EFFECT_EXTENSION",
-    "createLicoLiteAspect",
-    "createLicoLiteSigner",
-    "licoLitePolicyExtensionValue",
-    "licoLiteWorkspaceEffectExtensionValue",
-    "recordLicoLiteWorkspaceOperation",
-    "verifyLicoLiteBundle",
-    "verifyLicoLiteEnvelope"
-  ],
   "declarations": {
     "src/index.d.ts": {
-      "sha256": "5c3dc00434b932fc8019600448a73c475c23ef9535a1bc56dbcfc4169290c404",
-      "byteLength": 18803,
-      "exportCount": 86
+      "sha256": "31d384ecf5c114a5862a9234b0100a2db52d880fbece18f9a3f24708bf21753b",
+      "byteLength": 18704,
+      "exportCount": 85
     },
     "src/http.d.ts": {
-      "sha256": "515e87d296b479f84afd44cbe7d6e276ac10e5ecd9315950cc8ffb0b506b6a29",
-      "byteLength": 1272,
+      "sha256": "a346381cba4ca126e3ce85a55a12730b57fb7be4493e803086a70bfcb6c34527",
+      "byteLength": 1250,
       "exportCount": 7
-    },
-    "src/aspects/licolite/index.d.ts": {
-      "sha256": "a13e42e505caab0514666a002115a85fddcf545f1408ebe3b1bf7e5145217f9f",
-      "byteLength": 3174,
-      "exportCount": 15
     }
   },
   "oldRootExportsAbsent": true,
@@ -137,33 +111,13 @@
         "maxEntries": 128,
         "boundaryMask": 63
       }
-    },
-    "licoLite": {
-      "exportPath": "pactium/licolite",
-      "workspaceProjection": "enabled-by-default",
-      "signing": "enabled-by-default",
-      "criticalExtensions": [
-        "licolite.policy",
-        "licolite.workspaceEffect"
-      ],
-      "dataSupport": "latest-schema-only"
     }
-  },
-  "licoLiteDefaults": {
-    "workspaceProjectionDefault": true,
-    "criticalExtensions": [
-      "licolite.policy",
-      "licolite.workspaceEffect"
-    ]
   },
   "proofBundle": {
     "ok": false,
     "bundleType": "pactium.proof-bundle.indexed",
-    "blockCount": 6,
-    "criticalExtensions": [
-      "licolite.policy",
-      "licolite.workspaceEffect"
-    ]
+    "blockCount": 3,
+    "criticalExtensions": []
   },
   "failureCodes": [
     "derived_index_missing",

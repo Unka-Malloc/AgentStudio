@@ -2,7 +2,6 @@ import type { PactiumCore, PactiumDataDirOptions } from "./index.js";
 
 export interface PactiumHttpServerOptions extends PactiumDataDirOptions {
   pactium?: PactiumCore | null;
-  licolite?: unknown;
   maxBodyBytes?: number;
   enableMutations?: boolean;
   authorize?: ((ctx: { method: string; pathname: string; capability: string; headers: Record<string, string | string[] | undefined> }) => boolean | { allowed: boolean; reason?: string; statusCode?: number } | Promise<boolean | { allowed: boolean; reason?: string; statusCode?: number }>) | null;

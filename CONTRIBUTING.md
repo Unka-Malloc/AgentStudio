@@ -47,9 +47,9 @@ npm run verify:release
 ```
 pactium/
   src/
-    canonical/        # Canonical Value encoding (DAG-CBOR-style)
+    canonical/        # Pactium-specific canonical JSON encoding
     protocol/         # Protocol constants and hashing
-    storage/          # Storage Port (local JSON backend)
+    storage/          # Storage Port (in-memory, JSON, and SQLite)
     ledger/           # Ledger Transparency Log
     index-engine/     # Verifiable Index Engine (Prolly Tree)
     core/             # Pactium Core composition
@@ -57,7 +57,6 @@ pactium/
     verification/     # Verification failure types
     repair/           # Repair Planner
     maintenance/      # Maintenance Task Engine
-    aspects/licolite/ # LicoLite Aspect (first-class)
     quality/          # Public API pressure profiles
   bin/                # CLI entry point
   tests/              # Test suites and fixtures
@@ -77,7 +76,6 @@ Most changes should fit one of these package areas:
 - Shared Verifiable Index Engine
 - Operation lifecycle, Workspace Projection, Merkle State, and Checkpoint
 - Proof Envelopes and Proof Bundles
-- `pactium/licolite` integration aspect
 - CLI and HTTP facades
 
 ### 2. Understand the documentation
@@ -86,11 +84,11 @@ Start by reading the maintained docs for the area:
 
 | Area | Documents |
 | --- | --- |
+| Product boundary | [PRODUCT.md](./PRODUCT.md), [CONTEXT.md](./CONTEXT.md) |
 | Protocol behavior | [protocols/PROTOCOLS.md](./docs/protocols/PROTOCOLS.md), [protocols/PROFILE.md](./docs/protocols/PROFILE.md) |
 | Architecture | [architecture/ARCHITECTURE.md](./docs/architecture/ARCHITECTURE.md) |
-| LicoLite integration | [LICOLITE-ASPECT.md](./docs/LICOLITE-ASPECT.md) |
 | Release gates | [QUALITY-GATES.md](./docs/QUALITY-GATES.md) |
-| Decisions | [docs/adr/](./docs/adr/) (55 architectural decisions) |
+| Decisions | [docs/adr/](./docs/adr/) |
 
 ### 3. Implement and test
 
@@ -149,7 +147,7 @@ npm run verify:release
 2. Run `npm run verify:release` and confirm it passes
 3. Ensure your change aligns with the [Protocol Profile](./docs/protocols/PROFILE.md)
 4. If you changed public API surface, update:
-   - `src/index.d.ts` or `src/aspects/licolite/index.d.ts`
+   - `src/index.d.ts` or `src/http.d.ts`
    - `docs/API.md`
    - Relevant regression snapshots in `tests/fixtures/`
 5. If you made an architectural decision, add an ADR to `docs/adr/`

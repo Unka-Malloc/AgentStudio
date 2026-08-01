@@ -23,10 +23,6 @@ import {
   verifyLedgerInclusionProof,
   verifyProofBundle
 } from "../src/index.js";
-import {
-  LICOLITE_CRITICAL_EXTENSIONS,
-  createLicoLiteAspect
-} from "../src/aspects/licolite/index.js";
 import packageJson from "../package.json" with { type: "json" };
 
 const root = process.cwd();
@@ -160,11 +156,9 @@ async function buildProofVectors() {
 
 async function buildRegressionSnapshots() {
   const rootExports = Object.keys(await import("../src/index.js")).sort();
-  const licoLiteExports = Object.keys(await import("../src/aspects/licolite/index.js")).sort();
   const declarationFiles = [
     "src/index.d.ts",
-    "src/http.d.ts",
-    "src/aspects/licolite/index.d.ts"
+    "src/http.d.ts"
   ];
   const declarations = Object.fromEntries(await Promise.all(
     declarationFiles.map(async (file) => {
@@ -177,12 +171,17 @@ async function buildRegressionSnapshots() {
     })
   ));
   const pactium = createPactium({ inMemory: true });
-  const aspect = createLicoLiteAspect({ pactium, evidencePolicy: "opportunistic" });
-  const envelope = await aspect.recordWorkspaceOperation({ operationId: "snapshot", workspaceId: "snap" });
-  const bundle = await pactium.exportProofBundle(envelope);
-  const bundleResult = await verifyProofBundle(bundle, {
-    supportedCriticalExtensions: aspect.supportedCriticalExtensions
+  const envelope = await pactium.recordOperation({
+    operationId: "snapshot",
+    workspaceId: "snap",
+    extensions: [{
+      name: "host.snapshot",
+      critical: false,
+      value: { copyType: "synthetic", value: "snapshot" }
+    }]
   });
+  const bundle = await pactium.exportProofBundle(envelope);
+  const bundleResult = await verifyProofBundle(bundle);
   const failure = createVerificationFailure({
     layer: "workspace-projection",
     code: "derived_index_missing",
@@ -192,14 +191,9 @@ async function buildRegressionSnapshots() {
     protocol: PACTIUM_PROTOCOL,
     packageExports: packageJson.exports,
     rootExports,
-    licoLiteExports,
     declarations,
     oldRootExportsAbsent: oldRootExports.every((name) => !rootExports.includes(name)),
     profile: PACTIUM_PROTOCOL_PROFILE,
-    licoLiteDefaults: {
-      workspaceProjectionDefault: aspect.workspaceProjectionDefault,
-      criticalExtensions: LICOLITE_CRITICAL_EXTENSIONS
-    },
     proofBundle: {
       ok: bundleResult.ok,
       bundleType: bundle.bundleType,
@@ -252,7 +246,6 @@ async function runPressureGates() {
   const profiles = full
     ? {
         "api:operation-lifecycle": { operations: 10000 },
-        "api:licolite-record": { operations: 5000 },
         "api:index-engine": {
           operations: 100000,
           membershipProofs: 10000,
@@ -264,7 +257,6 @@ async function runPressureGates() {
       }
     : {
         "api:operation-lifecycle": { operations: 20 },
-        "api:licolite-record": { operations: 20 },
         "api:index-engine": {
           operations: 512,
           membershipProofs: 100,
@@ -343,7 +335,7 @@ async function main() {
     }
   }
   const allowedExports = Object.keys(packageJson.exports).sort();
-  assertDeepEqual(allowedExports, [".", "./http", "./licolite", "./package.json"], "package exports");
+  assertDeepEqual(allowedExports, [".", "./http", "./package.json"], "package exports");
   const vectors = await buildProofVectors();
   const snapshots = await buildRegressionSnapshots();
   if (process.env.PACTIUM_UPDATE_FIXTURES === "1") {

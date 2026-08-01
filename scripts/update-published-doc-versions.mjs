@@ -36,15 +36,16 @@ function runNpmPackDryRun() {
     throw new Error(`npm pack --dry-run --json failed\n${result.stderr || result.stdout}`);
   }
   const parsed = JSON.parse(result.stdout);
-  if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
-    throw new Error("Expected npm 12 pack JSON to be a package-keyed object.");
-  }
-  const packages = Object.values(parsed);
+  const packages = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object"
+      ? Object.values(parsed)
+      : [];
   if (packages.length !== 1 || !packages[0] || typeof packages[0] !== "object") {
-    throw new Error("Expected npm 12 pack JSON to contain exactly one package.");
+    throw new Error("Expected npm pack JSON to contain exactly one package.");
   }
   if (!Array.isArray(packages[0].files)) {
-    throw new Error("Expected npm 12 pack JSON package metadata to contain a files array.");
+    throw new Error("Expected npm pack JSON package metadata to contain a files array.");
   }
   return packages[0];
 }
