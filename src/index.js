@@ -17,6 +17,7 @@ export {
   canonicalString,
   normalizeCanonicalValue
 } from "./canonical/value.js";
+export { toCanonicalSafeValue } from "./canonical/safe-value.js";
 export {
   cidForBytes,
   cidForCanonical,
@@ -35,6 +36,17 @@ export {
   detectSqliteCapabilities,
   sqliteStorageAvailable
 } from "./storage/storage-port.js";
+export {
+  PACTIUM_MANIFEST_FILE,
+  PACTIUM_SQLITE_FILE,
+  PROTOCOL_STORAGE_CATEGORY,
+  assertCurrentDataDir,
+  classifyProtocolStorageArtifact,
+  inspectDataDir
+} from "./storage/data-dir-preflight.js";
+export { createContentAddressedStore } from "./core/content-addressed-store.js";
+export { createAppendOnlyEventLog } from "./core/append-only-event-log.js";
+export { createStateCommitStore } from "./core/state-commit-store.js";
 export { createVerificationFailure } from "./verification/failure.js";
 export {
   createLedgerConsistencyProof,

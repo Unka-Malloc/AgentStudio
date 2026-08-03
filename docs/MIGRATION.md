@@ -49,7 +49,7 @@ Pactium intentionally does not include automatic migration. Data directories are
 
 | Pactium version | Node.js requirement |
 | --- | --- |
-| 0.6.x | `^22.0.0 \|\| ^24.0.0` |
+| 0.7.x | `^22.0.0 \|\| ^24.0.0` |
 
 Pactium is pure ESM. It cannot be loaded via `require()`. If your project uses CommonJS, use dynamic `import()`:
 
@@ -92,6 +92,16 @@ Proof Bundles exported from any Pactium version remain independently verifiable 
 3. Critical extensions in the bundle are supported by the verifier
 
 Proof Bundles are the recommended way to preserve verification material across Pactium version upgrades.
+
+## Host Adoption Of New Helpers
+
+New host-neutral helpers (canonical-safe projection, data-directory preflight, content-addressed store helpers, append-only event logs, and configurable state-commit stores) are additive public APIs. Hosts should:
+
+1. Depend on the published Pactium version that introduces the helper.
+2. Call the Pactium export as the authoritative implementation.
+3. Keep any superseded host-local wrapper only as a Deprecated delegate until the host's next major release removes it.
+
+Pactium itself does not retain host-specific compatibility shims. See [Contributing: Host Capability Intake Workflow](https://github.com/Unka-Malloc/Pactium/blob/stable/CONTRIBUTING.md#host-capability-intake-workflow).
 
 ## Breaking Change Announcements
 

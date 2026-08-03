@@ -166,6 +166,34 @@ npm run verify:release
 - Test coverage: are protocol paths exercised through public APIs?
 - Documentation alignment: do maintained docs still match the implementation?
 
+## Host Capability Intake Workflow
+
+When a host (including Meshrix) observes a reusable proof or verifiable-state capability that belongs in Pactium, follow this intake order. Pactium remains an independent product; host convenience never expands the repository boundary.
+
+| Phase | Owner | Action | Done when |
+| --- | --- | --- | --- |
+| A1 Freeze | Cross-repo review | Pass the admission gate below and freeze host-neutral API names | No host product names in the Pactium draft |
+| A2 Implement | Pactium | Implement, document, test, and pass `npm run verify:release` | Gate green; no host leakage |
+| A3 Publish | Pactium | Publish the npm version that contains the capability | Version visible on the registry |
+| A4 Switch | Host | Bump the exact `pactium` dependency and route authority through the new API | New path is authoritative |
+| A5 Deprecate | Host | Keep old host exports callable only as thin delegates; mark Deprecated with replacement and next-major removal | Docs and symbols agree |
+| A6 Verify | Both | Pactium boundary gates + host substrate/boundary/proof gates | Failures attributed by owner |
+| B Remove | Host next major | Delete Deprecated symbols, wrappers, and old-entry tests | No compatibility residue |
+
+Admission gate (all required):
+
+1. Host-neutral: no host product names, env vars, scopes, or extension names in Pactium.
+2. Multi-host reusable: any conforming host can call the API without Meshrix or another product.
+3. Inside PRODUCT ownership: facts, hashes, ledger, indexes, proofs, storage mechanics, verification, planning, or a strict subset helper.
+4. Verifiable in Pactium alone: tests and examples must not import a host repository.
+5. Pactium names the contract first; hosts adapt afterward.
+
+Constraints:
+
+- Do not couple a host to an unpublished Pactium contract.
+- Do not delete still-public host APIs in phase A; only Deprecated delegates are allowed.
+- Deprecated wrappers must not keep a second business implementation.
+
 ## What Pactium Does Not Accept
 
 - Host-level product features (policy enforcement, UI, authorization)
@@ -174,6 +202,7 @@ npm run verify:release
 - Host-configurable hash algorithms, chunking parameters, or proof formats
 - Storage backends that define their own hash or proof semantics
 - Process-state documents (implementation plans, gap analyses)
+- Host-specific aspects, product modes, or Meshrix-shaped adapters
 
 These belong in the host system that embeds Pactium, not in the protocol substrate.
 
