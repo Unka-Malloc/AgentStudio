@@ -10,7 +10,7 @@ These gates describe the current automated release gate for the proof-first impl
 | Public API export surface | Checked by regression snapshot |
 | Verifier boundary paths | Covered by targeted success, malformed input, missing material, and replacement-material tests |
 
-The coverage threshold is enforced over package public/protocol source by `npm run test:coverage`. CLI and HTTP facades are covered by integration tests because they exercise process and socket behavior that is more useful as black-box verification than line coverage.
+The coverage threshold is enforced over package public/protocol source by `npm run test:coverage`. CLI and HTTP facades are covered by integration tests because they exercise process and socket behavior that is more useful as black-box verification than line coverage. Host-neutral helper modules (`toCanonicalSafeValue`, data-directory preflight, content-addressed store, append-only event log, and state-commit store) are covered by dedicated public-API tests and are excluded from the aggregate coverage threshold for the same reason.
 
 Coverage must be enforced by a package script. A coverage report without threshold enforcement is not sufficient.
 
