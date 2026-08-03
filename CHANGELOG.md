@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-08-03
+
+Add host-neutral digest, data-dir, CAS, event-log, and state-commit helpers.
+
+### Added
+
+- Added host-neutral helpers for canonical-safe projection, data-directory preflight, content-addressed store, append-only event log, and state-commit store.
+- Documented the host capability intake workflow: Pactium publish first, host switch and Deprecated wrappers second, host major removal last.
+
 ## [0.6.0] - 2026-08-01
 
 Pactium 0.6.0 establishes a host-neutral proof substrate boundary and treats Meshrix as an independent downstream framework.
@@ -16,17 +25,6 @@ Pactium 0.6.0 establishes a host-neutral proof substrate boundary and treats Mes
 ### Removed
 
 - Removed the retired framework-specific aspect, exports, HTTP routes, CLI commands, configuration, protocol fields, examples, tests, and signing helpers without compatibility aliases.
-
-## [Unreleased]
-
-### Changed
-
-- Defined Pactium as a host-neutral proof substrate and Meshrix as an independent downstream framework.
-- Clarified that operation facts retain input and result digests by default, while State Values and Proof Extension values are explicit content-persistence surfaces.
-
-### Breaking Changes
-
-- Removed the retired framework-specific package entry point, source aspect, HTTP routes, CLI commands, environment configuration, protocol profile fields, fixtures, examples, tests, and documentation without compatibility aliases or legacy-state discovery.
 
 ## [0.5.0] - 2026-07-21
 
@@ -258,6 +256,7 @@ This is the first public release of Pactium as a proof-first protocol substrate.
 - Ed25519 signing support for Ledger Heads
 - Signed head verification with verifier manifest validation
 
+[0.7.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.5.0
 [0.4.1]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.4.1

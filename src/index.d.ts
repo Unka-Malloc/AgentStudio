@@ -344,7 +344,7 @@ export interface PactiumHttpServerStartResult {
 
 export const PACTIUM_PROTOCOL: "pactium.v0.3";
 export const PACTIUM_SCHEMA_VERSION: "pactium.v0.3.schema.latest";
-export const PACTIUM_PACKAGE_VERSION: "0.6.0";
+export const PACTIUM_PACKAGE_VERSION: "0.7.0";
 export const PACTIUM_HTTP_PROTOCOL: "pactium.v0.3.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES: 1048576;
 export const PACTIUM_INDEX_ENGINE: "pactium.verifiable-index-engine";
@@ -374,6 +374,17 @@ export function normalizeCanonicalValue(value: unknown): PactiumCanonicalValue;
 export function canonicalString(value: unknown): string;
 export function canonicalEncode(value: unknown): Uint8Array;
 export function canonicalDecode(bytes: Uint8Array | ArrayBuffer | string): PactiumCanonicalValue;
+export function toCanonicalSafeValue(
+  value: unknown,
+  options?: {
+    maxDepth?: number;
+    maxArrayItems?: number;
+    maxObjectKeys?: number;
+    maxStringLength?: number;
+    binaryMode?: "summary" | "preserve" | string;
+  },
+  depth?: number
+): unknown;
 export function protocolHashHex(domain: string, value: unknown): string;
 export function protocolHash(domain: string, value: unknown): string;
 export function cidForBytes(bytes: Uint8Array | ArrayBuffer | string): string;
@@ -384,6 +395,64 @@ export function createJsonStoragePort(options?: PactiumDataDirOptions): PactiumS
 export function createSqliteStoragePort(options?: PactiumDataDirOptions): PactiumStoragePort;
 export function detectSqliteCapabilities(options?: PactiumRecord): Promise<PactiumRecord>;
 export function sqliteStorageAvailable(options?: PactiumRecord): boolean;
+export const PACTIUM_MANIFEST_FILE: "pactium-manifest.json";
+export const PACTIUM_SQLITE_FILE: "pactium.sqlite";
+export const PROTOCOL_STORAGE_CATEGORY: "protocol-substrate";
+export function classifyProtocolStorageArtifact(relativePath?: string): string;
+export function inspectDataDir(input?: {
+  dataDir?: string;
+  userDataPath?: string;
+}): {
+  ok: boolean;
+  dataDir: string;
+  protocol: string;
+  schema: string;
+  packageVersion: string;
+  findings: PactiumRecord[];
+};
+export function assertCurrentDataDir(input?: {
+  dataDir?: string;
+  userDataPath?: string;
+}): {
+  ok: boolean;
+  dataDir: string;
+  protocol: string;
+  schema: string;
+  packageVersion: string;
+  findings: PactiumRecord[];
+};
+export function createContentAddressedStore(options: {
+  storage: PactiumStoragePort;
+  defaultKind?: string;
+  defaultCodec?: string;
+}): PactiumRecord;
+export function createAppendOnlyEventLog(options: {
+  storage: PactiumStoragePort;
+  protocolObjectScope?: string;
+  hashDomain?: string;
+  createEventId?: (input: PactiumRecord) => string;
+  withWriteLock?: (task: () => unknown, options?: PactiumRecord) => Promise<unknown>;
+}): PactiumRecord;
+export function createStateCommitStore(options: {
+  storage: PactiumStoragePort;
+  core: PactiumCore;
+  indexEngine: PactiumIndexEngine;
+  eventLog?: PactiumRecord;
+  scopes?: {
+    stateRoot?: string;
+    stateCommit?: string;
+    stateCommitEventIndex?: string;
+    stateMutationIdempotency?: string;
+    eventLog?: string;
+  };
+  hashDomainPrefix?: string;
+  eventHashDomain?: string;
+  createCommitId?: (input: PactiumRecord) => string;
+  createEventId?: (input: PactiumRecord) => string;
+  defaultCommitOperationId?: string;
+  defaultRestoreOperationId?: string;
+  withTransaction?: (task: () => unknown, options?: PactiumRecord) => Promise<unknown>;
+}): PactiumRecord;
 export function ledgerLeafHash(leaf: unknown): string;
 export function ledgerNodeHash(leftHash: string, rightHash: string): string;
 export function emptyTreeHash(): string;

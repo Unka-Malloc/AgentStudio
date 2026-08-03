@@ -18,6 +18,60 @@ The package surface is host-neutral. It provides protocol facts, proofs, storage
 
 Operation inputs and results are reduced to protocol hashes in core facts. Pactium does not retain those values by default. A caller can deliberately persist a State Value through `stateMutations` or attach an explicit portable copy through a Proof Extension `value`; the host owns minimization and disclosure safety for both.
 
+---
+
+## Host-Neutral Helpers
+
+These helpers are part of the public proof-first surface. They contain no host product modes. Hosts may pass storage scopes, hash domains, and id factories when they need durable layout control; defaults remain Pactium-neutral.
+
+### `toCanonicalSafeValue(value, options?)`
+
+Projects an arbitrary value into a bounded digest-ready shape (depth, key, string, and binary limits). It does not replace Canonical Value normalization.
+
+### Data-directory preflight
+
+| Export | Description |
+| --- | --- |
+| `PACTIUM_MANIFEST_FILE` | Manifest filename (`pactium-manifest.json`) |
+| `PACTIUM_SQLITE_FILE` | SQLite database filename (`pactium.sqlite`) |
+| `PROTOCOL_STORAGE_CATEGORY` | Category label for protocol-substrate artifacts |
+| `classifyProtocolStorageArtifact(relativePath)` | Returns `protocol-substrate` for manifest, SQLite, `cas/`, and `protocol/` paths |
+| `inspectDataDir({ dataDir })` | Reports whether a directory is empty or current-schema |
+| `assertCurrentDataDir({ dataDir })` | Throws when a non-current Pactium manifest is present |
+
+### `createContentAddressedStore({ storage })`
+
+Thin CAS facade over a Storage Port (`putBlock`, `getBlock`, `walk`, `verify`).
+
+### `createAppendOnlyEventLog({ storage, protocolObjectScope?, hashDomain?, createEventId? })`
+
+Append-only partition log stored in protocol objects. Defaults use `pactium-event-log` and `pactium.state-event`.
+
+### `createStateCommitStore({ storage, core, indexEngine, ... })`
+
+Host-neutral state-root commit helper. It records Operation Ledger evidence, append-only events, commit records, and idempotency claims. Hosts may override protocol-object scopes and id factories; they must not introduce product policy into Pactium.
+
+```js
+import {
+  createPactium,
+  createStoragePort,
+  createVerifiableIndexEngine,
+  createStateCommitStore,
+  createContentAddressedStore
+} from "pactium";
+
+const storage = createStoragePort({ inMemory: true });
+const core = createPactium({ inMemory: true, storage });
+const indexEngine = createVerifiableIndexEngine({ storage });
+const state = createStateCommitStore({ storage, core, indexEngine });
+const cas = createContentAddressedStore({ storage });
+const block = await cas.putBlock({ path: "a.txt" });
+const commit = await state.commit({
+  scope: "workspace-a",
+  mutations: [{ action: "put", key: "a.txt", valueRef: block.cid }]
+});
+```
+
 ## Core API (`pactium`)
 
 ### `createPactium(options?)`
@@ -737,7 +791,7 @@ Bundle export accepts `{ "envelope": ... }`, `{ "envelopeId": "..." }`, `{ "id":
 import {
   PACTIUM_PROTOCOL,           // "pactium.v0.3"
   PACTIUM_SCHEMA_VERSION,     // "pactium.v0.3.schema.latest"
-  PACTIUM_PACKAGE_VERSION,    // "0.6.0"
+  PACTIUM_PACKAGE_VERSION,    // "0.7.0"
   PACTIUM_INDEX_ENGINE,       // "pactium.verifiable-index-engine"
   PACTIUM_INDEX_SPLITTER,     // "pactium-cdc-boundary"
   PACTIUM_PROOF_BUNDLE_TYPE,  // "pactium.proof-bundle.indexed"
