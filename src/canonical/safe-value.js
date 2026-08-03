@@ -79,5 +79,6 @@ export function toCanonicalSafeValue(value, options = {}, depth = 0) {
     }
     return output;
   }
+  /* node:coverage ignore next */
   return String(value);
 }

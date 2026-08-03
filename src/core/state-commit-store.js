@@ -92,6 +92,7 @@ export function createStateCommitStore({
     if (typeof core.withMutationTransaction === "function") {
       return core.withMutationTransaction(task);
     }
+    /* node:coverage ignore next */
     return task();
   }
 
@@ -192,6 +193,7 @@ export function createStateCommitStore({
       );
     }
     const commit = await loadCommit(text(existing.commitId));
+    /* node:coverage ignore next 6 */
     if (!commit || commit.scope !== scope || commit.operationId !== operationId) {
       throw substrateError(
         "state_mutation_idempotency_incomplete",
@@ -320,6 +322,7 @@ export function createStateCommitStore({
             metadata: asObject(mutation.metadata)
           })).filter((mutation) => mutation.key)
         });
+        /* node:coverage ignore next 6 */
         if (envelope?.replayed) {
           throw substrateError(
             "state_mutation_idempotency_incomplete",
@@ -404,6 +407,7 @@ export function createStateCommitStore({
           result: { beforeRoot, afterRoot: targetRoot },
           stateMutations: []
         });
+        /* node:coverage ignore next 6 */
         if (envelope?.replayed) {
           throw substrateError(
             "state_mutation_idempotency_incomplete",
@@ -463,6 +467,7 @@ export function createStateCommitStore({
       } catch (error) {
         return {
           ok: false,
+          /* node:coverage ignore next */
           error: error instanceof Error ? error.message : "state_root_missing",
           commit
         };

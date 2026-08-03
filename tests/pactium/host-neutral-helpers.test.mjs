@@ -146,6 +146,22 @@ describe("host-neutral helpers", () => {
       eventHash: "tampered"
     }, second]);
     assert.equal((await eventLog.verifyPartition("workspace-a")).ok, false);
+
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "pactium-event-lock-"));
+    const durable = createStoragePort({ dataDir, storageBackend: "json" });
+    try {
+      const durableLog = createAppendOnlyEventLog({ storage: durable });
+      const event = await durableLog.appendEvent({
+        partitionId: "locked",
+        operationId: "op.lock",
+        afterRoot: "root"
+      });
+      assert.equal(event.offset, 0);
+      assert.equal((await durableLog.verifyPartition("locked")).ok, true);
+    } finally {
+      await durable.close();
+      await fs.rm(dataDir, { recursive: true, force: true });
+    }
   });
 
   it("commits, restores, and looks up verifiable state through the state commit store", async () => {
@@ -158,8 +174,7 @@ describe("host-neutral helpers", () => {
     const state = createStateCommitStore({
       storage,
       core,
-      indexEngine,
-      withTransaction: async (task) => task()
+      indexEngine
     });
     try {
       const started = await state.begin({ scope: "alpha" });
@@ -175,6 +190,12 @@ describe("host-neutral helpers", () => {
       assert.ok(commit.afterRoot);
       assert.equal((await state.verifyCommit(commit.commitId)).ok, true);
       assert.equal((await state.verifyCommit("missing")).ok, false);
+      await storage.putProtocolObject(state.scopes.stateCommit, "broken-root", {
+        ...commit,
+        commitId: "broken-root",
+        afterRoot: "missing-root"
+      });
+      assert.equal((await state.verifyCommit("broken-root")).ok, false);
       const byEvent = await state.getCommitByEventHash({
         scope: "alpha",
         eventHash: commit.eventHash
