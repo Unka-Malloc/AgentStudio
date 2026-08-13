@@ -8,7 +8,7 @@ Pactium keeps a deliberately small tooling surface. Tools exist only when they s
 | --- | --- | --- |
 | Package scripts | `start`, `release:prepare`, `docs:sync-version`, `test`, `test:coverage`, `verify`, `verify:core`, `verify:docs:versions`, `verify:hygiene`, `verify:protocol:gates`, `verify:package:contents`, `verify:release:readiness`, `verify:release`, `pack:dry-run`, `publish:dry-run` | Development, one-command release file preparation, published-doc version sync, coverage, protocol gates, package-content checks, release readiness, package dry run, and publish dry run. |
 | CLI | `bin/pactium.mjs` | Local Pactium doctor, HTTP server, operation lifecycle recording, and proof verification. |
-| Release scripts | `scripts/prepare-release.mjs`, `scripts/update-published-doc-versions.mjs`, `scripts/verify-pactium-hygiene.mjs`, `scripts/verify-protocol-gates.mjs`, `scripts/verify-package-contents.mjs`, `scripts/verify-publish-dry-run.mjs`, `scripts/verify-release-readiness.mjs` | One-command release file preparation, published-doc version sync, hygiene scanning, protocol fixtures/properties/pressure gates, package content checks, publish dry-run checks, and release closure checks. |
+| Release scripts | `scripts/prepare-release.mjs`, `scripts/run-source-coverage.mjs`, `scripts/update-published-doc-versions.mjs`, `scripts/verify-pactium-hygiene.mjs`, `scripts/verify-protocol-gates.mjs`, `scripts/verify-package-contents.mjs`, `scripts/verify-publish-dry-run.mjs`, `scripts/verify-release-readiness.mjs` | One-command release file preparation, deterministic unique-range source coverage, published-doc version sync, hygiene scanning, protocol fixtures/properties/pressure gates, package content checks, publish-dry-run checks, and release closure checks. |
 | GitHub Actions | `.github/workflows/ci.yml`, `.github/workflows/publish.yml` | Matrix release-gate CI and trusted-publishing npm release workflow. |
 | HTTP facade | `src/http.js`, `pactium/http` | Local JSON endpoints for health, protocol catalog, operation lifecycle, proof bundle export/verification, workspace projection, cursors, recovery, maintenance, extensions, and envelope verification. |
 | Public package exports | `.`, `./http`, `./package.json` | Current proof-first package API, HTTP adapter, and package metadata. |
@@ -29,7 +29,7 @@ Runtime product skills, Tool Management registries, and KnowledgeSkill catalogs 
 
 - package scripts, `bin`, `exports`, `publishConfig`, and packaged files must match the current Pactium surface;
 - root `AGENT.md` must remain the single in-repository agent entry;
-- only `bin/pactium.mjs`, `scripts/prepare-release.mjs`, `scripts/update-published-doc-versions.mjs`, and the five verification scripts may exist under `bin/` and `scripts/`;
+- only `bin/pactium.mjs`, `scripts/prepare-release.mjs`, `scripts/run-source-coverage.mjs`, `scripts/update-published-doc-versions.mjs`, and the five verification scripts may exist under `bin/` and `scripts/`;
 - project-local agent skills and unrelated tool registries are rejected;
 - version-organized entrypoints, scripts, fixtures, and tooling names are rejected;
 - npm package contents must exclude process docs, agent maintenance docs, release tooling, tests, build outputs, binary caches, and compressed archives;

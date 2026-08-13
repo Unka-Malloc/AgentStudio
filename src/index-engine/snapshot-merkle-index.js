@@ -24,9 +24,9 @@ const BOUNDARY_HASH_CACHE_LIMIT = 16384;
 const boundaryHashCache = new Map();
 
 function compareIndexKeys(left, right) {
-  return String(left || "") < String(right || "")
+  return String(left) < String(right)
     ? -1
-    : String(left || "") > String(right || "")
+    : String(left) > String(right)
       ? 1
       : 0;
 }
@@ -45,7 +45,7 @@ function indexLeafHash(entry) {
   return protocolHashHex("index.leaf", {
     key: entry.key,
     valueRef: entry.valueRef,
-    valueHash: entry.valueHash || "",
+    valueHash: entry.valueHash,
     metadata: asRecord(entry.metadata)
   });
 }
@@ -77,8 +77,8 @@ function rangeForEntries(entries) {
 
 function rangeForChildren(children) {
   return {
-    min: children[0]?.keyRange?.min || "",
-    max: children[children.length - 1]?.keyRange?.max || ""
+    min: children[0].keyRange.min,
+    max: children[children.length - 1].keyRange.max
   };
 }
 
@@ -93,7 +93,7 @@ function descriptorFromNodePayload(payload, root = cidForCanonical(payload)) {
     rootHash: hexFromCid(root),
     level: Number(payload.level || 0),
     count: Number(payload.count || 0),
-    keyRange: payload.keyRange || { min: "", max: "" }
+    keyRange: payload.keyRange
   };
 }
 
@@ -134,7 +134,7 @@ function entryListsEqual(leftEntries, rightEntries) {
 }
 
 function first32(hash) {
-  return Number.parseInt(String(hash || "").slice(0, 8), 16) || 0;
+  return Number.parseInt(hash.slice(0, 8), 16);
 }
 
 // Chunk-boundary decisions consume only the first 32 bits of the boundary
@@ -164,10 +164,10 @@ function entryBoundarySignal(domain, entry) {
 
 function childBoundarySignal(domain, child) {
   return boundarySignalFor(
-    `c\u0000${domain}\u0000${child.keyRange?.max || ""}\u0000${child.root}\u0000${child.level}\u0000${child.count}`,
+    `c\u0000${domain}\u0000${child.keyRange.max}\u0000${child.root}\u0000${child.level}\u0000${child.count}`,
     () => ({
       domain,
-      key: child.keyRange?.max || "",
+      key: child.keyRange.max,
       root: child.root,
       rootHash: child.rootHash,
       level: child.level,
@@ -220,24 +220,24 @@ function validateLeafNodePayload(payload) {
   if (!payload || payload.protocol !== PACTIUM_PROTOCOL || payload.nodeType !== INDEX_NODE_TYPE || payload.level !== 0) return false;
   const rawEntries = asArray(payload.entries);
   const entries = rawEntries.map(normalizeIndexEntry);
-  if (entries.length !== Number(payload.count || 0)) return false;
+  if (entries.length !== Number(payload.count)) return false;
   for (let index = 0; index < rawEntries.length; index += 1) {
     if (!rawEntryIsCanonical(rawEntries[index], entries[index])) return false;
   }
   if (!ensureSortedEntries(entries)) return false;
-  return keyRangesEqual(rangeForEntries(entries), payload.keyRange || {});
+  return keyRangesEqual(rangeForEntries(entries), payload.keyRange);
 }
 
 function validateInternalNodePayload(payload) {
-  if (!payload || payload.protocol !== PACTIUM_PROTOCOL || payload.nodeType !== INDEX_NODE_TYPE || Number(payload.level || 0) <= 0) return false;
+  if (!payload || payload.protocol !== PACTIUM_PROTOCOL || payload.nodeType !== INDEX_NODE_TYPE || Number(payload.level) <= 0) return false;
   const children = asArray(payload.children);
   if (children.length === 0 || asArray(payload.entries).length > 0) return false;
-  const count = children.reduce((total, child) => total + Number(child.count || 0), 0);
-  if (count !== Number(payload.count || 0)) return false;
+  const count = children.reduce((total, child) => total + Number(child.count), 0);
+  if (count !== Number(payload.count)) return false;
   for (let index = 1; index < children.length; index += 1) {
     if (compareIndexKeys(children[index - 1].keyRange?.max, children[index].keyRange?.min) >= 0) return false;
   }
-  return keyRangesEqual(rangeForChildren(children), payload.keyRange || {});
+  return keyRangesEqual(rangeForChildren(children), payload.keyRange);
 }
 
 // Fast path for payloads this module already finalized: skips re-finalization
@@ -255,7 +255,7 @@ function verifyNodePayload(payload, expected = {}) {
 
 function findChildIndex(children, key) {
   if (children.length === 0) return -1;
-  const normalizedKey = String(key || "");
+  const normalizedKey = String(key);
   let low = 0;
   let high = children.length - 1;
   while (low < high) {
@@ -267,8 +267,8 @@ function findChildIndex(children, key) {
 }
 
 function rangesIntersect(range, min, max) {
-  const rangeMin = String(range?.min || "");
-  const rangeMax = String(range?.max || "");
+  const rangeMin = String(range.min);
+  const rangeMax = String(range.max);
   return (!max || compareIndexKeys(rangeMin, max) <= 0) && (!min || compareIndexKeys(rangeMax, min) >= 0);
 }
 
@@ -339,9 +339,9 @@ function leafRecordForProof(proof, context = {}) {
   if (hasInlineLeaf && hasLeafRef) return null;
   if (hasInlineLeaf) {
     return {
-      domain: String(proof.domain || ""),
-      leafRoot: String(proof.leafRoot || ""),
-      leafRootHash: String(proof.leafRootHash || ""),
+      domain: String(proof.domain),
+      leafRoot: String(proof.leafRoot),
+      leafRootHash: String(proof.leafRootHash),
       leafNode: proof.leafNode
     };
   }
@@ -350,11 +350,11 @@ function leafRecordForProof(proof, context = {}) {
   if (proof.leafRef < 0 || proof.leafRef >= table.length) return null;
   const record = asRecord(table[proof.leafRef]);
   if (!record.leafNode || typeof record.leafNode !== "object") return null;
-  if (String(record.domain || "") !== String(proof.domain || "")) return null;
+  if (String(record.domain) !== String(proof.domain)) return null;
   return {
-    domain: String(record.domain || ""),
-    leafRoot: String(record.leafRoot || ""),
-    leafRootHash: String(record.leafRootHash || ""),
+    domain: String(record.domain),
+    leafRoot: String(record.leafRoot),
+    leafRootHash: String(record.leafRootHash),
     leafNode: record.leafNode
   };
 }
@@ -373,7 +373,7 @@ function nodePayloadFromProofLeaf(proof, context = {}) {
     count: Number(leafNode.count ?? asArray(leafNode.entries).length),
     entries: asArray(leafNode.entries).map(normalizeIndexEntry),
     children: [],
-    splitter: leafNode.splitter || splitterConfig()
+    splitter: leafNode.splitter
   });
 }
 
@@ -393,7 +393,7 @@ function verifyPathToRoot({ proof, leafDescriptor, selectionKey = null, context 
       domain: proof.domain,
       level: pathItem.level,
       keyRange: pathItem.keyRange,
-      count: children.reduce((total, child) => total + Number(child.count || 0), 0),
+      count: children.reduce((total, child) => total + Number(child.count), 0),
       entries: [],
       children,
       splitter: splitterConfig()
@@ -414,17 +414,17 @@ function verifyMembershipProof(proof, context = {}) {
   if (!leafRecord || !leafPayload) return false;
   const leafRoot = cidForCanonical(leafPayload);
   const leafRootHash = hexFromCid(leafRoot);
-  if (!verifyFinalizedNodePayload(leafPayload, { root: leafRecord.leafRoot || leafRoot }, leafRoot)) return false;
+  if (!verifyFinalizedNodePayload(leafPayload, { root: leafRecord.leafRoot }, leafRoot)) return false;
   if ((leafRecord.leafRoot && leafRecord.leafRoot !== leafRoot) ||
       (leafRecord.leafRootHash && leafRecord.leafRootHash !== leafRootHash)) return false;
   const leafDescriptor = descriptorFromNodePayload(leafPayload, leafRoot);
-  const normalizedKey = String(proof.key || "");
+  const normalizedKey = String(proof.key);
   const rootDescriptor = verifyPathToRoot({ proof, leafDescriptor, selectionKey: normalizedKey, context });
   if (!rootDescriptor) return false;
   if (rootDescriptor.root !== proof.indexRoot || rootDescriptor.rootHash !== proof.rootHash) return false;
   // Leaf shape validation guarantees payload entries are canonical entries.
   const entries = asArray(leafPayload.entries);
-  const entry = normalizeIndexEntry(proof.entry || {});
+  const entry = normalizeIndexEntry(proof.entry);
   const found = entries.find((candidate) => candidate.key === normalizedKey);
   return Boolean(found) &&
     indexEntriesEqual(found, entry) &&
@@ -439,11 +439,11 @@ function verifyCompactNonMembershipProof(proof, context = {}) {
   if (!leafRecord || !leafPayload) return false;
   const leafRoot = cidForCanonical(leafPayload);
   const leafRootHash = hexFromCid(leafRoot);
-  if (!verifyFinalizedNodePayload(leafPayload, { root: leafRecord.leafRoot || leafRoot }, leafRoot)) return false;
+  if (!verifyFinalizedNodePayload(leafPayload, { root: leafRecord.leafRoot }, leafRoot)) return false;
   if ((leafRecord.leafRoot && leafRecord.leafRoot !== leafRoot) ||
       (leafRecord.leafRootHash && leafRecord.leafRootHash !== leafRootHash)) return false;
   const leafDescriptor = descriptorFromNodePayload(leafPayload, leafRoot);
-  const normalizedKey = String(proof.key || "");
+  const normalizedKey = String(proof.key);
   const rootDescriptor = verifyPathToRoot({ proof, leafDescriptor, selectionKey: normalizedKey, context });
   if (!rootDescriptor) return false;
   if (rootDescriptor.root !== proof.indexRoot || rootDescriptor.rootHash !== proof.rootHash) return false;
@@ -493,7 +493,7 @@ function verifyMembershipMultiproof(proof, context = {}) {
     if (!leafRecord || !leafPayload) return false;
     const leafRoot = cidForCanonical(leafPayload);
     const leafRootHash = hexFromCid(leafRoot);
-    if (!verifyFinalizedNodePayload(leafPayload, { root: leafRecord.leafRoot || leafRoot }, leafRoot)) return false;
+    if (!verifyFinalizedNodePayload(leafPayload, { root: leafRecord.leafRoot }, leafRoot)) return false;
     if ((leafRecord.leafRoot && leafRecord.leafRoot !== leafRoot) ||
         (leafRecord.leafRootHash && leafRecord.leafRootHash !== leafRootHash)) {
       return false;
@@ -521,20 +521,20 @@ function verifyMembershipMultiproof(proof, context = {}) {
 }
 
 function effectiveRangeMinimum(proof) {
-  const min = String(proof.min || "");
-  const after = String(proof.after || "");
+  const min = String(proof.min);
+  const after = String(proof.after);
   return after && compareIndexKeys(after, min) > 0 ? after : min;
 }
 
 function proofRangeContains(range, proof) {
-  return rangesIntersect(range, effectiveRangeMinimum(proof), String(proof.max || "\uffff"));
+  return rangesIntersect(range, effectiveRangeMinimum(proof), String(proof.max));
 }
 
 function verifyRangeProof(proof, context = {}) {
   if (!proof || proof.proofType !== PACTIUM_PROOF_TYPES.indexRange) return false;
-  const min = String(proof.min || "");
-  const max = String(proof.max || "\uffff");
-  const after = String(proof.after || "");
+  const min = String(proof.min);
+  const max = String(proof.max);
+  const after = String(proof.after);
   if (compareIndexKeys(min, max) > 0) return false;
   const coveredRoots = new Set();
   const leafRecords = [];
@@ -578,7 +578,7 @@ function verifyRangeProof(proof, context = {}) {
       if (!selectionKey) selectionKey = entry.key;
       matchingEntries.push(entry);
     }
-    selectionKey ||= descriptor.keyRange?.min || "";
+    selectionKey ||= descriptor.keyRange.min;
     const expandedPath = expandProofPath(localProof, context, descriptorTable);
     const rootDescriptor = verifyPathToRoot({
       proof: localProof,
@@ -613,7 +613,7 @@ function verifyRangeProof(proof, context = {}) {
     if (proof.truncated === true) return false;
     return proof.boundaryProof ? verifyCompactNonMembershipProof(proof.boundaryProof, context) : asArray(proof.leaves).length === 0;
   }
-  const lastReturnedKey = expectedEntries[expectedEntries.length - 1]?.key || "";
+  const lastReturnedKey = expectedEntries.at(-1).key;
   const hasLocalExtra = matchingEntries.length > expectedEntries.length;
   if (proof.truncated === true) {
     if (expectedEntries.length !== requestedLimit || !hasLocalExtra) return false;

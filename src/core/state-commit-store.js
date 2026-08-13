@@ -149,7 +149,7 @@ export function createStateCommitStore({
         ? {
             targetRoot: text(input.targetRoot || input.root),
             anchor: asObject(input.anchor),
-            allowedOperationIds: asArray(input.allowedOperationIds).map(text).filter(Boolean),
+            allowedOperationIds: asArray(input.allowedOperationIds).map((value) => text(value)).filter(Boolean),
             maxSuffixEvents: Number(input.maxSuffixEvents || 256)
           }
         : {
@@ -221,20 +221,27 @@ export function createStateCommitStore({
     );
   }
 
-  async function putIndex(root, key, valueRef, metadata = {}) {
-    const normalizedKey = normalizePathKey(key);
-    const next = await indexEngine.put(root, normalizedKey, {
-      key: normalizedKey,
-      valueRef: text(valueRef),
-      valueHash: protocolHash("block", { valueRef: text(valueRef) }),
-      metadata: normalizeCanonicalValue(asObject(metadata))
-    });
-    return next.root;
-  }
-
-  async function deleteIndex(root, key) {
-    const next = await indexEngine.delete(root, normalizePathKey(key));
-    return next.root;
+  async function mutateIndex(root, mutations, scope) {
+    const latest = new Map();
+    for (const mutation of mutations) {
+      const key = normalizePathKey(mutation.key);
+      if (!key) continue;
+      const action = text(mutation.action, "put");
+      latest.set(key, action === "delete"
+        ? { action: "delete", key }
+        : {
+            action: "put",
+            key,
+            valueRef: text(mutation.valueRef || mutation.value),
+            valueHash: text(mutation.valueHash || protocolHash("block", {
+              valueRef: text(mutation.valueRef || mutation.value || "")
+            })),
+            metadata: normalizeCanonicalValue(asObject(mutation.metadata))
+          });
+    }
+    const normalized = [...latest.values()].sort((left, right) => left.key.localeCompare(right.key));
+    if (normalized.length === 0) return root;
+    return (await indexEngine.mutate(root, normalized, { domain: `state:${scope}` })).root;
   }
 
   async function verifyRestoreLineage({
@@ -252,7 +259,7 @@ export function createStateCommitStore({
       anchoredEvent?.afterRoot === targetRoot
       ? anchorOffset
       : -1;
-    const allowed = asArray(allowedOperationIds).map(text).filter(Boolean);
+    const allowed = asArray(allowedOperationIds).map((value) => text(value)).filter(Boolean);
     const suffix = chronological.slice(anchorIndex + 1);
     const conflicting = suffix.find((event) => !allowed.includes(text(event.operationId)));
     if (anchorIndex < 0 || allowed.length === 0 || suffix.length > Math.max(1, Number(maxSuffixEvents) || 256) || conflicting) {
@@ -291,19 +298,7 @@ export function createStateCommitStore({
           afterRoot = (await indexEngine.createIndex([], { domain: `state:${scope}` })).root;
         }
         const mutations = asArray(input.mutations);
-        for (const mutation of mutations) {
-          const action = text(mutation.action, "put");
-          if (action === "delete") {
-            afterRoot = await deleteIndex(afterRoot, mutation.key);
-          } else {
-            afterRoot = await putIndex(
-              afterRoot,
-              mutation.key,
-              mutation.valueRef || mutation.value,
-              mutation.metadata || {}
-            );
-          }
-        }
+        afterRoot = await mutateIndex(afterRoot, mutations, scope);
         const operationId = text(input.operationId, defaultCommitOperationId);
         const envelope = await core.recordOperation({
           operationId,
@@ -348,7 +343,7 @@ export function createStateCommitStore({
           afterRoot,
           eventHash: event.eventHash,
           eventId: event.eventId,
-          contentRefs: asArray(input.contentRefs).map(text).filter(Boolean),
+          contentRefs: asArray(input.contentRefs).map((value) => text(value)).filter(Boolean),
           mutations: normalizeCanonicalValue(mutations),
           payload: normalizeCanonicalValue(asObject(input.payload)),
           evidence: {
@@ -433,7 +428,7 @@ export function createStateCommitStore({
           afterRoot: targetRoot,
           eventHash: event.eventHash,
           eventId: event.eventId,
-          contentRefs: asArray(input.contentRefs).map(text).filter(Boolean),
+          contentRefs: asArray(input.contentRefs).map((value) => text(value)).filter(Boolean),
           mutations: [],
           payload: normalizeCanonicalValue(asObject(input.payload)),
           evidence: {

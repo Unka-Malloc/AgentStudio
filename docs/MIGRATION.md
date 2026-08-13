@@ -28,7 +28,7 @@ During the `0.x` series, minor versions may include breaking changes. The protoc
 
 ### Current protocol/data format: v0.3
 
-Pactium 0.5.0 uses the `pactium.v0.3` protocol, normalized runtime-state layout, and `pactium.sqlite.v2.br1` SQLite format. Key constraints:
+Pactium 0.8.x uses the `pactium.v0.3` protocol, normalized runtime-state layout, and `pactium.sqlite.v2.br1` SQLite format. Key constraints:
 
 - **Fresh current directories only** -- Pactium does not read, dual-write, or migrate non-current formats
 - **Latest schema only** -- there is no support for loading older schema versions
@@ -49,7 +49,7 @@ Pactium intentionally does not include automatic migration. Data directories are
 
 | Pactium version | Node.js requirement |
 | --- | --- |
-| 0.7.x | `^22.0.0 \|\| ^24.0.0` |
+| 0.8.x | `^22.0.0 \|\| ^24.0.0` |
 
 Pactium is pure ESM. It cannot be loaded via `require()`. If your project uses CommonJS, use dynamic `import()`:
 

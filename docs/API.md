@@ -791,7 +791,7 @@ Bundle export accepts `{ "envelope": ... }`, `{ "envelopeId": "..." }`, `{ "id":
 import {
   PACTIUM_PROTOCOL,           // "pactium.v0.3"
   PACTIUM_SCHEMA_VERSION,     // "pactium.v0.3.schema.latest"
-  PACTIUM_PACKAGE_VERSION,    // "0.7.0"
+  PACTIUM_PACKAGE_VERSION,    // "0.8.0"
   PACTIUM_INDEX_ENGINE,       // "pactium.verifiable-index-engine"
   PACTIUM_INDEX_SPLITTER,     // "pactium-cdc-boundary"
   PACTIUM_PROOF_BUNDLE_TYPE,  // "pactium.proof-bundle.indexed"

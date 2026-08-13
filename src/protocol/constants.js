@@ -1,6 +1,6 @@
 export const PACTIUM_PROTOCOL = "pactium.v0.3";
 export const PACTIUM_SCHEMA_VERSION = "pactium.v0.3.schema.latest";
-export const PACTIUM_PACKAGE_VERSION = "0.7.0";
+export const PACTIUM_PACKAGE_VERSION = "0.8.0";
 export const PACTIUM_INDEX_ENGINE = "pactium.verifiable-index-engine";
 export const PACTIUM_INDEX_SPLITTER = "pactium-cdc-boundary";
 export const PACTIUM_PROOF_BUNDLE_TYPE = "pactium.proof-bundle.indexed";

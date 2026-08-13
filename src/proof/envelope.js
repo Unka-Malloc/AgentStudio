@@ -110,7 +110,7 @@ export function compactProofMaterialTables(material) {
     for (const key of Object.keys(value).sort()) visit(value[key], activeDomain);
   }
   const compacted = normalizeCanonicalValue(material);
-  visit(compacted.proofs || {});
+  visit(compacted.proofs);
   if (descriptorTable.length > 0) compacted.proofDescriptorTable = descriptorTable;
   if (leafTable.length > 0) compacted.proofLeafTable = leafTable;
   return compacted;
@@ -129,7 +129,7 @@ export function finalizeEnvelope(envelope) {
   const extensions = asArray(envelope.extensions);
   const seenNames = new Set();
   for (const extension of extensions) {
-    const name = String(extension.name || "");
+    const name = String(extension.name ?? "");
     if (!name) continue;
     if (seenNames.has(name)) {
       throw new Error(`Duplicate extension name in Proof Envelope: ${name}`);
@@ -138,7 +138,7 @@ export function finalizeEnvelope(envelope) {
   }
   const criticalExtensions = extensions
     .filter((extension) => extension.critical === true)
-    .map((extension) => String(extension.name || ""))
+    .map((extension) => String(extension.name ?? ""))
     .filter(Boolean);
   const identity = envelopeIdentityPayload({ ...envelope, criticalExtensions, extensions });
   return {
@@ -154,7 +154,7 @@ export async function materializeExtension(storage, extension) {
   if (extension.valueRef && extension.valueHash) {
     return {
       protocol: PACTIUM_PROTOCOL,
-      name: String(extension.name || ""),
+      name: String(extension.name ?? ""),
       critical: extension.critical === true,
       valueRef: String(extension.valueRef),
       valueHash: String(extension.valueHash),
@@ -165,12 +165,12 @@ export async function materializeExtension(storage, extension) {
     kind: `proof-extension:${extension.name || "extension"}`,
     refs: [
       ...asArray(extension.refs),
-      extension.value?.evidenceRef || ""
+      extension.value?.evidenceRef
     ].filter(Boolean)
   });
   return {
     protocol: PACTIUM_PROTOCOL,
-    name: String(extension.name || ""),
+    name: String(extension.name ?? ""),
     critical: extension.critical === true,
     valueRef: block.cid,
     valueHash: block.payloadHash,
@@ -182,7 +182,7 @@ async function resolveBlock({ cid, storage, bundleMap }) {
   if (bundleMap?.has(cid)) {
     const record = await bundleMap.get(cid);
     if (!record) return null;
-    const bytes = Buffer.from(String(record.payloadBase64 || ""), "base64");
+    const bytes = Buffer.from(String(record.payloadBase64 ?? ""), "base64");
     const payloadHash = `sha256:${hashBytes(bytes)}`;
     if (payloadHash !== record.payloadHash || cidForBytes(bytes) !== record.cid) {
       throw new Error(`Proof bundle block integrity failure for ${cid}`);
@@ -334,7 +334,7 @@ async function verifyEmbeddedProofs({
       await visit(nested, path ? `${path}.${key}` : key);
     }
   }
-  await visit(proofMaterial?.proofs || {}, "proofs");
+  await visit(proofMaterial.proofs, "proofs");
 }
 
 function factRefBindings(envelope, proofMaterial) {
@@ -432,7 +432,7 @@ function verifySemanticBindings({ envelope, proofMaterial, ledgerFact = null, fa
     }));
   }
 
-  const proofs = proofMaterial?.proofs || {};
+  const proofs = proofMaterial.proofs ?? {};
   const appendConditionHash = String(proofMaterial?.appendCondition?.conditionHash || "");
   if (ledgerFact) {
     if (ledgerFact.factType !== envelope.factType) {
@@ -525,7 +525,7 @@ function verifySemanticBindings({ envelope, proofMaterial, ledgerFact = null, fa
         stateCommit.workspaceId !== ledgerFact.workspaceId
       )) ||
       stateCommit.stateRoot !== proofs.state?.root ||
-      Number(stateCommit.mutationCount || 0) !== mutationDescriptors.length ||
+      Number(stateCommit.mutationCount ?? 0) !== mutationDescriptors.length ||
       mutationKeys.length !== mutationDescriptors.length ||
       mutationActions.length !== mutationDescriptors.length ||
       mutationKeys.some((key, index) => key !== mutationDescriptors[index]?.key) ||
@@ -533,7 +533,7 @@ function verifySemanticBindings({ envelope, proofMaterial, ledgerFact = null, fa
       provedKeyCount !== touchedKeyProofs.length ||
       provedKeyCount > mutationDescriptors.length ||
       totalUniqueKeyCount !== mutationDescriptors.length ||
-      !["sampled", "full"].includes(String(proofProfile.mode || stateCommit.mutationProofMode || ""));
+      !["sampled", "full"].includes(String(proofProfile.mode ?? stateCommit.mutationProofMode ?? ""));
     if (invalidStateCommit) {
       failures.push(createVerificationFailure({
         layer: "proof-semantics",
@@ -727,14 +727,14 @@ export async function verifyProofEnvelope(envelope, {
   const extensions = asArray(envelope.extensions);
   const extensionsByName = new Map();
   for (const extension of extensions) {
-    const name = String(extension.name || "");
+    const name = String(extension.name ?? "");
     if (!name) continue;
     if (!extensionsByName.has(name)) extensionsByName.set(name, []);
     extensionsByName.get(name).push(extension);
   }
   const criticalExtensionNames = new Set(asArray(envelope.criticalExtensions).map(String));
   for (const extension of extensions) {
-    const name = String(extension.name || "");
+    const name = String(extension.name ?? "");
     if (!name) continue;
     if (extension.critical === true && !criticalExtensionNames.has(name)) {
       failures.push(createVerificationFailure({
@@ -874,11 +874,11 @@ export async function verifyProofEnvelope(envelope, {
     //   trustedManifest (caller trust anchor) >
     //   verifierManifest (host-provided operational manifest) >
     //   proof material's self-carried manifest (format validation only)
-    const proofManifest = proofMaterial.ledger.verifierManifest || proofMaterial.ledger.head?.verifierManifest || null;
-    const manifestForHead = trustedManifest || verifierManifest || proofManifest || null;
+    const proofManifest = proofMaterial.ledger.verifierManifest ?? proofMaterial.ledger.head?.verifierManifest ?? null;
+    const manifestForHead = trustedManifest ?? verifierManifest ?? proofManifest;
     const signaturesForHead = asArray(ledgerHeadSignatures).length > 0
       ? ledgerHeadSignatures
-      : asArray(proofMaterial.ledger.ledgerHeadSignatures || proofMaterial.ledger.head?.signatures);
+      : asArray(proofMaterial.ledger.ledgerHeadSignatures ?? proofMaterial.ledger.head?.signatures);
 
     // In "structural" mode skip signature verification entirely.
     if (resolvedTrustPolicy !== "structural" && manifestForHead) {

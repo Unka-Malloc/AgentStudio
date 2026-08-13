@@ -60,6 +60,7 @@
     "createVerifiableIndexEngine",
     "createVerificationFailure",
     "createVerifierManifest",
+    "createWeightedLruCache",
     "defaultPactiumDataDir",
     "detectSqliteCapabilities",
     "emptyTreeHash",
@@ -88,9 +89,9 @@
   ],
   "declarations": {
     "src/index.d.ts": {
-      "sha256": "dd1ac58871e4f7d9c3433be6c2731afbeece31bd0e0429789e06c713c14b19cd",
-      "byteLength": 20796,
-      "exportCount": 95
+      "sha256": "9cff2415cd8face9a9927af38020ba33c6339d8cf80c374a0b48f8aaa517c0d8",
+      "byteLength": 21420,
+      "exportCount": 97
     },
     "src/http.d.ts": {
       "sha256": "a346381cba4ca126e3ce85a55a12730b57fb7be4493e803086a70bfcb6c34527",
