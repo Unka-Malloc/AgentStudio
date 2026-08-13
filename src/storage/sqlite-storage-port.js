@@ -160,7 +160,7 @@ export function createSqliteStoragePort({
   const memoryBlocks = createWeightedLruCache({
     maxEntries: blockCacheLimit,
     maxWeight: asPositiveCacheLimit(blockCacheBytes, DEFAULT_BLOCK_CACHE_BYTES),
-    weightOf: (record) => Number(record?.byteLength || 0)
+    weightOf: (record) => Number(record.byteLength)
   });
   const memoryObjects = createWeightedLruCache({
     maxEntries: objectCacheLimit,
@@ -256,9 +256,9 @@ export function createSqliteStoragePort({
       throw new Error("Pactium latest-schema-only boundary rejected non-current SQLite application tables.");
     }
     const userVersionRow = database().prepare("PRAGMA user_version").get();
-    const userVersion = Number(userVersionRow?.user_version || 0);
+    const userVersion = Number(userVersionRow?.user_version);
     const autoVacuumRow = database().prepare("PRAGMA auto_vacuum").get();
-    const autoVacuum = Number(autoVacuumRow?.auto_vacuum || 0);
+    const autoVacuum = Number(autoVacuumRow?.auto_vacuum);
     if (userVersion !== SQLITE_SCHEMA_VERSION || autoVacuum !== 2) {
       throw new Error("Pactium latest-schema-only boundary rejected a non-current SQLite storage format.");
     }
@@ -272,14 +272,14 @@ export function createSqliteStoragePort({
       if (manifest.protocol !== PACTIUM_PROTOCOL || manifest.schema !== PACTIUM_SCHEMA_VERSION) {
         throw new Error("Pactium latest-schema-only boundary rejected a non-current protocol data directory.");
       }
-      const manifestBackend = String(manifest.storageBackend || "json");
+      const manifestBackend = String(manifest.storageBackend ?? "json");
       if (manifestBackend !== PACTIUM_STORAGE_BACKEND_SQLITE) {
         throw new Error(`Pactium data directory uses ${manifestBackend} storage backend; SQLite storage backend cannot open it.`);
       }
       if (manifest.storageFormat !== PACTIUM_SQLITE_STORAGE_FORMAT) {
         throw new Error("Pactium latest-schema-only boundary rejected a non-current SQLite manifest.");
       }
-      const manifestDatabasePath = resolveSqliteDatabasePath(resolvedDataDir, manifest.sqlitePath || "pactium.sqlite");
+      const manifestDatabasePath = resolveSqliteDatabasePath(resolvedDataDir, manifest.sqlitePath ?? "pactium.sqlite");
       if (databasePath && resolvedDatabasePath !== manifestDatabasePath) {
         throw new Error(`Pactium SQLite manifest uses database ${manifestDatabasePath}; configured databasePath cannot open it.`);
       }
@@ -390,7 +390,7 @@ export function createSqliteStoragePort({
       }
       const concurrentDatabasePath = resolveSqliteDatabasePath(
         resolvedDataDir,
-        concurrentManifest.sqlitePath || "pactium.sqlite"
+        concurrentManifest.sqlitePath ?? "pactium.sqlite"
       );
       if (concurrentDatabasePath !== resolvedDatabasePath) {
         throw new Error("Pactium concurrent SQLite initialization selected a different database path.");
@@ -458,7 +458,6 @@ export function createSqliteStoragePort({
     const normalizedParents = normalizeStringSet(parentCids);
     const refsByParent = new Map(normalizedParents.map((cid) => [cid, []]));
     for (const batch of chunks(normalizedParents)) {
-      if (batch.length === 0) continue;
       const rows = database().prepare(`
         SELECT parent_cid, child_cid FROM block_refs
         WHERE parent_cid IN (${placeholders(batch.length)})
@@ -487,7 +486,7 @@ export function createSqliteStoragePort({
       codec: row.codec,
       kind: row.kind,
       refs: readRefs(row.cid),
-      byteLength: Number(row.raw_length || 0),
+      byteLength: Number(row.raw_length),
       storedByteLength: Buffer.from(row.payload).length,
       compression: row.compression,
       payloadHash,
@@ -497,7 +496,7 @@ export function createSqliteStoragePort({
   }
 
   function readBlockRecord(cid) {
-    const row = database().prepare("SELECT * FROM blocks WHERE cid = ?").get(String(cid || ""));
+    const row = database().prepare("SELECT * FROM blocks WHERE cid = ?").get(String(cid));
     return blockFromRow(row);
   }
 
@@ -530,7 +529,6 @@ export function createSqliteStoragePort({
       existing.add(ref);
     }
     for (const batch of chunks(missing)) {
-      if (batch.length === 0) continue;
       database().prepare(`
         INSERT OR IGNORE INTO block_refs (parent_cid, ordinal, child_cid)
         VALUES ${batch.map(() => "(?, ?, ?)").join(", ")}
@@ -542,7 +540,7 @@ export function createSqliteStoragePort({
   async function putBlock(value, { codec = "pactium-canonical", kind = "protocol-material", refs = [] } = {}) {
     await ensureInitialized();
     const bytes = codec === "raw"
-      ? Buffer.from(value || "")
+      ? Buffer.from(value)
       : Buffer.from(canonicalEncode(value));
     const cid = cidForBytes(bytes);
     const payloadHash = `sha256:${hashBytes(bytes)}`;
@@ -576,7 +574,7 @@ export function createSqliteStoragePort({
       encoded.payload,
       createdAt
     );
-    if (Number(result?.changes || 0) === 0) {
+    if (Number(result?.changes) === 0) {
       existing = readBlockRecord(cid);
       if (!existing || existing.payloadHash !== payloadHash || !existing.bytes.equals(bytes)) {
         throw new Error(`CAS collision or replacement attempt for ${cid}`);
@@ -606,7 +604,7 @@ export function createSqliteStoragePort({
 
   async function getBlock(cid) {
     await ensureInitialized();
-    const normalizedCid = String(cid || "");
+    const normalizedCid = String(cid);
     const cached = cachedBlock(normalizedCid);
     if (cached) return cloneBlock(cached);
     const record = readBlockRecord(normalizedCid);
@@ -623,7 +621,7 @@ export function createSqliteStoragePort({
     const missing = [];
     const blocks = [];
     const seen = new Set();
-    const stack = [String(rootCid || "").trim()].filter(Boolean);
+    const stack = [String(rootCid).trim()].filter(Boolean);
     while (stack.length > 0) {
       const cid = stack.pop();
       if (!cid || seen.has(cid)) continue;
@@ -735,7 +733,7 @@ export function createSqliteStoragePort({
     `).get(normalizedScope, normalizedKey);
     if (!row) return fallback;
     const value = protocolObjectFromRow(row);
-    cacheProtocolObject(memoryKey, value, Number(row.raw_length || 0));
+    cacheProtocolObject(memoryKey, value, Number(row.raw_length));
     return normalizeCanonicalValue(value);
   }
 
@@ -768,7 +766,7 @@ export function createSqliteStoragePort({
     }
     for (const [memoryKey, value] of staged.objects.entries()) {
       if (value === TRANSACTION_TOMBSTONE) memoryObjects.delete(memoryKey);
-      else memoryObjects.set(memoryKey, value, Number(staged.objectWeights.get(memoryKey) || 0));
+      else memoryObjects.set(memoryKey, value, Number(staged.objectWeights.get(memoryKey)));
     }
   }
 
@@ -830,7 +828,7 @@ export function createSqliteStoragePort({
       WHERE cid > ?${kindClause}
       ORDER BY cid
       LIMIT ?
-    `).all(String(afterCid || ""), ...normalizedKinds, normalizedLimit + 1);
+    `).all(String(afterCid), ...normalizedKinds, normalizedLimit + 1);
     const hasMore = rows.length > normalizedLimit;
     const page = hasMore ? rows.slice(0, normalizedLimit) : rows;
     const refsByParent = readRefsForParents(page.map((row) => String(row.cid)));
@@ -839,11 +837,11 @@ export function createSqliteStoragePort({
       codec: String(row.codec),
       kind: String(row.kind),
       compression: String(row.compression),
-      byteLength: Number(row.raw_length || 0),
-      storedByteLength: Number(row.stored_length || 0),
+      byteLength: Number(row.raw_length),
+      storedByteLength: Number(row.stored_length),
       payloadHash: String(row.cid).slice("cid:".length),
       createdAt: String(row.created_at),
-      refs: refsByParent.get(String(row.cid)) || []
+      refs: refsByParent.get(String(row.cid))
     }));
     return {
       supported: true,
@@ -856,7 +854,6 @@ export function createSqliteStoragePort({
   function existingCids(cids) {
     const existing = new Set();
     for (const batch of chunks(cids)) {
-      if (batch.length === 0) continue;
       const rows = database().prepare(`
         SELECT cid FROM blocks WHERE cid IN (${placeholders(batch.length)})
       `).all(...batch);
@@ -966,14 +963,14 @@ export function createSqliteStoragePort({
         return true;
       });
       candidateCount += candidates.length;
-      candidateBytes += candidates.reduce((total, row) => total + Number(row.stored_length || 0), 0);
+      candidateBytes += candidates.reduce((total, row) => total + Number(row.stored_length), 0);
       for (const row of candidates) {
         if (candidatePreview.length >= 100) break;
         candidatePreview.push({
           cid: String(row.cid),
           kind: String(row.kind),
-          byteLength: Number(row.raw_length || 0),
-          storedByteLength: Number(row.stored_length || 0),
+          byteLength: Number(row.raw_length),
+          storedByteLength: Number(row.stored_length),
           createdAt: String(row.created_at)
         });
       }

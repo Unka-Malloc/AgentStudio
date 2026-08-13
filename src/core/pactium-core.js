@@ -68,9 +68,8 @@ function compareStateMutationKeys(left, right) {
 
 function netStateMutationsByKey(mutations) {
   const latestByKey = new Map();
-  for (const mutation of asArray(mutations)) {
-    const key = String(mutation?.key || "");
-    if (!key) continue;
+  for (const mutation of mutations) {
+    const key = String(mutation.key);
     latestByKey.set(key, { ...asRecord(mutation), key });
   }
   return [...latestByKey.values()].sort((left, right) => compareStateMutationKeys(left.key, right.key));
@@ -169,14 +168,7 @@ export function createPactium({
 
   function runOpenAsync(method, args) {
     if (lifecycleState !== "open") return Promise.reject(closedCoreError());
-    let result;
-    try {
-      result = method(...args);
-    } catch (error) {
-      return Promise.reject(error);
-    }
-    let tracked;
-    tracked = Promise.resolve(result).finally(() => {
+    const tracked = Promise.resolve().then(() => method(...args)).finally(() => {
       activeCalls.delete(tracked);
     });
     activeCalls.add(tracked);
@@ -189,8 +181,8 @@ export function createPactium({
 
   function guardSync(method) {
     return (...args) => {
-      if (lifecycleState !== "open") throw closedCoreError();
-      return method(...args);
+      if (lifecycleState === "open") return method(...args);
+      throw closedCoreError();
     };
   }
 
@@ -223,7 +215,13 @@ export function createPactium({
       }).catch(async (error) => {
         state = null;
         if (typeof resolvedStorage.clearCache === "function") resolvedStorage.clearCache();
-        if (typeof ledger.reload === "function") await ledger.reload().catch(() => null);
+        if (typeof ledger.reload === "function") {
+          try {
+            await ledger.reload();
+          } catch {
+            // Preserve the originating mutation failure; state is already invalidated.
+          }
+        }
         throw error;
       });
     });
@@ -265,19 +263,17 @@ export function createPactium({
   }
 
   async function readFact(locator, expectedFactType) {
-    if (!locator?.factCid) return null;
     const block = await resolvedStorage.getBlock(String(locator.factCid));
     if (!block) throw new Error(`Ledger fact block missing from storage: ${locator.factCid}`);
     const fact = canonicalDecode(block.bytes);
     if (fact?.factType !== expectedFactType) {
-      throw new Error(`Runtime locator expected ${expectedFactType}, received ${fact?.factType || "unknown"}.`);
+      throw new Error(`Runtime locator expected ${expectedFactType}, received ${fact?.factType ?? "unknown"}.`);
     }
     return fact;
   }
 
   async function loadIntentRecord(current, intentId) {
-    const key = String(intentId || "");
-    if (!key) return null;
+    const key = String(intentId);
     if (Object.hasOwn(current.intents, key)) return current.intents[key];
     const locator = await stateStore.get(stateStore.scopes.intent, key, null);
     if (!locator) return null;
@@ -307,8 +303,7 @@ export function createPactium({
   }
 
   async function loadOutcome(current, intentId) {
-    const key = String(intentId || "");
-    if (!key) return null;
+    const key = String(intentId);
     if (Object.hasOwn(current.outcomes, key)) return current.outcomes[key];
     const locator = await stateStore.get(stateStore.scopes.outcome, key, null);
     if (!locator) return null;
@@ -324,7 +319,7 @@ export function createPactium({
       outcomeId: safeText(outcome.outcomeId),
       workspaceId: safeText(outcome.workspaceId),
       ledgerEventId: safeText(ledgerAppend.entry.eventId),
-      ledgerIndex: Number(ledgerAppend.entry.index || 0),
+      ledgerIndex: Number(ledgerAppend.entry.index),
       factCid: safeText(ledgerAppend.entry.factCid),
       outcomeEnvelopeId: safeText(outcomeEnvelopeId)
     };
@@ -335,8 +330,7 @@ export function createPactium({
   }
 
   async function loadReceipt(current, receiptId) {
-    const key = String(receiptId || "");
-    if (!key) return null;
+    const key = String(receiptId);
     if (Object.hasOwn(current.receipts, key)) return current.receipts[key];
     const locator = await stateStore.get(stateStore.scopes.receipt, key, null);
     if (!locator) return null;
@@ -352,7 +346,7 @@ export function createPactium({
       workspaceId: safeText(receipt.workspaceId),
       operationId: safeText(receipt.operationId),
       ledgerEventId: safeText(ledgerAppend.entry.eventId),
-      ledgerIndex: Number(ledgerAppend.entry.index || 0),
+      ledgerIndex: Number(ledgerAppend.entry.index),
       factCid: safeText(ledgerAppend.entry.factCid),
       envelopeId: safeText(envelopeId)
     };
@@ -393,7 +387,7 @@ export function createPactium({
   }
 
   async function hasCausalityRef(ref) {
-    return Boolean(await stateStore.get(stateStore.scopes.causalityRef, String(ref || ""), null));
+    return Boolean(await stateStore.get(stateStore.scopes.causalityRef, String(ref), null));
   }
 
   // Runtime state keeps only the envelope block CID; the envelope body lives in
@@ -411,7 +405,7 @@ export function createPactium({
   }
 
   async function resolveEnvelopeById(current, envelopeId) {
-    const key = String(envelopeId || "");
+    const key = String(envelopeId);
     if (!Object.hasOwn(current.envelopes, key)) {
       const locator = await stateStore.get(stateStore.scopes.envelope, key, null);
       if (locator?.cid) current.envelopes[key] = locator.cid;
@@ -509,7 +503,7 @@ export function createPactium({
       envelopeType: "pactium.proof-envelope",
       envelopeKind,
       factType: fact.factType,
-      factId: fact.intentId || fact.outcomeId || fact.receiptId || fact.repairId || ledgerAppend.entry.eventId,
+      factId: fact.intentId ?? fact.outcomeId ?? fact.receiptId ?? fact.repairId ?? ledgerAppend.entry.eventId,
       factRef: {
         ledgerEventId: ledgerAppend.entry.eventId,
         ledgerIndex: ledgerAppend.entry.index,
@@ -865,14 +859,13 @@ export function createPactium({
     }
     const projection = await updateWorkspaceProjection({ indexEngine, state: current, workspaceId, ledgerAppend, proofOptions });
     const workspaceStateEntries = stateEntriesFor(current, workspaceId);
-    const mutations = asArray(input.stateMutations || input.state?.mutations);
+    const mutations = asArray(input.stateMutations ?? input.state?.mutations);
     const keyedMutations = mutations.filter((mutation) => mutation?.key);
     const netKeyedMutations = netStateMutationsByKey(keyedMutations);
     await ensureWorkspaceStateRoot({ indexEngine, workspace, workspaceStateEntries });
     const stateIndexMutations = [];
     for (const mutation of netKeyedMutations) {
-      const key = String(mutation.key || "");
-      if (!key) continue;
+      const key = mutation.key;
       if (mutation.action === "delete") {
         delete workspaceStateEntries[key];
         stateIndexMutations.push({ action: "delete", key });
@@ -905,14 +898,14 @@ export function createPactium({
       ? netKeyedMutations.length
       : Math.min(netKeyedMutations.length, 32);
     const mutationDescriptors = netKeyedMutations.map((mutation) => {
-      const key = String(mutation.key || "");
-      const action = String(mutation.action || "put");
-      const entry = workspaceStateEntries[key] || {};
+      const key = mutation.key;
+      const action = String(mutation.action ?? "put");
+      const entry = workspaceStateEntries[key];
       return {
         key,
         action,
-        valueRef: action === "delete" ? "" : String(entry.valueRef || ""),
-        valueHash: action === "delete" ? "" : String(entry.valueHash || ""),
+        valueRef: action === "delete" ? "" : String(entry.valueRef),
+        valueHash: action === "delete" ? "" : String(entry.valueHash),
         metadata: normalizeCanonicalValue(asRecord(mutation.metadata))
       };
     });
@@ -931,8 +924,8 @@ export function createPactium({
       stateRoot,
       mutationCount: netKeyedMutations.length,
       mutations: mutationDescriptors,
-      mutationKeys: netKeyedMutations.map((mutation) => String(mutation.key || "")),
-      mutationActions: netKeyedMutations.map((mutation) => String(mutation.action || "put")),
+      mutationKeys: netKeyedMutations.map((mutation) => mutation.key),
+      mutationActions: netKeyedMutations.map((mutation) => String(mutation.action ?? "put")),
       provedKeyCount: provedStateMutationCount,
       mutationProofMode: fullStateMutationMode ? "full" : "sampled",
       proofCompleteness: provedStateMutationCount >= netKeyedMutations.length ? "full" : "sampled",
@@ -1046,7 +1039,7 @@ export function createPactium({
     const current = await ensureState();
     const operationId = safeText(input.operationId);
     if (!operationId) throw new Error("operationId is required for Operation Receipt.");
-    if (asArray(input.stateMutations || input.state?.mutations).length > 0) {
+    if (asArray(input.stateMutations ?? input.state?.mutations).length > 0) {
       throw new Error("Operation Receipt is terminal evidence and does not accept stateMutations.");
     }
     const workspaceId = safeText(input.workspaceId || input.scope, "default");
@@ -1461,12 +1454,12 @@ export function createPactium({
             proofOptions
           });
           const workspaceStateEntries = stateEntriesFor(current, item.workspaceId);
-          const mutations = asArray(item.input.stateMutations || item.input.state?.mutations);
+          const mutations = asArray(item.input.stateMutations ?? item.input.state?.mutations);
           const netKeyedMutations = netStateMutationsByKey(mutations.filter((mutation) => mutation?.key));
           await ensureWorkspaceStateRoot({ indexEngine, workspace, workspaceStateEntries });
           const stateIndexMutations = [];
           for (const mutation of netKeyedMutations) {
-            const key = String(mutation.key || "");
+            const key = mutation.key;
             if (mutation.action === "delete") {
               delete workspaceStateEntries[key];
               stateIndexMutations.push({ action: "delete", key });
@@ -1499,14 +1492,14 @@ export function createPactium({
             ? netKeyedMutations.length
             : Math.min(netKeyedMutations.length, 32);
           const mutationDescriptors = netKeyedMutations.map((mutation) => {
-            const key = String(mutation.key || "");
-            const action = String(mutation.action || "put");
-            const entry = workspaceStateEntries[key] || {};
+            const key = mutation.key;
+            const action = String(mutation.action ?? "put");
+            const entry = workspaceStateEntries[key];
             return {
               key,
               action,
-              valueRef: action === "delete" ? "" : String(entry.valueRef || ""),
-              valueHash: action === "delete" ? "" : String(entry.valueHash || ""),
+              valueRef: action === "delete" ? "" : String(entry.valueRef),
+              valueHash: action === "delete" ? "" : String(entry.valueHash),
               metadata: normalizeCanonicalValue(asRecord(mutation.metadata))
             };
           });
@@ -1525,8 +1518,8 @@ export function createPactium({
             stateRoot,
             mutationCount: netKeyedMutations.length,
             mutations: mutationDescriptors,
-            mutationKeys: netKeyedMutations.map((mutation) => String(mutation.key || "")),
-            mutationActions: netKeyedMutations.map((mutation) => String(mutation.action || "put")),
+            mutationKeys: netKeyedMutations.map((mutation) => mutation.key),
+            mutationActions: netKeyedMutations.map((mutation) => String(mutation.action ?? "put")),
             provedKeyCount: provedStateMutationCount,
             mutationProofMode: fullStateMutationMode ? "full" : "sampled",
             proofCompleteness: provedStateMutationCount >= netKeyedMutations.length ? "full" : "sampled",
@@ -1670,7 +1663,7 @@ export function createPactium({
 
   async function lookupOpenIntent(intentId) {
     const current = await prepareRead();
-    const proof = await indexEngine.prove(current.indexRoots.openIntent, String(intentId || ""));
+    const proof = await indexEngine.prove(current.indexRoots.openIntent, String(intentId));
     const intentRecord = await loadIntentRecord(current, intentId);
     return {
       protocol: PACTIUM_PROTOCOL,
@@ -1687,38 +1680,38 @@ export function createPactium({
 
   async function lookupOutcome(intentId) {
     const current = await prepareRead();
-    const proof = await indexEngine.prove(current.indexRoots.outcome, String(intentId || ""));
+    const proof = await indexEngine.prove(current.indexRoots.outcome, String(intentId));
     const outcome = await loadOutcome(current, intentId);
-    const locator = current.outcomeLocators[String(intentId || "")] || {};
+    const locator = current.outcomeLocators[String(intentId)];
     return {
       protocol: PACTIUM_PROTOCOL,
       intentId,
       exists: isMembershipProof(proof),
       proof,
       outcome,
-      ledgerEventId: locator.ledgerEventId || "",
-      ledgerIndex: Number(locator.ledgerIndex || 0),
-      factCid: locator.factCid || "",
-      envelopeId: locator.outcomeEnvelopeId || ""
+      ledgerEventId: locator?.ledgerEventId ?? "",
+      ledgerIndex: Number(locator?.ledgerIndex ?? 0),
+      factCid: locator?.factCid ?? "",
+      envelopeId: locator?.outcomeEnvelopeId ?? ""
     };
   }
 
   async function lookupReceipt(receiptId) {
     const current = await prepareRead();
-    const key = String(receiptId || "");
+    const key = String(receiptId);
     const proof = await indexEngine.prove(current.indexRoots.receipt, key);
     const receipt = await loadReceipt(current, key);
-    const locator = current.receiptLocators[key] || {};
+    const locator = current.receiptLocators[key];
     return {
       protocol: PACTIUM_PROTOCOL,
       receiptId: key,
       exists: isMembershipProof(proof),
       proof,
       receipt,
-      ledgerEventId: locator.ledgerEventId || "",
-      ledgerIndex: Number(locator.ledgerIndex || 0),
-      factCid: locator.factCid || "",
-      envelopeId: locator.envelopeId || ""
+      ledgerEventId: locator?.ledgerEventId ?? "",
+      ledgerIndex: Number(locator?.ledgerIndex ?? 0),
+      factCid: locator?.factCid ?? "",
+      envelopeId: locator?.envelopeId ?? ""
     };
   }
 
@@ -2329,7 +2322,7 @@ export function createPactium({
         pageReclamation: { supported: false, pagesRequested: 0 }
       };
     }
-    const retainedNodeRoots = new Set(asArray(cache.retainedNodeRoots || retainedRoots).map(String));
+    const retainedNodeRoots = new Set(asArray(cache.retainedNodeRoots).map(String));
     const prunedBlocks = typeof resolvedStorage.pruneBlocks === "function"
       ? resolvedStorage.pruneBlocks((block) => {
           const kind = String(block.kind || "");
@@ -2368,11 +2361,11 @@ export function createPactium({
   }
 
   async function hasBlock(cid) {
-    return resolvedStorage.hasBlock(String(cid || ""));
+    return resolvedStorage.hasBlock(String(cid));
   }
 
   async function readLedgerHead(id) {
-    const head = await ledger.getHead(id || "");
+    const head = await ledger.getHead(id ?? "");
     if (!head) return null;
     // Clone to prevent caller mutation of internal ledger state.
     return normalizeCanonicalValue(head);
@@ -2387,12 +2380,12 @@ export function createPactium({
   }
 
   async function readProtocolObject(scope, key, fallback) {
-    return resolvedStorage.getProtocolObject(String(scope || ""), String(key || ""), fallback);
+    return resolvedStorage.getProtocolObject(String(scope), String(key), fallback);
   }
 
   async function listProtocolObjectKeys(scope) {
     if (typeof resolvedStorage.listProtocolObjectKeys === "function") {
-      return resolvedStorage.listProtocolObjectKeys(String(scope || ""));
+      return resolvedStorage.listProtocolObjectKeys(String(scope));
     }
     return [];
   }
@@ -2407,7 +2400,11 @@ export function createPactium({
     const admittedCalls = [...activeCalls];
     closePromise = (async () => {
       await Promise.allSettled(admittedCalls);
-      await mutationLane.catch(() => null);
+      try {
+        await mutationLane;
+      } catch {
+        // The caller already observed the mutation failure; closing still releases storage.
+      }
       state = null;
       if (ownsStorage) await resolvedStorage.close?.();
       lifecycleState = "closed";

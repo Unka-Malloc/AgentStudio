@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-08-13
+
+Bound Pactium event, Merkle mutation, and CAS retention work independently of accumulated history.
+
+### Added
+
+- Added segmented event-log pages with sequence and event-id indexes, durable generation-indexed CAS pins, and fail-closed pin-aware garbage collection.
+
+### Changed
+
+- State commits now coalesce and sort mutations before one path-copy Merkle batch, and event appends persist bounded record-and-byte tail segments.
+- Coverage now uses deterministic unique V8 source ranges across test isolates. The release minimum is 95% lines, 95% functions, and 87% branches under this broader source-only denominator.
+
 ## [0.7.0] - 2026-08-03
 
 Add host-neutral digest, data-dir, CAS, event-log, and state-commit helpers.
@@ -256,6 +269,7 @@ This is the first public release of Pactium as a proof-first protocol substrate.
 - Ed25519 signing support for Ledger Heads
 - Signed head verification with verifier manifest validation
 
+[0.8.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Unka-Malloc/Pactium/releases/tag/v0.5.0

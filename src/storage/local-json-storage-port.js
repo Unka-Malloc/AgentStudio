@@ -26,7 +26,7 @@ export function resolveDataDir(dataDir = "") {
 
 export function resolveWithin(root, ...segments) {
   const base = path.resolve(String(root || defaultPactiumDataDir()));
-  const target = path.resolve(base, ...segments.map((segment) => String(segment || "")));
+  const target = path.resolve(base, ...segments.map(String));
   if (target !== base && !target.startsWith(`${base}${path.sep}`)) {
     throw new Error(`Path escapes Pactium data directory: ${target}`);
   }
@@ -127,7 +127,7 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
       if (manifest.protocol !== PACTIUM_PROTOCOL || manifest.schema !== PACTIUM_SCHEMA_VERSION) {
         throw new Error("Pactium latest-schema-only boundary rejected a non-current protocol data directory.");
       }
-      const manifestBackend = String(manifest.storageBackend || PACTIUM_STORAGE_BACKEND_JSON);
+      const manifestBackend = String(manifest.storageBackend ?? PACTIUM_STORAGE_BACKEND_JSON);
       if (manifestBackend !== PACTIUM_STORAGE_BACKEND_JSON) {
         throw new Error(`Pactium data directory uses ${manifestBackend} storage backend; JSON storage backend cannot open it.`);
       }
@@ -196,7 +196,7 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
   async function putBlock(value, { codec = "pactium-canonical", kind = "protocol-material", refs = [] } = {}) {
     await ensureInitialized();
     const bytes = codec === "raw"
-      ? Buffer.from(value || "")
+      ? Buffer.from(value)
       : Buffer.from(canonicalEncode(value));
     const cid = cidForBytes(bytes);
     const payloadHash = `sha256:${hashBytes(bytes)}`;
@@ -206,7 +206,7 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
       cid,
       codec,
       kind,
-      refs: [...new Set(asArray(refs).map((ref) => String(ref || "").trim()).filter(Boolean))],
+      refs: [...new Set(asArray(refs).map((ref) => String(ref).trim()).filter(Boolean))],
       byteLength: bytes.length,
       payloadHash,
       payloadBase64: bytes.toString("base64"),
@@ -232,13 +232,13 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
       return {
         ...cached,
         refs: [...asArray(cached.refs)],
-        bytes: Buffer.from(cached.payloadBase64 || "", "base64")
+        bytes: Buffer.from(cached.payloadBase64, "base64")
       };
     }
     if (inMemory) return null;
     const record = await readJson(blockPath(cid));
     if (!record) return null;
-    const bytes = Buffer.from(String(record.payloadBase64 || ""), "base64");
+    const bytes = Buffer.from(String(record.payloadBase64), "base64");
     const payloadHash = `sha256:${hashBytes(bytes)}`;
     if (payloadHash !== record.payloadHash || cidForBytes(bytes) !== record.cid) {
       throw new Error(`CAS block integrity failure for ${cid}`);
@@ -256,7 +256,7 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
     const missing = [];
     const blocks = [];
     const seen = new Set();
-    const stack = [String(rootCid || "").trim()].filter(Boolean);
+    const stack = [String(rootCid).trim()].filter(Boolean);
     while (stack.length > 0) {
       const cid = stack.pop();
       if (!cid || seen.has(cid)) continue;
@@ -305,7 +305,13 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
     const admittedOperations = [...activeOperations];
     closePromise = (async () => {
       await Promise.allSettled(admittedOperations);
-      await initializationPromise?.catch(() => null);
+      if (initializationPromise) {
+        try {
+          await initializationPromise;
+        } catch {
+          // The admitted initializer already observed the latched failure.
+        }
+      }
       memoryBlocks.clear();
       memoryObjects.clear();
       lifecycleState = "closed";
@@ -325,7 +331,7 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
       owner = await readJson(lockOwnerPath(lockDir), null);
     } catch (error) {
       ownerUnreadable = true;
-      rawError = error?.message || String(error);
+      rawError = error instanceof Error ? error.message : String(error);
     }
     // readJson returns null for ENOENT (file missing) — distinguish from
     // unreadable (parse/permission errors). A JSON null value is treated as
@@ -338,7 +344,7 @@ export function createJsonStoragePort({ dataDir = "", userDataPath = "", inMemor
       owner,
       ownerMissing,
       ownerUnreadable,
-      mtimeMs: Number(stats?.mtimeMs || 0),
+      mtimeMs: Number(stats?.mtimeMs),
       rawError
     };
   }

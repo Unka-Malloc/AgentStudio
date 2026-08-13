@@ -2593,6 +2593,32 @@ describe("Pactium proof-first root API", () => {
       }
     });
     assert.ok(throwingBundleResolverResult.failures.some((failure) => failure.code === "replaced_proof_material"));
+    const nullBundleResolverResult = await verifyProofEnvelope(outcome, {
+      bundleResolver: {
+        has() {
+          return true;
+        },
+        get() {
+          return null;
+        }
+      }
+    });
+    assert.ok(nullBundleResolverResult.failures.some((failure) => failure.code === "missing_proof_material"));
+    const corruptBundleRecord = {
+      ...await getPactiumInternals(pactium).storage.getBlock(outcome.proofRefs[0].cid),
+      payloadBase64: Buffer.from("corrupt proof material").toString("base64")
+    };
+    const corruptBundleResolverResult = await verifyProofEnvelope(outcome, {
+      bundleResolver: {
+        has(cid) {
+          return cid === outcome.proofRefs[0].cid;
+        },
+        get() {
+          return corruptBundleRecord;
+        }
+      }
+    });
+    assert.ok(corruptBundleResolverResult.failures.some((failure) => failure.code === "replaced_proof_material"));
     const directExtension = await pactium.createExtension({
       name: "direct",
       critical: false,
@@ -2619,6 +2645,36 @@ describe("Pactium proof-first root API", () => {
       }]
     };
     assert.ok((await pactium.verifyEnvelope(badExtensionHash)).failures.some((failure) => failure.code === "bad_extension_hash"));
+    const throwingExtensionResolverResult = await verifyProofEnvelope({
+      ...outcome,
+      extensions: [directExtension]
+    }, {
+      storage: getPactiumInternals(pactium).storage,
+      bundleResolver: {
+        has(cid) {
+          return cid === directExtension.valueRef;
+        },
+        get() {
+          throw new Error("extension resolver failed");
+        }
+      }
+    });
+    assert.ok(throwingExtensionResolverResult.failures.some((failure) => failure.code === "bad_extension_hash"));
+    const nullExtensionResolverResult = await verifyProofEnvelope({
+      ...outcome,
+      extensions: [directExtension]
+    }, {
+      storage: getPactiumInternals(pactium).storage,
+      bundleResolver: {
+        has(cid) {
+          return cid === directExtension.valueRef;
+        },
+        get() {
+          return null;
+        }
+      }
+    });
+    assert.ok(nullExtensionResolverResult.failures.some((failure) => failure.code === "missing_extension_material"));
 
     const validProofBlock = await getPactiumInternals(pactium).storage.getBlock(outcome.proofRefs[0].cid);
     const validProofValue = JSON.parse(Buffer.from(validProofBlock.payloadBase64, "base64").toString("utf8"));

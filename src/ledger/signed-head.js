@@ -23,14 +23,14 @@ export function createVerifierManifest(input = {}) {
       roles: asArray(signer.roles).map(String)
     })).filter((signer) => signer.signerId && signer.publicKey),
     revokedSigners: asArray(input.revokedSigners).map((revocation) => ({
-      signerId: safeText(revocation.signerId || revocation),
+      signerId: safeText(typeof revocation === "string" ? revocation : revocation.signerId),
       revokedAt: safeText(revocation.revokedAt),
-      reason: safeText(revocation.reason || revocation.revocationReason)
+      reason: safeText(revocation.reason ?? revocation.revocationReason)
     })).filter((revocation) => revocation.signerId),
-    quorum: Math.max(1, Number(input.quorum || input.quorumPolicy?.ledgerHead || 1)),
+    quorum: Math.max(1, Number(input.quorum ?? input.quorumPolicy?.ledgerHead ?? 1)),
     quorumPolicy: normalizeCanonicalValue(asRecord(input.quorumPolicy)),
     witnesses: asArray(input.witnesses).map((witness) => ({
-      witnessId: safeText(witness.witnessId || witness.signerId),
+      witnessId: safeText(witness.witnessId ?? witness.signerId),
       algorithm: safeText(witness.algorithm, "ed25519"),
       publicKey: safeText(witness.publicKey),
       roles: asArray(witness.roles).map(String)
@@ -74,8 +74,8 @@ export function signLedgerHead(head = {}, {
     signatureType: "pactium.ledger-head-signature",
     signerId: safeText(signerId),
     algorithm: "ed25519",
-    manifestId: resolvedManifest?.manifestId || safeText(manifest?.manifestId),
-    manifestHash: resolvedManifest?.manifestHash || safeText(manifest?.manifestHash),
+    manifestId: resolvedManifest ? resolvedManifest.manifestId : safeText(manifest?.manifestId),
+    manifestHash: resolvedManifest ? resolvedManifest.manifestHash : safeText(manifest?.manifestHash),
     headId: safeText(head.headId),
     signedPayloadHash: protocolHash("ledger.head.signing", payload),
     signature,
@@ -87,7 +87,7 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
   const verifierManifest = manifest?.manifestType === "pactium.verifier-manifest"
     ? manifest
     : createVerifierManifest(manifest);
-  const signatures = asArray(options.signatures || head.signatures || (head.signature ? [head.signature] : []));
+  const signatures = asArray(options.signatures ?? head.signatures ?? (head.signature ? [head.signature] : []));
   const failures = [];
   let accepted = 0;
   const acceptedSigners = new Set();
@@ -111,7 +111,7 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       failures.push(createVerificationFailure({
         layer: "ledger-head-signature",
         code: "unknown_signer",
-        evidenceRef: record.signerId || ""
+        evidenceRef: safeText(record.signerId)
       }));
       continue;
     }
@@ -119,7 +119,7 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       failures.push(createVerificationFailure({
         layer: "ledger-head-signature",
         code: "signature_manifest_mismatch",
-        evidenceRef: record.signerId || ""
+        evidenceRef: record.signerId
       }));
       continue;
     }
@@ -127,7 +127,7 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       failures.push(createVerificationFailure({
         layer: "ledger-head-signature",
         code: "signature_manifest_mismatch",
-        evidenceRef: record.signerId || ""
+        evidenceRef: record.signerId
       }));
       continue;
     }
@@ -135,7 +135,7 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       failures.push(createVerificationFailure({
         layer: "ledger-head-signature",
         code: "duplicate_signature_signer",
-        evidenceRef: record.signerId || ""
+        evidenceRef: record.signerId
       }));
       continue;
     }
@@ -143,7 +143,7 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       failures.push(createVerificationFailure({
         layer: "ledger-head-signature",
         code: "unsupported_signature_algorithm",
-        evidenceRef: record.signerId || ""
+        evidenceRef: record.signerId
       }));
       continue;
     }
@@ -151,7 +151,7 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       failures.push(createVerificationFailure({
         layer: "ledger-head-signature",
         code: "signer_role_missing",
-        evidenceRef: record.signerId || ""
+        evidenceRef: record.signerId
       }));
       continue;
     }
@@ -159,23 +159,23 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       failures.push(createVerificationFailure({
         layer: "ledger-head-signature",
         code: "bad_signed_head_payload",
-        evidenceRef: record.signerId || ""
+        evidenceRef: record.signerId
       }));
       continue;
     }
-    const sigTime = safeText(record.createdAt || head.createdAt);
+    const sigTime = safeText(record.createdAt ?? head.createdAt);
     const revokedRecord = revokedSignersById.get(record.signerId);
     if (signer.revokedAt || revokedRecord) {
-      const revokedAt = safeText(signer.revokedAt || revokedRecord?.revokedAt || sigTime);
+      const revokedAt = safeText(signer.revokedAt ?? revokedRecord?.revokedAt ?? sigTime);
       if (!revokedAt || sigTime >= revokedAt) {
         failures.push(createVerificationFailure({
           layer: "ledger-head-signature",
           code: "signer_revoked",
           message: `Signer ${record.signerId} is revoked.`,
-          evidenceRef: record.signerId || "",
+          evidenceRef: record.signerId,
           details: {
             revokedAt,
-            reason: signer.revocationReason || revokedRecord?.reason || ""
+            reason: signer.revocationReason ?? revokedRecord?.reason ?? ""
           }
         }));
         continue;
@@ -186,7 +186,7 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
         layer: "ledger-head-signature",
         code: "signer_not_yet_valid",
         message: `Signer ${record.signerId} is not yet valid (validFrom: ${signer.validFrom}).`,
-        evidenceRef: record.signerId || ""
+        evidenceRef: record.signerId
       }));
       continue;
     }
@@ -195,7 +195,7 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
         layer: "ledger-head-signature",
         code: "signer_expired",
         message: `Signer ${record.signerId} has expired (validTo: ${signer.validTo}).`,
-        evidenceRef: record.signerId || ""
+        evidenceRef: record.signerId
       }));
       continue;
     }
@@ -205,14 +205,14 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
         null,
         payloadBytes,
         signer.publicKey,
-        Buffer.from(String(record.signature || ""), "base64")
+        Buffer.from(String(record.signature), "base64")
       );
     } catch (error) {
       failures.push(createVerificationFailure({
         layer: "ledger-head-signature",
         code: "bad_signer_public_key",
         message: error instanceof Error ? error.message : "Signer public key could not be used for verification.",
-        evidenceRef: record.signerId || ""
+        evidenceRef: record.signerId
       }));
       continue;
     }
@@ -224,15 +224,15 @@ export function verifyLedgerHeadSignature(head = {}, manifest = {}, options = {}
       failures.push(createVerificationFailure({
         layer: "ledger-head-signature",
         code: "bad_head_signature",
-        evidenceRef: record.signerId || ""
+        evidenceRef: record.signerId
       }));
     }
   }
-  if (accepted < Number(verifierManifest.quorum || 1)) {
+  if (accepted < Number(verifierManifest.quorum)) {
     failures.push(createVerificationFailure({
       layer: "ledger-head-signature",
       code: "manifest_quorum_not_met",
-      details: { accepted, quorum: verifierManifest.quorum || 1 }
+      details: { accepted, quorum: verifierManifest.quorum }
     }));
   }
   return {

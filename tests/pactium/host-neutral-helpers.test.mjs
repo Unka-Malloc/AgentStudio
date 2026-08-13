@@ -141,7 +141,7 @@ describe("host-neutral helpers", () => {
     assert.equal(await eventLog.getEvent("workspace-a", -1), null);
     assert.equal(await eventLog.getEvent("workspace-a", 1.5), null);
 
-    await storage.putProtocolObject(eventLog.protocolObjectScope, "event-log:workspace-a", [{
+    await storage.putProtocolObject(eventLog.protocolObjectScope, "event-log-segment:workspace-a:0", [{
       ...first,
       eventHash: "tampered"
     }, second]);

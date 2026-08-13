@@ -344,7 +344,7 @@ export interface PactiumHttpServerStartResult {
 
 export const PACTIUM_PROTOCOL: "pactium.v0.3";
 export const PACTIUM_SCHEMA_VERSION: "pactium.v0.3.schema.latest";
-export const PACTIUM_PACKAGE_VERSION: "0.7.0";
+export const PACTIUM_PACKAGE_VERSION: "0.8.0";
 export const PACTIUM_HTTP_PROTOCOL: "pactium.v0.3.http";
 export const PACTIUM_HTTP_MAX_BODY_BYTES: 1048576;
 export const PACTIUM_INDEX_ENGINE: "pactium.verifiable-index-engine";
@@ -385,6 +385,21 @@ export function toCanonicalSafeValue(
   },
   depth?: number
 ): unknown;
+export interface PactiumWeightedLruCache<Key = unknown, Value = unknown> {
+  readonly size: number;
+  readonly weight: number;
+  has(key: Key): boolean;
+  get(key: Key): Value | undefined;
+  set(key: Key, value: Value, explicitWeight?: number): Value;
+  delete(key: Key): boolean;
+  clear(): void;
+  keys(): IterableIterator<Key>;
+}
+export function createWeightedLruCache<Key = unknown, Value = unknown>(options?: {
+  maxEntries?: number;
+  maxWeight?: number;
+  weightOf?: (value: Value, key: Key) => number;
+}): PactiumWeightedLruCache<Key, Value>;
 export function protocolHashHex(domain: string, value: unknown): string;
 export function protocolHash(domain: string, value: unknown): string;
 export function cidForBytes(bytes: Uint8Array | ArrayBuffer | string): string;
@@ -425,6 +440,7 @@ export function createContentAddressedStore(options: {
   storage: PactiumStoragePort;
   defaultKind?: string;
   defaultCodec?: string;
+  pinScope?: string;
 }): PactiumRecord;
 export function createAppendOnlyEventLog(options: {
   storage: PactiumStoragePort;
@@ -432,6 +448,8 @@ export function createAppendOnlyEventLog(options: {
   hashDomain?: string;
   createEventId?: (input: PactiumRecord) => string;
   withWriteLock?: (task: () => unknown, options?: PactiumRecord) => Promise<unknown>;
+  segmentSize?: number;
+  maxSegmentBytes?: number;
 }): PactiumRecord;
 export function createStateCommitStore(options: {
   storage: PactiumStoragePort;

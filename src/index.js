@@ -18,6 +18,7 @@ export {
   normalizeCanonicalValue
 } from "./canonical/value.js";
 export { toCanonicalSafeValue } from "./canonical/safe-value.js";
+export { createWeightedLruCache } from "./shared/lru-cache.js";
 export {
   cidForBytes,
   cidForCanonical,
